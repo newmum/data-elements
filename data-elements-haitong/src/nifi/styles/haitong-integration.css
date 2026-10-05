@@ -1,0 +1,248 @@
+/* Keep the original NiFi editor layout; only its palette follows HaiTong. */
+.nifi-workspace {
+  width: 100%;
+  height: 100vh;
+  color-scheme: light;
+  --canvas-bg: #ffffff;
+  --canvas-dot: #dedede;
+  --node-bg: #ffffff;
+  --node-border: #e0e0e0;
+  --node-border-selected: #1677ff;
+  --edge-color: #bfbfbf;
+  --text-primary: #262626;
+  --text-secondary: #595959;
+  --text-tertiary: #8c8c8c;
+  --surface: #fff;
+  --text: #262626;
+  --secondary: #595959;
+  --border: #d9d9d9;
+}
+
+:root[data-theme='dark'] .nifi-workspace {
+  color-scheme: dark;
+  --canvas-bg: #141414;
+  --canvas-dot: #434343;
+  --node-bg: #1f1f1f;
+  --node-border: #434343;
+  --node-border-hover: #696969;
+  --node-border-selected: #4096ff;
+  --node-shadow: 0 6px 20px rgba(0, 0, 0, .3);
+  --node-shadow-hover: 0 10px 28px rgba(0, 0, 0, .4);
+  --node-shadow-selected: 0 0 0 2px rgba(64, 150, 255, .28), 0 10px 28px rgba(0, 0, 0, .4);
+  --edge-color: #8c8c8c;
+  --edge-color-hover: #69b1ff;
+  --edge-color-running: #4096ff;
+  --port-bg: #1f1f1f;
+  --port-border: #8c8c8c;
+  --port-border-hover: #69b1ff;
+  --text-primary: #f0f0f0;
+  --text-secondary: #bfbfbf;
+  --text-tertiary: #8c8c8c;
+  --text-disabled: #666666;
+  --surface: #1f1f1f;
+  --text: #f0f0f0;
+  --secondary: #bfbfbf;
+  --border: #434343;
+  --fm-bg-canvas: #141414;
+  --fm-bg-panel: #1f1f1f;
+  --fm-bg-row-hover: #303030;
+  --fm-bg-row-active: #303030;
+  --fm-bg-row-mapped: #1e352b;
+  --fm-list-header-bg: #262626;
+  --fm-list-selected-bg: #303030;
+  --fm-border-default: #434343;
+  --fm-border-hover: #4096ff;
+  --fm-text-primary: #f0f0f0;
+  --fm-text-secondary: #bfbfbf;
+  --fm-text-tertiary: #8c8c8c;
+  --fm-edge-idle: #696969;
+  --fm-edge-active: #69b1ff;
+  --fm-edge-disabled: #595959;
+  background: var(--canvas-bg);
+}
+
+/* Node cards, runtime panel, canvas tools and popovers are separate surfaces. */
+:root[data-theme='dark'] .nifi-workspace .coze-node__section-content,
+:root[data-theme='dark'] .nifi-workspace .runtime-overview__grid div,
+:root[data-theme='dark'] .nifi-workspace .field-mapping-policy,
+:root[data-theme='dark'] .nifi-workspace .field-mapping-sql-preview {
+  background: #262626;
+  color: var(--text-primary);
+}
+:root[data-theme='dark'] .nifi-workspace .coze-node__completion {
+  background: #162b21;
+  border-color: #3d6650;
+  color: #9ee0b3;
+}
+:root[data-theme='dark'] .nifi-workspace .coze-node__completion-desc { color: #8fd5a6; }
+:root[data-theme='dark'] .nifi-workspace .coze-node__watermark-row {
+  background: #262626;
+  border-color: #595959;
+  color: #d9d9d9;
+}
+:root[data-theme='dark'] .nifi-workspace .coze-node__watermark-row span { color: var(--text-secondary); }
+:root[data-theme='dark'] .nifi-workspace .runtime-overview {
+  background: rgba(31, 31, 31, .96);
+  border-color: var(--node-border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+}
+:root[data-theme='dark'] .nifi-workspace .coze-toolbar,
+:root[data-theme='dark'] .nifi-workspace .canvas-add-node,
+:root[data-theme='dark'] .nifi-workspace .canvas-controls,
+:root[data-theme='dark'] .nifi-workspace .canvas-empty,
+:root[data-theme='dark'] .nifi-workspace .coze-node-plus,
+:root[data-theme='dark'] .nifi-workspace .node-selector__card,
+:root[data-theme='dark'] .nifi-workspace .mapping-row,
+:root[data-theme='dark'] .nifi-workspace .condition-builder__row,
+:root[data-theme='dark'] .nifi-workspace .branch-editor__route,
+:root[data-theme='dark'] .nifi-workspace .branch-editor__default {
+  background: var(--node-bg);
+  color: var(--text-primary);
+  border-color: var(--node-border);
+}
+:root[data-theme='dark'] .nifi-workspace .coze-toolbar { border-bottom-color: var(--node-border); }
+:root[data-theme='dark'] .nifi-workspace .coze-toolbar__state {
+  color: #d9d9d9;
+  background: #303030;
+  border-color: #434343;
+}
+:root[data-theme='dark'] .nifi-workspace .coze-toolbar__state.is-running {
+  color: #69b1ff;
+  background: #162a3d;
+  border-color: #315371;
+}
+:root[data-theme='dark'] .nifi-workspace .coze-drawer-footer .ant-btn-default:not(:disabled) {
+  color: #f0f0f0;
+  background: #303030;
+  border-color: #595959;
+}
+:root[data-theme='dark'] .nifi-workspace .coze-drawer-footer .ant-btn-default:not(:disabled):hover {
+  color: #ffffff;
+  background: #434343;
+  border-color: #8c8c8c;
+}
+:root[data-theme='dark'] .nifi-workspace .canvas-controls__btn:hover,
+:root[data-theme='dark'] .nifi-workspace .coze-toolbar__name:hover { background: #303030; }
+:root[data-theme='dark'] .nifi-workspace .canvas-controls__divider { background: var(--node-border); }
+:root[data-theme='dark'] .nifi-workspace .filter-editor--business,
+:root[data-theme='dark'] .nifi-workspace .branch-editor,
+:root[data-theme='dark'] .nifi-workspace .mapping-row[data-enabled='false'] { background: #171717; }
+:root[data-theme='dark'] .nifi-workspace .fm-dsl-actions { background: rgba(31, 31, 31, .94); border-color: var(--node-border); }
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton { background: var(--canvas-bg); }
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton__toolbar,
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton__step span { background: var(--node-bg); border-color: var(--node-border); }
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton__copy strong,
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton__step { color: var(--text-primary); }
+:root[data-theme='dark'] .nifi-workspace .x6-graph { background: var(--canvas-bg); }
+
+/* The mapping table has a few handcrafted cells alongside Ant's themed cells. */
+:root[data-theme='dark'] .nifi-workspace .fm-list-table .ant-table-thead > tr > th {
+  border-bottom-color: var(--fm-border-default);
+}
+:root[data-theme='dark'] .nifi-workspace .fm-list-table .ant-table-tbody > tr > td {
+  border-bottom-color: var(--fm-border-default);
+}
+:root[data-theme='dark'] .nifi-workspace .fm-list-table .ant-table-tbody > tr.is-selected:hover > td {
+  background: var(--fm-list-selected-bg);
+}
+:root[data-theme='dark'] .nifi-workspace .fm-list-relation-arrow {
+  color: #69b1ff;
+}
+
+.nifi-workspace .canvas-theme-toggle {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+:root[data-theme='dark'] .nifi-workspace .canvas-theme-toggle:hover {
+  color: var(--text-primary);
+  background: #303030;
+}
+
+/* Keep the original mapping/editor structure while replacing remaining fixed light surfaces. */
+:root[data-theme='dark'] .nifi-workspace .fm-topbar,
+:root[data-theme='dark'] .nifi-workspace .fm-bottombar,
+:root[data-theme='dark'] .nifi-workspace .fm-mapping-card,
+:root[data-theme='dark'] .nifi-workspace .custom-sql-editor,
+:root[data-theme='dark'] .nifi-workspace .filter-editor,
+:root[data-theme='dark'] .nifi-workspace .start-mode-picker__group .ant-radio-wrapper {
+  background: var(--node-bg);
+  color: var(--text-primary);
+  border-color: var(--node-border);
+}
+:root[data-theme='dark'] .nifi-workspace .fm-mapping-card.is-active,
+:root[data-theme='dark'] .nifi-workspace .start-mode-picker__group .ant-radio-wrapper:hover {
+  background: #303030;
+}
+:root[data-theme='dark'] .nifi-workspace .fm-field-chip-source .ant-select-selector,
+:root[data-theme='dark'] .nifi-workspace .fm-field-chip-target .ant-select-selector,
+:root[data-theme='dark'] .nifi-workspace .filter-editor__table-block,
+:root[data-theme='dark'] .nifi-workspace .condition-builder__index,
+:root[data-theme='dark'] .nifi-workspace .branch-editor__route-index {
+  background: #262626 !important;
+  color: var(--text-primary);
+  border-color: var(--node-border);
+}
+:root[data-theme='dark'] .nifi-workspace .fm-field-panel-source .fm-port,
+:root[data-theme='dark'] .nifi-workspace .fm-field-panel-target .fm-port,
+:root[data-theme='dark'] .nifi-workspace .fm-card-port {
+  background: var(--node-bg);
+}
+:root[data-theme='dark'] .nifi-workspace .fm-policy-title,
+:root[data-theme='dark'] .nifi-workspace .fm-field-row.is-active .fm-field-name { color: var(--text-primary); }
+:root[data-theme='dark'] .nifi-workspace .coze-toolbar__back { background: #303030; color: #d9d9d9; }
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton__toolbar i,
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton__toolbar span,
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton__toolbar b {
+  background: linear-gradient(90deg, #262626 25%, #383838 50%, #262626 75%);
+  background-size: 200% 100%;
+}
+:root[data-theme='dark'] .nifi-workspace .nifi-page-skeleton__step.is-active span { background: #303030; color: #d9d9d9; }
+:root[data-theme='dark'] .nifi-workspace .fm-expression-input,
+:root[data-theme='dark'] .nifi-workspace .fm-constant-chip,
+:root[data-theme='dark'] .nifi-workspace .fm-lookup-hint code,
+:root[data-theme='dark'] .nifi-workspace .fm-lookup-sql,
+:root[data-theme='dark'] .nifi-workspace .custom-sql-editor__table-block,
+:root[data-theme='dark'] .nifi-workspace .custom-sql-editor__field-type,
+:root[data-theme='dark'] .nifi-workspace .materialize-ddl-editor .cm-editor,
+:root[data-theme='dark'] .nifi-workspace .field-mapping-dsl-view .cm-editor,
+:root[data-theme='dark'] .nifi-workspace .probe-columns-table th {
+  background: #171717;
+  color: var(--text-primary);
+  border-color: var(--node-border);
+}
+:root[data-theme='dark'] .nifi-workspace .cm-editor,
+:root[data-theme='dark'] .nifi-workspace .cm-scroller,
+:root[data-theme='dark'] .nifi-workspace .cm-gutters {
+  background: #171717;
+  color: var(--text-primary);
+  border-color: var(--node-border);
+}
+:root[data-theme='dark'] .nifi-workspace .cm-activeLine,
+:root[data-theme='dark'] .nifi-workspace .cm-activeLineGutter { background: #303030; }
+:root[data-theme='dark'] .nifi-workspace .cm-cursor { border-left-color: #f0f0f0; }
+:root[data-theme='dark'] .nifi-workspace .cm-selectionBackground { background: #264f78 !important; }
+:root[data-theme='dark'] .nifi-workspace .fm-fx-large,
+:root[data-theme='dark'] .nifi-workspace .fm-pk-tag,
+:root[data-theme='dark'] .nifi-workspace .fm-transform-help { background: #303030; color: #d9d9d9; }
+
+/* Ant portals mount outside .nifi-workspace, so give them the same palette. */
+:root[data-theme='dark'] body.haitong-nifi-active .ant-drawer-root,
+:root[data-theme='dark'] body.haitong-nifi-active .ant-modal-root,
+:root[data-theme='dark'] body.haitong-nifi-active .ant-popover,
+:root[data-theme='dark'] body.haitong-nifi-active .ant-dropdown {
+  --surface: #1f1f1f;
+  --text: #f0f0f0;
+  --secondary: #bfbfbf;
+  --border: #434343;
+  color-scheme: dark;
+}
+
+:root[data-theme='dark'] .nifi-workspace .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous) {
+  color: #ffffff !important;
+  background: #177ddc !important;
+  border-color: #177ddc !important;
+}

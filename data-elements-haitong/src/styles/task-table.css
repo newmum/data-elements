@@ -1,0 +1,10 @@
+.ht-table-wrap .ht-task-action-column {
+  padding-inline: 12px !important;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.ht-table-wrap .ht-task-action-column .ant-btn-link {
+  padding-inline: 0 !important;
+  white-space: nowrap;
+}

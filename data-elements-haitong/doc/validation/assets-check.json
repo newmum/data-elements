@@ -1,0 +1,171 @@
+{
+  "svgAssets": 25,
+  "pngSizes": [
+    32,
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "preservedDependencies": 28,
+  "preservedScripts": 3,
+  "newDependenciesThisRound": 0,
+  "assets": [
+    {
+      "path": "public/brand/haitong-mark.svg",
+      "bytes": 697,
+      "sha256": "20f2acb0b4c41d72c34f21c7d0c45bac69577802604faaeb667315997bc1c64e"
+    },
+    {
+      "path": "public/heroes/batch-dark.svg",
+      "bytes": 2028,
+      "sha256": "bbbdc10a955baf461c03c007dc622a16d75c58cce8355ed23f91f620884bcdde"
+    },
+    {
+      "path": "public/heroes/batch-light.svg",
+      "bytes": 2021,
+      "sha256": "657305325de97919cde3c4ba4fe536dfb101eab90c3330bdabccec61747a2a8d"
+    },
+    {
+      "path": "public/heroes/clusters-dark.svg",
+      "bytes": 1775,
+      "sha256": "ae684db4ba6078a7173686a6746729e0e6358cfb2e3ce96286efdbd9de8edc34"
+    },
+    {
+      "path": "public/heroes/clusters-light.svg",
+      "bytes": 1768,
+      "sha256": "6d59ea4fffeb1d80ba9d605b5d686dd55bdf1ec979261f6661a25730978756da"
+    },
+    {
+      "path": "public/heroes/cross-dark.svg",
+      "bytes": 2096,
+      "sha256": "a31fa2767626e8cd52aaca47c05b5b1fb2d08feda34850e38fb5bebb5b2c9e68"
+    },
+    {
+      "path": "public/heroes/cross-light.svg",
+      "bytes": 2089,
+      "sha256": "ce1e0e43e20f9c09fc1e5b7492d56a194e565ebf44fa895632f5504edffb17d2"
+    },
+    {
+      "path": "public/heroes/distribution-dark.svg",
+      "bytes": 2169,
+      "sha256": "25f337240638c280aba8d8e49c25f582e3c67428c845b18b4682653556fc181a"
+    },
+    {
+      "path": "public/heroes/distribution-light.svg",
+      "bytes": 2160,
+      "sha256": "f2adfde6b8957251cf8b054e7c3d0e83d4bdbe04040fef4ff941da49893f7386"
+    },
+    {
+      "path": "public/heroes/ingress-dark.svg",
+      "bytes": 1904,
+      "sha256": "110e6082f3c97a3643888e0bcbfd1ad9bc76d25bd653c20dde42a0a59987dff9"
+    },
+    {
+      "path": "public/heroes/ingress-light.svg",
+      "bytes": 1899,
+      "sha256": "12b605cba1755127f1e9ad8760b9a3c823084e5c0cec834f6b87e88ff563cc2a"
+    },
+    {
+      "path": "public/heroes/instant-dark.svg",
+      "bytes": 1656,
+      "sha256": "67ae80753fe50308da7e355c4df6a7cbc566a5ca7e044aa841e5351918ed4bb9"
+    },
+    {
+      "path": "public/heroes/instant-light.svg",
+      "bytes": 1656,
+      "sha256": "7b84417bfc762829e513d42171b23c2efefe8302611d2fd7d0ad59986750281e"
+    },
+    {
+      "path": "public/heroes/inventory-dark.svg",
+      "bytes": 1629,
+      "sha256": "6da62e23ddfdb70dbe30bf40d1a27c99a02de7f751c6e7add0914bea22709ce0"
+    },
+    {
+      "path": "public/heroes/inventory-light.svg",
+      "bytes": 1629,
+      "sha256": "7f1cd4b4f1e1f609319fb2a1531534845da0677b4b1d0001614d4e60b52d7f26"
+    },
+    {
+      "path": "public/heroes/multi-dark.svg",
+      "bytes": 1853,
+      "sha256": "7b674a21d271199cce365027f75ab577cb6668ef7cc1fafad78a425972f3d209"
+    },
+    {
+      "path": "public/heroes/multi-light.svg",
+      "bytes": 1847,
+      "sha256": "d050a847db247e5e96a8ac4ef166d8b719d1c56ac95d7c561004d3ff3bc6e056"
+    },
+    {
+      "path": "public/heroes/overview-dark.svg",
+      "bytes": 2205,
+      "sha256": "a04f134212579c19c30ec0cd16f26ceaf683f7aa1b49210cc8818ad5eb2a64d9"
+    },
+    {
+      "path": "public/heroes/overview-light.svg",
+      "bytes": 2197,
+      "sha256": "b14766dd185584e8a4c8dac4caecf51f353b2127db856ca9c4188bfcd3666b50"
+    },
+    {
+      "path": "public/heroes/registry-dark.svg",
+      "bytes": 1914,
+      "sha256": "8c0c63182cd6487491d675559b57f08ba82d74c5f75a0f2151ff295ed5bbab4a"
+    },
+    {
+      "path": "public/heroes/registry-light.svg",
+      "bytes": 1910,
+      "sha256": "9daca0250901039f3de22afefef2158ce877377beb3684f5a428480e6e5d87ef"
+    },
+    {
+      "path": "public/heroes/statements-dark.svg",
+      "bytes": 1887,
+      "sha256": "9b736b6725666c682f0d2fdaa37b78f83c79c29bc534830c1757c56ec1d9db79"
+    },
+    {
+      "path": "public/heroes/statements-light.svg",
+      "bytes": 1887,
+      "sha256": "bac6c0a86c171d45fd53cf041dab0e5a9a8c82d8d61f49a547bff88bbf4df372"
+    },
+    {
+      "path": "public/heroes/tasks-dark.svg",
+      "bytes": 1819,
+      "sha256": "29f81cdec72811984eaf31e8192493344e7eedf5aa7af456b0024917253e271e"
+    },
+    {
+      "path": "public/heroes/tasks-light.svg",
+      "bytes": 1815,
+      "sha256": "5ad59d94a47592d33a5a773b5538a139e14a69ff01df29498c6a83dbee4f7f34"
+    },
+    {
+      "path": "public/brand/haitong-mark-32.png",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "path": "public/brand/haitong-mark-64.png",
+      "width": 64,
+      "height": 64
+    },
+    {
+      "path": "public/brand/haitong-mark-128.png",
+      "width": 128,
+      "height": 128
+    },
+    {
+      "path": "public/brand/haitong-mark-256.png",
+      "width": 256,
+      "height": 256
+    },
+    {
+      "path": "public/brand/haitong-mark-512.png",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "path": "public/brand/haitong-mark-1024.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ]
+}

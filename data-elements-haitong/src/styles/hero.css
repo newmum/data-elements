@@ -1,0 +1,38 @@
+/* Keep the shared page introduction compact; the page title remains the main cue. */
+.ht-hero { min-height: 164px; }
+.ht-hero-copy,
+.hero-overview .ht-hero-copy { padding: 20px 28px; }
+.ht-hero h1 { margin: 0 0 7px; }
+.ht-hero-tags { margin-top: 8px; }
+.ht-hero-action { margin-top: 11px; }
+.ht-hero-art-image,
+.ocean-art { min-height: 0; max-height: 188px; }
+.ht-hero-art-image { object-fit: contain; object-position: center; }
+.hero-overview .ht-hero-art { max-height: 188px; }
+
+/* The overview's table belongs to its panel, without a second outer frame. */
+.overview-flow-panel .ht-table-wrap .ant-table-container {
+  border: 0;
+  border-radius: 0;
+}
+.overview-flow-panel .ht-table-wrap .ant-table-thead > tr > th {
+  padding: 10px 12px;
+  border-radius: 0 !important;
+  background: var(--surface-soft);
+}
+.overview-flow-panel .ht-table-wrap .ant-table-tbody > tr > td { padding: 9px 12px; }
+.overview-flow-panel .ht-table-wrap .ant-table-thead > tr > th:first-child,
+.overview-flow-panel .ht-table-wrap .ant-table-tbody > tr > td:first-child {
+  text-align: center;
+}
+.overview-flow-index { color: var(--secondary); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 1000px) {
+  .ht-hero-copy,
+  .hero-overview .ht-hero-copy { padding: 18px 20px; }
+}
+@media (max-width: 760px) {
+  .ht-hero { min-height: 138px; }
+  .ht-hero-copy,
+  .hero-overview .ht-hero-copy { padding: 17px 18px; }
+}

@@ -1,0 +1,33 @@
+.ht-account-modal.ant-modal { max-width: calc(100vw - 32px); top: 48px; padding-bottom: 16px; }
+.ht-account-modal .ant-modal-content,
+.ht-account-modal .ant-modal-container {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.ht-account-modal .ant-modal-title { font-size: 18px !important; line-height: 26px; }
+.ht-account-modal .ant-modal-body {
+  max-height: calc(100dvh - 200px);
+  overflow: auto;
+  padding: 14px 0 4px;
+  scrollbar-gutter: stable;
+}
+.ht-account-modal .ant-modal-footer { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px; }
+.ht-account-modal .ant-modal-footer .ant-space { display: flex; justify-content: flex-end; flex-wrap: wrap; }
+.ht-account-modal .ant-descriptions-item-content { overflow-wrap: anywhere; }
+.ht-account-summary { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.ht-account-summary .ant-avatar { flex: 0 0 48px; width: 48px; height: 48px; line-height: 48px; background: var(--primary-soft); color: var(--primary); font-size: 23px; }
+.ht-account-summary > div { display: grid; gap: 3px; min-width: 0; }
+.ht-account-summary > div > strong { color: var(--text); font-size: 16px; line-height: 1.4; }
+.ht-account-summary > div > span { color: var(--secondary); font-size: 12px; line-height: 1.5; }
+.ht-account-note { margin: 0; color: var(--secondary); font-size: 12px; line-height: 1.7; }
+.profile-button span:has(>b) { max-width: 150px; min-width: 0; }
+.profile-button b,.profile-button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .ht-account-modal.ant-modal { max-width: calc(100vw - 20px); top: 16px; }
+  .ht-account-modal .ant-modal-content,
+  .ht-account-modal .ant-modal-container { padding: 18px; }
+  .ht-account-modal .ant-modal-body { max-height: calc(100dvh - 172px); }
+}

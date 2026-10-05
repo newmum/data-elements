@@ -1,0 +1,6 @@
+
+> nifi-canvas-frontend@1.1.0 check
+> node scripts/check.mjs
+
+语法与本地导入检查 33 个 TS/TSX 文件；原 28 项依赖声明逐字比较。
+PASS（非完整 React/X6 类型或运行验收）
