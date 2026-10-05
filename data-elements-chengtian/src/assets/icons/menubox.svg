@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="" aria-hidden="true" fill="currentColor" width="1em"
+     height="1em" focusable="false">
+  <g fill="#fff">
+    <path transform="translate(0 1)" d="M0 0H16V2H0z"></path>
+    <path transform="translate(0 7)" d="M0 0H16V2H0z"></path>
+    <path transform="translate(0 13)" d="M0 0H16V2H0z"></path>
+  </g>
+</svg>

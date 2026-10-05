@@ -1,0 +1,18 @@
+/** 全局SCSS变量 */
+
+:root {
+  --page-padding: 16px;
+  --navbar-height: 55px;
+
+  --sidebar-width: 236px; // 侧边栏宽度
+  --sidebar-width-collapsed: 80px; // 侧边栏收缩宽度
+
+  --tags-view-height: 34px; // TagsView 高度
+}
+
+.hidden-nav {
+  --navbar-height: 0px;
+}
+
+$navbar-height: var(--navbar-height); // 导航栏高度
+$tags-view-height: var(--tags-view-height); // TagsView 高度

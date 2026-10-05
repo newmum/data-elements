@@ -1,0 +1,109 @@
+@use "./reset";
+@use "./element-plus";
+@use "./vxe-table";
+@use "./auto-image-styles";
+@import url("./vxe-table.css");
+
+.card-container {
+  height: 100%;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/*19主体布局*/
+.on-container {
+  padding: 32px 16px 16px;
+  background-image: url("@/assets/images/19/19-bg.svg");
+  background-size: 100% auto;
+}
+.hidden-nav .on-container {
+  margin: 0 !important;
+}
+.layout-mix .app-main > div > .on-container {
+  margin: -16px -16px 0;
+}
+/*19主体布局*/
+
+.hidden-nav {
+  .app-main {
+    padding: 0 !important;
+  }
+  .layout__header,
+  .layout__sidebar--left {
+    display: none;
+  }
+}
+
+// 进度条颜色
+#nprogress .bar {
+  background-color: var(--el-color-primary);
+}
+
+/* Shared table/tree refresh overlay. Initial empty loading uses LoadingState instead. */
+.app-data-loading-mask {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+
+  .el-loading-spinner {
+    left: 50%;
+    width: auto;
+    min-width: 176px;
+    padding: 14px 20px;
+    background: #fff;
+    border: 1px solid #e5eaf2;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(31, 54, 88, 0.1);
+    transform: translateX(-50%);
+
+    .circular {
+      width: 28px;
+      height: 28px;
+    }
+
+    .el-loading-text {
+      margin-top: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0;
+      color: #52607a;
+    }
+  }
+}
+
+/* Raw Element Plus tables must never show loading and empty states together. */
+.el-table.el-loading-parent--relative .el-table__empty-block {
+  visibility: hidden;
+}
+
+// 带边框表单表格样式
+.form-border {
+  .fc-form-col {
+    box-sizing: border-box;
+    margin: -1px 0 0 -1px;
+    border: 1px solid #ebedf0;
+
+    .el-form-item {
+      height: 100%;
+      margin-bottom: 0;
+      .el-form-item__label,
+      .el-form-item__content {
+        height: auto;
+        padding: 10px;
+      }
+      .el-form-item__label {
+        background: #f4f7fc;
+        & > .fc-form-title {
+          font-weight: 500;
+          color: #587aa8 !important;
+        }
+      }
+    }
+    .twoRows .el-form-item__content {
+      display: block;
+      min-height: 115px;
+    }
+    .el-form-item-explain-error {
+      display: none;
+    }
+  }
+}

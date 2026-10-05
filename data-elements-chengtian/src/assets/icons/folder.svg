@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="icon-triangle-down" width="20" height="20" viewBox="0 0 20 20">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: none;
+      }
+
+      .cls-2 {
+        clip-path: url(#clip-path);
+      }
+
+      .cls-3 {
+        fill: #0b8bf9;
+      }
+    </style>
+    <clipPath id="clip-path">
+      <rect id="Rectangle_3" data-name="Rectangle 3" class="cls-1" width="20" height="20"></rect>
+    </clipPath>
+  </defs>
+  <rect id="Rectangle_3-2" data-name="Rectangle 3" class="cls-1" width="20" height="20"></rect>
+  <path id="&#x8DEF;&#x5F84;_55523" data-name="&#x8DEF;&#x5F84; 55523" class="cls-3" d="M114.241,146.548c0-.267-.076-.343-.343-.343H102.464c-.267,0-.382.076-.382.382v5.984c0,.8.343,1.147,1.106,1.147h9.987c.765,0,1.106-.343,1.106-1.106C114.241,150.55,114.241,148.568,114.241,146.548Zm-11.854-.953h11.2c.648,0,.648,0,.648-.612,0-.724-.306-.994-.994-.994h-4.836c-.612,0-.612,0-.612-.612,0-.648-.306-.917-.953-.917h-3.81c-.688-.038-.953.229-.994.917v1.875C102.047,145.557,102.123,145.594,102.387,145.594Z" transform="translate(-98.16 -138.087)"></path>
+</svg>

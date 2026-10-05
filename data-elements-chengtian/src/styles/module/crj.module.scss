@@ -1,0 +1,74 @@
+:root {
+  --el-border-radius-base: 6px;
+  --el-color-primary-light-9: #f5f5f5;
+  --el-text-color-regular: #2b324e;
+  --el-color-error: #ff4d4f;
+  --el-color-warning: #ffa224;
+  --el-dialog-padding-primary: 20px 24px !important;
+  --el-border-radius-small: 4px;
+  --el-font-size-base: 16px;
+}
+
+/* el-table */
+.el-table {
+  --el-font-size-base: var(--el-font-size-base);
+  --el-fill-color-lighter: rgba(238, 244, 250, 1);
+  border-right: 1px solid var(--el-table-border-color);
+  border-left: 1px solid var(--el-table-border-color);
+  border-radius: 4px;
+}
+.el-table .el-table__cell {
+  padding: 9px 0;
+}
+.el-table thead {
+  font-family:
+    Source Han Sans SC,
+    PingFang,
+    sans-serif;
+  font-size: var(--el-font-size-base);
+  border-radius: 8px !important;
+  --el-table-header-text-color: #fff;
+  --el-table-header-bg-color: #40a9ff;
+}
+.el-table thead .el-table__cell {
+  padding: 12px 0;
+}
+
+/*表单项*/
+.el-form-item--default {
+  --font-size: 16px;
+  --el-form-label-font-size: 16px;
+}
+
+/*el-tag*/
+.el-tag--default {
+  --el-tag-font-size: var(--el-font-size-base);
+  height: 32px;
+  padding: 0 11px;
+  --el-icon-size: var(--el-font-size-base);
+}
+
+/*el-segmented*/
+.el-segmented {
+  --el-segmented-bg-color: #fff;
+  --el-border-radius-base: 20px;
+  --el-segmented-padding: 8px;
+  min-height: 52px;
+  font-size: calc(var(--el-font-size-base) + 4px);
+}
+.el-segmented .el-segmented__item {
+  padding: 4px 20px 6px 20px !important;
+  border-radius: calc(var(--el-border-radius-base) - 2px);
+}
+.el-segmented .el-segmented__item-selected {
+  &::after {
+    position: absolute;
+    bottom: -7px;
+    left: calc(50% - 8px);
+    z-index: 1;
+    content: "";
+    border-top: 8px solid var(--el-color-primary); /* 顶部边框（可见，形成三角形的底边） */
+    border-right: 8px solid transparent; /* 右侧边框（透明） */
+    border-left: 8px solid transparent; /* 左侧边框（透明） */
+  }
+}

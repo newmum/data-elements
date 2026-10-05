@@ -1,0 +1,347 @@
+<!-- 文件上传组件 -->
+<template>
+  <!-- 预览状态下的展示 -->
+  <div v-if="props.preview">
+    <div v-for="(item, ind) in fileList" :key="ind">
+      <a class="el-upload-list__item-name" @click="handleDownload(item)">
+        <Icon
+          v-if="item.name?.split('.')?.length > 0"
+          :icon="item.name.split('.')[item.name.split('.').length - 1]"
+        />
+        <Icon v-else icon="el-icon-Document" />
+        <span class="el-upload-list__item-file-name">{{ item.name }}</span>
+      </a>
+    </div>
+  </div>
+
+  <el-upload
+    v-else
+    v-model:file-list="fileList"
+    :style="props.style"
+    :before-upload="handleBeforeUpload"
+    :http-request="handleUpload"
+    :on-success="handleSuccess"
+    :on-error="handleError"
+    :accept="props.accept"
+    :limit="props.limit"
+    multiple
+  >
+    <!-- 上传文件按钮 -->
+    <el-button :type="props.uploadBtnType" :disabled="fileList.length >= props.limit" icon="upload">
+      {{ props.uploadBtnText }}
+    </el-button>
+
+    <!-- 文件列表 -->
+    <template #file="{ file }">
+      <template v-if="file.status === 'success'">
+        <div class="el-upload-list__item-info">
+          <a class="el-upload-list__item-name" @click="handleDownload(file)">
+            <Icon
+              v-if="file.name?.split('.')?.length > 0"
+              :icon="file.name.split('.')[file.name.split('.').length - 1]"
+            />
+            <Icon v-else icon="el-icon-Document" />
+            <span class="el-upload-list__item-file-name">{{ file.name }}</span>
+            <span class="el-icon--close" @click.stop="handleRemove(file.tid!)">
+              <el-icon><Close /></el-icon>
+            </span>
+          </a>
+        </div>
+      </template>
+      <template v-else>
+        <div class="el-upload-list__item-info">
+          <el-progress style="display: inline-flex" :percentage="file.percentage" />
+        </div>
+      </template>
+    </template>
+  </el-upload>
+</template>
+<script lang="ts" setup>
+import {
+  UploadRawFile,
+  UploadUserFile,
+  UploadFile,
+  UploadFiles,
+  UploadRequestOptions,
+} from "element-plus";
+
+import FileAPI, { FileInfo } from "@/api/file-api";
+import { cloneDeep, isString } from "lodash-es";
+
+const emit = defineEmits(["update:modelValue"]);
+const props = defineProps({
+  /**
+   * 上传方法
+   */
+  upload: {
+    type: Function as PropType<(formData: any) => Promise<any>>,
+    required: false,
+  },
+  /**
+   * 请求携带的额外参数
+   */
+  data: {
+    type: Object,
+    default: () => {
+      return {};
+    },
+  },
+  /**
+   * 上传文件的参数名
+   */
+  name: {
+    type: String,
+    default: "file",
+  },
+  /**
+   * 文件上传数量限制
+   */
+  limit: {
+    type: Number,
+    default: 10,
+  },
+  /**
+   * 单个文件上传大小限制(单位MB)
+   */
+  maxFileSize: {
+    type: Number,
+    default: 10,
+  },
+  /**
+   * 上传文件类型
+   */
+  accept: {
+    type: String,
+    default: "*",
+  },
+  /**
+   * 上传按钮文本
+   */
+  uploadBtnText: {
+    type: String,
+    default: "上传文件",
+  },
+  /**
+   * 上传按钮文本
+   */
+  uploadBtnType: {
+    type: String,
+    default: "primary",
+  },
+
+  /**
+   * 样式
+   */
+  style: {
+    type: Object,
+    default: () => {
+      return {
+        width: "300px",
+      };
+    },
+  },
+  // 控制数据转JSON
+  multipleToStr: {
+    type: Boolean,
+    default: false,
+  },
+  modelValue: {
+    type: Array as PropType<FileInfo[]>,
+    default: () => [],
+  },
+  // 调用接口删除
+  delete: {
+    type: Boolean,
+    default: false,
+  },
+  // 是否预览组件
+  preview: {
+    type: Boolean,
+  },
+});
+
+const modelValue = computed({
+  get: () => {
+    if (props.multipleToStr && isString(props.modelValue)) {
+      try {
+        return JSON.parse(props.modelValue);
+      } catch {
+        return [];
+      }
+    } else {
+      return props.modelValue;
+    }
+  },
+  set: (val) => {
+    if (props.multipleToStr) {
+      emit("update:modelValue", val ? JSON.stringify(val) : JSON.stringify([]));
+    } else {
+      emit("update:modelValue", val);
+    }
+  },
+});
+
+const fileList = ref([] as UploadFile[]);
+
+// 监听 modelValue 转换用于显示的 fileList
+watch(
+  modelValue,
+  (value) => {
+    const files = cloneDeep(value);
+    // if (props.multipleToStr && isString(value)) {
+    //   try {
+    //     files = JSON.parse(value);
+    //   } catch {
+    //     files = [];
+    //   }
+    // }
+    fileList.value = files.map((item: FileInfo) => {
+      const name = item.name ? item.name : item.url?.substring(item.url.lastIndexOf("/") + 1);
+      return {
+        name,
+        url: item.url,
+        tid: item.tid,
+        status: "success",
+        uid: getUid(),
+      } as UploadFile & { tid: string };
+    });
+  },
+  {
+    immediate: true,
+  }
+);
+
+/**
+ * 上传前校验
+ */
+function handleBeforeUpload(file: UploadRawFile) {
+  // 限制文件大小
+  if (file.size > props.maxFileSize * 1024 * 1024) {
+    ElMessage.warning("上传文件不能大于" + props.maxFileSize + "M");
+    return false;
+  }
+  return true;
+}
+
+/*
+ * 上传文件
+ */
+function handleUpload(options: UploadRequestOptions) {
+  return new Promise((resolve, reject) => {
+    const file = options.file;
+    const formData = new FormData();
+    formData.append(props.name, file);
+
+    // 处理附加参数
+    Object.keys(props.data).forEach((key) => {
+      formData.append(key, props.data[key]);
+    });
+    if (props.upload) {
+      props.upload(formData);
+    } else {
+      FileAPI.upload(formData, (percent) => {
+        const uid = file.uid;
+        const fileItem = fileList.value.find((file) => file.uid === uid);
+        if (fileItem) {
+          fileItem.percentage = percent;
+        }
+      })
+        .then((res) => {
+          resolve(res);
+        })
+        .catch((err) => {
+          reject(err);
+        });
+    }
+  });
+}
+
+/**
+ * 上传成功
+ */
+const handleSuccess = (response: any, uploadFile: UploadFile, files: UploadFiles) => {
+  ElMessage.success("上传成功");
+  //只有当状态为success或者fail，代表文件上传全部完成了，失败也算完成
+  if (
+    files.every((file: UploadFile) => {
+      return file.status === "success" || file.status === "fail";
+    })
+  ) {
+    const fileInfos = [] as FileInfo[];
+    files.map((file: UploadFile) => {
+      if (file.status === "success") {
+        //只取携带response的才是刚上传的
+        const res = file.response as FileInfo;
+        if (res) {
+          fileInfos.push({ name: res.name, url: res.url, tid: res.tid } as FileInfo);
+        }
+      } else {
+        //失败上传 从fileList删掉，不展示
+        fileList.value.splice(
+          fileList.value.findIndex((e) => e.uid === file.uid),
+          1
+        );
+      }
+    });
+    if (fileInfos.length > 0) {
+      modelValue.value = [...modelValue.value, ...fileInfos];
+    }
+  }
+};
+
+/**
+ * 上传失败
+ */
+const handleError = (_error: any) => {
+  console.error(_error);
+  ElMessage.warning("上传失败");
+};
+
+/**
+ * 删除文件
+ */
+function handleRemove(tid: string) {
+  modelValue.value = fileList.value.filter((file) => file.tid !== tid);
+  if (props.delete) {
+    FileAPI.delete(tid).then(() => {
+      console.info("成功删除文件");
+    });
+  }
+}
+
+/**
+ * 下载文件
+ */
+function handleDownload(file: UploadUserFile) {
+  const { url, name } = file;
+  if (url) {
+    FileAPI.download(url, name);
+  }
+}
+
+/** 获取一个不重复的id */
+function getUid(): number {
+  // 时间戳左移13位（相当于乘以8192） + 4位随机数
+  return (Date.now() << 13) | Math.floor(Math.random() * 8192);
+}
+</script>
+<style lang="scss" scoped>
+.el-upload-list__item .el-icon--close {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  opacity: 0.75;
+  transform: translateY(-50%);
+  transition: opacity var(--el-transition-duration);
+}
+
+:deep(.el-upload-list) {
+  margin: 0;
+}
+
+:deep(.el-upload-list__item) {
+  margin: 0;
+}
+</style>

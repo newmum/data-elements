@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" class="design-iconfont" fill="#">
+  <defs>
+    <linearGradient id="fb5bjh4ra__ywtepytq4b" x1=".5" y1="-.277" x2=".5" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0" stop-color="#bae7ff"/>
+      <stop offset="1" stop-color="#40a9ff"/>
+    </linearGradient>
+    <clipPath id="fb5bjh4ra__fq0z0xmpsa">
+      <path transform="translate(30 101.118)" fill="#fff" d="M0 0H28V28H0z"/>
+    </clipPath>
+  </defs>
+  <g transform="translate(-30 -101.118)" clip-path="url(#fb5bjh4ra__fq0z0xmpsa)">
+    <path d="M18.333,0a2,2,0,0,1,1.741,1.016l5.37,9.5a2,2,0,0,1,0,1.968l-5.37,9.5A2,2,0,0,1,18.333,23H7.667a2,2,0,0,1-1.741-1.016l-5.37-9.5a2,2,0,0,1,0-1.968l5.37-9.5A2,2,0,0,1,7.667,0Z" transform="translate(31 103.618)" fill="none" stroke="#3a8cf1" stroke-miterlimit="10" stroke-width="2"/>
+    <path transform="rotate(-30 213.92119952 -16.94798734)" fill="#3a8cf1" d="M0 0H2V25.837H0z"/>
+    <path transform="rotate(30 -167.68453448 144.7269356)" fill="#3a8cf1" d="M0 0H2V26.416H0z"/>
+    <path transform="rotate(90 -28.996 85.019)" fill="#3a8cf1" d="M0 0H2V24.252H0z"/>
+    <path d="M13.967-1.39l1.559,9.271L13.337,14.8H4.183L-.488,7.4,4.183.831Z" transform="translate(35.634 107.717)" stroke="transparent" fill="url(#fb5bjh4ra__ywtepytq4b)"/>
+  </g>
+</svg>

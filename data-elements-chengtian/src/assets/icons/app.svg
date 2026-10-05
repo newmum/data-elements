@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" fill="#0b8bf9" xmlns:xlink="http://www.w3.org/1999/xlink" width="16" height="16" viewBox="0 0 16 16">
+  <defs>
+    <style>.a{fill:#fff;opacity:0;}.b{clip-path:url(#a);}.d{opacity:0.4;}</style>
+    <clipPath id="a">
+      <rect class="a" width="16" height="16" transform="translate(899.722 141)"></rect>
+    </clipPath>
+  </defs>
+  <g class="b" transform="translate(-899.722 -141)">
+    <g transform="translate(434.242 -57.529)">
+      <rect class="c" width="6.5" height="6.5" rx="1" transform="translate(466 207.52)"></rect>
+      <rect class="c" width="6.5" height="6.5" rx="1" transform="translate(466 200.52)"></rect>
+      <rect class="d" width="6.5" height="6.5" rx="1" transform="matrix(0.966, 0.259, -0.259, 0.966, 474.682, 199.039)"></rect>
+      <rect class="c" width="6.5" height="6.5" rx="1" transform="translate(473 207.52)"></rect>
+    </g>
+  </g>
+</svg>

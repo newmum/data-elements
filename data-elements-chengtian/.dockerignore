@@ -1,0 +1,11 @@
+.git
+.vscode
+.husky
+node_modules
+dist
+coverage
+npm-debug.log*
+pnpm-debug.log*
+Dockerfile
+deploy/k8s
+*.iml

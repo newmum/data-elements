@@ -1,0 +1,255 @@
+:root {
+  --el-mask-color: rgba(255, 255, 255, 0.4) !important;
+  --el-border-color-light: #e6e8f0 !important;
+  --el-fill-color-light: rgb(245, 245, 245);
+
+  /* 主题色覆盖（原 variables.scss @forward 迁移至 CSS 变量） */
+  --el-color-primary: #1890ff;
+  --el-color-success: #3abc6c;
+  --el-color-warning: #ffa224;
+  --el-color-danger: #ff4d4f;
+  --el-color-info: #a9aeb8;
+  --el-bg-color-page: #f0f2f5;
+
+  /*自定义css变量*/
+  --el-border-color: #e6e8f0 !important;
+  --border: 1px solid var(--el-border-color);
+  --bg-hover-color: var(--el-fill-color-light);
+}
+
+.el-menu--horizontal .el-menu-item:not(.is-disabled):focus {
+  --el-menu-hover-bg-color: transparent !important;
+  --el-menu-active-color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* el-popper */
+.el-popper {
+  --el-popover-border-radius: 8px !important;
+}
+
+/* 弹框 */
+.el-popover {
+  .el-popover__title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+}
+
+/* el-table */
+.el-table__empty-block {
+  min-height: 180px;
+}
+
+.el-table__empty-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100% !important;
+  line-height: normal !important;
+  color: var(--el-text-color-secondary);
+}
+
+.el-table__empty-text > .app-empty {
+  width: 100%;
+}
+
+/* el-dialog */
+.el-dialog {
+  --el-dialog-padding-primary: 20px;
+
+  .el-dialog__header {
+    align-items: center;
+    margin: 0;
+
+    .el-dialog__title {
+      font-size: calc(var(--el-font-size-base) * 1.25);
+      font-weight: 700;
+      line-height: 1.5;
+      color: rgba(0, 0, 0, 0.88);
+      word-wrap: break-word;
+    }
+
+    .el-dialog__headerbtn {
+      font-size: 20px;
+    }
+  }
+
+  .el-dialog__body {
+    --el-dialog-content-font-size: var(--el-font-size-base);
+  }
+
+  .el-dialog__footer {
+    //border-top: var(--border);
+  }
+
+  &.is-fullscreen {
+    border-radius: var(--el-border-radius-base) !important;
+  }
+}
+
+/** el-drawer */
+.el-drawer {
+  .el-drawer__header {
+    padding: 15px 20px;
+    margin: 0;
+    color: inherit;
+    border-bottom: var(--border);
+    .el-drawer__title {
+      font-weight: bold;
+    }
+  }
+
+  .el-drawer__body {
+    padding: 20px;
+  }
+
+  .el-drawer__footer {
+    padding: 15px;
+    border-top: var(--border);
+  }
+}
+
+// 抽屉和对话框底部按钮区域
+.dialog-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+// 消息提示文字
+.el-message {
+  .el-message__content {
+    color: #000000e0 !important;
+  }
+}
+
+// 下拉框
+.el-dropdown__list {
+  .el-dropdown-menu {
+    padding: 4px !important;
+  }
+  .el-dropdown-menu__item {
+    --el-border-radius-base: 4px;
+    padding: 5px 12px;
+    border-radius: var(--el-border-radius-base);
+  }
+
+  .el-dropdown-menu__item:not(.is-disabled):focus,
+  .el-dropdown-menu__item:not(.is-disabled):hover {
+    --el-dropdown-menuItem-hover-fill: var(--bg-hover-color);
+    --el-dropdown-menuItem-hover-color: var(--el-text-color);
+  }
+}
+
+// popup
+.el-menu--popup {
+  min-width: 160px !important;
+  padding: 5px;
+}
+
+// 按钮
+.el-button--primary.is-plain {
+  --el-button-hover-bg-color: transparent !important;
+  --el-button-bg-color: transparent !important;
+  --el-button-border-color: var(--el-color-primary) !important;
+  --el-button-hover-text-color: var(--el-color-primary) !important;
+  &:hover {
+    --el-button-hover-border-color: var(--el-color-primary-light-2) !important;
+    --el-button-hover-text-color: var(--el-color-primary-light-2) !important;
+  }
+  &:active {
+    --el-button-active-text-color: var(--el-color-primary) !important;
+    --el-button-active-bg-color: var(--el-color-primary-light-9) !important;
+  }
+}
+.el-button.is-link {
+  padding: 0;
+}
+.el-button.is-link.is-disabled {
+  color: var(--el-color-info);
+  &:hover {
+    color: var(--el-color-info);
+  }
+}
+.el-button--dashed {
+  border-style: dashed !important;
+}
+
+.el-select-dropdown__list {
+  padding: 6px !important;
+}
+.el-select-dropdown__item {
+  padding: 0 12px;
+  border-radius: 6px;
+}
+
+// 分割面板线
+.el-splitter-bar__dragger-horizontal::before,
+.el-splitter-bar__dragger-horizontal::after {
+  width: 1px !important;
+}
+
+// 时间轴节点
+.el-timeline-item__node--large {
+  --el-timeline-node-size-large: 20px;
+  top: -3px;
+  left: -5px;
+}
+
+// el-input-number
+.el-input-number.is-controls-right .el-input__inner {
+  text-align: left;
+}
+
+.el-input-group__append,
+.el-input-group__prepend {
+  padding: 0 8px;
+}
+
+:deep(.el-tag) + .el-tag {
+  margin-left: 12px;
+}
+
+// el-message-box
+.el-message-box {
+  // border-radius: 8px;
+  // position: relative;
+  --el-messagebox-border-radius: 8px !important;
+  --el-messagebox-padding-primary: 20px 24px !important;
+
+  .el-message-box__header {
+    .el-message-box__title {
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.5;
+      color: rgba(0, 0, 0, 0.88);
+    }
+  }
+
+  .el-message-box__content {
+    margin-top: 8px;
+    color: #000000e0;
+  }
+
+  .el-message-box__btns {
+    margin-top: 12px;
+  }
+}
+
+/*复选框*/
+.el-checkbox {
+  --el-checkbox-input-width: 16px !important;
+  --el-checkbox-input-height: 16px !important;
+  --el-checkbox-height: var(--el-checkbox-input-height);
+  .el-checkbox__inner::after {
+    width: 4px;
+    border: 2px solid transparent;
+    border-top: 0;
+    border-left: 0;
+  }
+}
+
+/*给取消按钮加边框*/
+.el-popconfirm__action .el-button:first-child {
+  border: 1px solid var(--el-border-color);
+}

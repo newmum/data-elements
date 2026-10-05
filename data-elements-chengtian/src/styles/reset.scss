@@ -1,0 +1,183 @@
+// 兼容低版本浏览器 css
+.el-overlay,
+.el-overlay-dialog,
+.el-madal-dialog,
+.el-loading-mask {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+*,
+::before,
+::after {
+  box-sizing: border-box;
+  border-color: currentcolor;
+  border-style: solid;
+  border-width: 0;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+html {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  line-height: 1.5;
+  tab-size: 4;
+  text-size-adjust: 100%;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  font-family:
+    Source Han Sans CN,
+    Source Han Sans CN Medium,
+    "PingFang",
+    "PingFang SC",
+    Arial,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.15;
+  color: #323643;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
+}
+
+input {
+  font-family:
+    Source Han Sans CN,
+    Source Han Sans CN Medium,
+    "PingFang",
+    "PingFang SC",
+    Arial,
+    sans-serif;
+}
+
+img,
+svg {
+  display: inline-block;
+}
+
+svg {
+  // 因icon大小被设置为和字体大小一致，而span等标签的下边缘会和字体的基线对齐，故需设置一个往下的偏移比例，来纠正视觉上的未对齐效果
+  vertical-align: -0.15em;
+}
+
+// 全局标题标签重置（h1-h6）
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  padding: 0;
+  margin: 8px 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: inherit;
+  color: #323643;
+  text-decoration: none;
+  border: none;
+}
+
+// 基础标题样式（可通过类名复用）
+.h1,
+h1 {
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.h2,
+h2 {
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.h3,
+h3 {
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.h4,
+h4 {
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.h5,
+h5 {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.h6,
+h6 {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+ul,
+li {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+a {
+  color: var(--el-color-primary);
+  text-decoration: inherit;
+  cursor: pointer;
+}
+
+a:focus,
+a:hover {
+  color: var(--el-color-primary-light-2);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a:focus,
+a:active,
+div:focus {
+  outline: none;
+}
+
+* {
+  //滚动条整体部分
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  //滚动条里面的小方块，能上下左右移动（取决于是垂直滚动条还是水平滚动条）
+  &::-webkit-scrollbar-thumb {
+    margin-bottom: 10px;
+    background: #e8eaed;
+    border-radius: 8px;
+  }
+  //滚动条的轨道（里面装有thumb）滚动槽
+  &::-webkit-scrollbar-track {
+    background: #ffffff; //滚动槽背景色
+    border-radius: 0; //滚动条边框半径设置
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    width: 20px;
+    background: rgba(157, 165, 183, 0.7);
+  }
+}

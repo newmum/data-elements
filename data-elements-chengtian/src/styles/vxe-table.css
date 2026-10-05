@@ -1,0 +1,69 @@
+.vxe-table--filter-wrapper {
+  padding: 8px 8px 0 8px;
+  margin-top: 8px;
+  border-radius: 8px;
+}
+.vxe-table--filter-wrapper .vxe-table--filter-footer {
+  border: 0;
+}
+
+:root {
+  /*font*/
+  --vxe-ui-font-family: Source Han Sans SC, PingFang, sans-serif;
+  --vxe-ui-select-option-height-small: 32px;
+
+  /*font size*/
+  --vxe-ui-font-size-small: var(--el-font-size-base);
+
+  /*base border*/
+  --vxe-ui-base-border-radius: 6px;
+
+  /* color */
+  --vxe-ui-font-color: var(--el-text-color-regular);
+  --vxe-ui-font-primary-color: var(--el-color-primary);
+  --vxe-ui-font-lighten-color: var(--el-text-color-primary);
+  --vxe-ui-font-darken-color: var(--el-text-color-secondary);
+  --vxe-ui-font-disabled-color: var(--el-text-color-disabled);
+  --vxe-ui-status-success-color: var(--el-color-success);
+  --vxe-ui-status-info-color: var(--el-color-info);
+  --vxe-ui-status-warning-color: var(--el-color-warning);
+  --vxe-ui-status-danger-color: var(--el-color-danger);
+  --vxe-ui-status-error-color: var(--el-color-danger);
+
+  /* input/radio/checkbox */
+  --vxe-ui-input-border-color: var(--el-border-color);
+  --vxe-ui-input-disabled-color: var(--el-text-color-disabled);
+  --vxe-ui-input-disabled-background-color: var(--el-fill-color-light);
+  --vxe-ui-input-placeholder-color: var(--el-text-color-placeholder);
+
+  /* table */
+  --vxe-ui-table-header-font-color: #587aa8;
+  --vxe-ui-table-header-background-color: #f4f7fc;
+  --vxe-ui-table-footer-font-color: var(--el-text-color-regular);
+  --vxe-ui-table-border-color: var(--el-border-color-lighter);
+  --vxe-ui-table-body-background-color: var(--el-bg-color);
+  --vxe-ui-table-footer-background-color: var(--el-bg-color);
+  --vxe-ui-table-row-hover-background-color: var(--el-fill-color-light);
+  --vxe-ui-table-row-current-background-color: var(--el-fill-color-light);
+  --vxe-ui-table-row-hover-current-background-color: var(--el-fill-color-light);
+  --vxe-ui-table-checkbox-range-background-color: var(--el-fill-color-light);
+
+  /* menu */
+  --vxe-ui-table-menu-background-color: var(--el-bg-color-overlay);
+
+  /* loading */
+  --vxe-ui-loading-color: var(--el-color-primary);
+  --vxe-ui-loading-background-color: var(--el-mask-color);
+
+  /* validate */
+  --vxe-ui-table-validate-error-color: var(--el-color-danger);
+
+  /* toolbar */
+  --vxe-ui-toolbar-custom-active-background-color: var(--el-bg-color-overlay);
+
+  /* modal */
+  --vxe-ui-modal-header-background-color: var(--el-bg-color);
+
+  /* form */
+  --vxe-ui-form-validate-error-color: var(--el-color-danger);
+}

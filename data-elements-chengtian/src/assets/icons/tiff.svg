@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" class="design-iconfont">
+  <defs>
+    <clipPath id="vm0qxvhtm__yk8z0zfcha">
+      <path transform="translate(701 271)" stroke="#707070" opacity=".3" fill="#fff" d="M0 0H16V16H0z"/>
+    </clipPath>
+  </defs>
+  <g transform="translate(-701 -271)" clip-path="url(#vm0qxvhtm__yk8z0zfcha)">
+    <path d="M162.582,107.789h6.736l4.042,4.2v8.866a.916.916,0,0,1-.9.933h-9.879a.916.916,0,0,1-.9-.933V108.723A.916.916,0,0,1,162.582,107.789Z" transform="translate(541.486 164.183)" fill="#9d75e2"/>
+    <path d="M619.59,107.789l4.042,4.042h-3.483a.744.744,0,0,1-.446-.154.653.653,0,0,1-.112-.437Z" transform="translate(91.214 164.183)" fill="#dcd5f7"/>
+    <path d="M275.952,604.27h-1.04v3.964h-.6V604.27h-1.037v-.649h2.678Zm1.157,3.964h-.618v-4.613h.618Zm2.855-3.964h-1.353v1.387h1.247v.647h-1.247v1.93h-.6v-4.613h1.954Zm2.609,0h-1.353v1.387h1.247v.647h-1.247v1.93h-.6v-4.613h1.954Z" transform="translate(430.975 -325.595)" stroke="#fff" stroke-width=".1" fill="#fff"/>
+  </g>
+</svg>

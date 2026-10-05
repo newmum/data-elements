@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="聚焦数据要素全流程操作与价值转化，覆盖管理、配置、操作与监控需求，开箱即用支持深度二次定制，大幅缩短数据要素类系统搭建与上线周期，精准赋能数据资产价值挖掘与落地转化。"
+    />
+    <meta name="keywords" content="数据要素,数据管理,数据配置,数据操作,数据监控" />
+    <title>数据要素操作平台</title>
+    <style>
+      html,
+      body,
+      #app {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+      }
+
+      .boot-screen {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        font-family:
+          Inter,
+          "PingFang SC",
+          "Microsoft YaHei",
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: #172033;
+        background:
+          radial-gradient(circle at 22% 20%, rgba(59, 130, 246, 0.2), transparent 30%),
+          radial-gradient(circle at 78% 22%, rgba(79, 70, 229, 0.14), transparent 28%),
+          linear-gradient(135deg, #f8fbff 0%, #eef4ff 46%, #f7faff 100%);
+      }
+
+      .boot-bg-grid {
+        position: absolute;
+        inset: 10%;
+        background-image:
+          linear-gradient(rgba(36, 99, 235, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(36, 99, 235, 0.08) 1px, transparent 1px);
+        background-size: 36px 36px;
+        mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+      }
+
+      .boot-panel {
+        position: relative;
+        display: grid;
+        grid-template-columns: 62px minmax(0, 1fr);
+        gap: 18px;
+        align-items: center;
+        width: min(460px, calc(100vw - 48px));
+        padding: 28px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(47, 84, 235, 0.12);
+        border-radius: 18px;
+        box-shadow: 0 24px 70px rgba(31, 76, 148, 0.16);
+        backdrop-filter: blur(18px);
+      }
+
+      .boot-mark {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 62px;
+        height: 62px;
+        border-radius: 16px;
+      }
+
+      .boot-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .boot-copy strong {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .boot-copy small {
+        font-size: 13px;
+        color: #607089;
+      }
+
+      .boot-progress {
+        position: relative;
+        grid-column: 1 / -1;
+        height: 5px;
+        overflow: hidden;
+        background: #d9e7fb;
+        border-radius: 999px;
+      }
+
+      .boot-progress span {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 100%;
+        background: linear-gradient(90deg, #d9e7fb 0%, #2563eb 42%, #4f46e5 58%, #d9e7fb 100%);
+        background-size: 220% 100%;
+        animation: boot-loading 1.4s ease-in-out infinite;
+      }
+
+      @keyframes boot-loading {
+        0% {
+          background-position: 120% 0;
+        }
+        100% {
+          background-position: -120% 0;
+        }
+      }
+
+      @keyframes boot-pulse {
+        0%,
+        100% {
+          opacity: 0.45;
+          transform: scale(0.96);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.06);
+        }
+      }
+    </style>
+    <!-- Object.hasOwn polyfill (ES2022) — @antv/x6 使用了此 API，Chrome<93 等低版本浏览器不支持 -->
+    <script>
+      if (!Object.hasOwn) {
+        Object.hasOwn = function (obj, prop) {
+          return Object.prototype.hasOwnProperty.call(obj, prop);
+        };
+      }
+    </script>
+    <!-- 同步更新 <title>，避免 tab 标题闪烁 -->
+    <script>
+      (function () {
+        try {
+          var cached = localStorage.getItem("systemName");
+          window.__SYSTEM_NAME__ = cached
+            ? (function () {
+                try {
+                  var p = JSON.parse(cached);
+                  return typeof p === "string" ? p : "数据要素操作平台";
+                } catch (_) {
+                  return cached;
+                }
+              })()
+            : "数据要素操作平台";
+          document.title = window.__SYSTEM_NAME__;
+        } catch (_) {
+          window.__SYSTEM_NAME__ = "数据要素操作平台";
+        }
+      })();
+    </script>
+  </head>
+
+  <body>
+    <!-- 针对 IE：默认隐藏 -->
+    <div
+      id="ie-warning"
+      style="
+        position: fixed;
+        top: 0;
+        right: 0;
+        left: 0;
+        z-index: 9999;
+        display: none;
+        padding: 15px;
+        font-size: 16px;
+        color: white;
+        text-align: center;
+        background: #ff4d4f;
+      "
+    >
+      抱歉，本网站不支持 Internet Explorer 浏览器。
+      <br />
+      请使用 Chrome、Edge、Firefox 等现代浏览器访问。
+    </div>
+
+    <div id="app">
+      <div class="boot-screen">
+        <div class="boot-bg-grid"></div>
+        <div class="boot-panel">
+          <div class="boot-mark">
+            <img
+              id="boot-logo"
+              src=""
+              alt="logo"
+              style="width: 62px; height: 62px; object-fit: contain"
+            />
+          </div>
+          <script>
+            // 从 localStorage 读取 logo 字段并设置到启动屏 logo，无则显示默认图标
+            (function () {
+              try {
+                var img = document.getElementById("boot-logo");
+                if (!img) return;
+                var logo = localStorage.getItem("logo");
+                if (logo) {
+                  img.src = logo;
+                } else {
+                  // 默认 SVG 图标（数据库图标）
+                  img.src =
+                    "data:image/svg+xml," +
+                    encodeURIComponent(
+                      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">' +
+                        '<rect x="8" y="8" width="48" height="48" rx="12" fill="url(#g)"/>' +
+                        '<ellipse cx="32" cy="24" rx="14" ry="6" stroke="#fff" stroke-width="2.5" fill="none"/>' +
+                        '<path d="M18 24v8c0 3.3 6.3 6 14 6s14-2.7 14-6v-8" stroke="#fff" stroke-width="2.5" fill="none"/>' +
+                        '<path d="M18 32v8c0 3.3 6.3 6 14 6s14-2.7 14-6v-8" stroke="#fff" stroke-width="2.5" fill="none"/>' +
+                        '<defs><linearGradient id="g" x1="8" y1="8" x2="56" y2="56">' +
+                        '<stop stop-color="#2563eb"/><stop offset="1" stop-color="#4f46e5"/>' +
+                        "</linearGradient></defs></svg>"
+                    );
+                }
+              } catch (e) {}
+            })();
+          </script>
+          <div class="boot-copy">
+            <strong></strong>
+            <script>
+              // 同步替换启动屏标题，零闪现
+              (function () {
+                var el = document.currentScript.previousElementSibling;
+                if (el && window.__SYSTEM_NAME__) el.textContent = window.__SYSTEM_NAME__;
+              })();
+            </script>
+            <small>正在初始化应用资源</small>
+          </div>
+          <div class="boot-progress">
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+  <script>
+    // 检测是否为 IE 浏览器
+    function isIE() {
+      return /msie|trident/.test(window.navigator.userAgent.toLowerCase());
+    }
+
+    if (isIE()) {
+      // 显示针对 IE10/11 的提示
+      document.getElementById("ie-warning").style.display = "block";
+      document.getElementById("app").style.display = "none";
+    }
+  </script>
+  <script type="module" src="/src/main.ts"></script>
+  <!-- 加载babel用于动态组件编译ts转js -->
+  <script type="module" src="/babel.min.js"></script>
+</html>

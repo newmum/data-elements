@@ -1,0 +1,355 @@
+// 自动生成：请勿手动修改 更新图片请执行 pnpm run gen:image-styles
+:root {
+  --images-19-19-bg: url("@/assets/images/19/19-bg.svg");
+  --images-19-card-header2: url("@/assets/images/19/card-header2.svg");
+  --images-19-title-bg: url("@/assets/images/19/title-bg.svg");
+  --images-401: url("@/assets/images/401.svg");
+  --images-404: url("@/assets/images/404.svg");
+  --images-bg: url("@/assets/images/bg.svg");
+  --images-detail-empty: url("@/assets/images/detail/empty.png");
+  --images-img: url("@/assets/images/img.png");
+  --images-market-bg: url("@/assets/images/market/bg.jpg");
+  --images-market-tab: url("@/assets/images/market/tab.svg");
+  --images-portal-a1: url("@/assets/images/portal/a1.png");
+  --images-portal-a2: url("@/assets/images/portal/a2.png");
+  --images-portal-a3: url("@/assets/images/portal/a3.png");
+  --images-portal-a4: url("@/assets/images/portal/a4.png");
+  --images-portal-b1: url("@/assets/images/portal/b1.png");
+  --images-portal-b2: url("@/assets/images/portal/b2.png");
+  --images-portal-b3: url("@/assets/images/portal/b3.png");
+  --images-portal-b4: url("@/assets/images/portal/b4.png");
+  --images-portal-b5: url("@/assets/images/portal/b5.png");
+  --images-portal-b6: url("@/assets/images/portal/b6.png");
+  --images-portal-bg: url("@/assets/images/portal/bg.png");
+  --images-server-apicount1: url("@/assets/images/server/apicount1.png");
+  --images-server-apicount2: url("@/assets/images/server/apicount2.png");
+  --images-server-apicount3: url("@/assets/images/server/apicount3.png");
+  --images-touxiang: url("@/assets/images/touxiang.png");
+  --images-warehouse-logo1: url("@/assets/images/warehouse/logo1.png");
+  --images-warehouse-logo2: url("@/assets/images/warehouse/logo2.png");
+  --images-warehouse-logo3: url("@/assets/images/warehouse/logo3.png");
+  --images-warehouse-logo4: url("@/assets/images/warehouse/logo4.png");
+  --images-warehouse-logo5: url("@/assets/images/warehouse/logo5.png");
+  --images-warehouse-logo6: url("@/assets/images/warehouse/logo6.png");
+  --images-workplace-bg: url("@/assets/images/workplace/bg.png");
+  --images-workplace-bg2: url("@/assets/images/workplace/bg2.png");
+  --images-workplace-bg3: url("@/assets/images/workplace/bg3.png");
+  --images-workplace-card-bg: url("@/assets/images/workplace/card-bg.png");
+  --images-workplace-catalog: url("@/assets/images/workplace/catalog.svg");
+  --images-workplace-db-bg: url("@/assets/images/workplace/db-bg.png");
+  --images-workplace-home-banner: url("@/assets/images/workplace/home-banner.png");
+  --images-workplace-home: url("@/assets/images/workplace/home.svg");
+  --images-workplace-icon-home: url("@/assets/images/workplace/icon-home.svg");
+  --images-workplace-icon-快捷入口-2x: url("@/assets/images/workplace/icon-快捷入口@2x.png");
+  --images-workplace-icon-我的利益-2x: url("@/assets/images/workplace/icon-我的利益@2x.png");
+  --images-workplace-icon-我的合约-2x: url("@/assets/images/workplace/icon-我的合约@2x.png");
+  --images-workplace-icon-我的待办-2x: url("@/assets/images/workplace/icon-我的待办@2x.png");
+  --images-workplace-icon-我的目录-2x: url("@/assets/images/workplace/icon-我的目录@2x.png");
+  --images-workplace-icon-我的资源-2x: url("@/assets/images/workplace/icon-我的资源@2x.png");
+  --images-workplace-icon-数据合约-2x: url("@/assets/images/workplace/icon-数据合约@2x.png");
+  --images-workplace-icon-流通跟踪-2x: url("@/assets/images/workplace/icon-流通跟踪@2x.png");
+  --images-workplace-icon-目录上架-2x: url("@/assets/images/workplace/icon-目录上架@2x.png");
+  --images-workplace-icon-目录编制-2x: url("@/assets/images/workplace/icon-目录编制@2x.png");
+  --images-workplace-icon-资源登记-2x: url("@/assets/images/workplace/icon-资源登记@2x.png");
+  --images-workplace-icon-连接器管理-2x: url("@/assets/images/workplace/icon-连接器管理@2x.png");
+  --images-workplace-iconApplication: url("@/assets/images/workplace/iconApplication.svg");
+  --images-workplace-iconCategory: url("@/assets/images/workplace/iconCategory.svg");
+  --images-workplace-iconDatabase: url("@/assets/images/workplace/iconDatabase.svg");
+  --images-workplace-iconDb: url("@/assets/images/workplace/iconDb.svg");
+  --images-workplace-icon_应用系统: url("@/assets/images/workplace/icon_应用系统.svg");
+  --images-workplace-icon_我的待办: url("@/assets/images/workplace/icon_我的待办.svg");
+  --images-workplace-icon_我的收藏: url("@/assets/images/workplace/icon_我的收藏.svg");
+  --images-workplace-icon_我的足迹: url("@/assets/images/workplace/icon_我的足迹.svg");
+  --images-workplace-icon_数据导入: url("@/assets/images/workplace/icon_数据导入.svg");
+  --images-workplace-icon_数据库表: url("@/assets/images/workplace/icon_数据库表.svg");
+  --images-workplace-icon_数据文件: url("@/assets/images/workplace/icon_数据文件.svg");
+  --images-workplace-icon_数据服务: url("@/assets/images/workplace/icon_数据服务.svg");
+  --images-workplace-icon_数据目录: url("@/assets/images/workplace/icon_数据目录.svg");
+  --images-workplace-info-bg: url("@/assets/images/workplace/info-bg.png");
+  --images-workplace-search: url("@/assets/images/workplace/search.svg");
+  --images-workplace-serve-empty: url("@/assets/images/workplace/serve-empty.png");
+  --images-workplace-zoom-in: url("@/assets/images/workplace/zoom-in.svg");
+}
+
+// 公共背景样式（SCSS占位符，用于@extend）
+%images-base {
+  background-repeat: no-repeat;
+}
+
+// 自动生成的背景类
+.images-19-19-bg {
+  @extend %images-base;
+  background-image: var(--images-19-19-bg);
+}
+.images-19-card-header2 {
+  @extend %images-base;
+  background-image: var(--images-19-card-header2);
+}
+.images-19-title-bg {
+  @extend %images-base;
+  background-image: var(--images-19-title-bg);
+}
+.images-401 {
+  @extend %images-base;
+  background-image: var(--images-401);
+}
+.images-404 {
+  @extend %images-base;
+  background-image: var(--images-404);
+}
+.images-bg {
+  @extend %images-base;
+  background-image: var(--images-bg);
+}
+.images-detail-empty {
+  @extend %images-base;
+  background-image: var(--images-detail-empty);
+}
+.images-img {
+  @extend %images-base;
+  background-image: var(--images-img);
+}
+.images-market-bg {
+  @extend %images-base;
+  background-image: var(--images-market-bg);
+}
+.images-market-tab {
+  @extend %images-base;
+  background-image: var(--images-market-tab);
+}
+.images-portal-a1 {
+  @extend %images-base;
+  background-image: var(--images-portal-a1);
+}
+.images-portal-a2 {
+  @extend %images-base;
+  background-image: var(--images-portal-a2);
+}
+.images-portal-a3 {
+  @extend %images-base;
+  background-image: var(--images-portal-a3);
+}
+.images-portal-a4 {
+  @extend %images-base;
+  background-image: var(--images-portal-a4);
+}
+.images-portal-b1 {
+  @extend %images-base;
+  background-image: var(--images-portal-b1);
+}
+.images-portal-b2 {
+  @extend %images-base;
+  background-image: var(--images-portal-b2);
+}
+.images-portal-b3 {
+  @extend %images-base;
+  background-image: var(--images-portal-b3);
+}
+.images-portal-b4 {
+  @extend %images-base;
+  background-image: var(--images-portal-b4);
+}
+.images-portal-b5 {
+  @extend %images-base;
+  background-image: var(--images-portal-b5);
+}
+.images-portal-b6 {
+  @extend %images-base;
+  background-image: var(--images-portal-b6);
+}
+.images-portal-bg {
+  @extend %images-base;
+  background-image: var(--images-portal-bg);
+}
+.images-server-apicount1 {
+  @extend %images-base;
+  background-image: var(--images-server-apicount1);
+}
+.images-server-apicount2 {
+  @extend %images-base;
+  background-image: var(--images-server-apicount2);
+}
+.images-server-apicount3 {
+  @extend %images-base;
+  background-image: var(--images-server-apicount3);
+}
+.images-touxiang {
+  @extend %images-base;
+  background-image: var(--images-touxiang);
+}
+.images-warehouse-logo1 {
+  @extend %images-base;
+  background-image: var(--images-warehouse-logo1);
+}
+.images-warehouse-logo2 {
+  @extend %images-base;
+  background-image: var(--images-warehouse-logo2);
+}
+.images-warehouse-logo3 {
+  @extend %images-base;
+  background-image: var(--images-warehouse-logo3);
+}
+.images-warehouse-logo4 {
+  @extend %images-base;
+  background-image: var(--images-warehouse-logo4);
+}
+.images-warehouse-logo5 {
+  @extend %images-base;
+  background-image: var(--images-warehouse-logo5);
+}
+.images-warehouse-logo6 {
+  @extend %images-base;
+  background-image: var(--images-warehouse-logo6);
+}
+.images-workplace-bg {
+  @extend %images-base;
+  background-image: var(--images-workplace-bg);
+}
+.images-workplace-bg2 {
+  @extend %images-base;
+  background-image: var(--images-workplace-bg2);
+}
+.images-workplace-bg3 {
+  @extend %images-base;
+  background-image: var(--images-workplace-bg3);
+}
+.images-workplace-card-bg {
+  @extend %images-base;
+  background-image: var(--images-workplace-card-bg);
+}
+.images-workplace-catalog {
+  @extend %images-base;
+  background-image: var(--images-workplace-catalog);
+}
+.images-workplace-db-bg {
+  @extend %images-base;
+  background-image: var(--images-workplace-db-bg);
+}
+.images-workplace-home-banner {
+  @extend %images-base;
+  background-image: var(--images-workplace-home-banner);
+}
+.images-workplace-home {
+  @extend %images-base;
+  background-image: var(--images-workplace-home);
+}
+.images-workplace-icon-home {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-home);
+}
+.images-workplace-icon-快捷入口-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-快捷入口-2x);
+}
+.images-workplace-icon-我的利益-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-我的利益-2x);
+}
+.images-workplace-icon-我的合约-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-我的合约-2x);
+}
+.images-workplace-icon-我的待办-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-我的待办-2x);
+}
+.images-workplace-icon-我的目录-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-我的目录-2x);
+}
+.images-workplace-icon-我的资源-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-我的资源-2x);
+}
+.images-workplace-icon-数据合约-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-数据合约-2x);
+}
+.images-workplace-icon-流通跟踪-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-流通跟踪-2x);
+}
+.images-workplace-icon-目录上架-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-目录上架-2x);
+}
+.images-workplace-icon-目录编制-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-目录编制-2x);
+}
+.images-workplace-icon-资源登记-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-资源登记-2x);
+}
+.images-workplace-icon-连接器管理-2x {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon-连接器管理-2x);
+}
+.images-workplace-iconApplication {
+  @extend %images-base;
+  background-image: var(--images-workplace-iconApplication);
+}
+.images-workplace-iconCategory {
+  @extend %images-base;
+  background-image: var(--images-workplace-iconCategory);
+}
+.images-workplace-iconDatabase {
+  @extend %images-base;
+  background-image: var(--images-workplace-iconDatabase);
+}
+.images-workplace-iconDb {
+  @extend %images-base;
+  background-image: var(--images-workplace-iconDb);
+}
+.images-workplace-icon_应用系统 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_应用系统);
+}
+.images-workplace-icon_我的待办 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_我的待办);
+}
+.images-workplace-icon_我的收藏 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_我的收藏);
+}
+.images-workplace-icon_我的足迹 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_我的足迹);
+}
+.images-workplace-icon_数据导入 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_数据导入);
+}
+.images-workplace-icon_数据库表 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_数据库表);
+}
+.images-workplace-icon_数据文件 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_数据文件);
+}
+.images-workplace-icon_数据服务 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_数据服务);
+}
+.images-workplace-icon_数据目录 {
+  @extend %images-base;
+  background-image: var(--images-workplace-icon_数据目录);
+}
+.images-workplace-info-bg {
+  @extend %images-base;
+  background-image: var(--images-workplace-info-bg);
+}
+.images-workplace-search {
+  @extend %images-base;
+  background-image: var(--images-workplace-search);
+}
+.images-workplace-serve-empty {
+  @extend %images-base;
+  background-image: var(--images-workplace-serve-empty);
+}
+.images-workplace-zoom-in {
+  @extend %images-base;
+  background-image: var(--images-workplace-zoom-in);
+}
