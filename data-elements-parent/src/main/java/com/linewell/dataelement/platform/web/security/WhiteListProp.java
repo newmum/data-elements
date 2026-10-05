@@ -21,6 +21,7 @@ public class WhiteListProp {
             "/portal/logout",
             "/idaas/auth/login",
             "/idaas/auth/public-settings",
+            "/idaas/password-recovery/request",
             "/idaas/auth-account/login",
             "/idaas/auth-account/register",
             "/idaas/auth-account/me",

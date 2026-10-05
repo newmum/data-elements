@@ -35,7 +35,11 @@ async function checkAuthControls(page: Page) {
     const route = new URL(page.url()).hash;
     if (/login|register/.test(route)) expect(controls.inputs.length).toBeGreaterThan(0);
     else if (route.endsWith('/mfa')) await expect(page.getByText('认证流程已失效，请重新登录', { exact: true })).toBeVisible();
-    else await expect(page.getByText('请联系对应系统的账号管理员', { exact: true })).toBeVisible();
+    else {
+        await expect(page.getByText(/提交申请后，请联系对应系统的账号管理员/)).toBeVisible();
+        await expect(page.getByLabel('登录账号', { exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: '提交找回申请' })).toBeVisible();
+    }
     for (const height of controls.inputs) expect(height).toBeGreaterThanOrEqual(44);
     for (const height of controls.actions) expect(height).toBeGreaterThanOrEqual(48);
     for (const margin of controls.fieldMargins) expect(margin).toBeGreaterThanOrEqual(24);
@@ -68,6 +72,20 @@ for (const width of [1920, 1440, 1224, 768, 390]) test(`@compact 全部认证页
         await checkAuthControls(page);
         await page.screenshot({ path: testInfo.outputPath(route.replaceAll('/', '-') + '.png'), fullPage: true });
     }
+});
+test('@compact 忘记密码提交后显示统一回执并允许切换账号类型', async ({ page }) => {
+    const { recoveryRequests } = await installContract(page);
+    await page.goto('/#/auth/workforce/forgot');
+    await page.getByLabel('登录账号', { exact: true }).fill('someone.account');
+    await page.getByRole('button', { name: '提交找回申请' }).click();
+    await expect(page.getByText('申请已提交', { exact: true })).toBeVisible();
+    expect(recoveryRequests).toEqual([{ username: 'someone.account', realm: 'platform', domain: 'workforce' }]);
+    await page.getByText('统一认证账号', { exact: true }).click();
+    await page.getByText('公众身份', { exact: true }).click();
+    await page.getByLabel('登录账号', { exact: true }).fill('another.account');
+    await page.getByRole('button', { name: '提交找回申请' }).click();
+    await expect(page.getByText('申请已提交', { exact: true })).toBeVisible();
+    expect(recoveryRequests[1]).toEqual({ username: 'another.account', realm: 'auth-account', domain: 'public' });
 });
 test('@compact 已删除的设计页面、个人菜单、帮助与搜索入口', async ({ page }) => {
     await login(page);

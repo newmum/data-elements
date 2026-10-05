@@ -191,7 +191,7 @@ export default function Shell() {
               <Button type="text" aria-label="通知" onClick={() => setNotifications(true)} icon={<Badge dot={attention.length > 0}><BellOutlined /></Badge>}/>
               <Tooltip title="使用帮助"><Button type="text" aria-label="使用帮助" icon={<QuestionCircleOutlined />} onClick={() => setHelpOpen(true)}/></Tooltip>
               <Dropdown menu={{ items: [{ key: 'profile', label: '个人中心', icon: <UserOutlined />, onClick: () => go('profile') }, { type: 'divider' }, { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, onClick: logout }] }}>
-                <Button type="text" className="account-button"><UserAvatar user={{ id: session.username, name: session.name }} size={32}/><span className="account-copy"><span>{session.name}</span><small>{roleName}</small></span><DownOutlined style={{ fontSize: 9, color: '#8b99b3' }}/></Button>
+                <Button type="text" className="account-button"><Avatar size={32} className="account-avatar" aria-hidden="true">{Array.from((session.name || session.username || '').trim())[0] || '用'}</Avatar><span className="account-copy"><span>{session.name || session.username}</span><small>{roleName}</small></span><DownOutlined style={{ fontSize: 9, color: '#8b99b3' }}/></Button>
               </Dropdown>
             </div>
           </Header>

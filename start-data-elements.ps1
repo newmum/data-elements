@@ -242,7 +242,19 @@ if (-not [string]::IsNullOrWhiteSpace($NifiApiPullReachableBaseUrl)) {
 }
 $localOverrides["nifi"] = $nifiOverrides
 if ($Profile -eq "dev") {
-    $localOverrides["idaas"] = @{ transport = @{ "allow-local-http" = $true } }
+    # The public-security receiver route is deployment-owned. Incoming payloads
+    # cannot choose a tenant schema, application, or receiver instance.
+    $gaReceiverRoutes = @{
+        "ga-local-v2" = @{
+            tenantId = "2084109831682699264"
+            appId = "2084109831682699264"
+            instanceId = "ga-local-v2"
+        }
+    } | ConvertTo-Json -Depth 4 -Compress
+    $localOverrides["idaas"] = @{
+        transport = @{ "allow-local-http" = $true }
+        receiver = @{ routes = $gaReceiverRoutes }
+    }
 }
 
 $env:SPRING_APPLICATION_JSON = $localOverrides | ConvertTo-Json -Depth 8 -Compress

@@ -8,16 +8,16 @@ NiFi 原工程的迁入基线固定为 2026-09-29 14:42:43 的 `c122f605`；之�
 
 ## 安装和启动
 
-要求 Node.js 22.12+ 和 npm。在本目录运行：
+要求 Node.js 22.12+ 和 pnpm 12.6.0。在本目录运行：
 
 ```bash
-npm ci --ignore-scripts
-npm run deps:check
-npm run typecheck
-npm test
-npm run test:nifi
-npm run build
-npm run dev
+pnpm install --frozen-lockfile
+pnpm run deps:check
+pnpm run typecheck
+pnpm test
+pnpm run test:nifi
+pnpm run build
+pnpm run dev
 ```
 
 浏览器打开 `http://localhost:3002/#/integration/overview`。这个端口和入口与数据中台“数据集成中心”菜单一致；跨端口登录态通过平台现有的 `capability-session.html` 获取，不在地址栏传递 Token。生产环境使用同源 `/haitong/` 入口；如平台地址不同，构建时配置 `VITE_SOURCE_PLATFORM_HOME_URL`。项目沿用 React 18、Ant Design 5、X6 2、TypeScript 5 和 Vite 5；NiFi 画布直接复用同一安装树中的版本。依赖风险预检由 `predev` 和 `prebuild` 执行。原始依赖清单与历史检查记录保存在 `doc/`，其中较早的“无法构建”说明已不是当前集成版状态。
@@ -55,7 +55,7 @@ NiFi 流程本身不保存在 IndexedDB；本地工作区只保存可选的 `nif
 
 ## 验证与结构
 
-当前集成版已通过 `npm run typecheck`、`npm test`（59 项领域及会话测试）、`npm run test:nifi`（20 项 NiFi 专项测试）及 `npm run build`。构建可能提示大分包体积；该提示不代表构建失败。真实部署、特定数据库和生产网关仍须在目标环境联调验收。
+当前集成版已通过 `pnpm run typecheck`、`pnpm test`（66 项领域及会话测试）、`pnpm run test:nifi`（20 项 NiFi 专项测试）及 `pnpm run build`。构建可能提示大分包体积；该提示不代表构建失败。真实部署、特定数据库和生产网关仍须在目标环境联调验收。
 
 ```text
 src/app/             路由、工作台上下文

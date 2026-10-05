@@ -8,6 +8,7 @@ export async function installContract(page: Page) {
     const session: Session = { userId: 'u-admin', tenantId: 'tenant-contract', tenantName: '公安', username: 'contract.user', name: '管理人员', role: 'admin', domain: 'workforce', capabilities: ['workspace', 'users', 'orgs', 'apps', 'roles', 'resources', 'audit'], editableTables: ['users', 'orgs', 'apps', 'roles', 'resources'], allowedAppIds: database.apps.filter(app => app.domain === 'workforce').map(app => app.id), orgIds: [], scopeMode: 'tenant' };
     for (const key of ['groups', 'syncConfigs', 'tasks', 'catalog', 'legalEntities'] as const) database[key] = [];
     const saved: Array<Record<string, unknown>> = [];
+    const recoveryRequests: Array<{ username: string; realm: string; domain: string }> = [];
     await page.route('**/api/**', async route => {
         const pathname = new URL(route.request().url()).pathname;
         let data: unknown;
@@ -19,7 +20,21 @@ export async function installContract(page: Page) {
         } else if (pathname.endsWith('/idaas/session/me')) data = session;
         else if (pathname.endsWith('/idaas/workspace/bootstrap')) data = { session, database, capabilities: session.capabilities };
         else if (pathname.endsWith('/idaas/auth/logout')) data = true;
+        else if (pathname.endsWith('/idaas/password-recovery/request')) {
+            recoveryRequests.push(route.request().postDataJSON());
+            data = { accepted: true, message: '申请已提交' };
+        }
         else if (pathname.endsWith('/idaas/users/operations')) data = [];
+        else if (pathname.endsWith('/idaas/users/list')) {
+            const params = new URL(route.request().url()).searchParams;
+            const domain = params.get('domain') || session.domain;
+            const query = (params.get('q') || '').trim().toLowerCase();
+            const page = Math.max(1, Number(params.get('page') || 1));
+            const size = Math.max(1, Number(params.get('size') || 20));
+            const matches = database.users.filter(user => user.domain === domain &&
+                (!query || [user.name, user.account, user.email].some(value => (value || '').toLowerCase().includes(query))));
+            data = { list: matches.slice((page - 1) * size, page * size), total: matches.length, page, size };
+        }
         else if (/\/idaas\/(users|orgs|applications|roles|resources)\/save$/.test(pathname)) {
             const body = route.request().postDataJSON(); saved.push(body);
             const segment = pathname.split('/').at(-2);
@@ -33,7 +48,7 @@ export async function installContract(page: Page) {
         } else return route.fulfill({ status: 404, json: { code: 404, message: '接口未开通' } });
         await route.fulfill({ json: { code: 200, data } });
     });
-    return { database, saved };
+    return { database, saved, recoveryRequests };
 }
 export async function login(page: Page) {
     await page.goto('/#/login');

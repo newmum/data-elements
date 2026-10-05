@@ -12,6 +12,7 @@ class MemoryStorage {
 }
 Object.defineProperty(globalThis, 'sessionStorage', { value: new MemoryStorage(), configurable: true });
 const workspace = await import('../src/services/workspace.ts');
+const identity = await import('../src/services/identity.ts');
 const session: Session = { userId: 'account-1', tenantId: 'tenant-1', tenantName: '公安', username: 'contract.user', name: '接口契约用户', role: 'admin', domain: 'workforce', capabilities: ['workspace', 'users', 'orgs', 'apps', 'roles', 'resources', 'audit'], editableTables: ['users', 'orgs', 'apps', 'roles', 'resources'], permissions: ['idaas:users:write'], allowedAppIds: [], orgIds: [], scopeMode: 'tenant' };
 const response = (data: unknown, code: number | string = 200, status = 200) => new Response(JSON.stringify({ code, data }), { status, headers: { 'content-type': 'application/json' } });
 
@@ -42,6 +43,15 @@ test('工作区最初为空，登录失败不会载入初始身份或伪造会�
     await assert.rejects(workspace.api.login('wrong', 'wrong', 'workforce', 'tenant-1'), /账号或密码/);
     assert.equal(workspace.getSession(), null);
     assert.equal(workspace.getDatabase().users.length, 0);
+});
+test('密码找回申请以未登录请求提交，且只传账号、身份类型和身份域', async () => {
+    globalThis.fetch = async (input, options) => {
+        assert.equal(input, '/api/idaas/password-recovery/request');
+        assert.equal((options?.headers as Record<string, string>).token, undefined);
+        assert.deepEqual(JSON.parse(String(options?.body)), { username: 'manager', realm: 'platform', domain: 'workforce' });
+        return response({ accepted: true, message: '申请已提交' });
+    };
+    assert.equal((await identity.identityApi.requestRecovery('manager', 'platform', 'workforce')).accepted, true);
 });
 test('登录凭据错误保留业务提示，已有会话过期使用认证错误', async () => {
     globalThis.fetch = async () => new Response(JSON.stringify({ code: 401, message: '账号或密码不正确' }));

@@ -362,6 +362,17 @@ button {
   height: 36px;
   padding-inline: 6px
 }
+.account-button .account-avatar {
+  flex: none;
+  background: #e8eeff;
+  color: #3657b7;
+  border: 1px solid #d3def8;
+  box-shadow: 0 1px 3px rgba(35, 60, 110, .08);
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: var(--iam-font-body);
+  font-weight: 600;
+  letter-spacing: 0;
+}
 .account-copy {
   display: flex;
   flex-direction: column;

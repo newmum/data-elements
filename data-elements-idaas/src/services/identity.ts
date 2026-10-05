@@ -19,6 +19,10 @@ export async function identityRequest<T>(path: string, body?: unknown): Promise<
     catch (error) { if (error instanceof DomainError && error.code === 'UNAUTHENTICATED' && identityToken === currentToken) retainIdentityToken(''); throw error; }
 }
 export const identityApi = {
+    requestRecovery: (username: string, realm: 'platform' | 'auth-account', domain: Domain) =>
+        request<{ accepted: boolean; message: string }>('/idaas/password-recovery/request', {
+            method: 'POST', body: { username, realm, domain },
+        }),
     async login(username: string, password: string, domain: Domain) {
         const value = await request<{ token?: string; profile?: IdentityProfile; mfaRequired?: boolean; challenge?: string }>('/idaas/auth-account/login', { method: 'POST', body: { username, password, domain } });
         if (value.token) retainIdentityToken(value.token);

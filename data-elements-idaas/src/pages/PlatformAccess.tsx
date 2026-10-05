@@ -3,8 +3,9 @@ import { Alert, App, Button, Checkbox, Form, Input, Modal, Select, Space, Table,
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { PageTitle } from '../components/common';
 import { foundationApi, refreshWorkspace, useDatabase, useSession } from '../mock/store';
+import PasswordRecoveryRequests from '../components/PasswordRecoveryRequests';
 
-interface Operator { id: string; username: string; display_name: string; status: string; version: number; must_change_password: number; locked_until?: string; }
+interface Operator { id: string; username: string; display_name: string; subject_id?: string; subject_version?: number; status: string; version: number; must_change_password: number; locked_until?: string; }
 interface Role { id: string; code: string; name: string; description: string; status: string; version: number; resourceIds: string[]; }
 interface Resource { id: string; code: string; name: string; }
 interface Assignment { role_id: string; valid_from?: string; valid_until?: string; scopes: { scope_kind: string; app_id?: string; org_id?: string; include_children?: number; identity_domain: string }[]; }
@@ -21,10 +22,12 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
     const [error, setError] = useState('');
     const [editing, setEditing] = useState<Operator | Role | null>(null);
     const [open, setOpen] = useState(false);
-    const [resetting, setResetting] = useState<Operator | null>(null);
+    const [resetting, setResetting] = useState<Pick<Operator, 'id' | 'version'> | null>(null);
+    const [recoveryVersion, setRecoveryVersion] = useState(0);
     const [assigning, setAssigning] = useState<Operator | null>(null);
     const [scopes, setScopes] = useState<ScopeEditor[]>([]);
     const [form] = Form.useForm();
+    const selectedSubjectId = Form.useWatch('subjectId', form);
     const [passwordForm] = Form.useForm();
     const { message, modal } = App.useApp();
     const can = (permission: string) => session.permissions?.includes(permission) === true;
@@ -55,7 +58,7 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
     const save = async () => {
         const values = await form.validateFields();
         await perform(() => foundationApi.write(`/idaas/${rolePage ? 'platform-roles' : 'operators'}/save`, {
-            record: { ...values, id: editing?.id, version: editing?.version }, creating: !editing,
+            record: { ...values, id: editing?.id, version: editing?.version, subjectVersion: editing && 'subject_version' in editing ? editing.subject_version : undefined }, creating: !editing,
         }), '已保存'); setOpen(false);
     };
     const assign = async (row: Operator) => {
@@ -82,6 +85,10 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
             extra={<Space><Button icon={<ReloadOutlined />} loading={busy} onClick={() => void load()}>刷新</Button>{kind !== 'locked' && <Button type="primary" icon={<PlusOutlined />} disabled={!can(rolePage ? 'platform-roles:write' : 'operators:write')} onClick={() => edit(null)}>新建{rolePage ? '角色' : '操作账号'}</Button>}</Space>}/>
         {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }}/>} 
         <Alert type="info" showIcon title="功能权限与管理范围共同决定操作资格，保存授权前请核对职责。" style={{ marginBottom: 16 }}/>
+        {!rolePage && kind === 'operators' && can('operators:write') && <PasswordRecoveryRequests realm="platform" domain="workforce" refreshKey={recoveryVersion} onReset={request => {
+            if (request.accountId === session.userId) { message.error('请由另一名有权限的管理员核验并重置此账号'); return; }
+            passwordForm.resetFields(); setResetting({ id: request.accountId, version: request.version });
+        }}/>}
         {rolePage ? <Table<Role> size="small" rowKey="id" loading={busy} dataSource={roles} scroll={{ x: 800 }} columns={[
             { title: '角色名称', dataIndex: 'name' }, { title: '编码', dataIndex: 'code' },
             { title: '功能权限', render: (_, row) => <Space wrap>{row.resourceIds.map(id => <Tag key={id}>{resources.find(r => r.id === id)?.code || id}</Tag>)}</Space> },
@@ -105,7 +112,8 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
                     <Form.Item name="code" label="角色编码" rules={[{ required: true }, { pattern: /^[A-Za-z][A-Za-z0-9_-]{1,99}$/ }]}><Input disabled={!!editing}/></Form.Item>
                     <Form.Item name="description" label="职责说明"><Input.TextArea rows={3}/></Form.Item>
                     <Form.Item name="resourceIds" label="平台功能权限"><Select mode="multiple" options={resources.map(r => ({ value: r.id, label: r.code }))}/></Form.Item></> : <>
-                    <Form.Item name="displayName" label="姓名" rules={[{ required: true }, { max: 100 }]}><Input/></Form.Item>
+                    <Form.Item name="displayName" label="姓名" rules={[{ required: true }, { max: 100 }]}><Input disabled={!!selectedSubjectId}/></Form.Item>
+                    {!editing && <Form.Item name="subjectId" label="关联已有人员" extra="选择已有人员后，姓名以人员主档为准；未选择时该账号仅保存平台显示名。"><Select allowClear showSearch optionFilterProp="label" options={db.users.filter(user => user.domain === 'workforce' && user.status === 'enabled').map(user => ({ value: user.id, label: `${user.name} · ${user.subjectCode || user.account}` }))} onChange={value => { const user = db.users.find(item => item.id === value); if (user) form.setFieldValue('displayName', user.name); }}/></Form.Item>}
                     <Form.Item name="username" label="登录账号" rules={[{ required: true }, { pattern: /^[A-Za-z][A-Za-z0-9_.-]{2,49}$/ }]}><Input disabled={!!editing} autoComplete="off"/></Form.Item>
                     {!editing && <Form.Item name="password" label="初始密码" rules={[{ required: true }, { min: db.settings.workforce.minLength || 8 }]} extra="新账号首次登录后需要修改密码。"><Input.Password autoComplete="new-password"/></Form.Item>}</>}
                 <Form.Item name="status" label="状态"><Select options={[{ value: 'ACTIVE', label: '启用' }, { value: 'DISABLED', label: '停用' }]}/></Form.Item>
@@ -113,7 +121,7 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
         </Modal>
         <Modal title="重置平台密码" open={!!resetting} onCancel={() => setResetting(null)} okText="重置密码" cancelText="取消" confirmLoading={busy} onOk={async () => {
             const values = await passwordForm.validateFields(); if (!resetting) return;
-            await perform(() => foundationApi.write('/idaas/operators/reset-password', { id: resetting.id, version: resetting.version, password: values.password }), '密码已重置，原会话已失效'); setResetting(null);
+            await perform(() => foundationApi.write('/idaas/operators/reset-password', { id: resetting.id, version: resetting.version, password: values.password }), '密码已重置，原会话已失效'); setResetting(null); setRecoveryVersion(value => value + 1);
         }}><Form size="small" form={passwordForm} layout="vertical"><Form.Item name="password" label="新密码" rules={[{ required: true }, { min: db.settings.workforce.minLength || 8 }]}><Input.Password autoComplete="new-password"/></Form.Item></Form></Modal>
         <Modal title={`${assigning?.display_name || ''} · 角色与管理范围`} open={!!assigning} onCancel={() => setAssigning(null)} onOk={saveAssignments} okText="保存授权" cancelText="取消" confirmLoading={busy} width={736}>
             <Alert type="info" showIcon title="每个角色分别限定范围及有效期；留空表示立即生效、长期有效。机构范围限定中央资料维护，应用范围限定所属应用。" style={{ marginBottom: 16 }}/>

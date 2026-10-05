@@ -5,7 +5,7 @@
 | 应用 | 工程目录 | 技术栈 | 本地端口 | 生产静态资源前缀 | 安装与启动 |
 | --- | --- | --- | ---: | --- | --- |
 | 澄天数据中台 | [`data-elements-chengtian/`](data-elements-chengtian/README.md) | Vue 3 / Vite | 3000 | `/wanxiang/` | `pnpm install --frozen-lockfile`、`pnpm run dev` |
-| 海通数据集成中心 | [`data-elements-haitong/`](data-elements-haitong/README.md) | React 18 / Vite | 3002 | `/haitong/` | `npm ci --ignore-scripts`、`npm run dev` |
+| 海通数据集成中心 | [`data-elements-haitong/`](data-elements-haitong/README.md) | React 18 / Vite | 3002 | `/haitong/` | `pnpm install --frozen-lockfile`、`pnpm run dev` |
 | 统一身份管理平台 | [`data-elements-idaas/`](data-elements-idaas/README.md) | React 19 / Vite | 3005 | `/idaas/` | `pnpm install --frozen-lockfile`、`pnpm run dev` |
 | 万象数据治理中心 | [`data-elements-wanxiang/`](data-elements-wanxiang/README.md) | React 19 / Vite | 3010 | `/wanxiang-governance/` | `npm ci`、`npm run dev` |
 | 共享后端 | [`data-elements-parent/`](data-elements-parent/README.md) | Java 21 / Spring Boot / Maven | 8088 | API 网关配置决定 | `mvn -f data-elements-parent/pom.xml spring-boot:run` |

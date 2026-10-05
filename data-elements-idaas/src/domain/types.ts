@@ -238,6 +238,7 @@ export interface Session {
     appBindIds?: string[];
     appAssignableIds?: string[];
     operatorVersion?: number;
+    subjectVersion?: number;
     mustChangePassword?: boolean;
     securityVersion?: number;
     realm?: 'platform' | 'tenant';

@@ -138,7 +138,7 @@
       "detail": "13个页面实现文件，共享模板覆盖多个路由"
     }
   ],
-  "sourceFileCount": 53,
+  "sourceFileCount": 54,
   "pageImplementationFiles": [
     "src/pages/Applications.tsx",
     "src/pages/Audit.tsx",
@@ -850,7 +850,7 @@
         },
         {
           "component": "Card",
-          "line": 77,
+          "line": 80,
           "attributes": [
             "size=\"small\"",
             "className=\"table-card\""
@@ -858,14 +858,14 @@
         },
         {
           "component": "Text",
-          "line": 80,
+          "line": 83,
           "attributes": [
             "className=\"table-title\""
           ]
         },
         {
           "component": "Drawer",
-          "line": 155,
+          "line": 158,
           "attributes": [
             "title={title}",
             "size={width}"
@@ -873,7 +873,7 @@
         },
         {
           "component": "Drawer",
-          "line": 169,
+          "line": 172,
           "attributes": [
             "title={title}",
             "size={736}"
@@ -881,7 +881,7 @@
         },
         {
           "component": "Card",
-          "line": 194,
+          "line": 197,
           "attributes": [
             "size=\"small\"",
             "className=\"metric-card\""
@@ -889,7 +889,7 @@
         },
         {
           "component": "Text",
-          "line": 195,
+          "line": 198,
           "attributes": [
             "className=\"metric-label\""
           ]
@@ -915,23 +915,38 @@
       "componentUses": [
         {
           "component": "Modal",
-          "line": 94,
+          "line": 79,
           "attributes": [
             "title=\"导入用户\""
           ]
         },
         {
           "component": "Text",
-          "line": 94,
+          "line": 79,
           "attributes": []
         }
       ],
       "fontOverrides": [
         {
-          "line": 94,
+          "line": 79,
           "value": "28"
         }
       ]
+    },
+    {
+      "file": "src/components/PasswordRecoveryRequests.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Card",
+          "line": 37,
+          "attributes": [
+            "size=\"small\"",
+            "title={`待核验的密码找回申请（${total}）`}"
+          ]
+        }
+      ],
+      "fontOverrides": []
     },
     {
       "file": "src/components/ProtocolConfiguration.tsx",
@@ -1459,7 +1474,7 @@
         },
         {
           "component": "Title",
-          "line": 73,
+          "line": 87,
           "attributes": [
             "className=\"auth-page-title\"",
             "level={2}"
@@ -1467,7 +1482,7 @@
         },
         {
           "component": "Title",
-          "line": 75,
+          "line": 99,
           "attributes": [
             "className=\"auth-page-title\"",
             "level={2}"
@@ -1823,35 +1838,35 @@
       "componentUses": [
         {
           "component": "PageTitle",
-          "line": 12,
+          "line": 13,
           "attributes": [
             "title=\"认证账号\""
           ]
         },
         {
           "component": "RecordEditor",
-          "line": 12,
+          "line": 13,
           "attributes": [
             "title={editing ? '维护认证账号' : '建立认证账号'}"
           ]
         },
         {
           "component": "Modal",
-          "line": 12,
+          "line": 13,
           "attributes": [
             "title=\"重置统一认证密码\""
           ]
         },
         {
           "component": "PageTitle",
-          "line": 18,
+          "line": 19,
           "attributes": [
             "title=\"身份核验\""
           ]
         },
         {
           "component": "Card",
-          "line": 18,
+          "line": 19,
           "attributes": [
             "size=\"small\"",
             "title=\"核验提供方\""
@@ -1859,7 +1874,7 @@
         },
         {
           "component": "Card",
-          "line": 18,
+          "line": 19,
           "attributes": [
             "size=\"small\"",
             "title=\"核验申请\""
@@ -1937,14 +1952,14 @@
         },
         {
           "component": "PageTitle",
-          "line": 158,
+          "line": 167,
           "attributes": [
             "title={lockedOnly ? '账号解锁' : persons ? '自然人管理' : '用户管理'}"
           ]
         },
         {
           "component": "Card",
-          "line": 162,
+          "line": 171,
           "attributes": [
             "size=\"small\"",
             "className=\"organization-tree-card\"",
@@ -1953,31 +1968,31 @@
         },
         {
           "component": "DataTable",
-          "line": 163,
+          "line": 172,
           "attributes": [
             "title={orgId === 'all' ? (persons ? '自然人列表' : lockedOnly ? '锁定账号' : '用户列表') : db.orgs.find(o => o.id === orgId)?.name}"
           ]
         },
         {
           "component": "Text",
-          "line": 163,
+          "line": 172,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 163,
+          "line": 172,
           "attributes": []
         },
         {
           "component": "RecordEditor",
-          "line": 164,
+          "line": 173,
           "attributes": [
             "title={persons ? (userEdit ? '编辑自然人' : '新建自然人') : (userEdit ? '编辑用户' : '新建用户')}"
           ]
         },
         {
           "component": "RecordEditor",
-          "line": 165,
+          "line": 174,
           "attributes": [
             "title={orgEdit ? '编辑机构' : '新建机构'}"
           ]
@@ -1985,11 +2000,11 @@
       ],
       "fontOverrides": [
         {
-          "line": 163,
+          "line": 172,
           "value": "'var(--iam-font-secondary)'"
         },
         {
-          "line": 163,
+          "line": 172,
           "value": "'var(--iam-font-secondary)'"
         }
       ]
@@ -2000,28 +2015,28 @@
       "componentUses": [
         {
           "component": "PageTitle",
-          "line": 80,
+          "line": 83,
           "attributes": [
             "title={rolePage ? '系统角色' : kind === 'locked' ? '账号解锁' : '管理员管理'}"
           ]
         },
         {
           "component": "Modal",
-          "line": 102,
+          "line": 109,
           "attributes": [
             "title={`${editing ? '编辑' : '新建'}${rolePage ? '平台角色' : '操作账号'}`}"
           ]
         },
         {
           "component": "Modal",
-          "line": 114,
+          "line": 122,
           "attributes": [
             "title=\"重置平台密码\""
           ]
         },
         {
           "component": "Modal",
-          "line": 118,
+          "line": 126,
           "attributes": [
             "title={`${assigning?.display_name || ''} · 角色与管理范围`}"
           ]
@@ -2230,14 +2245,14 @@
       "componentUses": [
         {
           "component": "PageTitle",
-          "line": 58,
+          "line": 73,
           "attributes": [
             "title={view === 'configs' ? '同步配置' : view === 'entities' ? '同步对象' : '同步任务'}"
           ]
         },
         {
           "component": "Card",
-          "line": 62,
+          "line": 77,
           "attributes": [
             "size=\"small\"",
             "title=\"接收系统配置\""
@@ -2245,7 +2260,7 @@
         },
         {
           "component": "Card",
-          "line": 67,
+          "line": 82,
           "attributes": [
             "size=\"small\"",
             "className=\"section-gap\""
@@ -2253,12 +2268,12 @@
         },
         {
           "component": "Text",
-          "line": 67,
+          "line": 82,
           "attributes": []
         },
         {
           "component": "Card",
-          "line": 70,
+          "line": 85,
           "attributes": [
             "size=\"small\"",
             "title=\"中央目录对象\""
@@ -2266,7 +2281,7 @@
         },
         {
           "component": "Card",
-          "line": 74,
+          "line": 89,
           "attributes": [
             "size=\"small\"",
             "title=\"下发任务记录\""
@@ -2274,19 +2289,19 @@
         },
         {
           "component": "Text",
-          "line": 74,
+          "line": 89,
           "attributes": []
         },
         {
           "component": "RecordEditor",
-          "line": 81,
+          "line": 96,
           "attributes": [
             "title={editing ? '编辑同步配置' : '新建同步配置'}"
           ]
         },
         {
           "component": "Drawer",
-          "line": 89,
+          "line": 104,
           "attributes": [
             "title=\"下发任务明细\"",
             "size={900}"

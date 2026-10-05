@@ -225,7 +225,7 @@ export const api = {
         mutationIds.delete(mutation.key); await refreshWorkspace();
     },
     async profile(name: string): Promise<void> {
-        const body = { name, version: session?.operatorVersion };
+        const body = { name, version: session?.operatorVersion, subjectVersion: session?.subjectVersion };
         const mutation = await requestIdFor(body);
         await authenticated('/idaas/profile/save', { ...body, requestId: mutation.requestId });
         mutationIds.delete(mutation.key); await refreshWorkspace();
