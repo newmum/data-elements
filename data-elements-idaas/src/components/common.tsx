@@ -49,7 +49,7 @@ export function useAction() {
 }
 export function useEditable(section: string) { return canEdit(useSession(), section); }
 export function exportCsv(filename: string, headers: string[], rows: unknown[][]) { const blob = new Blob([encodeCsv([headers, ...rows])], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500); }
-export function DataTable<T extends Base>({ data, columns, title, searchPlaceholder = '搜索名称或编码', searchFields = ['name'], actions, selection, onSelection, loading = false, extraFilters, hideStatus = false, exporter }: {
+export function DataTable<T extends Base>({ data, columns, title, searchPlaceholder = '搜索名称或编码', searchFields = ['name'], actions, selection, onSelection, loading = false, extraFilters, hideStatus = false, exporter, remote }: {
     data: T[];
     columns: TableProps<T>['columns'];
     title?: string;
@@ -62,6 +62,7 @@ export function DataTable<T extends Base>({ data, columns, title, searchPlacehol
     extraFilters?: ReactNode;
     hideStatus?: boolean;
     exporter?: (rows: T[]) => void;
+    remote?: { total: number; page: number; size: number; onChange: (page: number, size: number, query: string, status: string) => void };
 }) {
     const [input, setInput] = useState('');
     const [query, setQuery] = useState('');
@@ -69,16 +70,18 @@ export function DataTable<T extends Base>({ data, columns, title, searchPlacehol
     const [chosen, setChosen] = useState('all');
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
-    const filtered = data.filter(r => (status === 'all' || r.status === status) && (!query || searchFields.some(k => String((r as unknown as Record<string, unknown>)[k] ?? '').toLowerCase().includes(query.toLowerCase()))));
+    const filtered = remote ? data : data.filter(r => (status === 'all' || r.status === status) && (!query || searchFields.some(k => String((r as unknown as Record<string, unknown>)[k] ?? '').toLowerCase().includes(query.toLowerCase()))));
     useEffect(() => {
-        if (page > Math.max(1, Math.ceil(filtered.length / pageSize)))
+        if (!remote && page > Math.max(1, Math.ceil(filtered.length / pageSize)))
             setPage(1);
-    }, [filtered.length, page, pageSize]);
+    }, [filtered.length, page, pageSize, remote]);
+    const search = () => { setQuery(input); setStatus(chosen); setPage(1); onSelection?.([]); remote?.onChange(1, remote.size, input, chosen); };
+    const reset = () => { setInput(''); setQuery(''); setStatus('all'); setChosen('all'); setPage(1); onSelection?.([]); remote?.onChange(1, remote.size, '', 'all'); };
     return <Card size="small" className="table-card" styles={{ body: { padding: 0 } }}>
- <div className="table-filter"><Input aria-label={searchPlaceholder} prefix={<SearchOutlined />} placeholder={searchPlaceholder} value={input} onChange={e => setInput(e.target.value)} onPressEnter={() => { setQuery(input); setStatus(chosen); setPage(1); onSelection?.([]); }} allowClear style={{ width: 260, maxWidth: '100%' }}/>{!hideStatus && <Select aria-label="状态筛选" value={chosen} onChange={setChosen} style={{ width: 132, maxWidth: '100%' }} options={[{ value: 'all', label: '全部状态' }, ...Array.from(new Set(data.map(r => r.status))).map(s => ({ value: s, label: labels[s] || s }))]}/>} {extraFilters}
- <Button type="primary" onClick={() => { setQuery(input); setStatus(chosen); setPage(1); onSelection?.([]); }}>查询</Button><Button onClick={() => { setInput(''); setQuery(''); setStatus('all'); setChosen('all'); setPage(1); onSelection?.([]); }}>重置</Button></div>
- <div className="table-toolbar"><Space wrap><Text strong className="table-title">{title || '数据列表'}</Text><span className="table-count">共 {filtered.length.toLocaleString()} 项</span>{!!selection?.length && <Tag color="blue">已选 {selection.length} 项</Tag>}</Space><Space wrap>{exporter && <Button icon={<DownloadOutlined />} onClick={() => exporter(filtered)}>导出</Button>}{actions}</Space></div>
- <Table<T> rowKey="id" dataSource={filtered} columns={columns} size="small" loading={loading} rowSelection={onSelection ? { selectedRowKeys: selection, onChange: keys => onSelection(keys), preserveSelectedRowKeys: false } : undefined} pagination={{ current: page, onChange: (p, size) => { setPage(p); setPageSize(size); onSelection?.([]); }, pageSize, pageSizeOptions: [10, 20, 50, 100], showSizeChanger: true, showTotal: n => `共 ${n} 项` }} scroll={{ x: 'max-content' }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query || status !== 'all' ? '未找到符合条件的结果' : '暂无数据'}/> }}/>
+ <div className="table-filter"><Input aria-label={searchPlaceholder} prefix={<SearchOutlined />} placeholder={searchPlaceholder} value={input} onChange={e => setInput(e.target.value)} onPressEnter={search} allowClear style={{ width: 260, maxWidth: '100%' }}/>{!hideStatus && <Select aria-label="状态筛选" value={chosen} onChange={setChosen} style={{ width: 132, maxWidth: '100%' }} options={remote ? [{ value: 'all', label: '全部状态' }, { value: 'enabled', label: '已启用' }, { value: 'disabled', label: '已停用' }] : [{ value: 'all', label: '全部状态' }, ...Array.from(new Set(data.map(r => r.status))).map(s => ({ value: s, label: labels[s] || s }))]}/>} {extraFilters}
+ <Button type="primary" onClick={search}>查询</Button><Button onClick={reset}>重置</Button></div>
+ <div className="table-toolbar"><Space wrap><Text strong className="table-title">{title || '数据列表'}</Text><span className="table-count">共 {(remote?.total ?? filtered.length).toLocaleString()} 项</span>{!!selection?.length && <Tag color="blue">已选 {selection.length} 项</Tag>}</Space><Space wrap>{exporter && <Button icon={<DownloadOutlined />} onClick={() => exporter(filtered)}>{remote ? '导出当前页' : '导出'}</Button>}{actions}</Space></div>
+ <Table<T> rowKey="id" dataSource={filtered} columns={columns} size="small" loading={loading} rowSelection={onSelection ? { selectedRowKeys: selection, onChange: keys => onSelection(keys), preserveSelectedRowKeys: false } : undefined} pagination={{ current: remote?.page ?? page, onChange: (p, size) => { if(remote) remote.onChange(p,size,query,status); else { setPage(p); setPageSize(size); } onSelection?.([]); }, pageSize: remote?.size ?? pageSize, total: remote?.total ?? filtered.length, pageSizeOptions: [10, 20, 50, 100], showSizeChanger: true, showTotal: n => `共 ${n} 项` }} scroll={{ x: 'max-content' }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query || status !== 'all' ? '未找到符合条件的结果' : '暂无数据'}/> }}/>
  </Card>;
 }
 export interface Field {

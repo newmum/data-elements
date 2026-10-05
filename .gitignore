@@ -4,6 +4,7 @@
 **/dist-ssr/
 data-elements-parent/target/
 data-elements-parent/build/
+.runtime/
 !data-elements-parent/src/main/**/target/
 !data-elements-parent/src/test/**/target/
 !data-elements-parent/src/main/**/build/

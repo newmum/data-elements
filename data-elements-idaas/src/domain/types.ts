@@ -21,6 +21,7 @@ export interface User extends Base {
     email: string;
     phone: string;
     orgId: string;
+    orgName?: string;
     post: string;
     kind: 'person' | 'admin' | 'citizen';
     locked: boolean;

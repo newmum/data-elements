@@ -1,7 +1,8 @@
 param(
     # The packaged application is compiled for Java 21.
-    [string]$JavaExe = "D:\Program Files\java\jdk-21.0.8\bin\java.exe",
-    [string]$JarPath = "$PSScriptRoot\data-elements\target\data-element.jar",
+    [string]$JavaExe = "",
+    [string]$JarPath = "",
+    [switch]$Build,
     [int]$Port = 8088,
     [int]$StartupTimeoutSeconds = 300,
     [string]$NacosHost = "192.168.175.86",
@@ -91,19 +92,36 @@ function Test-MagicLoginReadiness {
     return $true
 }
 
-Write-Status "Validating Java, JAR, and port $Port."
+Write-Status "Validating Java, backend project, and port $Port."
 
-if (-not (Test-Path -LiteralPath $JavaExe)) {
-    throw "Java not found: $JavaExe"
+$projectDir = Join-Path $PSScriptRoot "data-elements-parent"
+$pomPath = Join-Path $projectDir "pom.xml"
+if (-not (Test-Path -LiteralPath $pomPath -PathType Leaf)) {
+    throw "Backend project not found beside the startup script: $pomPath"
 }
 
-if (-not (Test-Path -LiteralPath $JarPath)) {
-    throw "Jar not found: $JarPath"
+if ([string]::IsNullOrWhiteSpace($JavaExe)) {
+    $javaFromHome = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME "bin\java.exe" } else { $null }
+    if ($javaFromHome -and (Test-Path -LiteralPath $javaFromHome -PathType Leaf)) {
+        $JavaExe = $javaFromHome
+    } else {
+        $javaOnPath = Get-Command java.exe -ErrorAction SilentlyContinue
+        if ($javaOnPath) { $JavaExe = $javaOnPath.Source }
+    }
+}
+if (-not $JavaExe -or -not (Test-Path -LiteralPath $JavaExe -PathType Leaf)) {
+    throw "Java not found. Install JDK 21, set JAVA_HOME, or pass -JavaExe with its full path."
 }
 
-$backendDir = Split-Path -Parent $JarPath
+$usingDefaultJar = [string]::IsNullOrWhiteSpace($JarPath)
+if ($usingDefaultJar) { $JarPath = Join-Path $projectDir "target\data-element.jar" }
+if (-not [System.IO.Path]::IsPathRooted($JarPath)) { $JarPath = Join-Path $PSScriptRoot $JarPath }
+$JarPath = [System.IO.Path]::GetFullPath($JarPath)
+if ($Build -and -not $usingDefaultJar) {
+    throw "-Build packages the default backend JAR. Omit -JarPath when using -Build."
+}
 $logDir = Join-Path $PSScriptRoot "logs"
-$unixDomainTempDir = "C:\Temp\data-elements-uds"
+$unixDomainTempDir = Join-Path $env:SystemDrive "Temp\data-elements-uds"
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $stdoutLog = Join-Path $logDir "data-elements-local.$timestamp.out.log"
 $stderrLog = Join-Path $logDir "data-elements-local.$timestamp.err.log"
@@ -123,6 +141,44 @@ if ($portOwnerPid) {
     $ownerProcess = Get-Process -Id $portOwnerPid -ErrorAction SilentlyContinue
     $ownerName = if ($ownerProcess) { $ownerProcess.ProcessName } else { 'unknown' }
     throw "Port $Port is already in use by PID=$portOwnerPid ($ownerName). Stop that process deliberately or choose a different port."
+}
+
+if ($NacosHost -eq "192.168.175.86") {
+    # Prefer process/user environment values. On a fresh terminal, request the
+    # local Nacos credentials without echoing or storing the password in the repo.
+    foreach ($name in @("NACOS_USER", "NACOS_PASSWORD")) {
+        if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name, "Process"))) {
+            $savedValue = [Environment]::GetEnvironmentVariable($name, "User")
+            if (-not [string]::IsNullOrWhiteSpace($savedValue)) {
+                [Environment]::SetEnvironmentVariable($name, $savedValue, "Process")
+            }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($env:NACOS_USER) -or [string]::IsNullOrWhiteSpace($env:NACOS_PASSWORD)) {
+        if ([Console]::IsInputRedirected) {
+            throw "Nacos credentials are unavailable in this noninteractive session. Set NACOS_USER and NACOS_PASSWORD in the process environment."
+        }
+        if ([string]::IsNullOrWhiteSpace($env:NACOS_USER)) {
+            $enteredUser = Read-Host "Nacos username [nacos]"
+            $env:NACOS_USER = if ([string]::IsNullOrWhiteSpace($enteredUser)) { "nacos" } else { $enteredUser.Trim() }
+        }
+        if ([string]::IsNullOrWhiteSpace($env:NACOS_PASSWORD)) {
+            $securePassword = Read-Host "Nacos password" -AsSecureString
+            if (-not $securePassword -or $securePassword.Length -eq 0) { throw "Nacos password cannot be empty." }
+            $env:NACOS_PASSWORD = ([pscredential]::new($env:NACOS_USER, $securePassword)).GetNetworkCredential().Password
+        }
+    }
+}
+
+if ($Build -or ($usingDefaultJar -and -not (Test-Path -LiteralPath $JarPath -PathType Leaf))) {
+    $maven = Get-Command mvn.cmd -ErrorAction SilentlyContinue
+    if (-not $maven) { throw "Maven not found. Install Maven 3.8+, add mvn.cmd to PATH, or build data-elements-parent manually." }
+    Write-Status "Packaging backend: $pomPath"
+    & $maven.Source -f $pomPath -DskipTests package
+    if ($LASTEXITCODE -ne 0) { throw "Backend package failed with exit code $LASTEXITCODE" }
+}
+if (-not (Test-Path -LiteralPath $JarPath -PathType Leaf)) {
+    throw "Jar not found: $JarPath"
 }
 
 # Maven replaces target\data-element.jar in place while packaging.  A running
@@ -206,14 +262,16 @@ try {
     # Do not pipe the JVM through Tee-Object.  Under the local Windows host
     # that pipeline can close the child streams during bootstrap and leave
     # $LASTEXITCODE as -1 without creating the log file.
-    $javaArgs = @("-Djdk.net.unixdomain.tmpdir=$unixDomainTempDir", "-jar", $JarPath) + $runtimeArgs
+    # Start-Process joins ArgumentList into one Windows command line. Quote file
+    # paths so the launcher also works when this repository lives under a space.
+    $javaArgs = @("-Djdk.net.unixdomain.tmpdir=`"$unixDomainTempDir`"", "-jar", "`"$JarPath`"") + $runtimeArgs
     # Keep the JVM hidden and its file handles independent from this PowerShell process, but
     # forward the redirected files back to the same console in real time. A
     # direct `java | Tee-Object` pipeline can close child streams during Spring
     # bootstrap on this Windows host; tailing the files avoids that failure
     # while still making startup errors visible immediately.
     New-Item -ItemType File -Force -Path $stdoutLog, $stderrLog | Out-Null
-    $process = Start-Process -FilePath $JavaExe -ArgumentList $javaArgs -WorkingDirectory $backendDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+    $process = Start-Process -FilePath $JavaExe -ArgumentList $javaArgs -WorkingDirectory $projectDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
     $logTailJobs = @()
     if (-not $NoLiveLog) {
         $logTailJobs += Start-Job -ScriptBlock {

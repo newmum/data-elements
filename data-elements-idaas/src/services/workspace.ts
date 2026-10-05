@@ -167,6 +167,33 @@ export const api = {
         mutationIds.delete(mutation.key);
         await refreshWorkspace();
     },
+    async batchDisableUsers(entries: { id: string; version: number }[], domain: Domain): Promise<number> {
+        if (!session?.editableTables?.includes('users')) return unavailable();
+        if (!entries.length || entries.length > 100 || new Set(entries.map(row => row.id)).size !== entries.length)
+            throw new DomainError('每次请选择 1 至 100 个不同的用户。');
+        const result = await authenticated<{ count: number }>('/idaas/users/batch-disable', {
+            domain, entries, requestId: crypto.randomUUID(),
+        });
+        await refreshWorkspace();
+        return result.count;
+    },
+    async importUsers(rows: { name: string; account: string; email: string; phone: string; orgCode: string; post: string }[], domain: Domain): Promise<number> {
+        if (!session?.editableTables?.includes('users')) return unavailable();
+        if (!rows.length || rows.length > 500) throw new DomainError('每次可导入 1 至 500 人。');
+        const result = await authenticated<{ count: number }>('/idaas/users/import', {
+            domain, rows, requestId: crypto.randomUUID(),
+        });
+        await refreshWorkspace();
+        return result.count;
+    },
+    async listUsers(query: { domain: Domain; page: number; size: number; q?: string; status?: string; orgId?: string; includeChildren?: boolean }): Promise<{ list: Database['users']; total: number; page: number; size: number }> {
+        if (!session?.capabilities?.includes('users')) return unavailable();
+        const params = new URLSearchParams({ domain: query.domain, page: String(query.page), size: String(query.size),
+            q: query.q || '', status: query.status || 'all', orgId: query.orgId || '', includeChildren: String(query.includeChildren === true) });
+        const result = await authenticated<{ list: Database['users']; total: number; page: number; size: number }>(`/idaas/users/list?${params}`);
+        if (!result || !Array.isArray(result.list) || !Number.isFinite(result.total)) throw new DomainError('人员列表响应不完整，请重试。', 'INVALID_RESPONSE');
+        return result;
+    },
     async reorderApplications(ids: string[]): Promise<void> {
         if (!session?.globalPermissions?.includes('apps:write')) return unavailable();
         if (!ids.length || new Set(ids).size !== ids.length) throw new DomainError('请选择有效的应用顺序。');
@@ -234,10 +261,13 @@ export async function acceptPlatformLogin(value: { token: string; session: Sessi
 export interface ReceiverConfig { id: string; name: string; appId: string; targetTenantId: string; receiverInstanceId: string; endpoint: string; keyId: string; enabled: boolean; timeout: number; version: number; hasSecret: boolean; lastTestResult?: string; }
 export interface ProvisionItem { eventId: string; objectId: string; type: 'user' | 'org' | 'role' | 'resource'; version: number; status: string; attempt: number; result: { message?: string; result?: string; localId?: string } | null; }
 export interface ProvisionTask { id: string; version: number; configId: string; targetTenantId: string; status: string; createdAt: string; name: string; items: ProvisionItem[]; }
+export interface ProvisionObject { id: string; name: string; version: number; status: string; account?: string; code?: string; }
 export const provisionApi = {
     options: () => authenticated<TenantOption[]>('/idaas/provision/options'),
     configs: () => authenticated<ReceiverConfig[]>('/idaas/provision/configs'),
     tasks: () => authenticated<ProvisionTask[]>('/idaas/provision/tasks'),
+    objects: (query: { configId: string; kind: string; page: number; size: number; q?: string }) => authenticated<{ list: ProvisionObject[]; total: number; page: number; size: number }>(
+        `/idaas/provision/objects?${new URLSearchParams({ configId: query.configId, kind: query.kind, page: String(query.page), size: String(query.size), q: query.q || '' })}`),
     save: (values: Partial<ReceiverConfig> & { secret?: string }) => foundationApi.write('/idaas/provision/save-config', values),
     async test(configId: string) { const result = await foundationApi.write<{ verified: boolean; message?: string }>('/idaas/provision/test', { configId }); if (!result.verified) throw new DomainError(result.message || '接收方的应用、实例或签名核验失败，请检查配置。'); return result; },
     create: (configId: string, requestId: string, kind?: string, selectedIds?: string[]) => authenticated<{ id: string }>('/idaas/provision/create', { configId, requestId, kind, selectedIds }),

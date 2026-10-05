@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { Key } from 'react';
-import { Alert, Button, Card, Descriptions, Drawer, Empty, Segmented, Select, Space, Table } from 'antd';
+import { Alert, Button, Card, Descriptions, Drawer, Empty, Input, Segmented, Select, Space, Table } from 'antd';
 import { PlusOutlined, SyncOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { provisionApi, useDatabase, type ReceiverConfig, type ProvisionTask, type TenantOption } from '../mock/store';
-import type { Domain, User, Org } from '../domain/types';
+import { provisionApi, useDatabase, type ReceiverConfig, type ProvisionTask, type ProvisionObject, type TenantOption } from '../mock/store';
+import type { Domain } from '../domain/types';
 import { PageTitle, RecordEditor, StatusTag, Text, dateText, useAction, useEditable, type FormValues } from '../components/common';
 
 export default function Synchronization({ domain, view }: { domain: Domain; view: 'configs' | 'entities' | 'tasks' }) {
@@ -13,6 +13,9 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
     const [targets, setTargets] = useState<TenantOption[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState<ReceiverConfig | null>(null); const [open, setOpen] = useState(false);
     const [configId, setConfigId] = useState(''); const [kind, setKind] = useState('user'); const [selected, setSelected] = useState<Key[]>([]);
+    const [objectPage, setObjectPage] = useState(1); const [objectSize, setObjectSize] = useState(20);
+    const [objectQuery, setObjectQuery] = useState(''); const [objects, setObjects] = useState<ProvisionObject[]>([]);
+    const [objectTotal, setObjectTotal] = useState(0); const [objectLoading, setObjectLoading] = useState(false);
     const [taskId, setTaskId] = useState(''); const [progress, setProgress] = useState('');
     const [submission, setSubmission] = useState<{ key: string; requestId: string } | null>(null);
     const ready = (config: ReceiverConfig) => config.enabled && config.lastTestResult === 'SUCCESS';
@@ -28,6 +31,16 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
         finally { setLoading(false); }
     };
     useEffect(() => { if (editable) void load(); else setLoading(false); }, [view, editable]);
+    useEffect(() => {
+        if (view !== 'entities' || !editable || !selectedConfig) return;
+        let active = true;
+        setObjectLoading(true);
+        void provisionApi.objects({ configId: selectedConfig.id, kind, page: objectPage, size: objectSize, q: objectQuery })
+            .then(result => { if (active) { setObjects(result.list); setObjectTotal(result.total); setError(''); } })
+            .catch(failure => { if (active) setError(failure instanceof Error ? failure.message : '同步对象加载失败'); })
+            .finally(() => { if (active) setObjectLoading(false); });
+        return () => { active = false; };
+    }, [view, editable, selectedConfig?.id, kind, objectPage, objectSize, objectQuery, db]);
     const execute = async (id: string) => {
         try {
             for (let round = 0; round < 100; round++) {
@@ -46,12 +59,14 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
     };
     const submit = () => run(async () => {
         if (!selectedConfig) throw new Error('请先测试并启用目标接收配置。');
-        const ids = selected.map(String); const key = JSON.stringify({ configId, kind, ids });
+        const ids = selected.map(String);
+        if (ids.length > 1000) throw new Error('每次最多选择 1000 项');
+        const key = JSON.stringify({ configId, kind, ids });
         const requestId = submission?.key === key ? submission.requestId : crypto.randomUUID(); setSubmission({ key, requestId });
         const task = await provisionApi.create(configId, requestId, view === 'entities' ? kind : undefined, ids); setSubmission(null);
         await execute(task.id); nav(`/console/${domain}/sync/tasks`);
     }, '下发已完成');
-    const task = tasks.find(t => t.id === taskId); const objects = kind === 'user' ? db.users : db.orgs;
+    const task = tasks.find(t => t.id === taskId);
     const defaults = editing ? { ...editing, secret: '' } : { name: '', targetTenantId: '', receiverInstanceId: '', endpoint: '', keyId: '', secret: '', timeout: 10, enabled: false };
     const targetName = (id: string) => targets.find(t => t.tenantId === id)?.tenantName || id;
     return <>
@@ -64,11 +79,11 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
                 { title: '接收地址', dataIndex: 'endpoint', ellipsis: true, width: 360 }, { title: '状态', render: (_, c) => <StatusTag value={c.enabled ? 'enabled' : 'disabled'}/> },
                 { title: '操作', render: (_, c) => <Space wrap><Button type="link" disabled={busy} onClick={() => { setEditing(c); setOpen(true); }}>编辑</Button><Button type="link" disabled={busy} onClick={() => run(() => provisionApi.test(c.id), '接收接口认证与目标校验通过')}>测试连接</Button><Button type="link" disabled={busy || !ready(c)} onClick={() => { setConfigId(c.id); nav(`/console/${domain}/sync/entities`); }}>选择下发对象</Button></Space> },
             ]}/></Card> : view === 'entities' ? <>
-                <Card size="small" className="section-gap"><Space wrap><Text strong>目标配置</Text><Select aria-label="目标同步配置" style={{ minWidth: 220 }} value={selectedConfig?.id} options={readyConfigs.map(c => ({ value: c.id, label: c.name }))} onChange={value => { setConfigId(value); setSelected([]); setSubmission(null); }}/><Segmented value={kind} onChange={v => { setKind(String(v)); setSelected([]); setSubmission(null); }} options={[{ label: '人员', value: 'user' }, { label: '机构', value: 'org' }]}/><Button type="primary" icon={<SyncOutlined />} disabled={!selectedConfig || busy || objects.length === 0} loading={busy} onClick={submit}>下发{selected.length ? `选中 ${selected.length} 项` : '全部对象'}</Button></Space></Card>
+                <Card size="small" className="section-gap"><Space wrap><Text strong>目标配置</Text><Select aria-label="目标同步配置" style={{ minWidth: 220 }} value={selectedConfig?.id} options={readyConfigs.map(c => ({ value: c.id, label: c.name }))} onChange={value => { setConfigId(value); setSelected([]); setSubmission(null); setObjectPage(1); }}/><Segmented value={kind} onChange={v => { setKind(String(v)); setSelected([]); setSubmission(null); setObjectPage(1); }} options={[{ label: '人员', value: 'user' }, { label: '机构', value: 'org' }]}/><Button type="primary" icon={<SyncOutlined />} disabled={!selectedConfig || busy || (selected.length === 0 && objectTotal === 0)} loading={busy} onClick={submit}>下发{selected.length ? `选中 ${selected.length} 项` : '全部对象'}</Button></Space></Card>
                 {!loading && !readyConfigs.length && <Alert className="section-gap" type="warning" showIcon title="尚无已测试并启用的接收配置" description="请先在同步配置中测试连接并启用目标配置，再人工下发。"/>}
                 <Alert className="section-gap" type="info" showIcon title="人员资料不包含登录密码" description="下发会先补齐所需机构。新账号由租户设置本地密码和角色；已有账号保留本地密码、角色及本地停用设置。"/>
-                <Card size="small" title="中央目录对象"><Table<User | Org> size="small" rowKey="id" dataSource={objects} scroll={{ x: 'max-content' }} rowSelection={{ selectedRowKeys: selected, onChange: setSelected }} columns={[
-                    { title: '名称', dataIndex: 'name' }, { title: '拟用账号 / 机构编码', render: (_, record) => 'account' in record ? record.account : record.code },
+                <Card size="small" title="中央目录对象" extra={<Input.Search placeholder="搜索名称或账号" allowClear onSearch={value => { setObjectQuery(value.trim()); setObjectPage(1); }} style={{ width: 240 }}/>}><Table<ProvisionObject> size="small" rowKey="id" dataSource={objects} loading={objectLoading} pagination={{ current: objectPage, pageSize: objectSize, total: objectTotal, showSizeChanger: true, pageSizeOptions: [20, 50, 100], onChange: (page, size) => { setObjectPage(page); setObjectSize(size); } }} scroll={{ x: 'max-content' }} rowSelection={{ selectedRowKeys: selected, onChange: setSelected, preserveSelectedRowKeys: true }} columns={[
+                    { title: '名称', dataIndex: 'name' }, { title: '拟用账号 / 机构编码', render: (_, record) => kind === 'user' ? record.account : record.code },
                     { title: '版本', dataIndex: 'version' }, { title: '状态', dataIndex: 'status', render: value => <StatusTag value={value}/> },
                 ]}/></Card>
             </> : <Card size="small" title="下发任务记录"><Space className="section-gap"><Button disabled={busy} onClick={() => void load()}>查看最新结果</Button><Text type="secondary">共 {tasks.length} 个最近任务</Text></Space><Table size="small" rowKey="id" loading={loading} dataSource={tasks} scroll={{ x: 'max-content' }} columns={[

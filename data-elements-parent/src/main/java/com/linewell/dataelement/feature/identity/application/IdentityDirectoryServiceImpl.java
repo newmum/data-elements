@@ -93,19 +93,32 @@ public class IdentityDirectoryServiceImpl implements IdentityDirectoryService {
         if (empty(ids)) {
             return Collections.emptyList();
         }
+        // The directory adapter caps each page at 200. Read every requested ID in
+        // bounded batches; a single page silently dropped the remainder.
+        List<String> requested = ids.stream().distinct().toList();
+        if (requested.size() > 2_000) {
+            throw new IllegalArgumentException("一次最多查询2000名用户");
+        }
         String tenantId = TenantContext.requireTenantId();
-        Map<String, Object> page = controlIdentityService.page(tenantId, 1, 200, ids, null, null);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> rows = (List<Map<String, Object>>) page.get("list");
         Map<String, IdentityDirectoryEntry> entries = new LinkedHashMap<>();
-        for (Map<String, Object> row : rows) {
-            IdentityDirectoryEntry entry = new IdentityDirectoryEntry();
-            entry.setId(text(row.get("id")));
-            entry.setCode(text(row.get("userName")));
-            entry.setName(text(row.get("realName")));
-            entry.setPhone(text(row.get("phone")));
-            entry.setStatus(number(row.get("status")));
-            entries.put(entry.getId(), entry);
+        for (int start = 0; start < requested.size(); start += 200) {
+            List<String> batch = requested.subList(start, Math.min(start + 200, requested.size()));
+            Map<String, Object> page = controlIdentityService.page(tenantId, 1, 200, batch, null, null);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> rows = (List<Map<String, Object>>) page.get("list");
+            for (Map<String, Object> row : rows) {
+                String id = text(row.get("id"));
+                if (!batch.contains(id)) {
+                    throw new IllegalStateException("目录接口返回了未请求的用户");
+                }
+                IdentityDirectoryEntry entry = new IdentityDirectoryEntry();
+                entry.setId(id);
+                entry.setCode(text(row.get("userName")));
+                entry.setName(text(row.get("realName")));
+                entry.setPhone(text(row.get("phone")));
+                entry.setStatus(number(row.get("status")));
+                entries.put(id, entry);
+            }
         }
         return ids.stream().map(entries::get).filter(java.util.Objects::nonNull).toList();
     }

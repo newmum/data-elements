@@ -121,12 +121,6 @@ Windows可运行 `检查页面排版.cmd`，按顺序执行检查；任何一步
 
 V2.2 排版修订时的实际结果、未执行项见 `docs/v2.2/验证与交付说明.md`；该记录中的依赖下载失败及未执行状态是历史交付结果。命名统一的范围与实际验证见 `docs/命名统一说明.md`；认证页舒展布局及 localhost / 3005 调整见 `docs/认证页面与本地启动调整.md`。源码语法、纯逻辑类型检查及独立HTML测量不能替代实际React验收。
 
-## 可选视觉辅助
-
-`preview/index.html` 是更新过字号的独立 HTML 辅助，可用浏览器直接打开；代表总览、用户、应用、授权、审计、设置、登录与3种浮层。它不加载React/Ant Design，不具有完整业务功能。
-
-该辅助文件复用实际工程样式并单独桥接原生DOM；需要更新样式时运行 `node scripts/build-companion.mjs`。其Chromium结果在 `docs/v2.2/companion-browser-results.json`，截图在 `companion-screenshots/`，均明确属于独立HTML，不是实际React截图。
-
 `docs/v1`、`docs/v2`、`docs/v2.1` 及 V2.2 原始验收记录是历史资料，不代表本次命名统一后的验证状态；不得把旧字号、旧截图和旧测试结论覆盖当前工程。历史日志中的旧 npm 包名、截图中的旧平台标题、原始方案文件名及清单路径用于追溯原交付，保留原始值。
 
 

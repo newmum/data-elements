@@ -80,6 +80,35 @@ test('实体保存使用明确创建标识、幂等请求号和服务端重新�
     assert.equal(workspace.getSession()?.tenantId, 'tenant-1');
     assert.throws(() => workspace.setSession({ ...session, tenantId: 'other-tenant' }), /身份服务/);
 });
+test('20/100 项批量停用和 CSV 导入各只发送一次写请求与一次工作区刷新', async () => {
+    const db = workspace.getDatabase();
+    for (const size of [20, 100]) {
+        const paths: string[] = [];
+        globalThis.fetch = async (input, options) => {
+            const path = String(input);
+            paths.push(path);
+            if (path.endsWith('/users/batch-disable')) {
+                const body = JSON.parse(String(options?.body));
+                assert.equal(body.entries.length, size);
+                assert.equal(body.domain, 'workforce');
+                return response({ count: size });
+            }
+            if (path.endsWith('/users/import')) {
+                const body = JSON.parse(String(options?.body));
+                assert.equal(body.rows.length, size);
+                assert.equal(body.domain, 'workforce');
+                return response({ count: size });
+            }
+            if (path.endsWith('/workspace/bootstrap')) return response({ session, database: db, capabilities: session.capabilities });
+            throw new Error(`Unexpected path ${path}`);
+        };
+        assert.equal(await workspace.api.batchDisableUsers(Array.from({ length: size }, (_, i) => ({ id: `user-${i}`, version: 1 })), 'workforce'), size);
+        assert.equal(await workspace.api.importUsers(Array.from({ length: size }, (_, i) => ({ name: `Person ${i}`, account: `user${i}`, email: '', phone: '', orgCode: 'ORG', post: '' })), 'workforce'), size);
+        assert.equal(paths.filter(path => path.endsWith('/users/batch-disable')).length, 1);
+        assert.equal(paths.filter(path => path.endsWith('/users/import')).length, 1);
+        assert.equal(paths.filter(path => path.endsWith('/workspace/bootstrap')).length, 2);
+    }
+});
 test('待恢复人员操作读取失败保留工作区，重试只发送原请求号', async () => {
     const db = workspace.getDatabase();
     globalThis.fetch = async () => new Response(JSON.stringify({ code: 503, message: '恢复记录暂时不可用' }));
