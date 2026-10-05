@@ -362,7 +362,8 @@ button {
   height: 36px;
   padding-inline: 6px
 }
-.account-button .account-avatar {
+.account-button .account-avatar,
+.identity-avatar {
   flex: none;
   background: #e8eeff;
   color: #3657b7;
@@ -1697,14 +1698,6 @@ button {
   align-items: center;
   gap: 8px
 }
-.editor-intro {
-  margin-bottom: 12px;
-  border-radius: 9px;
-  padding: 10px 12px;
-  background: linear-gradient(100deg,#f0f4ff,#f9fbff);
-  font-size: var(--iam-font-secondary);
-  color: #8094b7;
-  line-height: var(--iam-leading-secondary)}
 .screen-top-note {
   font-size: var(--iam-font-caption);
   color: #8b9bb6

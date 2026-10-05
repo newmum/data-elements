@@ -109,6 +109,15 @@ for (const width of [1440, 390]) test(`@compact 抽屉、弹窗、宽表及长�
     await page.screenshot({ path: testInfo.outputPath('user-profile.png'), fullPage: true });
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /新建用户$/ }).click();
+    const editor = page.getByRole('dialog');
+    await expect(editor.getByLabel('账号', { exact: true })).toBeVisible();
+    const labels = (await editor.locator('.ant-form-item-label label').allTextContents()).map(label => label.trim());
+    expect(labels.slice(0, 6)).toEqual(['账号', '姓名', '邮箱', '手机号', '组织机构', '岗位']);
+    await expect(editor.getByText('请填写以下信息。', { exact: false })).toHaveCount(0);
+    await expect(editor.getByLabel('身份类型', { exact: true })).toHaveCount(0);
+    await expect(editor.getByLabel('初始密码', { exact: true })).toHaveCount(0);
+    await expect(editor.getByText('创建新账号', { exact: true })).toHaveCount(0);
+    await expect(editor.getByText(/暂无岗位。请到/)).toBeVisible();
     await page.getByRole('dialog').getByLabel('姓名', {exact:true}).fill('华东区域技术管理与业务协作中心负责人');
     await checkSurface(page);
     await page.screenshot({ path: testInfo.outputPath('user-editor-long-label.png'), fullPage: true });

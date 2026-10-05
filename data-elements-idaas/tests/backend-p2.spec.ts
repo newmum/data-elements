@@ -37,7 +37,7 @@ for (const width of [1440, 390, 1920]) test(`P2 真实平台目录与下发页�
         if (path === 'sync/tasks') await expect(page.locator('.ant-spin-spinning')).toHaveCount(0, { timeout: 20000 });
         if (path === 'organization') {
             await page.getByRole('button', { name: /新建用户/ }).click({ timeout: 10000 });
-            await expect(page.getByLabel('拟用租户账号')).toBeVisible();
+            await expect(page.getByLabel('账号', { exact: true })).toBeVisible();
             await expect(page.getByLabel('初始密码', { exact: true })).toHaveCount(0);
             await page.getByRole('button', { name: /^取\s*消$/ }).click();
         }

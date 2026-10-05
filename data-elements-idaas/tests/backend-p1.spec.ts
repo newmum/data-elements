@@ -13,15 +13,15 @@ test('P1 HTTP 登录、真实会话恢复与不可用能力边界', async ({ pag
     await expect(page.getByRole('heading', { name: '自然人注册' })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('iam.frontend.mock.v2'))).toBeNull();
 });
-test('P1 创建多任职用户传密码与创建标识，列表由服务返回', async ({ page }) => {
+test('新建中央人员只提交资料与任职，不提交登录凭据', async ({ page }) => {
     const { saved } = await installContract(page); await login(page);
     await page.goto('/#/console/workforce/organization');
     await page.getByRole('button', { name: /新建用户$/ }).click();
     const drawer = page.getByRole('dialog');
     await drawer.getByLabel('姓名', { exact: true }).fill('契约新增人员');
     await drawer.getByLabel('账号', { exact: true }).fill('contract.created');
-    await drawer.getByLabel('初始密码', { exact: true }).fill('Unique-initial-pass-2026');
-    await drawer.getByLabel('岗位', { exact: true }).fill('数据管理员');
+    await expect(drawer.getByLabel('初始密码', { exact: true })).toHaveCount(0);
+    await expect(drawer.getByText('创建新账号', { exact: true })).toHaveCount(0);
     await drawer.getByLabel('账户状态', { exact: true }).click();
     const statuses = page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden):not(.ant-slide-up-leave)');
     await expect(statuses).not.toContainText('待完善');
@@ -32,25 +32,22 @@ test('P1 创建多任职用户传密码与创建标识，列表由服务返回',
     await page.getByRole('button', { name: /查\s*询/ }).click();
     await expect(page.getByRole('button', { name: '契约新增人员', exact: true })).toBeVisible();
     expect(saved[0].creating).toBe(true);
-    const record = saved[0].record as { initialPassword: string; appointments: unknown[] };
-    expect(record.initialPassword).toBe('Unique-initial-pass-2026');
+    const record = saved[0].record as Record<string, unknown> & { appointments: unknown[] };
+    expect(Object.hasOwn(record, 'initialPassword')).toBe(false);
+    expect(Object.hasOwn(record, 'password')).toBe(false);
+    expect(Object.hasOwn(record, 'existingAccount')).toBe(false);
     expect(record.appointments).toHaveLength(1);
 });
-test('P1 关联已有账号需要显式选择且不提交初始密码', async ({ page }) => {
+test('新建中央人员必须填写姓名，账号不代表登录资格', async ({ page }) => {
     const { saved } = await installContract(page); await login(page);
     await page.goto('/#/console/workforce/organization');
     await page.getByRole('button', { name: /新建用户$/ }).click();
     const drawer = page.getByRole('dialog');
-    await drawer.getByText('关联已有账号', { exact: true }).click();
-    await expect(drawer.getByLabel('姓名', { exact: true })).toBeDisabled();
     await expect(drawer.getByLabel('初始密码', { exact: true })).toHaveCount(0);
     await drawer.getByLabel('账号', { exact: true }).fill('existing.account');
     await drawer.getByRole('button', { name: /保\s*存/ }).click();
-    await expect(drawer).toHaveCount(0);
-    expect(saved[0].creating).toBe(true);
-    const record = saved[0].record as Record<string, unknown>;
-    expect(record.existingAccount).toBe(true);
-    expect(Object.hasOwn(record, 'initialPassword')).toBe(false);
+    await expect(drawer.getByText('请填写姓名', { exact: true })).toBeVisible();
+    expect(saved).toHaveLength(0);
 });
 test('P1 保存冲突保留输入，重试沿用同一个请求号', async ({ page }) => {
     await installContract(page);

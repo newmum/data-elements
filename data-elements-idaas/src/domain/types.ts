@@ -39,6 +39,7 @@ export interface User extends Base {
 export interface Org extends Base {
     code: string;
     parentId: string | null;
+    sortNo?: number;
     leader: string;
     line: string;
 }

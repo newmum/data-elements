@@ -1019,7 +1019,7 @@
       "fontOverrides": [
         {
           "line": 21,
-          "value": "size > 48 ? 25 : 13"
+          "value": "size > 48 ? 25 : undefined"
         },
         {
           "line": 31,
@@ -1889,7 +1889,7 @@
       "componentUses": [
         {
           "component": "Card",
-          "line": 52,
+          "line": 63,
           "attributes": [
             "size=\"small\"",
             "title={operations.length ? `待恢复的人员操作（${operations.length}）` : '人员操作恢复'}"
@@ -1897,49 +1897,49 @@
         },
         {
           "component": "Text",
-          "line": 54,
+          "line": 65,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 55,
+          "line": 66,
           "attributes": [
             "title={operation.requestId}"
           ]
         },
         {
           "component": "h4",
-          "line": 78,
+          "line": 89,
           "attributes": []
         },
         {
           "component": "h4",
-          "line": 83,
+          "line": 94,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 83,
+          "line": 94,
           "attributes": []
         },
         {
           "component": "h4",
-          "line": 84,
+          "line": 95,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 84,
+          "line": 95,
           "attributes": []
         },
         {
           "component": "h4",
-          "line": 85,
+          "line": 96,
           "attributes": []
         },
         {
           "component": "Drawer",
-          "line": 87,
+          "line": 98,
           "attributes": [
             "title=\"身份档案\"",
             "size={560}"
@@ -1947,19 +1947,19 @@
         },
         {
           "component": "h2",
-          "line": 87,
+          "line": 98,
           "attributes": []
         },
         {
           "component": "PageTitle",
-          "line": 167,
+          "line": 189,
           "attributes": [
             "title={lockedOnly ? '账号解锁' : persons ? '自然人管理' : '用户管理'}"
           ]
         },
         {
           "component": "Card",
-          "line": 171,
+          "line": 193,
           "attributes": [
             "size=\"small\"",
             "className=\"organization-tree-card\"",
@@ -1968,31 +1968,31 @@
         },
         {
           "component": "DataTable",
-          "line": 172,
+          "line": 194,
           "attributes": [
             "title={orgId === 'all' ? (persons ? '自然人列表' : lockedOnly ? '锁定账号' : '用户列表') : db.orgs.find(o => o.id === orgId)?.name}"
           ]
         },
         {
           "component": "Text",
-          "line": 172,
+          "line": 194,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 172,
+          "line": 194,
           "attributes": []
         },
         {
           "component": "RecordEditor",
-          "line": 173,
+          "line": 195,
           "attributes": [
             "title={persons ? (userEdit ? '编辑自然人' : '新建自然人') : (userEdit ? '编辑用户' : '新建用户')}"
           ]
         },
         {
           "component": "RecordEditor",
-          "line": 174,
+          "line": 202,
           "attributes": [
             "title={orgEdit ? '编辑机构' : '新建机构'}"
           ]
@@ -2000,11 +2000,11 @@
       ],
       "fontOverrides": [
         {
-          "line": 172,
+          "line": 194,
           "value": "'var(--iam-font-secondary)'"
         },
         {
-          "line": 172,
+          "line": 194,
           "value": "'var(--iam-font-secondary)'"
         }
       ]

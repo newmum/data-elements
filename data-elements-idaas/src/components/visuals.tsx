@@ -17,8 +17,8 @@ export function UserAvatar({ user, size = 32 }: {
     user: Pick<User, 'id' | 'name'>;
     size?: number;
 }) {
-    const t = toneFor(user.id);
-    return <Avatar size={size} className="identity-avatar" style={{ background: `linear-gradient(145deg, ${t.light}, ${t.bg})`, color: t.color, fontSize: size > 48 ? 25 : 13, fontWeight: 600, border: '2px solid #fff', boxShadow: '0 2px 7px rgba(40,62,114,.07)' }}>{user.name.slice(-2)}</Avatar>;
+    const initial = Array.from(user.name.trim())[0] || '用';
+    return <Avatar size={size} className="identity-avatar" style={{ fontSize: size > 48 ? 25 : undefined }}>{initial}</Avatar>;
 }
 export function AppIcon({ app, size = 36 }: {
     app: Pick<Application, 'id' | 'group' | 'logoUrl'>;
