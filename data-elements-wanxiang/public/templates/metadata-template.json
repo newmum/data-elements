@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0",
+  "id": "snapshot-001",
+  "capturedAt": "2026-09-13T00:00:00Z",
+  "description": "待导入元数据",
+  "sources": [],
+  "entities": [],
+  "catalogRelationships": []
+}

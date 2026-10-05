@@ -1,0 +1,132 @@
+[
+  {
+    "key": "catalog",
+    "file": "catalog.html",
+    "label": "元数据目录"
+  },
+  {
+    "key": "codes",
+    "file": "codes.html",
+    "label": "标准代码"
+  },
+  {
+    "key": "collection",
+    "file": "collection.html",
+    "label": "元数据采集"
+  },
+  {
+    "key": "elements",
+    "file": "elements.html",
+    "label": "数据元"
+  },
+  {
+    "key": "encoding-editor",
+    "file": "encoding-editor.html",
+    "label": "encoding-editor"
+  },
+  {
+    "key": "encoding",
+    "file": "encoding.html",
+    "label": "编码标准"
+  },
+  {
+    "key": "er",
+    "file": "er.html",
+    "label": "ER 关系图"
+  },
+  {
+    "key": "job-drawer",
+    "file": "job-drawer.html",
+    "label": "job-drawer"
+  },
+  {
+    "key": "landing",
+    "file": "landing.html",
+    "label": "标准落地"
+  },
+  {
+    "key": "lineage",
+    "file": "lineage.html",
+    "label": "数据血缘"
+  },
+  {
+    "key": "login",
+    "file": "login.html",
+    "label": "login"
+  },
+  {
+    "key": "mapping-editor",
+    "file": "mapping-editor.html",
+    "label": "mapping-editor"
+  },
+  {
+    "key": "mapping",
+    "file": "mapping.html",
+    "label": "元数据对标"
+  },
+  {
+    "key": "models",
+    "file": "models.html",
+    "label": "数据模型"
+  },
+  {
+    "key": "overview",
+    "file": "overview.html",
+    "label": "治理总览"
+  },
+  {
+    "key": "plans",
+    "file": "plans.html",
+    "label": "质检方案与任务"
+  },
+  {
+    "key": "profile-reports",
+    "file": "profile-reports.html",
+    "label": "探查报告"
+  },
+  {
+    "key": "profiling",
+    "file": "profiling.html",
+    "label": "数据质量探查"
+  },
+  {
+    "key": "reports",
+    "file": "reports.html",
+    "label": "质量报告"
+  },
+  {
+    "key": "review",
+    "file": "review.html",
+    "label": "数据元审核"
+  },
+  {
+    "key": "rule-editor",
+    "file": "rule-editor.html",
+    "label": "rule-editor"
+  },
+  {
+    "key": "rules",
+    "file": "rules.html",
+    "label": "数据质量规则"
+  },
+  {
+    "key": "source-editor",
+    "file": "source-editor.html",
+    "label": "source-editor"
+  },
+  {
+    "key": "sources",
+    "file": "sources.html",
+    "label": "数据源管理"
+  },
+  {
+    "key": "standard-editor",
+    "file": "standard-editor.html",
+    "label": "standard-editor"
+  },
+  {
+    "key": "workorders",
+    "file": "workorders.html",
+    "label": "质检工单"
+  }
+]

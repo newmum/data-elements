@@ -1,0 +1,618 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Capabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "catalogConstraints": {
+          "default": false,
+          "title": "Catalogconstraints",
+          "type": "boolean"
+        },
+        "fieldProfiles": {
+          "default": false,
+          "title": "Fieldprofiles",
+          "type": "boolean"
+        },
+        "referenceValidation": {
+          "default": false,
+          "title": "Referencevalidation",
+          "type": "boolean"
+        },
+        "crossSourceValidation": {
+          "default": false,
+          "title": "Crosssourcevalidation",
+          "type": "boolean"
+        },
+        "sqlEvidence": {
+          "default": false,
+          "title": "Sqlevidence",
+          "type": "boolean"
+        },
+        "semanticAssistance": {
+          "default": false,
+          "title": "Semanticassistance",
+          "type": "boolean"
+        },
+        "fullValidation": {
+          "default": false,
+          "title": "Fullvalidation",
+          "type": "boolean"
+        }
+      },
+      "title": "Capabilities",
+      "type": "object"
+    },
+    "CatalogRelationship": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "sourceEntityId": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Sourceentityid",
+          "type": "string"
+        },
+        "targetEntityId": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Targetentityid",
+          "type": "string"
+        },
+        "mappings": {
+          "items": {
+            "$ref": "#/$defs/FieldMapping"
+          },
+          "minItems": 1,
+          "title": "Mappings",
+          "type": "array"
+        },
+        "constraintName": {
+          "title": "Constraintname",
+          "type": "string"
+        },
+        "enforced": {
+          "default": "unknown",
+          "enum": [
+            "true",
+            "false",
+            "unknown"
+          ],
+          "title": "Enforced",
+          "type": "string"
+        },
+        "validated": {
+          "default": "unknown",
+          "enum": [
+            "true",
+            "false",
+            "unknown"
+          ],
+          "title": "Validated",
+          "type": "string"
+        },
+        "matchRule": {
+          "default": "unknown",
+          "enum": [
+            "simple",
+            "full",
+            "partial",
+            "unknown"
+          ],
+          "title": "Matchrule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "sourceEntityId",
+        "targetEntityId",
+        "mappings",
+        "constraintName"
+      ],
+      "title": "CatalogRelationship",
+      "type": "object"
+    },
+    "Entity": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "sourceId": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Sourceid",
+          "type": "string"
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog"
+        },
+        "schemaName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schemaname"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "displayName": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Displayname"
+        },
+        "kind": {
+          "enum": [
+            "table",
+            "view",
+            "collection",
+            "index",
+            "keyspace",
+            "embedded"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "comment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment"
+        },
+        "constraintsAvailability": {
+          "default": "unknown",
+          "enum": [
+            "available",
+            "unavailable",
+            "unknown"
+          ],
+          "title": "Constraintsavailability",
+          "type": "string"
+        },
+        "shapeBasis": {
+          "default": "unknown",
+          "enum": [
+            "declared_complete",
+            "observed_sample",
+            "observed_full",
+            "mixed",
+            "unknown"
+          ],
+          "title": "Shapebasis",
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FieldDef"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "keys": {
+          "items": {
+            "$ref": "#/$defs/KeyConstraint"
+          },
+          "title": "Keys",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "sourceId",
+        "name",
+        "kind",
+        "fields"
+      ],
+      "title": "Entity",
+      "type": "object"
+    },
+    "FieldDef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "ordinal": {
+          "minimum": 0,
+          "title": "Ordinal",
+          "type": "integer"
+        },
+        "nativeType": {
+          "title": "Nativetype",
+          "type": "string"
+        },
+        "typeFamily": {
+          "enum": [
+            "integer",
+            "decimal",
+            "float",
+            "string",
+            "boolean",
+            "date",
+            "timestamp",
+            "uuid",
+            "objectid",
+            "binary",
+            "object",
+            "array",
+            "unknown"
+          ],
+          "title": "Typefamily",
+          "type": "string"
+        },
+        "nullable": {
+          "default": "unknown",
+          "enum": [
+            "true",
+            "false",
+            "unknown"
+          ],
+          "title": "Nullable",
+          "type": "string"
+        },
+        "comment": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment"
+        },
+        "precision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Precision"
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scale"
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Length"
+        },
+        "signed": {
+          "default": "unknown",
+          "enum": [
+            "true",
+            "false",
+            "unknown"
+          ],
+          "title": "Signed",
+          "type": "string"
+        },
+        "collation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Collation"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Timezone"
+        },
+        "arrayDepth": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Arraydepth",
+          "type": "integer"
+        },
+        "presenceRatio": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Presenceratio"
+        },
+        "typeVariants": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Typevariants",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "path",
+        "ordinal",
+        "nativeType",
+        "typeFamily"
+      ],
+      "title": "FieldDef",
+      "type": "object"
+    },
+    "FieldMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "sourceFieldId": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Sourcefieldid",
+          "type": "string"
+        },
+        "targetFieldId": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Targetfieldid",
+          "type": "string"
+        },
+        "comparisonRule": {
+          "default": "exact",
+          "enum": [
+            "exact",
+            "uuid_parse",
+            "objectid_parse",
+            "approved_lossless_cast"
+          ],
+          "title": "Comparisonrule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceFieldId",
+        "targetFieldId"
+      ],
+      "title": "FieldMapping",
+      "type": "object"
+    },
+    "KeyConstraint": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "primary",
+            "unique",
+            "unique_index"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "fieldIds": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Fieldids",
+          "type": "array"
+        },
+        "enforced": {
+          "default": "unknown",
+          "enum": [
+            "true",
+            "false",
+            "unknown"
+          ],
+          "title": "Enforced",
+          "type": "string"
+        },
+        "scope": {
+          "default": "unknown",
+          "enum": [
+            "full",
+            "partial",
+            "expression",
+            "unknown"
+          ],
+          "title": "Scope",
+          "type": "string"
+        },
+        "nullSemantics": {
+          "default": "unknown",
+          "enum": [
+            "distinct",
+            "not_distinct",
+            "not_allowed",
+            "unknown"
+          ],
+          "title": "Nullsemantics",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "fieldIds"
+      ],
+      "title": "KeyConstraint",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "engine": {
+          "title": "Engine",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/Capabilities"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "engine",
+        "capabilities"
+      ],
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schemaversion",
+      "type": "string"
+    },
+    "id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "capturedAt": {
+      "format": "date-time",
+      "title": "Capturedat",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/Source"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "entities": {
+      "items": {
+        "$ref": "#/$defs/Entity"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "catalogRelationships": {
+      "items": {
+        "$ref": "#/$defs/CatalogRelationship"
+      },
+      "title": "Catalogrelationships",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "capturedAt",
+    "sources",
+    "entities"
+  ],
+  "title": "MetadataSnapshot",
+  "type": "object"
+}

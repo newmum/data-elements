@@ -1,0 +1,35 @@
+{
+  "version": "1.1.0",
+  "generation": "Original vector geometry; not enlarged screenshot crops",
+  "logo": {
+    "original": "public/brand/resource-mark.svg",
+    "pngSizes": [
+      64,
+      128,
+      256,
+      512,
+      1024
+    ]
+  },
+  "heroes": [
+    "overview",
+    "layers",
+    "databases",
+    "bindings",
+    "models",
+    "standardization",
+    "materialization",
+    "logs",
+    "warehouse",
+    "catalog-overview",
+    "catalog-entries",
+    "catalog-reviews"
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "fileType": "SVG",
+  "viewBox": "120 10 670 310",
+  "preserveAspectRatio": "xMidYMid meet"
+}

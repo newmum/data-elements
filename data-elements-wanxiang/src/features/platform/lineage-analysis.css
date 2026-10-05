@@ -1,0 +1,80 @@
+.wx-lineage-tabs > .ant-tabs-nav { margin-bottom: 15px; }
+.wx-lineage-explorer { display: grid; gap: 14px; min-width: 0; }
+.wx-lineage-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; gap: 10px; align-items: stretch; }
+.wx-lineage-summary > div { display: flex; flex-direction: column; justify-content: center; gap: 3px; min-height: 70px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.wx-lineage-summary span { color: var(--muted); font-size: 12px; }
+.wx-lineage-summary strong { color: var(--text); font-size: 23px; line-height: 1.2; font-weight: 650; }
+.wx-lineage-summary small { color: var(--muted); font-size: 11px; line-height: 1.3; }
+.wx-lineage-summary > .ant-btn { align-self: center; }
+.wx-lineage-body { display: grid; grid-template-columns: 304px minmax(0, 1fr); gap: 14px; align-items: start; min-width: 0; }
+.wx-lineage-picker, .wx-lineage-results { border: 1px solid var(--border); border-radius: 11px; background: var(--surface); min-width: 0; }
+.wx-lineage-picker { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.wx-lineage-section-heading, .wx-lineage-related-heading, .wx-lineage-graph-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wx-lineage-section-heading strong, .wx-lineage-related-heading strong, .wx-lineage-graph-header strong { font-size: 14px; color: var(--text); }
+.wx-lineage-section-heading span, .wx-lineage-related-heading span, .wx-lineage-graph-header span { font-size: 12px; color: var(--muted); }
+.wx-lineage-picker-filters { display: grid; grid-template-columns: minmax(100px, .78fr) minmax(120px, 1.22fr); gap: 8px; }
+.wx-lineage-picker-filters .ant-select { min-width: 0; }
+.wx-lineage-object-list { display: flex; flex-direction: column; gap: 4px; max-height: 512px; overflow: auto; padding: 1px; }
+.wx-lineage-object { appearance: none; width: 100%; display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; }
+.wx-lineage-object:hover, .wx-lineage-object.is-selected { background: var(--primary-soft); border-color: var(--primary-line); }
+.wx-lineage-object-icon { display: grid; place-items: center; flex: 0 0 32px; width: 32px; height: 32px; border-radius: 8px; color: var(--primary); background: var(--primary-soft); font-size: 16px; }
+.wx-lineage-object-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; width: 100%; }
+.wx-lineage-object-copy strong, .wx-lineage-object-copy small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wx-lineage-object-copy strong { font-size: 13px; font-weight: 600; }
+.wx-lineage-object-copy small { font-size: 11px; color: var(--muted); }
+.wx-lineage-pagination { align-self: center; }
+.wx-lineage-results { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.wx-lineage-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.wx-lineage-control-right { display: flex; align-items: center; gap: 8px; }
+.wx-lineage-control-right .ant-select:first-child { min-width: 132px; }
+.wx-lineage-control-right .ant-select:last-child { min-width: 88px; }
+.wx-lineage-results-caption { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.wx-lineage-placeholder { min-height: 460px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: 9px; background: var(--surface-muted); }
+.wx-lineage-placeholder > .anticon { font-size: 38px; color: var(--primary); }
+.wx-lineage-placeholder h2 { margin: 0; font-size: 17px; color: var(--text); }
+.wx-lineage-placeholder p { margin: 0; max-width: 440px; font-size: 13px; line-height: 1.65; }
+.wx-lineage-spin-space { width: 160px; height: 60px; }
+.wx-lineage-focus { display: flex; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--primary-line); border-radius: 9px; background: var(--primary-soft); }
+.wx-lineage-focus-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px; border-radius: 9px; background: var(--surface); color: var(--primary); font-size: 18px; }
+.wx-lineage-focus > div:nth-child(2) { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
+.wx-lineage-focus span, .wx-lineage-focus small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-lineage-focus strong { font-size: 15px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-lineage-graph-header { padding-top: 4px; }
+.wx-lineage-canvas { height: min(62vh, 600px); min-height: 410px; width: 100%; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: var(--surface-muted); }
+.wx-lineage-canvas .react-flow__node-default { width: 218px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; text-align: left; background: var(--surface); color: var(--text); box-shadow: 0 7px 24px #00000014; }
+.wx-lineage-canvas .react-flow__node-default.is-root { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-line), 0 7px 24px #00000018; }
+.wx-lineage-canvas .react-flow__node-default:hover { border-color: var(--primary); }
+.wx-lineage-canvas .react-flow__node-default .react-flow__handle { width: 7px; height: 7px; background: var(--primary); border-color: var(--surface); }
+.wx-lineage-node-copy { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wx-lineage-node-kind { font-size: 11px; color: var(--primary); }
+.wx-lineage-node-copy strong, .wx-lineage-node-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-lineage-node-copy strong { font-size: 13px; }
+.wx-lineage-node-copy small { font-size: 11px; color: var(--muted); }
+.wx-lineage-more { margin-top: 2px; }
+.wx-lineage-related-heading { padding: 6px 0 2px; }
+.wx-lineage-related-list { display: grid; gap: 6px; max-height: 280px; overflow: auto; }
+.wx-lineage-related-list > button, .wx-lineage-evidence-list > button { appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; min-width: 0; cursor: pointer; text-align: left; }
+.wx-lineage-related-list > button { display: grid; grid-template-columns: 104px minmax(0, 1fr) 84px; gap: 12px; align-items: center; padding: 9px 12px; }
+.wx-lineage-related-list > button:hover, .wx-lineage-evidence-list > button:hover { border-color: var(--primary); }
+.wx-lineage-related-kind { font-size: 12px; color: var(--primary); }
+.wx-lineage-related-name { display: flex; flex-direction: column; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; font-weight: 550; }
+.wx-lineage-related-name small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 400; color: var(--muted); }
+.wx-lineage-related-list > button > span:last-child { text-align: right; color: var(--muted); font-size: 12px; }
+.wx-lineage-evidence-list { display: flex; flex-direction: column; gap: 6px; }
+.wx-lineage-evidence-list > strong { font-size: 14px; margin: 4px 0; }
+.wx-lineage-evidence-list > button { display: grid; grid-template-columns: 120px minmax(0, 1fr) 74px; gap: 10px; padding: 8px 12px; align-items: center; font-size: 12px; }
+.wx-lineage-evidence-list > button small { color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wx-lineage-evidence-list > button > span:last-child { color: var(--primary); text-align: right; }
+.wx-lineage-drawer-title { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; font-size: 16px; }
+.wx-lineage-drawer-title .anticon { color: var(--primary); }
+.wx-lineage-drawer-actions { margin-top: 20px; }
+.wx-lineage-evidence-route { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 18px 0; font-size: 15px; }
+.wx-lineage-evidence-route span { color: var(--primary); }
+.wx-lineage-evidence-route > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; max-width: 43%; }
+.wx-lineage-evidence-route strong, .wx-lineage-evidence-route small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wx-lineage-evidence-route small { font-size: 11px; font-weight: 400; color: var(--muted); }
+.wx-lineage-evidence-explanation { margin: 18px 0; color: var(--muted); line-height: 1.7; }
+.lineage-embedded-actions { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+@media (max-width: 1080px) { .wx-lineage-body { grid-template-columns: 260px minmax(0, 1fr); } .wx-lineage-controls { align-items: stretch; } }
+@media (max-width: 760px) { .wx-lineage-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wx-lineage-summary > .ant-btn { grid-column: 1 / -1; justify-self: end; } .wx-lineage-body { grid-template-columns: minmax(0, 1fr); } .wx-lineage-object-list { max-height: 250px; } .wx-lineage-control-right { width: 100%; } .wx-lineage-control-right .ant-select { flex: 1; } .wx-lineage-canvas { min-height: 380px; } }
+@media (max-width: 520px) { .wx-lineage-related-list > button { grid-template-columns: 78px minmax(0, 1fr); } .wx-lineage-related-list > button > span:last-child { grid-column: 2; text-align: left; } .wx-lineage-evidence-list > button { grid-template-columns: 1fr auto; } .wx-lineage-evidence-list > button small { grid-column: 1 / -1; grid-row: 2; } }

@@ -1,0 +1,385 @@
+{
+  "baseline": "data-elements-wanxiang-v3.1.0-frontend.zip",
+  "changes": [
+    {
+      "path": ".gitignore",
+      "change": "modified"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "change": "modified"
+    },
+    {
+      "path": "README.md",
+      "change": "modified"
+    },
+    {
+      "path": "design.md",
+      "change": "modified"
+    },
+    {
+      "path": "doc/01-改造与操作说明.md",
+      "change": "modified"
+    },
+    {
+      "path": "doc/02-测试报告.md",
+      "change": "modified"
+    },
+    {
+      "path": "doc/03-浏览器验收清单.md",
+      "change": "modified"
+    },
+    {
+      "path": "doc/validation/build-attempt.log",
+      "change": "modified"
+    },
+    {
+      "path": "doc/validation/checks.log",
+      "change": "added"
+    },
+    {
+      "path": "doc/validation/registry-access.log",
+      "change": "modified"
+    },
+    {
+      "path": "doc/validation/source-dom-review.json",
+      "change": "added"
+    },
+    {
+      "path": "doc/visual/数据源管理-浅色-源码DOM.png",
+      "change": "added"
+    },
+    {
+      "path": "doc/visual/数据源管理-深色-源码DOM.png",
+      "change": "added"
+    },
+    {
+      "path": "doc/visual/界面样式评审.html",
+      "change": "added"
+    },
+    {
+      "path": "doc/visual/登记抽屉-源码DOM.png",
+      "change": "added"
+    },
+    {
+      "path": "doc/visual/说明.md",
+      "change": "modified"
+    },
+    {
+      "path": "index.html",
+      "change": "modified"
+    },
+    {
+      "path": "package.json",
+      "change": "modified"
+    },
+    {
+      "path": "scripts/check-core-types.mjs",
+      "change": "modified"
+    },
+    {
+      "path": "scripts/test.mjs",
+      "change": "modified"
+    },
+    {
+      "path": "src/app/App.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/app/ProductNavigation.tsx",
+      "change": "added"
+    },
+    {
+      "path": "src/app/routes.ts",
+      "change": "modified"
+    },
+    {
+      "path": "src/assets/databases/dm8.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/databases/elasticsearch.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/databases/mariadb.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/databases/mongodb.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/databases/mysql.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/databases/oracle.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/databases/postgresql.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/databases/sqlserver.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/catalog-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/catalog-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/codes-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/codes-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/collection-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/collection-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/elements-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/elements-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/encoding-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/encoding-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/er-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/er-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/landing-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/landing-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/lineage-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/lineage-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/mapping-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/mapping-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/models-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/models-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/overview-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/overview-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/plans-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/plans-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/profile-reports-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/profile-reports-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/profiling-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/profiling-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/reports-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/reports-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/review-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/review-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/rules-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/rules-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/sources-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/sources-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/workorders-dark.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/assets/heroes/workorders-light.svg",
+      "change": "added"
+    },
+    {
+      "path": "src/design/ModuleIcon.tsx",
+      "change": "added"
+    },
+    {
+      "path": "src/design/Visuals.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/design/heroAssets.ts",
+      "change": "added"
+    },
+    {
+      "path": "src/design/iconPaths.ts",
+      "change": "added"
+    },
+    {
+      "path": "src/design/moduleVisuals.ts",
+      "change": "added"
+    },
+    {
+      "path": "src/features/er/components/EntityLibrary.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/features/er/components/EntityNode.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/features/platform/DataPages.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/features/platform/ModelsPage.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/features/platform/OverviewPage.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/features/platform/QualityPages.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/features/platform/SourcesPage.tsx",
+      "change": "added"
+    },
+    {
+      "path": "src/features/platform/StandardPages.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/features/platform/common.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/main.tsx",
+      "change": "modified"
+    },
+    {
+      "path": "src/mocks/engine.ts",
+      "change": "modified"
+    },
+    {
+      "path": "src/mocks/sourceAnnotations.ts",
+      "change": "added"
+    },
+    {
+      "path": "src/shared/businessLabels.ts",
+      "change": "added"
+    },
+    {
+      "path": "src/shared/sourcePresentation.ts",
+      "change": "added"
+    },
+    {
+      "path": "src/styles/studio-polish.css",
+      "change": "added"
+    },
+    {
+      "path": "tests/design.test.mjs",
+      "change": "modified"
+    },
+    {
+      "path": "tests/local.test.mjs",
+      "change": "modified"
+    },
+    {
+      "path": "tests/polish.test.mjs",
+      "change": "added"
+    },
+    {
+      "path": "tests/review/README.md",
+      "change": "added"
+    },
+    {
+      "path": "tests/review/render-components.cjs",
+      "change": "added"
+    },
+    {
+      "path": "tests/review/review.py",
+      "change": "added"
+    }
+  ]
+}

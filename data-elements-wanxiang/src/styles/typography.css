@@ -1,0 +1,325 @@
+/* Shared reading scale across governance pages, overlays, and the ER workbench.
+   Body 14px; dense controls and tables 13px; supporting copy at least 12px. */
+:root {
+  --wx-type-body: 14px;
+  --wx-type-dense: 13px;
+  --wx-type-support: 12px;
+  --wx-action-gap: 10px;
+}
+
+/* Ant uses this row only to measure column widths; cell padding must not show as a gap below the header. */
+.ant-table-tbody > tr.ant-table-measure-row > td {
+  height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  line-height: 0 !important;
+}
+
+/* One table treatment for governance pages, drawers, dialogs, and the model studio.
+   The surrounding panel may stay rounded; the table header itself is square. */
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table {
+  border-radius: 0 !important;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--wx-type-dense);
+}
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table-container,
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table-content {
+  border-radius: 0 !important;
+}
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table-thead > tr > th {
+  border-radius: 0 !important;
+  background: var(--surface-muted) !important;
+  color: var(--muted) !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 10px 12px !important;
+  font-size: var(--wx-type-dense) !important;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table-tbody > tr:not(.ant-table-measure-row) > td {
+  border-bottom: 1px solid var(--border) !important;
+  padding: 9px 12px !important;
+  font-size: var(--wx-type-dense) !important;
+  line-height: 1.55;
+  vertical-align: middle;
+}
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table-middle .ant-table-tbody > tr:not(.ant-table-measure-row) > td {
+  padding-block: 12px !important;
+}
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table-tbody > tr:not(.ant-table-measure-row):hover > td {
+  background: var(--surface-hover) !important;
+}
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table-tbody > tr:not(.ant-table-measure-row):hover > td.ant-table-cell-fix-right {
+  background: var(--surface-hover) !important;
+}
+:is(.governance-shell, .er-module, .diagrams-page, .ant-drawer, .ant-modal) .ant-table-pagination {
+  margin-block: 12px;
+  padding-inline: 16px;
+  font-size: var(--wx-type-dense);
+}
+
+/* Keep action controls centered between equal left and right cell gutters. */
+.platform-page .wx-action-column,
+.diagrams-page .wx-action-column,
+.ant-drawer .wx-action-column,
+.ant-modal .wx-action-column {
+  padding-inline: 12px !important;
+  text-align: center;
+  white-space: nowrap;
+}
+.platform-page .wx-action-column > .ant-space,
+.diagrams-page .wx-action-column > .ant-space,
+.ant-drawer .wx-action-column > .ant-space,
+.ant-modal .wx-action-column > .ant-space {
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+  justify-content: center;
+  gap: 0 var(--wx-action-gap) !important;
+  flex-wrap: nowrap !important;
+}
+.wx-action-column > .ant-space .ant-btn-link,
+.wx-action-column > .ant-btn-link {
+  padding-inline: 0 !important;
+  white-space: nowrap;
+}
+.wx-action-column .wx-catalog-action-pair { gap: var(--wx-action-gap); }
+.wx-action-column > .wx-source-actions { gap: 8px !important; }
+.wx-action-column > .wx-collection-actions {
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+  gap: var(--wx-action-gap);
+}
+.diagrams-page .wx-action-column > .table-actions {
+  justify-content: center;
+  gap: var(--wx-action-gap);
+}
+.wx-dashboard-table th:last-child,
+.wx-dashboard-table td:last-child {
+  width: 88px;
+  padding-inline: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+.wx-dashboard-table td:last-child .ant-btn-link { padding-inline: 0; }
+.platform-page[data-page="元数据对标"] .wx-action-column {
+  width: 132px !important;
+  min-width: 132px !important;
+  max-width: 132px !important;
+}
+.platform-page[data-page="元数据对标"] .ant-table-content > table {
+  width: 100% !important;
+  min-width: 940px !important;
+  table-layout: fixed !important;
+}
+.platform-page[data-page="元数据对标"] .ant-table col:nth-child(2) { width: 220px !important; }
+.platform-page[data-page="元数据对标"] .ant-table th:nth-child(2),
+.platform-page[data-page="元数据对标"] .ant-table td:nth-child(2) {
+  width: 220px !important;
+  max-width: 220px !important;
+}
+.platform-page[data-page="元数据对标"] .wx-mapping-standard-column {
+  width: 190px !important;
+  max-width: 190px !important;
+}
+.platform-page[data-page="元数据对标"] .wx-mapping-field,
+.platform-page[data-page="元数据对标"] .wx-mapping-standard {
+  min-width: 0;
+  width: 100%;
+}
+.platform-page[data-page="元数据对标"] .wx-mapping-field > *,
+.platform-page[data-page="元数据对标"] .wx-mapping-standard > * {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wx-mapping-type,
+.wx-mapping-unresolved {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wx-mapping-type-standard { color: #147d4c; }
+[data-theme=dark] .wx-mapping-type-standard { color: #57c991; }
+.wx-mapping-unresolved { color: #93601d; }
+[data-theme=dark] .wx-mapping-unresolved { color: #eab36e; }
+
+/* Use the same comfortable actions in form dialogs and confirmation dialogs. */
+.ant-modal:not(.canvas-workspace-modal) .ant-modal-footer .ant-btn:not(.ant-btn-icon-only),
+.ant-modal:not(.canvas-workspace-modal) .ant-modal-confirm-btns .ant-btn,
+.ant-drawer .editor-footer .ant-btn {
+  min-width: 76px;
+  height: 38px;
+  padding-inline: 16px;
+  font-size: 14px;
+}
+.ant-modal:not(.canvas-workspace-modal) .ant-modal-footer > .ant-btn + .ant-btn {
+  margin-inline-start: 12px !important;
+}
+.ant-modal:not(.canvas-workspace-modal) .ant-modal-confirm-btns,
+.ant-modal:not(.canvas-workspace-modal) .ant-modal-footer .ant-space,
+.ant-drawer .editor-footer .ant-space {
+  column-gap: 12px !important;
+}
+
+.application-frame .platform-page,
+.er-module {
+  font-size: var(--wx-type-body);
+}
+
+.platform-page .ant-table-thead > tr > th,
+.ant-drawer .ant-table-thead > tr > th,
+.ant-modal .ant-table-thead > tr > th {
+  font-size: var(--wx-type-dense);
+  line-height: 1.45;
+  font-weight: 600;
+}
+.platform-page .ant-table-tbody > tr > td,
+.ant-drawer .ant-table-tbody > tr > td,
+.ant-modal .ant-table-tbody > tr > td,
+.platform-page .ant-pagination,
+.ant-drawer .ant-pagination,
+.ant-modal .ant-pagination {
+  font-size: var(--wx-type-dense);
+  line-height: 1.55;
+}
+
+.platform-page .ant-form-item-label > label,
+.ant-drawer .ant-form-item-label > label,
+.ant-modal .ant-form-item-label > label,
+.platform-page .ant-descriptions-item-label,
+.platform-page .ant-descriptions-item-content,
+.ant-drawer .ant-descriptions-item-label,
+.ant-drawer .ant-descriptions-item-content,
+.ant-modal .ant-descriptions-item-label,
+.ant-modal .ant-descriptions-item-content {
+  font-size: var(--wx-type-dense);
+  line-height: 1.6;
+}
+
+.platform-page .ant-tabs-tab,
+.ant-drawer .ant-tabs-tab,
+.ant-modal .ant-tabs-tab,
+.platform-page .ant-input,
+.ant-drawer .ant-input,
+.ant-modal .ant-input,
+.platform-page .ant-select-selection-item,
+.ant-drawer .ant-select-selection-item,
+.ant-modal .ant-select-selection-item {
+  font-size: var(--wx-type-dense);
+}
+
+.platform-page .platform-eyebrow,
+.platform-page .has-module-art .platform-eyebrow,
+.wx-nav-group h2,
+.wanxiang-wordmark small,
+.wx-user-copy small,
+.login-brand p {
+  font-size: var(--wx-type-support);
+}
+
+.er-module .property-list {
+  grid-template-columns: 94px minmax(0, 1fr);
+  gap: 15px 12px;
+  font-size: var(--wx-type-body);
+  line-height: 1.65;
+}
+.er-module .property-list dt {
+  font-size: var(--wx-type-dense);
+}
+.er-module .property-list dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.er-module .property-list dd code {
+  font-size: var(--wx-type-support);
+  line-height: 1.6;
+}
+.er-module .field-table .ant-table-thead > tr > th {
+  font-size: var(--wx-type-dense) !important;
+}
+.er-module .field-table .ant-table-tbody > tr > td,
+.er-module .field-table .detail-field code {
+  font-size: var(--wx-type-dense);
+}
+.er-module .field-table .detail-field small,
+.er-module .field-table .field-native-type,
+.er-module .source-subtitle,
+.er-module .workbench-status,
+.er-module .graph-legend {
+  font-size: var(--wx-type-support);
+}
+
+/* Supporting text repeated across overview, metadata, standards, quality, and lineage. */
+.application-frame .surface-header small,
+.application-frame .table-toolbar-left .count,
+.application-frame .asset-table-sub,
+.application-frame .workbench-time,
+.application-frame .model-name-cell small,
+.application-frame .metadata-pane-head small,
+.application-frame .governance-flow .surface-header small,
+.application-frame .governance-exception-grid small,
+.application-frame .governance-link-row small,
+.application-frame .governance-form label > small,
+.application-frame .mapping-columns aside small,
+.application-frame .mapping-result span,
+.application-frame .mapping-result small,
+.application-frame .profile-indicators span,
+.application-frame .quality-dimension-list b,
+.application-frame .rule-test-console small,
+.application-frame .lineage-legend,
+.application-frame .lineage-legend span,
+.application-frame .lineage-node-kind,
+.application-frame .lineage-node small,
+.application-frame .table-column-settings-footer,
+.application-frame .model-active-dot,
+.application-frame .fullscreen-heading > span,
+.application-frame .fullscreen-save-state {
+  font-size: var(--wx-type-support);
+}
+
+.er-module .page-breadcrumb,
+.er-module .content-subtitle,
+.er-module .save-status,
+.er-module .library-entity-text > small,
+.er-module .library-entity-text > span,
+.er-module .canvas-badge,
+.er-module .canvas-settings p,
+.er-module .canvas-shortcuts,
+.er-module .workbench-status > button,
+.er-module .entity-inspector-names small,
+.er-module .inspector-copy-name,
+.er-module .relations-compact-details,
+.er-module .activity-event time,
+.er-module .palette-result-label > small,
+.er-module .palette-result-type,
+.er-module .palette-footer,
+.er-module .diagram-tile-body footer,
+.er-module .source-info-card small,
+.er-module .catalog-caption {
+  font-size: var(--wx-type-support);
+}
+
+/* Keep the main reading hierarchy consistent with HaiTong's 14px body and 27px page title. */
+.platform-page-heading h1 {
+  font-size: 27px;
+  line-height: 1.22;
+  font-weight: 650;
+  letter-spacing: .1px;
+}
+
+.platform-page-heading p {
+  font-size: 14px;
+  line-height: 1.68;
+}
+
+@media (max-width: 760px) {
+  .platform-page-heading h1 { font-size: 24px; }
+}

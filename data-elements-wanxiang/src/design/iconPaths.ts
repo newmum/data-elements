@@ -1,0 +1,22 @@
+/** Original 24px two-tone product icon geometry, independent from Ant Menu indentation. */
+export const moduleIconPaths: Record<string, { lines: string[]; accents: string[] }> = {
+ overview:{lines:['M3 10.5 12 3l9 7.5','M5 9v11h14V9','M9 20v-6h6v6'],accents:['M7 9h10v3H7z']},
+ sources:{lines:['M4 6c0-3 16-3 16 0s-16 3-16 0Z','M4 6v12c0 3 16 3 16 0V6','M4 12c0 3 16 3 16 0','M4 17c0 3 16 3 16 0'],accents:['M5 7q7 3 14 0v4q-7 3-14 0Z']},
+ collection:{lines:['M4 5h9M4 9h9M4 13h5','M3 3h12v13H3z','M12 18h9v3h-9z','M18 7v8m-3-3 3 3 3-3'],accents:['M4 4h10v3H4z','M13 19h7v1h-7z']},
+ catalog:{lines:['M3 7V4h7l2 3h9v13H3z','M3 10h18','M7 13h4m-4 3h4','M14 13h3m-3 3h3'],accents:['M4 8h16v3H4z']},
+ models:{lines:['M12 3 20 7.5v9L12 21l-8-4.5v-9Z','m4 7.5 8 4.5 8-4.5M12 12v9','M8 5.25 8 4.5'],accents:['M12 12 20 7.5v9L12 21z']},
+ er:{lines:['M2.5 4.5h7v6h-7zM14.5 13.5h7v6h-7z','M6 10.5v6h8.5','M15 5h6M18 2v6','M5 7.5h2M17 16.5h2'],accents:['M3 5h6v2H3zM15 14h6v2h-6z']},
+ mapping:{lines:['M2.5 4h7v16h-7zM14.5 4h7v16h-7z','M5 8h2M5 12h2M5 16h2M17 8h2M17 12h2M17 16h2','M10 10h4m-2-2 2 2-2 2'],accents:['M3 5h6v3H3zM15 5h6v3h-6z']},
+ lineage:{lines:['M3 4h6v5H3zM15 4h6v5h-6zM9 16h6v5H9z','M6 9v3h12V9M12 12v4'],accents:['M10 17h4v3h-4z']},
+ elements:{lines:['M5 3h10l4 4v14H5zM14 3v5h5','M8 12h8M8 16h6'],accents:['M8 6h3v3H8z']},
+ review:{lines:['M4 3h11l3 3v4M4 3v18h8','M7 7h5M7 11h4','M15 13a4 4 0 1 0 0 8 4 4 0 0 0 0-8','m13 17 1.5 1.5L17 16'],accents:['M12 13.5q3-2 6 0v5q-3 3-6 0Z']},
+ landing:{lines:['M3 4h8v7H3zM3 14h8v7H3z','M15 6h6M18 3v6','m14 17 2.5 2.5L21 14.5','M6 7h2M6 17h2'],accents:['M4 5h6v2H4zM4 15h6v2H4z']},
+ codes:{lines:['M4 3h14v18H4zM2 7h4M2 12h4M2 17h4','m10 8-2 3 2 3m3-6 2 3-2 3','M18 6h3v15h-3'],accents:['M5 4h12v3H5z']},
+ encoding:{lines:['M4 5h16v14H4z','M7 9v6M10 8v8M13 9v6M16 8v8','M2 3h5M17 3h5M2 21h5M17 21h5'],accents:['M5 6h14v2H5z']},
+ profiling:{lines:['M4 19V5h10','M7 15v-4M11 12V8','M15.5 12a4 4 0 1 0 0 8 4 4 0 0 0 0-8','m18.5 19 3 3'],accents:['M12 13q3-2 6 0v5q-3 3-6 0Z']},
+ 'profile-reports':{lines:['M5 3h10l4 4v14H5zM14 3v5h5','M8 17v-4M12 17V9M16 17v-6'],accents:['M7 12h2v6H7zM11 9h2v9h-2z']},
+ rules:{lines:['M12 2 21 6v6c0 5-9 10-9 10S3 17 3 12V6Z','M8 9h8M8 13h8','M10 7v4M14 11v4'],accents:['M12 3 20 6.5v6q0 5-8 8Z']},
+ plans:{lines:['M4 5h16v16H4zM4 10h16M8 3v4M16 3v4','M8 14h2M8 17h2','m14 13 4 3-4 3Z'],accents:['M5 6h14v3H5z']},
+ reports:{lines:['M4 3h16v18H4zM7 7h5M7 17h10','M7 14l3-3 3 2 4-4'],accents:['M7 14l3-3 3 2 4-4v7H7Z']},
+ workorders:{lines:['M8 4H4v17h16V4h-4','M8 2h8v4H8z','M8 10h8M8 14h4','m14 16 2 2 4-4'],accents:['M9 3h6v2H9zM7 9h10v3H7z']},
+};

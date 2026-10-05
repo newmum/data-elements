@@ -1,0 +1,597 @@
+{
+  "scope": "SourceIcon output from real TSX; isolated hook/UI adapters, actual Chromium image decoding.",
+  "imagesChecked": 64,
+  "passed": 64,
+  "results": [
+    {
+      "theme": "light",
+      "cases": 32,
+      "passed": 32,
+      "images": [
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 64,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 64,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 64,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 64,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgba(0, 0, 0, 0)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(255, 255, 255)"
+        }
+      ]
+    },
+    {
+      "theme": "dark",
+      "cases": 32,
+      "passed": 32,
+      "images": [
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(244, 243, 250)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(244, 243, 250)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 64,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(244, 243, 250)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 64,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 64,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 64,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(244, 243, 250)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(244, 243, 250)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 32,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(244, 243, 250)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(244, 243, 250)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 29,
+          "h": 29,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(244, 243, 250)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 21,
+          "h": 21,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        },
+        {
+          "loaded": true,
+          "naturalWidth": 150,
+          "w": 23,
+          "h": 23,
+          "filter": "none",
+          "fit": "contain",
+          "containerBackground": "rgb(233, 229, 243)"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+import type { Entity, FieldDef, Relationship, DiagramNode } from '../../features/er/types/domain';
+export type Id = string;
+export interface Versioned { id: Id; version: number; createdAt: string; updatedAt: string; }
+export interface Layer extends Versioned { name:string; code:string; purpose:string; owner:string; order:number; sortNo?:number; builtIn:boolean; state:'ACTIVE'|'ARCHIVED'; sourceId?:Id; sourceName?:string; sourceDbType?:string; bindingId?:Id; bindingVersion?:number; tableCount?:number; }
+export interface Warehouse extends Versioned { name:string; code:string; layerId:Id; domain:string; purpose:string; owner:string; mode:'MANAGED'|'REFERENCE'; state:'ACTIVE'|'ARCHIVED'; sourceId?:Id; sourceName?:string; sourceDbType?:string; bindingId?:Id; bindingVersion?:number; tableCount?:number; }
+export interface Binding extends Versioned { databaseId:Id; environment:'DEV'|'TEST'|'PROD'; sourceId:Id; sourceName?:string; tableCount?:number; catalog:string; schema:string; prefix:string; category:'RELATIONAL'|'LAKE'|'REFERENCE'; profile:string; state:'NOT_CHECKED'|'VALID'|'INVALID'; checkedHash?:string; checkedAt?:string; }
+export type LogicalType='String'|'Text'|'Int32'|'Int64'|'Decimal'|'Boolean'|'Date'|'Timestamp'|'Binary'|'UUID'|'JSON'|'Array'|'Object';
+export interface DesignField extends FieldDef { logicalType:LogicalType; businessName:string; standard?:{id:Id;revisionId:Id}; }
+export interface DesignEntity extends Entity { fields:DesignField[]; grain:string; role?:'SOURCE'|'OUTPUT'; reference?:{modelId:Id;revisionId:Id}; origin?:{entityId:Id;sourceId?:Id;tableName?:string;snapshotId:Id;fieldMap:Record<Id,Id>}; }
+export interface FusionJoin { id:Id; leftEntityId:Id; rightEntityId:Id; joinType:'INNER'|'LEFT'; pairs:Array<{leftFieldId:Id;rightFieldId:Id}>; rightCardinality:'ONE'|'MANY'; dedupe:'NONE'|'LATEST'; orderFieldId?:Id; }
+export interface FusionMapping { id:Id; targetFieldId:Id; sourceEntityId:Id; sourceFieldId:Id; transform:'DIRECT'|'TRIM'|'UPPER'|'LOWER'; }
+export interface FusionDesign { baseEntityId?:Id; joins:FusionJoin[]; mappings:FusionMapping[]; }
+export interface ModelContent { entities:DesignEntity[]; relationships:Relationship[]; nodes:DiagramNode[]; outputEntityId?:Id; fusion?:FusionDesign; }
+export interface FrozenModel extends ModelContent { id:Id; number:number; note:string; createdAt:string; signature:string; }
+export interface LogicalModel extends Versioned,ModelContent { name:string; code:string; domain:string; description:string; databaseId?:Id; owner:string; method:'MANUAL'|'STANDARD'|'REVERSE'|'COPY'; state:'ACTIVE'|'ARCHIVED'; frozen:FrozenModel[]; }
+export interface PlanItem { id:Id;designEntityId:Id;targetName:string;state:'PENDING'|'SUCCEEDED'|'FAILED'|'CANCELLED';error?:string;entityId?:Id;resourceId?:Id; }
+export interface Materialization extends Versioned { requestedBy?:Id;name:string;modelId:Id;revisionId:Id;bindingId:Id;bindingHash:string;revision:FrozenModel;items:PlanItem[];ddl:string;warnings:string[];errors:string[];state:'BLOCKED'|'READY'|'QUEUED'|'RUNNING'|'CANCELLING'|'CANCELLED'|'SUCCEEDED'|'PARTIAL'|'FAILED';attempt:number;startedAt?:string;finishedAt?:string;loadState?:'RUNNING'|'SUCCEEDED'|'FAILED';loadedRows?:number;loadError?:string;loadedAt?:string; }
+export interface Resource extends Versioned { entityId:Id;structure:Entity;structureRevisionId:Id;name:string;databaseId:Id;domain:string;owner:string;description:string;origin:'SNAPSHOT'|'MATERIALIZATION'|'LAKE';state:'ACTIVE'|'ARCHIVED';modelId?:Id;deploymentId?:Id;designFieldMap?:Record<Id,Id>; }
+export type ShareMode='CONDITIONAL'|'UNCONDITIONAL'|'NONE';
+export interface CatalogContent { name:string;code:string;classificationId:Id;summary:string;provider:string;contact:string;resourceId:Id;keywords:string[];frequency:'ONCE'|'DAILY'|'WEEKLY'|'MONTHLY';shareMode:ShareMode;conditions:string;visibility:'WORKSPACE'|'DEPARTMENTS';visibleDepartments:string[];format:'CSV'|'JSON';fieldIds:Id[];fieldLabels:Record<Id,string>;note:string; }
+export type ReviewState='DRAFT'|'RETURNED'|'PENDING_REVIEW'|'APPROVED'|'SUPERSEDED';
+export interface CatalogRevision extends CatalogContent {id:Id;number:number;state:ReviewState;submittedBy?:Id;submittedAt?:string;reviewer?:Id;reviewedAt?:string;opinion?:string;structure?:Entity;structureRevisionId?:Id;checks:Check[]; }
+export interface CatalogEntry extends Versioned {draft:CatalogRevision;revisions:CatalogRevision[];}
+export interface Check {code:string;level:'ERROR'|'WARNING'|'INFO';message:string;}
+export interface Publication extends Versioned { entryId:Id;revisionId:Id;revision:CatalogRevision;state:'PUBLISHED'|'OFFLINE';busState:'NOT_CONFIGURED'|'PENDING'|'SYNCING'|'SYNCED'|'FAILED';publishedBy:Id;reason?:string; }
+export interface Subscription extends Versioned {publicationId:Id;applicantId:Id;department:string;purpose:string;fieldIds:Id[];approvedFields:Id[];frequency:'ONCE'|'DAILY'|'WEEKLY'|'MONTHLY';validFrom:string;validTo:string;state:'PENDING'|'RETURNED'|'SCHEDULED'|'ACTIVE'|'PAUSED'|'EXPIRED'|'REVOKED';reviewer?:Id;opinion?:string;nextDeliveryAt?:string;grantId?:Id;}
+export interface Delivery extends Versioned {subscriptionId:Id;scheduledFor:string;publicationId:Id;grantId:Id;state:'SUCCEEDED'|'FAILED';fieldIds:Id[];rows:number;availableRows?:number;truncated?:boolean;content:string;format:'CSV'|'JSON';filename:string;error?:string;}
+export interface Classification extends Versioned {name:string;code:string;parentId?:Id;}
+export interface ItemSet extends Versioned {name:string;modelId:Id;items:Array<{fieldId:Id;entityId:Id;name:string;standardId?:Id;candidateId?:Id;}>;state:'DRAFT'|'SUBMITTED';}
+export interface ActionLog {id:Id;time:string;actorId:Id;actorName?:string;action:string;objectId:Id;name:string;detail:string;}
+export interface ResourceState {schemaVersion:1;layers:Layer[];databases:Warehouse[];bindings:Binding[];models:LogicalModel[];materializations:Materialization[];resources:Resource[];catalogs:CatalogEntry[];publications:Publication[];subscriptions:Subscription[];deliveries:Delivery[];classifications:Classification[];itemSets:ItemSet[];logs:ActionLog[];autoApprove:boolean;busConfigured:boolean;ignoredMatches:string[];technicalRevisions:Array<{id:string;entity:Entity;time:string}>;}
