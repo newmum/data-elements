@@ -1,0 +1,62 @@
+{
+  "controlLegacy": [],
+  "tenants": [
+    {
+      "tid": "2084109831682699264",
+      "name": "公安行业场景",
+      "code": "PUBLIC_SECURITY",
+      "accountSource": "LOCAL",
+      "schemaHint": "baseline_ga",
+      "historicalActiveMembers": 5,
+      "actualBinding": {
+        "databaseProduct": "MySQL",
+        "sqlSchema": "",
+        "schema": "baseline_ga_old",
+        "dataSourceKey": "public-security"
+      }
+    },
+    {
+      "tid": "2084109831682699265",
+      "name": "广电行业场景",
+      "code": "BROADCASTING",
+      "accountSource": "LOCAL",
+      "schemaHint": "baseline_beijing_gd",
+      "historicalActiveMembers": 2,
+      "actualBinding": {
+        "databaseProduct": "DM DBMS",
+        "sqlSchema": "baseline_beijing_gd",
+        "schema": "baseline_beijing_gd",
+        "dataSourceKey": "broadcasting"
+      }
+    },
+    {
+      "tid": "2084109831682699266",
+      "name": "海渔行业场景",
+      "code": "SEA_FISHERY",
+      "accountSource": "LOCAL",
+      "schemaHint": "baseline_sea_fishery",
+      "historicalActiveMembers": 1,
+      "actualBinding": {
+        "databaseProduct": "MySQL",
+        "sqlSchema": "",
+        "schema": "baseline_sea_fishery",
+        "dataSourceKey": "sea-fishery"
+      }
+    },
+    {
+      "tid": "2084109831682699267",
+      "name": "澄天数据中台",
+      "code": "CHENGTIAN_DATA_PLATFORM",
+      "accountSource": "LOCAL",
+      "schemaHint": "chengtian",
+      "historicalActiveMembers": 2,
+      "actualBinding": {
+        "databaseProduct": "MySQL",
+        "sqlSchema": "",
+        "schema": "chengtian",
+        "dataSourceKey": "chengtian"
+      }
+    }
+  ],
+  "membershipHistoryTable": "archive_iam_legacy_membership_20260929_t"
+}

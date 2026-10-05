@@ -1,0 +1,921 @@
+{
+  "completed": true,
+  "qaCleanup": true,
+  "stamp": "20260929-000946-6c79",
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/workspace/bootstrap",
+      "path": "/idaas/workspace/bootstrap",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "平台会话没有租户标识",
+      "passed": true
+    },
+    {
+      "name": "首阶段显式14项功能权限",
+      "passed": true
+    },
+    {
+      "name": "仅4个行业应用登记",
+      "passed": true
+    },
+    {
+      "name": "/idaas/users/list?page=1&size=2",
+      "path": "/idaas/users/list?page=1&size=2",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "中央既有人员分页只读",
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/list?page=1&size=10",
+      "path": "/idaas/orgs/list?page=1&size=10",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "中央既有机构分页只读",
+      "passed": true
+    },
+    {
+      "name": "拒绝非法分页参数",
+      "path": "/idaas/audit/list?page=oops",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "匿名不能取得平台会话",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "登录品牌可匿名读取",
+      "path": "/idaas/auth/public-settings",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/login-options",
+      "path": "/sym/tenant/login-options",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "租户登录配置 PUBLIC_SECURITY",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原租户账号仍可登录 PUBLIC_SECURITY",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "租户账号源保留 PUBLIC_SECURITY",
+      "passed": true
+    },
+    {
+      "name": "租户令牌不能访问平台 PUBLIC_SECURITY",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/me",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公安原角色机构正常",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/page",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公安仍为5个本地业务账号",
+      "passed": true
+    },
+    {
+      "name": "/sym/org/getOrgTree",
+      "path": "/sym/org/getOrgTree",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/role/page",
+      "path": "/sym/role/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公安不能切换到CONTROL租户",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "租户登录配置 BROADCASTING",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原租户账号仍可登录 BROADCASTING",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "租户账号源保留 BROADCASTING",
+      "passed": true
+    },
+    {
+      "name": "租户令牌不能访问平台 BROADCASTING",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "租户登录配置 SEA_FISHERY",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699266",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原租户账号仍可登录 SEA_FISHERY",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "租户账号源保留 SEA_FISHERY",
+      "passed": true
+    },
+    {
+      "name": "租户令牌不能访问平台 SEA_FISHERY",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "租户登录配置 CHENGTIAN_DATA_PLATFORM",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699267",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原租户账号仍可登录 CHENGTIAN_DATA_PLATFORM",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "租户账号源保留 CHENGTIAN_DATA_PLATFORM",
+      "passed": true
+    },
+    {
+      "name": "租户令牌不能访问平台 CHENGTIAN_DATA_PLATFORM",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "平台令牌不能进入租户系统",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "中央下发仍暂停",
+      "path": "/idaas/provision/execute",
+      "code": 503,
+      "passed": true
+    },
+    {
+      "name": "中央目录写入留待第二阶段",
+      "path": "/idaas/users/save",
+      "code": 503,
+      "passed": true
+    },
+    {
+      "name": "/idaas/application-groups/save",
+      "path": "/idaas/application-groups/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/application-groups/save",
+      "path": "/idaas/application-groups/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "相同请求回放相同ID",
+      "passed": true
+    },
+    {
+      "name": "同请求号不同内容拒绝",
+      "path": "/idaas/application-groups/save",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/application-groups/list",
+      "path": "/idaas/application-groups/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/save",
+      "path": "/idaas/applications/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "有应用引用的分组拒绝删除",
+      "path": "/idaas/application-groups/remove",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "并发版本控制 2",
+      "path": "/idaas/applications/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "并发版本控制 1",
+      "path": "/idaas/applications/save",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "并发修改仅一方成功",
+      "passed": true
+    },
+    {
+      "name": "旧版本不覆盖新数据",
+      "path": "/idaas/applications/save",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "核验本地权限应用必须真实存在",
+      "path": "/idaas/applications/runtime-binding",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "核验公安真实运行库",
+      "path": "/idaas/applications/runtime-binding",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公安实际绑定baseline_ga_old",
+      "passed": true
+    },
+    {
+      "name": "运行绑定也受乐观版本保护",
+      "path": "/idaas/applications/runtime-binding",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "同租户不能重复绑定不同应用",
+      "path": "/idaas/applications/runtime-binding",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "弱初始密码拒绝",
+      "path": "/idaas/operators/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/save",
+      "path": "/idaas/operators/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "账号接口无凭据字段",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "新账号需首次改密",
+      "passed": true
+    },
+    {
+      "name": "改密前不可访问业务管理",
+      "path": "/idaas/applications/list",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "改密校验原密码",
+      "path": "/idaas/profile/password",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "首次改密成功",
+      "path": "/idaas/profile/password",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "改密后原会话失效",
+      "path": "/idaas/session/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "原密码失效",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/resources",
+      "path": "/idaas/platform-roles/resources",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/save",
+      "path": "/idaas/platform-roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/save",
+      "path": "/idaas/platform-roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/save",
+      "path": "/idaas/platform-roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "配置全域只读和局部可写",
+      "path": "/idaas/platform-roles/assign",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "全域读角色可见所有登记",
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "局部写角色可修改指定应用",
+      "path": "/idaas/applications/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "全域读不扩大局部写范围",
+      "path": "/idaas/applications/save",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "局部写不能创建全局新应用",
+      "path": "/idaas/applications/save",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "应用维护账号不能管理平台账号",
+      "path": "/idaas/operators/list",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "撤销局部写角色",
+      "path": "/idaas/platform-roles/assign",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "现有会话即时失去已撤销权限",
+      "path": "/idaas/applications/save",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "设置授权有效期",
+      "path": "/idaas/platform-roles/assign",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "到期前授权生效",
+      "path": "/idaas/applications/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "到期后现有会话自动失效",
+      "path": "/idaas/applications/save",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/assign",
+      "path": "/idaas/platform-roles/assign",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "拒绝角色功能权限提升",
+      "path": "/idaas/platform-roles/save",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "拒绝转授不具备的应用写权限",
+      "path": "/idaas/platform-roles/assign",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/assignments?operatorId=1995681734511165441",
+      "path": "/idaas/platform-roles/assignments?operatorId=1995681734511165441",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "角色分配读取正确平台账号",
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/assign",
+      "path": "/idaas/platform-roles/assign",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "拒绝移除最后全局授权入口",
+      "path": "/idaas/platform-roles/assign",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/assignments?operatorId=1995681734511165441",
+      "path": "/idaas/platform-roles/assignments?operatorId=1995681734511165441",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "最后入口失败整批回滚",
+      "passed": true
+    },
+    {
+      "name": "错误密码计数 1",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "错误密码计数 2",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "错误密码计数 3",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "错误密码计数 4",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "错误密码计数 5",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "达到阈值后正确密码仍被锁定",
+      "path": "/idaas/auth/login",
+      "code": 429,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "锁定UTC截止时间可解析",
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/unlock",
+      "path": "/idaas/operators/unlock",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/reset-password",
+      "path": "/idaas/operators/reset-password",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "重置密码使原会话失效",
+      "path": "/idaas/session/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "重置后强制改密",
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/save",
+      "path": "/idaas/operators/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "停用使原会话失效",
+      "path": "/idaas/session/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "停用账号不可登录",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/list",
+      "path": "/idaas/settings/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "未开通MFA字段不接受伪配置",
+      "path": "/idaas/settings/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "服务端保存实际安全策略",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "策略旧版本拒绝覆盖",
+      "path": "/idaas/settings/save",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/audit/list?page=1&size=5",
+      "path": "/idaas/audit/list?page=1&size=5",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "审计服务端分页",
+      "passed": true
+    },
+    {
+      "name": "/idaas/audit/list?page=1&size=5&type=API",
+      "path": "/idaas/audit/list?page=1&size=5&type=API",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "真实API审计含路径方法耗时",
+      "passed": true
+    },
+    {
+      "name": "/idaas/audit/list?page=1&size=200&type=OPERATION",
+      "path": "/idaas/audit/list?page=1&size=200&type=OPERATION",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "拒绝权限操作记录审计",
+      "passed": true
+    },
+    {
+      "name": "审计不含验收口令",
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/remove",
+      "path": "/idaas/operators/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/list",
+      "path": "/idaas/platform-roles/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "清理验收角色",
+      "path": "/idaas/platform-roles/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "清理验收角色",
+      "path": "/idaas/platform-roles/remove",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "清理验收角色",
+      "path": "/idaas/platform-roles/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/list",
+      "path": "/idaas/applications/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/remove",
+      "path": "/idaas/applications/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/application-groups/list",
+      "path": "/idaas/application-groups/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/application-groups/remove",
+      "path": "/idaas/application-groups/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline.rm_user_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline.rm_user_tenant_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline.sym_tenant_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline_ga_old.rm_user_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline_ga_old.rm_blacklist_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline_ga_old.rm_org_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline_ga_old.rm_role_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline_ga_old.rm_menu_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline_ga_old.rm_user_org_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline_ga_old.rm_user_role_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原控制/公安表结构及数据保持一致 baseline_ga_old.rm_role_menu_rela_t",
+      "passed": true
+    },
+    {
+      "name": "公安库没有IAM表",
+      "passed": true
+    },
+    {
+      "name": "Magic活动资源无同路径重复",
+      "passed": true
+    }
+  ]
+}

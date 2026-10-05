@@ -1,0 +1,1 @@
+Test TypeScript files: 8, syntax errors: 0. This does NOT run browser tests.

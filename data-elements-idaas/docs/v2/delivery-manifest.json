@@ -1,0 +1,374 @@
+{
+  "version": "2.0.0",
+  "sourceLocalImports": "resolved",
+  "sourceFilesWithSyntaxCheck": 26,
+  "unitTestsPassed": 69,
+  "actualReactBuild": "not run: npm unavailable",
+  "files": [
+    {
+      "file": ".gitignore",
+      "bytes": 78,
+      "sha256": "618da8b69108522bdc5872d397596ba524885361e9578874da1d07834a052ba0"
+    },
+    {
+      "file": ".npmrc",
+      "bytes": 16,
+      "sha256": "be85cc462e740587626bbcbb1c3ed1c40b26e62ec072e8cbd2768f23915c28e6"
+    },
+    {
+      "file": "DESIGN.md",
+      "bytes": 5129,
+      "sha256": "f5328cb6ff01826406c3a82f4e3d28e34cf30934f5b8da60c6264c1fd852e5e2"
+    },
+    {
+      "file": "README.md",
+      "bytes": 8915,
+      "sha256": "6a7ad979a853073a0d703203c124b75e19a0af4352487c326e0e2d092e89a7e3"
+    },
+    {
+      "file": "docs/v1/前端功能覆盖与验收记录.md",
+      "bytes": 7690,
+      "sha256": "2561df722b02ef42f84285b9352e4a650c1bd3126a284ccd688112764e772b34"
+    },
+    {
+      "file": "docs/v1/自动化测试结果.txt",
+      "bytes": 9033,
+      "sha256": "30a4b4b87f3fb52c9fdd58f9bfcc3f2f316b73a9a87166f478bd8ef3f8ab117c"
+    },
+    {
+      "file": "docs/v2/Mock数据与联调说明.md",
+      "bytes": 4813,
+      "sha256": "37b88e165b186759dbc7c08784b76da2e8d4e3034df97a865488f931e30e26d0"
+    },
+    {
+      "file": "docs/v2/dependency-install-failure.txt",
+      "bytes": 318,
+      "sha256": "5e3549183c5243677d00d5e8902b8ac8c4e8b8270aa6bf8d34b4d92e50af40f7"
+    },
+    {
+      "file": "docs/v2/domain-typecheck-results.txt",
+      "bytes": 575,
+      "sha256": "b2da9b35f960c163388067a3595ce66ef9712bf28bb796b0a8378d9cf6dce052"
+    },
+    {
+      "file": "docs/v2/preview/apps.png",
+      "bytes": 514392,
+      "sha256": "8005d4a194f5c0adbbcb2b977d86a3932934123b993528e0d2e90d3ac32ed654"
+    },
+    {
+      "file": "docs/v2/preview/audit-detail.png",
+      "bytes": 362839,
+      "sha256": "2e40fbaa28a56ce032164597ee166e38637e47aaa48bfe8c87f30980e3b793d9"
+    },
+    {
+      "file": "docs/v2/preview/audit.png",
+      "bytes": 454856,
+      "sha256": "6a3b6c3cd2b2f05db291461830dbf196a0a7078c026cccf08eb32682525a687a"
+    },
+    {
+      "file": "docs/v2/preview/grant-editor.png",
+      "bytes": 439694,
+      "sha256": "92997b6dd6e7b260ecdf37b9572391f9cb7ba1071c33811239222c85316e6663"
+    },
+    {
+      "file": "docs/v2/preview/grants.png",
+      "bytes": 493268,
+      "sha256": "6ac21beaf1342ee318b0f59a3d4fb599e82aae49dec6cd2069605292b5c6d0ca"
+    },
+    {
+      "file": "docs/v2/preview/login-mobile.png",
+      "bytes": 89225,
+      "sha256": "1a665a8392858a7f735185d0221c9038559b9874f804742ab3ebcb78f1fe9861"
+    },
+    {
+      "file": "docs/v2/preview/login.png",
+      "bytes": 619040,
+      "sha256": "5763cf56066e39551c7ea21c1ad18d34181b215fa372e1ab075b2476bf73c061"
+    },
+    {
+      "file": "docs/v2/preview/overview.png",
+      "bytes": 550189,
+      "sha256": "916f4d95b5aa3221b0bd900433da2b457530e7c669fe2a7a6d75421e4b8ce178"
+    },
+    {
+      "file": "docs/v2/preview/settings.png",
+      "bytes": 454028,
+      "sha256": "1ec5799d233c41833d1c2558f31c8c61ecbeb30346beed9f55896cba76618314"
+    },
+    {
+      "file": "docs/v2/preview/user-detail.png",
+      "bytes": 405025,
+      "sha256": "7504b45473779757dd0698e57a96407738a004ce0a9406e2c9b8c00e085471d6"
+    },
+    {
+      "file": "docs/v2/preview/users.png",
+      "bytes": 435893,
+      "sha256": "e0dbcc5369316f9b4271965aec181c9fe3f2327d0e279522a92b8af2a80412cd"
+    },
+    {
+      "file": "docs/v2/reference/01-统一身份管理平台数据总览.png",
+      "bytes": 1414988,
+      "sha256": "5545350c9bb52315be247a8eca835bd4547e75156300cfefc65ada5faf9e1d58"
+    },
+    {
+      "file": "docs/v2/reference/02-统一身份管理平台用户管理界面.png",
+      "bytes": 1382178,
+      "sha256": "8e2bf7a0f1f6afa8ab1ab26260c0c24d859761cfca4876cdd7e286fd29e97259"
+    },
+    {
+      "file": "docs/v2/reference/03-统一身份管理平台授权中心.png",
+      "bytes": 1457108,
+      "sha256": "1642f0c6887056563756daa685dc87fabd4d8d6fb921f42c94e44bb6ab307738"
+    },
+    {
+      "file": "docs/v2/reference/04-统一身份平台安全审计中心.png",
+      "bytes": 1481319,
+      "sha256": "cd3050240d2a10b8b1bd5cd735b36bef79ab40b1838fe6e12920108a8b2c2ee7"
+    },
+    {
+      "file": "docs/v2/syntax-check-results.txt",
+      "bytes": 204,
+      "sha256": "4213b1e6a4632d9990da9e2b71dbdcae7841270563de37cb3fd5f3c497507a50"
+    },
+    {
+      "file": "docs/v2/unit-test-results.txt",
+      "bytes": 11962,
+      "sha256": "692fadd655177e7c68b765d6d04f274d0ab0f683325f02c66864ecc70db314f4"
+    },
+    {
+      "file": "docs/v2/visual-preview-test.json",
+      "bytes": 1886,
+      "sha256": "bea4b78378412ee0787ccf7c9d8d9c001905daa2b737dd048772b24c08d27e7b"
+    },
+    {
+      "file": "docs/v2/visual-preview.html",
+      "bytes": 1545755,
+      "sha256": "b70c46eb628f43fd1ba0f15734f33524e8f1d4d5bd2d50061f1aea232ff0d99b"
+    },
+    {
+      "file": "docs/v2/全页面改造说明.md",
+      "bytes": 4612,
+      "sha256": "2606ffbd3fd0090687af4823fc743316e91e5e290a0ceb72812873e627cc3ae6"
+    },
+    {
+      "file": "docs/v2/验收记录.md",
+      "bytes": 4679,
+      "sha256": "5b40044e80521d537b13bce2e8fc0ae9d2c9fb378ef14293206ed73b9cf4025d"
+    },
+    {
+      "file": "docs/产品需求规格说明书.docx",
+      "bytes": 115216,
+      "sha256": "0827eb13a2e453520a72ad06762aea2336085c8f47fdf975a96654d3d5a5b34e"
+    },
+    {
+      "file": "docs/产品需求规格说明书.md",
+      "bytes": 137499,
+      "sha256": "7666819fb3a6ff846f1258e6343905795865101d11ac74759fb3804000136cc1"
+    },
+    {
+      "file": "index.html",
+      "bytes": 435,
+      "sha256": "27e7b963853ee42a25e17fada0e0600618b52656bd22d74b9f715930038bca1c"
+    },
+    {
+      "file": "package.json",
+      "bytes": 1142,
+      "sha256": "21f39cefef36b380255491f217cff4975bd37786107477f967e29cc500d07641"
+    },
+    {
+      "file": "playwright.config.ts",
+      "bytes": 515,
+      "sha256": "5ea62855956ce34f2d8691ea1a78b58418671e227da769d00a800aae6d07fe04"
+    },
+    {
+      "file": "public/favicon.svg",
+      "bytes": 393,
+      "sha256": "53bb6aaefb0e84a40bb940beccc4c32cd54a18fe367a8a6165ee6e0418c40942"
+    },
+    {
+      "file": "scripts/syntax-check.mjs",
+      "bytes": 847,
+      "sha256": "5cc761a798e370d202862fcfe3f5c602f0e98ba86cb74449ef9bd87debe375be"
+    },
+    {
+      "file": "src/app/Shell.tsx",
+      "bytes": 20503,
+      "sha256": "35b9676e0c8d939b234ea562a1e95f37f94a9851ce03e357e3ab079af23eded3"
+    },
+    {
+      "file": "src/app/navigation.tsx",
+      "bytes": 5445,
+      "sha256": "c5dd2b7e653050793445269a31c2313af5214ab28e08d9fd6fd17b7bc513f3b0"
+    },
+    {
+      "file": "src/app/theme.ts",
+      "bytes": 3040,
+      "sha256": "b1a9ae3d00af607d343702f797e93335e44af1ca31bf6b614d55a1e44462b5ae"
+    },
+    {
+      "file": "src/components/Brand.tsx",
+      "bytes": 3092,
+      "sha256": "40807c1b09808a816042060e6c234bd99c550942816f2532b8508528f0277dcb"
+    },
+    {
+      "file": "src/components/ImportUsers.tsx",
+      "bytes": 5687,
+      "sha256": "5f7a9eb35a1fc5f3ceef4f497bcabb2e061a533921a559de4a9061934effea09"
+    },
+    {
+      "file": "src/components/common.tsx",
+      "bytes": 14061,
+      "sha256": "ba3c1b7b0dafa3391d2ef2079f0e9b834d8edd756f67665446b641a37c4ab4c6"
+    },
+    {
+      "file": "src/components/visuals.tsx",
+      "bytes": 6874,
+      "sha256": "be40bf5afdec9adbf961033a22703182acec223dddde55a42c6dd085a1da0078"
+    },
+    {
+      "file": "src/domain/csv.ts",
+      "bytes": 1822,
+      "sha256": "5a0c58063dea85350f93404fba0cf4a066295acb465475bbaa8f9ec453ab4964"
+    },
+    {
+      "file": "src/domain/engine.ts",
+      "bytes": 17463,
+      "sha256": "b03fcb2b09cee53b0cb19b739a4ba93990eafd849f87f9e6804b5950a00e4250"
+    },
+    {
+      "file": "src/domain/premium-seed.ts",
+      "bytes": 12144,
+      "sha256": "3c2558d6d3432e8d781705145240f695e7561482b81930fe8815cf38272a2774"
+    },
+    {
+      "file": "src/domain/seed.ts",
+      "bytes": 14382,
+      "sha256": "440de932cda70acc2044e2d061e184644bf2fc232a03d60c1b0684ee370d0ff7"
+    },
+    {
+      "file": "src/domain/types.ts",
+      "bytes": 5216,
+      "sha256": "d483fdc3ee0feeb2125b5f75ea651e3ec09abec0c7731f3dec760bc2fbce2bca"
+    },
+    {
+      "file": "src/main.tsx",
+      "bytes": 1297,
+      "sha256": "dbc2267e513d20b81c6192fcf77c9f5fb23bcd4953ab2b5a5a5613841c059137"
+    },
+    {
+      "file": "src/mock/database.ts",
+      "bytes": 13224,
+      "sha256": "5f448efc9132e6960560754741a21e1e01de18b8ad1d2967de8c5d1231945630"
+    },
+    {
+      "file": "src/mock/store.ts",
+      "bytes": 464,
+      "sha256": "cd727c6115ab810cb8f884d6ee1d981c348a281b90789a6287cd043d4f992673"
+    },
+    {
+      "file": "src/pages/Applications.tsx",
+      "bytes": 26218,
+      "sha256": "292341d81286f94c7350afbeccc3d11c79e525c41211e41629f4d1d1b8f8e1f9"
+    },
+    {
+      "file": "src/pages/Audit.tsx",
+      "bytes": 12086,
+      "sha256": "147c0574a7bcd532634105c3550325646ad4a3625c1081b8de61643cffddc0ad"
+    },
+    {
+      "file": "src/pages/Auth.tsx",
+      "bytes": 15208,
+      "sha256": "fa56494da841c313e1189cc28d350e703cbe6ff2d9e2f409ab4aa4061c2569d8"
+    },
+    {
+      "file": "src/pages/Authorization.tsx",
+      "bytes": 24265,
+      "sha256": "ceb6ec40b11da70491a34b52745c5ecb9580febf4106102dd6352e9eecf2ea8b"
+    },
+    {
+      "file": "src/pages/CatalogPage.tsx",
+      "bytes": 10563,
+      "sha256": "c1e28483b62d25ceea7d41146535d743a3bb34ad02d2acd6e65d2efb383a0699"
+    },
+    {
+      "file": "src/pages/Dashboard.tsx",
+      "bytes": 15913,
+      "sha256": "c6a6c27faeeec63ddbaf92fd79ee1c71152007e4386d2162d7b51c0911fa6c80"
+    },
+    {
+      "file": "src/pages/DesignSystem.tsx",
+      "bytes": 4848,
+      "sha256": "8babb009bac551d132baefed3f0a1fc686b3669fd57f95fa57ca0de39c3d7817"
+    },
+    {
+      "file": "src/pages/Organization.tsx",
+      "bytes": 23432,
+      "sha256": "765eb9888b2b93579adedc254283bd5203b563ae8b3157f32c98f35ac6106797"
+    },
+    {
+      "file": "src/pages/PublicEntities.tsx",
+      "bytes": 6498,
+      "sha256": "0e37603483d5ae1fa301ca897bdbc4ac13a17b4754521b4e8c5777b0c2cc6ec8"
+    },
+    {
+      "file": "src/pages/Settings.tsx",
+      "bytes": 14771,
+      "sha256": "c4122656ef955a0928070b724be8c3021faa58050477109d4c60e435f3035489"
+    },
+    {
+      "file": "src/pages/Synchronization.tsx",
+      "bytes": 11630,
+      "sha256": "213a097da048d4141eb44b7a27b729e0dc25b2361deb451670471953af685abe"
+    },
+    {
+      "file": "src/styles/app.css",
+      "bytes": 39566,
+      "sha256": "ccdacff0bb5cb96ce27f7af12ebf020b17452c2e38871db405d1755d639cc7fe"
+    },
+    {
+      "file": "tests/domain.test.ts",
+      "bytes": 11139,
+      "sha256": "106d0135a63f47695ed89f442f65b3ecb22dea3f16c1441f02508357504b81f4"
+    },
+    {
+      "file": "tests/e2e.spec.ts",
+      "bytes": 10443,
+      "sha256": "b5992660fdf257181043e35b4d59c96389063502a26350518886044af940014e"
+    },
+    {
+      "file": "tests/mock.test.ts",
+      "bytes": 5197,
+      "sha256": "009f7af554ff7d139e59d55c5c2e0b23f41a601848105e3ea25693ceb2f89987"
+    },
+    {
+      "file": "tests/premium.test.ts",
+      "bytes": 4339,
+      "sha256": "740922b401631b2ff4c3d2e916878114fdabd47ecb442a2f8096b6f158e1d1b2"
+    },
+    {
+      "file": "tsconfig.json",
+      "bytes": 490,
+      "sha256": "c74fa7ef24f97ad00c9105b10ca76a6773983ced2fb29f3e90b06c1910fb500a"
+    },
+    {
+      "file": "vite.config.ts",
+      "bytes": 371,
+      "sha256": "b94912bdf3a46d8f9168bf9c81405e6dbee0db8b16ead4c32c9c76ee71a73d61"
+    },
+    {
+      "file": "启动前端.cmd",
+      "bytes": 336,
+      "sha256": "62b48bbdcf812d7fcb08625b0d2ac2bb5b169b2f29a1f9f9e7846f2e97a82212"
+    },
+    {
+      "file": "启动前端.sh",
+      "bytes": 211,
+      "sha256": "1fa80f3fcdcf7f2d00cfffa38b486b9c629196231f97da6b83e795f4e5cf3aea"
+    },
+    {
+      "file": "打开视觉预览.cmd",
+      "bytes": 88,
+      "sha256": "4864a61c61f15ce2e76d3aec96f842ea59986425dc28fe1df42ecefc104d5421"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+exit=124
+Registry connectivity probe: https://registry.npmjs.org/react
+TypeError: fetch failed
+cause: EAI_AGAIN
+elapsed ms 104
+Earlier npm install was terminated at its timeout (exit 124); no successful dependency installation.

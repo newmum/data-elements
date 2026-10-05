@@ -1,0 +1,38 @@
+/* Generated from src/app/typography.ts. Run npm run tokens:generate. */
+:root {
+  --iam-font-caption: 12px;
+  --iam-leading-caption: 18px;
+  --iam-weight-caption: 400;
+  --iam-font-secondary: 13px;
+  --iam-leading-secondary: 20px;
+  --iam-weight-secondary: 400;
+  --iam-font-body: 14px;
+  --iam-leading-body: 22px;
+  --iam-weight-body: 400;
+  --iam-font-navigation: 14px;
+  --iam-leading-navigation: 22px;
+  --iam-weight-navigation: 500;
+  --iam-font-section: 16px;
+  --iam-leading-section: 24px;
+  --iam-weight-section: 600;
+  --iam-font-panel: 18px;
+  --iam-leading-panel: 28px;
+  --iam-weight-panel: 600;
+  --iam-font-page: 24px;
+  --iam-leading-page: 34px;
+  --iam-weight-page: 600;
+  --iam-font-statistic: 28px;
+  --iam-leading-statistic: 36px;
+  --iam-weight-statistic: 600;
+  --iam-font-statistic-small: 24px;
+  --iam-leading-statistic-small: 32px;
+  --iam-weight-statistic-small: 600;
+  --iam-font-display: 32px;
+  --iam-leading-display: 42px;
+  --iam-weight-display: 600;
+  --iam-type-heading: #142044;
+  --iam-type-body: #253453;
+  --iam-type-secondary: #667493;
+  --iam-type-caption: #71809B;
+  --iam-type-on-dark: #B8C7E0;
+}

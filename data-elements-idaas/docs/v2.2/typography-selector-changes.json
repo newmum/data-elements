@@ -1,0 +1,1106 @@
+[
+  {
+    "selector": ".sider-brand-text strong",
+    "media": false,
+    "old": "font-size: 14px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".sider-brand-text small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".workspace-label",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".sider-banner strong",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".sider-banner strong",
+    "media": false,
+    "old": "line-height: 1.9",
+    "new": "line-height: var(--iam-leading-body)"
+  },
+  {
+    "selector": ".sider-banner small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".sider-version",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".brand-name",
+    "media": false,
+    "old": "font-size: 16px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".global-search",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".global-search kbd",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".account-copy",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".account-copy",
+    "media": false,
+    "old": "line-height: 1.15",
+    "new": "line-height: var(--iam-leading-body)"
+  },
+  {
+    "selector": ".account-copy small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".env-badge",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".eyebrow",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".page-description",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".page-time",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".metric-top",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".metric-value",
+    "media": false,
+    "old": "font-size: 24px",
+    "new": "font-size: var(--iam-font-statistic)"
+  },
+  {
+    "selector": ".metric-value",
+    "media": false,
+    "old": "line-height: 1.3",
+    "new": "line-height: var(--iam-leading-statistic)"
+  },
+  {
+    "selector": ".metric-desc",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".metric-subnote",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".hero-copy .hero-kicker",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".hero-copy h2",
+    "media": false,
+    "old": "font-size: 22px",
+    "new": "font-size: var(--iam-font-page)"
+  },
+  {
+    "selector": ".hero-copy h2",
+    "media": false,
+    "old": "line-height: 1.45",
+    "new": "line-height: var(--iam-leading-page)"
+  },
+  {
+    "selector": ".hero-copy p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".hero-copy p",
+    "media": false,
+    "old": "line-height: 1.7",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".hero-bullets",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".hero-health-title",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".health-row",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".health-rate",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".health-rate strong",
+    "media": false,
+    "old": "font-size: 16px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".hero-live",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".chart-legend",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".chart-tooltip",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".chart-tooltip",
+    "media": false,
+    "old": "line-height: 1.9",
+    "new": "line-height: var(--iam-leading-caption)"
+  },
+  {
+    "selector": ".rank-number",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".rank-name",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".ranking-count",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".ranking-count small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".attention-copy strong",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".attention-copy small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".attention-count",
+    "media": false,
+    "old": "font-size: 14px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".card-link",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".donut-legend",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".application-description",
+    "media": false,
+    "old": "line-height: 20px",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".application-description",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".app-meta-grid span",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".app-meta-grid strong",
+    "media": false,
+    "old": "font-size: 16px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".table-count",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".tree-node-title",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".tree-node-title>span:last-child",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".tree-bottom",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".object-choice strong",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".object-choice small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".source-tag",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".drawer-identity-head h3",
+    "media": false,
+    "old": "font-size: 20px",
+    "new": "font-size: var(--iam-font-page)"
+  },
+  {
+    "selector": ".drawer-profile-meta",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".detail-section-title",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".detail-app-chip",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".detail-risk small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".settings-guide-top h3",
+    "media": false,
+    "old": "font-size: 15px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".settings-guide-top p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".settings-guide-top p",
+    "media": false,
+    "old": "line-height: 1.9",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".guide-list",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".guide-number",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".guide-list strong",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".json-view",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".json-view",
+    "media": false,
+    "old": "line-height: 1.7",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".app-footer",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".section-intro strong",
+    "media": false,
+    "old": "font-size: 15px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".section-intro p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".section-intro p",
+    "media": false,
+    "old": "line-height: 1.8",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".intro-stats span",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".intro-stats strong",
+    "media": false,
+    "old": "font-size: 22px",
+    "new": "font-size: var(--iam-font-statistic-small)"
+  },
+  {
+    "selector": ".audit-score",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".audit-score strong",
+    "media": false,
+    "old": "font-size: 34px",
+    "new": "font-size: var(--iam-font-statistic)"
+  },
+  {
+    "selector": ".audit-overview-title",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".risk-list>div",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".risk-list b",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".audit-event-head strong",
+    "media": false,
+    "old": "font-size: 17px",
+    "new": "font-size: var(--iam-font-panel)"
+  },
+  {
+    "selector": ".audit-event-head p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".diff-grid small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".command-result strong",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".command-result small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".notification-row strong",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".notification-row p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".auth-logo-label",
+    "media": false,
+    "old": "font-size: 17px",
+    "new": "font-size: var(--iam-font-panel)"
+  },
+  {
+    "selector": ".auth-logo small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".auth-story h1",
+    "media": false,
+    "old": "font-size: 32px",
+    "new": "font-size: var(--iam-font-display)"
+  },
+  {
+    "selector": ".auth-story h1",
+    "media": false,
+    "old": "line-height: 1.45",
+    "new": "line-height: var(--iam-leading-display)"
+  },
+  {
+    "selector": ".auth-story>p",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".auth-story>p",
+    "media": false,
+    "old": "line-height: 1.75",
+    "new": "line-height: var(--iam-leading-body)"
+  },
+  {
+    "selector": ".auth-capabilities>div",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".login-heading small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".login-heading h2",
+    "media": false,
+    "old": "font-size: 27px",
+    "new": "font-size: var(--iam-font-page)"
+  },
+  {
+    "selector": ".login-heading p",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".login-options",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".auth-links",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".auth-footnote",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".profile-summary h2",
+    "media": false,
+    "old": "font-size: 23px",
+    "new": "font-size: var(--iam-font-page)"
+  },
+  {
+    "selector": ".profile-summary p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".sync-flow",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".editor-intro",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".editor-intro",
+    "media": false,
+    "old": "line-height: 1.8",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".screen-top-note",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".hero-copy h2",
+    "media": true,
+    "old": "font-size: 28px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".metric-value",
+    "media": true,
+    "old": "font-size: 24px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".metric-value",
+    "media": true,
+    "old": "font-size: 24px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".metric-desc",
+    "media": true,
+    "old": "font-size: 11px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-copy h2",
+    "media": true,
+    "old": "font-size: 22px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-bullets",
+    "media": true,
+    "old": "font-size: 11px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".donut-legend",
+    "media": true,
+    "old": "font-size: 11px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".header-breadcrumb",
+    "media": true,
+    "old": "font-size: 12px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-copy h2",
+    "media": true,
+    "old": "font-size: 26px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-bullets",
+    "media": true,
+    "old": "font-size: 12px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-health-title",
+    "media": true,
+    "old": "font-size: 13px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".health-row",
+    "media": true,
+    "old": "font-size: 12px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".auth-story h1",
+    "media": true,
+    "old": "font-size: 30px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".env-badge",
+    "media": true,
+    "old": "font-size: 11px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-copy h2",
+    "media": true,
+    "old": "font-size: 22px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-bullets",
+    "media": true,
+    "old": "font-size: 11px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".metric-value",
+    "media": true,
+    "old": "font-size: 24px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".header-breadcrumb",
+    "media": true,
+    "old": "font-size: 11px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".muted",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".subtle-label",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".count-pill",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".table-secondary",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".org-tree-label>span",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".org-tree-label small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".user-profile-hero h2",
+    "media": false,
+    "old": "font-size: 21px",
+    "new": "font-size: var(--iam-font-page)"
+  },
+  {
+    "selector": ".user-profile-hero p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".detail-section h4",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".detail-section p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".user-app-chips>span",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".device-row strong",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".device-row small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".account-health strong",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".account-health p",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".object-choice strong",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".object-choice small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".impact-preview span",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".impact-preview strong",
+    "media": false,
+    "old": "font-size: 24px",
+    "new": "font-size: var(--iam-font-statistic-small)"
+  },
+  {
+    "selector": ".impact-preview small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".app-card-metrics span",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".app-card-metrics strong",
+    "media": false,
+    "old": "font-size: 19px",
+    "new": "font-size: var(--iam-font-statistic-small)"
+  },
+  {
+    "selector": ".application-detail-hero h1",
+    "media": false,
+    "old": "font-size: 22px",
+    "new": "font-size: var(--iam-font-page)"
+  },
+  {
+    "selector": ".application-detail-hero p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".app-hero-stat span",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".app-hero-stat strong",
+    "media": false,
+    "old": "font-size: 26px",
+    "new": "font-size: var(--iam-font-statistic)"
+  },
+  {
+    "selector": ".chart-legend",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".rank-bars .rank-label",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".rank-bars strong",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".audit-filters label>span:first-child",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".event-mini",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".audit-detail-hero h3",
+    "media": false,
+    "old": "font-size: 17px",
+    "new": "font-size: var(--iam-font-panel)"
+  },
+  {
+    "selector": ".audit-detail-hero p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".settings-guide h3",
+    "media": false,
+    "old": "font-size: 17px",
+    "new": "font-size: var(--iam-font-section)"
+  },
+  {
+    "selector": ".settings-guide>p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".settings-guide>p",
+    "media": false,
+    "old": "line-height: 1.9",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".guide-point>span",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".guide-point p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".guide-point p",
+    "media": false,
+    "old": "line-height: 1.8",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".guide-footer",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".profile-banner h2",
+    "media": false,
+    "old": "font-size: 22px",
+    "new": "font-size: var(--iam-font-page)"
+  },
+  {
+    "selector": ".profile-banner p",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".profile-safety",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".auth-logo strong",
+    "media": false,
+    "old": "font-size: 17px",
+    "new": "font-size: var(--iam-font-panel)"
+  },
+  {
+    "selector": ".auth-eyebrow",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".auth-capabilities strong",
+    "media": false,
+    "old": "font-size: 12px",
+    "new": "font-size: var(--iam-font-body)"
+  },
+  {
+    "selector": ".auth-capabilities small",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".auth-brand-footer",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".auth-footer",
+    "media": false,
+    "old": "font-size: 11px",
+    "new": "font-size: var(--iam-font-caption)"
+  },
+  {
+    "selector": ".application-detail-hero h1",
+    "media": true,
+    "old": "font-size: 21px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".device-row small",
+    "media": true,
+    "old": "font-size: 11px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".audit-detail-hero h3",
+    "media": true,
+    "old": "line-height: 1.8",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".help-copy p",
+    "media": false,
+    "old": "font-size: 13px",
+    "new": "font-size: var(--iam-font-secondary)"
+  },
+  {
+    "selector": ".help-copy p",
+    "media": false,
+    "old": "line-height: 1.7",
+    "new": "line-height: var(--iam-leading-secondary)"
+  },
+  {
+    "selector": ".hero-copy h2",
+    "media": true,
+    "old": "font-size: 24px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-copy h2",
+    "media": true,
+    "old": "font-size: 24px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".metric-value",
+    "media": true,
+    "old": "font-size: 22px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".hero-bullets",
+    "media": true,
+    "old": "font-size: 11px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".application-detail-hero h1",
+    "media": true,
+    "old": "font-size: 20px",
+    "new": "(inherits semantic role)"
+  },
+  {
+    "selector": ".auth-logo strong",
+    "media": true,
+    "old": "font-size: 16px",
+    "new": "(inherits semantic role)"
+  }
+]

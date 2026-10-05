@@ -1,0 +1,41 @@
+
+Running 28 tests using 2 workers
+
+(node:3548) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15284) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:3548) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:15284) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  2 tests\navigation.spec.ts:13:46 › 系统切换菜单可读、可滚动 1920px (21.9s)
+  ok  1 tests\navigation.spec.ts:13:46 › 系统切换菜单可读、可滚动 1440px (22.7s)
+  ok  3 tests\navigation.spec.ts:13:46 › 系统切换菜单可读、可滚动 1360px (8.0s)
+  ok  4 tests\navigation.spec.ts:13:46 › 系统切换菜单可读、可滚动 390px (8.9s)
+  ok  5 tests\navigation.spec.ts:56:1 › 折叠侧栏保留可访问的切换入口 (6.7s)
+  ok  6 tests\navigation.spec.ts:80:3 › 折叠侧栏悬停应用管理可进入二级功能 (6.8s)
+  ok  7 tests\navigation.spec.ts:80:3 › 折叠侧栏悬停组织与用户可进入二级功能 (8.6s)
+  ok  8 tests\navigation.spec.ts:80:3 › 折叠侧栏悬停授权管理可进入二级功能 (7.7s)
+  ok  9 tests\navigation.spec.ts:80:3 › 折叠侧栏悬停同步管理可进入二级功能 (7.0s)
+  ok 10 tests\navigation.spec.ts:80:3 › 折叠侧栏悬停审计日志可进入二级功能 (7.5s)
+  ok 11 tests\navigation.spec.ts:80:3 › 折叠侧栏悬停系统管理可进入二级功能 (8.0s)
+  ok 12 tests\navigation.spec.ts:117:1 › 折叠菜单点击、离开关闭与展开后当前分组保持一致 (14.5s)
+  ok 13 tests\navigation.spec.ts:149:1 › 折叠菜单支持键盘进入二级功能 (11.6s)
+  ok 15 tests\navigation.spec.ts:198:1 › 公众域折叠菜单只展示当前身份域功能 (16.8s)
+  ok 14 tests\navigation.spec.ts:169:1 › 当前分组曾手动关闭时，折叠选择同组功能后展开可见 (27.7s)
+  ok 16 tests\navigation.spec.ts:220:1 › 手机导航抽屉仍以内联菜单选择功能 (14.7s)
+  ok 17 tests\navigation.spec.ts:255:3 › 点击数据资源中心进入所属系统并使用当前标签页 (9.7s)
+  ok 18 tests\navigation.spec.ts:255:3 › 点击数据集成中心进入所属系统并使用当前标签页 (8.6s)
+  ok 20 tests\navigation.spec.ts:255:3 › 点击数据治理中心进入所属系统并使用当前标签页 (10.2s)
+  ok 19 tests\navigation.spec.ts:255:3 › 点击数据计算中心进入所属系统并使用当前标签页 (17.3s)
+  ok 22 tests\navigation.spec.ts:255:3 › 点击数据资产中心进入所属系统并使用当前标签页 (9.9s)
+  ok 21 tests\navigation.spec.ts:255:3 › 点击数据安全中心进入所属系统并使用当前标签页 (10.3s)
+  ok 24 tests\navigation.spec.ts:255:3 › 点击数据可视化中心进入所属系统并使用当前标签页 (17.7s)
+  ok 23 tests\navigation.spec.ts:255:3 › 点击数据服务中心进入所属系统并使用当前标签页 (19.2s)
+  ok 26 tests\navigation.spec.ts:255:3 › 点击智能搜索中心进入所属系统并使用当前标签页 (17.0s)
+  ok 25 tests\navigation.spec.ts:255:3 › 点击知识图谱中心进入所属系统并使用当前标签页 (18.3s)
+  ok 28 tests\navigation.spec.ts:255:3 › 点击人工智能支撑平台进入所属系统并使用当前标签页 (15.2s)
+  ok 27 tests\navigation.spec.ts:255:3 › 点击数据运行智能监控平台进入所属系统并使用当前标签页 (15.5s)
+
+  28 passed (3.3m)

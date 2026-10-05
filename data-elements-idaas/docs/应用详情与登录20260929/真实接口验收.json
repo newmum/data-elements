@@ -1,0 +1,79 @@
+{
+  "completed": true,
+  "realBackend": true,
+  "checkedAt": "2026-10-02T09:03:06.145852+00:00",
+  "databaseSchemaChanges": false,
+  "businessDataChanges": false,
+  "javaRuntimeChanges": true,
+  "checks": [
+    {
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公安登录仍进入指定应用的本地账号体系",
+      "passed": true
+    },
+    {
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公安本地角色和机构仍可读取",
+      "passed": true
+    },
+    {
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "path": "/idaas/workspace/bootstrap",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "卓鉴登录使用独立平台操作账号",
+      "passed": true
+    },
+    {
+      "name": "原有应用连接仍保留",
+      "passed": true
+    },
+    {
+      "path": "/idaas/assignments/list?appId=2084109831682699264&domain=workforce",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "人员和机构资料可分别读取",
+      "passed": true
+    },
+    {
+      "path": "/idaas/clients/list?appId=2084109831682699264&domain=workforce",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原有客户端配置可读取",
+      "passed": true
+    },
+    {
+      "path": "/idaas/auth/logout",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "path": "/portal/logout",
+      "code": 0,
+      "passed": true
+    }
+  ]
+}

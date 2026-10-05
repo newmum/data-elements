@@ -1,0 +1,166 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/save",
+      "path": "/idaas/operators/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/profile/password",
+      "path": "/idaas/profile/password",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/status",
+      "path": "/idaas/mfa/status",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "新平台账号未继承其他账号动态口令",
+      "passed": true
+    },
+    {
+      "name": "平台MFA设置核对当前密码",
+      "path": "/idaas/mfa/setup",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/setup",
+      "path": "/idaas/mfa/setup",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/bind",
+      "path": "/idaas/mfa/bind",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "平台绑定返回十个仅显示一次的恢复码",
+      "passed": true
+    },
+    {
+      "name": "平台绑定MFA撤销原管理会话",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "平台密码登录必须继续二次验证",
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/verify-login",
+      "path": "/idaas/mfa/verify-login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "挑战中固定的操作账号域不能由调用者改成公众域",
+      "passed": true
+    },
+    {
+      "name": "平台MFA会话仍不能进入公众认证账号",
+      "path": "/idaas/auth-account/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "平台二次验证挑战只能消费一次",
+      "path": "/idaas/mfa/verify-login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "平台恢复码也只能消费一次",
+      "path": "/idaas/mfa/verify-login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/disable",
+      "path": "/idaas/mfa/disable",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "平台解绑MFA撤销原管理会话",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "解绑后以密码建立新的独立管理会话",
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/status",
+      "path": "/idaas/mfa/status",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "解绑后的平台MFA状态准确",
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/list",
+      "path": "/idaas/settings/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "未完成全体管理员绑定时不允许强制开启MFA",
+      "path": "/idaas/settings/save",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "MFA验收结束后原11张账号和权限保护表完整保留",
+      "passed": true
+    }
+  ],
+  "ownOperatorCleaned": true
+}

@@ -1,0 +1,33 @@
+
+> data-elements-idaas@2.2.0 audit:typography
+> node --experimental-strip-types scripts/audit-typography.mjs
+
+PASS 紧凑算法保留
+PASS 全局小尺寸保留
+PASS 基础字号为14px
+PASS 导航不小于正文
+PASS 正文大于描述
+PASS 卡片标题大于正文
+PASS 标题层级递增
+PASS 辅助文本不小于12px
+PASS 主文本行高保留余量
+PASS 小卡片标题不是压缩字号
+PASS 小表格正文仍为正文层级
+PASS 小按钮字号独立于高度
+PASS 小输入字号独立于高度
+PASS 导航主题显式正文级别
+PASS 卡片标题嵌套Text继承
+PASS 应用名称不再被嵌套Typography缩小
+PASS 页面标题使用统一角色
+PASS 指标标签使用独立角色
+PASS 最终文字样式后加载
+PASS 不使用整页缩放
+PASS 图表使用实测宽度
+PASS 环图中心使用HTML文字
+PASS 设计规范页面保持删除
+PASS 全局样式不把所有span缩小
+PASS 完整覆盖派生标题Token
+PASS 全源码语法树可解析
+PASS 全部业务页面纳入源码清单 — 10个页面实现文件，共享模板覆盖多个路由
+
+Static contract: 27/27; 34 source files; 44 workspaces; 8 auth routes. NOT rendered-page acceptance.

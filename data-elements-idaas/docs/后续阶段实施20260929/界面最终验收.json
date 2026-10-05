@@ -1,0 +1,60 @@
+{
+  "completed": true,
+  "realBackend": true,
+  "loginViaPage": true,
+  "widths": [
+    390,
+    1440,
+    1920
+  ],
+  "checks": [
+    {
+      "name": "真实 IAM 工作区与认证页面 1440px",
+      "passed": true,
+      "durationMs": 66630
+    },
+    {
+      "name": "真实 IAM 工作区与认证页面 390px",
+      "passed": true,
+      "durationMs": 53411
+    },
+    {
+      "name": "真实 IAM 工作区与认证页面 1920px",
+      "passed": true,
+      "durationMs": 54820
+    }
+  ],
+  "screenCount": 30,
+  "screenshots": [
+    "界面验收/live-apps-1440.png",
+    "界面验收/live-grants-apps-1440.png",
+    "界面验收/live-identity-login-1440.png",
+    "界面验收/live-organization-1440.png",
+    "界面验收/live-overview-1440.png",
+    "界面验收/live-sync-tasks-1440.png",
+    "界面验收/live-system-access-admins-1440.png",
+    "界面验收/live-system-settings-api-1440.png",
+    "界面验收/live-system-settings-encryption-1440.png",
+    "界面验收/live-system-settings-sso-1440.png",
+    "界面验收/live-apps-1920.png",
+    "界面验收/live-grants-apps-1920.png",
+    "界面验收/live-identity-login-1920.png",
+    "界面验收/live-organization-1920.png",
+    "界面验收/live-overview-1920.png",
+    "界面验收/live-sync-tasks-1920.png",
+    "界面验收/live-system-access-admins-1920.png",
+    "界面验收/live-system-settings-api-1920.png",
+    "界面验收/live-system-settings-encryption-1920.png",
+    "界面验收/live-system-settings-sso-1920.png",
+    "界面验收/live-apps-390.png",
+    "界面验收/live-grants-apps-390.png",
+    "界面验收/live-identity-login-390.png",
+    "界面验收/live-organization-390.png",
+    "界面验收/live-overview-390.png",
+    "界面验收/live-sync-tasks-390.png",
+    "界面验收/live-system-access-admins-390.png",
+    "界面验收/live-system-settings-api-390.png",
+    "界面验收/live-system-settings-encryption-390.png",
+    "界面验收/live-system-settings-sso-390.png"
+  ]
+}

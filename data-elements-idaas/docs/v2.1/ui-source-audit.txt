@@ -1,0 +1,11 @@
+{
+  "kind": "static-source-audit-not-browser",
+  "files": 28,
+  "tables": 11,
+  "cards": 37,
+  "forms": 11,
+  "tabs": 6,
+  "checks": 4167,
+  "passed": 4167,
+  "failures": []
+}

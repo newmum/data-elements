@@ -1,0 +1,27 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "启动后匿名可取得实际OIDC发现文档",
+      "passed": true
+    },
+    {
+      "name": "实际公开公钥对应配置的持久RSA私钥",
+      "passed": true
+    },
+    {
+      "name": "JWKS不泄露私钥字段",
+      "passed": true
+    },
+    {
+      "name": "协议使用固定RS256签名用途及稳定kid",
+      "passed": true
+    },
+    {
+      "name": "本机启动修复复用原密钥并未轮换",
+      "passed": true
+    }
+  ],
+  "keyLocation": "C:\\Users\\Administrator\\.data-elements\\idaas\\keys\\protocol-signing.jwk",
+  "issuer": "http://localhost:8088"
+}

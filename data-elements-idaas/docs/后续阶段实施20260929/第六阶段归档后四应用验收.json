@@ -1,0 +1,371 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "旧共享账号归档已完成",
+      "passed": true
+    },
+    {
+      "name": "运行控制库没有活跃共享账号表",
+      "passed": true
+    },
+    {
+      "name": "历史账号逐字段摘要仍然一致 rm_user_t",
+      "passed": true
+    },
+    {
+      "name": "历史账号逐字段摘要仍然一致 rm_user_tenant_rela_t",
+      "passed": true
+    },
+    {
+      "name": "活跃Magic不再查询共享账号或成员关系",
+      "passed": true
+    },
+    {
+      "name": "四个实际应用仍为LOCAL且下发OFF",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/session/me",
+      "path": "/idaas/session/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "卓鉴操作会话不附带应用租户",
+      "passed": true
+    },
+    {
+      "name": "/idaas/workspace/bootstrap?domain=workforce",
+      "path": "/idaas/workspace/bootstrap?domain=workforce",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "中央目录及应用在旧账号归档后正常读取",
+      "passed": true
+    },
+    {
+      "name": "卓鉴操作令牌不能直接登录应用",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/runtime-inspection?appId=2084109831682699264",
+      "path": "/idaas/applications/runtime-inspection?appId=2084109831682699264",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "实际数据库绑定 2084109831682699264",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "独立本地凭据校验 2084109831682699264",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地登录范围只有当前应用 2084109831682699264",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/me",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原本地用户机构角色仍然有效 2084109831682699264",
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/page",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地令牌不能进入卓鉴 2084109831682699264",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "本地令牌不能跨应用 2084109831682699264",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/runtime-inspection?appId=2084109831682699265",
+      "path": "/idaas/applications/runtime-inspection?appId=2084109831682699265",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "实际数据库绑定 2084109831682699265",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "独立本地凭据校验 2084109831682699265",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地登录范围只有当前应用 2084109831682699265",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/me",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原本地用户机构角色仍然有效 2084109831682699265",
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/page",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地令牌不能进入卓鉴 2084109831682699265",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "本地令牌不能跨应用 2084109831682699265",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/runtime-inspection?appId=2084109831682699266",
+      "path": "/idaas/applications/runtime-inspection?appId=2084109831682699266",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "实际数据库绑定 2084109831682699266",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699266",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699266",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "独立本地凭据校验 2084109831682699266",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地登录范围只有当前应用 2084109831682699266",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/me",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原本地用户机构角色仍然有效 2084109831682699266",
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/page",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地令牌不能进入卓鉴 2084109831682699266",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "本地令牌不能跨应用 2084109831682699266",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/runtime-inspection?appId=2084109831682699267",
+      "path": "/idaas/applications/runtime-inspection?appId=2084109831682699267",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "实际数据库绑定 2084109831682699267",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699267",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699267",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "独立本地凭据校验 2084109831682699267",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地登录范围只有当前应用 2084109831682699267",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/me",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "原本地用户机构角色仍然有效 2084109831682699267",
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/page",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地令牌不能进入卓鉴 2084109831682699267",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "本地令牌不能跨应用 2084109831682699267",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "归档及公安原业务保护表保持原样",
+      "passed": true
+    }
+  ],
+  "actualBindings": [
+    {
+      "databaseProduct": "MySQL",
+      "sqlSchema": "",
+      "schema": "baseline_ga_old",
+      "dataSourceKey": "public-security"
+    },
+    {
+      "databaseProduct": "DM DBMS",
+      "sqlSchema": "baseline_beijing_gd",
+      "schema": "baseline_beijing_gd",
+      "dataSourceKey": "broadcasting"
+    },
+    {
+      "databaseProduct": "MySQL",
+      "sqlSchema": "",
+      "schema": "baseline_sea_fishery",
+      "dataSourceKey": "sea-fishery"
+    },
+    {
+      "databaseProduct": "MySQL",
+      "sqlSchema": "",
+      "schema": "chengtian",
+      "dataSourceKey": "chengtian"
+    }
+  ]
+}

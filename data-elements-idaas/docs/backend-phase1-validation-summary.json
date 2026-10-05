@@ -1,0 +1,102 @@
+{
+  "recordedAt": "2026-09-27T23:34:18",
+  "environment": "local development",
+  "controlSchema": "baseline",
+  "tenantSchema": "baseline_ga_old",
+  "database": {
+    "addedControlTables": 3,
+    "addedTenantTables": 8,
+    "addedAccountFields": [
+      "rm_user_t.iam_active_login_name"
+    ],
+    "addedAccountUniqueIndexes": [
+      "uk_iam_active_login_name"
+    ],
+    "eligibleMembersInitiallySeeded": 5,
+    "backupDirectory": "C:\\Users\\Administrator\\Documents\\CodexBackups\\idaas-phase1\\20260927-231953-fb3093"
+  },
+  "realHttp": {
+    "applicationsRolesResources": 35,
+    "usersOrganizations": 46,
+    "authenticationSessions": 24,
+    "total": 105
+  },
+  "runtimeRelease": {
+    "status": "passed",
+    "coldStartLogin": true,
+    "coldStartBootstrap": true,
+    "runtimeScriptsVerified": 29,
+    "apiCount": 16,
+    "functionCount": 13,
+    "missingGroupIds": [],
+    "pendingOperations": 0,
+    "temporaryFaultTriggers": 0,
+    "knownMemberFailedLoginAuditVisible": true
+  },
+  "java": {
+    "suites": {
+      "IdentityRuntimeMagicModuleTest": {
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "TenantWebInterceptorTest": {
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "WhiteListPropTest": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "IdaasMagicTransactionTest": {
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "IdaasRecoveryPayloadTest": {
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "IdaasMagicSyntaxTest": {
+        "tests": 29,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "total": 69
+  },
+  "frontend": {
+    "unitTests": 99,
+    "typecheck": "passed",
+    "build": "passed",
+    "tokens": "passed",
+    "syntaxFiles": 36,
+    "syntaxErrors": 0,
+    "uiAuditChecks": 4215,
+    "typographyStaticChecks": 27,
+    "p1ContractBrowserTests": 6,
+    "compactBrowserTests": 18,
+    "typographyBrowserTests": 10,
+    "typographyNote": "8 passed in initial run, 2 drawer cleanup cases passed after targeted test repair; final affected cases rechecked",
+    "finalAffectedBrowserChecks": 12,
+    "realPageChecksWithSyntheticCreation": 21,
+    "finalRealPageReadChecks": 20,
+    "finalRealPageErrors": 0
+  },
+  "limitations": [
+    "Only baseline_ga_old initialized; no second tenant write acceptance",
+    "ORG/OWNER management scopes not enabled",
+    "Legacy sym writers do not maintain new extension versions",
+    "Manual requestId recovery; no automatic outbox worker",
+    "OIDC, business grants, MFA, public identity and external synchronization are later phases"
+  ]
+}

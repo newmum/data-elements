@@ -1,0 +1,59 @@
+{
+  "completed": true,
+  "realBackend": true,
+  "widths": [
+    390,
+    1440,
+    1920
+  ],
+  "checks": [
+    {
+      "name": "真实统一控制台公众菜单与政企资料 390px",
+      "passed": true,
+      "durationMs": 60348
+    },
+    {
+      "name": "真实统一控制台公众菜单与政企资料 1440px",
+      "passed": true,
+      "durationMs": 69203
+    },
+    {
+      "name": "真实统一控制台公众菜单与政企资料 1920px",
+      "passed": true,
+      "durationMs": 38066
+    }
+  ],
+  "screenCount": 30,
+  "screenshots": [
+    "界面验收/live-console-app-groups-1440.png",
+    "界面验收/live-console-apps-1440.png",
+    "界面验收/live-console-audit-statistics-1440.png",
+    "界面验收/live-console-auth-accounts-1440.png",
+    "界面验收/live-console-entities-1440.png",
+    "界面验收/live-console-navigation-1440.png",
+    "界面验收/live-console-organization-1440.png",
+    "界面验收/live-console-overview-1440.png",
+    "界面验收/live-console-persons-1440.png",
+    "界面验收/live-console-verifications-1440.png",
+    "界面验收/live-console-app-groups-1920.png",
+    "界面验收/live-console-apps-1920.png",
+    "界面验收/live-console-audit-statistics-1920.png",
+    "界面验收/live-console-auth-accounts-1920.png",
+    "界面验收/live-console-entities-1920.png",
+    "界面验收/live-console-navigation-1920.png",
+    "界面验收/live-console-organization-1920.png",
+    "界面验收/live-console-overview-1920.png",
+    "界面验收/live-console-persons-1920.png",
+    "界面验收/live-console-verifications-1920.png",
+    "界面验收/live-console-app-groups-390.png",
+    "界面验收/live-console-apps-390.png",
+    "界面验收/live-console-audit-statistics-390.png",
+    "界面验收/live-console-auth-accounts-390.png",
+    "界面验收/live-console-entities-390.png",
+    "界面验收/live-console-navigation-390.png",
+    "界面验收/live-console-organization-390.png",
+    "界面验收/live-console-overview-390.png",
+    "界面验收/live-console-persons-390.png",
+    "界面验收/live-console-verifications-390.png"
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/save",
+      "path": "/idaas/applications/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/admin",
+      "path": "/idaas/receiver/admin",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/save-config",
+      "path": "/idaas/provision/save-config",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/test",
+      "path": "/idaas/provision/test",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "签名实例测试通过",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/configs?appId=854ffe4fcea5472fb9968977ed82e091",
+      "path": "/idaas/provision/configs?appId=854ffe4fcea5472fb9968977ed82e091",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/save-config",
+      "path": "/idaas/provision/save-config",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/save",
+      "path": "/idaas/orgs/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "无需人工触发，定时工作者实际创建并完成HTTP任务",
+      "passed": true
+    },
+    {
+      "name": "真实工作者创建并完成冻结任务",
+      "passed": true
+    },
+    {
+      "name": "工作者仅下发独立应用四个对象",
+      "passed": true
+    },
+    {
+      "name": "真实回执推进人员确认版本",
+      "passed": true
+    },
+    {
+      "name": "未变更事件不产生重复对象事件",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/remove",
+      "path": "/idaas/grants/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "真实自动撤权下发禁用状态",
+      "passed": true
+    },
+    {
+      "name": "工作者测试清理后原11表结构数据完全一致",
+      "passed": true
+    }
+  ],
+  "ownObjectsCleaned": true
+}

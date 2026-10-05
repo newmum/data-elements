@@ -1,0 +1,48 @@
+{
+  "apply": true,
+  "archives": [
+    {
+      "source": "rm_user_t",
+      "archive": "archive_iam_legacy_account_20260929_t",
+      "rows": 48,
+      "sha256": "c10799950e499522aa628e5d6ce41cab056b4243568c2693b9c12df5393b3050"
+    },
+    {
+      "source": "rm_user_tenant_rela_t",
+      "archive": "archive_iam_legacy_membership_20260929_t",
+      "rows": 15,
+      "sha256": "5f3412c2f005106046ad703a91cbcc145deffed6f1aba448845bf4c23ea01c6f"
+    }
+  ],
+  "allActiveApplicationsLocal": true,
+  "actualBindings": [
+    {
+      "databaseProduct": "MySQL",
+      "sqlSchema": "",
+      "schema": "baseline_ga_old",
+      "dataSourceKey": "public-security"
+    },
+    {
+      "databaseProduct": "DM DBMS",
+      "sqlSchema": "baseline_beijing_gd",
+      "schema": "baseline_beijing_gd",
+      "dataSourceKey": "broadcasting"
+    },
+    {
+      "databaseProduct": "MySQL",
+      "sqlSchema": "",
+      "schema": "baseline_sea_fishery",
+      "dataSourceKey": "sea-fishery"
+    },
+    {
+      "databaseProduct": "MySQL",
+      "sqlSchema": "",
+      "schema": "chengtian",
+      "dataSourceKey": "chengtian"
+    }
+  ],
+  "liveMagicReferences": [],
+  "backup": "C:\\Users\\Administrator\\.codex\\private\\idaas-next\\shared-accounts-archive-20260929-110540",
+  "completed": true,
+  "readyToArchive": false
+}

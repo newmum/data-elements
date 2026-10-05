@@ -1,0 +1,20 @@
+{
+  "applied": true,
+  "tenantId": "2084109831682699265",
+  "schema": "baseline_beijing_gd",
+  "product": "DM DBMS",
+  "accounts": 2,
+  "activeMembers": 2,
+  "inactiveReferenceCount": 0,
+  "localPermissionAppId": "1995678661281710081",
+  "businessTableDigests": {
+    "rm_org_t": "32c4ddf5da5a28476e5c436dd809f0afa43b04c2bed31c79f513bb9d4620815f",
+    "rm_role_t": "5522dbc96472078c63d509a5034ea253fd213ac69d640c0204863900348eafcb",
+    "rm_menu_t": "dd790c8652fc092c800583fe8558959be9d254aa967a59f5d3db5da2118eb277",
+    "rm_user_org_rela_t": "1b070c8ce7340d2a034861ed96a74c0a279e7ab7e510da5cb711e1078243e856",
+    "rm_user_role_rela_t": "ba4f328ea4e02375d8f2bd7ee3a9d88c892851ab53f20ca8e2e842668f7ed53e",
+    "rm_role_menu_rela_t": "524955d2a3079fa1c0969cbb1c062b45f4044da5926ebe28c4b0dfdd1356edaf",
+    "rm_blacklist_t": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "backup": "C:\\Users\\Administrator\\.codex\\private\\idaas-next\\local-dm-migration-2084109831682699265-20260929-084945"
+}

@@ -1,0 +1,15 @@
+
+> unified-identity-platform@2.2.0 audit:ui
+> node scripts/audit-ui.mjs
+
+{
+  "kind": "static-source-audit-not-browser",
+  "files": 31,
+  "tables": 11,
+  "cards": 37,
+  "forms": 11,
+  "tabs": 6,
+  "checks": 4189,
+  "passed": 4189,
+  "failures": []
+}

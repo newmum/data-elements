@@ -1,0 +1,193 @@
+{
+  "appRelatedTables": [
+    {
+      "db": "baseline_ga_old",
+      "name": "app_workshop_big_screen",
+      "comment": "应用工坊大屏"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "app_workshop_repository",
+      "comment": "应用工坊应用"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "app_workshop_repository_self_icon",
+      "comment": "应用工坊自定义图标"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "app_workshop_repository_tab",
+      "comment": "应用工坊页面签"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "da_catalog_apply_form_rela",
+      "comment": "源头数据目录申请单关系"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "data_access_field_mapping",
+      "comment": "数据接入字段映射"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "data_apply_form_catalog_rela",
+      "comment": "VIEW"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "data_apply_form_t",
+      "comment": "数据申请单"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "gateway_user_app_rela",
+      "comment": "网关用户应用关系"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "pingao_application_sync_state_t",
+      "comment": "Pingao application catalogue synchronization state"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "rm_menu_t",
+      "comment": "菜单与权限资源"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "rm_role_menu_rela_t",
+      "comment": "角色菜单权限关系"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "rm_role_t",
+      "comment": "角色定义"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "rm_user_role_rela_t",
+      "comment": "用户角色关系"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "sym_application_t",
+      "comment": "业务应用系统"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "wf_approval_action_log_t",
+      "comment": "审批操作审计"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "wf_approval_delegation_t",
+      "comment": "审批委托规则"
+    },
+    {
+      "db": "baseline_ga_old",
+      "name": "wf_approval_reminder_t",
+      "comment": "审批催办记录"
+    }
+  ],
+  "controlUserStatusCounts": [
+    {
+      "status": 0,
+      "deleted": 0,
+      "n": 36
+    },
+    {
+      "status": 1,
+      "deleted": 1,
+      "n": 6
+    },
+    {
+      "status": 0,
+      "deleted": 1,
+      "n": 6
+    }
+  ],
+  "activeMembershipCounts": [
+    {
+      "tenant_id": "2084109831682699264",
+      "code": "PUBLIC_SECURITY",
+      "n": 5,
+      "users": 5
+    },
+    {
+      "tenant_id": "2084109831682699265",
+      "code": "BROADCASTING",
+      "n": 2,
+      "users": 2
+    },
+    {
+      "tenant_id": "2084109831682699266",
+      "code": "SEA_FISHERY",
+      "n": 1,
+      "users": 1
+    },
+    {
+      "tenant_id": "2084109831682699267",
+      "code": "CHENGTIAN_DATA_PLATFORM",
+      "n": 2,
+      "users": 2
+    }
+  ],
+  "operatorAccountCount": 1,
+  "operatorPermissionCounts": [
+    {
+      "permission_code": "orgs:read",
+      "target_tenant_id": "*",
+      "n": 1
+    },
+    {
+      "permission_code": "orgs:write",
+      "target_tenant_id": "*",
+      "n": 1
+    },
+    {
+      "permission_code": "provision:write",
+      "target_tenant_id": "*",
+      "n": 1
+    },
+    {
+      "permission_code": "users:read",
+      "target_tenant_id": "*",
+      "n": 1
+    },
+    {
+      "permission_code": "users:write",
+      "target_tenant_id": "*",
+      "n": 1
+    }
+  ],
+  "subjectJsonKeys": [
+    "account",
+    "appointments",
+    "domain",
+    "email",
+    "employmentType",
+    "history",
+    "id",
+    "kind",
+    "locked",
+    "name",
+    "orgId",
+    "phone",
+    "post",
+    "status",
+    "verified",
+    "version"
+  ],
+  "orgJsonKeys": [
+    "code",
+    "domain",
+    "id",
+    "leader",
+    "line",
+    "name",
+    "parentId",
+    "status"
+  ]
+}

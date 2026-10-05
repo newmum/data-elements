@@ -1,0 +1,26 @@
+{
+  "tool": "tinycss2",
+  "files": [
+    {
+      "file": "src/styles/typography.css",
+      "errors": []
+    },
+    {
+      "file": "src/styles/app.css",
+      "errors": []
+    },
+    {
+      "file": "src/styles/typography-tokens.css",
+      "errors": []
+    },
+    {
+      "file": "preview/typography-bridge.css",
+      "errors": []
+    },
+    {
+      "file": "preview/companion.css",
+      "errors": []
+    }
+  ],
+  "passed": true
+}

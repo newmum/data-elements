@@ -1,0 +1,30 @@
+[
+  {
+    "check": "tokens:check",
+    "exit": 0
+  },
+  {
+    "check": "syntaxcheck",
+    "exit": 0
+  },
+  {
+    "check": "audit:ui",
+    "exit": 0
+  },
+  {
+    "check": "audit:typography",
+    "exit": 0
+  },
+  {
+    "check": "test",
+    "exit": 0
+  },
+  {
+    "check": "typecheck",
+    "exit": 0
+  },
+  {
+    "check": "build",
+    "exit": 0
+  }
+]

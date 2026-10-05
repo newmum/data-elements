@@ -1,0 +1,94 @@
+{
+  "completed": true,
+  "realBackend": true,
+  "checkedAt": "2026-09-29T04:59:42.771457+00:00",
+  "schemaChanges": false,
+  "magicFunctionChanges": [
+    "idaas/session"
+  ],
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/workspace/bootstrap",
+      "path": "/idaas/workspace/bootstrap",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "实际平台操作账号可发现两个已授权身份域",
+      "passed": true
+    },
+    {
+      "name": "菜单发现不附带写权限或跨租户登录凭据",
+      "passed": true
+    },
+    {
+      "name": "政企工作区数据仍属于政企身份域",
+      "passed": true
+    },
+    {
+      "name": "/idaas/session/domain",
+      "path": "/idaas/session/domain",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公众功能加载返回公众权限及资料",
+      "passed": true
+    },
+    {
+      "name": "加载公众功能时保留整套菜单发现信息",
+      "passed": true
+    },
+    {
+      "name": "公众认证账号真实查询",
+      "path": "/idaas/auth-accounts/list?domain=public",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公众核验配置真实查询",
+      "path": "/idaas/verifications/provider",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "拒绝非法身份资料上下文",
+      "path": "/idaas/session/domain",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/session/domain",
+      "path": "/idaas/session/domain",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "返回政企功能后人员机构应用资料保持一致",
+      "passed": true
+    },
+    {
+      "name": "当前功能权限未由菜单发现信息扩大",
+      "passed": true
+    },
+    {
+      "name": "平台账号仍不能进入租户本地系统",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/logout",
+      "path": "/idaas/auth/logout",
+      "code": 0,
+      "passed": true
+    }
+  ],
+  "javaRuntimeChanges": false
+}

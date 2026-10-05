@@ -1,0 +1,296 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/save",
+      "path": "/idaas/applications/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/admin",
+      "path": "/idaas/receiver/admin",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/save-config",
+      "path": "/idaas/provision/save-config",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/test",
+      "path": "/idaas/provision/test",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "签名实例测试通过",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "path": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/save-config",
+      "path": "/idaas/provision/save-config",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/save",
+      "path": "/idaas/orgs/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/reconcile",
+      "path": "/idaas/provision/reconcile",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "工作者未抢占有效事件租约",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/reconcile",
+      "path": "/idaas/provision/reconcile",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "工作者恢复到期事件且确认持久任务",
+      "passed": true
+    },
+    {
+      "name": "真实工作者创建并完成冻结任务",
+      "passed": true
+    },
+    {
+      "name": "工作者仅下发独立应用四个对象",
+      "passed": true
+    },
+    {
+      "name": "真实回执推进人员确认版本",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/reconcile",
+      "path": "/idaas/provision/reconcile",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "未变更事件不产生重复对象事件",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "可重试前置失败保留人员待处理且不占用尝试",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks?appId=b041235c3d194921bb20ca6a17067bf6",
+      "path": "/idaas/provision/tasks?appId=b041235c3d194921bb20ca6a17067bf6",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "终止前置失败明确阻断依赖并结束任务",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "path": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/rotate",
+      "path": "/idaas/provision/rotate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "path": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "path": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "path": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "轮换密钥关闭配置并要求重新验证",
+      "passed": true
+    },
+    {
+      "name": "旧凭据快照任务拒绝继续执行",
+      "path": "/idaas/provision/execute",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/admin",
+      "path": "/idaas/receiver/admin",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/admin",
+      "path": "/idaas/receiver/admin",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/test",
+      "path": "/idaas/provision/test",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "签名实例测试通过",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "path": "/idaas/provision/configs?appId=b041235c3d194921bb20ca6a17067bf6",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/save-config",
+      "path": "/idaas/provision/save-config",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks?appId=b041235c3d194921bb20ca6a17067bf6",
+      "path": "/idaas/provision/tasks?appId=b041235c3d194921bb20ca6a17067bf6",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "轮换后新任务签名与回执匹配",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/remove",
+      "path": "/idaas/grants/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/reconcile",
+      "path": "/idaas/provision/reconcile",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "真实自动撤权下发禁用状态",
+      "passed": true
+    },
+    {
+      "name": "工作者测试清理后原11表结构数据完全一致",
+      "passed": true
+    }
+  ],
+  "ownObjectsCleaned": true
+}

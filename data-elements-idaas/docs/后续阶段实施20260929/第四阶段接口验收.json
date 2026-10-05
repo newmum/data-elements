@@ -1,0 +1,456 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "平台操作账号不能设置接收端信任",
+      "path": "/idaas/receiver/admin",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/admin",
+      "path": "/idaas/receiver/admin",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "接收端拒绝伪造签名",
+      "path": "/idaas/receiver/v2",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/v2",
+      "path": "/idaas/receiver/v2",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "真实签名HTTP创建机构",
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/v2",
+      "path": "/idaas/receiver/v2",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "重复事件返回持久回执",
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/v2",
+      "path": "/idaas/receiver/v2",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "新任务相同对象版本不重复创建",
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/v2",
+      "path": "/idaas/receiver/v2",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "乱序事件不覆盖新资料",
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/v2",
+      "path": "/idaas/receiver/v2",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "同对象版本不同资料报冲突",
+      "passed": true
+    },
+    {
+      "name": "签名目标不能替换为其他应用",
+      "path": "/idaas/receiver/v2",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "接收端拒绝凭据字段",
+      "path": "/idaas/receiver/v2",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/save-config",
+      "path": "/idaas/provision/save-config",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/test",
+      "path": "/idaas/provision/test",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "接收连通校验必须验证签名应用实例",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/configs",
+      "path": "/idaas/provision/configs",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/save-config",
+      "path": "/idaas/provision/save-config",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/save",
+      "path": "/idaas/orgs/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/assignments/list?appId=2084109831682699264",
+      "path": "/idaas/assignments/list?appId=2084109831682699264",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/assignments/save",
+      "path": "/idaas/assignments/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "机构资源角色人员HTTP下发成功",
+      "passed": true
+    },
+    {
+      "name": "中央ID与本地ID稳定且隔离",
+      "passed": true
+    },
+    {
+      "name": "下发不设置密码也不清除本地停用",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/saveOrUpdate",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/me",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "重建任务同版本可复核",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "已确认同实例无变更增量任务为零项",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "未到期执行租约阻止并发",
+      "path": "/idaas/provision/execute",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "重启后到期租约可复核同一事件",
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/cancel",
+      "path": "/idaas/provision/cancel",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "取消任务没有发送并保留取消状态",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/remove",
+      "path": "/idaas/grants/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "撤权通过真实回执确认",
+      "passed": true
+    },
+    {
+      "name": "仅中央来源账号撤权后不能登录",
+      "path": "/portal/login",
+      "code": -1,
+      "passed": true
+    },
+    {
+      "name": "已登录会话实时执行中央来源策略",
+      "path": "/sym/user/me",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "中央撤权保留本地密码摘要",
+      "passed": true
+    },
+    {
+      "name": "/sym/role/saveOrUpdate",
+      "path": "/sym/role/saveOrUpdate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "明确本地授权不被中央撤权清除",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/saveOrUpdate",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=250",
+      "path": "/idaas/subjects/list?size=250",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地资料修改不会被中央覆盖",
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/admin",
+      "path": "/idaas/receiver/admin",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/receiver/admin",
+      "path": "/idaas/receiver/admin",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/create",
+      "path": "/idaas/provision/create",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/execute",
+      "path": "/idaas/provision/execute",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/provision/tasks",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "脱管对象拒绝中央覆盖",
+      "passed": true
+    },
+    {
+      "name": "脱管后本地账号继续独立登录",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "接收测试清理后原11表结构与数据完全一致",
+      "passed": true
+    }
+  ],
+  "ownObjectsCleaned": true
+}

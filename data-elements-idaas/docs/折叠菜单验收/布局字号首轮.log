@@ -1,0 +1,93 @@
+
+Running 36 tests using 2 workers
+
+(node:24216) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:22380) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:24216) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:22380) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 tests\compact.spec.ts:53:31 › @compact workforce 全部工作区 1600px (59.0s)
+  ok  2 tests\compact.spec.ts:53:31 › @compact workforce 全部工作区 1920px (59.3s)
+  ok  4 tests\compact.spec.ts:53:31 › @compact workforce 全部工作区 1280px (48.5s)
+  ok  3 tests\compact.spec.ts:53:31 › @compact workforce 全部工作区 1440px (49.3s)
+  ok  6 tests\compact.spec.ts:53:31 › @compact workforce 全部工作区 768px (43.4s)
+  ok  5 tests\compact.spec.ts:53:31 › @compact workforce 全部工作区 1024px (44.5s)
+  ok  8 tests\compact.spec.ts:53:31 › @compact public 全部工作区 1920px (27.1s)
+  ok  7 tests\compact.spec.ts:53:31 › @compact workforce 全部工作区 390px (48.1s)
+  ok  9 tests\compact.spec.ts:53:31 › @compact public 全部工作区 1600px (30.4s)
+  ok 10 tests\compact.spec.ts:53:31 › @compact public 全部工作区 1440px (19.9s)
+  ok 11 tests\compact.spec.ts:53:31 › @compact public 全部工作区 1280px (40.7s)
+  ok 12 tests\compact.spec.ts:53:31 › @compact public 全部工作区 1024px (39.2s)
+  ok 13 tests\compact.spec.ts:53:31 › @compact public 全部工作区 768px (23.4s)
+  ok 14 tests\compact.spec.ts:53:31 › @compact public 全部工作区 390px (20.6s)
+  ok 15 tests\compact.spec.ts:76:51 › @compact 全部认证页 1920px (8.8s)
+  ok 16 tests\compact.spec.ts:76:51 › @compact 全部认证页 1440px (8.4s)
+  ok 17 tests\compact.spec.ts:76:51 › @compact 全部认证页 1224px (9.0s)
+  ok 18 tests\compact.spec.ts:76:51 › @compact 全部认证页 768px (9.3s)
+  ok 19 tests\compact.spec.ts:76:51 › @compact 全部认证页 390px (13.5s)
+  ok 20 tests\compact.spec.ts:95:1 › @compact 已删除的设计页面、个人菜单、帮助与搜索入口 (13.1s)
+  ok 21 tests\compact.spec.ts:115:34 › @compact 抽屉、弹窗、宽表及长字段 1440px (23.3s)
+  ok 22 tests\compact.spec.ts:115:34 › @compact 抽屉、弹窗、宽表及长字段 390px (26.9s)
+  ok 24 tests\compact.spec.ts:155:47 › @compact public 全部应用详情页签 (44.3s)
+  x  25 tests\typography.spec.ts:80:42 › @typography workforce全部工作区 1440 (34.9s)
+(node:22824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 23 tests\compact.spec.ts:155:47 › @compact workforce 全部应用详情页签 (1.7m)
+(node:22824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 26 tests\typography.spec.ts:80:42 › @typography workforce全部工作区 390 (39.4s)
+  ok 27 tests\typography.spec.ts:80:42 › @typography workforce全部工作区 1920 (1.0m)
+  ok 29 tests\typography.spec.ts:80:42 › @typography public全部工作区 1440 (22.1s)
+  ok 28 tests\typography.spec.ts:98:3 › @typography workforce全部应用与页签 (1.2m)
+  ok 30 tests\typography.spec.ts:80:42 › @typography public全部工作区 1920 (32.5s)
+  ok 31 tests\typography.spec.ts:80:42 › @typography public全部工作区 390 (29.5s)
+  ok 33 tests\typography.spec.ts:118:34 › @typography 全部认证入口 1440 (6.0s)
+  ok 32 tests\typography.spec.ts:98:3 › @typography public全部应用与页签 (24.7s)
+  ok 34 tests\typography.spec.ts:118:34 › @typography 全部认证入口 390 (4.3s)
+  ok 36 tests\typography.spec.ts:132:34 › @typography 浮层、长字段与空结果 390 (17.2s)
+  ok 35 tests\typography.spec.ts:132:34 › @typography 浮层、长字段与空结果 1440 (19.8s)
+
+
+  1) tests\typography.spec.ts:80:42 › @typography workforce全部工作区 1440 ──────────────────────────────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m()[22m failed
+
+    Locator:  locator('.page-heading')
+    Expected: visible
+    Received: <element(s) not found>
+    Timeout:  5000ms
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('.page-heading')[22m
+
+
+      57 |   for(const route of domainPages(domain)) {
+      58 |    await page.goto(`/#/console/${domain}/${route.key}`);
+    > 59 |    await expect(page.locator('.page-heading')).toBeVisible();
+         |                                                ^
+      60 |    await audit(page,info,route.key.replaceAll('/','-'));
+      61 |   }
+      62 |   expect(errors).toEqual([]);
+        at D:\Sourcecode\data-elements-parent\data-elements-idaas\tests\typography.spec.ts:59:48
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    C:\Users\ADMINI~1\AppData\Local\Temp\data-elements-idaas-submenu-20260927\layout-final\typography--typography-workforce全部工作区-1440\test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: C:\Users\ADMINI~1\AppData\Local\Temp\data-elements-idaas-submenu-20260927\layout-final\typography--typography-workforce全部工作区-1440\error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    C:\Users\ADMINI~1\AppData\Local\Temp\data-elements-idaas-submenu-20260927\layout-final\typography--typography-workforce全部工作区-1440\trace.zip
+    Usage:
+
+        npx playwright show-trace C:\Users\ADMINI~1\AppData\Local\Temp\data-elements-idaas-submenu-20260927\layout-final\typography--typography-workforce全部工作区-1440\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    tests\typography.spec.ts:80:42 › @typography workforce全部工作区 1440 ───────────────────────────────
+  35 passed (10.1m)

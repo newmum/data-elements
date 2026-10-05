@@ -1,0 +1,63 @@
+{
+  "recordedOn": "2026-09-29",
+  "phase": 1,
+  "status": "implemented_and_verified",
+  "runtime": {
+    "frontend": "http://localhost:3005/#/login",
+    "frontendHttpStatus": 200,
+    "backend": "http://localhost:8088",
+    "backendHealth": "UP",
+    "coldStartVerified": true
+  },
+  "database": {
+    "targetSchema": "baseline",
+    "targetTables": 15,
+    "newTables": 14,
+    "reconstructedTables": 1,
+    "archivedSecurityRows": 2,
+    "unchangedOriginalTables": 11,
+    "policeSchema": "baseline_ga_old",
+    "policeHasNewIamTables": false,
+    "testBusinessObjectsRemaining": 0,
+    "evidence": "数据库实际核验.json"
+  },
+  "magic": {
+    "namespace": "13.统一身份管理",
+    "httpApis": 45,
+    "functions": 15,
+    "apiGroups": 13,
+    "activeResourcesIncludingDirectoryMetadata": 90,
+    "note": "接口数包含明确返回503的后续阶段兼容入口，非全部功能均已开放。"
+  },
+  "verification": {
+    "realHttp": { "passed": 165, "failed": 0, "evidence": "接口验收结果.json" },
+    "coldStartReadiness": { "passed": 26, "failed": 0, "evidence": "发布后核验结果.json" },
+    "java": { "passed": 91, "errors": 0, "failures": 0, "magicSyntaxCases": 60 },
+    "frontend": {
+      "tokensCheck": "passed",
+      "syntaxCheck": "passed",
+      "uiAudit": "passed",
+      "typographyAudit": "passed",
+      "unitTestsPassed": 99,
+      "typecheck": "passed",
+      "productionBuild": "passed",
+      "edgeTypographyCasesPassed": 10,
+      "edgeCompact": {
+        "initialFullRun": { "passed": 18, "failed": 0 },
+        "finalFullRun": { "passed": 17, "failed": 1 },
+        "failure": "公众工作区边界1440px用例在契约登录后等待总览标题时超时；失败现场已加载总览，无错误页面。",
+        "targetedRetest": { "passed": 2, "failed": 0, "widths": [1440, 390] },
+        "productChangedForRetest": false,
+        "assertionsRelaxedForRetest": false
+      }
+    },
+    "realBrowser": { "browser": "Edge", "fixtures": false, "passed": 39, "failed": 0, "screenshots": 37, "widths": [390, 1440, 1920], "evidence": "界面验收/浏览器验收结果.json" }
+  },
+  "remainingScope": {
+    "phase2": "中央人员、机构、主兼任、字典、扩展字段及应用资料分配；开通机构范围。",
+    "phase3": "应用业务角色、资源及授权。",
+    "phase4": "标准HTTP下发及后续确认的应用Magic接收端。",
+    "phase5": "统一认证及公众能力。",
+    "phase6": "其它应用本地账号闭环及旧控制库rm兼容依赖逐个退役。"
+  }
+}

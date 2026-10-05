@@ -1,0 +1,7 @@
+
+> unified-identity-platform@2.2.0 tokens:check
+> node --experimental-strip-types scripts/generate-typography.mjs --check
+
+Typography CSS and semantic tokens are in sync.
+(node:2358) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

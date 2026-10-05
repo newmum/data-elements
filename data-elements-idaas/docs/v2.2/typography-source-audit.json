@@ -1,0 +1,2323 @@
+{
+  "version": "2.2.0",
+  "kind": "static-source-audit-not-browser",
+  "checks": [
+    {
+      "name": "紧凑算法保留",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "全局小尺寸保留",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "基础字号为14px",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "导航不小于正文",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "正文大于描述",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "卡片标题大于正文",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "标题层级递增",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "辅助文本不小于12px",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "主文本行高保留余量",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "小卡片标题不是压缩字号",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "小表格正文仍为正文层级",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "小按钮字号独立于高度",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "小输入字号独立于高度",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "导航主题显式正文级别",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "卡片标题嵌套Text继承",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "应用名称不再被嵌套Typography缩小",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "页面标题使用统一角色",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "指标标签使用独立角色",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "最终文字样式后加载",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "不使用整页缩放",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "图表使用实测宽度",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "环图中心使用HTML文字",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "设计规范页面保持删除",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "全局样式不把所有span缩小",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "完整覆盖派生标题Token",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "全源码语法树可解析",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "全部业务页面纳入源码清单",
+      "passed": true,
+      "detail": "13个页面实现文件，共享模板覆盖多个路由"
+    }
+  ],
+  "sourceFileCount": 53,
+  "pageImplementationFiles": [
+    "src/pages/Applications.tsx",
+    "src/pages/Audit.tsx",
+    "src/pages/Auth.tsx",
+    "src/pages/Authorization.tsx",
+    "src/pages/CatalogPage.tsx",
+    "src/pages/Dashboard.tsx",
+    "src/pages/Identity.tsx",
+    "src/pages/IdentityAdministration.tsx",
+    "src/pages/Organization.tsx",
+    "src/pages/PlatformAccess.tsx",
+    "src/pages/PublicEntities.tsx",
+    "src/pages/Settings.tsx",
+    "src/pages/Synchronization.tsx"
+  ],
+  "workspaceCount": 47,
+  "routes": [
+    {
+      "domain": "workforce",
+      "key": "overview",
+      "label": "总览",
+      "route": "/console/workforce/overview",
+      "source": "src/pages/Dashboard.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "apps",
+      "label": "应用列表",
+      "route": "/console/workforce/apps",
+      "source": "src/pages/Applications.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "app-groups",
+      "label": "应用分组",
+      "route": "/console/workforce/app-groups",
+      "source": "src/pages/CatalogPage.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "organization",
+      "label": "组织与用户",
+      "route": "/console/workforce/organization",
+      "source": "src/pages/Organization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "delegates",
+      "label": "分级管理员",
+      "route": "/console/workforce/delegates",
+      "source": "src/pages/CatalogPage.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "org-settings/lines",
+      "label": "条线管理",
+      "route": "/console/workforce/org-settings/lines",
+      "source": "src/pages/CatalogPage.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "org-settings/dictionaries",
+      "label": "职务岗位",
+      "route": "/console/workforce/org-settings/dictionaries",
+      "source": "src/pages/CatalogPage.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "org-settings/fields",
+      "label": "扩展字段",
+      "route": "/console/workforce/org-settings/fields",
+      "source": "src/pages/CatalogPage.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "grants/apps",
+      "label": "应用授权",
+      "route": "/console/workforce/grants/apps",
+      "source": "src/pages/Authorization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "grants/users",
+      "label": "用户授权",
+      "route": "/console/workforce/grants/users",
+      "source": "src/pages/Authorization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "grants/orgs",
+      "label": "机构授权",
+      "route": "/console/workforce/grants/orgs",
+      "source": "src/pages/Authorization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "permission-groups",
+      "label": "权限组",
+      "route": "/console/workforce/permission-groups",
+      "source": "src/pages/Authorization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "api-grants/apps",
+      "label": "API 应用授权",
+      "route": "/console/workforce/api-grants/apps",
+      "source": "src/pages/CatalogPage.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "api-grants/users",
+      "label": "API 用户授权",
+      "route": "/console/workforce/api-grants/users",
+      "source": "src/pages/CatalogPage.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "sync/configs",
+      "label": "同步配置",
+      "route": "/console/workforce/sync/configs",
+      "source": "src/pages/Synchronization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "sync/entities",
+      "label": "同步对象",
+      "route": "/console/workforce/sync/entities",
+      "source": "src/pages/Synchronization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "sync/tasks",
+      "label": "同步任务",
+      "route": "/console/workforce/sync/tasks",
+      "source": "src/pages/Synchronization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "audit/operations",
+      "label": "操作日志",
+      "route": "/console/workforce/audit/operations",
+      "source": "src/pages/Audit.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "audit/logins",
+      "label": "登录日志",
+      "route": "/console/workforce/audit/logins",
+      "source": "src/pages/Audit.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "audit/api",
+      "label": "API 日志",
+      "route": "/console/workforce/audit/api",
+      "source": "src/pages/Audit.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "audit/statistics",
+      "label": "统计分析",
+      "route": "/console/workforce/audit/statistics",
+      "source": "src/pages/Dashboard.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "system/access/admins",
+      "label": "管理员管理",
+      "route": "/console/workforce/system/access/admins",
+      "source": "src/pages/PlatformAccess.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "system/access/roles",
+      "label": "系统角色",
+      "route": "/console/workforce/system/access/roles",
+      "source": "src/pages/PlatformAccess.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "system/settings/security",
+      "label": "账号安全",
+      "route": "/console/workforce/system/settings/security",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "system/settings/sso",
+      "label": "单点登录设置",
+      "route": "/console/workforce/system/settings/sso",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "system/settings/encryption",
+      "label": "字段加密",
+      "route": "/console/workforce/system/settings/encryption",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "system/settings/api",
+      "label": "API 访问控制",
+      "route": "/console/workforce/system/settings/api",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "system/settings/branding",
+      "label": "系统品牌",
+      "route": "/console/workforce/system/settings/branding",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "locked-accounts",
+      "label": "账号解锁",
+      "route": "/console/workforce/locked-accounts",
+      "source": "src/pages/PlatformAccess.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "auth-accounts",
+      "label": "认证账号",
+      "route": "/console/workforce/auth-accounts",
+      "source": "src/pages/IdentityAdministration.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "workforce",
+      "key": "profile",
+      "label": "个人中心",
+      "route": "/console/workforce/profile",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "overview",
+      "label": "总览",
+      "route": "/console/public/overview",
+      "source": "src/pages/Dashboard.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "apps",
+      "label": "应用列表",
+      "route": "/console/public/apps",
+      "source": "src/pages/Applications.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "app-groups",
+      "label": "应用分组",
+      "route": "/console/public/app-groups",
+      "source": "src/pages/CatalogPage.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "audit/operations",
+      "label": "操作日志",
+      "route": "/console/public/audit/operations",
+      "source": "src/pages/Audit.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "audit/logins",
+      "label": "登录日志",
+      "route": "/console/public/audit/logins",
+      "source": "src/pages/Audit.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "audit/api",
+      "label": "API 日志",
+      "route": "/console/public/audit/api",
+      "source": "src/pages/Audit.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "audit/statistics",
+      "label": "统计分析",
+      "route": "/console/public/audit/statistics",
+      "source": "src/pages/Dashboard.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "system/access/admins",
+      "label": "管理员管理",
+      "route": "/console/public/system/access/admins",
+      "source": "src/pages/PlatformAccess.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "system/access/roles",
+      "label": "系统角色",
+      "route": "/console/public/system/access/roles",
+      "source": "src/pages/PlatformAccess.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "system/settings/security",
+      "label": "账号安全",
+      "route": "/console/public/system/settings/security",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "system/settings/branding",
+      "label": "系统品牌",
+      "route": "/console/public/system/settings/branding",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "auth-accounts",
+      "label": "认证账号",
+      "route": "/console/public/auth-accounts",
+      "source": "src/pages/IdentityAdministration.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "verifications",
+      "label": "身份核验",
+      "route": "/console/public/verifications",
+      "source": "src/pages/IdentityAdministration.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "persons",
+      "label": "自然人管理",
+      "route": "/console/public/persons",
+      "source": "src/pages/Organization.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "entities",
+      "label": "法人管理",
+      "route": "/console/public/entities",
+      "source": "src/pages/PublicEntities.tsx",
+      "status": "source-reviewed; runtime-pending"
+    },
+    {
+      "domain": "public",
+      "key": "profile",
+      "label": "个人中心",
+      "route": "/console/public/profile",
+      "source": "src/pages/Settings.tsx",
+      "status": "source-reviewed; runtime-pending"
+    }
+  ],
+  "authRoutes": [
+    "/auth/identity/login",
+    "/login",
+    "/auth/public/login",
+    "/auth/public/register/person",
+    "/auth/public/register/company",
+    "/auth/workforce/forgot",
+    "/auth/public/forgot",
+    "/auth/workforce/mfa",
+    "/auth/public/mfa"
+  ],
+  "dynamicDetails": {
+    "applications": 12,
+    "tabsPerApplication": 6,
+    "runtimeStatus": "pending"
+  },
+  "inventory": [
+    {
+      "file": "src/app/componentDefaults.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/app/console-navigation.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/app/navigation-data.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/app/navigation.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/app/platformNavigation.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/app/ProductCenterSwitcher.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/app/Shell.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "h1",
+          "line": 118,
+          "attributes": [
+            "className=\"page-heading\""
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 203,
+          "attributes": [
+            "title=\"导航\"",
+            "size={280}"
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 204,
+          "attributes": [
+            "title=\"搜索工作空间\""
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 208,
+          "attributes": [
+            "title=\"通知中心\"",
+            "size={420}"
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 209,
+          "attributes": [
+            "title=\"使用帮助\"",
+            "size={480}"
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 216,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"常用操作\"",
+            "className=\"section-gap\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 219,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"操作提示\""
+          ]
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 182,
+          "value": "'var(--iam-font-caption)'"
+        },
+        {
+          "line": 194,
+          "value": "9"
+        },
+        {
+          "line": 208,
+          "value": "'var(--iam-font-secondary)'"
+        }
+      ]
+    },
+    {
+      "file": "src/app/theme.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": [
+        {
+          "line": 13,
+          "value": "typeScale.body.size"
+        },
+        {
+          "line": 35,
+          "value": "typeScale.navigation.size"
+        },
+        {
+          "line": 41,
+          "value": "typeScale.body.size"
+        },
+        {
+          "line": 42,
+          "value": "typeScale.body.size"
+        },
+        {
+          "line": 43,
+          "value": "typeScale.caption.size"
+        },
+        {
+          "line": 45,
+          "value": "typeScale.body.size"
+        },
+        {
+          "line": 46,
+          "value": "typeScale.navigation.size"
+        },
+        {
+          "line": 49,
+          "value": "typeScale.body.size"
+        },
+        {
+          "line": 50,
+          "value": "typeScale.body.size"
+        }
+      ]
+    },
+    {
+      "file": "src/app/typography.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/ApplicationAssignments.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Modal",
+          "line": 29,
+          "attributes": [
+            "title={kind === 'subject' ? '人员资料分配' : '机构资料范围'}"
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/ApplicationDirectorySync.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Card",
+          "line": 110,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"应用界面配置\"",
+            "className=\"section-gap\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 113,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"人员与机构资料对比\"",
+            "className=\"section-gap\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 120,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"租户 → 平台\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 127,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"平台 → 租户\""
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/ApplicationLocalInventory.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Card",
+          "line": 66,
+          "attributes": [
+            "size=\"small\"",
+            "className={kind === 'users' || kind === 'orgs' ? 'application-directory-card' : undefined}",
+            "title={title[kind]}"
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/ApplicationRuntimeConnection.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Modal",
+          "line": 30,
+          "attributes": [
+            "title={app.bindingStatus === 'VERIFIED' ? '重新检查应用关联' : '检查并保存应用关联'}"
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/AuthClients.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Card",
+          "line": 13,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"应用客户端\""
+          ]
+        },
+        {
+          "component": "RecordEditor",
+          "line": 16,
+          "attributes": [
+            "title={editing?'编辑客户端':'登记客户端'}"
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/Brand.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/chart-layout.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/common.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Text",
+          "line": 27,
+          "attributes": [
+            "className=\"eyebrow\""
+          ]
+        },
+        {
+          "component": "Title",
+          "line": 27,
+          "attributes": [
+            "level={1}",
+            "className=\"page-heading\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 77,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"table-card\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 80,
+          "attributes": [
+            "className=\"table-title\""
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 155,
+          "attributes": [
+            "title={title}",
+            "size={width}"
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 169,
+          "attributes": [
+            "title={title}",
+            "size={736}"
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 194,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"metric-card\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 195,
+          "attributes": [
+            "className=\"metric-label\""
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/directory-fields.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/ImageValueInput.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/ImportUsers.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Modal",
+          "line": 94,
+          "attributes": [
+            "title=\"导入用户\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 94,
+          "attributes": []
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 94,
+          "value": "28"
+        }
+      ]
+    },
+    {
+      "file": "src/components/ProtocolConfiguration.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Modal",
+          "line": 12,
+          "attributes": [
+            "title={'认证接入 · ' + client.name}"
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/SelfLegalEntities.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Card",
+          "line": 16,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"法人资料与办理身份\""
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 26,
+          "attributes": [
+            "title=\"登记法人资料\""
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 30,
+          "attributes": [
+            "title=\"申请法人核验\""
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/useElementWidth.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/visuals.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "h2",
+          "line": 59,
+          "attributes": [
+            "className=\"section-intro-title\""
+          ]
+        },
+        {
+          "component": "SectionIntro",
+          "line": 85,
+          "attributes": [
+            "title={content[0]}"
+          ]
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 21,
+          "value": "size > 48 ? 25 : 13"
+        },
+        {
+          "line": 31,
+          "value": "size * .48"
+        }
+      ]
+    },
+    {
+      "file": "src/components/WorkspaceLoading.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "h1",
+          "line": 15,
+          "attributes": []
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/domain/audit-presentation.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/domain/branding.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/domain/csv.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/domain/engine.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/domain/premium-seed.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/domain/presentation.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/domain/seed.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/domain/types.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/main.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/mock/database.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/mock/store.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/pages/Applications.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "RecordEditor",
+          "line": 41,
+          "attributes": [
+            "title=\"新建应用\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 124,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"section-gap\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 124,
+          "attributes": []
+        },
+        {
+          "component": "Card",
+          "line": 125,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"application-card\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 125,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 125,
+          "attributes": [
+            "className=\"application-description\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 125,
+          "attributes": []
+        },
+        {
+          "component": "Card",
+          "line": 125,
+          "attributes": [
+            "size=\"small\""
+          ]
+        },
+        {
+          "component": "DataTable",
+          "line": 125,
+          "attributes": [
+            "title=\"应用列表\""
+          ]
+        },
+        {
+          "component": "RecordEditor",
+          "line": 126,
+          "attributes": [
+            "title=\"编辑应用信息\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 170,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"基本信息\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 176,
+          "attributes": []
+        },
+        {
+          "component": "Card",
+          "line": 182,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"人数与权限\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 198,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"application-directory-card\"",
+            "title=\"平台人员资料分配\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 199,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"application-directory-card\"",
+            "title=\"平台机构资料分配\""
+          ]
+        },
+        {
+          "component": "DataTable",
+          "line": 201,
+          "attributes": [
+            "title=\"平台应用角色\""
+          ]
+        },
+        {
+          "component": "DataTable",
+          "line": 202,
+          "attributes": [
+            "title=\"平台应用资源\""
+          ]
+        },
+        {
+          "component": "DataTable",
+          "line": 203,
+          "attributes": [
+            "title=\"平台有效授权用户\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 203,
+          "attributes": []
+        },
+        {
+          "component": "h1",
+          "line": 207,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 207,
+          "attributes": []
+        },
+        {
+          "component": "RecordEditor",
+          "line": 208,
+          "attributes": [
+            "title={editRole ? '编辑角色' : '新建角色'}"
+          ]
+        },
+        {
+          "component": "RecordEditor",
+          "line": 209,
+          "attributes": [
+            "title={editRes ? '编辑资源' : '新建资源'}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 214,
+          "attributes": []
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 125,
+          "value": "'var(--iam-font-secondary)'"
+        },
+        {
+          "line": 125,
+          "value": "'var(--iam-font-secondary)'"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/Audit.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "PageTitle",
+          "line": 44,
+          "attributes": [
+            "title={title}"
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 52,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"section-gap\""
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 65,
+          "attributes": [
+            "title=\"日志详情\"",
+            "size={560}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 72,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 72,
+          "attributes": []
+        },
+        {
+          "component": "PageTitle",
+          "line": 99,
+          "attributes": [
+            "title=\"安全审计中心\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 101,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"近 7 天登录趋势\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 101,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"事件类型排行\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 101,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"事件结果分布\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 102,
+          "attributes": [
+            "className=\"section-gap\"",
+            "title=\"高级筛选\"",
+            "size=\"small\""
+          ]
+        },
+        {
+          "component": "DataTable",
+          "line": 103,
+          "attributes": [
+            "title={title}"
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 113,
+          "attributes": [
+            "title=\"日志详情\"",
+            "size={560}"
+          ]
+        },
+        {
+          "component": "h3",
+          "line": 113,
+          "attributes": []
+        },
+        {
+          "component": "h4",
+          "line": 113,
+          "attributes": []
+        },
+        {
+          "component": "h4",
+          "line": 113,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 113,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 113,
+          "attributes": []
+        },
+        {
+          "component": "h4",
+          "line": 113,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 113,
+          "attributes": []
+        },
+        {
+          "component": "h4",
+          "line": 113,
+          "attributes": []
+        },
+        {
+          "component": "h4",
+          "line": 113,
+          "attributes": []
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 113,
+          "value": "'var(--iam-font-secondary)'"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/Auth.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "h1",
+          "line": 22,
+          "attributes": []
+        },
+        {
+          "component": "Title",
+          "line": 54,
+          "attributes": [
+            "className=\"auth-page-title\"",
+            "level={2}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 54,
+          "attributes": []
+        },
+        {
+          "component": "Title",
+          "line": 58,
+          "attributes": [
+            "className=\"auth-page-title\"",
+            "level={2}"
+          ]
+        },
+        {
+          "component": "Title",
+          "line": 64,
+          "attributes": [
+            "className=\"auth-page-title\"",
+            "level={2}"
+          ]
+        },
+        {
+          "component": "Title",
+          "line": 69,
+          "attributes": [
+            "className=\"auth-page-title\"",
+            "level={2}"
+          ]
+        },
+        {
+          "component": "Title",
+          "line": 73,
+          "attributes": [
+            "className=\"auth-page-title\"",
+            "level={2}"
+          ]
+        },
+        {
+          "component": "Title",
+          "line": 75,
+          "attributes": [
+            "className=\"auth-page-title\"",
+            "level={2}"
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/pages/Authorization.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Drawer",
+          "line": 87,
+          "attributes": [
+            "title=\"配置应用授权\"",
+            "size={760}"
+          ]
+        },
+        {
+          "component": "PageTitle",
+          "line": 117,
+          "attributes": [
+            "title={title}"
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 117,
+          "attributes": [
+            "size=\"small\"",
+            "title={mode === 'apps' ? '选择应用' : mode === 'users' ? '选择用户' : '选择机构'}"
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 117,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"section-gap grant-subject-card\""
+          ]
+        },
+        {
+          "component": "Title",
+          "line": 117,
+          "attributes": [
+            "level={4}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 117,
+          "attributes": []
+        },
+        {
+          "component": "DataTable",
+          "line": 117,
+          "attributes": [
+            "title=\"授权记录\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 117,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 117,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 117,
+          "attributes": []
+        },
+        {
+          "component": "Card",
+          "line": 117,
+          "attributes": [
+            "size=\"small\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 119,
+          "attributes": [
+            "size=\"small\""
+          ]
+        },
+        {
+          "component": "PageTitle",
+          "line": 155,
+          "attributes": [
+            "title=\"权限组\""
+          ]
+        },
+        {
+          "component": "ModuleSummary",
+          "line": 155,
+          "attributes": []
+        },
+        {
+          "component": "DataTable",
+          "line": 155,
+          "attributes": [
+            "title=\"权限组列表\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 155,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 155,
+          "attributes": []
+        },
+        {
+          "component": "Modal",
+          "line": 155,
+          "attributes": [
+            "title={editing ? '配置权限组' : '新建权限组'}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 155,
+          "attributes": [
+            "className=\"detail-section-title\""
+          ]
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 117,
+          "value": "28"
+        },
+        {
+          "line": 117,
+          "value": "'var(--iam-font-secondary)'"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/CatalogPage.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "PageTitle",
+          "line": 56,
+          "attributes": [
+            "title={cfg.title}"
+          ]
+        },
+        {
+          "component": "ModuleSummary",
+          "line": 56,
+          "attributes": []
+        },
+        {
+          "component": "DataTable",
+          "line": 56,
+          "attributes": [
+            "title={cfg.title}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 56,
+          "attributes": []
+        },
+        {
+          "component": "RecordEditor",
+          "line": 60,
+          "attributes": [
+            "title={`${editing ? '编辑' : '新建'}${cfg.title}`}"
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 65,
+          "attributes": [
+            "title=\"配置详情\"",
+            "size={560}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 65,
+          "attributes": []
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/pages/Dashboard.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "PageTitle",
+          "line": 99,
+          "attributes": [
+            "title=\"统计分析\""
+          ]
+        },
+        {
+          "component": "h2",
+          "line": 109,
+          "attributes": []
+        },
+        {
+          "component": "Card",
+          "line": 113,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"dashboard-card\"",
+            "title=\"登录趋势\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 118,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"dashboard-card\"",
+            "title=\"应用访问排行\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 121,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"dashboard-card\"",
+            "title=\"近期业务动态\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 124,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"dashboard-card\"",
+            "title=\"需要关注\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 129,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"dashboard-card\"",
+            "title=\"身份分布\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 130,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"dashboard-card\"",
+            "title=\"最近操作记录\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 138,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"访问趋势明细\""
+          ]
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 111,
+          "value": "10"
+        },
+        {
+          "line": 114,
+          "value": "'var(--iam-font-caption)'"
+        },
+        {
+          "line": 114,
+          "value": "'var(--iam-font-caption)'"
+        },
+        {
+          "line": 124,
+          "value": "'var(--iam-font-caption)'"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/Identity.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Card",
+          "line": 19,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"动态口令\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 19,
+          "attributes": []
+        },
+        {
+          "component": "PageTitle",
+          "line": 32,
+          "attributes": [
+            "title=\"个人身份中心\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 32,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"认证账号\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 32,
+          "attributes": [
+            "size=\"small\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 32,
+          "attributes": [
+            "size=\"small\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 32,
+          "attributes": []
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/pages/IdentityAdministration.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "PageTitle",
+          "line": 12,
+          "attributes": [
+            "title=\"认证账号\""
+          ]
+        },
+        {
+          "component": "RecordEditor",
+          "line": 12,
+          "attributes": [
+            "title={editing ? '维护认证账号' : '建立认证账号'}"
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 12,
+          "attributes": [
+            "title=\"重置统一认证密码\""
+          ]
+        },
+        {
+          "component": "PageTitle",
+          "line": 18,
+          "attributes": [
+            "title=\"身份核验\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 18,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"核验提供方\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 18,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"核验申请\""
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/pages/Organization.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Card",
+          "line": 52,
+          "attributes": [
+            "size=\"small\"",
+            "title={operations.length ? `待恢复的人员操作（${operations.length}）` : '人员操作恢复'}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 54,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 55,
+          "attributes": [
+            "title={operation.requestId}"
+          ]
+        },
+        {
+          "component": "h4",
+          "line": 78,
+          "attributes": []
+        },
+        {
+          "component": "h4",
+          "line": 83,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 83,
+          "attributes": []
+        },
+        {
+          "component": "h4",
+          "line": 84,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 84,
+          "attributes": []
+        },
+        {
+          "component": "h4",
+          "line": 85,
+          "attributes": []
+        },
+        {
+          "component": "Drawer",
+          "line": 87,
+          "attributes": [
+            "title=\"身份档案\"",
+            "size={560}"
+          ]
+        },
+        {
+          "component": "h2",
+          "line": 87,
+          "attributes": []
+        },
+        {
+          "component": "PageTitle",
+          "line": 158,
+          "attributes": [
+            "title={lockedOnly ? '账号解锁' : persons ? '自然人管理' : '用户管理'}"
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 162,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"organization-tree-card\"",
+            "title={<Space><ApartmentOutlined />组织架构</Space>}"
+          ]
+        },
+        {
+          "component": "DataTable",
+          "line": 163,
+          "attributes": [
+            "title={orgId === 'all' ? (persons ? '自然人列表' : lockedOnly ? '锁定账号' : '用户列表') : db.orgs.find(o => o.id === orgId)?.name}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 163,
+          "attributes": []
+        },
+        {
+          "component": "Text",
+          "line": 163,
+          "attributes": []
+        },
+        {
+          "component": "RecordEditor",
+          "line": 164,
+          "attributes": [
+            "title={persons ? (userEdit ? '编辑自然人' : '新建自然人') : (userEdit ? '编辑用户' : '新建用户')}"
+          ]
+        },
+        {
+          "component": "RecordEditor",
+          "line": 165,
+          "attributes": [
+            "title={orgEdit ? '编辑机构' : '新建机构'}"
+          ]
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 163,
+          "value": "'var(--iam-font-secondary)'"
+        },
+        {
+          "line": 163,
+          "value": "'var(--iam-font-secondary)'"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/PlatformAccess.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "PageTitle",
+          "line": 80,
+          "attributes": [
+            "title={rolePage ? '系统角色' : kind === 'locked' ? '账号解锁' : '管理员管理'}"
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 102,
+          "attributes": [
+            "title={`${editing ? '编辑' : '新建'}${rolePage ? '平台角色' : '操作账号'}`}"
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 114,
+          "attributes": [
+            "title=\"重置平台密码\""
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 118,
+          "attributes": [
+            "title={`${assigning?.display_name || ''} · 角色与管理范围`}"
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/pages/PublicEntities.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "PageTitle",
+          "line": 22,
+          "attributes": [
+            "title=\"法人管理\""
+          ]
+        },
+        {
+          "component": "DataTable",
+          "line": 22,
+          "attributes": [
+            "title=\"法人账户\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 22,
+          "attributes": []
+        },
+        {
+          "component": "RecordEditor",
+          "line": 22,
+          "attributes": [
+            "title={editing ? '编辑法人信息' : '新建法人记录'}"
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 22,
+          "attributes": [
+            "title=\"法人详情\"",
+            "size={800}"
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 22,
+          "attributes": [
+            "title={relation?.action === 'activate-member' ? '启用法人经办关系' : '撤销法人经办关系'}"
+          ]
+        }
+      ],
+      "fontOverrides": [
+        {
+          "line": 22,
+          "value": "'var(--iam-font-secondary)'"
+        }
+      ]
+    },
+    {
+      "file": "src/pages/Settings.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "Text",
+          "line": 57,
+          "attributes": [
+            "className=\"setting-title\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 57,
+          "attributes": [
+            "className=\"setting-description\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 58,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"密码策略\"",
+            "className=\"section-gap\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 58,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"登录保护\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 59,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"会话与令牌\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 60,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"敏感字段保护\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 60,
+          "attributes": []
+        },
+        {
+          "component": "Card",
+          "line": 61,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"来源限制与配额\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 62,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"系统标识\""
+          ]
+        },
+        {
+          "component": "PageTitle",
+          "line": 75,
+          "attributes": [
+            "title={titles[kind][0]}"
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 75,
+          "attributes": []
+        },
+        {
+          "component": "h3",
+          "line": 75,
+          "attributes": []
+        },
+        {
+          "component": "PageTitle",
+          "line": 102,
+          "attributes": [
+            "title=\"个人中心\""
+          ]
+        },
+        {
+          "component": "h2",
+          "line": 102,
+          "attributes": []
+        },
+        {
+          "component": "Card",
+          "line": 102,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"基本资料\"",
+            "className=\"section-gap\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 102,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"账户安全\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 102,
+          "attributes": [
+            "className=\"setting-title\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 102,
+          "attributes": [
+            "className=\"setting-description\""
+          ]
+        },
+        {
+          "component": "Modal",
+          "line": 102,
+          "attributes": [
+            "title=\"修改密码\""
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/pages/Synchronization.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "PageTitle",
+          "line": 58,
+          "attributes": [
+            "title={view === 'configs' ? '同步配置' : view === 'entities' ? '同步对象' : '同步任务'}"
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 62,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"接收系统配置\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 67,
+          "attributes": [
+            "size=\"small\"",
+            "className=\"section-gap\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 67,
+          "attributes": []
+        },
+        {
+          "component": "Card",
+          "line": 70,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"中央目录对象\""
+          ]
+        },
+        {
+          "component": "Card",
+          "line": 74,
+          "attributes": [
+            "size=\"small\"",
+            "title=\"下发任务记录\""
+          ]
+        },
+        {
+          "component": "Text",
+          "line": 74,
+          "attributes": []
+        },
+        {
+          "component": "RecordEditor",
+          "line": 81,
+          "attributes": [
+            "title={editing ? '编辑同步配置' : '新建同步配置'}"
+          ]
+        },
+        {
+          "component": "Drawer",
+          "line": 89,
+          "attributes": [
+            "title=\"下发任务明细\"",
+            "size={900}"
+          ]
+        }
+      ],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/services/http.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/services/identity.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/services/logoutFeedback.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/services/workspace.ts",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [],
+      "fontOverrides": []
+    }
+  ]
+}

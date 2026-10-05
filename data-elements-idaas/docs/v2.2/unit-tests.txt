@@ -1,0 +1,540 @@
+
+> unified-identity-platform@2.2.0 test
+> node --experimental-strip-types --test tests/*.test.ts
+
+TAP version 13
+# (node:2690) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Mock数据包含两个隔离身份域和可引用应用
+ok 1 - Mock数据包含两个隔离身份域和可引用应用
+  ---
+  duration_ms: 49.481335
+  type: 'test'
+  ...
+# Subtest: 种子数据中所有用户通过字段校验
+ok 2 - 种子数据中所有用户通过字段校验
+  ---
+  duration_ms: 14.149912
+  type: 'test'
+  ...
+# Subtest: 种子数据中应用、角色、资源通过字段校验
+ok 3 - 种子数据中应用、角色、资源通过字段校验
+  ---
+  duration_ms: 9.519364
+  type: 'test'
+  ...
+# Subtest: 直接授权产生应用访问和业务角色
+ok 4 - 直接授权产生应用访问和业务角色
+  ---
+  duration_ms: 11.863633
+  type: 'test'
+  ...
+# Subtest: 同一用户多来源授权合并且保留来源
+ok 5 - 同一用户多来源授权合并且保留来源
+  ---
+  duration_ms: 7.687433
+  type: 'test'
+  ...
+# Subtest: 撤销一种来源保留其他有效来源
+ok 6 - 撤销一种来源保留其他有效来源
+  ---
+  duration_ms: 7.781425
+  type: 'test'
+  ...
+# Subtest: 到期边界不再生效
+ok 7 - 到期边界不再生效
+  ---
+  duration_ms: 0.220394
+  type: 'test'
+  ...
+# Subtest: 未来授权不会提前生效
+ok 8 - 未来授权不会提前生效
+  ---
+  duration_ms: 0.107773
+  type: 'test'
+  ...
+# Subtest: 停用用户不具有有效访问
+ok 9 - 停用用户不具有有效访问
+  ---
+  duration_ms: 9.786289
+  type: 'test'
+  ...
+# Subtest: 锁定用户不具有有效访问
+ok 10 - 锁定用户不具有有效访问
+  ---
+  duration_ms: 7.184762
+  type: 'test'
+  ...
+# Subtest: 平台管理账号不可通过直接授权访问业务应用
+ok 11 - 平台管理账号不可通过直接授权访问业务应用
+  ---
+  duration_ms: 6.10657
+  type: 'test'
+  ...
+# Subtest: 平台管理账号不可经机构授权继承业务应用
+ok 12 - 平台管理账号不可经机构授权继承业务应用
+  ---
+  duration_ms: 5.334502
+  type: 'test'
+  ...
+# Subtest: 跨域用户授权被拒绝
+ok 13 - 跨域用户授权被拒绝
+  ---
+  duration_ms: 5.582738
+  type: 'test'
+  ...
+# Subtest: 不同应用角色不可混用
+ok 14 - 不同应用角色不可混用
+  ---
+  duration_ms: 5.690111
+  type: 'test'
+  ...
+# Subtest: 已停用应用不能新增有效授权
+ok 15 - 已停用应用不能新增有效授权
+  ---
+  duration_ms: 5.391539
+  type: 'test'
+  ...
+# Subtest: 应用停用后仍可撤销历史授权
+ok 16 - 应用停用后仍可撤销历史授权
+  ---
+  duration_ms: 5.767017
+  type: 'test'
+  ...
+# Subtest: 无效授权期限被拒绝
+ok 17 - 无效授权期限被拒绝
+  ---
+  duration_ms: 5.157104
+  type: 'test'
+  ...
+# Subtest: 机构范围包含下级且任职关系可参与计算
+ok 18 - 机构范围包含下级且任职关系可参与计算
+  ---
+  duration_ms: 5.631792
+  type: 'test'
+  ...
+# Subtest: 机构层级修改不能形成循环
+ok 19 - 机构层级修改不能形成循环
+  ---
+  duration_ms: 7.56343
+  type: 'test'
+  ...
+# Subtest: 机构遍历对畸形循环不会无限递归
+ok 20 - 机构遍历对畸形循环不会无限递归
+  ---
+  duration_ms: 16.650766
+  type: 'test'
+  ...
+# Subtest: 同域账号唯一性不区分大小写
+ok 21 - 同域账号唯一性不区分大小写
+  ---
+  duration_ms: 9.21796
+  type: 'test'
+  ...
+# Subtest: 每个人员恰好一个主职
+ok 22 - 每个人员恰好一个主职
+  ---
+  duration_ms: 17.711911
+  type: 'test'
+  ...
+# Subtest: 内置管理账号不能在用户页被停用
+ok 23 - 内置管理账号不能在用户页被停用
+  ---
+  duration_ms: 7.411986
+  type: 'test'
+  ...
+# Subtest: 回调地址禁止通配符
+ok 24 - 回调地址禁止通配符
+  ---
+  duration_ms: 8.472892
+  type: 'test'
+  ...
+# Subtest: 生产回调地址禁止普通HTTP
+ok 25 - 生产回调地址禁止普通HTTP
+  ---
+  duration_ms: 6.974323
+  type: 'test'
+  ...
+# Subtest: 本地调试回调可使用localhostHTTP
+ok 26 - 本地调试回调可使用localhostHTTP
+  ---
+  duration_ms: 8.107718
+  type: 'test'
+  ...
+# Subtest: 资源父项停用时排除其子资源
+ok 27 - 资源父项停用时排除其子资源
+  ---
+  duration_ms: 8.611962
+  type: 'test'
+  ...
+# Subtest: 权限组重算只替换自身授权来源
+ok 28 - 权限组重算只替换自身授权来源
+  ---
+  duration_ms: 7.076088
+  type: 'test'
+  ...
+# Subtest: 被引用的机构不可直接删除
+ok 29 - 被引用的机构不可直接删除
+  ---
+  duration_ms: 5.98722
+  type: 'test'
+  ...
+# Subtest: 被引用的资源不可直接删除
+ok 30 - 被引用的资源不可直接删除
+  ---
+  duration_ms: 6.194254
+  type: 'test'
+  ...
+# Subtest: 审计角色只读
+ok 31 - 审计角色只读
+  ---
+  duration_ms: 0.118089
+  type: 'test'
+  ...
+# Subtest: 应用管理员只有指定应用范围
+ok 32 - 应用管理员只有指定应用范围
+  ---
+  duration_ms: 5.777963
+  type: 'test'
+  ...
+# Subtest: 机构管理员范围不包含外部机构用户
+ok 33 - 机构管理员范围不包含外部机构用户
+  ---
+  duration_ms: 5.292459
+  type: 'test'
+  ...
+# Subtest: 同步任务计数一致且首轮失败可重试
+ok 34 - 同步任务计数一致且首轮失败可重试
+  ---
+  duration_ms: 5.812476
+  type: 'test'
+  ...
+# Subtest: 已中止任务不会继续改变结果
+ok 35 - 已中止任务不会继续改变结果
+  ---
+  duration_ms: 6.025508
+  type: 'test'
+  ...
+# Subtest: 同步配置检查HTTPS和当前身份域
+ok 36 - 同步配置检查HTTPS和当前身份域
+  ---
+  duration_ms: 5.634777
+  type: 'test'
+  ...
+# Subtest: 法人标识不可重复，关联账号不可跨域
+ok 37 - 法人标识不可重复，关联账号不可跨域
+  ---
+  duration_ms: 5.658693
+  type: 'test'
+  ...
+# Subtest: CSV支持BOM、逗号、引号和字段内换行
+ok 38 - CSV支持BOM、逗号、引号和字段内换行
+  ---
+  duration_ms: 0.690034
+  type: 'test'
+  ...
+# Subtest: CSV未闭合引号返回可读错误
+ok 39 - CSV未闭合引号返回可读错误
+  ---
+  duration_ms: 0.174144
+  type: 'test'
+  ...
+# Subtest: CSV导出中和潜在公式
+ok 40 - CSV导出中和潜在公式
+  ---
+  duration_ms: 0.177168
+  type: 'test'
+  ...
+# Subtest: 导出字段默认脱敏
+ok 41 - 导出字段默认脱敏
+  ---
+  duration_ms: 0.109486
+  type: 'test'
+  ...
+# Subtest: 日志快照不明文输出敏感键
+ok 42 - 日志快照不明文输出敏感键
+  ---
+  duration_ms: 0.258661
+  type: 'test'
+  ...
+# (node:2691) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Mock登录使用固定评审账号并写入登录日志
+ok 43 - Mock登录使用固定评审账号并写入登录日志
+  ---
+  duration_ms: 247.794064
+  type: 'test'
+  ...
+# Subtest: 错误评审密码被拒绝
+ok 44 - 错误评审密码被拒绝
+  ---
+  duration_ms: 257.628415
+  type: 'test'
+  ...
+# Subtest: 修改用户同时更新本地存储和操作日志
+ok 45 - 修改用户同时更新本地存储和操作日志
+  ---
+  duration_ms: 244.62042
+  type: 'test'
+  ...
+# Subtest: 旧版本编辑返回冲突，不覆盖新内容
+ok 46 - 旧版本编辑返回冲突，不覆盖新内容
+  ---
+  duration_ms: 470.898353
+  type: 'test'
+  ...
+# Subtest: 故障注入只失败一次，不提交半成品
+ok 47 - 故障注入只失败一次，不提交半成品
+  ---
+  duration_ms: 460.906319
+  type: 'test'
+  ...
+# Subtest: 只读审计身份无法调用Mock修改
+ok 48 - 只读审计身份无法调用Mock修改
+  ---
+  duration_ms: 229.839139
+  type: 'test'
+  ...
+# Subtest: 政企管理会话无法修改公众身份
+ok 49 - 政企管理会话无法修改公众身份
+  ---
+  duration_ms: 231.159609
+  type: 'test'
+  ...
+# Subtest: 同步指定对象不会加入其他未选对象
+ok 50 - 同步指定对象不会加入其他未选对象
+  ---
+  duration_ms: 244.689947
+  type: 'test'
+  ...
+# Subtest: 失败任务重试保留成功结果并最终完成
+ok 51 - 失败任务重试保留成功结果并最终完成
+  ---
+  duration_ms: 487.980156
+  type: 'test'
+  ...
+# Subtest: 中止任务保留明细，后续tick不改变
+ok 52 - 中止任务保留明细，后续tick不改变
+  ---
+  duration_ms: 481.89008
+  type: 'test'
+  ...
+# Subtest: 本地公众注册未标记实名认证，也不自动授权
+ok 53 - 本地公众注册未标记实名认证，也不自动授权
+  ---
+  duration_ms: 239.843489
+  type: 'test'
+  ...
+# Subtest: 删除权限组仅移除该组授权来源
+ok 54 - 删除权限组仅移除该组授权来源
+  ---
+  duration_ms: 242.247535
+  type: 'test'
+  ...
+# Subtest: 品牌设置与审计同时保存
+ok 55 - 品牌设置与审计同时保存
+  ---
+  duration_ms: 238.263893
+  type: 'test'
+  ...
+# (node:2692) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V2: identical initialization time produces identical fictional data
+ok 56 - V2: identical initialization time produces identical fictional data
+  ---
+  duration_ms: 26.369964
+  type: 'test'
+  ...
+# Subtest: V2: identity domains contain 180 business people, 1 platform identity and 60 citizens
+ok 57 - V2: identity domains contain 180 business people, 1 platform identity and 60 citizens
+  ---
+  duration_ms: 0.280485
+  type: 'test'
+  ...
+# Subtest: V2: account names and row IDs are unique
+ok 58 - V2: account names and row IDs are unique
+  ---
+  duration_ms: 0.547909
+  type: 'test'
+  ...
+# Subtest: V2: every workforce appointment references an organization in its domain
+ok 59 - V2: every workforce appointment references an organization in its domain
+  ---
+  duration_ms: 0.32384
+  type: 'test'
+  ...
+# Subtest: V2: employee types partition the business-user population
+ok 60 - V2: employee types partition the business-user population
+  ---
+  duration_ms: 0.137048
+  type: 'test'
+  ...
+# Subtest: V2: every role and resource belongs to a known application
+ok 61 - V2: every role and resource belongs to a known application
+  ---
+  duration_ms: 0.253684
+  type: 'test'
+  ...
+# Subtest: V2: all grant references are valid and platform identity is never a grant subject
+ok 62 - V2: all grant references are valid and platform identity is never a grant subject
+  ---
+  duration_ms: 1.074556
+  type: 'test'
+  ...
+# Subtest: V2: expired and upcoming grants are both represented
+ok 63 - V2: expired and upcoming grants are both represented
+  ---
+  duration_ms: 0.21769
+  type: 'test'
+  ...
+# Subtest: V2: logging contains 1800 ordered records with linked application identities
+ok 64 - V2: logging contains 1800 ordered records with linked application identities
+  ---
+  duration_ms: 3.929416
+  type: 'test'
+  ...
+# Subtest: V2: a failed operation does not pretend that data changed
+ok 65 - V2: a failed operation does not pretend that data changed
+  ---
+  duration_ms: 0.383391
+  type: 'test'
+  ...
+# Subtest: V2: sample events cover both identity domains and all three log categories
+ok 66 - V2: sample events cover both identity domains and all three log categories
+  ---
+  duration_ms: 0.168024
+  type: 'test'
+  ...
+# Subtest: V2: legal entity contacts and subaccounts reference public identities
+ok 67 - V2: legal entity contacts and subaccounts reference public identities
+  ---
+  duration_ms: 0.174544
+  type: 'test'
+  ...
+# Subtest: V2: initial task aggregate counts equal the number of task items
+ok 68 - V2: initial task aggregate counts equal the number of task items
+  ---
+  duration_ms: 0.137738
+  type: 'test'
+  ...
+# Subtest: V2: mock storage payload stays below a conservative 4 MiB budget
+ok 69 - V2: mock storage payload stays below a conservative 4 MiB budget
+  ---
+  duration_ms: 4.143179
+  type: 'test'
+  ...
+# (node:2723) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: V2.1: built-in labels upgrade without changing row IDs or counts
+ok 70 - V2.1: built-in labels upgrade without changing row IDs or counts
+  ---
+  duration_ms: 29.679431
+  type: 'test'
+  ...
+# Subtest: V2.1: presentation upgrade preserves effective access, grant timestamps and resources
+ok 71 - V2.1: presentation upgrade preserves effective access, grant timestamps and resources
+  ---
+  duration_ms: 101.112204
+  type: 'test'
+  ...
+# Subtest: V2.1: audit evidence, user names and free-form input are not rewritten
+ok 72 - V2.1: audit evidence, user names and free-form input are not rewritten
+  ---
+  duration_ms: 9.193672
+  type: 'test'
+  ...
+# Subtest: V2.1: label upgrade is idempotent
+ok 73 - V2.1: label upgrade is idempotent
+  ---
+  duration_ms: 17.562837
+  type: 'test'
+  ...
+# Subtest: V2.1: new fixture text contains no development or demonstration wording
+ok 74 - V2.1: new fixture text contains no development or demonstration wording
+  ---
+  duration_ms: 12.111978
+  type: 'test'
+  ...
+# Subtest: V2.1: failed task status and failure evidence survive copy changes
+ok 75 - V2.1: failed task status and failure evidence survive copy changes
+  ---
+  duration_ms: 7.815687
+  type: 'test'
+  ...
+# (node:2734) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 导航、正文与表格使用14px基准，不随紧凑密度缩小
+ok 76 - 导航、正文与表格使用14px基准，不随紧凑密度缩小
+  ---
+  duration_ms: 0.722834
+  type: 'test'
+  ...
+# Subtest: 标题与辅助文字层级严格递增
+ok 77 - 标题与辅助文字层级严格递增
+  ---
+  duration_ms: 0.152882
+  type: 'test'
+  ...
+# Subtest: 所有角色至少12px且行高不裁切
+ok 78 - 所有角色至少12px且行高不裁切
+  ---
+  duration_ms: 0.151699
+  type: 'test'
+  ...
+# Subtest: 指标数值独立于普通标题角色
+ok 79 - 指标数值独立于普通标题角色
+  ---
+  duration_ms: 0.085029
+  type: 'test'
+  ...
+# Subtest: CSS变量与语义字号源一致
+ok 80 - CSS变量与语义字号源一致
+  ---
+  duration_ms: 0.599878
+  type: 'test'
+  ...
+# Subtest: 空图表与非法数据数量不会生成刻度
+ok 81 - 空图表与非法数据数量不会生成刻度
+  ---
+  duration_ms: 0.610444
+  type: 'test'
+  ...
+# Subtest: 单个数据点仅有一个刻度
+ok 82 - 单个数据点仅有一个刻度
+  ---
+  duration_ms: 0.201505
+  type: 'test'
+  ...
+# Subtest: 窄图不缩小文字而减少刻度
+ok 83 - 窄图不缩小文字而减少刻度
+  ---
+  duration_ms: 0.131319
+  type: 'test'
+  ...
+# Subtest: 宽图保留全部七天刻度
+ok 84 - 宽图保留全部七天刻度
+  ---
+  duration_ms: 0.289087
+  type: 'test'
+  ...
+# Subtest: 大量数据刻度无重复、首尾保留且有序
+ok 85 - 大量数据刻度无重复、首尾保留且有序
+  ---
+  duration_ms: 0.952802
+  type: 'test'
+  ...
+# Subtest: 异常画布宽度和间距得到安全处理
+ok 86 - 异常画布宽度和间距得到安全处理
+  ---
+  duration_ms: 0.159581
+  type: 'test'
+  ...
+1..86
+# tests 86
+# suites 0
+# pass 86
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4280.2842

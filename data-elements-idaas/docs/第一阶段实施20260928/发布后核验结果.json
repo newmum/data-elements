@@ -1,0 +1,150 @@
+{
+  "completed": true,
+  "coldStart": true,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/workspace/bootstrap",
+      "path": "/idaas/workspace/bootstrap",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/list",
+      "path": "/idaas/operators/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "当前平台仍为1操作账号及4行业应用",
+      "passed": true
+    },
+    {
+      "name": "应用操作按钮按服务端对象范围投影",
+      "passed": true
+    },
+    {
+      "name": "/idaas/audit/list?type=API&page=1&size=10&q=foundation-search-no-match-1143e9e673b1f8f9",
+      "path": "/idaas/audit/list?type=API&page=1&size=10&q=foundation-search-no-match-1143e9e673b1f8f9",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "审计搜索由服务端过滤且无假结果",
+      "passed": true
+    },
+    {
+      "name": "/idaas/audit/list?type=API&page=2&size=10&q=operators",
+      "path": "/idaas/audit/list?type=API&page=2&size=10&q=operators",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "审计支持历史服务端分页",
+      "passed": true
+    },
+    {
+      "name": "/idaas/audit/list?type=OPERATION&page=1&size=10&result=DENIED",
+      "path": "/idaas/audit/list?type=OPERATION&page=1&size=10&result=DENIED",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "审计结果筛选由服务端执行",
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/list",
+      "path": "/idaas/settings/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "缺失安全策略数值拒绝",
+      "path": "/idaas/settings/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "非整数安全策略拒绝",
+      "path": "/idaas/settings/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "密码黑名单策略实时保存",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "服务端拒绝密码黑名单值",
+      "path": "/idaas/operators/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/list",
+      "path": "/idaas/settings/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "恢复原安全策略内容",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/list",
+      "path": "/idaas/settings/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "品牌设置真实保存",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/public-settings",
+      "path": "/idaas/auth/public-settings",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公开登录品牌等于保存内容",
+      "passed": true
+    },
+    {
+      "name": "/idaas/session/me",
+      "path": "/idaas/session/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "个人资料真实保存",
+      "path": "/idaas/profile/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "个人资料版本冲突拒绝",
+      "path": "/idaas/profile/save",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "冷启动后下发能力仍关闭",
+      "path": "/idaas/provision/execute",
+      "code": 503,
+      "passed": true
+    }
+  ]
+}

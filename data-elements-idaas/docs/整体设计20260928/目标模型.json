@@ -1,0 +1,2496 @@
+[
+  {
+    "name": "iam_application_group_t",
+    "title": "应用分组",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "code",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "分组编码，不复用已归档编码"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "分组名称"
+      },
+      {
+        "name": "sort_no",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "排序"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "code"
+    ],
+    "indexes": [],
+    "references": "",
+    "rules": "",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_application_t",
+    "title": "身份应用主表",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "code",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "全局应用编码；现有应用沿用原行业编码"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(200) NOT NULL",
+        "comment": "业务应用名称"
+      },
+      {
+        "name": "kind",
+        "sql": "varchar(16) NOT NULL DEFAULT 'BUSINESS'",
+        "comment": "BUSINESS行业应用；INTERNAL为卓鉴自己的管理资源容器"
+      },
+      {
+        "name": "group_id",
+        "sql": "varchar(32) NULL",
+        "comment": "应用分组ID"
+      },
+      {
+        "name": "description",
+        "sql": "varchar(1000) NULL",
+        "comment": "说明"
+      },
+      {
+        "name": "owner_operator_id",
+        "sql": "varchar(32) NULL",
+        "comment": "平台侧负责操作账号，可空"
+      },
+      {
+        "name": "homepage",
+        "sql": "varchar(1000) NULL",
+        "comment": "应用首页，不放令牌"
+      },
+      {
+        "name": "identity_domains",
+        "sql": "json NOT NULL",
+        "comment": "支持的身份域数组，workforce/public"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'DRAFT'",
+        "comment": "DRAFT/ACTIVE/DISABLED/ARCHIVED"
+      },
+      {
+        "name": "auth_mode",
+        "sql": "varchar(24) NOT NULL DEFAULT 'LOCAL'",
+        "comment": "LOCAL或后续显式启用的FEDERATED"
+      },
+      {
+        "name": "provisioning_mode",
+        "sql": "varchar(24) NOT NULL DEFAULT 'OFF'",
+        "comment": "OFF/HTTP；下发与认证独立开关"
+      },
+      {
+        "name": "ext_json",
+        "sql": "json NULL",
+        "comment": "经字段定义校验的扩展资料"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "code"
+    ],
+    "indexes": [
+      "group_id,status"
+    ],
+    "references": "group_id → iam_application_group_t.id；owner_operator_id → iam_operator_t.id",
+    "rules": "当前四个行业应用直接沿用 sym_tenant_t.tid 为 id。INTERNAL 仅作平台权限容器，不出现在业务应用列表，不绑定 schema，不允许接收普通人员授权。停用 IAM 应用不直接停用底层租户运行。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_application_runtime_t",
+    "title": "应用与原运行租户绑定",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "IAM应用ID"
+      },
+      {
+        "name": "runtime_tenant_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "共享框架 sym_tenant_t.tid"
+      },
+      {
+        "name": "backend_code",
+        "sql": "varchar(64) NOT NULL DEFAULT 'data-elements'",
+        "comment": "后端部署标识"
+      },
+      {
+        "name": "environment",
+        "sql": "varchar(32) NOT NULL DEFAULT 'development'",
+        "comment": "运行环境标识"
+      },
+      {
+        "name": "local_permission_app_id",
+        "sql": "varchar(64) NULL",
+        "comment": "本地角色菜单原app_id，非IAM应用ID"
+      },
+      {
+        "name": "binding_status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/VERIFIED/DISABLED"
+      },
+      {
+        "name": "verified_time",
+        "sql": "datetime(6) NULL",
+        "comment": "最近完成实际数据源核验的时间"
+      }
+    ],
+    "unique": [
+      "app_id",
+      "runtime_tenant_id"
+    ],
+    "indexes": [],
+    "references": "app_id → iam_application_t.id；runtime_tenant_id → baseline.sym_tenant_t.tid",
+    "rules": "当前严格一对一。只存绑定引用，不复制数据库密码或维护第二份 datasource/schema 配置。实际配置仍从现有注册表与 Nacos 解析；变更需核验，不能由普通请求体切库。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_operator_t",
+    "title": "卓鉴平台操作账号",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "username",
+        "sql": "varchar(50) NOT NULL",
+        "comment": "仅用于卓鉴管理控制台登录的账号"
+      },
+      {
+        "name": "display_name",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "姓名或显示名"
+      },
+      {
+        "name": "phone",
+        "sql": "varchar(256) NULL",
+        "comment": "联系方式，可按策略加密"
+      },
+      {
+        "name": "email",
+        "sql": "varchar(512) NULL",
+        "comment": "邮箱，可按策略加密"
+      },
+      {
+        "name": "subject_id",
+        "sql": "varchar(32) NULL",
+        "comment": "可选关联人员档案，不继承档案的应用权限"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/ACTIVE/DISABLED"
+      },
+      {
+        "name": "must_change_password",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "下次登录是否必须改密"
+      },
+      {
+        "name": "last_login_time",
+        "sql": "datetime(6) NULL",
+        "comment": "最近平台登录时间"
+      },
+      {
+        "name": "active_username",
+        "sql": "varchar(50) GENERATED ALWAYS AS (CASE WHEN is_del=0 THEN lower(trim(username)) ELSE NULL END) STORED",
+        "comment": "有效账号规范名"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "active_username"
+    ],
+    "indexes": [],
+    "references": "subject_id → iam_subject_t.id；凭据通过 iam_credential_t 的 OPERATOR 归属",
+    "rules": "不把被管理人员自动变成操作账号；迁移只接收经过确认的平台账号。只有平台权限角色可以关联此账号，凭据不下发到应用库。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_operator_role_rela_t",
+    "title": "平台操作账号角色分配",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "operator_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "操作账号ID"
+      },
+      {
+        "name": "role_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "卓鉴INTERNAL应用下的平台角色ID"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/REVOKED"
+      },
+      {
+        "name": "valid_from",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "生效时间"
+      },
+      {
+        "name": "valid_until",
+        "sql": "datetime(6) NULL",
+        "comment": "失效时间，空表示不设固定到期"
+      }
+    ],
+    "unique": [
+      "operator_id,role_id"
+    ],
+    "indexes": [],
+    "references": "operator_id → iam_operator_t.id；role_id → iam_role_t.id",
+    "rules": "角色必须属于保留的卓鉴内部应用。角色权限与本条分配的管理范围成对计算，不能将不同角色的范围做无条件笛卡尔组合。",
+    "soft": false,
+    "checks": [
+      "valid_until IS NULL OR valid_until>valid_from"
+    ]
+  },
+  {
+    "name": "iam_operator_scope_t",
+    "title": "平台角色分配的管理范围",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "assignment_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "平台角色分配ID"
+      },
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "workforce/public；分别授权"
+      },
+      {
+        "name": "scope_kind",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "ALL/APPLICATION/ORG"
+      },
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NULL",
+        "comment": "范围限定应用，可与ORG组合限定机构内指定应用"
+      },
+      {
+        "name": "org_id",
+        "sql": "varchar(32) NULL",
+        "comment": "范围限定机构"
+      },
+      {
+        "name": "include_children",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "是否含下级机构"
+      }
+    ],
+    "unique": [],
+    "indexes": [
+      "assignment_id",
+      "app_id",
+      "org_id"
+    ],
+    "references": "assignment_id → iam_operator_role_rela_t.id；app_id → iam_application_t.id；org_id → iam_org_t.id",
+    "rules": "ALL、应用和机构范围必须显式授予；没有范围记录即没有对象范围。接口同时校验功能码与同一角色分配的对象范围，不依赖特殊管理员布尔字段。",
+    "soft": false,
+    "checks": [
+      "(scope_kind='ALL' AND app_id IS NULL AND org_id IS NULL) OR (scope_kind='APPLICATION' AND app_id IS NOT NULL AND org_id IS NULL) OR (scope_kind='ORG' AND org_id IS NOT NULL)"
+    ]
+  },
+  {
+    "name": "iam_role_t",
+    "title": "应用角色与平台内部角色",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "所属应用；平台角色归属INTERNAL应用"
+      },
+      {
+        "name": "code",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "应用内角色编码"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "角色名称"
+      },
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "workforce/public"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED"
+      },
+      {
+        "name": "description",
+        "sql": "varchar(1000) NULL",
+        "comment": "职责说明"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "app_id,code"
+    ],
+    "indexes": [
+      "app_id,status"
+    ],
+    "references": "app_id → iam_application_t.id",
+    "rules": "普通应用角色不能授给平台操作账号；平台角色不能进入人员应用授权。编码归档后不复用。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_resource_t",
+    "title": "应用菜单按钮和API资源",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "所属应用"
+      },
+      {
+        "name": "parent_id",
+        "sql": "varchar(32) NULL",
+        "comment": "同应用父资源ID"
+      },
+      {
+        "name": "code",
+        "sql": "varchar(160) NOT NULL",
+        "comment": "应用内唯一权限标识"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(200) NOT NULL",
+        "comment": "资源名称"
+      },
+      {
+        "name": "resource_type",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "MENU/BUTTON/API"
+      },
+      {
+        "name": "path",
+        "sql": "varchar(1000) NULL",
+        "comment": "页面或API路径"
+      },
+      {
+        "name": "http_method",
+        "sql": "varchar(16) NULL",
+        "comment": "API请求方法"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED"
+      },
+      {
+        "name": "sort_no",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "顺序"
+      },
+      {
+        "name": "ext_json",
+        "sql": "json NULL",
+        "comment": "资源扩展资料"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "app_id,code"
+    ],
+    "indexes": [
+      "app_id,parent_id"
+    ],
+    "references": "app_id → iam_application_t.id；parent_id → iam_resource_t.id",
+    "rules": "父子资源必须同应用，禁止环。展示菜单不等于API授权，API必须由后端执行权限校验。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_role_resource_rela_t",
+    "title": "角色资源关联",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "role_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "角色ID"
+      },
+      {
+        "name": "resource_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "资源ID"
+      },
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "归属应用用于隔离校验"
+      }
+    ],
+    "unique": [
+      "role_id,resource_id"
+    ],
+    "indexes": [
+      "app_id,resource_id"
+    ],
+    "references": "role_id → iam_role_t.id；resource_id → iam_resource_t.id；app_id → iam_application_t.id",
+    "rules": "两个对象必须都属于 app_id，且有效。先校验整批引用，再事务替换关联。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_account_security_t",
+    "title": "认证主体锁定与安全状态",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "principal_kind",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "OPERATOR/AUTH_ACCOUNT"
+      },
+      {
+        "name": "principal_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "对应认证账号ID"
+      },
+      {
+        "name": "failed_count",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "连续失败次数"
+      },
+      {
+        "name": "locked_until",
+        "sql": "datetime(6) NULL",
+        "comment": "锁定截止"
+      },
+      {
+        "name": "password_changed_time",
+        "sql": "datetime(6) NULL",
+        "comment": "最近改密时间"
+      },
+      {
+        "name": "security_version",
+        "sql": "bigint unsigned NOT NULL DEFAULT 1",
+        "comment": "安全版本，改密等操作触发会话版本失效"
+      }
+    ],
+    "unique": [
+      "principal_kind,principal_id"
+    ],
+    "indexes": [],
+    "references": "OPERATOR → iam_operator_t.id；AUTH_ACCOUNT → iam_auth_account_t.id",
+    "rules": "平台与统一认证的锁定状态按主体类型隔离；未知账号限流使用有限TTL缓存，不无界插入此表。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_credential_t",
+    "title": "分用途凭据与密钥版本",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "owner_kind",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "OPERATOR/AUTH_ACCOUNT/CLIENT/SYNC_CONFIG"
+      },
+      {
+        "name": "owner_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "归属账号或配置ID"
+      },
+      {
+        "name": "credential_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "PASSWORD/TOTP/WEBAUTHN/CLIENT_SECRET/HMAC_KEY/RECOVERY_CODE"
+      },
+      {
+        "name": "slot",
+        "sql": "varchar(100) NOT NULL DEFAULT 'primary'",
+        "comment": "密码固定primary；设备或轮换密钥使用独立槽"
+      },
+      {
+        "name": "revision",
+        "sql": "int unsigned NOT NULL DEFAULT 1",
+        "comment": "凭据版本"
+      },
+      {
+        "name": "algorithm",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "明确算法和编码版本"
+      },
+      {
+        "name": "secret_hash",
+        "sql": "varchar(2048) NULL",
+        "comment": "密码、恢复码、客户端验证密钥的单向摘要"
+      },
+      {
+        "name": "secret_cipher",
+        "sql": "text NULL",
+        "comment": "需要恢复使用的TOTP种子或签名密钥的密文"
+      },
+      {
+        "name": "key_ref",
+        "sql": "varchar(200) NULL",
+        "comment": "外部加密主密钥引用；不存主密钥值"
+      },
+      {
+        "name": "public_data",
+        "sql": "json NULL",
+        "comment": "公开公钥及非敏感参数，不放密码"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/ACTIVE/RETIRED/REVOKED"
+      },
+      {
+        "name": "not_before",
+        "sql": "datetime(6) NULL",
+        "comment": "可用起点"
+      },
+      {
+        "name": "expires_at",
+        "sql": "datetime(6) NULL",
+        "comment": "失效时间"
+      },
+      {
+        "name": "active_slot",
+        "sql": "varchar(160) GENERATED ALWAYS AS (CASE WHEN status='ACTIVE' THEN concat(credential_type,':',slot) ELSE NULL END) STORED",
+        "comment": "防止同凭据槽多个活动版本"
+      }
+    ],
+    "unique": [
+      "owner_kind,owner_id,credential_type,slot,revision",
+      "owner_kind,owner_id,active_slot"
+    ],
+    "indexes": [],
+    "references": "按 owner_kind 分别引用 iam_operator_t、iam_auth_account_t、iam_auth_client_t、iam_sync_config_t",
+    "rules": "密码只存单向摘要；HMAC/TOTP采用受控加密。按用途严格校验所有者，API永不返回已存秘密。旧密码可标记旧算法兼容读取，在重新设置密码时升级。秘密不能进入任务JSON或审计。",
+    "soft": false,
+    "checks": [
+      "credential_type<>'PASSWORD' OR slot='primary'",
+      "secret_hash IS NULL OR secret_cipher IS NULL"
+    ]
+  },
+  {
+    "name": "iam_setting_t",
+    "title": "IAM自身配置与策略",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "scope_kind",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "GLOBAL/DOMAIN/APPLICATION"
+      },
+      {
+        "name": "scope_key",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "全局固定global；身份域或应用ID"
+      },
+      {
+        "name": "category",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "SECURITY/SESSION/BRANDING/FIELD_PROTECTION/API_ACCESS"
+      },
+      {
+        "name": "config_key",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "配置项键"
+      },
+      {
+        "name": "value_json",
+        "sql": "json NOT NULL",
+        "comment": "经过类型和范围校验的配置，不存秘密"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "scope_kind,scope_key,category,config_key"
+    ],
+    "indexes": [],
+    "references": "scope_kind=APPLICATION 时 scope_key → iam_application_t.id",
+    "rules": "只存卓鉴配置。其他系统的 sym_config_t 不整体迁移。强制安全策略覆盖规则需明确，不允许应用配置放宽平台下限。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_audit_event_t",
+    "title": "操作认证和API审计",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "event_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "OPERATION/AUTH/API/MIGRATION"
+      },
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NULL",
+        "comment": "事件身份域"
+      },
+      {
+        "name": "actor_kind",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "OPERATOR/AUTH_ACCOUNT/CLIENT/SYSTEM/LEGACY"
+      },
+      {
+        "name": "actor_id",
+        "sql": "varchar(64) NULL",
+        "comment": "操作者ID或历史主体引用"
+      },
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NULL",
+        "comment": "目标应用；平台事件可为INTERNAL应用"
+      },
+      {
+        "name": "action",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "稳定业务动作码"
+      },
+      {
+        "name": "object_type",
+        "sql": "varchar(32) NULL",
+        "comment": "目标对象类型"
+      },
+      {
+        "name": "object_id",
+        "sql": "varchar(64) NULL",
+        "comment": "目标对象ID"
+      },
+      {
+        "name": "result",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "SUCCESS/DENIED/FAILED等"
+      },
+      {
+        "name": "reason_code",
+        "sql": "varchar(100) NULL",
+        "comment": "可检索原因码"
+      },
+      {
+        "name": "account_fingerprint",
+        "sql": "char(64) NULL",
+        "comment": "失败登录账号指纹，不存口令"
+      },
+      {
+        "name": "trace_id",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "链路号"
+      },
+      {
+        "name": "ip",
+        "sql": "varchar(64) NULL",
+        "comment": "访问地址"
+      },
+      {
+        "name": "request_path",
+        "sql": "varchar(1000) NULL",
+        "comment": "脱敏后的路径"
+      },
+      {
+        "name": "http_method",
+        "sql": "varchar(16) NULL",
+        "comment": "请求方法"
+      },
+      {
+        "name": "http_status",
+        "sql": "int NULL",
+        "comment": "HTTP状态"
+      },
+      {
+        "name": "duration_ms",
+        "sql": "bigint NULL",
+        "comment": "耗时"
+      },
+      {
+        "name": "event_time",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "事件实际发生时间，历史迁移不改写"
+      },
+      {
+        "name": "snapshot_json",
+        "sql": "json NULL",
+        "comment": "脱敏前后值和必要上下文，不含凭据或完整报文"
+      }
+    ],
+    "unique": [],
+    "indexes": [
+      "event_type,event_time",
+      "app_id,event_time",
+      "actor_kind,actor_id,event_time",
+      "trace_id",
+      "account_fingerprint,event_time"
+    ],
+    "references": "",
+    "rules": "追加写入。操作审计与业务变更同一控制库事务；认证失败也记录。保留策略独立配置，不以通用删除接口清空审计。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_request_receipt_t",
+    "title": "业务请求幂等回执",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "operator_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "当前平台操作账号ID"
+      },
+      {
+        "name": "operation_code",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "接口业务动作码"
+      },
+      {
+        "name": "request_id",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "调用者请求号"
+      },
+      {
+        "name": "request_hash",
+        "sql": "char(64) NOT NULL",
+        "comment": "规范化有效请求内容摘要，不记录密码本身"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "IN_PROGRESS/SUCCEEDED/FAILED/LEGACY_ARCHIVED"
+      },
+      {
+        "name": "result_json",
+        "sql": "json NULL",
+        "comment": "可安全回放结果，禁止令牌和秘密"
+      },
+      {
+        "name": "error_code",
+        "sql": "varchar(100) NULL",
+        "comment": "失败码"
+      },
+      {
+        "name": "expires_at",
+        "sql": "datetime(6) NULL",
+        "comment": "非历史回执保留截止"
+      }
+    ],
+    "unique": [
+      "operator_id,operation_code,request_id"
+    ],
+    "indexes": [
+      "status,updated_time"
+    ],
+    "references": "operator_id → iam_operator_t.id；历史记录只能作为归档回执，不自动重试",
+    "rules": "同请求号不同内容返回409；并发写由唯一键和事务保护。旧跨库人员操作11条全部先归档核对，不解释成新授权任务。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_migration_map_t",
+    "title": "重构迁移批次与ID对照",
+    "phase": 1,
+    "columns": [
+      {
+        "name": "batch_id",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "迁移批次"
+      },
+      {
+        "name": "source_schema",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "来源库名，仅记录来源不用于动态执行"
+      },
+      {
+        "name": "source_table",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "来源表"
+      },
+      {
+        "name": "source_id",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "原ID或组合键"
+      },
+      {
+        "name": "target_type",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "目标表或归档类型"
+      },
+      {
+        "name": "target_id",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "新ID或保留ID"
+      },
+      {
+        "name": "source_hash",
+        "sql": "char(64) NOT NULL",
+        "comment": "迁移快照摘要"
+      },
+      {
+        "name": "state",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "COPIED/VERIFIED/ARCHIVED/ROLLED_BACK"
+      }
+    ],
+    "unique": [
+      "batch_id,source_schema,source_table,source_id,target_type"
+    ],
+    "indexes": [
+      "target_type,target_id"
+    ],
+    "references": "",
+    "rules": "仅用于可核对迁移，不用于运行期授权或默认合并身份。一个旧用户可分别对应平台操作账号和人员档案，不能假设同ID等价。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_subject_t",
+    "title": "中央人员主档",
+    "phase": 2,
+    "columns": [
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "workforce/public"
+      },
+      {
+        "name": "subject_code",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "稳定中央人员编号"
+      },
+      {
+        "name": "account_hint",
+        "sql": "varchar(100) NULL",
+        "comment": "建议下发登录名；不是平台登录凭据"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "姓名"
+      },
+      {
+        "name": "phone",
+        "sql": "varchar(256) NULL",
+        "comment": "受保护联系方式"
+      },
+      {
+        "name": "email",
+        "sql": "varchar(512) NULL",
+        "comment": "受保护邮箱"
+      },
+      {
+        "name": "employee_no",
+        "sql": "varchar(100) NULL",
+        "comment": "员工编号"
+      },
+      {
+        "name": "employment_type",
+        "sql": "varchar(24) NULL",
+        "comment": "EMPLOYEE/PARTNER/TEMPORARY等"
+      },
+      {
+        "name": "join_date",
+        "sql": "date NULL",
+        "comment": "入职日期"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED/ARCHIVED"
+      },
+      {
+        "name": "ext_json",
+        "sql": "json NULL",
+        "comment": "扩展属性；原record_json剩余资料须明确归属后迁移"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "identity_domain,subject_code"
+    ],
+    "indexes": [
+      "identity_domain,status",
+      "identity_domain,name"
+    ],
+    "references": "",
+    "rules": "不存平台密码或平台权限。人员不强制绑定唯一机构，任职放关联表；手机号、姓名不作跨系统合并键。人员停用影响中央授权目标，应用实际停用要等回执。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_org_t",
+    "title": "中央机构树",
+    "phase": 2,
+    "columns": [
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "所属身份域"
+      },
+      {
+        "name": "code",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "域内稳定机构编码"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(200) NOT NULL",
+        "comment": "机构名称"
+      },
+      {
+        "name": "parent_id",
+        "sql": "varchar(32) NULL",
+        "comment": "同域上级机构；根为空"
+      },
+      {
+        "name": "path",
+        "sql": "varchar(2000) NOT NULL",
+        "comment": "以ID构造的规范路径，含自身ID边界分隔"
+      },
+      {
+        "name": "depth",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "层级"
+      },
+      {
+        "name": "leader_subject_id",
+        "sql": "varchar(32) NULL",
+        "comment": "负责人档案ID"
+      },
+      {
+        "name": "line_code",
+        "sql": "varchar(100) NULL",
+        "comment": "条线字典编码"
+      },
+      {
+        "name": "sort_no",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "排序"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED/ARCHIVED"
+      },
+      {
+        "name": "ext_json",
+        "sql": "json NULL",
+        "comment": "机构扩展属性"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "identity_domain,code"
+    ],
+    "indexes": [
+      "identity_domain,parent_id",
+      "identity_domain,status"
+    ],
+    "references": "parent_id → iam_org_t.id；leader_subject_id → iam_subject_t.id；line_code → iam_dict_item_t.code（LINE）",
+    "rules": "同域树、禁止环，移树事务更新子孙路径；删除有有效子节点或任职的机构须先处理关联。机构编码归档后不复用。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_appointment_t",
+    "title": "人员机构与主兼任",
+    "phase": 2,
+    "columns": [
+      {
+        "name": "subject_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "中央人员ID"
+      },
+      {
+        "name": "org_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "机构ID"
+      },
+      {
+        "name": "post_code",
+        "sql": "varchar(100) NULL",
+        "comment": "岗位字典编码"
+      },
+      {
+        "name": "position_code",
+        "sql": "varchar(100) NULL",
+        "comment": "职务字典编码"
+      },
+      {
+        "name": "rank_code",
+        "sql": "varchar(100) NULL",
+        "comment": "职级字典编码"
+      },
+      {
+        "name": "title_code",
+        "sql": "varchar(100) NULL",
+        "comment": "职称字典编码"
+      },
+      {
+        "name": "is_primary",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "是否主职"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/ENDED"
+      },
+      {
+        "name": "valid_from",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "生效时间"
+      },
+      {
+        "name": "valid_until",
+        "sql": "datetime(6) NULL",
+        "comment": "截止时间"
+      },
+      {
+        "name": "primary_subject_id",
+        "sql": "varchar(32) GENERATED ALWAYS AS (CASE WHEN is_del=0 AND status='ACTIVE' AND is_primary=1 THEN subject_id ELSE NULL END) STORED",
+        "comment": "每人最多一条标记活动主职"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "primary_subject_id"
+    ],
+    "indexes": [
+      "subject_id,status",
+      "org_id,status"
+    ],
+    "references": "subject_id → iam_subject_t.id；org_id → iam_org_t.id；各岗位编码 → iam_dict_item_t",
+    "rules": "人员机构必须同身份域。业务事务保证在职人员恰有一个主职；调岗保留历史。到期和未来任职由显式生效任务处理，不在生成列中使用NOW。",
+    "soft": true,
+    "checks": [
+      "valid_until IS NULL OR valid_until>valid_from"
+    ]
+  },
+  {
+    "name": "iam_dict_item_t",
+    "title": "条线岗位职务等IAM字典",
+    "phase": 2,
+    "columns": [
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "身份域"
+      },
+      {
+        "name": "category",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "LINE/POST/POSITION/RANK/TITLE等"
+      },
+      {
+        "name": "code",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "同类编码"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(200) NOT NULL",
+        "comment": "显示名称"
+      },
+      {
+        "name": "parent_id",
+        "sql": "varchar(32) NULL",
+        "comment": "同类父字典"
+      },
+      {
+        "name": "sort_no",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "排序"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "identity_domain,category,code"
+    ],
+    "indexes": [],
+    "references": "parent_id → iam_dict_item_t.id",
+    "rules": "共性IAM字典不替换业务库 sym_dict_t；条线分级采用此表同类别父子关系。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_field_definition_t",
+    "title": "扩展属性定义",
+    "phase": 2,
+    "columns": [
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "身份域"
+      },
+      {
+        "name": "entity_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "SUBJECT/ORG/APPLICATION/RESOURCE"
+      },
+      {
+        "name": "field_key",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "字段键"
+      },
+      {
+        "name": "label",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "显示名"
+      },
+      {
+        "name": "value_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "STRING/NUMBER/DATE/BOOLEAN/ENUM"
+      },
+      {
+        "name": "required_flag",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "是否必填"
+      },
+      {
+        "name": "validation_json",
+        "sql": "json NULL",
+        "comment": "长度、枚举、格式及迁移默认值等"
+      },
+      {
+        "name": "sensitive_flag",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "是否敏感"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "identity_domain,entity_type,field_key"
+    ],
+    "indexes": [],
+    "references": "",
+    "rules": "只扩展资料，不允许把权限、密码、租户归属等关键字段藏入扩展JSON。新增必填定义须有存量迁移策略。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_access_grant_t",
+    "title": "应用资格和角色授权来源",
+    "phase": 3,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "被授予的业务应用ID"
+      },
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "主体身份域"
+      },
+      {
+        "name": "principal_type",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "SUBJECT/ORG/GROUP/CLIENT"
+      },
+      {
+        "name": "subject_id",
+        "sql": "varchar(32) NULL",
+        "comment": "人员直接授权主体"
+      },
+      {
+        "name": "org_id",
+        "sql": "varchar(32) NULL",
+        "comment": "机构授权主体"
+      },
+      {
+        "name": "group_id",
+        "sql": "varchar(32) NULL",
+        "comment": "权限组授权主体"
+      },
+      {
+        "name": "client_id",
+        "sql": "varchar(32) NULL",
+        "comment": "机器客户端授权主体"
+      },
+      {
+        "name": "include_children",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "机构授权是否含下级"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/REVOKED"
+      },
+      {
+        "name": "valid_from",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "起效"
+      },
+      {
+        "name": "valid_until",
+        "sql": "datetime(6) NULL",
+        "comment": "到期"
+      },
+      {
+        "name": "reason",
+        "sql": "varchar(1000) NULL",
+        "comment": "授权理由"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [],
+    "indexes": [
+      "app_id,status",
+      "subject_id,app_id",
+      "org_id,app_id",
+      "group_id,app_id",
+      "client_id,app_id"
+    ],
+    "references": "app_id → iam_application_t.id；四种主体分别引用 iam_subject_t、iam_org_t、iam_permission_group_t、iam_auth_client_t",
+    "rules": "角色放子表；无角色的授权只表达应用分配资格，不自动授予管理员或本地默认角色。CLIENT只允许API资源。拒绝INTERNAL应用；主体、角色、资源按域与应用校验。",
+    "soft": true,
+    "checks": [
+      "valid_until IS NULL OR valid_until>valid_from",
+      "(principal_type='SUBJECT' AND subject_id IS NOT NULL AND org_id IS NULL AND group_id IS NULL AND client_id IS NULL) OR (principal_type='ORG' AND subject_id IS NULL AND org_id IS NOT NULL AND group_id IS NULL AND client_id IS NULL) OR (principal_type='GROUP' AND subject_id IS NULL AND org_id IS NULL AND group_id IS NOT NULL AND client_id IS NULL) OR (principal_type='CLIENT' AND subject_id IS NULL AND org_id IS NULL AND group_id IS NULL AND client_id IS NOT NULL)"
+    ]
+  },
+  {
+    "name": "iam_grant_role_rela_t",
+    "title": "授权包含的应用角色",
+    "phase": 3,
+    "columns": [
+      {
+        "name": "grant_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "授权来源ID"
+      },
+      {
+        "name": "role_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "应用角色ID"
+      },
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "同应用约束值"
+      }
+    ],
+    "unique": [
+      "grant_id,role_id"
+    ],
+    "indexes": [],
+    "references": "grant_id → iam_access_grant_t.id；role_id → iam_role_t.id；app_id → iam_application_t.id",
+    "rules": "grant与role必须同app_id；撤销一个授权来源不删除其他来源的同一角色。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_permission_group_t",
+    "title": "跨应用权限组合",
+    "phase": 3,
+    "columns": [
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "身份域"
+      },
+      {
+        "name": "code",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "组编码"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(200) NOT NULL",
+        "comment": "组名称"
+      },
+      {
+        "name": "description",
+        "sql": "varchar(1000) NULL",
+        "comment": "说明"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "identity_domain,code"
+    ],
+    "indexes": [],
+    "references": "",
+    "rules": "组成员放iam_group_member_t；每个应用的组合角色使用GROUP类型grant及子表表达，避免再维护重复的权限组明细主数据。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_group_member_t",
+    "title": "权限组人员成员",
+    "phase": 3,
+    "columns": [
+      {
+        "name": "group_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "权限组ID"
+      },
+      {
+        "name": "subject_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "人员ID"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/REVOKED"
+      },
+      {
+        "name": "valid_from",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "生效时间"
+      },
+      {
+        "name": "valid_until",
+        "sql": "datetime(6) NULL",
+        "comment": "截止时间"
+      }
+    ],
+    "unique": [
+      "group_id,subject_id"
+    ],
+    "indexes": [
+      "subject_id,status"
+    ],
+    "references": "group_id → iam_permission_group_t.id；subject_id → iam_subject_t.id",
+    "rules": "首版只支持直接人员成员，不支持权限组相互嵌套。",
+    "soft": false,
+    "checks": [
+      "valid_until IS NULL OR valid_until>valid_from"
+    ]
+  },
+  {
+    "name": "iam_subject_app_t",
+    "title": "人员应用分配与下发投影",
+    "phase": 2,
+    "columns": [
+      {
+        "name": "subject_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "中央人员ID"
+      },
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "目标业务应用ID"
+      },
+      {
+        "name": "account_alias",
+        "sql": "varchar(100) NULL",
+        "comment": "该应用拟使用的本地账号名"
+      },
+      {
+        "name": "directory_assigned",
+        "sql": "tinyint NOT NULL DEFAULT 1",
+        "comment": "是否仍有人工目录分配来源；纯授权派生记录显式写0"
+      },
+      {
+        "name": "assignment_mode",
+        "sql": "varchar(24) NOT NULL DEFAULT 'DIRECTORY_ONLY'",
+        "comment": "计算结果：DIRECTORY_ONLY仅目录；GRANT_DERIVED有有效授权"
+      },
+      {
+        "name": "assignment_status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE有目录或授权来源；REVOKED无来源仍保留撤销回执"
+      },
+      {
+        "name": "desired_enabled",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "期望的中央来源可用状态，不覆盖本地停用"
+      },
+      {
+        "name": "desired_version",
+        "sql": "bigint unsigned NOT NULL DEFAULT 1",
+        "comment": "此应用分配的递增期望版本"
+      },
+      {
+        "name": "ack_version",
+        "sql": "bigint unsigned NOT NULL DEFAULT 0",
+        "comment": "接收方已确认应用的版本"
+      },
+      {
+        "name": "sync_status",
+        "sql": "varchar(24) NOT NULL DEFAULT 'NOT_CONNECTED'",
+        "comment": "NOT_CONNECTED/PENDING/IN_SYNC/FAILED/CONFLICT"
+      }
+    ],
+    "unique": [
+      "subject_id,app_id"
+    ],
+    "indexes": [
+      "app_id,sync_status"
+    ],
+    "references": "subject_id → iam_subject_t.id；app_id → iam_application_t.id",
+    "rules": "人工来源directory_assigned独立保留，授权是否有效从grant实时计算。最后一个授权撤销后，有人工来源则退回仅目录并撤销中央访问资格；无任何来源则标记REVOKED并保留撤销同步记录。DIRECTORY_ONLY不赋予登录资格；mode/status/desired_enabled由同一计算函数维护，不开放任意改写。此表不是鉴权事实来源；界面区分期望与已生效。",
+    "soft": false,
+    "checks": [
+      "directory_assigned IN (0,1)",
+      "desired_enabled IN (0,1)"
+    ]
+  },
+  {
+    "name": "iam_app_org_t",
+    "title": "应用机构目录范围",
+    "phase": 2,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "业务应用ID"
+      },
+      {
+        "name": "org_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "中央机构ID"
+      },
+      {
+        "name": "include_children",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "是否包含下级"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/REVOKED"
+      }
+    ],
+    "unique": [
+      "app_id,org_id"
+    ],
+    "indexes": [],
+    "references": "app_id → iam_application_t.id；org_id → iam_org_t.id",
+    "rules": "控制该应用可接收的机构目录；与机构给人员授予应用资格不同。下发时补齐必要祖先，引用范围外机构须拒绝或显式扩大范围。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_sync_config_t",
+    "title": "应用HTTP接收配置",
+    "phase": 4,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "目标应用"
+      },
+      {
+        "name": "endpoint",
+        "sql": "varchar(1000) NOT NULL",
+        "comment": "经校验的完整接收URL"
+      },
+      {
+        "name": "protocol_version",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "IDAAS/2；旧IDAAS/1需显式适配"
+      },
+      {
+        "name": "receiver_instance_id",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "接收方固定实例标识，防止地址错配"
+      },
+      {
+        "name": "timeout_seconds",
+        "sql": "int NOT NULL DEFAULT 10",
+        "comment": "有限超时"
+      },
+      {
+        "name": "batch_size",
+        "sql": "int NOT NULL DEFAULT 100",
+        "comment": "单任务分批大小"
+      },
+      {
+        "name": "max_attempts",
+        "sql": "int NOT NULL DEFAULT 5",
+        "comment": "重试上限"
+      },
+      {
+        "name": "object_types",
+        "sql": "json NOT NULL",
+        "comment": "启用的对象类型清单"
+      },
+      {
+        "name": "mapping_json",
+        "sql": "json NULL",
+        "comment": "可声明的字段映射和字段归属规则，不执行任意代码"
+      },
+      {
+        "name": "enabled",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "默认关闭，连通验证成功后显式开通"
+      },
+      {
+        "name": "last_test_time",
+        "sql": "datetime(6) NULL",
+        "comment": "最近连接测试"
+      },
+      {
+        "name": "last_test_result",
+        "sql": "varchar(32) NULL",
+        "comment": "SUCCESS/FAILED；不代表业务已同步"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "app_id"
+    ],
+    "indexes": [],
+    "references": "app_id → iam_application_t.id；签名凭据通过 iam_credential_t 的 SYNC_CONFIG 归属",
+    "rules": "允许配置业务内网地址，但校验协议、目标、重定向及允许列表，禁止访问云元数据和未授权地址。实际下发仅HTTP，不直写应用库。",
+    "soft": true,
+    "checks": [
+      "timeout_seconds BETWEEN 1 AND 60",
+      "batch_size BETWEEN 1 AND 1000",
+      "max_attempts BETWEEN 1 AND 20"
+    ]
+  },
+  {
+    "name": "iam_sync_task_t",
+    "title": "同步与对账任务",
+    "phase": 4,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "目标应用"
+      },
+      {
+        "name": "config_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "接收配置"
+      },
+      {
+        "name": "config_version",
+        "sql": "bigint unsigned NOT NULL",
+        "comment": "已锁定配置版本"
+      },
+      {
+        "name": "config_snapshot_json",
+        "sql": "json NOT NULL",
+        "comment": "创建时冻结的非秘密接收地址、实例、协议和映射配置"
+      },
+      {
+        "name": "mode",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "FULL/DELTA/RECONCILE"
+      },
+      {
+        "name": "request_id",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "创建任务幂等号"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(24) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/RUNNING/PARTIAL/SUCCEEDED/FAILED/CANCELED"
+      },
+      {
+        "name": "lease_token",
+        "sql": "varchar(64) NULL",
+        "comment": "工作者租约标识，不是用户登录令牌"
+      },
+      {
+        "name": "lease_until",
+        "sql": "datetime(6) NULL",
+        "comment": "租约超时"
+      },
+      {
+        "name": "total_count",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "总项数"
+      },
+      {
+        "name": "success_count",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "成功项数"
+      },
+      {
+        "name": "failure_count",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "失败项数"
+      }
+    ],
+    "unique": [
+      "app_id,request_id"
+    ],
+    "indexes": [
+      "status,lease_until",
+      "app_id,created_time"
+    ],
+    "references": "app_id → iam_application_t.id；config_id → iam_sync_config_t.id",
+    "rules": "计数是派生进度，任务状态必须按明细推导。配置快照不含秘密；每次传输还要检查当前配置是否启用及地址许可。接收地址、实例或映射改变时暂停旧任务并重新预览，不静默改投新地址；仅凭据轮换可使用同实例的有效版本并在attempt记录。取消不能撤回已提交远程事件，必须保留已完成结果。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_sync_item_t",
+    "title": "不可变下发事件与结果",
+    "phase": 4,
+    "columns": [
+      {
+        "name": "task_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "任务ID"
+      },
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "目标应用ID"
+      },
+      {
+        "name": "object_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "ORG/SUBJECT/APPOINTMENT/ROLE/RESOURCE/USER_ROLE等"
+      },
+      {
+        "name": "object_id",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "中央对象稳定ID"
+      },
+      {
+        "name": "source_version",
+        "sql": "bigint unsigned NOT NULL",
+        "comment": "该对象面向该应用的期望版本"
+      },
+      {
+        "name": "event_action",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "UPSERT/DISABLE/REMOVE"
+      },
+      {
+        "name": "sequence_no",
+        "sql": "int NOT NULL",
+        "comment": "任务依赖顺序"
+      },
+      {
+        "name": "depends_on_id",
+        "sql": "varchar(32) NULL",
+        "comment": "单一前置项；复杂依赖由拓扑分批处理"
+      },
+      {
+        "name": "payload_json",
+        "sql": "json NOT NULL",
+        "comment": "冻结的发送资料，禁止任何密码或密钥"
+      },
+      {
+        "name": "payload_hash",
+        "sql": "char(64) NOT NULL",
+        "comment": "规范资料摘要，重试不可改变"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(24) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/RUNNING/APPLIED/DUPLICATE/STALE/FAILED/CONFLICT/CANCELED"
+      },
+      {
+        "name": "attempt_count",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "已尝试次数"
+      },
+      {
+        "name": "next_retry_time",
+        "sql": "datetime(6) NULL",
+        "comment": "下次重试"
+      },
+      {
+        "name": "result_json",
+        "sql": "json NULL",
+        "comment": "校验并脱敏的接收回执"
+      }
+    ],
+    "unique": [
+      "task_id,sequence_no"
+    ],
+    "indexes": [
+      "app_id,object_type,object_id,source_version",
+      "status,next_retry_time"
+    ],
+    "references": "task_id → iam_sync_task_t.id；app_id → iam_application_t.id；depends_on_id → iam_sync_item_t.id",
+    "rules": "id即不可变eventId。相同eventId+不同内容拒绝。源主档版本不能替代应用分配版本：授权变化即使人员资料没变也必须有新版本。旧版本回执不能覆盖新状态。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_sync_attempt_t",
+    "title": "同步每次尝试记录",
+    "phase": 4,
+    "columns": [
+      {
+        "name": "item_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "下发项ID"
+      },
+      {
+        "name": "attempt_no",
+        "sql": "int NOT NULL",
+        "comment": "本项尝试序号"
+      },
+      {
+        "name": "credential_id",
+        "sql": "varchar(32) NULL",
+        "comment": "本次实际使用的服务凭据版本ID；未发出时可空"
+      },
+      {
+        "name": "started_time",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "开始时间"
+      },
+      {
+        "name": "finished_time",
+        "sql": "datetime(6) NULL",
+        "comment": "完成时间"
+      },
+      {
+        "name": "transport_status",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "SENT/TIMEOUT/NETWORK_ERROR/REJECTED/ACKNOWLEDGED"
+      },
+      {
+        "name": "http_status",
+        "sql": "int NULL",
+        "comment": "HTTP状态"
+      },
+      {
+        "name": "result_code",
+        "sql": "varchar(100) NULL",
+        "comment": "业务回执码"
+      },
+      {
+        "name": "safe_message",
+        "sql": "varchar(2000) NULL",
+        "comment": "脱敏原因"
+      },
+      {
+        "name": "duration_ms",
+        "sql": "bigint NULL",
+        "comment": "耗时"
+      }
+    ],
+    "unique": [
+      "item_id,attempt_no"
+    ],
+    "indexes": [],
+    "references": "item_id → iam_sync_item_t.id；credential_id → iam_credential_t.id",
+    "rules": "追加记录。超时结果不确定，重试沿用eventId，不重新生成另一条开户命令。只记录凭据版本ID，不记录密钥或签名原文。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_external_link_t",
+    "title": "中央对象与应用本地对象映射",
+    "phase": 4,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "目标应用"
+      },
+      {
+        "name": "receiver_instance_id",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "接收方实例"
+      },
+      {
+        "name": "object_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "对象类型"
+      },
+      {
+        "name": "source_id",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "中央对象ID"
+      },
+      {
+        "name": "local_id",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "接收方返回本地ID"
+      },
+      {
+        "name": "ack_version",
+        "sql": "bigint unsigned NOT NULL DEFAULT 0",
+        "comment": "接收确认版本"
+      },
+      {
+        "name": "ack_hash",
+        "sql": "char(64) NULL",
+        "comment": "确认资料摘要"
+      },
+      {
+        "name": "management_state",
+        "sql": "varchar(24) NOT NULL DEFAULT 'MANAGED'",
+        "comment": "MANAGED/DETACHED/CONFLICT"
+      },
+      {
+        "name": "last_ack_time",
+        "sql": "datetime(6) NULL",
+        "comment": "最近确认时间"
+      }
+    ],
+    "unique": [
+      "app_id,object_type,source_id",
+      "app_id,receiver_instance_id,object_type,local_id"
+    ],
+    "indexes": [],
+    "references": "app_id → iam_application_t.id；source_id 按类型关联中央对象",
+    "rules": "中央ID和本地ID不能等同，也不能按姓名/电话自动合并。既有本地账号关联须接收方核准。脱管不删除本地业务引用。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_change_event_t",
+    "title": "控制库事务变更与待处理事件",
+    "phase": 4,
+    "columns": [
+      {
+        "name": "event_type",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "资料或授权变更事件类型"
+      },
+      {
+        "name": "object_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "主对象类型"
+      },
+      {
+        "name": "object_id",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "主对象ID"
+      },
+      {
+        "name": "object_version",
+        "sql": "bigint unsigned NOT NULL",
+        "comment": "主对象版本"
+      },
+      {
+        "name": "scope_json",
+        "sql": "json NULL",
+        "comment": "受影响身份域和应用范围，不含秘密"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/PROCESSING/DONE/FAILED"
+      },
+      {
+        "name": "lease_until",
+        "sql": "datetime(6) NULL",
+        "comment": "处理租约"
+      },
+      {
+        "name": "lease_token",
+        "sql": "varchar(64) NULL",
+        "comment": "工作者标识"
+      },
+      {
+        "name": "attempt_count",
+        "sql": "int NOT NULL DEFAULT 0",
+        "comment": "重算尝试次数"
+      }
+    ],
+    "unique": [
+      "event_type,object_type,object_id,object_version"
+    ],
+    "indexes": [
+      "status,lease_until"
+    ],
+    "references": "",
+    "rules": "与控制库变更同事务写入。消费端以事件ID和目标应用派生确定任务请求号，至少一次处理保持幂等；定期到期任务补充时间引发的授权变化。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_auth_account_t",
+    "title": "可选的统一认证账号",
+    "phase": 5,
+    "columns": [
+      {
+        "name": "subject_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "中央人员ID；不是平台操作账号"
+      },
+      {
+        "name": "identity_domain",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "workforce/public"
+      },
+      {
+        "name": "username",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "统一认证登录名"
+      },
+      {
+        "name": "legal_entity_id",
+        "sql": "varchar(32) NULL",
+        "comment": "可选法人子账号上下文，需有效经办关系"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/ACTIVE/DISABLED"
+      },
+      {
+        "name": "must_change_password",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "下次强制改密"
+      },
+      {
+        "name": "active_username",
+        "sql": "varchar(100) GENERATED ALWAYS AS (CASE WHEN is_del=0 THEN lower(trim(username)) ELSE NULL END) STORED",
+        "comment": "同域有效登录名"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "identity_domain,active_username"
+    ],
+    "indexes": [
+      "subject_id,status"
+    ],
+    "references": "subject_id → iam_subject_t.id；legal_entity_id → iam_legal_entity_t.id；凭据通过 iam_credential_t 的 AUTH_ACCOUNT 归属",
+    "rules": "仅在决定开通统一认证/公众登录后启用；不能用于卓鉴管理控制台。默认应用仍本地登录，公众主体不能因同名获得平台操作资格。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_auth_client_t",
+    "title": "应用的终端与机器身份登记",
+    "phase": 3,
+    "columns": [
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "所属业务应用；不是另一个行业应用"
+      },
+      {
+        "name": "client_key",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "协议client_id，全局唯一"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "终端/机器名称"
+      },
+      {
+        "name": "client_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "PUBLIC/CONFIDENTIAL/SERVICE"
+      },
+      {
+        "name": "protocol",
+        "sql": "varchar(24) NOT NULL DEFAULT 'NONE'",
+        "comment": "NONE/OIDC；其他协议后续显式扩展"
+      },
+      {
+        "name": "grant_types",
+        "sql": "json NULL",
+        "comment": "经过白名单校验的授权模式"
+      },
+      {
+        "name": "scopes",
+        "sql": "json NULL",
+        "comment": "允许请求的scope白名单"
+      },
+      {
+        "name": "token_auth_method",
+        "sql": "varchar(32) NULL",
+        "comment": "none/client_secret_basic/private_key_jwt等"
+      },
+      {
+        "name": "require_pkce",
+        "sql": "tinyint NOT NULL DEFAULT 1",
+        "comment": "交互授权码使用PKCE"
+      },
+      {
+        "name": "access_ttl_seconds",
+        "sql": "int NOT NULL DEFAULT 600",
+        "comment": "访问令牌有效期"
+      },
+      {
+        "name": "refresh_ttl_seconds",
+        "sql": "int NOT NULL DEFAULT 86400",
+        "comment": "刷新令牌最大有效期"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'REGISTERED'",
+        "comment": "REGISTERED/ACTIVE/DISABLED；登记不代表协议已开通"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "client_key"
+    ],
+    "indexes": [
+      "app_id,status"
+    ],
+    "references": "app_id → iam_application_t.id；凭据通过 iam_credential_t 的 CLIENT 归属",
+    "rules": "同一应用可有PC、移动端和机器客户端。PUBLIC客户端不持有客户端秘密。API机器授权只允许API资源，不继承用户或平台会话。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_auth_redirect_t",
+    "title": "认证精确回调地址",
+    "phase": 5,
+    "columns": [
+      {
+        "name": "client_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "客户端ID"
+      },
+      {
+        "name": "uri_type",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "LOGIN/LOGOUT"
+      },
+      {
+        "name": "uri",
+        "sql": "varchar(2000) NOT NULL",
+        "comment": "完整登记地址"
+      },
+      {
+        "name": "uri_hash",
+        "sql": "char(64) NOT NULL",
+        "comment": "完整地址摘要便于唯一索引"
+      }
+    ],
+    "unique": [
+      "client_id,uri_type,uri_hash"
+    ],
+    "indexes": [],
+    "references": "client_id → iam_auth_client_t.id",
+    "rules": "协议处理仍比较完整URI，摘要只用于索引。禁止通配符和开放重定向，localhost开发例外需按环境登记。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_auth_session_t",
+    "title": "认证会话元数据与撤销索引",
+    "phase": 5,
+    "columns": [
+      {
+        "name": "principal_kind",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "OPERATOR/AUTH_ACCOUNT/CLIENT"
+      },
+      {
+        "name": "principal_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "认证主体ID"
+      },
+      {
+        "name": "client_id",
+        "sql": "varchar(32) NULL",
+        "comment": "所属认证客户端"
+      },
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NULL",
+        "comment": "令牌限定应用"
+      },
+      {
+        "name": "session_fingerprint",
+        "sql": "char(64) NOT NULL",
+        "comment": "会话或令牌标识摘要，不是原始令牌"
+      },
+      {
+        "name": "family_id",
+        "sql": "varchar(64) NULL",
+        "comment": "刷新轮换族标识"
+      },
+      {
+        "name": "security_version",
+        "sql": "bigint unsigned NOT NULL",
+        "comment": "签发时安全版本"
+      },
+      {
+        "name": "issued_at",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "签发时间"
+      },
+      {
+        "name": "expires_at",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "到期时间"
+      },
+      {
+        "name": "revoked_at",
+        "sql": "datetime(6) NULL",
+        "comment": "撤销时间"
+      },
+      {
+        "name": "revoke_reason",
+        "sql": "varchar(100) NULL",
+        "comment": "撤销原因"
+      }
+    ],
+    "unique": [
+      "session_fingerprint"
+    ],
+    "indexes": [
+      "principal_kind,principal_id",
+      "family_id",
+      "expires_at"
+    ],
+    "references": "按principal_kind关联对应认证主体；client_id → iam_auth_client_t.id；app_id → iam_application_t.id",
+    "rules": "实际会话和短期授权码继续交给认证框架与有限TTL存储。此表用于持久撤销/审计，不保存明文access/refresh token。",
+    "soft": false,
+    "checks": []
+  },
+  {
+    "name": "iam_public_profile_t",
+    "title": "公众自然人实名资料",
+    "phase": 5,
+    "columns": [
+      {
+        "name": "subject_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "public域人员ID"
+      },
+      {
+        "name": "document_type",
+        "sql": "varchar(32) NULL",
+        "comment": "证件类型"
+      },
+      {
+        "name": "document_cipher",
+        "sql": "text NULL",
+        "comment": "证件号密文"
+      },
+      {
+        "name": "document_fingerprint",
+        "sql": "char(64) NULL",
+        "comment": "受密钥保护的查重指纹"
+      },
+      {
+        "name": "verification_status",
+        "sql": "varchar(24) NOT NULL DEFAULT 'UNVERIFIED'",
+        "comment": "UNVERIFIED/PENDING/VERIFIED/REJECTED/EXPIRED"
+      },
+      {
+        "name": "verified_time",
+        "sql": "datetime(6) NULL",
+        "comment": "实名通过时间"
+      },
+      {
+        "name": "verification_id",
+        "sql": "varchar(32) NULL",
+        "comment": "当前有效核验记录ID"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "subject_id"
+    ],
+    "indexes": [
+      "document_type,document_fingerprint"
+    ],
+    "references": "subject_id → iam_subject_t.id；verification_id → iam_verification_t.id",
+    "rules": "不依靠手机号完成实名合并；身份证号受控访问，外部核验能力未接通时不能展示已认证。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_legal_entity_t",
+    "title": "法人主体",
+    "phase": 5,
+    "columns": [
+      {
+        "name": "code",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "法人稳定中央编号"
+      },
+      {
+        "name": "name",
+        "sql": "varchar(200) NOT NULL",
+        "comment": "法人名称"
+      },
+      {
+        "name": "registration_code",
+        "sql": "varchar(100) NULL",
+        "comment": "统一社会信用代码，经过校验"
+      },
+      {
+        "name": "representative_subject_id",
+        "sql": "varchar(32) NULL",
+        "comment": "法定代表人自然人档案"
+      },
+      {
+        "name": "verification_status",
+        "sql": "varchar(24) NOT NULL DEFAULT 'UNVERIFIED'",
+        "comment": "UNVERIFIED/PENDING/VERIFIED/REJECTED/EXPIRED"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'ACTIVE'",
+        "comment": "ACTIVE/DISABLED/ARCHIVED"
+      },
+      {
+        "name": "ext_json",
+        "sql": "json NULL",
+        "comment": "法人扩展资料"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [
+      "code",
+      "registration_code"
+    ],
+    "indexes": [],
+    "references": "representative_subject_id → iam_subject_t.id",
+    "rules": "法人本身不共享一个人类密码。法人办理业务由实名自然人或独立子账号凭有效关系进入相应上下文。",
+    "soft": true,
+    "checks": []
+  },
+  {
+    "name": "iam_legal_member_t",
+    "title": "法人自然人及子账号关系",
+    "phase": 5,
+    "columns": [
+      {
+        "name": "entity_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "法人ID"
+      },
+      {
+        "name": "subject_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "自然人档案ID"
+      },
+      {
+        "name": "auth_account_id",
+        "sql": "varchar(32) NULL",
+        "comment": "具体子账号，可空"
+      },
+      {
+        "name": "relation_type",
+        "sql": "varchar(24) NOT NULL",
+        "comment": "REPRESENTATIVE/AGENT/SUBACCOUNT"
+      },
+      {
+        "name": "app_id",
+        "sql": "varchar(32) NULL",
+        "comment": "可选限定业务应用"
+      },
+      {
+        "name": "valid_from",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "生效时间"
+      },
+      {
+        "name": "valid_until",
+        "sql": "datetime(6) NULL",
+        "comment": "失效时间"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(16) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/ACTIVE/REVOKED"
+      },
+      {
+        "name": "is_del",
+        "sql": "tinyint NOT NULL DEFAULT 0",
+        "comment": "软删除标志；不用于删除审计"
+      }
+    ],
+    "unique": [],
+    "indexes": [
+      "entity_id,status",
+      "subject_id,status",
+      "auth_account_id"
+    ],
+    "references": "entity_id → iam_legal_entity_t.id；subject_id → iam_subject_t.id；auth_account_id → iam_auth_account_t.id；app_id → iam_application_t.id",
+    "rules": "经办关系与应用授权均有效才可操作；撤销法人关系不能撤销该自然人自己的其他应用权限。",
+    "soft": true,
+    "checks": [
+      "valid_until IS NULL OR valid_until>valid_from"
+    ]
+  },
+  {
+    "name": "iam_verification_t",
+    "title": "实名与法人核验过程",
+    "phase": 5,
+    "columns": [
+      {
+        "name": "target_type",
+        "sql": "varchar(16) NOT NULL",
+        "comment": "SUBJECT/LEGAL_ENTITY"
+      },
+      {
+        "name": "target_id",
+        "sql": "varchar(32) NOT NULL",
+        "comment": "待核验主体"
+      },
+      {
+        "name": "provider_code",
+        "sql": "varchar(64) NOT NULL",
+        "comment": "核验渠道"
+      },
+      {
+        "name": "provider_request_id",
+        "sql": "varchar(100) NOT NULL",
+        "comment": "外部请求号"
+      },
+      {
+        "name": "status",
+        "sql": "varchar(24) NOT NULL DEFAULT 'PENDING'",
+        "comment": "PENDING/VERIFIED/REJECTED/EXPIRED"
+      },
+      {
+        "name": "result_code",
+        "sql": "varchar(100) NULL",
+        "comment": "脱敏结果码"
+      },
+      {
+        "name": "evidence_ref",
+        "sql": "varchar(1000) NULL",
+        "comment": "受控证据引用，不直接保存证件图片"
+      },
+      {
+        "name": "consent_ref",
+        "sql": "varchar(200) NULL",
+        "comment": "必要的申请/授权记录引用"
+      },
+      {
+        "name": "requested_time",
+        "sql": "datetime(6) NOT NULL",
+        "comment": "申请时间"
+      },
+      {
+        "name": "completed_time",
+        "sql": "datetime(6) NULL",
+        "comment": "完成时间"
+      },
+      {
+        "name": "expires_at",
+        "sql": "datetime(6) NULL",
+        "comment": "结果到期"
+      }
+    ],
+    "unique": [
+      "provider_code,provider_request_id"
+    ],
+    "indexes": [
+      "target_type,target_id,requested_time"
+    ],
+    "references": "按target_type关联 iam_subject_t / iam_legal_entity_t",
+    "rules": "回调认证、请求关联和幂等校验后才能改变实名状态；外部服务失败保留待处理或失败，不伪造成功。",
+    "soft": false,
+    "checks": []
+  }
+]

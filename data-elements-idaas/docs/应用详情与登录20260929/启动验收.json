@@ -1,0 +1,31 @@
+{
+  "completed": true,
+  "checkedAt": "2026-09-29T15:46:02.635040+00:00",
+  "entry": "start-data-elements.ps1",
+  "defaultStartupTimeoutSeconds": 300,
+  "coldStart": {
+    "passed": true,
+    "readyMessageObserved": true,
+    "log": "logs/data-elements-local.20260929-234052.out.log"
+  },
+  "resourceLoadFailure": {
+    "passed": true,
+    "testStartupTimeoutSeconds": 180,
+    "reportedFailure": true,
+    "startedProcessStopped": true,
+    "exitCode": 1
+  },
+  "frameworkClassMatchesRuntime": true,
+  "loginRouteChecks": [
+    {
+      "path": "/portal/login",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "path": "/idaas/auth/login",
+      "code": 400,
+      "passed": true
+    }
+  ]
+}

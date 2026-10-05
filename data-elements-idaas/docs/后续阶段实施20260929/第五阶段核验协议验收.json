@@ -1,0 +1,285 @@
+{
+  "completed": true,
+  "testProvider": "LOCAL_ACCEPTANCE_ONLY",
+  "productionProviderConfigured": false,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/session/domain",
+      "path": "/idaas/session/domain",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/register",
+      "path": "/idaas/auth-account/register",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/verifications/save-provider",
+      "path": "/idaas/verifications/save-provider",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/verifications/submit",
+      "path": "/idaas/verifications/submit",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "错误签名的核验回执不能标记实名",
+      "passed": true
+    },
+    {
+      "name": "/idaas/verifications/submit",
+      "path": "/idaas/verifications/submit",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "实际HTTP签名核验回执可推进状态",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "认证账号读取真实未到期核验状态",
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?domain=public",
+      "path": "/idaas/subjects/list?domain=public",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "管理目录展示同一核验事实",
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "变更实名姓名后原证明不再有效",
+      "passed": true
+    },
+    {
+      "name": "/idaas/verifications/submit",
+      "path": "/idaas/verifications/submit",
+      "code": 502,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "过期回执不会复用旧实名结果",
+      "passed": true
+    },
+    {
+      "name": "/idaas/verifications/submit",
+      "path": "/idaas/verifications/submit",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "签名有效的拒绝回执保持拒绝",
+      "passed": true
+    },
+    {
+      "name": "/idaas/self-entities/register",
+      "path": "/idaas/self-entities/register",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/verifications/submit",
+      "path": "/idaas/verifications/submit",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "登记经办人可以申请法人核验",
+      "passed": true
+    },
+    {
+      "name": "/idaas/public-entities/list",
+      "path": "/idaas/public-entities/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "法人核验通过不会自动启用经办授权",
+      "passed": true
+    },
+    {
+      "name": "本人也不能绕过待审批经办关系",
+      "path": "/idaas/auth-account/select-entity",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "未启用经办关系不能绑定法人上下文",
+      "path": "/idaas/auth-accounts/bind-entity",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/public-entities/activate-member",
+      "path": "/idaas/public-entities/activate-member",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-accounts/bind-entity",
+      "path": "/idaas/auth-accounts/bind-entity",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "法人上下文变更撤销原认证会话",
+      "path": "/idaas/auth-account/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "已授权法人可作为本人办理身份",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/select-entity",
+      "path": "/idaas/auth-account/select-entity",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "切回自然人撤销旧上下文会话",
+      "path": "/idaas/auth-account/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "切回自然人不会保留法人上下文",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/select-entity",
+      "path": "/idaas/auth-account/select-entity",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本人切换法人后需要重新登录",
+      "path": "/idaas/auth-account/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/self-entities/mine",
+      "path": "/idaas/self-entities/mine",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本人法人列表准确展示到期证明",
+      "passed": true
+    },
+    {
+      "name": "已到期证明不能再次选择法人身份",
+      "path": "/idaas/auth-account/select-entity",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "证明到期仍可退回自然人身份",
+      "path": "/idaas/auth-account/select-entity",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/public-entities/list",
+      "path": "/idaas/public-entities/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/public-entities/save",
+      "path": "/idaas/public-entities/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/public-entities/list",
+      "path": "/idaas/public-entities/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "法人名称变更撤销既有核验事实",
+      "passed": true
+    },
+    {
+      "name": "原控制账号及公安11表保持原样",
+      "passed": true
+    }
+  ]
+}

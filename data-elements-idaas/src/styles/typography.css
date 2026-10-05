@@ -1,0 +1,233 @@
+/* Readable compact typography.
+   Layout density stays in app.css / componentDefaults.ts; font roles live in typography.ts.
+   Do not add a blanket font-size rule to all spans, all .ant-typography, or all small components. */
+body,
+.ant-app {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", Arial, sans-serif;
+  font-size: var(--iam-font-body);
+  line-height: var(--iam-leading-body);
+  color: var(--iam-type-body);
+}
+button, input, select, textarea { font-family: inherit; }
+/* Ant Typography's `secondary` semantic explicitly means subordinate copy here. */
+.ant-typography.ant-typography-secondary {
+  font-size: var(--iam-font-secondary); line-height: var(--iam-leading-secondary);
+  color: var(--iam-type-secondary);
+}
+.iam-root { font-size: var(--iam-font-body); line-height: var(--iam-leading-body); }
+
+/* Page > panel > section > body > secondary. Numeric metrics are a separate role. */
+.page-title .ant-typography.page-heading {
+  font-size: var(--iam-font-page);
+  line-height: var(--iam-leading-page);
+  font-weight: var(--iam-weight-page);
+  color: var(--iam-type-heading);
+  letter-spacing: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.page-title .ant-typography.page-description {
+  font-size: var(--iam-font-secondary);
+  line-height: var(--iam-leading-secondary);
+  color: var(--iam-type-secondary);
+  margin: 4px 0 0;
+  max-width: 80ch;
+}
+.page-title { align-items: flex-start; }
+.page-title-actions { padding-top: 3px; }
+.section-intro-title {
+  margin: 0;
+  font-size: var(--iam-font-section);
+  line-height: var(--iam-leading-section);
+  font-weight: var(--iam-weight-section);
+  color: var(--iam-type-heading);
+}
+.section-intro p { margin: 4px 0 0; color: var(--iam-type-secondary); }
+
+/* small cards keep compact padding, but their headings remain section headings. */
+.ant-card .ant-card-head-title {
+  font-size: var(--iam-font-section);
+  line-height: var(--iam-leading-section);
+  font-weight: var(--iam-weight-section);
+  white-space: normal; overflow-wrap: anywhere;
+}
+.ant-card-head-title .ant-typography {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+}
+.ant-card .ant-card-meta-title { font-size: var(--iam-font-section); line-height: var(--iam-leading-section); }
+.ant-card .ant-card-meta-description { font-size: var(--iam-font-secondary); line-height: var(--iam-leading-secondary); }
+.table-toolbar .ant-typography.table-title {
+  font-size: var(--iam-font-section);
+  line-height: var(--iam-leading-section);
+  font-weight: var(--iam-weight-section);
+  color: var(--iam-type-heading);
+}
+.table-count, .count-pill { line-height: var(--iam-leading-caption); white-space: nowrap; }
+
+/* Navigation is a primary task surface, never a caption. Header metadata stays secondary. */
+.business-navigation.ant-menu,
+.business-navigation.ant-menu .ant-menu-item,
+.business-navigation.ant-menu .ant-menu-submenu-title,
+.business-navigation-popup .ant-menu-item {
+  font-size: var(--iam-font-navigation);
+}
+.business-navigation .ant-menu-title-content,
+.business-navigation-popup .ant-menu-title-content { font-weight: var(--iam-weight-navigation); }
+.header-breadcrumb.ant-breadcrumb { font-size: var(--iam-font-navigation); line-height: var(--iam-leading-navigation); }
+.header-breadcrumb .ant-breadcrumb-link { color: #5D6F91; }
+.header-breadcrumb li:last-child .ant-breadcrumb-link { color: var(--iam-type-heading); font-weight: 500; }
+.header-breadcrumb ol { flex-wrap: nowrap; }
+.header-breadcrumb li { min-width: 0; }
+.header-breadcrumb .ant-breadcrumb-link { display: inline-block; max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.global-search { width: 248px; line-height: var(--iam-leading-body); color: #6D7E9B; }
+.global-search > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.global-search > .anticon, .global-search kbd { flex-shrink: 0; }
+.account-button.ant-btn { height: 40px; }
+.account-copy { line-height: 20px; gap: 0; }
+.account-copy > span { max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.account-copy small { line-height: 16px; color: var(--iam-type-secondary); }
+.sider-brand-text strong { line-height: var(--iam-leading-section); text-overflow: ellipsis; overflow: hidden; }
+.sider-brand-text small { line-height: var(--iam-leading-caption); letter-spacing: 1px; }
+.sider-banner strong { font-weight: 500; line-height: var(--iam-leading-body); }
+.sider-banner small { white-space: normal; }
+
+/* Card identity labels and figures: the label is not the small footnote. */
+.metric-top { min-height: var(--iam-leading-body); padding-right: 10px; }
+.metric-top .ant-typography.metric-label {
+  font-size: var(--iam-font-body);
+  line-height: var(--iam-leading-body);
+  font-weight: 500;
+  color: #536585;
+}
+.metric-value { margin: 4px 0; line-height: var(--iam-leading-statistic); font-weight: 600; }
+.metric-desc { line-height: var(--iam-leading-secondary); color: var(--iam-type-secondary); white-space: normal; overflow-wrap: anywhere; }
+.metric-chevron { top: 16px; }
+.summary-stat .ant-typography.summary-number { font-size: var(--iam-font-statistic); line-height: var(--iam-leading-statistic); margin: 4px 0 12px; }
+.hero-copy h2 { line-height: var(--iam-leading-page); font-weight: 600; }
+.hero-copy p, .hero-bullets { color: #61769B; }
+.hero-health-title { flex-wrap: wrap; gap: 6px; }
+.hero-health-title .ant-tag { margin-inline-end: 0; }
+.health-row { gap: 6px; line-height: var(--iam-leading-secondary); }
+.hero-health { min-width: 0; }
+.attention-row { align-items: flex-start; }
+.attention-icon { margin-top: 3px; }
+.attention-copy strong { line-height: var(--iam-leading-body); }
+.attention-copy small { line-height: var(--iam-leading-secondary); margin-top: 2px; color: var(--iam-type-secondary); }
+.attention-row > .attention-count { padding-top: 3px; }
+.card-link.ant-btn { font-size: var(--iam-font-secondary); }
+
+/* Avoid Button(16) > Typography(14), the nested reset that made app names look smaller. */
+.application-title.ant-btn {
+  padding: 0; height: auto; max-width: 100%; justify-content: flex-start;
+  font-size: var(--iam-font-section); line-height: var(--iam-leading-section); font-weight: 600;
+  color: var(--iam-type-heading); text-align: left;
+}
+.application-title-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; color: inherit; }
+.application-card-footer { flex-wrap: wrap; align-items: center; }
+.application-description { color: var(--iam-type-secondary); margin-block: 10px; }
+.application-detail-hero h1 { line-height: var(--iam-leading-page); }
+.application-detail-hero h1 .ant-tag { vertical-align: middle; }
+.application-detail-hero p { line-height: var(--iam-leading-secondary); color: var(--iam-type-secondary); }
+.app-card-metrics strong, .intro-stats strong { line-height: var(--iam-leading-statistic-small); }
+.app-card-metrics span, .intro-stats span { color: var(--iam-type-secondary); line-height: var(--iam-leading-secondary); }
+
+/* Trees, object pickers and long-form data: keep labels legible without enlarging every container. */
+.org-tree-label > span, .tree-node-title > span:first-child { line-height: var(--iam-leading-body); }
+.org-tree-label small { flex-shrink: 0; line-height: var(--iam-leading-caption); }
+.object-choice { min-width: 0; }
+.object-choice > div { min-width: 0; }
+.object-choice strong { line-height: var(--iam-leading-body); }
+.object-choice small { line-height: var(--iam-leading-caption); color: var(--iam-type-secondary); }
+.object-choice strong, .object-choice small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-bottom .ant-checkbox-wrapper { font-size: var(--iam-font-secondary); line-height: var(--iam-leading-secondary); }
+.table-secondary, .muted { color: var(--iam-type-secondary); line-height: var(--iam-leading-secondary); }
+
+/* Forms and floating surfaces share the type scale outside the shell root too. */
+.iam-panel-title, .ant-drawer-title.iam-panel-title, .ant-modal-title.iam-panel-title {
+  font-size: var(--iam-font-panel); line-height: var(--iam-leading-panel); font-weight: 600; color: var(--iam-type-heading);
+}
+.iam-drawer-header .ant-drawer-title { font-size: var(--iam-font-panel); line-height: var(--iam-leading-panel); }
+.iam-drawer-header { flex-shrink: 0; }
+.iam-drawer-body .detail-section h4,
+.detail-section-title { line-height: var(--iam-leading-section); margin-bottom: 10px; color: var(--iam-type-heading); }
+.user-profile-hero h2, .profile-banner h2 { line-height: var(--iam-leading-page); }
+.user-profile-hero p, .profile-banner p, .detail-section p { line-height: var(--iam-leading-secondary); color: var(--iam-type-secondary); }
+.device-row strong, .account-health strong { line-height: var(--iam-leading-body); font-weight: 500; }
+.device-row small { line-height: var(--iam-leading-caption); color: var(--iam-type-secondary); }
+.setting-title.ant-typography { font-size: var(--iam-font-body); line-height: var(--iam-leading-body); font-weight: 500; }
+.setting-description.ant-typography { display: inline-block; font-size: var(--iam-font-secondary); line-height: var(--iam-leading-secondary); margin-top: 3px; color: var(--iam-type-secondary); }
+.ant-form .ant-form-item-extra, .ant-form .ant-form-item-explain {
+  font-size: var(--iam-font-secondary); line-height: var(--iam-leading-secondary);
+}
+.ant-form .ant-form-item-extra { color: var(--iam-type-secondary); padding-top: 3px; }
+.ant-form .ant-form-item-label > label { line-height: var(--iam-leading-body); }
+.ant-descriptions .ant-descriptions-title { font-size: var(--iam-font-section); line-height: var(--iam-leading-section); }
+.ant-descriptions .ant-descriptions-item-label { font-size: var(--iam-font-secondary); line-height: var(--iam-leading-secondary); }
+.ant-descriptions .ant-descriptions-item-content { font-size: var(--iam-font-body); line-height: var(--iam-leading-body); }
+.application-overview .ant-descriptions-item-label,
+.application-runtime-connection .ant-descriptions-item-label { font-size: var(--iam-font-body); line-height: var(--iam-leading-body); }
+.application-overview .ant-table-cell { font-size: var(--iam-font-body); line-height: var(--iam-leading-body); }
+.application-directory-card .ant-table-cell,
+.application-directory-card .ant-btn { font-size: var(--iam-font-body); line-height: var(--iam-leading-body); }
+.settings-guide h3 { line-height: var(--iam-leading-section); }
+.guide-point p, .settings-guide > p { color: var(--iam-type-secondary); }
+.settings-footer .ant-typography { font-size: var(--iam-font-secondary); }
+.audit-filters label > span:first-child { line-height: var(--iam-leading-body); font-weight: 500; }
+.audit-detail-hero h3 { line-height: var(--iam-leading-panel); }
+.audit-detail-hero p { line-height: var(--iam-leading-secondary); }
+.command-result strong, .notification-row strong { line-height: var(--iam-leading-body); font-weight: 500; }
+.command-result small, .notification-row p { line-height: var(--iam-leading-secondary); color: var(--iam-type-secondary); }
+.command-result .ant-tag { flex-shrink: 0; }
+
+/* Auth pages keep the same 14px forms; decorative brand heading is a separate display role. */
+.auth-content .ant-typography.auth-page-title { font-size: var(--iam-font-page); line-height: var(--iam-leading-page); font-weight: 600; margin-top: 16px; margin-bottom: 12px; }
+.auth-content .ant-form.ant-form-large .ant-form-item-label > label { height: auto; min-height: var(--iam-leading-body); }
+.auth-content .ant-typography.auth-page-title + .ant-typography { font-size: var(--iam-font-secondary); line-height: var(--iam-leading-secondary); color: var(--iam-type-secondary); }
+.auth-capabilities strong { line-height: var(--iam-leading-body); }
+.auth-capabilities small { line-height: var(--iam-leading-caption); white-space: normal; }
+.auth-brand-footer, .auth-footer { line-height: var(--iam-leading-caption); }
+
+/* Responsive layouts reflow, not shrink typography. */
+@media (max-width: 1439px) {
+  .global-search { width: 216px; }
+  .hero-card { grid-template-columns: minmax(0, 1fr) 184px; }
+}
+@media (max-width: 1199px) {
+  .global-search { width: 28px; padding: 0; justify-content: center; }
+  .global-search > span:not(.anticon), .global-search kbd { display: none; }
+}
+@media (max-width: 767px) {
+  .page-title { gap: 8px; }
+  .page-title-actions { padding-top: 0; }
+  .header-breadcrumb .ant-breadcrumb-link { max-width: 12ch; }
+  .metric-card-inner { flex-wrap: wrap; }
+  .metric-card .metric-main { flex: 1 1 84px; }
+  .metric-top { padding-right: 0; }
+  .hero-card { display: block; }
+  .hero-health-title { justify-content: flex-start; }
+  .hero-health { gap: 4px; }
+  .application-detail-hero > div { max-width: 100%; }
+  .application-title.ant-btn { max-width: 100%; }
+  .section-intro { align-items: flex-start; }
+  .auth-logo strong { font-size: var(--iam-font-section); line-height: var(--iam-leading-section); }
+}
+
+/* Chart text is in CSS pixels, not scaled SVG glyphs. */
+.chart-wrap { min-width: 0; width: 100%; }
+.chart-wrap > svg { max-width: 100%; }
+.donut-layout .donut-graphic,
+.audit-insight-grid .donut-layout > .donut-graphic {
+  position: relative; flex: 0 0 132px; width: 132px; height: 132px;
+}
+.donut-graphic > svg { display: block; width: 100%; height: 100%; }
+.donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; pointer-events: none; }
+.donut-center span, .donut-center small { font-size: var(--iam-font-caption); line-height: var(--iam-leading-caption); color: var(--iam-type-secondary); }
+.donut-center strong { font-size: var(--iam-font-statistic-small); line-height: var(--iam-leading-statistic-small); font-weight: 600; color: var(--iam-type-heading); font-variant-numeric: tabular-nums; }
+.donut-legend { line-height: var(--iam-leading-caption); }
+
+.ant-typography.detail-section-title { font-size: var(--iam-font-section); line-height: var(--iam-leading-section); font-weight: 600; }
+
+/* Keep save actions in document flow; a floating bar obscured the final form rows. */
+.settings-footer { position: static; bottom: auto; }

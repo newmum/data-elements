@@ -1,0 +1,794 @@
+{
+  "completed": true,
+  "passed": 110,
+  "total": 110,
+  "tenantId": "2084109831682699264",
+  "database": "baseline_ga_old",
+  "qaCleanup": true,
+  "checks": [
+    {
+      "name": "/sym/tenant/login-options",
+      "method": "GET",
+      "path": "/sym/tenant/login-options",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699266",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699266",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699267",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699267",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "旧控制会话仍可读取公开登录配置",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "旧控制会话不能继续操作公安本地账号",
+      "method": "POST",
+      "path": "/sym/user/page",
+      "code": 100120,
+      "passed": true,
+      "message": "user_no_login"
+    },
+    {
+      "name": "公安原账号密码迁移后可登录",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "会话明确为公安本地账号",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "公安仅有所属租户",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/switch",
+      "method": "POST",
+      "path": "/sym/tenant/switch",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "本地账号不可切到其他租户",
+      "method": "POST",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true,
+      "message": "本地账号只能访问所属租户，请切换系统后重新登录"
+    },
+    {
+      "name": "/sym/user/me",
+      "method": "POST",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "原机构和角色继续有效",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/page",
+      "method": "POST",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "原公安有效账号迁入5个",
+      "passed": true
+    },
+    {
+      "name": "分页不返回存储密码",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/list",
+      "method": "GET",
+      "path": "/sym/user/list",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/user/user/compat-page?limit=10&offset=0",
+      "method": "GET",
+      "path": "/sym/user/user/compat-page?limit=10&offset=0",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/user/user/application-list?appId=1995678661281710081",
+      "method": "GET",
+      "path": "/sym/user/user/application-list?appId=1995678661281710081",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/org/getOrgTree",
+      "method": "POST",
+      "path": "/sym/org/getOrgTree",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/org/list",
+      "method": "POST",
+      "path": "/sym/org/list",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/role/page",
+      "method": "POST",
+      "path": "/sym/role/page",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "method": "POST",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "创建公安机构",
+      "method": "POST",
+      "path": "/sym/org/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "修改公安机构",
+      "method": "POST",
+      "path": "/sym/org/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "创建本地用户并归属机构",
+      "method": "POST",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "新增账号不进入控制库",
+      "passed": true
+    },
+    {
+      "name": "新增本地用户不生成控制库成员关系",
+      "passed": true
+    },
+    {
+      "name": "拒绝重复登录名",
+      "method": "POST",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 409,
+      "passed": true,
+      "message": "用户账号已存在"
+    },
+    {
+      "name": "无效机构不写入用户",
+      "method": "POST",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 400,
+      "passed": true,
+      "message": "请选择有效的所属机构"
+    },
+    {
+      "name": "/sym/user/page",
+      "method": "POST",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "机构用户列表可找到本地用户",
+      "passed": true
+    },
+    {
+      "name": "拒绝不存在的应用角色",
+      "method": "POST",
+      "path": "/sym/user/saveRoles",
+      "code": 400,
+      "passed": true,
+      "message": "所选角色不存在或不属于当前应用"
+    },
+    {
+      "name": "创建角色并关联本地用户",
+      "method": "POST",
+      "path": "/sym/role/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "角色不能关联非本地用户",
+      "method": "POST",
+      "path": "/sym/role/saveOrUpdate",
+      "code": 400,
+      "passed": true,
+      "message": "所选用户不是本租户的本地用户"
+    },
+    {
+      "name": "/sym/user/roles",
+      "method": "POST",
+      "path": "/sym/user/roles",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "失败的角色修改保留原关联",
+      "passed": true
+    },
+    {
+      "name": "通过用户页面保存角色",
+      "method": "POST",
+      "path": "/sym/user/saveRoles",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "配置角色菜单权限",
+      "method": "POST",
+      "path": "/sym/auth/saveRoleResource",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "无效资源不能覆盖已有权限",
+      "method": "POST",
+      "path": "/sym/auth/saveRoleResource",
+      "code": 400,
+      "passed": true,
+      "message": "所选菜单不存在或不属于当前应用"
+    },
+    {
+      "name": "新本地账号登录",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/user/me",
+      "method": "POST",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "本地身份返回新用户和本地机构角色",
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "method": "POST",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "本地角色菜单授权生效",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/online/page",
+      "method": "POST",
+      "path": "/sym/user/online/page",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "在线列表能解析本地姓名",
+      "passed": true
+    },
+    {
+      "name": "没有控制库成员关系的本地用户不能跨租户",
+      "method": "POST",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true,
+      "message": "本地账号只能访问所属租户，请切换系统后重新登录"
+    },
+    {
+      "name": "停用本地角色",
+      "method": "POST",
+      "path": "/sym/role/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "停用角色不继续提供权限",
+      "method": "POST",
+      "path": "/sym/user/me",
+      "code": 400,
+      "passed": true,
+      "message": "当前用户未配置有效的应用角色，请联系管理员"
+    },
+    {
+      "name": "恢复本地角色",
+      "method": "POST",
+      "path": "/sym/role/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "修改本地用户及密码",
+      "method": "POST",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "修改密码使旧本地令牌失效",
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true,
+      "message": "user_no_login"
+    },
+    {
+      "name": "旧密码失效",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": -1,
+      "passed": true,
+      "message": "用户名或密码错误"
+    },
+    {
+      "name": "新密码生效",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "公安本地账号不能登录卓鉴",
+      "method": "POST",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true,
+      "message": "平台账号或密码不正确"
+    },
+    {
+      "name": "公安会话不能进入卓鉴",
+      "method": "GET",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true,
+      "message": "user_no_login"
+    },
+    {
+      "name": "停用本地用户",
+      "method": "POST",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "停用账号不可登录",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": -1,
+      "passed": true,
+      "message": "用户名或密码错误"
+    },
+    {
+      "name": "停用账号原令牌失效",
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true,
+      "message": "user_no_login"
+    },
+    {
+      "name": "重新启用本地用户",
+      "method": "POST",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "重新启用后可登录",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "删除本地用户",
+      "method": "POST",
+      "path": "/sym/user/delete",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "已删除本地账号不能登录",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": -1,
+      "passed": true,
+      "message": "用户名或密码错误"
+    },
+    {
+      "name": "删除账号使原令牌失效",
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true,
+      "message": "user_no_login"
+    },
+    {
+      "name": "已删除用户不可继续分配角色",
+      "method": "POST",
+      "path": "/sym/user/roles",
+      "code": 404,
+      "passed": true,
+      "message": "用户不存在或不属于当前租户"
+    },
+    {
+      "name": "不能删除当前维护账号",
+      "method": "POST",
+      "path": "/sym/user/delete",
+      "code": 409,
+      "passed": true,
+      "message": "不能删除当前登录账号"
+    },
+    {
+      "name": "删除本地测试角色",
+      "method": "POST",
+      "path": "/sym/role/delete",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "删除本地测试机构",
+      "method": "POST",
+      "path": "/sym/org/delete",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "其他租户原账号仍可登录 BROADCASTING",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/tenant/current",
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "其他租户仍使用CONTROL BROADCASTING",
+      "passed": true
+    },
+    {
+      "name": "控制账号不能直接切入本地公安体系",
+      "method": "POST",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true,
+      "message": "所选租户使用独立账号，请重新登录"
+    },
+    {
+      "name": "其他租户原账号仍可登录 SEA_FISHERY",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/tenant/current",
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "其他租户仍使用CONTROL SEA_FISHERY",
+      "passed": true
+    },
+    {
+      "name": "控制账号不能直接切入本地公安体系",
+      "method": "POST",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true,
+      "message": "所选租户使用独立账号，请重新登录"
+    },
+    {
+      "name": "其他租户原账号仍可登录 CHENGTIAN_DATA_PLATFORM",
+      "method": "POST",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/sym/tenant/current",
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "其他租户仍使用CONTROL CHENGTIAN_DATA_PLATFORM",
+      "passed": true
+    },
+    {
+      "name": "控制账号不能直接切入本地公安体系",
+      "method": "POST",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true,
+      "message": "所选租户使用独立账号，请重新登录"
+    },
+    {
+      "name": "/idaas/auth/login",
+      "method": "POST",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "/idaas/session/me",
+      "method": "GET",
+      "path": "/idaas/session/me",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "卓鉴会话不能进入公安",
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true,
+      "message": "user_no_login"
+    },
+    {
+      "name": "此前暂停的中央下发仍保持暂停",
+      "method": "POST",
+      "path": "/idaas/provision/execute",
+      "code": 503,
+      "passed": true,
+      "message": "租户接入已暂停，当前只维护平台中央目录"
+    },
+    {
+      "name": "最终公开登录配置回归 PUBLIC_SECURITY",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "最终公开登录配置回归 BROADCASTING",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "最终公开登录配置回归 SEA_FISHERY",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699266",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "最终公开登录配置回归 CHENGTIAN_DATA_PLATFORM",
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699267",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "name": "原业务行保持一致 rm_org_t",
+      "passed": true
+    },
+    {
+      "name": "原业务行保持一致 rm_role_t",
+      "passed": true
+    },
+    {
+      "name": "原业务行保持一致 rm_menu_t",
+      "passed": true
+    },
+    {
+      "name": "原业务行保持一致 rm_user_org_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原业务行保持一致 rm_user_role_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原业务行保持一致 rm_role_menu_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原业务行保持一致 rm_blacklist_t",
+      "passed": true
+    },
+    {
+      "name": "原业务表结构保持一致 rm_org_t",
+      "passed": true
+    },
+    {
+      "name": "原业务表结构保持一致 rm_role_t",
+      "passed": true
+    },
+    {
+      "name": "原业务表结构保持一致 rm_menu_t",
+      "passed": true
+    },
+    {
+      "name": "原业务表结构保持一致 rm_user_org_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原业务表结构保持一致 rm_user_role_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原业务表结构保持一致 rm_role_menu_rela_t",
+      "passed": true
+    },
+    {
+      "name": "原业务表结构保持一致 rm_blacklist_t",
+      "passed": true
+    },
+    {
+      "name": "迁移账号原ID资料状态和密码摘要完整保留",
+      "passed": true
+    },
+    {
+      "name": "控制库所有账号内容保持一致",
+      "passed": true
+    },
+    {
+      "name": "控制库成员关系保持一致",
+      "passed": true
+    },
+    {
+      "name": "测试清理后仅保留5个业务账号",
+      "passed": true
+    },
+    {
+      "name": "没有恢复任何IAM租户表",
+      "passed": true
+    }
+  ],
+  "adaptedApis": 41,
+  "newMagicFunctions": 5,
+  "localAccounts": 5,
+  "frameworkAndMagicTests": 87,
+  "coldStartRegression": [
+    {
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "path": "/sym/org/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "path": "/sym/role/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true
+    }
+  ],
+  "coldStartProbe": {
+    "functionDirectoryLoaded": true,
+    "missingFileGroups": []
+  }
+}

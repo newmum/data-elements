@@ -1,0 +1,51 @@
+{
+  "apply": true,
+  "archives": [
+    {
+      "source": "iam_auth_event_t",
+      "archive": "archive_iam_auth_event_20260929_t",
+      "rows": 35,
+      "sha256": "90c0f2ac39e6cfc4cad27768ced57042c3d21099a7419afa499ff0a96bdaba20"
+    },
+    {
+      "source": "iam_directory_org_t",
+      "archive": "archive_iam_directory_org_20260929_t",
+      "rows": 113,
+      "sha256": "3fe5e21727e2cc90723f8d60b3a0faf1d099d05927c6648b1c11e91c0bf7e17e"
+    },
+    {
+      "source": "iam_identity_operation_t",
+      "archive": "archive_iam_identity_operation_20260929_t",
+      "rows": 11,
+      "sha256": "d1e136f88b0630bb504efa3d80e8001e348be2686ec1a2ec03ad681a64bade6e"
+    },
+    {
+      "source": "iam_operator_permission_t",
+      "archive": "archive_iam_operator_permission_20260929_t",
+      "rows": 5,
+      "sha256": "e682da82f59e7b5ab0dc28302d912e0cbaf0cc6890e840da69c30fbd80713ffe"
+    },
+    {
+      "source": "iam_provision_item_t",
+      "archive": "archive_iam_provision_item_20260929_t",
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "iam_provision_task_t",
+      "archive": "archive_iam_provision_task_20260929_t",
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source": "iam_receiver_config_t",
+      "archive": "archive_iam_receiver_config_20260929_t",
+      "rows": 1,
+      "sha256": "451fb5384ba8be8d33f971dbd8aa2b434eb5269bac21a09a3d46336bf20c8a30"
+    }
+  ],
+  "controlRmRetained": true,
+  "liveMagicReferences": [],
+  "backup": "C:\\Users\\Administrator\\.codex\\private\\idaas-next\\legacy-archive-20260929-082904",
+  "completed": true
+}

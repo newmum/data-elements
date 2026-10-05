@@ -1,0 +1,148 @@
+{
+  "checkedAt": "2026-09-28T15:02:14.204515+00:00",
+  "kind": "OFFLINE_DOCUMENT_MODEL_CONSISTENCY",
+  "databaseExecuted": false,
+  "runtimeTestsExecuted": false,
+  "scope": "仅离线文本、模型、字段、索引、引用和现有功能覆盖核对；未执行MySQL DDL、迁移、应用接口或运行测试；不等同数据库语法引擎与业务正确性验收。",
+  "passed": true,
+  "checkCount": 20,
+  "results": [
+    {
+      "name": "目标表共40张且名称唯一",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "新业务表全部使用iam前缀",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "阶段表数一致",
+      "passed": true,
+      "details": {
+        "1": 15,
+        "2": 7,
+        "3": 5,
+        "4": 6,
+        "5": 7
+      }
+    },
+    {
+      "name": "字段与公共字段无重名",
+      "passed": true,
+      "details": []
+    },
+    {
+      "name": "全部索引列存在",
+      "passed": true,
+      "details": []
+    },
+    {
+      "name": "索引长度静态估计不超过3072字节",
+      "passed": true,
+      "details": []
+    },
+    {
+      "name": "逻辑引用指向已设计的IAM表",
+      "passed": true,
+      "details": []
+    },
+    {
+      "name": "DDL字符串及结束符完整",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "DDL只有40条CREATE TABLE且仅指向设计模型",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "DDL字段与模型逐表一致",
+      "passed": true,
+      "details": []
+    },
+    {
+      "name": "DDL无USE或现有表修改与数据修改语句",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "DDL无跨库目标或物理外键",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "CHECK名称全局唯一且未超过64字符",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "字段字典包含全部目标表和公共字段",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "现有32个导航均有功能设计",
+      "passed": true,
+      "details": {
+        "count": 32,
+        "missing": []
+      }
+    },
+    {
+      "name": "现有8个认证页面均有功能设计",
+      "passed": true,
+      "details": [
+        "/login",
+        "/auth/public/login",
+        "/auth/public/register/person",
+        "/auth/public/register/company",
+        "/auth/workforce/forgot",
+        "/auth/public/forgot",
+        "/auth/workforce/mfa",
+        "/auth/public/mfa"
+      ]
+    },
+    {
+      "name": "现有2张rm和9张iam均有迁移去向",
+      "passed": true,
+      "details": [
+        "iam_account_security_t",
+        "iam_auth_event_t",
+        "iam_directory_org_t",
+        "iam_identity_operation_t",
+        "iam_operator_permission_t",
+        "iam_provision_item_t",
+        "iam_provision_task_t",
+        "iam_receiver_config_t",
+        "iam_subject_t",
+        "rm_user_t",
+        "rm_user_tenant_rela_t"
+      ]
+    },
+    {
+      "name": "设计文档内部文件链接可解析",
+      "passed": true,
+      "details": []
+    },
+    {
+      "name": "工程入口明确标注设计待确认",
+      "passed": true,
+      "details": null
+    },
+    {
+      "name": "方案明确本地账号隔离及先确认后实施",
+      "passed": true,
+      "details": null
+    }
+  ],
+  "sha256": {
+    "功能与关联设计.md": "1c54ba62b4170b4d86c1db92c51b4e89ae5f56d7e54d10befc9e77629b23c9ce",
+    "总体方案.md": "2e88d7739677377443083d85400941ea3e04ab148347fd43f7f8bd8ebaca3133",
+    "数据库表结构设计.md": "e2bc5876a70d0da4d9bfe323e1a12d7b669f7f93035fc3232e202f471162ac1f",
+    "目标模型.json": "dfcb4ad14e28ee2dfcef25f38463a24b994c0986a37c1eaf04cf79a77cae137b",
+    "目标表结构.mysql.sql": "273528ed6a3422116cc78408926c191e0dd347f5b729b0b6b1693a1ba49ea781"
+  }
+}

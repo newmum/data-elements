@@ -1,0 +1,19 @@
+
+> data-element-haitong@0.0.1 build
+> tsc -b && vite build
+
+vite v5.4.21 building for production...
+<script src="./app-config.js"> in "/index.html" can't be bundled without type="module" attribute
+transforming...
+✓ 4158 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                     2.02 kB │ gzip:   1.02 kB
+dist/assets/index-BJU40jEf.css     61.46 kB │ gzip:  11.96 kB
+dist/assets/index-CcHcjyLz.js   2,500.52 kB │ gzip: 789.17 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 29.73s

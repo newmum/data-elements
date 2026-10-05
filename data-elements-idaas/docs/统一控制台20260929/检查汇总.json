@@ -1,0 +1,450 @@
+{
+  "completed": true,
+  "checkedAt": "2026-09-29T05:23:08.884831+00:00",
+  "staticChecks": [
+    "tokens:check",
+    "syntaxcheck",
+    "audit:ui",
+    "audit:typography",
+    "typecheck",
+    "build"
+  ],
+  "unitTests": {
+    "passed": 104,
+    "failed": 0
+  },
+  "magicTests": {
+    "passed": 179,
+    "syntax": 171,
+    "permissionSnapshot": 4,
+    "pairedDomainNavigation": 4
+  },
+  "navigationBrowser": {
+    "contractFixture": true,
+    "checks": [
+      {
+        "file": "console-navigation.spec.ts",
+        "name": "统一控制台公众入口、搜索和返回组织管理 390px",
+        "passed": true,
+        "durationMs": 23506
+      },
+      {
+        "file": "console-navigation.spec.ts",
+        "name": "统一控制台公众入口、搜索和返回组织管理 1440px",
+        "passed": true,
+        "durationMs": 16171
+      },
+      {
+        "file": "console-navigation.spec.ts",
+        "name": "统一控制台公众入口、搜索和返回组织管理 1920px",
+        "passed": true,
+        "durationMs": 7664
+      },
+      {
+        "file": "console-navigation.spec.ts",
+        "name": "无公众管理范围时隐藏入口，深链接不能触发跨域加载",
+        "passed": true,
+        "durationMs": 3556
+      },
+      {
+        "file": "console-navigation.spec.ts",
+        "name": "后台撤销公众范围后显示失败、支持重试，不展示旧身份域资料",
+        "passed": true,
+        "durationMs": 6443
+      },
+      {
+        "file": "console-navigation.spec.ts",
+        "name": "公众深链接刷新及浏览器后退自动加载所需身份资料",
+        "passed": true,
+        "durationMs": 8321
+      },
+      {
+        "file": "console-navigation.spec.ts",
+        "name": "加载期间快速返回会串行恢复目标上下文",
+        "passed": true,
+        "durationMs": 6202
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "系统切换菜单可读、可滚动 1920px",
+        "passed": true,
+        "durationMs": 18102
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "系统切换菜单可读、可滚动 1440px",
+        "passed": true,
+        "durationMs": 11185
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "系统切换菜单可读、可滚动 1360px",
+        "passed": true,
+        "durationMs": 8621
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "系统切换菜单可读、可滚动 390px",
+        "passed": true,
+        "durationMs": 5949
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠侧栏保留可访问的切换入口",
+        "passed": true,
+        "durationMs": 3831
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠侧栏悬停应用管理可进入二级功能",
+        "passed": true,
+        "durationMs": 4629
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠侧栏悬停组织与用户可进入二级功能",
+        "passed": true,
+        "durationMs": 5041
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠侧栏悬停授权管理可进入二级功能",
+        "passed": true,
+        "durationMs": 5805
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠侧栏悬停同步管理可进入二级功能",
+        "passed": true,
+        "durationMs": 5966
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠侧栏悬停审计日志可进入二级功能",
+        "passed": true,
+        "durationMs": 5520
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠侧栏悬停系统管理可进入二级功能",
+        "passed": true,
+        "durationMs": 4685
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠菜单点击、离开关闭与展开后当前分组保持一致",
+        "passed": true,
+        "durationMs": 6585
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "折叠菜单支持键盘进入二级功能",
+        "passed": true,
+        "durationMs": 4678
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "当前分组曾手动关闭时，折叠选择同组功能后展开可见",
+        "passed": true,
+        "durationMs": 5845
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "公众身份折叠菜单可直接进入功能并保留组织菜单",
+        "passed": true,
+        "durationMs": 10264
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "手机导航抽屉仍以内联菜单选择功能",
+        "passed": true,
+        "durationMs": 7672
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据资源中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 6917
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据集成中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 6652
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据计算中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 5349
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据治理中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 6559
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据安全中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 5806
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据资产中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 9491
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据服务中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 5883
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据可视化中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 6933
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击知识图谱中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 6165
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击智能搜索中心进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 5783
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击数据运行智能监控平台进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 6591
+      },
+      {
+        "file": "navigation.spec.ts",
+        "name": "点击人工智能支撑平台进入所属系统并使用当前标签页",
+        "passed": true,
+        "durationMs": 6106
+      },
+      {
+        "file": "console-navigation.spec.ts",
+        "name": "公众资料被拒绝时即使改选同域其他功能也显示失败并能重试",
+        "passed": true,
+        "durationMs": 6573
+      }
+    ],
+    "passed": 36
+  },
+  "layoutBrowser": {
+    "contractFixture": true,
+    "initialFailures": [
+      "@compact 抽屉、弹窗、宽表及长字段 1440px",
+      "@typography 公众工作区未开通状态 1440",
+      "@typography 公众工作区未开通状态 390"
+    ],
+    "revalidated": [
+      "@compact 抽屉、弹窗、宽表及长字段 1440px",
+      "@compact 公众工作区保留未开通边界 1440px",
+      "@compact 公众工作区保留未开通边界 390px",
+      "@typography 公众工作区未开通状态 1440",
+      "@typography 公众工作区未开通状态 390"
+    ],
+    "checks": [
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact workforce 全部工作区 1920px",
+        "passed": true,
+        "durationMs": 64282
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact workforce 全部工作区 1600px",
+        "passed": true,
+        "durationMs": 51879
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact workforce 全部工作区 1440px",
+        "passed": true,
+        "durationMs": 49789
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact workforce 全部工作区 1280px",
+        "passed": true,
+        "durationMs": 31768
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact workforce 全部工作区 1024px",
+        "passed": true,
+        "durationMs": 40362
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact workforce 全部工作区 768px",
+        "passed": true,
+        "durationMs": 42744
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact workforce 全部工作区 390px",
+        "passed": true,
+        "durationMs": 35060
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 全部认证页 1920px",
+        "passed": true,
+        "durationMs": 7383
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 全部认证页 1440px",
+        "passed": true,
+        "durationMs": 4610
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 全部认证页 1224px",
+        "passed": true,
+        "durationMs": 4865
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 全部认证页 768px",
+        "passed": true,
+        "durationMs": 4942
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 全部认证页 390px",
+        "passed": true,
+        "durationMs": 5082
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 已删除的设计页面、个人菜单、帮助与搜索入口",
+        "passed": true,
+        "durationMs": 9848
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 抽屉、弹窗、宽表及长字段 1440px",
+        "passed": true,
+        "durationMs": 21134
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 抽屉、弹窗、宽表及长字段 390px",
+        "passed": true,
+        "durationMs": 26881
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact workforce 全部应用详情页签",
+        "passed": true,
+        "durationMs": 47316
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 公众工作区保留未开通边界 1440px",
+        "passed": true,
+        "durationMs": 4052
+      },
+      {
+        "file": "compact.spec.ts",
+        "name": "@compact 公众工作区保留未开通边界 390px",
+        "passed": true,
+        "durationMs": 3750
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography workforce全部工作区 1440",
+        "passed": true,
+        "durationMs": 71416
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography workforce全部工作区 1920",
+        "passed": true,
+        "durationMs": 55547
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography workforce全部工作区 390",
+        "passed": true,
+        "durationMs": 26386
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography workforce全部应用与页签",
+        "passed": true,
+        "durationMs": 59099
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography 全部认证入口 1440",
+        "passed": true,
+        "durationMs": 15576
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography 全部认证入口 390",
+        "passed": true,
+        "durationMs": 9871
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography 浮层、长字段与空结果 1440",
+        "passed": true,
+        "durationMs": 30739
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography 浮层、长字段与空结果 390",
+        "passed": true,
+        "durationMs": 30389
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography 公众工作区未开通状态 1440",
+        "passed": true,
+        "durationMs": 12713
+      },
+      {
+        "file": "typography.spec.ts",
+        "name": "@typography 公众工作区未开通状态 390",
+        "passed": true,
+        "durationMs": 4731
+      }
+    ],
+    "passed": 28
+  },
+  "liveApi": {
+    "realBackend": true,
+    "passed": 16
+  },
+  "liveBrowser": {
+    "realBackend": true,
+    "passed": 3,
+    "screenCount": 30,
+    "widths": [
+      390,
+      1440,
+      1920
+    ]
+  },
+  "databaseChanges": false,
+  "javaRuntimeChanges": false,
+  "newHttpInterfaces": 0,
+  "changedMagicFunctions": [
+    "@/idaas/session"
+  ]
+}

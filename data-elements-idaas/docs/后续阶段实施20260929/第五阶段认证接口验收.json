@@ -1,0 +1,338 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "平台令牌不能成为统一认证账号",
+      "path": "/idaas/auth-account/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/register",
+      "path": "/idaas/auth-account/register",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公众注册未伪造实名或应用授权",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/register",
+      "path": "/idaas/auth-account/register",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "注册申请重放稳定",
+      "passed": true
+    },
+    {
+      "name": "相同申请号内容不同拒绝",
+      "path": "/idaas/auth-account/register",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公众认证账号不能进入平台管理",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "没有真实核验渠道不能标记实名",
+      "path": "/idaas/verifications/submit",
+      "code": 503,
+      "passed": true
+    },
+    {
+      "name": "/idaas/self-entities/register",
+      "path": "/idaas/self-entities/register",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "法人登记不自动核验或启用经办关系",
+      "passed": true
+    },
+    {
+      "name": "/idaas/self-entities/register",
+      "path": "/idaas/self-entities/register",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "法人登记申请重放稳定",
+      "passed": true
+    },
+    {
+      "name": "公众登录名不能用于平台登录",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/session/domain",
+      "path": "/idaas/session/domain",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "未核验或未获经办授权不能绑定法人办理上下文",
+      "path": "/idaas/auth-accounts/bind-entity",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?domain=public&size=250",
+      "path": "/idaas/subjects/list?domain=public&size=250",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公众平台工作区按域过滤",
+      "passed": true
+    },
+    {
+      "name": "/idaas/session/domain",
+      "path": "/idaas/session/domain",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/save",
+      "path": "/idaas/applications/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-accounts/save",
+      "path": "/idaas/auth-accounts/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "管理初始化认证账号要求首次改密",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/password",
+      "path": "/idaas/auth-account/password",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "改密撤销旧独立认证会话",
+      "path": "/idaas/auth-account/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/clients/save",
+      "path": "/idaas/clients/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/clients/list",
+      "path": "/idaas/clients/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "禁止通配符回调",
+      "path": "/idaas/protocol-config/configure",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/protocol-config/configure",
+      "path": "/idaas/protocol-config/configure",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/clients/list",
+      "path": "/idaas/clients/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/protocol-config/federation",
+      "path": "/idaas/protocol-config/federation",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "真实OIDC发现端点",
+      "passed": true
+    },
+    {
+      "name": "公钥端点没有RSA私钥",
+      "passed": true
+    },
+    {
+      "name": "平台token不能取得授权码",
+      "passed": true
+    },
+    {
+      "name": "授权码与用户同意及PKCE生效",
+      "passed": true
+    },
+    {
+      "name": "真实授权码换取访问与身份令牌",
+      "passed": true
+    },
+    {
+      "name": "访问令牌限定应用身份令牌限定客户端",
+      "passed": true
+    },
+    {
+      "name": "JWT真实签名与当前API授权执行",
+      "passed": true
+    },
+    {
+      "name": "访问令牌真实内省有效",
+      "passed": true
+    },
+    {
+      "name": "OIDC用户信息来自认证主体",
+      "passed": true
+    },
+    {
+      "name": "刷新令牌轮换",
+      "passed": true
+    },
+    {
+      "name": "已消费刷新令牌拒绝重放",
+      "passed": true
+    },
+    {
+      "name": "刷新重放撤销整个认证族",
+      "passed": true
+    },
+    {
+      "name": "授权码不能重复消费",
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/setup",
+      "path": "/idaas/mfa/setup",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/bind",
+      "path": "/idaas/mfa/bind",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "动态口令绑定返回一次性恢复码",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "第二因素未完成不会签发会话",
+      "passed": true
+    },
+    {
+      "name": "/idaas/mfa/verify-login",
+      "path": "/idaas/mfa/verify-login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "MFA挑战仅能消费一次",
+      "path": "/idaas/mfa/verify-login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "恢复码仅能消费一次",
+      "path": "/idaas/mfa/verify-login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "恢复码不明文保存",
+      "passed": true
+    },
+    {
+      "name": "认证测试清理后原11表结构数据完全一致",
+      "passed": true
+    }
+  ],
+  "ownObjectsCleaned": true
+}

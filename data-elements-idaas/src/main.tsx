@@ -1,0 +1,21 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { App as AntApp, ConfigProvider } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import dayjs from 'dayjs';
+import 'dayjs/locale/zh-cn';
+import 'antd/dist/reset.css';
+import './styles/typography-tokens.css';
+import './styles/app.css';
+import './styles/typography.css';
+import { appTheme } from './app/theme';
+import { compactComponents } from './app/componentDefaults';
+import Shell from './app/Shell';
+import Login, { PublicLogin, Register, PasswordFlow } from './pages/Auth';
+import IdentityCenter from './pages/Identity';
+dayjs.locale('zh-cn');
+const root = document.getElementById('root');
+if (!root)
+    throw new Error('Root element is missing');
+createRoot(root).render(<React.StrictMode><ConfigProvider {...compactComponents} locale={zhCN} componentSize="small" theme={appTheme}><AntApp><HashRouter><Routes><Route path="/login" element={<Login />}/><Route path="/console/:domain/*" element={<Shell />}/><Route path="/auth/identity/login" element={<PublicLogin />}/><Route path="/auth/identity/profile" element={<IdentityCenter />}/><Route path="/auth/public/login" element={<PublicLogin />}/><Route path="/auth/public/register/person" element={<Register />}/><Route path="/auth/public/register/company" element={<Register company/>}/><Route path="/auth/:domain/forgot" element={<PasswordFlow />}/><Route path="/auth/:domain/mfa" element={<PasswordFlow mfa/>}/><Route path="*" element={<Navigate to="/login" replace/>}/></Routes></HashRouter></AntApp></ConfigProvider></React.StrictMode>);

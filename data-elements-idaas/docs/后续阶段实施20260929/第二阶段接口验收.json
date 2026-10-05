@@ -1,0 +1,401 @@
+{
+  "completed": true,
+  "phase": 2,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/workspace/bootstrap",
+      "path": "/idaas/workspace/bootstrap",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "平台与租户会话隔离保持",
+      "passed": true
+    },
+    {
+      "name": "中央目录迁移5人员113机构",
+      "passed": true
+    },
+    {
+      "name": "第二阶段显式目录与分配权限",
+      "passed": true
+    },
+    {
+      "name": "旧人员JSON完整归档",
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?page=1&size=2",
+      "path": "/idaas/subjects/list?page=1&size=2",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "结构化人员实际分页",
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?page=no",
+      "path": "/idaas/subjects/list?page=no",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "人员ID姓名拟用账号保留",
+      "passed": true
+    },
+    {
+      "name": "迁入主职唯一且任职三条",
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/save",
+      "path": "/idaas/orgs/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/save",
+      "path": "/idaas/orgs/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/save",
+      "path": "/idaas/orgs/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/list?size=1000",
+      "path": "/idaas/orgs/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "移树不能形成环",
+      "path": "/idaas/orgs/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "引用机构不能归档",
+      "path": "/idaas/orgs/remove",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "拒绝双主职并整批回滚",
+      "path": "/idaas/subjects/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "失败保存未改变人员版本",
+      "passed": true
+    },
+    {
+      "name": "拒绝不存在任职机构",
+      "path": "/idaas/subjects/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "人员旧版本不能覆盖",
+      "path": "/idaas/subjects/save",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/dictionaries/save",
+      "path": "/idaas/dictionaries/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "被任职引用的字典不能删除",
+      "path": "/idaas/dictionaries/remove",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/field-definitions/save",
+      "path": "/idaas/field-definitions/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "扩展枚举拒绝越界值",
+      "path": "/idaas/subjects/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "扩展枚举值真实保存",
+      "passed": true
+    },
+    {
+      "name": "有数据扩展定义不能删除",
+      "path": "/idaas/field-definitions/remove",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "拒绝扩展凭据字段",
+      "path": "/idaas/field-definitions/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "拒绝无效校验规则",
+      "path": "/idaas/field-definitions/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/field-definitions/save",
+      "path": "/idaas/field-definitions/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "敏感扩展字段接口只返回掩码",
+      "passed": true
+    },
+    {
+      "name": "敏感扩展字段没有明文存库",
+      "passed": true
+    },
+    {
+      "name": "敏感扩展值不进入审计或回执",
+      "passed": true
+    },
+    {
+      "name": "/idaas/assignments/save",
+      "path": "/idaas/assignments/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/assignments/list?appId=2084109831682699265",
+      "path": "/idaas/assignments/list?appId=2084109831682699265",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "资料分配没有伪装授权或下发成功",
+      "passed": true
+    },
+    {
+      "name": "/idaas/assignments/remove",
+      "path": "/idaas/assignments/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "移除人工分配保留撤销投影",
+      "passed": true
+    },
+    {
+      "name": "/idaas/operators/save",
+      "path": "/idaas/operators/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/profile/password",
+      "path": "/idaas/profile/password",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/resources",
+      "path": "/idaas/platform-roles/resources",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/save",
+      "path": "/idaas/platform-roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/save",
+      "path": "/idaas/platform-roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/platform-roles/assign",
+      "path": "/idaas/platform-roles/assign",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "机构范围账号可修改范围内人员",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "全域读不能扩大机构写范围",
+      "path": "/idaas/subjects/save",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/list?size=1000",
+      "path": "/idaas/subjects/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "不能调岗到范围外机构",
+      "path": "/idaas/subjects/save",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/list?size=1000",
+      "path": "/idaas/orgs/list?size=1000",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "机构范围根节点可以原地编辑",
+      "path": "/idaas/orgs/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "机构范围不能创建无机构全局人员",
+      "path": "/idaas/subjects/save",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "目录管理员不能登录应用系统",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "公安和兼容控制库11表完全未变",
+      "passed": true
+    },
+    {
+      "name": "清理后原公安及兼容数据仍一致",
+      "passed": true
+    }
+  ],
+  "testBusinessObjectsCleaned": true
+}

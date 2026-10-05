@@ -1,0 +1,305 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/applications/save",
+      "path": "/idaas/applications/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/clients/save",
+      "path": "/idaas/clients/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/protocol-config/configure",
+      "path": "/idaas/protocol-config/configure",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/protocol-config/federation",
+      "path": "/idaas/protocol-config/federation",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "登记和协议配置不隐含机器访问资格",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/save",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "真实机器客户端凭据签发限定访问令牌",
+      "passed": true
+    },
+    {
+      "name": "机器令牌标记客户端主体和政企域",
+      "passed": true
+    },
+    {
+      "name": "实际API执行",
+      "passed": true
+    },
+    {
+      "name": "重复应用参数不能改变受众选择",
+      "passed": true
+    },
+    {
+      "name": "机器令牌不能跨应用调用",
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/list?appId=745d38d74b7f4334825342be201770df",
+      "path": "/idaas/resources/list?appId=745d38d74b7f4334825342be201770df",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "停用资源祖先实时阻断原API令牌",
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/list?appId=745d38d74b7f4334825342be201770df",
+      "path": "/idaas/resources/list?appId=745d38d74b7f4334825342be201770df",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "恢复资源祖先后仍须校验当前授权",
+      "passed": true
+    },
+    {
+      "name": "来源策略拒绝主机名规则",
+      "path": "/idaas/settings/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/save",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "来源拒绝规则优先于允许规则",
+      "passed": true
+    },
+    {
+      "name": "API来源规则不会锁住平台管理",
+      "path": "/idaas/session/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/save",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "伪造转发头不能绕过接口来源限制",
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/save",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "实际API执行",
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/save",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "实际Redis配额拒绝超限调用",
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/save",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/remove",
+      "path": "/idaas/grants/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "撤销机器授权立即影响已签发令牌",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/protocol-config/rotate",
+      "path": "/idaas/protocol-config/rotate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "旧客户端密钥在轮换后失效",
+      "passed": true
+    },
+    {
+      "name": "客户端轮换撤销已有机器会话",
+      "passed": true
+    },
+    {
+      "name": "轮换后新机器密钥可用",
+      "passed": true
+    },
+    {
+      "name": "实际API执行",
+      "passed": true
+    },
+    {
+      "name": "实际RFC7009令牌撤销成功",
+      "passed": true
+    },
+    {
+      "name": "主动撤销令牌不能继续调用",
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/register",
+      "path": "/idaas/auth-account/register",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "关闭并发后新登录替换旧认证会话",
+      "path": "/idaas/auth-account/me",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/settings/save",
+      "path": "/idaas/settings/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/login",
+      "path": "/idaas/auth-account/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "开启并发后保留既有认证会话",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/auth-account/me",
+      "path": "/idaas/auth-account/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/clients/save",
+      "path": "/idaas/clients/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/protocol-config/configure",
+      "path": "/idaas/protocol-config/configure",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "公共客户端缺少PKCE时拒绝授权",
+      "passed": true
+    },
+    {
+      "name": "未登记回调不能收到授权响应",
+      "passed": true
+    },
+    {
+      "name": "策略测试清理后原11表与策略原记录均保留",
+      "passed": true
+    }
+  ],
+  "ownObjectsCleaned": true,
+  "originalPoliciesRestored": true
+}

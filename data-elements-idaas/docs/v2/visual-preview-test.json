@@ -1,0 +1,88 @@
+{
+  "artifact": "Standalone visual preview, NOT React/Ant Design runtime",
+  "browser": "144.0.7559.96",
+  "method": "set_content of self-contained local HTML; no actual React app navigation",
+  "desktopScreens": 7,
+  "drawerScreens": 3,
+  "mobileScreens": 1,
+  "checks": [
+    {
+      "route": "overview",
+      "viewport": "1728x1080",
+      "horizontalOverflow": false,
+      "height": 1514
+    },
+    {
+      "route": "users",
+      "viewport": "1728x1080",
+      "horizontalOverflow": false,
+      "height": 1319
+    },
+    {
+      "route": "apps",
+      "viewport": "1728x1080",
+      "horizontalOverflow": false,
+      "height": 1593
+    },
+    {
+      "route": "grants",
+      "viewport": "1728x1080",
+      "horizontalOverflow": false,
+      "height": 1205
+    },
+    {
+      "route": "audit",
+      "viewport": "1728x1080",
+      "horizontalOverflow": false,
+      "height": 1559
+    },
+    {
+      "route": "settings",
+      "viewport": "1728x1080",
+      "horizontalOverflow": false,
+      "height": 1122
+    },
+    {
+      "route": "login",
+      "viewport": "1728x1080",
+      "horizontalOverflow": false,
+      "height": 1080
+    },
+    {
+      "route": "overview",
+      "viewport": "1440x1000",
+      "horizontalOverflow": false
+    },
+    {
+      "route": "users",
+      "viewport": "1440x1000",
+      "horizontalOverflow": false
+    },
+    {
+      "route": "apps",
+      "viewport": "1440x1000",
+      "horizontalOverflow": false
+    },
+    {
+      "route": "grants",
+      "viewport": "1440x1000",
+      "horizontalOverflow": false
+    },
+    {
+      "route": "audit",
+      "viewport": "1440x1000",
+      "horizontalOverflow": false
+    },
+    {
+      "route": "settings",
+      "viewport": "1440x1000",
+      "horizontalOverflow": false
+    },
+    {
+      "route": "login",
+      "viewport": "390x844",
+      "horizontalOverflow": false
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,38 @@
+{
+  "completed": true,
+  "realBackend": true,
+  "widths": [
+    390,
+    1440,
+    1920
+  ],
+  "checks": [
+    {
+      "name": "真实公安应用人员、机构与连接信息 390px",
+      "passed": true,
+      "durationMs": 12271
+    },
+    {
+      "name": "真实公安应用人员、机构与连接信息 1440px",
+      "passed": true,
+      "durationMs": 11686
+    },
+    {
+      "name": "真实公安应用人员、机构与连接信息 1920px",
+      "passed": true,
+      "durationMs": 11336
+    }
+  ],
+  "screenCount": 9,
+  "screenshots": [
+    "界面验收/live-application-connection-1440.png",
+    "界面验收/live-application-orgs-1440.png",
+    "界面验收/live-application-persons-1440.png",
+    "界面验收/live-application-connection-1920.png",
+    "界面验收/live-application-orgs-1920.png",
+    "界面验收/live-application-persons-1920.png",
+    "界面验收/live-application-connection-390.png",
+    "界面验收/live-application-orgs-390.png",
+    "界面验收/live-application-persons-390.png"
+  ]
+}

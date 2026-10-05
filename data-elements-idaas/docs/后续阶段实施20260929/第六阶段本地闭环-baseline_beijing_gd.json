@@ -1,0 +1,207 @@
+{
+  "completed": true,
+  "tenantId": "2084109831682699265",
+  "schema": "BASELINE_BEIJING_GD",
+  "checks": [
+    {
+      "name": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "账号由应用本地库校验",
+      "passed": true
+    },
+    {
+      "name": "/sym/tenant/current",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地会话只有所属应用",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/page",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "迁入账号数量及密码脱敏",
+      "passed": true
+    },
+    {
+      "name": "/sym/user/me",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "既有机构角色仍然有效",
+      "passed": true
+    },
+    {
+      "name": "/sym/org/getOrgTree",
+      "path": "/sym/org/getOrgTree",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/org/saveOrUpdate",
+      "path": "/sym/org/saveOrUpdate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/saveOrUpdate",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地登录名唯一",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/sym/role/saveOrUpdate",
+      "path": "/sym/role/saveOrUpdate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地新增账号不写控制库",
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/saveRoleResource",
+      "path": "/sym/auth/saveRoleResource",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/me",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地新增机构用户角色闭环",
+      "passed": true
+    },
+    {
+      "name": "/sym/auth/userMenu",
+      "path": "/sym/auth/userMenu",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地会话不能跨应用",
+      "path": "/sym/tenant/switch",
+      "code": 403,
+      "passed": true
+    },
+    {
+      "name": "本地会话不能进入卓鉴",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "本地账号不能登录卓鉴",
+      "path": "/idaas/auth/login",
+      "code": 401,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/saveOrUpdate",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "本地改密撤销旧会话",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": -1,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/saveOrUpdate",
+      "path": "/sym/user/saveOrUpdate",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/portal/login",
+      "path": "/portal/login",
+      "code": -1,
+      "passed": true
+    },
+    {
+      "name": "本地停用立即撤销会话",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true
+    },
+    {
+      "name": "/sym/user/delete",
+      "path": "/sym/user/delete",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/role/delete",
+      "path": "/sym/role/delete",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/sym/org/delete",
+      "path": "/sym/org/delete",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "应用原用户机构角色菜单逐行保持原样",
+      "passed": true
+    },
+    {
+      "name": "控制库及公安保护表保持原样",
+      "passed": true
+    }
+  ]
+}

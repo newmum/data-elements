@@ -1,0 +1,1988 @@
+{
+  "checkedAt": "2026-09-29T00:33:53.861118",
+  "targetSchema": "baseline",
+  "targetTableCount": 15,
+  "newTables": 14,
+  "reconstructedTables": 1,
+  "archivedSecurityRows": 2,
+  "activeMagicResources": 90,
+  "tableDefinitions": [
+    {
+      "table": "iam_application_group_t",
+      "comment": "应用分组",
+      "rowCount": 1,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "code",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "分组编码，不复用已归档编码",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "name",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "分组名称",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "sort_no",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "排序",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "软删除标志；不用于删除审计",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_application_t",
+      "comment": "身份应用主表",
+      "rowCount": 5,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "code",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "全局应用编码；现有应用沿用原行业编码",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "name",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "业务应用名称",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "kind",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "BUSINESS",
+          "COLUMN_COMMENT": "BUSINESS行业应用；INTERNAL为卓鉴自己的管理资源容器",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "group_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "应用分组ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "description",
+          "COLUMN_TYPE": "varchar(1000)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "说明",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "owner_operator_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "平台侧负责操作账号，可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "homepage",
+          "COLUMN_TYPE": "varchar(1000)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "应用首页，不放令牌",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "identity_domains",
+          "COLUMN_TYPE": "json",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "支持的身份域数组，workforce/public",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "DRAFT",
+          "COLUMN_COMMENT": "DRAFT/ACTIVE/DISABLED/ARCHIVED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "auth_mode",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "LOCAL",
+          "COLUMN_COMMENT": "LOCAL或后续显式启用的FEDERATED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "provisioning_mode",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "OFF",
+          "COLUMN_COMMENT": "OFF/HTTP；下发与认证独立开关",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "ext_json",
+          "COLUMN_TYPE": "json",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "经字段定义校验的扩展资料",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "软删除标志；不用于删除审计",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_application_runtime_t",
+      "comment": "应用与原运行租户绑定",
+      "rowCount": 4,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "IAM应用ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "runtime_tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "共享框架 sym_tenant_t.tid",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "backend_code",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "data-elements",
+          "COLUMN_COMMENT": "后端部署标识",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "environment",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "development",
+          "COLUMN_COMMENT": "运行环境标识",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "local_permission_app_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "本地角色菜单原app_id，非IAM应用ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "binding_status",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "PENDING",
+          "COLUMN_COMMENT": "PENDING/VERIFIED/DISABLED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "verified_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近完成实际数据源核验的时间",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_operator_t",
+      "comment": "卓鉴平台操作账号",
+      "rowCount": 1,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "username",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "仅用于卓鉴管理控制台登录的账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "display_name",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "姓名或显示名",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "phone",
+          "COLUMN_TYPE": "varchar(256)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "联系方式，可按策略加密",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "email",
+          "COLUMN_TYPE": "varchar(512)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "邮箱，可按策略加密",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "subject_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "可选关联人员档案，不继承档案的应用权限",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "PENDING",
+          "COLUMN_COMMENT": "PENDING/ACTIVE/DISABLED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "must_change_password",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "下次登录是否必须改密",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "last_login_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近平台登录时间",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "active_username",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "有效账号规范名",
+          "EXTRA": "STORED GENERATED"
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "软删除标志；不用于删除审计",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_operator_role_rela_t",
+      "comment": "平台操作账号角色分配",
+      "rowCount": 1,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "operator_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "操作账号ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "role_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "卓鉴INTERNAL应用下的平台角色ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "ACTIVE",
+          "COLUMN_COMMENT": "ACTIVE/REVOKED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "valid_from",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "生效时间",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "valid_until",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "失效时间，空表示不设固定到期",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_operator_scope_t",
+      "comment": "平台角色分配的管理范围",
+      "rowCount": 1,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "assignment_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "平台角色分配ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "identity_domain",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "workforce/public；分别授权",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "scope_kind",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "ALL/APPLICATION/ORG",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "范围限定应用，可与ORG组合限定机构内指定应用",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "org_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "范围限定机构",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "include_children",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "是否含下级机构",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_role_t",
+      "comment": "应用角色与平台内部角色",
+      "rowCount": 1,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "所属应用；平台角色归属INTERNAL应用",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "应用内角色编码",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "name",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "角色名称",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "identity_domain",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "workforce/public",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "ACTIVE",
+          "COLUMN_COMMENT": "ACTIVE/DISABLED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "description",
+          "COLUMN_TYPE": "varchar(1000)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "职责说明",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "软删除标志；不用于删除审计",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_resource_t",
+      "comment": "应用菜单按钮和API资源",
+      "rowCount": 14,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "所属应用",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "parent_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "同应用父资源ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "code",
+          "COLUMN_TYPE": "varchar(160)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "应用内唯一权限标识",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "name",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "资源名称",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "resource_type",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "MENU/BUTTON/API",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "path",
+          "COLUMN_TYPE": "varchar(1000)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "页面或API路径",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "http_method",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "API请求方法",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "ACTIVE",
+          "COLUMN_COMMENT": "ACTIVE/DISABLED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "sort_no",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "顺序",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "ext_json",
+          "COLUMN_TYPE": "json",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "资源扩展资料",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "软删除标志；不用于删除审计",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_role_resource_rela_t",
+      "comment": "角色资源关联",
+      "rowCount": 14,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "role_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "角色ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "resource_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "资源ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "归属应用用于隔离校验",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_account_security_t",
+      "comment": "认证主体锁定与安全状态",
+      "rowCount": 1,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "principal_kind",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "OPERATOR/AUTH_ACCOUNT",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "principal_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "对应认证账号ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "failed_count",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "连续失败次数",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "locked_until",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "锁定截止",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "password_changed_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近改密时间",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "security_version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "安全版本，改密等操作触发会话版本失效",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_credential_t",
+      "comment": "分用途凭据与密钥版本",
+      "rowCount": 1,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "owner_kind",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "OPERATOR/AUTH_ACCOUNT/CLIENT/SYNC_CONFIG",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "owner_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "归属账号或配置ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "credential_type",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "PASSWORD/TOTP/WEBAUTHN/CLIENT_SECRET/HMAC_KEY/RECOVERY_CODE",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "slot",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "primary",
+          "COLUMN_COMMENT": "密码固定primary；设备或轮换密钥使用独立槽",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "revision",
+          "COLUMN_TYPE": "int unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "凭据版本",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "algorithm",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "明确算法和编码版本",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "secret_hash",
+          "COLUMN_TYPE": "varchar(2048)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "密码、恢复码、客户端验证密钥的单向摘要",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "secret_cipher",
+          "COLUMN_TYPE": "text",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "需要恢复使用的TOTP种子或签名密钥的密文",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "key_ref",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "外部加密主密钥引用；不存主密钥值",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "public_data",
+          "COLUMN_TYPE": "json",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "公开公钥及非敏感参数，不放密码",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "PENDING",
+          "COLUMN_COMMENT": "PENDING/ACTIVE/RETIRED/REVOKED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "not_before",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "可用起点",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "expires_at",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "失效时间",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "active_slot",
+          "COLUMN_TYPE": "varchar(160)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "防止同凭据槽多个活动版本",
+          "EXTRA": "STORED GENERATED"
+        }
+      ]
+    },
+    {
+      "table": "iam_setting_t",
+      "comment": "IAM自身配置与策略",
+      "rowCount": 2,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "scope_kind",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "GLOBAL/DOMAIN/APPLICATION",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "scope_key",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "全局固定global；身份域或应用ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "category",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "SECURITY/SESSION/BRANDING/FIELD_PROTECTION/API_ACCESS",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "config_key",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "配置项键",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "value_json",
+          "COLUMN_TYPE": "json",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "经过类型和范围校验的配置，不存秘密",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "ACTIVE",
+          "COLUMN_COMMENT": "ACTIVE/DISABLED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "0",
+          "COLUMN_COMMENT": "软删除标志；不用于删除审计",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_audit_event_t",
+      "comment": "操作认证和API审计",
+      "rowCount": 648,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "event_type",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "OPERATION/AUTH/API/MIGRATION",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "identity_domain",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "事件身份域",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "actor_kind",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "OPERATOR/AUTH_ACCOUNT/CLIENT/SYSTEM/LEGACY",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "actor_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "操作者ID或历史主体引用",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "目标应用；平台事件可为INTERNAL应用",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "action",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定业务动作码",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "object_type",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "目标对象类型",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "object_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "目标对象ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "result",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "SUCCESS/DENIED/FAILED等",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "reason_code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "可检索原因码",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "account_fingerprint",
+          "COLUMN_TYPE": "char(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "失败登录账号指纹，不存口令",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "trace_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "链路号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "ip",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "访问地址",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "request_path",
+          "COLUMN_TYPE": "varchar(1000)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "脱敏后的路径",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "http_method",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "请求方法",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "http_status",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "HTTP状态",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "duration_ms",
+          "COLUMN_TYPE": "bigint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "耗时",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "event_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "事件实际发生时间，历史迁移不改写",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "snapshot_json",
+          "COLUMN_TYPE": "json",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "脱敏前后值和必要上下文，不含凭据或完整报文",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_request_receipt_t",
+      "comment": "业务请求幂等回执",
+      "rowCount": 72,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "operator_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "当前平台操作账号ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "operation_code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "接口业务动作码",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "request_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "调用者请求号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "request_hash",
+          "COLUMN_TYPE": "char(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "规范化有效请求内容摘要，不记录密码本身",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "IN_PROGRESS/SUCCEEDED/FAILED/LEGACY_ARCHIVED",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "result_json",
+          "COLUMN_TYPE": "json",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "可安全回放结果，禁止令牌和秘密",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "error_code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "失败码",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "expires_at",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "非历史回执保留截止",
+          "EXTRA": ""
+        }
+      ]
+    },
+    {
+      "table": "iam_migration_map_t",
+      "comment": "重构迁移批次与ID对照",
+      "rowCount": 1,
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "稳定主键，应用生成",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "创建操作账号；系统任务可空",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "最近更新操作账号",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "utc_timestamp(6)",
+          "COLUMN_COMMENT": "",
+          "EXTRA": "DEFAULT_GENERATED"
+        },
+        {
+          "COLUMN_NAME": "version",
+          "COLUMN_TYPE": "bigint unsigned",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": "1",
+          "COLUMN_COMMENT": "乐观版本，每次有效修改加1",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "batch_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "迁移批次",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "source_schema",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "来源库名，仅记录来源不用于动态执行",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "source_table",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "来源表",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "source_id",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "原ID或组合键",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "target_type",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "目标表或归档类型",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "target_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "新ID或保留ID",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "source_hash",
+          "COLUMN_TYPE": "char(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "迁移快照摘要",
+          "EXTRA": ""
+        },
+        {
+          "COLUMN_NAME": "state",
+          "COLUMN_TYPE": "varchar(24)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_DEFAULT": null,
+          "COLUMN_COMMENT": "COPIED/VERIFIED/ARCHIVED/ROLLED_BACK",
+          "EXTRA": ""
+        }
+      ]
+    }
+  ],
+  "applications": [
+    {
+      "name": "广电数据管理平台",
+      "code": "BROADCASTING",
+      "status": "ACTIVE",
+      "auth_mode": "LOCAL",
+      "provisioning_mode": "OFF",
+      "id": "2084109831682699265"
+    },
+    {
+      "name": "澄天数据中台",
+      "code": "CHENGTIAN_DATA_PLATFORM",
+      "status": "ACTIVE",
+      "auth_mode": "LOCAL",
+      "provisioning_mode": "OFF",
+      "id": "2084109831682699267"
+    },
+    {
+      "name": "公安元数据管理平台",
+      "code": "PUBLIC_SECURITY",
+      "status": "ACTIVE",
+      "auth_mode": "LOCAL",
+      "provisioning_mode": "OFF",
+      "id": "2084109831682699264"
+    },
+    {
+      "name": "海渔数据管理平台",
+      "code": "SEA_FISHERY",
+      "status": "ACTIVE",
+      "auth_mode": "LOCAL",
+      "provisioning_mode": "OFF",
+      "id": "2084109831682699266"
+    }
+  ],
+  "runtimeBindings": [
+    {
+      "code": "BROADCASTING",
+      "runtime_tenant_id": "2084109831682699265",
+      "local_permission_app_id": "1995678661281710081",
+      "binding_status": "PENDING"
+    },
+    {
+      "code": "CHENGTIAN_DATA_PLATFORM",
+      "runtime_tenant_id": "2084109831682699267",
+      "local_permission_app_id": "1995678661281710081",
+      "binding_status": "PENDING"
+    },
+    {
+      "code": "PUBLIC_SECURITY",
+      "runtime_tenant_id": "2084109831682699264",
+      "local_permission_app_id": "1995678661281710081",
+      "binding_status": "VERIFIED"
+    },
+    {
+      "code": "SEA_FISHERY",
+      "runtime_tenant_id": "2084109831682699266",
+      "local_permission_app_id": "1995678661281710081",
+      "binding_status": "PENDING"
+    }
+  ],
+  "unchanged": [
+    {
+      "schema": "baseline",
+      "table": "rm_user_t",
+      "rows": 48,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline",
+      "table": "rm_user_tenant_rela_t",
+      "rows": 15,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline",
+      "table": "sym_tenant_t",
+      "rows": 4,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline_ga_old",
+      "table": "rm_blacklist_t",
+      "rows": 0,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline_ga_old",
+      "table": "rm_menu_t",
+      "rows": 98,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline_ga_old",
+      "table": "rm_org_t",
+      "rows": 126,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline_ga_old",
+      "table": "rm_role_menu_rela_t",
+      "rows": 948,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline_ga_old",
+      "table": "rm_role_t",
+      "rows": 10,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline_ga_old",
+      "table": "rm_user_org_rela_t",
+      "rows": 78,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline_ga_old",
+      "table": "rm_user_role_rela_t",
+      "rows": 70,
+      "structureAndDataUnchanged": true
+    },
+    {
+      "schema": "baseline_ga_old",
+      "table": "rm_user_t",
+      "rows": 5,
+      "structureAndDataUnchanged": true
+    }
+  ]
+}

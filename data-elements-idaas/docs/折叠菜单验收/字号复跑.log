@@ -1,0 +1,10 @@
+
+Running 1 test using 1 worker
+
+(node:28476) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:28476) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\typography.spec.ts:80:42 › @typography workforce全部工作区 1440 (51.3s)
+
+  1 passed (55.6s)

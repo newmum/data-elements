@@ -1,0 +1,138 @@
+{
+  "completed": true,
+  "generatedAt": "2026-09-29T11:46:37",
+  "engineering": {
+    "sharedBackendCompile": true,
+    "sharedBackendPackage": true,
+    "identityTenantTests": 73,
+    "magicPermissionSnapshotTests": 4,
+    "centralMagicSyntaxChecks": 171,
+    "retiredApiSyntaxChecks": 8,
+    "frontendUnitTests": 99,
+    "frontendTypecheckAndBuild": true,
+    "typographyBrowserTests": 10,
+    "compactBrowserTests": 18
+  },
+  "runtime": {
+    "frontend": "http://localhost:3005",
+    "backend": "http://localhost:8088",
+    "centralTables": 40,
+    "activeControlRmTables": 0,
+    "actualApplicationsLocal": 4,
+    "actualApplicationsProvisioning": "OFF",
+    "persistentSigningKeyReused": true
+  },
+  "evidence": [
+    {
+      "file": "第二阶段接口验收.json",
+      "passedChecks": 71,
+      "sha256": "eb2576972b94aaae2951a77305706b98826407644bdacc03bf5a625a1c2c9027"
+    },
+    {
+      "file": "第三阶段接口验收.json",
+      "passedChecks": 63,
+      "sha256": "be7cbdc048351c92e048213a5e09c98e2618060cd2612558c4f9cb89dd3358df"
+    },
+    {
+      "file": "第四阶段接口验收.json",
+      "passedChecks": 81,
+      "sha256": "e01ad2ed1ee17ab5035d353d361694928b99f7c5305253aa4e004a07e89802ca"
+    },
+    {
+      "file": "第四阶段工作者接口验收.json",
+      "passedChecks": 53,
+      "sha256": "351b707b7e81e329efa99a31a93a41bca9f20e588d099672725af4f66a6144fc"
+    },
+    {
+      "file": "第四阶段定时工作者验收.json",
+      "passedChecks": 24,
+      "sha256": "0c2e1a863dcf997e3973406ff5d8dc17c4a524aee4f6d9d982c6e50008de7e22"
+    },
+    {
+      "file": "第五阶段认证接口验收.json",
+      "passedChecks": 63,
+      "sha256": "04dd861725e169ecd413dc05c84d4eefcdce49b0cda5c1335809b22586d1785e"
+    },
+    {
+      "file": "第五阶段机器与策略接口验收.json",
+      "passedChecks": 57,
+      "sha256": "70e3baa5f3a760280aa7bccd67fd81772c4b24d624b8e1d8e9f2d082b55405ac"
+    },
+    {
+      "file": "第五阶段平台MFA验收.json",
+      "passedChecks": 29,
+      "sha256": "bd0505d26014a0c63fa14a2cc014a059926de21563ade5720d9a587f052e2918"
+    },
+    {
+      "file": "第五阶段核验协议验收.json",
+      "passedChecks": 51,
+      "sha256": "85c9c75775fb2db78f2bcecc1789034899b8b646db9ef62ffff97d6434ed023e"
+    },
+    {
+      "file": "第六阶段本地闭环-baseline_ga_old.json",
+      "passedChecks": 36,
+      "sha256": "9f78a6642e0d5b812e7e1807906e21cd490fa9394d740048c468ebcbb7d7cec8"
+    },
+    {
+      "file": "第六阶段本地闭环-baseline_beijing_gd.json",
+      "passedChecks": 36,
+      "sha256": "70e3387a7de39f686430bbd0c8f8fc65bc0ad1ff22a0a2969203b2a3491b0750"
+    },
+    {
+      "file": "第六阶段本地闭环-baseline_sea_fishery.json",
+      "passedChecks": 36,
+      "sha256": "9f541dd41c5b826defc9cd731c9c2bbbca5029c0551397fcbe518ccb6fa8b357"
+    },
+    {
+      "file": "第六阶段本地闭环-chengtian.json",
+      "passedChecks": 36,
+      "sha256": "66ba82c9b2d87cdfaa3f149084c3b7314b3d2cd4b4b2657a3152dacd11c22229"
+    },
+    {
+      "file": "第六阶段本地账号迁移-chengtian.json",
+      "passedChecks": 43,
+      "sha256": "3ec4764a1c54db07eca91e9ccf434f57411075fc3acbe7728684eb5455e5e204"
+    },
+    {
+      "file": "第六阶段归档后四应用验收.json",
+      "passedChecks": 65,
+      "sha256": "4c2b178cdd75d74c587c36cfe4fb479a0f78ab981c951ae59f45dda4290b5f49"
+    },
+    {
+      "file": "启动协议与持久密钥验收.json",
+      "passedChecks": 5,
+      "sha256": "867e9efb4da94b681faa44f1a3bdbf388782e48cffcaf66bff4a2135964c7f92"
+    },
+    {
+      "file": "界面最终验收.json",
+      "passedChecks": 3,
+      "sha256": "d375a94b482cd877f3bc8f8d15ba26d724116ab8f3c81b8f80e09b775db23e07"
+    },
+    {
+      "file": "第六阶段旧IAM归档验收.json",
+      "migrationVerified": true,
+      "sha256": "9febcb2eddf9090e7c993b1b8680379686455d59e61850947b64d8c6e5cc116b"
+    },
+    {
+      "file": "第六阶段共享账号归档验收.json",
+      "migrationVerified": true,
+      "sha256": "19c954711a3e7d22a0fe499c909c4d813ce6ea1cf74028bf0dd02399af69be86"
+    },
+    {
+      "file": "第六阶段广电本地账号迁移.json",
+      "migrationVerified": true,
+      "sha256": "32a535401b94a7b8b00dcc825e20f985d7ce2878750ec0dd6500ed2d01d59cbe"
+    },
+    {
+      "file": "数据库最终结构核查.json",
+      "migrationVerified": true,
+      "sha256": "d3ad7530a63bcfd2129226547994bf0775c82e6db999c8ed1e895aa69b4c291c"
+    }
+  ],
+  "externalConfigurationRemaining": [
+    "真实实名核验服务及其正式凭据",
+    "密码恢复通知渠道",
+    "正式HTTPS域名、接入应用及接收端部署地址"
+  ],
+  "otherSharedBackendObservation": "既有NiFi BulletinPoller SQL结构警告仍存在；本轮IAM启动与验收已通过，未改造NiFi业务表。"
+}

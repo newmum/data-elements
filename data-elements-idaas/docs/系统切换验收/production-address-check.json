@@ -1,0 +1,27 @@
+[
+  {
+    "project": "data-elements-idaas",
+    "productionIdentityPrefix": true,
+    "containsIdentityDevOrigin": false
+  },
+  {
+    "project": "data-elements-wanxiang",
+    "productionIdentityPrefix": true,
+    "containsIdentityDevOrigin": false
+  },
+  {
+    "project": "data-elements-qizhi",
+    "productionIdentityPrefix": true,
+    "containsIdentityDevOrigin": false
+  },
+  {
+    "project": "data-element-haitong",
+    "productionIdentityPrefix": true,
+    "containsIdentityDevOrigin": false
+  },
+  {
+    "project": "data-elements-front",
+    "productionIdentityPrefix": true,
+    "containsIdentityDevOrigin": false
+  }
+]

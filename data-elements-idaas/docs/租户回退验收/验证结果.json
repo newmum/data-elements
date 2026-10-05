@@ -1,0 +1,355 @@
+{
+  "checks": [
+    {
+      "method": "GET",
+      "path": "/sym/tenant/login-options",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699265",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699266",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699267",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/login-options",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/available",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/login-settings?tenantId=2084109831682699264",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/user/me",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/user/list",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/user/page",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/user/user/compat-page?pageNum=1&pageSize=10",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/user/user/application-list?appId=1995678661281710081",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/user/roles",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/user/role-options",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/org/list",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/org/getOrgTree",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/role/page",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/role/appRoleList",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/user/online/page",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/tenant/switch",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/portal/login",
+      "code": -1,
+      "passed": true,
+      "message": "用户名或密码错误"
+    },
+    {
+      "method": "POST",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/idaas/workspace/bootstrap",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/idaas/users/list",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/idaas/orgs/list",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/idaas/provision/configs",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "GET",
+      "path": "/idaas/provision/tasks",
+      "code": 0,
+      "passed": true,
+      "message": "success"
+    },
+    {
+      "method": "POST",
+      "path": "/idaas/provision/save-config",
+      "code": 503,
+      "passed": true,
+      "message": "租户接入已暂停，当前只维护平台中央目录"
+    },
+    {
+      "method": "POST",
+      "path": "/idaas/provision/create",
+      "code": 503,
+      "passed": true,
+      "message": "租户接入已暂停，当前只维护平台中央目录"
+    },
+    {
+      "method": "POST",
+      "path": "/idaas/provision/test",
+      "code": 503,
+      "passed": true,
+      "message": "租户接入已暂停，当前只维护平台中央目录"
+    },
+    {
+      "method": "POST",
+      "path": "/idaas/provision/execute",
+      "code": 503,
+      "passed": true,
+      "message": "租户接入已暂停，当前只维护平台中央目录"
+    },
+    {
+      "method": "GET",
+      "path": "/idaas/session/me",
+      "code": 100120,
+      "passed": true,
+      "message": "user_no_login"
+    },
+    {
+      "method": "GET",
+      "path": "/sym/tenant/current",
+      "code": 100120,
+      "passed": true,
+      "message": "user_no_login"
+    },
+    {
+      "method": "POST",
+      "path": "/sym/identity/provision/apply",
+      "code": 500,
+      "passed": true,
+      "message": "No static resource sym/identity/provision/apply."
+    },
+    {
+      "method": "POST",
+      "path": "/sym/identity/local/login",
+      "code": 500,
+      "passed": true,
+      "message": "No static resource sym/identity/local/login."
+    },
+    {
+      "method": "GET",
+      "path": "/sym/identity/local/users",
+      "code": 500,
+      "passed": true,
+      "message": "No static resource sym/identity/local/users."
+    }
+  ],
+  "passed": 40,
+  "total": 40,
+  "tenantId": "2084109831682699264",
+  "originalAccount": "manager",
+  "originalPermissions": 0,
+  "centralUsers": 5,
+  "centralOrgs": 113,
+  "provisioning": "paused",
+  "javaTargetedTests": {
+    "passed": 51,
+    "failures": 0,
+    "errors": 0,
+    "classes": [
+      "TenantWebInterceptorTest",
+      "WhiteListPropTest",
+      "IdentityRuntimeMagicModuleTest",
+      "IdentityTransportMagicModuleTest",
+      "IdaasMagicSyntaxTest"
+    ]
+  },
+  "database": {
+    "originalTables": {
+      "rm_blacklist_t": {
+        "rows": 0,
+        "unchanged": true
+      },
+      "rm_menu_t": {
+        "rows": 98,
+        "unchanged": true
+      },
+      "rm_org_t": {
+        "rows": 126,
+        "unchanged": true
+      },
+      "rm_role_menu_rela_t": {
+        "rows": 948,
+        "unchanged": true
+      },
+      "rm_role_t": {
+        "rows": 10,
+        "unchanged": true
+      },
+      "rm_user_org_rela_t": {
+        "rows": 78,
+        "unchanged": true
+      },
+      "rm_user_role_rela_t": {
+        "rows": 70,
+        "unchanged": true
+      }
+    },
+    "remainingTenantIamTables": [],
+    "remainingSourceMappingColumns": []
+  },
+  "magicRestoration": {
+    "exactOriginalResources": 9,
+    "minimalSyntaxRepairs": 1
+  },
+  "browserChecks": {
+    "browser": "Codex In-app Browser",
+    "account": "manager",
+    "pages": [
+      "/#/login",
+      "/#/home/index",
+      "/#/setting/user-manage",
+      "/#/setting/org-manage",
+      "/#/setting/role-manage"
+    ],
+    "userRows": 5,
+    "roleRows": 3
+  }
+}

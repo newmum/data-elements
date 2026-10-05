@@ -1,0 +1,45 @@
+{
+  "files": [
+    {
+      "path": "src/domain/types.ts",
+      "unchanged": true,
+      "sha256": "d483fdc3ee0feeb2125b5f75ea651e3ec09abec0c7731f3dec760bc2fbce2bca"
+    },
+    {
+      "path": "src/domain/csv.ts",
+      "unchanged": true,
+      "sha256": "5a0c58063dea85350f93404fba0cf4a066295acb465475bbaa8f9ec453ab4964"
+    },
+    {
+      "path": "src/domain/seed.ts",
+      "unchanged": true,
+      "sha256": "729fcc15355cc4755365196de35d2620d18f41340a15afa0dcfe07577bc4d0f7"
+    },
+    {
+      "path": "src/domain/presentation.ts",
+      "unchanged": true,
+      "sha256": "139db7eae5e78fbea8aa82ad39489d707639aa6da6fce92106edced9c5b2bf2f"
+    },
+    {
+      "path": "src/domain/engine.ts",
+      "unchanged": true,
+      "sha256": "36571c0d7e732feb5d61e9aa18d9eabc114263af7a4b158fbbb3154156f497df"
+    },
+    {
+      "path": "src/domain/premium-seed.ts",
+      "unchanged": true,
+      "sha256": "3411b01a00ebe10d4ebd086de6cbe59b1ed2d3136362b30ad2cdabfd54f5b8ec"
+    },
+    {
+      "path": "src/mock/store.ts",
+      "unchanged": true,
+      "sha256": "cd727c6115ab810cb8f884d6ee1d981c348a281b90789a6287cd043d4f992673"
+    },
+    {
+      "path": "src/mock/database.ts",
+      "unchanged": true,
+      "sha256": "4f2bc825315c75740f4e619ed85d2cd71769ab8fc30fbf3aa2fc54f07a0fab31"
+    }
+  ],
+  "allUnchanged": true
+}

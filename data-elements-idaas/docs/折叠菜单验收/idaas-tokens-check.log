@@ -1,0 +1,5 @@
+
+> data-elements-idaas@2.2.0 tokens:check
+> node --experimental-strip-types scripts/generate-typography.mjs --check
+
+Typography CSS and semantic tokens are in sync.

@@ -1,0 +1,354 @@
+{
+  "completed": true,
+  "checks": [
+    {
+      "name": "/idaas/auth/login",
+      "path": "/idaas/auth/login",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/workspace/bootstrap",
+      "path": "/idaas/workspace/bootstrap",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "第三阶段能力真实开放",
+      "passed": true
+    },
+    {
+      "name": "/idaas/orgs/save",
+      "path": "/idaas/orgs/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/subjects/save",
+      "path": "/idaas/subjects/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "直接与机构来源角色并集去重",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/remove",
+      "path": "/idaas/grants/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "撤销一个来源保留另一个",
+      "passed": true
+    },
+    {
+      "name": "/idaas/permission-groups/save",
+      "path": "/idaas/permission-groups/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "权限组来源实际生效",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/remove",
+      "path": "/idaas/grants/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "撤销机构仍保留权限组",
+      "passed": true
+    },
+    {
+      "name": "/idaas/permission-groups/list",
+      "path": "/idaas/permission-groups/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/permission-groups/save",
+      "path": "/idaas/permission-groups/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "成员到期即时失效",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "未来授权即时排除",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/remove",
+      "path": "/idaas/grants/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "仅资格授权不产生业务资源",
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/remove",
+      "path": "/idaas/grants/remove",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/list",
+      "path": "/idaas/roles/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "停用角色即时撤销角色与资源",
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/list",
+      "path": "/idaas/roles/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/save",
+      "path": "/idaas/roles/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/list",
+      "path": "/idaas/resources/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/resources/save",
+      "path": "/idaas/resources/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "停用资源即时排除",
+      "passed": true
+    },
+    {
+      "name": "/idaas/roles/list",
+      "path": "/idaas/roles/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "有效授权引用角色不能归档",
+      "path": "/idaas/roles/remove",
+      "code": 409,
+      "passed": true
+    },
+    {
+      "name": "/idaas/clients/save",
+      "path": "/idaas/clients/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/clients/list",
+      "path": "/idaas/clients/list",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "客户端登记不伪装开通协议",
+      "passed": true
+    },
+    {
+      "name": "/idaas/clients/save",
+      "path": "/idaas/clients/save",
+      "code": 400,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/save",
+      "path": "/idaas/grants/save",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "path": "/idaas/grants/explain?appId=2084109831682699264&subjectId=3f30ab9652484c4ca18ddc508af7bc1f",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "机器授权不增加人员授权来源",
+      "passed": true
+    },
+    {
+      "name": "/idaas/assignments/list?appId=2084109831682699264",
+      "path": "/idaas/assignments/list?appId=2084109831682699264",
+      "code": 0,
+      "passed": true
+    },
+    {
+      "name": "授权投影版本递增且无远端假回执",
+      "passed": true
+    },
+    {
+      "name": "原公安和兼容库基表完全未变",
+      "passed": true
+    },
+    {
+      "name": "测试清理后原账号权限数据一致",
+      "passed": true
+    }
+  ],
+  "ownObjectsCleaned": true
+}

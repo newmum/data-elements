@@ -1,0 +1,1 @@
+domain typecheck exit=0

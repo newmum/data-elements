@@ -1,0 +1,3487 @@
+{
+  "product": "卓鉴统一身份管理平台",
+  "engineeringName": "data-elements-idaas",
+  "sharedBackend": "data-elements",
+  "inspectionDate": "2026-09-27",
+  "mode": "read-only",
+  "mysqlVersion": "8.0.30",
+  "scope": [
+    "baseline",
+    "baseline_ga"
+  ],
+  "method": "information_schema metadata and exact SELECT COUNT queries in read-only transactions; no authentication calls or data mutation",
+  "limitations": [
+    "Source defaults do not prove the running Nacos configuration values.",
+    "Table counts are an inspection snapshot.",
+    "No live protocol or application implementation acceptance was performed.",
+    "No account records, personal fields, stored hashes, tokens, or client-secret values are included."
+  ],
+  "tenants": [
+    {
+      "tid": "2084109831682699264",
+      "code": "PUBLIC_SECURITY",
+      "name": "公安行业场景",
+      "status": 1,
+      "is_del": 0
+    },
+    {
+      "tid": "2084109831682699265",
+      "code": "BROADCASTING",
+      "name": "广电行业场景",
+      "status": 1,
+      "is_del": 0
+    },
+    {
+      "tid": "2084109831682699266",
+      "code": "SEA_FISHERY",
+      "name": "海渔行业场景",
+      "status": 1,
+      "is_del": 0
+    },
+    {
+      "tid": "2084109831682699267",
+      "code": "CHENGTIAN_DATA_PLATFORM",
+      "name": "澄天数据中台",
+      "status": 1,
+      "is_del": 0
+    }
+  ],
+  "facts": {
+    "controlAccounts": {
+      "total": 43,
+      "notDeleted": 36,
+      "notDeletedStatusZero": 36,
+      "distinctSubjectsWithActiveMembership": 6,
+      "notDeletedWithoutAnyActiveMembership": 30,
+      "loginNameDuplicateGroups": 0
+    },
+    "activeMembershipCountsByTenant": [
+      {
+        "tenant_id": "2084109831682699265",
+        "total": 2,
+        "active": "2"
+      },
+      {
+        "tenant_id": "2084109831682699264",
+        "total": 5,
+        "active": "5"
+      },
+      {
+        "tenant_id": "2084109831682699266",
+        "total": 1,
+        "active": "1"
+      },
+      {
+        "tenant_id": "2084109831682699267",
+        "total": 2,
+        "active": "2"
+      }
+    ],
+    "publicSecurityOrganizationRelations": {
+      "count": 36,
+      "missingActiveMembershipRelationCount": 31,
+      "missingActiveMembershipDistinctAccountCount": 29,
+      "missingActiveAccountCount": 0,
+      "missingActiveOrganizationCount": 0
+    },
+    "publicSecurityRoleRelations": {
+      "count": 4,
+      "missingActiveAccountCount": 0,
+      "missingActiveRoleCount": 0,
+      "missingActiveMembershipCount": 0
+    },
+    "publicSecurityTableExactCounts": {
+      "rm_org_t": [
+        {
+          "tenant_id": "2084109831682699264",
+          "count": 169
+        }
+      ],
+      "rm_menu_t": [
+        {
+          "tenant_id": "2084109831682699264",
+          "count": 98
+        }
+      ],
+      "rm_role_t": [
+        {
+          "tenant_id": "2084109831682699264",
+          "count": 3
+        }
+      ],
+      "rm_role_menu_rela_t": [
+        {
+          "tenant_id": "2084109831682699264",
+          "count": 98
+        }
+      ],
+      "rm_user_org_rela_t": [
+        {
+          "tenant_id": "2084109831682699264",
+          "count": 36
+        }
+      ],
+      "rm_user_role_rela_t": [
+        {
+          "tenant_id": "2084109831682699264",
+          "count": 4
+        }
+      ],
+      "api_oauth_client_t": [],
+      "gateway_user_app_rela": [
+        {
+          "tenant_id": "2084109831682699264",
+          "count": 2
+        }
+      ]
+    },
+    "publicSecurityBusinessApplications": {
+      "total": 1178,
+      "notDeleted": 599,
+      "notDeletedWithClientId": 0,
+      "notDeletedWithClientSecret": 0
+    },
+    "publicSecurityLoginLogSensitiveFieldPresenceOnly": {
+      "rowCount": 4405,
+      "passwordNonemptyCount": 1368,
+      "tokenNonemptyCount": 4405,
+      "note": "No values inspected; password format or plaintext cannot be inferred from presence."
+    },
+    "activeAccountPasswordFormatLengthOnly": [
+      {
+        "digest_length": 96,
+        "count": 36
+      }
+    ],
+    "legacyRoleAppCatalogMatches": [
+      {
+        "app_id": "1995678661281710081",
+        "role_count": 3,
+        "matched_catalog_rows": "0"
+      }
+    ],
+    "legacyResourceTypeCounts": [
+      {
+        "resource_type": 0,
+        "status": 0,
+        "row_count": 32
+      },
+      {
+        "resource_type": 0,
+        "status": 1,
+        "row_count": 52
+      },
+      {
+        "resource_type": 2,
+        "status": 0,
+        "row_count": 7
+      },
+      {
+        "resource_type": 2,
+        "status": 1,
+        "row_count": 1
+      },
+      {
+        "resource_type": 3,
+        "status": 0,
+        "row_count": 2
+      },
+      {
+        "resource_type": 3,
+        "status": 1,
+        "row_count": 2
+      }
+    ],
+    "organizationJobTypeCounts": [
+      {
+        "job_type": "1",
+        "row_count": 34
+      },
+      {
+        "job_type": "4",
+        "row_count": 2
+      }
+    ],
+    "globalAccountTypeCounts": [
+      {
+        "user_type": 0,
+        "user_from": 0,
+        "status": 0,
+        "row_count": 34
+      },
+      {
+        "user_type": 0,
+        "user_from": null,
+        "status": 0,
+        "row_count": 2
+      }
+    ],
+    "sharedTablePresence": [
+      {
+        "TABLE_SCHEMA": "baseline",
+        "TABLE_NAME": "rm_user_t"
+      }
+    ],
+    "activeMembershipDuplicatePairs": [
+      {
+        "groups_count": 0
+      }
+    ]
+  },
+  "observedSchemaMetadata": [
+    {
+      "TABLE_SCHEMA": "baseline",
+      "TABLE_NAME": "rm_user_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "控制面登录用户账号",
+      "columns": [
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "real_name",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "真实名称"
+        },
+        {
+          "COLUMN_NAME": "user_name",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "MUL",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户名称"
+        },
+        {
+          "COLUMN_NAME": "password",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "密码摘要，不存储明文"
+        },
+        {
+          "COLUMN_NAME": "phone",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "电话"
+        },
+        {
+          "COLUMN_NAME": "id_card",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "标识卡片"
+        },
+        {
+          "COLUMN_NAME": "gender",
+          "COLUMN_TYPE": "varchar(2)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "性别"
+        },
+        {
+          "COLUMN_NAME": "date_birth",
+          "COLUMN_TYPE": "date",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "出生日期"
+        },
+        {
+          "COLUMN_NAME": "nation",
+          "COLUMN_TYPE": "varchar(20)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "民族"
+        },
+        {
+          "COLUMN_NAME": "native_place",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "籍贯地点"
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "状态"
+        },
+        {
+          "COLUMN_NAME": "user_code",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户编码"
+        },
+        {
+          "COLUMN_NAME": "data_src",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "数据来源"
+        },
+        {
+          "COLUMN_NAME": "sort_num",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序数量"
+        },
+        {
+          "COLUMN_NAME": "rank_sort",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "职级排序"
+        },
+        {
+          "COLUMN_NAME": "app_file_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "应用文件标识"
+        },
+        {
+          "COLUMN_NAME": "charge_status",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "负责人状态"
+        },
+        {
+          "COLUMN_NAME": "user_status",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户状态"
+        },
+        {
+          "COLUMN_NAME": "origin_user_id",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "外部来源用户标识"
+        },
+        {
+          "COLUMN_NAME": "pwd_status",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "密码状态"
+        },
+        {
+          "COLUMN_NAME": "has_login",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否登录"
+        },
+        {
+          "COLUMN_NAME": "change_pwd_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "最近密码修改时间"
+        },
+        {
+          "COLUMN_NAME": "office_address",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "办公地址"
+        },
+        {
+          "COLUMN_NAME": "create_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "update_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "create_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "update_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "deleted",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "email",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "邮箱"
+        },
+        {
+          "COLUMN_NAME": "fax_phone",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "传真电话"
+        },
+        {
+          "COLUMN_NAME": "fixed_phone",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "固定电话"
+        },
+        {
+          "COLUMN_NAME": "job_number",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "任务编号"
+        },
+        {
+          "COLUMN_NAME": "user_from",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户来源"
+        },
+        {
+          "COLUMN_NAME": "user_type",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户类型"
+        },
+        {
+          "COLUMN_NAME": "origin_user_types",
+          "COLUMN_TYPE": "varchar(512)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "外部来源用户类型集合（兼容字段）"
+        },
+        {
+          "COLUMN_NAME": "origin_user_ids",
+          "COLUMN_TYPE": "varchar(512)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "外部来源用户标识集合（兼容字段）"
+        },
+        {
+          "COLUMN_NAME": "origin_user_type",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "外部来源用户类型"
+        },
+        {
+          "COLUMN_NAME": "origin_position",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "来源职务"
+        },
+        {
+          "COLUMN_NAME": "origin_rank",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "来源职级"
+        },
+        {
+          "COLUMN_NAME": "authorized_strength",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "授权强度"
+        },
+        {
+          "COLUMN_NAME": "is_temporary",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否临时"
+        },
+        {
+          "COLUMN_NAME": "expire_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "过期时间"
+        },
+        {
+          "COLUMN_NAME": "is_effective",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否有效"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565828",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_user_login",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "user_name",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_user_login",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "deleted",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline",
+      "TABLE_NAME": "rm_user_tenant_rela_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "用户租户成员关系",
+      "columns": [
+        {
+          "COLUMN_NAME": "tid",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "user_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户标识"
+        },
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "is_default",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否默认"
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "状态"
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565609",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline",
+      "TABLE_NAME": "sym_config_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "系统配置",
+      "columns": [
+        {
+          "COLUMN_NAME": "TID",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_CODE",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置编码"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_NAME",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置名称"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_VALUE",
+          "COLUMN_TYPE": "longtext",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置值"
+        },
+        {
+          "COLUMN_NAME": "IS_USE",
+          "COLUMN_TYPE": "decimal(1,0)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否使用"
+        },
+        {
+          "COLUMN_NAME": "SORT_NO",
+          "COLUMN_TYPE": "decimal(4,0)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序编号"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_TYPE",
+          "COLUMN_TYPE": "decimal(8,0)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置类型"
+        },
+        {
+          "COLUMN_NAME": "CREATE_USER_ID",
+          "COLUMN_TYPE": "varchar(20)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建用户标识"
+        },
+        {
+          "COLUMN_NAME": "CREATE_TIME",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "UPDATE_TIME",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_DESC",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置描述"
+        },
+        {
+          "COLUMN_NAME": "IS_ENCRYPT",
+          "COLUMN_TYPE": "decimal(1,0)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否加密"
+        },
+        {
+          "COLUMN_NAME": "MODULE_ID",
+          "COLUMN_TYPE": "varchar(20)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "模块标识"
+        },
+        {
+          "COLUMN_NAME": "IS_DEL",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "CREATE_BY",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人员"
+        },
+        {
+          "COLUMN_NAME": "UPDATE_BY",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人员"
+        },
+        {
+          "COLUMN_NAME": "JSON_DATA",
+          "COLUMN_TYPE": "text",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "JSON数据数据"
+        },
+        {
+          "COLUMN_NAME": "TENANT_ID",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "MUL",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_GROUP",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置分组"
+        },
+        {
+          "COLUMN_NAME": "VALUE_TYPE",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "值类型"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_SCOPE",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置范围"
+        },
+        {
+          "COLUMN_NAME": "CACHE_TTL_SECONDS",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "缓存缓存时长秒"
+        },
+        {
+          "COLUMN_NAME": "VERSION_NO",
+          "COLUMN_TYPE": "bigint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "版本编号"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "TENANT_ID",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "CONFIG_GROUP",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "IS_USE",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "IS_DEL",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 5,
+          "COLUMN_NAME": "SORT_NO",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565610",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "TID",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "TID",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline",
+      "TABLE_NAME": "sym_tenant_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "租户定义",
+      "columns": [
+        {
+          "COLUMN_NAME": "tid",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "key",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "键"
+        },
+        {
+          "COLUMN_NAME": "code",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "编码"
+        },
+        {
+          "COLUMN_NAME": "name",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "名称"
+        },
+        {
+          "COLUMN_NAME": "init_flag",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "初始化标志"
+        },
+        {
+          "COLUMN_NAME": "json_config",
+          "COLUMN_TYPE": "longtext",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "JSON数据配置"
+        },
+        {
+          "COLUMN_NAME": "sort_no",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序编号"
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "状态"
+        },
+        {
+          "COLUMN_NAME": "isolation_mode",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "隔离模式"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565611",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "api_oauth_client_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "接口OAuth客户端",
+      "columns": [
+        {
+          "COLUMN_NAME": "tid",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "client_id",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "客户端标识"
+        },
+        {
+          "COLUMN_NAME": "resource_ids",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "资源标识集合"
+        },
+        {
+          "COLUMN_NAME": "client_secret",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "OAuth客户端密钥（加密存储）"
+        },
+        {
+          "COLUMN_NAME": "scope",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "范围"
+        },
+        {
+          "COLUMN_NAME": "authorized_grant_types",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "授权授权类型集合"
+        },
+        {
+          "COLUMN_NAME": "web_server_redirect_uri",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "网页服务端重定向资源地址"
+        },
+        {
+          "COLUMN_NAME": "authorities",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "权限集合"
+        },
+        {
+          "COLUMN_NAME": "access_token_validity",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "访问票据有效期"
+        },
+        {
+          "COLUMN_NAME": "refresh_token_validity",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "刷新票据有效期"
+        },
+        {
+          "COLUMN_NAME": "additional_information",
+          "COLUMN_TYPE": "longtext",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "附加信息"
+        },
+        {
+          "COLUMN_NAME": "autoapprove",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "自动批准"
+        },
+        {
+          "COLUMN_NAME": "public_key",
+          "COLUMN_TYPE": "longtext",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "公钥"
+        },
+        {
+          "COLUMN_NAME": "private_key",
+          "COLUMN_TYPE": "longtext",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "私钥（加密存储）"
+        },
+        {
+          "COLUMN_NAME": "sm4_key",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "SM4密钥（加密存储）"
+        },
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "MUL",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "idx_api_oauth_client_tenant_is_del",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_api_oauth_client_tenant_is_del",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "is_del",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565273",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "gateway_user_app_rela",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "网关用户应用关系",
+      "columns": [
+        {
+          "COLUMN_NAME": "tid",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "revision",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "修订版本"
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "应用标识"
+        },
+        {
+          "COLUMN_NAME": "user_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户标识"
+        },
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "MUL",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "idx_gateway_user_app_rela_tenant_is_del",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_gateway_user_app_rela_tenant_is_del",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "is_del",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565314",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "log_user_login_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "用户登录日志",
+      "columns": [
+        {
+          "COLUMN_NAME": "tid",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "is_success",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否成功"
+        },
+        {
+          "COLUMN_NAME": "account",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "账号"
+        },
+        {
+          "COLUMN_NAME": "password",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "密码摘要，不存储明文"
+        },
+        {
+          "COLUMN_NAME": "token",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "票据"
+        },
+        {
+          "COLUMN_NAME": "ip",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "IP地址"
+        },
+        {
+          "COLUMN_NAME": "browser",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "浏览器"
+        },
+        {
+          "COLUMN_NAME": "os",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "操作系统"
+        },
+        {
+          "COLUMN_NAME": "remark",
+          "COLUMN_TYPE": "varchar(500)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "备注"
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "MUL",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "idx_log_user_login_tenant_is_del_created",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_log_user_login_tenant_is_del_created",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "is_del",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_log_user_login_tenant_is_del_created",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "created_time",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565318",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "rm_menu_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "菜单与权限资源",
+      "columns": [
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "name",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "名称"
+        },
+        {
+          "COLUMN_NAME": "parent_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "父级标识"
+        },
+        {
+          "COLUMN_NAME": "static_icon",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "静态图标"
+        },
+        {
+          "COLUMN_NAME": "dynamic_img",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "动态图片"
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "状态"
+        },
+        {
+          "COLUMN_NAME": "resource_type",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "资源类型"
+        },
+        {
+          "COLUMN_NAME": "sno",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "序号"
+        },
+        {
+          "COLUMN_NAME": "url_type",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "访问地址类型"
+        },
+        {
+          "COLUMN_NAME": "url",
+          "COLUMN_TYPE": "varchar(256)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "访问地址"
+        },
+        {
+          "COLUMN_NAME": "method_name",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "方法名称"
+        },
+        {
+          "COLUMN_NAME": "create_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "update_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "deleted",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "create_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "update_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "sort_num",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序数量"
+        },
+        {
+          "COLUMN_NAME": "code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "编码"
+        },
+        {
+          "COLUMN_NAME": "open_type",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "开放类型"
+        },
+        {
+          "COLUMN_NAME": "top_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "顶级标识"
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "应用标识"
+        },
+        {
+          "COLUMN_NAME": "data_scope_enabled",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否启用角色数据范围"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565503",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565503",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_menu_tree",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_menu_tree",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "parent_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_menu_tree",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "deleted",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_menu_tree",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "status",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_menu_tree",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 5,
+          "COLUMN_NAME": "sort_num",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "app_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "parent_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "deleted",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 5,
+          "COLUMN_NAME": "sort_num",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "app_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "resource_type",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "status",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_menu_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 5,
+          "COLUMN_NAME": "deleted",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "rm_org_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "组织机构",
+      "columns": [
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "name",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "名称"
+        },
+        {
+          "COLUMN_NAME": "parent_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "父级标识"
+        },
+        {
+          "COLUMN_NAME": "short_name",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "简称名称"
+        },
+        {
+          "COLUMN_NAME": "credit_code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "信用编码"
+        },
+        {
+          "COLUMN_NAME": "standard",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "标准"
+        },
+        {
+          "COLUMN_NAME": "nature",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "性质"
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "状态"
+        },
+        {
+          "COLUMN_NAME": "serial_number",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "序列编号"
+        },
+        {
+          "COLUMN_NAME": "org_path",
+          "COLUMN_TYPE": "varchar(500)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "组织路径"
+        },
+        {
+          "COLUMN_NAME": "sort_num",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序数量"
+        },
+        {
+          "COLUMN_NAME": "description",
+          "COLUMN_TYPE": "text",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "描述"
+        },
+        {
+          "COLUMN_NAME": "data_src",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "数据来源"
+        },
+        {
+          "COLUMN_NAME": "create_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "update_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "create_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "update_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "deleted",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "dept_type",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "部门类型"
+        },
+        {
+          "COLUMN_NAME": "dept_code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "部门编码"
+        },
+        {
+          "COLUMN_NAME": "national_code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "国家编码"
+        },
+        {
+          "COLUMN_NAME": "national_name",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "国家名称"
+        },
+        {
+          "COLUMN_NAME": "region_code",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "区域编码"
+        },
+        {
+          "COLUMN_NAME": "node_type",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "节点类型"
+        },
+        {
+          "COLUMN_NAME": "origin_types",
+          "COLUMN_TYPE": "text",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "来源类型集合"
+        },
+        {
+          "COLUMN_NAME": "origin_ids",
+          "COLUMN_TYPE": "text",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "来源标识集合"
+        },
+        {
+          "COLUMN_NAME": "label",
+          "COLUMN_TYPE": "varchar(1000)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "标签"
+        },
+        {
+          "COLUMN_NAME": "leader_org_id",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "负责人组织标识"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565488",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565488",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_org_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_org_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "parent_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_org_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "deleted",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_org_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "sort_num",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_org_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_org_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "serial_number",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "rm_role_menu_rela_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "角色菜单权限关系",
+      "columns": [
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "role_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "角色标识"
+        },
+        {
+          "COLUMN_NAME": "app_resource_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "应用资源标识"
+        },
+        {
+          "COLUMN_NAME": "extend_id",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "扩展标识"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565507",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565507",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_menu_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_menu_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "role_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_menu_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "app_resource_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_menu_rela_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_menu_rela_t_lf2",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "app_resource_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "rm_role_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "角色定义",
+      "columns": [
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "create_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "update_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "deleted",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "create_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "update_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "status",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "状态"
+        },
+        {
+          "COLUMN_NAME": "name",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "名称"
+        },
+        {
+          "COLUMN_NAME": "code_num",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "编码数量"
+        },
+        {
+          "COLUMN_NAME": "description",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "描述"
+        },
+        {
+          "COLUMN_NAME": "app_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "应用标识"
+        },
+        {
+          "COLUMN_NAME": "sort_num",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序数量"
+        },
+        {
+          "COLUMN_NAME": "data_scope",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "角色全局数据范围：ALL、ORG、OWNER"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565484",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565484",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_role_code",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_role_code",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "app_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_role_code",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "code_num",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_rm_role_code",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "deleted",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "app_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "status",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_role_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "deleted",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "rm_user_org_rela_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "用户组织关系",
+      "columns": [
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "org_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "组织标识"
+        },
+        {
+          "COLUMN_NAME": "user_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户标识"
+        },
+        {
+          "COLUMN_NAME": "sort_num",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序数量"
+        },
+        {
+          "COLUMN_NAME": "job_type",
+          "COLUMN_TYPE": "varchar(10)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "任务类型"
+        },
+        {
+          "COLUMN_NAME": "employee_number",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "员工编号"
+        },
+        {
+          "COLUMN_NAME": "email",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "邮箱"
+        },
+        {
+          "COLUMN_NAME": "fax_phone",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "传真电话"
+        },
+        {
+          "COLUMN_NAME": "fixed_phone",
+          "COLUMN_TYPE": "varchar(200)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "固定电话"
+        },
+        {
+          "COLUMN_NAME": "serial_number",
+          "COLUMN_TYPE": "varchar(100)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "序列编号"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565497",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565497",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_user_org_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_user_org_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "user_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_user_org_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "job_type",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "rm_user_role_rela_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "用户角色关系",
+      "columns": [
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "role_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "角色标识"
+        },
+        {
+          "COLUMN_NAME": "user_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "用户标识"
+        },
+        {
+          "COLUMN_NAME": "auth_from",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "授权来源"
+        },
+        {
+          "COLUMN_NAME": "authority_group_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "权限分组标识"
+        },
+        {
+          "COLUMN_NAME": "is_temporary",
+          "COLUMN_TYPE": "smallint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否临时"
+        },
+        {
+          "COLUMN_NAME": "edit_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "编辑时间"
+        },
+        {
+          "COLUMN_NAME": "end_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "结束时间"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "INDEX33565493",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565493",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_user_role_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_user_role_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "user_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "ix_sym_user_role_rela_t_lf1",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "role_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "id",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "sym_application_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "业务应用系统",
+      "columns": [
+        {
+          "COLUMN_NAME": "tid",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "client_id",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "客户端标识"
+        },
+        {
+          "COLUMN_NAME": "client_secret",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "OAuth客户端密钥（加密存储）"
+        },
+        {
+          "COLUMN_NAME": "app_name",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "应用名称"
+        },
+        {
+          "COLUMN_NAME": "app_desc",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "应用描述"
+        },
+        {
+          "COLUMN_NAME": "app_url",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "应用访问地址"
+        },
+        {
+          "COLUMN_NAME": "auto_approve",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "自动审批"
+        },
+        {
+          "COLUMN_NAME": "accress_validity",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "访问有效期"
+        },
+        {
+          "COLUMN_NAME": "refresh_validity",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "刷新有效期"
+        },
+        {
+          "COLUMN_NAME": "notify_url",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "通知访问地址"
+        },
+        {
+          "COLUMN_NAME": "return_url",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "返回访问地址"
+        },
+        {
+          "COLUMN_NAME": "scope",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "范围"
+        },
+        {
+          "COLUMN_NAME": "auth_types",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "授权类型集合"
+        },
+        {
+          "COLUMN_NAME": "is_use",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否使用"
+        },
+        {
+          "COLUMN_NAME": "seq",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "顺序"
+        },
+        {
+          "COLUMN_NAME": "logo",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "标志图"
+        },
+        {
+          "COLUMN_NAME": "public_key",
+          "COLUMN_TYPE": "longtext",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "公钥"
+        },
+        {
+          "COLUMN_NAME": "private_key",
+          "COLUMN_TYPE": "longtext",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "私钥（加密存储）"
+        },
+        {
+          "COLUMN_NAME": "autoapprove1",
+          "COLUMN_TYPE": "varchar(255)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "自动批准"
+        },
+        {
+          "COLUMN_NAME": "asset_class",
+          "COLUMN_TYPE": "varchar(50)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "资产类别"
+        },
+        {
+          "COLUMN_NAME": "sort_no",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序编号"
+        },
+        {
+          "COLUMN_NAME": "org_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": ""
+        },
+        {
+          "COLUMN_NAME": "created_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人标识"
+        },
+        {
+          "COLUMN_NAME": "created_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "updated_by",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人标识"
+        },
+        {
+          "COLUMN_NAME": "updated_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "is_del",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "tenant_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "MUL",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "revision",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "修订版本"
+        },
+        {
+          "COLUMN_NAME": "reg_time",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "登记时间"
+        },
+        {
+          "COLUMN_NAME": "asset_status",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "资产状态"
+        },
+        {
+          "COLUMN_NAME": "flow_status",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "流程状态"
+        },
+        {
+          "COLUMN_NAME": "flow_order_id",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "流程顺序标识"
+        },
+        {
+          "COLUMN_NAME": "db_total",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "数据库总数"
+        },
+        {
+          "COLUMN_NAME": "data_origin",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "LEGACY=历史数据，PINGAO=品高同步"
+        },
+        {
+          "COLUMN_NAME": "source_key",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "品高 fjrbAbility.id"
+        },
+        {
+          "COLUMN_NAME": "sync_active",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "品高已上线且可在新建下拉中选择"
+        },
+        {
+          "COLUMN_NAME": "last_synced_at",
+          "COLUMN_TYPE": "datetime",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "最近一次品高同步时间"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "idx_application_tenant",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_application_tenant",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "is_del",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_application_tenant",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "updated_time",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_application_pingao_options",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_application_pingao_options",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "data_origin",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_application_pingao_options",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "sync_active",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_application_pingao_options",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "is_del",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_application_pingao_options",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 5,
+          "COLUMN_NAME": "app_name",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565331",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tid",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "uk_sym_application_pingao_source",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "tenant_id",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "uk_sym_application_pingao_source",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "data_origin",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "uk_sym_application_pingao_source",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "source_key",
+          "SUB_PART": null
+        }
+      ]
+    },
+    {
+      "TABLE_SCHEMA": "baseline_ga",
+      "TABLE_NAME": "sym_config_t",
+      "TABLE_TYPE": "BASE TABLE",
+      "TABLE_COMMENT": "系统配置",
+      "columns": [
+        {
+          "COLUMN_NAME": "TID",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "PRI",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "主键标识"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_CODE",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置编码"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_NAME",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置名称"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_VALUE",
+          "COLUMN_TYPE": "longtext",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置值"
+        },
+        {
+          "COLUMN_NAME": "IS_USE",
+          "COLUMN_TYPE": "decimal(1,0)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否使用"
+        },
+        {
+          "COLUMN_NAME": "SORT_NO",
+          "COLUMN_TYPE": "decimal(4,0)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "排序编号"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_TYPE",
+          "COLUMN_TYPE": "decimal(8,0)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置类型"
+        },
+        {
+          "COLUMN_NAME": "CREATE_USER_ID",
+          "COLUMN_TYPE": "varchar(20)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建用户标识"
+        },
+        {
+          "COLUMN_NAME": "CREATE_TIME",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建时间"
+        },
+        {
+          "COLUMN_NAME": "UPDATE_TIME",
+          "COLUMN_TYPE": "datetime(6)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新时间"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_DESC",
+          "COLUMN_TYPE": "varchar(128)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置描述"
+        },
+        {
+          "COLUMN_NAME": "IS_ENCRYPT",
+          "COLUMN_TYPE": "decimal(1,0)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "是否加密"
+        },
+        {
+          "COLUMN_NAME": "MODULE_ID",
+          "COLUMN_TYPE": "varchar(20)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "模块标识"
+        },
+        {
+          "COLUMN_NAME": "IS_DEL",
+          "COLUMN_TYPE": "tinyint",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "删除标志：0正常，1删除"
+        },
+        {
+          "COLUMN_NAME": "CREATE_BY",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "创建人员"
+        },
+        {
+          "COLUMN_NAME": "UPDATE_BY",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "更新人员"
+        },
+        {
+          "COLUMN_NAME": "JSON_DATA",
+          "COLUMN_TYPE": "text",
+          "IS_NULLABLE": "YES",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "JSON数据数据"
+        },
+        {
+          "COLUMN_NAME": "TENANT_ID",
+          "COLUMN_TYPE": "varchar(32)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "MUL",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "租户标识"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_GROUP",
+          "COLUMN_TYPE": "varchar(64)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置分组"
+        },
+        {
+          "COLUMN_NAME": "VALUE_TYPE",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "值类型"
+        },
+        {
+          "COLUMN_NAME": "CONFIG_SCOPE",
+          "COLUMN_TYPE": "varchar(16)",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "配置范围"
+        },
+        {
+          "COLUMN_NAME": "CACHE_TTL_SECONDS",
+          "COLUMN_TYPE": "int",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "缓存缓存时长秒"
+        },
+        {
+          "COLUMN_NAME": "VERSION_NO",
+          "COLUMN_TYPE": "bigint",
+          "IS_NULLABLE": "NO",
+          "COLUMN_KEY": "",
+          "EXTRA": "",
+          "COLUMN_COMMENT": "版本编号"
+        }
+      ],
+      "indexes": [
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "TENANT_ID",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 2,
+          "COLUMN_NAME": "CONFIG_GROUP",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 3,
+          "COLUMN_NAME": "IS_USE",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 4,
+          "COLUMN_NAME": "IS_DEL",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "idx_sym_config_lookup",
+          "NON_UNIQUE": 1,
+          "SEQ_IN_INDEX": 5,
+          "COLUMN_NAME": "SORT_NO",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "INDEX33565610",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "TID",
+          "SUB_PART": null
+        },
+        {
+          "INDEX_NAME": "PRIMARY",
+          "NON_UNIQUE": 0,
+          "SEQ_IN_INDEX": 1,
+          "COLUMN_NAME": "TID",
+          "SUB_PART": null
+        }
+      ]
+    }
+  ],
+  "currentMagicResourceEvidence": [
+    "/magic-api/api/01.系统门户/03.单点登录.ms",
+    "/magic-api/api/01.系统门户/08.登录会话/01.获取登录票据.ms",
+    "/magic-api/api/01.系统门户/用户登录.ms",
+    "/magic-api/api/09.系统管理/02.用户管理/05.当前用户信息.ms",
+    "/magic-api/api/09.系统管理/02.用户管理/用户角色保存.ms",
+    "/magic-api/api/09.系统管理/03.角色管理/02.角色保存修改.ms"
+  ]
+}

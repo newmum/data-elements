@@ -1,0 +1,279 @@
+{
+  "kind": "source-route-inventory-not-browser-results",
+  "workspaces": [
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/overview",
+      "name": "总览",
+      "group": "总览"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/apps",
+      "name": "应用列表",
+      "group": "应用管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/app-groups",
+      "name": "应用分组",
+      "group": "应用管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/organization",
+      "name": "组织与用户",
+      "group": "组织与用户"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/delegates",
+      "name": "分级管理员",
+      "group": "组织与用户"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/org-settings/lines",
+      "name": "条线管理",
+      "group": "组织与用户"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/org-settings/dictionaries",
+      "name": "职务岗位",
+      "group": "组织与用户"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/org-settings/fields",
+      "name": "扩展字段",
+      "group": "组织与用户"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/grants/apps",
+      "name": "应用授权",
+      "group": "授权管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/grants/users",
+      "name": "用户授权",
+      "group": "授权管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/grants/orgs",
+      "name": "机构授权",
+      "group": "授权管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/permission-groups",
+      "name": "权限组",
+      "group": "授权管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/api-grants/apps",
+      "name": "API 应用授权",
+      "group": "授权管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/api-grants/users",
+      "name": "API 用户授权",
+      "group": "授权管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/sync/configs",
+      "name": "同步配置",
+      "group": "同步管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/sync/entities",
+      "name": "同步对象",
+      "group": "同步管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/sync/tasks",
+      "name": "同步任务",
+      "group": "同步管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/audit/operations",
+      "name": "操作日志",
+      "group": "审计日志"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/audit/logins",
+      "name": "登录日志",
+      "group": "审计日志"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/audit/api",
+      "name": "API 日志",
+      "group": "审计日志"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/audit/statistics",
+      "name": "统计分析",
+      "group": "审计日志"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/system/access/admins",
+      "name": "管理员管理",
+      "group": "系统管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/system/access/roles",
+      "name": "系统角色",
+      "group": "系统管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/system/settings/security",
+      "name": "账号安全",
+      "group": "系统管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/system/settings/sso",
+      "name": "单点登录设置",
+      "group": "系统管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/system/settings/encryption",
+      "name": "字段加密",
+      "group": "系统管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/system/settings/api",
+      "name": "API 访问控制",
+      "group": "系统管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/system/settings/branding",
+      "name": "系统品牌",
+      "group": "系统管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/locked-accounts",
+      "name": "账号解锁",
+      "group": "系统管理"
+    },
+    {
+      "domain": "workforce",
+      "path": "/console/workforce/profile",
+      "name": "个人中心",
+      "group": "个人中心"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/overview",
+      "name": "总览",
+      "group": "总览"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/apps",
+      "name": "应用列表",
+      "group": "应用管理"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/app-groups",
+      "name": "应用分组",
+      "group": "应用管理"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/audit/operations",
+      "name": "操作日志",
+      "group": "审计日志"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/audit/logins",
+      "name": "登录日志",
+      "group": "审计日志"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/audit/api",
+      "name": "API 日志",
+      "group": "审计日志"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/audit/statistics",
+      "name": "统计分析",
+      "group": "审计日志"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/system/access/admins",
+      "name": "管理员管理",
+      "group": "系统管理"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/system/access/roles",
+      "name": "系统角色",
+      "group": "系统管理"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/system/settings/security",
+      "name": "账号安全",
+      "group": "系统管理"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/system/settings/branding",
+      "name": "系统品牌",
+      "group": "系统管理"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/persons",
+      "name": "自然人管理",
+      "group": "公众身份"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/entities",
+      "name": "法人管理",
+      "group": "公众身份"
+    },
+    {
+      "domain": "public",
+      "path": "/console/public/profile",
+      "name": "个人中心",
+      "group": "个人中心"
+    }
+  ],
+  "authentication": [
+    "/login",
+    "/auth/public/login",
+    "/auth/public/register/person",
+    "/auth/public/register/company",
+    "/auth/workforce/forgot",
+    "/auth/public/forgot",
+    "/auth/workforce/mfa",
+    "/auth/public/mfa"
+  ]
+}

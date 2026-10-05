@@ -1,0 +1,238 @@
+{
+  "completed": true,
+  "checkedAt": "2026-09-29T15:46:02.636137+00:00",
+  "staticChecks": {
+    "tokens": true,
+    "syntax": true,
+    "uiAudit": true,
+    "typographyAudit": true,
+    "typecheck": true,
+    "build": true
+  },
+  "frontendUnitTests": {
+    "passed": 104,
+    "failed": 0
+  },
+  "magicTests": {
+    "passed": 182,
+    "failed": 0
+  },
+  "frameworkResourceTests": {
+    "passed": 5,
+    "failed": 0
+  },
+  "applicationInteraction": {
+    "passed": 6,
+    "failed": 0,
+    "checks": [
+      {
+        "name": "应用详情人员与机构独立页签 390px",
+        "passed": true,
+        "durationMs": 7489
+      },
+      {
+        "name": "应用详情人员与机构独立页签 1440px",
+        "passed": true,
+        "durationMs": 7814
+      },
+      {
+        "name": "应用详情人员与机构独立页签 1920px",
+        "passed": true,
+        "durationMs": 6143
+      },
+      {
+        "name": "人员与机构编辑提交各自对象类型和原始标识",
+        "passed": true,
+        "durationMs": 7954
+      },
+      {
+        "name": "只读应用仍可看两类资料，分配与连接核验保持禁用",
+        "passed": true,
+        "durationMs": 3578
+      },
+      {
+        "name": "应用资料读取失败可刷新重试",
+        "passed": true,
+        "durationMs": 4673
+      }
+    ],
+    "note": "四项全量通过，剩余两项修正等待和选择器后定向复测通过；保留原始失败记录。"
+  },
+  "layoutAndTypography": {
+    "passed": 28,
+    "failed": 0,
+    "checks": [
+      {
+        "name": "@compact workforce 全部工作区 1920px",
+        "passed": true,
+        "durationMs": 31493
+      },
+      {
+        "name": "@compact workforce 全部工作区 1600px",
+        "passed": true,
+        "durationMs": 32687
+      },
+      {
+        "name": "@compact workforce 全部工作区 1440px",
+        "passed": true,
+        "durationMs": 32021
+      },
+      {
+        "name": "@compact workforce 全部工作区 1280px",
+        "passed": true,
+        "durationMs": 32411
+      },
+      {
+        "name": "@compact workforce 全部工作区 1024px",
+        "passed": true,
+        "durationMs": 28024
+      },
+      {
+        "name": "@compact workforce 全部工作区 768px",
+        "passed": true,
+        "durationMs": 25685
+      },
+      {
+        "name": "@compact workforce 全部工作区 390px",
+        "passed": true,
+        "durationMs": 19046
+      },
+      {
+        "name": "@compact 全部认证页 1920px",
+        "passed": true,
+        "durationMs": 6358
+      },
+      {
+        "name": "@compact 全部认证页 1440px",
+        "passed": true,
+        "durationMs": 6041
+      },
+      {
+        "name": "@compact 全部认证页 1224px",
+        "passed": true,
+        "durationMs": 5109
+      },
+      {
+        "name": "@compact 全部认证页 768px",
+        "passed": true,
+        "durationMs": 4962
+      },
+      {
+        "name": "@compact 全部认证页 390px",
+        "passed": true,
+        "durationMs": 3714
+      },
+      {
+        "name": "@compact 已删除的设计页面、个人菜单、帮助与搜索入口",
+        "passed": true,
+        "durationMs": 5434
+      },
+      {
+        "name": "@compact 抽屉、弹窗、宽表及长字段 1440px",
+        "passed": true,
+        "durationMs": 9871
+      },
+      {
+        "name": "@compact 抽屉、弹窗、宽表及长字段 390px",
+        "passed": true,
+        "durationMs": 9189
+      },
+      {
+        "name": "@compact workforce 全部应用详情页签",
+        "passed": true,
+        "durationMs": 41292
+      },
+      {
+        "name": "@compact 公众工作区保留未开通边界 1440px",
+        "passed": true,
+        "durationMs": 4337
+      },
+      {
+        "name": "@compact 公众工作区保留未开通边界 390px",
+        "passed": true,
+        "durationMs": 3402
+      },
+      {
+        "name": "@typography workforce全部工作区 1440",
+        "passed": true,
+        "durationMs": 30939
+      },
+      {
+        "name": "@typography workforce全部工作区 1920",
+        "passed": true,
+        "durationMs": 34988
+      },
+      {
+        "name": "@typography workforce全部工作区 390",
+        "passed": true,
+        "durationMs": 22324
+      },
+      {
+        "name": "@typography workforce全部应用与页签",
+        "passed": true,
+        "durationMs": 48604
+      },
+      {
+        "name": "@typography 全部认证入口 1440",
+        "passed": true,
+        "durationMs": 7261
+      },
+      {
+        "name": "@typography 全部认证入口 390",
+        "passed": true,
+        "durationMs": 4772
+      },
+      {
+        "name": "@typography 浮层、长字段与空结果 1440",
+        "passed": true,
+        "durationMs": 19630
+      },
+      {
+        "name": "@typography 浮层、长字段与空结果 390",
+        "passed": true,
+        "durationMs": 16632
+      },
+      {
+        "name": "@typography 公众工作区未开通状态 1440",
+        "passed": true,
+        "durationMs": 4526
+      },
+      {
+        "name": "@typography 公众工作区未开通状态 390",
+        "passed": true,
+        "durationMs": 4054
+      }
+    ]
+  },
+  "realApiChecks": {
+    "passed": 15,
+    "failed": 0,
+    "report": "真实接口验收.json"
+  },
+  "realBrowser": {
+    "passed": 3,
+    "failed": 0,
+    "screenCount": 9,
+    "report": "真实界面验收.json"
+  },
+  "startup": {
+    "passed": true,
+    "report": "启动验收.json"
+  },
+  "changes": {
+    "databaseSchema": false,
+    "businessRecords": false,
+    "newHttpApis": false,
+    "magicFunctions": [
+      "/idaas/directory",
+      "/idaas/field-values"
+    ],
+    "javaFrameworkClass": "DmCompatibleDatabaseResource"
+  },
+  "earlierAttempts": {
+    "realBrowserLoginTimeouts": 2,
+    "timeoutSeconds": 60,
+    "coldStartResourceTimeouts": 1,
+    "note": "前轮网络和资源读取超时记录已保留；本轮冷启动后，三种宽度各用时约 11～12 秒。结果不代表消除了数据库或 Redis 网络波动。"
+  }
+}

@@ -1,0 +1,1807 @@
+{
+  "observedAt": "2026-09-28T22:33:28",
+  "database": "baseline",
+  "mysqlVersion": "8.0.30",
+  "tables": [
+    {
+      "name": "api_file_t",
+      "comment": "Magic API资源文件",
+      "count": 1083,
+      "ddl": "CREATE TABLE `api_file_t` (\n  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '主键标识',\n  `api_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '接口标识',\n  `file_kind` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '文件类别',\n  `file_content` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT 'Magic资源完整内容',\n  `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',\n  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',\n  `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',\n  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',\n  `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',\n  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '租户标识',\n  `file_path` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Magic资源路径'\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Magic API资源文件'",
+      "columns": [
+        {
+          "name": "tid",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "主键标识",
+          "extra": ""
+        },
+        {
+          "name": "api_id",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "接口标识",
+          "extra": ""
+        },
+        {
+          "name": "file_kind",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "文件类别",
+          "extra": ""
+        },
+        {
+          "name": "file_content",
+          "type": "longtext",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "Magic资源完整内容",
+          "extra": ""
+        },
+        {
+          "name": "created_by",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建人标识",
+          "extra": ""
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建时间",
+          "extra": ""
+        },
+        {
+          "name": "updated_by",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新人标识",
+          "extra": ""
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新时间",
+          "extra": ""
+        },
+        {
+          "name": "is_del",
+          "type": "tinyint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "删除标志：0正常，1删除",
+          "extra": ""
+        },
+        {
+          "name": "tenant_id",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "租户标识",
+          "extra": ""
+        },
+        {
+          "name": "file_path",
+          "type": "varchar(1000)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "Magic资源路径",
+          "extra": ""
+        }
+      ]
+    },
+    {
+      "name": "iam_account_security_t",
+      "comment": "卓鉴账号认证安全状态，不复制凭据",
+      "count": 2,
+      "ddl": "CREATE TABLE `iam_account_security_t` (\n  `user_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `failed_count` int NOT NULL DEFAULT '0',\n  `locked_until` datetime(6) DEFAULT NULL,\n  `version` bigint NOT NULL DEFAULT '1',\n  `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  PRIMARY KEY (`user_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='卓鉴账号认证安全状态，不复制凭据'",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "failed_count",
+          "type": "int",
+          "nullable": "NO",
+          "default_value": "0",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "locked_until",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "nullable": "NO",
+          "default_value": "1",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    {
+      "name": "iam_auth_event_t",
+      "comment": "卓鉴认证事件，无密码、摘要和原始令牌",
+      "count": 35,
+      "ddl": "CREATE TABLE `iam_auth_event_t` (\n  `id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,\n  `user_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,\n  `account_fingerprint` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,\n  `event_type` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `result` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,\n  `reason_code` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,\n  `ip` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,\n  `trace_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,\n  `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  PRIMARY KEY (`id`),\n  KEY `ix_iam_auth_account_time` (`account_fingerprint`,`created_time`),\n  KEY `ix_iam_auth_tenant_time` (`tenant_id`,`created_time`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='卓鉴认证事件，无密码、摘要和原始令牌'",
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "tenant_id",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "user_id",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "account_fingerprint",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "event_type",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "result",
+          "type": "varchar(16)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "reason_code",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "ip",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "trace_id",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    {
+      "name": "iam_directory_org_t",
+      "comment": "",
+      "count": 113,
+      "ddl": "CREATE TABLE `iam_directory_org_t` (\n  `id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `code` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\n  `parent_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,\n  `record_json` json NOT NULL,\n  `version` bigint NOT NULL DEFAULT '1',\n  `is_del` tinyint NOT NULL DEFAULT '0',\n  `active_code` varchar(100) COLLATE utf8mb4_general_ci GENERATED ALWAYS AS ((case when (`is_del` = 0) then lower(trim(`code`)) else NULL end)) STORED,\n  `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_directory_code` (`active_code`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "code",
+          "type": "varchar(100)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "parent_id",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "record_json",
+          "type": "json",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "nullable": "NO",
+          "default_value": "1",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "is_del",
+          "type": "tinyint",
+          "nullable": "NO",
+          "default_value": "0",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "active_code",
+          "type": "varchar(100)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": "STORED GENERATED"
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    {
+      "name": "iam_identity_operation_t",
+      "comment": "卓鉴跨库成员开通记录；可恢复、不保存密码",
+      "count": 11,
+      "ddl": "CREATE TABLE `iam_identity_operation_t` (\n  `id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,\n  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `user_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `operator_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `operation_type` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `request_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,\n  `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,\n  `safe_payload` longtext COLLATE utf8mb4_general_ci NOT NULL,\n  `error_code` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,\n  `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  PRIMARY KEY (`id`),\n  KEY `ix_iam_operation_tenant_status` (`tenant_id`,`status`,`updated_time`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='卓鉴跨库成员开通记录；可恢复、不保存密码'",
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "tenant_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "user_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "operator_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "operation_type",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "request_hash",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "safe_payload",
+          "type": "longtext",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "error_code",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    {
+      "name": "iam_operator_permission_t",
+      "comment": "",
+      "count": 5,
+      "ddl": "CREATE TABLE `iam_operator_permission_t` (\n  `user_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `permission_code` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,\n  `target_tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '*',\n  PRIMARY KEY (`user_id`,`permission_code`,`target_tenant_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "permission_code",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "target_tenant_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": "*",
+          "comment": "",
+          "extra": ""
+        }
+      ]
+    },
+    {
+      "name": "iam_provision_item_t",
+      "comment": "",
+      "count": 0,
+      "ddl": "CREATE TABLE `iam_provision_item_t` (\n  `event_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `task_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `object_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `object_type` varchar(16) COLLATE utf8mb4_general_ci NOT NULL,\n  `source_version` bigint NOT NULL,\n  `payload_json` longtext COLLATE utf8mb4_general_ci NOT NULL,\n  `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\n  `attempt` int NOT NULL DEFAULT '0',\n  `result_json` json DEFAULT NULL,\n  `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  `sequence_no` int NOT NULL,\n  PRIMARY KEY (`event_id`),\n  KEY `ix_provision_task` (`task_id`,`sequence_no`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+      "columns": [
+        {
+          "name": "event_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "task_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "object_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "object_type",
+          "type": "varchar(16)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "source_version",
+          "type": "bigint",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "payload_json",
+          "type": "longtext",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": "NO",
+          "default_value": "pending",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "attempt",
+          "type": "int",
+          "nullable": "NO",
+          "default_value": "0",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "result_json",
+          "type": "json",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "sequence_no",
+          "type": "int",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        }
+      ]
+    },
+    {
+      "name": "iam_provision_task_t",
+      "comment": "",
+      "count": 0,
+      "ddl": "CREATE TABLE `iam_provision_task_t` (\n  `id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `config_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `target_tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `config_version` bigint NOT NULL,\n  `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\n  `lease_token` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL,\n  `lease_until` datetime(6) DEFAULT NULL,\n  `created_by` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  `request_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `request_id` (`request_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "config_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "target_tenant_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "config_version",
+          "type": "bigint",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": "NO",
+          "default_value": "pending",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "lease_token",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "lease_until",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "created_by",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "request_id",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        }
+      ]
+    },
+    {
+      "name": "iam_receiver_config_t",
+      "comment": "",
+      "count": 1,
+      "ddl": "CREATE TABLE `iam_receiver_config_t` (\n  `id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `name` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\n  `target_tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `endpoint` varchar(1000) COLLATE utf8mb4_general_ci NOT NULL,\n  `key_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,\n  `secret_cipher` varchar(1000) COLLATE utf8mb4_general_ci NOT NULL,\n  `enabled` tinyint NOT NULL DEFAULT '1',\n  `timeout_seconds` int NOT NULL DEFAULT '10',\n  `version` bigint NOT NULL DEFAULT '1',\n  `created_by` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `updated_by` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_receiver_key` (`target_tenant_id`,`key_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(100)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "target_tenant_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "endpoint",
+          "type": "varchar(1000)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "key_id",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "secret_cipher",
+          "type": "varchar(1000)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "enabled",
+          "type": "tinyint",
+          "nullable": "NO",
+          "default_value": "1",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "timeout_seconds",
+          "type": "int",
+          "nullable": "NO",
+          "default_value": "10",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "nullable": "NO",
+          "default_value": "1",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "created_by",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "updated_by",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    {
+      "name": "iam_subject_t",
+      "comment": "",
+      "count": 5,
+      "ddl": "CREATE TABLE `iam_subject_t` (\n  `id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL,\n  `account` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\n  `record_json` json NOT NULL,\n  `version` bigint NOT NULL DEFAULT '1',\n  `is_del` tinyint NOT NULL DEFAULT '0',\n  `active_account` varchar(50) COLLATE utf8mb4_general_ci GENERATED ALWAYS AS ((case when (`is_del` = 0) then lower(trim(`account`)) else NULL end)) STORED,\n  `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uk_subject_account` (`active_account`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci",
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "account",
+          "type": "varchar(50)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "record_json",
+          "type": "json",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "nullable": "NO",
+          "default_value": "1",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "is_del",
+          "type": "tinyint",
+          "nullable": "NO",
+          "default_value": "0",
+          "comment": "",
+          "extra": ""
+        },
+        {
+          "name": "active_account",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": "STORED GENERATED"
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": "CURRENT_TIMESTAMP(6)",
+          "comment": "",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    {
+      "name": "rm_user_t",
+      "comment": "控制面登录用户账号",
+      "count": 48,
+      "ddl": "CREATE TABLE `rm_user_t` (\n  `id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',\n  `real_name` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '真实名称',\n  `user_name` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户名称',\n  `password` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '密码摘要，不存储明文',\n  `phone` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '电话',\n  `id_card` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '标识卡片',\n  `gender` varchar(2) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '性别',\n  `date_birth` date DEFAULT NULL COMMENT '出生日期',\n  `nation` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '民族',\n  `native_place` varchar(200) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '籍贯地点',\n  `status` smallint DEFAULT NULL COMMENT '状态',\n  `user_code` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户编码',\n  `data_src` int DEFAULT NULL COMMENT '数据来源',\n  `sort_num` int DEFAULT NULL COMMENT '排序数量',\n  `rank_sort` int DEFAULT NULL COMMENT '职级排序',\n  `app_file_id` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '应用文件标识',\n  `charge_status` int DEFAULT NULL COMMENT '负责人状态',\n  `user_status` smallint DEFAULT NULL COMMENT '用户状态',\n  `origin_user_id` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户标识',\n  `pwd_status` smallint DEFAULT NULL COMMENT '密码状态',\n  `has_login` smallint DEFAULT NULL COMMENT '是否登录',\n  `change_pwd_time` datetime(6) DEFAULT NULL COMMENT '最近密码修改时间',\n  `office_address` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '办公地址',\n  `create_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',\n  `update_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',\n  `create_time` datetime(6) DEFAULT NULL COMMENT '创建时间',\n  `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',\n  `deleted` smallint DEFAULT NULL COMMENT '删除标志：0正常，1删除',\n  `email` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '邮箱',\n  `fax_phone` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '传真电话',\n  `fixed_phone` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '固定电话',\n  `job_number` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '任务编号',\n  `user_from` int DEFAULT NULL COMMENT '用户来源',\n  `user_type` smallint DEFAULT NULL COMMENT '用户类型',\n  `origin_user_types` varchar(512) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户类型集合（兼容字段）',\n  `origin_user_ids` varchar(512) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户标识集合（兼容字段）',\n  `origin_user_type` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户类型',\n  `origin_position` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源职务',\n  `origin_rank` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源职级',\n  `authorized_strength` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '授权强度',\n  `is_temporary` int DEFAULT NULL COMMENT '是否临时',\n  `expire_time` datetime(6) DEFAULT NULL COMMENT '过期时间',\n  `is_effective` smallint DEFAULT NULL COMMENT '是否有效',\n  `iam_active_login_name` varchar(50) COLLATE utf8mb4_general_ci GENERATED ALWAYS AS ((case when (`deleted` = 0) then lower(trim(`user_name`)) else NULL end)) STORED,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `INDEX33565828` (`id`),\n  UNIQUE KEY `uk_iam_active_login_name` (`iam_active_login_name`),\n  KEY `ix_rm_user_login` (`user_name`,`deleted`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='控制面登录用户账号'",
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "主键标识",
+          "extra": ""
+        },
+        {
+          "name": "real_name",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "真实名称",
+          "extra": ""
+        },
+        {
+          "name": "user_name",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "用户名称",
+          "extra": ""
+        },
+        {
+          "name": "password",
+          "type": "varchar(255)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "密码摘要，不存储明文",
+          "extra": ""
+        },
+        {
+          "name": "phone",
+          "type": "varchar(128)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "电话",
+          "extra": ""
+        },
+        {
+          "name": "id_card",
+          "type": "varchar(128)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "标识卡片",
+          "extra": ""
+        },
+        {
+          "name": "gender",
+          "type": "varchar(2)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "性别",
+          "extra": ""
+        },
+        {
+          "name": "date_birth",
+          "type": "date",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "出生日期",
+          "extra": ""
+        },
+        {
+          "name": "nation",
+          "type": "varchar(20)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "民族",
+          "extra": ""
+        },
+        {
+          "name": "native_place",
+          "type": "varchar(200)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "籍贯地点",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "smallint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "状态",
+          "extra": ""
+        },
+        {
+          "name": "user_code",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "用户编码",
+          "extra": ""
+        },
+        {
+          "name": "data_src",
+          "type": "int",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "数据来源",
+          "extra": ""
+        },
+        {
+          "name": "sort_num",
+          "type": "int",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "排序数量",
+          "extra": ""
+        },
+        {
+          "name": "rank_sort",
+          "type": "int",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "职级排序",
+          "extra": ""
+        },
+        {
+          "name": "app_file_id",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "应用文件标识",
+          "extra": ""
+        },
+        {
+          "name": "charge_status",
+          "type": "int",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "负责人状态",
+          "extra": ""
+        },
+        {
+          "name": "user_status",
+          "type": "smallint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "用户状态",
+          "extra": ""
+        },
+        {
+          "name": "origin_user_id",
+          "type": "varchar(128)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "外部来源用户标识",
+          "extra": ""
+        },
+        {
+          "name": "pwd_status",
+          "type": "smallint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "密码状态",
+          "extra": ""
+        },
+        {
+          "name": "has_login",
+          "type": "smallint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "是否登录",
+          "extra": ""
+        },
+        {
+          "name": "change_pwd_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "最近密码修改时间",
+          "extra": ""
+        },
+        {
+          "name": "office_address",
+          "type": "varchar(255)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "办公地址",
+          "extra": ""
+        },
+        {
+          "name": "create_id",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建人标识",
+          "extra": ""
+        },
+        {
+          "name": "update_id",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新人标识",
+          "extra": ""
+        },
+        {
+          "name": "create_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建时间",
+          "extra": ""
+        },
+        {
+          "name": "update_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新时间",
+          "extra": ""
+        },
+        {
+          "name": "deleted",
+          "type": "smallint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "删除标志：0正常，1删除",
+          "extra": ""
+        },
+        {
+          "name": "email",
+          "type": "varchar(255)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "邮箱",
+          "extra": ""
+        },
+        {
+          "name": "fax_phone",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "传真电话",
+          "extra": ""
+        },
+        {
+          "name": "fixed_phone",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "固定电话",
+          "extra": ""
+        },
+        {
+          "name": "job_number",
+          "type": "varchar(128)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "任务编号",
+          "extra": ""
+        },
+        {
+          "name": "user_from",
+          "type": "int",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "用户来源",
+          "extra": ""
+        },
+        {
+          "name": "user_type",
+          "type": "smallint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "用户类型",
+          "extra": ""
+        },
+        {
+          "name": "origin_user_types",
+          "type": "varchar(512)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "外部来源用户类型集合（兼容字段）",
+          "extra": ""
+        },
+        {
+          "name": "origin_user_ids",
+          "type": "varchar(512)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "外部来源用户标识集合（兼容字段）",
+          "extra": ""
+        },
+        {
+          "name": "origin_user_type",
+          "type": "varchar(128)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "外部来源用户类型",
+          "extra": ""
+        },
+        {
+          "name": "origin_position",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "来源职务",
+          "extra": ""
+        },
+        {
+          "name": "origin_rank",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "来源职级",
+          "extra": ""
+        },
+        {
+          "name": "authorized_strength",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "授权强度",
+          "extra": ""
+        },
+        {
+          "name": "is_temporary",
+          "type": "int",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "是否临时",
+          "extra": ""
+        },
+        {
+          "name": "expire_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "过期时间",
+          "extra": ""
+        },
+        {
+          "name": "is_effective",
+          "type": "smallint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "是否有效",
+          "extra": ""
+        },
+        {
+          "name": "iam_active_login_name",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "",
+          "extra": "STORED GENERATED"
+        }
+      ]
+    },
+    {
+      "name": "rm_user_tenant_rela_t",
+      "comment": "用户租户成员关系",
+      "count": 15,
+      "ddl": "CREATE TABLE `rm_user_tenant_rela_t` (\n  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',\n  `user_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户标识',\n  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',\n  `is_default` smallint NOT NULL COMMENT '是否默认',\n  `status` smallint NOT NULL COMMENT '状态',\n  `created_by` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',\n  `created_time` datetime(6) NOT NULL COMMENT '创建时间',\n  `updated_by` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',\n  `updated_time` datetime(6) NOT NULL COMMENT '更新时间',\n  `is_del` smallint NOT NULL COMMENT '删除标志：0正常，1删除',\n  PRIMARY KEY (`tid`),\n  UNIQUE KEY `INDEX33565609` (`tid`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户租户成员关系'",
+      "columns": [
+        {
+          "name": "tid",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "主键标识",
+          "extra": ""
+        },
+        {
+          "name": "user_id",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "用户标识",
+          "extra": ""
+        },
+        {
+          "name": "tenant_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "租户标识",
+          "extra": ""
+        },
+        {
+          "name": "is_default",
+          "type": "smallint",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "是否默认",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "smallint",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "状态",
+          "extra": ""
+        },
+        {
+          "name": "created_by",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建人标识",
+          "extra": ""
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "创建时间",
+          "extra": ""
+        },
+        {
+          "name": "updated_by",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新人标识",
+          "extra": ""
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "更新时间",
+          "extra": ""
+        },
+        {
+          "name": "is_del",
+          "type": "smallint",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "删除标志：0正常，1删除",
+          "extra": ""
+        }
+      ]
+    },
+    {
+      "name": "sym_config_t",
+      "comment": "系统配置",
+      "count": 32,
+      "ddl": "CREATE TABLE `sym_config_t` (\n  `TID` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',\n  `CONFIG_CODE` varchar(128) COLLATE utf8mb4_general_ci NOT NULL COMMENT '配置编码',\n  `CONFIG_NAME` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '配置名称',\n  `CONFIG_VALUE` longtext COLLATE utf8mb4_general_ci COMMENT '配置值',\n  `IS_USE` decimal(1,0) DEFAULT NULL COMMENT '是否使用',\n  `SORT_NO` decimal(4,0) DEFAULT NULL COMMENT '排序编号',\n  `CONFIG_TYPE` decimal(8,0) DEFAULT NULL COMMENT '配置类型',\n  `CREATE_USER_ID` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建用户标识',\n  `CREATE_TIME` datetime(6) DEFAULT NULL COMMENT '创建时间',\n  `UPDATE_TIME` datetime(6) DEFAULT NULL COMMENT '更新时间',\n  `CONFIG_DESC` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '配置描述',\n  `IS_ENCRYPT` decimal(1,0) DEFAULT NULL COMMENT '是否加密',\n  `MODULE_ID` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '模块标识',\n  `IS_DEL` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',\n  `CREATE_BY` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人员',\n  `UPDATE_BY` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人员',\n  `JSON_DATA` text COLLATE utf8mb4_general_ci COMMENT 'JSON数据数据',\n  `TENANT_ID` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',\n  `CONFIG_GROUP` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '配置分组',\n  `VALUE_TYPE` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT '值类型',\n  `CONFIG_SCOPE` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT '配置范围',\n  `CACHE_TTL_SECONDS` int NOT NULL COMMENT '缓存缓存时长秒',\n  `VERSION_NO` bigint NOT NULL COMMENT '版本编号',\n  PRIMARY KEY (`TID`),\n  UNIQUE KEY `INDEX33565610` (`TID`),\n  KEY `idx_sym_config_lookup` (`TENANT_ID`,`CONFIG_GROUP`,`IS_USE`,`IS_DEL`,`SORT_NO`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='系统配置'",
+      "columns": [
+        {
+          "name": "TID",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "主键标识",
+          "extra": ""
+        },
+        {
+          "name": "CONFIG_CODE",
+          "type": "varchar(128)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "配置编码",
+          "extra": ""
+        },
+        {
+          "name": "CONFIG_NAME",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "配置名称",
+          "extra": ""
+        },
+        {
+          "name": "CONFIG_VALUE",
+          "type": "longtext",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "配置值",
+          "extra": ""
+        },
+        {
+          "name": "IS_USE",
+          "type": "decimal(1,0)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "是否使用",
+          "extra": ""
+        },
+        {
+          "name": "SORT_NO",
+          "type": "decimal(4,0)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "排序编号",
+          "extra": ""
+        },
+        {
+          "name": "CONFIG_TYPE",
+          "type": "decimal(8,0)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "配置类型",
+          "extra": ""
+        },
+        {
+          "name": "CREATE_USER_ID",
+          "type": "varchar(20)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建用户标识",
+          "extra": ""
+        },
+        {
+          "name": "CREATE_TIME",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建时间",
+          "extra": ""
+        },
+        {
+          "name": "UPDATE_TIME",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新时间",
+          "extra": ""
+        },
+        {
+          "name": "CONFIG_DESC",
+          "type": "varchar(128)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "配置描述",
+          "extra": ""
+        },
+        {
+          "name": "IS_ENCRYPT",
+          "type": "decimal(1,0)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "是否加密",
+          "extra": ""
+        },
+        {
+          "name": "MODULE_ID",
+          "type": "varchar(20)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "模块标识",
+          "extra": ""
+        },
+        {
+          "name": "IS_DEL",
+          "type": "tinyint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "删除标志：0正常，1删除",
+          "extra": ""
+        },
+        {
+          "name": "CREATE_BY",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建人员",
+          "extra": ""
+        },
+        {
+          "name": "UPDATE_BY",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新人员",
+          "extra": ""
+        },
+        {
+          "name": "JSON_DATA",
+          "type": "text",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "JSON数据数据",
+          "extra": ""
+        },
+        {
+          "name": "TENANT_ID",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "租户标识",
+          "extra": ""
+        },
+        {
+          "name": "CONFIG_GROUP",
+          "type": "varchar(64)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "配置分组",
+          "extra": ""
+        },
+        {
+          "name": "VALUE_TYPE",
+          "type": "varchar(16)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "值类型",
+          "extra": ""
+        },
+        {
+          "name": "CONFIG_SCOPE",
+          "type": "varchar(16)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "配置范围",
+          "extra": ""
+        },
+        {
+          "name": "CACHE_TTL_SECONDS",
+          "type": "int",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "缓存缓存时长秒",
+          "extra": ""
+        },
+        {
+          "name": "VERSION_NO",
+          "type": "bigint",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "版本编号",
+          "extra": ""
+        }
+      ]
+    },
+    {
+      "name": "sym_tenant_t",
+      "comment": "租户定义",
+      "count": 4,
+      "ddl": "CREATE TABLE `sym_tenant_t` (\n  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',\n  `key` int DEFAULT NULL COMMENT '键',\n  `code` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '编码',\n  `name` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '名称',\n  `init_flag` tinyint DEFAULT NULL COMMENT '初始化标志',\n  `json_config` longtext COLLATE utf8mb4_general_ci COMMENT 'JSON数据配置',\n  `sort_no` int DEFAULT NULL COMMENT '排序编号',\n  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',\n  `created_by` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',\n  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',\n  `updated_by` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',\n  `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',\n  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '租户标识',\n  `status` tinyint NOT NULL COMMENT '状态',\n  `isolation_mode` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT '隔离模式',\n  PRIMARY KEY (`tid`),\n  UNIQUE KEY `INDEX33565611` (`tid`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='租户定义'",
+      "columns": [
+        {
+          "name": "tid",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "主键标识",
+          "extra": ""
+        },
+        {
+          "name": "key",
+          "type": "int",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "键",
+          "extra": ""
+        },
+        {
+          "name": "code",
+          "type": "varchar(255)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "编码",
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "名称",
+          "extra": ""
+        },
+        {
+          "name": "init_flag",
+          "type": "tinyint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "初始化标志",
+          "extra": ""
+        },
+        {
+          "name": "json_config",
+          "type": "longtext",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "JSON数据配置",
+          "extra": ""
+        },
+        {
+          "name": "sort_no",
+          "type": "int",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "排序编号",
+          "extra": ""
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建时间",
+          "extra": ""
+        },
+        {
+          "name": "created_by",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建人标识",
+          "extra": ""
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新时间",
+          "extra": ""
+        },
+        {
+          "name": "updated_by",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新人标识",
+          "extra": ""
+        },
+        {
+          "name": "is_del",
+          "type": "tinyint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "删除标志：0正常，1删除",
+          "extra": ""
+        },
+        {
+          "name": "tenant_id",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "租户标识",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "tinyint",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "状态",
+          "extra": ""
+        },
+        {
+          "name": "isolation_mode",
+          "type": "varchar(16)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "隔离模式",
+          "extra": ""
+        }
+      ]
+    },
+    {
+      "name": "ui_component_t",
+      "comment": "低代码组件定义",
+      "count": 230,
+      "ddl": "CREATE TABLE `ui_component_t` (\n  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',\n  `pid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '父级标识',\n  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '名称',\n  `source_code` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT 'Vue单文件组件源码',\n  `compile_js` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '组件编译后JavaScript',\n  `compile_css` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '组件编译后样式',\n  `type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '类型',\n  `remark` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '备注',\n  `created_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',\n  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',\n  `updated_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',\n  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',\n  `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',\n  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',\n  PRIMARY KEY (`tid`) USING BTREE,\n  UNIQUE KEY `INDEX33565613` (`tid`) USING BTREE\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='低代码组件定义'",
+      "columns": [
+        {
+          "name": "tid",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "主键标识",
+          "extra": ""
+        },
+        {
+          "name": "pid",
+          "type": "varchar(32)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "父级标识",
+          "extra": ""
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "名称",
+          "extra": ""
+        },
+        {
+          "name": "source_code",
+          "type": "longtext",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "Vue单文件组件源码",
+          "extra": ""
+        },
+        {
+          "name": "compile_js",
+          "type": "longtext",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "组件编译后JavaScript",
+          "extra": ""
+        },
+        {
+          "name": "compile_css",
+          "type": "longtext",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "组件编译后样式",
+          "extra": ""
+        },
+        {
+          "name": "type",
+          "type": "varchar(50)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "类型",
+          "extra": ""
+        },
+        {
+          "name": "remark",
+          "type": "varchar(255)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "备注",
+          "extra": ""
+        },
+        {
+          "name": "created_by",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建人标识",
+          "extra": ""
+        },
+        {
+          "name": "created_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "创建时间",
+          "extra": ""
+        },
+        {
+          "name": "updated_by",
+          "type": "varchar(64)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新人标识",
+          "extra": ""
+        },
+        {
+          "name": "updated_time",
+          "type": "datetime(6)",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "更新时间",
+          "extra": ""
+        },
+        {
+          "name": "is_del",
+          "type": "tinyint",
+          "nullable": "YES",
+          "default_value": null,
+          "comment": "删除标志：0正常，1删除",
+          "extra": ""
+        },
+        {
+          "name": "tenant_id",
+          "type": "varchar(32)",
+          "nullable": "NO",
+          "default_value": null,
+          "comment": "租户标识",
+          "extra": ""
+        }
+      ]
+    }
+  ],
+  "tenants": [
+    {
+      "tid": "2084109831682699264",
+      "code": "PUBLIC_SECURITY",
+      "name": "公安行业场景",
+      "status": 1,
+      "is_del": 0,
+      "accountSource": "LOCAL",
+      "binding": {
+        "dataSourceKey": "public-security",
+        "schema": "baseline_ga"
+      }
+    },
+    {
+      "tid": "2084109831682699265",
+      "code": "BROADCASTING",
+      "name": "广电行业场景",
+      "status": 1,
+      "is_del": 0,
+      "accountSource": "CONTROL",
+      "binding": {
+        "dataSourceKey": "broadcasting",
+        "schema": "baseline_beijing_gd"
+      }
+    },
+    {
+      "tid": "2084109831682699266",
+      "code": "SEA_FISHERY",
+      "name": "海渔行业场景",
+      "status": 1,
+      "is_del": 0,
+      "accountSource": "CONTROL",
+      "binding": {}
+    },
+    {
+      "tid": "2084109831682699267",
+      "code": "CHENGTIAN_DATA_PLATFORM",
+      "name": "澄天数据中台",
+      "status": 1,
+      "is_del": 0,
+      "accountSource": "CONTROL",
+      "binding": {
+        "dataSourceKey": "chengtian",
+        "schema": "chengtian"
+      }
+    }
+  ],
+  "magicReferences": {
+    "iam_account_security_t": [
+      "/magic-api/function/13.统一身份管理/03.平台登录.ms"
+    ],
+    "iam_auth_event_t": [
+      "/magic-api/function/13.统一身份管理/03.平台登录.ms"
+    ],
+    "iam_directory_org_t": [
+      "/magic-api/function/13.统一身份管理/04.中央人员机构目录.ms",
+      "/magic-api/function/13.统一身份管理/06.接入配置与下发任务.ms"
+    ],
+    "iam_identity_operation_t": [],
+    "iam_operator_permission_t": [
+      "/magic-api/function/13.统一身份管理/01.平台权限上下文.ms"
+    ],
+    "iam_provision_item_t": [
+      "/magic-api/function/13.统一身份管理/06.接入配置与下发任务.ms",
+      "/magic-api/function/13.统一身份管理/07.下发执行与重试.ms"
+    ],
+    "iam_provision_task_t": [
+      "/magic-api/function/13.统一身份管理/06.接入配置与下发任务.ms",
+      "/magic-api/function/13.统一身份管理/07.下发执行与重试.ms"
+    ],
+    "iam_receiver_config_t": [
+      "/magic-api/function/13.统一身份管理/06.接入配置与下发任务.ms",
+      "/magic-api/function/13.统一身份管理/07.下发执行与重试.ms"
+    ],
+    "iam_subject_t": [
+      "/magic-api/function/13.统一身份管理/04.中央人员机构目录.ms",
+      "/magic-api/function/13.统一身份管理/06.接入配置与下发任务.ms"
+    ],
+    "rm_user_t": [
+      "/magic-api/api/01.系统门户/用户登录.ms",
+      "/magic-api/api/09.系统管理/03.角色管理/01.角色分页.ms",
+      "/magic-api/api/09.系统管理/14.租户管理/03.用户租户分页.ms",
+      "/magic-api/api/09.系统管理/14.租户管理/04.保存用户租户关联.ms",
+      "/magic-api/function/13.统一身份管理/01.平台权限上下文.ms",
+      "/magic-api/function/13.统一身份管理/03.平台登录.ms",
+      "/magic-api/function/09.租户账号/01.本地登录.ms",
+      "/magic-api/function/09.租户账号/02.本地用户维护.ms"
+    ],
+    "rm_user_tenant_rela_t": [
+      "/magic-api/api/01.系统门户/用户登录.ms",
+      "/magic-api/api/09.系统管理/14.租户管理/03.用户租户分页.ms",
+      "/magic-api/api/09.系统管理/14.租户管理/04.保存用户租户关联.ms",
+      "/magic-api/api/09.系统管理/14.租户管理/05.解除用户租户关联.ms"
+    ]
+  },
+  "scope": "read-only; schema, aggregate counts and non-secret tenant metadata only"
+}

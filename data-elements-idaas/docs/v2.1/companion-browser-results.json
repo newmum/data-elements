@@ -1,0 +1,520 @@
+{
+  "kind": "independent-html-only-not-react",
+  "method": "Chromium set_content, self-contained HTML; no React runtime",
+  "checks": 70,
+  "browserErrors": [],
+  "failed": [],
+  "results": [
+    {
+      "route": "overview",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1920-overview.png"
+    },
+    {
+      "route": "users",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1920-users.png"
+    },
+    {
+      "route": "apps",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1920-apps.png"
+    },
+    {
+      "route": "grants",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1920-grants.png"
+    },
+    {
+      "route": "audit",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1920-audit.png"
+    },
+    {
+      "route": "settings",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1920-settings.png"
+    },
+    {
+      "route": "login",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1920-login.png"
+    },
+    {
+      "route": "user-details",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1920-user-details.png"
+    },
+    {
+      "route": "grant-editor",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1920-grant-editor.png"
+    },
+    {
+      "route": "audit-details",
+      "width": 1920,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1920-audit-details.png"
+    },
+    {
+      "route": "overview",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1600-overview.png"
+    },
+    {
+      "route": "users",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1600-users.png"
+    },
+    {
+      "route": "apps",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1600-apps.png"
+    },
+    {
+      "route": "grants",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1600-grants.png"
+    },
+    {
+      "route": "audit",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1600-audit.png"
+    },
+    {
+      "route": "settings",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1600-settings.png"
+    },
+    {
+      "route": "login",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1600-login.png"
+    },
+    {
+      "route": "user-details",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1600-user-details.png"
+    },
+    {
+      "route": "grant-editor",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1600-grant-editor.png"
+    },
+    {
+      "route": "audit-details",
+      "width": 1600,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1600-audit-details.png"
+    },
+    {
+      "route": "overview",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1440-overview.png"
+    },
+    {
+      "route": "users",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1440-users.png"
+    },
+    {
+      "route": "apps",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1440-apps.png"
+    },
+    {
+      "route": "grants",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1440-grants.png"
+    },
+    {
+      "route": "audit",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1440-audit.png"
+    },
+    {
+      "route": "settings",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1440-settings.png"
+    },
+    {
+      "route": "login",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1440-login.png"
+    },
+    {
+      "route": "user-details",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1440-user-details.png"
+    },
+    {
+      "route": "grant-editor",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1440-grant-editor.png"
+    },
+    {
+      "route": "audit-details",
+      "width": 1440,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1440-audit-details.png"
+    },
+    {
+      "route": "overview",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1280-overview.png"
+    },
+    {
+      "route": "users",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1280-users.png"
+    },
+    {
+      "route": "apps",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1280-apps.png"
+    },
+    {
+      "route": "grants",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1280-grants.png"
+    },
+    {
+      "route": "audit",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1280-audit.png"
+    },
+    {
+      "route": "settings",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1280-settings.png"
+    },
+    {
+      "route": "login",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1280-login.png"
+    },
+    {
+      "route": "user-details",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1280-user-details.png"
+    },
+    {
+      "route": "grant-editor",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1280-grant-editor.png"
+    },
+    {
+      "route": "audit-details",
+      "width": 1280,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1280-audit-details.png"
+    },
+    {
+      "route": "overview",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1024-overview.png"
+    },
+    {
+      "route": "users",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1024-users.png"
+    },
+    {
+      "route": "apps",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1024-apps.png"
+    },
+    {
+      "route": "grants",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1024-grants.png"
+    },
+    {
+      "route": "audit",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1024-audit.png"
+    },
+    {
+      "route": "settings",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1024-settings.png"
+    },
+    {
+      "route": "login",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/1024-login.png"
+    },
+    {
+      "route": "user-details",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1024-user-details.png"
+    },
+    {
+      "route": "grant-editor",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1024-grant-editor.png"
+    },
+    {
+      "route": "audit-details",
+      "width": 1024,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/1024-audit-details.png"
+    },
+    {
+      "route": "overview",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/768-overview.png"
+    },
+    {
+      "route": "users",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/768-users.png"
+    },
+    {
+      "route": "apps",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/768-apps.png"
+    },
+    {
+      "route": "grants",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/768-grants.png"
+    },
+    {
+      "route": "audit",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/768-audit.png"
+    },
+    {
+      "route": "settings",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/768-settings.png"
+    },
+    {
+      "route": "login",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/768-login.png"
+    },
+    {
+      "route": "user-details",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/768-user-details.png"
+    },
+    {
+      "route": "grant-editor",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/768-grant-editor.png"
+    },
+    {
+      "route": "audit-details",
+      "width": 768,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 470,
+      "screenshot": "docs/v2.1/screenshots/768-audit-details.png"
+    },
+    {
+      "route": "overview",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/390-overview.png"
+    },
+    {
+      "route": "users",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/390-users.png"
+    },
+    {
+      "route": "apps",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/390-apps.png"
+    },
+    {
+      "route": "grants",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/390-grants.png"
+    },
+    {
+      "route": "audit",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/390-audit.png"
+    },
+    {
+      "route": "settings",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/390-settings.png"
+    },
+    {
+      "route": "login",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "screenshot": "docs/v2.1/screenshots/390-login.png"
+    },
+    {
+      "route": "user-details",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 390,
+      "screenshot": "docs/v2.1/screenshots/390-user-details.png"
+    },
+    {
+      "route": "grant-editor",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 390,
+      "screenshot": "docs/v2.1/screenshots/390-grant-editor.png"
+    },
+    {
+      "route": "audit-details",
+      "width": 390,
+      "overflow": 0,
+      "banned": [],
+      "drawerWidth": 390,
+      "screenshot": "docs/v2.1/screenshots/390-audit-details.png"
+    }
+  ]
+}
