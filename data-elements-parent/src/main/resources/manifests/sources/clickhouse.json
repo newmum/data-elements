@@ -1,0 +1,37 @@
+{
+  "key": "source.clickhouse",
+  "category": "source",
+  "label": "ClickHouse 数据源",
+  "icon": "clickhouse",
+  "description": "从 ClickHouse OLAP 数据库批量抽取数据",
+  "fields": [
+    { "key": "host", "label": "主机", "type": "text", "required": true },
+    { "key": "port", "label": "端口", "type": "number", "default": 8123 },
+    { "key": "database", "label": "数据库", "type": "text", "required": true },
+    { "key": "protocol", "label": "协议", "type": "select", "default": "http", "options": [
+      { "label": "HTTP", "value": "http" },
+      { "label": "Native", "value": "native" },
+      { "label": "gRPC", "value": "grpc" }
+    ], "group": "advanced" },
+    { "key": "username", "label": "用户名", "type": "text", "required": true },
+    { "key": "password", "label": "密码", "type": "password", "required": true },
+    { "key": "table", "label": "表名", "type": "table-picker", "required": true },
+    { "key": "incrementalColumn", "label": "增量字段", "type": "text" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "controllerServices": [{ "localId": "dbcp", "type": "org.apache.nifi.dbcp.DBCPConnectionPool", "properties": {
+      "Database Connection URL": "jdbc:clickhouse://${config.host}:${config.port}/${config.database}?compress=1",
+      "Database Driver Class Name": "com.clickhouse.jdbc.ClickHouseDriver",
+      "Database Driver Locations": "${jdbc.driverLocations}/clickhouse-jdbc-0.6.5-all.jar",
+      "Database User": "${config.username}",
+      "Password": "${config.password}"
+    }}],
+    "processors": [
+      { "localId": "fetch", "type": "org.apache.nifi.processors.standard.GenerateTableFetch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Table Name": "${config.table}", "Maximum-value Columns": "${config.incrementalColumn}", "Partition Size": "50000" } },
+      { "localId": "execute", "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Record Writer": "${cs.jsonWriter}" } }
+    ],
+    "internalConnections": [{ "from": "fetch", "to": "execute", "relationship": "success" }],
+    "outlets": [{ "name": "default", "processorRef": "execute", "relationship": "success" }]
+  }
+}

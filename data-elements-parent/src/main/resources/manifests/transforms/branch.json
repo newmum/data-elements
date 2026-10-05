@@ -1,0 +1,27 @@
+{
+  "key": "branch.conditions",
+  "category": "branch",
+  "label": "条件分流",
+  "icon": "branch",
+  "description": "按业务条件将记录发送到不同下游",
+  "fields": [
+    {
+      "key": "routes",
+      "label": "分流规则",
+      "type": "json-editor",
+      "required": true,
+      "default": []
+    },
+    {
+      "key": "defaultRouteName",
+      "label": "其他数据出口",
+      "type": "text",
+      "default": "其他"
+    }
+  ],
+  "compile": {
+    "processors": [],
+    "internalConnections": [],
+    "outlets": []
+  }
+}

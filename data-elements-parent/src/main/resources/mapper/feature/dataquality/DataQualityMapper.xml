@@ -1,0 +1,424 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.feature.dataquality.infrastructure.persistence.mapper.DataQualityMapper">
+
+    <select id="selectTaskPage" resultType="java.util.LinkedHashMap">
+        SELECT q.*, d.db_name AS datasource_name, t.table_name, t.table_name_cn,
+               CASE WHEN EXISTS (SELECT 1 FROM dq_quality_task_rule_t qp WHERE qp.tenant_id=#{tenantId} AND qp.task_id=q.tid AND qp.is_del=0 AND qp.rule_type='PROFILE') THEN 'PROFILE' ELSE 'QUALITY' END AS task_kind,
+               r.status AS latest_run_status,
+               CASE WHEN r.checked_count>0 THEN r.quality_score ELSE NULL END AS latest_score,
+               r.violation_count AS latest_violation_count,
+               (SELECT COUNT(*) FROM dq_quality_task_rule_t qr WHERE qr.tenant_id=#{tenantId} AND qr.task_id=q.tid AND qr.is_del=0) AS rule_count,
+               CASE WHEN d.tid IS NULL OR t.tid IS NULL THEN 1 ELSE 0 END AS repair_required
+        FROM dq_quality_task_t q
+        LEFT JOIN db_datasource_t d ON d.tid = q.datasource_id AND d.tenant_id = #{tenantId} AND d.is_del = 0
+        LEFT JOIN db_table_t t ON t.tid = q.table_id AND t.tenant_id = #{tenantId} AND t.is_del = 0
+        LEFT JOIN dq_quality_run_t r ON r.tid = q.last_run_id AND r.tenant_id = #{tenantId}
+        WHERE q.tenant_id = #{tenantId} AND q.is_del = 0
+        <if test="kind != null and kind != ''">
+            AND (CASE WHEN EXISTS (SELECT 1 FROM dq_quality_task_rule_t qp WHERE qp.tenant_id=#{tenantId} AND qp.task_id=q.tid AND qp.is_del=0 AND qp.rule_type='PROFILE') THEN 'PROFILE' ELSE 'QUALITY' END) = #{kind}
+        </if>
+        <if test="status != null and status != ''">
+            AND q.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (q.task_name LIKE CONCAT('%', #{keyword}, '%')
+              OR q.task_code LIKE CONCAT('%', #{keyword}, '%')
+              OR d.db_name LIKE CONCAT('%', #{keyword}, '%')
+              OR t.table_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY q.updated_time DESC
+    </select>
+
+    <select id="selectRunPage" resultType="java.util.LinkedHashMap">
+        SELECT r.*, q.task_name, q.task_code, d.db_name AS datasource_name,
+               t.table_name, t.table_name_cn,
+               r.run_kind AS task_kind
+        FROM dq_quality_run_t r
+        JOIN dq_quality_task_t q ON q.tid = r.task_id AND q.tenant_id = #{tenantId}
+        LEFT JOIN db_datasource_t d ON d.tid = q.datasource_id AND d.tenant_id = #{tenantId}
+        LEFT JOIN db_table_t t ON t.tid = q.table_id AND t.tenant_id = #{tenantId}
+        WHERE r.tenant_id = #{tenantId} AND r.is_del = 0
+        <if test="kind != null and kind != ''">
+            AND r.run_kind = #{kind}
+        </if>
+        <if test="status != null and status != ''">
+            AND r.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (q.task_name LIKE CONCAT('%', #{keyword}, '%')
+              OR q.task_code LIKE CONCAT('%', #{keyword}, '%')
+              OR t.table_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY r.created_time DESC
+    </select>
+
+    <select id="selectIssuePage" resultType="java.util.LinkedHashMap">
+        SELECT i.*, m.rule_name, m.rule_type, m.quality_dimension
+        FROM dq_quality_issue_sample_t i
+        JOIN dq_quality_metric_t m ON m.run_id = i.run_id
+          AND m.task_rule_id = i.task_rule_id AND m.tenant_id = #{tenantId}
+        WHERE i.tenant_id = #{tenantId} AND i.run_id = #{runId}
+        <if test="status != null and status != ''">AND i.issue_status = #{status}</if>
+        <if test="severity != null and severity != ''">AND i.severity = #{severity}</if>
+        ORDER BY i.created_time DESC
+    </select>
+
+    <select id="selectTask" resultType="java.util.LinkedHashMap">
+        SELECT q.*, d.db_name AS datasource_name, t.table_name, t.table_name_cn, t.table_comment
+        FROM dq_quality_task_t q
+        LEFT JOIN db_datasource_t d ON d.tid = q.datasource_id AND d.tenant_id = #{tenantId} AND d.is_del=0
+        LEFT JOIN db_table_t t ON t.tid = q.table_id AND t.tenant_id = #{tenantId} AND t.is_del=0
+        WHERE q.tenant_id = #{tenantId} AND q.tid = #{taskId} AND q.is_del = 0
+    </select>
+
+    <select id="selectTaskRules" resultType="java.util.LinkedHashMap">
+        SELECT * FROM dq_quality_task_rule_t
+        WHERE tenant_id = #{tenantId} AND task_id = #{taskId} AND is_del = 0 AND enabled = 1
+        ORDER BY sort_no, created_time
+    </select>
+    <select id="lockTask" resultType="java.util.LinkedHashMap">
+        SELECT * FROM dq_quality_task_t WHERE tenant_id=#{tenantId} AND tid=#{taskId} AND is_del=0 FOR UPDATE
+    </select>
+    <select id="activeRuns" resultType="integer">
+        SELECT COUNT(*) FROM dq_quality_run_t WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND status IN ('PENDING','INITIALIZING','RUNNING') AND is_del=0
+    </select>
+    <update id="deleteTask">
+        UPDATE dq_quality_task_t SET is_del=1,status=2,updated_by=#{operator},updated_time=#{now} WHERE tenant_id=#{tenantId} AND tid=#{taskId} AND is_del=0
+    </update>
+
+    <select id="selectRun" resultType="java.util.LinkedHashMap">
+        SELECT r.*, q.task_name, q.task_code, q.datasource_id, q.table_id, q.shard_key,
+               d.db_name AS datasource_name, t.table_name, t.table_name_cn
+        FROM dq_quality_run_t r
+        JOIN dq_quality_task_t q ON q.tid = r.task_id AND q.tenant_id = #{tenantId}
+        LEFT JOIN db_datasource_t d ON d.tid = q.datasource_id AND d.tenant_id = #{tenantId}
+        LEFT JOIN db_table_t t ON t.tid = q.table_id AND t.tenant_id = #{tenantId}
+        WHERE r.tenant_id = #{tenantId} AND r.tid = #{runId} AND r.is_del = 0
+    </select>
+
+    <select id="selectRunMetrics" resultType="java.util.LinkedHashMap">
+        SELECT * FROM dq_quality_metric_t
+        WHERE tenant_id = #{tenantId} AND run_id = #{runId}
+        ORDER BY quality_dimension, rule_name
+    </select>
+
+    <select id="selectRunShards" resultType="java.util.LinkedHashMap">
+        SELECT * FROM dq_quality_run_shard_t
+        WHERE tenant_id = #{tenantId} AND run_id = #{runId}
+        ORDER BY shard_no
+    </select>
+
+    <select id="selectDatasourceOptions" resultType="java.util.LinkedHashMap">
+        SELECT d.tid, d.db_name, d.database_type, d.db_type,
+               COUNT(t.tid) AS table_count
+        FROM db_datasource_t d
+        JOIN db_table_t t ON t.datasource_id = d.tid AND t.tenant_id = #{tenantId} AND t.is_del = 0
+        WHERE d.tenant_id = #{tenantId} AND d.is_del = 0 AND d.is_enable = 1
+          AND d.jdbc_url LIKE 'jdbc:%'
+        GROUP BY d.tid, d.db_name, d.database_type, d.db_type
+        ORDER BY d.db_name
+    </select>
+
+    <select id="selectTableOptions" resultType="java.util.LinkedHashMap">
+        SELECT t.tid, t.table_name, t.table_name_cn, t.table_comment, t.record_count, t.field_count
+        FROM db_table_t t
+        WHERE t.tenant_id = #{tenantId} AND t.datasource_id = #{datasourceId}
+          AND t.is_del = 0
+        ORDER BY COALESCE(t.table_name_cn, t.table_comment, t.table_name), t.table_name
+    </select>
+
+    <select id="selectColumnOptions" resultType="java.util.LinkedHashMap">
+        SELECT c.tid, c.column_name, c.column_comment, c.data_type, c.column_type,
+               c.nullable, c.primary_key, c.is_unique, c.indexed, c.ordinal_position
+        FROM db_table_column_t c
+        WHERE c.tenant_id = #{tenantId} AND c.table_id = #{tableId} AND c.is_del = 0
+        ORDER BY c.ordinal_position, c.column_name
+    </select>
+
+    <select id="selectSummary" resultType="java.util.LinkedHashMap">
+        SELECT
+          (SELECT COUNT(*) FROM dq_quality_task_t q WHERE q.tenant_id=#{tenantId} AND q.is_del=0) AS task_total,
+          (SELECT COUNT(*) FROM dq_quality_task_t q WHERE q.tenant_id=#{tenantId} AND q.is_del=0 AND q.status=1) AS task_enabled,
+          (SELECT COUNT(*) FROM dq_quality_run_t r WHERE r.tenant_id=#{tenantId} AND r.is_del=0 AND r.created_time &gt;= #{since}) AS run_total,
+          (SELECT COALESCE(SUM(r.violation_count),0) FROM dq_quality_run_t r WHERE r.tenant_id=#{tenantId} AND r.is_del=0 AND r.created_time &gt;= #{since}) AS violation_total,
+          (SELECT AVG(r.quality_score) FROM dq_quality_run_t r WHERE r.tenant_id=#{tenantId} AND r.is_del=0 AND r.created_time &gt;= #{since} AND r.checked_count&gt;0 AND r.status IN ('COMPLETED','COMPLETED_WITH_ISSUES')) AS average_score,
+          (SELECT COUNT(*) FROM dq_quality_run_t r WHERE r.tenant_id=#{tenantId} AND r.is_del=0 AND r.status IN ('PENDING','INITIALIZING','RUNNING')) AS running_total
+    </select>
+
+    <select id="selectDimensionSummary" resultType="java.util.LinkedHashMap">
+        SELECT m.quality_dimension,
+               COALESCE(SUM(m.checked_count),0) AS checked_count,
+               COALESCE(SUM(m.violation_count),0) AS violation_count,
+               AVG(CASE WHEN m.checked_count>0 THEN m.pass_rate ELSE NULL END) AS pass_rate
+        FROM dq_quality_metric_t m
+        JOIN dq_quality_run_t r ON r.tid=m.run_id AND r.tenant_id=#{tenantId} AND r.created_time &gt;= #{since}
+        WHERE m.tenant_id=#{tenantId}
+        GROUP BY m.quality_dimension
+        ORDER BY m.quality_dimension
+    </select>
+
+    <insert id="insertTask">
+        INSERT INTO dq_quality_task_t
+        (tid,tenant_id,task_name,task_code,datasource_id,table_id,shard_key,trigger_mode,
+         cron_expression,shard_count,sample_limit,timeout_minutes,resource_group,status,
+         description,version_no,created_by,created_time,updated_by,updated_time,is_del)
+        VALUES
+        (#{tid},#{tenantId},#{taskName},#{taskCode},#{datasourceId},#{tableId},#{shardKey},#{triggerMode},
+         #{cronExpression},#{shardCount},#{sampleLimit},#{timeoutMinutes},#{resourceGroup},2,
+         #{description},1,#{operator},#{now},#{operator},#{now},0)
+    </insert>
+
+    <update id="updateTask">
+        UPDATE dq_quality_task_t SET task_name=#{taskName}, task_code=#{taskCode},
+          datasource_id=#{datasourceId}, table_id=#{tableId}, shard_key=#{shardKey},
+          trigger_mode=#{triggerMode}, cron_expression=#{cronExpression}, shard_count=#{shardCount},
+          sample_limit=#{sampleLimit}, timeout_minutes=#{timeoutMinutes}, resource_group=#{resourceGroup},
+          description=#{description}, status=2,next_run_at=NULL,precheck_status=NULL, precheck_message=NULL,
+          version_no=version_no+1, updated_by=#{operator}, updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND tid=#{tid} AND is_del=0
+    </update>
+
+    <update id="softDeleteRules">
+        UPDATE dq_quality_task_rule_t SET is_del=1, updated_by=#{operator}, updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND task_id=#{taskId} AND is_del=0
+    </update>
+
+    <insert id="insertTaskRule">
+        INSERT INTO dq_quality_task_rule_t
+        (tid,tenant_id,task_id,rule_name,rule_type,quality_dimension,column_name,related_column,
+         parameters_json,severity,weight_value,enabled,sort_no,created_by,created_time,updated_by,updated_time,is_del)
+        VALUES
+        (#{tid},#{tenantId},#{taskId},#{ruleName},#{ruleType},#{dimension},#{columnName},#{relatedColumn},
+         #{parametersJson},#{severity},#{weight},1,#{sortNo},#{operator},#{now},#{operator},#{now},0)
+    </insert>
+
+    <update id="updatePrecheck">
+        UPDATE dq_quality_task_t SET precheck_status=#{status}, precheck_message=#{message},
+          updated_time=#{now} WHERE tenant_id=#{tenantId} AND tid=#{taskId} AND is_del=0
+    </update>
+    <update id="updateTaskEnabled">
+        UPDATE dq_quality_task_t SET status=#{status}, updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND tid=#{taskId} AND is_del=0
+    </update>
+
+    <insert id="insertRun">
+        INSERT INTO dq_quality_run_t
+        (tid,tenant_id,task_id,task_version,task_snapshot,run_kind,trigger_type,request_id,dedupe_key,status,
+         created_by,created_time,updated_time,is_del)
+        VALUES (#{tid},#{tenantId},#{taskId},#{taskVersion},#{taskSnapshot},#{taskKind},#{triggerType},#{requestId},
+                #{dedupeKey},'PENDING',#{operator},#{now},#{now},0)
+    </insert>
+    <select id="selectRunIdByDedupe" resultType="string">
+        SELECT tid FROM dq_quality_run_t WHERE tenant_id=#{tenantId} AND dedupe_key=#{dedupeKey}
+    </select>
+    <update id="touchTaskRun">
+        UPDATE dq_quality_task_t SET last_run_id=#{runId}, last_run_status='PENDING',
+          last_run_at=#{now}, updated_time=#{now} WHERE tenant_id=#{tenantId} AND tid=#{taskId}
+    </update>
+    <update id="requestCancel">
+        UPDATE dq_quality_run_t SET cancel_requested=1, updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND tid=#{runId} AND status IN ('PENDING','INITIALIZING','RUNNING')
+    </update>
+
+    <select id="selectDueTasks" resultType="java.util.LinkedHashMap">
+        SELECT tid,tenant_id,cron_expression,next_run_at FROM dq_quality_task_t q
+        WHERE is_del=0 AND status=1 AND trigger_mode='CRON'
+          AND precheck_status='PASSED'
+          AND NOT EXISTS (SELECT 1 FROM dq_quality_run_t r WHERE r.task_id=q.tid AND r.tenant_id=q.tenant_id AND r.status IN ('PENDING','INITIALIZING','RUNNING') AND r.is_del=0)
+          AND (next_run_at IS NULL OR next_run_at &lt;= #{now})
+        ORDER BY next_run_at
+    </select>
+    <update id="updateNextRun">
+        UPDATE dq_quality_task_t SET next_run_at=#{nextRunAt}
+        WHERE tenant_id=#{tenantId} AND tid=#{taskId} AND is_del=0
+    </update>
+
+    <select id="selectPendingRuns" resultType="java.util.LinkedHashMap">
+        SELECT tid,tenant_id,task_id FROM dq_quality_run_t
+        WHERE status='PENDING' AND is_del=0 ORDER BY created_time
+    </select>
+    <update id="claimRun">
+        UPDATE dq_quality_run_t SET status='INITIALIZING',worker_id=#{workerId},started_at=#{now},updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND tid=#{runId} AND status='PENDING' AND cancel_requested=0
+    </update>
+    <delete id="deleteRunShards">
+        DELETE FROM dq_quality_run_shard_t WHERE tenant_id=#{tenantId} AND run_id=#{runId}
+    </delete>
+    <insert id="insertShard">
+        INSERT INTO dq_quality_run_shard_t
+        (tid,tenant_id,run_id,shard_no,key_lower,key_upper,upper_inclusive,status,attempt,created_time,updated_time)
+        VALUES (#{tid},#{tenantId},#{runId},#{shardNo},#{keyLower},#{keyUpper},#{upperInclusive},'PENDING',0,#{now},#{now})
+    </insert>
+    <update id="markRunRunning">
+        UPDATE dq_quality_run_t SET status='RUNNING',shard_total=#{shardTotal},shard_completed=0,updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND tid=#{runId} AND status='INITIALIZING'
+    </update>
+    <select id="selectCandidateShards" resultType="java.util.LinkedHashMap">
+        SELECT s.tid,s.tenant_id,s.run_id FROM dq_quality_run_shard_t s
+        JOIN dq_quality_run_t r ON r.tid=s.run_id AND r.tenant_id=s.tenant_id
+        WHERE s.status='PENDING' AND r.status='RUNNING' AND r.cancel_requested=0
+        ORDER BY r.created_time,s.shard_no
+    </select>
+    <update id="claimShard">
+        UPDATE dq_quality_run_shard_t SET status='RUNNING',attempt=attempt+1,worker_id=#{workerId},
+          lease_at=#{now},started_at=COALESCE(started_at,#{now}),updated_time=#{now}
+        WHERE tid=#{shardId} AND status='PENDING'
+    </update>
+    <select id="selectShard" resultType="java.util.LinkedHashMap">
+        SELECT * FROM dq_quality_run_shard_t
+        WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND tid=#{shardId}
+    </select>
+    <update id="completeShard">
+        UPDATE dq_quality_run_shard_t SET status='COMPLETED',row_count=#{rowCount},checked_count=#{checked},
+          violation_count=#{violations},finished_at=#{now},updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND tid=#{shardId} AND status='RUNNING'
+    </update>
+    <update id="updateShardFailure">
+        UPDATE dq_quality_run_shard_t SET status=#{status},error_message=#{message},worker_id=NULL,lease_at=NULL,
+          finished_at=CASE WHEN #{status}='FAILED' THEN #{now} ELSE NULL END,updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND tid=#{shardId}
+    </update>
+    <select id="selectShardAttempt" resultType="integer">
+        SELECT attempt FROM dq_quality_run_shard_t WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND tid=#{shardId}
+    </select>
+
+    <insert id="upsertMetric" databaseId="mysql">
+        INSERT INTO dq_quality_metric_t
+        (tid,tenant_id,run_id,task_rule_id,rule_name,rule_type,quality_dimension,column_name,severity,
+         weight_value,checked_count,violation_count,pass_rate,score,created_time,updated_time)
+        VALUES (#{tid},#{tenantId},#{runId},#{ruleId},#{ruleName},#{ruleType},#{dimension},#{columnName},
+                #{severity},#{weight},#{checked},#{violations},#{passRate},#{score},#{now},#{now})
+        ON DUPLICATE KEY UPDATE
+          checked_count=checked_count+VALUES(checked_count),
+          violation_count=violation_count+VALUES(violation_count),
+          pass_rate=CASE WHEN checked_count=0 THEN 100 ELSE (checked_count-LEAST(checked_count,violation_count))*100/checked_count END,
+          score=pass_rate,updated_time=VALUES(updated_time)
+    </insert>
+    <insert id="upsertMetric" databaseId="dm">
+        MERGE INTO dq_quality_metric_t target USING (SELECT #{tenantId} tenant_id,#{runId} run_id,#{ruleId} task_rule_id FROM dual) source
+        ON (target.tenant_id=source.tenant_id AND target.run_id=source.run_id AND target.task_rule_id=source.task_rule_id)
+        WHEN MATCHED THEN UPDATE SET target.checked_count=target.checked_count+#{checked},
+          target.violation_count=target.violation_count+#{violations},
+          target.pass_rate=CASE WHEN target.checked_count+#{checked}=0 THEN 100 ELSE
+            ((target.checked_count+#{checked})-LEAST(target.checked_count+#{checked},target.violation_count+#{violations}))*100/(target.checked_count+#{checked}) END,
+          target.score=target.pass_rate,target.updated_time=#{now}
+        WHEN NOT MATCHED THEN INSERT
+          (tid,tenant_id,run_id,task_rule_id,rule_name,rule_type,quality_dimension,column_name,severity,weight_value,
+           checked_count,violation_count,pass_rate,score,created_time,updated_time)
+          VALUES (#{tid},#{tenantId},#{runId},#{ruleId},#{ruleName},#{ruleType},#{dimension},#{columnName},#{severity},#{weight},
+                  #{checked},#{violations},#{passRate},#{score},#{now},#{now})
+    </insert>
+    <insert id="upsertMetric" databaseId="oracle">
+        MERGE INTO dq_quality_metric_t target USING (SELECT #{tenantId} tenant_id,#{runId} run_id,#{ruleId} task_rule_id FROM dual) source
+        ON (target.tenant_id=source.tenant_id AND target.run_id=source.run_id AND target.task_rule_id=source.task_rule_id)
+        WHEN MATCHED THEN UPDATE SET target.checked_count=target.checked_count+#{checked},target.violation_count=target.violation_count+#{violations},target.updated_time=#{now}
+        WHEN NOT MATCHED THEN INSERT (tid,tenant_id,run_id,task_rule_id,rule_name,rule_type,quality_dimension,column_name,severity,weight_value,checked_count,violation_count,pass_rate,score,created_time,updated_time)
+          VALUES (#{tid},#{tenantId},#{runId},#{ruleId},#{ruleName},#{ruleType},#{dimension},#{columnName},#{severity},#{weight},#{checked},#{violations},#{passRate},#{score},#{now},#{now})
+    </insert>
+    <insert id="upsertMetric" databaseId="postgresql">
+        INSERT INTO dq_quality_metric_t (tid,tenant_id,run_id,task_rule_id,rule_name,rule_type,quality_dimension,column_name,severity,weight_value,checked_count,violation_count,pass_rate,score,created_time,updated_time)
+        VALUES (#{tid},#{tenantId},#{runId},#{ruleId},#{ruleName},#{ruleType},#{dimension},#{columnName},#{severity},#{weight},#{checked},#{violations},#{passRate},#{score},#{now},#{now})
+        ON CONFLICT (tenant_id,run_id,task_rule_id) DO UPDATE SET checked_count=dq_quality_metric_t.checked_count+EXCLUDED.checked_count,violation_count=dq_quality_metric_t.violation_count+EXCLUDED.violation_count,updated_time=EXCLUDED.updated_time
+    </insert>
+    <insert id="upsertMetric" databaseId="kingbase">
+        INSERT INTO dq_quality_metric_t (tid,tenant_id,run_id,task_rule_id,rule_name,rule_type,quality_dimension,column_name,severity,weight_value,checked_count,violation_count,pass_rate,score,created_time,updated_time)
+        VALUES (#{tid},#{tenantId},#{runId},#{ruleId},#{ruleName},#{ruleType},#{dimension},#{columnName},#{severity},#{weight},#{checked},#{violations},#{passRate},#{score},#{now},#{now})
+        ON CONFLICT (tenant_id,run_id,task_rule_id) DO UPDATE SET checked_count=dq_quality_metric_t.checked_count+EXCLUDED.checked_count,violation_count=dq_quality_metric_t.violation_count+EXCLUDED.violation_count,updated_time=EXCLUDED.updated_time
+    </insert>
+
+    <!-- Routing selects a different vendor per tenant, but MyBatis databaseId is
+         resolved from the control datasource. Use portable statements under a
+         run-row lock rather than a control-vendor-specific UPSERT. -->
+    <select id="lockRun" resultType="java.util.LinkedHashMap">
+        SELECT * FROM dq_quality_run_t WHERE tenant_id=#{tenantId} AND tid=#{runId} AND is_del=0 FOR UPDATE
+    </select>
+
+    <select id="selectColumnOptionsBatch" resultType="java.util.LinkedHashMap">
+        SELECT c.table_id, c.tid, c.column_name, c.column_comment, c.data_type, c.column_type,
+               c.nullable, c.primary_key, c.is_unique, c.indexed, c.ordinal_position
+        FROM db_table_column_t c
+        JOIN db_table_t t ON t.tid=c.table_id AND t.tenant_id=c.tenant_id AND t.is_del=0
+        JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0
+        WHERE c.tenant_id=#{tenantId} AND c.is_del=0 AND c.table_id IN
+        <foreach collection="tableIds" item="tableId" open="(" separator="," close=")">#{tableId}</foreach>
+        ORDER BY c.table_id,c.ordinal_position,c.column_name
+    </select>
+
+    <select id="selectValidTableIds" resultType="java.lang.String">
+        SELECT t.tid FROM db_table_t t
+        JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0
+        WHERE t.tenant_id=#{tenantId} AND t.datasource_id=#{datasourceId} AND t.is_del=0 AND t.tid IN
+        <foreach collection="tableIds" item="tableId" open="(" separator="," close=")">#{tableId}</foreach>
+    </select>
+    <update id="addMetric">
+        UPDATE dq_quality_metric_t SET checked_count=checked_count+#{checked},
+          violation_count=violation_count+#{violations},profile_json=COALESCE(#{profileJson},profile_json),updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND task_rule_id=#{ruleId}
+    </update>
+    <insert id="insertMetric">
+        INSERT INTO dq_quality_metric_t
+        (tid,tenant_id,run_id,task_rule_id,rule_name,rule_type,quality_dimension,column_name,severity,weight_value,
+         checked_count,violation_count,pass_rate,score,profile_json,created_time,updated_time)
+        VALUES (#{tid},#{tenantId},#{runId},#{ruleId},#{ruleName},#{ruleType},#{dimension},#{columnName},#{severity},#{weight},
+          #{checked},#{violations},#{passRate},#{score},#{profileJson},#{now},#{now})
+    </insert>
+    <insert id="insertIssue">
+        INSERT INTO dq_quality_issue_sample_t
+        (tid,tenant_id,run_id,shard_id,task_rule_id,issue_hash,row_key,column_name,issue_value,row_snapshot,
+         severity,issue_status,created_time,updated_time)
+        VALUES (#{tid},#{tenantId},#{runId},#{shardId},#{ruleId},#{issueHash},#{rowKey},#{columnName},
+                #{issueValue},#{rowSnapshot},#{severity},'OPEN',#{now},#{now})
+    </insert>
+
+    <select id="selectShardState" resultType="java.util.LinkedHashMap">
+        SELECT COUNT(*) AS total,
+          COALESCE(SUM(CASE WHEN status='COMPLETED' THEN 1 ELSE 0 END),0) AS completed,
+          COALESCE(SUM(CASE WHEN status='FAILED' THEN 1 ELSE 0 END),0) AS failed
+        FROM dq_quality_run_shard_t WHERE tenant_id=#{tenantId} AND run_id=#{runId}
+    </select>
+    <select id="selectRunSums" resultType="java.util.LinkedHashMap">
+        SELECT (SELECT COALESCE(SUM(row_count),0) FROM dq_quality_run_shard_t WHERE tenant_id=#{tenantId} AND run_id=#{runId}) AS row_count,
+          COALESCE(SUM(checked_count),0) AS checked_count,
+          COALESCE(SUM(violation_count),0) AS violation_count,
+          CASE WHEN COALESCE(SUM(CASE WHEN checked_count>0 THEN weight_value ELSE 0 END),0)=0 THEN NULL
+            ELSE SUM(CASE WHEN checked_count>0 THEN score*weight_value ELSE 0 END)/SUM(CASE WHEN checked_count>0 THEN weight_value ELSE 0 END) END AS quality_score
+        FROM dq_quality_metric_t WHERE tenant_id=#{tenantId} AND run_id=#{runId}
+    </select>
+    <update id="refreshMetricRates">
+        UPDATE dq_quality_metric_t SET pass_rate=CASE WHEN checked_count=0 THEN 0 ELSE (checked_count-LEAST(checked_count,violation_count))*100.0/checked_count END,
+            score=CASE WHEN checked_count=0 THEN 0 ELSE (checked_count-LEAST(checked_count,violation_count))*100.0/checked_count END
+        WHERE tenant_id=#{tenantId} AND run_id=#{runId}
+    </update>
+    <update id="finishRun">
+        UPDATE dq_quality_run_t SET status=#{status},shard_completed=#{shardCompleted},row_count=#{rowCount},
+          checked_count=#{checked},violation_count=#{violations},quality_score=#{score},finished_at=#{now},updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND tid=#{runId} AND status='RUNNING'
+    </update>
+    <update id="failRun">
+        UPDATE dq_quality_run_t SET status='FAILED',error_code=#{code},error_message=#{message},error_detail=#{detail},
+          trace_id=#{traceId},finished_at=#{now},updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND tid=#{runId} AND status IN ('PENDING','INITIALIZING','RUNNING')
+    </update>
+    <update id="cancelRun">
+        UPDATE dq_quality_run_t SET status='CANCELLED',finished_at=#{now},updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND tid=#{runId} AND status IN ('PENDING','INITIALIZING','RUNNING')
+    </update>
+    <update id="cancelPendingShards">
+        UPDATE dq_quality_run_shard_t SET status='CANCELLED',finished_at=#{now},updated_time=#{now}
+        WHERE tenant_id=#{tenantId} AND run_id=#{runId} AND status IN ('PENDING','RUNNING')
+    </update>
+    <select id="selectCancelRequested" resultType="integer">
+        SELECT cancel_requested FROM dq_quality_run_t WHERE tenant_id=#{tenantId} AND tid=#{runId}
+    </select>
+    <update id="recoverInitializingRuns">
+        UPDATE dq_quality_run_t SET status='PENDING',worker_id=NULL,updated_time=#{staleBefore}
+        WHERE status='INITIALIZING' AND updated_time &lt; #{staleBefore}
+    </update>
+    <update id="recoverRunningShards">
+        UPDATE dq_quality_run_shard_t
+        SET status=CASE WHEN attempt &gt;= #{maxAttempts} THEN 'FAILED' ELSE 'PENDING' END,
+            worker_id=NULL,lease_at=NULL,updated_time=#{staleBefore}
+        WHERE status='RUNNING' AND lease_at &lt; #{staleBefore}
+    </update>
+</mapper>

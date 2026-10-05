@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.feature.approval.infrastructure.persistence.mapper.ApprovalDelegationMapper">
+    <select id="selectActiveDelegatorIds" resultType="java.lang.String">
+        select distinct delegator_user_id
+          from wf_approval_delegation_t
+         where tenant_id = #{tenantId}
+           and delegate_user_id = #{delegateUserId}
+           and status = 1
+           and is_del = 0
+           and start_time &lt;= #{now}
+           and end_time &gt;= #{now}
+    </select>
+</mapper>

@@ -1,0 +1,28 @@
+{
+  "key": "source.hbase",
+  "category": "source",
+  "label": "HBase 数据源",
+  "icon": "database",
+  "description": "从 Huawei MRS HBase 表扫描数据，使用 MRS 客户端配置与 Kerberos 凭据",
+  "fields": [
+    { "key": "zookeeperQuorum", "label": "ZK Quorum", "type": "text", "required": true, "placeholder": "host1:2181,host2:2181" },
+    { "key": "clientConfigDir", "label": "客户端配置目录", "type": "text", "required": true },
+    { "key": "table", "label": "HBase 表", "type": "table-picker", "required": true },
+    { "key": "rowStart", "label": "起始 RowKey", "type": "text", "group": "advanced" },
+    { "key": "rowStop", "label": "结束 RowKey", "type": "text", "group": "advanced" },
+    { "key": "kerberosPrincipal", "label": "Kerberos Principal", "type": "text", "group": "security" },
+    { "key": "keytabPath", "label": "Keytab 路径", "type": "text", "group": "security" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "controllerServices": [{ "localId": "hbase", "type": "org.apache.nifi.hbase.HBase_2_ClientService", "properties": {
+      "Hadoop Configuration Files": "${config.clientConfigDir}/core-site.xml,${config.clientConfigDir}/hdfs-site.xml,${config.clientConfigDir}/hbase-site.xml",
+      "Kerberos Principal": "${config.kerberosPrincipal}",
+      "Kerberos Keytab": "${config.keytabPath}"
+    }}],
+    "processors": [
+      { "localId": "scan", "type": "org.apache.nifi.hbase.ScanHBase", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "HBase Client Service": "${cs.hbase}", "Table Name": "${config.table}", "Start Row": "${config.rowStart}", "End Row": "${config.rowStop}" } }
+    ],
+    "outlets": [{ "name": "default", "processorRef": "scan", "relationship": "success" }]
+  }
+}

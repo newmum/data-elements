@@ -1,0 +1,45 @@
+{
+  "key": "source.api",
+  "category": "source",
+  "label": "API 接口",
+  "icon": "api",
+  "description": "按调度调用 HTTP API 获取数据",
+  "fields": [
+    { "key": "url", "label": "接口地址", "type": "text", "required": true, "placeholder": "https://example.com/api/list" },
+    { "key": "method", "label": "请求方式", "type": "select", "default": "GET", "options": [
+      { "label": "GET", "value": "GET" },
+      { "label": "POST", "value": "POST" },
+      { "label": "PUT", "value": "PUT" },
+      { "label": "DELETE", "value": "DELETE" }
+    ] },
+    { "key": "contentType", "label": "Content-Type", "type": "text", "default": "application/json", "group": "advanced" },
+    { "key": "requestBody", "label": "请求体", "type": "json-editor", "group": "advanced" },
+    { "key": "authHeader", "label": "Authorization", "type": "password", "placeholder": "Bearer token", "group": "advanced" },
+    { "key": "connectTimeout", "label": "连接超时", "type": "duration", "default": "10 sec", "group": "advanced" },
+    { "key": "readTimeout", "label": "读取超时", "type": "duration", "default": "30 sec", "group": "advanced" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "invoke",
+        "type": "org.apache.nifi.processors.standard.InvokeHTTP",
+        "schedulingPeriod": "${config.schedulingPeriod}",
+        "schedulingStrategy": "TIMER_DRIVEN",
+        "properties": {
+          "HTTP Method": "${config.method}",
+          "HTTP URL": "${config.url}",
+          "Request Body": "${config.requestBody}",
+          "Content-Type": "${config.contentType}",
+          "Authorization": "${config.authHeader}",
+          "Connection Timeout": "${config.connectTimeout}",
+          "Socket Read Timeout": "${config.readTimeout}",
+          "Response Generation Required": "true"
+        }
+      }
+    ],
+    "outlets": [
+      { "name": "default", "processorRef": "invoke", "relationship": "Response" }
+    ]
+  }
+}

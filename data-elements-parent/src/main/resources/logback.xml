@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 日志保存路径 -->
+    <property name="LOG_HOME" value="./logs"/>
+    <!-- 日志保存文件名前缀 -->
+    <property name="FILE_NAME" value="analysis-center"/>
+    <!-- 日志文件大小最大值 -->
+    <property name="LOG_MAX_SIZE" value="100MB" />
+    <!-- 日志文件大小最大值 -->
+    <property name="TOTAL_SIZE_CAP" value="500MB" />
+    <property name="MAX_HISTORY" value="3" />
+    <property name="CLEAN_HISTORY_ON_START" value="true" />
+
+    <include resource="org/springframework/boot/logging/logback/base.xml" />
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+
+    <!-- 2. 输出到文件  -->
+    <appender name="FILE_DEBUG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- 当前记录的日志文档完整路径 -->
+        <file>${LOG_HOME}/${FILE_NAME}-debug.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>DEBUG</level>
+        </filter>
+        <!--日志文档输出格式-->
+        <encoder>
+            <pattern>AA%d{yyyy-MM-dd HH:mm:ss.SSS} -%5level ---[%15.15thread] %-40.40logger{39} : %msg%n%n</pattern>
+            <charset>UTF-8</charset> <!-- 此处设置字符集 -->
+        </encoder>
+        <!-- 日志记录器的滚动策略，按日期，按大小记录 -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/${FILE_NAME}-debug-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>${LOG_MAX_SIZE}</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <!--日志文档保留天数（非持续运行情况下，15天外不会清理）-->
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <!-- 应对服务非持续偶尔运行，日志清理机制无法触发而导致日志得不到清理的情况-->
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>${CLEAN_HISTORY_ON_START}</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+    <!-- 2. 输出到文件  -->
+    <appender name="FILE_INFO" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- 当前记录的日志文档完整路径 -->
+        <file>${LOG_HOME}/${FILE_NAME}-info.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+        <!--日志文档输出格式-->
+        <encoder>
+            <pattern>BB%d{yyyy-MM-dd HH:mm:ss.SSS} -%5level ---[%15.15thread] %-40.40logger{39} : %msg%n%n</pattern>
+            <charset>UTF-8</charset> <!-- 此处设置字符集 -->
+        </encoder>
+        <!-- 日志记录器的滚动策略，按日期，按大小记录 -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/${FILE_NAME}-info-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>${LOG_MAX_SIZE}</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <!--日志文档保留天数（非持续运行情况下，15天外不会清理）-->
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <!-- 应对服务非持续偶尔运行，日志清理机制无法触发而导致日志得不到清理的情况-->
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>${CLEAN_HISTORY_ON_START}</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+    <!-- 2. 输出到文件  -->
+    <appender name="FILE_ERROR" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <!-- 当前记录的日志文档完整路径 -->
+        <file>${LOG_HOME}/${FILE_NAME}-error.log</file>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <!--日志文档输出格式-->
+        <encoder>
+            <pattern>CC%d{yyyy-MM-dd HH:mm:ss.SSS} -%5level ---[%15.15thread] %-40.40logger{39} : %msg%n%n</pattern>
+            <charset>UTF-8</charset> <!-- 此处设置字符集 -->
+        </encoder>
+        <!-- 日志记录器的滚动策略，按日期，按大小记录 -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_HOME}/${FILE_NAME}-error-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>${LOG_MAX_SIZE}</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <!--日志文档保留天数（非持续运行情况下，15天外不会清理）-->
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <!-- 应对服务非持续偶尔运行，日志清理机制无法触发而导致日志得不到清理的情况-->
+            <totalSizeCap>${TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>${CLEAN_HISTORY_ON_START}</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <!--<appender name="logstash" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+        <destination>192.168.31.139:4560</destination>
+        <encoder charset="UTF-8" class="net.logstash.logback.encoder.LogstashEncoder" />
+    </appender>-->
+    <!-- 配置一些固定输出级别 -->
+    <logger name="com" level="info"></logger>
+    <logger name="org" level="info"></logger>
+    <logger name="ch" level="info"></logger>
+    <logger name="cn" level="info"></logger>
+    <logger name="co" level="info"></logger>
+    <logger name="io" level="info"></logger>
+    <logger name="org" level="info"></logger>
+    <logger name="javax" level="info"></logger>
+    <logger name="sun" level="info"></logger>
+    <logger name="oracle" level="info"></logger>
+    <logger name="antlr" level="info"></logger>
+    <logger name="com.linewell.dataasset" level="debug"></logger>
+    <logger name="com.linewell.job" level="debug"></logger>
+    <logger name="com.linewell.message" level="debug"></logger>
+    <logger name="graphql.execution" level="info"></logger>
+    <root level="debug">
+        <!-- 开发环境开启，生产环境不开启 -->
+        <!--<appender-ref ref="console" />-->
+        <!-- 开发环境可以不开启，生产环境需要开启 -->
+        <appender-ref ref="FILE_DEBUG" />
+        <appender-ref ref="FILE_INFO" />
+        <appender-ref ref="FILE_ERROR" />
+    </root>
+</configuration>
+

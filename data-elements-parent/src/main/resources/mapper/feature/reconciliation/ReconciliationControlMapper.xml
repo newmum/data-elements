@@ -1,0 +1,463 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.feature.reconciliation.infrastructure.persistence.mapper.ReconciliationControlMapper">
+
+    <sql id="PolicySearch">
+        from data_reconcile_policy_t p
+        join data_access_agg_task_t a
+          on a.tid = p.access_task_id
+         and a.tenant_id = p.tenant_id
+        left join db_table_t st
+          on st.tid = a.source_table_id
+         and st.tenant_id = p.tenant_id
+        left join db_table_t tt
+          on tt.tid = a.target_table_id
+         and tt.tenant_id = p.tenant_id
+        left join data_reconcile_run_t r
+          on r.tid = (
+              select latest.tid
+                from (
+                    select rr.tid, rr.policy_id, rr.tenant_id,
+                           row_number() over (
+                               partition by rr.tenant_id, rr.policy_id
+                               order by rr.created_time desc
+                           ) row_no
+                      from data_reconcile_run_t rr
+                ) latest
+               where latest.tenant_id = p.tenant_id
+                 and latest.policy_id = p.tid
+                 and latest.row_no = 1
+          )
+       where p.tenant_id = #{tenantId}
+         and p.is_del = 0
+        <if test="keyword != null and keyword != ''">
+            and (
+                p.policy_name like concat(concat('%', #{keyword}), '%')
+                or a.task_name like concat(concat('%', #{keyword}), '%')
+                or st.table_name like concat(concat('%', #{keyword}), '%')
+                or tt.table_name like concat(concat('%', #{keyword}), '%')
+            )
+        </if>
+    </sql>
+
+    <select id="selectPolicyPage" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select p.*, a.task_name, st.table_name source_table_name,
+               tt.table_name target_table_name,
+               r.status last_run_status, r.consistency_rate,
+               r.diff_count last_diff_count, r.finished_at last_finished_at
+        <include refid="PolicySearch"/>
+        order by p.updated_time desc
+    </select>
+
+    <select id="selectRunPage" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select r.*, p.policy_name, p.compare_mode
+          from data_reconcile_run_t r
+          join data_reconcile_policy_t p
+            on p.tid = r.policy_id
+           and p.tenant_id = r.tenant_id
+         where r.tenant_id = #{tenantId}
+        <if test="status != null and status != ''">
+            and r.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            and p.policy_name like concat(concat('%', #{keyword}), '%')
+        </if>
+         order by r.created_time desc
+    </select>
+
+    <select id="selectDiffPage" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select tid, business_key, diff_type, field_name,
+               source_value_masked, target_value_masked,
+               source_row_hash, target_row_hash,
+               resolve_status, created_time
+          from data_reconcile_diff_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+        <if test="diffType != null and diffType != ''">
+            and diff_type = #{diffType}
+        </if>
+         order by created_time, tid
+    </select>
+
+    <select id="selectPolicyDetail" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select p.*, a.task_name, a.source_db_id, a.source_table_id,
+               a.target_db_id, a.target_table_id,
+               st.table_name source_table_name,
+               tt.table_name target_table_name,
+               sd.db_name source_db_name,
+               td.db_name target_db_name
+          from data_reconcile_policy_t p
+          join data_access_agg_task_t a
+            on a.tid = p.access_task_id
+           and a.tenant_id = p.tenant_id
+          left join db_table_t st
+            on st.tid = a.source_table_id
+           and st.tenant_id = p.tenant_id
+          left join db_table_t tt
+            on tt.tid = a.target_table_id
+           and tt.tenant_id = p.tenant_id
+          left join db_datasource_t sd
+            on sd.tid = a.source_db_id
+           and sd.tenant_id = p.tenant_id
+          left join db_datasource_t td
+            on td.tid = a.target_db_id
+           and td.tenant_id = p.tenant_id
+         where p.tenant_id = #{tenantId}
+           and p.tid = #{policyId}
+           and p.is_del = 0
+    </select>
+
+    <select id="selectRunDetail" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select r.*, p.policy_name, p.compare_mode, p.access_task_id
+          from data_reconcile_run_t r
+          join data_reconcile_policy_t p
+            on p.tid = r.policy_id
+           and p.tenant_id = r.tenant_id
+         where r.tenant_id = #{tenantId}
+           and r.tid = #{runId}
+    </select>
+
+    <select id="selectBuckets" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select bucket_no, key_lower, key_upper, upper_inclusive,
+               status, worker_id, source_count, target_count,
+               matched_count, missing_target_count, extra_target_count,
+               value_mismatch_count, diff_count, attempt,
+               error_message, started_at, finished_at
+          from data_reconcile_bucket_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+         order by bucket_no
+    </select>
+
+    <select id="selectDiffSummary" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select diff_type, count(1) count
+          from data_reconcile_diff_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+         group by diff_type
+    </select>
+
+    <select id="selectAccessTasks" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select a.tid, a.task_name, a.source_db_id, a.source_table_id,
+               a.target_db_id, a.target_table_id,
+               a.source_table_primary_key, a.target_table_primary_key,
+               a.source_table_increment_key,
+               st.table_name source_table_name,
+               tt.table_name target_table_name,
+               sd.db_name source_db_name,
+               td.db_name target_db_name
+          from data_access_agg_task_t a
+          join db_datasource_t sd
+            on sd.tid = a.source_db_id
+           and sd.tenant_id = a.tenant_id
+          join db_datasource_t td
+            on td.tid = a.target_db_id
+           and td.tenant_id = a.tenant_id
+          join db_table_t st
+            on st.tid = a.source_table_id
+           and st.tenant_id = a.tenant_id
+          join db_table_t tt
+            on tt.tid = a.target_table_id
+           and tt.tenant_id = a.tenant_id
+         where a.tenant_id = #{tenantId}
+           and a.is_del = 0
+           and a.source_db_id is not null
+           and a.source_table_id is not null
+           and a.target_db_id is not null
+           and a.target_table_id is not null
+         order by a.updated_time desc
+    </select>
+
+    <select id="selectAccessTask" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select *
+          from data_access_agg_task_t
+         where tenant_id = #{tenantId}
+           and tid = #{taskId}
+           and is_del = 0
+    </select>
+
+    <insert id="insertPolicy">
+        insert into data_reconcile_policy_t(
+            tid, tenant_id, policy_name, policy_code, access_task_id,
+            compare_mode, trigger_mode, cron_expression,
+            source_key_fields, target_key_fields,
+            source_increment_field, target_increment_field,
+            bucket_count, fetch_size, diff_limit, numeric_tolerance,
+            null_equals_empty, trim_strings, ignore_case,
+            status, precheck_status, version, remark,
+            created_by, created_time, updated_by, updated_time, is_del
+        ) values (
+            #{tid}, #{tenantId}, #{policyName}, #{policyCode}, #{accessTaskId},
+            #{compareMode}, #{triggerMode}, #{cronExpression},
+            #{sourceKeyFields}, #{targetKeyFields},
+            #{sourceIncrementField}, #{targetIncrementField},
+            #{bucketCount}, #{fetchSize}, #{diffLimit}, #{numericTolerance},
+            #{nullEqualsEmpty}, #{trimStrings}, #{ignoreCase},
+            0, 'PENDING', 1, #{remark},
+            #{operator}, #{now}, #{operator}, #{now}, 0
+        )
+    </insert>
+
+    <update id="updatePolicy">
+        update data_reconcile_policy_t
+           set policy_name = #{policyName},
+               policy_code = #{policyCode},
+               access_task_id = #{accessTaskId},
+               compare_mode = #{compareMode},
+               trigger_mode = #{triggerMode},
+               cron_expression = #{cronExpression},
+               source_key_fields = #{sourceKeyFields},
+               target_key_fields = #{targetKeyFields},
+               source_increment_field = #{sourceIncrementField},
+               target_increment_field = #{targetIncrementField},
+               bucket_count = #{bucketCount},
+               fetch_size = #{fetchSize},
+               diff_limit = #{diffLimit},
+               numeric_tolerance = #{numericTolerance},
+               null_equals_empty = #{nullEqualsEmpty},
+               trim_strings = #{trimStrings},
+               ignore_case = #{ignoreCase},
+               status = 0,
+               precheck_status = 'PENDING',
+               precheck_message = null,
+               precheck_detail = null,
+               version = version + 1,
+               remark = #{remark},
+               updated_by = #{operator},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and tid = #{tid}
+           and is_del = 0
+    </update>
+
+    <update id="softDeleteRules">
+        update data_reconcile_field_rule_t
+           set is_del = 1,
+               updated_by = #{operator},
+               updated_time = #{updatedTime}
+         where tenant_id = #{tenantId}
+           and policy_id = #{policyId}
+           and is_del = 0
+    </update>
+
+    <select id="selectAccessFieldMappings"
+            resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select source_field, target_field, source_data_type, target_data_type, sort_no
+          from data_access_field_mapping
+         where tenant_id = #{tenantId}
+           and task_id = #{taskId}
+           and is_del = 0
+         order by sort_no, created_time
+    </select>
+
+    <insert id="insertRule">
+        insert into data_reconcile_field_rule_t(
+            tid, tenant_id, policy_id, source_field, target_field,
+            source_data_type, target_data_type, compare_enabled,
+            normalization, numeric_tolerance, date_precision,
+            null_equals_empty, mask_rule, sort_no,
+            created_by, created_time, updated_by, updated_time, is_del
+        ) values (
+            #{tid}, #{tenantId}, #{policyId}, #{sourceField}, #{targetField},
+            #{sourceDataType}, #{targetDataType}, #{compareEnabled},
+            #{normalization}, #{numericTolerance}, #{datePrecision},
+            #{nullEqualsEmpty}, #{maskRule}, #{sortNo},
+            #{operator}, #{now}, #{operator}, #{now}, 0
+        )
+    </insert>
+
+    <select id="selectRunPlan" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select r.tid run_id, r.policy_id, r.lower_watermark, r.upper_watermark,
+               p.compare_mode, p.source_key_fields, p.target_key_fields,
+               p.source_increment_field, p.target_increment_field,
+               p.fetch_size, p.diff_limit, p.numeric_tolerance,
+               p.null_equals_empty, p.trim_strings, p.ignore_case,
+               a.source_db_id, a.source_table_id,
+               a.target_db_id, a.target_table_id
+          from data_reconcile_run_t r
+          join data_reconcile_policy_t p
+            on p.tid = r.policy_id
+           and p.tenant_id = r.tenant_id
+          join data_access_agg_task_t a
+            on a.tid = p.access_task_id
+           and a.tenant_id = p.tenant_id
+         where r.tenant_id = #{tenantId}
+           and r.tid = #{runId}
+    </select>
+
+    <select id="selectPolicyPlan" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select p.*, a.source_db_id, a.source_table_id,
+               a.target_db_id, a.target_table_id
+          from data_reconcile_policy_t p
+          join data_access_agg_task_t a
+            on a.tid = p.access_task_id
+           and a.tenant_id = p.tenant_id
+         where p.tenant_id = #{tenantId}
+           and p.tid = #{policyId}
+           and p.is_del = 0
+    </select>
+
+    <update id="updatePrecheck">
+        update data_reconcile_policy_t
+           set precheck_status = #{status},
+               precheck_message = #{message},
+               precheck_detail = #{detail},
+               prechecked_at = #{now},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and tid = #{policyId}
+           and is_del = 0
+    </update>
+
+    <select id="selectPrecheckStatus" resultType="java.lang.String">
+        select precheck_status
+          from data_reconcile_policy_t
+         where tenant_id = #{tenantId}
+           and tid = #{policyId}
+           and is_del = 0
+    </select>
+
+    <update id="updatePolicyEnabled">
+        update data_reconcile_policy_t
+           set status = #{status},
+               next_run_at = case
+                   when #{enabled} = 1 and trigger_mode = 'CRON' then #{now}
+                   else next_run_at
+               end,
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and tid = #{policyId}
+           and is_del = 0
+    </update>
+
+    <select id="selectLatestSuccessfulUpperWatermark" resultType="java.lang.String">
+        select upper_watermark
+          from (
+                select upper_watermark,
+                       row_number() over (
+                           order by finished_at desc, created_time desc
+                       ) row_no
+                  from data_reconcile_run_t
+                 where tenant_id = #{tenantId}
+                   and policy_id = #{policyId}
+                   and status in ('CONSISTENT', 'INCONSISTENT')
+                   and upper_watermark is not null
+          ) ranked
+         where row_no = 1
+    </select>
+
+    <insert id="insertRun">
+        insert into data_reconcile_run_t(
+            tid, tenant_id, policy_id, policy_version, policy_snapshot,
+            access_run_id, trigger_type, lower_watermark, upper_watermark,
+            dedupe_key, status, created_by, created_time, updated_time
+        ) values (
+            #{tid}, #{tenantId}, #{policyId}, #{policyVersion}, #{policySnapshot},
+            #{accessRunId}, #{triggerType}, #{lowerWatermark}, #{upperWatermark},
+            #{dedupeKey}, 'PENDING', #{operator}, #{now}, #{now}
+        )
+    </insert>
+
+    <select id="selectRunIdByDedupe" resultType="java.lang.String">
+        select tid
+          from data_reconcile_run_t
+         where tenant_id = #{tenantId}
+           and dedupe_key = #{dedupeKey}
+    </select>
+
+    <update id="touchPolicyLastRun">
+        update data_reconcile_policy_t
+           set last_run_at = #{updatedTime},
+               updated_time = #{updatedTime}
+         where tenant_id = #{tenantId}
+           and tid = #{policyId}
+    </update>
+
+    <update id="requestCancel">
+        update data_reconcile_run_t
+           set cancel_requested = 1,
+               updated_time = #{updatedTime}
+         where tenant_id = #{tenantId}
+           and tid = #{runId}
+           and status in ('PENDING', 'INITIALIZING', 'RUNNING')
+    </update>
+
+    <select id="selectDuePolicies" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select tid, tenant_id, cron_expression, next_run_at
+          from data_reconcile_policy_t
+         where is_del = 0
+           and status = 1
+           and trigger_mode = 'CRON'
+           and (next_run_at is null or next_run_at &lt;= CURRENT_TIMESTAMP)
+         order by next_run_at
+    </select>
+
+    <update id="updateNextRun">
+        update data_reconcile_policy_t
+           set next_run_at = #{nextRunAt}
+         where tenant_id = #{tenantId}
+           and tid = #{policyId}
+    </update>
+
+    <select id="selectRules" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select *
+          from data_reconcile_field_rule_t
+         where tenant_id = #{tenantId}
+           and policy_id = #{policyId}
+           and is_del = 0
+         order by sort_no, created_time
+    </select>
+
+    <select id="selectAccessEventPolicyIds" resultType="java.lang.String">
+        select tid
+          from data_reconcile_policy_t
+         where tenant_id = #{tenantId}
+           and access_task_id = #{accessTaskId}
+           and trigger_mode = 'ACCESS_EVENT'
+           and status = 1
+           and is_del = 0
+    </select>
+
+    <select id="countPolicies" resultType="long">
+        select count(1)
+          from data_reconcile_policy_t
+         where tenant_id = #{tenantId}
+           and is_del = 0
+        <if test="status != null">
+            and status = #{status}
+        </if>
+    </select>
+
+    <select id="selectRunStatusSummary"
+            resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select status, count(1) count
+          from data_reconcile_run_t
+         where tenant_id = #{tenantId}
+           and created_time &gt;= #{createdSince}
+         group by status
+    </select>
+
+    <select id="countOpenDiffs" resultType="long">
+        select count(1)
+          from data_reconcile_diff_t
+         where tenant_id = #{tenantId}
+           and resolve_status = 'OPEN'
+    </select>
+
+    <select id="selectEndpoint" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select d.tid datasource_id, d.jdbc_url, d.username, d.password,
+               d.driver_class_name, d.db_type, d.database_type,
+               t.tid table_id, t.table_name
+          from db_datasource_t d
+          join db_table_t t
+            on t.datasource_id = d.tid
+           and t.tenant_id = d.tenant_id
+           and t.is_del = 0
+         where d.tid = #{datasourceId}
+           and t.tid = #{tableId}
+           and d.tenant_id = #{tenantId}
+           and d.is_del = 0
+           and d.is_enable = 1
+    </select>
+</mapper>

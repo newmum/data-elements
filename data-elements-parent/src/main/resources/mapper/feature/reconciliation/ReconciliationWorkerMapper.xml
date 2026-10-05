@@ -1,0 +1,451 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.feature.reconciliation.infrastructure.persistence.mapper.ReconciliationWorkerMapper">
+
+    <select id="selectPendingRuns" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select tid, tenant_id
+          from data_reconcile_run_t
+         where status = 'PENDING'
+           and cancel_requested = 0
+         order by created_time
+    </select>
+
+    <update id="claimRun">
+        update data_reconcile_run_t
+           set status = 'INITIALIZING',
+               coordinator_id = #{workerId},
+               started_at = coalesce(started_at, #{now}),
+               updated_time = #{now}
+         where tid = #{runId}
+           and tenant_id = #{tenantId}
+           and status = 'PENDING'
+    </update>
+
+    <select id="selectRequestedBucketCount" resultType="java.lang.Integer">
+        select p.bucket_count
+          from data_reconcile_run_t r
+          join data_reconcile_policy_t p
+            on p.tid = r.policy_id
+           and p.tenant_id = r.tenant_id
+         where r.tenant_id = #{tenantId}
+           and r.tid = #{runId}
+    </select>
+
+    <delete id="deleteBuckets">
+        delete from data_reconcile_bucket_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+    </delete>
+
+    <insert id="insertBucket">
+        insert into data_reconcile_bucket_t(
+            tid, tenant_id, run_id, bucket_no,
+            key_lower, key_upper, upper_inclusive,
+            status, attempt, created_time, updated_time
+        ) values (
+            #{tid}, #{tenantId}, #{runId}, #{bucketNo},
+            #{keyLower}, #{keyUpper}, #{upperInclusive},
+            'PENDING', 0, #{now}, #{now}
+        )
+    </insert>
+
+    <update id="markRunRunning">
+        update data_reconcile_run_t
+           set status = 'RUNNING',
+               bucket_total = #{bucketTotal},
+               bucket_completed = 0,
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and tid = #{runId}
+           and status = 'INITIALIZING'
+    </update>
+
+    <select id="selectCandidateBuckets"
+            resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select b.tid, b.tenant_id, b.run_id
+          from data_reconcile_bucket_t b
+          join data_reconcile_run_t r
+            on r.tid = b.run_id
+           and r.tenant_id = b.tenant_id
+         where b.status = 'PENDING'
+           and r.status = 'RUNNING'
+           and r.cancel_requested = 0
+         order by r.created_time, b.bucket_no
+    </select>
+
+    <update id="claimBucket">
+        update data_reconcile_bucket_t
+           set status = 'RUNNING',
+               worker_id = #{workerId},
+               attempt = attempt + 1,
+               started_at = coalesce(started_at, #{now}),
+               updated_time = #{now}
+         where tid = #{bucketId}
+           and status = 'PENDING'
+    </update>
+
+    <update id="completeBucket">
+        update data_reconcile_bucket_t
+           set status = 'COMPLETED',
+               source_count = #{sourceCount},
+               target_count = #{targetCount},
+               matched_count = #{matchedCount},
+               missing_target_count = #{missingTargetCount},
+               extra_target_count = #{extraTargetCount},
+               value_mismatch_count = #{valueMismatchCount},
+               diff_count = #{diffCount},
+               finished_at = #{now},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+           and tid = #{bucketId}
+    </update>
+
+    <update id="cancelBucket">
+        update data_reconcile_bucket_t
+           set status = 'CANCELLED',
+               error_message = #{errorMessage},
+               finished_at = #{now},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+           and tid = #{bucketId}
+    </update>
+
+    <select id="selectBucket" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select *
+          from data_reconcile_bucket_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+           and tid = #{bucketId}
+    </select>
+
+    <select id="selectBucketState" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select count(1) total,
+               sum(case when status = 'COMPLETED' then 1 else 0 end) completed,
+               sum(case when status = 'FAILED' then 1 else 0 end) failed,
+               sum(case when status in ('PENDING', 'RUNNING') then 1 else 0 end) active
+          from data_reconcile_bucket_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+    </select>
+
+    <update id="updateBucketCompleted">
+        update data_reconcile_run_t
+           set bucket_completed = #{bucketCompleted},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and tid = #{runId}
+    </update>
+
+    <select id="selectBucketSums" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select coalesce(sum(source_count), 0) source_count,
+               coalesce(sum(target_count), 0) target_count,
+               coalesce(sum(matched_count), 0) matched_count,
+               coalesce(sum(missing_target_count), 0) missing_target_count,
+               coalesce(sum(extra_target_count), 0) extra_target_count,
+               coalesce(sum(value_mismatch_count), 0) value_mismatch_count,
+               coalesce(sum(diff_count), 0) diff_count
+          from data_reconcile_bucket_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+    </select>
+
+    <update id="finishRun">
+        update data_reconcile_run_t
+           set status = #{status},
+               source_count = #{sourceCount},
+               target_count = #{targetCount},
+               matched_count = #{matchedCount},
+               missing_target_count = #{missingTargetCount},
+               extra_target_count = #{extraTargetCount},
+               value_mismatch_count = #{valueMismatchCount},
+               diff_count = #{diffCount},
+               consistency_rate = #{consistencyRate},
+               bucket_completed = #{bucketCompleted},
+               finished_at = #{now},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and tid = #{runId}
+           and status = 'RUNNING'
+    </update>
+
+    <select id="selectAttempt" resultType="java.lang.Integer">
+        select attempt
+          from data_reconcile_bucket_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+           and tid = #{bucketId}
+    </select>
+
+    <update id="updateBucketFailure">
+        update data_reconcile_bucket_t
+           set status = #{status},
+               error_message = #{errorMessage},
+               worker_id = null,
+               finished_at = case
+                   when #{retry} = 1 then finished_at
+                   else #{now}
+               end,
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+           and tid = #{bucketId}
+    </update>
+
+    <update id="failRun">
+        update data_reconcile_run_t
+           set status = 'FAILED',
+               error_code = #{errorCode},
+               error_message = #{errorMessage},
+               error_detail = #{errorDetail},
+               trace_id = #{traceId},
+               finished_at = #{now},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and tid = #{runId}
+           and status not in ('CONSISTENT', 'INCONSISTENT', 'CANCELLED')
+    </update>
+
+    <update id="cancelRun">
+        update data_reconcile_run_t
+           set status = 'CANCELLED',
+               finished_at = #{now},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and tid = #{runId}
+    </update>
+
+    <update id="cancelPendingBuckets">
+        update data_reconcile_bucket_t
+           set status = 'CANCELLED',
+               finished_at = #{now},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+           and status = 'PENDING'
+    </update>
+
+    <select id="selectCancelRequested" resultType="java.lang.Integer">
+        select cancel_requested
+          from data_reconcile_run_t
+         where tenant_id = #{tenantId}
+           and tid = #{runId}
+    </select>
+
+    <update id="recoverInitializingRuns">
+        update data_reconcile_run_t
+           set status = 'PENDING',
+               coordinator_id = null,
+               updated_time = CURRENT_TIMESTAMP
+         where status = 'INITIALIZING'
+           and updated_time &lt; #{staleBefore}
+    </update>
+
+    <update id="recoverRunningBuckets">
+        update data_reconcile_bucket_t
+           set status = case
+                   when attempt &gt;= #{maxAttempts} then 'FAILED'
+                   else 'PENDING'
+               end,
+               worker_id = null,
+               error_message = 'Worker lease expired',
+               updated_time = CURRENT_TIMESTAMP
+         where status = 'RUNNING'
+           and updated_time &lt; #{staleBefore}
+           and exists (
+               select 1
+                 from data_reconcile_run_t r
+                where r.tid = data_reconcile_bucket_t.run_id
+                  and r.tenant_id = data_reconcile_bucket_t.tenant_id
+                  and r.status = 'RUNNING'
+           )
+    </update>
+
+    <select id="selectCancelledRuns"
+            resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select r.tid, r.tenant_id
+          from data_reconcile_run_t r
+         where r.status = 'RUNNING'
+           and r.cancel_requested = 1
+           and not exists (
+               select 1
+                 from data_reconcile_bucket_t b
+                where b.tenant_id = r.tenant_id
+                  and b.run_id = r.tid
+                  and b.status = 'RUNNING'
+           )
+    </select>
+
+    <select id="selectTerminalRuns"
+            resultType="org.springframework.util.LinkedCaseInsensitiveMap">
+        select r.tid, r.tenant_id
+          from data_reconcile_run_t r
+         where r.status = 'RUNNING'
+           and r.cancel_requested = 0
+           and exists (
+               select 1
+                 from data_reconcile_bucket_t b
+                where b.tenant_id = r.tenant_id
+                  and b.run_id = r.tid
+           )
+           and not exists (
+               select 1
+                 from data_reconcile_bucket_t b
+                where b.tenant_id = r.tenant_id
+                  and b.run_id = r.tid
+                  and b.status in ('PENDING', 'RUNNING')
+           )
+    </select>
+
+    <select id="countRunDiffs" resultType="long">
+        select count(1)
+          from data_reconcile_diff_t
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+    </select>
+
+    <update id="updateCheckpoint">
+        update data_reconcile_bucket_t
+           set checkpoint_source_key = #{checkpointSourceKey},
+               checkpoint_target_key = #{checkpointTargetKey},
+               source_count = #{sourceCount},
+               target_count = #{targetCount},
+               matched_count = #{matchedCount},
+               missing_target_count = #{missingTargetCount},
+               extra_target_count = #{extraTargetCount},
+               value_mismatch_count = #{valueMismatchCount},
+               diff_count = #{diffCount},
+               updated_time = #{now}
+         where tenant_id = #{tenantId}
+           and run_id = #{runId}
+           and tid = #{bucketId}
+    </update>
+
+    <insert id="insertDiffBatch" databaseId="mysql">
+        insert ignore into data_reconcile_diff_t(
+            tid, tenant_id, run_id, bucket_id, diff_hash,
+            business_key, diff_type, field_name,
+            source_value_masked, target_value_masked,
+            source_row_hash, target_row_hash,
+            resolve_status, created_time
+        ) values
+        <foreach collection="rows" item="row" separator=",">
+            (
+                #{row.tid}, #{row.tenantId}, #{row.runId}, #{row.bucketId},
+                #{row.diffHash}, #{row.businessKey}, #{row.diffType}, #{row.fieldName},
+                #{row.sourceValueMasked}, #{row.targetValueMasked},
+                #{row.sourceRowHash}, #{row.targetRowHash},
+                'OPEN', #{row.createdTime}
+            )
+        </foreach>
+    </insert>
+
+    <sql id="mergeDiffBatch">
+        merge into data_reconcile_diff_t target
+        using (
+            <foreach collection="rows" item="row" separator=" union all ">
+                select #{row.tid} tid,
+                       #{row.tenantId} tenant_id,
+                       #{row.runId} run_id,
+                       #{row.bucketId} bucket_id,
+                       #{row.diffHash} diff_hash,
+                       #{row.businessKey} business_key,
+                       #{row.diffType} diff_type,
+                       #{row.fieldName} field_name,
+                       #{row.sourceValueMasked} source_value_masked,
+                       #{row.targetValueMasked} target_value_masked,
+                       #{row.sourceRowHash} source_row_hash,
+                       #{row.targetRowHash} target_row_hash,
+                       #{row.createdTime} created_time
+                  from dual
+            </foreach>
+        ) source
+           on (
+               target.tenant_id = source.tenant_id
+               and target.run_id = source.run_id
+               and target.diff_hash = source.diff_hash
+           )
+        when not matched then insert (
+            tid, tenant_id, run_id, bucket_id, diff_hash,
+            business_key, diff_type, field_name,
+            source_value_masked, target_value_masked,
+            source_row_hash, target_row_hash,
+            resolve_status, created_time
+        ) values (
+            source.tid, source.tenant_id, source.run_id, source.bucket_id,
+            source.diff_hash, source.business_key, source.diff_type, source.field_name,
+            source.source_value_masked, source.target_value_masked,
+            source.source_row_hash, source.target_row_hash,
+            'OPEN', source.created_time
+        )
+    </sql>
+
+    <insert id="insertDiffBatch" databaseId="dm">
+        <include refid="mergeDiffBatch"/>
+    </insert>
+
+    <insert id="insertDiffBatch" databaseId="oracle">
+        <include refid="mergeDiffBatch"/>
+    </insert>
+
+    <insert id="insertDiffBatch" databaseId="postgresql">
+        insert into data_reconcile_diff_t(
+            tid, tenant_id, run_id, bucket_id, diff_hash,
+            business_key, diff_type, field_name,
+            source_value_masked, target_value_masked,
+            source_row_hash, target_row_hash,
+            resolve_status, created_time
+        ) values
+        <foreach collection="rows" item="row" separator=",">
+            (
+                #{row.tid}, #{row.tenantId}, #{row.runId}, #{row.bucketId},
+                #{row.diffHash}, #{row.businessKey}, #{row.diffType}, #{row.fieldName},
+                #{row.sourceValueMasked}, #{row.targetValueMasked},
+                #{row.sourceRowHash}, #{row.targetRowHash},
+                'OPEN', #{row.createdTime}
+            )
+        </foreach>
+        on conflict do nothing
+    </insert>
+
+    <insert id="insertDiffBatch" databaseId="kingbase">
+        insert into data_reconcile_diff_t(
+            tid, tenant_id, run_id, bucket_id, diff_hash,
+            business_key, diff_type, field_name,
+            source_value_masked, target_value_masked,
+            source_row_hash, target_row_hash,
+            resolve_status, created_time
+        ) values
+        <foreach collection="rows" item="row" separator=",">
+            (
+                #{row.tid}, #{row.tenantId}, #{row.runId}, #{row.bucketId},
+                #{row.diffHash}, #{row.businessKey}, #{row.diffType}, #{row.fieldName},
+                #{row.sourceValueMasked}, #{row.targetValueMasked},
+                #{row.sourceRowHash}, #{row.targetRowHash},
+                'OPEN', #{row.createdTime}
+            )
+        </foreach>
+        on conflict do nothing
+    </insert>
+
+    <insert id="insertDiffBatch">
+        insert into data_reconcile_diff_t(
+            tid, tenant_id, run_id, bucket_id, diff_hash,
+            business_key, diff_type, field_name,
+            source_value_masked, target_value_masked,
+            source_row_hash, target_row_hash,
+            resolve_status, created_time
+        ) values
+        <foreach collection="rows" item="row" separator=",">
+            (
+                #{row.tid}, #{row.tenantId}, #{row.runId}, #{row.bucketId},
+                #{row.diffHash}, #{row.businessKey}, #{row.diffType}, #{row.fieldName},
+                #{row.sourceValueMasked}, #{row.targetValueMasked},
+                #{row.sourceRowHash}, #{row.targetRowHash},
+                'OPEN', #{row.createdTime}
+            )
+        </foreach>
+    </insert>
+</mapper>

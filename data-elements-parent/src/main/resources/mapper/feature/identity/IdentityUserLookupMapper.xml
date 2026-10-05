@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.feature.identity.infrastructure.persistence.mapper.IdentityUserLookupMapper">
+    <select id="selectRoleDataScope" resultType="java.lang.String">
+        select data_scope from rm_role_t where id = #{roleId} and tenant_id = #{tenantId} and deleted = 0
+    </select>
+    <select id="selectRoleDataScopes" resultType="java.lang.String">
+        select data_scope from rm_role_t where tenant_id = #{tenantId} and deleted = 0 and id in
+        <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">#{roleId}</foreach>
+    </select>
+    <update id="updateRoleDataScope">
+        update rm_role_t set data_scope = #{scope}, update_time = now() where id = #{roleId} and tenant_id = #{tenantId} and deleted = 0
+    </update>
+    <select id="selectUserIdsByOrgIds" resultType="java.lang.String">
+        select distinct ou.user_id
+          from rm_user_org_rela_t ou
+         where ou.org_id in
+        <foreach collection="orgIds" item="orgId" open="(" separator="," close=")">
+            #{orgId}
+        </foreach>
+           and ou.tenant_id = #{tenantId}
+    </select>
+
+    <select id="selectUserIdsByRoleCode" resultType="java.lang.String">
+        select distinct ur.user_id
+          from rm_user_role_rela_t ur
+          join rm_role_t r on r.id = ur.role_id
+         where r.app_id = #{appId}
+           and r.code_num = #{roleCode}
+           and ur.tenant_id = #{tenantId}
+           and r.tenant_id = #{tenantId}
+           and r.deleted = 0
+           and r.status = 0
+    </select>
+
+    <select id="selectOrganizationById"
+            resultType="com.linewell.dataelement.feature.identity.domain.IdentityOrganization">
+        select id, serial_number as serialNumber, org_path as orgPath
+          from rm_org_t
+         where id = #{organizationId}
+           and deleted = 0
+    </select>
+
+    <select id="selectRoleCodes" resultType="java.lang.String">
+        select distinct r.code_num
+          from rm_user_role_rela_t ur
+          join rm_role_t r on r.id = ur.role_id
+         where ur.user_id = #{userId}
+           and ur.tenant_id = #{tenantId}
+           and r.tenant_id = #{tenantId}
+           and r.deleted = 0
+           and r.status = 0
+        <if test="appId != null and appId != ''">
+           and r.app_id = #{appId}
+        </if>
+    </select>
+
+    <select id="selectRoleCodesForUsers" resultType="java.lang.String">
+        select distinct r.code_num
+          from rm_user_role_rela_t ur
+          join rm_role_t r on r.id = ur.role_id
+         where ur.user_id in
+         <foreach collection="userIds" item="userId" open="(" separator="," close=")">#{userId}</foreach>
+           and ur.tenant_id = #{tenantId}
+           and r.tenant_id = #{tenantId}
+           and r.deleted = 0
+           and r.status = 0
+        <if test="appId != null and appId != ''">
+           and r.app_id = #{appId}
+        </if>
+    </select>
+
+    <select id="selectRoleIds" resultType="java.lang.String">
+        select distinct r.id
+          from rm_user_role_rela_t ur
+          join rm_role_t r on r.id = ur.role_id
+         where ur.user_id = #{userId}
+           and ur.tenant_id = #{tenantId}
+           and r.tenant_id = #{tenantId}
+           and r.deleted = 0
+           and r.status = 0
+    </select>
+
+    <select id="countActiveRole" resultType="int">
+        select count(1)
+          from rm_role_t
+         where id = #{roleId}
+           and tenant_id = #{tenantId}
+           and deleted = 0
+           and status = 0
+    </select>
+
+    <select id="selectOrganizationIds" resultType="java.lang.String">
+        select distinct uor.org_id
+          from rm_user_org_rela_t uor
+          join rm_org_t o on o.id = uor.org_id
+         where uor.user_id = #{userId}
+           and uor.tenant_id = #{tenantId}
+           and o.tenant_id = #{tenantId}
+           and o.deleted = 0
+    </select>
+
+    <select id="selectOrganizationIdsForUsers" resultType="java.lang.String">
+        select distinct uor.org_id
+          from rm_user_org_rela_t uor
+          join rm_org_t o on o.id = uor.org_id
+         where uor.user_id in
+         <foreach collection="userIds" item="userId" open="(" separator="," close=")">#{userId}</foreach>
+           and uor.tenant_id = #{tenantId}
+           and o.tenant_id = #{tenantId}
+           and o.deleted = 0
+    </select>
+</mapper>

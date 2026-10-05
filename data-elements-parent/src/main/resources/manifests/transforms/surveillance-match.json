@@ -1,0 +1,110 @@
+{
+  "key": "transform.surveillance-match",
+  "category": "transform",
+  "label": "布控匹配",
+  "icon": "shield",
+  "description": "批量调用平台布控匹配接口，输出命中结果并将异常送入系统死信",
+  "fields": [
+    { "key": "engineCode", "label": "引擎编码", "type": "text", "required": true, "default": "structured-surveillance" },
+    { "key": "channelCode", "label": "通道编码", "type": "text", "required": true, "placeholder": "vehicle" },
+    { "key": "resourceCode", "label": "资源编码", "type": "text", "required": true, "placeholder": "vehicle_plate" },
+    { "key": "inputTopic", "label": "输入 Topic", "type": "text", "required": true },
+    { "key": "resultTopic", "label": "结果 Topic", "type": "text", "required": true },
+    { "key": "matchUrl", "label": "匹配接口地址", "type": "text", "required": true, "placeholder": "http://platform/api/v1/surveillance/match/batch" },
+    { "key": "batchIdPath", "label": "批次 ID 路径", "type": "text", "default": "batchId" },
+    { "key": "eventIdPath", "label": "事件 ID 路径", "type": "text", "default": "eventId" },
+    { "key": "occurredAtPath", "label": "发生时间路径", "type": "text", "default": "occurredAt" },
+    { "key": "batchSize", "label": "批量大小", "type": "number", "default": 100 },
+    { "key": "requestTimeout", "label": "请求超时", "type": "duration", "default": "30 sec" },
+    { "key": "metricEnabled", "label": "启用日增量统计", "type": "boolean", "default": true },
+    { "key": "matchedRoute", "label": "命中出口", "type": "text", "default": "matched" },
+    { "key": "failureRoute", "label": "异常出口", "type": "text", "default": "failure" }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "normalize",
+        "type": "org.apache.nifi.processors.standard.ConvertRecord",
+        "properties": {
+          "Record Reader": "${cs.jsonReader}",
+          "Record Writer": "${cs.jsonWriter}"
+        }
+      },
+      {
+        "localId": "batch",
+        "type": "org.apache.nifi.processors.standard.MergeRecord",
+        "properties": {
+          "Record Reader": "${cs.jsonReader}",
+          "Record Writer": "${cs.jsonWriter}",
+          "Merge Strategy": "Bin-Packing",
+          "Minimum Number of Records": "${config.batchSize}",
+          "Max Bin Age": "${config.requestTimeout}"
+        }
+      },
+      {
+        "localId": "match",
+        "type": "org.apache.nifi.processors.standard.InvokeHTTP",
+        "properties": {
+          "HTTP Method": "POST",
+          "Remote URL": "${config.matchUrl}",
+          "Content-Type": "application/json",
+          "X-Surveillance-Engine": "${config.engineCode}",
+          "X-Surveillance-Channel": "${config.channelCode}",
+          "X-Surveillance-Resource": "${config.resourceCode}",
+          "X-Surveillance-Input-Topic": "${config.inputTopic}",
+          "X-Surveillance-Result-Topic": "${config.resultTopic}",
+          "X-Surveillance-Batch-Id": "${batch.id}",
+          "Read Timeout": "${config.requestTimeout}"
+        }
+      },
+      {
+        "localId": "markFailure",
+        "type": "org.apache.nifi.processors.attributes.UpdateAttribute",
+        "properties": {
+          "surveillance.match.error": "http-failure"
+        }
+      },
+      {
+        "localId": "split",
+        "type": "org.apache.nifi.processors.standard.SplitJson",
+        "properties": {
+          "JsonPath Expression": "$.results"
+        }
+      },
+      {
+        "localId": "extract",
+        "type": "org.apache.nifi.processors.standard.EvaluateJsonPath",
+        "properties": {
+          "Destination": "flowfile-attribute",
+          "surveillance.matched": "$.matched",
+          "surveillance.match.error": "$.error"
+        }
+      },
+      {
+        "localId": "route",
+        "type": "org.apache.nifi.processors.standard.RouteOnAttribute",
+        "properties": {
+          "Routing Strategy": "Route to Property name",
+          "matched": "${surveillance.matched:equals('true')}",
+          "failure": "${surveillance.match.error:isEmpty():not()}"
+        }
+      }
+    ],
+    "internalConnections": [
+      { "from": "normalize", "to": "batch", "relationship": "success" },
+      { "from": "batch", "to": "match", "relationship": "merged" },
+      { "from": "match", "to": "split", "relationship": "Response" },
+      { "from": "match", "to": "markFailure", "relationship": "Retry" },
+      { "from": "match", "to": "markFailure", "relationship": "No Retry" },
+      { "from": "match", "to": "markFailure", "relationship": "Failure" },
+      { "from": "markFailure", "to": "route", "relationship": "success" },
+      { "from": "split", "to": "extract", "relationship": "split" },
+      { "from": "extract", "to": "route", "relationship": "matched" }
+    ],
+    "inlet": "normalize",
+    "outlets": [
+      { "name": "matched", "processorRef": "route", "relationship": "matched" },
+      { "name": "failure", "processorRef": "route", "relationship": "failure" }
+    ]
+  }
+}

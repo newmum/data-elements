@@ -1,0 +1,37 @@
+{
+  "key": "source.ftp",
+  "category": "source",
+  "label": "FTP 数据源",
+  "icon": "ftp",
+  "description": "从 FTP 目录拉取文件",
+  "fields": [
+    { "key": "hostname", "label": "主机", "type": "text", "required": true, "placeholder": "192.168.1.10" },
+    { "key": "port", "label": "端口", "type": "number", "default": 21 },
+    { "key": "username", "label": "用户名", "type": "text", "required": true },
+    { "key": "password", "label": "密码", "type": "password", "required": true },
+    { "key": "remotePath", "label": "远程目录", "type": "text", "required": true, "placeholder": "/data/in" },
+    { "key": "fileFilterRegex", "label": "文件匹配", "type": "text", "default": "(?i).*\\.(csv|json|xlsx|xls)$", "placeholder": "例如 (?i).*\\.(csv|json|xlsx|xls)$" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "fetch",
+        "type": "org.apache.nifi.processors.standard.GetFTP",
+        "schedulingPeriod": "${config.schedulingPeriod}",
+        "schedulingStrategy": "TIMER_DRIVEN",
+        "properties": {
+          "Hostname": "${config.hostname}",
+          "Port": "${config.port}",
+          "Username": "${config.username}",
+          "Password": "${config.password}",
+          "Remote Path": "${config.remotePath}",
+          "File Filter Regex": "${config.fileFilterRegex}"
+        }
+      }
+    ],
+    "outlets": [
+      { "name": "default", "processorRef": "fetch", "relationship": "success" }
+    ]
+  }
+}

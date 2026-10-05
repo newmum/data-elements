@@ -1,0 +1,36 @@
+{
+  "key": "source.hive",
+  "category": "source",
+  "label": "华为 MRS Hive 来源",
+  "icon": "database",
+  "description": "从服务器托管的华为 MRS Hive 配置集读取数据。部署时自动创建 NiFi Kerberos Keytab User Service 并绑定 Hive 连接池；ZooKeeper、Kerberos、keytab、krb5.conf 与 JDBC 驱动均由服务器统一管理，不会写入画布。",
+  "fields": [
+    { "key": "hiveProfile", "label": "MRS 配置集", "type": "select", "default": "default", "required": true, "options": [{ "label": "默认华为 MRS Hive 配置集", "value": "default" }], "group": "connection", "help": "由服务器 hive.conf.dir 下的 hiveclient.properties、krb5.conf 与 keytab 自动提供连接参数。" },
+    { "key": "database", "label": "Hive 数据库", "type": "text", "default": "default", "required": true, "group": "connection" },
+    { "key": "table", "label": "表名", "type": "table-picker", "required": true },
+    { "key": "incrementalColumn", "label": "增量字段", "type": "text" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "controllerServices": [
+      { "localId": "kerberos", "type": "org.apache.nifi.kerberos.KerberosKeytabUserService", "properties": {
+        "Kerberos Principal": "${config.userPrincipal}",
+        "Kerberos Keytab": "${config.keytabPath}"
+      }},
+      { "localId": "dbcp", "type": "org.apache.nifi.dbcp.DBCPConnectionPool", "properties": {
+      "Database Connection URL": "${jdbc.url}",
+      "Database Driver Class Name": "${jdbc.driverClass}",
+      "Database Driver Locations": "${jdbc.driverLocations}",
+      "Kerberos User Service": "${cs.kerberos}",
+      "Database User": "${config.username}",
+      "Password": "${config.password}"
+    }}
+    ],
+    "processors": [
+      { "localId": "fetch", "type": "org.apache.nifi.processors.standard.GenerateTableFetch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Table Name": "${config.table}", "Maximum-value Columns": "${config.incrementalColumn}", "Partition Size": "50000" } },
+      { "localId": "execute", "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Record Writer": "${cs.jsonWriter}" } }
+    ],
+    "internalConnections": [{ "from": "fetch", "to": "execute", "relationship": "success" }],
+    "outlets": [{ "name": "default", "processorRef": "execute", "relationship": "success" }]
+  }
+}

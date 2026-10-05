@@ -1,0 +1,34 @@
+{
+  "key": "transform.filter",
+  "category": "transform",
+  "label": "数据过滤",
+  "icon": "filter",
+  "description": "按业务条件保留需要的数据",
+  "fields": [
+    {
+      "key": "whereClause",
+      "label": "过滤规则",
+      "type": "sql-editor",
+      "required": true,
+      "placeholder": "请添加过滤条件"
+    }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "query",
+        "type": "org.apache.nifi.processors.standard.QueryRecord",
+        "properties": {
+          "Record Reader": "${cs.jsonReader}",
+          "Record Writer": "${cs.jsonWriter}",
+          "Include Zero Record FlowFiles": "false",
+          "filtered": "SELECT * FROM FLOWFILE WHERE ${config.whereClause}"
+        }
+      }
+    ],
+    "inlet": "query",
+    "outlets": [
+      { "name": "default", "processorRef": "query", "relationship": "filtered" }
+    ]
+  }
+}

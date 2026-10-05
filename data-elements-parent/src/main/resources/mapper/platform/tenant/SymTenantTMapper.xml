@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.platform.tenant.infrastructure.persistence.mapper.SymTenantTMapper">
+
+    <select id="selectActiveId" resultType="java.lang.String">
+        select tid
+          from sym_tenant_t
+         where tid = #{tenantId}
+           and status = 1
+           and is_del = 0
+    </select>
+
+    <select id="selectActiveAccountConfig"
+            resultType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.SymTenantT">
+        select tid, json_config
+          from sym_tenant_t
+         where tid = #{tenantId}
+           and status = 1
+           and is_del = 0
+    </select>
+
+    <select id="selectLoginOptions"
+            resultType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.SymTenantT">
+        select tid, code, name
+          from sym_tenant_t
+         where status = 1
+           and is_del = 0
+         order by sort_no, created_time
+    </select>
+
+    <select id="selectTenantList"
+            resultType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.SymTenantT">
+        select tid, code, name, status, init_flag, isolation_mode,
+               json_config, sort_no, created_time, updated_time
+          from sym_tenant_t
+         where is_del = 0
+         order by sort_no, created_time
+    </select>
+
+    <select id="selectCurrent"
+            resultType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.SymTenantT">
+        select tid, code, name, status, init_flag, isolation_mode
+          from sym_tenant_t
+         where tid = #{tenantId}
+           and is_del = 0
+    </select>
+
+    <update id="updateTenant"
+            parameterType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.SymTenantT">
+        update sym_tenant_t
+           set code = #{code},
+               name = #{name},
+               status = #{status},
+               isolation_mode = #{isolationMode},
+               json_config = #{jsonConfig},
+               sort_no = #{sortNo},
+               updated_time = #{updatedTime},
+               updated_by = #{updatedBy}
+         where tid = #{tid}
+           and is_del = 0
+    </update>
+</mapper>

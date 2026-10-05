@@ -1,0 +1,25 @@
+{
+  "key": "source.hdfs",
+  "category": "source",
+  "label": "HDFS 数据源",
+  "icon": "folder",
+  "description": "从 Huawei MRS HDFS 路径监听并读取文件，支持 MRS 客户端配置路径",
+  "fields": [
+    { "key": "host", "label": "NameNode 主机", "type": "text", "required": true },
+    { "key": "port", "label": "端口", "type": "number", "default": 8020 },
+    { "key": "path", "label": "HDFS 路径", "type": "text", "default": "/", "required": true },
+    { "key": "fileFilterRegex", "label": "文件正则", "type": "text", "default": ".*", "group": "advanced" },
+    { "key": "clientConfigDir", "label": "客户端配置目录", "type": "text", "group": "security" },
+    { "key": "kerberosPrincipal", "label": "Kerberos Principal", "type": "text", "group": "security" },
+    { "key": "keytabPath", "label": "Keytab 路径", "type": "text", "group": "security" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "processors": [
+      { "localId": "list", "type": "org.apache.nifi.processors.hadoop.ListHDFS", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Hadoop Configuration Resources": "${config.clientConfigDir}/core-site.xml,${config.clientConfigDir}/hdfs-site.xml", "Directory": "${config.path}", "File Filter": "${config.fileFilterRegex}", "Kerberos Principal": "${config.kerberosPrincipal}", "Kerberos Keytab": "${config.keytabPath}" } },
+      { "localId": "fetch", "type": "org.apache.nifi.processors.hadoop.FetchHDFS", "properties": { "Hadoop Configuration Resources": "${config.clientConfigDir}/core-site.xml,${config.clientConfigDir}/hdfs-site.xml", "Kerberos Principal": "${config.kerberosPrincipal}", "Kerberos Keytab": "${config.keytabPath}" } }
+    ],
+    "internalConnections": [{ "from": "list", "to": "fetch", "relationship": "success" }],
+    "outlets": [{ "name": "default", "processorRef": "fetch", "relationship": "success" }]
+  }
+}

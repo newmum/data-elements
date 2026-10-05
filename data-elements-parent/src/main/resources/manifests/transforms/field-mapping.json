@@ -1,0 +1,35 @@
+{
+  "key": "transform.field-mapping",
+  "category": "transform",
+  "label": "字段映射",
+  "icon": "swap",
+  "description": "",
+  "fields": [
+    {
+      "key": "mappings",
+      "label": "",
+      "type": "field-mapping-dsl",
+      "required": true,
+      "default": "{\n  \"version\": \"1.0\",\n  \"passthroughUnmapped\": false,\n  \"passthroughCaseSensitive\": true,\n  \"onMissingSource\": \"NULL\",\n  \"onTypeMismatch\": \"CAST\",\n  \"mappings\": []\n}",
+      "help": "新版格式必须使用 mappings 数组；同一个 from 可出现多次以表达一对多。旧对象式会自动迁移，但重复 key 无法可靠恢复。"
+    }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "map",
+        "type": "org.apache.nifi.processors.standard.QueryRecord",
+        "properties": {
+          "Record Reader": "${cs.jsonReader}",
+          "Record Writer": "${cs.jsonWriter}",
+          "Include Zero Record FlowFiles": "false"
+        }
+      }
+    ],
+    "internalConnections": [],
+    "inlet": "map",
+    "outlets": [
+      { "name": "default", "processorRef": "map", "relationship": "success" }
+    ]
+  }
+}

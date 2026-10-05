@@ -1,0 +1,33 @@
+{
+  "key": "source.gbase8a",
+  "category": "source",
+  "label": "GBase 8a 数据源",
+  "icon": "gbase",
+  "description": "南大通用 GBase 8a MPP 列存数据源",
+  "fields": [
+    { "key": "host", "label": "协调节点主机", "type": "text", "required": true },
+    { "key": "port", "label": "端口", "type": "number", "default": 5258 },
+    { "key": "database", "label": "数据库", "type": "text", "required": true },
+    { "key": "coordinatorList", "label": "多协调节点", "type": "text", "placeholder": "h1:5258,h2:5258", "group": "advanced" },
+    { "key": "username", "label": "用户名", "type": "text", "required": true },
+    { "key": "password", "label": "密码", "type": "password", "required": true },
+    { "key": "table", "label": "表名", "type": "table-picker", "required": true },
+    { "key": "incrementalColumn", "label": "增量字段", "type": "text" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "controllerServices": [{ "localId": "dbcp", "type": "org.apache.nifi.dbcp.DBCPConnectionPool", "properties": {
+      "Database Connection URL": "jdbc:gbase://${config.host}:${config.port}/${config.database}?characterEncoding=utf8",
+      "Database Driver Class Name": "com.gbase.jdbc.Driver",
+      "Database Driver Locations": "${jdbc.driverLocations}/gbase-connector-java.jar",
+      "Database User": "${config.username}",
+      "Password": "${config.password}"
+    }}],
+    "processors": [
+      { "localId": "fetch", "type": "org.apache.nifi.processors.standard.GenerateTableFetch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Table Name": "${config.table}", "Maximum-value Columns": "${config.incrementalColumn}", "Partition Size": "50000" } },
+      { "localId": "execute", "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Record Writer": "${cs.jsonWriter}" } }
+    ],
+    "internalConnections": [{ "from": "fetch", "to": "execute", "relationship": "success" }],
+    "outlets": [{ "name": "default", "processorRef": "execute", "relationship": "success" }]
+  }
+}

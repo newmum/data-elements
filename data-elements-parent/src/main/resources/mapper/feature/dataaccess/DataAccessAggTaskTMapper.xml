@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.mapper.DataAccessAggTaskTMapper">
+
+    <resultMap id="BaseResultMap" type="com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessAggTaskT">
+            <id property="tid" column="tid" />
+            <result property="dataCatalogId" column="data_catalog_id" />
+            <result property="taskName" column="task_name" />
+            <result property="taskTypeName" column="task_type_name" />
+            <result property="taskTypeId" column="task_type_id" />
+            <result property="taskDesc" column="task_desc" />
+            <result property="sourceDbId" column="source_db_id" />
+            <result property="sourceTableId" column="source_table_id" />
+            <result property="sourceTablePrimaryKey" column="source_table_primary_key" />
+            <result property="sourceTableIncrementKey" column="source_table_increment_key" />
+            <result property="targetDbId" column="target_db_id" />
+            <result property="targetTableId" column="target_table_id" />
+            <result property="targetTablePrimaryKey" column="target_table_primary_key" />
+            <result property="scheduleStrategy" column="schedule_strategy" />
+            <result property="scheduleCycle" column="schedule_cycle" />
+            <result property="scheduleRunning" column="schedule_running" />
+            <result property="scheduleRunningStart" column="schedule_running_start" />
+            <result property="scheduleRunningEnd" column="schedule_running_end" />
+            <result property="scheduleFaildRetry" column="schedule_faild_retry" />
+            <result property="cronExpress" column="cron_express" />
+            <result property="taskStatus" column="task_status" />
+            <result property="lastRunning" column="last_running" />
+            <result property="lastStatusValue" column="last_status_value" />
+            <result property="endRunning" column="end_running" />
+            <result property="tenantId" column="tenant_id" />
+            <result property="revision" column="revision" />
+            <result property="createdBy" column="created_by" />
+            <result property="createdTime" column="created_time" />
+            <result property="updatedBy" column="updated_by" />
+            <result property="updatedTime" column="updated_time" />
+            <result property="processGroupId" column="process_group_id" />
+            <result property="processGroupVersion" column="process_group_version" />
+            <result property="isDel" column="is_del" />
+            <result property="pipelineId" column="pipeline_id" />
+            <result property="monitorTime" column="monitor_time" />
+            <result property="delayLevel" column="delay_level" />
+            <result property="delayMsEstimate" column="delay_ms_estimate" />
+            <result property="thresholdMs" column="threshold_ms" />
+            <result property="isTimeout" column="is_timeout" />
+            <result property="queuedCount" column="queued_count" />
+            <result property="queuedBytes" column="queued_bytes" />
+            <result property="activeThreadCount" column="active_thread_count" />
+            <result property="flowFilesIn" column="flow_files_in" />
+            <result property="flowFilesOut" column="flow_files_out" />
+            <result property="bytesIn" column="bytes_in" />
+            <result property="bytesOut" column="bytes_out" />
+            <result property="monitorStatus" column="monitor_status" />
+            <result property="monitorMsg" column="monitor_msg" />
+    </resultMap>
+
+</mapper>

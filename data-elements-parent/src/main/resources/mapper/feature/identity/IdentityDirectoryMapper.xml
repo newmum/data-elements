@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.feature.identity.infrastructure.persistence.mapper.IdentityDirectoryMapper">
+    <resultMap id="directoryEntry" type="com.linewell.dataelement.feature.identity.domain.IdentityDirectoryEntry">
+        <id property="id" column="id"/>
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="appId" column="app_id"/>
+        <result property="description" column="description"/>
+        <result property="phone" column="phone"/>
+        <result property="status" column="status"/>
+        <result property="sortNum" column="sort_num"/>
+        <result property="createTime" column="created_time"/>
+        <result property="updateTime" column="updated_time"/>
+    </resultMap>
+
+    <select id="selectRolePage" resultMap="directoryEntry">
+        select r.id,
+               r.code_num as code,
+               r.name,
+               r.app_id,
+               r.description,
+               r.status,
+               r.sort_num,
+               r.created_time,
+               r.updated_time
+          from rm_role_t r
+         where r.tenant_id = #{tenantId}
+           and r.deleted = 0
+        <if test="code != null and code != ''">
+           and r.code_num like concat('%', #{code}, '%')
+        </if>
+        <if test="name != null and name != ''">
+           and r.name like concat('%', #{name}, '%')
+        </if>
+         order by r.sort_num, r.created_time desc
+    </select>
+
+    <select id="selectOrganizationPage" resultMap="directoryEntry">
+        select o.id,
+               o.serial_number as code,
+               o.name,
+               o.parent_id,
+               o.status,
+               o.sort_num,
+               o.create_time as created_time,
+               o.update_time as updated_time
+          from rm_org_t o
+         where o.tenant_id = #{tenantId}
+           and o.deleted = 0
+        <if test="name != null and name != ''">
+           and o.name like concat('%', #{name}, '%')
+        </if>
+         order by o.sort_num, o.create_time
+    </select>
+
+    <select id="selectAllOrganizations" resultMap="directoryEntry">
+        select o.id,
+               o.serial_number as code,
+               o.name,
+               o.parent_id,
+               o.status,
+               o.sort_num,
+               o.create_time as created_time,
+               o.update_time as updated_time
+          from rm_org_t o
+         where o.tenant_id = #{tenantId}
+           and o.deleted = 0
+         order by o.sort_num, o.create_time
+    </select>
+
+    <select id="selectRoles" resultMap="directoryEntry">
+        select r.id, r.code_num as code, r.name, r.app_id, r.description, r.status,
+               r.sort_num, r.created_time, r.updated_time
+          from rm_role_t r
+         where r.id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+           and r.tenant_id = #{tenantId}
+           and r.deleted = 0
+    </select>
+
+    <select id="selectOrganizations" resultMap="directoryEntry">
+        select o.id, o.serial_number as code, o.name, o.parent_id, o.status,
+               o.sort_num, o.create_time as created_time, o.update_time as updated_time
+          from rm_org_t o
+         where o.id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+           and o.tenant_id = #{tenantId}
+           and o.deleted = 0
+    </select>
+</mapper>

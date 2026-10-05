@@ -1,0 +1,20 @@
+{
+  "key": "source.minio",
+  "category": "source",
+  "label": "MinIO 对象存储",
+  "icon": "minio",
+  "description": "从 MinIO 存储桶读取 CSV、JSON 或 Excel 文件并转换为记录",
+  "fields": [
+    { "key": "minioEndpoint", "label": "服务地址", "type": "text", "required": true, "placeholder": "http://127.0.0.1:9000" },
+    { "key": "minioAccessKey", "label": "Access Key", "type": "text", "required": true },
+    { "key": "minioSecretKey", "label": "Secret Key", "type": "password", "required": true },
+    { "key": "minioBucket", "label": "存储桶", "type": "text", "required": true },
+    { "key": "minioPrefix", "label": "对象前缀", "type": "text", "placeholder": "例如 mysql/" },
+    { "key": "minioFilePattern", "label": "文件匹配", "type": "text", "default": "(?i).*\\.(csv|json|xlsx|xls)$" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "processors": [],
+    "outlets": []
+  }
+}

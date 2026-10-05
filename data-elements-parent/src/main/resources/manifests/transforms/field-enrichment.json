@@ -1,0 +1,48 @@
+{
+  "key": "transform.field-enrichment",
+  "category": "transform",
+  "label": "字段增强",
+  "icon": "swap",
+  "description": "统一执行字段映射、字典翻译与统一格式；同源数据库时自动下推为一条批量 SQL。",
+  "fields": [
+    {
+      "key": "executionMode",
+      "label": "执行策略",
+      "type": "select",
+      "required": false,
+      "default": "AUTO",
+      "options": [
+        { "label": "自动优化", "value": "AUTO" },
+        { "label": "来源数据库批量 SQL", "value": "SOURCE_DB" },
+        { "label": "记录流兼容模式", "value": "RECORD" }
+      ],
+      "help": "同一来源库内的字典翻译会自动合并进一条 SELECT；跨库字典或需要逐条失败路由时自动使用兼容模式。"
+    },
+    {
+      "key": "mappings",
+      "label": "字段增强规则",
+      "type": "field-mapping-dsl",
+      "required": true,
+      "default": "{\n  \"version\": \"1.0\",\n  \"passthroughUnmapped\": false,\n  \"passthroughCaseSensitive\": true,\n  \"onMissingSource\": \"NULL\",\n  \"onTypeMismatch\": \"CAST\",\n  \"mappings\": []\n}",
+      "help": "复用字段映射规则；固定枚举使用 CASE，字典查询在同库时下推到来源 SQL。"
+    }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "map",
+        "type": "org.apache.nifi.processors.standard.QueryRecord",
+        "properties": {
+          "Record Reader": "${cs.jsonReader}",
+          "Record Writer": "${cs.jsonWriter}",
+          "Include Zero Record FlowFiles": "false"
+        }
+      }
+    ],
+    "internalConnections": [],
+    "inlet": "map",
+    "outlets": [
+      { "name": "default", "processorRef": "map", "relationship": "success" }
+    ]
+  }
+}

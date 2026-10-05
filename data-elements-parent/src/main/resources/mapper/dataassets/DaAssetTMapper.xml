@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.dataassets.base.mapper.DaAssetTMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.linewell.dataelement.dataassets.base.entity.DaAssetT">
+        <id column="tid" property="tid" />
+        <result column="tenant_id" property="tenantId" />
+        <result column="revision" property="revision" />
+        <result column="created_by" property="createdBy" />
+        <result column="created_time" property="createdTime" />
+        <result column="updated_by" property="updatedBy" />
+        <result column="updated_time" property="updatedTime" />
+        <result column="asset_type" property="assetType" />
+        <result column="is_del" property="isDel" />
+        <result column="reg_time" property="regTime" />
+        <result column="asset_status" property="assetStatus" />
+        <result column="flow_status" property="flowStatus" />
+        <result column="data_catalog_num" property="dataCatalogNum" />
+        <result column="table_num" property="tableNum" />
+        <result column="flow_order_id" property="flowOrderId" />
+    </resultMap>
+
+</mapper>

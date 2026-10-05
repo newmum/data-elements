@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.dataassets.base.mapper.DaAssetCatalogItemTMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.linewell.dataelement.dataassets.base.entity.DaAssetCatalogItemT">
+        <id column="tid" property="tid" />
+        <result column="catalog_id" property="catalogId" />
+        <result column="tenant_id" property="tenantId" />
+        <result column="revision" property="revision" />
+        <result column="created_by" property="createdBy" />
+        <result column="created_time" property="createdTime" />
+        <result column="updated_by" property="updatedBy" />
+        <result column="updated_time" property="updatedTime" />
+        <result column="is_del" property="isDel" />
+        <result column="col_name" property="colName" />
+        <result column="col_en" property="colEn" />
+        <result column="col_type" property="colType" />
+        <result column="col_comment" property="colComment" />
+        <result column="col_length" property="colLength" />
+        <result column="is_pk" property="isPk" />
+        <result column="is_masking" property="isMasking" />
+        <result column="is_fk" property="isFk" />
+        <result column="is_nullable" property="isNullable" />
+        <result column="date_format" property="dateFormat" />
+        <result column="mark_lvl" property="markLvl" />
+        <result column="col_unit" property="colUnit" />
+        <result column="col_precision" property="colPrecision" />
+        <result column="masking_id" property="maskingId" />
+        <result column="sort_no" property="sortNo" />
+        <result column="share_type" property="shareType" />
+        <result column="share_condition" property="shareCondition" />
+        <result column="is_dict" property="isDict" />
+        <result column="dict_name" property="dictName" />
+        <result column="col_max_length" property="colMaxLength" />
+        <result column="default_value" property="defaultValue" />
+        <result column="data_standard_id" property="dataStandardId" />
+        <result column="quality_rule" property="qualityRule" />
+        <result column="enable_code_table" property="enableCodeTable" />
+        <result column="code_table_id" property="codeTableId" />
+        <result column="source_table_column_id" property="sourceTableColumnId" />
+        <result column="target_table_column_id" property="targetTableColumnId" />
+    </resultMap>
+
+</mapper>

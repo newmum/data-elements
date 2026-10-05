@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linewell.dataelement.platform.tenant.infrastructure.persistence.mapper.RmUserTenantRelaTMapper">
+
+    <resultMap id="TenantMembershipMap"
+               type="com.linewell.dataelement.platform.tenant.infrastructure.persistence.model.TenantMembership">
+        <id column="tenant_id" property="tenantId"/>
+        <result column="code" property="code"/>
+        <result column="name" property="name"/>
+        <result column="status" property="status"/>
+        <result column="init_flag" property="initFlag"/>
+        <result column="is_default" property="isDefault"/>
+    </resultMap>
+
+    <select id="selectAvailable" resultMap="TenantMembershipMap">
+        select r.tenant_id, r.is_default
+          from rm_user_tenant_rela_t r
+          join sym_tenant_t t on t.tid = r.tenant_id
+         where r.user_id = #{userId}
+           and r.status = 1
+           and r.is_del = 0
+           and t.status = 1
+           and t.is_del = 0
+         order by r.is_default desc, t.sort_no, t.created_time
+    </select>
+
+    <select id="selectCompatible" resultMap="TenantMembershipMap">
+        select tenant_id, is_default
+          from rm_user_tenant_rela_t
+         where user_id = #{userId}
+           and status = 1
+           and is_del = 0
+         order by is_default desc
+    </select>
+
+    <select id="selectMembership" resultMap="TenantMembershipMap">
+        select r.tenant_id
+          from rm_user_tenant_rela_t r
+          join sym_tenant_t t on t.tid = r.tenant_id
+         where r.user_id = #{userId}
+           and r.tenant_id = #{tenantId}
+           and r.status = 1
+           and r.is_del = 0
+           and t.status = 1
+           and t.is_del = 0
+    </select>
+
+    <select id="selectTenantOptions" resultMap="TenantMembershipMap">
+        select t.tid tenant_id, t.code, t.name, t.status, t.init_flag,
+               r.is_default
+          from rm_user_tenant_rela_t r
+          join sym_tenant_t t on t.tid = r.tenant_id
+         where r.user_id = #{userId}
+           and r.status = 1
+           and r.is_del = 0
+           and t.is_del = 0
+         order by r.is_default desc, t.sort_no, t.created_time
+    </select>
+
+    <update id="clearDefault">
+        update rm_user_tenant_rela_t
+           set is_default = 0,
+               updated_by = #{operator},
+               updated_time = #{updatedTime}
+         where user_id = #{userId}
+           and is_del = 0
+    </update>
+
+    <select id="selectRelationId" resultType="java.lang.String">
+        select tid
+          from rm_user_tenant_rela_t
+         where user_id = #{userId}
+           and tenant_id = #{tenantId}
+           and is_del = 0
+    </select>
+
+    <update id="updateAssignment"
+            parameterType="com.linewell.dataelement.platform.tenant.infrastructure.persistence.entity.RmUserTenantRelaT">
+        update rm_user_tenant_rela_t
+           set is_default = #{isDefault},
+               status = 1,
+               updated_by = #{updatedBy},
+               updated_time = #{updatedTime}
+         where tid = #{tid}
+    </update>
+</mapper>

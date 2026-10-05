@@ -1,0 +1,48 @@
+{
+  "key": "transform.sql",
+  "category": "transform",
+  "label": "自定义 SQL",
+  "icon": "code",
+  "description": "",
+  "fields": [
+    {
+      "key": "executionMode",
+      "label": "执行模式",
+      "type": "select",
+      "required": false,
+      "default": "AUTO",
+      "options": [
+        { "label": "自动判断", "value": "AUTO" },
+        { "label": "FlowFile 记录内执行", "value": "FLOWFILE" },
+        { "label": "源数据库执行", "value": "SOURCE_DB" }
+      ],
+      "help": "AUTO: SQL 中包含 FLOWFILE 时走 QueryRecord；SOURCE_DB: 强制走 ExecuteSQLRecord，适合真实表/LEFT JOIN/字典表"
+    },
+    {
+      "key": "sql",
+      "label": "SQL 语句",
+      "type": "sql-editor",
+      "required": true,
+      "default": "SELECT * FROM FLOWFILE",
+      "help": "FLOWFILE 模式下 FROM 固定为 FLOWFILE；源数据库模式下可直接写真实表名和 JOIN"
+    }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "query",
+        "type": "org.apache.nifi.processors.standard.QueryRecord",
+        "properties": {
+          "Record Reader": "${cs.jsonReader}",
+          "Record Writer": "${cs.jsonWriter}",
+          "Include Zero Record FlowFiles": "false",
+          "result": "${config.sql}"
+        }
+      }
+    ],
+    "inlet": "query",
+    "outlets": [
+      { "name": "default", "processorRef": "query", "relationship": "result" }
+    ]
+  }
+}

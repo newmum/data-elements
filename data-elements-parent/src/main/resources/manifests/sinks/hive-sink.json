@@ -1,0 +1,41 @@
+{
+  "key": "sink.hive",
+  "category": "sink",
+  "label": "华为 MRS Hive 写入",
+  "icon": "database",
+  "description": "向服务器托管的华为 MRS Hive 配置集写入数据。默认使用 Linewell PutHwHDFS，也可切换为原生 PutHDFS 或 HiveRecordPut；部署时自动创建并绑定 NiFi Kerberos Keytab User Service 和 Hive 连接池。ZooKeeper、Kerberos、keytab、krb5.conf 与 JDBC 驱动均由服务器统一管理。当前写入仅支持 INSERT。",
+  "fields": [
+    { "key": "dbType", "label": "数据库类型", "type": "select", "default": "HIVE", "required": true, "options": [{ "label": "华为 MRS Hive", "value": "HIVE" }], "group": "connection" },
+    { "key": "hiveProfile", "label": "MRS 配置集", "type": "select", "default": "default", "required": true, "options": [{ "label": "默认华为 MRS Hive 配置集", "value": "default" }], "group": "connection", "help": "选择服务端管理的连接与认证配置；配置集名称与 Hive 数据库名分别设置。" },
+    { "key": "database", "label": "Hive 数据库", "type": "text", "default": "default", "required": true, "group": "connection", "help": "目标表所在的 Hive 数据库；即使与认证用户名相同，也按数据库名使用。" },
+    { "key": "table", "label": "目标表", "type": "text", "required": true, "group": "write" },
+    { "key": "hiveWriteMode", "label": "目标表写入组件", "type": "select", "default": "LINEWELL_HDFS", "required": true, "options": [{ "label": "Linewell PutHwHDFS（默认）", "value": "LINEWELL_HDFS" }, { "label": "NiFi 原生 PutHDFS", "value": "HDFS_BATCH" }, { "label": "标准写入（HiveRecordPut）", "value": "HIVE_RECORD_PUT" }], "group": "write", "help": "部署时会核验当前 Leafy/NiFi 节点已安装所选组件。PutHwHDFS 与 PutHDFS 均直接写入目标 Hive 表所在的 HDFS 目录。" },
+    { "key": "hdfsDirectory", "label": "HDFS 写入目录", "type": "text", "group": "write", "help": "仅 PutHwHDFS 或 PutHDFS 使用。不填时按 Hive 默认仓库目录推导；目标表使用自定义 LOCATION 时，请填写该表实际的 HDFS 目录。" },
+    { "key": "statementType", "label": "写入语义", "type": "select", "default": "INSERT", "required": true, "options": [{ "label": "新增写入（INSERT）", "value": "INSERT" }], "group": "write", "help": "Hive 目标不支持通用 JDBC 的 UPSERT、UPDATE、DELETE。" }
+  ],
+  "compile": {
+    "controllerServices": [
+      { "localId": "kerberos", "type": "org.apache.nifi.kerberos.KerberosKeytabUserService", "properties": {
+        "Kerberos Principal": "${config.userPrincipal}",
+        "Kerberos Keytab": "${config.keytabPath}"
+      }},
+      { "localId": "dbcp", "type": "org.apache.nifi.dbcp.DBCPConnectionPool", "properties": {
+      "Database Connection URL": "${config.jdbcUrl}",
+      "Database Driver Class Name": "${jdbc.driverClass}",
+      "Database Driver Locations": "${jdbc.driverLocations}",
+      "Kerberos User Service": "${cs.kerberos}",
+      "Database User": "${config.username}",
+      "Password": "${config.password}"
+    }}
+    ],
+    "processors": [{ "localId": "put", "type": "com.linewell.nifi.hive.HiveRecordPut", "properties": {
+      "Record Reader": "${cs.jsonReader}",
+      "Database Connection Pooling Service": "${cs.dbcp}",
+      "Hive Database": "${config.database}",
+      "Target Table": "${config.table}",
+      "Maximum Rows Per Statement": "500"
+    }}],
+    "inlet": "put",
+    "outlets": []
+  }
+}

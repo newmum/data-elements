@@ -1,0 +1,45 @@
+{
+  "key": "sink.kafka",
+  "category": "sink",
+  "label": "Kafka 输出",
+  "icon": "kafka",
+  "description": "将布控命中结果发布到 Kafka Topic；异常消息由系统级死信链路处理",
+  "fields": [
+    { "key": "bootstrapServers", "label": "Bootstrap Servers", "type": "text", "required": true, "placeholder": "h1:9092,h2:9092" },
+    { "key": "topic", "label": "Topic", "type": "text", "required": true },
+    { "key": "securityProtocol", "label": "安全协议", "type": "select", "default": "PLAINTEXT", "options": [
+      { "label": "PLAINTEXT", "value": "PLAINTEXT" },
+      { "label": "SSL", "value": "SSL" },
+      { "label": "SASL_PLAINTEXT", "value": "SASL_PLAINTEXT" },
+      { "label": "SASL_SSL", "value": "SASL_SSL" }
+    ] },
+    { "key": "saslMechanism", "label": "SASL 机制", "type": "select", "default": "PLAIN", "options": [
+      { "label": "PLAIN", "value": "PLAIN" },
+      { "label": "SCRAM-SHA-256", "value": "SCRAM-SHA-256" },
+      { "label": "SCRAM-SHA-512", "value": "SCRAM-SHA-512" },
+      { "label": "GSSAPI", "value": "GSSAPI" }
+    ] },
+    { "key": "credentialRef", "label": "Kafka 凭据引用", "type": "text", "group": "security", "placeholder": "credential://kafka/structured-surveillance" },
+    { "key": "deliveryGuarantee", "label": "投递保证", "type": "select", "default": "EXACTLY_ONCE", "options": [
+      { "label": "至少一次", "value": "AT_LEAST_ONCE" },
+      { "label": "精确一次（幂等生产者）", "value": "EXACTLY_ONCE" }
+    ] }
+  ],
+  "compile": {
+    "controllerServices": [{ "localId": "kafka", "type": "org.apache.nifi.kafka.service.Kafka3ConnectionService", "properties": {
+      "bootstrap.servers": "${config.bootstrapServers}",
+      "security.protocol": "${config.securityProtocol}",
+      "sasl.mechanism": "${config.saslMechanism}",
+      "credentials.reference": "${config.credentialRef}",
+      "client.id": "structured-surveillance"
+    }}],
+    "processors": [{ "localId": "publish", "type": "org.apache.nifi.processors.kafka.pubsub.PublishKafka", "properties": {
+      "Kafka Connection Service": "${cs.kafka}",
+      "Topic Name": "${config.topic}",
+      "Message Key Field": "eventId",
+      "Use Transactions": "${config.deliveryGuarantee:equals('EXACTLY_ONCE')}"
+    }}],
+    "inlet": "publish",
+    "outlets": []
+  }
+}

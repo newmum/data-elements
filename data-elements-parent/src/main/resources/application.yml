@@ -1,0 +1,31 @@
+spring:
+  profiles:
+    include: ${DATA_ELEMENT_PROFILE:dev}
+  application:
+    name: data-element
+  # Nacos connection/bootstrap settings must remain local: they are required
+  # before the application can load centralized runtime configuration.
+  config:
+    import:
+      - optional:nacos:data-element.yml?group=DEFAULT_GROUP&refreshable=true
+      - optional:nacos:data-element-${DATA_ELEMENT_PROFILE:dev}.yml?group=DEFAULT_GROUP&refreshable=true
+  cloud:
+    nacos:
+      server-addr: ${NACOS_HOST:192.168.175.86}:${NACOS_PORT:8848}
+      username: ${NACOS_USER:nacos}
+      password: ${NACOS_PASSWORD:nacos}
+      discovery:
+        username: ${NACOS_USER:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        enabled: true
+        file-extension: yml
+        namespace: ${NACOS_NAMESPACE:data-element}
+        server-addr: ${NACOS_HOST:192.168.175.86}:${NACOS_PORT:8848}
+      config:
+        username: ${NACOS_USER:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        enabled: true
+        namespace: ${NACOS_NAMESPACE:data-element}
+        file-extension: yml
+# All runtime settings, including datasource, Redis, NiFi, and Magic API
+# options, are supplied from Nacos or explicitly injected deployment variables.

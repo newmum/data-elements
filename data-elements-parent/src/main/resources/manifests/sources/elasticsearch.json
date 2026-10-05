@@ -1,0 +1,44 @@
+{
+  "key": "source.elasticsearch",
+  "category": "source",
+  "label": "Elasticsearch 数据源",
+  "icon": "elasticsearch",
+  "description": "从 Elasticsearch/OpenSearch 查询索引数据",
+  "fields": [
+    { "key": "nodes", "label": "节点列表", "type": "text", "required": true, "placeholder": "h1:9200,h2:9200" },
+    { "key": "protocol", "label": "协议", "type": "select", "default": "http", "options": [
+      { "label": "HTTP", "value": "http" },
+      { "label": "HTTPS", "value": "https" }
+    ] },
+    { "key": "version", "label": "版本", "type": "select", "default": "8", "options": [
+      { "label": "7.x", "value": "7" },
+      { "label": "8.x", "value": "8" }
+    ] },
+    { "key": "authMethod", "label": "认证方式", "type": "select", "default": "NONE", "options": [
+      { "label": "无", "value": "NONE" },
+      { "label": "用户名密码", "value": "BASIC" },
+      { "label": "API Key", "value": "API_KEY" },
+      { "label": "Bearer Token", "value": "TOKEN" }
+    ] },
+    { "key": "username", "label": "用户名", "type": "text", "visibleWhen": { "key": "authMethod", "equals": "BASIC" } },
+    { "key": "password", "label": "密码", "type": "password", "visibleWhen": { "key": "authMethod", "equals": "BASIC" } },
+    { "key": "apiKey", "label": "API Key", "type": "password", "visibleWhen": { "key": "authMethod", "equals": "API_KEY" } },
+    { "key": "defaultIndex", "label": "索引", "type": "text", "required": true },
+    { "key": "queryJson", "label": "查询 DSL", "type": "json-editor", "default": "{\"query\":{\"match_all\":{}}}" },
+    { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
+  ],
+  "compile": {
+    "controllerServices": [{ "localId": "es", "type": "org.apache.nifi.elasticsearch.ElasticSearchClientServiceImpl", "properties": {
+      "el-cs-http-hosts": "${config.protocol}://${config.nodes}",
+      "el-cs-username": "${config.username}",
+      "el-cs-password": "${config.password}",
+      "el-cs-api-key": "${config.apiKey}",
+      "el-cs-authorization-scheme": "${config.authMethod}",
+      "el-cs-connect-timeout": "5 sec",
+      "el-cs-socket-timeout": "30 sec",
+      "el-cs-charset": "UTF-8"
+    }}],
+    "processors": [{ "localId": "query", "type": "org.apache.nifi.processors.elasticsearch.JsonQueryElasticsearch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "el-rest-client-service": "${cs.es}", "Index": "${config.defaultIndex}", "Query": "${config.queryJson}" } }],
+    "outlets": [{ "name": "default", "processorRef": "query", "relationship": "hits" }]
+  }
+}
