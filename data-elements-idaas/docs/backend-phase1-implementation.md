@@ -177,7 +177,7 @@ Java 没有新增人员、应用、角色、机构的业务 CRUD，没有把字�
 | `IdaasRecoveryPayloadTest` | 14 项通过：从实际人员脚本提取安全投影，剔除嵌套凭据、拒绝错误类型、验证 Hutool JSON 恢复 |
 | `IdaasMagicSyntaxTest` | 29 份 API 与函数用真实 MagicScript 引擎编译通过；最后一次登录审计调整后重新编译通过 |
 
-重复验证入口：
+重复验证入口（以下为当时环境的历史路径；当前仓库后端目录为 `data-elements-parent/`，且不包含该验证脚本）：
 
 ```powershell
 & 'D:/Sourcecode/data-elements-parent/data-elements/scripts/verify-idaas-magic.ps1' `

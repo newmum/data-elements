@@ -1,6 +1,6 @@
-# 数据要素操作平台前端
+# 澄天数据中台前端
 
-`data-elements-front` 是数据要素操作平台的 Vue 前端工程，面向管理、配置、流程操作、低代码表单和数据要素业务场景，基于 Vue 3、Vite 7、TypeScript、Element Plus、Pinia、UnoCSS、VXE Table 和 form-create 构建。
+`data-elements-chengtian` 是澄天数据中台的 Vue 前端工程，面向管理、配置、流程操作、低代码表单和数据要素业务场景，基于 Vue 3、Vite 7、TypeScript、Element Plus、Pinia、UnoCSS、VXE Table 和 form-create 构建。
 
 ## 功能概览
 
@@ -30,9 +30,9 @@
 ## 本地启动
 
 ```bash
-cd data-elements-front
+cd data-elements-chengtian
 npm install -g pnpm
-pnpm install
+pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
@@ -134,7 +134,7 @@ server {
 
 ## 统一身份管理入口
 
-系统导航的“数据安全产品 → 统一身份管理中心”对应卓鉴 `data-elements-idaas`。开发入口为 `http://localhost:3005/#/console/workforce/overview`，生产默认前缀 `/idaas/`，可通过 `VITE_IDAAS_CENTER_URL` 覆盖为实际部署地址。点击在当前标签页打开，目标系统仍执行自身登录校验，不在 URL 中传递口令或令牌。
+系统导航的“平台支撑 → 统一身份管理平台”对应 `data-elements-idaas`。开发入口为 `http://localhost:3005/#/console/workforce/overview`，生产默认前缀 `/idaas/`，可通过 `VITE_IDAAS_CENTER_URL` 覆盖为实际部署地址。点击在当前标签页打开，目标系统仍执行自身登录校验，不在 URL 中传递口令或令牌。
 
-数据中台入口来自共享低代码组件 `global-nav`，工作副本位于父工程 `data/working/global-nav.vue`；源码与编译 JS/CSS 已同步发布并刷新组件缓存。卓鉴的导航地址独立于 `capabilityCenterBases`，没有扩大数据中台会话桥的接收范围。
+数据中台入口来自共享后端控制库中的低代码组件 `global-nav`，而不是本前端仓库内的静态菜单。历史工作副本路径 `data/working/global-nav.vue` 不在当前 Git 树内；维护时应从运行环境读取实际组件。统一身份管理平台的导航地址独立于 `capabilityCenterBases`，没有扩大数据中台会话桥的接收范围。
 

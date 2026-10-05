@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 assert(process.env.METADATA_TEST_PASSWORD,'Development credentials must come from the invoking environment');
 const base='http://localhost:8088';
 const login=await fetch(base+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:process.env.METADATA_TEST_ACCOUNT||'manager',password:sm3(process.env.METADATA_TEST_PASSWORD),appId:'1995678661281710081'})}).then(r=>r.json());assert.equal(login.code,0);

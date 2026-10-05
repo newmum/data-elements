@@ -3,6 +3,7 @@
   "version": "2.2.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.6.0",
   "description": "统一身份管理平台 · React + Ant Design",
   "engines": {
     "node": ">=22.12.0"

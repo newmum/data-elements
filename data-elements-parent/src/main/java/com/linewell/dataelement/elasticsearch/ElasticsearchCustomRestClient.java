@@ -77,9 +77,9 @@ public class ElasticsearchCustomRestClient {
      */
     @Value("${elasticsearch.host: 127.0.0.1:9200}")
     String[] ipAddress;
-    @Value("${elasticsearch.username: elastic}")
+    @Value("${elasticsearch.username:}")
     private String username;
-    @Value("${elasticsearch.password: elastic}")
+    @Value("${elasticsearch.password:}")
     private String password;
     @Value("${elasticsearch.auth: true}")
     private Boolean auth;

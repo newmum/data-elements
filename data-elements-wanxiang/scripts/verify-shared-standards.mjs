@@ -4,7 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 const base=process.env.DATA_ELEMENTS_TEST_API||'http://localhost:8088',tenant='2084109831682699265';
 if(!process.env.DATA_ELEMENTS_TEST_PASSWORD)throw new Error('Missing test-login environment credential');
 const started=Date.now(),checks=[],fixtures={};

@@ -1,6 +1,6 @@
 /** Bounded test-only retry for a shared runtime being published. Not an auth bypass. */
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 export async function verificationLogin(base,account,password){
  for(let attempt=0;attempt<4;attempt++){
   let result,message='';

@@ -1,7 +1,7 @@
 /** Remove only this implementation's never-run, disabled UI test configuration. */
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 const account=process.env.QUALITY_TEST_ACCOUNT,password=process.env.QUALITY_TEST_PASSWORD;
 assert(account&&password,'Set test credentials in the invoking environment');
 const base='http://localhost:3010/dev-api';

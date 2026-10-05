@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 assert(process.env.QUALITY_TEST_PASSWORD);
 const base='http://localhost:3000/dev-api';
 const login=await fetch(base+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:process.env.QUALITY_TEST_ACCOUNT||'manager',password:sm3(process.env.QUALITY_TEST_PASSWORD),appId:'1995678661281710081'})}).then(r=>r.json());assert.equal(login.code,0);

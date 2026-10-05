@@ -1,7 +1,7 @@
 /** Read-only live contract verification. Credentials come only from the invoking environment. */
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 const account=process.env.QUALITY_TEST_ACCOUNT,password=process.env.QUALITY_TEST_PASSWORD;
 assert(account&&password,'Set QUALITY_TEST_ACCOUNT and QUALITY_TEST_PASSWORD in the invoking environment');
 const bases=['http://localhost:3000/dev-api','http://localhost:3010/dev-api'];

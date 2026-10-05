@@ -7,7 +7,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 if(!process.env.DATA_ELEMENTS_TEST_PASSWORD)throw new Error('Missing test-login environment credential');
 const base=process.env.DATA_ELEMENTS_TEST_API||'http://localhost:8088';
 const login=await fetch(base+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:'manager',password:sm3(process.env.DATA_ELEMENTS_TEST_PASSWORD),appId:'1995678661281710081',tenantId:'2084109831682699265'})}).then(r=>r.json());

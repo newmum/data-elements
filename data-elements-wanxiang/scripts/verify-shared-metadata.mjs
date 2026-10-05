@@ -1,7 +1,7 @@
 /** Read-only shared metadata contract checks. No token, credentials or business rows are printed. */
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 assert(process.env.METADATA_TEST_ACCOUNT&&process.env.METADATA_TEST_PASSWORD,'Set development credentials in the invoking environment');
 const base='http://localhost:3000/dev-api';
 const login=await fetch(base+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:process.env.METADATA_TEST_ACCOUNT,password:sm3(process.env.METADATA_TEST_PASSWORD),appId:'1995678661281710081'})}).then(r=>r.json());

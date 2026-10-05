@@ -1,4 +1,4 @@
-# 数据治理中心 · data-elements-wanxiang
+# 万象数据治理中心（data-elements-wanxiang）
 
 ## 当前运行状态
 
@@ -6,18 +6,19 @@
 
 模型名称、业务域、选表范围和画布布局沿用旧 `wanxiang2` 的浏览器视图方案，按账号和租户隔离。真实数据源、表、字段、逻辑关系、标准引用、质检记录均来自共享服务；本地模型视图不是服务端数据模型库。
 
-- [元数据管理对接说明与差异](docs/shared-metadata-integration.md)
-- [数据质量对接说明](docs/shared-quality-integration.md)
-- [全中心功能完整性检查与本轮验收](docs/governance-center-audit-20260929.md)
+- 元数据、质量和中心功能的历史对接记录散见 `doc/`；旧 README 曾引用的 `docs/shared-metadata-integration.md`、`docs/shared-quality-integration.md`、`docs/governance-center-audit-20260929.md` 未随当前仓库检出，不能作为现行验收依据。
 - 原始 UI 设计记录位于 `doc/`，其中的离线 Mock 运行方式和旧测试数字属于历史版本，不适用于当前已接入菜单。
 
 ## 本地启动
 
-使用 Node.js 22.12 或更高版本，现有依赖安装完成后：
+使用 Node.js 22.12 或更高版本，在本应用目录安装依赖并启动：
 
 ```powershell
+npm ci
 npm run dev
 ```
+
+依赖由万象自己的 `package.json` 和 `package-lock.json` 管理；维护与验收脚本也从本应用依赖中加载所需模块，无需安装其他前端工程。每次依赖声明变化后重新执行 `npm ci`。
 
 开发入口为 `http://localhost:3010/`，元数据管理平台为 `http://localhost:3000/`，共享后端为 `http://localhost:8088/`。先在平台登录，再进入治理中心。不要直接双击源码 `index.html`。开发服务使用固定端口，不会静默换成其他端口。
 
@@ -53,7 +54,7 @@ node scripts/verify-shared-metadata-writes.mjs
 
 2026-09-29 扩展已接入联合关系/条件/基数、实际业务键验证、明确确认的物理 FK、质量规则/技术字段引用及手工加工图/字段转换。真实扩展回归脚本为 `scripts/verify-metadata-extensions.mjs`，会创建和清理专用开发测试表与记录，运行前必须核对实际租户库并从调用环境提供连接配置。本轮 25 项通过，MySQL 实际 FK 约束已验证；其他数据库的实库验收和其他租户迁移尚未完成。
 
-当前用户已确认账号体系仍在更新。不要通过修改认证或回退旧运行包恢复页面；认证稳定后的全菜单及加工图 UI 闭环复验见完整性检查清单。当前最新前端自动化为 300 项通过，完整构建通过，后端新增能力针对性测试 13 项通过。这些数字不等于整个中心所有页面已完成最终浏览器验收。
+当前用户已确认账号体系仍在更新。不要通过修改认证或回退旧运行包恢复页面。历史验收曾记录前端自动化 300 项通过、后端针对性测试 13 项通过；这些数字不代表当前检出的测试状态。2026-10-05 仓库整理时，生产构建通过；`npm run check` 的 317 项测试中 309 项通过、8 项失败，失败涉及未随仓库检出的 `backend/standard-landing/`、`third-party/` 验收素材及既有基线校验。缺失素材恢复前，不应把完整检查标为通过。
 
 生产带路径前缀构建示例（不等于部署）：
 
@@ -76,11 +77,9 @@ src/services/              共享接口 DTO、缓存、查询及本地视图适�
 src/shared/                共享认证、请求、跨系统导航
 src/assets/                用户已确认的本地插画、数据库原图
 src/mocks/                 保留的历史预览/测试实现，不作为已接入菜单的数据源
-backend/                   需要保存到原 Magic API 的审阅后脚本
 scripts/                   检查、构建、真实接口验证及发布工具
 tests/                     逻辑/契约测试和图形资产原样检查
-docs/                      当前共享后端对接说明
 doc/                       新版原始设计与历史验收记录
 ```
 
-数据库图标来源和固定文件哈希见 `src/assets/databases/sources.json`，许可证见 `third-party/`。界面只使用本地图像，不请求外网图床。
+数据库图标来源和固定文件哈希见 `src/assets/databases/sources.json`。当前 Git 树没有旧测试所需的 `third-party/` 许可证目录；发布前须补齐并核对相应图标的来源与授权。界面只使用本地图像，不请求外网图床。

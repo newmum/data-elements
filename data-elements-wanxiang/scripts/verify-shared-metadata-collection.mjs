@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const required=['METADATA_TEST_ACCOUNT','METADATA_TEST_PASSWORD','METADATA_PHYSICAL_HOST','METADATA_PHYSICAL_USER','METADATA_PHYSICAL_PASSWORD'];
 assert(required.every(k=>process.env[k]),'Provide the development login and allowed MySQL test connection in environment');
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 const base='http://localhost:3010/dev-api',key=Date.now().toString(36),name='WX_METADATA_PHYSICAL_'+key;
 const response=await fetch(base+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:process.env.METADATA_TEST_ACCOUNT,password:sm3(process.env.METADATA_TEST_PASSWORD),appId:'1995678661281710081'})}).then(r=>r.json());
 assert.equal(response.code,0);assert(response.data?.token);

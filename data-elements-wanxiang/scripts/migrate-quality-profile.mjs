@@ -4,13 +4,11 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {mkdtemp,writeFile,rm,readdir} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 const require=createRequire(import.meta.url),exec=promisify(execFile);
-const packageRoot=new URL('../../data-elements-front/node_modules/.pnpm/',import.meta.url),yamlPackage=(await readdir(packageRoot)).find(n=>n.startsWith('js-yaml@'));
-assert(yamlPackage,'Use the existing frontend YAML dependency');
-const yaml=require(new URL(yamlPackage+'/node_modules/js-yaml/index.js',packageRoot).pathname.replace(/^\/([A-Za-z]:)/,'$1'));
+const yaml=require('js-yaml');
 const source=`import java.sql.*;import java.util.*;import java.nio.file.*;
 public class WxQualitySchema {
  public static void main(String[] args)throws Exception {

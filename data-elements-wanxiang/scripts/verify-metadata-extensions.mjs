@@ -8,7 +8,7 @@ import {mkdir,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {verificationLogin} from './shared-verification-auth.mjs';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto'),exec=promisify(execFile);
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto'),exec=promisify(execFile);
 for(const env of ['METADATA_TEST_ACCOUNT','METADATA_TEST_PASSWORD','WX_META_JAVA','WX_META_DRIVER','WX_META_DB_HOST','WX_META_DB_USER','WX_META_DB_PASSWORD'])assert(process.env[env],env+' must be set');
 assert.equal(process.env.WX_META_DATABASE,'baseline_ga_old','Resolve the actual active tenant before writes');
 const key=Date.now().toString(36),prefix='WX_META_EXT_'+key,folder=join(tmpdir(),'wx-metadata-extensions-'+key);await mkdir(folder);

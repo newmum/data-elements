@@ -1,6 +1,6 @@
 /** Publish exactly the reviewed live component, preserving concurrent edits and a rollback. */
 import assert from 'node:assert/strict';import fs from 'node:fs/promises';import {createRequire} from 'node:module';import path from 'node:path';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');assert(process.env.QUALITY_TEST_PASSWORD);
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');assert(process.env.QUALITY_TEST_PASSWORD);
 const base='http://localhost:3000/dev-api',login=await fetch(base+'/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:process.env.QUALITY_TEST_ACCOUNT||'manager',password:sm3(process.env.QUALITY_TEST_PASSWORD),appId:'1995678661281710081'})}).then(r=>r.json());assert.equal(login.code,0);
 async function call(route,body={}){const r=await fetch(base+route,{method:'POST',headers:{token:login.data.token,'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(45000)}).then(r=>r.json());assert.equal(r.code,0,route+': '+String(r.msg||r.message));return r.data;}
 const context=JSON.parse(await fs.readFile(new URL('../../data/working/quality-platform-context.json',import.meta.url),'utf8'));

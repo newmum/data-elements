@@ -12,18 +12,18 @@ spring:
   cloud:
     nacos:
       server-addr: ${NACOS_HOST:192.168.175.86}:${NACOS_PORT:8848}
-      username: ${NACOS_USER:nacos}
-      password: ${NACOS_PASSWORD:nacos}
+      username: ${NACOS_USER:}
+      password: ${NACOS_PASSWORD:}
       discovery:
-        username: ${NACOS_USER:nacos}
-        password: ${NACOS_PASSWORD:nacos}
+        username: ${NACOS_USER:}
+        password: ${NACOS_PASSWORD:}
         enabled: true
         file-extension: yml
         namespace: ${NACOS_NAMESPACE:data-element}
         server-addr: ${NACOS_HOST:192.168.175.86}:${NACOS_PORT:8848}
       config:
-        username: ${NACOS_USER:nacos}
-        password: ${NACOS_PASSWORD:nacos}
+        username: ${NACOS_USER:}
+        password: ${NACOS_PASSWORD:}
         enabled: true
         namespace: ${NACOS_NAMESPACE:data-element}
         file-extension: yml

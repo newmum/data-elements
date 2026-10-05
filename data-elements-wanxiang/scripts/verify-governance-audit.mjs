@@ -1,7 +1,7 @@
 /** Read-only standard/binding/resource contract audit. Never changes tenant or business data. */
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto');
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto');
 assert(process.env.METADATA_TEST_PASSWORD,'Use a development credential from the invoking environment');
 const auth=await fetch('http://localhost:3010/dev-api/portal/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({account:process.env.METADATA_TEST_ACCOUNT||'manager',password:sm3(process.env.METADATA_TEST_PASSWORD),appId:'1995678661281710081'})}).then(r=>r.json());
 assert.equal(auth.code,0);assert(auth.data?.token);

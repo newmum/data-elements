@@ -1,6 +1,6 @@
-# data-elements 后端服务
+# data-elements-parent 共享后端
 
-`data-elements` 是数据要素平台后端工程，基于 Spring Boot、MyBatis-Plus、Sa-Token、magic-api、Redis、Nacos、Warm Flow 等组件构建，为管理端和图表设计器提供接口、动态 API、认证、配置、流程和数据访问能力。
+`data-elements-parent` 是当前仓库中的单模块共享后端工程，基于 Spring Boot、MyBatis-Plus、Sa-Token、magic-api、Redis、Nacos、Warm Flow 等组件构建，为各前端提供接口、动态 API、认证、配置、流程和数据访问能力。目录名中的 `parent` 不表示 Maven 聚合父工程。
 
 ## 技术栈
 
@@ -25,25 +25,25 @@
 ## 本地启动
 
 ```bash
-cd data-elements
+cd data-elements-parent
 mvn spring-boot:run -DskipTests
 ```
 
 如果从父目录启动，可使用：
 
 ```bash
-mvn -f data-elements/pom.xml spring-boot:run -DskipTests
+mvn -f data-elements-parent/pom.xml spring-boot:run -DskipTests
 ```
 
 ## 常用环境变量
 
-当前配置支持通过环境变量覆盖 Nacos 连接信息：
+当前配置通过环境变量接收 Nacos 连接信息。实际凭据由运行环境或密钥管理提供，不写入仓库：
 
 ```env
 NACOS_HOST=192.168.175.86
 NACOS_PORT=8848
-NACOS_USER=nacos
-NACOS_PASSWORD=nacos
+NACOS_USER=<从运行环境提供>
+NACOS_PASSWORD=<从密钥管理提供>
 NACOS_NAMESPACE=data-element
 ```
 
@@ -102,7 +102,7 @@ magic-api:
 
 ## 前端联调
 
-两个前端通常通过 Vite 代理访问后端：
+各前端通常通过 Vite 代理访问同一个后端：
 
 ```env
 VITE_APP_BASE_API=/dev-api
@@ -111,14 +111,18 @@ VITE_APP_API_URL=http://localhost:8088
 
 对应工程：
 
-- `data-elements-front`：管理端，默认端口 `3000`
-- `data-element-designer`：图表设计器，默认端口 `5173`
+- `data-elements-chengtian`：澄天数据中台，默认端口 `3000`
+- `data-elements-haitong`：海通数据集成中心，默认端口 `3002`
+- `data-elements-idaas`：统一身份管理平台，默认端口 `3005`
+- `data-elements-wanxiang`：万象数据治理中心，默认端口 `3010`
+
+旧文档中出现的 `data-element-designer` 是另一个工程，不在当前 Git 仓库内。
 
 ## 常见问题
 
 ### Maven 在父目录运行失败
 
-请进入 `data-elements` 目录执行 Maven，或使用 `-f data-elements/pom.xml` 指定 POM。
+请进入 `data-elements-parent` 目录执行 Maven，或使用 `-f data-elements-parent/pom.xml` 指定 POM。
 
 ### 端口被占用
 

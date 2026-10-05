@@ -2,7 +2,7 @@
  * fixture helper stays in TEMP. Credentials/tokens/business rows never enter logs. */
 import assert from 'node:assert/strict';import {createRequire} from 'node:module';import {execFile} from 'node:child_process';import {promisify} from 'node:util';import {mkdtemp,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {verificationLogin} from './shared-verification-auth.mjs';
-const require=createRequire(import.meta.url),{sm3}=require('../../data-elements-front/node_modules/sm-crypto'),exec=promisify(execFile);
+const require=createRequire(import.meta.url),{sm3}=require('sm-crypto'),exec=promisify(execFile);
 for(const key of ['QUALITY_TEST_ACCOUNT','QUALITY_TEST_PASSWORD','WX_META_JAVA','WX_META_DRIVER','WX_META_DB_HOST','WX_META_DB_USER','WX_META_DB_PASSWORD'])assert(process.env[key],key+' required');
 assert.equal(process.env.WX_META_DATABASE,'baseline_ga_old','Resolve actual tenant schema before testing');
 const cleanupKey=process.env.WX_QUALITY_CLEANUP_KEY;if(cleanupKey)assert.match(cleanupKey,/^[a-z0-9]{8,16}$/);
