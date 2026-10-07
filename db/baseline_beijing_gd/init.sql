@@ -681,28 +681,6 @@ CREATE TABLE "baseline_beijing_gd"."da_metadata_t"
 "version_no" VARCHAR(32) DEFAULT '1.0' NOT NULL,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
--- TABLE da_order_asset_rela
-CREATE TABLE "baseline_beijing_gd"."da_order_asset_rela"
-(
-"tid" VARCHAR(32) NOT NULL,
-"tenant_id" VARCHAR(32) DEFAULT '2084109831682699265' NOT NULL,
-"revision" VARCHAR(32),
-"created_by" VARCHAR(32),
-"created_time" TIMESTAMP(6),
-"updated_by" VARCHAR(32),
-"updated_time" TIMESTAMP(6),
-"is_del" INT,
-"flow_order_id" VARCHAR(32),
-"flow_type" VARCHAR(64),
-"flow_status" INT,
-"asset_id" VARCHAR(32),
-"asset_type" VARCHAR(32),
-"asset_version" VARCHAR(32),
-"asset_snapshot_data" TEXT,
-"asset_new_data" TEXT,
-"instance_id" BLOB,
-NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
 -- TABLE da_prop_t
 CREATE TABLE "baseline_beijing_gd"."da_prop_t"
 (
@@ -2077,25 +2055,6 @@ CREATE TABLE "baseline_beijing_gd"."idaas_receiver_receipt_t"
 CONSTRAINT "ga_idaas_receiver_receipt_t_pk_75d36e4d46e8" NOT CLUSTER PRIMARY KEY("id"),
 CONSTRAINT "ga_idaas_receiver_receipt_t_source_version_range_3206d83b3af8" CHECK("source_version" BETWEEN 0 AND 18446744073709551615.)) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
--- TABLE kg_relation
-CREATE TABLE "baseline_beijing_gd"."kg_relation"
-(
-"tid" BIGINT NOT NULL,
-"tenant_id" BIGINT NOT NULL,
-"dataset_id" BIGINT NOT NULL,
-"source_entity_id" BIGINT NOT NULL,
-"target_entity_id" BIGINT NOT NULL,
-"relation_type" VARCHAR(128) NOT NULL,
-"relation_name" VARCHAR(255),
-"relation_properties" CLOB,
-"relation_status" VARCHAR(32) NOT NULL,
-"created_time" TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP NOT NULL,
-"created_by" BIGINT,
-"updated_time" TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP NOT NULL,
-"updated_by" BIGINT,
-"is_del" SMALLINT DEFAULT 0 NOT NULL,
-CONSTRAINT "pk_kg_relation" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
 -- TABLE log_request_t
 CREATE TABLE "baseline_beijing_gd"."log_request_t"
 (
@@ -2305,20 +2264,6 @@ CREATE TABLE "baseline_beijing_gd"."nifi_pipeline_t"
 "is_del" INT NOT NULL,
 "tenant_id" VARCHAR(32) DEFAULT '2084109831682699265' NOT NULL,
 NOT CLUSTER PRIMARY KEY("id")) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
--- TABLE nrta_tv_drama_approval_t
-CREATE TABLE "baseline_beijing_gd"."nrta_tv_drama_approval_t"
-(
-"tid" VARCHAR(32) NOT NULL,
-"drama_name" VARCHAR(255) NOT NULL,
-"production_org" VARCHAR(255) NOT NULL,
-"license_no" VARCHAR(64) NOT NULL,
-"episode_count" INT NOT NULL,
-"approval_status" VARCHAR(32) NOT NULL,
-"approval_date" TIMESTAMP(0),
-"tenant_id" VARCHAR(32) NOT NULL,
-"updated_time" TIMESTAMP(6) NOT NULL,
-NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE ods_batch_create_item_t
 CREATE TABLE "baseline_beijing_gd"."ods_batch_create_item_t"
@@ -3504,8 +3449,6 @@ CREATE OR REPLACE  INDEX "IDX_DATA_PUSH_SCHEMA_T_IDX_DATA_PUSH_SCHEMA_LOOKUP" ON
 
 CREATE OR REPLACE UNIQUE  INDEX "IDX_DATA_PUSH_SCHEMA_T_UK_DATA_PUSH_SCHEMA_TABLE" ON "baseline_beijing_gd"."data_push_schema_t"("tenant_id" ASC,"datasource_id" ASC,"table_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
-CREATE OR REPLACE  INDEX "idx_kg_relation_source" ON "baseline_beijing_gd"."kg_relation"("tenant_id" ASC,"source_entity_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
 CREATE OR REPLACE  INDEX "idx_metadata_collection_latest" ON "baseline_beijing_gd"."metadata_table_collection_job_t"("tenant_id" ASC,"datasource_id" ASC,"is_del" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "idx_metadata_collection_running" ON "baseline_beijing_gd"."metadata_table_collection_job_t"("tenant_id" ASC,"datasource_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -3567,8 +3510,6 @@ CREATE OR REPLACE  INDEX "ix_asset_workbench_sync_t_1ez39sl" ON "baseline_beijin
 CREATE OR REPLACE  INDEX "ix_asset_workbench_sync_t_1fcxbde" ON "baseline_beijing_gd"."asset_workbench_sync_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_asset_workbench_sync_t_1sxsvif" ON "baseline_beijing_gd"."asset_workbench_sync_t"("target_system" ASC,"sync_status" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
-CREATE OR REPLACE  INDEX "ix_da_order_asset_rela_1fcxbde" ON "baseline_beijing_gd"."da_order_asset_rela"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_data_access_agg_task_t_190kkk2" ON "baseline_beijing_gd"."data_access_agg_task_t"("tenant_id" ASC,"is_del" ASC,"task_status" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -3782,10 +3723,6 @@ CREATE OR REPLACE  INDEX "nifi_node_t_ix_nifi_node_tenant_code" ON "baseline_bei
 
 CREATE OR REPLACE  INDEX "nifi_node_t_ix_nifi_node_tenant_default" ON "baseline_beijing_gd"."nifi_node_t"("tenant_id" ASC,"is_del" ASC,"is_default" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
-CREATE OR REPLACE  INDEX "nrta_tv_drama_approval_t_ix_nrta_tv_status" ON "baseline_beijing_gd"."nrta_tv_drama_approval_t"("tenant_id" ASC,"approval_status" ASC,"approval_date" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
-CREATE OR REPLACE UNIQUE  INDEX "nrta_tv_drama_approval_t_uk_nrta_tv_license" ON "baseline_beijing_gd"."nrta_tv_drama_approval_t"("tenant_id" ASC,"license_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
 CREATE OR REPLACE  INDEX "service_node_t_ix_service_node_code" ON "baseline_beijing_gd"."service_node_t"("tenant_id" ASC,"node_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "service_node_t_ix_service_node_default" ON "baseline_beijing_gd"."service_node_t"("tenant_id" ASC,"is_del" ASC,"is_default" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -3880,7 +3817,6 @@ COMMENT ON TABLE "baseline_beijing_gd"."da_demand_case_t" IS '供需对接-需�
 COMMENT ON TABLE "baseline_beijing_gd"."da_demand_match_t" IS '供需对接-供需对接追加记录；匹配成功不授予资源访问';
 COMMENT ON TABLE "baseline_beijing_gd"."da_metadata_code_t" IS '数据标准-数据标准代码';
 COMMENT ON TABLE "baseline_beijing_gd"."da_metadata_t" IS '数据标准-数据治理元数据规则';
-COMMENT ON TABLE "baseline_beijing_gd"."da_order_asset_rela" IS '资产审批-订单资产关联';
 COMMENT ON TABLE "baseline_beijing_gd"."da_prop_t" IS '数据盘点-业务扩展属性';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_agg_task_t" IS '数据接入-数据接入任务';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_field_mapping" IS '数据接入-数据接入字段映射';
@@ -3940,7 +3876,6 @@ COMMENT ON TABLE "baseline_beijing_gd"."gateway_user_app_rela" IS '网关管理-
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_binding_t" IS '统一身份-标准接收端固定绑定及加密服务密钥';
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_object_t" IS '统一身份-中央来源映射、版本与拥有关系；不复制本地密码';
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_receipt_t" IS '统一身份-每次接收持久回执与重放约束';
-COMMENT ON TABLE "baseline_beijing_gd"."kg_relation" IS '知识图谱-实体关系';
 COMMENT ON TABLE "baseline_beijing_gd"."log_request_t" IS '日志管理-请求日志';
 COMMENT ON TABLE "baseline_beijing_gd"."log_system_t" IS '日志管理-系统日志';
 COMMENT ON TABLE "baseline_beijing_gd"."log_template_t" IS '日志管理-日志模板';
@@ -3951,7 +3886,6 @@ COMMENT ON TABLE "baseline_beijing_gd"."nifi_node_t" IS '数据接入-集成节�
 COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_external_ref_t" IS '数据接入-外部流程与NiFi画布流程登记关系';
 COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_migration_mark_t" IS '数据接入-集成管道迁移标记（NiFi）';
 COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_t" IS '数据接入-数据集成管道（NiFi）';
-COMMENT ON TABLE "baseline_beijing_gd"."nrta_tv_drama_approval_t" IS '广电业务-电视剧审批登记';
 COMMENT ON TABLE "baseline_beijing_gd"."ods_batch_create_item_t" IS '数据接入-批量创建任务逐项结果';
 COMMENT ON TABLE "baseline_beijing_gd"."ods_batch_create_job_t" IS '数据接入-批量创建任务作业';
 COMMENT ON TABLE "baseline_beijing_gd"."pingao_application_sync_state_t" IS '应用系统同步-平澳应用目录同步状态';
@@ -4522,23 +4456,6 @@ COMMENT ON COLUMN "baseline_beijing_gd"."da_metadata_t"."updated_by" IS '更新�
 COMMENT ON COLUMN "baseline_beijing_gd"."da_metadata_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."da_metadata_t"."value_domain_id" IS '值领域标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."da_metadata_t"."version_no" IS '标准版本';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."asset_id" IS '资产标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."asset_new_data" IS '资产新值数据';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."asset_snapshot_data" IS '资产快照数据';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."asset_type" IS '资产类型';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."asset_version" IS '资产版本';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."created_by" IS '创建人标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."created_time" IS '创建时间';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."flow_order_id" IS '流程顺序标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."flow_status" IS '流程状态';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."flow_type" IS '流程类型';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."instance_id" IS '实例标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."is_del" IS '删除标志：0正常，1删除';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."revision" IS '修订版本';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."tenant_id" IS '租户标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."tid" IS '主键标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."updated_by" IS '更新人标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."da_order_asset_rela"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."da_prop_t"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."da_prop_t"."created_time" IS '创建时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."da_prop_t"."data_type" IS '数据类型';
@@ -5621,20 +5538,6 @@ COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."payload_hash
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."result_json" IS '结果JSON数据';
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."source_id" IS '来源标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."source_version" IS '来源版本';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."created_by" IS '创建人标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."created_time" IS '创建时间';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."dataset_id" IS '所属数据集标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."is_del" IS '逻辑删除标识，0正常，1删除';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."relation_name" IS '关系名称';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."relation_properties" IS '关系属性定义';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."relation_status" IS '关系状态';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."relation_type" IS '关系类型';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."source_entity_id" IS '源实体标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."target_entity_id" IS '目标实体标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."tenant_id" IS '租户标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."tid" IS '纯数字全局唯一标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."updated_by" IS '更新人标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."kg_relation"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."account" IS '账号';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."created_time" IS '创建时间';

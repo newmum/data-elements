@@ -5,29 +5,14 @@ import cn.hutool.core.util.NumberUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.linewell.dataelement.model.dataasset.CatalogItemSaveOrUpdateRequest;
-import com.linewell.dataelement.model.dataasset.CatalogItemValueRequest;
-import com.linewell.dataelement.model.dataasset.DataAssetPropSaveRequest;
-import com.linewell.dataelement.feature.approval.config.DataAssetApprovalMode;
-import com.linewell.dataelement.feature.approval.config.DataAssetApprovalProperties;
-import com.linewell.dataelement.dataassets.runtime.DataAssetRuntimeAdapter;
 import com.linewell.dataelement.model.approval.ApprovalCallbackRequest;
 import com.linewell.dataelement.model.approval.ApprovalHandleRequest;
 import com.linewell.dataelement.model.approval.ApprovalPreviousNodeRequest;
-import com.linewell.dataelement.model.approval.ApprovalRestoreAssetStatusRequest;
 import com.linewell.dataelement.model.approval.ApprovalRevokeRequest;
 import com.linewell.dataelement.model.approval.ApprovalStartRequest;
 import com.linewell.dataelement.model.approval.ApprovalTerminationRequest;
-import com.linewell.dataelement.dataassets.base.entity.DaAssetT;
-import com.linewell.dataelement.dataassets.base.entity.DaOrderAssetRela;
 import com.linewell.dataelement.dataassets.base.entity.DataApplyFormT;
-import com.linewell.dataelement.dataassets.base.entity.DataPropT;
-import com.linewell.dataelement.dataassets.base.service.IDaAssetTService;
 import com.linewell.dataelement.dataassets.base.service.IDataApplyFormTService;
-import com.linewell.dataelement.dataassets.base.service.IDataPropTService;
-import com.linewell.dataelement.dataassets.base.service.IDaOrderAssetRelaService;
 import com.linewell.dataelement.elasticsearch.EsCommonService;
 import com.linewell.dataelement.feature.identity.application.IdentityUserLookupService;
 import com.linewell.dataelement.feature.delivery.application.ResourceDeliveryService;
@@ -37,21 +22,17 @@ import com.linewell.dataelement.feature.approval.infrastructure.persistence.enti
 import com.linewell.dataelement.feature.approval.infrastructure.persistence.service.IFlowSuggestionService;
 import com.linewell.dataelement.model.common.BizException;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import com.linewell.dataelement.platform.persistence.id.NumericId;
 import java.util.Objects;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.CompleteCommand;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.EngineInstance;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.StartCommand;
 import com.linewell.dataelement.feature.approval.domain.ApprovalEngineModels.TaskOperationCommand;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,75 +40,48 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ApprovalFlowService {
 
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
     private final ApprovalEnginePort approvalEngine;
-    private final IDaOrderAssetRelaService daOrderAssetRelaService;
-    private final IDaAssetTService daAssetTService;
+    private final ApprovalBusinessAssociationService businessAssociations;
     private final IDataApplyFormTService dataApplyFormTService;
-    private final IDataPropTService dataPropTService;
     private final IFlowSuggestionService flowSuggestionService;
     private final EsCommonService esCommonService;
     private final IdentityUserLookupService identityUserLookupService;
-    private final ObjectMapper objectMapper;
-    private final DataAssetRuntimeAdapter dataAssetRuntimeAdapter;
     private final ResourceDeliveryService resourceDeliveryService;
     private final AssetCenterApprovalBridge assetCenterApprovalBridge;
-    private final DataAssetApprovalProperties approvalProperties;
 
     public ApprovalFlowService(
         ApprovalEnginePort approvalEngine,
-        IDaOrderAssetRelaService daOrderAssetRelaService,
-        IDaAssetTService daAssetTService,
         IDataApplyFormTService dataApplyFormTService,
-        IDataPropTService dataPropTService,
         IFlowSuggestionService flowSuggestionService,
         EsCommonService esCommonService,
         IdentityUserLookupService identityUserLookupService,
-        ObjectMapper objectMapper,
-        @Lazy DataAssetRuntimeAdapter dataAssetRuntimeAdapter,
         ResourceDeliveryService resourceDeliveryService,
         AssetCenterApprovalBridge assetCenterApprovalBridge,
-        DataAssetApprovalProperties approvalProperties
+        ApprovalBusinessAssociationService businessAssociations
     ) {
         this.approvalEngine = approvalEngine;
-        this.daOrderAssetRelaService = daOrderAssetRelaService;
-        this.daAssetTService = daAssetTService;
+        this.businessAssociations = businessAssociations;
         this.dataApplyFormTService = dataApplyFormTService;
-        this.dataPropTService = dataPropTService;
         this.flowSuggestionService = flowSuggestionService;
         this.esCommonService = esCommonService;
         this.identityUserLookupService = identityUserLookupService;
-        this.objectMapper = objectMapper;
-        this.dataAssetRuntimeAdapter = dataAssetRuntimeAdapter;
         this.resourceDeliveryService = resourceDeliveryService;
         this.assetCenterApprovalBridge = assetCenterApprovalBridge;
-        this.approvalProperties = approvalProperties;
     }
 
     public Map<String, Object> start(ApprovalStartRequest request) {
-        String approveType = request == null ? null : request.getApproveType();
-        if (isAssetApprovalType(approveType)) {
-            DataAssetApprovalMode mode = approvalProperties.currentMode();
-            if (mode == DataAssetApprovalMode.AUTO) {
-                completeAssetApprovalPassByFlowOrderId(request.getFlowOrderId(), approveType);
-                return buildApprovalBypassResult(request, mode);
-            }
-            if (mode == DataAssetApprovalMode.OFF) {
-                return buildApprovalBypassResult(request, mode);
-            }
-        }
-
         validate(request);
-
         String currentUserId = String.valueOf(StpUtil.getLoginId());
+        var business = businessAssociations.load(request.getFlowOrderId());
+        businessAssociations.requireCompatible(business, request.getApproveType());
+        businessAssociations.requireInitiator(business, currentUserId);
 
         Map<String, Object> variable = new LinkedHashMap<>();
         if (request.getFlowParams() != null) {
             variable.putAll(request.getFlowParams());
         }
 
-        List<String> dataProviderOrgIds = resolveFlowOrgIds(request.getFlowOrderId());
+        List<String> dataProviderOrgIds = business.orgId().isBlank() ? List.of() : List.of(business.orgId());
         List<String> dataProviderOrgHandlers = resolveOrgHandlers(dataProviderOrgIds);
         if (dataProviderOrgHandlers.isEmpty()) {
             dataProviderOrgHandlers.add(currentUserId);
@@ -156,7 +110,7 @@ public class ApprovalFlowService {
             request.getFlowOrderId(),
             request.getFlowType(),
             currentUserId,
-            JSONUtil.toJsonStr(resolveFlowExtInfo(request.getFlowOrderId(), request.getFlowType())),
+            JSONUtil.toJsonStr(resolveFlowExtInfo(business, request.getFlowType())),
             variable
         ));
 
@@ -164,19 +118,6 @@ public class ApprovalFlowService {
         result.put("instanceId", instance.id());
         result.put("flowCode", request.getFlowType());
         result.put("flowOrderId", request.getFlowOrderId());
-        return result;
-    }
-
-    private boolean isAssetApprovalType(String approveType) {
-        return "checkIn".equals(approveType) || "assetUpdate".equals(approveType);
-    }
-
-    private Map<String, Object> buildApprovalBypassResult(ApprovalStartRequest request, DataAssetApprovalMode mode) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("instanceId", null);
-        result.put("flowCode", request.getFlowType());
-        result.put("flowOrderId", request.getFlowOrderId());
-        result.put("approvalMode", mode.name());
         return result;
     }
 
@@ -309,18 +250,10 @@ public class ApprovalFlowService {
             throw new BizException(-1, "flowOrderId不能为空");
         }
 
-        List<DaOrderAssetRela> relas = daOrderAssetRelaService.list(
-            new LambdaQueryWrapper<DaOrderAssetRela>()
-                .eq(DaOrderAssetRela::getAssetId, request.getTid())
-                .eq(DaOrderAssetRela::getFlowOrderId, request.getFlowOrderId())
-                .eq(DaOrderAssetRela::getFlowStatus, 1)
-        );
-        if (relas.isEmpty()) {
-            throw new BizException(500, "撤销记录不存在");
-        }
-
-        DaOrderAssetRela rela = relas.get(0);
-        Long instanceId = approvalEngine.findInstanceId(rela.getFlowOrderId()).orElse(null);
+        var business = businessAssociations.load(request.getFlowOrderId());
+        if (!request.getTid().equals(business.id())) throw new BizException(403, "业务单号与撤销对象不一致");
+        businessAssociations.requireInitiator(business, String.valueOf(StpUtil.getLoginId()));
+        Long instanceId = approvalEngine.findInstanceId(business.id()).orElse(null);
         if (instanceId == null) {
             throw new BizException(500, "流程实例不存在");
         }
@@ -330,19 +263,13 @@ public class ApprovalFlowService {
         }
         String taskId = String.valueOf(taskIdNum);
 
-        List<DaAssetT> assets = daAssetTService.list(new LambdaQueryWrapper<DaAssetT>().eq(DaAssetT::getTid, rela.getAssetId()));
-        String approveType = "checkIn";
-        if (!assets.isEmpty() && Objects.equals(assets.get(0).getAssetStatus(), 2)) {
-            approveType = "assetUpdate";
-        }
-
         ApprovalHandleRequest handleRequest = new ApprovalHandleRequest();
         handleRequest.setTaskId(taskId);
-        handleRequest.setBusinessId(rela.getFlowOrderId());
+        handleRequest.setBusinessId(business.id());
         handleRequest.setHandleType("REVOKE");
         handleRequest.setMessage(request.getMessage());
         handleRequest.setNodeCode("end");
-        handleRequest.setApproveType(approveType);
+        handleRequest.setApproveType(business.approveType());
         return handle(handleRequest);
     }
 
@@ -395,16 +322,17 @@ public class ApprovalFlowService {
             flowStatus = 5;
         }
 
-        boolean assetFlow = "checkIn".equals(approveType) || "assetUpdate".equals(approveType);
+        var business = businessAssociations.load(businessId);
+        businessAssociations.requireCompatible(business, approveType);
         LocalDateTime now = LocalDateTime.now();
         if ("haoyuePublication".equals(approveType) || "haoyueSubscription".equals(approveType)) {
             assetCenterApprovalBridge.complete(approveType, businessId, flowStatus);
-        } else if (assetFlow) {
-            completeAssetApprovalByFlowOrderId(businessId, approveType, flowStatus);
         } else {
             dataApplyFormTService.update(
                 new LambdaUpdateWrapper<DataApplyFormT>()
                     .eq(DataApplyFormT::getTid, businessId)
+                    .eq(DataApplyFormT::getTenantId, business.tenantId())
+                    .and(active -> active.eq(DataApplyFormT::getIsDel, 0).or().isNull(DataApplyFormT::getIsDel))
                     .set(DataApplyFormT::getFlowStatus, String.valueOf(flowStatus))
                     .set(DataApplyFormT::getUpdatedTime, now)
             );
@@ -421,241 +349,6 @@ public class ApprovalFlowService {
             }
         }
         return true;
-    }
-
-    public void completeAssetApprovalPassByFlowOrderId(String flowOrderId, String approveType) {
-        completeAssetApprovalByFlowOrderId(flowOrderId, approveType, 2);
-    }
-
-    public void completeAssetApprovalByFlowOrderId(String flowOrderId, String approveType, int flowStatus) {
-        boolean assetFlow = "checkIn".equals(approveType) || "assetUpdate".equals(approveType);
-        if (!assetFlow) {
-            throw new BizException(500, "不支持的资产审批类型: " + approveType);
-        }
-
-        List<DaOrderAssetRela> relas = daOrderAssetRelaService.list(
-            new LambdaQueryWrapper<DaOrderAssetRela>().eq(DaOrderAssetRela::getFlowOrderId, flowOrderId)
-        );
-        if (relas.isEmpty()) {
-            throw new BizException(500, "未找到关联的资产");
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        for (DaOrderAssetRela rela : relas) {
-            applyAssetApprovalResult(rela, flowStatus, now);
-        }
-    }
-
-    private void applyAssetApprovalResult(DaOrderAssetRela rela, int flowStatus, LocalDateTime now) {
-        String assetId = rela.getAssetId();
-        daAssetTService.update(new LambdaUpdateWrapper<DaAssetT>()
-            .eq(DaAssetT::getTid, assetId)
-            .set(DaAssetT::getFlowStatus, flowStatus));
-
-        rela.setFlowStatus(flowStatus);
-        rela.setUpdatedTime(now);
-        daOrderAssetRelaService.updateById(rela);
-
-        boolean needsEsUpdate = false;
-        if (flowStatus == 2) {
-            needsEsUpdate = true;
-            if ("assetUpdate".equals(rela.getFlowType())) {
-                applyAssetUpdateNewData(assetId, rela.getAssetNewData());
-            }
-            daAssetTService.update(new LambdaUpdateWrapper<DaAssetT>()
-                .eq(DaAssetT::getTid, assetId)
-                .set(DaAssetT::getAssetStatus, 2)
-                .set(DaAssetT::getFlowOrderId, null)
-                .set(DaAssetT::getUpdatedTime, now));
-        }
-
-        if (flowStatus == 4 || flowStatus == 3) {
-            needsEsUpdate = true;
-            if ("checkIn".equals(rela.getFlowType())) {
-                daAssetTService.update(new LambdaUpdateWrapper<DaAssetT>()
-                    .eq(DaAssetT::getTid, assetId)
-                    .set(DaAssetT::getAssetStatus, 0)
-                    .set(DaAssetT::getFlowOrderId, null)
-                    .set(DaAssetT::getUpdatedTime, now));
-            } else if ("assetUpdate".equals(rela.getFlowType())) {
-                daAssetTService.update(new LambdaUpdateWrapper<DaAssetT>()
-                    .eq(DaAssetT::getTid, assetId)
-                    .set(DaAssetT::getAssetStatus, 2)
-                    .set(DaAssetT::getFlowOrderId, null)
-                    .set(DaAssetT::getUpdatedTime, now));
-            }
-        }
-
-        if (needsEsUpdate) {
-            Map<String, Object> resultData = buildAssetEsDoc(assetId);
-            if ("catalog".equals(stringValue(resultData.get("assetType")))) {
-                String sourceTableId = stringValue(resultData.get("sourceTableId"));
-                if (sourceTableId != null && !sourceTableId.isBlank()) {
-                    daAssetTService.update(new LambdaUpdateWrapper<DaAssetT>()
-                        .eq(DaAssetT::getTid, sourceTableId)
-                        .set(DaAssetT::getAssetStatus, 2)
-                        .set(DaAssetT::getFlowOrderId, null)
-                        .set(DaAssetT::getUpdatedTime, now));
-                    esCommonService.saveOrUpdate("dataassets", sourceTableId, "{\"assetStatus\":2}", true);
-                }
-            }
-            esCommonService.saveOrUpdate("dataassets", assetId, JSONUtil.toJsonStr(resultData), true);
-        }
-    }
-
-    private void applyAssetUpdateNewData(String assetId, String assetNewData) {
-        if (assetNewData == null || assetNewData.isBlank()) {
-            return;
-        }
-        try {
-            Map<String, Object> newData = objectMapper.readValue(assetNewData, new TypeReference<Map<String, Object>>() {});
-            Object propListObj = newData.get("propList");
-            if (propListObj instanceof Map<?, ?> propMapObj) {
-                Map<String, Object> props = new LinkedHashMap<>();
-                for (Map.Entry<?, ?> entry : propMapObj.entrySet()) {
-                    if (entry.getKey() != null) {
-                        props.put(String.valueOf(entry.getKey()), entry.getValue());
-                    }
-                }
-                DataAssetPropSaveRequest propRequest = new DataAssetPropSaveRequest();
-                propRequest.setTid(assetId);
-                propRequest.setProps(props);
-                dataAssetRuntimeAdapter.propSaveOrUpdate(propRequest);
-            }
-
-            Object catalogItemsObj = newData.get("catalogItems");
-            if (catalogItemsObj instanceof List<?> rawList && !rawList.isEmpty()) {
-                List<CatalogItemValueRequest> catalogItems = objectMapper.convertValue(
-                    rawList, new TypeReference<List<CatalogItemValueRequest>>() {}
-                );
-                CatalogItemSaveOrUpdateRequest request = new CatalogItemSaveOrUpdateRequest();
-                request.setCatalogId(assetId);
-                request.setCatalogItems(catalogItems);
-                dataAssetRuntimeAdapter.catalogItemSaveOrUpdate(request);
-            }
-        } catch (Exception e) {
-            throw new BizException(500, "审批通过后应用资产新数据失败: " + e.getMessage());
-        }
-    }
-
-    private Map<String, Object> buildAssetEsDoc(String assetId) {
-        List<DaAssetT> assets = daAssetTService.list(
-            new LambdaQueryWrapper<DaAssetT>()
-                .eq(DaAssetT::getTid, assetId)
-                .eq(DaAssetT::getIsDel, 0)
-        );
-        DaAssetT mainData = assets.isEmpty() ? null : assets.get(0);
-        Map<String, Object> resultData = new LinkedHashMap<>();
-        if (mainData != null) {
-            resultData.put("tid", mainData.getTid());
-            resultData.put("tenantId", mainData.getTenantId());
-            resultData.put("assetType", mainData.getAssetType());
-            resultData.put("assetStatus", mainData.getAssetStatus() == null ? 0 : mainData.getAssetStatus());
-            resultData.put("flowStatus", mainData.getFlowStatus() == null ? 0 : mainData.getFlowStatus());
-            resultData.put("regTime", formatTime(mainData.getRegTime()));
-            resultData.put("createdTime", formatTime(mainData.getCreatedTime()));
-            resultData.put("updatedTime", formatTime(mainData.getUpdatedTime()));
-            resultData.put("dataCatalogNum", mainData.getDataCatalogNum());
-            resultData.put("flowOrderId", mainData.getFlowOrderId());
-        }
-
-        List<DataPropT> propData = dataPropTService.list(
-            new LambdaQueryWrapper<DataPropT>()
-                .eq(DataPropT::getParentId, assetId)
-                .eq(DataPropT::getIsDel, 0)
-        );
-        for (DataPropT prop : propData) {
-            if (prop.getPropName() != null) {
-                resultData.put(prop.getPropName(), prop.getPropValue());
-            }
-        }
-        return resultData;
-    }
-
-    /**
-     * 根据 flowOrderId 恢复关联资产状态，并同步 ES。
-     * checkIn -> asset_status = 0
-     * assetUpdate -> asset_status = 2
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public Object restoreAssetStatusByFlowOrderId(ApprovalRestoreAssetStatusRequest request) {
-        if (request == null || request.getFlowOrderId() == null || request.getFlowOrderId().isBlank()) {
-            throw new BizException(-1, "flowOrderId不能为空");
-        }
-
-        List<DaOrderAssetRela> relaList = daOrderAssetRelaService.list(
-            new LambdaQueryWrapper<DaOrderAssetRela>()
-                .eq(DaOrderAssetRela::getFlowOrderId, request.getFlowOrderId())
-        );
-        if (relaList == null || relaList.isEmpty()) {
-            throw new BizException(500, "未找到关联资产关系数据");
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        int successCount = 0;
-        int skipCount = 0;
-        List<String> updatedAssetIds = new ArrayList<>();
-        for (DaOrderAssetRela rela : relaList) {
-            if (rela == null || rela.getAssetId() == null || rela.getAssetId().isBlank()) {
-                skipCount++;
-                continue;
-            }
-
-            Integer restoreStatus = null;
-            Integer restoreFlowStatus = null;
-            if ("checkIn".equals(rela.getFlowType())) {
-                restoreStatus = 0;
-                restoreFlowStatus = 0;
-            } else if ("assetUpdate".equals(rela.getFlowType())) {
-                restoreStatus = 2;
-                restoreFlowStatus = 2;
-            }
-            if (restoreStatus == null) {
-                skipCount++;
-                continue;
-            }
-
-            // 恢复操作统一标记为撤回
-//            rela.setFlowStatus(4);
-//            rela.setUpdatedTime(now);
-//            rela.setIsDel(1);
-//            daOrderAssetRelaService.updateById(rela);
-            daOrderAssetRelaService.removeById(rela.getTid());
-
-            daAssetTService.update(
-                new LambdaUpdateWrapper<DaAssetT>()
-                    .eq(DaAssetT::getTid, rela.getAssetId())
-                    .set(DaAssetT::getAssetStatus, restoreStatus)
-                    .set(DaAssetT::getFlowStatus, restoreFlowStatus)
-                    //更新时间待定
-                    //.set(DaAssetT::getUpdatedTime, now)
-            );
-
-            Map<String, Object> resultData = buildAssetEsDoc(rela.getAssetId());
-            esCommonService.saveOrUpdate("dataassets", rela.getAssetId(), JSONUtil.toJsonStr(resultData), true);
-            successCount++;
-            updatedAssetIds.add(rela.getAssetId());
-        }
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("flowOrderId", request.getFlowOrderId());
-        result.put("total", relaList.size());
-        result.put("success", successCount);
-        result.put("skipped", skipCount);
-        result.put("updatedAssetIds", updatedAssetIds);
-
-        // 同步软删除资产关联关系
-        daOrderAssetRelaService.update(
-            new LambdaUpdateWrapper<DaOrderAssetRela>()
-                .eq(DaOrderAssetRela::getFlowOrderId, request.getFlowOrderId())
-                .set(DaOrderAssetRela::getIsDel, 1)
-                .set(DaOrderAssetRela::getUpdatedTime, now)
-        );
-
-        // 清理 warm-flow 中与 business_id 关联的流程数据
-        Map<String, Integer> warmFlowDeleteCount = approvalEngine.deleteInstances(request.getFlowOrderId()).asMap();
-        result.put("warmFlowDeleted", warmFlowDeleteCount);
-        return result;
     }
 
     private boolean isCollaborativeOperation(String handleType) {
@@ -686,31 +379,6 @@ public class ApprovalFlowService {
         }
     }
 
-    private List<String> resolveFlowOrgIds(String flowOrderId) {
-        List<String> orgIds = new ArrayList<>();
-        if (flowOrderId == null || flowOrderId.isBlank()) {
-            return orgIds;
-        }
-
-        List<DaOrderAssetRela> relaList = daOrderAssetRelaService.list(
-            new LambdaQueryWrapper<DaOrderAssetRela>().eq(DaOrderAssetRela::getFlowOrderId, flowOrderId)
-        );
-
-        for (DaOrderAssetRela rela : relaList) {
-            if (rela.getAssetId() == null || rela.getAssetId().isBlank()) {
-                continue;
-            }
-            Map<String, Object> assetDoc = esCommonService.getDocument("dataassets", rela.getAssetId());
-            addUnique(orgIds, stringValue(assetDoc == null ? null : assetDoc.get("orgId")));
-        }
-
-        if (orgIds.isEmpty()) {
-            Map<String, Object> applyDoc = esCommonService.getDocument("dataassets_apply_form", flowOrderId);
-            addUnique(orgIds, stringValue(applyDoc == null ? null : applyDoc.get("orgId")));
-        }
-        return orgIds;
-    }
-
     private List<String> resolveOrgHandlers(List<String> orgIds) {
         List<String> handlerIds = new ArrayList<>();
         for (IdentityUser user : identityUserLookupService.listUsersByOrgIds(orgIds)) {
@@ -727,58 +395,16 @@ public class ApprovalFlowService {
         return handlerIds;
     }
 
-    private Map<String, Object> resolveFlowExtInfo(String flowOrderId, String flowCode) {
+    private Map<String, Object> resolveFlowExtInfo(ApprovalBusinessAssociationService.Business business, String flowCode) {
         Map<String, Object> extInfo = new LinkedHashMap<>();
-        extInfo.put("businessId", flowOrderId);
-        extInfo.put("businessType", "");
-        extInfo.put("businessName", "");
+        extInfo.put("businessId", business.id());
+        extInfo.put("businessType", business.type());
+        extInfo.put("businessName", business.name());
         extInfo.put("flowCode", flowCode);
-        extInfo.put("flowName", "");
-        extInfo.put("keyword", "");
-        extInfo.put("relaId", "");
-
-        approvalEngine.publishedDefinitionName(flowCode)
-            .ifPresent(flowName -> extInfo.put("flowName", flowName));
-
-        List<DaOrderAssetRela> relaList = daOrderAssetRelaService.list(
-            new LambdaQueryWrapper<DaOrderAssetRela>().eq(DaOrderAssetRela::getFlowOrderId, flowOrderId)
-        );
-
-        if (!relaList.isEmpty()) {
-            List<String> assetNames = new ArrayList<>();
-            for (DaOrderAssetRela item : relaList) {
-                Map<String, Object> assetDoc = esCommonService.getDocument("dataassets", item.getAssetId());
-                if (assetDoc == null) {
-                    continue;
-                }
-                String assetName = switch (stringValue(item.getAssetType())) {
-                    case "app" -> stringValue(assetDoc.get("appName"));
-                    case "db" -> stringValue(assetDoc.get("dbName"));
-                    case "table" -> stringValue(assetDoc.get("tableName"));
-                    case "catalog" -> stringValue(assetDoc.get("catalogName"));
-                    default -> null;
-                };
-                addUnique(assetNames, assetName);
-            }
-            extInfo.put("relaId", relaList.get(0).getAssetId());
-            extInfo.put("businessType", "asset");
-            extInfo.put("businessName", String.join(", ", assetNames));
-            extInfo.put("assetNames", assetNames);
-        } else {
-            Map<String, Object> applyDoc = esCommonService.getDocument("dataassets_apply_form", flowOrderId);
-            if (applyDoc != null) {
-                String applyName = stringValue(applyDoc.get("applyName"));
-                extInfo.put("businessType", "applyForm");
-                extInfo.put("businessName", applyName);
-                extInfo.put("applyName", applyName);
-                extInfo.put("relaId", stringValue(applyDoc.get("tid")));
-            }
-        }
-
-        String flowName = stringValue(extInfo.get("flowName"));
-        String businessName = stringValue(extInfo.get("businessName"));
-        String keyword = ((flowName == null ? "" : flowName) + " " + (businessName == null ? "" : businessName)).trim();
-        extInfo.put("keyword", keyword);
+        String flowName = approvalEngine.publishedDefinitionName(flowCode).orElse("");
+        extInfo.put("flowName", flowName);
+        extInfo.put("relaId", business.id());
+        extInfo.put("keyword", (flowName + " " + business.name()).trim());
         return extInfo;
     }
 
@@ -795,7 +421,4 @@ public class ApprovalFlowService {
         return value == null ? null : String.valueOf(value);
     }
 
-    private String formatTime(LocalDateTime time) {
-        return time == null ? null : TIME_FORMATTER.format(time);
-    }
 }

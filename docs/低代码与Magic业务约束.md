@@ -38,8 +38,6 @@ Common metadata interfaces:
   - Deletes metadata snapshots only, not the physical database table.
 - `POST /dst/database/metadata/table/sample-data`
   - Magic API sample-data endpoint used by preview dialogs; requires `tableId`.
-- `POST /dst/database/metadata/tables/preview`
-  - Lightweight table exploration/list preview.
 - `POST /dst/database/metadata/test-connection`
   - Data source connection test.
 - `POST /dst/application/save`
@@ -208,20 +206,21 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - Asset registration has no approval workflow:
   - Do not expose or call an asset `submit` endpoint.
   - Save application systems, data sources, tables, and catalogs as directly usable (`asset_status=2`, `flow_status=2`, no `flow_order_id`).
-  - Do not create `da_order_asset_rela` rows for `app`, `db`, `table`, or `catalog`.
+  - Do not create legacy order-asset relation rows for `app`, `db`, `table`, or `catalog`.
   - Registration steps after the first data-source step show only Previous/Next; they must not auto-save or auto-submit.
 - The standalone approval center remains available independently of asset registration:
   - Keep the Warm-Flow dependencies, `com.linewell.dataelement.flow` runtime package, approval controller/service, flow suggestions, and flow relation infrastructure.
-  - Its Magic tree is `/magic-api/api/09.系统管理/02.审批中心/`; public routes start with `/sym/approval`.
-  - Warm-Flow callbacks and permission handlers call the `/sym/approval` Magic routes.
+  - Its Magic tree is `/magic-api/api/09.系统管理/08.审批中心/`; public routes start with `/sym/approval`.
+  - Warm-Flow completion uses the current `/sym/approval/callback/finshHandle` Magic contract. Permission resolution uses `ApprovalPrincipalService`; unused legacy permission/query wrappers are not restored.
   - Do not reconnect `register-db`, `register-dbTable`, catalog registration, or registration completion to automatic approval submission.
+  - Associate current approval operations through the authoritative `data_apply_form_t` / `res_catalog_publish_request` business ID and Warm-Flow `flow_instance.business_id`, not a second asset-order relation table. Load the business record with an explicit current-tenant predicate, resolve applicant/organization and display information in one bounded query, and check initiator ownership or current-tenant organization membership. The subscription and publication approval types must match their actual business records; asset registration must not be reconnected to the retired `checkIn` / `assetUpdate` path. Keep current subscription, publication, task handling and callback contracts.
 - Application systems use `sym_application_t` as their only master table. Data sources use `db_datasource_t` as their only master table. Preserve migrated IDs in each table's `tid`; do not recreate app/db rows in `da_asset_t`.
 - Data tables use `db_table_t` as their only master table and `db_table_column_t.table_id` for field metadata. Preserve migrated table IDs in `db_table_t.tid`; do not create table rows in `da_asset_t`, `da_asset_table_column_t`, or `data_prop_t`.
 - Every data-table property used by registration, governance, preview, resource-center, or indexing logic must be represented by a physical `db_table_t` / `db_table_column_t` column. Do not add `data_type='table'` dynamic properties.
 - Data-source connection options, metadata summaries, and migration extensions belong in the valid JSON object stored in `db_datasource_t.pool_cfg`. Data-source interfaces must not read or write `data_prop_t`; direct columns remain denormalized query fields where present.
 - Application systems and data sources keep `sym_application_t` and `db_datasource_t` as their authoritative master tables. Their high-frequency list/search interfaces read the denormalized Elasticsearch index for speed; in this environment the configured physical index is `elements_dataassets` (`configData().es_dataassets`), while `EsCommonService` receives the logical name `dataassets` and adds the `elements_` prefix. Detail interfaces may fall back to MySQL when an index document is absent.
-- Ordinary application-system and data-source save/delete interfaces update MySQL first and then update or remove the matching Elasticsearch document. Dynamic-detail saves that explicitly request `deferIndexRefresh` follow the validated best-effort asynchronous projection contract above and return `indexRefreshPending: true`; do not make a completed authoritative save appear failed because indexing is slow. Keep `POST /dataassets/manage/assets/refresh` for one asset and `POST /dataassets/manage/assets/batchRefresh` for reconciliation or full index rebuilds.
-- Implement the legacy refresh routes above as thin Magic API compatibility aliases that delegate to `/dst/maintenance/refresh` and `/dst/maintenance/batchRefresh`; keep the indexing logic in the `/dst/maintenance` implementations.
+- Ordinary application-system and data-source save/delete interfaces update MySQL first and then update or remove the matching Elasticsearch document. Dynamic-detail saves that explicitly request `deferIndexRefresh` follow the validated best-effort asynchronous projection contract above and return `indexRefreshPending: true`; do not make a completed authoritative save appear failed because indexing is slow. Use `POST /dst/maintenance/refresh` for one asset and `POST /dst/maintenance/batchRefresh` for reconciliation or full index rebuilds.
+- Keep indexing logic in the `/dst/maintenance` implementations. The unused `/dataassets/manage/assets/refresh` and `/batchRefresh` aliases have been retired; do not recreate them without a confirmed current caller. The service builder still uses `/dataassets/manage/assets/page`.
 - Never treat Elasticsearch as the source of truth for application systems or data sources. Index refresh must rebuild app documents from `sym_application_t`, db documents from `db_datasource_t` plus `pool_cfg`, and remove stale app/db documents that no longer exist in the master tables.
 - Elasticsearch documents are search projections, not storage for full configuration. Keep datasource credentials and complex `pool_cfg` objects out of ES, convert Hutool `JSONNull` values to real nulls or strings before indexing, and exclude large governance payloads such as `fieldGovernanceConfig`, dictionary profiles, and column arrays. Full values remain in MySQL.
 - For `showConnect=0`, persist the data-source master record but clear direct connection columns and connection keys in `pool_cfg` so credentials cannot reappear in detail views.

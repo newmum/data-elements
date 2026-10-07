@@ -1,8 +1,8 @@
 -- 当前完整结构基线：仅适用于新空库，不含业务数据、账号或授权。
 -- 不得直接在现有数据库执行；现有库变更须单独审阅差异并备份。
 SET NAMES utf8mb4;
-CREATE DATABASE `chengtian` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
-USE `chengtian`;
+CREATE DATABASE `baseline_ga` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+USE `baseline_ga`;
 SET FOREIGN_KEY_CHECKS=0;
 
 -- TABLE api_info_t
@@ -42,7 +42,7 @@ CREATE TABLE `api_info_t` (
   `call_count` bigint DEFAULT NULL COMMENT '调用数量',
   `success_percent` decimal(38,10) DEFAULT NULL COMMENT '成功百分比',
   `service_sql` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '服务SQL语句',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -71,7 +71,7 @@ CREATE TABLE `api_oauth_client_t` (
   `public_key` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '公钥',
   `private_key` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '私钥（加密存储）',
   `sm4_key` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'SM4密钥（加密存储）',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -95,7 +95,7 @@ CREATE TABLE `api_param_t` (
   `showcase_value` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '示例值',
   `param_scope` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '参数范围',
   `sort_no` int DEFAULT NULL COMMENT '排序编号',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -111,7 +111,7 @@ CREATE TABLE `api_param_t` (
 -- TABLE app_workshop_big_screen
 CREATE TABLE `app_workshop_big_screen` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -131,7 +131,7 @@ CREATE TABLE `app_workshop_big_screen` (
 -- TABLE app_workshop_repository
 CREATE TABLE `app_workshop_repository` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -153,7 +153,7 @@ CREATE TABLE `app_workshop_repository` (
 -- TABLE app_workshop_repository_self_icon
 CREATE TABLE `app_workshop_repository_self_icon` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -170,7 +170,7 @@ CREATE TABLE `app_workshop_repository_self_icon` (
 -- TABLE app_workshop_repository_tab
 CREATE TABLE `app_workshop_repository_tab` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -209,7 +209,7 @@ CREATE TABLE `asset_workbench_issue_t` (
   `resolved_time` datetime(6) DEFAULT NULL COMMENT '已解决时间',
   `resolution` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '解决方案',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565199` (`tid`) USING BTREE,
   KEY `idx_asset_workbench_issue_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE,
@@ -235,7 +235,7 @@ CREATE TABLE `asset_workbench_sync_t` (
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565204` (`tid`) USING BTREE,
   KEY `idx_app` (`app_id`) USING BTREE,
@@ -278,14 +278,14 @@ CREATE TABLE `da_apply_scope_t` (
   UNIQUE KEY `uk_applyscope_idempotency` (`tenant_id`,`idempotency_key`),
   KEY `idx_applyscope_pub` (`tenant_id`,`publication_id`,`status`),
   KEY `idx_applyscope_status` (`tenant_id`,`status`,`updated_time`),
-  CONSTRAINT `ck_applyscope_approved` CHECK (((`approved_scope` is null) or (json_type(`approved_scope`) = _utf8mb4'OBJECT'))),
-  CONSTRAINT `ck_applyscope_channel` CHECK ((`delivery_channel` in (_utf8mb4'API',_utf8mb4'TABLE',_utf8mb4'FILE'))),
-  CONSTRAINT `ck_applyscope_dates` CHECK (((`requested_until` is null) or (`requested_from` is null) or (`requested_until` > `requested_from`))),
-  CONSTRAINT `ck_applyscope_decision` CHECK ((((`status` = _utf8mb4'APPROVED') and (`approved_scope` is not null) and (`decided_at` is not null)) or ((`status` <> _utf8mb4'APPROVED') and (`approved_scope` is null)))),
-  CONSTRAINT `ck_applyscope_no` CHECK ((`scope_no` >= 1)),
-  CONSTRAINT `ck_applyscope_requested` CHECK ((json_type(`requested_scope`) = _utf8mb4'OBJECT')),
-  CONSTRAINT `ck_applyscope_status` CHECK ((`status` in (_utf8mb4'DRAFT',_utf8mb4'SUBMITTED',_utf8mb4'APPROVED',_utf8mb4'REJECTED',_utf8mb4'WITHDRAWN'))),
-  CONSTRAINT `ck_applyscope_version` CHECK ((`submission_version` >= 1))
+  CONSTRAINT `da_apply_scope_t_chk_1` CHECK (((`approved_scope` is null) or (json_type(`approved_scope`) = _utf8mb4'OBJECT'))),
+  CONSTRAINT `da_apply_scope_t_chk_2` CHECK ((`delivery_channel` in (_utf8mb4'API',_utf8mb4'TABLE',_utf8mb4'FILE'))),
+  CONSTRAINT `da_apply_scope_t_chk_3` CHECK (((`requested_until` is null) or (`requested_from` is null) or (`requested_until` > `requested_from`))),
+  CONSTRAINT `da_apply_scope_t_chk_4` CHECK ((((`status` = _utf8mb4'APPROVED') and (`approved_scope` is not null) and (`decided_at` is not null)) or ((`status` <> _utf8mb4'APPROVED') and (`approved_scope` is null)))),
+  CONSTRAINT `da_apply_scope_t_chk_5` CHECK ((`scope_no` >= 1)),
+  CONSTRAINT `da_apply_scope_t_chk_6` CHECK ((json_type(`requested_scope`) = _utf8mb4'OBJECT')),
+  CONSTRAINT `da_apply_scope_t_chk_7` CHECK ((`status` in (_utf8mb4'DRAFT',_utf8mb4'SUBMITTED',_utf8mb4'APPROVED',_utf8mb4'REJECTED',_utf8mb4'WITHDRAWN'))),
+  CONSTRAINT `da_apply_scope_t_chk_8` CHECK ((`submission_version` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='资源申请-申请资源与范围快照；主申请单和流程继续复用';
 
 -- TABLE da_asset_command_t
@@ -325,8 +325,8 @@ CREATE TABLE `da_asset_event_t` (
   UNIQUE KEY `uk_assetevent_key` (`tenant_id`,`event_key`),
   KEY `idx_assetevent_object` (`tenant_id`,`object_type`,`object_id`,`occurred_at`),
   KEY `idx_assetevent_correlation` (`tenant_id`,`correlation_id`,`occurred_at`),
-  CONSTRAINT `ck_assetevent_payload` CHECK ((json_type(`payload_redacted`) = _utf8mb4'OBJECT')),
-  CONSTRAINT `ck_assetevent_version` CHECK ((`schema_version` >= 1))
+  CONSTRAINT `da_asset_event_t_chk_1` CHECK ((json_type(`payload_redacted`) = _utf8mb4'OBJECT')),
+  CONSTRAINT `da_asset_event_t_chk_2` CHECK ((`schema_version` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='资产管理-追加资产领域事件审计；不替代审批审计';
 
 -- TABLE da_asset_outbox_t
@@ -359,10 +359,10 @@ CREATE TABLE `da_asset_outbox_t` (
   KEY `idx_outbox_due` (`status`,`available_at`,`lease_until`),
   KEY `idx_outbox_tenant_due` (`tenant_id`,`status`,`available_at`),
   KEY `idx_outbox_aggregate` (`tenant_id`,`aggregate_type`,`aggregate_id`,`aggregate_version`),
-  CONSTRAINT `ck_outbox_max` CHECK ((`max_attempts` >= 1)),
-  CONSTRAINT `ck_outbox_payload` CHECK ((json_type(`payload_meta`) = _utf8mb4'OBJECT')),
-  CONSTRAINT `ck_outbox_status` CHECK ((`status` in (_utf8mb4'PENDING',_utf8mb4'PROCESSING',_utf8mb4'SUCCEEDED',_utf8mb4'FAILED',_utf8mb4'DEAD'))),
-  CONSTRAINT `ck_outbox_success` CHECK (((`status` <> _utf8mb4'SUCCEEDED') or (`delivered_at` is not null)))
+  CONSTRAINT `da_asset_outbox_t_chk_1` CHECK ((`max_attempts` >= 1)),
+  CONSTRAINT `da_asset_outbox_t_chk_2` CHECK ((json_type(`payload_meta`) = _utf8mb4'OBJECT')),
+  CONSTRAINT `da_asset_outbox_t_chk_3` CHECK ((`status` in (_utf8mb4'PENDING',_utf8mb4'PROCESSING',_utf8mb4'SUCCEEDED',_utf8mb4'FAILED',_utf8mb4'DEAD'))),
+  CONSTRAINT `da_asset_outbox_t_chk_4` CHECK (((`status` <> _utf8mb4'SUCCEEDED') or (`delivered_at` is not null)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='资产管理-与领域事务同提交的待投递事件；租约、重试和幂等由worker处理';
 
 -- TABLE da_authorization_scope_t
@@ -400,13 +400,13 @@ CREATE TABLE `da_authorization_scope_t` (
   KEY `idx_authscope_grantee` (`tenant_id`,`grantee_org_id`,`status`,`valid_until`),
   KEY `idx_authscope_expiry` (`tenant_id`,`status`,`valid_until`),
   KEY `idx_authscope_publication` (`tenant_id`,`publication_id`,`status`),
-  CONSTRAINT `ck_authscope_api` CHECK (((`delivery_channel` <> _utf8mb4'API') or (`api_authorization_id` is not null))),
-  CONSTRAINT `ck_authscope_channel` CHECK ((`delivery_channel` in (_utf8mb4'API',_utf8mb4'TABLE',_utf8mb4'FILE'))),
-  CONSTRAINT `ck_authscope_dates` CHECK ((`valid_until` > `valid_from`)),
-  CONSTRAINT `ck_authscope_revoke` CHECK (((`status` <> _utf8mb4'REVOKED') or (`revoked_at` is not null))),
-  CONSTRAINT `ck_authscope_snapshot` CHECK ((json_type(`scope_snapshot`) = _utf8mb4'OBJECT')),
-  CONSTRAINT `ck_authscope_status` CHECK ((`status` in (_utf8mb4'PENDING',_utf8mb4'ACTIVE',_utf8mb4'SUSPENDED',_utf8mb4'EXPIRED',_utf8mb4'REVOKED',_utf8mb4'SUPERSEDED'))),
-  CONSTRAINT `ck_authscope_version` CHECK ((`authorization_version` >= 1))
+  CONSTRAINT `da_authorization_scope_t_chk_1` CHECK (((`delivery_channel` <> _utf8mb4'API') or (`api_authorization_id` is not null))),
+  CONSTRAINT `da_authorization_scope_t_chk_2` CHECK ((`delivery_channel` in (_utf8mb4'API',_utf8mb4'TABLE',_utf8mb4'FILE'))),
+  CONSTRAINT `da_authorization_scope_t_chk_3` CHECK ((`valid_until` > `valid_from`)),
+  CONSTRAINT `da_authorization_scope_t_chk_4` CHECK (((`status` <> _utf8mb4'REVOKED') or (`revoked_at` is not null))),
+  CONSTRAINT `da_authorization_scope_t_chk_5` CHECK ((json_type(`scope_snapshot`) = _utf8mb4'OBJECT')),
+  CONSTRAINT `da_authorization_scope_t_chk_6` CHECK ((`status` in (_utf8mb4'PENDING',_utf8mb4'ACTIVE',_utf8mb4'SUSPENDED',_utf8mb4'EXPIRED',_utf8mb4'REVOKED',_utf8mb4'SUPERSEDED'))),
+  CONSTRAINT `da_authorization_scope_t_chk_7` CHECK ((`authorization_version` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='资源申请-统一交付渠道的范围与有效期；API网关状态仍在既有授权表';
 
 -- TABLE da_catalog_apply_form_rela
@@ -415,7 +415,7 @@ CREATE TABLE `da_catalog_apply_form_rela` (
   `apply_form_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '申请表单标识',
   `catalog_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '目录标识',
   `sort_no` int DEFAULT NULL COMMENT '排序编号',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -453,16 +453,16 @@ CREATE TABLE `da_catalog_item_mapping_t` (
   UNIQUE KEY `uk_mapping_item_ref` (`tenant_id`,`binding_id`,`mapping_version`,`catalog_item_id`,`source_ref_hash`),
   KEY `idx_mapping_item` (`tenant_id`,`catalog_item_id`,`status`),
   KEY `idx_mapping_field` (`tenant_id`,`resource_field_id`,`status`),
-  CONSTRAINT `ck_mapping_kind` CHECK ((`mapping_kind` in (_utf8mb4'DIRECT',_utf8mb4'TRANSFORM',_utf8mb4'CONSTANT',_utf8mb4'MANUAL'))),
-  CONSTRAINT `ck_mapping_status` CHECK ((`status` in (_utf8mb4'ACTIVE',_utf8mb4'DISABLED'))),
-  CONSTRAINT `ck_mapping_version` CHECK ((`mapping_version` >= 1))
+  CONSTRAINT `da_catalog_item_mapping_t_chk_1` CHECK ((`mapping_kind` in (_utf8mb4'DIRECT',_utf8mb4'TRANSFORM',_utf8mb4'CONSTANT',_utf8mb4'MANUAL'))),
+  CONSTRAINT `da_catalog_item_mapping_t_chk_2` CHECK ((`status` in (_utf8mb4'ACTIVE',_utf8mb4'DISABLED'))),
+  CONSTRAINT `da_catalog_item_mapping_t_chk_3` CHECK ((`mapping_version` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据目录-业务数据项到资源字段的映射版本，不是另一份技术字段主表';
 
 -- TABLE da_catalog_item_t
 CREATE TABLE `da_catalog_item_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
   `catalog_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '目录标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -524,9 +524,9 @@ CREATE TABLE `da_catalog_publication_head_t` (
   UNIQUE KEY `uk_pubhead_catalog` (`tenant_id`,`catalog_id`),
   KEY `idx_pubhead_current` (`tenant_id`,`current_publication_id`),
   KEY `idx_pubhead_visible` (`tenant_id`,`availability`,`updated_time`),
-  CONSTRAINT `ck_pubhead_availability` CHECK ((`availability` in (_utf8mb4'OFFLINE',_utf8mb4'PUBLISHED',_utf8mb4'WITHDRAWN'))),
-  CONSTRAINT `ck_pubhead_current` CHECK (((`availability` <> _utf8mb4'PUBLISHED') or (`current_publication_id` is not null))),
-  CONSTRAINT `ck_pubhead_next` CHECK ((`next_version_no` >= 1))
+  CONSTRAINT `da_catalog_publication_head_t_chk_1` CHECK ((`availability` in (_utf8mb4'OFFLINE',_utf8mb4'PUBLISHED',_utf8mb4'WITHDRAWN'))),
+  CONSTRAINT `da_catalog_publication_head_t_chk_2` CHECK (((`availability` <> _utf8mb4'PUBLISHED') or (`current_publication_id` is not null))),
+  CONSTRAINT `da_catalog_publication_head_t_chk_3` CHECK ((`next_version_no` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据目录-目录当前发布指针和并发版本；下架改指针状态不改历史版本';
 
 -- TABLE da_catalog_publication_t
@@ -560,13 +560,13 @@ CREATE TABLE `da_catalog_publication_t` (
   UNIQUE KEY `uk_pub_idempotency` (`tenant_id`,`idempotency_key`),
   UNIQUE KEY `uk_pub_request` (`tenant_id`,`request_id`),
   KEY `idx_pub_catalog_status` (`tenant_id`,`catalog_id`,`status`,`created_time`),
-  CONSTRAINT `ck_pub_items` CHECK ((json_type(`item_snapshot`) = _utf8mb4'ARRAY')),
-  CONSTRAINT `ck_pub_meta` CHECK ((json_type(`metadata_snapshot`) = _utf8mb4'OBJECT')),
-  CONSTRAINT `ck_pub_published` CHECK ((((`status` = _utf8mb4'PUBLISHED') and (`request_id` is not null) and (`published_at` is not null) and (`published_by` is not null) and (`contract_hash` is not null)) or ((`status` <> _utf8mb4'PUBLISHED') and (`published_at` is null)))),
-  CONSTRAINT `ck_pub_scope` CHECK ((json_type(`visibility_scope`) = _utf8mb4'OBJECT')),
-  CONSTRAINT `ck_pub_status` CHECK ((`status` in (_utf8mb4'DRAFT',_utf8mb4'VALIDATED',_utf8mb4'PUBLISHED',_utf8mb4'ABANDONED'))),
-  CONSTRAINT `ck_pub_validated` CHECK (((`status` not in (_utf8mb4'VALIDATED',_utf8mb4'PUBLISHED')) or ((`validated_at` is not null) and (`contract_hash` is not null)))),
-  CONSTRAINT `ck_pub_version` CHECK ((`version_no` >= 1))
+  CONSTRAINT `da_catalog_publication_t_chk_1` CHECK ((json_type(`item_snapshot`) = _utf8mb4'ARRAY')),
+  CONSTRAINT `da_catalog_publication_t_chk_2` CHECK ((json_type(`metadata_snapshot`) = _utf8mb4'OBJECT')),
+  CONSTRAINT `da_catalog_publication_t_chk_3` CHECK ((((`status` = _utf8mb4'PUBLISHED') and (`request_id` is not null) and (`published_at` is not null) and (`published_by` is not null) and (`contract_hash` is not null)) or ((`status` <> _utf8mb4'PUBLISHED') and (`published_at` is null)))),
+  CONSTRAINT `da_catalog_publication_t_chk_4` CHECK ((json_type(`visibility_scope`) = _utf8mb4'OBJECT')),
+  CONSTRAINT `da_catalog_publication_t_chk_5` CHECK ((`status` in (_utf8mb4'DRAFT',_utf8mb4'VALIDATED',_utf8mb4'PUBLISHED',_utf8mb4'ABANDONED'))),
+  CONSTRAINT `da_catalog_publication_t_chk_6` CHECK (((`status` not in (_utf8mb4'VALIDATED',_utf8mb4'PUBLISHED')) or ((`validated_at` is not null) and (`contract_hash` is not null)))),
+  CONSTRAINT `da_catalog_publication_t_chk_7` CHECK ((`version_no` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据目录-目录版本与冻结契约；不替代共享目录主表';
 
 -- TABLE da_catalog_resource_binding_t
@@ -594,12 +594,12 @@ CREATE TABLE `da_catalog_resource_binding_t` (
   UNIQUE KEY `uk_binding_idempotency` (`tenant_id`,`idempotency_key`),
   KEY `idx_binding_catalog` (`tenant_id`,`catalog_id`,`status`,`display_order`),
   KEY `idx_binding_reverse` (`tenant_id`,`resource_type`,`resource_id`,`status`),
-  CONSTRAINT `ck_binding_directory_ref` CHECK (((`resource_type` <> _utf8mb4'DIRECTORY') or (`binding_role` = _utf8mb4'REFERENCE'))),
-  CONSTRAINT `ck_binding_mapping_ver` CHECK ((`mapping_version` >= 1)),
-  CONSTRAINT `ck_binding_primary` CHECK ((`primary_flag` in (0,1))),
-  CONSTRAINT `ck_binding_role` CHECK ((`binding_role` in (_utf8mb4'SOURCE',_utf8mb4'DELIVERY',_utf8mb4'REFERENCE'))),
-  CONSTRAINT `ck_binding_status` CHECK ((`status` in (_utf8mb4'ACTIVE',_utf8mb4'DISABLED',_utf8mb4'DETACHED'))),
-  CONSTRAINT `ck_binding_type` CHECK ((`resource_type` in (_utf8mb4'TABLE',_utf8mb4'API',_utf8mb4'FILE',_utf8mb4'DIRECTORY')))
+  CONSTRAINT `da_catalog_resource_binding_t_chk_1` CHECK (((`resource_type` <> _utf8mb4'DIRECTORY') or (`binding_role` = _utf8mb4'REFERENCE'))),
+  CONSTRAINT `da_catalog_resource_binding_t_chk_2` CHECK ((`mapping_version` >= 1)),
+  CONSTRAINT `da_catalog_resource_binding_t_chk_3` CHECK ((`primary_flag` in (0,1))),
+  CONSTRAINT `da_catalog_resource_binding_t_chk_4` CHECK ((`binding_role` in (_utf8mb4'SOURCE',_utf8mb4'DELIVERY',_utf8mb4'REFERENCE'))),
+  CONSTRAINT `da_catalog_resource_binding_t_chk_5` CHECK ((`status` in (_utf8mb4'ACTIVE',_utf8mb4'DISABLED',_utf8mb4'DETACHED'))),
+  CONSTRAINT `da_catalog_resource_binding_t_chk_6` CHECK ((`resource_type` in (_utf8mb4'TABLE',_utf8mb4'API',_utf8mb4'FILE',_utf8mb4'DIRECTORY')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据目录-目录与多个共享物理资源的可变挂接关系；已发布版本另存契约';
 
 -- TABLE da_catalog_resource_snapshot_t
@@ -621,10 +621,10 @@ CREATE TABLE `da_catalog_resource_snapshot_t` (
   PRIMARY KEY (`tid`),
   UNIQUE KEY `uk_resourcesnap_pub_binding` (`tenant_id`,`publication_id`,`binding_id`),
   KEY `idx_resourcesnap_reverse` (`tenant_id`,`resource_type`,`resource_id`,`captured_at`),
-  CONSTRAINT `ck_resourcesnap_contract` CHECK ((json_type(`contract_snapshot`) = _utf8mb4'OBJECT')),
-  CONSTRAINT `ck_resourcesnap_file_version` CHECK (((`resource_type` <> _utf8mb4'FILE') or (0 <> coalesce(((json_type(json_extract(`contract_snapshot`,_utf8mb4'$.resourceVersionId')) = _utf8mb4'STRING') and (char_length(json_unquote(json_extract(`contract_snapshot`,_utf8mb4'$.resourceVersionId'))) > 0)),false)))),
-  CONSTRAINT `ck_resourcesnap_mapping` CHECK ((`mapping_version` >= 1)),
-  CONSTRAINT `ck_resourcesnap_type` CHECK ((`resource_type` in (_utf8mb4'TABLE',_utf8mb4'API',_utf8mb4'FILE')))
+  CONSTRAINT `da_catalog_resource_snapshot_t_chk_1` CHECK ((json_type(`contract_snapshot`) = _utf8mb4'OBJECT')),
+  CONSTRAINT `da_catalog_resource_snapshot_t_chk_2` CHECK (((`resource_type` <> _utf8mb4'FILE') or (0 <> coalesce(((json_type(json_extract(`contract_snapshot`,_utf8mb4'$.resourceVersionId')) = _utf8mb4'STRING') and (char_length(json_unquote(json_extract(`contract_snapshot`,_utf8mb4'$.resourceVersionId'))) > 0)),false)))),
+  CONSTRAINT `da_catalog_resource_snapshot_t_chk_3` CHECK ((`mapping_version` >= 1)),
+  CONSTRAINT `da_catalog_resource_snapshot_t_chk_4` CHECK ((`resource_type` in (_utf8mb4'TABLE',_utf8mb4'API',_utf8mb4'FILE')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据目录-目录发布版本对应的物理资源契约快照';
 
 -- TABLE da_catalog_t
@@ -699,11 +699,11 @@ CREATE TABLE `da_demand_case_t` (
   UNIQUE KEY `uk_demandcase_idempotency` (`tenant_id`,`idempotency_key`),
   KEY `idx_demandcase_requester` (`tenant_id`,`requesting_org_id`,`status`,`updated_time`),
   KEY `idx_demandcase_handler` (`tenant_id`,`owner_org_id`,`status`,`expected_at`),
-  CONSTRAINT `ck_demandcase_seq` CHECK ((`next_event_seq` >= 1)),
-  CONSTRAINT `ck_demandcase_snapshot` CHECK ((json_type(`demand_snapshot`) = _utf8mb4'OBJECT')),
-  CONSTRAINT `ck_demandcase_status` CHECK ((`status` in (_utf8mb4'DRAFT',_utf8mb4'SUBMITTED',_utf8mb4'TRIAGED',_utf8mb4'MATCHING',_utf8mb4'MATCHED',_utf8mb4'FULFILLED',_utf8mb4'CLOSED',_utf8mb4'WITHDRAWN'))),
-  CONSTRAINT `ck_demandcase_type` CHECK ((`canonical_type` = _utf8mb4'DATA_DEMAND')),
-  CONSTRAINT `ck_demandcase_types` CHECK ((json_type(`requested_resource_types`) = _utf8mb4'ARRAY'))
+  CONSTRAINT `da_demand_case_t_chk_1` CHECK ((`next_event_seq` >= 1)),
+  CONSTRAINT `da_demand_case_t_chk_2` CHECK ((json_type(`demand_snapshot`) = _utf8mb4'OBJECT')),
+  CONSTRAINT `da_demand_case_t_chk_3` CHECK ((`status` in (_utf8mb4'DRAFT',_utf8mb4'SUBMITTED',_utf8mb4'TRIAGED',_utf8mb4'MATCHING',_utf8mb4'MATCHED',_utf8mb4'FULFILLED',_utf8mb4'CLOSED',_utf8mb4'WITHDRAWN'))),
+  CONSTRAINT `da_demand_case_t_chk_4` CHECK ((`canonical_type` = _utf8mb4'DATA_DEMAND')),
+  CONSTRAINT `da_demand_case_t_chk_5` CHECK ((json_type(`requested_resource_types`) = _utf8mb4'ARRAY'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='供需对接-需求供需处理状态扩展，主需求信息与申请ID共享';
 
 -- TABLE da_demand_match_t
@@ -729,8 +729,8 @@ CREATE TABLE `da_demand_match_t` (
   UNIQUE KEY `uk_demandmatch_idempotency` (`tenant_id`,`idempotency_key`),
   KEY `idx_demandmatch_candidate` (`tenant_id`,`demand_case_id`,`candidate_id`,`event_seq`),
   KEY `idx_demandmatch_catalog` (`tenant_id`,`catalog_id`,`occurred_at`),
-  CONSTRAINT `ck_demandmatch_seq` CHECK ((`event_seq` >= 1)),
-  CONSTRAINT `ck_demandmatch_type` CHECK ((`event_type` in (_utf8mb4'PROPOSED',_utf8mb4'ACCEPTED',_utf8mb4'DECLINED',_utf8mb4'COMMENT',_utf8mb4'DELIVERED',_utf8mb4'CANCELLED')))
+  CONSTRAINT `da_demand_match_t_chk_1` CHECK ((`event_seq` >= 1)),
+  CONSTRAINT `da_demand_match_t_chk_2` CHECK ((`event_type` in (_utf8mb4'PROPOSED',_utf8mb4'ACCEPTED',_utf8mb4'DECLINED',_utf8mb4'COMMENT',_utf8mb4'DELIVERED',_utf8mb4'CANCELLED')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='供需对接-供需对接追加记录；匹配成功不授予资源访问';
 
 -- TABLE da_metadata_code_t
@@ -748,7 +748,7 @@ CREATE TABLE `da_metadata_code_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` int DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `code_set` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '标准代码集',
   `code_value` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '代码值',
   `code_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '代码名称',
@@ -783,7 +783,7 @@ CREATE TABLE `da_metadata_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` int DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `field_type` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '规范字段类型',
   `field_length` int DEFAULT NULL COMMENT '规范最大长度',
   `numeric_precision` int DEFAULT NULL COMMENT '数值精度',
@@ -801,7 +801,7 @@ CREATE TABLE `da_metadata_t` (
 -- TABLE da_prop_t
 CREATE TABLE `da_prop_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -817,9 +817,9 @@ CREATE TABLE `da_prop_t` (
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565291` (`tid`) USING BTREE,
   KEY `idx_data_prop_tenant_parent_id_is_del_prop_name` (`tenant_id`,`parent_id`,`is_del`,`prop_name`) USING BTREE,
-  KEY `idx_da_prop_parent_type` (`parent_id`,`data_type`,`is_del`) USING BTREE,
-  KEY `idx_da_prop_tenant_type` (`tenant_id`,`data_type`,`is_del`) USING BTREE,
-  KEY `idx_da_prop_lookup` (`parent_id`,`data_type`,`prop_name`,`is_del`) USING BTREE
+  KEY `idx_da_prop_parent_type` (`parent_id`,`data_type`,`is_del`),
+  KEY `idx_da_prop_tenant_type` (`tenant_id`,`data_type`,`is_del`),
+  KEY `idx_da_prop_lookup` (`parent_id`,`data_type`,`prop_name`,`is_del`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据盘点-业务扩展属性';
 
 -- TABLE data_access_agg_task_t
@@ -848,7 +848,7 @@ CREATE TABLE `data_access_agg_task_t` (
   `last_running` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近运行',
   `last_status_value` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近状态值',
   `end_running` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '结束运行',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -896,7 +896,7 @@ CREATE TABLE `data_access_field_mapping` (
   `func_value` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '函数值（支持字典翻译/统一格式的完整 JSON 规则）',
   `func_code` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '函数编码',
   `sort_no` int DEFAULT NULL COMMENT '排序编号',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -911,11 +911,11 @@ CREATE TABLE `data_access_field_mapping` (
 
 -- TABLE data_access_multi_group_item_t
 CREATE TABLE `data_access_multi_group_item_t` (
-  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '编组成员标识',
-  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前会话所属租户标识',
-  `group_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属多表任务编组标识',
-  `source_table_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '已登记来源表标识',
-  `access_task_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '关联的单表接入任务标识',
+  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '编组成员标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前会话所属租户标识',
+  `group_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属多表任务编组标识',
+  `source_table_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '已登记来源表标识',
+  `access_task_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '关联的单表接入任务标识',
   `sort_no` int NOT NULL COMMENT '成员在编组中的显示与处理顺序，从1开始',
   `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '编组成员创建时间',
   `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '编组成员最后修改时间',
@@ -924,15 +924,15 @@ CREATE TABLE `data_access_multi_group_item_t` (
   UNIQUE KEY `uk_multi_group_sort` (`tenant_id`,`group_id`,`sort_no`),
   KEY `idx_multi_group_task` (`tenant_id`,`access_task_id`),
   KEY `fk_multi_group_item_group` (`group_id`),
-  CONSTRAINT `fk_multi_group_item_group` FOREIGN KEY (`group_id`) REFERENCES `data_access_multi_group_t` (`tid`)
+  CONSTRAINT `data_access_multi_group_item_t_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `data_access_multi_group_t` (`tid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-多表任务编组成员';
 
 -- TABLE data_access_multi_group_t
 CREATE TABLE `data_access_multi_group_t` (
-  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '多表任务编组标识，由客户端固定请求标识生成',
-  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前会话所属租户标识',
-  `group_name` varchar(200) COLLATE utf8mb4_general_ci NOT NULL COMMENT '多表任务编组名称',
-  `created_by` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人账号标识',
+  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '多表任务编组标识，由客户端固定请求标识生成',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前会话所属租户标识',
+  `group_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '多表任务编组名称',
+  `created_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人账号标识',
   `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '编组创建时间',
   `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '编组最后修改时间',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志：0有效，1已删除',
@@ -962,7 +962,7 @@ CREATE TABLE `data_access_task_monitor_snap_t` (
   `monitor_msg` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '监控消息',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `is_del` int DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565282` (`tid`) USING BTREE,
   KEY `idx_data_access_task_monitor_snap_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
@@ -971,6 +971,7 @@ CREATE TABLE `data_access_task_monitor_snap_t` (
 -- TABLE data_api_authorization_t
 CREATE TABLE `data_api_authorization_t` (
   `tid` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
+  `tenant_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',
   `apply_form_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '申请表单标识',
   `catalog_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '目录标识',
   `api_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '接口标识',
@@ -982,16 +983,15 @@ CREATE TABLE `data_api_authorization_t` (
   `gateway_message` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '网关消息',
   `authorized_time` datetime(6) DEFAULT NULL COMMENT '授权时间',
   `expire_time` datetime(6) DEFAULT NULL COMMENT '过期时间',
-  `tenant_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',
   `created_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '创建人标识',
   `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
   `updated_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '更新时间',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志，0未删除、1已删除',
-  PRIMARY KEY (`tid`) USING BTREE,
+  PRIMARY KEY (`tid`),
   KEY `idx_api_auth_application` (`tenant_id`,`application_id`,`is_del`),
-  KEY `idx_api_auth_catalog` (`tenant_id`,`catalog_id`,`api_id`,`is_del`),
   KEY `idx_api_auth_form` (`tenant_id`,`apply_form_id`,`is_del`),
+  KEY `idx_api_auth_catalog` (`tenant_id`,`catalog_id`,`api_id`,`is_del`),
   KEY `idx_api_auth_gateway` (`tenant_id`,`gateway_sync_status`,`authorization_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据服务-共享交付服务接口授权台账；网关受控启用前保留待生效审批记录';
 
@@ -1005,7 +1005,7 @@ CREATE TABLE `data_apply_form_t` (
   `catalog_ids` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '目录标识集合',
   `type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '类型',
   `flow_status` int DEFAULT NULL COMMENT '流程状态',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -1041,16 +1041,16 @@ CREATE TABLE `data_distribution_task_t` (
   `status_message` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近运行状态说明',
   `started_time` datetime(6) DEFAULT NULL COMMENT '开始运行时间',
   `finished_time` datetime(6) DEFAULT NULL COMMENT '完成运行时间',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) NOT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) NOT NULL COMMENT '更新时间',
   `is_del` int NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
   `resource_result_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '批准字段真实导出结果与固定批次文件；不保存连接凭据',
-  PRIMARY KEY (`tid`) USING BTREE,
-  UNIQUE KEY `uk_distribution_apply_catalog` (`tenant_id`,`apply_form_id`,`catalog_id`,`is_del`) USING BTREE,
-  KEY `ix_distribution_status` (`tenant_id`,`task_status`,`updated_time`) USING BTREE
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_distribution_apply_catalog` (`tenant_id`,`apply_form_id`,`catalog_id`,`is_del`),
+  KEY `ix_distribution_status` (`tenant_id`,`task_status`,`updated_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='资源申请-资源申请数据分发任务';
 
 -- TABLE data_gov_quality_rule
@@ -1069,7 +1069,7 @@ CREATE TABLE `data_gov_quality_rule` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565286` (`tid`) USING BTREE,
@@ -1083,7 +1083,7 @@ CREATE TABLE `data_market_catalog_browse_t` (
   `apply_user_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '申请用户标识',
   `apply_user_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '申请用户名称',
   `browse_time` datetime(6) DEFAULT NULL COMMENT '浏览时间',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `asset_type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资产类型',
   `asset_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资产标识',
   `visit_count` int NOT NULL DEFAULT '1' COMMENT '访问数量',
@@ -1100,7 +1100,7 @@ CREATE TABLE `data_market_collect_t` (
   `apply_user_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '申请用户名称',
   `apply_org_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '申请组织标识',
   `org_tree_path` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '组织树路径',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `asset_type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资产类型',
   `asset_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资产标识',
   `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
@@ -1117,7 +1117,7 @@ CREATE TABLE `data_market_shopping_cart_t` (
   `apply_user_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '申请用户标识',
   `apply_user_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '申请用户名称',
   `apply_org_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '申请组织标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -1142,9 +1142,9 @@ CREATE TABLE `data_pull_checkpoint_t` (
   `last_success_batch_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '最近成功批次标识',
   `last_full_success_at` datetime(6) DEFAULT NULL COMMENT '最近全量成功时间',
   `updated_time` datetime(6) NOT NULL COMMENT '更新时间',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_pull_checkpoint_rule_key` (`tenant_id`,`pull_rule_id`,`checkpoint_key`),
-  KEY `idx_pull_checkpoint_rule` (`tenant_id`,`pull_rule_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_pull_checkpoint_rule_key` (`tenant_id`,`pull_rule_id`,`checkpoint_key`) USING BTREE,
+  KEY `idx_pull_checkpoint_rule` (`tenant_id`,`pull_rule_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据拉取-表级同步水位与断点';
 
 -- TABLE data_pull_failure_t
@@ -1164,9 +1164,9 @@ CREATE TABLE `data_pull_failure_t` (
   `resolved_at` datetime(6) DEFAULT NULL COMMENT '解决时间',
   `created_time` datetime(6) NOT NULL COMMENT '创建时间',
   `updated_time` datetime(6) NOT NULL COMMENT '更新时间',
-  PRIMARY KEY (`tid`),
-  KEY `idx_pull_failure_retry` (`tenant_id`,`retryable`,`next_retry_at`),
-  KEY `idx_pull_failure_run` (`tenant_id`,`pull_run_id`,`pull_rule_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  KEY `idx_pull_failure_retry` (`tenant_id`,`retryable`,`next_retry_at`) USING BTREE,
+  KEY `idx_pull_failure_run` (`tenant_id`,`pull_run_id`,`pull_rule_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据拉取-接口拉取记录级失败与重试队列';
 
 -- TABLE data_pull_rule_t
@@ -1197,10 +1197,10 @@ CREATE TABLE `data_pull_rule_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) NOT NULL COMMENT '更新时间',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志，0未删除、1已删除',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_pull_rule_table` (`tenant_id`,`source_table_id`,`is_del`),
-  KEY `idx_pull_rule_due` (`tenant_id`,`enabled`,`trigger_mode`,`is_del`),
-  KEY `idx_pull_rule_source` (`tenant_id`,`datasource_id`,`service_id`,`is_del`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_pull_rule_table` (`tenant_id`,`source_table_id`,`is_del`) USING BTREE,
+  KEY `idx_pull_rule_due` (`tenant_id`,`enabled`,`trigger_mode`,`is_del`) USING BTREE,
+  KEY `idx_pull_rule_source` (`tenant_id`,`datasource_id`,`service_id`,`is_del`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据拉取-逻辑表 API 拉取、分页、增量、映射与调度规则';
 
 -- TABLE data_pull_run_t
@@ -1225,9 +1225,9 @@ CREATE TABLE `data_pull_run_t` (
   `finished_at` datetime(6) DEFAULT NULL COMMENT '结束时间',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) NOT NULL COMMENT '创建时间',
-  PRIMARY KEY (`tid`),
-  KEY `idx_pull_run_rule_time` (`tenant_id`,`pull_rule_id`,`started_at`),
-  KEY `idx_pull_run_status` (`tenant_id`,`status`,`started_at`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  KEY `idx_pull_run_rule_time` (`tenant_id`,`pull_rule_id`,`started_at`) USING BTREE,
+  KEY `idx_pull_run_status` (`tenant_id`,`status`,`started_at`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据拉取-接口拉取任务运行账本';
 
 -- TABLE data_pull_service_t
@@ -1259,9 +1259,9 @@ CREATE TABLE `data_pull_service_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) NOT NULL COMMENT '更新时间',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志，0未删除、1已删除',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_pull_service_tenant_code` (`tenant_id`,`datasource_id`,`service_code`,`is_del`),
-  KEY `idx_pull_service_source` (`tenant_id`,`datasource_id`,`status`,`is_del`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_pull_service_tenant_code` (`tenant_id`,`datasource_id`,`service_code`,`is_del`) USING BTREE,
+  KEY `idx_pull_service_source` (`tenant_id`,`datasource_id`,`status`,`is_del`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据拉取-数据源 API 服务配置；不保存明文凭据';
 
 -- TABLE data_push_schema_field_t
@@ -1301,7 +1301,7 @@ CREATE TABLE `data_push_schema_t` (
 -- TABLE data_reconcile_bucket_t
 CREATE TABLE `data_reconcile_bucket_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `run_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '运行标识',
   `bucket_no` int NOT NULL COMMENT '分桶编号',
   `key_lower` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '键下限',
@@ -1334,7 +1334,7 @@ CREATE TABLE `data_reconcile_bucket_t` (
 -- TABLE data_reconcile_diff_t
 CREATE TABLE `data_reconcile_diff_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `run_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '运行标识',
   `bucket_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '分桶标识',
   `diff_hash` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '差异哈希',
@@ -1358,7 +1358,7 @@ CREATE TABLE `data_reconcile_diff_t` (
 -- TABLE data_reconcile_field_rule_t
 CREATE TABLE `data_reconcile_field_rule_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `policy_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略标识',
   `source_field` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '来源字段',
   `target_field` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '目标字段',
@@ -1387,7 +1387,7 @@ CREATE TABLE `data_reconcile_field_rule_t` (
 -- TABLE data_reconcile_policy_t
 CREATE TABLE `data_reconcile_policy_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `policy_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略名称',
   `policy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '策略编码',
   `access_task_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '访问任务标识',
@@ -1430,7 +1430,7 @@ CREATE TABLE `data_reconcile_policy_t` (
 -- TABLE data_reconcile_run_t
 CREATE TABLE `data_reconcile_run_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `policy_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略标识',
   `policy_version` int NOT NULL COMMENT '策略版本',
   `policy_snapshot` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略快照',
@@ -1483,7 +1483,7 @@ CREATE TABLE `db_datasource_t` (
   `remark` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '备注',
   `is_enable` tinyint DEFAULT NULL COMMENT '是否启用',
   `app_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '应用标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -1512,7 +1512,7 @@ CREATE TABLE `db_datasource_t` (
   UNIQUE KEY `INDEX33565292` (`tid`) USING BTREE,
   KEY `idx_db_datasource_tenant` (`tenant_id`,`is_del`,`updated_time`) USING BTREE,
   KEY `idx_db_datasource_tenant_is_del_app_id` (`tenant_id`,`is_del`,`app_id`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据资源登记-登记数据源';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='数据资源登记-登记数据源';
 
 -- TABLE db_table_column_t
 CREATE TABLE `db_table_column_t` (
@@ -1535,7 +1535,7 @@ CREATE TABLE `db_table_column_t` (
   `charset` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '字符集',
   `collation` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '排序规则',
   `extra` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '额外',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -1609,7 +1609,7 @@ CREATE TABLE `db_table_t` (
   `source_catalog_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源目录标识',
   `catalog_name` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '目录名称',
   `catalog_name_en` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '目录名称英文',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -1645,7 +1645,7 @@ CREATE TABLE `db_table_t` (
 -- TABLE dq_quality_issue_sample_t
 CREATE TABLE `dq_quality_issue_sample_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `run_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '运行标识',
   `shard_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '分片标识',
   `task_rule_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务规则标识',
@@ -1672,7 +1672,7 @@ CREATE TABLE `dq_quality_issue_sample_t` (
 -- TABLE dq_quality_metric_t
 CREATE TABLE `dq_quality_metric_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `run_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '运行标识',
   `task_rule_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务规则标识',
   `rule_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '规则名称',
@@ -1696,7 +1696,7 @@ CREATE TABLE `dq_quality_metric_t` (
 -- TABLE dq_quality_run_shard_t
 CREATE TABLE `dq_quality_run_shard_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `run_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '运行标识',
   `shard_no` int NOT NULL COMMENT '分片编号',
   `key_lower` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '键下限',
@@ -1723,7 +1723,7 @@ CREATE TABLE `dq_quality_run_shard_t` (
 -- TABLE dq_quality_run_t
 CREATE TABLE `dq_quality_run_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `task_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务标识',
   `task_version` int NOT NULL COMMENT '任务版本',
   `task_snapshot` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '任务快照',
@@ -1760,7 +1760,7 @@ CREATE TABLE `dq_quality_run_t` (
 -- TABLE dq_quality_task_rule_t
 CREATE TABLE `dq_quality_task_rule_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `task_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务标识',
   `rule_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '规则名称',
   `rule_type` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '规则类型',
@@ -1785,7 +1785,7 @@ CREATE TABLE `dq_quality_task_rule_t` (
 -- TABLE dq_quality_task_t
 CREATE TABLE `dq_quality_task_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `task_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务名称',
   `task_code` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务编码',
   `datasource_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '数据源标识',
@@ -1829,7 +1829,7 @@ CREATE TABLE `dwm_center_layer_source_t` (
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `configuration_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '主存储环境、命名空间、前缀与配置校验指纹',
   `revision_no` int NOT NULL DEFAULT '1' COMMENT '存储绑定乐观锁版本',
   PRIMARY KEY (`tid`) USING BTREE,
@@ -1911,7 +1911,7 @@ CREATE TABLE `file_upload_t` (
   `file_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '文件名称',
   `file_size` int DEFAULT NULL COMMENT '文件大小',
   `file_suffix` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '文件后缀',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
@@ -1943,7 +1943,7 @@ CREATE TABLE `flow_definition` (
   `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人员',
   `del_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '删除标志',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565297` (`id`) USING BTREE,
   KEY `idx_flow_definition_tenant` (`tenant_id`) USING BTREE,
@@ -1974,7 +1974,7 @@ CREATE TABLE `flow_his_task` (
   `create_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `del_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '删除标志',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565298` (`id`) USING BTREE,
   KEY `idx_flow_his_task_tenant` (`tenant_id`) USING BTREE,
@@ -1999,7 +1999,7 @@ CREATE TABLE `flow_instance` (
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人员',
   `ext` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '扩展',
   `del_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '删除标志',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565299` (`id`) USING BTREE,
   KEY `idx_flow_instance_tenant` (`tenant_id`) USING BTREE,
@@ -2030,7 +2030,7 @@ CREATE TABLE `flow_node` (
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人员',
   `ext` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '扩展',
   `del_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '删除标志',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565300` (`id`) USING BTREE,
   KEY `idx_flow_node_tenant` (`tenant_id`) USING BTREE
@@ -2053,7 +2053,7 @@ CREATE TABLE `flow_skip` (
   `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人员',
   `del_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '删除标志',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565301` (`id`) USING BTREE,
   KEY `idx_flow_skip_tenant` (`tenant_id`) USING BTREE
@@ -2068,7 +2068,7 @@ CREATE TABLE `flow_suggestion` (
   `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人员',
   `is_del` int DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `content` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '内容',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565302` (`tid`) USING BTREE,
@@ -2091,7 +2091,7 @@ CREATE TABLE `flow_task` (
   `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人员',
   `del_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '删除标志',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565303` (`id`) USING BTREE,
   KEY `idx_flow_task_tenant` (`tenant_id`) USING BTREE,
@@ -2109,7 +2109,7 @@ CREATE TABLE `flow_user` (
   `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `update_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人员',
   `del_flag` char(1) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '删除标志',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565304` (`id`) USING BTREE,
   KEY `idx_flow_user_tenant` (`tenant_id`) USING BTREE,
@@ -2128,7 +2128,7 @@ CREATE TABLE `fs_alert_event` (
   `notify_target` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '通知目标',
   `status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '状态',
   `triggered_at` datetime(6) NOT NULL COMMENT '已触发时间',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565305` (`id`) USING BTREE,
   KEY `idx_alert_event_rule` (`rule_id`) USING BTREE,
@@ -2147,7 +2147,7 @@ CREATE TABLE `fs_alert_rule` (
   `notify_target` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '通知目标',
   `enabled` tinyint NOT NULL COMMENT '启用',
   `created_at` datetime(6) NOT NULL COMMENT '创建时间',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565306` (`id`) USING BTREE,
   KEY `idx_fs_alert_rule_tenant` (`tenant_id`) USING BTREE
@@ -2161,7 +2161,7 @@ CREATE TABLE `fs_audit_log` (
   `target` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '目标',
   `detail` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '详情',
   `created_at` datetime(6) NOT NULL COMMENT '创建时间',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565307` (`id`) USING BTREE,
   KEY `idx_fs_audit_log_tenant` (`tenant_id`) USING BTREE
@@ -2179,7 +2179,7 @@ CREATE TABLE `fs_call_log` (
   `duration_ms` bigint NOT NULL COMMENT '时长毫秒',
   `error_message` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '错误消息',
   `created_at` datetime(6) NOT NULL COMMENT '创建时间',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565308` (`id`) USING BTREE,
   KEY `idx_call_created_at` (`created_at`) USING BTREE,
@@ -2200,7 +2200,7 @@ CREATE TABLE `fs_flow` (
   `updated_at` datetime(6) NOT NULL COMMENT '更新时间',
   `lock_version` int NOT NULL COMMENT '锁版本',
   `deleted` tinyint NOT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565310` (`id`) USING BTREE,
   KEY `idx_fs_flow_tenant` (`tenant_id`) USING BTREE
@@ -2218,7 +2218,7 @@ CREATE TABLE `fs_flow_version` (
   `publish_time` datetime(6) NOT NULL COMMENT '发布时间',
   `remark` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '备注',
   `status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '状态',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565311` (`id`) USING BTREE,
   UNIQUE KEY `uk_flow_version` (`flow_id`,`version`) USING BTREE,
@@ -2235,7 +2235,7 @@ CREATE TABLE `fs_publish_record` (
   `status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '状态',
   `publish_time` datetime(6) NOT NULL COMMENT '发布时间',
   `runtime_node_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '运行时节点标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565312` (`id`) USING BTREE,
   KEY `idx_fs_publish_record_tenant` (`tenant_id`) USING BTREE
@@ -2254,7 +2254,7 @@ CREATE TABLE `fs_runtime_node` (
   `enabled` tinyint NOT NULL COMMENT '启用',
   `created_at` datetime(6) NOT NULL COMMENT '创建时间',
   `deploy_token` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '部署票据',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565313` (`id`) USING BTREE,
   KEY `idx_fs_runtime_node_tenant` (`tenant_id`) USING BTREE
@@ -2271,7 +2271,7 @@ CREATE TABLE `gateway_user_app_rela` (
   `is_del` int DEFAULT NULL COMMENT '删除标志：0正常，1删除',
   `app_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '应用标识',
   `user_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565314` (`tid`) USING BTREE,
   KEY `idx_gateway_user_app_rela_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
@@ -2354,7 +2354,7 @@ CREATE TABLE `log_request_t` (
   `execute_time` int DEFAULT NULL COMMENT '执行时间',
   `user_role_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户角色名称',
   `user_role_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户角色标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -2385,7 +2385,7 @@ CREATE TABLE `log_system_t` (
   `is_success` tinyint DEFAULT NULL COMMENT '是否成功',
   `project_code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '项目编码',
   `detail_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '详情JSON数据',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -2399,7 +2399,7 @@ CREATE TABLE `log_system_t` (
 -- TABLE log_template_t
 CREATE TABLE `log_template_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `request_method` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '请求方法',
   `request_uri` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '请求资源地址',
   `log_type` int DEFAULT NULL COMMENT '日志类型',
@@ -2430,7 +2430,7 @@ CREATE TABLE `log_user_login_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565318` (`tid`) USING BTREE,
   KEY `idx_log_user_login_tenant_is_del_created` (`tenant_id`,`is_del`,`created_time`) USING BTREE
@@ -2450,7 +2450,7 @@ CREATE TABLE `log_version_t` (
   `is_antivirus` tinyint DEFAULT NULL COMMENT '是否防病毒',
   `svn_version` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '版本库版本',
   `version_content` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '版本内容',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   PRIMARY KEY (`tid`) USING BTREE,
@@ -2486,37 +2486,37 @@ CREATE TABLE `metadata_table_collection_job_t` (
 
 -- TABLE nifi_node_t
 CREATE TABLE `nifi_node_t` (
-  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '租户标识',
+  `tid` varchar(32) NOT NULL COMMENT '主键标识',
+  `tenant_id` varchar(32) NOT NULL COMMENT '租户标识',
   `network_type` varchar(32) DEFAULT NULL COMMENT '所属网络：公安网、互联网、专网',
   `network_code` varchar(64) DEFAULT NULL COMMENT '所属网络字典编码（SSWL）',
-  `node_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '节点名称',
-  `node_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '节点编码',
-  `base_url` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT 'NiFi服务地址',
-  `root_process_group_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '根流程组标识',
+  `node_name` varchar(128) NOT NULL COMMENT '节点名称',
+  `node_code` varchar(64) NOT NULL COMMENT '节点编码',
+  `base_url` varchar(255) NOT NULL COMMENT 'NiFi服务地址',
+  `root_process_group_id` varchar(128) DEFAULT NULL COMMENT '根流程组标识',
   `auth_username` varchar(128) DEFAULT NULL COMMENT '认证用户名',
   `auth_password` varchar(512) DEFAULT NULL COMMENT '认证密码',
-  `insecure_tls` tinyint NOT NULL DEFAULT '0' COMMENT '允许非安全传输标志',
+  `insecure_tls` tinyint NOT NULL DEFAULT '1' COMMENT '允许非安全传输标志',
   `jdbc_driver_locations` text COMMENT 'NiFi节点JDBC驱动映射：DB_TYPE=/absolute/path，每行一条',
   `enabled` tinyint NOT NULL DEFAULT '1' COMMENT '启用状态：1启用，0停用',
   `is_default` tinyint NOT NULL DEFAULT '0' COMMENT '默认节点：1默认，0否',
-  `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '备注',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
   `created_time` datetime(6) NOT NULL COMMENT '创建时间',
   `updated_time` datetime(6) NOT NULL COMMENT '更新时间',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '删除标志：0正常，1删除',
-  PRIMARY KEY (`tid`) USING BTREE,
-  KEY `ix_nifi_node_tenant_default` (`tenant_id`,`is_del`,`is_default`) USING BTREE,
-  KEY `ix_nifi_node_tenant_code` (`tenant_id`,`node_code`,`is_del`) USING BTREE
+  PRIMARY KEY (`tid`),
+  KEY `ix_nifi_node_tenant_default` (`tenant_id`,`is_del`,`is_default`),
+  KEY `ix_nifi_node_tenant_code` (`tenant_id`,`node_code`,`is_del`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据接入-集成节点配置（NiFi）';
 
 -- TABLE nifi_pipeline_external_ref_t
 CREATE TABLE `nifi_pipeline_external_ref_t` (
-  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '登记记录主键',
-  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前租户标识',
-  `external_flow_id` varchar(128) COLLATE utf8mb4_general_ci NOT NULL COMMENT '外部流程唯一标识',
-  `pipeline_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '已保存的 NiFi 流程主键',
-  `source_format` varchar(32) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'CANVAS_DSL_V1' COMMENT '登记源格式，仅支持 NiFi Canvas DSL v1',
-  `dsl_hash_at_import` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '登记时已保存流程的 DSL 摘要',
+  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '登记记录主键',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前租户标识',
+  `external_flow_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '外部流程唯一标识',
+  `pipeline_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '已保存的 NiFi 流程主键',
+  `source_format` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'CANVAS_DSL_V1' COMMENT '登记源格式，仅支持 NiFi Canvas DSL v1',
+  `dsl_hash_at_import` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '登记时已保存流程的 DSL 摘要',
   `created_time` datetime(6) NOT NULL COMMENT '登记时间',
   `updated_time` datetime(6) NOT NULL COMMENT '最近更新时间',
   PRIMARY KEY (`tid`),
@@ -2530,7 +2530,7 @@ CREATE TABLE `nifi_pipeline_migration_mark_t` (
   `mark_key` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '标注键',
   `mark_value` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '标注值',
   `created_at` bigint DEFAULT NULL COMMENT '创建时间',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tenant_id`,`mark_key`) USING BTREE,
   UNIQUE KEY `INDEX33565615` (`tenant_id`,`mark_key`) USING BTREE,
   KEY `idx_nifi_pipeline_migration_mark_tenant` (`tenant_id`) USING BTREE
@@ -2554,7 +2554,7 @@ CREATE TABLE `nifi_pipeline_t` (
   `created_at` bigint DEFAULT NULL COMMENT '创建时间',
   `updated_at` bigint DEFAULT NULL COMMENT '更新时间',
   `is_del` int NOT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE KEY `INDEX33565320` (`id`) USING BTREE,
   KEY `idx_nifi_pipeline_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
@@ -2562,23 +2562,23 @@ CREATE TABLE `nifi_pipeline_t` (
 
 -- TABLE ods_batch_create_item_t
 CREATE TABLE `ods_batch_create_item_t` (
-  `item_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '批量创建项标识',
-  `job_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属批量创建作业标识',
-  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前登录租户标识',
+  `item_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '批量创建项标识',
+  `job_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属批量创建作业标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前登录租户标识',
   `item_index` int NOT NULL COMMENT '创建项在提交清单中的顺序',
-  `source_table_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '来源登记表标识',
-  `source_table_name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL COMMENT '提交时的来源表名称快照',
-  `source_catalog_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源数据目录标识',
-  `target_table_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '已物化目标登记表标识',
-  `target_table_name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL COMMENT '提交时的目标表名称快照',
-  `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'PENDING' COMMENT '创建项状态：PENDING、RUNNING、SUCCEEDED、FAILED',
+  `source_table_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '来源登记表标识',
+  `source_table_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '提交时的来源表名称快照',
+  `source_catalog_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源数据目录标识',
+  `target_table_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '已物化目标登记表标识',
+  `target_table_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '提交时的目标表名称快照',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'PENDING' COMMENT '创建项状态：PENDING、RUNNING、SUCCEEDED、FAILED',
   `attempt_count` int NOT NULL DEFAULT '0' COMMENT '已领取执行的次数',
-  `lease_token` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '当前执行尝试的随机租约标识',
+  `lease_token` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '当前执行尝试的随机租约标识',
   `claimed_time` datetime(6) DEFAULT NULL COMMENT '最近一次领取执行时间',
   `completed_time` datetime(6) DEFAULT NULL COMMENT '最近一次完成或失败时间',
-  `task_id` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '真实数据接入任务标识',
+  `task_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '真实数据接入任务标识',
   `was_existing` tinyint(1) DEFAULT NULL COMMENT '是否复用已有接入任务：0新建，1复用',
-  `error_message` text COLLATE utf8mb4_general_ci COMMENT '最近一次创建失败原因',
+  `error_message` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '最近一次创建失败原因',
   `created_time` datetime(6) NOT NULL COMMENT '创建项入库时间',
   `updated_time` datetime(6) NOT NULL COMMENT '创建项最近更新时间',
   PRIMARY KEY (`item_id`),
@@ -2589,14 +2589,14 @@ CREATE TABLE `ods_batch_create_item_t` (
 
 -- TABLE ods_batch_create_job_t
 CREATE TABLE `ods_batch_create_job_t` (
-  `job_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '批量创建作业标识',
-  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前登录租户标识',
-  `request_key` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '客户端提交幂等键',
-  `job_name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL COMMENT '作业显示名称',
-  `source_db_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '来源数据源标识',
-  `target_db_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '目标数据源标识',
-  `match_rule_json` longtext COLLATE utf8mb4_general_ci COMMENT '提交时的表名匹配规则快照',
-  `status` varchar(16) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'RUNNING' COMMENT '作业状态：RUNNING、SUCCEEDED、PARTIAL、FAILED、STOPPED',
+  `job_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '批量创建作业标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前登录租户标识',
+  `request_key` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '客户端提交幂等键',
+  `job_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '作业显示名称',
+  `source_db_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '来源数据源标识',
+  `target_db_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '目标数据源标识',
+  `match_rule_json` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '提交时的表名匹配规则快照',
+  `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'RUNNING' COMMENT '作业状态：RUNNING、SUCCEEDED、PARTIAL、FAILED、STOPPED',
   `stop_requested` tinyint(1) NOT NULL DEFAULT '0' COMMENT '是否停止领取后续创建项：0否，1是',
   `total_count` int NOT NULL COMMENT '创建项总数',
   `created_time` datetime(6) NOT NULL COMMENT '作业创建时间',
@@ -2810,7 +2810,7 @@ CREATE TABLE `rm_blacklist_t` (
   `user_ip` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户IP地址',
   `beg_time` datetime(6) DEFAULT NULL COMMENT '开始时间',
   `end_time` datetime(6) DEFAULT NULL COMMENT '结束时间',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -2823,7 +2823,7 @@ CREATE TABLE `rm_blacklist_t` (
 
 -- TABLE rm_menu_t
 CREATE TABLE `rm_menu_t` (
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
   `name` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '名称',
   `parent_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '父级标识',
@@ -2855,7 +2855,7 @@ CREATE TABLE `rm_menu_t` (
 
 -- TABLE rm_org_t
 CREATE TABLE `rm_org_t` (
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
   `name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '名称',
   `parent_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '父级标识',
@@ -2892,7 +2892,7 @@ CREATE TABLE `rm_org_t` (
 
 -- TABLE rm_role_menu_rela_t
 CREATE TABLE `rm_role_menu_rela_t` (
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
   `role_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '角色标识',
   `app_resource_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '应用资源标识',
@@ -2905,7 +2905,7 @@ CREATE TABLE `rm_role_menu_rela_t` (
 
 -- TABLE rm_role_t
 CREATE TABLE `rm_role_t` (
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
   `create_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
   `update_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
@@ -2927,7 +2927,7 @@ CREATE TABLE `rm_role_t` (
 
 -- TABLE rm_user_org_rela_t
 CREATE TABLE `rm_user_org_rela_t` (
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
   `org_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '组织标识',
   `user_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户标识',
@@ -2945,7 +2945,7 @@ CREATE TABLE `rm_user_org_rela_t` (
 
 -- TABLE rm_user_role_rela_t
 CREATE TABLE `rm_user_role_rela_t` (
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
   `role_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '角色标识',
   `user_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户标识',
@@ -2961,50 +2961,50 @@ CREATE TABLE `rm_user_role_rela_t` (
 
 -- TABLE rm_user_t
 CREATE TABLE `rm_user_t` (
-  `id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `real_name` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '真实名称',
-  `user_name` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户名称',
-  `password` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '密码摘要，不存储明文',
-  `phone` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '电话',
-  `id_card` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '标识卡片',
-  `gender` varchar(2) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '性别',
+  `id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
+  `real_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '真实名称',
+  `user_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户名称',
+  `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '密码摘要，不存储明文',
+  `phone` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '电话',
+  `id_card` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '标识卡片',
+  `gender` varchar(2) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '性别',
   `date_birth` date DEFAULT NULL COMMENT '出生日期',
-  `nation` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '民族',
-  `native_place` varchar(200) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '籍贯地点',
+  `nation` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '民族',
+  `native_place` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '籍贯地点',
   `status` smallint DEFAULT NULL COMMENT '状态',
-  `user_code` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户编码',
+  `user_code` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户编码',
   `data_src` int DEFAULT NULL COMMENT '数据来源',
   `sort_num` int DEFAULT NULL COMMENT '排序数量',
   `rank_sort` int DEFAULT NULL COMMENT '职级排序',
-  `app_file_id` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '应用文件标识',
+  `app_file_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '应用文件标识',
   `charge_status` int DEFAULT NULL COMMENT '负责人状态',
   `user_status` smallint DEFAULT NULL COMMENT '用户状态',
-  `origin_user_id` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户标识',
+  `origin_user_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户标识',
   `pwd_status` smallint DEFAULT NULL COMMENT '密码状态',
   `has_login` smallint DEFAULT NULL COMMENT '是否登录',
   `change_pwd_time` datetime(6) DEFAULT NULL COMMENT '最近密码修改时间',
-  `office_address` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '办公地址',
-  `create_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
-  `update_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
+  `office_address` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '办公地址',
+  `create_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
+  `update_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `create_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `deleted` smallint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `email` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '邮箱',
-  `fax_phone` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '传真电话',
-  `fixed_phone` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '固定电话',
-  `job_number` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '任务编号',
+  `email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '邮箱',
+  `fax_phone` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '传真电话',
+  `fixed_phone` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '固定电话',
+  `job_number` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '任务编号',
   `user_from` int DEFAULT NULL COMMENT '用户来源',
   `user_type` smallint DEFAULT NULL COMMENT '用户类型',
-  `origin_user_types` varchar(512) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户类型集合（兼容字段）',
-  `origin_user_ids` varchar(512) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户标识集合（兼容字段）',
-  `origin_user_type` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户类型',
-  `origin_position` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源职务',
-  `origin_rank` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源职级',
-  `authorized_strength` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '授权强度',
+  `origin_user_types` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户类型集合（兼容字段）',
+  `origin_user_ids` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户标识集合（兼容字段）',
+  `origin_user_type` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户类型',
+  `origin_position` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源职务',
+  `origin_rank` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源职级',
+  `authorized_strength` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '授权强度',
   `is_temporary` int DEFAULT NULL COMMENT '是否临时',
   `expire_time` datetime(6) DEFAULT NULL COMMENT '过期时间',
   `is_effective` smallint DEFAULT NULL COMMENT '是否有效',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '所属公安租户',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '所属公安租户',
   `active_login_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci GENERATED ALWAYS AS ((case when (`deleted` = 0) then lower(trim(`user_name`)) else NULL end)) STORED COMMENT '有效登录名称',
   PRIMARY KEY (`id`),
   UNIQUE KEY `INDEX33565828` (`id`),
@@ -3328,7 +3328,7 @@ CREATE TABLE `sym_application_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `revision` int DEFAULT NULL COMMENT '修订版本',
   `reg_time` datetime(6) DEFAULT NULL COMMENT '登记时间',
   `asset_status` int DEFAULT NULL COMMENT '资产状态',
@@ -3341,9 +3341,9 @@ CREATE TABLE `sym_application_t` (
   `last_synced_at` datetime DEFAULT NULL COMMENT '最近一次品高同步时间',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565331` (`tid`) USING BTREE,
-  UNIQUE KEY `uk_sym_application_pingao_source` (`tenant_id`,`data_origin`,`source_key`) USING BTREE,
+  UNIQUE KEY `uk_sym_application_pingao_source` (`tenant_id`,`data_origin`,`source_key`),
   KEY `idx_application_tenant` (`tenant_id`,`is_del`,`updated_time`) USING BTREE,
-  KEY `idx_sym_application_pingao_options` (`tenant_id`,`data_origin`,`sync_active`,`is_del`,`app_name`) USING BTREE
+  KEY `idx_sym_application_pingao_options` (`tenant_id`,`data_origin`,`sync_active`,`is_del`,`app_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='应用系统管理-业务应用系统';
 
 -- TABLE sym_area_t
@@ -3361,7 +3361,7 @@ CREATE TABLE `sym_area_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565332` (`tid`) USING BTREE,
   KEY `idx_sym_area_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
@@ -3376,7 +3376,7 @@ CREATE TABLE `sym_black_list_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565333` (`tid`) USING BTREE,
   KEY `idx_sym_black_list_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
@@ -3426,7 +3426,7 @@ CREATE TABLE `sym_dict_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` int DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `tag_type` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '标签类型',
   `icon` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '图标',
   `biz_type` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '业务类型',
@@ -3453,7 +3453,7 @@ CREATE TABLE `sym_dict_type_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565335` (`tid`) USING BTREE,
   KEY `idx_sym_dict_type_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
@@ -3469,11 +3469,11 @@ CREATE TABLE `sym_form` (
   `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565336` (`tid`) USING BTREE,
   KEY `idx_sym_form_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='动态表单-动态表单配置';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=DYNAMIC COMMENT='动态表单-动态表单配置';
 
 -- TABLE sym_server_t
 CREATE TABLE `sym_server_t` (
@@ -3492,7 +3492,7 @@ CREATE TABLE `sym_server_t` (
   `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565337` (`tid`) USING BTREE,
   KEY `idx_sym_server_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
@@ -3501,7 +3501,7 @@ CREATE TABLE `sym_server_t` (
 -- TABLE wf_approval_action_log_t
 CREATE TABLE `wf_approval_action_log_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `instance_id` bigint DEFAULT NULL COMMENT '实例标识',
   `task_id` bigint DEFAULT NULL COMMENT '任务标识',
   `business_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '业务标识',
@@ -3521,7 +3521,7 @@ CREATE TABLE `wf_approval_action_log_t` (
 -- TABLE wf_approval_delegation_t
 CREATE TABLE `wf_approval_delegation_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `delegator_user_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '委托人用户标识',
   `delegate_user_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '受托人用户标识',
   `flow_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '流程编码',
@@ -3543,7 +3543,7 @@ CREATE TABLE `wf_approval_delegation_t` (
 -- TABLE wf_approval_reminder_t
 CREATE TABLE `wf_approval_reminder_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `instance_id` bigint NOT NULL COMMENT '实例标识',
   `task_id` bigint NOT NULL COMMENT '任务标识',
   `business_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '业务标识',
@@ -3568,7 +3568,7 @@ CREATE TABLE `wf_approval_reminder_t` (
 -- TABLE wf_process_binding_t
 CREATE TABLE `wf_process_binding_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699267' COMMENT '租户标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   `business_type` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '业务类型',
   `flow_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '流程编码',
   `form_component` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '表单组件',
@@ -3588,5 +3588,20 @@ CREATE TABLE `wf_process_binding_t` (
   UNIQUE KEY `uk_wf_binding_tenant_business` (`tenant_id`,`business_type`) USING BTREE,
   KEY `idx_wf_binding_flow` (`tenant_id`,`flow_code`,`status`,`is_del`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='流程审批-业务流程绑定';
+
+-- VIEW da_app_catalog_rela
+CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `da_app_catalog_rela` AS select `sym_application_t`.`tid` AS `tid`,`sym_application_t`.`tenant_id` AS `tenant_id`,cast(NULL as char(32) charset utf8mb4) AS `revision`,`sym_application_t`.`created_by` AS `created_by`,`sym_application_t`.`created_time` AS `created_time`,`sym_application_t`.`updated_by` AS `updated_by`,`sym_application_t`.`updated_time` AS `updated_time`,`sym_application_t`.`is_del` AS `is_del`,`sym_application_t`.`tid` AS `app_id`,cast(NULL as char(32) charset utf8mb4) AS `data_catalog_id` from `sym_application_t` where (1 = 0);
+
+-- VIEW da_asset_api_rela
+CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `da_asset_api_rela` AS select `api_info_t`.`tid` AS `tid`,cast(NULL as char(32) charset utf8mb4) AS `revision`,`api_info_t`.`created_by` AS `created_by`,`api_info_t`.`created_time` AS `created_time`,`api_info_t`.`updated_by` AS `updated_by`,`api_info_t`.`updated_time` AS `updated_time`,`api_info_t`.`is_del` AS `is_del`,`api_info_t`.`tid` AS `api_id`,`api_info_t`.`catalog_id` AS `catalog_id`,`api_info_t`.`tenant_id` AS `tenant_id` from `api_info_t` where (1 = 0);
+
+-- VIEW da_asset_catalog_item_t
+CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `da_asset_catalog_item_t` AS select `da_catalog_item_t`.`tid` AS `tid`,`da_catalog_item_t`.`catalog_id` AS `catalog_id`,`da_catalog_item_t`.`tenant_id` AS `tenant_id`,`da_catalog_item_t`.`revision` AS `revision`,`da_catalog_item_t`.`created_by` AS `created_by`,`da_catalog_item_t`.`created_time` AS `created_time`,`da_catalog_item_t`.`updated_by` AS `updated_by`,`da_catalog_item_t`.`updated_time` AS `updated_time`,`da_catalog_item_t`.`is_del` AS `is_del`,`da_catalog_item_t`.`col_name` AS `col_name`,`da_catalog_item_t`.`col_en` AS `col_en`,`da_catalog_item_t`.`col_type` AS `col_type`,`da_catalog_item_t`.`col_comment` AS `col_comment`,`da_catalog_item_t`.`col_length` AS `col_length`,`da_catalog_item_t`.`is_pk` AS `is_pk`,`da_catalog_item_t`.`is_masking` AS `is_masking`,`da_catalog_item_t`.`is_fk` AS `is_fk`,`da_catalog_item_t`.`is_nullable` AS `is_nullable`,`da_catalog_item_t`.`date_format` AS `date_format`,`da_catalog_item_t`.`mark_lvl` AS `mark_lvl`,`da_catalog_item_t`.`col_unit` AS `col_unit`,`da_catalog_item_t`.`col_precision` AS `col_precision`,`da_catalog_item_t`.`masking_id` AS `masking_id`,`da_catalog_item_t`.`sort_no` AS `sort_no`,`da_catalog_item_t`.`share_type` AS `share_type`,`da_catalog_item_t`.`share_condition` AS `share_condition`,`da_catalog_item_t`.`is_dict` AS `is_dict`,`da_catalog_item_t`.`dict_name` AS `dict_name`,`da_catalog_item_t`.`col_max_length` AS `col_max_length`,`da_catalog_item_t`.`default_value` AS `default_value`,`da_catalog_item_t`.`data_standard_id` AS `data_standard_id`,`da_catalog_item_t`.`quality_rule` AS `quality_rule`,`da_catalog_item_t`.`enable_code_table` AS `enable_code_table`,`da_catalog_item_t`.`code_table_id` AS `code_table_id`,`da_catalog_item_t`.`source_table_column_id` AS `source_table_column_id`,`da_catalog_item_t`.`target_table_column_id` AS `target_table_column_id` from `da_catalog_item_t`;
+
+-- VIEW da_asset_t
+CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `da_asset_t` AS select `da_catalog_t`.`tid` AS `tid`,`da_catalog_t`.`tenant_id` AS `tenant_id`,`da_catalog_t`.`revision` AS `revision`,`da_catalog_t`.`created_by` AS `created_by`,`da_catalog_t`.`created_time` AS `created_time`,`da_catalog_t`.`updated_by` AS `updated_by`,`da_catalog_t`.`updated_time` AS `updated_time`,'catalog' AS `asset_type`,`da_catalog_t`.`is_del` AS `is_del`,`da_catalog_t`.`reg_time` AS `reg_time`,`da_catalog_t`.`asset_status` AS `asset_status`,`da_catalog_t`.`flow_status` AS `flow_status`,cast(NULL as char(255) charset utf8mb4) AS `data_catalog_num`,cast(NULL as char(255) charset utf8mb4) AS `table_num`,cast(NULL as char(32) charset utf8mb4) AS `flow_order_id` from `da_catalog_t`;
+
+-- VIEW data_apply_form_catalog_rela
+CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `data_apply_form_catalog_rela` AS select `da_catalog_apply_form_rela`.`tid` AS `tid`,`da_catalog_apply_form_rela`.`apply_form_id` AS `apply_form_id`,`da_catalog_apply_form_rela`.`catalog_id` AS `catalog_id`,`da_catalog_apply_form_rela`.`sort_no` AS `sort_no`,`da_catalog_apply_form_rela`.`tenant_id` AS `tenant_id`,`da_catalog_apply_form_rela`.`revision` AS `revision`,`da_catalog_apply_form_rela`.`created_time` AS `created_time`,`da_catalog_apply_form_rela`.`updated_by` AS `updated_by`,`da_catalog_apply_form_rela`.`updated_time` AS `updated_time`,`da_catalog_apply_form_rela`.`created_by` AS `created_by`,`da_catalog_apply_form_rela`.`is_del` AS `is_del`,`da_catalog_apply_form_rela`.`catalog_org_id` AS `catalog_org_id`,`da_catalog_apply_form_rela`.`catalog_org_path` AS `catalog_org_path` from `da_catalog_apply_form_rela`;
 
 SET FOREIGN_KEY_CHECKS=1;

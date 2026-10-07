@@ -16,7 +16,7 @@ import sys
 spec = importlib.util.spec_from_file_location('export_db', Path(__file__).with_name('export-db.py'))
 export = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(export)
-AUTHORITY = 'baseline_ga_old'
+AUTHORITY = 'baseline_ga'
 
 
 def grouped(rows, table_key, name_key):

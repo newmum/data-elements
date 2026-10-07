@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.model.approval.ApprovalCallbackRequest;
 import com.linewell.dataelement.model.approval.ApprovalHandleRequest;
 import com.linewell.dataelement.model.approval.ApprovalPreviousNodeRequest;
-import com.linewell.dataelement.model.approval.ApprovalRestoreAssetStatusRequest;
 import com.linewell.dataelement.model.approval.ApprovalRevokeRequest;
 import com.linewell.dataelement.model.approval.ApprovalStartRequest;
 import com.linewell.dataelement.model.approval.ApprovalTerminationRequest;
@@ -59,11 +58,6 @@ public class ApprovalFlowMagicModule {
     @Comment("处理流程节点完成回调")
     public Object finshHandle(Map<String, Object> body) {
         return service.finshHandle(command(body, ApprovalCallbackRequest.class));
-    }
-
-    @Comment("按流程单号恢复关联资产状态")
-    public Object restoreAssetStatusByFlowOrderId(Map<String, Object> body) {
-        return service.restoreAssetStatusByFlowOrderId(command(body, ApprovalRestoreAssetStatusRequest.class));
     }
 
     private <T> T command(Map<String, Object> body, Class<T> type) {

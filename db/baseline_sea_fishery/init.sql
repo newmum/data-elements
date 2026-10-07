@@ -798,30 +798,6 @@ CREATE TABLE `da_metadata_t` (
   KEY `idx_da_metadata_standard_active` (`tenant_id`,`publish_status`,`is_del`,`meta_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据标准-数据治理元数据规则';
 
--- TABLE da_order_asset_rela
-CREATE TABLE `da_order_asset_rela` (
-  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699266' COMMENT '租户标识',
-  `revision` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '修订版本',
-  `created_by` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
-  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
-  `updated_by` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
-  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
-  `is_del` int DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `flow_order_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '流程顺序标识',
-  `flow_type` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '流程类型',
-  `flow_status` int DEFAULT NULL COMMENT '流程状态',
-  `asset_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资产标识',
-  `asset_type` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资产类型',
-  `asset_version` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资产版本',
-  `asset_snapshot_data` longtext COLLATE utf8mb4_general_ci COMMENT '资产快照数据',
-  `asset_new_data` longtext COLLATE utf8mb4_general_ci COMMENT '资产新值数据',
-  `instance_id` longblob COMMENT '实例标识',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `INDEX33565279` (`tid`),
-  KEY `idx_da_order_asset_rela_tenant_is_del` (`tenant_id`,`is_del`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='资产审批-订单资产关联';
-
 -- TABLE da_prop_t
 CREATE TABLE `da_prop_t` (
   `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
@@ -2353,26 +2329,6 @@ CREATE TABLE `idaas_receiver_receipt_t` (
   KEY `ix_receiver_event` (`app_id`,`instance_id`,`event_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-每次接收持久回执与重放约束';
 
--- TABLE kg_relation
-CREATE TABLE `kg_relation` (
-  `tid` bigint NOT NULL COMMENT '纯数字全局唯一标识',
-  `tenant_id` bigint NOT NULL COMMENT '租户标识',
-  `dataset_id` bigint NOT NULL COMMENT '所属数据集标识',
-  `source_entity_id` bigint NOT NULL COMMENT '源实体标识',
-  `target_entity_id` bigint NOT NULL COMMENT '目标实体标识',
-  `relation_type` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '关系类型',
-  `relation_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '关系名称',
-  `relation_properties` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '关系属性定义',
-  `relation_status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '关系状态',
-  `created_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '创建时间',
-  `created_by` bigint DEFAULT NULL COMMENT '创建人标识',
-  `updated_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '更新时间',
-  `updated_by` bigint DEFAULT NULL COMMENT '更新人标识',
-  `is_del` smallint NOT NULL DEFAULT '0' COMMENT '逻辑删除标识，0正常，1删除',
-  PRIMARY KEY (`tid`),
-  KEY `idx_kg_relation_source` (`tenant_id`,`source_entity_id`,`is_del`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='知识图谱-实体关系';
-
 -- TABLE log_request_t
 CREATE TABLE `log_request_t` (
   `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
@@ -2603,22 +2559,6 @@ CREATE TABLE `nifi_pipeline_t` (
   UNIQUE KEY `INDEX33565320` (`id`),
   KEY `idx_nifi_pipeline_tenant_is_del` (`tenant_id`,`is_del`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-数据集成管道（NiFi）';
-
--- TABLE nrta_tv_drama_approval_t
-CREATE TABLE `nrta_tv_drama_approval_t` (
-  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
-  `drama_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
-  `production_org` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
-  `license_no` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
-  `episode_count` int NOT NULL,
-  `approval_status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
-  `approval_date` datetime DEFAULT NULL,
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
-  `updated_time` datetime(6) NOT NULL,
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_nrta_tv_license` (`tenant_id`,`license_no`),
-  KEY `ix_nrta_tv_status` (`tenant_id`,`approval_status`,`approval_date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='广电业务-电视剧审批登记';
 
 -- TABLE ods_batch_create_item_t
 CREATE TABLE `ods_batch_create_item_t` (

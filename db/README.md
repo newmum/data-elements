@@ -9,19 +9,16 @@
 | 角色 | 实际数据库 | 方言 | 表数量 |
 | --- | --- | --- | ---: |
 | 控制库 | `baseline` | MySQL | 50 |
-| 公安 | `baseline_ga_old` | MySQL | 143 |
-| 澄天 | `chengtian` | MySQL | 143 |
-| 海渔 | `baseline_sea_fishery` | MySQL | 143 |
-| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 143 |
+| 公安 | `baseline_ga` | MySQL | 140 |
+| 澄天 | `chengtian` | MySQL | 140 |
+| 海渔 | `baseline_sea_fishery` | MySQL | 140 |
+| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 140 |
 
-四个行业租户维护同一套业务表、列、主键、索引和约束，以 `baseline_ga_old` 为统一结构权威。当前包含公安原 139 张表和以下四张有现用功能或资产依据的公共表；各库都有完整定义，新增空表不复制其他租户数据。
+四个行业租户维护同一套业务表、列、主键、索引和约束，以 `baseline_ga` 为统一结构权威。当前包含公安原 139 张表和以下一张有现用功能依据的公共表；各库都有完整定义，新增空表不复制其他租户数据。
 
 | 公共表 | 业务依据 |
 | --- | --- |
 | `service_node_t` | 数据服务节点列表、保存、删除接口及有效节点记录 |
-| `da_order_asset_rela` | Java 订单资产实体/服务及资产删除关联清理 |
-| `kg_relation` | 知识图谱关系清单接口 |
-| `nrta_tv_drama_approval_t` | 广电当前租户已有电视剧审批数据表和资源目录登记 |
 
 控制库保存租户路由、共享资源与身份控制结构，独立于行业表集合。`baseline.api_backup_t` 和 `baseline.ui_component_history_t` 是编辑器历史功能表，保留。各租户保留自己的租户 ID 默认值、部署设置和业务数据；NiFi 证书校验设置按部署维护。
 

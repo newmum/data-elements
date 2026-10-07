@@ -300,15 +300,6 @@ if (pipelineIds.size() > 0) {
         .update({ is_del: 1, updated_at: System.currentTimeMillis() })
 }
 
-var assetIds = [tableId]
-for (catalogId in catalogIds) {
-    addUnique(assetIds, catalogId)
-}
-cleanup.relationRows = cleanup.relationRows + safeUpdate('da_order_asset_rela', () =>
-    db.table('da_order_asset_rela').where().in('asset_id', assetIds).eq('is_del', 0)
-        .update({ is_del: 1, updated_time: nowTime })
-)
-
 var tableDeleted = db.table('db_table_t').where().eq('tid', tableId).eq('is_del', 0)
     .update({ is_del: 1, updated_time: nowTime })
 cleanup.dictionaryRelations = tableDeleted > 0 ? reconcileRetiredDictionaryRelations(true) : dictionaryRelationPlan
