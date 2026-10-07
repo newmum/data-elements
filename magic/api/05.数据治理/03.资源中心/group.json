@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "46fe687ba7304a608b5e2865725ad21c",
+  "name" : "03.资源中心",
+  "type" : "api",
+  "parentId" : "4fb5fbaf61b24db1a05ea12ae38437b1",
+  "path" : "/center",
+  "createTime" : 1781960051928,
+  "updateTime" : 1784437771538,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

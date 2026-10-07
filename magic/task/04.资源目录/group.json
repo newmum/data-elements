@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "34f1d1bf50ba4aa58228a74ad8ce0738",
+  "name" : "04.资源目录",
+  "type" : "task",
+  "parentId" : "0",
+  "path" : "category",
+  "createTime" : 1782660713490,
+  "updateTime" : 1784440284509,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

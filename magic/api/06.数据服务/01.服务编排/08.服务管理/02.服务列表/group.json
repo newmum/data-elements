@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "45b082c7d94f4ff08e3b9bf367521723",
+  "name" : "02.服务列表",
+  "type" : "api",
+  "parentId" : "2baeb325734a4f348df335661b205952",
+  "path" : "/api",
+  "createTime" : 1782955363352,
+  "updateTime" : 1784437771886,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

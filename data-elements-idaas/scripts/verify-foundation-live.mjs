@@ -7,7 +7,7 @@ const base = process.env.IDAAS_FRONT_URL || 'http://localhost:3005';
 const username = process.env.IDAAS_OPERATOR_USERNAME;
 const password = process.env.IDAAS_OPERATOR_PASSWORD;
 if (!username || !password) throw new Error('Provide platform acceptance credentials through environment variables.');
-const output = resolve('docs/第一阶段实施20260928/界面验收');
+const output = resolve(import.meta.dirname, '../../logs/idaas/foundation-live');
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const checks = [];

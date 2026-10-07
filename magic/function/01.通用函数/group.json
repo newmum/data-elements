@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "0f27d7cf99494ceca369c14f35fbb987",
+  "name" : "01.通用函数",
+  "type" : "function",
+  "parentId" : "0",
+  "path" : "/common",
+  "createTime" : 1782660713429,
+  "updateTime" : 1753943361800,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

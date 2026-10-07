@@ -1,6 +1,0 @@
-
-> nifi-canvas-frontend@1.1.0 prebuild
-> node scripts/check-dependencies.mjs
-
-缺少 29 项依赖：@ant-design/icons, @antv/x6, @antv/x6-plugin-clipboard, @antv/x6-plugin-history, @antv/x6-plugin-keyboard, @antv/x6-plugin-minimap, @antv/x6-plugin-selection, @antv/x6-plugin-snapline, @antv/x6-react-shape, @codemirror/commands, @codemirror/lang-json, @codemirror/lang-sql, @codemirror/state, @codemirror/view, @tanstack/react-query, @uiw/react-codemirror, antd, axios, dayjs, nanoid, react, react-dom, react-router-dom, zustand, @types/react, @types/react-dom, @vitejs/plugin-react, typescript, vite
-依赖检查未通过，不能声称已完成生产构建。参见 README。

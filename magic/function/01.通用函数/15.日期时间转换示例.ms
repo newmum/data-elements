@@ -1,0 +1,17 @@
+{
+  "properties": {},
+  "id": "d38635c1476543c8bdccfcd5a767f275",
+  "groupId": "0f27d7cf99494ceca369c14f35fbb987",
+  "script": "// 共享函数：15.日期时间转换示例\n// 函数路径：/common/dataTimeConverter\n// 业务说明：历史演示函数：内部定义日期转换与安全转换方法，然后对脚本内固定样例逐项转换并返回结果列表；当前没有外部调用方。\n// 函数输入：无显式参数。\nimport java.time.LocalDateTime;\nimport java.time.format.DateTimeFormatter;\nimport java.time.format.DateTimeParseException;\n\n/**\n * 时间格式转换工具类\n * 支持多种时间格式，统一转换为 yyyy-MM-dd HH:mm:ss 格式\n */\n \n// 目标格式\nvar TARGET_FORMATTER = DateTimeFormatter.ofPattern(\"yyyy-MM-dd HH:mm:ss\");\n\n// 支持的时间格式列表\nvar SUPPORTED_FORMATTERS = [\n    // yyyyMMddHHmmss (14位数字，无分隔符)\n    DateTimeFormatter.ofPattern(\"yyyyMMddHHmmss\"),\n    // yyyy-MM-dd HH:mm:ss (标准格式)\n    DateTimeFormatter.ofPattern(\"yyyy-MM-dd HH:mm:ss\"),\n    // yyyy-MM-dd HH:mm:ss.S (带小数点)\n    DateTimeFormatter.ofPattern(\"yyyy-MM-dd HH:mm:ss.S\"),\n    // yyyy-MM-dd HH:mm:ss.SS (带两位小数)\n    DateTimeFormatter.ofPattern(\"yyyy-MM-dd HH:mm:ss.SS\"),\n    // yyyy-MM-dd HH:mm:ss.SSS (带三位小数)\n    DateTimeFormatter.ofPattern(\"yyyy-MM-dd HH:mm:ss.SSS\")\n]\n\n/**\n * 将各种时间格式转换为 yyyy-MM-dd HH:mm:ss 格式\n * \n * @param dateTimeStr 输入的时间字符串\n * @return 格式化后的时间字符串 (yyyy-MM-dd HH:mm:ss)\n * @throws IllegalArgumentException 如果无法解析输入的时间格式\n */\nvar convert = (dateTimeStr) => {\n    if (dateTimeStr == null || dateTimeStr.trim().isEmpty()) {\n        throw new IllegalArgumentException(\"时间字符串不能为空\");\n    }\n    \n    String trimmed = dateTimeStr.trim();\n    \n    // 尝试使用各种格式解析\n    for ( formatter in SUPPORTED_FORMATTERS) {\n        try {\n            LocalDateTime dateTime = LocalDateTime.parse(trimmed, formatter);\n            return dateTime.format(TARGET_FORMATTER);\n        } catch (e) {\n            // 继续尝试下一个格式\n            continue;\n        }\n    }\n    \n    // 如果所有格式都解析失败，抛出异常\n    throw new IllegalArgumentException(\n        \"无法解析时间格式: \" + dateTimeStr + \n        \"。支持的格式: yyyyMMddHHmmss, yyyy-MM-dd HH:mm:ss, yyyy-MM-dd HH:mm:ss.S等\");\n}\n\n/**\n * 将各种时间格式转换为 yyyy-MM-dd HH:mm:ss 格式（安全版本，解析失败返回null）\n * \n * @param dateTimeStr 输入的时间字符串\n * @return 格式化后的时间字符串，如果解析失败则返回null\n */\nvar convertSafely = (dateTimeStr) => {\n    try {\n        return convert(dateTimeStr);\n    } catch (e) {\n        return null;\n    }\n}\n    \n    var testCases = {\n            \"20251204012100\",\n            \"2024-04-08 02:27:54.0\",\n            \"2024-04-08 02:27:56.0\",\n            \"2019-09-23 16:30:15.0\",\n            \"1970-01-01 08:00:00\",\n            \"20251203232121\",\n            \"2024-04-08 02:28:21.0\",\n            \"20251203232552\",\n            \"20251204234610\",\n            \"20251204233933\"\n        };\n\n        \n var tt = [];       \n        \n        System.out.println(\"时间格式转换测试：\");\n        System.out.println(\"==========================================\");\n        for (testCase in testCases) {\n            try {\n                String result = dataTimeConverter.convertSafely(testCase);\n                print(result);\n                tt.add(result);\n            } catch (e) {\n                tt.add(result);\n            }\n        }\nreturn tt;\n",
+  "name": "15.日期时间转换示例",
+  "createTime": 1782660730459,
+  "updateTime": 1765160217788,
+  "lock": null,
+  "createBy": null,
+  "updateBy": null,
+  "path": "/dataTimeConverter",
+  "description": "历史演示函数：内部定义日期转换与安全转换方法，然后对脚本内固定样例逐项转换并返回结果列表；当前没有外部调用方。",
+  "returnType": null,
+  "mappingPath": null,
+  "parameters": []
+}

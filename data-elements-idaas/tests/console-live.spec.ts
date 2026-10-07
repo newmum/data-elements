@@ -38,7 +38,7 @@ for (const width of [390, 1440, 1920]) test(`真实统一控制台公众菜单�
     await page.getByLabel('全局搜索内容').fill('组织与用户');
     await page.locator('.command-result').filter({ hasText: '组织与用户' }).click();
     await expect(page).toHaveURL(/console\/workforce\/organization$/);
-    await expect(page.getByRole('heading', { name: '用户管理', exact: true })).toBeVisible({ timeout: 60000 });
+    await expect(page.locator('.organization-layout .table-card')).toBeVisible({ timeout: 60000 });
     await page.screenshot({ path: info.outputPath(`live-console-organization-${width}.png`), fullPage: true, animations: 'disabled' });
     expect(errors).toEqual([]);
 });

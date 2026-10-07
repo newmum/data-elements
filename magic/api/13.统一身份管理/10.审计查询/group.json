@@ -1,0 +1,15 @@
+{
+  "properties": {},
+  "id": "a2d73d152a83535d9993586812fb257f",
+  "name": "10.审计查询",
+  "type": "api",
+  "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
+  "path": "/audit",
+  "createTime": 1790612165860,
+  "updateTime": 1790612165860,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================

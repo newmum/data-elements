@@ -1,0 +1,10 @@
+{
+  "properties" : { },
+  "id" : "ods_api_pull_group_01",
+  "name" : "08.API拉取",
+  "type" : "api",
+  "parentId" : "1f4028f20aaa4f379b5e37a343b99fa9",
+  "path" : "/api-pull",
+  "createTime" : 1789106804607,
+  "updateTime" : 1789106804607
+}

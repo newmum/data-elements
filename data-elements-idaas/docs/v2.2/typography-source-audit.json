@@ -138,7 +138,7 @@
       "detail": "13个页面实现文件，共享模板覆盖多个路由"
     }
   ],
-  "sourceFileCount": 54,
+  "sourceFileCount": 55,
   "pageImplementationFiles": [
     "src/pages/Applications.tsx",
     "src/pages/Audit.tsx",
@@ -648,10 +648,6 @@
       ],
       "fontOverrides": [
         {
-          "line": 182,
-          "value": "'var(--iam-font-caption)'"
-        },
-        {
           "line": 194,
           "value": "9"
         },
@@ -716,7 +712,7 @@
       "componentUses": [
         {
           "component": "Modal",
-          "line": 29,
+          "line": 30,
           "attributes": [
             "title={kind === 'subject' ? '人员资料分配' : '机构资料范围'}"
           ]
@@ -787,7 +783,7 @@
       "componentUses": [
         {
           "component": "Modal",
-          "line": 30,
+          "line": 31,
           "attributes": [
             "title={app.bindingStatus === 'VERIFIED' ? '重新检查应用关联' : '检查并保存应用关联'}"
           ]
@@ -850,7 +846,7 @@
         },
         {
           "component": "Card",
-          "line": 80,
+          "line": 99,
           "attributes": [
             "size=\"small\"",
             "className=\"table-card\""
@@ -858,22 +854,30 @@
         },
         {
           "component": "Text",
-          "line": 83,
+          "line": 102,
           "attributes": [
             "className=\"table-title\""
           ]
         },
         {
           "component": "Drawer",
-          "line": 158,
+          "line": 185,
           "attributes": [
             "title={title}",
-            "size={width}"
+            "size={width}",
+            "className={className}"
+          ]
+        },
+        {
+          "component": "h3",
+          "line": 186,
+          "attributes": [
+            "className=\"editor-section-title\""
           ]
         },
         {
           "component": "Drawer",
-          "line": 172,
+          "line": 200,
           "attributes": [
             "title={title}",
             "size={736}"
@@ -881,7 +885,7 @@
         },
         {
           "component": "Card",
-          "line": 197,
+          "line": 225,
           "attributes": [
             "size=\"small\"",
             "className=\"metric-card\""
@@ -889,7 +893,7 @@
         },
         {
           "component": "Text",
-          "line": 198,
+          "line": 226,
           "attributes": [
             "className=\"metric-label\""
           ]
@@ -915,20 +919,20 @@
       "componentUses": [
         {
           "component": "Modal",
-          "line": 79,
+          "line": 77,
           "attributes": [
             "title=\"导入用户\""
           ]
         },
         {
           "component": "Text",
-          "line": 79,
+          "line": 77,
           "attributes": []
         }
       ],
       "fontOverrides": [
         {
-          "line": 79,
+          "line": 77,
           "value": "28"
         }
       ]
@@ -954,7 +958,7 @@
       "componentUses": [
         {
           "component": "Modal",
-          "line": 12,
+          "line": 13,
           "attributes": [
             "title={'认证接入 · ' + client.name}"
           ]
@@ -968,7 +972,7 @@
       "componentUses": [
         {
           "component": "Card",
-          "line": 16,
+          "line": 17,
           "attributes": [
             "size=\"small\"",
             "title=\"法人资料与办理身份\""
@@ -976,14 +980,14 @@
         },
         {
           "component": "Modal",
-          "line": 26,
+          "line": 27,
           "attributes": [
             "title=\"登记法人资料\""
           ]
         },
         {
           "component": "Modal",
-          "line": 30,
+          "line": 31,
           "attributes": [
             "title=\"申请法人核验\""
           ]
@@ -995,6 +999,31 @@
       "file": "src/components/useElementWidth.ts",
       "sourceSyntaxErrors": 0,
       "componentUses": [],
+      "fontOverrides": []
+    },
+    {
+      "file": "src/components/UserEditor.tsx",
+      "sourceSyntaxErrors": 0,
+      "componentUses": [
+        {
+          "component": "RecordEditor",
+          "line": 198,
+          "attributes": [
+            "title={user ? '用户信息' : '新建用户'}",
+            "className=\"user-editor\""
+          ]
+        },
+        {
+          "component": "h3",
+          "line": 202,
+          "attributes": []
+        },
+        {
+          "component": "h3",
+          "line": 223,
+          "attributes": []
+        }
+      ],
       "fontOverrides": []
     },
     {
@@ -1033,7 +1062,7 @@
       "componentUses": [
         {
           "component": "h1",
-          "line": 15,
+          "line": 21,
           "attributes": []
         }
       ],
@@ -1113,12 +1142,13 @@
           "component": "RecordEditor",
           "line": 41,
           "attributes": [
-            "title=\"新建应用\""
+            "title=\"新建应用\"",
+            "className=\"application-editor\""
           ]
         },
         {
           "component": "Card",
-          "line": 124,
+          "line": 144,
           "attributes": [
             "size=\"small\"",
             "className=\"section-gap\""
@@ -1126,12 +1156,12 @@
         },
         {
           "component": "Text",
-          "line": 124,
+          "line": 144,
           "attributes": []
         },
         {
           "component": "Card",
-          "line": 125,
+          "line": 145,
           "attributes": [
             "size=\"small\"",
             "className=\"application-card\""
@@ -1139,45 +1169,46 @@
         },
         {
           "component": "Text",
-          "line": 125,
+          "line": 145,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 125,
+          "line": 145,
           "attributes": [
             "className=\"application-description\""
           ]
         },
         {
           "component": "Text",
-          "line": 125,
+          "line": 145,
           "attributes": []
         },
         {
           "component": "Card",
-          "line": 125,
+          "line": 145,
           "attributes": [
             "size=\"small\""
           ]
         },
         {
           "component": "DataTable",
-          "line": 125,
+          "line": 145,
           "attributes": [
             "title=\"应用列表\""
           ]
         },
         {
           "component": "RecordEditor",
-          "line": 126,
+          "line": 146,
           "attributes": [
-            "title=\"编辑应用信息\""
+            "title=\"编辑应用信息\"",
+            "className=\"application-editor\""
           ]
         },
         {
           "component": "Card",
-          "line": 170,
+          "line": 190,
           "attributes": [
             "size=\"small\"",
             "title=\"基本信息\""
@@ -1185,12 +1216,12 @@
         },
         {
           "component": "Text",
-          "line": 176,
+          "line": 195,
           "attributes": []
         },
         {
           "component": "Card",
-          "line": 182,
+          "line": 201,
           "attributes": [
             "size=\"small\"",
             "title=\"人数与权限\""
@@ -1198,7 +1229,7 @@
         },
         {
           "component": "Card",
-          "line": 198,
+          "line": 217,
           "attributes": [
             "size=\"small\"",
             "className=\"application-directory-card\"",
@@ -1207,7 +1238,7 @@
         },
         {
           "component": "Card",
-          "line": 199,
+          "line": 218,
           "attributes": [
             "size=\"small\"",
             "className=\"application-directory-card\"",
@@ -1216,67 +1247,67 @@
         },
         {
           "component": "DataTable",
-          "line": 201,
+          "line": 220,
           "attributes": [
             "title=\"平台应用角色\""
           ]
         },
         {
           "component": "DataTable",
-          "line": 202,
+          "line": 221,
           "attributes": [
             "title=\"平台应用资源\""
           ]
         },
         {
           "component": "DataTable",
-          "line": 203,
+          "line": 222,
           "attributes": [
             "title=\"平台有效授权用户\""
           ]
         },
         {
           "component": "Text",
-          "line": 203,
+          "line": 222,
           "attributes": []
         },
         {
           "component": "h1",
-          "line": 207,
+          "line": 226,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 207,
+          "line": 226,
           "attributes": []
         },
         {
           "component": "RecordEditor",
-          "line": 208,
+          "line": 227,
           "attributes": [
             "title={editRole ? '编辑角色' : '新建角色'}"
           ]
         },
         {
           "component": "RecordEditor",
-          "line": 209,
+          "line": 228,
           "attributes": [
             "title={editRes ? '编辑资源' : '新建资源'}"
           ]
         },
         {
           "component": "Text",
-          "line": 214,
+          "line": 233,
           "attributes": []
         }
       ],
       "fontOverrides": [
         {
-          "line": 125,
+          "line": 145,
           "value": "'var(--iam-font-secondary)'"
         },
         {
-          "line": 125,
+          "line": 145,
           "value": "'var(--iam-font-secondary)'"
         }
       ]
@@ -1432,12 +1463,12 @@
       "componentUses": [
         {
           "component": "h1",
-          "line": 22,
+          "line": 21,
           "attributes": []
         },
         {
           "component": "Title",
-          "line": 54,
+          "line": 50,
           "attributes": [
             "className=\"auth-page-title\"",
             "level={2}"
@@ -1445,12 +1476,12 @@
         },
         {
           "component": "Text",
-          "line": 54,
+          "line": 50,
           "attributes": []
         },
         {
           "component": "Title",
-          "line": 58,
+          "line": 54,
           "attributes": [
             "className=\"auth-page-title\"",
             "level={2}"
@@ -1458,7 +1489,7 @@
         },
         {
           "component": "Title",
-          "line": 64,
+          "line": 60,
           "attributes": [
             "className=\"auth-page-title\"",
             "level={2}"
@@ -1466,7 +1497,7 @@
         },
         {
           "component": "Title",
-          "line": 69,
+          "line": 65,
           "attributes": [
             "className=\"auth-page-title\"",
             "level={2}"
@@ -1474,7 +1505,7 @@
         },
         {
           "component": "Title",
-          "line": 87,
+          "line": 83,
           "attributes": [
             "className=\"auth-page-title\"",
             "level={2}"
@@ -1482,7 +1513,7 @@
         },
         {
           "component": "Title",
-          "line": 99,
+          "line": 95,
           "attributes": [
             "className=\"auth-page-title\"",
             "level={2}"
@@ -1497,7 +1528,7 @@
       "componentUses": [
         {
           "component": "Drawer",
-          "line": 87,
+          "line": 80,
           "attributes": [
             "title=\"配置应用授权\"",
             "size={760}"
@@ -1505,14 +1536,14 @@
         },
         {
           "component": "PageTitle",
-          "line": 117,
+          "line": 110,
           "attributes": [
             "title={title}"
           ]
         },
         {
           "component": "Card",
-          "line": 117,
+          "line": 110,
           "attributes": [
             "size=\"small\"",
             "title={mode === 'apps' ? '选择应用' : mode === 'users' ? '选择用户' : '选择机构'}"
@@ -1520,7 +1551,7 @@
         },
         {
           "component": "Card",
-          "line": 117,
+          "line": 110,
           "attributes": [
             "size=\"small\"",
             "className=\"section-gap grant-subject-card\""
@@ -1528,91 +1559,91 @@
         },
         {
           "component": "Title",
-          "line": 117,
+          "line": 110,
           "attributes": [
             "level={4}"
           ]
         },
         {
           "component": "Text",
-          "line": 117,
+          "line": 110,
           "attributes": []
         },
         {
           "component": "DataTable",
-          "line": 117,
+          "line": 110,
           "attributes": [
             "title=\"授权记录\""
           ]
         },
         {
           "component": "Text",
-          "line": 117,
+          "line": 110,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 117,
+          "line": 110,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 117,
+          "line": 110,
           "attributes": []
         },
         {
           "component": "Card",
-          "line": 117,
+          "line": 110,
           "attributes": [
             "size=\"small\""
           ]
         },
         {
           "component": "Card",
-          "line": 119,
+          "line": 112,
           "attributes": [
             "size=\"small\""
           ]
         },
         {
           "component": "PageTitle",
-          "line": 155,
+          "line": 144,
           "attributes": [
             "title=\"权限组\""
           ]
         },
         {
           "component": "ModuleSummary",
-          "line": 155,
+          "line": 144,
           "attributes": []
         },
         {
           "component": "DataTable",
-          "line": 155,
+          "line": 144,
           "attributes": [
             "title=\"权限组列表\""
           ]
         },
         {
           "component": "Text",
-          "line": 155,
+          "line": 144,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 155,
+          "line": 144,
           "attributes": []
         },
         {
           "component": "Modal",
-          "line": 155,
+          "line": 144,
           "attributes": [
             "title={editing ? '配置权限组' : '新建权限组'}"
           ]
         },
         {
           "component": "Text",
-          "line": 155,
+          "line": 144,
           "attributes": [
             "className=\"detail-section-title\""
           ]
@@ -1620,11 +1651,11 @@
       ],
       "fontOverrides": [
         {
-          "line": 117,
+          "line": 110,
           "value": "28"
         },
         {
-          "line": 117,
+          "line": 110,
           "value": "'var(--iam-font-secondary)'"
         }
       ]
@@ -1889,7 +1920,7 @@
       "componentUses": [
         {
           "component": "Card",
-          "line": 63,
+          "line": 76,
           "attributes": [
             "size=\"small\"",
             "title={operations.length ? `待恢复的人员操作（${operations.length}）` : '人员操作恢复'}"
@@ -1897,69 +1928,26 @@
         },
         {
           "component": "Text",
-          "line": 65,
+          "line": 78,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 66,
+          "line": 79,
           "attributes": [
             "title={operation.requestId}"
           ]
         },
         {
-          "component": "h4",
-          "line": 89,
-          "attributes": []
-        },
-        {
-          "component": "h4",
-          "line": 94,
-          "attributes": []
-        },
-        {
-          "component": "Text",
-          "line": 94,
-          "attributes": []
-        },
-        {
-          "component": "h4",
-          "line": 95,
-          "attributes": []
-        },
-        {
-          "component": "Text",
-          "line": 95,
-          "attributes": []
-        },
-        {
-          "component": "h4",
-          "line": 96,
-          "attributes": []
-        },
-        {
-          "component": "Drawer",
-          "line": 98,
-          "attributes": [
-            "title=\"身份档案\"",
-            "size={560}"
-          ]
-        },
-        {
-          "component": "h2",
-          "line": 98,
-          "attributes": []
-        },
-        {
           "component": "PageTitle",
-          "line": 189,
+          "line": 191,
           "attributes": [
             "title={lockedOnly ? '账号解锁' : persons ? '自然人管理' : '用户管理'}"
           ]
         },
         {
           "component": "Card",
-          "line": 193,
+          "line": 195,
           "attributes": [
             "size=\"small\"",
             "className=\"organization-tree-card\"",
@@ -1968,26 +1956,26 @@
         },
         {
           "component": "DataTable",
-          "line": 194,
+          "line": 196,
           "attributes": [
             "title={orgId === 'all' ? (persons ? '自然人列表' : lockedOnly ? '锁定账号' : '用户列表') : db.orgs.find(o => o.id === orgId)?.name}"
           ]
         },
         {
           "component": "Text",
-          "line": 194,
+          "line": 196,
           "attributes": []
         },
         {
           "component": "Text",
-          "line": 194,
+          "line": 196,
           "attributes": []
         },
         {
           "component": "RecordEditor",
-          "line": 195,
+          "line": 198,
           "attributes": [
-            "title={persons ? (userEdit ? '编辑自然人' : '新建自然人') : (userEdit ? '编辑用户' : '新建用户')}"
+            "title={userEdit ? '用户信息' : '新建自然人'}"
           ]
         },
         {
@@ -2000,11 +1988,11 @@
       ],
       "fontOverrides": [
         {
-          "line": 194,
+          "line": 196,
           "value": "'var(--iam-font-secondary)'"
         },
         {
-          "line": 194,
+          "line": 196,
           "value": "'var(--iam-font-secondary)'"
         }
       ]
@@ -2015,28 +2003,28 @@
       "componentUses": [
         {
           "component": "PageTitle",
-          "line": 83,
+          "line": 88,
           "attributes": [
             "title={rolePage ? '系统角色' : kind === 'locked' ? '账号解锁' : '管理员管理'}"
           ]
         },
         {
           "component": "Modal",
-          "line": 109,
+          "line": 114,
           "attributes": [
             "title={`${editing ? '编辑' : '新建'}${rolePage ? '平台角色' : '操作账号'}`}"
           ]
         },
         {
           "component": "Modal",
-          "line": 122,
+          "line": 127,
           "attributes": [
             "title=\"重置平台密码\""
           ]
         },
         {
           "component": "Modal",
-          "line": 126,
+          "line": 135,
           "attributes": [
             "title={`${assigning?.display_name || ''} · 角色与管理范围`}"
           ]
@@ -2103,21 +2091,21 @@
       "componentUses": [
         {
           "component": "Text",
-          "line": 57,
+          "line": 52,
           "attributes": [
             "className=\"setting-title\""
           ]
         },
         {
           "component": "Text",
-          "line": 57,
+          "line": 52,
           "attributes": [
             "className=\"setting-description\""
           ]
         },
         {
           "component": "Card",
-          "line": 58,
+          "line": 53,
           "attributes": [
             "size=\"small\"",
             "title=\"密码策略\"",
@@ -2126,7 +2114,7 @@
         },
         {
           "component": "Card",
-          "line": 58,
+          "line": 53,
           "attributes": [
             "size=\"small\"",
             "title=\"登录保护\""
@@ -2134,7 +2122,7 @@
         },
         {
           "component": "Card",
-          "line": 59,
+          "line": 54,
           "attributes": [
             "size=\"small\"",
             "title=\"会话与令牌\""
@@ -2142,7 +2130,7 @@
         },
         {
           "component": "Card",
-          "line": 60,
+          "line": 55,
           "attributes": [
             "size=\"small\"",
             "title=\"敏感字段保护\""
@@ -2150,12 +2138,12 @@
         },
         {
           "component": "Text",
-          "line": 60,
+          "line": 55,
           "attributes": []
         },
         {
           "component": "Card",
-          "line": 61,
+          "line": 56,
           "attributes": [
             "size=\"small\"",
             "title=\"来源限制与配额\""
@@ -2163,7 +2151,7 @@
         },
         {
           "component": "Card",
-          "line": 62,
+          "line": 57,
           "attributes": [
             "size=\"small\"",
             "title=\"系统标识\""
@@ -2171,36 +2159,36 @@
         },
         {
           "component": "PageTitle",
-          "line": 75,
+          "line": 70,
           "attributes": [
             "title={titles[kind][0]}"
           ]
         },
         {
           "component": "Text",
-          "line": 75,
+          "line": 70,
           "attributes": []
         },
         {
           "component": "h3",
-          "line": 75,
+          "line": 70,
           "attributes": []
         },
         {
           "component": "PageTitle",
-          "line": 102,
+          "line": 97,
           "attributes": [
             "title=\"个人中心\""
           ]
         },
         {
           "component": "h2",
-          "line": 102,
+          "line": 97,
           "attributes": []
         },
         {
           "component": "Card",
-          "line": 102,
+          "line": 97,
           "attributes": [
             "size=\"small\"",
             "title=\"基本资料\"",
@@ -2209,7 +2197,7 @@
         },
         {
           "component": "Card",
-          "line": 102,
+          "line": 97,
           "attributes": [
             "size=\"small\"",
             "title=\"账户安全\""
@@ -2217,21 +2205,21 @@
         },
         {
           "component": "Text",
-          "line": 102,
+          "line": 97,
           "attributes": [
             "className=\"setting-title\""
           ]
         },
         {
           "component": "Text",
-          "line": 102,
+          "line": 97,
           "attributes": [
             "className=\"setting-description\""
           ]
         },
         {
           "component": "Modal",
-          "line": 102,
+          "line": 97,
           "attributes": [
             "title=\"修改密码\""
           ]
@@ -2245,14 +2233,14 @@
       "componentUses": [
         {
           "component": "PageTitle",
-          "line": 73,
+          "line": 78,
           "attributes": [
             "title={view === 'configs' ? '同步配置' : view === 'entities' ? '同步对象' : '同步任务'}"
           ]
         },
         {
           "component": "Card",
-          "line": 77,
+          "line": 82,
           "attributes": [
             "size=\"small\"",
             "title=\"接收系统配置\""
@@ -2260,7 +2248,7 @@
         },
         {
           "component": "Card",
-          "line": 82,
+          "line": 89,
           "attributes": [
             "size=\"small\"",
             "className=\"section-gap\""
@@ -2268,12 +2256,12 @@
         },
         {
           "component": "Text",
-          "line": 82,
+          "line": 89,
           "attributes": []
         },
         {
           "component": "Card",
-          "line": 85,
+          "line": 92,
           "attributes": [
             "size=\"small\"",
             "title=\"中央目录对象\""
@@ -2281,7 +2269,7 @@
         },
         {
           "component": "Card",
-          "line": 89,
+          "line": 96,
           "attributes": [
             "size=\"small\"",
             "title=\"下发任务记录\""
@@ -2289,19 +2277,19 @@
         },
         {
           "component": "Text",
-          "line": 89,
+          "line": 96,
           "attributes": []
         },
         {
           "component": "RecordEditor",
-          "line": 96,
+          "line": 103,
           "attributes": [
             "title={editing ? '编辑同步配置' : '新建同步配置'}"
           ]
         },
         {
           "component": "Drawer",
-          "line": 104,
+          "line": 111,
           "attributes": [
             "title=\"下发任务明细\"",
             "size={900}"

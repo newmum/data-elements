@@ -12,7 +12,7 @@ import { accessibleAppIds, effectiveAccess, makeBase } from '../domain/engine';
 import type { Application, Domain, PortalConfig, Resource, Role } from '../domain/types';
 import { CardMetric, ConfirmDelete, DataTable, dateText, options, RecordEditor, StatusTag, Text, useAction, useEditable, type Field, type FormValues } from '../components/common';
 import { AppIcon, UserAvatar } from '../components/visuals';
-const portalFormKeys = { logo: 'portalLogo', systemName: 'portalSystemName', systemCode: 'portalSystemCode', themeColor: 'portalThemeColor', watermarkContent: 'portalWatermarkContent', needLogin: 'portalNeedLogin', showShoppingCar: 'portalShowShoppingCar', showTagsView: 'portalShowTagsView', showWatermark: 'portalShowWatermark', version: 'portalVersion' } as const;
+const portalFormKeys = { logo: 'portalLogo', themeColor: 'portalThemeColor', watermarkContent: 'portalWatermarkContent', needLogin: 'portalNeedLogin', showShoppingCar: 'portalShowShoppingCar', showTagsView: 'portalShowTagsView', showWatermark: 'portalShowWatermark', version: 'portalVersion' } as const;
 type LocalInventoryCounts = { available: boolean; counts: { users: number; authorizedUsers: number } };
 type LocalInventorySummary = LocalInventoryCounts & { appId: string };
 /** The receiver permits at most 50 apps and 10 distinct runtime tenants per summary request. */
@@ -38,13 +38,13 @@ function localInventoryBatches(apps: Application[]): string[][] {
 function NewApplication({ open, domain, onClose }: { open: boolean; domain: Domain; onClose: () => void }) {
     const db = useDatabase();
     const initial: Application = { ...makeBase('', domain, 'app'), code: '', group: db.catalog.find(c => c.category === 'app-group')?.name || '未分组', description: '', protocol: '未配置', environment: 'production', homepage: '', redirectUris: '', logoutUri: '', owner: '', clientId: '', clientType: 'confidential', mfa: false, accessTtl: 0, scopes: [], secretVersion: 0 };
-    return <RecordEditor open={open} title="新建应用" initial={initial as unknown as FormValues} onClose={onClose} fields={[
-        { name: 'name', label: '应用名称', required: true, max: 50 },
-        { name: 'code', label: '应用编码', required: true, max: 48, pattern: /^[a-z][a-z0-9-]{2,47}$/, patternMessage: '3–48位小写字母、数字或短横线' },
-        { name: 'group', label: '应用分组', type: 'select', options: [{ value: '未分组', label: '未分组' }, ...db.catalog.filter(c => c.category === 'app-group').map(c => ({ value: c.name, label: c.name }))] }, { name: 'owner', label: '应用负责人' },
+    return <RecordEditor open={open} title="新建应用" initial={initial as unknown as FormValues} onClose={onClose} horizontal className="application-editor" width={720} fields={[
+        { name: 'name', label: '应用系统名称', required: true, max: 50, help: '同时作为租户系统名称。' },
+        { name: 'code', label: '应用系统编码', required: true, max: 48, pattern: /^[a-z][a-z0-9-]{2,47}$/, patternMessage: '3–48位小写字母、数字或短横线', help: '登记后不可修改，将同时作为租户系统代码。' },
+        { name: 'group', label: '应用分组', type: 'select', options: [{ value: '未分组', label: '未分组' }, ...db.catalog.filter(c => c.category === 'app-group').map(c => ({ value: c.name, label: c.name }))] },
         { name: 'homepage', label: '应用首页' }, { name: 'description', label: '应用说明', type: 'textarea', max: 200 },
         { name: 'status', label: '登记状态', type: 'select', options: [{ value: 'enabled', label: '启用' }, { value: 'disabled', label: '停用' }] },
-    ]} onSave={values => api.save('apps', { ...initial, ...values } as Application, '创建应用')}/>;
+    ]} onSave={values => api.save('apps', { ...initial, ...values, portalConfig: { systemName: String(values.name || '').trim(), systemCode: String(values.code || '').trim() } } as Application, '创建应用')}/>;
 }
 export default function Applications({ domain }: {
     domain: Domain;
@@ -105,25 +105,45 @@ export default function Applications({ domain }: {
     const rolesCount = db.roles.filter(r => appIds.has(r.appId)).length;
     const usersCount = db.users.filter(u => u.domain === domain && u.kind !== 'admin').length;
     const resourcesCount = db.resources.filter(r => appIds.has(r.appId)).length;
-    const editValues = { ...(editing || {}), sortPosition: editing ? String(all.findIndex(app => app.id === editing.id) + 1) : undefined,
-        ...Object.fromEntries(Object.entries(portalFormKeys).map(([key, form]) => [form, editing?.portalConfig?.[key as keyof PortalConfig]])) } as FormValues;
+    const editValues = { ...(editing || {}), sortPosition: editing ? all.findIndex(app => app.id === editing.id) + 1 : undefined,
+        ...Object.fromEntries(Object.entries(portalFormKeys).map(([key, form]) => [form, editing?.portalConfig?.[key as keyof PortalConfig]])),
+        portalThemeColor: editing?.portalConfig?.themeColor || '#5267F5' } as FormValues;
+    const editFields: Field[] = [
+        { name: 'name', label: '应用系统名称', required: true, max: 50, help: '同时作为租户系统名称，保存后可手动下发。' },
+        { name: 'code', label: '应用系统编码', disabled: true, help: '新建时填写，登记后保持不变。' },
+        { name: 'group', label: '应用分组', type: 'select', options: [{ value: '未分组', label: '未分组' }, ...db.catalog.filter(c => c.category === 'app-group').map(c => ({ value: c.name, label: c.name }))] },
+        { name: 'description', label: '应用说明', type: 'textarea', max: 200 },
+        ...(session.globalPermissions?.includes('apps:write') && all.length > 1 && all.length <= 200 ? [{ name: 'sortPosition', label: '应用排序', type: 'number' as const, min: 1, max: all.length, help: `填写 1–${all.length}，数字越小越靠前；仅影响应用卡片和列表。` }] : []),
+        { name: 'portalLogo', label: '应用标识', type: 'image', max: 350000 },
+        { name: 'portalThemeColor', label: '主题色', type: 'color', max: 7, pattern: /^#[0-9a-fA-F]{6}$/, help: '点击色块选择颜色。' },
+        { name: 'portalWatermarkContent', label: '水印内容', type: 'textarea', max: 200 },
+        { name: 'portalVersion', label: '版本号', max: 40 },
+        { name: 'portalNeedLogin', label: '需要登录', type: 'switch' },
+        { name: 'portalShowShoppingCar', label: '显示购物车', type: 'switch' },
+        { name: 'portalShowTagsView', label: '显示标签页', type: 'switch' },
+        { name: 'portalShowWatermark', label: '显示水印', type: 'switch' },
+    ];
     const saveEditing = async (values: FormValues) => {
         if (!editing) return;
-        const portal: Record<string, string | boolean | undefined> = { ...editing.portalConfig };
+        const portal: Record<string, string | boolean | undefined> = {
+            ...editing.portalConfig,
+            systemName: String(values.name || '').trim(),
+            systemCode: editing.code,
+        };
         for (const [key, form] of Object.entries(portalFormKeys)) {
             const value = values[form];
             if ((typeof value === 'string' || typeof value === 'boolean') && (value !== '' || key in portal || key === 'logo')) portal[key] = value;
         }
         const fields = Object.fromEntries(Object.entries(values).filter(([key]) => !key.startsWith('portal')));
-        await api.save('apps', { ...editing, ...fields, portalConfig: portal } as Application, '编辑应用');
+        await api.save('apps', { ...editing, ...fields, owner: '', portalConfig: portal } as Application, '编辑应用');
     };
     const detail = (a: Application) => nav(`/console/${domain}/apps/${a.id}`);
     const toggle = (a: Application) => modal.confirm({ title: `${a.status === 'enabled' ? '停用' : '启用'}“${a.name}”？`, content: a.status === 'enabled' ? '停用当前身份应用登记，保留角色与资源记录。' : '启用当前身份应用登记。认证接入和访问授权须另行配置。', okText: a.status === 'enabled' ? '停用应用' : '启用应用', cancelText: '取消', okButtonProps: { danger: a.status === 'enabled' }, onOk: () => run(() => api.save('apps', { ...a, status: a.status === 'enabled' ? 'disabled' : 'enabled' }, '调整应用状态'), '应用状态已更新') });
     return <>
  <div className="metric-grid four"><CardMetric label="应用数量" value={all.length} icon={<AppstoreOutlined />} description="当前可管理的应用"/><CardMetric label="角色数量" value={rolesCount} icon={<TeamOutlined />} tone="cyan" description="这些应用的平台角色"/><CardMetric label="用户数量" value={usersCount} icon={<UserOutlined />} tone="green" description="当前身份域可见人员"/><CardMetric label="权限数量" value={resourcesCount} tone="purple" icon={<SafetyCertificateOutlined />} description="这些应用的资源权限"/></div>
  <Card size="small" className="section-gap" styles={{ body: { padding: '12px 16px' } }}><div className="inline-toolbar"><Space wrap><Input.Search aria-label="搜索应用" placeholder="搜索应用名称或编码" allowClear style={{ width: 300, maxWidth: '100%' }} value={query} onChange={e => setQuery(e.target.value)}/><Select aria-label="应用分组" value={group} onChange={setGroup} style={{ width: 160 }} options={[{ value: 'all', label: '全部分组' }, ...Array.from(new Set(all.map(a => a.group))).map(x => ({ value: x, label: x }))]}/><Text type="secondary">共 {data.length} 个应用</Text></Space><Space wrap><Segmented aria-label="应用视图" value={view} onChange={v => setView(String(v))} options={[{ value: 'cards', label: <Tooltip title="卡片视图"><AppstoreOutlined /></Tooltip> }, { value: 'table', label: <Tooltip title="表格视图"><UnorderedListOutlined /></Tooltip> }]}/><Button type="primary" icon={<PlusOutlined />} disabled={!canCreate} onClick={() => setCreate(true)}>新建应用</Button></Space></div></Card>
- {view === 'cards' ? <Row gutter={[12, 12]}>{data.map(a => <Col key={a.id} xs={24} lg={12} xl={8}><Card size="small" className="application-card" styles={{ body: { padding: 16 } }}><div className="application-card-top"><AppIcon app={a} size={40}/><div style={{ flex: 1, minWidth: 0 }}><Button type="link" className="application-title" onClick={() => detail(a)}><span className="application-title-text" title={a.name}>{a.name}</span></Button><div><Text type="secondary" style={{ fontSize: 'var(--iam-font-secondary)' }}>{a.code}</Text></div></div><Dropdown menu={{ items: [{ key: 'edit', label: '编辑信息', disabled: !canWriteApp(a), onClick: () => setEditing(a) }, { key: 'toggle', label: a.status === 'enabled' ? '停用应用' : '启用应用', danger: a.status === 'enabled', disabled: !canWriteApp(a), onClick: () => toggle(a) }] }}><Button type="text" aria-label={`${a.name}更多操作`} icon={<EllipsisOutlined />}/></Dropdown></div><Text type="secondary" className="application-description">{a.description || '尚未填写应用说明'}</Text><Space wrap><Tag>{a.group}</Tag><Tag>{a.protocol}</Tag><StatusTag value={a.status}/></Space><div className="app-card-metrics"><div><span>本地授权用户</span><strong>{localCounts[a.id]?.available ? localCounts[a.id].counts.authorizedUsers : '—'}</strong><small>{localCounts[a.id]?.available ? `本地用户 ${localCounts[a.id].counts.users} · 平台授权 ${grantsAvailable ? db.users.filter(u => effectiveAccess(db, u.id).some(v => v.appId === a.id)).length : '—'}` : '本地数据暂不可读'}</small></div><div><span>应用角色</span><strong>{db.roles.filter(r => r.appId === a.id).length}</strong></div><div><span>资源权限</span><strong>{db.resources.filter(r => r.appId === a.id).length}</strong></div></div><div className="application-card-footer"><Text type="secondary" style={{ fontSize: 'var(--iam-font-secondary)' }}>{a.mfa ? <><SafetyCertificateOutlined /> 已配置多因子认证</> : <>负责人：{a.owner}</>}</Text><Button type="link" style={{ padding: 0 }} onClick={() => detail(a)}>管理应用 <SettingOutlined /></Button></div></Card></Col>)}{!data.length && <Col span={24}><Card size="small"><Empty description="未找到符合条件的应用"/></Card></Col>}</Row> : <DataTable data={data} title="应用列表" searchFields={['name', 'code']} columns={[{ title: '应用名称', dataIndex: 'name', render: (_, r) => <Space><AppIcon app={r} size={36}/><Button type="link" style={{ padding: 0 }} onClick={() => detail(r)}>{r.name}</Button></Space> }, { title: '应用编码', dataIndex: 'code' }, { title: '分组', dataIndex: 'group' }, { title: '协议', dataIndex: 'protocol' }, { title: '状态', dataIndex: 'status', render: v => <StatusTag value={v}/> }, { title: '负责人', dataIndex: 'owner' }, { title: '操作', key: 'actions', render: (_, r) => <Space><Button type="link" onClick={() => detail(r)}>管理</Button><Button type="link" disabled={!canWriteApp(r)} onClick={() => setEditing(r)}>编辑</Button></Space> }]}/>}
- <NewApplication open={create} domain={domain} onClose={() => setCreate(false)}/><RecordEditor open={!!editing} title="编辑应用信息" initial={editValues} onClose={() => setEditing(null)} fields={[{ name: 'name', label: '应用名称', required: true, max: 50 }, { name: 'group', label: '分组', type: 'select', options: [{ value: '未分组', label: '未分组' }, ...db.catalog.filter(c => c.category === 'app-group').map(c => ({ value: c.name, label: c.name }))] }, { name: 'owner', label: '负责人' }, { name: 'description', label: '应用说明', type: 'textarea', max: 200 }, ...(session.globalPermissions?.includes('apps:write') && all.length > 1 ? [{ name: 'sortPosition', label: '显示位置', type: 'select' as const, options: all.map((app, index) => ({ value: String(index + 1), label: `${index + 1} · ${app.name}` })), help: '保存后卡片和列表按此顺序展示。' }] : []), { name: 'portalLogo', label: '应用标识', type: 'image', max: 350000 }, { name: 'portalSystemName', label: '租户系统名称', max: 100 }, { name: 'portalSystemCode', label: '租户系统代码', max: 64, pattern: /^[A-Za-z0-9_-]+$/ }, { name: 'portalThemeColor', label: '主题颜色', max: 7, pattern: /^#[0-9a-fA-F]{6}$/ }, { name: 'portalWatermarkContent', label: '水印内容', type: 'textarea', max: 200 }, { name: 'portalVersion', label: '版本号', max: 40 }, { name: 'portalNeedLogin', label: '需要登录', type: 'switch' }, { name: 'portalShowShoppingCar', label: '显示购物车', type: 'switch' }, { name: 'portalShowTagsView', label: '显示标签页', type: 'switch' }, { name: 'portalShowWatermark', label: '显示水印', type: 'switch' }]} onSave={saveEditing}/>
+ {view === 'cards' ? <Row gutter={[12, 12]}>{data.map(a => <Col key={a.id} xs={24} lg={12} xl={8}><Card size="small" className="application-card" styles={{ body: { padding: 16 } }}><div className="application-card-top"><AppIcon app={a} size={40}/><div style={{ flex: 1, minWidth: 0 }}><Button type="link" className="application-title" onClick={() => detail(a)}><span className="application-title-text" title={a.name}>{a.name}</span></Button><div><Text type="secondary" style={{ fontSize: 'var(--iam-font-secondary)' }}>{a.code}</Text></div></div><Dropdown menu={{ items: [{ key: 'edit', label: '编辑信息', disabled: !canWriteApp(a), onClick: () => setEditing(a) }, { key: 'toggle', label: a.status === 'enabled' ? '停用应用' : '启用应用', danger: a.status === 'enabled', disabled: !canWriteApp(a), onClick: () => toggle(a) }] }}><Button type="text" aria-label={`${a.name}更多操作`} icon={<EllipsisOutlined />}/></Dropdown></div><Text type="secondary" className="application-description">{a.description || '尚未填写应用说明'}</Text><Space wrap><Tag>{a.group}</Tag><Tag>{a.protocol}</Tag><StatusTag value={a.status}/></Space><div className="app-card-metrics"><div><span>本地授权用户</span><strong>{localCounts[a.id]?.available ? localCounts[a.id].counts.authorizedUsers : '—'}</strong><small>{localCounts[a.id]?.available ? `本地用户 ${localCounts[a.id].counts.users} · 平台授权 ${grantsAvailable ? db.users.filter(u => effectiveAccess(db, u.id).some(v => v.appId === a.id)).length : '—'}` : '本地数据暂不可读'}</small></div><div><span>应用角色</span><strong>{db.roles.filter(r => r.appId === a.id).length}</strong></div><div><span>资源权限</span><strong>{db.resources.filter(r => r.appId === a.id).length}</strong></div></div><div className="application-card-footer"><Text type="secondary" style={{ fontSize: 'var(--iam-font-secondary)' }}>{a.mfa && <><SafetyCertificateOutlined /> 已配置多因子认证</>}</Text><Button type="link" style={{ padding: 0 }} onClick={() => detail(a)}>管理应用 <SettingOutlined /></Button></div></Card></Col>)}{!data.length && <Col span={24}><Card size="small"><Empty description="未找到符合条件的应用"/></Card></Col>}</Row> : <DataTable data={data} title="应用列表" searchFields={['name', 'code']} columns={[{ title: '应用名称', dataIndex: 'name', render: (_, r) => <Space><AppIcon app={r} size={36}/><Button type="link" style={{ padding: 0 }} onClick={() => detail(r)}>{r.name}</Button></Space> }, { title: '应用编码', dataIndex: 'code' }, { title: '分组', dataIndex: 'group' }, { title: '协议', dataIndex: 'protocol' }, { title: '状态', dataIndex: 'status', render: v => <StatusTag value={v}/> }, { title: '操作', key: 'actions', render: (_, r) => <Space><Button type="link" onClick={() => detail(r)}>管理</Button><Button type="link" disabled={!canWriteApp(r)} onClick={() => setEditing(r)}>编辑</Button></Space> }]}/>}
+ <NewApplication open={create} domain={domain} onClose={() => setCreate(false)}/><RecordEditor open={!!editing} title="编辑应用信息" initial={editValues} onClose={() => setEditing(null)} horizontal className="application-editor" width={720} fields={editFields} onSave={saveEditing}/>
  </>;
 }
 export function ApplicationDetail({ domain, appId }: {
@@ -171,7 +191,6 @@ export function ApplicationDetail({ domain, appId }: {
                 <Descriptions size="small" column={{ xs: 1, sm: 2 }} layout="vertical" items={[
                     { key: 'code', label: '应用编码', children: app.code },
                     { key: 'group', label: '所属分组', children: app.group },
-                    { key: 'owner', label: '负责人', children: app.owner },
                     { key: 'status', label: '状态', children: <StatusTag value={app.status}/> },
                     { key: 'homepage', label: '应用首页', children: app.homepage ? <Text copyable>{app.homepage}</Text> : '未填写', span: 2 },
                     { key: 'desc', label: '应用说明', children: app.description || '未填写', span: 2 },

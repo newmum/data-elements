@@ -4,10 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DynamicTest;
@@ -18,14 +14,10 @@ import org.ssssssss.script.MagicScript;
 class PanshiMagicSyntaxTest {
     @TestFactory
     Stream<DynamicTest> compileTenantBusinessResources() throws IOException {
-        Path root = Path.of("db/migrations/resources/panshi-integration-20261002");
-        List<Path> scripts;
-        try (Stream<Path> paths = Files.walk(root)) {
-            scripts = paths.filter(path -> path.toString().endsWith(".ms")).sorted().toList();
-        }
-        assertFalse(scripts.isEmpty(), "Missing Panshi Magic deliverables");
-        return scripts.stream().map(path -> DynamicTest.dynamicTest(root.relativize(path).toString(), () -> {
-            String source = Files.readString(path, StandardCharsets.UTF_8);
+        var scripts = CanonicalMagicSources.under("function/14.磐石资源中心");
+        assertFalse(scripts.isEmpty(), "Missing current Panshi Magic functions");
+        return scripts.stream().map(script -> DynamicTest.dynamicTest(script.relativePath(), () -> {
+            String source = script.source();
             MagicScript.create(source, null).compile();
             assertTrue(source.contains("tenantRuntime.id()"), "Tenant must originate in the server session");
             Pattern clientTenantAssignment = Pattern.compile(

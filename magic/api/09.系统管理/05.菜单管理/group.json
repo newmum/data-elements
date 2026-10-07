@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "b3f641e93f574cc5a88009f84e695ab1",
+  "name" : "05.菜单管理",
+  "type" : "api",
+  "parentId" : "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path" : "/menu",
+  "createTime" : 1781960047139,
+  "updateTime" : 1784437771090,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

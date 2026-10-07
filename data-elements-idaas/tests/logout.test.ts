@@ -58,7 +58,7 @@ test('管理端撤销请求失败也退出，并保留后续新会话', async ()
     assert.equal(workspace.getSession(), null);
     await workspace.api.login('operator', 'password', 'workforce');
     finishLogout(response(null, 503, 503));
-    await assert.rejects(logout, /请求未完成/);
+    await assert.rejects(logout, /服务器无响应，请稍后再试/);
     assert.equal(storage.getItem('iam.frontend.backend.token'), 'platform-token-2');
     assert.equal(workspace.getSession()?.userId, 'operator-1');
     workspace.setSession(null);
@@ -111,7 +111,7 @@ test('统一认证退出网络失败也立即清令牌，旧请求不会清除�
     finishOldRead(response(null, 401, 401));
     await assert.rejects(oldRead, /登录已过期/);
     failLogout(new TypeError('offline'));
-    await assert.rejects(logout, /暂时无法连接身份服务/);
+    await assert.rejects(logout, /服务器无响应，请稍后再试/);
     assert.equal(identity.hasIdentitySession(), true);
     assert.equal(storage.getItem('iam.auth.account.token'), 'identity-token-2');
     identity.retainIdentityToken('');

@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "2baeb325734a4f348df335661b205952",
+  "name" : "08.服务管理",
+  "type" : "api",
+  "parentId" : "5d290a9b3bca3b2dd9ffd715dc47ce56",
+  "path" : "/gateway",
+  "createTime" : 1784420517826,
+  "updateTime" : 1785021690408,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

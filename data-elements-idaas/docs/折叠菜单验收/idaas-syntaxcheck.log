@@ -1,5 +1,0 @@
-
-> data-elements-idaas@2.2.0 syntaxcheck
-> node scripts/syntax-check.mjs
-
-已解析 34 个源码文件；语法错误 0 项。此检查不替代完整类型检查。

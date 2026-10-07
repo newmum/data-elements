@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "019b772ee9b44705a27710f91bbd731a",
+  "name" : "01.数据标准",
+  "type" : "api",
+  "parentId" : "4fb5fbaf61b24db1a05ea12ae38437b1",
+  "path" : "/standard",
+  "createTime" : 1781960051368,
+  "updateTime" : 1784437771538,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

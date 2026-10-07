@@ -5,7 +5,7 @@ import json, os, shutil, sys
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / '.review-3.2'
+OUT = ROOT.parent / 'logs/wanxiang/review'
 SHOTS = OUT / 'shots'
 SHOTS.mkdir(exist_ok=True)
 manifest = json.loads((OUT / 'manifest.json').read_text())

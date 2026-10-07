@@ -1,6 +1,6 @@
 import { theme, type ThemeConfig } from 'antd';
 import { typeScale, typeColor, bodyFontFamily } from './typography';
-/** Aurora Blue 管理工作区的可读紧凑主题；认证主题在本文件单独维护。见 /design.md。 */
+/** Aurora Blue 管理工作区：保留小尺寸组件语义，表格与表单采用舒展间距。见 /design.md。 */
 export const appTheme: ThemeConfig = {
     algorithm: theme.compactAlgorithm,
     token: {
@@ -23,9 +23,9 @@ export const appTheme: ThemeConfig = {
         lineHeightHeading3: typeScale.panel.lineHeight / typeScale.panel.size,
         lineHeightHeading4: typeScale.section.lineHeight / typeScale.section.size,
         lineHeightHeading5: typeScale.body.lineHeight / typeScale.body.size,
-        controlHeight: 28, controlHeightSM: 28, controlHeightLG: 32,
-        padding: 12, paddingLG: 16, paddingSM: 8, paddingXS: 4,
-        margin: 12, marginLG: 16, marginSM: 8, marginXS: 4,
+        controlHeight: 36, controlHeightSM: 34, controlHeightLG: 40,
+        padding: 16, paddingLG: 20, paddingSM: 10, paddingXS: 6,
+        margin: 16, marginLG: 20, marginSM: 10, marginXS: 6,
         fontFamily: bodyFontFamily,
         boxShadow: '0 8px 32px rgba(36,59,114,.08)',
         boxShadowSecondary: '0 12px 40px rgba(36,59,114,.12)',
@@ -33,22 +33,22 @@ export const appTheme: ThemeConfig = {
     components: {
         Layout: { headerBg: '#ffffff', siderBg: '#111D35', bodyBg: '#F4F7FC', headerHeight: 56, headerPadding: '0 16px' },
         Menu: { fontSize: typeScale.navigation.size, darkItemBg: 'transparent', darkSubMenuItemBg: 'transparent', darkItemColor: typeColor.onDark, darkItemHoverColor: '#FFFFFF', darkItemSelectedBg: '#314978', darkItemSelectedColor: '#FFFFFF', darkPopupBg: '#172640', itemHeight: 34, itemMarginInline: 8, itemMarginBlock: 2, itemBorderRadius: 6, subMenuItemBg: 'transparent', iconSize: 16, groupTitleFontSize: 12 },
-        Card: { bodyPadding: 16, bodyPaddingSM: 12, headerFontSize: typeScale.section.size, headerFontSizeSM: typeScale.section.size, headerHeight: 40, headerHeightSM: 40, headerPadding: 16, headerPaddingSM: 12, colorBorderSecondary: '#EDF1F8', boxShadowTertiary: '0 4px 24px rgba(40,62,114,.035)' },
+        Card: { bodyPadding: 20, bodyPaddingSM: 16, headerFontSize: typeScale.section.size, headerFontSizeSM: typeScale.section.size, headerHeight: 48, headerHeightSM: 48, headerPadding: 20, headerPaddingSM: 16, colorBorderSecondary: '#EDF1F8', boxShadowTertiary: '0 4px 24px rgba(40,62,114,.035)' },
         Button: { contentFontSize: typeScale.body.size, contentFontSizeSM: typeScale.body.size, primaryShadow: '0 4px 10px rgba(82,103,245,.19)', defaultShadow: '0 1px 2px rgba(35,60,110,.025)', fontWeight: 500, paddingInlineSM: 10 },
-        Table: { headerBg: '#F7F9FD', headerColor: '#667493', headerSplitColor: 'transparent', rowHoverBg: '#F5F7FF', rowSelectedBg: '#EDF1FF', cellPaddingBlockSM: 6, cellPaddingInlineSM: 12, cellFontSizeSM: typeScale.body.size, cellFontSize: typeScale.body.size, cellFontSizeMD: typeScale.body.size, cellPaddingBlockMD: 6, cellPaddingInlineMD: 12, borderColor: '#EDF1F8' },
+        Table: { headerBg: '#F7F9FD', headerColor: '#667493', headerSplitColor: 'transparent', rowHoverBg: '#F5F7FF', rowSelectedBg: '#EDF1FF', cellPaddingBlockSM: 10, cellPaddingInlineSM: 14, cellFontSizeSM: typeScale.body.size, cellFontSize: typeScale.body.size, cellFontSizeMD: typeScale.body.size, cellPaddingBlockMD: 12, cellPaddingInlineMD: 16, borderColor: '#EDF1F8' },
         Tabs: { titleFontSize: typeScale.body.size, titleFontSizeSM: typeScale.body.size, itemColor: '#7A86A2', itemSelectedColor: '#5267F5', inkBarColor: '#5267F5', horizontalItemGutter: 20, horizontalItemPaddingSM: '8px 0' },
         Input: { inputFontSize: typeScale.body.size, inputFontSizeSM: typeScale.body.size, activeShadow: '0 0 0 3px rgba(82,103,245,.08)', hoverBorderColor: '#9EABFF' },
-        Select: { fontSize: typeScale.body.size, optionFontSize: typeScale.body.size, optionSelectedBg: '#EEF2FF', optionActiveBg: '#F7F9FD', optionHeight: 28 },
+        Select: { fontSize: typeScale.body.size, optionFontSize: typeScale.body.size, optionSelectedBg: '#EEF2FF', optionActiveBg: '#F7F9FD', optionHeight: 34 },
         Tree: { fontSize: typeScale.body.size, nodeHoverBg: '#F5F7FF', nodeSelectedBg: '#EDF2FF', titleHeight: 30 },
         Tag: { fontSize: typeScale.caption.size, fontSizeSM: typeScale.caption.size, defaultBg: '#F3F6FC', defaultColor: '#667493' },
-        Drawer: { fontSizeLG: typeScale.panel.size, footerPaddingBlock: 12, footerPaddingInline: 16 },
+        Drawer: { fontSizeLG: typeScale.panel.size, footerPaddingBlock: 14, footerPaddingInline: 24 },
         Descriptions: { fontSize: typeScale.body.size, fontSizeLG: typeScale.section.size, labelColor: typeColor.secondary, contentColor: '#243354', itemPaddingBottom: 10 },
         Breadcrumb: { fontSize: typeScale.navigation.size },
         InputNumber: { inputFontSize: typeScale.body.size, inputFontSizeSM: typeScale.body.size },
         DatePicker: { inputFontSize: typeScale.body.size, inputFontSizeSM: typeScale.body.size },
         Pagination: { fontSize: typeScale.body.size },
         Segmented: { fontSize: typeScale.body.size, trackBg: '#F1F4FA', itemSelectedBg: '#FFFFFF', itemSelectedColor: '#5267F5' },
-        Form: { labelColor: '#5D6C8D', labelFontSize: typeScale.body.size, verticalLabelPadding: '0 0 4px', itemMarginBottom: 12 },
+        Form: { labelColor: '#5D6C8D', labelFontSize: typeScale.body.size, verticalLabelPadding: '0 0 6px', itemMarginBottom: 18 },
         Modal: { titleFontSize: typeScale.panel.size },
         Statistic: { titleFontSize: typeScale.body.size, contentFontSize: typeScale.statistic.size },
     },

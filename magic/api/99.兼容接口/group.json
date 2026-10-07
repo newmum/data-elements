@@ -1,0 +1,14 @@
+{
+  "properties": {},
+  "id": "compat_dataassets_root_01",
+  "name": "99.兼容接口",
+  "type": "api",
+  "parentId": "0",
+  "path": "/dataassets",
+  "createTime": 1784458863447,
+  "updateTime": 1784458863447,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}

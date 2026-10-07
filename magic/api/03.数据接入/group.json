@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "1f4028f20aaa4f379b5e37a343b99fa9",
+  "name" : "03.数据接入",
+  "type" : "api",
+  "parentId" : "0",
+  "path" : "/ods",
+  "createTime" : 1784420517826,
+  "updateTime" : 1784437771538,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

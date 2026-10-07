@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "9ef163a809ec40b59d35eb27d2f584a5",
+  "name" : "04.盘点统计",
+  "type" : "api",
+  "parentId" : "ae3a63e77a194c2db32d854923f4983a",
+  "path" : "/statistics",
+  "createTime" : 1784420517826,
+  "updateTime" : 1784437771538,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

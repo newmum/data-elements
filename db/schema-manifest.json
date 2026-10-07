@@ -1,0 +1,118 @@
+{
+  "formatVersion": 1,
+  "scope": "structure-only",
+  "routingSource": "private current Nacos API/runtime snapshot",
+  "schemas": [
+    {
+      "dataSourceKey": "control",
+      "schema": "baseline",
+      "dialect": "mysql",
+      "file": "baseline/init.sql",
+      "objects": {
+        "tables": 50,
+        "views": 2,
+        "indexes": 149,
+        "foreignKeys": 1,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "646b9655e4616179cf874acc24266d8cbce290dc008e49eaaecdd0113d4c509f",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      }
+    },
+    {
+      "dataSourceKey": "broadcasting",
+      "schema": "baseline_beijing_gd",
+      "dialect": "dameng",
+      "file": "baseline_beijing_gd/init.sql",
+      "objects": {
+        "tables": 143,
+        "views": 5,
+        "indexes": 577,
+        "explicitIndexes": 291,
+        "foreignKeys": 1,
+        "triggers": 20,
+        "procedures": 0,
+        "functions": 0,
+        "sequences": 0
+      },
+      "sha256": "fee5c9ef97a7e74b65aeb2e949b5b09cef88f6b739e31460a45a082959904629",
+      "exportNotes": {
+        "definitions": "DBMS_METADATA.GET_DDL",
+        "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
+        "implicitIndexes": "included in table DDL"
+      }
+    },
+    {
+      "dataSourceKey": "chengtian",
+      "schema": "chengtian",
+      "dialect": "mysql",
+      "file": "chengtian/init.sql",
+      "objects": {
+        "tables": 143,
+        "views": 0,
+        "indexes": 515,
+        "foreignKeys": 1,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "ef00de4e5d8fc564fd632f8f890c0f2e15a8fbdccde84b329630a5dea89093b8",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      }
+    },
+    {
+      "dataSourceKey": "public-security",
+      "schema": "baseline_ga_old",
+      "dialect": "mysql",
+      "file": "baseline_ga_old/init.sql",
+      "objects": {
+        "tables": 143,
+        "views": 1,
+        "indexes": 515,
+        "foreignKeys": 1,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "56623ff785b9f2fd6b046b237035e6400beac6aa18acea1bd6f1d8411ef3be61",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      }
+    },
+    {
+      "dataSourceKey": "sea-fishery",
+      "schema": "baseline_sea_fishery",
+      "dialect": "mysql",
+      "file": "baseline_sea_fishery/init.sql",
+      "objects": {
+        "tables": 143,
+        "views": 5,
+        "indexes": 515,
+        "foreignKeys": 1,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "9e57e25c5220ade9ac48fca57d50cd5b0e77529b847ffd746b4855fd8979525d",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      }
+    }
+  ]
+}

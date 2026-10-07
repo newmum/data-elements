@@ -1,0 +1,15 @@
+{
+  "properties": {},
+  "id": "e325afaf57bd5e38b68f38837525b3b0",
+  "name": "25.统一认证账号",
+  "type": "api",
+  "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
+  "path": "/auth-accounts",
+  "createTime": 1790635007936,
+  "updateTime": 1790946845378,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================

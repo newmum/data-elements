@@ -1,0 +1,5 @@
+# Canonical resources use one line-ending format in Git and checkouts.
+magic/** text eol=lf
+lowcode/** text eol=lf
+db/** text eol=lf
+tools/** text eol=lf

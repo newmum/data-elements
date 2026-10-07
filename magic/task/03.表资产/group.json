@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "87fdde50f33c4c139c40f0820af3083a",
+  "name" : "03.表资产",
+  "type" : "task",
+  "parentId" : "0",
+  "path" : "/table-task",
+  "createTime" : 1782660713472,
+  "updateTime" : 1784440284310,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

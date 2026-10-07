@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "2c4350a98636412f9b4feb6e31969c00",
+  "name" : "06.数据服务",
+  "type" : "api",
+  "parentId" : "0",
+  "path" : "/dws",
+  "createTime" : 1784420517826,
+  "updateTime" : 1784437772101,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

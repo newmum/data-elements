@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "4caa8ec9cb88479aa42cbbc42ea4771d",
+  "name" : "02.数据集成定时任务",
+  "type" : "task",
+  "parentId" : "0",
+  "path" : "integration",
+  "createTime" : 1782660713458,
+  "updateTime" : 1784440284061,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

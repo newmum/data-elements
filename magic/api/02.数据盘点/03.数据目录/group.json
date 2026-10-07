@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "datapd_catalog_group_01",
+  "name" : "03.数据目录",
+  "type" : "api",
+  "parentId" : "ae3a63e77a194c2db32d854923f4983a",
+  "path" : "/catalog",
+  "createTime" : 1784420517826,
+  "updateTime" : 1784437772101,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

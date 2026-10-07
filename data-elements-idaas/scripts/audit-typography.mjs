@@ -78,7 +78,7 @@ function templateFor(key) {
 }
 const routes = ['workforce','public'].flatMap(domain => domainPages(domain).map(p => ({ domain, key: p.key, label:p.label, route:`/console/${domain}/${p.key}`, source:`src/pages/${templateFor(p.key)}`, status:'source-reviewed; runtime-pending' })));
 const report = { version:'2.2.0', kind:'static-source-audit-not-browser', checks, sourceFileCount:files.length, pageImplementationFiles:pageFiles.map(p=>p.file), workspaceCount:routes.length, routes, authRoutes:authPaths, dynamicDetails:{applications:12,tabsPerApplication:6,runtimeStatus:'pending'}, inventory };
-const out=path.join(root,'docs/v2.2'); fs.mkdirSync(out,{recursive:true});
+const out=path.resolve(root,'../logs/idaas/audit'); fs.mkdirSync(out,{recursive:true});
 fs.writeFileSync(path.join(out,'typography-source-audit.json'),JSON.stringify(report,null,2));
 for (const c of checks) console.log(`${c.passed ? 'PASS':'FAIL'} ${c.name}${c.detail?' — '+c.detail:''}`);
 console.log(`\nStatic contract: ${checks.filter(c=>c.passed).length}/${checks.length}; ${files.length} source files; ${routes.length} workspaces; ${authPaths.length} auth routes. NOT rendered-page acceptance.`);

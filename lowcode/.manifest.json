@@ -1,0 +1,1583 @@
+{
+  "version": 1,
+  "database": "baseline",
+  "rootId": "0",
+  "warnings": [],
+  "resources": [
+    {
+      "id": "ui_group_portal_20260731",
+      "parentId": "0",
+      "name": "01.系统门户",
+      "displayName": "01.系统门户",
+      "type": "0",
+      "sortOrder": 1,
+      "path": "01.系统门户",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2106362027181645824",
+      "parentId": "ui_group_portal_20260731",
+      "name": "01.数据源管理",
+      "displayName": "01.数据源管理",
+      "type": "0",
+      "sortOrder": 1,
+      "path": "01.系统门户/01.数据源管理",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2027589459685986304",
+      "parentId": "2106362027181645824",
+      "name": "my-workbench",
+      "displayName": "01.工作台",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "01.系统门户/01.数据源管理/01.工作台(my-workbench).vue",
+      "baseSha256": "7a47d308d97ca17019b7ee39edd8b47ea8190efde813854b45ee81cca84bd9ca"
+    },
+    {
+      "id": "deptdatasourceui00000000000001",
+      "parentId": "2106362027181645824",
+      "name": "department-datasource",
+      "displayName": "02.数据源管理列表",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
+      "baseSha256": "8ddcabeaa7258f7eb56308fcbd3dca7fbb54819bcc18edee59c7dedcd0d696d5"
+    },
+    {
+      "id": "2016435561264910336",
+      "parentId": "deptdatasourceui00000000000001",
+      "name": "register-db",
+      "displayName": "01.登记数据源",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
+      "baseSha256": "cdb9f1b9678fc3757bf578788eafc7169ad538a5711a9611cf3c0a8775f7f16c"
+    },
+    {
+      "id": "2074806689771094016",
+      "parentId": "deptdatasourceui00000000000001",
+      "name": "register-dbTable",
+      "displayName": "02.探查数据表",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/02.探查数据表(register-dbTable).vue",
+      "baseSha256": "a9ca9632b8cac55b43bf7d1c8240782333b367221b459cec0258d463636a41e0"
+    },
+    {
+      "id": "2074806944084328448",
+      "parentId": "deptdatasourceui00000000000001",
+      "name": "register-dbTable-catalog",
+      "displayName": "03.登记数据表",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue",
+      "baseSha256": "838d9317afc22acd344154e8b3dcf8ba41580c4d96e68cbbc0ec7305d561548d"
+    },
+    {
+      "id": "2075055310869430272",
+      "parentId": "deptdatasourceui00000000000001",
+      "name": "register-confirm",
+      "displayName": "04.登记内容审查",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
+      "baseSha256": "8e495eb448a921d939e08435d4784d02fb084c8643eba3f5c199723b485e05ad"
+    },
+    {
+      "id": "2008087014782078976",
+      "parentId": "deptdatasourceui00000000000001",
+      "name": "db-table",
+      "displayName": "05.数据源详情库表信息",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/05.数据源详情库表信息(db-table).vue",
+      "baseSha256": "6d06b3901b4cadec73a7b1e4779340bae80278539979136b5a86271b83775fe0"
+    },
+    {
+      "id": "2001578680197386240",
+      "parentId": "ui_group_portal_20260731",
+      "name": "02.协作任务",
+      "displayName": "02.协作任务",
+      "type": "0",
+      "sortOrder": 2,
+      "path": "01.系统门户/02.协作任务",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2018225265199091712",
+      "parentId": "2001578680197386240",
+      "name": "approval-modal",
+      "displayName": "审批弹窗",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "01.系统门户/02.协作任务/审批弹窗(approval-modal).vue",
+      "baseSha256": "0b2b7b06a856a2c5760442c7afee889e48fa54d9102e82f6c3003180adf19122"
+    },
+    {
+      "id": "2018969070206529536",
+      "parentId": "2001578680197386240",
+      "name": "my-apply",
+      "displayName": "资源申请",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "01.系统门户/02.协作任务/资源申请(my-apply).vue",
+      "baseSha256": "96ed46a3338a1fa1faa5fadc4ab046cf2833a89cf31717585e8716e0151de7cd"
+    },
+    {
+      "id": "08204573bcdb4283b7a88e57aefdd0ea",
+      "parentId": "0",
+      "name": "02.数据盘点",
+      "displayName": "02.数据盘点",
+      "type": "0",
+      "sortOrder": 2,
+      "path": "02.数据盘点",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2004514814346989568",
+      "parentId": "08204573bcdb4283b7a88e57aefdd0ea",
+      "name": "01.数据登记",
+      "displayName": "01.数据登记",
+      "type": "0",
+      "sortOrder": 1,
+      "path": "02.数据盘点/01.数据登记",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2004515467794386944",
+      "parentId": "2004514814346989568",
+      "name": "my-app",
+      "displayName": "2.2.1 业务系统",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "02.数据盘点/01.数据登记/2.2.1 业务系统(my-app).vue",
+      "baseSha256": "659acffeddcb63bed95f0b52c0a9122b9aa139f7420161000af50aab4d66e928"
+    },
+    {
+      "id": "2004515730382983168",
+      "parentId": "2004514814346989568",
+      "name": "my-db",
+      "displayName": "2.2.2 数据探查",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "02.数据盘点/01.数据登记/2.2.2 数据探查(my-db).vue",
+      "baseSha256": "b34c6cda5985ab044f6c3c6af89090f2b98f535f18b7492bf1da2c0c4fd49abb"
+    },
+    {
+      "id": "2004515843704688640",
+      "parentId": "2004514814346989568",
+      "name": "my-catalog",
+      "displayName": "2.2.3 数据目录",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "02.数据盘点/01.数据登记/2.2.3 数据目录(my-catalog).vue",
+      "baseSha256": "eced440bd00c513bcb4124de336f7b8df4ca0869af4d78011d68ed75f7ffe16a"
+    },
+    {
+      "id": "2004515963359793152",
+      "parentId": "2004514814346989568",
+      "name": "my-fileCatalog",
+      "displayName": "2.2.4 数据导入",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "02.数据盘点/01.数据登记/2.2.4 数据导入(my-fileCatalog).vue",
+      "baseSha256": "0e8d85ca32c8fd053f153797dbbef21bcc35d16782da0c45e233c7bef1b7029b"
+    },
+    {
+      "id": "008dadfcf24d47199b33e3afa791dbcd",
+      "parentId": "08204573bcdb4283b7a88e57aefdd0ea",
+      "name": "02.登记流程组件",
+      "displayName": "02.登记流程组件",
+      "type": "0",
+      "sortOrder": 2,
+      "path": "02.数据盘点/02.登记流程组件",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2006191210534342656",
+      "parentId": "008dadfcf24d47199b33e3afa791dbcd",
+      "name": "db-type-select",
+      "displayName": "数据库类型选择器",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "02.数据盘点/02.登记流程组件/数据库类型选择器(db-type-select).vue",
+      "baseSha256": "86fd9223778d84483a8facf0c936584e273792cb43de8611469d52e873113235"
+    },
+    {
+      "id": "1998313128624459776",
+      "parentId": "008dadfcf24d47199b33e3afa791dbcd",
+      "name": "register-modal",
+      "displayName": "登记组件",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal).vue",
+      "baseSha256": "e89a8180b14882fd1e32852265d5835e715b6e624640909754779b4f18846137"
+    },
+    {
+      "id": "2008008668001931264",
+      "parentId": "1998313128624459776",
+      "name": "register-finish",
+      "displayName": "0. 登记完成页",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/0. 登记完成页(register-finish).vue",
+      "baseSha256": "4464914e833045fd4cb1524b9f421833ab9576e88b0c35ae414b07f7d60148db"
+    },
+    {
+      "id": "2004510336608702464",
+      "parentId": "1998313128624459776",
+      "name": "register-app",
+      "displayName": "1. 登记系统",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/1. 登记系统(register-app).vue",
+      "baseSha256": "3715aa1928b9a62bc6045e0b3e26e9c75c5dbc333d5dd648db56e0b77465e270"
+    },
+    {
+      "id": "2004521750421377024",
+      "parentId": "1998313128624459776",
+      "name": "register-catalog",
+      "displayName": "3. 登记目录",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/3. 登记目录(register-catalog).vue",
+      "baseSha256": "f1856accc7e862dd61a887863790dfc20036c1de2fea146b9a93917133a1b540"
+    },
+    {
+      "id": "2016026573025120256",
+      "parentId": "1998313128624459776",
+      "name": "register-fileCatalog",
+      "displayName": "登记文件目录",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记文件目录(register-fileCatalog).vue",
+      "baseSha256": "e26eb24a3d0806b18ff0d0023c6442b36e58e6d26996d8b96a5981e8cf8b0e3c"
+    },
+    {
+      "id": "2016031237237968896",
+      "parentId": "2016026573025120256",
+      "name": "register-fileCatalog-data",
+      "displayName": "上传数据",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记文件目录(register-fileCatalog)/上传数据(register-fileCatalog-data).vue",
+      "baseSha256": "6ba529244a7f9595a49e32eae3114b3261214c9344a4289192a5bba81304a6d6"
+    },
+    {
+      "id": "2017179897413832704",
+      "parentId": "1998313128624459776",
+      "name": "register-apply",
+      "displayName": "登记订阅申请单",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply).vue",
+      "baseSha256": "3dbd7cd9b534dfe3dd046fa8267e05e97cb29f76236322b2b439f93ac30b5026"
+    },
+    {
+      "id": "2020438938227388416",
+      "parentId": "2017179897413832704",
+      "name": "apply-print-modal",
+      "displayName": "打印申请单弹框",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/打印申请单弹框(apply-print-modal).vue",
+      "baseSha256": "b05e14539a57ffb5bdc8424270678b0de4c5b169f5f18c284c8f06dcadc38251"
+    },
+    {
+      "id": "2041789646725767168",
+      "parentId": "2017179897413832704",
+      "name": "apply-json-form",
+      "displayName": "申请单表单",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/申请单表单(apply-json-form).vue",
+      "baseSha256": "40a929391045f18be629b0a779c7617a34ebfabc226a119615f62bd105dbe0e4"
+    },
+    {
+      "id": "2020438813065162752",
+      "parentId": "2017179897413832704",
+      "name": "apply-res-table",
+      "displayName": "申请资源表格",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/申请资源表格(apply-res-table).vue",
+      "baseSha256": "32c7bdb8b9f9eccfdda1ecd48c32634f5ea90bbf878ae6306e46eecd9abd1997"
+    },
+    {
+      "id": "2019722685447745536",
+      "parentId": "2017179897413832704",
+      "name": "car-register-apply",
+      "displayName": "订阅申请单",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/订阅申请单(car-register-apply).vue",
+      "baseSha256": "af43dd02fcaf4aec778eea7d43d9913d3864e994ee1cd605e780cde05061ea7d"
+    },
+    {
+      "id": "2019722536331849728",
+      "parentId": "2017179897413832704",
+      "name": "car-list",
+      "displayName": "购物车列表",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/购物车列表(car-list).vue",
+      "baseSha256": "b27243cfe1264940f0019745dfcdc3b6acb3c06cc5dddc1cc2723093df0e3743"
+    },
+    {
+      "id": "2007661287158910976",
+      "parentId": "008dadfcf24d47199b33e3afa791dbcd",
+      "name": "detail-page",
+      "displayName": "详情页面",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page).vue",
+      "baseSha256": "e5a7ded33b569433bbe81e356846230cb3133df59958edfae1c6163633f7656f"
+    },
+    {
+      "id": "2018596040552812544",
+      "parentId": "2007661287158910976",
+      "name": "detail-breadcrumb",
+      "displayName": "0. 详情面包屑",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/0. 详情面包屑(detail-breadcrumb).vue",
+      "baseSha256": "5b06f2eefa7ab1f98d39d422bd0bad3c37344c18c0405ea512ef0b65aa9cbb05"
+    },
+    {
+      "id": "2007987224610148352",
+      "parentId": "2007661287158910976",
+      "name": "base-detail",
+      "displayName": "1. 资产【app|db|table|category】详情",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/1. 资产【app%7Cdb%7Ctable%7Ccategory】详情(base-detail).vue",
+      "baseSha256": "9c14eb879912e5d8c217b28518baa76360540e36c8024a1bd46edf199634ceb4"
+    },
+    {
+      "id": "2063240154598391808",
+      "parentId": "2007661287158910976",
+      "name": "detail-dialog",
+      "displayName": "2.详情弹窗",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/2.详情弹窗(detail-dialog).vue",
+      "baseSha256": "837c41cad0f528854c555e58433f7255a59ba7328f8e6292258078ec1820db70"
+    },
+    {
+      "id": "2019225341245599744",
+      "parentId": "2007661287158910976",
+      "name": "api-param",
+      "displayName": "API1-服务信息",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/API1-服务信息(api-param).vue",
+      "baseSha256": "eecd1fe8965c0de288153ce5b7b9384b46c67f0cb5ac4c7acfb421a4a9522262"
+    },
+    {
+      "id": "2019225460762292224",
+      "parentId": "2007661287158910976",
+      "name": "api-test",
+      "displayName": "API2-API调试",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/API2-API调试(api-test).vue",
+      "baseSha256": "6eed79f3ae4b6918af7f9186dafd964558e1168a47fd04b6b7e5999f1d6f7fd4"
+    },
+    {
+      "id": "2019225540563120128",
+      "parentId": "2007661287158910976",
+      "name": "api-use",
+      "displayName": "API3-使用情况",
+      "type": "1",
+      "sortOrder": 6,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/API3-使用情况(api-use).vue",
+      "baseSha256": "0249a2f970afdcac53eff74738019f28359ec23b58164f66d1528e037c1f2ec5"
+    },
+    {
+      "id": "2031218708510777344",
+      "parentId": "2007661287158910976",
+      "name": "fileCatalog-item",
+      "displayName": "文件目录1-数据项信息",
+      "type": "1",
+      "sortOrder": 7,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/文件目录1-数据项信息(fileCatalog-item).vue",
+      "baseSha256": "ecf77c1f4d2a3ba136e1dfd35ace5caee31ba53a82bb0048a85739484fdc2b1a"
+    },
+    {
+      "id": "2031218842099359744",
+      "parentId": "2007661287158910976",
+      "name": "fileCatalog-data",
+      "displayName": "文件目录2-数据预览",
+      "type": "1",
+      "sortOrder": 8,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/文件目录2-数据预览(fileCatalog-data).vue",
+      "baseSha256": "ce65fedf9d1d37381b1e5d58e5b70c98a79cf04c16df808b6425b39a6dc943c5"
+    },
+    {
+      "id": "2008735517480914944",
+      "parentId": "2007661287158910976",
+      "name": "table-col",
+      "displayName": "表1-数据表字段",
+      "type": "1",
+      "sortOrder": 9,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表1-数据表字段(table-col).vue",
+      "baseSha256": "b068aa07d782c6291f4e0e1829888661889d6d4492274dd35e14c50904c734ad"
+    },
+    {
+      "id": "2027271778864726016",
+      "parentId": "2007661287158910976",
+      "name": "table-tupu",
+      "displayName": "表2-图谱",
+      "type": "1",
+      "sortOrder": 10,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表2-图谱(table-tupu).vue",
+      "baseSha256": "8003428a66e390eb1cadeb98bd1da4b017f6b407cdb631b0b1f1d6187790b0ab"
+    },
+    {
+      "id": "2027271874662629376",
+      "parentId": "2007661287158910976",
+      "name": "table-blood",
+      "displayName": "表3-血缘分析",
+      "type": "1",
+      "sortOrder": 11,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表3-血缘分析(table-blood).vue",
+      "baseSha256": "8003428a66e390eb1cadeb98bd1da4b017f6b407cdb631b0b1f1d6187790b0ab"
+    },
+    {
+      "id": "2065275712078180352",
+      "parentId": "2007661287158910976",
+      "name": "table-preview",
+      "displayName": "表4-数据预览",
+      "type": "1",
+      "sortOrder": 12,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表4-数据预览(table-preview).vue",
+      "baseSha256": "591525afa9ace9eef7465ec9a7cfbbde71722c713115c94ceec209b9c5dc48f0"
+    },
+    {
+      "id": "2008427924812271616",
+      "parentId": "2007661287158910976",
+      "name": "catalog-item",
+      "displayName": "资源目录1-数据项信息",
+      "type": "1",
+      "sortOrder": 13,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录1-数据项信息(catalog-item).vue",
+      "baseSha256": "663c0e2da17199f8e943225c4066b78f4f24bcd811f3496c15a117fa54deb455"
+    },
+    {
+      "id": "2008464053368328192",
+      "parentId": "2007661287158910976",
+      "name": "catalog-rela",
+      "displayName": "资源目录2-挂接资源",
+      "type": "1",
+      "sortOrder": 14,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录2-挂接资源(catalog-rela).vue",
+      "baseSha256": "cb71c7f19e258f581312add0eec9287dff5d6f0861951ea0e266548b3541ef1a"
+    },
+    {
+      "id": "2008469508677242880",
+      "parentId": "2007661287158910976",
+      "name": "catalog-rela-table",
+      "displayName": "资源目录3-关联表资源",
+      "type": "1",
+      "sortOrder": 15,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录3-关联表资源(catalog-rela-table).vue",
+      "baseSha256": "c7854addc3e4aaf16e2176cc51b0c986a7c0b1986909fa1224bc16ef4c983bfa"
+    },
+    {
+      "id": "2008470019165982720",
+      "parentId": "2007661287158910976",
+      "name": "catalog-collect",
+      "displayName": "资源目录4-汇聚情况",
+      "type": "1",
+      "sortOrder": 16,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录4-汇聚情况(catalog-collect).vue",
+      "baseSha256": "73c8d1aad5550cb984f08edd388ed9ceeb5137865b44cdbf9fcbcc093e43673d"
+    },
+    {
+      "id": "2018613696492277760",
+      "parentId": "2007661287158910976",
+      "name": "catalog-market-item",
+      "displayName": "资源目录5-超市-数据项信息",
+      "type": "1",
+      "sortOrder": 17,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录5-超市-数据项信息(catalog-market-item).vue",
+      "baseSha256": "6689c8379b69b59f72a17b906202b3ebc5293c3815cec981665476c527f85c2c"
+    },
+    {
+      "id": "2018613836888215552",
+      "parentId": "2007661287158910976",
+      "name": "catalog-market-res",
+      "displayName": "资源目录6-超市-资源信息",
+      "type": "1",
+      "sortOrder": 18,
+      "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/资源目录6-超市-资源信息(catalog-market-res).vue",
+      "baseSha256": "8c590efe95bb0060dbbe1401606429ea5a85907bcdf839dae8f80479a82d11bf"
+    },
+    {
+      "id": "2020738614931570688",
+      "parentId": "008dadfcf24d47199b33e3afa791dbcd",
+      "name": "asset-register",
+      "displayName": "资产登记组件",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "02.数据盘点/02.登记流程组件/资产登记组件(asset-register).vue",
+      "baseSha256": "aa1a18af19538b357b37dd6aeebdc4c02928ed88e76573e81353c786fca46889"
+    },
+    {
+      "id": "2020739089332518912",
+      "parentId": "2020738614931570688",
+      "name": "register-body",
+      "displayName": "登记中间件",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "02.数据盘点/02.登记流程组件/资产登记组件(asset-register)/登记中间件(register-body).vue",
+      "baseSha256": "be15ef2b4ab9c21c2d262bc4821dcab3a4fec167be1cdf25c250cea25fc3a9ad"
+    },
+    {
+      "id": "2020738897917067264",
+      "parentId": "2020738614931570688",
+      "name": "register-action",
+      "displayName": "登记按钮组件",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "02.数据盘点/02.登记流程组件/资产登记组件(asset-register)/登记按钮组件(register-action).vue",
+      "baseSha256": "8183871fc50351ec4b72f081edadb774c37f9b4437dd73fc1630f39136c4e0ac"
+    },
+    {
+      "id": "2006253181124284416",
+      "parentId": "0",
+      "name": "03.数据接入",
+      "displayName": "03.数据接入",
+      "type": "0",
+      "sortOrder": 3,
+      "path": "03.数据接入",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2006253365342310400",
+      "parentId": "2006253181124284416",
+      "name": "data-dz",
+      "displayName": "2.2.3 数据对账",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "03.数据接入/2.2.3 数据对账(data-dz).vue",
+      "baseSha256": "5ca2e132662c326b6a16b94add0c028f40f87af0712567c4b61a3b359775f6b5"
+    },
+    {
+      "id": "2006267215160610816",
+      "parentId": "2006253365342310400",
+      "name": "data-dz-dj",
+      "displayName": "登记页",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "03.数据接入/2.2.3 数据对账(data-dz)/登记页(data-dz-dj).vue",
+      "baseSha256": "9b44629a3fae83f1e16546f6cc4bda2a351977b1dc85196a069705eec4e5c471"
+    },
+    {
+      "id": "2102416094001098752",
+      "parentId": "2006253181124284416",
+      "name": "data-convergence-hive",
+      "displayName": "2.3.1 Hive元数据库",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "03.数据接入/2.3.1 Hive元数据库(data-convergence-hive).vue",
+      "baseSha256": "7fd7bfed56329ecce5459d909b2683102d8166a8c4019cf1243899be2e218d0e"
+    },
+    {
+      "id": "2008730136700588032",
+      "parentId": "2006253181124284416",
+      "name": "data-convergence",
+      "displayName": "2.3.1 数据汇聚",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
+      "baseSha256": "d5e50cb88f3d30fc8f7655836a5e9ae11e304e87912c7b65fd7adf7a08c1196b"
+    },
+    {
+      "id": "2066782132212649984",
+      "parentId": "2008730136700588032",
+      "name": "ddl-dialog",
+      "displayName": "ddl弹窗",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/ddl弹窗(ddl-dialog).vue",
+      "baseSha256": "5d25548e8db59f69ec848309c461fecbd352404f2b88b53c275c5cf1f1ffbb96"
+    },
+    {
+      "id": "2053033792551608320",
+      "parentId": "2008730136700588032",
+      "name": "schedule-setting",
+      "displayName": "任务配置",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/任务配置(schedule-setting).vue",
+      "baseSha256": "5a236e3820efbc23ce530c3fd16ac7699512940d2eca2453ba9b7bc333b1b8f3"
+    },
+    {
+      "id": "2027276449775878144",
+      "parentId": "2008730136700588032",
+      "name": "access-apply",
+      "displayName": "接入申请",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
+      "baseSha256": "471082f7509d41303c6fad5e1701b18c435f876eb2518c5f01bbae3181cb6073"
+    },
+    {
+      "id": "2046880498703695872",
+      "parentId": "2008730136700588032",
+      "name": "access-apply_1",
+      "displayName": "接入申请",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply_1).vue",
+      "baseSha256": "c78cce068fdefdbc54d9d2f57d23aa3b4b748f4706734d7e0c092e05420fa4ec"
+    },
+    {
+      "id": "2016463450651824128",
+      "parentId": "2008730136700588032",
+      "name": "access-modal",
+      "displayName": "数据接入弹窗",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/数据接入弹窗(access-modal).vue",
+      "baseSha256": "b313e91c9d061cde6c1d11a986fa5c670fb82bbff4c83238d81e4b1a49cc0813"
+    },
+    {
+      "id": "2018533330964254720",
+      "parentId": "2016463450651824128",
+      "name": "task-finish",
+      "displayName": "创建完成页",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/数据接入弹窗(access-modal)/创建完成页(task-finish).vue",
+      "baseSha256": "ce781423f9c72dd91c4dc4a713eb08ff3e9f264059efaa90508d43f1f3205458"
+    },
+    {
+      "id": "2016463732836208640",
+      "parentId": "2016463450651824128",
+      "name": "field-mapping",
+      "displayName": "字段映射",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/数据接入弹窗(access-modal)/字段映射(field-mapping).vue",
+      "baseSha256": "5da71808b2e67d2e54a4c012ef8bede5fc34ceb4bd7d34017b3a48b278ec0e5e"
+    },
+    {
+      "id": "2016463807998136320",
+      "parentId": "2016463450651824128",
+      "name": "schedule-config",
+      "displayName": "执行调度策略",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/数据接入弹窗(access-modal)/执行调度策略(schedule-config).vue",
+      "baseSha256": "a1c3b8e6be30adcd37f0df5b52850e751414b41215b13b3080ddde00c4d40263"
+    },
+    {
+      "id": "2016463617438322688",
+      "parentId": "2016463450651824128",
+      "name": "database-config",
+      "displayName": "数据库表配置",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/数据接入弹窗(access-modal)/数据库表配置(database-config).vue",
+      "baseSha256": "0f6e255c33fb3a77508d782e03cf41e7077c3944853225a0d8c697e1d36824dd"
+    },
+    {
+      "id": "2016798577084928000",
+      "parentId": "2016463450651824128",
+      "name": "detail-drawer",
+      "displayName": "详情抽屉",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/数据接入弹窗(access-modal)/详情抽屉(detail-drawer).vue",
+      "baseSha256": "6734609d38edf2ae84a58f4388f5b20d55a9556fd500ba6409865c977e57c59b"
+    },
+    {
+      "id": "2008730414761971712",
+      "parentId": "2006253181124284416",
+      "name": "access-monitoring",
+      "displayName": "2.3.2 接入监控",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "03.数据接入/2.3.2 接入监控(access-monitoring).vue",
+      "baseSha256": "68076c0512847e5ae66cc88205fd4a55ddb615e0cf6f2f1a6eec8390e706af85"
+    },
+    {
+      "id": "2059545106555981824",
+      "parentId": "2008730414761971712",
+      "name": "delay-monitor",
+      "displayName": "延时监控",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "03.数据接入/2.3.2 接入监控(access-monitoring)/延时监控(delay-monitor).vue",
+      "baseSha256": "8a01ff6f9c4d16ed62c86a54c6219360357418d904d4f2f79ad03dadbfb7b5fc"
+    },
+    {
+      "id": "2060165467882496000",
+      "parentId": "2008730414761971712",
+      "name": "error-log-panel",
+      "displayName": "异常日志",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "03.数据接入/2.3.2 接入监控(access-monitoring)/异常日志(error-log-panel).vue",
+      "baseSha256": "4403716cdb8ba7599427bbe6aca64b344a2fa49b6247a45702795b8e618d0fa6"
+    },
+    {
+      "id": "2005563673546395648",
+      "parentId": "0",
+      "name": "05.数据治理",
+      "displayName": "05.数据治理",
+      "type": "0",
+      "sortOrder": 4,
+      "path": "05.数据治理",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2013139484096925696",
+      "parentId": "2005563673546395648",
+      "name": "data-warehouse",
+      "displayName": "2.5.1 数据中心",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse).vue",
+      "baseSha256": "1c7c142ad1ed65e72b796dcf391ea93437bad10eafd435f174be80981a0287f6"
+    },
+    {
+      "id": "2018975669541220352",
+      "parentId": "2013139484096925696",
+      "name": "dwd-detail",
+      "displayName": "基础层详情",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/基础层详情(dwd-detail).vue",
+      "baseSha256": "f60be040fb3eb1270077151bbb08b0f11d48803cf93432cc0c03ee4080ccafcd"
+    },
+    {
+      "id": "2014274065852338176",
+      "parentId": "2013139484096925696",
+      "name": "dst-detail",
+      "displayName": "数源层详情",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/数源层详情(dst-detail).vue",
+      "baseSha256": "db706f844fdaeb445ab35cea3c2b61af0ab3f4a25607b346a560a1463ff2cbed"
+    },
+    {
+      "id": "2015613030412914688",
+      "parentId": "2013139484096925696",
+      "name": "dwm-detail",
+      "displayName": "整合层详情",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/整合层详情(dwm-detail).vue",
+      "baseSha256": "9535e059f997c22be4723c06fb3a73db9d32916539c7d245ab5efe3cd3a0d383"
+    },
+    {
+      "id": "2063155434573344768",
+      "parentId": "2015613030412914688",
+      "name": "create-node-dialog",
+      "displayName": "创建节点",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/整合层详情(dwm-detail)/创建节点(create-node-dialog).vue",
+      "baseSha256": "3f030a96275fcbc79c6dee339fc56061ef315d49daae8774a52f648a033a8dbe"
+    },
+    {
+      "id": "2016090006466662400",
+      "parentId": "2015613030412914688",
+      "name": "dwm-visual-tree",
+      "displayName": "规划图组件",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/整合层详情(dwm-detail)/规划图组件(dwm-visual-tree).vue",
+      "baseSha256": "5d36815db3fcac9db5a6eaf581c39a2970aaa622b5be7ae7f5e539769faffc4f"
+    },
+    {
+      "id": "2016090152789151744",
+      "parentId": "2015613030412914688",
+      "name": "process-detail-drawer",
+      "displayName": "进度抽屉",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/整合层详情(dwm-detail)/进度抽屉(process-detail-drawer).vue",
+      "baseSha256": "4d6f3ecf798b9eb2fc4cdbe72e71660c48fd202c8013535b65f0cbf4c55c986a"
+    },
+    {
+      "id": "2018593486175539200",
+      "parentId": "2013139484096925696",
+      "name": "tags-detail",
+      "displayName": "服务层-数据标签库详情",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/服务层-数据标签库详情(tags-detail).vue",
+      "baseSha256": "de16b99cd7cd1fac9f7f8484784c2a8a7be353960f2fa4a0a020311e24105dc9"
+    },
+    {
+      "id": "2018613212184383488",
+      "parentId": "2018593486175539200",
+      "name": "tag-drawer",
+      "displayName": "创建标签抽屉",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/服务层-数据标签库详情(tags-detail)/创建标签抽屉(tag-drawer).vue",
+      "baseSha256": "bae816419b1048f3ee092af85ed13f299a10624128f966fba08228a17378384e"
+    },
+    {
+      "id": "2064978903590064128",
+      "parentId": "2013139484096925696",
+      "name": "dws-detail",
+      "displayName": "服务层详情",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/服务层详情(dws-detail).vue",
+      "baseSha256": "4a06444d192b077cc9eff9629cc415b307b4a8dd7091b350a6b7bf88d1933a08"
+    },
+    {
+      "id": "d0e0194cdc0b4a71b3502ccb3fe4bce6",
+      "parentId": "2013139484096925696",
+      "name": "ods-detail",
+      "displayName": "贴源层 ODS 数据表详情",
+      "type": "1",
+      "sortOrder": 6,
+      "path": "05.数据治理/2.5.1 数据中心(data-warehouse)/贴源层 ODS 数据表详情(ods-detail).vue",
+      "baseSha256": "f7ccd8fbdd75769098dac34f86f56b95a1508fe9b473bf6e9f4593f82b32a4ec"
+    },
+    {
+      "id": "2005563932859240448",
+      "parentId": "2005563673546395648",
+      "name": "data-category",
+      "displayName": "2.5.2 数据目录",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "05.数据治理/2.5.2 数据目录(data-category).vue",
+      "baseSha256": "3a730548cfbfa747130952674c1b025ec880d8b3e2cbf85857c93dc862995cb2"
+    },
+    {
+      "id": "2059535771591331840",
+      "parentId": "2005563932859240448",
+      "name": "field-display-drawer",
+      "displayName": "字段管理",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.2 数据目录(data-category)/字段管理(field-display-drawer).vue",
+      "baseSha256": "a5b0a4d07b68de07e2146c5c9cb2c322d95c3fa4a490ba5c863b68a82528d04e"
+    },
+    {
+      "id": "2006256270447284224",
+      "parentId": "2005563932859240448",
+      "name": "data-category-drawer",
+      "displayName": "目录分类",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "05.数据治理/2.5.2 数据目录(data-category)/目录分类(data-category-drawer).vue",
+      "baseSha256": "3699edf5740cb63e31007e0f89e9da82487c482c935bb67ed6632021f21d2221"
+    },
+    {
+      "id": "2009529477967187968",
+      "parentId": "2005563673546395648",
+      "name": "data-deal",
+      "displayName": "2.5.3 数据处理",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "05.数据治理/2.5.3 数据处理(data-deal).vue",
+      "baseSha256": "9a835b534b7917a19482ab3e1d447fefad52c02cef7d585ab6fb725e37078d98"
+    },
+    {
+      "id": "2014604773577789440",
+      "parentId": "2009529477967187968",
+      "name": "task-side-panel",
+      "displayName": "任务面板",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.3 数据处理(data-deal)/任务面板(task-side-panel).vue",
+      "baseSha256": "01ef1c402b44b9936f2fa2150f46977561e2adb46cb2adb97fb30e8024ba2a80"
+    },
+    {
+      "id": "2013918885449371648",
+      "parentId": "2009529477967187968",
+      "name": "table-panel",
+      "displayName": "列表面板",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "05.数据治理/2.5.3 数据处理(data-deal)/列表面板(table-panel).vue",
+      "baseSha256": "72ab22a16b3cc72eb611a18a945a5b82b05bf1196592cad55c247aaee10b1d8f"
+    },
+    {
+      "id": "2009565937680322560",
+      "parentId": "2009529477967187968",
+      "name": "property-panel",
+      "displayName": "属性面板",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "05.数据治理/2.5.3 数据处理(data-deal)/属性面板(property-panel).vue",
+      "baseSha256": "9b149aebb43b3192a217115a942cafb62b958e974936e3779f54355ef67a2394"
+    },
+    {
+      "id": "2009565859053899776",
+      "parentId": "2009529477967187968",
+      "name": "preview-panel",
+      "displayName": "预览面板",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "05.数据治理/2.5.3 数据处理(data-deal)/预览面板(preview-panel).vue",
+      "baseSha256": "c900c4bbec745c7f476d99fa48e1a899d00210ff1c57352455c3530f86cd2631"
+    },
+    {
+      "id": "2019673282695475200",
+      "parentId": "2005563673546395648",
+      "name": "data-quality",
+      "displayName": "2.5.4 数据质量",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality).vue",
+      "baseSha256": "5aad26557db512d07936391222920a8bcaf911cd66b5af4d317cf46e5a48fe40"
+    },
+    {
+      "id": "2019674005495689216",
+      "parentId": "2019673282695475200",
+      "name": "quality-reports",
+      "displayName": "数据质量报告",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality)/数据质量报告(quality-reports).vue",
+      "baseSha256": "a0cc690ee7087645ca0bf62cc6fa235dada35a3578b3b8b5920d7df33bb2af7e"
+    },
+    {
+      "id": "2020696697363578880",
+      "parentId": "2019673282695475200",
+      "name": "质检弹窗",
+      "displayName": "质检弹窗",
+      "type": "0",
+      "sortOrder": 2,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality)/质检弹窗",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2020696910199341056",
+      "parentId": "2020696697363578880",
+      "name": "quality-rule-config",
+      "displayName": "规则定义配置",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality)/质检弹窗/规则定义配置(quality-rule-config).vue",
+      "baseSha256": "8dfbf7f44eded31ee3f67ef3d97a2cb8072d1cf06fb97256b864536da9ed7392"
+    },
+    {
+      "id": "2020697011592445952",
+      "parentId": "2020696697363578880",
+      "name": "quality-task-config",
+      "displayName": "质检任务设置",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality)/质检弹窗/质检任务设置(quality-task-config).vue",
+      "baseSha256": "498607a07f4de74d61a75286a70a3b37d4a1d6b1a3c00df289621c30deaa0084"
+    },
+    {
+      "id": "2020410655368622080",
+      "parentId": "2019673282695475200",
+      "name": "quality-report",
+      "displayName": "质检报告",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality)/质检报告(quality-report).vue",
+      "baseSha256": "79fe881d57352ebdb3fbc14e9cbafc65bdc5036b29deacf89bd9472322754268"
+    },
+    {
+      "id": "2021465157593022464",
+      "parentId": "2019673282695475200",
+      "name": "quality-empty",
+      "displayName": "质检结果暂无",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality)/质检结果暂无(quality-empty).vue",
+      "baseSha256": "436ebe519163359d079d9007de35e7e3ca5ac13ba5ae67e4af4dcd3f55b9c36c"
+    },
+    {
+      "id": "2019673658236678144",
+      "parentId": "2019673282695475200",
+      "name": "rule-library",
+      "displayName": "质检规则库",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality)/质检规则库(rule-library).vue",
+      "baseSha256": "32ee58909be188c9e2e7e2f6fcc9ae3c8ef359019eb6fed2706c78e92853cadd"
+    },
+    {
+      "id": "2021822069937356800",
+      "parentId": "2019673282695475200",
+      "name": "quality-card",
+      "displayName": "质量卡片",
+      "type": "1",
+      "sortOrder": 6,
+      "path": "05.数据治理/2.5.4 数据质量(data-quality)/质量卡片(quality-card).vue",
+      "baseSha256": "ca0824419026186b712df612b5a8df65bc9cbaf2310b536fd4131eb4ca87b790"
+    },
+    {
+      "id": "2013151015996035072",
+      "parentId": "2005563673546395648",
+      "name": "data-standard",
+      "displayName": "2.5.5 数据标准",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "05.数据治理/2.5.5 数据标准(data-standard).vue",
+      "baseSha256": "10470aae3422d59a5fd0aad7dc03cece504aa5a56a8500defeefd6c303dd3c3c"
+    },
+    {
+      "id": "2059526706911858688",
+      "parentId": "2013151015996035072",
+      "name": "meta-import-drawer",
+      "displayName": "数据元批量导入",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "05.数据治理/2.5.5 数据标准(data-standard)/数据元批量导入(meta-import-drawer).vue",
+      "baseSha256": "8d5cb58bfdf4dea1caec104a4dc242711388f4a0533bfb3672bd5bb6e4c541c9"
+    },
+    {
+      "id": "2059526782921035776",
+      "parentId": "2013151015996035072",
+      "name": "meta-detail-drawer",
+      "displayName": "数据元抽屉",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "05.数据治理/2.5.5 数据标准(data-standard)/数据元抽屉(meta-detail-drawer).vue",
+      "baseSha256": "5068cc0bb8cb2042a6012934c140400a65343c7327f21152c082d1d5766b231a"
+    },
+    {
+      "id": "2029026832923807744",
+      "parentId": "2013151015996035072",
+      "name": "standard-code",
+      "displayName": "标准代码",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "05.数据治理/2.5.5 数据标准(data-standard)/标准代码(standard-code).vue",
+      "baseSha256": "6f89d2d3dee923cc3204f03877175c3496c75bee994f6c4bce250ba894f43daf"
+    },
+    {
+      "id": "2059526902550974464",
+      "parentId": "2013151015996035072",
+      "name": "standard-category-drawer",
+      "displayName": "标准分类目录抽屉",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "05.数据治理/2.5.5 数据标准(data-standard)/标准分类目录抽屉(standard-category-drawer).vue",
+      "baseSha256": "22ae5ddc64390e90c54c4ac2ba37969b1556356cd063a717b20d37215bd0b2bd"
+    },
+    {
+      "id": "2014605325493669888",
+      "parentId": "0",
+      "name": "06.数据服务",
+      "displayName": "06.数据服务",
+      "type": "0",
+      "sortOrder": 5,
+      "path": "06.数据服务",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2015737170683826176",
+      "parentId": "2014605325493669888",
+      "name": "02.数据超市",
+      "displayName": "02.数据超市",
+      "type": "0",
+      "sortOrder": 1,
+      "path": "06.数据服务/02.数据超市",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2019596591486808064",
+      "parentId": "2015737170683826176",
+      "name": "shopping-car",
+      "displayName": "购物车",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "06.数据服务/02.数据超市/购物车(shopping-car).vue",
+      "baseSha256": "c65a8ba0af84017853789ee2b2abfe4de7eb84db6d8607c4a17cef272c61be7f"
+    },
+    {
+      "id": "2015737231052443648",
+      "parentId": "2015737170683826176",
+      "name": "market",
+      "displayName": "超市列表页",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "06.数据服务/02.数据超市/超市列表页(market).vue",
+      "baseSha256": "6fd3db0038480503cb9b017378506c4f5c350fc0fe39ea1d597d1c42823e014d"
+    },
+    {
+      "id": "2015737672091897856",
+      "parentId": "2015737231052443648",
+      "name": "market-list",
+      "displayName": "列表组件",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "06.数据服务/02.数据超市/超市列表页(market)/列表组件(market-list).vue",
+      "baseSha256": "ebcb596b7134300ab8324122a77b48d2f36e1fc7739190de28f32f5a24e998da"
+    },
+    {
+      "id": "2015737443246477312",
+      "parentId": "2015737170683826176",
+      "name": "check-card",
+      "displayName": "超市标签筛选",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "06.数据服务/02.数据超市/超市标签筛选(check-card).vue",
+      "baseSha256": "93546263da0e770da15cc3d9af44529db9880c862b72be11f01f26075b9a53c0"
+    },
+    {
+      "id": "2015737553770582016",
+      "parentId": "2015737443246477312",
+      "name": "check-tags",
+      "displayName": "标签筛选组件",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "06.数据服务/02.数据超市/超市标签筛选(check-card)/标签筛选组件(check-tags).vue",
+      "baseSha256": "67ebe6337737655ba74b7af7d86efa697a2e62162cfb6ad69c8ec471c9b0ce77"
+    },
+    {
+      "id": "2018627213819711488",
+      "parentId": "2015737170683826176",
+      "name": "market-detail",
+      "displayName": "超市详情",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "06.数据服务/02.数据超市/超市详情(market-detail).vue",
+      "baseSha256": "27ef8ab8589056cd94cf7980402f4be28fc73f50137e3599a19b6a421b1abc27"
+    },
+    {
+      "id": "2014615745029804032",
+      "parentId": "2014605325493669888",
+      "name": "data-serve",
+      "displayName": "数据服务",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "06.数据服务/数据服务(data-serve).vue",
+      "baseSha256": "5c3260acd6c181729f7dc7afedf1cb6625df797ce1ac829c002318158781c566"
+    },
+    {
+      "id": "2017170871384870912",
+      "parentId": "2014615745029804032",
+      "name": "api-params",
+      "displayName": "api参数",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "06.数据服务/数据服务(data-serve)/api参数(api-params).vue",
+      "baseSha256": "ef6441b83768b7842bc0745f38692ea15be1f22ac888c534a5f42c60ee1fc40b"
+    },
+    {
+      "id": "2017170975672045568",
+      "parentId": "2014615745029804032",
+      "name": "api-modal",
+      "displayName": "api弹窗",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "06.数据服务/数据服务(data-serve)/api弹窗(api-modal).vue",
+      "baseSha256": "ffad8f1bfcf7bf93924435ef4b94742feaf77445f04533c0d69798040d6fe0fc"
+    },
+    {
+      "id": "2063874949527420928",
+      "parentId": "2014615745029804032",
+      "name": "api-detail",
+      "displayName": "api详情",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "06.数据服务/数据服务(data-serve)/api详情(api-detail).vue",
+      "baseSha256": "ac2d2ac56054c7400bb921363996fbf76c29ae822822eef9f046ac2dce37ac21"
+    },
+    {
+      "id": "2060245186132844544",
+      "parentId": "2014615745029804032",
+      "name": "api-build-dialog",
+      "displayName": "服务构建",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "06.数据服务/数据服务(data-serve)/服务构建(api-build-dialog).vue",
+      "baseSha256": "e4798f7ec36985980d2e5ba17b81b32f93ab2c38eb9323a7ea4d9b8692bf6fe8",
+      "redactedFields": [
+        "dataSources[].user_name",
+        "dataSources[].password"
+      ],
+      "publicationBlocked": "Private literals are omitted from Git; migrate them to runtime configuration before publication"
+    },
+    {
+      "id": "2063874204568698880",
+      "parentId": "2014615745029804032",
+      "name": "服务组件",
+      "displayName": "服务组件",
+      "type": "0",
+      "sortOrder": 5,
+      "path": "06.数据服务/数据服务(data-serve)/服务组件",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2063874276488429568",
+      "parentId": "2063874204568698880",
+      "name": "api-build-content",
+      "displayName": "api构建",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "06.数据服务/数据服务(data-serve)/服务组件/api构建(api-build-content).vue",
+      "baseSha256": "f37a0c2780f3c36d57da62681439e5a2c9c6e81cf5ab135978c99f8363437bae"
+    },
+    {
+      "id": "2063874357107146752",
+      "parentId": "2063874204568698880",
+      "name": "api-register-content",
+      "displayName": "api注册",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "06.数据服务/数据服务(data-serve)/服务组件/api注册(api-register-content).vue",
+      "baseSha256": "579ffd0af8c5d71275cef8873575e9c18e5900fd73e46389bd2933d5cbdb4c3c"
+    },
+    {
+      "id": "2063874447825747968",
+      "parentId": "2063874204568698880",
+      "name": "service-status-table",
+      "displayName": "api状态表格",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "06.数据服务/数据服务(data-serve)/服务组件/api状态表格(service-status-table).vue",
+      "baseSha256": "2861673fdb9778d50a3f87b269cf664a75e36a52130646ddc8e24fba89e26ca2"
+    },
+    {
+      "id": "2063874553702563840",
+      "parentId": "2063874204568698880",
+      "name": "service-dialog-wrapper",
+      "displayName": "服务弹窗",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "06.数据服务/数据服务(data-serve)/服务组件/服务弹窗(service-dialog-wrapper).vue",
+      "baseSha256": "bfe383670c74185ed3ff1946df1e88eadf0f85a4006e3668a240e41613673719"
+    },
+    {
+      "id": "2064226542223462400",
+      "parentId": "2063874204568698880",
+      "name": "api-build-modal",
+      "displayName": "服务构建弹窗",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "06.数据服务/数据服务(data-serve)/服务组件/服务构建弹窗(api-build-modal).vue",
+      "baseSha256": "85e0a10f6549c8963e438c8afc7221b3d4d6ac1be69fda9e3b85f3a27b0b49c0"
+    },
+    {
+      "id": "2064226681117839360",
+      "parentId": "2063874204568698880",
+      "name": "api-register-modal",
+      "displayName": "服务注册弹窗",
+      "type": "1",
+      "sortOrder": 6,
+      "path": "06.数据服务/数据服务(data-serve)/服务组件/服务注册弹窗(api-register-modal).vue",
+      "baseSha256": "606290ab14ffbb879cb57d4585d192a6adde6ecca9d3b501e5a0fca84e9e8594"
+    },
+    {
+      "id": "2014616362783674368",
+      "parentId": "2014615745029804032",
+      "name": "serve-empty",
+      "displayName": "服务缺省",
+      "type": "1",
+      "sortOrder": 6,
+      "path": "06.数据服务/数据服务(data-serve)/服务缺省(serve-empty).vue",
+      "baseSha256": "853b44284c4924253b9772060517b40801f39727d8c079c4b8aa3981c727db32"
+    },
+    {
+      "id": "2017170778183241728",
+      "parentId": "2014615745029804032",
+      "name": "category-drawer",
+      "displayName": "目录抽屉",
+      "type": "1",
+      "sortOrder": 7,
+      "path": "06.数据服务/数据服务(data-serve)/目录抽屉(category-drawer).vue",
+      "baseSha256": "96f5e878545f4d30c3712d7675017f80fc68865957798658b39a54acd982014e"
+    },
+    {
+      "id": "2026114126046601216",
+      "parentId": "0",
+      "name": "07.数据应用",
+      "displayName": "07.数据应用",
+      "type": "0",
+      "sortOrder": 6,
+      "path": "07.数据应用",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2026115170365382656",
+      "parentId": "2026114126046601216",
+      "name": "app-warehouse",
+      "displayName": "2.4.1 应用仓库",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "07.数据应用/2.4.1 应用仓库(app-warehouse).vue",
+      "baseSha256": "256c7d1b38ae80fcfb05cdd6286b9115a3f912292605c769053d1309b8f7af5f"
+    },
+    {
+      "id": "2026227187550035968",
+      "parentId": "2026115170365382656",
+      "name": "create-app-modal",
+      "displayName": "创建应用弹窗",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "07.数据应用/2.4.1 应用仓库(app-warehouse)/创建应用弹窗(create-app-modal).vue",
+      "baseSha256": "b0dcf5265ee269153155e1a8c0cd58c29a48e8eab8d91cabea277fbd50f41714"
+    },
+    {
+      "id": "2046525999313092608",
+      "parentId": "2026115170365382656",
+      "name": "publish-view",
+      "displayName": "发布预览（组件、表单）",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "07.数据应用/2.4.1 应用仓库(app-warehouse)/发布预览（组件、表单）(publish-view).vue",
+      "baseSha256": "213f16d90ed25692734d30aa36bf8f6910f2dfe974db399dc25971f251fd1a73"
+    },
+    {
+      "id": "2029457633557684224",
+      "parentId": "2026115170365382656",
+      "name": "base-table",
+      "displayName": "基础透视表",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "07.数据应用/2.4.1 应用仓库(app-warehouse)/基础透视表(base-table).vue",
+      "baseSha256": "78a70f8a3e3bde91e6f8c4894b662df8ad3497bec9180c4cfc3e1185e1a0e72f"
+    },
+    {
+      "id": "2029851370624491520",
+      "parentId": "2026115170365382656",
+      "name": "base-table2",
+      "displayName": "基础透视表2",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "07.数据应用/2.4.1 应用仓库(app-warehouse)/基础透视表2(base-table2).vue",
+      "baseSha256": "f2b61f10631b643f6932cc594f48263d757a8668e475ba0a1ba0c0f9e9627a2d"
+    },
+    {
+      "id": "2026182131778625536",
+      "parentId": "2026115170365382656",
+      "name": "warehouse-card",
+      "displayName": "应用卡片",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "07.数据应用/2.4.1 应用仓库(app-warehouse)/应用卡片(warehouse-card).vue",
+      "baseSha256": "0b250c81d53cabea2a73c1320508815c60619a8aa87fa6931b80ee018d0af6af"
+    },
+    {
+      "id": "2026232963140198400",
+      "parentId": "2026115170365382656",
+      "name": "app-editor",
+      "displayName": "应用编辑页",
+      "type": "1",
+      "sortOrder": 6,
+      "path": "07.数据应用/2.4.1 应用仓库(app-warehouse)/应用编辑页(app-editor).vue",
+      "baseSha256": "af25bdfd5c5eb66b723fcb1fc423cd06ce31398255aa1fcaee400eb0816f92fd"
+    },
+    {
+      "id": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "parentId": "0",
+      "name": "09.系统管理",
+      "displayName": "09.系统管理",
+      "type": "0",
+      "sortOrder": 7,
+      "path": "09.系统管理",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2033838278811688960",
+      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "name": "02.用户与权限",
+      "displayName": "02.用户与权限",
+      "type": "0",
+      "sortOrder": 1,
+      "path": "09.系统管理/02.用户与权限",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2087450000000000000",
+      "parentId": "2033838278811688960",
+      "name": "nifi-node-config",
+      "displayName": "NiFi 节点配置",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "09.系统管理/02.用户与权限/NiFi 节点配置(nifi-node-config).vue",
+      "baseSha256": "9e7a0da7867add7300eb0e743912073ce2fcf337ef0bbf5936a814bc7c2641a1"
+    },
+    {
+      "id": "178716197774800001",
+      "parentId": "2033838278811688960",
+      "name": "online-user-manage",
+      "displayName": "在线用户",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "09.系统管理/02.用户与权限/在线用户(online-user-manage).vue",
+      "baseSha256": "707a3985e9ead42bb0e5a55cb063f8ee17f27e84b71dd14b8a810df4abaf2114"
+    },
+    {
+      "id": "2033843666244182016",
+      "parentId": "2033838278811688960",
+      "name": "auth-manage",
+      "displayName": "权限管理",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "09.系统管理/02.用户与权限/权限管理(auth-manage).vue",
+      "baseSha256": "15f998d5d29f335643a37d655de78d0e00ce90b1fa4b6b0fd6bc65e540cf55e4"
+    },
+    {
+      "id": "2034515146976083968",
+      "parentId": "2033843666244182016",
+      "name": "auth-perm-tree",
+      "displayName": "右侧权限树",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "09.系统管理/02.用户与权限/权限管理(auth-manage)/右侧权限树(auth-perm-tree).vue",
+      "baseSha256": "5b8f63be99514893128d98e4a5090c6a21adc5549404b578f4c88f07aa7d12e2"
+    },
+    {
+      "id": "2034515052092538880",
+      "parentId": "2033843666244182016",
+      "name": "auth-left-panel",
+      "displayName": "左侧面板",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "09.系统管理/02.用户与权限/权限管理(auth-manage)/左侧面板(auth-left-panel).vue",
+      "baseSha256": "ca6fac58c08c05c75ebc19a896456930da5367b56a8466d94f9fb475f8954dad"
+    },
+    {
+      "id": "2033843576989392896",
+      "parentId": "2033838278811688960",
+      "name": "user-manage",
+      "displayName": "用户管理",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "09.系统管理/02.用户与权限/用户管理(user-manage).vue",
+      "baseSha256": "cf3d2aa5da4a673ec46e2386be011a69d77a936e7c4c99a5a45f93cfbda56f14"
+    },
+    {
+      "id": "178716197779600002",
+      "parentId": "2033838278811688960",
+      "name": "tenant-manage",
+      "displayName": "租户管理",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "09.系统管理/02.用户与权限/租户管理(tenant-manage).vue",
+      "baseSha256": "ec494dfd5c18725e4475042910864b7aa7377a15cb4540990dab64f41ff3fed7"
+    },
+    {
+      "id": "2033838744941469696",
+      "parentId": "2033838278811688960",
+      "name": "org-manage",
+      "displayName": "组织机构",
+      "type": "1",
+      "sortOrder": 6,
+      "path": "09.系统管理/02.用户与权限/组织机构(org-manage).vue",
+      "baseSha256": "b4cc9f6d1e53283a68a1aa1a7d1a90f51b226b4e15d466be019eab55b63b32e5"
+    },
+    {
+      "id": "2033843620580794368",
+      "parentId": "2033838278811688960",
+      "name": "role-manage",
+      "displayName": "角色管理",
+      "type": "1",
+      "sortOrder": 7,
+      "path": "09.系统管理/02.用户与权限/角色管理(role-manage).vue",
+      "baseSha256": "baa9ae977c8d54bf8a992e874f3161c7443ca57e0289c8b2a59f8919ad461dca"
+    },
+    {
+      "id": "ui_group_approval_20260802",
+      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "name": "08.审批中心",
+      "displayName": "08.审批中心",
+      "type": "0",
+      "sortOrder": 2,
+      "path": "09.系统管理/08.审批中心",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "ui_approval_center_20260802",
+      "parentId": "ui_group_approval_20260802",
+      "name": "approval-center",
+      "displayName": "审批中心",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "09.系统管理/08.审批中心/审批中心(approval-center).vue",
+      "baseSha256": "90e8ea82cfa9e01197d0538cb930dc38390035d598ddb5700b836d1df7219439"
+    },
+    {
+      "id": "2048677106957221888",
+      "parentId": "ui_group_approval_20260802",
+      "name": "flow-config",
+      "displayName": "流程管理",
+      "type": "1",
+      "sortOrder": 2,
+      "path": "09.系统管理/08.审批中心/流程管理(flow-config).vue",
+      "baseSha256": "0f534d4de5ec7b47c3abee2ccfb18008cc46b58f475ad28875a39d9dfa614845"
+    },
+    {
+      "id": "2048677252751228928",
+      "parentId": "ui_group_approval_20260802",
+      "name": "flow-designer",
+      "displayName": "流程设计器",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "09.系统管理/08.审批中心/流程设计器(flow-designer).vue",
+      "baseSha256": "8999fa6848d878b870467e57900c36255f7bec89d6c5dbbc57bee1a7c845a5cb"
+    },
+    {
+      "id": "5c0e764b293b4e9ca0b39d4e350f1814",
+      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "name": "sym-config",
+      "displayName": "1.1.系统配置",
+      "type": "1",
+      "sortOrder": 3,
+      "path": "09.系统管理/1.1.系统配置(sym-config).vue",
+      "baseSha256": "65d08b7000f0ffb746cd7279b60800f4ff461f160452195ddcd52079c72db517"
+    },
+    {
+      "id": "2003021421129306112",
+      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "name": "sym-icon",
+      "displayName": "1.2 icon图标",
+      "type": "1",
+      "sortOrder": 4,
+      "path": "09.系统管理/1.2 icon图标(sym-icon).vue",
+      "baseSha256": "f7da45fccf52a3e994ecfc487ee849f49865b0382220d0de268b4894a4ff5c46"
+    },
+    {
+      "id": "2021030351122022400",
+      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "name": "form-config",
+      "displayName": "1.3 表单配置页",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "09.系统管理/1.3 表单配置页(form-config).vue",
+      "baseSha256": "0e200e1f2789817a623cc9ebae642aafe9bfa8c70a71f73ee5db0a40375da8ed"
+    },
+    {
+      "id": "2037465914704191488",
+      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "name": "dict-manage",
+      "displayName": "1.4 字典管理",
+      "type": "1",
+      "sortOrder": 6,
+      "path": "09.系统管理/1.4 字典管理(dict-manage).vue",
+      "baseSha256": "d1591416aabb83100b43446b7132b4c492df406a9339d59ba8e1dd9a6403db3a"
+    },
+    {
+      "id": "ui_group_common_20260731",
+      "parentId": "0",
+      "name": "10.通用组件",
+      "displayName": "10.通用组件",
+      "type": "0",
+      "sortOrder": 8,
+      "path": "10.通用组件",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "2009111573765361664",
+      "parentId": "ui_group_common_20260731",
+      "name": "global-nav",
+      "displayName": "全局导航",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "10.通用组件/全局导航(global-nav).vue",
+      "baseSha256": "38e3c5a07ecc83da0546018bc665316805cc4ebf3caf28c1bf699a9ab421037c"
+    }
+  ]
+}

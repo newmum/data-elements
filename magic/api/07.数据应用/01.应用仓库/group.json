@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "37c35deab6bc4e678c8955cc951f2ffd",
+  "name" : "01.应用仓库",
+  "type" : "api",
+  "parentId" : "196ee3f39e364f1eb1a9eed14cd9f372",
+  "path" : "/repository",
+  "createTime" : 1781960052218,
+  "updateTime" : 1784437771538,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

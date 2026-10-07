@@ -5,8 +5,6 @@ import static org.mockito.Mockito.*;
 
 import cn.dev33.satoken.session.SaSession;
 import com.linewell.dataelement.platform.tenant.api.PlatformSessionMagicModule;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -69,7 +67,7 @@ class IdaasSessionNavigationTest {
         when(platform.session()).thenReturn(session);
         when(session.get("identityDomain")).thenReturn(domain);
         var fixture = Map.of("userId", "operator-1", "account", Map.of("username", "operator-1", "display_name", "平台管理员", "must_change_password", forceChange ? 1 : 0, "security_version", 1, "version", 1), "pairs", pairs);
-        String source = Files.readString(Path.of("db/migrations/resources/idaas-foundation-20260928/functions/session.ms"))
+        String source = CanonicalMagicSources.byId("f1b2b970b6195bf8aad27cdded34304d")
                 .replaceAll("(?m)^import (db|platformSession);\\r?\\n", "")
                 .replaceAll("(?m)^import '@/[^\\r\\n]+;\\r?\\n", "");
         String prefix = "var context=()=>fixture;var directoryScope=(permission,domain)=>{return {all:true,orgIds:[]};};\n";

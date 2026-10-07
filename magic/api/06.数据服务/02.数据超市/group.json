@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "dataservice_resource_group_01",
+  "name" : "02.数据超市",
+  "type" : "api",
+  "parentId" : "2c4350a98636412f9b4feb6e31969c00",
+  "path" : "/market",
+  "createTime" : 1784420517826,
+  "updateTime" : 1785021681888,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

@@ -9,8 +9,6 @@ import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.metautil.service.MetadataExplorerService;
 import com.linewell.dataelement.metautil.service.TargetTableDeletionService;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,8 +30,7 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Executes the released reset script with real Magic/H2 persistence and a mocked Hive connection. */
 class HuaweiHiveTargetDeletionMagicTest {
-    private static final Path SOURCE = Path.of(
-            "db/migrations/resources/huawei-hive-target-delete-20260929/magic/ods_data_agg_reset_01.ms");
+    private static final String SOURCE_ID = "ods_data_agg_reset_01";
     private SQLModule db;
     private JdbcTemplate jdbc;
     private HiveModule hive;
@@ -212,7 +209,7 @@ class HuaweiHiveTargetDeletionMagicTest {
     private Object run(Map<String, Object> body) throws Exception {
         // Replace only runtime imports with test adapters; execute every validation and
         // cleanup statement from the actual released API using the project's Magic engine.
-        String script = Files.readString(SOURCE)
+        String script = CanonicalMagicSources.byId(SOURCE_ID)
                 .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.model\\.|java\\.util\\.Map)[^\\n]*\\n", "");
         String prefix = "var datasourceConnectionConfig = (action, datasourceId, values, clearAll) => fixture.connectionConfig(datasourceId);\n"
                 + "var huaweiHiveGateway = () => fixture.gateway(body);\n";

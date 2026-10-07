@@ -210,14 +210,29 @@ test('应用目录区分本地与平台授权，并在编辑中保存排序和�
     await card.getByRole('button', { name: `${application.name}更多操作` }).click();
     await page.getByText('编辑信息', { exact: true }).click();
     const editor = page.getByRole('dialog', { name: '编辑应用信息' });
-    await expect(editor.getByText('显示位置', { exact: true })).toBeVisible();
+    await expect(editor.getByText('应用排序', { exact: true })).toBeVisible();
     await expect(editor.getByText('应用标识', { exact: true })).toBeVisible();
-    await editor.getByLabel('租户系统名称').fill('公安数据管理平台');
+    await expect(editor.getByLabel('负责人')).toHaveCount(0);
+    await expect(editor.getByLabel('租户系统名称')).toHaveCount(0);
+    await expect(editor.getByLabel('租户系统代码')).toHaveCount(0);
+    await expect(editor.getByLabel('应用系统编码')).toHaveValue(application.code);
+    await expect(editor.getByLabel('应用系统编码')).toBeDisabled();
+    await editor.getByLabel('应用系统名称').fill('公安数据管理平台');
+    const nameBox = await editor.getByLabel('应用系统名称').boundingBox();
+    const nameLabel = await editor.locator('label[for="name"]').boundingBox();
+    expect(nameBox && nameLabel && Math.abs(nameBox.y - nameLabel.y)).toBeLessThan(18);
+    await expect(editor.locator('.ant-color-picker-trigger')).toBeVisible();
+    await editor.locator('.ant-color-picker-trigger').click();
+    await page.locator('.ant-color-picker-hex-input input').fill('2f54eb');
+    await editor.getByLabel('应用系统名称').click();
     await editor.getByRole('button', { name: /保\s*存/ }).click();
     await expect(editor).toHaveCount(0);
     expect(saves.at(-1)?.record.portalConfig.systemName).toBe('公安数据管理平台');
+    expect(saves.at(-1)?.record.portalConfig.systemCode).toBe(application.code);
+    expect(saves.at(-1)?.record.portalConfig.themeColor).toBe('#2f54eb');
+    expect(saves.at(-1)?.record.owner).toBe('');
     expect(saves.at(-1)?.record.sortPosition).toBeTruthy();
-    await card.getByRole('button', { name: `${application.name}更多操作` }).click();
+    await page.locator('.application-card').filter({ hasText: '公安数据管理平台' }).getByRole('button', { name: '公安数据管理平台更多操作' }).click();
     await expect(page.getByText('下发界面配置', { exact: true })).toHaveCount(0);
     await page.goto(`/#/console/workforce/apps/${application.id}`);
     await page.getByRole('tab', { name: '资料同步' }).click();
@@ -226,11 +241,23 @@ test('应用目录区分本地与平台授权，并在编辑中保存排序和�
     await expect.poll(() => pushes.length).toBe(1);
     expect(pushes[0].appId).toBe(application.id);
     expect(pushes[0].requestId).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    await page.goto('/#/console/workforce/apps');
+    await page.getByRole('button', { name: '新建应用' }).click();
+    const creator = page.getByRole('dialog', { name: '新建应用' });
+    await creator.getByLabel('应用系统名称').fill('测试应用系统');
+    await creator.getByLabel('应用系统编码').fill('test-system');
+    await expect(creator.getByLabel('负责人')).toHaveCount(0);
+    await creator.getByRole('button', { name: /保\s*存/ }).click();
+    await expect(creator).toHaveCount(0);
+    expect(saves.at(-1)?.record.portalConfig).toMatchObject({ systemName: '测试应用系统', systemCode: 'test-system' });
 });
 
 for (const width of [390, 1440, 1920]) test(`应用目录调整后页面布局 ${width}px`, async ({ page }, info) => {
-    const { database } = await installConsoleContract(page);
+    const { session, database } = await installConsoleContract(page);
     const application = database.apps.find(app => app.domain === 'workforce')!;
+    session.globalPermissions!.push('apps:write');
+    session.editableTables!.push('apps');
+    session.appWriteIds = [application.id];
     application.portalConfig = { logo: `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#5267f5"/></svg>').toString('base64')}` };
     application.logoUrl = application.portalConfig.logo;
     await page.route('**/api/idaas/applications/local-inventory**', async route => {
@@ -249,4 +276,37 @@ for (const width of [390, 1440, 1920]) test(`应用目录调整后页面布局 $
     await expect(page.locator('.application-card').filter({ hasText: application.name }).locator('.app-card-metrics')).toContainText('本地用户 5');
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: info.outputPath(`applications-${width}.png`), fullPage: true });
+    await page.locator('.application-card').filter({ hasText: application.name }).getByRole('button', { name: `${application.name}更多操作` }).click();
+    await page.getByText('编辑信息', { exact: true }).click();
+    const editor = page.getByRole('dialog', { name: '编辑应用信息' });
+    await expect(editor.getByLabel('应用系统名称')).toBeVisible();
+    await expect(editor.locator('.ant-color-picker-trigger')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+    await page.waitForTimeout(450);
+    await page.screenshot({ path: info.outputPath(`application-editor-${width}.png`) });
+});
+
+for (const size of [20, 100]) test(`应用列表 ${size} 项只按 50 项批量读取本地摘要`, async ({ page }) => {
+    test.setTimeout(60000);
+    const { database } = await installConsoleContract(page);
+    const base = database.apps.find(app => app.domain === 'workforce')!;
+    database.apps = Array.from({ length: size }, (_, index) => ({
+        ...base, id: `bulk-app-${index}`, code: `bulk-app-${index}`, name: `批量应用${index + 1}`,
+        runtimeTenantId: 'tenant-contract', sortNo: index + 1,
+    }));
+    const batches: string[][] = [];
+    await page.route('**/api/idaas/applications/local-inventory**', async route => {
+        const ids = (new URL(route.request().url()).searchParams.get('appIds') || '').split(',').filter(Boolean);
+        batches.push(ids);
+        await route.fulfill({ json: { code: 0, data: { items: ids.map(appId => ({
+            appId, available: true, counts: { users: 0, authorizedUsers: 0 },
+        })) } } });
+    });
+    await login(page);
+    await page.goto('/#/console/workforce/apps');
+    await expect(page.getByText(`共 ${size} 个应用`)).toBeVisible({ timeout: 20000 });
+    await expect.poll(() => new Set(batches.flat()).size, { timeout: 20000 }).toBe(size);
+    expect(batches.length).toBeGreaterThanOrEqual(Math.ceil(size / 50));
+    expect(batches.length).toBeLessThanOrEqual(2 * Math.ceil(size / 50));
+    expect(batches.every(batch => batch.length <= 50)).toBe(true);
 });

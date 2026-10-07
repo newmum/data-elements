@@ -5,7 +5,7 @@ import json, re, os, shutil
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / 'docs/v2.2/companion-screenshots'; OUT.mkdir(parents=True, exist_ok=True)
+OUT = ROOT.parent / 'logs/idaas/companion'; OUT.mkdir(parents=True, exist_ok=True)
 RULES = [('.preview-nav',14),('.p-crumb',14),('.page-title h1',24),('.page-title p',13),
  ('.p-card-head strong',16),('.metric-top',14),('.metric-value',28),('.metric-desc',13),
  ('.p-table th',14),('.p-table td',14),('.p-btn',14),('.p-form-label',14),
@@ -38,7 +38,7 @@ with sync_playwright() as p:
   failed=result['overflow']>1 or banned or mismatches or small_svg or data['drawerWidth']>width+1 or data['overlaps']
   result['passed']=not bool(failed)
   if width in [1440,390] or failed:
-   target=OUT/f'{width}-{route}.png';page.screenshot(path=str(target),full_page=True);result['screenshot']=str(target.relative_to(ROOT))
+   target=OUT/f'{width}-{route}.png';page.screenshot(path=str(target),full_page=True);result['screenshot']=str(target.relative_to(ROOT.parent))
   results.append(result)
  for width in [1920,1600,1440,1280,1024,768,390]:
   page.set_viewport_size({'width':width,'height':1000 if width>768 else 844})
@@ -49,6 +49,6 @@ with sync_playwright() as p:
    page.wait_for_timeout(60);page.evaluate(action);page.wait_for_timeout(250);inspect(name,width)
  browser.close()
 report={'kind':'independent-html-only-NOT-React','method':'Chromium, shared product stylesheets + explicitly separate plain-HTML bridge','checks':len(results),'browserErrors':errors,'failed':[r for r in results if not r['passed']],'results':results}
-(ROOT/'docs/v2.2/companion-browser-results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+(OUT/'companion-browser-results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 print(json.dumps({'checks':len(results),'browserErrors':errors,'failed':[{k:v for k,v in r.items() if k!='fontMeasurements'} for r in report['failed']]},ensure_ascii=False,indent=2))
 raise SystemExit(1 if report['failed'] or errors else 0)

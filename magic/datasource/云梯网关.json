@@ -1,0 +1,19 @@
+{
+  "properties": {},
+  "id": "480e6004aeee4691af57413f5ee994e8",
+  "script": null,
+  "groupId": "datasource:0",
+  "name": "云梯网关",
+  "createTime": 1782660730323,
+  "updateTime": 1786680121310,
+  "lock": null,
+  "createBy": null,
+  "updateBy": null,
+  "url": "jdbc:mysql://192.168.175.86:3306/gateway?zeroDateTimeBehavior=convertToNull",
+  "username": "",
+  "password": "",
+  "key": "gateway",
+  "maxRows": -1,
+  "driverClassName": "com.mysql.cj.jdbc.Driver",
+  "type": "com.alibaba.druid.pool.DruidDataSource"
+}

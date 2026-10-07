@@ -13,12 +13,32 @@ for (const width of [390, 1440, 1920]) test(`首次进入应用目录时展示�
     await page.route('**/api/idaas/workspace/bootstrap', async route => { await waiting; await route.fallback(); });
     await page.goto('/#/console/workforce/apps');
     await expect(page.getByRole('status', { name: '正在载入应用目录' })).toBeVisible();
+    await expect(page.locator('.workspace-loading-preview')).toBeVisible();
+    await expect(page.locator('.workspace-loading')).not.toContainText('统一身份管理平台');
     await expect(page.locator('.ant-skeleton, .app-sider')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: info.outputPath(`workspace-loading-${width}.png`) });
     releaseBootstrap();
     await expect(page.getByText('应用数量', { exact: true })).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('status', { name: '正在载入应用目录' })).toHaveCount(0);
+});
+
+test('组织与用户加载画面不显示平台标识', async ({ page }, info) => {
+    await installConsoleContract(page);
+    await page.setViewportSize({ width: 1039, height: 582 });
+    await page.addInitScript(() => sessionStorage.setItem('iam.frontend.backend.token', 'console-contract-token'));
+    let releaseBootstrap!: () => void;
+    const waiting = new Promise<void>(resolve => { releaseBootstrap = resolve; });
+    await page.route('**/api/idaas/workspace/bootstrap', async route => { await waiting; await route.fallback(); });
+    await page.goto('/#/console/workforce/organization');
+    const loading = page.getByRole('status', { name: '正在载入组织与用户' });
+    await expect(loading).toBeVisible();
+    await expect(loading).not.toContainText('统一身份管理平台');
+    await expect(loading.locator('.workspace-loading-preview')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({ path: info.outputPath('organization-loading-1039.png') });
+    releaseBootstrap();
+    await expect(page.locator('.organization-layout .table-card')).toBeVisible({ timeout: 15000 });
 });
 
 async function login(page: Page) {
@@ -61,7 +81,7 @@ for (const width of [390, 1440, 1920]) test(`统一控制台公众入口、搜�
     await page.getByLabel('全局搜索内容').fill('组织与用户');
     await page.locator('.command-result').filter({ hasText: '组织与用户' }).click();
     await expect(page).toHaveURL(/console\/workforce\/organization$/);
-    await expect(page.getByRole('heading', { name: '用户管理', exact: true })).toBeVisible();
+    await expect(page.locator('.organization-layout .table-card')).toBeVisible();
     expect(fixture.transitions).toEqual(['public', 'workforce']);
     await expect(page.locator('.workspace-label, .domain-switch')).toHaveCount(0);
 });
@@ -92,7 +112,7 @@ test('公众深链接刷新及浏览器后退自动加载所需身份资料', as
     await page.reload();
     await expect(page.getByRole('heading', { name: '法人管理', exact: true })).toBeVisible();
     await page.goto('/#/console/workforce/organization');
-    await expect(page.getByRole('heading', { name: '用户管理', exact: true })).toBeVisible();
+    await expect(page.locator('.organization-layout .table-card')).toBeVisible();
     await page.goBack();
     await expect(page.getByRole('heading', { name: '法人管理', exact: true })).toBeVisible();
     expect(fixture.transitions).toEqual(['public', 'workforce', 'public']);
@@ -103,7 +123,7 @@ test('加载期间快速返回会串行恢复目标上下文', async ({ page }) 
     await (await publicItem(page, 1440, '自然人管理')).click();
     await expect.poll(() => fixture.transitions.length).toBe(1);
     await page.goto('/#/console/workforce/organization');
-    await expect(page.getByRole('heading', { name: '用户管理', exact: true })).toBeVisible();
+    await expect(page.locator('.organization-layout .table-card')).toBeVisible();
     await expect.poll(() => fixture.session.domain).toBe('workforce');
     expect(fixture.transitions).toEqual(['public', 'workforce']);
 });

@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "652292437ed443acba737511e3597522",
+  "name" : "08.登录会话",
+  "type" : "api",
+  "parentId" : "90ef9a3f03244c9b97aa655b8c59b0b6",
+  "path" : "/sso",
+  "createTime" : 1781960046069,
+  "updateTime" : 1784437771090,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

@@ -1,0 +1,13 @@
+{
+  "properties" : { },
+  "id" : "6e30fb6d565c40b18d480b219e13b20e",
+  "name" : "01.元数据管理",
+  "type" : "api",
+  "parentId" : "datapd_database_group_01",
+  "path" : "/metadata",
+  "paths" : [ ],
+  "options" : [ ],
+  "updateTime" : 1784437771888
+}
+================================
+

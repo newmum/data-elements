@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "e5ce028f1797312d57c628b66ffcf657",
+  "name" : "07.已发布服务",
+  "type" : "api",
+  "parentId" : "5d290a9b3bca3b2dd9ffd715dc47ce56",
+  "path" : "/published",
+  "createTime" : 1784828418423,
+  "updateTime" : 1784828418423,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

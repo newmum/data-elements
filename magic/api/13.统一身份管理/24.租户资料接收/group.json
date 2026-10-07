@@ -1,0 +1,15 @@
+{
+  "properties": {},
+  "id": "955acd903650573fbe414d610962a487",
+  "name": "24.租户资料接收",
+  "type": "api",
+  "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
+  "path": "/receiver",
+  "createTime": 1790618621046,
+  "updateTime": 1790946845378,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================

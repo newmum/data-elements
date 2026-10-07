@@ -179,7 +179,7 @@ export default function Shell() {
         <Sider className="app-sider" width={216} collapsedWidth={64} collapsed={collapsed} theme="dark">
           <ProductCenterSwitcher collapsed={collapsed} logoUrl={db.settings[domain].logoUrl}/>
           <div className="sider-content">{menu}</div>
-          <div className="sider-bottom">{!collapsed ? <><div className="sider-banner"><strong>构建安全高效的<br />数字身份基础设施</strong><small>统一身份，连接每一份信任</small></div><div className="sider-version"><span>v2.2.0</span><span><i className="status-dot"/>统一身份服务</span></div></> : <div style={{ color: '#91A8CD', textAlign: 'center', fontSize: 'var(--iam-font-caption)' }}>V2.2</div>}</div>
+          {!collapsed && <div className="sider-bottom"><div className="sider-banner"><strong>构建安全高效的<br />数字身份基础设施</strong></div></div>}
         </Sider>
         <Layout className="main-layout">
           <Header className="app-header">

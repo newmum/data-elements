@@ -1,31 +1,22 @@
 package com.linewell.dataelement.feature.reconciliation;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import com.linewell.dataelement.platform.magic.CanonicalMagicSources;
 import java.util.List;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.ssssssss.script.MagicScript;
 
+/** Offline compilation of canonical sources; no server or database mutation. */
 class ReconciliationMagicSyntaxTest {
-
     @TestFactory
     List<DynamicTest> compileEditableReconciliationInterfaces() throws Exception {
-        Path root = Path.of("db/migrations/resources/reconciliation-magic-20261002/apis");
-        List<Path> scripts;
-        try (var files = Files.walk(root)) {
-            scripts = files.filter(Files::isRegularFile)
-                    .filter(path -> path.toString().endsWith(".ms"))
-                    .sorted()
-                    .toList();
-        }
-        assertEquals(13, scripts.size());
-        return scripts.stream().map(path -> DynamicTest.dynamicTest(
-                root.relativize(path).toString(),
-                () -> MagicScript.create(Files.readString(path, StandardCharsets.UTF_8), null).compile()
+        var scripts = CanonicalMagicSources.under("api/03.数据接入/03.数据对账");
+        assertFalse(scripts.isEmpty(), "Current Magic resource tree is missing");
+        return scripts.stream().map(script -> DynamicTest.dynamicTest(
+                script.relativePath() + " [" + script.metadataId() + "]",
+                () -> MagicScript.create(script.source(), null).compile()
         )).toList();
     }
 }

@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "75d46bd7e4d74e538aad41249f8a50a6",
+  "name" : "01.口袋数据",
+  "type" : "task",
+  "parentId" : "0",
+  "path" : "/pocket-data",
+  "createTime" : 1782660713444,
+  "updateTime" : 1784440283886,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

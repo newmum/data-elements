@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "55c792d1ba0f4cb79b01a6d5c42dacea",
+  "name" : "01.数据元管理",
+  "type" : "api",
+  "parentId" : "019b772ee9b44705a27710f91bbd731a",
+  "path" : "/element",
+  "createTime" : 1781960051489,
+  "updateTime" : 1784437771538,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "38cbfa53987e4922be1cf8768d80f30e",
+  "name" : "11.省厅公安定制",
+  "type" : "api",
+  "parentId" : "0",
+  "path" : "/ga",
+  "createTime" : null,
+  "updateTime" : 1787306522062,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

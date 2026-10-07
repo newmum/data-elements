@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, Key } from 'react';
-import { App, Alert, Button, Card, Col, Descriptions, Drawer, Empty, Form, Input, InputNumber, Row, Select, Space, Switch, Table, Tag, Typography, DatePicker, theme, TreeSelect, Segmented } from 'antd';
+import { App, Button, Card, Col, ColorPicker, Descriptions, Drawer, Empty, Form, Input, InputNumber, Row, Select, Space, Switch, Table, Tag, Typography, DatePicker, theme, TreeSelect, Segmented } from 'antd';
 import type { TableProps } from 'antd';
-import { DownloadOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, RightOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, DownloadOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, RightOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { encodeCsv } from '../domain/csv';
 import { api, useSession } from '../mock/store';
@@ -49,7 +49,7 @@ export function useAction() {
 }
 export function useEditable(section: string) { return canEdit(useSession(), section); }
 export function exportCsv(filename: string, headers: string[], rows: unknown[][]) { const blob = new Blob([encodeCsv([headers, ...rows])], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500); }
-export function DataTable<T extends Base>({ data, columns, title, searchPlaceholder = '搜索名称或编码', searchFields = ['name'], actions, selection, onSelection, loading = false, extraFilters, hideStatus = false, exporter, remote }: {
+export function DataTable<T extends Base>({ data, columns, title, searchPlaceholder = '搜索名称或编码', searchFields = ['name'], actions, selection, onSelection, loading = false, extraFilters, hideStatus = false, exporter, remote, instantSearch = false, filterAction }: {
     data: T[];
     columns: TableProps<T>['columns'];
     title?: string;
@@ -63,6 +63,8 @@ export function DataTable<T extends Base>({ data, columns, title, searchPlacehol
     hideStatus?: boolean;
     exporter?: (rows: T[]) => void;
     remote?: { total: number; page: number; size: number; onChange: (page: number, size: number, query: string, status: string) => void };
+    instantSearch?: boolean;
+    filterAction?: ReactNode;
 }) {
     const [input, setInput] = useState('');
     const [query, setQuery] = useState('');
@@ -70,16 +72,33 @@ export function DataTable<T extends Base>({ data, columns, title, searchPlacehol
     const [chosen, setChosen] = useState('all');
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
+    const appliedFilter = useRef('\0all');
+    const remoteChange = useRef(remote?.onChange);
+    remoteChange.current = remote?.onChange;
     const filtered = remote ? data : data.filter(r => (status === 'all' || r.status === status) && (!query || searchFields.some(k => String((r as unknown as Record<string, unknown>)[k] ?? '').toLowerCase().includes(query.toLowerCase()))));
     useEffect(() => {
         if (!remote && page > Math.max(1, Math.ceil(filtered.length / pageSize)))
             setPage(1);
     }, [filtered.length, page, pageSize, remote]);
+    useEffect(() => {
+        if (!instantSearch) return;
+        const next = `${input}\0${chosen}`;
+        if (next === appliedFilter.current) return;
+        const timer = window.setTimeout(() => {
+            appliedFilter.current = next;
+            setQuery(input);
+            setStatus(chosen);
+            setPage(1);
+            onSelection?.([]);
+            remoteChange.current?.(1, remote?.size ?? pageSize, input, chosen);
+        }, 300);
+        return () => window.clearTimeout(timer);
+    }, [input, chosen, instantSearch, remote?.size, pageSize]);
     const search = () => { setQuery(input); setStatus(chosen); setPage(1); onSelection?.([]); remote?.onChange(1, remote.size, input, chosen); };
     const reset = () => { setInput(''); setQuery(''); setStatus('all'); setChosen('all'); setPage(1); onSelection?.([]); remote?.onChange(1, remote.size, '', 'all'); };
     return <Card size="small" className="table-card" styles={{ body: { padding: 0 } }}>
- <div className="table-filter"><Input aria-label={searchPlaceholder} prefix={<SearchOutlined />} placeholder={searchPlaceholder} value={input} onChange={e => setInput(e.target.value)} onPressEnter={search} allowClear style={{ width: 260, maxWidth: '100%' }}/>{!hideStatus && <Select aria-label="状态筛选" value={chosen} onChange={setChosen} style={{ width: 132, maxWidth: '100%' }} options={remote ? [{ value: 'all', label: '全部状态' }, { value: 'enabled', label: '已启用' }, { value: 'disabled', label: '已停用' }] : [{ value: 'all', label: '全部状态' }, ...Array.from(new Set(data.map(r => r.status))).map(s => ({ value: s, label: labels[s] || s }))]}/>} {extraFilters}
- <Button type="primary" onClick={search}>查询</Button><Button onClick={reset}>重置</Button></div>
+ <div className="table-filter"><Input aria-label={searchPlaceholder} prefix={<SearchOutlined />} placeholder={searchPlaceholder} value={input} onChange={e => setInput(e.target.value)} onPressEnter={instantSearch ? undefined : search} allowClear style={{ width: 260, maxWidth: '100%' }}/>{!hideStatus && <Select aria-label="状态筛选" value={chosen} onChange={setChosen} style={{ width: 132, maxWidth: '100%' }} options={remote ? [{ value: 'all', label: '全部状态' }, { value: 'enabled', label: '已启用' }, { value: 'disabled', label: '已停用' }] : [{ value: 'all', label: '全部状态' }, ...Array.from(new Set(data.map(r => r.status))).map(s => ({ value: s, label: labels[s] || s }))]}/>} {extraFilters}
+ {!instantSearch && <><Button type="primary" onClick={search}>查询</Button><Button onClick={reset}>重置</Button></>}{filterAction && <div className="table-filter-action">{filterAction}</div>}</div>
  <div className="table-toolbar"><Space wrap><Text strong className="table-title">{title || '数据列表'}</Text><span className="table-count">共 {(remote?.total ?? filtered.length).toLocaleString()} 项</span>{!!selection?.length && <Tag color="blue">已选 {selection.length} 项</Tag>}</Space><Space wrap>{exporter && <Button icon={<DownloadOutlined />} onClick={() => exporter(filtered)}>{remote ? '导出当前页' : '导出'}</Button>}{actions}</Space></div>
  <Table<T> rowKey="id" dataSource={filtered} columns={columns} size="small" loading={loading} rowSelection={onSelection ? { selectedRowKeys: selection, onChange: keys => onSelection(keys), preserveSelectedRowKeys: false } : undefined} pagination={{ current: remote?.page ?? page, onChange: (p, size) => { if(remote) remote.onChange(p,size,query,status); else { setPage(p); setPageSize(size); } onSelection?.([]); }, pageSize: remote?.size ?? pageSize, total: remote?.total ?? filtered.length, pageSizeOptions: [10, 20, 50, 100], showSizeChanger: true, showTotal: n => `共 ${n} 项` }} scroll={{ x: 'max-content' }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query || status !== 'all' ? '未找到符合条件的结果' : '暂无数据'}/> }}/>
  </Card>;
@@ -87,13 +106,15 @@ export function DataTable<T extends Base>({ data, columns, title, searchPlacehol
 export interface Field {
     name: string;
     label: string;
-    type?: 'text' | 'textarea' | 'number' | 'select' | 'multi' | 'switch' | 'date' | 'password' | 'tree' | 'image';
+    type?: 'text' | 'textarea' | 'number' | 'select' | 'multi' | 'switch' | 'date' | 'password' | 'tree' | 'image' | 'color';
     required?: boolean;
     options?: {
         label: string;
         value: string;
     }[];
     treeData?: unknown[];
+    treeExpandedKeys?: string[];
+    emptyText?: string;
     span?: 12 | 24;
     help?: string;
     disabled?: boolean;
@@ -103,19 +124,30 @@ export interface Field {
     patternMessage?: string;
 }
 export type FormValues = Record<string, unknown>;
-export function RecordEditor({ open, title, initial, fields, onClose, onSave, width = 560, children }: {
+export function formErrorText(error: unknown, fallback = '请检查表单后重试') {
+    if (error && typeof error === 'object' && 'errorFields' in error) {
+        const fields = (error as { errorFields?: Array<{ errors?: string[] }> }).errorFields;
+        return fields?.[0]?.errors?.[0] || fallback;
+    }
+    return error instanceof Error ? error.message : fallback;
+}
+export function RecordEditor({ open, title, initial, fields, onClose, onSave, width = 560, children, afterFields, formHeading, className, readOnly = false, horizontal = false }: {
     open: boolean;
     title: string;
     initial: FormValues;
     fields: Field[];
     onClose: () => void;
-    onSave: (values: FormValues) => Promise<void>;
+    onSave: (values: FormValues) => Promise<unknown>;
     width?: number;
     children?: ReactNode;
+    afterFields?: ReactNode;
+    formHeading?: string;
+    className?: string;
+    readOnly?: boolean;
+    horizontal?: boolean;
 }) {
     const [form] = Form.useForm();
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState('');
     const { modal, message } = App.useApp();
     useEffect(() => {
         if (open) {
@@ -126,7 +158,6 @@ export function RecordEditor({ open, title, initial, fields, onClose, onSave, wi
                     v[f.name] = dayjs(String(v[f.name]));
             });
             form.setFieldsValue(v);
-            setError('');
         }
     }, [open]);
     const close = () => {
@@ -142,22 +173,19 @@ export function RecordEditor({ open, title, initial, fields, onClose, onSave, wi
             const v = await form.validateFields();
             fields.filter(f => f.type === 'date').forEach(f => { v[f.name] = v[f.name] ? v[f.name].toISOString() : null; });
             setBusy(true);
-            setError('');
             await onSave(v);
             message.success('已保存');
             onClose();
         }
-        catch (e) {
-            if (e instanceof Error)
-                setError(e.message);
-        }
+        catch (e) { message.error(formErrorText(e)); }
         finally {
             setBusy(false);
         }
     };
-    return <Drawer title={title} open={open} size={width} onClose={close} destroyOnHidden footer={<div className="drawer-footer"><Button onClick={close}>取消</Button><Button type="primary" loading={busy} onClick={submit}>保存</Button></div>}>
- {error && <Alert title={error} type="error" showIcon style={{ marginBottom: 16 }}/>}{children}<Form size="small" form={form} initialValues={initial} layout="vertical" requiredMark onFinish={submit} preserve={false} scrollToFirstError><Row gutter={12}>{fields.map(f => <Col key={f.name} xs={24} sm={f.span || 24}><Form.Item name={f.name} label={f.label} valuePropName={f.type === 'switch' ? 'checked' : 'value'} extra={f.help} rules={[{ required: f.required, message: `请${['select', 'multi', 'tree', 'date'].includes(f.type || '') ? '选择' : '填写'}${f.label}` }, ...(f.pattern ? [{ pattern: f.pattern, message: f.patternMessage || `${f.label}格式不正确` }] : []), ...(!['number', 'switch', 'multi', 'date', 'tree'].includes(f.type || '') ? [{ max: f.max || 500, message: `最多${f.max || 500}个字符` }] : [])]}>
- {f.type === 'textarea' ? <Input.TextArea rows={3} disabled={f.disabled} showCount maxLength={f.max || 500}/> : f.type === 'image' ? <ImageValueInput disabled={f.disabled}/> : f.type === 'select' || f.type === 'multi' ? <Select disabled={f.disabled} mode={f.type === 'multi' ? 'multiple' : undefined} allowClear showSearch optionFilterProp="label" options={f.options} placeholder={`请选择${f.label}`}/> : f.type === 'switch' ? <Switch disabled={f.disabled}/> : f.type === 'number' ? <InputNumber disabled={f.disabled} min={f.min ?? 0} max={f.max ?? 999999} style={{ width: '100%' }}/> : f.type === 'date' ? <DatePicker showTime disabled={f.disabled} style={{ width: '100%' }}/> : f.type === 'tree' ? <TreeSelect treeData={f.treeData as never} treeDefaultExpandAll showSearch treeNodeFilterProp="title" disabled={f.disabled} allowClear/> : f.type === 'password' ? <Input.Password autoComplete="new-password" disabled={f.disabled}/> : <Input disabled={f.disabled} maxLength={f.max || 500} placeholder={`请输入${f.label}`}/>}</Form.Item></Col>)}</Row></Form>
+    return <Drawer title={title} open={open} size={width} className={className} onClose={close} destroyOnHidden footer={<div className="drawer-footer"><Button onClick={close}>{readOnly ? '关闭' : '取消'}</Button>{!readOnly && <Button type="primary" loading={busy} onClick={submit}>保存</Button>}</div>}>
+ {children}{formHeading && <h3 className="editor-section-title">{formHeading}</h3>}<Form size="small" form={form} initialValues={initial} layout={horizontal ? 'horizontal' : 'vertical'} labelAlign="left" labelCol={horizontal ? { flex: '150px' } : undefined} wrapperCol={horizontal ? { flex: 'auto' } : undefined} requiredMark onFinish={submit} onFinishFailed={info => message.error(info.errorFields[0]?.errors[0] || '请检查表单必填项')} preserve={false} scrollToFirstError><Row gutter={16}>{fields.map(f => <Col key={f.name} xs={24} sm={f.span || 24}><Form.Item name={f.name} label={f.label} valuePropName={f.type === 'switch' ? 'checked' : 'value'} getValueFromEvent={f.type === 'color' ? (color: { toHexString: () => string }) => color.toHexString() : undefined} extra={f.help} rules={[{ required: f.required, message: `请${['select', 'multi', 'tree', 'date'].includes(f.type || '') ? '选择' : '填写'}${f.label}` }, ...(f.pattern ? [{ pattern: f.pattern, message: f.patternMessage || `${f.label}格式不正确` }] : []), ...(!['number', 'switch', 'multi', 'date', 'tree'].includes(f.type || '') ? [{ max: f.max || 500, message: `最多${f.max || 500}个字符` }] : [])]}>
+ {f.type === 'textarea' ? <Input.TextArea rows={3} disabled={f.disabled || readOnly} showCount maxLength={f.max || 500}/> : f.type === 'image' ? <ImageValueInput disabled={f.disabled || readOnly}/> : f.type === 'color' ? <ColorPicker disabled={f.disabled || readOnly} format="hex" disabledAlpha showText/> : f.type === 'select' || f.type === 'multi' ? <Select disabled={f.disabled || readOnly} mode={f.type === 'multi' ? 'multiple' : undefined} allowClear showSearch optionFilterProp="label" options={f.options} notFoundContent={f.emptyText} placeholder={`请选择${f.label}`}/> : f.type === 'switch' ? <Switch disabled={f.disabled || readOnly}/> : f.type === 'number' ? <InputNumber disabled={f.disabled || readOnly} min={f.min ?? 0} max={f.max ?? 999999} style={{ width: '100%' }}/> : f.type === 'date' ? <DatePicker showTime disabled={f.disabled || readOnly} style={{ width: '100%' }}/> : f.type === 'tree' ? <TreeSelect treeData={f.treeData as never} treeDefaultExpandedKeys={f.treeExpandedKeys} showSearch treeNodeFilterProp="title" treeNodeLabelProp="title" treeTitleRender={node => <span className="org-picker-title"><ApartmentOutlined/><span title={String(node.title)}>{String(node.title)}</span></span>} switcherIcon={<RightOutlined/>} popupMatchSelectWidth={380} classNames={{ popup: { root: 'org-picker-popup' } }} disabled={f.disabled || readOnly} allowClear placeholder={`请选择${f.label}`}/> : f.type === 'password' ? <Input.Password autoComplete="new-password" disabled={f.disabled || readOnly}/> : <Input disabled={f.disabled || readOnly} maxLength={f.max || 500} placeholder={`请输入${f.label}`}/>}</Form.Item></Col>)}</Row></Form>
+ {afterFields}
  </Drawer>;
 }
 export function DetailDrawer({ open, title, items, onClose, children }: {

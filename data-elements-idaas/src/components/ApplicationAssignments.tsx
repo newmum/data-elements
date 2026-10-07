@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, App, Button, Form, Input, Modal, Select, Space, Switch, Table, Tag } from 'antd';
 import { foundationApi, useDatabase, useSession } from '../mock/store';
+import { formErrorText } from './common';
 import type { Domain } from '../domain/types';
 interface Assignment { id: string; name: string; subject_id?: string; org_id?: string; account_alias?: string; directory_assigned?: number; assignment_mode?: string; status?: string; desired_version?: number; ack_version?: number; sync_status?: string; include_children?: number; version: number; }
 const syncStatusLabel: Record<string, string> = {
@@ -15,7 +16,7 @@ export default function ApplicationAssignments({ appId, domain, kind }: { appId:
     const load = async () => { setBusy(true); try { setData(await foundationApi.read(`/idaas/assignments/list?appId=${encodeURIComponent(appId)}&domain=${domain}`)); setError(''); } catch (e) { setError(e instanceof Error ? e.message : '分配读取失败'); } finally { setBusy(false); } };
     useEffect(() => { void load(); }, [appId, domain]);
     const edit = (row: Assignment | null) => { setEditing(row); form.resetFields(); form.setFieldsValue(row ? { subjectId: row.subject_id, accountAlias: row.account_alias, orgId: row.org_id, includeChildren: row.include_children === 1 } : {}); setOpen(true); };
-    const save = async () => { const values = await form.validateFields(); setBusy(true); try { await foundationApi.write('/idaas/assignments/save', { record: { ...values, id: editing?.id, version: editing?.version, appId, domain, type: kind }, creating: !editing }); message.success('资料分配已保存'); setOpen(false); await load(); } catch (e) { message.error(e instanceof Error ? e.message : '保存失败'); } finally { setBusy(false); } };
+    const save = async () => { try { const values = await form.validateFields(); setBusy(true); await foundationApi.write('/idaas/assignments/save', { record: { ...values, id: editing?.id, version: editing?.version, appId, domain, type: kind }, creating: !editing }); message.success('资料分配已保存'); setOpen(false); await load(); } catch (e) { message.error(formErrorText(e, '保存失败')); } finally { setBusy(false); } };
     const remove = (row: Assignment) => modal.confirm({ title: `移除 ${row.name} 的资料分配？`, content: '仅移除平台对该应用的资料分配，不会删除人员或撤销独立的访问授权。', okText: '移除分配', cancelText: '取消', onOk: async () => { await foundationApi.write('/idaas/assignments/remove', { record: { id: row.id, version: row.version, type: kind, appId, domain, subjectId: row.subject_id, orgId: row.org_id } }); await load(); } });
     const actions = (row: Assignment) => <Space className="application-directory-actions" size={12}><Button type="link" disabled={!editable} onClick={() => edit(row)}>编辑</Button><Button type="link" danger disabled={!editable || (kind === 'subject' ? !row.directory_assigned : row.status === 'REVOKED')} onClick={() => remove(row)}>移除分配</Button></Space>;
     return <>
@@ -27,7 +28,7 @@ export default function ApplicationAssignments({ appId, domain, kind }: { appId:
             { title: '机构', dataIndex: 'name' }, { title: '包含下级', render: (_, row) => row.include_children ? '是' : '否' }, { title: '分配状态', dataIndex: 'status', render: value => value === 'ACTIVE' ? '已分配' : '已移除' }, { title: '操作', render: (_, row) => actions(row) },
         ]}/>}
         <Modal title={kind === 'subject' ? '人员资料分配' : '机构资料范围'} open={open} onCancel={() => setOpen(false)} onOk={save} okText="保存" cancelText="取消" confirmLoading={busy}>
-            <Form size="small" form={form} layout="vertical">
+            <Form size="small" form={form} layout="vertical" onFinishFailed={failure => message.error(formErrorText(failure))}>
                 {kind === 'subject' ? <><Form.Item name="subjectId" label="平台人员" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" disabled={!!editing} options={db.users.filter(row => row.domain === domain && row.status === 'enabled').map(row => ({ value: row.id, label: row.name }))}/></Form.Item><Form.Item name="accountAlias" label="账号"><Input/></Form.Item></> : <><Form.Item name="orgId" label="平台机构" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" disabled={!!editing} options={db.orgs.filter(row => row.domain === domain && row.status === 'enabled').map(row => ({ value: row.id, label: row.name }))}/></Form.Item><Form.Item name="includeChildren" label="包含下级机构" valuePropName="checked"><Switch/></Form.Item></>}
             </Form>
         </Modal>

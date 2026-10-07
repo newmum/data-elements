@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "90ef9a3f03244c9b97aa655b8c59b0b6",
+  "name" : "01.系统门户",
+  "type" : "api",
+  "parentId" : "0",
+  "path" : "/portal",
+  "createTime" : 1784603509058,
+  "updateTime" : 1784798327637,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

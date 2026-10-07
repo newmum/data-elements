@@ -63,5 +63,5 @@ except Exception as exc:
 finally:
  server.shutdown()
  report={'scope':'Actual Mock/API/ER DTO services in system Chromium; real localStorage/timers/two tabs. Not full React UI or an external backend.', 'executionStatus':'BLOCKED_OR_FAILED' if fatal else 'COMPLETED','executionError':fatal,'checks':checks,'passed':sum(x['passed'] for x in checks),'failed':sum(not x['passed'] for x in checks)}
- out=root/'doc/validation';out.mkdir(parents=True,exist_ok=True);(out/'browser-local-runtime.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+ out=root.parent/'logs/wanxiang/audit';out.mkdir(parents=True,exist_ok=True);(out/'browser-local-runtime.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
  print(json.dumps(report,ensure_ascii=False,indent=2))

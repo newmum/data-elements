@@ -3,8 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 
-const output = process.env.IDAAS_LIVE_OUTPUT;
-if (!output || !process.env.IDAAS_TEST_USERNAME || !process.env.IDAAS_TEST_PASSWORD) throw new Error('Provide live verification environment');
+const output = path.resolve(import.meta.dirname, '../../logs/idaas/backend-live');
+if (!process.env.IDAAS_TEST_USERNAME || !process.env.IDAAS_TEST_PASSWORD) throw new Error('Provide live verification credentials');
 await fs.mkdir(output, { recursive: true });
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });

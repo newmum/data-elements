@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "5d290a9b3bca3b2dd9ffd715dc47ce56",
+  "name" : "01.服务编排",
+  "type" : "api",
+  "parentId" : "2c4350a98636412f9b4feb6e31969c00",
+  "path" : "/flowserve",
+  "createTime" : 1784828418412,
+  "updateTime" : 1785021672078,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

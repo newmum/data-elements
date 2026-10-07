@@ -120,7 +120,7 @@ $JarPath = [System.IO.Path]::GetFullPath($JarPath)
 if ($Build -and -not $usingDefaultJar) {
     throw "-Build packages the default backend JAR. Omit -JarPath when using -Build."
 }
-$logDir = Join-Path $PSScriptRoot "logs"
+$logDir = Join-Path $PSScriptRoot "logs/backend"
 $unixDomainTempDir = Join-Path $env:SystemDrive "Temp\data-elements-uds"
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $stdoutLog = Join-Path $logDir "data-elements-local.$timestamp.out.log"
@@ -267,7 +267,12 @@ Write-Status "Live logs will appear in this terminal and are retained in: $stdou
 # settings. Do not duplicate those settings here: command-line properties have
 # higher precedence and would otherwise override the selected environment.
 $runtimeArgs = @(
-    "--server.port=$Port"
+    "--server.port=$Port",
+    # Apply the repository's log destination even when restarting an older packaged JAR.
+    "--logging.config=file:$($projectDir.Replace('\', '/'))/src/main/resources/logback.xml",
+    "--storage.error-root-dir=$logDir",
+    # Older ErrorService builds still read storage.root-dir for error snapshots.
+    "--storage.root-dir=$logDir"
 )
 
 try {
@@ -276,7 +281,8 @@ try {
     # $LASTEXITCODE as -1 without creating the log file.
     # Start-Process joins ArgumentList into one Windows command line. Quote file
     # paths so the launcher also works when this repository lives under a space.
-    $javaArgs = @("-Djdk.net.unixdomain.tmpdir=`"$unixDomainTempDir`"", "-jar", "`"$JarPath`"") + $runtimeArgs
+    $logbackConfig = Join-Path $projectDir 'src/main/resources/logback.xml'
+    $javaArgs = @("-Djdk.net.unixdomain.tmpdir=`"$unixDomainTempDir`"", "-DDATA_ELEMENTS_LOG_DIR=`"$logDir`"", "-Dlogback.configurationFile=`"$logbackConfig`"", "-jar", "`"$JarPath`"") + $runtimeArgs
     # Keep the JVM hidden and its file handles independent from this PowerShell process, but
     # forward the redirected files back to the same console in real time. A
     # direct `java | Tee-Object` pipeline can close child streams during Spring

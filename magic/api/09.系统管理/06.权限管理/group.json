@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "882093f918054984b1504ea77e58d3af",
+  "name" : "06.权限管理",
+  "type" : "api",
+  "parentId" : "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path" : "/auth",
+  "createTime" : 1781960046845,
+  "updateTime" : 1784437771090,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

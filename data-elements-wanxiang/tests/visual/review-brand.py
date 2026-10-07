@@ -29,9 +29,9 @@ with sync_playwright() as p:
     checks={'barStateCorrect':data['bar']['display']=='none' if collapsed else data['bar']['display']!='none' and data['bar']['content']=='""','collapsedIconCentered':not collapsed or abs(data['iconCenter']-data['railCenter'])<=1,'collapsedBrandCentered':not collapsed or abs(data['brandCenter']-data['railCenter'])<=1,'bannerAssetPresent':data['hasArtwork'],'bannerHeightReadable':data['heroHeight']>=126,'noPageOverflow':data['documentWidth']<=width+1,'darkTopNotWhite':theme!='dark' or data['topBackground']!='rgb(255, 255, 255)'}
     results.append({'theme':theme,'collapsed':collapsed,'width':width,'height':height,'checks':checks,'measurements':data})
     if width==1440:
-     out=root/'.visual-review/shots';out.mkdir(parents=True,exist_ok=True)
+     out=root.parent/'logs/wanxiang/visual-review/shots';out.mkdir(parents=True,exist_ok=True)
      page.screenshot(path=str(out/f'brand-{theme}-{"collapsed" if collapsed else "expanded"}.png'))
  b.close()
 report={'scope':'Production CSS and SVG assets in a simplified HTML shell. No full React/Ant Design rendering.','cases':len(results),'passed':sum(all(x['checks'].values()) for x in results),'results':results}
-out=root/'doc/validation';out.mkdir(parents=True,exist_ok=True);(out/'brand-rail-banner.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+out=root.parent/'logs/wanxiang/audit';out.mkdir(parents=True,exist_ok=True);(out/'brand-rail-banner.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 print(json.dumps(report,ensure_ascii=False,indent=2));raise SystemExit(0 if report['passed']==len(results) else 1)

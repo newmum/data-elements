@@ -29,11 +29,13 @@ test('HTTP 业务失败、无效响应和网络失败都拒绝返回数据', asy
     globalThis.fetch = async () => new Response(JSON.stringify({ code: 403, message: '无此操作权限', data: { users: ['not-allowed'] } }));
     await assert.rejects(request('/idaas/users/save'), /无此操作权限/);
     globalThis.fetch = async () => new Response('<html>error</html>');
-    await assert.rejects(request('/idaas/workspace/bootstrap'), /无法识别/);
+    await assert.rejects(request('/idaas/workspace/bootstrap'), /服务器无响应，请稍后再试/);
     globalThis.fetch = async () => new Response(JSON.stringify({ code: 200 }));
-    await assert.rejects(request('/idaas/workspace/bootstrap'), /不完整/);
+    await assert.rejects(request('/idaas/workspace/bootstrap'), /服务器无响应，请稍后再试/);
     globalThis.fetch = async () => { throw new TypeError('offline'); };
-    await assert.rejects(request('/idaas/workspace/bootstrap'), /无法连接/);
+    await assert.rejects(request('/idaas/workspace/bootstrap'), /服务器无响应，请稍后再试/);
+    globalThis.fetch = async () => new Response('<html>gateway error</html>', { status: 503 });
+    await assert.rejects(request('/idaas/workspace/bootstrap'), /服务器无响应，请稍后再试/);
 });
 test('工作区最初为空，登录失败不会载入初始身份或伪造会话', async () => {
     assert.equal(workspace.getDatabase().users.length, 0);

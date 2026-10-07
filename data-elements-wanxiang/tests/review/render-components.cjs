@@ -7,7 +7,7 @@
  */
 const fs=require('fs'),path=require('path'),Module=require('module'),{pathToFileURL,fileURLToPath}=require('url');
 const root=path.resolve(__dirname,'../..'),ts=require(process.env.TYPESCRIPT_PATH||'typescript');
-const out=path.join(root,'.review-3.2');fs.mkdirSync(out,{recursive:true});
+const out=path.resolve(root,'../logs/wanxiang/review');fs.mkdirSync(out,{recursive:true});
 for(const ext of ['.ts','.tsx'])Module._extensions[ext]=(module,file)=>{let code=fs.readFileSync(file,'utf8').replaceAll('import.meta.url',JSON.stringify(pathToFileURL(file).href));module._compile(ts.transpileModule(code,{fileName:file,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);};
 const {LocalMockEngine}=require(path.join(root,'src/mocks/engine.ts')),{WORKSPACE}=require(path.join(root,'src/mocks/types.ts'));
 const engine=new LocalMockEngine({storage:{getItem:()=>null,setItem:()=>{}},clock:()=>Date.parse('2026-09-27T08:30:00Z')});

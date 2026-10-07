@@ -1,0 +1,15 @@
+{
+  "properties": {},
+  "id": "36e1ceb97f9550bcb7092a621f8ee8bd",
+  "name": "30.实名核验",
+  "type": "api",
+  "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
+  "path": "/verifications",
+  "createTime": 1790635007936,
+  "updateTime": 1790946845378,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================

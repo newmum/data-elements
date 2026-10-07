@@ -1,5 +1,9 @@
 # Dependencies and build output
 **/node_modules/
+**/.pnpm-store/
+**/.vite/
+**/.vite-temp/
+**/.cache/
 **/dist/
 **/dist-ssr/
 data-elements-parent/target/
@@ -16,12 +20,17 @@ data-elements-parent/build/
 **/test-results/
 **/*.tsbuildinfo
 *.log
-# Archived acceptance logs are intentional historical evidence.
-!data-elements-haitong/doc/validation/*.log
-!data-elements-idaas/docs/折叠菜单验收/*.log
+*.log.*
+# Runtime logs, audit reports and screenshots belong in the root logs directory.
+/logs/*
+!/logs/.gitkeep
 *.pid
 *.pyc
 **/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+*.hprof
+*.jfr
 *.eslintcache
 *.stylelintcache
 data-elements-chengtian/stats.html
@@ -33,6 +42,9 @@ data-elements-wanxiang/.wanxiang-dependencies.json
 
 # Local environment and editor files
 *.local
+*.local.json
+*.local.yml
+*.local.yaml
 .env.local
 .env.*.local
 .DS_Store
@@ -66,8 +78,9 @@ data-elements-parent/nbproject/private/
 data-elements-parent/nbbuild/
 data-elements-parent/nbdist/
 data-elements-parent/.nb-gradle/
-data-elements-parent/logs/
+**/logs/
+!/logs/
 data-elements-parent/deploy/
-data-elements-parent/data/errors/2097883181453148161.json
-data-elements-parent/data/errors/2097836820133441537.json
-data-elements-parent/data/errors/2097895314396147713.json
+/exports/
+# Backend runtime files (error snapshots, resource caches and temporary work).
+/data-elements-parent/data/

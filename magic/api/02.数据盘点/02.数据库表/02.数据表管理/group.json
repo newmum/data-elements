@@ -1,0 +1,12 @@
+{
+  "properties": {},
+  "id": "datapd_db_table_group_01",
+  "name": "02.数据表管理",
+  "type": "api",
+  "parentId": "datapd_database_group_01",
+  "path": "/table",
+  "paths": [],
+  "options": []
+}
+================================
+

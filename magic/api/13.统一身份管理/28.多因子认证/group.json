@@ -1,0 +1,15 @@
+{
+  "properties": {},
+  "id": "863c54676e095a4aa6daf16770e35259",
+  "name": "28.多因子认证",
+  "type": "api",
+  "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
+  "path": "/mfa",
+  "createTime": 1790635007936,
+  "updateTime": 1790946845378,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================

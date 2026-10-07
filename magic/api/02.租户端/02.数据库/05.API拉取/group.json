@@ -1,0 +1,15 @@
+{
+  "properties": {},
+  "id": "tenant_magic_api_pull_20261003",
+  "name": "05.API拉取",
+  "type": "api",
+  "parentId": "tenant_magic_database_20261003",
+  "path": "",
+  "createTime": 1790981827729,
+  "updateTime": 1790981827729,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================

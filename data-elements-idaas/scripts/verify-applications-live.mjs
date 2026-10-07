@@ -2,6 +2,9 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from '@playwright/test';
+import { resolve } from 'node:path';
+
+const output = resolve(import.meta.dirname, '../../logs/idaas/applications-live');
 
 const username = process.env.IDAAS_LIVE_USER;
 const password = process.env.IDAAS_LIVE_PASSWORD;
@@ -14,7 +17,7 @@ const login = await loginResponse.json();
 assert.equal(login.code, 0, 'Platform login failed');
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 try {
-  await mkdir('test-results', { recursive: true });
+  await mkdir(output, { recursive: true });
   for (const width of [1360, 390]) {
     const context = await browser.newContext({ viewport: { width, height: 844 } });
     await context.addInitScript(token => sessionStorage.setItem('iam.frontend.backend.token', token), login.data.token);
@@ -37,7 +40,7 @@ try {
     const dialog = page.getByRole('dialog', { name: '调整应用顺序' });
     await dialog.waitFor();
     assert.match(await dialog.locator('.application-sort-item').first().innerText(), /公安元数据管理平台/);
-    await dialog.screenshot({ path: `test-results/application-sort-dialog-${width}.png` });
+    await dialog.screenshot({ path: resolve(output, `application-sort-dialog-${width}.png`) });
     await dialog.getByRole('button', { name: '下移公安元数据管理平台' }).click();
     assert.match(await dialog.locator('.application-sort-item').nth(1).innerText(), /公安元数据管理平台/);
     const moveToTop = dialog.locator('.application-sort-item').nth(1).locator('button').first();
@@ -53,7 +56,7 @@ try {
     assert.match(await page.locator('.application-card').first().innerText(), /公安元数据管理平台/);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
     assert.deepEqual(errors, []);
-    await page.screenshot({ path: `test-results/application-list-live-${width}.png`, fullPage: true });
+    await page.screenshot({ path: resolve(output, `application-list-live-${width}.png`), fullPage: true });
     await context.close();
   }
   process.stdout.write('Application list, saved order, toolbar, and responsive layout passed.\n');

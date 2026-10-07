@@ -50,6 +50,10 @@ for(const domain of ['workforce'] as const) {
   for(const route of domainPages(domain)) {
    await page.goto(`/#/console/${domain}/${route.key}`);
    if(route.key==='overview' || route.key==='apps') await expect(page.locator('.page-heading')).toHaveCount(0);
+   else if(route.key==='organization') {
+    await expect(page.locator('.organization-layout .table-card')).toBeVisible();
+    await expect(page.locator('.page-heading')).toHaveCount(0);
+   }
    else await expect(page.locator('.page-heading')).toBeVisible();
    await audit(page,info,route.key.replaceAll('/','-'));
   }
@@ -73,7 +77,7 @@ for(const width of [1440,390]) test(`@typography 全部认证入口 ${width}`,as
 for(const width of [1440,390]) test(`@typography 浮层、长字段与空结果 ${width}`,async({page},info)=>{
  test.setTimeout(180000);await page.setViewportSize({width,height:width===390?844:1000});await login(page);
  await page.goto('/#/console/workforce/organization?user=u1');
- await expect(page.getByText('身份档案',{exact:true})).toBeVisible();await audit(page,info,'user-profile');
+ await expect(page.getByText('用户信息',{exact:true})).toBeVisible();await audit(page,info,'user-profile');
  await page.keyboard.press('Escape');
  await page.getByRole('button',{name:/新建用户$/}).click();
  await page.getByRole('dialog').getByLabel('姓名',{exact:true}).fill('华东区域技术管理与业务协作中心负责人');

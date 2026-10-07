@@ -29,7 +29,6 @@ test('新建中央人员只提交资料与任职，不提交登录凭据', async
     await drawer.getByRole('button', { name: /保\s*存/ }).click();
     await expect(drawer).toHaveCount(0);
     await page.getByRole('textbox', { name: '搜索姓名、账号或邮箱' }).fill('contract.created');
-    await page.getByRole('button', { name: /查\s*询/ }).click();
     await expect(page.getByRole('button', { name: '契约新增人员', exact: true })).toBeVisible();
     expect(saved[0].creating).toBe(true);
     const record = saved[0].record as Record<string, unknown> & { appointments: unknown[] };
@@ -64,7 +63,7 @@ test('P1 保存冲突保留输入，重试沿用同一个请求号', async ({ pa
     await drawer.getByLabel('机构名称', { exact: true }).fill('待保存机构');
     await drawer.getByLabel('机构编码', { exact: true }).fill('CONTRACT_ORG');
     await drawer.getByRole('button', { name: /保\s*存/ }).click();
-    await expect(drawer.getByText('机构资料已更新，请核对后重试', { exact: true })).toBeVisible();
+    await expect(page.locator('.ant-message-notice-error')).toContainText('机构资料已更新，请核对后重试');
     await expect(drawer.getByLabel('机构名称', { exact: true })).toHaveValue('待保存机构');
     await drawer.getByRole('button', { name: /保\s*存/ }).click();
     await expect(drawer).toHaveCount(0);
@@ -107,6 +106,7 @@ test('P1 登录页舒展控件和工作区在 390/1440/1920px 可用', async ({ 
             await page.goto(`/#/console/workforce/${path}`);
             if (path === 'overview') await expect(page.getByText('身份用户总数', { exact: true })).toBeVisible();
             else if (path === 'apps') await expect(page.getByText('应用数量', { exact: true })).toBeVisible();
+            else if (path === 'organization') await expect(page.locator('.organization-layout .table-card')).toBeVisible();
             else await expect(page.locator('.page-heading, .application-detail-hero').first()).toBeVisible();
             expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width + 1);
         }

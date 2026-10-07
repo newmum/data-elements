@@ -9,9 +9,6 @@ import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingServ
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
@@ -22,16 +19,15 @@ import org.ssssssss.script.MagicScriptContext;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MultiValueTranslationMagicSyntaxTest {
-    private static final Path DIRECTORY = Path.of(
-            "db/migrations/resources/multivalue-translation-20261003/magic");
+    private static final String TASK_SOURCE_ID = "ods_data_agg_task_ensure_01";
 
     @Test
     void materializationAndTaskGenerationCompile() {
         for (String file : new String[] {
-                "e3320ec899a24426adf5f77e2dab36f9.ms",
-                "ods_data_agg_task_ensure_01.ms" }) {
+                "e3320ec899a24426adf5f77e2dab36f9",
+                TASK_SOURCE_ID }) {
             assertDoesNotThrow(() -> MagicScript.create(
-                    Files.readString(DIRECTORY.resolve(file), StandardCharsets.UTF_8), null).compile(), file);
+                    CanonicalMagicSources.byId(file), null).compile(), file);
         }
     }
 
@@ -98,8 +94,7 @@ class MultiValueTranslationMagicSyntaxTest {
     }
 
     private String helperQuery(String dictionaryRows) throws Exception {
-        String source = Files.readString(DIRECTORY.resolve("ods_data_agg_task_ensure_01.ms"),
-                StandardCharsets.UTF_8);
+        String source = CanonicalMagicSources.byId(TASK_SOURCE_ID);
         String helper = source.substring(source.indexOf("// NiFi's ExecuteSQLRecord"),
                 source.indexOf("var mappingDsl ="));
         String script = "var text = (value) => value == null ? '' : '' + value\n"

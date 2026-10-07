@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import { api, useDatabase, useSession } from '../mock/store';
 import { assertGrant, belongsToOrg, effectiveAccess, grantIsCurrent, makeBase } from '../domain/engine';
 import type { Domain, Grant, PermissionGroup } from '../domain/types';
-import { CardMetric, ConfirmDelete, DataTable, dateText, exportCsv, options, PageTitle, StatusTag, Text, Title, useAction, useEditable } from '../components/common';
+import { CardMetric, ConfirmDelete, DataTable, dateText, exportCsv, options, PageTitle, StatusTag, Text, Title, useAction, useEditable, formErrorText } from '../components/common';
 import { AppIcon, UserAvatar, ModuleSummary } from '../components/visuals';
 function GrantDialog({ open, domain, mode, selected, onClose }: {
     open: boolean;
@@ -20,7 +20,6 @@ function GrantDialog({ open, domain, mode, selected, onClose }: {
     const [step, setStep] = useState(0);
     const [preview, setPreview] = useState<Grant[]>([]);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState('');
     const { modal, message } = App.useApp();
     const source = Form.useWatch('source', form) || 'user';
     const appId = Form.useWatch('appId', form);
@@ -28,7 +27,6 @@ function GrantDialog({ open, domain, mode, selected, onClose }: {
         if (open) {
             setStep(0);
             setPreview([]);
-            setError('');
             form.resetFields();
             form.setFieldsValue({ source: mode === 'orgs' ? 'org' : 'user', subjectIds: mode === 'apps' ? [] : [selected], appId: mode === 'apps' ? selected : undefined, roleIds: [], includeChildren: true, startsAt: dayjs(), reason: '' });
         }
@@ -40,12 +38,8 @@ function GrantDialog({ open, domain, mode, selected, onClose }: {
             items.forEach(g => assertGrant(db, g));
             setPreview(items);
             setStep(1);
-            setError('');
         }
-        catch (e) {
-            if (e instanceof Error)
-                setError(e.message);
-        }
+        catch (e) { message.error(formErrorText(e)); }
     };
     const subjects = source === 'org' ? db.orgs.filter(o => o.domain === domain && o.status === 'enabled') : db.users.filter(u => u.domain === domain && u.kind !== 'admin' && u.status === 'enabled');
     const affected = db.users.filter(u => u.domain === domain && u.kind !== 'admin' && preview.some(g => g.source === 'user' ? g.subjectId === u.id : belongsToOrg(db, u, g.subjectId, g.includeChildren)));
@@ -57,7 +51,6 @@ function GrantDialog({ open, domain, mode, selected, onClose }: {
     const grantNames = (g: Grant) => g.source === 'user' ? db.users.find(u => u.id === g.subjectId)?.name : db.orgs.find(o => o.id === g.subjectId)?.name;
     const commit = async () => {
         setBusy(true);
-        setError('');
         let count = 0;
         let skipped = 0;
         const errors: string[] = [];
@@ -76,7 +69,7 @@ function GrantDialog({ open, domain, mode, selected, onClose }: {
         }
         setBusy(false);
         if (errors.length) {
-            setError(`已保存${count}项，跳过已有${skipped}项，失败：${errors.join('；')}`);
+            message.error(`已保存${count}项，跳过已有${skipped}项，失败：${errors.join('；')}`);
         }
         else {
             message.success(`已新增${count}项授权${skipped ? `，跳过已有${skipped}项` : ''}`);
@@ -84,7 +77,7 @@ function GrantDialog({ open, domain, mode, selected, onClose }: {
         }
     };
     const close = () => form.isFieldsTouched() ? modal.confirm({ title: '放弃未提交的授权？', content: '本次预览不会产生实际授权关系。', okText: '放弃', cancelText: '继续编辑', onOk: onClose }) : onClose();
-    return <Drawer title="配置应用授权" open={open} size={760} onClose={busy ? undefined : close} destroyOnHidden footer={<Space><Button onClick={close} disabled={busy}>取消</Button>{step === 1 && <Button onClick={() => setStep(0)} disabled={busy}>返回修改</Button>}<Button type="primary" loading={busy} onClick={step === 0 ? build : commit}>{step === 0 ? '预览授权影响' : '确认授权'}</Button></Space>}><Steps current={step} size="small" items={[{ title: '选择对象与权限' }, { title: '预览并确认' }]} style={{ margin: '24px 0' }}/>{error && <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }}/>}<div hidden={step !== 0}><Form size="small" layout="vertical" form={form} preserve><Row gutter={12}><Col xs={24} sm={12}><Form.Item name="source" label="授权对象类型"><Radio.Group disabled={mode !== 'apps'} options={[{ value: 'user', label: '用户' }, { value: 'org', label: '机构' }]} onChange={() => form.setFieldValue('subjectIds', [])}/></Form.Item><Form.Item label={source === 'org' ? '授权机构' : '授权用户'} name="subjectIds" rules={[{ required: true, message: '请选择至少一个授权对象' }]} extra={source === 'user' ? '平台管理账号不参与业务应用授权。' : '机构授权随任职与机构范围变化计算。'}><Select mode="multiple" showSearch optionFilterProp="label" options={options(subjects)} placeholder="选择授权对象"/></Form.Item>{source === 'org' && <Form.Item name="includeChildren" valuePropName="checked"><Checkbox>包含下级机构用户</Checkbox></Form.Item>}<Form.Item label="目标应用" name="appId" rules={[{ required: true, message: '请选择目标应用' }]}><Select disabled={mode === 'apps'} showSearch optionFilterProp="label" options={options(db.apps.filter(a => a.domain === domain && a.status === 'enabled'))} placeholder="选择应用" onChange={() => form.setFieldValue('roleIds', [])}/></Form.Item><Form.Item label="应用角色" name="roleIds" extra="不选择角色时，仅授予应用访问资格，不包含业务操作权限。"><Select mode="multiple" showSearch optionFilterProp="label" disabled={!appId} options={options(db.roles.filter(r => r.appId === appId && r.status === 'enabled'))}/></Form.Item></Col><Col xs={24} sm={12}><Form.Item label="生效时间" name="startsAt" rules={[{ required: true }]}><DatePicker showTime style={{ width: '100%' }}/></Form.Item><Form.Item label="到期时间" name="expiresAt" extra="留空表示长期有效；到期后自动从有效权限中排除。"><DatePicker showTime style={{ width: '100%' }}/></Form.Item><Form.Item label="授权原因" name="reason" rules={[{ required: true, message: '请说明授权原因' }, { max: 200 }]}><Input.TextArea rows={4} showCount maxLength={200} placeholder="说明业务需要与授权范围"/></Form.Item><Alert title="授权操作可追溯" description="本次变更会记录对象、应用、角色、期限与原因。" type="info" showIcon/></Col></Row></Form></div><div hidden={step !== 1}><div className="impact-preview"><div><span>新增应用访问</span><strong>{newAppAccess}<small> 项</small></strong></div><div><span>新增用户-资源权限</span><strong>{newResources}<small> 项</small></strong></div><div><span>回收权限</span><strong>0<small> 项</small></strong></div></div><Alert type="warning" showIcon title={`涉及 ${preview.length} 个授权对象、${affected.length} 位关联用户`} description={`其中 ${affected.filter(u => u.status === 'enabled' && !u.locked).length} 位账户当前可用；停用或锁定账户不会立即获得有效访问。已有其他授权来源不会被覆盖。`} style={{ marginBottom: 12 }}/><Table size="small" rowKey="id" pagination={false} dataSource={preview} columns={[{ title: '授权对象', render: (_, g) => grantNames(g) }, { title: '目标应用', render: (_, g) => db.apps.find(a => a.id === g.appId)?.name }, { title: '角色', render: (_, g) => g.roleIds.map(id => <Tag key={id}>{db.roles.find(r => r.id === id)?.name}</Tag>) }, { title: '到期时间', render: (_, g) => g.expiresAt ? dateText(g.expiresAt) : '长期有效' }]} scroll={{ x: 'max-content' }}/></div></Drawer>;
+    return <Drawer title="配置应用授权" open={open} size={760} onClose={busy ? undefined : close} destroyOnHidden footer={<Space><Button onClick={close} disabled={busy}>取消</Button>{step === 1 && <Button onClick={() => setStep(0)} disabled={busy}>返回修改</Button>}<Button type="primary" loading={busy} onClick={step === 0 ? build : commit}>{step === 0 ? '预览授权影响' : '确认授权'}</Button></Space>}><Steps current={step} size="small" items={[{ title: '选择对象与权限' }, { title: '预览并确认' }]} style={{ margin: '24px 0' }}/><div hidden={step !== 0}><Form size="small" layout="vertical" form={form} onFinishFailed={failure => message.error(formErrorText(failure))} preserve><Row gutter={12}><Col xs={24} sm={12}><Form.Item name="source" label="授权对象类型"><Radio.Group disabled={mode !== 'apps'} options={[{ value: 'user', label: '用户' }, { value: 'org', label: '机构' }]} onChange={() => form.setFieldValue('subjectIds', [])}/></Form.Item><Form.Item label={source === 'org' ? '授权机构' : '授权用户'} name="subjectIds" rules={[{ required: true, message: '请选择至少一个授权对象' }]} extra={source === 'user' ? '平台管理账号不参与业务应用授权。' : '机构授权随任职与机构范围变化计算。'}><Select mode="multiple" showSearch optionFilterProp="label" options={options(subjects)} placeholder="选择授权对象"/></Form.Item>{source === 'org' && <Form.Item name="includeChildren" valuePropName="checked"><Checkbox>包含下级机构用户</Checkbox></Form.Item>}<Form.Item label="目标应用" name="appId" rules={[{ required: true, message: '请选择目标应用' }]}><Select disabled={mode === 'apps'} showSearch optionFilterProp="label" options={options(db.apps.filter(a => a.domain === domain && a.status === 'enabled'))} placeholder="选择应用" onChange={() => form.setFieldValue('roleIds', [])}/></Form.Item><Form.Item label="应用角色" name="roleIds" extra="不选择角色时，仅授予应用访问资格，不包含业务操作权限。"><Select mode="multiple" showSearch optionFilterProp="label" disabled={!appId} options={options(db.roles.filter(r => r.appId === appId && r.status === 'enabled'))}/></Form.Item></Col><Col xs={24} sm={12}><Form.Item label="生效时间" name="startsAt" rules={[{ required: true }]}><DatePicker showTime style={{ width: '100%' }}/></Form.Item><Form.Item label="到期时间" name="expiresAt" extra="留空表示长期有效；到期后自动从有效权限中排除。"><DatePicker showTime style={{ width: '100%' }}/></Form.Item><Form.Item label="授权原因" name="reason" rules={[{ required: true, message: '请说明授权原因' }, { max: 200 }]}><Input.TextArea rows={4} showCount maxLength={200} placeholder="说明业务需要与授权范围"/></Form.Item><Alert title="授权操作可追溯" description="本次变更会记录对象、应用、角色、期限与原因。" type="info" showIcon/></Col></Row></Form></div><div hidden={step !== 1}><div className="impact-preview"><div><span>新增应用访问</span><strong>{newAppAccess}<small> 项</small></strong></div><div><span>新增用户-资源权限</span><strong>{newResources}<small> 项</small></strong></div><div><span>回收权限</span><strong>0<small> 项</small></strong></div></div><Alert type="warning" showIcon title={`涉及 ${preview.length} 个授权对象、${affected.length} 位关联用户`} description={`其中 ${affected.filter(u => u.status === 'enabled' && !u.locked).length} 位账户当前可用；停用或锁定账户不会立即获得有效访问。已有其他授权来源不会被覆盖。`} style={{ marginBottom: 12 }}/><Table size="small" rowKey="id" pagination={false} dataSource={preview} columns={[{ title: '授权对象', render: (_, g) => grantNames(g) }, { title: '目标应用', render: (_, g) => db.apps.find(a => a.id === g.appId)?.name }, { title: '角色', render: (_, g) => g.roleIds.map(id => <Tag key={id}>{db.roles.find(r => r.id === id)?.name}</Tag>) }, { title: '到期时间', render: (_, g) => g.expiresAt ? dateText(g.expiresAt) : '长期有效' }]} scroll={{ x: 'max-content' }}/></div></Drawer>;
 }
 export default function Authorization({ domain, mode }: {
     domain: Domain;
@@ -128,9 +121,8 @@ export function PermissionGroups({ domain }: {
     const [form] = Form.useForm();
     const [items, setItems] = useState<PermissionGroup['items']>([]);
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState('');
     const { message, modal } = App.useApp();
-    const start = (g: PermissionGroup | null) => { setEditing(g); setItems(g?.items.map(i => ({ ...i, roleIds: [...i.roleIds] })) || []); setOpen(true); setError(''); form.resetFields(); form.setFieldsValue(g || { name: '', description: '', userIds: [], status: 'enabled' }); };
+    const start = (g: PermissionGroup | null) => { setEditing(g); setItems(g?.items.map(i => ({ ...i, roleIds: [...i.roleIds] })) || []); setOpen(true); form.resetFields(); form.setFieldsValue(g || { name: '', description: '', userIds: [], status: 'enabled' }); };
     const save = async () => {
         try {
             const v = await form.validateFields();
@@ -143,14 +135,11 @@ export function PermissionGroups({ domain }: {
             message.success('权限组及关联授权已更新');
             setOpen(false);
         }
-        catch (e) {
-            if (e instanceof Error)
-                setError(e.message);
-        }
+        catch (e) { message.error(formErrorText(e)); }
         finally {
             setBusy(false);
         }
     };
     const close = () => modal.confirm({ title: '放弃本次修改？', content: '尚未保存的应用组合和成员选择将被丢弃。', okText: '放弃修改', cancelText: '继续编辑', onOk: () => setOpen(false) });
-    return <><PageTitle title="权限组" description="将跨应用的角色组合为权限组，统一授予业务人员。" extra={<Button type="primary" icon={<PlusOutlined />} disabled={!editable} onClick={() => start(null)}>新建权限组</Button>}/><ModuleSummary domain={domain} category="groups"/><DataTable data={db.groups.filter(g => g.domain === domain)} title="权限组列表" columns={[{ title: '权限组', dataIndex: 'name', render: (v, r) => <div><Text strong>{v}</Text><div><Text type="secondary">{r.description}</Text></div></div> }, { title: '应用组合', render: (_, g) => <Space wrap>{g.items.map(i => <Tag key={i.appId}>{db.apps.find(a => a.id === i.appId)?.name}</Tag>)}</Space> }, { title: '成员数', align: 'right', render: (_, g) => g.userIds.length }, { title: '状态', dataIndex: 'status', render: v => <StatusTag value={v}/> }, { title: '操作', render: (_, g) => <Space><Button type="link" disabled={!editable} onClick={() => start(g)}>配置</Button><ConfirmDelete target={g.name} disabled={!editable} onConfirm={() => api.remove('groups', g.id)}/></Space> }]}/><Modal title={editing ? '配置权限组' : '新建权限组'} open={open} width={900} onCancel={close} destroyOnHidden onOk={save} confirmLoading={busy} okText="保存权限组" cancelText="取消">{error && <Alert title={error} type="error" showIcon style={{ marginBottom: 16 }}/>}<Form size="small" form={form} layout="vertical"><Row gutter={12}><Col xs={24} sm={12}><Form.Item label="权限组名称" name="name" rules={[{ required: true }]}><Input /></Form.Item></Col><Col xs={24} sm={12}><Form.Item label="状态" name="status"><Select options={[{ value: 'enabled', label: '启用' }, { value: 'disabled', label: '停用' }]}/></Form.Item></Col></Row><Form.Item label="说明" name="description"><Input.TextArea rows={2}/></Form.Item><Form.Item label="组成员" name="userIds" extra="只授予业务用户，不包含平台管理账号。"><Select mode="multiple" showSearch optionFilterProp="label" options={options(db.users.filter(u => u.domain === domain && u.kind !== 'admin'))}/></Form.Item></Form><Text strong className="detail-section-title">应用与角色组合</Text><div style={{ margin: '12px 0' }}>{items.map((item, index) => <Row gutter={12} key={index} style={{ marginBottom: 12 }}><Col xs={24} sm={9}><Select aria-label={`组合${index + 1}应用`} style={{ width: '100%' }} value={item.appId || undefined} placeholder="选择应用" options={options(db.apps.filter(a => a.domain === domain && a.status === 'enabled'))} onChange={id => setItems(items.map((v, i) => i === index ? { appId: id, roleIds: [] } : v))}/></Col><Col xs={24} sm={12}><Select aria-label={`组合${index + 1}角色`} mode="multiple" style={{ width: '100%' }} value={item.roleIds} placeholder="选择该应用角色" options={options(db.roles.filter(r => r.appId === item.appId && r.status === 'enabled'))} onChange={ids => setItems(items.map((v, i) => i === index ? { ...v, roleIds: ids } : v))}/></Col><Col xs={24} sm={3}><Button danger onClick={() => setItems(items.filter((_, i) => i !== index))}>移除</Button></Col></Row>)}</div><Button type="dashed" block icon={<PlusOutlined />} onClick={() => setItems([...items, { appId: '', roleIds: [] }])}>添加应用组合</Button><Alert style={{ marginTop: 20 }} type="info" showIcon title="保存后重新生成此权限组的授权来源，不影响用户的直接或机构授权。"/></Modal></>;
+    return <><PageTitle title="权限组" description="将跨应用的角色组合为权限组，统一授予业务人员。" extra={<Button type="primary" icon={<PlusOutlined />} disabled={!editable} onClick={() => start(null)}>新建权限组</Button>}/><ModuleSummary domain={domain} category="groups"/><DataTable data={db.groups.filter(g => g.domain === domain)} title="权限组列表" columns={[{ title: '权限组', dataIndex: 'name', render: (v, r) => <div><Text strong>{v}</Text><div><Text type="secondary">{r.description}</Text></div></div> }, { title: '应用组合', render: (_, g) => <Space wrap>{g.items.map(i => <Tag key={i.appId}>{db.apps.find(a => a.id === i.appId)?.name}</Tag>)}</Space> }, { title: '成员数', align: 'right', render: (_, g) => g.userIds.length }, { title: '状态', dataIndex: 'status', render: v => <StatusTag value={v}/> }, { title: '操作', render: (_, g) => <Space><Button type="link" disabled={!editable} onClick={() => start(g)}>配置</Button><ConfirmDelete target={g.name} disabled={!editable} onConfirm={() => api.remove('groups', g.id)}/></Space> }]}/><Modal title={editing ? '配置权限组' : '新建权限组'} open={open} width={900} onCancel={close} destroyOnHidden onOk={save} confirmLoading={busy} okText="保存权限组" cancelText="取消"><Form size="small" form={form} layout="vertical" onFinishFailed={failure => message.error(formErrorText(failure))}><Row gutter={12}><Col xs={24} sm={12}><Form.Item label="权限组名称" name="name" rules={[{ required: true }]}><Input /></Form.Item></Col><Col xs={24} sm={12}><Form.Item label="状态" name="status"><Select options={[{ value: 'enabled', label: '启用' }, { value: 'disabled', label: '停用' }]}/></Form.Item></Col></Row><Form.Item label="说明" name="description"><Input.TextArea rows={2}/></Form.Item><Form.Item label="组成员" name="userIds" extra="只授予业务用户，不包含平台管理账号。"><Select mode="multiple" showSearch optionFilterProp="label" options={options(db.users.filter(u => u.domain === domain && u.kind !== 'admin'))}/></Form.Item></Form><Text strong className="detail-section-title"><span className="form-required-mark" aria-hidden="true">*</span>应用与角色组合</Text><div style={{ margin: '12px 0' }}>{items.map((item, index) => <Row gutter={12} key={index} style={{ marginBottom: 12 }}><Col xs={24} sm={9}><Select aria-label={`组合${index + 1}应用`} style={{ width: '100%' }} value={item.appId || undefined} placeholder="选择应用" options={options(db.apps.filter(a => a.domain === domain && a.status === 'enabled'))} onChange={id => setItems(items.map((v, i) => i === index ? { appId: id, roleIds: [] } : v))}/></Col><Col xs={24} sm={12}><Select aria-label={`组合${index + 1}角色`} mode="multiple" style={{ width: '100%' }} value={item.roleIds} placeholder="选择该应用角色" options={options(db.roles.filter(r => r.appId === item.appId && r.status === 'enabled'))} onChange={ids => setItems(items.map((v, i) => i === index ? { ...v, roleIds: ids } : v))}/></Col><Col xs={24} sm={3}><Button danger onClick={() => setItems(items.filter((_, i) => i !== index))}>移除</Button></Col></Row>)}</div><Button type="dashed" block icon={<PlusOutlined />} onClick={() => setItems([...items, { appId: '', roleIds: [] }])}>添加应用组合</Button><Alert style={{ marginTop: 20 }} type="info" showIcon title="保存后重新生成此权限组的授权来源，不影响用户的直接或机构授权。"/></Modal></>;
 }

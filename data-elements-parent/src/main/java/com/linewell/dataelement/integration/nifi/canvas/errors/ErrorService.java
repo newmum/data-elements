@@ -19,7 +19,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * In-memory + file-backed store of {@link FlowError}s, keyed by pipeline id.
  *
  * <p>Each pipeline keeps at most {@link #MAX_PER_FLOW} most recent errors.
- * On each mutation the list is also persisted to {@code data/errors/{flowId}.json}
+ * On each mutation the list is also persisted beneath the backend log directory
+ * to {@code errors/{flowId}.json}
  * so the UI can reload error context after a backend restart.
  */
 @Service
@@ -32,7 +33,7 @@ public class ErrorService {
     private final Path baseDir;
     private final ObjectMapper mapper;
 
-    public ErrorService(@Value("${storage.root-dir:./data}") String rootDir, ObjectMapper mapper) {
+    public ErrorService(@Value("${storage.error-root-dir:${DATA_ELEMENTS_LOG_DIR:../logs/backend}}") String rootDir, ObjectMapper mapper) {
         this.baseDir = Path.of(rootDir, "errors").toAbsolutePath().normalize();
         this.mapper = mapper;
     }

@@ -1,19 +1,25 @@
-import { AppstoreOutlined, SafetyCertificateOutlined, TeamOutlined } from '@ant-design/icons';
-import { BrandMark } from './Brand';
-
 /** A single loading state for session restore, domain changes and lazy pages. */
 export function WorkspaceLoading({ label, fullScreen = false }: { label: string; fullScreen?: boolean }) {
     return <div className={`workspace-loading${fullScreen ? ' workspace-loading-full' : ''}`} role="status" aria-live="polite" aria-label={label}>
         <div className="workspace-loading-panel">
-            <div className="workspace-loading-brand"><BrandMark size={32}/><span>统一身份管理平台</span></div>
-            <div className="workspace-loading-illustration" aria-hidden="true">
-                <span className="workspace-loading-link"/>
-                <span className="workspace-loading-node"><AppstoreOutlined /></span>
-                <span className="workspace-loading-node"><TeamOutlined /></span>
-                <span className="workspace-loading-node"><SafetyCertificateOutlined /></span>
+            <div className="workspace-loading-visual" aria-hidden="true">
+                <span className="workspace-loading-orbit"/>
+                <span className="workspace-loading-orbit workspace-loading-orbit-two"/>
+                <div className="workspace-loading-preview">
+                    <div className="workspace-loading-preview-rail"><span/><span/><span/><span/></div>
+                    <div className="workspace-loading-preview-content">
+                        <span className="workspace-loading-preview-title"/>
+                        <span className="workspace-loading-preview-line"/>
+                        <span className="workspace-loading-preview-line"/>
+                        <span className="workspace-loading-preview-line"/>
+                    </div>
+                    <span className="workspace-loading-preview-sheen"/>
+                </div>
+                <span className="workspace-loading-spark workspace-loading-spark-one"/>
+                <span className="workspace-loading-spark workspace-loading-spark-two"/>
             </div>
             <h1>{label}</h1>
-            <p>正在准备你有权访问的内容，请稍候…</p>
+            <p>正在整理页面内容，请稍候…</p>
             <span className="workspace-loading-progress" aria-hidden="true"><span/></span>
         </div>
     </div>;

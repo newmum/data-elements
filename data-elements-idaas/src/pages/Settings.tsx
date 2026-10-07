@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { CheckCircleOutlined, LockOutlined, SafetyCertificateOutlined, SaveOutlined, UserOutlined, ApiOutlined, GlobalOutlined, DatabaseOutlined, CheckCircleFilled, ApartmentOutlined } from '@ant-design/icons';
 import { useDatabase, useSession, api, setSession } from '../mock/store';
 import type { Domain, Settings as SettingsType } from '../domain/types';
-import { PageTitle, Text, Title } from '../components/common';
+import { PageTitle, Text, Title, formErrorText } from '../components/common';
 import { UserAvatar, SectionIntro } from '../components/visuals';
 import { BrandMark } from '../components/Brand';
 import { MfaBinding } from './Identity';
@@ -21,11 +21,10 @@ export default function Settings({ domain, kind }: {
     const [form] = Form.useForm<SettingsType>();
     const [busy, setBusy] = useState(false);
     const [dirty, setDirty] = useState(false);
-    const [error, setError] = useState('');
     const { message, modal } = App.useApp();
     const editable = session.permissions?.includes('settings:write') === true && domain === 'workforce' && ['security', 'branding', 'api', 'sso'].includes(kind);
     const current = db.settings[domain];
-    useEffect(() => { form.resetFields(); form.setFieldsValue(current); setDirty(false); setError(''); }, [domain, kind]);
+    useEffect(() => { form.resetFields(); form.setFieldsValue(current); setDirty(false); }, [domain, kind]);
     useEffect(() => {
         const warn = (e: BeforeUnloadEvent) => {
             if (dirty) {
@@ -40,15 +39,11 @@ export default function Settings({ domain, kind }: {
         try {
             const values = await form.validateFields();
             setBusy(true);
-            setError('');
             await api.settings(domain, values, kind);
             setDirty(false);
             message.success(kind === 'branding' ? '系统品牌已更新' : '配置已保存');
         }
-        catch (e) {
-            if (e instanceof Error)
-                setError(e.message);
-        }
+        catch (e) { message.error(formErrorText(e)); }
         finally {
             setBusy(false);
         }
@@ -72,7 +67,7 @@ export default function Settings({ domain, kind }: {
         branding: { title: '一致的品牌体验', intro: '名称、标识和描述在管理后台与统一登录入口中保持一致。', items: ['使用清晰的系统名称，建议控制在16字以内。', 'Logo建议提供带透明背景的HTTPS图片。', '留空或加载失败时回退到默认平台标识。'] }
     };
     const guide = guidance[kind];
-    return <><PageTitle title={titles[kind][0]} description={titles[kind][1]}/><div className="settings-layout"><div className="settings-main">{error && <Alert title={error} type="error" showIcon style={{ marginBottom: 16 }}/>}<Form size="small" layout="vertical" form={form} disabled={!editable} onValuesChange={() => setDirty(true)} onFinish={save} preserve>{content}{kind !== 'encryption' && <div className="settings-footer"><Space><Button onClick={() => modal.confirm({ title: '放弃当前修改？', okText: '恢复已保存配置', cancelText: '继续编辑', onOk: () => { form.setFieldsValue(current); setDirty(false); } })}>重置修改</Button><Button type="primary" icon={<SaveOutlined />} loading={busy} disabled={!editable} htmlType="submit">保存配置</Button>{dirty && <Text type="secondary">有未保存的修改</Text>}</Space></div>}</Form></div><aside className="settings-guide"><div className="guide-icon">{kind === 'api' ? <ApiOutlined /> : kind === 'sso' ? <GlobalOutlined /> : kind === 'encryption' ? <DatabaseOutlined /> : kind === 'branding' ? <BrandMark size={40}/> : <SafetyCertificateOutlined />}</div><h3>{guide.title}</h3><p>{guide.intro}</p><div className="guide-divider"/>{guide.items.map((t, i) => <div className="guide-point" key={t}><span>{String(i + 1).padStart(2, '0')}</span><p>{t}</p></div>)}<div className="guide-footer"><CheckCircleFilled /> {kind === 'encryption' ? '按字段定义保护资料' : '平台共用策略'}</div></aside></div></>;
+    return <><PageTitle title={titles[kind][0]} description={titles[kind][1]}/><div className="settings-layout"><div className="settings-main"><Form size="small" layout="vertical" form={form} disabled={!editable} onValuesChange={() => setDirty(true)} onFinish={save} onFinishFailed={failure => message.error(formErrorText(failure))} preserve>{content}{kind !== 'encryption' && <div className="settings-footer"><Space><Button onClick={() => modal.confirm({ title: '放弃当前修改？', okText: '恢复已保存配置', cancelText: '继续编辑', onOk: () => { form.setFieldsValue(current); setDirty(false); } })}>重置修改</Button><Button type="primary" icon={<SaveOutlined />} loading={busy} disabled={!editable} htmlType="submit">保存配置</Button>{dirty && <Text type="secondary">有未保存的修改</Text>}</Space></div>}</Form></div><aside className="settings-guide"><div className="guide-icon">{kind === 'api' ? <ApiOutlined /> : kind === 'sso' ? <GlobalOutlined /> : kind === 'encryption' ? <DatabaseOutlined /> : kind === 'branding' ? <BrandMark size={40}/> : <SafetyCertificateOutlined />}</div><h3>{guide.title}</h3><p>{guide.intro}</p><div className="guide-divider"/>{guide.items.map((t, i) => <div className="guide-point" key={t}><span>{String(i + 1).padStart(2, '0')}</span><p>{t}</p></div>)}<div className="guide-footer"><CheckCircleFilled /> {kind === 'encryption' ? '按字段定义保护资料' : '平台共用策略'}</div></aside></div></>;
 }
 export function Profile({ domain }: {
     domain: Domain;
@@ -99,13 +94,13 @@ export function Profile({ domain }: {
             setBusy(false);
         }
     };
-    return <><PageTitle title="个人中心" description="查看账户身份与个人安全选项。"/>{session.mustChangePassword && <Alert type="warning" showIcon title="请先修改初始密码，再继续管理平台。" style={{ marginBottom: 16 }}/>}<div className="profile-banner"><UserAvatar user={{ id: session.username, name: session.name }} size={56}/><div><h2>{session.name}</h2><p>{session.username} · {domain === 'public' ? '公众身份域' : '政企身份域'}</p><Tag color="blue">{{ admin: '系统管理员', auditor: '审计员', orgadmin: '机构管理员', appmanager: '应用管理员' }[session.role] || '平台成员'}</Tag></div><div className="profile-safety"><SafetyCertificateOutlined /><span>管理身份与业务使用身份分离</span></div></div><div className="settings-container"><Card size="small" title="基本资料" className="section-gap"><Descriptions size="small" column={{ xs: 1, sm: 2 }} items={[{ key: 'account', label: '登录账号', children: session.username }, { key: 'role', label: '管理角色', children: session.role }, { key: 'domain', label: '当前身份域', children: domain === 'public' ? '公众侧' : '政企侧' }, { key: 'store', label: '会话保存', children: '当前浏览器标签页' }]}/><Form size="small" form={form} layout="vertical" initialValues={{ name: session.name }} style={{ marginTop: 16, maxWidth: 480 }} onFinish={save}><Form.Item label="显示名称" name="name" rules={[{ required: true }, { max: 30 }]}><Input /></Form.Item><Button type="primary" htmlType="submit" loading={busy}>保存资料</Button></Form></Card><Card size="small" title="账户安全"><div className="setting-row"><div><Text strong className="setting-title">登录密码</Text><div><Text type="secondary" className="setting-description">使用符合安全策略的密码，避免在多个系统重复使用。</Text></div></div><Button onClick={() => { passwordForm.resetFields(); setOpen(true); }}>修改密码</Button></div></Card><MfaBinding/></div><Modal open={open} title="修改密码" onCancel={() => setOpen(false)} okText="修改密码" cancelText="取消" onOk={async () => {
+    return <><PageTitle title="个人中心" description="查看账户身份与个人安全选项。"/>{session.mustChangePassword && <Alert type="warning" showIcon title="请先修改初始密码，再继续管理平台。" style={{ marginBottom: 16 }}/>}<div className="profile-banner"><UserAvatar user={{ id: session.username, name: session.name }} size={56}/><div><h2>{session.name}</h2><p>{session.username} · {domain === 'public' ? '公众身份域' : '政企身份域'}</p><Tag color="blue">{{ admin: '系统管理员', auditor: '审计员', orgadmin: '机构管理员', appmanager: '应用管理员' }[session.role] || '平台成员'}</Tag></div><div className="profile-safety"><SafetyCertificateOutlined /><span>管理身份与业务使用身份分离</span></div></div><div className="settings-container"><Card size="small" title="基本资料" className="section-gap"><Descriptions size="small" column={{ xs: 1, sm: 2 }} items={[{ key: 'account', label: '登录账号', children: session.username }, { key: 'role', label: '管理角色', children: session.role }, { key: 'domain', label: '当前身份域', children: domain === 'public' ? '公众侧' : '政企侧' }, { key: 'store', label: '会话保存', children: '当前浏览器标签页' }]}/><Form size="small" form={form} layout="vertical" initialValues={{ name: session.name }} style={{ marginTop: 16, maxWidth: 480 }} onFinish={save} onFinishFailed={failure => message.error(formErrorText(failure))}><Form.Item label="显示名称" name="name" rules={[{ required: true }, { max: 30 }]}><Input /></Form.Item><Button type="primary" htmlType="submit" loading={busy}>保存资料</Button></Form></Card><Card size="small" title="账户安全"><div className="setting-row"><div><Text strong className="setting-title">登录密码</Text><div><Text type="secondary" className="setting-description">使用符合安全策略的密码，避免在多个系统重复使用。</Text></div></div><Button onClick={() => { passwordForm.resetFields(); setOpen(true); }}>修改密码</Button></div></Card><MfaBinding/></div><Modal open={open} title="修改密码" onCancel={() => setOpen(false)} okText="修改密码" cancelText="取消" onOk={async () => {
             try {
                 const values = await passwordForm.validateFields();
                 await api.password(values.old, values.password);
                 message.success('密码已修改，请重新登录');
                 setOpen(false);
             }
-            catch (error) { if (error instanceof Error) message.error(error.message); }
-        }}><Form size="small" layout="vertical" form={passwordForm}><Form.Item label="当前密码" name="old" rules={[{ required: true }]}><Input.Password autoComplete="current-password"/></Form.Item><Form.Item label="新密码" name="password" rules={[{ required: true }, { min: db.settings[domain].minLength, message: `至少${db.settings[domain].minLength}位` }]}><Input.Password autoComplete="new-password"/></Form.Item><Form.Item label="确认新密码" name="confirm" dependencies={['password']} rules={[{ required: true }, ({ getFieldValue }) => ({ validator: (_, v) => v === getFieldValue('password') ? Promise.resolve() : Promise.reject(new Error('两次密码不一致')) })]}><Input.Password autoComplete="new-password"/></Form.Item></Form></Modal></>;
+            catch (error) { message.error(formErrorText(error)); }
+        }}><Form size="small" layout="vertical" form={passwordForm} onFinishFailed={failure => message.error(formErrorText(failure))}><Form.Item label="当前密码" name="old" rules={[{ required: true }]}><Input.Password autoComplete="current-password"/></Form.Item><Form.Item label="新密码" name="password" rules={[{ required: true }, { min: db.settings[domain].minLength, message: `至少${db.settings[domain].minLength}位` }]}><Input.Password autoComplete="new-password"/></Form.Item><Form.Item label="确认新密码" name="confirm" dependencies={['password']} rules={[{ required: true }, ({ getFieldValue }) => ({ validator: (_, v) => v === getFieldValue('password') ? Promise.resolve() : Promise.reject(new Error('两次密码不一致')) })]}><Input.Password autoComplete="new-password"/></Form.Item></Form></Modal></>;
 }

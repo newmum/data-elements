@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "99c8dd7189af40939e5110b76bcd7160",
+  "name" : "02.接入任务",
+  "type" : "api",
+  "parentId" : "1f4028f20aaa4f379b5e37a343b99fa9",
+  "path" : "/task",
+  "createTime" : 1781960050355,
+  "updateTime" : 1784437771538,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

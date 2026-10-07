@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, App, Button, Checkbox, Form, Input, Modal, Select, Space, Table, Tag } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
-import { PageTitle } from '../components/common';
+import { PageTitle, formErrorText } from '../components/common';
 import { foundationApi, refreshWorkspace, useDatabase, useSession } from '../mock/store';
 import PasswordRecoveryRequests from '../components/PasswordRecoveryRequests';
 
@@ -56,10 +56,15 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
         setOpen(true);
     };
     const save = async () => {
-        const values = await form.validateFields();
-        await perform(() => foundationApi.write(`/idaas/${rolePage ? 'platform-roles' : 'operators'}/save`, {
-            record: { ...values, id: editing?.id, version: editing?.version, subjectVersion: editing && 'subject_version' in editing ? editing.subject_version : undefined }, creating: !editing,
-        }), '已保存'); setOpen(false);
+        let values;
+        try { values = await form.validateFields(); }
+        catch (error) { message.error(formErrorText(error)); return; }
+        try {
+            await perform(() => foundationApi.write(`/idaas/${rolePage ? 'platform-roles' : 'operators'}/save`, {
+                record: { ...values, id: editing?.id, version: editing?.version, subjectVersion: editing && 'subject_version' in editing ? editing.subject_version : undefined }, creating: !editing,
+            }), '已保存');
+            setOpen(false);
+        } catch { /* perform already shows the server error */ }
     };
     const assign = async (row: Operator) => {
         setBusy(true);
@@ -107,7 +112,7 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
             </Space> },
         ]}/>} 
         <Modal title={`${editing ? '编辑' : '新建'}${rolePage ? '平台角色' : '操作账号'}`} open={open} onCancel={() => setOpen(false)} onOk={save} okText="保存" cancelText="取消" confirmLoading={busy}>
-            <Form size="small" form={form} layout="vertical">
+            <Form size="small" form={form} layout="vertical" onFinishFailed={failure => message.error(formErrorText(failure))}>
                 {rolePage ? <><Form.Item name="name" label="角色名称" rules={[{ required: true }, { max: 100 }]}><Input/></Form.Item>
                     <Form.Item name="code" label="角色编码" rules={[{ required: true }, { pattern: /^[A-Za-z][A-Za-z0-9_-]{1,99}$/ }]}><Input disabled={!!editing}/></Form.Item>
                     <Form.Item name="description" label="职责说明"><Input.TextArea rows={3}/></Form.Item>
@@ -120,11 +125,16 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
             </Form>
         </Modal>
         <Modal title="重置平台密码" open={!!resetting} onCancel={() => setResetting(null)} okText="重置密码" cancelText="取消" confirmLoading={busy} onOk={async () => {
-            const values = await passwordForm.validateFields(); if (!resetting) return;
-            await perform(() => foundationApi.write('/idaas/operators/reset-password', { id: resetting.id, version: resetting.version, password: values.password }), '密码已重置，原会话已失效'); setResetting(null); setRecoveryVersion(value => value + 1);
-        }}><Form size="small" form={passwordForm} layout="vertical"><Form.Item name="password" label="新密码" rules={[{ required: true }, { min: db.settings.workforce.minLength || 8 }]}><Input.Password autoComplete="new-password"/></Form.Item></Form></Modal>
+            let values;
+            try { values = await passwordForm.validateFields(); }
+            catch (error) { message.error(formErrorText(error)); return; }
+            if (!resetting) return;
+            try { await perform(() => foundationApi.write('/idaas/operators/reset-password', { id: resetting.id, version: resetting.version, password: values.password }), '密码已重置，原会话已失效'); setResetting(null); setRecoveryVersion(value => value + 1); }
+            catch { /* perform already shows the server error */ }
+        }}><Form size="small" form={passwordForm} layout="vertical" onFinishFailed={failure => message.error(formErrorText(failure))}><Form.Item name="password" label="新密码" rules={[{ required: true }, { min: db.settings.workforce.minLength || 8 }]}><Input.Password autoComplete="new-password"/></Form.Item></Form></Modal>
         <Modal title={`${assigning?.display_name || ''} · 角色与管理范围`} open={!!assigning} onCancel={() => setAssigning(null)} onOk={saveAssignments} okText="保存授权" cancelText="取消" confirmLoading={busy} width={736}>
             <Alert type="info" showIcon title="每个角色分别限定范围及有效期；留空表示立即生效、长期有效。机构范围限定中央资料维护，应用范围限定所属应用。" style={{ marginBottom: 16 }}/>
+            <div className="platform-scope-label"><span className="form-required-mark" aria-hidden="true">*</span>角色与管理范围</div>
             {scopes.map((s, index) => <Space key={index} wrap style={{ marginBottom: 12 }}>
                 <Select aria-label={`第${index + 1}项平台角色`} style={{ width: 180 }} value={s.roleId} options={roles.filter(r => r.status === 'ACTIVE').map(r => ({ value: r.id, label: r.name }))} onChange={roleId => setScopes(scopes.map((v, i) => i === index ? { ...v, roleId } : v))}/>
                 <Select aria-label={`第${index + 1}项管理范围`} style={{ width: 130 }} value={s.scopeKind} options={[{ value: 'ALL', label: '全部对象' }, { value: 'APPLICATION', label: '指定应用' }, { value: 'ORG', label: '指定机构' }]} onChange={scopeKind => setScopes(scopes.map((v, i) => i === index ? { ...v, scopeKind, appId: undefined, orgId: undefined } : v))}/>

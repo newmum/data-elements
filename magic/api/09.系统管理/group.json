@@ -1,0 +1,14 @@
+{
+  "properties" : { },
+  "id" : "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "name" : "09.系统管理",
+  "type" : "api",
+  "parentId" : "0",
+  "path" : "/sym",
+  "createTime" : 1781960045883,
+  "updateTime" : 1784798352146,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}

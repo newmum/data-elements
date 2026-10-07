@@ -22,12 +22,10 @@ export default function ImportUsers({ open, domain, onClose }: {
     onClose: () => void;
 }) {
     const [rows, setRows] = useState<Preview[]>([]);
-    const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState('');
     const { message } = App.useApp();
     const parse = async (file: File) => {
-        setError('');
         setResult('');
         setRows([]);
         try {
@@ -58,7 +56,7 @@ export default function ImportUsers({ open, domain, onClose }: {
             setRows(preview);
         }
         catch (e) {
-            setError(e instanceof Error ? e.message : '无法解析CSV');
+            message.error(e instanceof Error ? e.message : '无法解析CSV');
         }
         return false;
     };
@@ -71,10 +69,10 @@ export default function ImportUsers({ open, domain, onClose }: {
             setResult(`已导入 ${count} 项；未导入 ${rows.length - count} 项。`);
             message.success(`已导入${count}项`);
         } catch (failure) {
-            setError(failure instanceof Error ? failure.message : '导入失败，请检查机构和岗位编码');
+            message.error(failure instanceof Error ? failure.message : '导入失败，请检查机构和岗位编码');
         } finally {
             setBusy(false);
         }
     };
-    return <Modal open={open} title="导入用户" onCancel={busy ? undefined : onClose} width={900} destroyOnHidden footer={<Space><Button disabled={busy} onClick={onClose}>关闭</Button><Button type="primary" loading={busy} disabled={!rows.some(r => !r.error)} onClick={commit}>导入有效数据（{rows.filter(r => !r.error).length}）</Button></Space>}><Alert type="info" showIcon title="支持 UTF-8 CSV，最多500行。预览检查格式，提交时由服务端统一核验机构、岗位和管理范围；导入的是中央档案，不会创建登录密码。" style={{ marginBottom: 16 }}/><Button icon={<DownloadOutlined />} style={{ marginBottom: 16 }} onClick={() => exportCsv('用户导入模板', ['姓名', '账号', '邮箱', '手机号', '机构编码', '岗位'], [])}>下载模板</Button><Upload.Dragger accept=".csv" beforeUpload={file => { void parse(file); return false; }} maxCount={1} showUploadList={false} disabled={busy}><p><InboxOutlined style={{ fontSize: 28 }}/></p><p>点击选择 CSV 文件，或拖拽文件到此处</p><Text type="secondary">选择文件后将先校验字段格式与必填信息。</Text></Upload.Dragger>{error && <Alert style={{ marginTop: 16 }} type="error" title={error} showIcon/>}{result && <Alert style={{ marginTop: 16 }} type="info" title={result} showIcon/>}{rows.length > 0 && <Table style={{ marginTop: 16 }} rowKey="id" size="small" dataSource={rows} pagination={{ pageSize: 10 }} scroll={{ x: 760 }} columns={[{ title: '行', dataIndex: 'line', width: 50 }, { title: '姓名', dataIndex: 'name' }, { title: '账号', dataIndex: 'account' }, { title: '机构', dataIndex: 'orgCode' }, { title: '校验结果', dataIndex: 'error', render: v => v ? <Tag color="error">{v}</Tag> : <Tag color="success">待服务端校验</Tag> }]}/>}</Modal>;
+    return <Modal open={open} title="导入用户" onCancel={busy ? undefined : onClose} width={900} destroyOnHidden footer={<Space><Button disabled={busy} onClick={onClose}>关闭</Button><Button type="primary" loading={busy} disabled={!rows.some(r => !r.error)} onClick={commit}>导入有效数据（{rows.filter(r => !r.error).length}）</Button></Space>}><Alert type="info" showIcon title="支持 UTF-8 CSV，最多500行。预览检查格式，提交时由服务端统一核验机构、岗位和管理范围；导入的是中央档案，不会创建登录密码。" style={{ marginBottom: 16 }}/><Button icon={<DownloadOutlined />} style={{ marginBottom: 16 }} onClick={() => exportCsv('用户导入模板', ['姓名', '账号', '邮箱', '手机号', '机构编码', '岗位'], [])}>下载模板</Button><Upload.Dragger accept=".csv" beforeUpload={file => { void parse(file); return false; }} maxCount={1} showUploadList={false} disabled={busy}><p><InboxOutlined style={{ fontSize: 28 }}/></p><p>点击选择 CSV 文件，或拖拽文件到此处</p><Text type="secondary">选择文件后将先校验字段格式与必填信息。</Text></Upload.Dragger>{result && <Alert style={{ marginTop: 16 }} type="info" title={result} showIcon/>}{rows.length > 0 && <Table style={{ marginTop: 16 }} rowKey="id" size="small" dataSource={rows} pagination={{ pageSize: 10 }} scroll={{ x: 760 }} columns={[{ title: '行', dataIndex: 'line', width: 50 }, { title: '姓名', dataIndex: 'name' }, { title: '账号', dataIndex: 'account' }, { title: '机构', dataIndex: 'orgCode' }, { title: '校验结果', dataIndex: 'error', render: v => v ? <Tag color="error">{v}</Tag> : <Tag color="success">待服务端校验</Tag> }]}/>}</Modal>;
 }

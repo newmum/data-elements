@@ -20,5 +20,7 @@ assert len(list((ROOT/'public/heroes').glob('*.svg')))==24
 assert len({hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'public/heroes').glob('*-light.svg')})==12
 files=list(ROOT.rglob('*'));assert not any(p.suffix.lower() in ['.ttf','.otf','.woff','.woff2'] for p in files)
 report={'svgAssets':25,'pngSizes':[32,64,128,256,512,1024],'preservedDependencies':28,'preservedScripts':3,'newDependenciesThisRound':0,'assets':assets}
-(ROOT/'doc/validation/assets-check.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+OUT = ROOT.parent/'logs/haitong/audit'
+OUT.mkdir(parents=True, exist_ok=True)
+(OUT/'assets-check.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
 print('PASS 25 local SVG files, 6 PNG sizes, 28 original dependency declarations, 3 original scripts.')

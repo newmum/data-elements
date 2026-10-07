@@ -55,6 +55,7 @@ for (const domain of ['workforce'] as const) {
             await page.goto(`/#/console/${domain}/${route.key}`);
             if (route.key === 'overview') await expect(page.getByText('身份用户总数', { exact: true })).toBeVisible();
             else if (route.key === 'apps') await expect(page.getByText('应用数量', { exact: true })).toBeVisible();
+            else if (route.key === 'organization') await expect(page.locator('.organization-layout .table-card')).toBeVisible();
             else await expect(page.locator('.page-title')).toBeVisible();
             await checkSurface(page);
             await page.screenshot({ path: testInfo.outputPath(`${route.key.replaceAll('/', '-')}.png`), fullPage: true });
@@ -68,10 +69,47 @@ for (const width of [1920, 1440, 1224, 768, 390]) test(`@compact 全部认证页
     for (const route of authPaths) {
         await page.goto('/#' + route);
         await expect(page.locator('.auth-content')).toBeVisible();
+        await expect(page.locator('.auth-brand-footer')).toHaveText(/一个身份。连接每一份信任。/);
+        await expect(page.locator('.auth-footer')).toHaveCount(0);
+        if (width >= 768) await expect(page.locator('.auth-story h1')).toHaveText('统一身份，安全访问。让人员、应用和访问权限高效有序协同。');
+        await expect(page.locator('.auth-story p, .auth-capabilities small')).toHaveCount(0);
+        if (route === '/login') await expect(page.getByText('使用平台操作账号，管理应用、身份目录与平台权限。')).toHaveCount(0);
         await checkSurface(page);
         await checkAuthControls(page);
         await page.screenshot({ path: testInfo.outputPath(route.replaceAll('/', '-') + '.png'), fullPage: true });
     }
+});
+test('@compact 管理登录品牌标题与能力图标在短屏幕保持对齐', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1039, height: 582 });
+    await page.goto('/#/login');
+    await expect(page.locator('.auth-story h1')).toBeVisible();
+    const layout = await page.locator('.auth-story').evaluate(root => {
+        const title = root.querySelector('h1')!.getBoundingClientRect();
+        const shield = root.querySelector('.auth-shield')!.getBoundingClientRect();
+        const centers = [...root.querySelectorAll('.auth-capabilities > div')].map(item => {
+            const icon = item.querySelector('.auth-cap-icon')!.getBoundingClientRect();
+            const label = item.querySelector('strong')!.getBoundingClientRect();
+            return { icon: icon.left + icon.width / 2, label: label.left + label.width / 2 };
+        });
+        return { titleBottom: title.bottom, shieldTop: shield.top, centers };
+    });
+    expect(layout.titleBottom).toBeLessThan(layout.shieldTop);
+    expect(layout.centers).toHaveLength(3);
+    for (const item of layout.centers) expect(Math.abs(item.icon - item.label)).toBeLessThan(2);
+    for (let i = 1; i < layout.centers.length; i++) expect(layout.centers[i].icon - layout.centers[i - 1].icon).toBeGreaterThan(100);
+    await page.screenshot({ path: testInfo.outputPath('login-brand-1039.png'), fullPage: true });
+});
+
+test('@compact 管理登录服务无响应时显示清晰错误提示', async ({ page }, testInfo) => {
+    await page.route('**/api/idaas/auth/login', route => route.fulfill({ status: 503, contentType: 'text/html', body: 'Service unavailable' }));
+    await page.goto('/#/login');
+    await page.getByLabel('管理账号').fill('idaas');
+    await page.getByLabel('登录密码').fill('invalid-password');
+    await page.getByRole('button', { name: /登录控制台/ }).click();
+    const error = page.locator('.ant-message-notice-error');
+    await expect(error).toContainText('服务器无响应，请稍后再试。');
+    await expect(page.locator('.auth-login-error')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('login-server-unavailable.png'), fullPage: true });
 });
 test('@compact 忘记密码提交后显示统一回执并允许切换账号类型', async ({ page }) => {
     const { recoveryRequests } = await installContract(page);
@@ -104,7 +142,7 @@ for (const width of [1440, 390]) test(`@compact 抽屉、弹窗、宽表及长�
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
     await login(page);
     await page.goto('/#/console/workforce/organization?user=u1');
-    await expect(page.getByText('身份档案', { exact: true })).toBeVisible();
+    await expect(page.getByText('用户信息', { exact: true })).toBeVisible();
     await checkSurface(page);
     await page.screenshot({ path: testInfo.outputPath('user-profile.png'), fullPage: true });
     await page.keyboard.press('Escape');
@@ -117,7 +155,15 @@ for (const width of [1440, 390]) test(`@compact 抽屉、弹窗、宽表及长�
     await expect(editor.getByLabel('身份类型', { exact: true })).toHaveCount(0);
     await expect(editor.getByLabel('初始密码', { exact: true })).toHaveCount(0);
     await expect(editor.getByText('创建新账号', { exact: true })).toHaveCount(0);
-    await expect(editor.getByText(/暂无岗位。请到/)).toBeVisible();
+    await expect(editor.getByText(/暂无岗位，请到/)).toHaveCount(0);
+    await editor.getByLabel('岗位', { exact: true }).click();
+    await expect(page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(/暂无岗位，请到/)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await editor.getByLabel('组织机构', { exact: true }).click();
+    await expect(editor.locator('.ant-tree-select .ant-select-prefix .anticon-apartment')).toHaveCount(0);
+    await expect(page.locator('.ant-select-tree')).toBeVisible();
+    await expect(page.locator('.ant-select-tree-treenode:not([aria-hidden="true"])').first()).toBeVisible();
+    await page.keyboard.press('Escape');
     await page.getByRole('dialog').getByLabel('姓名', {exact:true}).fill('华东区域技术管理与业务协作中心负责人');
     await checkSurface(page);
     await page.screenshot({ path: testInfo.outputPath('user-editor-long-label.png'), fullPage: true });

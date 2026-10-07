@@ -1,0 +1,15 @@
+{
+  "properties": {},
+  "id": "039920aa11d55b4faed04ad7b00bbf94",
+  "name": "33.密码找回",
+  "type": "api",
+  "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
+  "path": "/password-recovery",
+  "createTime": 1791193400395,
+  "updateTime": 1791193400395,
+  "createBy": null,
+  "updateBy": null,
+  "paths": [],
+  "options": []
+}
+================================

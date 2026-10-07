@@ -16,7 +16,7 @@ python tests/visual/review.py --screenshots
 
 已安装系统 Chromium 时可设置 `CHROMIUM_PATH`，例如 Linux 的 `/usr/bin/chromium` 或 Windows 中 chrome.exe 的完整路径。工具通过 `set_content` 读取本地样板和项目 CSS，不请求生产接口、不写业务库。字体采用测试机器系统字体，因此不同机器的换行与渲染可能有差异。
 
-输出 `.visual-review/visual-results.json` 与截图。260 个组合覆盖 26 个页面/表单样板、两种主题和五种尺寸；失败返回非零退出码。检查文档宽度、主要容器边界、文字尺寸、深色顶部及全屏区域尺寸。
+输出仓库根目录 `logs/wanxiang/visual-review/visual-results.json` 与截图，均不提交 Git。260 个组合覆盖 26 个页面/表单样板、两种主题和五种尺寸；失败返回非零退出码。检查文档宽度、主要容器边界、文字尺寸、深色顶部及全屏区域尺寸。
 
 **没有检测到溢出不等于每种数据长度或 Ant Design 动态组件都已通过。** 仍需启动真实前后端检查表格固定列、Popover/Select/DatePicker、抽屉滚动、焦点恢复、React Flow 连线与键盘操作。请勿把本工具输出作为业务端到端验收证明。
 

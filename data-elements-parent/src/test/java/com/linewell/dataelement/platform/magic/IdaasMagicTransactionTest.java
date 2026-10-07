@@ -2,9 +2,6 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,12 +50,14 @@ class IdaasMagicTransactionTest {
         jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("create table business_record(id varchar(32) primary key, name varchar(100))");
         jdbc.execute("""
-                create table iam_mutation_receipt_t (
-                    tenant_id varchar(32), request_id varchar(64), operation_key varchar(100),
-                    actor_id varchar(32), request_hash varchar(64), result_json clob,
-                    primary key (tenant_id, request_id)
+                create table iam_request_receipt_t (
+                    tid varchar(32) primary key, operator_id varchar(32), operation_code varchar(100),
+                    request_id varchar(64), request_hash varchar(64), status varchar(20), result_json clob,
+                    unique(operator_id, operation_code, request_id)
                 )
                 """);
+        jdbc.execute("create table iam_application_t(tid varchar(32) primary key)");
+        jdbc.update("insert into iam_application_t values('idaas-platform-internal')");
     }
 
     @Test
@@ -118,7 +117,7 @@ class IdaasMagicTransactionTest {
         Object result = run(source, mutationArguments());
         assertInstanceOf(ExitValue.class, result);
         assertEquals(0, count("business_record"));
-        assertEquals(0, count("iam_mutation_receipt_t"));
+        assertEquals(0, count("iam_request_receipt_t"));
     }
 
     @Test
@@ -134,20 +133,21 @@ class IdaasMagicTransactionTest {
         assertEquals("new-record", ((Map<?, ?>) first).get("id"));
         assertEquals("new-record", ((Map<?, ?>) replay).get("id"));
         assertEquals(1, count("business_record"));
-        assertEquals(1, count("iam_mutation_receipt_t"));
+        assertEquals(1, count("iam_request_receipt_t"));
     }
 
     private String actualMutationSource(String callback) throws Exception {
-        Path source = Path.of("db/migrations/resources/idaas-phase1-20260927/functions/mutate.ms");
-        // Inject only the db module. Execute the checked-in helper unchanged otherwise.
-        return callback + Files.readString(source, StandardCharsets.UTF_8)
-                .replaceFirst("(?m)^import db;\\r?\\n", "");
+        // Adapt external authorization/fingerprint modules; execute the actual transaction unchanged.
+        return "var context=()=>({pairs:[],permissions:[],account:{}});var guard=(permission,app,domain)=>context();\n"
+                + callback + CanonicalMagicSources.byId("cdebc557515854f7aff31170e0b6c630")
+                .replaceAll("(?m)^import (db|identityTransport);\\r?\\n", "")
+                .replaceAll("(?m)^import '@/[^\\r\\n]+;\\r?\\n", "");
     }
 
     private Map<String, Object> mutationArguments() {
         return Map.of(
-                "ctx", Map.of("tenantId", "police", "userId", "test-user"),
-                "operationKey", "test:save",
+                "ctx", new LinkedHashMap<>(Map.of("userId", "test-user")),
+                "operation", "test:save",
                 "payload", Map.of("requestId", "test-request-001", "record", Map.of("name", "test"))
         );
     }
@@ -165,16 +165,21 @@ class IdaasMagicTransactionTest {
         Map<?, ?> result = assertInstanceOf(Map.class, run(source, arguments));
         assertEquals("restored-record", result.get("id"));
         assertEquals(1, count("business_record"));
-        assertEquals(1, count("iam_mutation_receipt_t"));
+        assertEquals(1, count("iam_request_receipt_t"));
     }
 
     private Object run(String source, Map<String, Object> inputs) {
         Map<String, Object> environment = new LinkedHashMap<>(inputs);
         environment.put("db", db);
+        environment.put("identityTransport", new FingerprintStub());
         return MagicScript.create(source, null).execute(new MagicScriptContext(environment));
     }
 
     private int count(String table) {
         return jdbc.queryForObject("select count(*) from " + table, Integer.class);
+    }
+
+    public static class FingerprintStub {
+        public String protectedFingerprint(String digest, String purpose) { return digest; }
     }
 }

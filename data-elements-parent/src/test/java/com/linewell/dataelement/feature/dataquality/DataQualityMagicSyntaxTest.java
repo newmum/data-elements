@@ -1,31 +1,22 @@
 package com.linewell.dataelement.feature.dataquality;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import com.linewell.dataelement.platform.magic.CanonicalMagicSources;
 import java.util.List;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.ssssssss.script.MagicScript;
 
+/** Offline compilation of canonical sources; no server or database mutation. */
 class DataQualityMagicSyntaxTest {
-
     @TestFactory
     List<DynamicTest> compileEditableQualityInterfaces() throws Exception {
-        Path root = Path.of("db/migrations/resources/quality-magic-20261002/apis");
-        List<Path> scripts;
-        try (var files = Files.walk(root)) {
-            scripts = files.filter(Files::isRegularFile)
-                    .filter(path -> path.toString().endsWith(".ms"))
-                    .sorted()
-                    .toList();
-        }
-        assertEquals(16, scripts.size());
-        return scripts.stream().map(path -> DynamicTest.dynamicTest(
-                path.getFileName().toString(),
-                () -> MagicScript.create(Files.readString(path, StandardCharsets.UTF_8), null).compile()
+        var scripts = CanonicalMagicSources.under("api/05.数据治理/02.数据质量");
+        assertFalse(scripts.isEmpty(), "Current Magic resource tree is missing");
+        return scripts.stream().map(script -> DynamicTest.dynamicTest(
+                script.relativePath() + " [" + script.metadataId() + "]",
+                () -> MagicScript.create(script.source(), null).compile()
         )).toList();
     }
 }

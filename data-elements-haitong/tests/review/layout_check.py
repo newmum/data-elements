@@ -3,6 +3,7 @@ import asyncio, json
 from pathlib import Path
 from playwright.async_api import async_playwright
 ROOT=Path(__file__).resolve().parents[2]
+OUTPUT=ROOT.parent/'logs/haitong/review'
 PAGES=['overview','tasks','batch','registry','multi','ingress','distribution','clusters','cross','instant','inventory','statements','canvas']
 SIZES=[(1920,1080),(1670,940),(1440,900),(1366,768),(768,1024),(390,844)]
 JS='''() => {
@@ -20,7 +21,7 @@ JS='''() => {
  return {width:innerWidth,scrollWidth:root.scrollWidth,scrollHeight:root.scrollHeight,navDelta:Math.max(0,...navDelta),badImages,heroOverlap:!!overlap,smallMenuText:smallText,theme:root.dataset.theme,primary:getComputedStyle(root).getPropertyValue('--primary').trim(),svgCount:document.querySelectorAll('svg').length};
 }'''
 async def main():
- out=ROOT/'doc/validation/screenshots';out.mkdir(exist_ok=True)
+ out=OUTPUT/'screenshots';out.mkdir(parents=True,exist_ok=True)
  results=[]
  async with async_playwright() as p:
   browser=await p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
@@ -30,7 +31,7 @@ async def main():
     for width,height in SIZES if navigation=='collapsed' else SIZES[:4]:
      await page.set_viewport_size({'width':width,'height':height})
      for name in PAGES:
-      file=ROOT/'doc/validation/dom-review'/f'{name}-{mode}-{navigation}.html'
+      file=OUTPUT/'dom-review'/f'{name}-{mode}-{navigation}.html'
       await page.set_content(file.read_text(),wait_until='load')
       m=await page.evaluate(JS)
       m.update(page=name,viewport=f'{width}x{height}',navigation=navigation)
@@ -42,7 +43,7 @@ async def main():
        await page.screenshot(path=str(out/f'{name}-{mode}-390.png'),full_page=True)
   await browser.close()
  report={'kind':'isolated-dom-not-application-e2e','count':len(results),'passed':sum(r['passed'] for r in results),'failed':[r for r in results if not r['passed']],'results':results}
- (ROOT/'doc/validation/layout-check.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+ (OUTPUT/'layout-check.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
  print(json.dumps({k:v for k,v in report.items() if k!='results'},ensure_ascii=False,indent=2))
  if report['failed']:raise SystemExit(1)
 asyncio.run(main())

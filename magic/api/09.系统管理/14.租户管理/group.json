@@ -1,0 +1,15 @@
+{
+  "properties" : { },
+  "id" : "d28618bcdcca47279ce2c6f513002948",
+  "name" : "14.租户管理",
+  "type" : "api",
+  "parentId" : "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path" : "/tenant",
+  "createTime" : 1787162475661,
+  "updateTime" : 1787162475661,
+  "createBy" : "codex",
+  "updateBy" : "codex",
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================

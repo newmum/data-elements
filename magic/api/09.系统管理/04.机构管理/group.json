@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "c1736799c6af43359a75e6764601931f",
+  "name" : "04.机构管理",
+  "type" : "api",
+  "parentId" : "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path" : "/org",
+  "createTime" : 1781960046365,
+  "updateTime" : 1784437771090,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

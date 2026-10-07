@@ -1,4 +1,0 @@
-Date: 2026-09-27
-Method: TypeScript transpileModule, ReactJSX + ES2022; no actual React/Ant Design dependency types.
-FILES 26 ERRORS 0
-Result: PASS for syntax only; this is not a full project type check.

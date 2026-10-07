@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "fb9192d12472469f82f204f1a4310a28",
+  "name" : "01.服务分组",
+  "type" : "api",
+  "parentId" : "2baeb325734a4f348df335661b205952",
+  "path" : "/group",
+  "createTime" : 1782955363338,
+  "updateTime" : 1784437771886,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

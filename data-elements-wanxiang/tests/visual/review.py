@@ -2,7 +2,7 @@ import json, time, sys, re, os, shutil, base64
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 root=Path(__file__).resolve().parents[2]
-qa=root/'.visual-review';qa.mkdir(exist_ok=True);shots=qa/'shots';shots.mkdir(exist_ok=True)
+qa=root.parent/'logs/wanxiang/visual-review';qa.mkdir(parents=True,exist_ok=True);shots=qa/'shots';shots.mkdir(exist_ok=True)
 manifest=json.loads((root/'tests/visual/fixtures/manifest.json').read_text())
 viewport_cases=[(1440,1000),(1366,900),(1920,1080),(768,1024),(390,844)]
 results=[];bad=[]

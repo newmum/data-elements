@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "8f2a6564b6fd43c28ff7a5e35d4d7cd2",
+  "name" : "03.页签",
+  "type" : "api",
+  "parentId" : "37c35deab6bc4e678c8955cc951f2ffd",
+  "path" : "/tab",
+  "createTime" : 1781960052561,
+  "updateTime" : 1784437771538,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

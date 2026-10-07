@@ -32,6 +32,11 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
     };
     useEffect(() => { if (editable) void load(); else setLoading(false); }, [view, editable]);
     useEffect(() => {
+        if (selectedConfig?.mappingMode === 'EXISTING_LOCAL' && kind !== 'user') {
+            setKind('user'); setSelected([]); setObjectPage(1);
+        }
+    }, [selectedConfig?.mappingMode, kind]);
+    useEffect(() => {
         if (view !== 'entities' || !editable || !selectedConfig) return;
         let active = true;
         setObjectLoading(true);
@@ -76,12 +81,14 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
             {progress && <Alert className="section-gap" type="info" showIcon title={progress}/>}
             {view === 'configs' ? <Card size="small" title="接收系统配置"><Table size="small" rowKey="id" loading={loading} dataSource={configs} scroll={{ x: 'max-content' }} columns={[
                 { title: '配置名称', dataIndex: 'name' }, { title: '目标租户', render: (_, c) => targetName(c.targetTenantId) },
-                { title: '接收地址', dataIndex: 'endpoint', ellipsis: true, width: 360 }, { title: '状态', render: (_, c) => <StatusTag value={c.enabled ? 'enabled' : 'disabled'}/> },
+                { title: '接收地址', dataIndex: 'endpoint', ellipsis: true, width: 360 },
+                { title: '角色下发', render: (_, c) => c.mappingMode === 'EXISTING_LOCAL' ? '关联已有本地角色' : '由接收端创建角色' },
+                { title: '状态', render: (_, c) => <StatusTag value={c.enabled ? 'enabled' : 'disabled'}/> },
                 { title: '操作', render: (_, c) => <Space wrap><Button type="link" disabled={busy} onClick={() => { setEditing(c); setOpen(true); }}>编辑</Button><Button type="link" disabled={busy} onClick={() => run(() => provisionApi.test(c.id), '接收接口认证与目标校验通过')}>测试连接</Button><Button type="link" disabled={busy || !ready(c)} onClick={() => { setConfigId(c.id); nav(`/console/${domain}/sync/entities`); }}>选择下发对象</Button></Space> },
             ]}/></Card> : view === 'entities' ? <>
-                <Card size="small" className="section-gap"><Space wrap><Text strong>目标配置</Text><Select aria-label="目标同步配置" style={{ minWidth: 220 }} value={selectedConfig?.id} options={readyConfigs.map(c => ({ value: c.id, label: c.name }))} onChange={value => { setConfigId(value); setSelected([]); setSubmission(null); setObjectPage(1); }}/><Segmented value={kind} onChange={v => { setKind(String(v)); setSelected([]); setSubmission(null); setObjectPage(1); }} options={[{ label: '人员', value: 'user' }, { label: '机构', value: 'org' }]}/><Button type="primary" icon={<SyncOutlined />} disabled={!selectedConfig || busy || (selected.length === 0 && objectTotal === 0)} loading={busy} onClick={submit}>下发{selected.length ? `选中 ${selected.length} 项` : '全部对象'}</Button></Space></Card>
+                <Card size="small" className="section-gap"><Space wrap><Text strong><span className="form-required-mark" aria-hidden="true">*</span>目标配置</Text><Select aria-label="目标同步配置" style={{ minWidth: 220 }} value={selectedConfig?.id} options={readyConfigs.map(c => ({ value: c.id, label: c.name }))} onChange={value => { setConfigId(value); setSelected([]); setSubmission(null); setObjectPage(1); }}/><Segmented value={kind} onChange={v => { setKind(String(v)); setSelected([]); setSubmission(null); setObjectPage(1); }} options={selectedConfig?.mappingMode === 'EXISTING_LOCAL' ? [{ label: '人员', value: 'user' }] : [{ label: '人员', value: 'user' }, { label: '机构', value: 'org' }]}/><Button type="primary" icon={<SyncOutlined />} disabled={!selectedConfig || busy || (selected.length === 0 && objectTotal === 0)} loading={busy} onClick={submit}>下发{selected.length ? `选中 ${selected.length} 项` : '全部对象'}</Button></Space></Card>
                 {!loading && !readyConfigs.length && <Alert className="section-gap" type="warning" showIcon title="尚无已测试并启用的接收配置" description="请先在同步配置中测试连接并启用目标配置，再人工下发。"/>}
-                <Alert className="section-gap" type="info" showIcon title="人员资料不包含登录密码" description="下发会先补齐所需机构。新账号由租户设置本地密码和角色；已有账号保留本地密码、角色及本地停用设置。"/>
+                <Alert className="section-gap" type="info" showIcon title="单独下发不设置登录密码" description={selectedConfig?.mappingMode === 'EXISTING_LOCAL' ? '已关联的机构和角色直接使用目标系统现有记录；下发人员时自动绑定映射角色。新建用户时可在“用户信息”中填写初始密码并立即下发。' : '下发会先补齐所需机构与角色。新建用户时可在“用户信息”中填写初始密码并立即下发；已有账号保留本地密码及停用设置。'}/>
                 <Card size="small" title="中央目录对象" extra={<Input.Search placeholder="搜索名称或账号" allowClear onSearch={value => { setObjectQuery(value.trim()); setObjectPage(1); }} style={{ width: 240 }}/>}><Table<ProvisionObject> size="small" rowKey="id" dataSource={objects} loading={objectLoading} pagination={{ current: objectPage, pageSize: objectSize, total: objectTotal, showSizeChanger: true, pageSizeOptions: [20, 50, 100], onChange: (page, size) => { setObjectPage(page); setObjectSize(size); } }} scroll={{ x: 'max-content' }} rowSelection={{ selectedRowKeys: selected, onChange: setSelected, preserveSelectedRowKeys: true }} columns={[
                     { title: '名称', dataIndex: 'name' }, { title: '拟用账号 / 机构编码', render: (_, record) => kind === 'user' ? record.account : record.code },
                     { title: '版本', dataIndex: 'version' }, { title: '状态', dataIndex: 'status', render: value => <StatusTag value={value}/> },

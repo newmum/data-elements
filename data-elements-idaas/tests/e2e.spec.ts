@@ -19,11 +19,11 @@ test('平台会话可读取政企工作区和当前管理入口', async ({ page 
     for (const [route, heading] of [
         ['overview', '身份用户总数'],
         ['apps', '应用数量'],
-        ['organization', '用户管理'],
+        ['organization', '用户列表'],
         ['audit/operations', '操作日志'],
     ]) {
         await page.goto(`/#/console/workforce/${route}`);
-        if (route === 'overview' || route === 'apps') await expect(page.getByText(heading, { exact: true })).toBeVisible();
+        if (route === 'overview' || route === 'apps' || route === 'organization') await expect(page.getByText(heading, { exact: true })).toBeVisible();
         else await expect(page.getByRole('heading', { name: heading, exact: true }).first()).toBeVisible();
         await expect(page.getByText('页面暂时无法显示', { exact: true })).toHaveCount(0);
     }

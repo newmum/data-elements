@@ -1,0 +1,16 @@
+{
+  "properties" : { },
+  "id" : "b2bc4c16954544a69d4bcb4700dadce1",
+  "name" : "08.审批中心",
+  "type" : "api",
+  "parentId" : "9a18bf0b6a994f5aa56aa775f3de9f3d",
+  "path" : "/approval",
+  "createTime" : 1781960049295,
+  "updateTime" : 1784446017728,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
+

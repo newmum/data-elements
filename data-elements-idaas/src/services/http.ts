@@ -20,11 +20,12 @@ export async function request<T>(path: string, options: HttpOptions = {}): Promi
         });
     } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') throw error;
-        throw new DomainError('暂时无法连接身份服务，请检查网络后重试。', 'NETWORK_ERROR');
+        throw new DomainError('服务器无响应，请稍后再试。', 'NETWORK_ERROR');
     }
+    if (response.status >= 500) throw new DomainError('服务器无响应，请稍后再试。', 'SERVER_UNAVAILABLE');
     let payload: unknown;
     try { payload = await response.json(); }
-    catch { throw new DomainError('身份服务返回了无法识别的响应，请稍后重试。', 'INVALID_RESPONSE'); }
+    catch { throw new DomainError('服务器无响应，请稍后再试。', 'INVALID_RESPONSE'); }
     const value = payload as { code?: number | string; message?: string; msg?: string; data?: T } | null;
     const code = value?.code;
     const loginRequest = path === '/idaas/auth/login';
@@ -34,7 +35,7 @@ export async function request<T>(path: string, options: HttpOptions = {}): Promi
         throw new DomainError(message, unauthenticated ? 'UNAUTHENTICATED' : String(code || response.status));
     }
     if (!value || typeof value !== 'object' || !Object.hasOwn(value, 'data')) {
-        throw new DomainError('身份服务返回了不完整的数据，请稍后重试。', 'INVALID_RESPONSE');
+        throw new DomainError('服务器无响应，请稍后再试。', 'INVALID_RESPONSE');
     }
     return value.data as T;
 }

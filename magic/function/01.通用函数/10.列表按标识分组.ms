@@ -1,0 +1,83 @@
+{
+  "properties": {},
+  "id": "c495f88713a44e1eb0b43b1d3882b060",
+  "script": "// 共享函数：10.列表按标识分组\n// 函数路径：/common/list-group-by-id\n// 业务说明：按指定标识对列表分组，再把同组记录的分类计数折叠到一条结果，供统计展示复用。\n// 函数输入：list：待处理列表；groupId：分组标识字段名；name：名称字段名；group：分类字段名；count：计数字段名。\nif (!!!list) {\n  return null;\n}\nvar map = list.group(it->it[groupId], list->list);\nvar res = new ArrayList();\nfor (key,value in map) {\n    var obj = {}\n    var arr = map[key];\n    obj[\"name\"] = arr[0][name];\n    obj[groupId] = arr[0][groupId];\n    for (b in arr) {\n      obj[b[group]] = b[count]\n    }\n    res.add(obj);\n}\nreturn res\n",
+  "groupId": "0f27d7cf99494ceca369c14f35fbb987",
+  "name": "10.列表按标识分组",
+  "createTime": 1782660730409,
+  "updateTime": 1662010846684,
+  "lock": null,
+  "createBy": null,
+  "updateBy": null,
+  "path": "/list-group-by-id",
+  "description": "按指定标识对列表分组，再把同组记录的分类计数折叠到一条结果，供统计展示复用。",
+  "returnType": null,
+  "mappingPath": null,
+  "parameters": [
+    {
+      "name": "list",
+      "value": null,
+      "description": "待处理列表",
+      "required": false,
+      "dataType": "String",
+      "type": "java.lang.Object",
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
+    },
+    {
+      "name": "groupId",
+      "value": null,
+      "description": "分组标识字段名",
+      "required": false,
+      "dataType": "String",
+      "type": "java.lang.String",
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
+    },
+    {
+      "name": "name",
+      "value": null,
+      "description": "名称字段名",
+      "required": false,
+      "dataType": "String",
+      "type": "java.lang.String",
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
+    },
+    {
+      "name": "group",
+      "value": null,
+      "description": "分类字段名",
+      "required": false,
+      "dataType": "String",
+      "type": "java.lang.String",
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
+    },
+    {
+      "name": "count",
+      "value": null,
+      "description": "计数字段名",
+      "required": false,
+      "dataType": "String",
+      "type": null,
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
+    }
+  ]
+}

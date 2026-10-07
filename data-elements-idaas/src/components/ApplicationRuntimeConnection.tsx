@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Button, Collapse, Descriptions, Form, Input, Modal, Tag, Tooltip } from 'antd';
+import { App, Button, Collapse, Descriptions, Form, Input, Modal, Tag, Tooltip } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import type { Application } from '../domain/types';
 import { foundationApi, refreshWorkspace, useDatabase, useSession } from '../mock/store';
-import { dateText, useAction } from './common';
+import { dateText, formErrorText, useAction } from './common';
 
 export function ApplicationRuntimeConnection({ app }: { app: Application }) {
     const db = useDatabase();
     const session = useSession()!;
     const [open, setOpen] = useState(false);
     const [form] = Form.useForm();
+    const { message } = App.useApp();
     const { run, busy } = useAction();
     const canBind = session.appBindIds?.includes(app.id) === true;
 
@@ -28,10 +29,12 @@ export function ApplicationRuntimeConnection({ app }: { app: Application }) {
             </>,
         }]}/>
         <Modal title={app.bindingStatus === 'VERIFIED' ? '重新检查应用关联' : '检查并保存应用关联'} open={open} onCancel={() => setOpen(false)} okText="检查并保存" cancelText="取消" confirmLoading={busy} onOk={async () => {
-            const values = await form.validateFields();
-            await run(async () => { await foundationApi.write('/idaas/applications/runtime-binding', { id: app.id, version: app.version, ...values }); await refreshWorkspace(); setOpen(false); }, '应用关联已检查');
+            try {
+                const values = await form.validateFields();
+                await run(async () => { await foundationApi.write('/idaas/applications/runtime-binding', { id: app.id, version: app.version, ...values }); await refreshWorkspace(); setOpen(false); }, '应用关联已检查');
+            } catch (error) { message.error(formErrorText(error)); }
         }}>
-            <Form size="small" form={form} layout="vertical">
+            <Form size="small" form={form} layout="vertical" onFinishFailed={failure => message.error(formErrorText(failure))}>
                 <Form.Item name="runtimeTenantId" label="租户库标识" rules={[{ required: true }]} extra="确定读取哪一个租户数据库。已有绑定不能在这里切换租户库。"><Input disabled={!!app.runtimeTenantId}/></Form.Item>
                 <Form.Item name="localPermissionAppId" label="租户内权限应用标识" rules={[{ required: true }, { max: 64 }]} extra="用于查找该租户库中属于本应用的角色和菜单。"><Input/></Form.Item>
             </Form>

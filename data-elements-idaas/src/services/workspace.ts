@@ -58,9 +58,10 @@ async function authenticated<T>(path: string, body?: unknown): Promise<T> {
     try { return await request<T>(path, { token: currentToken, method: body === undefined ? 'GET' : 'POST', body }); }
     catch (error) { if (error instanceof DomainError && error.code === 'UNAUTHENTICATED' && token === currentToken) clearSession(); throw error; }
 }
-export async function refreshWorkspace(): Promise<void> {
+export async function refreshWorkspace(keepMounted = false): Promise<void> {
     const current = revision;
-    setState('loading');
+    // A write may refresh in place; login and realm changes must still hide old data.
+    if (!keepMounted || state.status !== 'ready') setState('loading');
     try { const value = await authenticated<Bootstrap>('/idaas/workspace/bootstrap'); if (current === revision) acceptBootstrap(value); }
     catch (error) { if (current === revision) setState('error', error instanceof Error ? error.message : '工作区加载失败'); throw error; }
 }
@@ -149,7 +150,7 @@ export const api = {
         await authenticated('/idaas/users/retry', { requestId });
         await refreshWorkspace();
     },
-    async save<K extends EntityTable>(table: K, record: EntityOf<K>, action = '保存'): Promise<void> {
+    async save<K extends EntityTable>(table: K, record: EntityOf<K>, action = '保存'): Promise<string> {
         const catalog = table === 'catalog' ? record as Database['catalog'][number] : null;
         const directoryCatalog = catalog && ['line', 'dictionary', 'extension'].includes(catalog.category);
         const path = catalog?.category === 'app-group' ? 'application-groups' : directoryCatalog ? catalog.category === 'extension' ? 'field-definitions' : 'dictionaries' : tablePaths[table];
@@ -162,10 +163,12 @@ export const api = {
             record = { ...record, id };
         }
         const mutation = await requestIdFor({ tenantId: session.tenantId, table, record, action, creating });
-        try { await authenticated(`/idaas/${path}/save`, { record, action, creating, requestId: mutation.requestId }); }
+        let saved: { id?: string } | undefined;
+        try { saved = await authenticated<{ id?: string }>(`/idaas/${path}/save`, { record, action, creating, requestId: mutation.requestId }); }
         catch (error) { if (table === 'users') userOperationListeners.forEach(fn => fn()); throw error; }
         mutationIds.delete(mutation.key);
-        await refreshWorkspace();
+        await refreshWorkspace(true);
+        return saved?.id || record.id;
     },
     async batchDisableUsers(entries: { id: string; version: number }[], domain: Domain): Promise<number> {
         if (!session?.editableTables?.includes('users')) return unavailable();
@@ -258,7 +261,7 @@ export const foundationApi = {
     },
 };
 export async function acceptPlatformLogin(value: { token: string; session: Session }, domain: Domain) { validateSession(value.session); revision++; domainRequests.clear(); retainToken(value.token); session = value.session; await refreshWorkspace(); if (domain !== session!.domain) await api.changeDomain(domain); return session!; }
-export interface ReceiverConfig { id: string; name: string; appId: string; targetTenantId: string; receiverInstanceId: string; endpoint: string; keyId: string; enabled: boolean; timeout: number; version: number; hasSecret: boolean; lastTestResult?: string; }
+export interface ReceiverConfig { id: string; name: string; appId: string; targetTenantId: string; receiverInstanceId: string; endpoint: string; keyId: string; enabled: boolean; timeout: number; version: number; hasSecret: boolean; lastTestResult?: string; mappingMode?: string; }
 export interface ProvisionItem { eventId: string; objectId: string; type: 'user' | 'org' | 'role' | 'resource'; version: number; status: string; attempt: number; result: { message?: string; result?: string; localId?: string } | null; }
 export interface ProvisionTask { id: string; version: number; configId: string; targetTenantId: string; status: string; createdAt: string; name: string; items: ProvisionItem[]; }
 export interface ProvisionObject { id: string; name: string; version: number; status: string; account?: string; code?: string; }

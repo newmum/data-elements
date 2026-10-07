@@ -1,0 +1,15 @@
+{
+  "properties" : { },
+  "id" : "compat_dataassets_assets_01",
+  "name" : "01.资产索引",
+  "type" : "api",
+  "parentId" : "compat_dataassets_manage_01",
+  "path" : "/assets",
+  "createTime" : 1784458863643,
+  "updateTime" : 1784458863643,
+  "createBy" : null,
+  "updateBy" : null,
+  "paths" : [ ],
+  "options" : [ ]
+}
+================================
