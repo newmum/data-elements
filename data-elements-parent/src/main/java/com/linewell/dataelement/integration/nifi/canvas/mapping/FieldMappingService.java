@@ -78,13 +78,14 @@ public class FieldMappingService {
         LinkedHashSet<String> runtimeFields = new LinkedHashSet<>();
 
         int lookupIndex = 0;
+        Map<String, Map<String, Object>> registered = registeredLookupSources(spec);
         for (JsonNode mapping : mappings) {
             if (mapping.path("enabled").isBoolean() && !mapping.path("enabled").asBoolean()) continue;
             if (isPlaceholderMapping(mapping)) continue;
             String to = columnName(requiredText(mapping, "to", "每条映射必须配置目标字段 to"), "目标字段");
             outputFields.add(to);
             if (mapping.has("lookup")) {
-                LookupPlan lookup = compileLookupPlan(mapping, lookupIndex++);
+                LookupPlan lookup = compileLookupPlan(mapping, lookupIndex++, registered);
                 lookups.add(lookup);
                 for (int i = 0; i < lookup.parameterFields().size(); i++) {
                     String sourceField = lookup.parameterFields().get(i);
@@ -159,13 +160,14 @@ public class FieldMappingService {
 
         List<String> projections = new ArrayList<>();
         int lookupIndex = 0;
+        Map<String, Map<String, Object>> registered = registeredLookupSources(spec);
         for (JsonNode mapping : spec.path("mappings")) {
             if (mapping.path("enabled").isBoolean() && !mapping.path("enabled").asBoolean()) continue;
             if (isPlaceholderMapping(mapping)) continue;
             String target = columnName(requiredText(mapping, "to", "每条映射必须配置目标字段 to"), "目标字段");
             String expression;
             if (mapping.has("lookup")) {
-                LookupPlan lookup = compileLookupPlan(mapping, lookupIndex++);
+                LookupPlan lookup = compileLookupPlan(mapping, lookupIndex++, registered);
                 if ("FAIL".equalsIgnoreCase(lookup.onMissing())) {
                     throw new IllegalStateException("lookup.onMissing=FAIL 需要记录级错误路由，不能使用来源 SQL 下推");
                 }
@@ -314,10 +316,10 @@ public class FieldMappingService {
         List<Map<String, Object>> rows = sampleRows == null ? List.of() : sampleRows;
         List<Map<String, Object>> resultRows = new ArrayList<>();
         List<RowResult> rowResults = new ArrayList<>();
-        boolean containsLookup = containsLookup(spec);
+        Map<String, List<Object>> multiValues = previewMultiValues(spec, sourceConfig, rows);
         for (int i = 0; i < rows.size(); i++) {
             try {
-                resultRows.add(applyToRow(spec, sourceConfig, rows.get(i), i));
+                resultRows.add(applyToRow(spec, sourceConfig, rows.get(i), i, multiValues));
                 rowResults.add(new RowResult(i, true, List.of()));
             } catch (RuntimeException ex) {
                 resultRows.add(Map.of());
@@ -371,6 +373,37 @@ public class FieldMappingService {
             }
         }
         return new RecommendResponse(spec, recommendations);
+    }
+
+    private Map<String, List<Object>> previewMultiValues(ObjectNode spec, Map<String, Object> sourceConfig,
+                                                        List<Map<String, Object>> rows) {
+        Map<String, List<Object>> result = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> registered = registeredLookupSources(spec);
+        for (JsonNode mapping : spec.path("mappings")) {
+            if (mapping.path("enabled").isBoolean() && !mapping.path("enabled").asBoolean()) continue;
+            if (!MultiValueTranslation.isRecordLookup(mapping.path("lookup"))) continue;
+            LookupPlan lookup = compileLookupPlan(mapping, 0, registered);
+            List<Object> translated = new ArrayList<>();
+            result.put(lookup.targetField(), translated);
+            if (rows.isEmpty()) continue;
+            Map<String, Object> cfg = lookup.dataSource().isEmpty() ? sourceConfig : lookup.dataSource();
+            try (Connection connection = lookup.recordLookup().inline() ? null : DriverManager.getConnection(
+                    buildJdbcUrl(cfg), stringValue(cfg.get("username")), stringValue(cfg.get("password")))) {
+                for (int start = 0; start < rows.size(); start += MultiValueTranslation.RECORD_BATCH_SIZE) {
+                    List<Map<String, Object>> batch = rows.subList(start,
+                            Math.min(rows.size(), start + MultiValueTranslation.RECORD_BATCH_SIZE));
+                    Set<String> codes = new LinkedHashSet<>();
+                    for (Map<String, Object> row : batch) codes.addAll(MultiValueTranslation.tokens(
+                            row.get(lookup.parameterFields().getFirst()), lookup.recordLookup().separator()));
+                    Map<String, String> values = MultiValueTranslation.dictionary(connection, lookup.recordLookup(), codes);
+                    for (Map<String, Object> row : batch) translated.add(MultiValueTranslation.translate(
+                            row.get(lookup.parameterFields().getFirst()), lookup.recordLookup(), values));
+                }
+            } catch (Exception exception) {
+                throw new IllegalStateException("多值字典预览失败: " + exception.getMessage(), exception);
+            }
+        }
+        return result;
     }
 
     private String recommendationIdentifier(FieldMeta field) {
@@ -510,6 +543,13 @@ public class FieldMappingService {
             }
             if (hasFromList || hasConstant || hasExpression) {
                 errors.add(new MappingIssue(path + ".lookup", null, "lookup 不能与 fromList、constant、expression 混用", "ERROR", "LOOKUP_CONFLICT", List.of()));
+            }
+            if (MultiValueTranslation.isRecordLookup(lookup)) {
+                try { MultiValueTranslation.rule(lookup); }
+                catch (RuntimeException ex) {
+                    errors.add(new MappingIssue(path + ".lookup", null, ex.getMessage(), "ERROR", "LOOKUP_INVALID", List.of()));
+                }
+                return;
             }
             String sql = lookup.path("sql").asText("").trim();
             if (sql.isBlank()) {
@@ -816,13 +856,22 @@ public class FieldMappingService {
         return sql.replace("upper(", "UPPER(").replace("lower(", "LOWER(").replace("coalesce(", "COALESCE(");
     }
 
-    private Map<String, Object> applyToRow(ObjectNode spec, Map<String, Object> sourceConfig, Map<String, Object> row, int rowIndex) {
+    private Map<String, Object> applyToRow(ObjectNode spec, Map<String, Object> sourceConfig, Map<String, Object> row, int rowIndex,
+                                         Map<String, List<Object>> multiValues) {
         Map<String, Object> output = new LinkedHashMap<>();
         if (spec.path("passthroughUnmapped").asBoolean(false)) output.putAll(row);
         for (JsonNode mapping : spec.path("mappings")) {
             if (mapping.path("enabled").isBoolean() && !mapping.path("enabled").asBoolean()) continue;
             String to = columnName(requiredText(mapping, "to", "每条映射必须配置 to"), "目标字段");
-            output.put(to, valueForMapping(mapping, sourceConfig, row, output, rowIndex));
+            if (multiValues.containsKey(to)) {
+                Object value = multiValues.get(to).get(rowIndex);
+                if (value == null) {
+                    String missing = mapping.path("lookup").path("onMissing").asText("NULL");
+                    if ("KEEP_SOURCE".equals(missing)) value = row.get(columnName(mapping.path("from").asText(), "源字段"));
+                    if ("FAIL".equals(missing)) throw new IllegalStateException("lookup returned no result for field " + to);
+                }
+                output.put(to, value);
+            } else output.put(to, valueForMapping(mapping, sourceConfig, row, output, rowIndex));
         }
         return output;
     }
@@ -1071,9 +1120,19 @@ public class FieldMappingService {
     }
 
     private LookupPlan compileLookupPlan(JsonNode mapping, int lookupIndex) {
+        return compileLookupPlan(mapping, lookupIndex, null);
+    }
+
+    private LookupPlan compileLookupPlan(JsonNode mapping, int lookupIndex, Map<String, Map<String, Object>> registered) {
         String targetField = columnName(requiredText(mapping, "to", "字典查询映射必须配置目标字段 to"), "目标字段");
         String sourceField = columnName(requiredText(mapping, "from", "字典查询映射必须配置源字段 from"), "源字段");
         JsonNode lookup = mapping.path("lookup");
+        if (MultiValueTranslation.isRecordLookup(lookup)) {
+            var rule = MultiValueTranslation.rule(lookup);
+            return new LookupPlan(targetField, targetField, "", List.of(sourceField),
+                    List.of("__lookup_" + lookupIndex + "_0"), lookup.path("onMissing").asText("NULL"),
+                    rule.inline() ? Map.of() : lookupDataSource(lookup, registered), true, rule);
+        }
         ParsedLookupSql parsed = parseLookupSql(lookup.path("sql").asText(""), lookup.path("resultColumn").asText(""), sourceField);
         List<String> parameterRecordFields = new ArrayList<>();
         for (int i = 0; i < parsed.parameterFields().size(); i++) {
@@ -1092,7 +1151,7 @@ public class FieldMappingService {
                 List.copyOf(parsed.parameterFields()),
                 List.copyOf(parameterRecordFields),
                 lookup.path("onMissing").asText("NULL"),
-                lookupDataSource(lookup),
+                lookupDataSource(lookup, registered),
                 lookup.path("multiValue").asBoolean(false));
     }
 
@@ -1101,7 +1160,21 @@ public class FieldMappingService {
      * table. Keep its connection alongside the lookup rule so deployment uses
      * the real dictionary location instead of assuming the upstream source.
      */
-    private Map<String, Object> lookupDataSource(JsonNode lookup) {
+    private Map<String, Map<String, Object>> registeredLookupSources(ObjectNode spec) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (JsonNode mapping : spec.path("mappings")) {
+            if (mapping.path("enabled").isBoolean() && !mapping.path("enabled").asBoolean()) continue;
+            JsonNode lookup = mapping.path("lookup");
+            if (lookup.path("values").isObject()) continue;
+            String id = lookup.path("dataSource").path("datasourceId").asText("");
+            if (!id.isBlank()) ids.add(id);
+        }
+        if (ids.isEmpty()) return Map.of();
+        if (registeredSources == null) throw new IllegalStateException("已登记字典来源须由服务端解析连接");
+        return registeredSources.resolveBatch(TenantContext.requireTenantId(), ids, "MENU:2081000000000000002");
+    }
+
+    private Map<String, Object> lookupDataSource(JsonNode lookup, Map<String, Map<String, Object>> registered) {
         JsonNode dataSource = lookup.path("dataSource");
         if (!dataSource.isObject()) {
             return Map.of();
@@ -1109,7 +1182,8 @@ public class FieldMappingService {
         String id=dataSource.path("datasourceId").asText("");
         if(!id.isBlank()) {
             if(registeredSources==null)throw new IllegalStateException("已登记字典来源须由服务端解析连接");
-            Map<String,Object> cfg=new LinkedHashMap<>(registeredSources.resolve(TenantContext.requireTenantId(),id));
+            Map<String,Object> cfg=new LinkedHashMap<>(registered == null
+                    ? registeredSources.resolve(TenantContext.requireTenantId(),id) : registered.getOrDefault(id, Map.of()));
             if(cfg.isEmpty()||"0".equals(String.valueOf(cfg.get("showConnect"))))throw new IllegalStateException("字典数据源不存在或未配置连接");
             cfg.put("datasourceId",id);
             for(String[] aliases:List.of(new String[]{"username","dbUser"},new String[]{"password","dbPassword"},new String[]{"host","dbIp"},new String[]{"port","dbPort"},new String[]{"database","dbMetaDbName"},new String[]{"jdbcUrl","jdbcURL"}))if(!cfg.containsKey(aliases[0])&&cfg.containsKey(aliases[1]))cfg.put(aliases[0],cfg.get(aliases[1]));
@@ -1405,7 +1479,13 @@ public class FieldMappingService {
                                   List<String> baseFields, List<String> outputFields, List<String> runtimeFields) {}
     public record LookupPlan(String targetField, String resultColumn, String parameterizedSql,
                              List<String> parameterFields, List<String> parameterRecordFields, String onMissing,
-                             Map<String, Object> dataSource, boolean multiValue) {
+                             Map<String, Object> dataSource, boolean multiValue, MultiValueTranslation.Rule recordLookup) {
+        public LookupPlan(String targetField, String resultColumn, String parameterizedSql,
+                          List<String> parameterFields, List<String> parameterRecordFields, String onMissing,
+                          Map<String, Object> dataSource, boolean multiValue) {
+            this(targetField, resultColumn, parameterizedSql, parameterFields, parameterRecordFields,
+                    onMissing, dataSource, multiValue, null);
+        }
         public LookupPlan(String targetField, String resultColumn, String parameterizedSql,
                           List<String> parameterFields, List<String> parameterRecordFields, String onMissing,
                           Map<String, Object> dataSource) {

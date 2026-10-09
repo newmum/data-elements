@@ -592,7 +592,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
-      "baseSha256": "d749916f67dacf652cd1a4d1d7695bd0d2ca4335ad6840e6a5ba590fe2bc7b4b"
+      "baseSha256": "4938a1e94d55bbbd112ff603c849e1b626fd58287a17cb5ceef8bc2a66dc35b3"
     },
     {
       "id": "2066782132212649984",
@@ -612,7 +612,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/任务配置(schedule-setting).vue",
-      "baseSha256": "5a236e3820efbc23ce530c3fd16ac7699512940d2eca2453ba9b7bc333b1b8f3"
+      "baseSha256": "164580d3596b951d6406f60070d925cda0eb4553027939c7b895ab01e46cb508"
     },
     {
       "id": "2027276449775878144",
@@ -622,7 +622,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
-      "baseSha256": "d6bb6c588c134da9c6a678ff7aa5c57226ece803e5e34084a36da2e9f2457e91"
+      "baseSha256": "8349140e85fb92dbb65e2339ff5c014c43031269925393fe5be933a2f5d043ef"
     },
     {
       "id": "2046880498703695872",
@@ -742,7 +742,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "05.数据治理/2.5.1 数据中心(data-warehouse).vue",
-      "baseSha256": "1c7c142ad1ed65e72b796dcf391ea93437bad10eafd435f174be80981a0287f6"
+      "baseSha256": "a571a0306437bcb9f46cbf4fd87bf7b0da189142b090b877be5607938ce24af9"
     },
     {
       "id": "2018975669541220352",

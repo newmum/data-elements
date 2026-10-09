@@ -104,6 +104,7 @@
             :data="fetchSources"
             :immediate="false"
             row-key="tid"
+            :expand-row-keys="expandedRows"
             stripe
             :show-search="false"
             :show-reset="false"
@@ -146,6 +147,11 @@
                           <Icon icon="menu-monitor" />
                           <span>{{ task.taskName }}</span>
                         </div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="接入链路" min-width="170" show-overflow-tooltip>
+                      <template #default="{ row: task }">
+                        {{ task.sourceDbName || '来源库' }} → {{ task.targetDbName || '目标库' }}
                       </template>
                     </el-table-column>
                     <el-table-column prop="targetTableName" label="目标表名" min-width="160" show-overflow-tooltip>
@@ -553,7 +559,7 @@ const hasChildTasks = (row) => Array.isArray(row?.tasks) && row.tasks.length > 0
 // 也兼容历史任务中仅保存一个 targetTableId 的记录。
 const targetTablesOf = (row, task = null) => {
   const candidates = [
-    ...(Array.isArray(row?.targetTables) ? row.targetTables : []),
+    ...(!task && Array.isArray(row?.targetTables) ? row.targetTables : []),
     ...(Array.isArray(task?.targetTables) ? task.targetTables : []),
   ];
   if (task?.targetTableId || row?.targetTableId || row?.materializedTableId) {
@@ -869,6 +875,9 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
   const payload = {
     tableId: getSourceTableId(row),
     catalogId: row?.sourceCatalogId || row?.catalogId || "",
+    ...(Array.isArray(row?.targetTableIds) && row.targetTableIds.length
+      ? { targetTableIds: row.targetTableIds }
+      : (row?.targetTableId ? { targetTableId: row.targetTableId } : {})),
     ...(forceRebuild ? { forceRebuild: true } : {}),
   };
   if (!payload.tableId) {
@@ -876,8 +885,10 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
     return null;
   }
   const result = await $common.post("/ods/dataAggTaskEnsure", payload);
-  const task = result?.task || result?.data?.task || result;
-  const taskId = task?.tid || result?.taskId || result?.data?.taskId;
+  const response = result?.data || result;
+  const tasks = Array.isArray(response?.tasks) ? response.tasks : [];
+  const task = tasks[0] || response?.task || response;
+  const taskId = task?.tid || response?.taskId;
   if (!taskId) {
     $message.warning("接入任务创建失败，请稍后重试");
     return null;
@@ -888,7 +899,7 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
     ? result.repairReasons
     : (Array.isArray(result?.data?.repairReasons) ? result.data.repairReasons : []);
   if (repairRequired) {
-    return { ...(task || {}), tid: taskId, pipelineId, repairRequired, repairReasons };
+    return { ...(task || {}), tid: taskId, pipelineId, tasks, repairRequired, repairReasons };
   }
   const datasourceId = row?.datasourceId || row?.dbId || row?.sourceDbId || "";
   // 所有来源都可安全调用：后端会对非 API 拉取来源返回 applicable=false。
@@ -912,6 +923,8 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
     tid: taskId,
     pipelineId,
     bindingWarning,
+    tasks: tasks.length ? tasks : [{ ...(task || {}), tid: taskId, pipelineId }],
+    createdCount: Number(response?.createdCount || 0),
     repairRequired,
     repairReasons,
   };
@@ -940,6 +953,7 @@ const handleTaskRecovery = async (task, row, command, target = null) => {
     );
     await $common.post("/ods/dataAggReset", {
       sourceTableId,
+      ...(!deleteTargetTable && task?.tid ? { taskId: task.tid } : {}),
       targetTableId: target?.targetTableId || task?.targetTableId || task?.target_table_id || row?.targetTableId || "",
       targetDbId: target?.targetDbId || "",
       targetTableName: target?.targetTableName || target?.tableName || "",
@@ -990,7 +1004,8 @@ const deleteAllTargets = async () => {
       const target = targets[index];
       deleteAllTargetProgress.value = index + 1;
       await $common.post("/ods/dataAggReset", {
-        sourceTableId: getSourceTableId(targetDrawerContext.value),
+        sourceTableId: targetDrawerTask.value?.sourceTableId || targetDrawerTask.value?.source_table_id
+          || getSourceTableId(targetDrawerContext.value),
         targetTableId: target.targetTableId,
         targetDbId: target.targetDbId || "",
         targetTableName: target.targetTableName || "",
@@ -1088,11 +1103,15 @@ const handleApplySave = async (materializedTarget = null) => {
     return;
   }
   try {
-    const targetTableId = materializedTarget?.targetTableId || materializedTarget?.tid || "";
-    if (!targetTableId) {
+    const selectedTargets = Array.isArray(materializedTarget?.targetTables)
+      ? materializedTarget.targetTables : [materializedTarget];
+    const targetTableIds = [...new Set(selectedTargets.map(
+      (target) => target?.targetTableId || target?.tid || "",
+    ).filter(Boolean))];
+    if (!targetTableIds.length) {
       throw new Error("目标表未创建成功，不能继续创建接入任务");
     }
-    const task = await ensureAccessTask({ ...row, targetTableId });
+    let task = await ensureAccessTask({ ...row, targetTableIds });
     if (task?.tid) {
       if (task.repairRequired) {
         const reasons = task.repairReasons.length
@@ -1100,29 +1119,30 @@ const handleApplySave = async (materializedTarget = null) => {
           : "已有接入画布需要更新";
         try {
           await ElMessageBox.confirm(
-            `目标表已物化，但已有接入画布需要更新：${reasons}。重新生成会替换旧任务和画布中的人工配置，目标表及数据会保留。是否重新生成并打开画布？`,
+            `目标表已物化，但已有接入画布需要更新：${reasons}。重新生成会按每个目标表创建独立任务，并替换所选旧画布的人工配置；目标表及数据会保留。是否重新生成？`,
             "接入画布需要更新",
-            { type: "warning", confirmButtonText: "重新生成并打开", cancelButtonText: "保留旧画布" },
+            { type: "warning", confirmButtonText: "重新生成", cancelButtonText: "保留旧画布" },
           );
         } catch (decision) {
           if (decision !== "cancel" && decision !== "close") throw decision;
           tableRef.value?.refresh?.();
           return;
         }
-        const rebuilt = await ensureAccessTask({ ...row, targetTableId }, true);
+        const rebuilt = await ensureAccessTask({ ...row, targetTableIds }, true);
         if (!rebuilt?.tid || rebuilt.repairRequired) {
           throw new Error("接入画布重新生成失败，请在任务设置中检查后重试");
         }
-        $message.success("接入画布已按当前目标表重新生成");
-        tableRef.value?.refresh?.();
-        openNifiDesigner(rebuilt.tid, row?.sourceTableId || row?.tid || row?.tableId || "");
-        return;
+        task = rebuilt;
       }
-      $message.success(materializedTarget?.reusedExisting
-        ? "已复用现有目标表并创建接入任务"
-        : "物化建表完成，接入任务已创建");
-      tableRef.value?.refresh?.();
-      openNifiDesigner(task.tid, row?.sourceTableId || row?.tid || row?.tableId || "");
+      const tasks = task.tasks || [task];
+      $message.success(tasks.length > 1
+        ? `物化建表完成，已按目标库顺序准备 ${tasks.length} 个级联接入任务，请在展开列表中分别配置`
+        : (materializedTarget?.reusedExisting ? "已复用现有目标表并创建接入任务" : "物化建表完成，接入任务已创建"));
+      expandedRows.value = [...new Set([...expandedRows.value, row.tid])];
+      await tableRef.value?.refresh?.();
+      if (tasks.length === 1) {
+        openNifiDesigner(tasks[0].tid, tasks[0].sourceTableId || getSourceTableId(row));
+      }
     }
   } catch (error) {
     console.error("物化后创建接入任务失败", error);

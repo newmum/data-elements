@@ -270,10 +270,10 @@ onUnmounted(() => {
 <style lang="scss" scoped>
 .schedule-setting-designer {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   background: #fff;
   z-index: 9999;
   .designer-error {
@@ -505,6 +505,7 @@ onUnmounted(() => {
   }
 
   .schedule-setting-iframe {
+    display: block;
     width: 100%;
     height: 100%;
     border: none;

@@ -148,9 +148,14 @@ public class AccessTaskFieldMappingBinder {
             if (definition != null && definition.config() != null
                     && definition.config().path("multiValue").asBoolean(false)
                     != existing.path("lookup").path("multiValue").asBoolean(false)) return true;
+            if (definition != null && definition.config() != null
+                    && definition.config().path("multiValue").asBoolean(false)
+                    && !MultiValueTranslation.isRecordLookup(existing.path("lookup"))) return true;
         }
         if (isEnum(rule)) {
-            if (isMultiStandard(rule)) return !existing.path("lookup").path("multiValue").asBoolean(false);
+            if (isMultiStandard(rule)) return !existing.path("lookup").path("values").equals(
+                    JSON.valueToTree(enumValues(rule)))
+                    || !existing.path("lookup").path("multiValue").asBoolean(false);
             if (!hasCurrentEnumMap(existing, rule)) return true;
         }
         return isExpression(rule) && !existing.hasNonNull("expression");
@@ -283,6 +288,13 @@ public class AccessTaskFieldMappingBinder {
         lookup.put("onMissing", "NULL");
         if (definition.config() != null && definition.config().path("multiValue").asBoolean(false)) {
             lookup.put("multiValue", true);
+            lookup.put("multiValueSeparator", definition.config().path("multiValueSeparator").asText(","));
+            String query = definition.config().path("query").asText("");
+            lookup.put("query", query.isBlank()
+                    ? MultiValueTranslation.legacyDictionaryQuery(configuredSql, table, source, result)
+                    : query);
+            // Old generated JSON_TABLE SQL is never executed as a single-value lookup.
+            lookup.remove("sql");
         }
     }
 
@@ -425,10 +437,6 @@ public class AccessTaskFieldMappingBinder {
 
     private void appendMultiStandardLookup(ObjectNode mapping, DataAccessFieldMapping rule,
                                            ObjectNode sourceLookupDataSource) {
-        if (sourceLookupDataSource == null
-                || !"MYSQL".equalsIgnoreCase(sourceLookupDataSource.path("dbType").asText())) {
-            throw new IllegalStateException("多值标准翻译目前只支持 MySQL 8 来源数据源");
-        }
         JsonNode config;
         try {
             config = JSON.readTree(trim(rule.getFuncValue()));
@@ -436,12 +444,11 @@ public class AccessTaskFieldMappingBinder {
             throw new IllegalStateException("多值标准翻译配置无效", exception);
         }
         ObjectNode lookup = mapping.putObject("lookup");
-        lookup.put("sql", MultiValueDictionarySql.standard(rule.getTargetField(), enumValues(rule),
-                config.path("multiValueSeparator").asText(",")));
+        lookup.set("values", JSON.valueToTree(enumValues(rule)));
+        lookup.put("multiValueSeparator", config.path("multiValueSeparator").asText(","));
         lookup.put("resultColumn", rule.getTargetField());
         lookup.put("onMissing", "NULL");
         lookup.put("multiValue", true);
-        lookup.set("dataSource", sourceLookupDataSource.deepCopy());
     }
 
     private Map<String, String> enumValues(DataAccessFieldMapping rule) {

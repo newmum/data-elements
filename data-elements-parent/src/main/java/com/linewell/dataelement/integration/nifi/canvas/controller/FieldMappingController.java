@@ -103,6 +103,13 @@ public class FieldMappingController {
             item.put("parameterFields", plan.parameterFields());
             item.put("parameterRecordFields", plan.parameterRecordFields());
             item.put("onMissing", plan.onMissing());
+            if (plan.recordLookup() != null) {
+                item.put("mode", "RECORD_TRANSLATION");
+                item.put("multiValue", true);
+                item.put("multiValueSeparator", plan.recordLookup().separator());
+                item.put("values", plan.recordLookup().values());
+                item.put("query", plan.recordLookup().query());
+            }
             Map<String, Object> source = plan.dataSource();
             if (source != null && !source.isEmpty()) {
                 Map<String, Object> summary = new LinkedHashMap<>();

@@ -1,4 +1,13 @@
 /* Keep the original NiFi editor layout; only its palette follows HaiTong. */
+/* The canvas owns viewport scrolling. Body portals must not resize the page
+   while a tooltip or dropdown is being measured or animated. */
+body.haitong-nifi-active {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .nifi-workspace {
   width: 100%;
   height: 100vh;

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.manifest.ComponentManifest;
 import com.linewell.dataelement.integration.nifi.canvas.manifest.ManifestRegistry;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.MultiValueTranslation;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.model.nifi.NifiEntity;
@@ -23,6 +24,35 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class DslCompilerLookupDeploymentTest {
+    @ParameterizedTest
+    @ValueSource(strings = {"ORACLE", "OCEANBASE_ORACLE", "POSTGRESQL", "KINGBASE", "MYSQL", "MARIADB", "DM", "SQLSERVER", "DB2", "HIVE"})
+    void multiValueUsesNativeRecordProcessorForEveryDictionaryDialect(String dictionaryType) throws Exception {
+        var fixture = compile("POSTGRESQL", dictionaryType, 2, true, false);
+        assertThat(fixture.sql()).isNotBlank().doesNotContain("JSON_TABLE", "GROUP_CONCAT", "FROM DUAL");
+        verify(fixture.nifi(), never()).createProcessor(anyString(), eq("org.apache.nifi.processors.standard.SplitRecord"),
+                startsWith("字段映射/"), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
+        verify(fixture.nifi(), never()).createProcessor(anyString(), eq("org.apache.nifi.processors.standard.ExecuteSQLRecord"),
+                startsWith("字段映射/"), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
+    }
+
+    @org.junit.jupiter.api.Test
+    void multiStandardDoesNotCreateLookupConnectionOnOracleSource() throws Exception {
+        var fixture = compile("ORACLE", "inherit", 2, true, true);
+        assertThat(fixture.lookupConnection()).isEmpty();
+        verify(fixture.nifi(), never()).createControllerService(anyString(), anyString(), startsWith("字段映射/lookup-dbcp-"), anyMap());
+    }
+
+    @org.junit.jupiter.api.Test
+    void mixedLookupsKeepMultiValueOutputThroughTheScalarChain() throws Exception {
+        var fixture = compile("ORACLE", "ORACLE", 2, true, false, true);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
+        verify(fixture.nifi()).createProcessor(anyString(), eq("org.apache.nifi.processors.standard.ExecuteSQLRecord"),
+                startsWith("字段映射/"), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
+        assertThat(properties.getValue().get("SQL Query")).contains("Label_0_cn", "Label_1_cn", "FROM DUAL");
+        verify(fixture.nifi(), times(1)).createProcessor(anyString(), eq(RecordLookupScript.PROCESSOR_TYPE),
+                startsWith("字段映射/"), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
+    }
     @ParameterizedTest
     @CsvSource({"POSTGRESQL,ORACLE,true", "ORACLE,POSTGRESQL,false", "POSTGRESQL,inherit,false"})
     void nativeExecuteSqlAndDbcpUseTheSameDictionaryDatabase(String sourceType, String dictionaryType,
@@ -51,6 +81,14 @@ class DslCompilerLookupDeploymentTest {
     }
 
     private static Fixture compile(String sourceType, String dictionaryType, int mappings) throws Exception {
+        return compile(sourceType, dictionaryType, mappings, false, false);
+    }
+
+    private static Fixture compile(String sourceType, String dictionaryType, int mappings, boolean multi, boolean inline) throws Exception {
+        return compile(sourceType, dictionaryType, mappings, multi, inline, false);
+    }
+
+    private static Fixture compile(String sourceType, String dictionaryType, int mappings, boolean multi, boolean inline, boolean mixed) throws Exception {
         NifiClient nifi = mock(NifiClient.class);
         AtomicInteger ids = new AtomicInteger();
         when(nifi.getRootProcessGroupId()).thenReturn("root");
@@ -69,12 +107,15 @@ class DslCompilerLookupDeploymentTest {
         FieldMappingService mappingService = mock(FieldMappingService.class);
         List<FieldMappingService.LookupPlan> lookups = new ArrayList<>();
         for (int index = 0; index < mappings; index++) {
+            boolean recordMulti = multi && (!mixed || index == 0);
             String target = "Label_" + index + "_cn";
             Map<String, Object> dictionary = "inherit".equals(dictionaryType)
                     ? Map.of() : connection(dictionaryType, "dictionary-db");
             lookups.add(new FieldMappingService.LookupPlan(target, target,
                     "SELECT label AS " + target + " FROM dictionary WHERE code = ?",
-                    List.of("code"), List.of("__lookup_" + index), "NULL", dictionary));
+                    List.of("code"), List.of("__lookup_" + index), "NULL", dictionary, recordMulti,
+                    recordMulti ? new MultiValueTranslation.Rule(",", inline ? Map.of("U", "未知") : Map.of(),
+                            inline ? "" : "SELECT code,label FROM dictionary WHERE code IN (:codes)") : null));
         }
         when(mappingService.compilePlan(any())).thenReturn(new FieldMappingService.CompiledMapping(
                 "SELECT * FROM FLOWFILE", "SELECT * FROM FLOWFILE", lookups,
@@ -91,13 +132,14 @@ class DslCompilerLookupDeploymentTest {
         new DslCompiler(nifi, registry, mappingService, mock(HiveModule.class)).compile(pipeline);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> sqlProperties = ArgumentCaptor.forClass(Map.class);
-        verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.ExecuteSQLRecord"),
+        verify(nifi).createProcessor(eq("pg"), eq(multi ? RecordLookupScript.PROCESSOR_TYPE : "org.apache.nifi.processors.standard.ExecuteSQLRecord"),
                 startsWith("字段映射/"), anyDouble(), anyDouble(), sqlProperties.capture(), nullable(String.class), nullable(String.class));
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> lookupProperties = ArgumentCaptor.forClass(Map.class);
-        verify(nifi).createControllerService(eq("pg"), eq("org.apache.nifi.dbcp.DBCPConnectionPool"),
+        if (!inline) verify(nifi).createControllerService(eq("pg"), eq("org.apache.nifi.dbcp.DBCPConnectionPool"),
                 startsWith("字段映射/lookup-dbcp-"), lookupProperties.capture());
-        return new Fixture(nifi, sqlProperties.getValue().get("SQL Query"), lookupProperties.getValue());
+        return new Fixture(nifi, sqlProperties.getValue().get(multi ? "Script Body" : "SQL Query"),
+                inline ? Map.of() : lookupProperties.getValue());
     }
 
     private static Map<String, Object> connection(String type, String id) {

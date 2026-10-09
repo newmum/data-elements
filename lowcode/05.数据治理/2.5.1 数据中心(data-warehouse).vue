@@ -35,8 +35,13 @@
       </div>
     </div>
 
-    <div v-loading="layersLoading" class="layers-section">
-      <div v-if="!layers.length" class="layers-section-empty">
+    <div v-loading="layersLoading" element-loading-text="正在加载数仓分层分域…" class="layers-section">
+      <div v-if="layersLoading && !layers.length" class="layers-section-empty" aria-hidden="true"></div>
+      <div v-if="layersError" class="layers-load-error" role="alert">
+        <span>{{ layersError }}</span>
+        <el-button type="primary" plain :loading="layersLoading" @click="loadLayers">重新加载</el-button>
+      </div>
+      <div v-if="!layersLoading && !layersError && !layers.length" class="layers-section-empty">
         <Empty description="当前还没有可展示的数据" />
       </div>
       <div v-for="layer in layers" :key="layer.name" class="layer-card">
@@ -342,8 +347,23 @@ const openCapability = (layer?: any, domain?: any) => {
   window.location.assign(url.href);
 };
 
-const layers = ref([]);
+const layers = ref<any[]>([]);
 const layersLoading = ref(false);
+const layersError = ref("");
+const loadLayers = async () => {
+  if (layersLoading.value) return;
+  layersLoading.value = true;
+  layersError.value = "";
+  try {
+    const result = await $common.get("/dwm/center/layer-list");
+    if (!Array.isArray(result)) throw new Error("Invalid resource center response");
+    layers.value = result;
+  } catch {
+    layersError.value = "资源中心加载失败，请检查连接后重新加载";
+  } finally {
+    layersLoading.value = false;
+  }
+};
 const dataCenterSources = ref<any[]>([]);
 const sourceLoading = ref(false);
 const configSaving = ref(false);
@@ -362,20 +382,10 @@ const configDialog = ref({
   newDomainCode: "",
 });
 
-const handleAction = (type: string, item: any) => {
-  console.log(type, item);
+const handleAction = (type: string, item?: any) => {
   switch (type) {
     case "init":
-      layersLoading.value = true;
-      $common
-        .get("/dwm/center/layer-list")
-        .then((res) => {
-          layers.value = res;
-        })
-        .finally(() => {
-          layersLoading.value = false;
-        });
-      break;
+      return loadLayers();
     case "查看全部":
       router.push({
         path: "detail",
@@ -808,6 +818,16 @@ const categories = [
 </script>
 
 <style scoped lang="scss">
+.layers-load-error {
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #606266;
+}
+
 .el-collapse-item__content {
   padding-bottom: 16px;
 }

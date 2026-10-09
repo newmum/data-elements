@@ -31,5 +31,7 @@ export default defineConfig(({ command, isPreview }) => ({
     },
   },
   preview: { host: '127.0.0.1', port: 4173 },
-  build: { target: 'es2022', chunkSizeWarningLimit: 1200 },
+  // Production workstations include Chrome 109; Vite must also lower CSS syntax
+  // for that engine instead of using its newer default browser targets.
+  build: { target: 'chrome109', cssTarget: 'chrome109', chunkSizeWarningLimit: 1200 },
 }));

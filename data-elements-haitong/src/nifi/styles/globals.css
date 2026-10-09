@@ -1523,7 +1523,7 @@
 .node-selector {
   width: 432px;
   max-width: calc(100vw - 48px);
-  max-height: 520px;
+  max-height: min(520px, calc(100vh - 32px));
   display: flex;
   flex-direction: column;
 }
@@ -1541,6 +1541,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   max-height: 360px;
+  min-height: 0;
 }
 .node-selector__card {
   display: flex;
@@ -1588,9 +1589,12 @@
    ============================================================ */
 .canvas-empty {
   position: absolute;
+  z-index: 12;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
   width: 240px; height: 140px;
+  padding: 0;
+  font: inherit;
   background: #fff;
   border: 2px dashed var(--node-border);
   border-radius: var(--node-radius);

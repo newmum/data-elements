@@ -9,6 +9,7 @@ import com.linewell.dataelement.metautil.explorer.impl.HiveMetadataExplorer;
 import com.linewell.dataelement.metautil.explorer.impl.MySqlMetadataExplorer;
 import com.linewell.dataelement.metautil.explorer.impl.OracleMetadataExplorer;
 import com.linewell.dataelement.metautil.explorer.impl.OceanBaseMetadataExplorer;
+import com.linewell.dataelement.metautil.explorer.impl.PostgreSqlMetadataExplorer;
 import com.linewell.dataelement.platform.magic.module.JsonModule;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,6 +35,53 @@ import org.ssssssss.script.runtime.ExitValue;
 /** Runs the canonical DDL API's batch branch with a real tenant metadata query. */
 class BatchCreateTableDdlMagicTest {
     private static final String SOURCE_ID = "8a56e7d664934c1499102cfa508cd58a";
+
+    @Test
+    void temporalDdlUsesTheDeclaredNativeTypeAcrossDestinations() throws Exception {
+        for (String dialect : List.of("mysql", "oceanbasemysql", "oracle", "oceanbaseoracle", "postgresql", "hive")) {
+            String timeType = dialect.contains("oracle") ? "date"
+                    : dialect.equals("hive") || dialect.equals("postgresql") ? "timestamp" : "datetime";
+            for (String type : List.of("date", timeType)) {
+                Fixture fixture = new Fixture(1);
+                fixture.targetNames("ODS_TEMPORAL");
+                fixture.jdbc.update("update db_datasource_t set db_type=?,username='ODS_OWNER' where tid='db-0'", dialect);
+                Map<String, Object> target = new LinkedHashMap<>(fixture.targets.getFirst());
+                target.put("tableItems", List.of(Map.of("columnName", "occurred_at", "dataType", type,
+                        "columnType", type, "length", 0, "columnComment", "事件时间")));
+                fixture.targets.set(0, target);
+                Object raw = fixture.run();
+                Map<?, ?> response = assertInstanceOf(Map.class, raw, dialect + "/" + type + ": " + raw);
+                String ddl = ((Map<?, ?>) ((List<?>) response.get("results")).getFirst()).get("ddl").toString().toUpperCase();
+                assertTrue(ddl.contains(type.toUpperCase()), ddl);
+                assertFalse(ddl.contains("VARCHAR"), ddl);
+                assertEquals(1, fixture.counter.reads);
+            }
+        }
+    }
+
+    @Test
+    void huaweiHivePreviewAddsTextfileStorageFromRegisteredConfigurationOnly() throws Exception {
+        for (String configuration : List.of("{\"hiveConnectionMode\":\"huawei-mrs\"}",
+                "{\"hiveProfile\":\"default\"}", "{\"usePlatformHiveConfig\":true}")) {
+            Fixture fixture = new Fixture(2);
+            fixture.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg=? where tid='db-1'", configuration);
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.run());
+            List<?> results = assertInstanceOf(List.class, response.get("results"));
+            String hiveDdl = ((Map<?, ?>) results.get(1)).get("ddl").toString();
+            assertTrue(hiveDdl.contains("ROW FORMAT DELIMITED"), hiveDdl);
+            assertTrue(hiveDdl.contains("FIELDS TERMINATED BY '\\001'"), hiveDdl);
+            assertTrue(hiveDdl.contains("STORED AS TEXTFILE"), hiveDdl);
+            assertFalse(hiveDdl.contains("\u0001"), "The preview must retain a visible octal escape");
+            assertFalse(((Map<?, ?>) results.getFirst()).get("ddl").toString().contains("TEXTFILE"));
+            assertEquals(1, fixture.counter.reads);
+            assertEquals(0, fixture.counter.writes);
+        }
+        Fixture plainHive = new Fixture(1);
+        plainHive.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg='{\"hiveConnectionMode\":\"open-source\"}'");
+        Map<?, ?> response = assertInstanceOf(Map.class, plainHive.run());
+        String ddl = ((Map<?, ?>) ((List<?>) response.get("results")).getFirst()).get("ddl").toString();
+        assertFalse(ddl.contains("TEXTFILE"), "Only registered Huawei Hive receives this storage policy");
+    }
 
     @Test
     void twentyTargetsUseOneScopedDatasourceRead() throws Exception {
@@ -211,7 +259,8 @@ class BatchCreateTableDdlMagicTest {
             String name = rename ? "UNEXPECTED_TABLE" : tableName;
             return switch (config.getDatabaseType().getCode()) {
                 case "oracle" -> new OracleMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
-                case "oceanbaseoracle" -> new OceanBaseMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
+                case "oceanbaseoracle", "oceanbasemysql" -> new OceanBaseMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
+                case "postgresql" -> new PostgreSqlMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
                 case "hive" -> new HiveMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
                 default -> new MySqlMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
             };

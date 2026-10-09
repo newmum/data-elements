@@ -452,6 +452,38 @@ var targetTable = null
 var targetChosenByTask = false
 var targetTableId = text(body?.targetTableId || body?.target_table_id).trim()
 var requestedTargetTableId = targetTableId
+var requestedTaskId = text(body?.taskId).trim()
+// 独立任务只取消用户指定的任务/目标；历史单任务多目标画布按其真实sink关联匹配。
+if (!blank(requestedTaskId)) {
+    var selectedTasks = []
+    for (task in tasks) { if (text(task.tid) == requestedTaskId) { selectedTasks.add(task) } }
+    if (selectedTasks.size() != 1) { exit 403, '所选任务不存在、不属于当前租户或来源表' }
+    tasks = selectedTasks
+} else if (!blank(requestedTargetTableId)) {
+    var pipelineIds = []
+    for (task in tasks) {
+        var pipelineId = text(first(task, ['pipelineId', 'pipeline_id']))
+        if (!blank(pipelineId) && !pipelineIds.contains(pipelineId)) { pipelineIds.add(pipelineId) }
+    }
+    var pipelines = pipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').columns('id', 'dsl_json').where()
+        .eq('tenant_id', tenantId).in('id', pipelineIds).eq('is_del', 0).select()
+    var matchingPipelineIds = []
+    for (pipeline in pipelines) {
+        var dsl = {}
+        try { dsl = poolJsons.parseObj(text(first(pipeline, ['dslJson', 'dsl_json']))) } catch (ignored) {}
+        for (node in (dsl.nodes == null ? [] : dsl.nodes)) {
+            if (text(node.category).toLowerCase() == 'sink' && text(node.config?.targetTableId) == requestedTargetTableId) {
+                matchingPipelineIds.add(text(pipeline.id)); break
+            }
+        }
+    }
+    var selectedTasks = []
+    for (task in tasks) {
+        if (text(first(task, ['targetTableId', 'target_table_id'])) == requestedTargetTableId
+            || matchingPipelineIds.contains(text(first(task, ['pipelineId', 'pipeline_id'])))) { selectedTasks.add(task) }
+    }
+    tasks = selectedTasks
+}
 var targetDbId = text(body?.targetDbId || body?.targetDatasourceId || body?.target_db_id).trim()
 var targetTableName = text(body?.targetTableName || body?.target_table_name).trim()
 var targetSelectionMode = ''
@@ -550,6 +582,10 @@ if (deleteTargetTable) {
         }
     }
     if (targetTable != null) {
+        // 汇聚表正在作为下一跳来源时保留物理表，须先取消下游任务。
+        var downstreamTasks = db.table('data_access_agg_task_t').where()
+            .eq('tenant_id', tenantId).eq('source_table_id', targetTableId).eq('is_del', 0).select()
+        if (downstreamTasks.size() > 0) { exit 409, '目标表仍作为下游任务的来源，请先删除下游任务再删除目标表' }
         // A table without source_table_id can still belong to another active
         // task or catalog. Resolve those references before a physical probe.
         var activeTargetTasks = db.table('data_access_agg_task_t').where()

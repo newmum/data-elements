@@ -184,6 +184,24 @@ var dataSourceOf = (asset) => {
     return dsConfig
 }
 
+// 华为 MRS Hive 采用用户要求的 Ctrl-A 分隔文本格式；只读取已登记配置，
+// 不根据浏览器传入的数据库类型判定，不连接目标库或逐项补查。
+var withHuaweiHiveStorage = (ddl, databaseType, connection, registeredType) => {
+    if (databaseType != DatabaseType.HIVE) { return ddl }
+    var mode = firstValue(connection, ['hiveConnectionMode', 'hive_connection_mode'])
+    var profile = firstValue(connection, ['hiveProfile', 'hive_profile'])
+    var platform = firstValue(connection, ['usePlatformHiveConfig', 'use_platform_hive_config'])
+    var managed = (!blank(mode) && textOf(mode).trim().toLowerCase() == 'huawei-mrs')
+        || !blank(profile) || platform == true || platform == 1 || textOf(platform) == 'true'
+        || (!blank(registeredType) && textOf(registeredType).trim().toLowerCase() == 'mrshive')
+    if (!managed) { return ddl }
+    var statement = textOf(ddl).trim()
+    // 已生成的存储声明保持完整；不要产生重复 ROW FORMAT/STORED AS。
+    if (statement.matches('(?is).*\\b(ROW\\s+FORMAT|STORED\\s+AS)\\b.*')) { return ddl }
+    statement = statement.replaceAll(';\\s*$', '')
+    return statement + "\nROW FORMAT DELIMITED\nFIELDS TERMINATED BY '\\001'\nSTORED AS TEXTFILE;\n"
+}
+
 // The materialization dialog generates DDL for several selected target
 // databases in one request. Read and authorize the whole bounded set first;
 // the dialect conversion below is CPU-only and does not query each datasource.
@@ -289,6 +307,7 @@ if (body?.batchGenerate == true) {
         try {
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 submittedProps.tableName, batchColumns, submittedProps.tableNameCn)
+            ddl = withHuaweiHiveStorage(ddl, targetType, pool, targetTypeCode)
             var parsed = canvasTableDdl.parse(ddl, batchConfig)
             var requestedTableName = textOf(submittedProps.tableName).trim()
             if (!canvasTableDdl.matches(parsed, requestedTableName, parsed.schemaName)) {
@@ -316,10 +335,14 @@ if (propList == null || blank(propList.tableName)) {
 }
 
 var dsConfig
+var targetConnection = {}
+var registeredTypeCode = null
 if (body.canvas == true) {
     if (blank(propList.dbId)) { exit 400, '请选择已登记的目标库' }
     var registered = connectionProperties.resolve(tenantRuntime.id(), textOf(propList.dbId))
     if (registered == null || registered.isEmpty()) { exit 404, '当前租户中不存在所选目标数据源' }
+    targetConnection = registered
+    registeredTypeCode = registered.dbType
     // DDL generation only needs target dialect/scope; managed Hive credentials stay on the server.
     dsConfig = new DataSourceConfig()
     var targetType = DatabaseType.fromCode(textOf(registered.dbType).toLowerCase())
@@ -334,6 +357,8 @@ if (body.canvas == true) {
         // 参数或业务状态不满足要求时立即终止请求。
         exit 500, 'dbId参数不正确'
     }
+    targetConnection = dbAsset
+    registeredTypeCode = firstValue(dbAsset, ['dbType', 'databaseType'])
     // DDL 预览只依赖目标库方言和可选的库/模式名，并不会建立 JDBC 连接。
     // 因此不能复用 dataSourceOf 的“主机、账号、连接参数完整”校验：
     // 该校验属于实际建表/连通性测试，若用于预览会把本可生成的 DDL 错误地拦截。
@@ -412,6 +437,7 @@ for (item in tableItems) {
 // 返回当前业务分支的标准结果。
 try {
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, propList.tableName, columns, propList.tableNameCn)
+    ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
     if (body.canvas == true) {
         // Use the same single-table and target-scope validation as physical creation.
         var parsed = canvasTableDdl.parse(ddl, dsConfig)

@@ -8,6 +8,7 @@ import { useCanvasSelectionRevision, useSessionRevision, useTokenReady } from '.
 import { setCanvasSelection } from '../../nifi/api/iframeBridge';
 import { useCanvasStore } from '../../nifi/stores/canvasStore';
 import EditorPage from '../../nifi/pages/EditorPage';
+import { getNifiOverlayContainer } from '../../nifi/panels/overlayContainer';
 import { NifiSessionPrompt } from './NifiFlowsPage';
 import '../../nifi/styles/globals.css';
 import '../../nifi/styles/haitong-integration.css';
@@ -114,7 +115,7 @@ export default function CanvasPage() {
  if (unsupportedEngine) return <Result status="warning" title="该专用画布未迁入海通" subTitle={`当前链接指定了 ${engine} 专用引擎。海通只接入指定 9 月 29 日基线的普通 NiFi 画布，不能把专用配置当作普通流程打开。`} extra={<Button onClick={back}>返回列表</Button>}/>;
 
  return <div className="haitong-nifi-canvas nifi-workspace" style={{position:'fixed', inset:0, zIndex:60, background:'var(--canvas-bg)'}}>
-  <ConfigProvider locale={zhCN} theme={nifiTheme(dark)}>
+  <ConfigProvider locale={zhCN} theme={nifiTheme(dark)} getPopupContainer={getNifiOverlayContainer}>
    <App style={{height:'100%'}}>
     {!tokenReady ? <div style={{padding:32, maxWidth:680, margin:'9vh auto'}}><NifiSessionPrompt redirectOnMissing/></div>
      : preparedKey===routeKey ? <EditorPage key={routeKey}/> : <div role="status" style={{padding:32}}>正在准备 NiFi 画布…</div>}

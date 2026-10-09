@@ -55,6 +55,7 @@ import {
 import { useCanvasStore } from '@/stores/canvasStore';
 import { findUniqueCaseInsensitiveFieldMatches, identifierMatchKey } from '@/utils/fieldNameMatching';
 import { getNifiOverlayContainer } from './overlayContainer';
+import { isRecordLookup } from '../utils/recordLookup';
 
 interface Props {
   value: unknown;
@@ -1433,7 +1434,7 @@ function LookupBody({ mapping, sourceFields, targetFields, onUpdate }: { mapping
   const { message } = AntdApp.useApp();
   const [open, setOpen] = useState(false);
   const lookup: LookupSpec = mapping.lookup ?? { sql: '' };
-  const summary = lookup.resultColumn ? `SQL · ${lookup.resultColumn}` : 'SQL';
+  const summary = isRecordLookup(lookup) ? '多值翻译' : lookup.resultColumn ? `SQL · ${lookup.resultColumn}` : 'SQL';
   return (
     <>
       <FieldSelect side="source" value={mapping.from} fields={sourceFields} onChange={(from) => onUpdate({ from })} />
@@ -1445,7 +1446,7 @@ function LookupBody({ mapping, sourceFields, targetFields, onUpdate }: { mapping
         onOpenChange={setOpen}
         content={<LookupConfig lookup={lookup} sourceField={mapping.from} onChange={(next) => onUpdate({ lookup: next })} onApply={() => { setOpen(false); message.success('字典查询映射已应用'); }} />}
       >
-        <button className="fm-lookup-badge" title="编辑字典查询语句" onClick={(e) => e.stopPropagation()}>{summary}</button>
+        <button className="fm-lookup-badge" title={isRecordLookup(lookup) ? '查看多值翻译配置' : '编辑字典查询语句'} onClick={(e) => e.stopPropagation()}>{summary}</button>
       </Popover>
       <FieldSelect side="target" value={mapping.to} fields={targetFields} onChange={(to) => onUpdate({ to })} />
     </>
@@ -1457,16 +1458,26 @@ function LookupConfig({ lookup, sourceField, onChange, onApply }: { lookup: Look
   const [sql, setSql] = useState(lookup.sql ?? '');
   const [resultColumn, setResultColumn] = useState(lookup.resultColumn ?? '');
   const [onMissing, setOnMissing] = useState<NonNullable<LookupSpec['onMissing']>>(lookup.onMissing ?? 'NULL');
+  const [separator, setSeparator] = useState(lookup.multiValueSeparator ?? ',');
+  const recordLookup = isRecordLookup(lookup);
   useEffect(() => {
     setSql(lookup.sql ?? '');
     setResultColumn(lookup.resultColumn ?? '');
     setOnMissing(lookup.onMissing ?? 'NULL');
+    setSeparator(lookup.multiValueSeparator ?? ',');
   }, [lookup]);
   const insertTemplate = () => {
     setSql("SELECT dict_label\nFROM sys_dict_data\nWHERE dict_type = 'sys_status'\n  AND dict_value = ?");
     if (!resultColumn) setResultColumn('');
   };
   const apply = () => {
+    if (recordLookup) {
+      if (!sourceField) { message.warning('请先选择左侧源字段'); return; }
+      if (!separator || separator.length > 8) { message.warning('分隔符须为 1–8 个字符'); return; }
+      onChange({ ...lookup, multiValueSeparator: separator, onMissing });
+      onApply();
+      return;
+    }
     const nextSql = sql.trim();
     if (!nextSql) {
       message.warning('请填写字典查询 SQL');
@@ -1480,12 +1491,21 @@ function LookupConfig({ lookup, sourceField, onChange, onApply }: { lookup: Look
       message.warning('SQL 中请使用 ? 作为源字段值占位符');
       return;
     }
-    onChange({ sql: nextSql, resultColumn: resultColumn.trim() || undefined, onMissing });
+    onChange({ ...lookup, sql: nextSql, resultColumn: resultColumn.trim() || undefined, onMissing });
     onApply();
   };
   return (
     <div className="fm-lookup-config" onClick={(e) => e.stopPropagation()}>
-      <Typography.Text strong>字典查询映射</Typography.Text>
+      <Typography.Text strong>{recordLookup ? '多值翻译' : '字典查询映射'}</Typography.Text>
+      {recordLookup ? <>
+        <Typography.Paragraph type="secondary" className="fm-lookup-hint">
+          按分隔符逐个翻译编码，保留原有顺序和重复值。编码与名称关联沿用资源登记配置。
+        </Typography.Paragraph>
+        {lookup.query ? <Input.TextArea value={lookup.query} readOnly autoSize={{ minRows: 3, maxRows: 8 }} />
+          : <div>{Object.entries(lookup.values ?? {}).slice(0, 20).map(([code, label]) => <Tag key={code}>{code} → {label}</Tag>)}
+            {Object.keys(lookup.values ?? {}).length > 20 && <Typography.Text type="secondary">共 {Object.keys(lookup.values ?? {}).length} 个编码</Typography.Text>}</div>}
+        <Input size="small" value={separator} addonBefore="分隔符" onChange={(event) => setSeparator(event.target.value)} />
+      </> : <>
       <Typography.Paragraph type="secondary" className="fm-lookup-hint">
         使用 <code>?</code> 作为源字段值占位符，系统会自动绑定左侧已选字段；结果列可留空，默认取 SELECT 第一列。
       </Typography.Paragraph>
@@ -1497,8 +1517,9 @@ function LookupConfig({ lookup, sourceField, onChange, onApply }: { lookup: Look
         placeholder="SELECT dict_name FROM sym_dict_t WHERE dict_code = ?"
         onChange={(e) => setSql(e.target.value)}
       />
+      </>}
       <div className="fm-lookup-row">
-        <Input size="small" value={resultColumn} placeholder="结果列名（可选，默认取首列）" onChange={(e) => setResultColumn(e.target.value)} />
+        {!recordLookup && <Input size="small" value={resultColumn} placeholder="结果列名（可选，默认取首列）" onChange={(e) => setResultColumn(e.target.value)} />}
         <Select
           size="small"
           value={onMissing}
@@ -1512,7 +1533,7 @@ function LookupConfig({ lookup, sourceField, onChange, onApply }: { lookup: Look
         />
       </div>
       <Space className="fm-lookup-actions">
-        <Button size="small" onClick={insertTemplate}>插入字典模板</Button>
+        {!recordLookup && <Button size="small" onClick={insertTemplate}>插入字典模板</Button>}
         <Button size="small" type="primary" onClick={apply}>应用</Button>
       </Space>
     </div>

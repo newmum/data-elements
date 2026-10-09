@@ -52,7 +52,9 @@ const SOURCE_POPULARITY_ORDER: Record<string, number> = {
 };
 
 function getCanvasPopupContainer(trigger: HTMLElement) {
-  return (trigger.closest('.canvas-shell') as HTMLElement | null) ?? document.body;
+  // The graph clips its descendants and creates a paint containing block.
+  // Keep the palette in the themed workspace, outside that clipping boundary.
+  return (trigger.closest('.nifi-workspace') as HTMLElement | null) ?? trigger.ownerDocument.body;
 }
 
 function manifestSort(a: ComponentManifest, b: ComponentManifest) {
@@ -202,6 +204,8 @@ export default function NodeSelector({
       trigger="click"
       placement={placement}
       autoAdjustOverflow
+      arrow={false}
+      align={{ offset: [0, 0], overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true } }}
       getPopupContainer={getCanvasPopupContainer}
       classNames={{ root: 'node-selector-popover' }}
       destroyOnHidden

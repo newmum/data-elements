@@ -18,6 +18,7 @@ const names = [
   'sameStringList', 'targetDatasourceIds', 'targetTableNameInput', 'targetTablePlans',
   'syncTargetDatasourceSelection', 'syncTargetTableNameInput', 'normalizeFormPayload',
   'isCurrentInit', 'trackLoad', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
+  'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
 ];
 const selected = names.map(name => {
   const node = ast.program.body.find(n => n.type === 'VariableDeclaration'
@@ -37,7 +38,11 @@ function fixture(size = 2) {
   const calls = [];
   const notices = [];
   const emitted = [];
-  const columns = [{ columnName: 'person_id', dataType: 'varchar', length: 32 }];
+  const columns = [{ columnName: 'person_id', dataType: 'varchar', length: 32 },
+    { columnName: 'occurred_at', dataType: 'varchar', columnType: 'varchar', sourceDataType: 'varchar',
+      standardField: 'DATETIME', length: 100, defaultValue: '' },
+    { columnName: 'birth_date', dataType: 'varchar', sourceDataType: 'varchar', standardField: 'DATE', length: 32 },
+    { columnName: 'ODS_RKSJ', dataType: 'date', length: 0 }];
   const datasource = Object.fromEntries(Array.from({ length: size }, (_, i) => [
     `db-${i}`, { dbType: i === 1 ? 'hive' : 'oracle', dbName: `target-${i}` },
   ]));
@@ -49,9 +54,9 @@ function fixture(size = 2) {
       setValue: value => Object.assign(form, plain(value)), getFormData: async () => plain(form),
       updateFieldOptions: () => {},
     }),
-    tableRef: ref({ validate: async () => {}, getData: () => columns }),
-    nifiNodeOptions: ref([]), resolveNifiNodeId: () => 'node-1', syncOdsSystemTimeTypes: () => {},
-    materializationTimeType: type => type === 'oracle' ? 'date' : 'timestamp',
+    tableRef: ref({ validate: async () => {}, getData: () => columns,
+      setData: rows => columns.splice(0, columns.length, ...rows) }),
+    nifiNodeOptions: ref([]), resolveNifiNodeId: () => 'node-1',
     props: { type: 'add', id: 'source-table', existingTargets: [] }, initRun: 0, open: ref(true),
     loadError: ref(''), knownTargets: ref([]), recoveryTarget: ref(null), templateLoading: ref(false),
     loadPending: ref({}), formRules: ref([]), formData: ref({}), templateTableItems: ref([]),
@@ -139,6 +144,13 @@ for (let i = 0; i < saved.length; i++) {
   assert.equal(generated[i].propList.tableName, 'ODS_USER_CONFIRMED');
   assert.equal(validated[i].tableName, 'ODS_USER_CONFIRMED');
   assert.deepEqual(saved[i].body.propList, generated[i].propList, 'Saving must reuse the preview target configuration');
+  assert.deepEqual(saved[i].body.tableItems, generated[i].tableItems, 'Persisted types must match this target DDL');
+  const fields = generated[i].tableItems;
+  assert.equal(fields.find(f => f.columnName === 'occurred_at').dataType,
+    generated[i].propList.dbType === 'oracle' ? 'date' : 'timestamp');
+  assert.equal(fields.find(f => f.columnName === 'birth_date').dataType, 'date');
+  assert.equal(fields.find(f => f.columnName === 'occurred_at').sourceDataType, 'varchar');
+  assert.equal(fields.find(f => f.columnName === 'occurred_at').defaultValue, null);
 }
 assert.equal(multi.emitted.at(-1)[0], 'save');
 

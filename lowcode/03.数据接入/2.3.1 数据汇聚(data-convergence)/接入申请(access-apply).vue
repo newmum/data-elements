@@ -1,10 +1,11 @@
 <template>
   <el-drawer
+    class="access-apply-drawer"
     v-model="open"
     :title="drawerTitle"
     direction="rtl"
     size="760px"
-    :body-class="'access-apply'"
+    :body-class="ddlMode ? 'access-apply access-apply-ddl' : 'access-apply'"
     :close-on-click-modal="true"
     @close="handleCancel"
   >
@@ -43,6 +44,7 @@
       :element-loading-text="loadingText"
       element-loading-background="rgba(255, 255, 255, 0.88)"
       class="access-apply-content"
+      :class="{ 'is-ddl-mode': ddlMode }"
     >
       <div v-if="loadError && !templateLoading" class="template-load-error" role="alert">
         <el-alert :title="loadError" type="error" :closable="false" show-icon />
@@ -99,15 +101,17 @@
         <el-tabs v-if="ddlPlans.length > 1" v-model="activeDdlKey" class="ddl-target-tabs">
           <el-tab-pane v-for="plan in ddlPlans" :key="plan.key" :name="plan.key" :label="plan.dbName" />
         </el-tabs>
-        <CodeEditor
-          :key="activeDdlKey"
-          v-model="activeDdlSql"
-          lang="sql"
-          theme="chrome"
-          :height="'100%'"
-          :show-option="false"
-          :read-only="!editable"
-        />
+        <div ref="ddlEditorHost" class="ddl-editor-host">
+          <CodeEditor
+            :key="activeDdlKey"
+            v-model="activeDdlSql"
+            lang="sql"
+            theme="chrome"
+            :height="ddlEditorHeight"
+            :show-option="false"
+            :read-only="!editable"
+          />
+        </div>
       </div>
     </div>
 
@@ -215,6 +219,23 @@ const formData = ref<any>({});
 const jsonFormRef = ref<any>(null);
 const drawerTitle = ref("物化建表");
 const ddlMode = ref(false);
+const ddlEditorHost = ref<HTMLElement | null>(null);
+const ddlEditorHeight = ref("360px");
+let ddlSizeObserver: ResizeObserver | null = null;
+const syncDdlEditorHeight = () => {
+  const host = ddlEditorHost.value;
+  const body = host?.closest(".el-drawer__body");
+  if (!host || !body) return;
+  const bottomPadding = Number.parseFloat(window.getComputedStyle(body).paddingBottom) || 0;
+  const availableHeight = body.getBoundingClientRect().bottom - host.getBoundingClientRect().top - bottomPadding;
+  // 使用明确像素高度，避免旧浏览器在多层 flex/百分比高度中回退为 200px。
+  ddlEditorHeight.value = `${Math.max(200, Math.floor(availableHeight))}px`;
+};
+const stopDdlEditorSizing = () => {
+  ddlSizeObserver?.disconnect();
+  ddlSizeObserver = null;
+  window.removeEventListener("resize", syncDdlEditorHeight);
+};
 const ddlGenerating = ref(false);
 const ddlPlans = ref<any[]>([]);
 const ddlSqlByTarget = ref<Record<string, string>>({});
@@ -858,12 +879,12 @@ const loadManagedNifiNodeOptions = (response: any) => {
 
 const materializationTimeType = (dbType: any) => {
   const code = String(dbType || "").trim().toLowerCase();
-  if (code.includes("oceanbase") || code === "oracle" || code === "dameng" || code === "dm") {
+  if (["oceanbaseoracle", "oceanbase_oracle", "oracle", "dameng", "dm"].includes(code)) {
     return "date";
   }
   if ([
     "postgresql", "postgres", "kingbase", "kingbase8", "gaussdb", "opengauss", "gauss",
-    "vertica", "hetu", "trino", "presto", "hive",
+    "highgo", "vastbase", "hailiang", "tdsql_pg", "tdsql-pg", "vertica", "hetu", "trino", "presto", "hive",
   ].includes(code)) {
     return "timestamp";
   }
@@ -873,20 +894,23 @@ const materializationTimeType = (dbType: any) => {
   return "datetime";
 };
 
+// 预览与提交共同使用每个目标库的类型，避免第二个目标沿用第一个库的 DATE。
+const targetTableItems = (items: any[], dbType: any) => items.map((row: any) => {
+  const name = String(row?.columnName || "").trim().toUpperCase();
+  const format = String(row?.standardField || row?.dataStandardId || "").trim().toUpperCase();
+  const targetType = format === "DATE" ? "date"
+    : format === "DATETIME" || name === "ODS_RKSJ" || name === "ODS_GXSJ"
+      ? materializationTimeType(dbType) : "";
+  if (!targetType) return row;
+  return { ...row, dataType: targetType, columnType: targetType, length: 0,
+    precisionLength: 0, scale: 0, defaultValue: null };
+});
+
 const syncOdsSystemTimeTypes = (dbType: any) => {
   const rows = tableRef.value?.getData?.() || [];
   if (!rows.length) return;
-  const targetType = materializationTimeType(dbType);
-  let changed = false;
-  const normalizedRows = rows.map((row: any) => {
-    const name = String(row?.columnName || "").trim().toUpperCase();
-    if (name !== "ODS_RKSJ" && name !== "ODS_GXSJ") return row;
-    if (String(row.dataType || "").toLowerCase() === targetType
-      && String(row.columnType || "").toLowerCase() === targetType) return row;
-    changed = true;
-    return { ...row, dataType: targetType, columnType: targetType, length: 0 };
-  });
-  if (changed) {
+  const normalizedRows = targetTableItems(rows, dbType);
+  if (JSON.stringify(normalizedRows) !== JSON.stringify(rows)) {
     tableRef.value?.setData?.(normalizedRows);
   }
 };
@@ -1164,14 +1188,7 @@ const regenerateDdl = async (input: any) => {
   try {
     const statements: Record<string, string> = {};
     const targets = input.targets.map((target: any) => {
-      const targetTimeType = materializationTimeType(target.propList.dbType);
-      const targetItems = input.tableItems.map((item: any) => {
-        const name = String(item.columnName || "").trim().toUpperCase();
-        return name === "ODS_RKSJ" || name === "ODS_GXSJ"
-          ? { ...item, dataType: targetTimeType, columnType: targetTimeType, length: 0 }
-          : item;
-      });
-      return { propList: target.propList, tableItems: targetItems };
+      return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType) };
     });
     const response = await $common.post("/dst/database/metadata/getCreateTableDDL", {
       batchGenerate: true,
@@ -1244,7 +1261,6 @@ const handleSave = async () => {
   let lastTargetForm: any = null;
   try {
     const ddlInput = await currentDdlInput();
-    const tableFields = ddlInput.tableItems;
     if (!ddlSourceFingerprint.value) await regenerateDdl(ddlInput);
     if (ddlSourceFingerprint.value && ddlSourceFingerprint.value !== ddlInput.fingerprint) {
       if (ddlWasEdited.value) {
@@ -1392,7 +1408,7 @@ const handleSave = async () => {
       lastTargetForm = targetForm;
       const result = await $common.post("/ods/createTapleApply", {
         propList: targetForm,
-        tableItems: tableFields,
+        tableItems: targetTableItems(ddlInput.tableItems, targetForm.dbType),
         tid: props.id,
         ddl: ddlSourceFingerprint.value ? ddlSqlByTarget.value[targetDbId] : undefined,
       }, { _hiddenErrorMsg: true }, 120 * 1000);
@@ -1590,6 +1606,19 @@ watch(() => props.modelValue, (visible, previous) => {
   if (!visible && previous) cancelPendingInit();
 });
 onBeforeUnmount(cancelPendingInit);
+watch([open, ddlMode, activeDdlKey], ([visible, isDdl]) => {
+  stopDdlEditorSizing();
+  if (!visible || !isDdl) return;
+  const body = ddlEditorHost.value?.closest(".el-drawer__body");
+  if (!body) return;
+  syncDdlEditorHeight();
+  if (typeof ResizeObserver !== "undefined") {
+    ddlSizeObserver = new ResizeObserver(syncDdlEditorHeight);
+    ddlSizeObserver.observe(body);
+  }
+  window.addEventListener("resize", syncDdlEditorHeight);
+}, { flush: "post" });
+onBeforeUnmount(stopDdlEditorSizing);
 </script>
 
 <style lang="scss" scoped>
@@ -1640,7 +1669,7 @@ onBeforeUnmount(cancelPendingInit);
   padding-top: 8px !important;
 }
 
-:global(.el-drawer__body.access-apply:has(.ddl-inline-panel)) {
+:global(.el-drawer__body.access-apply-ddl) {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1652,7 +1681,7 @@ onBeforeUnmount(cancelPendingInit);
   padding: 8px 0 !important;
 }
 
-:global(.el-drawer__header:has(.access-apply-drawer-header)) {
+:global(.access-apply-drawer .el-drawer__header) {
   margin-bottom: 0;
   padding-top: 0;
   padding-bottom: 0;
@@ -1701,7 +1730,7 @@ onBeforeUnmount(cancelPendingInit);
 }
 .template-load-error .el-alert { width: 100%; }
 .materialization-form-view { min-width: 0; }
-.access-apply-content:has(.ddl-inline-panel) {
+.access-apply-content.is-ddl-mode {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1739,17 +1768,21 @@ onBeforeUnmount(cancelPendingInit);
   border-radius: 6px;
   background: #fff;
 }
-.ddl-target-tabs { padding: 0 12px; }
-.ddl-inline-panel :deep(.el-scrollbar) {
-  flex: 1;
+.ddl-target-tabs { padding: 0 12px; flex: 0 0 auto; }
+.ddl-editor-host {
+  flex: 1 1 0;
   min-height: 0;
-  height: auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.ddl-inline-panel :deep(.el-scrollbar) {
+  height: 100%;
   width: 100%;
 }
 .ddl-inline-panel :deep(.ace_editor) { min-height: 200px !important; }
 
 @media (max-height: 430px) {
-  :global(.el-drawer__body.access-apply:has(.ddl-inline-panel)) { overflow: auto; }
-  .access-apply-content:has(.ddl-inline-panel) { min-height: 220px; }
+  :global(.el-drawer__body.access-apply-ddl) { overflow: auto; }
+  .access-apply-content.is-ddl-mode { min-height: 260px; }
 }
 </style>

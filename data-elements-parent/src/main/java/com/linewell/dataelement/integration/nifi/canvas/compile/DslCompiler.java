@@ -283,6 +283,7 @@ public class DslCompiler {
                     if (!plan.lookups().isEmpty() && !isSourceDbFieldEnrichmentNode(manifest, cfg)) {
                         Set<String> lookupConnectionKeys = new LinkedHashSet<>();
                         for (FieldMappingService.LookupPlan lookup : plan.lookups()) {
+                            if (lookup.recordLookup() != null && lookup.recordLookup().inline()) continue;
                             String key = lookupConnectionKey(lookup);
                             if (!lookupConnectionKeys.add(key)) continue;
                             Map<String, Object> lookupCfg = lookup.dataSource() == null || lookup.dataSource().isEmpty()
@@ -1696,24 +1697,41 @@ public class DslCompiler {
         nc.processorIds.put("base-query", baseQuery.id());
         nc.inletProcessorId = baseQuery.id();
 
-        NifiEntity split = nifi.createProcessor(pgId, SPLIT_RECORD_TYPE,
-                node.label() + "/split", x, flowRowY, Map.of(
-                        "Record Reader", sharedCs.get("jsonReader"),
-                        "Record Writer", sharedCs.get("jsonWriter"),
-                        "Records Per Split", "1"
-                ), null, null);
-        nc.processorIds.put("split", split.id());
-        nifi.createConnection(pgId, baseQuery.id(), "PROCESSOR", split.id(), "PROCESSOR", List.of("success"));
-        nc.usedOutgoing.computeIfAbsent(baseQuery.id(), k -> new LinkedHashSet<>()).add("success");
-
-        String previous = split.id();
+        List<FieldMappingService.LookupPlan> recordLookups = plan.lookups().stream()
+                .filter(lookup -> lookup.recordLookup() != null).toList();
+        String previous = baseQuery.id();
         Set<String> availableFields = new LinkedHashSet<>(plan.baseFields());
+        if (!recordLookups.isEmpty()) {
+            NifiEntity translate = nifi.createProcessor(pgId, RecordLookupScript.PROCESSOR_TYPE,
+                    node.label() + "/多值翻译", x + PROCESSOR_COLUMN_GAP, flowRowY + PROCESSOR_ROW_GAP,
+                    RecordLookupScript.properties(recordLookups, sharedCs.get("jsonReader"), sharedCs.get("jsonWriter"),
+                            lookup -> nc.csIds.get(lookupConnectionKey(lookup))), null, null);
+            nc.processorIds.put("multi-value-translate", translate.id());
+            connectInternal(pgId, nc, previous, translate.id(), "success");
+            previous = translate.id();
+            recordLookups.forEach(lookup -> availableFields.add(lookup.targetField()));
+            flowRowY += PROCESSOR_ROW_GAP;
+        }
+        String splitId = "";
+        if (plan.lookups().stream().anyMatch(lookup -> lookup.recordLookup() == null)) {
+            NifiEntity split = nifi.createProcessor(pgId, SPLIT_RECORD_TYPE,
+                    node.label() + "/split", x, flowRowY, Map.of(
+                            "Record Reader", sharedCs.get("jsonReader"),
+                            "Record Writer", sharedCs.get("jsonWriter"),
+                            "Records Per Split", "1"
+                    ), null, null);
+            nc.processorIds.put("split", split.id());
+            connectInternal(pgId, nc, previous, split.id(), "success");
+            previous = split.id();
+            splitId = split.id();
+        }
         // A lookup plan describes one target value, but it does not need one
         // NiFi chain.  Keep one chain per dictionary connection instead: the
         // ExecuteSQLRecord query below joins all lookup subqueries in one DB
         // round trip and carries all eight converted fields forward together.
         Map<String, List<FieldMappingService.LookupPlan>> lookupGroups = new LinkedHashMap<>();
         for (FieldMappingService.LookupPlan lookup : plan.lookups()) {
+            if (lookup.recordLookup() != null) continue;
             lookupGroups.computeIfAbsent(lookupConnectionKey(lookup), ignored -> new ArrayList<>()).add(lookup);
         }
         int groupIndex = 0;
@@ -1728,7 +1746,7 @@ public class DslCompiler {
                     node.label() + "/lookup-extract-" + chainIndex, extractX, lookupRowY,
                     buildLookupExtractProperties(availableFields, lookups), null, null);
             nc.processorIds.put("lookup-extract-" + chainIndex, extract.id());
-            String relationship = previous.equals(split.id()) ? "splits" : "success";
+            String relationship = previous.equals(splitId) ? "splits" : "success";
             nifi.createConnection(pgId, previous, "PROCESSOR", extract.id(), "PROCESSOR", List.of(relationship));
             nc.usedOutgoing.computeIfAbsent(previous, k -> new LinkedHashSet<>()).add(relationship);
 
@@ -1806,6 +1824,10 @@ public class DslCompiler {
         if (plan.lookups().isEmpty()) return plan;
         List<FieldMappingService.LookupPlan> lookups = new ArrayList<>();
         for (FieldMappingService.LookupPlan lookup : plan.lookups()) {
+            if (lookup.recordLookup() != null && lookup.recordLookup().inline()) {
+                lookups.add(lookup);
+                continue;
+            }
             Map<String, Object> effective = lookup.dataSource() == null || lookup.dataSource().isEmpty()
                     ? sourceCfg : lookup.dataSource();
             Map<String, Object> config = new LinkedHashMap<>(effective == null ? Map.of() : effective);
@@ -1821,7 +1843,7 @@ public class DslCompiler {
             if (url != null) config.put("jdbcUrl", url);
             lookups.add(new FieldMappingService.LookupPlan(lookup.targetField(), lookup.resultColumn(),
                     lookup.parameterizedSql(), lookup.parameterFields(), lookup.parameterRecordFields(),
-                    lookup.onMissing(), config, lookup.multiValue()));
+                    lookup.onMissing(), config, lookup.multiValue(), lookup.recordLookup()));
         }
         return new FieldMappingService.CompiledMapping(plan.baseQuery(), plan.finalQuery(), List.copyOf(lookups),
                 plan.baseFields(), plan.outputFields(), plan.runtimeFields());

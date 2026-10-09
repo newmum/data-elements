@@ -27,6 +27,8 @@
 // 业务说明：资源中心 06：按当前组织树汇总 DST 层应用系统、数据源和数据表；涉及 rm_org_t、db_datasource_t、db_table_t 等业务表。
 import "@post:/sym/user/me" as me
 import java.util.Map
+import tenantRuntime
+import dataScope
 
 /*
  * 资源中心 06：按当前组织树汇总 DST 层应用系统、数据源和数据表。
@@ -52,7 +54,20 @@ var rowValue = (row, keys) => {
     return null
 }
 
-// 从 MySQL 业务表读取当前有效数据。
+var tenantId = textOf(tenantRuntime.id())
+if (tenantId == '') { exit 401, '当前租户无效' }
+var scope = dataScope.dataSource()
+var scopeMode = textOf(scope?.scope)
+var scopeUserId = textOf(scope?.userId)
+var scopeOrgIds = scope?.organizationIds == null ? [] : scope.organizationIds
+if (!['ALL', 'ORG', 'OWNER'].contains(scopeMode) || scopeUserId == '') {
+    exit 403, '无法确定当前数据范围'
+}
+// 权限条件固定在 SQL 中，身份/部门/租户均绑定；空部门范围不返回数据。
+var scopeOrgCount = scopeOrgIds.size()
+if (scopeOrgCount == 0) { scopeOrgIds = [''] }
+
+// 按数据源所属租户和角色范围一次聚合。
 var statsRows = db.select("""
     SELECT d.org_id,
            COUNT(DISTINCT d.app_id) AS app_count,
@@ -61,9 +76,17 @@ var statsRows = db.select("""
       FROM db_datasource_t d
       LEFT JOIN db_table_t t
         ON t.datasource_id = d.tid
+       AND t.tenant_id = #{tenantId}
        AND t.is_del = 0
        AND t.asset_status = 2
-     WHERE d.is_del = 0
+     WHERE d.tenant_id = #{tenantId}
+       AND d.is_del = 0
+       AND (
+           #{scopeMode}='ALL'
+           OR (#{scopeMode}='OWNER' AND d.created_by=#{scopeUserId})
+           OR (#{scopeMode}='ORG' AND #{scopeOrgCount}>0 AND d.org_id IN
+               <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>)
+       )
        AND d.asset_status IN (1, 2)
      GROUP BY d.org_id
 """)
@@ -80,16 +103,14 @@ for (row in statsRows) {
 }
 
 var currentUser = me()
-var rootSerial = rowValue(currentUser, ['orgRootSerialNumber', 'org_root_serial_number'])
-// 从 MySQL 业务表读取当前有效数据。
-var orgQuery = db.table('rm_org_t')
-    .excludes('shortName', 'creditCode', 'standard', 'createId', 'updateId', 'createTime', 'updateTime', 'deleted')
-    .where()
-    .eq('deleted', '0')
-if (rootSerial != null && !textOf(rootSerial).isEmpty()) {
-    orgQuery.like('serial_number', textOf(rootSerial) + '%')
-}
-var orgList = orgQuery.orderBy('sort_num').select()
+var rootSerial = textOf(rowValue(currentUser, ['orgRootSerialNumber', 'org_root_serial_number']))
+var rootPattern = rootSerial + '%'
+var orgList = db.select("""
+    SELECT id, name FROM rm_org_t
+     WHERE tenant_id=#{tenantId} AND deleted=0
+       AND (#{rootSerial}='' OR serial_number LIKE #{rootPattern})
+     ORDER BY sort_num
+""")
 
 var result = []
 var dstTableCount = 0

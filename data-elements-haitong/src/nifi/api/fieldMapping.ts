@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { isRecordLookup, previewInlineRecordLookup, type RecordLookup } from '../utils/recordLookup';
 
 let fieldMappingApiUnavailable = false;
 
@@ -59,10 +60,10 @@ export interface TransformSpec {
   onError?: 'NULL' | 'SKIP_ROW' | 'KEEP_ORIGINAL';
 }
 
-export interface LookupSpec {
-  sql: string;
+export interface LookupSpec extends RecordLookup {
+  sql?: string;
   resultColumn?: string;
-  dataSource?: string;
+  dataSource?: string | Record<string, unknown>;
   onMissing?: 'NULL' | 'KEEP_SOURCE' | 'FAIL';
 }
 
@@ -198,7 +199,7 @@ function validateLocal(spec: FieldMappingSpec, sourceSchema: FieldMeta[], target
     const path = `mappings[${index}]`;
     if (!mapping.to) errors.push(issue(`${path}.to`, '目标字段不能为空', 'EMPTY_TARGET'));
     if (mapping.to && !isSimpleRecordPath(mapping.to)) errors.push(issue(`${path}.to`, '目标字段只支持数据库字段名或一级 RecordPath', 'INVALID_TARGET'));
-    if (mapping.lookup && !mapping.lookup.sql?.trim()) {
+    if (mapping.lookup && !isRecordLookup(mapping.lookup) && !mapping.lookup.sql?.trim()) {
       errors.push(issue(`${path}.lookup.sql`, '字典查询映射的 SQL 查询语句不能为空', 'EMPTY_LOOKUP_SQL'));
     }
     if (!mapping.from && !mapping.fromList?.length && !('constant' in mapping) && !mapping.expression && !mapping.lookup && !mapping.when) {
@@ -225,7 +226,7 @@ function previewLocal(spec: FieldMappingSpec, sampleRows: Record<string, unknown
       const target = displayPathLocal(mapping.to);
       if ('constant' in mapping) out[target] = mapping.constant;
       else if (mapping.expression) out[target] = renderExpressionLocal(mapping.expression, row);
-      else if (mapping.lookup) out[target] = previewLookupLocal(mapping.lookup, row);
+      else if (mapping.lookup) out[target] = previewLookupLocal(mapping.lookup, row, mapping.from);
       else if (mapping.fromList?.length) out[target] = mapping.fromList.map((from) => row[displayPathLocal(from)] ?? '').join(String(mapping.transform?.args?.[0] ?? ''));
       else if (mapping.from) out[target] = row[displayPathLocal(mapping.from)] ?? null;
     });
@@ -257,6 +258,9 @@ function recommendLocal(sourceSchema: FieldMeta[], targetSchema: FieldMeta[]): R
 }
 
 function compileLocal(spec: FieldMappingSpec, sourceSchema: FieldMeta[], targetSchema: FieldMeta[]): CompileResponse {
+  if (spec.mappings.some((mapping) => mapping.enabled !== false && isRecordLookup(mapping.lookup))) {
+    throw new Error('多值翻译需要后端服务生成 NiFi 记录处理组件');
+  }
   const columns = spec.mappings
     .filter((mapping) => mapping.enabled !== false && mapping.to)
     .map((mapping) => `${selectExpressionLocal(mapping)} AS ${quoteIdentifierLocal(displayPathLocal(mapping.to))}`);
@@ -307,7 +311,11 @@ function lookupExpressionLocal(lookup: LookupSpec, sourceField?: string) {
   return trimmed ? `(${trimmed})` : 'NULL';
 }
 
-function previewLookupLocal(lookup: LookupSpec, row: Record<string, unknown>) {
+function previewLookupLocal(lookup: LookupSpec, row: Record<string, unknown>, sourceField?: string) {
+  if (isRecordLookup(lookup)) {
+    if (lookup.query) throw new Error('多值字典翻译需要后端服务进行预览');
+    return previewInlineRecordLookup(row[displayPathLocal(sourceField)], lookup);
+  }
   const refs = lookupFieldRefsLocal(lookup.sql ?? '').map(displayPathLocal);
   const bound = refs.map((field) => `${field}=${row[field] ?? ''}`).join(', ');
   const column = lookup.resultColumn ? `.${lookup.resultColumn}` : '';

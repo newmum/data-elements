@@ -626,12 +626,18 @@ export default function Canvas() {
           defaultCategory="source"
           placement="rightTop"
         >
-          <div className="canvas-empty" onClick={() => setEmptyOpen(true)}>
+          <button
+            type="button"
+            className="canvas-empty"
+            aria-label="添加接入数据源"
+            aria-haspopup="dialog"
+            aria-expanded={emptyOpen}
+          >
             <div className="canvas-empty__plus">
               <PlusOutlined />
             </div>
             <div className="canvas-empty__text">点击添加接入数据源</div>
-          </div>
+          </button>
         </NodeSelector>
       )}
 

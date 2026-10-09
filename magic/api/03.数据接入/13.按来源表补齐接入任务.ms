@@ -16,32 +16,24 @@
   "requestBody": "{\n  \"tableId\": \"015c09572d174e89b9bea9c765ef72df\"\n}",
   "headers": [],
   "paths": [],
-  "responseBody": "{\n  \"created\": true,\n  \"taskId\": \"03ac61c2b0b84c1a87ff11ae1e38b949\",\n  \"task\": {\"tid\":\"03ac61c2b0b84c1a87ff11ae1e38b949\"}\n}",
-  "description": "按来源表补齐数据接入任务（POST /ods/dataAggTaskEnsure）。写接口；以 db_table_t 来源表为入口，读取自动目录和目标表，创建 nifi_pipeline_t 画布草稿、data_access_agg_task_t 任务及字段映射；已有任务时直接返回。用于数据接入-任务管理页面的创建任务按钮；使用请求参数 tableId、sourceTableId、tid、repair、forceRebuild、rebuild、catalogId；涉及 da_prop_t、db_table_column_t、db_table_t、da_catalog_t、dwm_center_layer_source_t、db_datasource_t 等业务表。",
+  "responseBody": "",
+  "description": "按当前租户来源表和所选物化目标表分别补齐独立接入任务。targetTableIds（最多100项）或targetTableId指定目标，省略时处理全部物化目标；首个任务从原来源读取，后续任务从前一个目标表读取；每个任务生成单目标画布及自己的字段映射，重复提交复用已有任务。批量校验租户和角色数据范围，dryRun只返回计划；forceRebuild须明确确认，会替换所选旧任务的画布。返回tasks、createdCount及兼容的首个task/taskId。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：13.按来源表补齐接入任务
 // 路由：POST /ods/dataAggTaskEnsure
-// 业务说明：按来源表补齐数据接入任务（POST /ods/dataAggTaskEnsure）。写接口；以 db_table_t 来源表为入口，读取自动目录和目标表，创建 nifi_pipeline_t 画布草稿、data_access_agg_task_t 任务及字段映射；已有任务时直接返回。用于数据接入-任务管理页面的创建任务按钮；使用请求参数 tableId、sourceTableId、tid、repair、forceRebuild、rebuild、catalogId；涉及 da_prop_t、db_table_column_t、db_table_t、da_catalog_t、dwm_center_layer_source_t、db_datasource_t 等业务表。
-/*
- * 按来源表确保接入任务存在。
- *
- * 业务链路：来源表 => 字段增强 => 目标表（目录）。
- * 如果来源表已经有 data_access_agg_task_t，则直接返回；
- * 否则读取 createTapleApply 自动生成的目录和目标表，写入任务与 NiFi 画布草稿，
- * 让前端能直接打开 data-element-nifi 继续查看/调整流程。
- */
+// 业务说明：一次预取来源、所选目标、连接及字典元数据，按所选目标顺序逐级生成独立任务。
+// 重复请求复用任务；仅显式重建替换画布，dryRun不写入。事务锁住来源登记，串行处理同一来源的创建请求。
 import cn.hutool.core.util.IdUtil
 import jsons
 import cn.hutool.json.JSONUtil as poolJsons
-import metadataAsset
-import targetTableSchema
 import apiPullConfig
 import tenantRuntime
 import dataScope
 import java.util.Map
+import java.util.List
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType as sourceTypes
 
 var text = (value) => value == null ? '' : value + ''
@@ -668,13 +660,13 @@ var odsSystemMapping = (name) => {
     }
     return null
 }
-var isStableBusinessKey = (column) => {
+var declaredKey = (column) => {
     var name = text(colName(column)).toUpperCase()
-    if (name == 'ODS_UUID') { return false }
     var pk = text(first(column, ['primaryKey', 'primary_key', 'isPrimaryKey', 'is_primary_key', 'isPk', 'is_pk']))
     var unique = text(first(column, ['isUnique', 'is_unique', 'unique', 'uk']))
     return pk == '1' || pk.toLowerCase() == 'true' || unique == '1' || unique.toLowerCase() == 'true'
 }
+var isStableBusinessKey = (column) => text(colName(column)).toUpperCase() != 'ODS_UUID' && declaredKey(column)
 var stableBusinessKeys = (rows) => {
     var keys = []
     for (c in (rows == null ? [] : rows)) {
@@ -686,50 +678,42 @@ var firstPk = (rows) => {
     var keys = stableBusinessKeys(rows)
     return keys.size() == 0 ? '' : keys[0]
 }
-// NiFi's ExecuteSQLRecord evaluates one split FlowFile at a time. JSON_TABLE
-// retains token position and duplicates; unknown codes remain visible when at
-// least one code resolves, matching the registration preview contract.
-var multiSqlLiteral = (value) => "'" + text(value).replace("'", "''") + "'"
-var mysqlMultiValueLookupSql = (targetName, dbType, dictionaryRows, separator) => {
-    var dialect = text(dbType).trim().toUpperCase()
-    if (dialect != 'MYSQL') {
-        exit 400, '多值翻译目前只支持 MySQL 8 字典或来源数据源；请勿按单值规则部署'
-    }
-    var delimiter = text(separator)
-    if (blank(delimiter) || delimiter.length() > 8 || delimiter.indexOf('"') >= 0
-        || delimiter.indexOf('\\') >= 0) {
-        exit 400, '多值翻译分隔符须为 1–8 个非引号、非反斜杠字符'
-    }
-    return "SELECT CASE WHEN SUM(CASE WHEN dict.dict_name IS NOT NULL AND dict.dict_name <> '' "
-        + "THEN 1 ELSE 0 END) = 0 THEN NULL ELSE "
-        + 'GROUP_CONCAT(COALESCE(NULLIF(dict.dict_name, \'\'), TRIM(tokens.code)) '
-        + 'ORDER BY tokens.ord SEPARATOR ' + multiSqlLiteral(delimiter) + ') END AS ' + targetName
-        + " FROM JSON_TABLE(CONCAT('[', REPLACE(JSON_QUOTE(?), " + multiSqlLiteral(delimiter)
-        + ", CHAR(34,44,34)), ']'), '$[*]' COLUMNS (ord FOR ORDINALITY, "
-        + "code VARCHAR(1024) PATH '$')) tokens LEFT JOIN " + dictionaryRows
-        + " dict ON CAST(dict.dict_code AS BINARY) = CAST(TRIM(tokens.code) AS BINARY) "
-        + "WHERE TRIM(tokens.code) <> ''"
-}
-var mysqlStandardRows = (values) => {
-    var rows = []
-    for (value in values) {
-        rows.add('SELECT ' + multiSqlLiteral(value.code) + ' AS dict_code, '
-            + multiSqlLiteral(value.label) + ' AS dict_name')
-    }
-    if (rows.size() == 0) { exit 400, '多值标准翻译缺少编码映射' }
-    return '(' + rows.join(' UNION ALL ') + ')'
-}
-var mysqlDictionaryRows = (relation, dictionaryName) => {
+// NiFi handles token order/duplicates and unknown codes in records, independently of SQL dialect.
+// Only the dictionary key/name rows use bounded, parameterized JDBC IN queries.
+var multiDictionaryQuery = (relation, dictionaryName) => {
     var conditions = dictionaryLookupConditions(relation)
-    return '(SELECT ' + relation.dictionaryKeyField + ' AS dict_code, '
-        + 'MAX(' + relation.dictionaryLabelField + ') AS dict_name FROM ' + dictionaryName
-        + (conditions.size() == 0 ? '' : ' WHERE ' + conditions.join(' AND '))
-        + ' GROUP BY ' + relation.dictionaryKeyField + ')'
+    return 'SELECT ' + relation.dictionaryKeyField + ', ' + relation.dictionaryLabelField
+        + ' FROM ' + dictionaryName + ' WHERE ' + relation.dictionaryKeyField + ' IN (:codes)'
+        + (conditions.size() == 0 ? '' : ' AND ' + conditions.join(' AND '))
 }
 
-var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, transformBindings, sourceLookupConfig) => {
+// 字段统一格式只从已经预取的本租户登记快照解析，不增加逐字段查询。
+var temporalMappingsOf = (sourceColumns, governanceConfig) => {
+    var registered = {}
+    for (field in (governanceConfig.fields == null ? [] : governanceConfig.fields)) {
+        var name = text(first(field, ['columnName', 'column_name'])).trim().toLowerCase()
+        if (!blank(name)) { registered[name] = field }
+    }
+    var result = {}
+    for (column in (sourceColumns == null ? [] : sourceColumns)) {
+        var name = text(colName(column)).trim()
+        var field = registered[name.toLowerCase()]
+        var cleared = field == null ? '' : text(field.standardFieldExplicitlyCleared).trim().toLowerCase()
+        if (cleared == 'true' || cleared == '1') { continue }
+        var format = text(first(column, ['dataStandardId', 'data_standard_id'])).trim().toUpperCase()
+        if (blank(format) && field != null) { format = text(field.standardField).trim().toUpperCase() }
+        if (format != 'DATE' && format != 'DATETIME') { continue }
+        var sourceType = text(first(column, ['dataType', 'data_type', 'columnType', 'column_type'])).trim().toLowerCase()
+        // 已有原生时间列由 Record Reader 保留时间语义；varchar 等需要显式转换。
+        if (sourceType.indexOf('date') >= 0 || sourceType.indexOf('time') >= 0) { continue }
+        var sqlType = format == 'DATE' ? 'DATE' : 'TIMESTAMP'
+        result[name.toLowerCase()] = 'CAST(NULLIF(TRIM(CAST(${field:' + name + '} AS VARCHAR)), \'\') AS ' + sqlType + ')'
+    }
+    return result
+}
+var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, transformBindings, sourceLookupConfig, temporalMappings, preserveSystemFields) => {
     var sourceNames = {}
-    var relations = dictionaryRelations(sourceTable)
+    var relations = preserveSystemFields ? {} : dictionaryRelations(sourceTable)
     for (c in (sourceColumns == null ? [] : sourceColumns)) {
         sourceNames[text(colName(c)).toLowerCase()] = colName(c)
     }
@@ -746,7 +730,7 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
     var mappings = []
     for (c in (targetColumns == null ? [] : targetColumns)) {
         var name = colName(c)
-        var systemMapping = odsSystemMapping(name)
+        var systemMapping = preserveSystemFields ? null : odsSystemMapping(name)
         var binding = bindingsByTarget[text(name).toLowerCase()]
         var sourceName = binding == null ? '' : text(binding.sourceField).trim()
         var relation = blank(sourceName) ? null : relations[sourceName.toLowerCase()]
@@ -759,10 +743,9 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
             }
             if (relation.multiValue) {
                 mappings.add({ from: '/' + relation.sourceName, to: '/' + name,
-                    lookup: { sql: mysqlMultiValueLookupSql(name, sourceLookupConfig.dbType,
-                            mysqlStandardRows(relation.standardValues), relation.multiValueSeparator),
+                    lookup: { values: standardValueMap,
                         resultColumn: name, onMissing: 'NULL', multiValue: true,
-                        multiValueSeparator: relation.multiValueSeparator, dataSource: sourceLookupConfig } })
+                        multiValueSeparator: relation.multiValueSeparator } })
             } else {
                 mappings.add({ from: '/' + relation.sourceName, to: '/' + name,
                     transform: { fn: 'enumMap', args: [standardValueMap, null] } })
@@ -782,15 +765,12 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
             if (lookupConditions.size() > 0) {
                 lookupSql = lookupSql + ' AND ' + lookupConditions.join(' AND ')
             }
-            if (relation.multiValue) {
-                lookupSql = mysqlMultiValueLookupSql(name, dictionarySource.config.dbType,
-                    mysqlDictionaryRows(relation, dictionaryName), relation.multiValueSeparator)
-            }
             mappings.add({
                 from: '/' + relation.sourceName,
                 to: '/' + name,
                 lookup: {
                     sql: lookupSql,
+                    query: relation.multiValue ? multiDictionaryQuery(relation, dictionaryName) : null,
                     resultColumn: name,
                     onMissing: 'NULL',
                     multiValue: relation.multiValue == true,
@@ -799,7 +779,13 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
                 }
             })
         } else if (!blank(name) && sourceNames[text(name).toLowerCase()] != null) {
-            mappings.add({ from: '/' + name, to: '/' + name })
+            var sourceName = sourceNames[text(name).toLowerCase()]
+            var temporalExpression = temporalMappings[text(sourceName).toLowerCase()]
+            if (!blank(temporalExpression)) {
+                mappings.add({ from: '/' + sourceName, to: '/' + name, expression: temporalExpression })
+            } else {
+                mappings.add({ from: '/' + sourceName, to: '/' + name })
+            }
         }
     }
     return jsons.toJSONStr({
@@ -812,6 +798,7 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
     })
 }
 
+return db.transaction(() => {
 var sourceTableId = text(body?.tableId || body?.sourceTableId || body?.tid).trim()
 var tenantId = text(tenantRuntime.id()).trim()
 if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录' }
@@ -820,15 +807,16 @@ if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录' }
 var forceRebuild = text(body?.repair || body?.forceRebuild || body?.rebuild).trim().toLowerCase()
 forceRebuild = forceRebuild == 'true' || forceRebuild == '1' || forceRebuild == 'yes'
 var now = new Date()
+var dryRun = body?.dryRun == true
 if (blank(sourceTableId)) {
     exit 400, 'tableId不能为空'
 }
 
-var sourceTable = db.table('db_table_t').where()
-    .eq('tid', sourceTableId)
-    .eq('tenant_id', tenantId)
-    .eq('is_del', 0)
-    .selectOne()
+var sourceTable = db.selectOne("""
+    SELECT * FROM db_table_t
+     WHERE tid = #{sourceTableId} AND tenant_id = #{tenantId} AND is_del = 0
+     FOR UPDATE
+""")
 if (sourceTable == null) {
     exit 404, '来源表不存在'
 }
@@ -845,6 +833,7 @@ var sourceColumns = db.table('db_table_column_t').where()
 metadataColumnsByTableId[sourceTableId] = sourceColumns == null ? [] : sourceColumns
 loadGovernanceForTableIds([sourceTableId])
 var sourceGovernanceConfig = governanceConfigOf(sourceTable)
+var sourceTemporalMappings = temporalMappingsOf(sourceColumns, sourceGovernanceConfig)
 var dictionaryTableIds = []
 var dictionaryTableNames = []
 for (sourceColumn in metadataColumnsByTableId[sourceTableId]) {
@@ -1018,6 +1007,32 @@ if (targetTables.size() == 0) {
 }
 if (targetTables.size() > 100) { exit 400, '单次最多处理100个物化目标表，请缩小目标范围' }
 
+var materializedTargetIds = []
+for (target in targetTables) { materializedTargetIds.add(text(target.tid)) }
+// 显式选择只处理这些目标；来源关联和租户条件由服务端逐ID核对。
+var requestedTargetIds = body?.targetTableIds == null ? [] : body.targetTableIds
+if (!(requestedTargetIds instanceof List)) { exit 400, 'targetTableIds必须为数组' }
+if (requestedTargetIds.size() > 100) { exit 400, '单次最多处理100个物化目标表' }
+if (!blank(body?.targetTableId) && requestedTargetIds.size() == 0) { requestedTargetIds = [text(body.targetTableId).trim()] }
+if (requestedTargetIds.size() > 0) {
+    var materializedById = {}
+    for (candidateTarget in targetTables) { materializedById[text(candidateTarget.tid)] = candidateTarget }
+    var selectedTargets = []
+    var selectedIds = []
+    for (requestedId in requestedTargetIds) {
+        var selectedId = text(requestedId).trim()
+        if (blank(selectedId) || materializedById[selectedId] == null) {
+            exit 403, '所选目标表不存在、不属于当前租户或未关联当前来源表'
+        }
+        if (!selectedIds.contains(selectedId)) {
+            selectedIds.add(selectedId)
+            selectedTargets.add(materializedById[selectedId])
+        }
+    }
+    targetTables = selectedTargets
+    targetTableIds = selectedIds
+}
+
 // Authorize every target database ID before reading columns or creating a
 // pipeline.  A mixed authorized/unauthorized target set fails as a whole.
 var targetDatasourceIds = []
@@ -1041,8 +1056,7 @@ for (candidateDbId in targetDatasourceIds) {
 }
 loadGovernanceForTableIds(targetTableIds)
 
-// One bounded column query serves all target sinks.  The field-enrichment
-// node and task mapping rows are shared by the sinks and use the first target.
+// 一次查询全部所选目标字段，独立任务分别使用自己的目标字段和映射。
 var targetColumnRows = db.table('db_table_column_t').where()
     .eq('tenant_id', tenantId).in('table_id', targetTableIds).eq('is_del', 0)
     .orderBy('ordinal_position', 'asc').select()
@@ -1057,138 +1071,137 @@ for (candidateTargetId in targetTableIds) {
         exit 409, '物化目标表缺少当前租户的字段元数据，请重新物化建表'
     }
 }
-var exists = db.table('data_access_agg_task_t').where()
-    .eq('tenant_id', tenantId)
-    .eq('source_table_id', sourceTableId)
-    .eq('is_del', 0)
-    .orderBy('updated_time', 'desc')
-    .selectOne()
-if (exists != null) {
-    // The task stores one shared mapping set, based on its primary target.
-    // Counting every sink's columns would retire a healthy multi-target task
-    // on every subsequent ensure call.
-    var mappingTargetId = text(first(exists, ['targetTableId', 'target_table_id']))
-    if (!targetTableIds.contains(mappingTargetId)) { mappingTargetId = targetTableIds[0] }
-    var expectedMappingCount = targetColumnsById[mappingTargetId].size()
-    var existingMappingCount = db.table('data_access_field_mapping').where()
-        .eq('tenant_id', tenantId)
-        .eq('task_id', exists.tid)
-        .eq('is_del', 0)
-        .count()
-    var existingPipelineId = text(exists.pipelineId || exists.pipeline_id)
-    var existingPipeline = blank(existingPipelineId) ? null : db.table('nifi_pipeline_t').where()
-        .eq('tenant_id', tenantId)
-        .eq('id', existingPipelineId)
-        .eq('is_del', 0)
-        .selectOne()
-    var existingDsl = existingPipeline == null ? '' : text(first(existingPipeline, ['dslJson', 'dsl_json']))
-    // mappings is stored as an escaped JSON string inside the pipeline DSL, so
-    // quoted-token matching falsely reports a missing dataSource. Match the
-    // property names themselves; a real missing lookup still triggers repair.
-    var needsDictionaryLookupUpgrade = dictionaryRelations(sourceTable).size() > 0
-        && (existingDsl.indexOf('lookup') < 0 || existingDsl.indexOf('dataSource') < 0)
-    // Compare actual sink nodes.  A table ID may also appear in the mapping
-    // node or another property, and a removed target can leave an old sink.
+// 选择顺序即接入链路顺序：来源→目标1，目标1→目标2，依次递进。
+var rootSourceTable = sourceTable
+var rootSourceDb = sourceDb
+var rootSourceColumns = sourceColumns
+var rootSourceTableId = sourceTableId
+var hopSourceByTarget = {}
+var chainSourceIds = [rootSourceTableId]
+var previousTable = rootSourceTable
+for (target in targetTables) {
+    hopSourceByTarget[text(target.tid)] = previousTable
+    if (!chainSourceIds.contains(text(target.tid))) { chainSourceIds.add(text(target.tid)) }
+    previousTable = target
+}
+var originalSourceTemporalMappings = sourceTemporalMappings
+var originalDictionaryRelations = dictionaryRelations(rootSourceTable)
+// 批量读取已有任务、画布和映射，不能按目标逐条查询。
+var existingTasksPage = db.table('data_access_agg_task_t').where()
+    .eq('tenant_id', tenantId).in('source_table_id', chainSourceIds).eq('is_del', 0)
+    .orderBy('updated_time', 'desc').page(201, 0)
+if (existingTasksPage.total > 200) { exit 409, '当前来源已有任务过多，请先核对任务' }
+var existingTasks = existingTasksPage.list == null ? [] : existingTasksPage.list
+var existingTaskIds = []
+var existingPipelineIds = []
+for (existingTask in existingTasks) {
+    existingTaskIds.add(text(existingTask.tid))
+    var existingPipelineId = text(first(existingTask, ['pipelineId', 'pipeline_id']))
+    if (!blank(existingPipelineId) && !existingPipelineIds.contains(existingPipelineId)) { existingPipelineIds.add(existingPipelineId) }
+}
+var existingPipelines = existingPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').where()
+    .eq('tenant_id', tenantId).in('id', existingPipelineIds).eq('is_del', 0).select()
+var existingPipelineById = {}
+for (pipeline in existingPipelines) { existingPipelineById[text(pipeline.id)] = pipeline }
+var existingMappingRows = existingTaskIds.size() == 0 ? [] : db.table('data_access_field_mapping').columns('task_id').where()
+    .eq('tenant_id', tenantId).in('task_id', existingTaskIds).eq('is_del', 0).select()
+var mappingCountByTask = {}
+for (mapping in existingMappingRows) {
+    var ownerTaskId = text(first(mapping, ['taskId', 'task_id']))
+    mappingCountByTask[ownerTaskId] = mappingCountByTask[ownerTaskId] == null ? 1 : mappingCountByTask[ownerTaskId] + 1
+}
+var existingTaskByTarget = {}
+var retireTaskIds = []
+var retirePipelineIds = []
+var repairReasons = []
+var reusedTasks = []
+for (existingTask in existingTasks) {
+    var pipelineId = text(first(existingTask, ['pipelineId', 'pipeline_id']))
+    var pipeline = existingPipelineById[pipelineId]
+    var existingDsl = text(first(pipeline, ['dslJson', 'dsl_json']))
     var existingDslObject = blank(existingDsl) ? {} : parseGovernanceConfig(existingDsl)
-    var existingSinkTargetIds = []
-    var existingSinkNodes = 0
-    for (existingNode in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
-        if (text(first(existingNode, ['category'])).toLowerCase() != 'sink') { continue }
-        existingSinkNodes = existingSinkNodes + 1
-        var existingNodeConfig = existingNode.config == null ? {} : existingNode.config
-        var existingSinkTargetId = text(first(existingNodeConfig, ['targetTableId'])).trim()
-        if (!blank(existingSinkTargetId) && !existingSinkTargetIds.contains(existingSinkTargetId)) {
-            existingSinkTargetIds.add(existingSinkTargetId)
+    var sinkIds = []
+    for (node in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
+        if (text(node.category).toLowerCase() == 'sink') {
+            var sinkId = text(first(node.config, ['targetTableId'])).trim()
+            if (!blank(sinkId) && !sinkIds.contains(sinkId)) { sinkIds.add(sinkId) }
         }
     }
-    var needsTargetSinkUpgrade = existingSinkNodes != targetTableIds.size()
-        || existingSinkTargetIds.size() != targetTableIds.size()
-    for (expectedTargetTableId in targetTableIds) {
-        if (!existingSinkTargetIds.contains(text(expectedTargetTableId))) {
-            needsTargetSinkUpgrade = true
-            break
+    var primaryTargetId = text(first(existingTask, ['targetTableId', 'target_table_id']))
+    var coveredIds = sinkIds.size() == 0 ? [primaryTargetId] : sinkIds
+    var intersects = targetTableIds.contains(primaryTargetId)
+    for (coveredId in coveredIds) { if (targetTableIds.contains(coveredId)) { intersects = true } }
+    if (!intersects) { continue }
+    var legacyMultiTarget = coveredIds.size() > 1
+    var expectedSource = hopSourceByTarget[primaryTargetId]
+    var wrongHopSource = expectedSource != null && text(first(existingTask, ['sourceTableId', 'source_table_id'])) != text(expectedSource.tid)
+    if (forceRebuild) {
+        if (!blank(first(existingTask, ['processGroupId', 'process_group_id']))
+            || ['RUNNING', 'DEPLOYED', 'STARTING'].contains(text(pipeline?.status).toUpperCase())) {
+            exit 409, '所选历史任务已部署，请先停止并删除该任务，再按新链路创建，目标表及数据可保留'
         }
-    }
-    var needsHuaweiHiveWriteUpgrade = false
-    if (existingDsl.indexOf('HIVE_RECORD_PUT') >= 0) {
-        for (existingNode in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
-            var existingNodeConfig = existingNode.config == null ? {} : existingNode.config
-            var existingNodeTargetId = text(first(existingNodeConfig, ['targetTableId']))
-            var existingNodeTargetDbId = text(first(existingNodeConfig, ['targetDbId']))
-            var existingTargetDb = targetDatasourceById[existingNodeTargetDbId]
-            if (first(existingNode, ['manifestKey']) == 'sink.hive'
-                && targetTableIds.contains(existingNodeTargetId)
-                && existingTargetDb != null
-                && isServerManagedHuaweiMrsHive(first(existingTargetDb, ['dbType', 'db_type']), readCfg(existingTargetDb))
-                && text(first(existingNodeConfig, ['hiveWriteMode'])).toUpperCase() == 'HIVE_RECORD_PUT') {
-                needsHuaweiHiveWriteUpgrade = true
-                break
+        // 替换历史多目标画布必须选择其全部仍有效目标，防止遗漏原任务中的其它目标。
+        for (coveredId in coveredIds) {
+            if (legacyMultiTarget && !targetTableIds.contains(coveredId)
+                && materializedTargetIds.contains(coveredId)) {
+                exit 409, '重建历史多目标任务须选择该任务的全部物化目标表'
             }
         }
+        retireTaskIds.add(text(existingTask.tid))
+        if (!blank(pipelineId) && !retirePipelineIds.contains(pipelineId)) { retirePipelineIds.add(pipelineId) }
+        continue
     }
-    // A user may intentionally leave some target columns unmapped. Never
-    // replace a saved canvas during normal ensure, even when its mapping count
-    // is lower than the primary target's column count. Only an explicit repair
-    // request may regenerate the registration-derived draft.
-    if (forceRebuild) {
-        db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId).eq('tid', exists.tid).update({
-            is_del: 1,
-            updated_time: now
-        })
-        if (existingPipeline != null) {
-            db.table('nifi_pipeline_t').where().eq('tenant_id', tenantId).eq('id', existingPipelineId).update({
-                is_del: 1,
-                updated_time: now
-            })
-        }
-    } else {
-    var repairReasons = []
-    if (existingPipeline == null) { repairReasons.add('关联流程不存在或已删除') }
-    if (blank(existingDsl)) { repairReasons.add('关联流程没有可读取的画布定义') }
-    if (existingMappingCount < expectedMappingCount) { repairReasons.add('字段映射少于主目标表字段，请确认后显式修复') }
-    if (needsDictionaryLookupUpgrade) { repairReasons.add('字典关联配置需要显式升级') }
-    if (needsTargetSinkUpgrade) { repairReasons.add('目标表关联发生变化，需要显式确认重建') }
-    if (needsHuaweiHiveWriteUpgrade) { repairReasons.add('华为 MRS Hive 写入方式需显式确认升级为 PutHwHDFS') }
-    return {
-        created: false,
-        taskId: exists.tid,
-        task: exists,
-        targetTableIds: targetTableIds,
-        repairRequired: repairReasons.size() > 0,
-        repairReasons: repairReasons
+    var taskReasons = []
+    if (wrongHopSource) { taskReasons.add('已有任务的来源与所选目标顺序不一致，需确认后按级联链路重建') }
+    if (legacyMultiTarget) { taskReasons.add('历史任务包含多个目标库，需确认后拆分为独立任务') }
+    if (pipeline == null || blank(existingDsl)) { taskReasons.add('关联流程不存在或没有画布定义') }
+    if (sinkIds.size() != 1 || !sinkIds.contains(primaryTargetId)) { taskReasons.add('画布目标表关联需要显式确认重建') }
+    if (targetColumnsById[primaryTargetId] != null
+        && (mappingCountByTask[text(existingTask.tid)] == null ? 0 : mappingCountByTask[text(existingTask.tid)]) < targetColumnsById[primaryTargetId].size()) {
+        taskReasons.add('字段映射少于目标表字段，请确认后显式修复')
     }
+    if (dictionaryRelations(sourceTable).size() > 0 && (existingDsl.indexOf('lookup') < 0 || existingDsl.indexOf('dataSource') < 0)) {
+        taskReasons.add('字典关联配置需要显式升级')
     }
+    if (existingDsl.indexOf('HIVE_RECORD_PUT') >= 0) { taskReasons.add('华为 MRS Hive 写入方式需确认升级为 PutHwHDFS') }
+    for (taskReason in taskReasons) { if (!repairReasons.contains(taskReason)) { repairReasons.add(taskReason) } }
+    existingTask.repairRequired = taskReasons.size() > 0
+    existingTask.repairReasons = taskReasons
+    reusedTasks.add(existingTask)
+    for (coveredId in coveredIds) {
+        if (targetTableIds.contains(coveredId) && existingTaskByTarget[coveredId] == null) { existingTaskByTarget[coveredId] = existingTask }
+    }
+    if (targetTableIds.contains(primaryTargetId) && existingTaskByTarget[primaryTargetId] == null) { existingTaskByTarget[primaryTargetId] = existingTask }
 }
+var responseOf = (tasks, createdCount, summaries) => {
+    var firstTask = tasks.size() == 0 ? null : tasks[0]
+    return {created: createdCount > 0, createdCount: createdCount, taskCount: tasks.size(), tasks: tasks,
+        task: firstTask, taskId: firstTask == null ? '' : text(firstTask.tid),
+        pipelineId: text(first(firstTask, ['pipelineId', 'pipeline_id'])),
+        catalogId: catalogId, sourceTableId: rootSourceTableId, targetTableIds: targetTableIds,
+        targetTableId: targetTableIds[0], targetTables: summaries,
+        repairRequired: repairReasons.size() > 0, repairReasons: repairReasons,
+        dryRun: dryRun, sideEffectsApplied: !dryRun && createdCount > 0}
+}
+// 已保存画布需要确认时整批保留，避免在提示确认前创建部分任务。
+if (repairReasons.size() > 0) { return responseOf(reusedTasks, 0, []) }
+var targetsToCreate = []
+for (target in targetTables) { if (forceRebuild || existingTaskByTarget[text(target.tid)] == null) { targetsToCreate.add(target) } }
+if (targetsToCreate.size() == 0) { return responseOf(reusedTasks, 0, []) }
 
-var targetTable = targetTables[0]
-var targetTableId = text(first(targetTable, ['tid']))
-
-var targetDbId = text(first(targetTable, ['datasourceId', 'datasource_id']))
-var targetDb = targetDatasourceById[targetDbId]
-var sourceCfg = readCfg(sourceDb)
-var targetCfg = readCfg(targetDb)
-
-var targetColumns = targetColumnsById[targetTableId]
+var sourceCfg = readCfg(rootSourceDb)
 var sourceColumnMap = {}
-for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
-    sourceColumnMap[text(colName(sourceColumn)).toLowerCase()] = sourceColumn
-}
+for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) { sourceColumnMap[text(colName(sourceColumn)).toLowerCase()] = sourceColumn }
 var sourceDictionaryRelations = dictionaryRelations(sourceTable)
 var dictionaryLookupSources = validatedDictionaryLookupSources
-
-var nowMs = new Date().getTime()
-var taskId = IdUtil.getSnowflakeNextIdStr()
-var pipelineId = IdUtil.getSnowflakeNextIdStr()
+var nowMs = now.getTime()
 var sourceTableName = first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
 var sourceTableLabel = text(first(sourceTable, ['tableNameCn', 'table_name_cn'])).trim()
 if (blank(sourceTableLabel)) { sourceTableLabel = text(sourceTableName).trim() }
-var targetTableName = first(targetTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
-var taskName = (first(sourceTable, ['tableNameCn', 'table_name_cn', 'tableComment', 'table_comment']) || sourceTableName) + '接入任务'
 var sourceDbType = first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
 var accessMode = pushAccessMode(sourceDb, sourceCfg)
 var pushFileSource = (accessMode == 'receive' || accessMode == 'upload' || accessMode == 'push')
     ? resolveOdsPushFtp(sourceDbId, sourceTableName) : null
-var targetDbType = first(targetDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
 var sourceService = first(sourceCfg, ['serviceName', 'sid', 'database', 'dbName', 'dbMetaDbName'])
 var sourceConnectionType = text(first(sourceCfg, ['connectionType', 'jdbcType'])).trim().toUpperCase()
 if (sourceConnectionType != 'SID') { sourceConnectionType = 'SERVICE_NAME' }
@@ -1200,129 +1213,7 @@ var sourceManifestKey = pushFileSource == null ? normalizeSourceKey(sourceDbType
     : normalizeSourceKey(pushFileSource.dbType, pushFileSource.config)
 var sourceJdbcUrl = pushFileSource == null ? jdbcUrl(sourceDbType, sourceCfg, sourceDb) : null
 
-// A valid explicit target binding is preferred.  Imported metadata may carry
-// an incomplete binding array though, so ensure every registered dictionary or
-// mandatory-standard source has its materialized <source>_cn output column.
-var missingTranslationColumns = []
-for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
-    var sourceName = text(colName(sourceColumn))
-    var relation = sourceDictionaryRelations[sourceName.toLowerCase()]
-    var translationName = relation == null ? '' : relation.sourceName + '_cn'
-    var targetColumnNames = {}
-    for (targetColumn in (targetColumns == null ? [] : targetColumns)) {
-        targetColumnNames[text(colName(targetColumn)).toLowerCase()] = true
-    }
-    if (relation != null && targetColumnNames[translationName.toLowerCase()] == null) {
-        missingTranslationColumns.add({
-            columnName: translationName,
-            sourceColumn: sourceColumn
-        })
-    }
-}
-if (missingTranslationColumns.size() > 0) {
-    if (targetTableId == sourceTableId) {
-        exit 400, '目标表未物化为独立表，无法添加字典翻译字段，请先重新物化建表'
-    }
-    var missingTranslationNames = []
-    for (translationColumn in missingTranslationColumns) {
-        missingTranslationNames.add(translationColumn.columnName)
-    }
-    var addedTranslationNames = targetTableSchema.ensureTranslationColumns({
-        jdbcUrl: jdbcUrl(targetDbType, targetCfg, targetDb),
-        username: first(targetCfg, ['username', 'dbMetaUser']),
-        password: first(targetCfg, ['password', 'dbMetaPassword'])
-    }, targetTableName, missingTranslationNames)
-    if (addedTranslationNames.size() > 0) {
-        var addedTranslationMap = {}
-        for (addedTranslationName in addedTranslationNames) {
-            addedTranslationMap[text(addedTranslationName).toLowerCase()] = true
-        }
-        var translationMetadata = []
-        var nextOrdinal = targetColumns == null ? 1 : targetColumns.size() + 1
-        for (translationColumn in missingTranslationColumns) {
-            var translationName = translationColumn.columnName
-            if (addedTranslationMap[translationName.toLowerCase()] != null) {
-                var sourceColumn = translationColumn.sourceColumn
-                translationMetadata.add({
-                    tid: IdUtil.getSnowflakeNextIdStr(),
-                    table_id: targetTableId,
-                    column_name: translationName,
-                    column_comment: text(first(sourceColumn, ['columnComment', 'column_comment'])).trim() + '翻译',
-                    data_type: 'varchar',
-                    column_type: 'varchar(255)',
-                    length: 255,
-                    precision_length: 0,
-                    scale: 0,
-                    nullable: 1,
-                    default_value: null,
-                    primary_key: 0,
-                    auto_increment: 0,
-                    is_unique: 0,
-                    indexed: 0,
-                    ordinal_position: nextOrdinal,
-                    charset: null,
-                    collation: null,
-                    extra: null,
-                    source_table_column_id: sourceColumn.tid,
-                    is_del: 0,
-                    created_time: now,
-                    updated_time: now
-                })
-                nextOrdinal = nextOrdinal + 1
-            }
-        }
-        if (translationMetadata.size() > 0) {
-            metadataAsset.batchInsertTableColumns(translationMetadata)
-            db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
-                .update({ field_count: targetColumns.size() + translationMetadata.size(), updated_time: now })
-            targetColumns = db.table('db_table_column_t').where()
-                .eq('table_id', targetTableId)
-                .eq('tenant_id', tenantId)
-                .eq('is_del', 0)
-                .orderBy('ordinal_position', 'asc')
-                .select()
-            targetColumnsById[targetTableId] = targetColumns
-        }
-    }
-}
-// This target-specific binding is authoritative for field enhancement.  It is
-// resolved after any legacy metadata refresh so the canvas sees final columns.
-var targetFieldBindings = targetFieldTransformBindings(sourceTable, targetTable, targetColumns)
-var targetBindingByField = {}
-for (targetFieldBinding in targetFieldBindings) {
-    targetBindingByField[text(targetFieldBinding.targetField).toLowerCase()] = targetFieldBinding
-}
 var sourceColumnsForNifi = columnList(sourceColumns)
-var targetColumnsForNifi = columnList(targetColumns)
-var primarySourceKeys = []
-var primaryTargetKeys = []
-for (targetColumn in (targetColumns == null ? [] : targetColumns)) {
-    var targetName = text(colName(targetColumn))
-    var sourceColumn = sourceColumnMap[targetName.toLowerCase()]
-    if (sourceColumn == null) {
-        var sourceColumnId = text(first(targetColumn, ['sourceTableColumnId', 'source_table_column_id']))
-        if (!blank(sourceColumnId)) {
-            for (candidateSource in (sourceColumns == null ? [] : sourceColumns)) {
-                if (text(candidateSource.tid) == sourceColumnId) {
-                    sourceColumn = candidateSource
-                    break
-                }
-            }
-        }
-    }
-    if (sourceColumn != null && isStableBusinessKey(sourceColumn) && isStableBusinessKey(targetColumn)) {
-        primarySourceKeys.add(colName(sourceColumn))
-        primaryTargetKeys.add(targetName)
-    }
-}
-var sourcePrimaryKeys = primarySourceKeys.join(',')
-var targetPrimaryKeys = primaryTargetKeys.join(',')
-var canUpsert = !blank(sourcePrimaryKeys) && !blank(targetPrimaryKeys)
-
-// 生成 data-element-nifi 可读取的基础画布草稿。来源和字段映射只保留一份，
-// 每个已物化目标表生成一个独立写入节点，字段映射后的 FlowFile 同时分发到所有目标。
-var sourceNodeId = 'source-' + sourceTableId
-var mapNodeId = 'map-' + taskId
 var sourceNodeConfig = {
     dbType: pushFileSource == null ? normalizeConfigType(sourceDbType, sourceCfg) : 'FTP',
     registeredDatasourceId: sourceDbId,
@@ -1457,6 +1348,139 @@ if (sourceManifestKey == 'source.minio') {
     sourceNodeConfig.minioObjectKey = minioObjectKey
     sourceNodeConfig.syncMode = 'FULL'
 }
+
+var pipelineRows = []
+var taskRows = []
+var allMappings = []
+var allTargetSummaries = []
+var originalSourceNodeConfig = sourceNodeConfig
+var originalSourceManifestKey = sourceManifestKey
+for (targetTable in targetsToCreate) {
+sourceTable = hopSourceByTarget[text(targetTable.tid)]
+sourceTableId = text(sourceTable.tid)
+var firstHop = sourceTableId == rootSourceTableId
+sourceDb = firstHop ? rootSourceDb : targetDatasourceById[text(first(sourceTable, ['datasourceId', 'datasource_id']))]
+sourceDbId = text(first(sourceTable, ['datasourceId', 'datasource_id']))
+sourceCfg = readCfg(sourceDb)
+sourceColumns = firstHop ? rootSourceColumns : targetColumnsById[sourceTableId]
+sourceTableName = first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
+sourceTableLabel = text(first(sourceTable, ['tableNameCn', 'table_name_cn'])).trim()
+if (blank(sourceTableLabel)) { sourceTableLabel = text(sourceTableName).trim() }
+sourceDbType = first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
+sourceManifestKey = firstHop ? originalSourceManifestKey : normalizeSourceKey(sourceDbType, sourceCfg)
+sourceTemporalMappings = firstHop ? originalSourceTemporalMappings : {}
+sourceDictionaryRelations = firstHop ? originalDictionaryRelations : {}
+sourceColumnMap = {}
+for (sourceColumn in sourceColumns) { sourceColumnMap[text(colName(sourceColumn)).toLowerCase()] = sourceColumn }
+sourceNodeConfig = originalSourceNodeConfig
+if (!firstHop) {
+    sourceService = first(sourceCfg, ['serviceName', 'sid', 'database', 'dbName', 'dbMetaDbName'])
+    sourceSchema = first(sourceCfg, ['defaultSchema', 'schema', 'currentSchema', 'schemaName', 'owner', 'dbSchema'])
+        || first(sourceTable, ['schemaName', 'schema_name', 'owner', 'tableSchema', 'table_schema'])
+    sourceNodeConfig = {
+        dbType: normalizeConfigType(sourceDbType, sourceCfg), registeredDatasourceId: sourceDbId,
+        host: first(sourceCfg, ['host', 'dbMetaIp']), port: first(sourceCfg, ['port', 'dbMetaPort']),
+        database: sourceService, sid: sourceService, serviceName: sourceService,
+        connectionType: text(first(sourceCfg, ['connectionType', 'jdbcType'])).toUpperCase() == 'SID' ? 'SID' : 'SERVICE_NAME',
+        jdbcUrl: jdbcUrl(sourceDbType, sourceCfg, sourceDb), defaultSchema: sourceSchema, schema: sourceSchema,
+        username: first(sourceCfg, ['username', 'dbMetaUser']), password: first(sourceCfg, ['password', 'dbMetaPassword']),
+        sourceDbId: sourceDbId, sourceDbName: first(sourceDb, ['dbName', 'db_name']),
+        sourceTableId: sourceTableId, sourceTableName: sourceTableName, table: sourceTableName,
+        sourceColumns: columnList(sourceColumns), incrementalColumn: firstPk(sourceColumns),
+        schedulingPeriod: '60 sec', syncMode: 'FULL_THEN_INCR', initialStrategy: 'START_AT_BEGINNING',
+        lookbackSeconds: 5, safetyLagSeconds: 1, batchSize: 5000, maxRowsPerRun: 200000,
+        softDeleteEnabled: false, deleteReconcileStrategy: 'NONE'
+    }
+    if (isServerManagedHuaweiMrsHive(sourceDbType, sourceCfg)) {
+        sourceNodeConfig.hiveProfile = first(sourceCfg, ['hiveProfile', 'hive_profile']) || 'default'
+        sourceNodeConfig.metadataAccessMode = 'server-managed-mrs'
+        sourceNodeConfig.hiveConnectionMode = 'huawei-mrs'
+        sourceNodeConfig.remove('jdbcUrl'); sourceNodeConfig.remove('username'); sourceNodeConfig.remove('password')
+    } else {
+        for (connectionKey in sourceCfg.keySet()) { if (sourceNodeConfig[connectionKey] == null) { sourceNodeConfig[connectionKey] = sourceCfg[connectionKey] } }
+    }
+    if (sourceManifestKey == 'source.oceanbase') {
+        sourceNodeConfig.compatibleMode = normalizeConfigType(sourceDbType, sourceCfg) == 'OCEANBASE_ORACLE' ? 'ORACLE' : 'MYSQL'
+    }
+    // 下游沿用汇聚库生成的ODS主键和时间，增量以更新时间游标读取。
+    for (column in sourceColumns) {
+        if (text(colName(column)).toUpperCase() == 'ODS_GXSJ') { sourceNodeConfig.incrementalColumn = colName(column) }
+    }
+}
+
+var targetTableId = text(targetTable.tid)
+var targetDbId = text(first(targetTable, ['datasourceId', 'datasource_id']))
+var targetDb = targetDatasourceById[targetDbId]
+var targetCfg = readCfg(targetDb)
+var targetDbType = first(targetDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
+var targetTableName = first(targetTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
+var targetColumns = targetColumnsById[targetTableId]
+var taskId = IdUtil.getSnowflakeNextIdStr()
+var pipelineId = IdUtil.getSnowflakeNextIdStr()
+var targetDbLabel = text(first(targetDb, ['dbName', 'db_name'])).trim()
+if (blank(targetDbLabel)) { targetDbLabel = targetDbId }
+var taskName = sourceTableLabel + '接入任务 → ' + targetDbLabel + ' / ' + targetTableName
+if (taskName.length() > 200) { taskName = taskName.substring(0, 200) }
+// A valid explicit target binding is preferred.  Imported metadata may carry
+// an incomplete binding array though, so ensure every registered dictionary or
+// mandatory-standard source has its materialized <source>_cn output column.
+var missingTranslationColumns = []
+for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
+    var sourceName = text(colName(sourceColumn))
+    var relation = sourceDictionaryRelations[sourceName.toLowerCase()]
+    var translationName = relation == null ? '' : relation.sourceName + '_cn'
+    var targetColumnNames = {}
+    for (targetColumn in (targetColumns == null ? [] : targetColumns)) {
+        targetColumnNames[text(colName(targetColumn)).toLowerCase()] = true
+    }
+    if (relation != null && targetColumnNames[translationName.toLowerCase()] == null) {
+        missingTranslationColumns.add({
+            columnName: translationName,
+            sourceColumn: sourceColumn
+        })
+    }
+}
+if (missingTranslationColumns.size() > 0) {
+    exit 409, '目标表「' + targetTableName + '」缺少字典翻译字段，请先重新物化建表；未创建或替换任务'
+}
+// This target-specific binding is authoritative for field enhancement.  It is
+// resolved after any legacy metadata refresh so the canvas sees final columns.
+var targetFieldBindings = firstHop ? targetFieldTransformBindings(sourceTable, targetTable, targetColumns) : []
+var targetBindingByField = {}
+for (targetFieldBinding in targetFieldBindings) {
+    targetBindingByField[text(targetFieldBinding.targetField).toLowerCase()] = targetFieldBinding
+}
+var sourceColumnsForNifi = columnList(sourceColumns)
+var targetColumnsForNifi = columnList(targetColumns)
+var primarySourceKeys = []
+var primaryTargetKeys = []
+for (targetColumn in (targetColumns == null ? [] : targetColumns)) {
+    var targetName = text(colName(targetColumn))
+    var sourceColumn = sourceColumnMap[targetName.toLowerCase()]
+    if (sourceColumn == null) {
+        var sourceColumnId = text(first(targetColumn, ['sourceTableColumnId', 'source_table_column_id']))
+        if (!blank(sourceColumnId)) {
+            for (candidateSource in (sourceColumns == null ? [] : sourceColumns)) {
+                if (text(candidateSource.tid) == sourceColumnId) {
+                    sourceColumn = candidateSource
+                    break
+                }
+            }
+        }
+    }
+    if (sourceColumn != null && (firstHop ? isStableBusinessKey(sourceColumn) : declaredKey(sourceColumn))
+        && (firstHop ? isStableBusinessKey(targetColumn) : declaredKey(targetColumn))) {
+        primarySourceKeys.add(colName(sourceColumn))
+        primaryTargetKeys.add(targetName)
+    }
+}
+var sourcePrimaryKeys = primarySourceKeys.join(',')
+var targetPrimaryKeys = primaryTargetKeys.join(',')
+var canUpsert = !blank(sourcePrimaryKeys) && !blank(targetPrimaryKeys)
+
+// 每个独立任务生成来源、自己的字段映射和唯一目标节点。
+var sourceNodeId = 'source-' + sourceTableId
+var mapNodeId = 'map-' + taskId
 var dslNodes = [
     {
         id: sourceNodeId,
@@ -1482,13 +1506,13 @@ var dslNodes = [
             targetTableId: targetTableId,
             executionMode: 'AUTO',
             mappings: mappingDsl(sourceColumns, targetColumns, sourceTable, dictionaryLookupSources,
-                targetFieldBindings, { datasourceId: sourceDbId, dbType: sourceDbType })
+                targetFieldBindings, { datasourceId: sourceDbId, dbType: sourceDbType }, sourceTemporalMappings, !firstHop)
         }
     }
 ]
 var dslEdges = [{ id: 'edge-source-map', source: sourceNodeId, target: mapNodeId, outlet: null }]
 var targetSummaries = []
-for (targetIndex, targetCandidate in targetTables) {
+for (targetIndex, targetCandidate in [targetTable]) {
     var candidateTargetId = text(first(targetCandidate, ['tid']))
     var candidateTargetDbId = text(first(targetCandidate, ['datasourceId', 'datasource_id']))
     var candidateTargetDb = targetDatasourceById[candidateTargetDbId]
@@ -1505,7 +1529,7 @@ for (targetIndex, targetCandidate in targetTables) {
         // 写入幂等性由目标表的业务主键/唯一键决定。来源表的登记元数据
         // 可能尚未标记 primaryKey（例如历史探查数据），但只要该目标键已有
         // 对应的来源字段映射，就可以安全地作为 UPSERT 键，不能退回 INSERT。
-        if (matchingSourceColumn != null && isStableBusinessKey(candidateTargetColumn)) {
+        if (matchingSourceColumn != null && (firstHop ? isStableBusinessKey(candidateTargetColumn) : declaredKey(candidateTargetColumn))) {
             candidateTargetKeys.add(candidateTargetName)
         }
     }
@@ -1577,12 +1601,12 @@ for (targetIndex, targetCandidate in targetTables) {
         targetDbType: candidateTargetDbType
     })
 }
-var dsl = { version: 1, nodes: dslNodes, edges: dslEdges }
-db.table('nifi_pipeline_t').primary('id').insert({
+var dsl = { version: 1, nodes: dslNodes, edges: dslEdges, accessChain: {rootSourceTableId: rootSourceTableId, targetTableIds: targetTableIds} }
+pipelineRows.add({
     id: pipelineId,
     tenant_id: tenantId,
     name: taskName,
-    description: '由数据接入页面按来源表自动创建',
+    description: '由数据接入页面按来源表和目标表创建独立任务',
     status: 'SAVED',
     dsl_json: jsons.toJSONStr(dsl),
     dsl_version: 1,
@@ -1591,14 +1615,14 @@ db.table('nifi_pipeline_t').primary('id').insert({
     is_del: 0
 })
 
-db.table('data_access_agg_task_t').primary('tid').insert({
+taskRows.add({
     tid: taskId,
     tenant_id: tenantId,
     data_catalog_id: catalogId,
     task_name: taskName,
     task_type_name: '数据表接入',
     task_type_id: 'table_access',
-    task_desc: '来源表自动创建接入任务',
+    task_desc: '来源表到单个目标表的独立接入任务',
     source_db_id: sourceDbId,
     source_table_id: sourceTableId,
     source_table_primary_key: sourcePrimaryKeys,
@@ -1617,7 +1641,7 @@ db.table('data_access_agg_task_t').primary('tid').insert({
 var mappings = []
 for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) {
     var targetName = text(colName(targetColumn))
-    var systemMapping = odsSystemMapping(targetName)
+    var systemMapping = firstHop ? odsSystemMapping(targetName) : null
     if (systemMapping != null) {
         mappings.add({
             tid: IdUtil.getSnowflakeNextIdStr(),
@@ -1694,11 +1718,6 @@ for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) 
             if (dictionaryConditions.size() > 0) {
                 dictionaryLookupSql = dictionaryLookupSql + ' AND ' + dictionaryConditions.join(' AND ')
             }
-            if (dictionaryRelation.multiValue) {
-                dictionaryLookupSql = mysqlMultiValueLookupSql(targetName, dictionaryDatasource.config.dbType,
-                    mysqlDictionaryRows(dictionaryRelation, dictionaryName),
-                    dictionaryRelation.multiValueSeparator)
-            }
             mappings.add({
                 tid: IdUtil.getSnowflakeNextIdStr(),
                 task_id: taskId,
@@ -1723,7 +1742,7 @@ for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) 
                     ? jsons.toJSONStr({ ruleKind: 'DICTIONARY', table: dictionaryRelation.dictionaryTable,
                         keyField: dictionaryRelation.dictionaryKeyField,
                         labelField: dictionaryRelation.dictionaryLabelField,
-                        sql: dictionaryLookupSql, multiValue: true,
+                        query: multiDictionaryQuery(dictionaryRelation, dictionaryName), multiValue: true,
                         multiValueSeparator: dictionaryRelation.multiValueSeparator,
                         dataSource: { datasourceId: dictionaryDatasource.config.datasourceId,
                             dbType: dictionaryDatasource.config.dbType } })
@@ -1760,31 +1779,49 @@ for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) 
         target_field_length: first(targetColumn, ['length']),
         target_data_type: first(targetColumn, ['dataType', 'data_type']),
         dict_enable: 0,
-        func_enable: 0,
+        func_enable: blank(sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()]) ? 0 : 1,
+        func_code: blank(sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()]) ? null : 'EXPRESSION',
+        func_value: sourceTemporalMappings[text(colName(sourceColumn)).toLowerCase()],
         sort_no: targetIndex,
         is_del: 0,
         created_time: now,
         updated_time: now
     })
 }
-if (mappings.size() > 0) {
-    for (mapping in mappings) { mapping.tenant_id = tenantId }
-    db.table('data_access_field_mapping').batchInsert(mappings)
+for (mapping in mappings) { mapping.tenant_id = tenantId; allMappings.add(mapping) }
+for (summary in targetSummaries) { allTargetSummaries.add(summary) }
 }
-
-var task = db.table('data_access_agg_task_t').where()
-    .eq('tenant_id', tenantId)
-    .eq('tid', taskId)
-    .eq('is_del', 0)
-    .selectOne()
-return {
-    created: true,
-    taskId: taskId,
-    pipelineId: pipelineId,
-    catalogId: catalogId,
-    sourceTableId: sourceTableId,
-    targetTableId: targetTableId,
-    targetTableIds: targetTableIds,
-    targetTables: targetSummaries,
-    task: task
+if (!dryRun) {
+    if (retireTaskIds.size() > 0) {
+        db.table('data_access_field_mapping').where().eq('tenant_id', tenantId).in('task_id', retireTaskIds).eq('is_del', 0)
+            .update({is_del: 1, updated_time: now})
+        db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId).in('tid', retireTaskIds).eq('is_del', 0)
+            .update({is_del: 1, updated_time: now})
+    }
+    if (retirePipelineIds.size() > 0) {
+        db.table('nifi_pipeline_t').where().eq('tenant_id', tenantId).in('id', retirePipelineIds).eq('is_del', 0)
+            .update({is_del: 1, updated_at: nowMs})
+    }
+    db.table('nifi_pipeline_t').batchInsert(pipelineRows)
+    db.table('data_access_agg_task_t').batchInsert(taskRows)
+    if (allMappings.size() > 0) { db.table('data_access_field_mapping').batchInsert(allMappings) }
 }
+var results = []
+for (target in targetTables) {
+    var targetId = text(target.tid)
+    var reused = existingTaskByTarget[targetId]
+    if (!forceRebuild && reused != null) { results.add(reused); continue }
+    for (taskRow in taskRows) {
+        if (text(taskRow.target_table_id) == targetId) {
+            results.add({tid: taskRow.tid, taskName: taskRow.task_name, pipelineId: taskRow.pipeline_id,
+                sourceTableId: taskRow.source_table_id, rootSourceTableId: rootSourceTableId, targetTableId: targetId, targetDbId: taskRow.target_db_id,
+                repairRequired: false, repairReasons: []})
+            break
+        }
+    }
+}
+var response = responseOf(results, taskRows.size(), allTargetSummaries)
+response.plannedCreateCount = taskRows.size()
+if (dryRun) { response.created = false; response.createdCount = 0 }
+return response
+})

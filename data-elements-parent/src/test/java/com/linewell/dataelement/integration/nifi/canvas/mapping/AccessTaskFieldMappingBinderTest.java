@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -110,8 +111,9 @@ class AccessTaskFieldMappingBinderTest {
         JsonNode spec = mappingsSpec(new AccessTaskFieldMappingBinder(tasks, mappings).bind(pipeline));
         JsonNode lookup = mapping(spec, "/gender_code_cn").path("lookup");
         assertTrue(lookup.path("multiValue").asBoolean());
-        assertTrue(lookup.path("sql").asText().contains("JSON_TABLE"));
-        assertEquals("source-1", lookup.path("dataSource").path("datasourceId").asText());
+        assertEquals("未知", lookup.path("values").path("U").asText());
+        assertFalse(lookup.has("sql"));
+        assertFalse(lookup.has("dataSource"));
     }
 
     @Test

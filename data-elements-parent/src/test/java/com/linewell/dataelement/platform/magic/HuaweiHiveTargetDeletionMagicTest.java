@@ -388,6 +388,29 @@ class HuaweiHiveTargetDeletionMagicTest {
                 "target-" + count, "police", "target-db", "ods_person_" + count, "source-1");
     }
 
+    @Test
+    void independentTaskCancellationAndDeletionPreserveOtherTasks() throws Exception {
+        jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) "
+                + "values('target-2','police','target-db','ods_other','source-1',0)");
+        jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) "
+                + "values('task-2','police','source-1','target-2','target-db',0)");
+        Map<?,?> preview=assertInstanceOf(Map.class,run(Map.of("sourceTableId","source-1","taskId","task-2","dryRun",true)));
+        assertEquals(1,preview.get("taskCount"));
+        run(Map.of("sourceTableId","source-1","taskId","task-2"));
+        assertEquals(0,jdbc.queryForObject("select is_del from data_access_agg_task_t where tid='task-1'",Integer.class));
+        assertEquals(1,jdbc.queryForObject("select is_del from data_access_agg_task_t where tid='task-2'",Integer.class));
+        assertInstanceOf(ExitValue.class,run(Map.of("sourceTableId","source-1","taskId","foreign-task","dryRun",true)));
+    }
+
+    @Test
+    void activeDownstreamTaskBlocksDeletingItsSourceTableBeforePhysicalProbe() throws Exception {
+        jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) "
+                + "values('task-2','police','target-1','target-2','target-db',0)");
+        assertInstanceOf(ExitValue.class,run(request()));
+        assertLifecycleIntact();
+        verifyNoInteractions(hive,explorer);
+    }
+
     private void prepareUnlinkedTargetWithAnotherActiveTask() {
         jdbc.update("update db_table_t set source_table_id=null where tid='target-1'");
         jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) "

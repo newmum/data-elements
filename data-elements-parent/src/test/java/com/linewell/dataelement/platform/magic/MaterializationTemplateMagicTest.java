@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.magicapi.core.context.RequestEntity;
@@ -32,6 +34,86 @@ import org.ssssssss.script.runtime.ExitValue;
 /** The template must stay local-first, bounded and scoped to the current role. */
 class MaterializationTemplateMagicTest {
     private static final String SOURCE_ID = "f93a8e653ac6413e89660f5d77d45769";
+
+    @ParameterizedTest
+    @CsvSource({"mysql,datetime", "oceanbasemysql,datetime", "oceanbaseoracle,date", "oracle,date",
+            "dameng,date", "postgresql,timestamp", "kingbase8,timestamp", "hive,timestamp",
+            "gaussdb,timestamp", "highgo,timestamp", "tdsql_pg,timestamp", "vastbase,timestamp", "sqlserver,datetime2"})
+    void registeredTemporalFormatsOverrideVarcharOnlyOnTheTarget(String dialect, String timeType) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.execute("alter table db_table_column_t add data_standard_id varchar(64)");
+        fixture.jdbc.execute("alter table db_table_column_t add default_value varchar(64)");
+        fixture.jdbc.update("update db_datasource_t set db_type=? where tid='targetdb-0'", dialect);
+        for (String format : List.of("DATE", "DATETIME")) {
+            fixture.jdbc.update("update db_table_column_t set data_standard_id=?,default_value='not-a-date' where tid='col-1'", format);
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+            Map<?, ?> item = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
+            assertEquals(format.equals("DATE") ? "date" : timeType, item.get("dataType"));
+            assertEquals(item.get("dataType"), item.get("columnType"));
+            assertEquals(format, item.get("standardField"));
+            assertEquals("varchar", item.get("sourceDataType"));
+            assertEquals("varchar(32)", item.get("sourceColumnType"));
+            assertEquals(0, ((Number) item.get("length")).intValue());
+            assertNull(item.get("defaultValue"));
+            assertEquals(0, fixture.explorer.calls);
+        }
+    }
+
+    @Test
+    void savedGovernanceFallbackAndExplicitClearAreRespected() throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.execute("alter table db_table_column_t add data_standard_id varchar(64)");
+        fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'",
+                "{\"fields\":[{\"columnName\":\"person_id\",\"standardField\":\"DATE\"}]}");
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        assertEquals("date", ((Map<?, ?>) ((List<?>) response.get("tableItems")).getFirst()).get("dataType"));
+        fixture.jdbc.update("update db_table_column_t set data_standard_id='DATETIME' where tid='col-1'");
+        fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'",
+                "{\"fields\":[{\"columnName\":\"person_id\",\"standardField\":\"DATE\",\"standardFieldExplicitlyCleared\":true}]}");
+        response = assertInstanceOf(Map.class, fixture.run(false));
+        assertEquals("varchar", ((Map<?, ?>) ((List<?>) response.get("tableItems")).getFirst()).get("dataType"));
+        fixture.jdbc.update("update db_table_t set field_governance_config=null where tid='source-1'");
+        fixture.jdbc.update("update db_table_column_t set data_standard_id='LXDH' where tid='col-1'");
+        response = assertInstanceOf(Map.class, fixture.run(false));
+        assertEquals("varchar", ((Map<?, ?>) ((List<?>) response.get("tableItems")).getFirst()).get("dataType"));
+    }
+
+    @Test
+    void temporalFormatReadsStayConstantForTwentyAndHundredFields() throws Exception {
+        List<Integer> reads = new ArrayList<>();
+        for (int count : List.of(20, 100)) {
+            Fixture fixture = new Fixture(1);
+            fixture.jdbc.execute("alter table db_table_column_t add data_standard_id varchar(64)");
+            fixture.jdbc.update("update db_table_column_t set data_standard_id='DATETIME'");
+            for (int i = 1; i < count; i++) fixture.jdbc.update("insert into db_table_column_t "
+                    + "(tid,tenant_id,table_id,column_name,data_type,column_type,length,nullable,is_del,data_standard_id) "
+                    + "values(?,'police','source-1',?,'varchar','varchar(100)',100,1,0,'DATE')", "col-" + (i + 1), "d_" + i);
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+            assertEquals(count + 3, ((List<?>) response.get("tableItems")).size());
+            reads.add(fixture.counter.queries);
+            assertEquals(0, fixture.explorer.calls);
+        }
+        assertEquals(reads.get(0), reads.get(1));
+        System.out.println("Temporal template 20/100 fields: SQL reads=" + reads);
+    }
+
+    @Test
+    void submissionNormalizesGovernedTypesBeforeDdlAndMetadataPersistence() throws Exception {
+        String canonical = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
+        String helpers = canonical.substring(canonical.indexOf("var text ="), canonical.indexOf("var upsertCatalogProp"))
+                + canonical.substring(canonical.indexOf("var materializationTimeType"), canonical.indexOf("var safeIdentifier"));
+        for (String dialect : List.of("oracle", "hive", "oceanbasemysql")) {
+            String expected = dialect.equals("oracle") ? "date" : dialect.equals("hive") ? "timestamp" : "datetime";
+            List<?> rows = assertInstanceOf(List.class, MagicScript.create(helpers
+                    + "return ensureOdsSystemColumns([{columnName:'event_time',standardField:'DATETIME',dataType:'varchar',length:200,defaultValue:''},"
+                    + "{columnName:'event_date',standardField:'DATE',dataType:'varchar',length:32}], dialect)", null)
+                    .execute(new MagicScriptContext(Map.of("dialect", dialect))));
+            assertEquals(expected, ((Map<?, ?>) rows.get(0)).get("dataType"));
+            assertEquals("date", ((Map<?, ?>) rows.get(1)).get("dataType"));
+            assertNull(((Map<?, ?>) rows.get(0)).get("defaultValue"));
+            assertEquals(expected, ((Map<?, ?>) rows.get(3)).get("dataType"));
+        }
+    }
 
     @Test
     void qualifiedSourceKeepsItsReadIdentityAndOnlyPrefixesTheTargetLeaf() throws Exception {

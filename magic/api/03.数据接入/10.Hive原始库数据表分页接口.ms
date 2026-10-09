@@ -20,6 +20,7 @@
 // 业务说明：Hive原始库数据表分页（POST /ods/hiveTargetPage）。只读；以OB阶段已物化的目标表为Hive新来源表，只关联Hive阶段新建的任务和目标表；使用请求参数 pageNum、pageSize、keyword、accessStatus、datasourceIds、datasourceId；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
 // Hive 原始库数据表分页：只读。OB 物化目标表在此阶段成为来源表，只返回第二阶段任务与目标表。
 import tenantRuntime
+import dataScope
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => text(value).trim() == ''
@@ -69,7 +70,8 @@ if (sourceIds.size() > 0) {
 var datasourceMap = {}
 if (datasourceIds.size() > 0) {
   var datasourceRows = db.table('db_datasource_t').where().in('tid', datasourceIds).eq('tenant_id', tenantId).eq('is_del', 0).select()
-  for (datasource in (datasourceRows == null ? [] : datasourceRows)) { datasourceMap[text(datasource.tid)] = datasource }
+  var visibleRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', datasourceRows == null ? [] : datasourceRows)
+  for (datasource in visibleRows) { datasourceMap[text(datasource.tid)] = datasource }
 }
 var sourceDatasourceIds = []
 for (sourceId in sourceIds) {
@@ -82,7 +84,8 @@ for (sourceId in sourceIds) {
 var sourceDatasourceMap = {}
 if (sourceDatasourceIds.size() > 0) {
   var sourceDatasourceRows = db.table('db_datasource_t').where().in('tid', sourceDatasourceIds).eq('tenant_id', tenantId).eq('is_del', 0).select()
-  for (sourceDatasource in (sourceDatasourceRows == null ? [] : sourceDatasourceRows)) { sourceDatasourceMap[text(sourceDatasource.tid)] = sourceDatasource }
+  var visibleRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', sourceDatasourceRows == null ? [] : sourceDatasourceRows)
+  for (sourceDatasource in visibleRows) { sourceDatasourceMap[text(sourceDatasource.tid)] = sourceDatasource }
 }
 
 // Hive 阶段任务以“OB 目标表”为 source_table_id；不能按 target_table_id 查询，否则会继承 OB 阶段任务。
@@ -114,10 +117,36 @@ if (targetIds.size() > 0) {
     if (!blank(nextDatasourceId) && !nextTargetDatasourceIds.contains(nextDatasourceId)) { nextTargetDatasourceIds.add(nextDatasourceId) }
   }
 }
+// 级联任务以真实上一跳表为来源；目标物化登记仍保留原来源事实关联，按任务目标ID一次补齐。
+var chainedTargetIds = []
+for (sourceId in tasksBySource.keySet()) {
+  for (task in tasksBySource[sourceId]) {
+    var id = text(task.targetTableId || task.target_table_id)
+    if (!blank(id) && !chainedTargetIds.contains(id)) { chainedTargetIds.add(id) }
+  }
+}
+var chainedTargets = chainedTargetIds.size() == 0 ? [] : db.table('db_table_t').where()
+  .eq('tenant_id', tenantId).in('tid', chainedTargetIds).eq('is_del', 0).select()
+var chainedTargetById = {}
+for (target in chainedTargets) { chainedTargetById[text(target.tid)] = target }
+for (sourceId in tasksBySource.keySet()) {
+  if (nextTargetsBySource[sourceId] == null) { nextTargetsBySource[sourceId] = [] }
+  var ownIds = []
+  for (target in nextTargetsBySource[sourceId]) { ownIds.add(text(target.tid)) }
+  for (task in tasksBySource[sourceId]) {
+    var id = text(task.targetTableId || task.target_table_id)
+    var target = chainedTargetById[id]
+    if (target == null || ownIds.contains(id)) { continue }
+    ownIds.add(id); nextTargetsBySource[sourceId].add(target)
+    var dbId = text(target.datasourceId || target.datasource_id)
+    if (!nextTargetDatasourceIds.contains(dbId)) { nextTargetDatasourceIds.add(dbId) }
+  }
+}
 var nextTargetDatasourceMap = {}
 if (nextTargetDatasourceIds.size() > 0) {
   var nextDatasourceRows = db.table('db_datasource_t').where().in('tid', nextTargetDatasourceIds).eq('tenant_id', tenantId).eq('is_del', 0).select()
-  for (nextDatasource in (nextDatasourceRows == null ? [] : nextDatasourceRows)) { nextTargetDatasourceMap[text(nextDatasource.tid)] = nextDatasource }
+  var visibleRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', nextDatasourceRows == null ? [] : nextDatasourceRows)
+  for (nextDatasource in visibleRows) { nextTargetDatasourceMap[text(nextDatasource.tid)] = nextDatasource }
 }
 
 var candidates = []
@@ -130,6 +159,7 @@ for (target in targetRows) {
   // 只有来源记录和目标库均存在，才能证明它是可追溯的物化产物。
   if (source == null || datasource == null) { continue }
   var originalDatasourceId = text(source.datasourceId || source.datasource_id)
+  if (sourceDatasourceMap[originalDatasourceId] == null) { continue }
   if (requestedDatasourceIds.size() > 0 && !requestedDatasourceIds.contains(originalDatasourceId)) { continue }
   var displayName = text(first(target, ['tableNameCn','table_name_cn','tableComment','table_comment','tableName','table_name']))
   var physicalName = text(first(target, ['tableName','table_name','tableNameEn','table_name_en']))
@@ -143,6 +173,7 @@ for (target in targetRows) {
   for (nextTarget in nextTargetRows) {
     var nextDatasourceId = text(nextTarget.datasourceId || nextTarget.datasource_id)
     var nextDatasource = nextTargetDatasourceMap[nextDatasourceId]
+    if (nextDatasource == null) { continue }
     targetTables.add({
       targetTableId: text(nextTarget.tid), targetTableName: first(nextTarget, ['tableName','table_name','tableNameEn','table_name_en']),
       targetDbId: nextDatasourceId, targetDbName: nextDatasource == null ? nextDatasourceId : (nextDatasource.dbName || nextDatasource.db_name),
@@ -161,6 +192,8 @@ for (target in targetRows) {
       if (taskItem.targetTableId == targetTable.targetTableId) {
         taskItem.targetTableName = targetTable.targetTableName; taskItem.targetDbId = targetTable.targetDbId
         taskItem.targetDbName = targetTable.targetDbName; taskItem.targetDbType = targetTable.targetDbType
+        taskItem.targetTables = [targetTable]
+        taskItem.sourceDbName = datasource.dbName || datasource.db_name
       }
     }
   }

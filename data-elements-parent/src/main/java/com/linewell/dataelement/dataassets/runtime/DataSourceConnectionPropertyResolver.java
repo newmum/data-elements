@@ -2,11 +2,16 @@ package com.linewell.dataelement.dataassets.runtime;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Reads a datasource connection from its authoritative {@code db_datasource_t} record.
@@ -21,10 +26,40 @@ public class DataSourceConnectionPropertyResolver {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final DataScopeAuthorizationService scopes;
 
     public DataSourceConnectionPropertyResolver(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+        this(jdbcTemplate, objectMapper, null);
+    }
+
+    @Autowired
+    public DataSourceConnectionPropertyResolver(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper,
+                                                DataScopeAuthorizationService scopes) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.scopes = scopes;
+    }
+
+    /** One tenant-scoped read, one role-scope decision and an explicit check of every ID. */
+    public Map<String, Map<String, Object>> resolveBatch(String tenantId, Collection<String> datasourceIds, String resource) {
+        if (blank(tenantId)) throw new IllegalStateException("缺少当前租户上下文");
+        var ids = new LinkedHashSet<>(datasourceIds == null ? List.<String>of() : datasourceIds);
+        ids.removeIf(this::blank);
+        if (ids.isEmpty()) return Map.of();
+        if (ids.size() > 200) throw new IllegalArgumentException("单次最多解析200个字典数据源");
+        var parameters = new java.util.ArrayList<Object>(ids);
+        parameters.add(tenantId);
+        String sql = "SELECT * FROM db_datasource_t WHERE tid IN ("
+                + String.join(",", Collections.nCopies(ids.size(), "?")) + ") AND tenant_id = ? AND is_del = 0";
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, parameters.toArray());
+        if (scopes == null) throw new IllegalStateException("字典数据源权限校验服务未配置");
+        rows = scopes.visibleDataSources(resource, rows);
+        Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) result.put(String.valueOf(row.get("tid")), connectionValues(row));
+        for (String id : ids) {
+            if (!result.containsKey(id)) throw new IllegalStateException("字典数据源不存在或无访问权限");
+        }
+        return result;
     }
 
     /** Returns a normalized connection map for one datasource in the active tenant database. */
@@ -42,7 +77,11 @@ public class DataSourceConnectionPropertyResolver {
             return new LinkedHashMap<>();
         }
         Map<String, Object> datasource = rows.getFirst();
-        Map<String, Object> values = readPoolConfig(datasource.get("pool_cfg"), datasourceId);
+        return connectionValues(datasource);
+    }
+
+    private Map<String, Object> connectionValues(Map<String, Object> datasource) {
+        Map<String, Object> values = readPoolConfig(datasource.get("pool_cfg"), String.valueOf(datasource.get("tid")));
         copyMasterValue(values, "dbType", datasource.get("db_type"));
         copyMasterValue(values, "jdbcURL", datasource.get("jdbc_url"));
         copyMasterValue(values, "username", datasource.get("username"));

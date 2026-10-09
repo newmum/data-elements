@@ -527,11 +527,12 @@ var normalizeNullable = (value) => {
 }
 var materializationTimeType = (dbType) => {
     var code = text(dbType).trim().toLowerCase()
-    if (code.indexOf('oceanbase') >= 0 || code == 'oracle' || code == 'dameng' || code == 'dm') {
+    if (code == 'oceanbaseoracle' || code == 'oceanbase_oracle' || code == 'oracle' || code == 'dameng' || code == 'dm') {
         return 'date'
     }
     if (code == 'postgresql' || code == 'postgres' || code == 'kingbase' || code == 'kingbase8'
         || code == 'gaussdb' || code == 'opengauss' || code == 'gauss'
+        || code == 'highgo' || code == 'vastbase' || code == 'hailiang' || code == 'tdsql_pg' || code == 'tdsql-pg'
         || code == 'vertica' || code == 'hetu' || code == 'trino' || code == 'presto'
         || code == 'hive') {
         return 'timestamp'
@@ -624,6 +625,7 @@ var appendOdsSystemColumns = (items, dbType) => {
 // 第四步登记的字段治理快照是用户确认后的主键口径。物理探查列可能没有
 // primary_key 标记，因此建表模板必须优先合并该快照，不能把 ODS_UUID 当作默认主键。
 var registeredPrimaryKeys = {}
+var registeredFormats = {}
 var sourceGovernanceConfig = governanceConfigOf(sourceTable)
 var registeredFields = sourceGovernanceConfig.fields
 for (registeredField in (registeredFields == null ? [] : registeredFields)) {
@@ -631,6 +633,7 @@ for (registeredField in (registeredFields == null ? [] : registeredFields)) {
     if (!blank(registeredColumnName) && isPrimaryKey(first(registeredField, ['primaryKey', 'primary_key', 'isPrimaryKey', 'is_primary_key']))) {
         registeredPrimaryKeys[registeredColumnName] = true
     }
+    if (!blank(registeredColumnName)) { registeredFormats[registeredColumnName] = registeredField }
 }
 
 var sourceTableName = text(first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])).trim()
@@ -686,12 +689,19 @@ for (col in (columns == null ? [] : columns)) {
         exit 409, '来源字段快照不完整，请先重新采集来源表字段'
     }
     var targetType = mapDataType(sourceType, columnType, sourceLength)
+    var registeredField = registeredFormats[text(columnName).trim().toLowerCase()]
+    var explicitlyCleared = registeredField != null && isPrimaryKey(registeredField.standardFieldExplicitlyCleared)
+    var standardField = explicitlyCleared ? '' : text(first(col, ['dataStandardId', 'data_standard_id'])).trim().toUpperCase()
+    if (!explicitlyCleared && blank(standardField) && registeredField != null) {
+        standardField = text(registeredField.standardField).trim().toUpperCase()
+    }
     tableItems.add({
         sourceColumnId: first(col, ['tid']),
         columnName: columnName,
         columnComment: first(col, ['columnComment', 'column_comment']) || columnName,
         sourceDataType: sourceType,
         sourceColumnType: columnType,
+        standardField: standardField,
         dataType: targetType,
         columnType: targetType,
         length: normalizeLength(targetType, sourceLength, sourcePrecision),
@@ -795,6 +805,19 @@ var dbId = targetDatasource == null ? '' : text(first(targetDatasource, ['tid'])
 var dbName = targetDatasource == null ? '' : text(first(targetDatasource, ['dbName', 'db_name']))
 var nodeId = targetDatasource == null ? '' : text(first(targetDatasource, ['nodeId', 'node_id']))
 var dbType = targetDatasource == null ? '' : text(first(targetDatasource, ['dbType', 'db_type']))
+// 统一格式是目标 ODS 的类型约定，来源物理类型仍保留在 sourceDataType。
+// 只采用登记值，不通过字段名推断日期；字符型来源的默认值不能沿用到时间列。
+for (item in tableItems) {
+    if (item.standardField == 'DATE' || item.standardField == 'DATETIME') {
+        var timeType = item.standardField == 'DATE' ? 'date' : materializationTimeType(dbType)
+        item.dataType = timeType
+        item.columnType = timeType
+        item.length = 0
+        item.precisionLength = 0
+        item.scale = 0
+        item.defaultValue = null
+    }
+}
 tableItems = appendOdsSystemColumns(tableItems, dbType)
 
 return {

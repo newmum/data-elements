@@ -22,6 +22,7 @@
   "responseBodyDefinition" : null
 }
 ================================
+import cn.hutool.json.JSONUtil
 // 接口：04.数据汇聚分页接口
 // 路由：POST /ods/dataAggPage
 // 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；关系库限定已完成登记的数据源，数据表清单和详情读取 Elasticsearch dataassets 投影，接入任务按表 ID 从 data_access_agg_task_t 批量补充；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
@@ -395,45 +396,14 @@ if (viewLevel == 'table') {
         }
     }
 
-    // 接入任务是业务主数据，不在 dataassets 搜索投影中；按当前候选表一次性批量读取。
-    var taskGroups = {}
-    var targetTableIds = []
-    if (candidateIds.size() > 0) {
-        var candidateTasks = db.table('data_access_agg_task_t').where()
-            .in('source_table_id', candidateIds).eq('is_del', 0)
-            .orderBy('updated_time', 'desc').select()
-        for (candidateTask in (candidateTasks == null ? [] : candidateTasks)) {
-            var candidateSourceTableId = text(first(candidateTask, ['sourceTableId', 'source_table_id']))
-            if (blank(candidateSourceTableId)) {
-                continue
-            }
-            if (taskGroups[candidateSourceTableId] == null) {
-                taskGroups[candidateSourceTableId] = []
-            }
-            taskGroups[candidateSourceTableId].add(candidateTask)
-            var candidateTargetTableId = text(first(candidateTask, ['targetTableId', 'target_table_id']))
-            if (!blank(candidateTargetTableId)) {
-                targetTableIds.add(candidateTargetTableId)
-            }
-        }
-    }
-
-    var selectedTargetTableMap = {}
-    if (targetTableIds.size() > 0) {
-        var selectedTargetRows = db.table('db_table_t').where()
-            .in('tid', targetTableIds).eq('is_del', 0).select()
-        for (selectedTarget in (selectedTargetRows == null ? [] : selectedTargetRows)) {
-            selectedTargetTableMap[text(first(selectedTarget, ['tid']))] = selectedTarget
-        }
-    }
-
     // 新版接入入口以来源表为主：物化目标表会写 db_table_t.source_table_id。
     // 列表提前补齐“已物化但未建任务”的目标表，点击创建任务时可直接生成 NiFi 任务。
     var materializedTargetMap = {}
     var materializedTargetDatasourceIds = []
+    var materializedTargets = []
     if (candidateIds.size() > 0) {
-        var materializedTargets = db.table('db_table_t').where()
-            .in('source_table_id', candidateIds).eq('is_del', 0).select()
+        materializedTargets = db.table('db_table_t').where()
+            .eq('tenant_id', tenantId).in('source_table_id', candidateIds).eq('is_del', 0).select()
         for (materializedTarget in (materializedTargets == null ? [] : materializedTargets)) {
             var materializedSourceId = text(first(materializedTarget, ['sourceTableId', 'source_table_id']))
             var materializedTid = text(first(materializedTarget, ['tid']))
@@ -447,11 +417,75 @@ if (viewLevel == 'table') {
         }
     }
 
+    var chainSourceIds = []
+    for (candidateId in candidateIds) { chainSourceIds.add(candidateId) }
+    var chainRootBySource = {}
+    for (target in (materializedTargets == null ? [] : materializedTargets)) {
+        var id = text(target.tid)
+        if (!chainSourceIds.contains(id)) { chainSourceIds.add(id) }
+        chainRootBySource[id] = text(first(target, ['sourceTableId', 'source_table_id']))
+    }
+    var taskPipelineIds = []
+    // 接入任务是业务主数据，不在 dataassets 搜索投影中；按当前候选表一次性批量读取。
+    var taskGroups = {}
+    var targetTableIds = []
+    if (candidateIds.size() > 0) {
+        var candidateTasks = db.table('data_access_agg_task_t').where()
+            .eq('tenant_id', tenantId).in('source_table_id', chainSourceIds).eq('is_del', 0)
+            .orderBy('updated_time', 'desc').select()
+        for (candidateTask in (candidateTasks == null ? [] : candidateTasks)) {
+            var candidateSourceTableId = text(first(candidateTask, ['sourceTableId', 'source_table_id']))
+            if (blank(candidateSourceTableId)) {
+                continue
+            }
+            var groupSourceId = candidateIds.contains(candidateSourceTableId) ? candidateSourceTableId : chainRootBySource[candidateSourceTableId]
+            if (blank(groupSourceId)) { continue }
+            if (taskGroups[groupSourceId] == null) { taskGroups[groupSourceId] = [] }
+            taskGroups[groupSourceId].add(candidateTask)
+            var pipelineId = text(first(candidateTask, ['pipelineId', 'pipeline_id']))
+            if (!blank(pipelineId) && !taskPipelineIds.contains(pipelineId)) { taskPipelineIds.add(pipelineId) }
+            var candidateTargetTableId = text(first(candidateTask, ['targetTableId', 'target_table_id']))
+            if (!blank(candidateTargetTableId)) {
+                targetTableIds.add(candidateTargetTableId)
+            }
+        }
+    }
+
+    // 画布目标只用一次批量读取：历史多目标任务仍准确展示其目标，新任务仅一个。
+    var pipelineTargetIds = {}
+    var pipelineChainOrder = {}
+    var taskPipelines = taskPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').columns('id', 'dsl_json').where()
+        .eq('tenant_id', tenantId).in('id', taskPipelineIds).eq('is_del', 0).select()
+    for (pipeline in taskPipelines) {
+        var ids = []
+        var dsl = {}
+        try { dsl = JSONUtil.parseObj(text(first(pipeline, ['dslJson', 'dsl_json']))) } catch (ignored) {}
+        for (node in (dsl.nodes == null ? [] : dsl.nodes)) {
+            if (text(node.category).toLowerCase() == 'sink') {
+                var targetId = text(node.config?.targetTableId)
+                if (!blank(targetId) && !ids.contains(targetId)) { ids.add(targetId) }
+            }
+        }
+        pipelineTargetIds[text(pipeline.id)] = ids
+        var orderedTargets = dsl.accessChain?.targetTableIds
+        if (orderedTargets != null && ids.size() == 1) { pipelineChainOrder[text(pipeline.id)] = orderedTargets.indexOf(ids[0]) }
+    }
+    var selectedTargetTableMap = {}
+    if (targetTableIds.size() > 0) {
+        var selectedTargetRows = db.table('db_table_t').where()
+            .in('tid', targetTableIds).eq('is_del', 0).select()
+        for (selectedTarget in (selectedTargetRows == null ? [] : selectedTargetRows)) {
+            selectedTargetTableMap[text(first(selectedTarget, ['tid']))] = selectedTarget
+        }
+    }
+
     var materializedDatasourceMap = {}
     if (materializedTargetDatasourceIds.size() > 0) {
         var materializedDatasourceRows = db.table('db_datasource_t').where()
             .in('tid', materializedTargetDatasourceIds).eq('is_del', 0).select()
-        for (materializedDatasource in (materializedDatasourceRows == null ? [] : materializedDatasourceRows)) {
+        var visibleMaterializedDatasources = dataScope.visibleDataSourcesFor('MENU:2081000000000000002',
+            materializedDatasourceRows == null ? [] : materializedDatasourceRows)
+        for (materializedDatasource in visibleMaterializedDatasources) {
             materializedDatasourceMap[text(first(materializedDatasource, ['tid']))] = materializedDatasource
         }
     }
@@ -475,12 +509,15 @@ if (viewLevel == 'table') {
         var materializedTargetsForSource = materializedTargetMap[selectedTableId] == null ? [] : materializedTargetMap[selectedTableId]
         var targetTables = []
         for (materializedTarget in materializedTargetsForSource) {
-            targetTables.add(targetSummary(materializedTarget))
+            if (materializedDatasourceMap[text(first(materializedTarget, ['datasourceId', 'datasource_id']))] != null) {
+                targetTables.add(targetSummary(materializedTarget))
+            }
         }
         var tasks = []
         for (rawTask in rawTasks) {
             var taskTargetId = text(first(rawTask, ['targetTableId', 'target_table_id']))
             var taskTarget = selectedTargetTableMap[taskTargetId]
+            if (taskTarget == null || materializedDatasourceMap[text(first(taskTarget, ['datasourceId', 'datasource_id']))] == null) { continue }
             var currentStatus = text(first(rawTask, ['currentStatus', 'current_status', 'monitorStatus', 'monitor_status'])).toUpperCase()
             var taskStatus = text(first(rawTask, ['taskStatus', 'task_status']))
             var taskStatusText = taskStatus == '1' ? '运行中' : taskStatus == '2' ? '运行异常' : '未启用'
@@ -491,9 +528,25 @@ if (viewLevel == 'table') {
             } else if (currentStatus == 'STOPPED') {
                 taskStatusText = '已停止'
             }
+            var taskTargets = []
+            var taskPipelineId = text(first(rawTask, ['pipelineId', 'pipeline_id']))
+            var ownTargetIds = pipelineTargetIds[taskPipelineId]
+            if (ownTargetIds == null || ownTargetIds.size() == 0) { ownTargetIds = [taskTargetId] }
+            for (target in targetTables) { if (ownTargetIds.contains(target.targetTableId)) { taskTargets.add(target) } }
+            if (taskTargets.size() == 0 && taskTarget != null) { taskTargets.add(targetSummary(taskTarget)) }
+            var actualSourceId = text(first(rawTask, ['sourceTableId', 'source_table_id']))
+            var actualSourceTable = actualSourceId == selectedTableId ? tableCandidate : null
+            for (target in materializedTargetsForSource) { if (text(target.tid) == actualSourceId) { actualSourceTable = target; break } }
+            var actualSourceDbId = text(first(actualSourceTable, ['datasourceId', 'datasource_id']))
+            if (actualSourceId != selectedTableId && materializedDatasourceMap[actualSourceDbId] == null) { continue }
             tasks.add({
                 tid: text(first(rawTask, ['tid'])),
-                sourceTableId: selectedTableId,
+                sourceTableId: actualSourceId,
+                rootSourceTableId: selectedTableId,
+                sourceTableName: first(actualSourceTable, ['tableName', 'table_name']) || '',
+                sourceDbName: actualSourceId == selectedTableId ? selectedDatasourceNameMap[actualSourceDbId]
+                    : first(materializedDatasourceMap[actualSourceDbId], ['dbName', 'db_name']),
+                chainOrder: pipelineChainOrder[taskPipelineId] == null ? -1 : pipelineChainOrder[taskPipelineId],
                 taskName: first(rawTask, ['taskName', 'task_name']) || '未命名接入任务',
                 targetTableId: taskTargetId,
                 pipelineId: text(first(rawTask, ['pipelineId', 'pipeline_id'])),
@@ -510,10 +563,14 @@ if (viewLevel == 'table') {
                 monitorStatus: first(rawTask, ['monitorStatus', 'monitor_status']),
                 monitorMessage: first(rawTask, ['monitorMsg', 'monitor_msg']),
                 taskStatusText: taskStatusText,
-                targetTables: targetTables
+                targetDbId: taskTargets.size() == 0 ? '' : taskTargets[0].targetDbId,
+                targetDbName: taskTargets.size() == 0 ? '' : taskTargets[0].targetDbName,
+                targetDbType: taskTargets.size() == 0 ? '' : taskTargets[0].targetDbType,
+                targetTables: taskTargets
             })
         }
 
+        tasks = tasks.sort((left, right) => left.chainOrder >= 0 && right.chainOrder >= 0 ? left.chainOrder - right.chainOrder : 0)
         var hasTask = tasks.size() > 0
         var workflowRow = tableWorkflowMap[selectedTableId]
         // 只有已完成登记的表才会作为接入候选。

@@ -80,15 +80,16 @@ var upsertCatalogProp = (catalogId, name, value, now) => {
     }
 }
 // ODS ingestion timestamps must use the target database's native temporal type.
-// OceanBase explicitly uses DATE; Oracle/DM share the same date-time semantics,
+// OceanBase Oracle mode uses DATE; Oracle/DM share the same date-time semantics,
 // PostgreSQL-like engines and Hive use TIMESTAMP, and SQL Server uses DATETIME2.
 var materializationTimeType = (dbType) => {
     var code = text(dbType).trim().toLowerCase()
-    if (code.indexOf('oceanbase') >= 0 || code == 'oracle' || code == 'dameng' || code == 'dm') {
+    if (code == 'oceanbaseoracle' || code == 'oceanbase_oracle' || code == 'oracle' || code == 'dameng' || code == 'dm') {
         return 'date'
     }
     if (code == 'postgresql' || code == 'postgres' || code == 'kingbase' || code == 'kingbase8'
         || code == 'gaussdb' || code == 'opengauss' || code == 'gauss'
+        || code == 'highgo' || code == 'vastbase' || code == 'hailiang' || code == 'tdsql_pg' || code == 'tdsql-pg'
         || code == 'vertica' || code == 'hetu' || code == 'trino' || code == 'presto'
         || code == 'hive') {
         return 'timestamp'
@@ -164,6 +165,16 @@ var ensureOdsSystemColumns = (items, dbType) => {
         var key = text(item.columnName).toLowerCase()
         if (key == 'ods_uuid' || key == 'ods_rksj' || key == 'ods_gxsj') {
             continue
+        }
+        var format = text(item.standardField || item.dataStandardId).trim().toUpperCase()
+        if (format == 'DATE' || format == 'DATETIME') {
+            var timeType = format == 'DATE' ? 'date' : materializationTimeType(dbType)
+            item.dataType = timeType
+            item.columnType = timeType
+            item.length = 0
+            item.precisionLength = 0
+            item.scale = 0
+            item.defaultValue = null
         }
         // Preserve a source business primary key. ODS_UUID is an ingestion id and
         // must not replace it when the target needs to support MERGE/UPSERT.
