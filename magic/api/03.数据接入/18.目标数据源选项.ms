@@ -17,7 +17,7 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"options\": [\n    {\n      \"label\": \"贴源层 ODS\",\n      \"value\": \"ODS\",\n      \"children\": [\n        {\n          \"label\": \"原始库 / 示例数据源\",\n          \"value\": \"datasource-id\",\n          \"layerCode\": \"ODS\"\n        }\n      ]\n    }\n  ],\n  \"list\": []\n}",
-  "description": "目标数据源选项（POST /ods/targetDatasource/options）。只读接口；按当前租户的数据组织 dataSourceType 字典读取贴源层 ODS 及其分域，并通过分层分域配置的关联表返回每个分域已配置的目标数据源。用于数据接入物化建表弹框，不依赖 ES；涉及 sym_dict_t、dwm_center_layer_source_t、db_datasource_t 等业务表。",
+  "description": "目标数据源选项（POST /ods/targetDatasource/options）。只读接口；按当前租户的数据组织 dataSourceType 字典读取贴源层 ODS 及其分域，并通过分层分域配置的关联表返回每个分域已配置且在当前角色数据范围内的目标数据源。用于数据接入物化建表弹框，不依赖 ES；涉及 sym_dict_t、dwm_center_layer_source_t、db_datasource_t 等业务表。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -31,6 +31,7 @@
  * dwm_center_layer_source_t 中关联的目标数据源；不会混入普通数据源登记列表。
  */
 import tenantRuntime
+import dataScope
 
 var text = value => value == null ? '' : value + ''
 var blank = value => text(value).trim() == ''
@@ -108,8 +109,10 @@ var datasourceRows = db.table('db_datasource_t').where()
     .eq('is_del', 0)
     .eq('show_connect', 1)
     .select()
+var visibleDatasources = dataScope.visibleDataSourcesFor(
+    'MENU:2081000000000000002', datasourceRows == null ? [] : datasourceRows)
 var datasourceMap = {}
-for (datasource in (datasourceRows == null ? [] : datasourceRows)) {
+for (datasource in visibleDatasources) {
     datasourceMap[text(datasource.tid)] = datasource
 }
 

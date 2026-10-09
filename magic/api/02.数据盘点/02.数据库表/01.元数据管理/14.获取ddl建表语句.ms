@@ -28,7 +28,9 @@
 
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
+import cn.hutool.json.JSONUtil as poolJsons
 import tenantRuntime
+import dataScope
 import canvasTableDdl
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
@@ -37,6 +39,7 @@ import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
 import java.util.Map
+import java.util.List
 
 /*
  * 元数据管理 14：生成建表 DDL。
@@ -179,6 +182,119 @@ var dataSourceOf = (asset) => {
     dsConfig.setClientConfigDir(firstValue(asset, ['clientConfigDir', 'mrsClientConfigDir']))
     // 返回当前业务分支的标准结果。
     return dsConfig
+}
+
+// The materialization dialog generates DDL for several selected target
+// databases in one request. Read and authorize the whole bounded set first;
+// the dialect conversion below is CPU-only and does not query each datasource.
+if (body?.batchGenerate == true) {
+    if (body?.canvas != true) { exit 400, '批量生成建表语句仅支持画布物化流程' }
+    var tenantId = textOf(tenantRuntime.id())
+    if (blank(tenantId)) { exit 401, '登录状态已失效，请重新登录' }
+    var submittedTargets = body?.targets
+    if (!(submittedTargets instanceof List) || submittedTargets.size() < 1 || submittedTargets.size() > 20) {
+        exit 400, '一次最多为20个目标库生成建表语句'
+    }
+    var batchDbIds = []
+    for (submittedTarget in submittedTargets) {
+        var submittedProps = submittedTarget?.propList
+        var submittedItems = submittedTarget?.tableItems
+        var submittedDbId = textOf(submittedProps?.dbId)
+        if (blank(submittedDbId) || submittedDbId.length() > 64
+            || blank(submittedProps?.tableName) || !(submittedItems instanceof List)
+            || submittedItems.size() < 1 || submittedItems.size() > 500) {
+            exit 400, '批量建表语句包含无效目标库、表名或字段列表'
+        }
+        if (batchDbIds.contains(submittedDbId)) { exit 400, '批量建表语句包含重复目标库' }
+        batchDbIds.add(submittedDbId)
+    }
+    var registeredRows = db.table('db_datasource_t').where()
+        .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', batchDbIds).select()
+    var visibleRows = dataScope.visibleDataSourcesFor(
+        'MENU:2081000000000000002', registeredRows == null ? [] : registeredRows)
+    var registeredById = {}
+    for (registeredRow in visibleRows) {
+        registeredById[textOf(rowValue(registeredRow, ['tid']))] = registeredRow
+    }
+    for (batchDbId in batchDbIds) {
+        if (registeredById[batchDbId] == null) {
+            exit 403, '目标库不存在，或不在当前租户及角色数据范围内'
+        }
+    }
+    var batchTimeType = (databaseType) => {
+        var code = databaseType == null ? '' : textOf(databaseType.getCode()).trim().toLowerCase()
+        if (code.indexOf('oceanbase') >= 0 || code == 'oracle' || code == 'dameng') { return 'DATE' }
+        if (code == 'postgresql' || code == 'kingbase' || code == 'gaussdb'
+            || code == 'vertica' || code == 'hetu' || code == 'hive') { return 'TIMESTAMP' }
+        if (code == 'sqlserver') { return 'DATETIME2' }
+        return 'DATETIME'
+    }
+    var generated = []
+    for (submittedTarget in submittedTargets) {
+        var submittedProps = submittedTarget.propList
+        var submittedItems = submittedTarget.tableItems
+        var submittedDbId = textOf(submittedProps.dbId)
+        var registered = registeredById[submittedDbId]
+        var poolRaw = rowValue(registered, ['poolCfg', 'pool_cfg'])
+        var pool = blank(poolRaw) ? {} : (poolRaw instanceof Map ? poolRaw : poolJsons.parse(textOf(poolRaw)))
+        if (!(pool instanceof Map)) { exit 500, '目标库 pool_cfg 不是有效 JSON 对象' }
+        var targetTypeCode = firstValue(registered, ['dbType', 'db_type'])
+        if (blank(targetTypeCode)) { targetTypeCode = firstValue(pool, ['dbType']) }
+        if (blank(targetTypeCode)) { exit 400, '目标库未配置数据库类型' }
+        var targetType
+        try { targetType = DatabaseType.fromCode(textOf(targetTypeCode).toLowerCase()) }
+        catch (e) { exit 400, '目标库数据库类型不受支持' }
+        var batchConfig = new DataSourceConfig()
+        batchConfig.setDatabaseType(targetType)
+        batchConfig.setDatabase(firstValue(pool, ['database', 'dbName', 'dbMetaDbName'])
+            || firstValue(registered, ['dbName', 'db_name']))
+        batchConfig.setUsername(firstValue(registered, ['username']) || firstValue(pool, ['username', 'user']))
+        batchConfig.setSchema(firstValue(pool, ['schema', 'defaultSchema', 'currentSchema', 'schemaName']))
+        var batchColumns = []
+        for (item in submittedItems) {
+            var columnInfo = new ColumnInfo()
+            columnInfo.setSourceDatabaseType(body?.sourceDatabaseType == null ? null : textOf(body.sourceDatabaseType))
+            var columnName = firstValue(item, ['columnName', 'name'])
+            var normalizedColumnName = blank(columnName) ? '' : textOf(columnName).trim().toUpperCase()
+            var dataType = firstValue(item, ['dataType', 'type'])
+            var columnType = firstValue(item, ['columnType'])
+            if (normalizedColumnName == 'ODS_RKSJ' || normalizedColumnName == 'ODS_GXSJ') {
+                dataType = batchTimeType(targetType)
+                columnType = dataType
+            }
+            columnInfo.setColumnName(columnName)
+            columnInfo.setColumnComment(firstValue(item, ['columnComment', 'comment']))
+            columnInfo.setDataType(dataType)
+            columnInfo.setColumnType(columnType)
+            if (rowValue(item, ['length']) != null) { columnInfo.setLength(rowValue(item, ['length'])::long) }
+            if (rowValue(item, ['precisionLength']) != null) {
+                columnInfo.setPrecision(rowValue(item, ['precisionLength'])::int)
+            }
+            if (rowValue(item, ['scale']) != null) { columnInfo.setScale(rowValue(item, ['scale'])::int) }
+            columnInfo.setNullable(rowValue(item, ['nullable']) == 1 || rowValue(item, ['nullable']) == true)
+            columnInfo.setDefaultValue(rowValue(item, ['defaultValue']))
+            columnInfo.setPrimaryKey(rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true)
+            columnInfo.setAutoIncrement(rowValue(item, ['autoIncrement']) == 1 || rowValue(item, ['autoIncrement']) == true)
+            columnInfo.setUnique(rowValue(item, ['isUnique', 'unique']) == 1
+                || rowValue(item, ['isUnique', 'unique']) == true)
+            columnInfo.setIndexed(rowValue(item, ['indexed']) == 1 || rowValue(item, ['indexed']) == true)
+            if (rowValue(item, ['ordinalPosition']) != null) {
+                columnInfo.setOrdinalPosition(rowValue(item, ['ordinalPosition'])::int)
+            }
+            columnInfo.setCharset(rowValue(item, ['charset']))
+            columnInfo.setCollation(rowValue(item, ['collation']))
+            columnInfo.setExtra(rowValue(item, ['extra']))
+            batchColumns.add(columnInfo)
+        }
+        try {
+            var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
+                submittedProps.tableName, batchColumns, submittedProps.tableNameCn)
+            generated.add({dbId: submittedDbId, ddl: canvasTableDdl.parse(ddl, batchConfig).ddl})
+        } catch (e) {
+            exit 400, '目标库“' + submittedDbId + '”生成建表语句失败：' + e.getMessage()
+        }
+    }
+    return {batchGenerate: true, results: generated}
 }
 
 // 解析请求体并为可选参数设置默认值。

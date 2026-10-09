@@ -179,6 +179,10 @@ export function useDeployPipeline() {
       qc.invalidateQueries({ queryKey: KEY });
       qc.invalidateQueries({ queryKey: ['pipeline-status', id] });
     },
+    onError: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['pipeline-errors', id] });
+      qc.invalidateQueries({ queryKey: ['pipeline-status', id] });
+    },
   });
 }
 

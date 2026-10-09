@@ -522,6 +522,8 @@ public class TableMetadataCollectionService {
                     update db_datasource_t set table_num=?, updated_time=?
                      where tid=? and tenant_id=? and is_del=0
                     """, distinctPhysical.size(), now(), datasourceId, tenantId);
+            com.linewell.dataelement.dataassets.runtime.DatasourceRegistrationStatus.refresh(
+                    java.util.Objects.requireNonNull(jdbc.getDataSource()), tenantId, datasourceId, false);
             jdbc.update("""
                     update metadata_table_collection_job_t
                        set status=?, phase='COMPLETED', scanned_count=?, persisted_count=?, total_count=?,

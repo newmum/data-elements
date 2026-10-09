@@ -27,6 +27,18 @@ public class KingBaseMetadataExplorer extends PostgreSqlMetadataExplorer {
 
     private static final String COLLECT_ALL_VISIBLE_OWNERS = "metadataCollectAllVisibleOwners";
 
+    /**
+     * KingBase adds its own catalog, audit and MAC schemas to PostgreSQL's
+     * reserved schemas. Filter owners, not table-name prefixes: public.sys_user
+     * and other user-created tables/views must remain discoverable.
+     * SYS_ and PG_ schema prefixes are reserved by the database.
+     */
+    private static String businessSchemaPredicate(String schemaColumn) {
+        return "LOWER(" + schemaColumn + ") NOT IN ('information_schema', 'sys', 'sysaudit', 'sysmac') "
+                + "AND LOWER(" + schemaColumn + ") NOT LIKE 'sys!_%' ESCAPE '!' "
+                + "AND LOWER(" + schemaColumn + ") NOT LIKE 'pg!_%' ESCAPE '!' ";
+    }
+
     private String getSchema(DataSourceConfig config) {
         String schema = config.getSchema();
         return schema == null || schema.trim().isEmpty() ? "public" : schema.trim();
@@ -101,7 +113,7 @@ public class KingBaseMetadataExplorer extends PostgreSqlMetadataExplorer {
             ") col ON col.table_schema = n.nspname AND col.table_name = c.relname " +
             "WHERE n.nspname = ? " +
             "  AND c.relkind IN ('r', 'p', 'v', 'm') " +
-            "  AND c.relname NOT LIKE 'pg_%' " +
+            "  AND " + businessSchemaPredicate("n.nspname") +
             "ORDER BY c.relname";
 
         try (Connection conn = getConnection(config);
@@ -137,12 +149,21 @@ public class KingBaseMetadataExplorer extends PostgreSqlMetadataExplorer {
     }
 
     @Override
+    public List<String> getSchemas(DataSourceConfig config) {
+        return readBusinessSchemas(config, "SELECT schema_name FROM information_schema.schemata "
+                + "WHERE " + businessSchemaPredicate("schema_name") + "ORDER BY schema_name");
+    }
+
+    @Override
     public List<String> getSchemasWithTables(DataSourceConfig config) {
-        List<String> schemas = new ArrayList<>();
         String sql = "SELECT DISTINCT table_schema FROM information_schema.tables "
-                + "WHERE table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast') "
-                + "  AND table_schema NOT LIKE 'pg_%' "
+                + "WHERE " + businessSchemaPredicate("table_schema")
                 + "  AND table_type IN ('BASE TABLE', 'VIEW') ORDER BY table_schema";
+        return readBusinessSchemas(config, sql);
+    }
+
+    private List<String> readBusinessSchemas(DataSourceConfig config, String sql) {
+        List<String> schemas = new ArrayList<>();
         try (Connection conn = getConnection(config);
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setQueryTimeout(30);
@@ -173,8 +194,7 @@ public class KingBaseMetadataExplorer extends PostgreSqlMetadataExplorer {
             "LEFT JOIN (SELECT table_schema, table_name, COUNT(*) AS column_count " +
             "             FROM information_schema.columns GROUP BY table_schema, table_name) col " +
             "       ON col.table_schema = n.nspname AND col.table_name = c.relname " +
-            "WHERE visible.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast') " +
-            "  AND visible.table_schema NOT LIKE 'pg_%' " +
+            "WHERE " + businessSchemaPredicate("visible.table_schema") +
             "  AND visible.table_type IN ('BASE TABLE', 'VIEW') " +
             "  AND c.relkind IN ('r', 'p', 'v', 'm') " +
             "ORDER BY n.nspname, c.relname";
@@ -236,7 +256,7 @@ public class KingBaseMetadataExplorer extends PostgreSqlMetadataExplorer {
             ") col ON col.table_schema = n.nspname AND col.table_name = c.relname " +
             "WHERE n.nspname = ? " +
             "  AND c.relkind IN ('r', 'p', 'v', 'm') " +
-            "  AND c.relname NOT LIKE 'pg_%' " +
+            "  AND " + businessSchemaPredicate("n.nspname") +
             "  AND (? IS NULL OR LOWER(c.relname) LIKE ? OR LOWER(COALESCE(d.description, '')) LIKE ?) ";
         String countSql = "SELECT COUNT(1) " + fromSql;
         String pageSql =

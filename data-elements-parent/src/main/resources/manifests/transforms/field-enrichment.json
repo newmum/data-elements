@@ -1,7 +1,7 @@
 {
   "key": "transform.field-enrichment",
   "category": "transform",
-  "label": "字段增强",
+  "label": "字段映射",
   "icon": "swap",
   "description": "统一执行字段映射、字典翻译与统一格式；同源数据库时自动下推为一条批量 SQL。",
   "fields": [
@@ -20,7 +20,7 @@
     },
     {
       "key": "mappings",
-      "label": "字段增强规则",
+      "label": "字段映射规则",
       "type": "field-mapping-dsl",
       "required": true,
       "default": "{\n  \"version\": \"1.0\",\n  \"passthroughUnmapped\": false,\n  \"passthroughCaseSensitive\": true,\n  \"onMissingSource\": \"NULL\",\n  \"onTypeMismatch\": \"CAST\",\n  \"mappings\": []\n}",

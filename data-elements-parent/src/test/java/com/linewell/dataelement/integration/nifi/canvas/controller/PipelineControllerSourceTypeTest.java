@@ -9,6 +9,27 @@ import org.junit.jupiter.api.Test;
 class PipelineControllerSourceTypeTest {
 
     @Test
+    void registeredKingbaseAliasUsesKingbaseAndUnknownTypesFail() {
+        assertThat(PipelineController.normalizeSourceNodeType("kingbase8", Map.of())).isEqualTo("source.kingbase");
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PipelineController.normalizeSourceNodeType("unknown-vendor", Map.of()));
+    }
+
+    @Test
+    void repairOfGeneratedMysqlFallbackKeepsManualQueryAndSchedule() {
+        var result = PipelineController.repairMistypedSourceConfig(
+                Map.of("dbType", "KINGBASE", "jdbcUrl", "jdbc:kingbase8://registered/business",
+                        "port", 54321, "compatibleMode", "PG"),
+                Map.of("dbType", "MySQL", "jdbcUrl", "jdbc:mysql://wrong/business", "port", 3306,
+                        "query", "select ID from manual_view", "schedulingPeriod", "5 min"));
+        assertThat(result).containsEntry("dbType", "KINGBASE")
+                .containsEntry("jdbcUrl", "jdbc:kingbase8://registered/business")
+                .containsEntry("port", 54321).containsEntry("compatibleMode", "PG")
+                .containsEntry("query", "select ID from manual_view")
+                .containsEntry("schedulingPeriod", "5 min");
+    }
+
+    @Test
     void repairsMissingRegisteredSftpEndpointWithoutOverwritingManualSettings() {
         Map<String, Object> config = PipelineController.repairFileSourceConfig(
                 Map.of("hostname", "registered-host", "port", 22, "username", "registered-user",

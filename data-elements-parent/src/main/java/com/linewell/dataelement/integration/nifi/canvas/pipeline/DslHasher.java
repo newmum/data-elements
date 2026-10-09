@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -24,6 +25,7 @@ public final class DslHasher {
 
     /** Current NiFi compiler contract; shared by deployment and safe historical lineage recovery. */
     public static final String CURRENT_COMPILER_REVISION = "nifi-execsqlrecord-avro-logical-types-v30";
+    private static final String HIVE_HDFS_COMPILER_REVISION = "hive-hdfs-record-chain-v1";
 
     private static final ObjectMapper SORTED = new ObjectMapper()
             .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
@@ -52,12 +54,26 @@ public final class DslHasher {
     public static String deploymentHash(Pipeline.Dsl dsl, String compilerRevision) {
         String baseHash = hash(dsl);
         if (baseHash == null) return null;
+        String effectiveRevision = compilerRevision == null ? "" : compilerRevision;
+        if (usesHiveHdfsSink(dsl)) effectiveRevision += "|" + HIVE_HDFS_COMPILER_REVISION;
         try {
-            return sha256((baseHash + "|" + (compilerRevision == null ? "" : compilerRevision))
+            return sha256((baseHash + "|" + effectiveRevision)
                     .getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("Deployment hash failed: " + e.getMessage(), e);
         }
+    }
+
+    private static boolean usesHiveHdfsSink(Pipeline.Dsl dsl) {
+        if (dsl.nodes() == null) return false;
+        for (Pipeline.Node node : dsl.nodes()) {
+            if (node == null || !"sink.hive".equals(node.manifestKey())) continue;
+            Object configured = node.config() == null ? null : node.config().get("hiveWriteMode");
+            String mode = configured == null ? "" : configured.toString().trim().toUpperCase(Locale.ROOT);
+            if (mode.isEmpty() || "LINEWELL_HDFS".equals(mode) || "LINEWELL".equals(mode)
+                    || "HDFS_BATCH".equals(mode) || "BATCH".equals(mode)) return true;
+        }
+        return false;
     }
 
     private static String sha256(byte[] input) throws NoSuchAlgorithmException {

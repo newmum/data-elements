@@ -28,6 +28,8 @@
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import tenantRuntime
+import metadataAsset
+import dataScope
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import cn.hutool.core.util.IdUtil
 import cn.hutool.json.JSONUtil
@@ -65,100 +67,21 @@ var first = (row, keys) => {
 if (blank(tenantId)) {
     exit 400, '无法识别当前租户，请重新登录后再保存数据源'
 }
-// 只在尝试完成登记时读取表配置。普通第一步保存与第二至四步“下一步”不做完成校验。
-// asset_status=2 是可用元数据，不能替代第三、四步显式保存的 registrationSavedPhase。
+// 结束登记允许部分表未完成；状态由当前租户有效表的 asset_status 聚合决定。
 var completionReview = null
 var requestedStatus = first(props, ['assetStatus', 'asset_status'])
-if (props.completeOnly == true || text(requestedStatus) == '2') {
+if (props.completeOnly == true || ['1', '2'].contains(text(requestedStatus))) {
     var existed = db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
-    if (existed == null) {
-        exit 404, '数据源不存在或不属于当前租户'
-    }
-    var completionTables = db.table('db_table_t').where().eq('datasource_id', tid).eq('tenant_id', tenantId).eq('is_del', 0).select()
-    var unannotatedTableCount = 0
-    var deferredTableCount = 0
-    var pendingDictionaryCount = 0
-    var pendingBusinessCount = 0
-    var pendingLogCount = 0
-    var completionIssues = []
-    for (completionTable in completionTables) {
-        var typeValue = first(completionTable, ['businessType', 'business_type'])
-        var businessTypeText = blank(typeValue) ? '' : text(typeValue).trim()
-        var annotatedValue = first(completionTable, ['annotated'])
-        var annotatedText = blank(annotatedValue) ? '' : text(annotatedValue).trim().toLowerCase()
-        var annotated = annotatedText == '1' || annotatedText == 'true' || annotatedText == 'yes'
-        var tableName = first(completionTable, ['tableName', 'table_name_en', 'table_name'])
-        var tableId = first(completionTable, ['tid'])
-        if (!annotated || !['字典表', '业务表', '日志表', '过程表', '备份表', '不确定', '暂不处理'].contains(businessTypeText)) {
-            unannotatedTableCount = unannotatedTableCount + 1
-            completionIssues.add({ tableId: tableId, tableName: tableName, step: 2, message: '尚未完成标注' })
-            continue
-        }
-        if (['不确定', '暂不处理'].contains(businessTypeText)) {
-            deferredTableCount = deferredTableCount + 1
-            continue
-        }
-        if (!['字典表', '业务表', '日志表'].contains(businessTypeText)) {
-            continue
-        }
-        var configValue = first(completionTable, ['fieldGovernanceConfig', 'field_governance_config'])
-        var config = null
-        try {
-            config = configValue instanceof Map ? configValue : blank(configValue) ? null : JSONUtil.parseObj(text(configValue))
-        } catch (parseError) {
-            // 无效 JSON 同未保存配置一样阻断完成登记，不使用历史资产状态兜底。
-            config = null
-        }
-        var expectedPhase = businessTypeText == '字典表' ? 'dictionary' : 'business'
-        var savedPhase = first(config, ['registrationSavedPhase'])
-        var savedType = first(config, ['businessType'])
-        if (text(savedPhase) != expectedPhase || (!blank(savedType) && text(savedType) != businessTypeText)) {
-            if (businessTypeText == '字典表') {
-                pendingDictionaryCount = pendingDictionaryCount + 1
-            } else if (businessTypeText == '业务表') {
-                pendingBusinessCount = pendingBusinessCount + 1
-            } else {
-                pendingLogCount = pendingLogCount + 1
-            }
-            completionIssues.add({ tableId: tableId, tableName: tableName, step: businessTypeText == '字典表' ? 3 : 4, message: '尚未完成' + businessTypeText + '登记' })
-        }
-    }
-    var tableReviewReady = completionTables.size() > 0 && completionIssues.size() == 0
-    completionReview = {
-        tid: tid, completionEligible: tableReviewReady, tableReviewReady: tableReviewReady,
-        tableCount: completionTables.size(), unannotatedTableCount: unannotatedTableCount,
-        deferredTableCount: deferredTableCount, pendingDictionaryCount: pendingDictionaryCount,
-        pendingBusinessCount: pendingBusinessCount, pendingLogCount: pendingLogCount, issues: completionIssues
-    }
-    // dryRun 仅报告真实校验结果，不修改 MySQL / ES，也不伪装成已完成。
-    if (props.dryRun == true || body?.dryRun == true) {
-        completionReview.dryRun = true
-        completionReview.assetStatus = first(existed, ['assetStatus', 'asset_status'])
-        return completionReview
-    }
-    if (!tableReviewReady) {
-        var reasons = []
-        if (completionTables.size() == 0) { reasons.add('尚未采集或登记数据表') }
-        if (unannotatedTableCount > 0) { reasons.add(unannotatedTableCount + ' 张表未完成标注') }
-        if (pendingDictionaryCount > 0) { reasons.add(pendingDictionaryCount + ' 张字典表未完成登记') }
-        if (pendingBusinessCount > 0) { reasons.add(pendingBusinessCount + ' 张业务表未完成登记') }
-        if (pendingLogCount > 0) { reasons.add(pendingLogCount + ' 张日志表未完成登记') }
-        var samples = []
-        for (issue in completionIssues) {
-            if (samples.size() >= 3) { break }
-            samples.add(issue.tableName + '：' + issue.message)
-        }
-        exit 400, '不能结束登记：' + reasons.join('、') + '。' + samples.join('；') + '。请返回对应步骤完善并保存。'
-    }
+    if (existed == null) { exit 404, '数据源不存在或不属于当前租户' }
+    var visible = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [existed])
+    if (visible == null || visible.size() != 1) { exit 403, '数据源不在当前角色的数据范围内' }
+    completionReview = metadataAsset.reviewRegistrationStatus(tid)
+    if (props.dryRun == true || body?.dryRun == true) { return completionReview }
 }
-// 第五步完成登记只落流程状态，不重写连接池配置，避免隐藏密码导致连接信息被清空。
-var completionAssetStatus = 2
+var completionAssetStatus = completionReview == null ? 0 : completionReview.assetStatus
 if (props.completeOnly == true) {
-    db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).update({
-        asset_status: completionAssetStatus,
-        flow_status: 2,
-        updated_time: nowTime
-    })
+    completionReview = metadataAsset.refreshRegistrationStatus(tid, true)
+    completionAssetStatus = completionReview.assetStatus
     var completionIndexFields = {
         assetStatus: completionAssetStatus,
         flowStatus: 2,
@@ -193,8 +116,8 @@ if (props.completeOnly == true) {
         completionEligible: true,
         tableReviewReady: completionReview.tableReviewReady,
         tableCount: completionReview.tableCount,
-        unannotatedTableCount: completionReview.unannotatedTableCount,
-        deferredTableCount: completionReview.deferredTableCount,
+        registeredTableCount: completionReview.registeredTableCount,
+        pendingTableCount: completionReview.pendingTableCount,
         indexSync: indexSyncMode
     }
 }
@@ -418,8 +341,7 @@ var inferDbType = (value, jdbcUrl) => {
 if (blank(tenantId)) {
     exit 400, '无法识别当前租户，请重新登录后再保存数据源'
 }
-// 详情页“是否已注册”直接绑定 db_datasource_t.asset_status：0 待注册、1 审核中、2 已注册。
-// 审核中只作为既有状态展示，人工编辑只允许在 0 和 2 之间切换。
+// 数据源状态：0 待登记，1 未登记完成，2 所有表已完成。客户端不能跳过表状态聚合。
 var explicitAssetStatus = first(props, ['assetStatus', 'asset_status'])
 var explicitAssetStatusText = blank(explicitAssetStatus) ? '' : text(explicitAssetStatus)
 var oldAssetStatus = old == null ? null : first(old, ['assetStatus', 'asset_status'])
@@ -470,7 +392,7 @@ var connectionChanged = old != null && (
     changedWhenProvided(first(old, ['jdbcUrl', 'jdbc_url']), first(props, ['jdbcURL', 'jdbcUrl', 'jdbc_url'])) ||
     (text(props.showConnect) == '0' && text(oldShowConnect) == '1')
 )
-if (connectionChanged && text(oldAssetStatus) == '2' && explicitAssetStatusText != '2') {
+if (connectionChanged && ['1', '2'].contains(text(oldAssetStatus)) && explicitAssetStatusText != '2') {
     assetStatus = 0
     flowStatus = 0
 }
@@ -478,8 +400,8 @@ if (connectionChanged && text(oldAssetStatus) == '2' && explicitAssetStatusText 
 if (explicitAssetStatusText == '0') {
     assetStatus = 0
     flowStatus = 0
-} else if (explicitAssetStatusText == '2') {
-    assetStatus = 2
+} else if (['1', '2'].contains(explicitAssetStatusText)) {
+    assetStatus = completionAssetStatus
     flowStatus = 2
 }
 
@@ -587,7 +509,7 @@ var savedTid = tid
 // 网络超时将已持久化的数据源保存操作卡在等待状态。
 var deferIndexRefresh = body != null && (body.deferIndexRefresh == true || body.deferIndexRefresh == 1 || body.deferIndexRefresh == '1')
 if (deferIndexRefresh) {
-    return { tid: savedTid, indexRefreshPending: true }
+    return { tid: savedTid, assetStatus: assetStatus, indexRefreshPending: true }
 }
 body = { tid: savedTid }
 try {
@@ -596,4 +518,4 @@ try {
     // 主数据已经提交；ES 为投影索引，连接故障不能回滚或阻断数据源保存。
     log.warn('刷新数据源搜索索引失败，稍后可通过盘点维护重试: {}', e.message)
 }
-return { tid: savedTid, indexRefreshPending: false }
+return { tid: savedTid, assetStatus: assetStatus, indexRefreshPending: false }

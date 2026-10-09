@@ -26,6 +26,7 @@
 // 路由：POST /ods/createTapleApply
 // 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，幂等创建或复用目标库同名物理表，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
 import tenantRuntime
+import metadataAsset
 /*
  * 物化建表并自动补目录。
  *
@@ -536,7 +537,7 @@ tableItems = ensureOdsSystemColumns(tableItems, targetDatasource.dbType)
 // domain is a governed materialization target and must not be rejected merely
 // because it is managed as a warehouse target rather than a normal registered source.
 var targetAssetStatus = text(first(targetDatasource, ['assetStatus', 'asset_status']))
-var targetRegistered = targetAssetStatus == '2'
+var targetRegistered = ['1', '2'].contains(targetAssetStatus)
 var dataSourceTypeRoot = db.table('sym_dict_t').where()
     .eq('tenant_id', tenantId)
     .eq('dict_code', 'dataSourceType')
@@ -929,6 +930,7 @@ db.table('db_table_t').where().eq('tid', sourceTableId).eq('is_del', 0)
 db.table('db_table_t').where().eq('tid', targetTableId).eq('is_del', 0)
     .update({ source_catalog_id: catalogId, catalog_name: catalogName, updated_time: now })
 
+metadataAsset.refreshRegistrationStatus(propList.dbId, false)
 return {
     tid: targetTableId,
     targetTableId: targetTableId,

@@ -2298,7 +2298,8 @@ function normalizeCatalogTableRow(row, local = {}) {
     businessType: row.businessType || "业务表",
     businessTypeReason: row.businessTypeReason || "",
     fieldCount: row.fieldCount || row.columnCount || local.fieldCount || local.columnCount || 0,
-    annotated: row.annotated ?? local.annotated ?? false,
+    // 当前表快照是标注状态的唯一依据；NULL、缺失或旧步骤缓存不能代替已标注。
+    annotated: isAnnotatedForRegistration(row),
   };
   return applySavedCatalogConfigToTable(normalized);
 }
@@ -2358,7 +2359,7 @@ function applySavedCatalogConfigToTable(table) {
       : governance.dictionaryProfile || catalog?.dictionaryProfiles || catalog?.dictionaryProfile || savedCategories
   );
   if (catalog?.tid) {
-    table.annotated = true;
+    // 物化目标表或重新标注的表仍可保留来源目录，目录关联不代表已完成标注。
     table.catalogId = catalog.tid;
   }
   // db_table_t.business_type is the current classification chosen in step 2.

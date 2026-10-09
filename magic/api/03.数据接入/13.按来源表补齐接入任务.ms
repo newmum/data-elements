@@ -25,7 +25,6 @@
 // 接口：13.按来源表补齐接入任务
 // 路由：POST /ods/dataAggTaskEnsure
 // 业务说明：按来源表补齐数据接入任务（POST /ods/dataAggTaskEnsure）。写接口；以 db_table_t 来源表为入口，读取自动目录和目标表，创建 nifi_pipeline_t 画布草稿、data_access_agg_task_t 任务及字段映射；已有任务时直接返回。用于数据接入-任务管理页面的创建任务按钮；使用请求参数 tableId、sourceTableId、tid、repair、forceRebuild、rebuild、catalogId；涉及 da_prop_t、db_table_column_t、db_table_t、da_catalog_t、dwm_center_layer_source_t、db_datasource_t 等业务表。
-import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 /*
  * 按来源表确保接入任务存在。
  *
@@ -36,10 +35,14 @@ import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
  */
 import cn.hutool.core.util.IdUtil
 import jsons
+import cn.hutool.json.JSONUtil as poolJsons
 import metadataAsset
 import targetTableSchema
 import apiPullConfig
 import tenantRuntime
+import dataScope
+import java.util.Map
+import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType as sourceTypes
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -54,26 +57,15 @@ var first = (row, keys) => {
     }
     return null
 }
-var jdbcUrl = (dbType, cfg, row) => {
-  var url = first(cfg, ['jdbcURL', 'jdbcUrl', 'url'])
-  if (blank(url)) { url = first(row, ['jdbc_url', 'jdbcURL', 'jdbcUrl', 'url']) }
-  if (!blank(url)) { return text(url) }
-  var type = text(dbType).trim().toUpperCase()
-  var host = first(cfg, ['host', 'dbMetaIp']) || first(row, ['host', 'db_meta_ip']) || '127.0.0.1'
-  var port = first(cfg, ['port', 'dbMetaPort']) || first(row, ['port', 'db_meta_port'])
-  var database = first(cfg, ['database', 'serviceName', 'sid', 'dbName', 'dbMetaDbName']) || first(row, ['dbName', 'db_name']) || ''
-  if (type == 'DM' || type == 'DAMENG') { return 'jdbc:dm://' + host + ':' + (blank(port) ? '5236' : port) + '/' + database }
-  if (type == 'ORACLE' || type == 'ORACLE12' || type == 'ORACLE_12') {
-    var connectionType = text(first(cfg, ['connectionType', 'jdbcType'])).trim().toUpperCase()
-    if (connectionType == 'SID') { return 'jdbc:oracle:thin:@' + host + ':' + (blank(port) ? '1521' : port) + ':' + database }
-    return 'jdbc:oracle:thin:@//' + host + ':' + (blank(port) ? '1521' : port) + '/' + database
-  }
-  if (type == 'POSTGRES' || type == 'POSTGRESQL' || type == 'TDSQL_PG' || type == 'GAUSSDB' || type == 'OPENGAUSS') { return 'jdbc:postgresql://' + host + ':' + (blank(port) ? '5432' : port) + '/' + database }
-  if (type == 'SQLSERVER' || type == 'MSSQL' || type == 'MS_SQL') { return 'jdbc:sqlserver://' + host + ':' + (blank(port) ? '1433' : port) + ';databaseName=' + database }
-  if (type == 'KINGBASE') { return 'jdbc:kingbase8://' + host + ':' + (blank(port) ? '54321' : port) + '/' + database }
-  if (type == 'CLICKHOUSE') { return 'jdbc:clickhouse://' + host + ':' + (blank(port) ? '8123' : port) + '/' + database }
-  return 'jdbc:mysql://' + host + ':' + (blank(port) ? '3306' : port) + '/' + database
+var firstPresent = (row, keys) => {
+    if (row == null) { return null }
+    for (key in keys) {
+        var value = row instanceof Map ? row.get(key) : row[key]
+        if (value != null) { return value }
+    }
+    return null
 }
+var jdbcUrl = (dbType, cfg, row) => sourceTypes.jdbcUrl(text(dbType), cfg, row)
 var safeIdentifier = (value) => text(value).trim().matches('^[A-Za-z_][A-Za-z0-9_$]*$')
 // Registrations from production commonly persist a dictionary table as
 // "SCHEMA.TABLE".  Keep both names separately: SQL can qualify the table
@@ -124,6 +116,59 @@ var governanceConfigFromProperties = (properties) => {
     }
     return fallback
 }
+var governancePropertiesByParent = {}
+var governanceCatalogIdsBySource = {}
+var governanceCatalogById = {}
+// This is called for three bounded groups: source, referenced dictionaries,
+// and materialized targets.  It never reads a row from inside a table loop.
+var loadGovernanceForTableIds = (tableIds) => {
+    var uniqueIds = []
+    for (tableId in (tableIds == null ? [] : tableIds)) {
+        var id = text(tableId).trim()
+        if (!blank(id) && !uniqueIds.contains(id)) { uniqueIds.add(id) }
+    }
+    if (uniqueIds.size() == 0) { return }
+    if (uniqueIds.size() > 200) { exit 400, '单次最多处理200个治理关联表' }
+    var directProperties = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId).in('parent_id', uniqueIds).eq('is_del', 0).select()
+    for (property in (directProperties == null ? [] : directProperties)) {
+        var parentId = text(first(property, ['parentId', 'parent_id']))
+        if (governancePropertiesByParent[parentId] == null) { governancePropertiesByParent[parentId] = [] }
+        governancePropertiesByParent[parentId].add(property)
+    }
+    var sourceLinkPage = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId).eq('prop_name', 'sourceTableId')
+        .in('prop_value', uniqueIds).eq('is_del', 0).page(201, 0)
+    if (sourceLinkPage != null && sourceLinkPage.total > 200) {
+        exit 400, '来源表关联目录过多，请先核对历史目录'
+    }
+    var sourceLinks = sourceLinkPage == null || sourceLinkPage.list == null ? [] : sourceLinkPage.list
+    var catalogIds = []
+    for (link in (sourceLinks == null ? [] : sourceLinks)) {
+        var linkedSourceId = text(first(link, ['propValue', 'prop_value']))
+        var catalogId = text(first(link, ['parentId', 'parent_id']))
+        if (blank(linkedSourceId) || blank(catalogId)) { continue }
+        if (governanceCatalogIdsBySource[linkedSourceId] == null) { governanceCatalogIdsBySource[linkedSourceId] = [] }
+        if (!governanceCatalogIdsBySource[linkedSourceId].contains(catalogId)) {
+            governanceCatalogIdsBySource[linkedSourceId].add(catalogId)
+        }
+        if (!catalogIds.contains(catalogId)) { catalogIds.add(catalogId) }
+    }
+    if (catalogIds.size() == 0) { return }
+    if (catalogIds.size() > 200) { exit 400, '来源表关联目录过多，请先核对历史目录' }
+    var catalogProperties = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId).in('parent_id', catalogIds).eq('is_del', 0).select()
+    for (property in (catalogProperties == null ? [] : catalogProperties)) {
+        var parentId = text(first(property, ['parentId', 'parent_id']))
+        if (governancePropertiesByParent[parentId] == null) { governancePropertiesByParent[parentId] = [] }
+        governancePropertiesByParent[parentId].add(property)
+    }
+    var catalogRows = db.table('da_catalog_t').where()
+        .eq('tenant_id', tenantId).in('tid', catalogIds).eq('is_del', 0).select()
+    for (catalogRow in (catalogRows == null ? [] : catalogRows)) {
+        governanceCatalogById[text(first(catalogRow, ['tid']))] = catalogRow
+    }
+}
 var governanceConfigOf = (table) => {
     var persisted = parseGovernanceConfig(first(table, [
         'fieldGovernanceConfig', 'field_governance_config', 'fieldGovernanceCfg'
@@ -131,16 +176,11 @@ var governanceConfigOf = (table) => {
     if (configHasFields(persisted)) { return persisted }
     var tableId = text(first(table, ['tid', 'id', 'tableId', 'table_id'])).trim()
     if (blank(tableId)) { return persisted }
-    var direct = governanceConfigFromProperties(db.table('da_prop_t').where()
-        .eq('parent_id', tableId).eq('is_del', 0).select())
+    var direct = governanceConfigFromProperties(governancePropertiesByParent[tableId])
     if (configHasFields(direct)) { return direct }
-    var sourceLinks = db.table('da_prop_t').where()
-        .eq('prop_name', 'sourceTableId').eq('prop_value', tableId).eq('is_del', 0).select()
-    for (link in sourceLinks) {
-        var catalogId = text(first(link, ['parentId', 'parent_id'])).trim()
+    for (catalogId in (governanceCatalogIdsBySource[tableId] == null ? [] : governanceCatalogIdsBySource[tableId])) {
         if (blank(catalogId)) { continue }
-        var catalogConfig = governanceConfigFromProperties(db.table('da_prop_t').where()
-            .eq('parent_id', catalogId).eq('is_del', 0).select())
+        var catalogConfig = governanceConfigFromProperties(governancePropertiesByParent[catalogId])
         if (configHasFields(catalogConfig)) { return catalogConfig }
     }
     return configHasFields(direct) ? direct : persisted
@@ -177,6 +217,10 @@ var mandatoryStandardMappings = (relation) => {
     }
     return result
 }
+var metadataTableById = {}
+var metadataColumnsByTableId = {}
+var metadataDatasourceById = {}
+var metadataTablesByName = {}
 // A field's checked dictionary association is persisted independently of the
 // detailed relation JSON.  Production registrations may only have these two
 // column values, so resolve the executable lookup from the registered
@@ -185,17 +229,15 @@ var registeredDictionaryRelations = (sourceTable) => {
     var result = []
     var sourceTableId = text(first(sourceTable, ['tid', 'id', 'tableId', 'table_id'])).trim()
     if (blank(sourceTableId)) { return result }
-    var sourceColumns = db.table('db_table_column_t').where()
-        .eq('table_id', sourceTableId).eq('is_del', 0).select()
-    for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
+    var registeredSourceColumns = metadataColumnsByTableId[sourceTableId]
+    for (sourceColumn in (registeredSourceColumns == null ? [] : registeredSourceColumns)) {
         var sourceName = text(first(sourceColumn, ['columnName', 'column_name'])).trim()
         var enabled = text(first(sourceColumn, ['enableCodeTable', 'enable_code_table', 'isDict', 'is_dict'])).trim().toLowerCase()
         var dictionaryTableId = text(first(sourceColumn, ['codeTableId', 'code_table_id', 'dictId', 'dict_id'])).trim()
         if (blank(sourceName) || (enabled != '1' && enabled != 'true' && enabled != 'yes' && blank(dictionaryTableId))) {
             continue
         }
-        var dictionaryTable = blank(dictionaryTableId) ? null : db.table('db_table_t').where()
-            .eq('tid', dictionaryTableId).eq('is_del', 0).selectOne()
+        var dictionaryTable = metadataTableById[dictionaryTableId]
         if (dictionaryTable == null) { continue }
         var dictionaryConfig = governanceConfigOf(dictionaryTable)
         var profile = dictionaryConfig.dictionaryProfile
@@ -216,8 +258,7 @@ var registeredDictionaryRelations = (sourceTable) => {
         // The dictionary profile may be an early registration. Use its primary
         // key and conventional name column only as metadata fallback, never as
         // a reason to reject an otherwise saved source-field association.
-        var dictionaryColumns = db.table('db_table_column_t').where()
-            .eq('table_id', dictionaryTableId).eq('is_del', 0).select()
+        var dictionaryColumns = metadataColumnsByTableId[dictionaryTableId]
         for (dictionaryColumn in (dictionaryColumns == null ? [] : dictionaryColumns)) {
             var columnName = text(first(dictionaryColumn, ['columnName', 'column_name'])).trim()
             var normalizedName = columnName.toLowerCase()
@@ -377,6 +418,7 @@ var readProp = (catalogId, name) => {
         return ''
     }
     var row = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId)
         .eq('parent_id', catalogId)
         .eq('prop_name', name)
         .eq('is_del', 0)
@@ -384,24 +426,44 @@ var readProp = (catalogId, name) => {
     return row == null ? '' : text(row.propValue)
 }
 var findCatalogBySource = (sourceTableId) => {
-    var props = db.table('da_prop_t').where()
-        .eq('prop_name', 'sourceTableId')
-        .eq('prop_value', sourceTableId)
-        .eq('is_del', 0)
-        .select()
-    for (prop in (props == null ? [] : props)) {
-        var asset = db.table('da_catalog_t').where()
-            .eq('tid', prop.parentId)
-            .eq('is_del', 0)
-            .selectOne()
-        if (asset != null) {
-            return text(prop.parentId)
-        }
+    for (catalogId in (governanceCatalogIdsBySource[sourceTableId] == null ? [] : governanceCatalogIdsBySource[sourceTableId])) {
+        if (governanceCatalogById[catalogId] != null) { return catalogId }
     }
     return ''
 }
 var colName = (row) => first(row, ['columnName', 'column_name'])
-var readCfg = (row) => datasourceConnectionConfig('read', first(row, ['tid']), null, false)
+// All source and target datasource rows have already been loaded in this
+// request.  Normalize their pool_cfg in memory: calling the shared read
+// function for every sink would query db_datasource_t once per target.
+var readCfg = (row) => {
+    if (row == null) { return {} }
+    var config = {}
+    var raw = firstPresent(row, ['poolCfg', 'pool_cfg'])
+    if (!blank(raw)) {
+        try {
+            var parsed = raw instanceof Map ? raw : poolJsons.parse(text(raw))
+            if (parsed != null) { config.putAll(parsed) }
+        } catch (e) {
+            exit 500, '数据源连接配置 pool_cfg 不是有效 JSON 对象'
+        }
+    }
+    var master = {
+        dbType: ['dbType', 'db_type'],
+        jdbcURL: ['jdbcURL', 'jdbcUrl', 'jdbc_url'],
+        username: ['username'],
+        password: ['password'],
+        dbVersion: ['dbVersion', 'db_version'],
+        nodeId: ['nodeId', 'node_id'],
+        storageDomain: ['storageDomain', 'storage_domain'],
+        showConnect: ['showConnect', 'show_connect'],
+        connectionStatus: ['connectionStatus', 'connection_status']
+    }
+    for (key in master.keySet()) {
+        var value = firstPresent(row, master[key])
+        if (value != null) { config[key] = value }
+    }
+    return config
+}
 // 数据上报/数据推送的数据文件已由上游落入 ODS 非结构化存储。
 // 创建任务时读取 fjghcc 域绑定的 FTP/SFTP，不能把其 api 类型误作数据拉取 API。
 var pushAccessMode = (datasource, cfg) => {
@@ -420,17 +482,17 @@ var trimSlashes = (value) => {
 }
 var resolveOdsPushFtp = (logicalDatasourceId, sourceTableName) => {
     var binding = db.table('dwm_center_layer_source_t').where()
-        .eq('target_type', 'domain').eq('layer_code', 'fjghcc').eq('is_del', 0)
+        .eq('tenant_id', tenantId).eq('target_type', 'domain').eq('layer_code', 'fjghcc').eq('is_del', 0)
         .orderBy('updated_time', 'desc').selectOne()
     var bindingDatasourceId = binding == null ? '' : first(binding, ['datasourceId', 'datasource_id'])
     if (blank(bindingDatasourceId)) {
         exit 400, '资源中心 ODS 数据域 fjghcc 未绑定 FTP/SFTP 数据源'
     }
     var storageId = text(bindingDatasourceId).trim()
-    var storage = db.table('db_datasource_t').where().eq('tid', storageId).eq('is_del', 0).selectOne()
+    var storage = db.table('db_datasource_t').where()
+        .eq('tenant_id', tenantId).eq('tid', storageId).eq('is_del', 0).selectOne()
     if (storage == null) { exit 404, '资源中心 ODS 数据域 fjghcc 绑定的数据源不存在' }
-    // readCfg is the same normalized/decrypted connection object used by normal task sources.
-    // Avoid re-merging heterogeneous config objects here: FTP fields are already authoritative in it.
+    // FTP fields in the tenant-owned datasource row are authoritative.
     var cfg = readCfg(storage)
     if (cfg == null) { cfg = {} }
     var dbType = text(first(storage, ['dbType', 'db_type', 'databaseType', 'database_type'])).trim().toUpperCase()
@@ -457,18 +519,12 @@ var dictionaryLookupSource = (relation) => {
         return { config: {}, schema: '' }
     }
     var dictionaryTableId = text(relation.dictionaryTableId).trim()
-    var dictionaryTable = blank(dictionaryTableId) ? null : db.table('db_table_t').where()
-        .eq('tid', dictionaryTableId)
-        .eq('is_del', 0)
-        .selectOne()
+    var dictionaryTable = metadataTableById[dictionaryTableId]
     if (dictionaryTable == null) {
         return { config: {}, schema: '' }
     }
     var datasourceId = text(first(dictionaryTable, ['datasourceId', 'datasource_id'])).trim()
-    var datasource = blank(datasourceId) ? null : db.table('db_datasource_t').where()
-        .eq('tid', datasourceId)
-        .eq('is_del', 0)
-        .selectOne()
+    var datasource = metadataDatasourceById[datasourceId]
     if (datasource == null) {
         return { config: {}, schema: '' }
     }
@@ -502,10 +558,7 @@ var dictionaryLookupFallback = (relation, sourceTable) => {
         return { config: {}, schema: '' }
     }
     var sourceDatasourceId = text(first(sourceTable, ['datasourceId', 'datasource_id'])).trim()
-    var candidates = db.table('db_table_t').where()
-        .eq('table_name', relation.dictionaryTable)
-        .eq('is_del', 0)
-        .select()
+    var candidates = metadataTablesByName[text(relation.dictionaryTable).toLowerCase()]
     var dictionaryTable = null
     for (candidate in (candidates == null ? [] : candidates)) {
         var candidateDatasourceId = text(first(candidate, ['datasourceId', 'datasource_id'])).trim()
@@ -521,10 +574,7 @@ var dictionaryLookupFallback = (relation, sourceTable) => {
         return { config: {}, schema: '' }
     }
     var datasourceId = text(first(dictionaryTable, ['datasourceId', 'datasource_id'])).trim()
-    var datasource = blank(datasourceId) ? null : db.table('db_datasource_t').where()
-        .eq('tid', datasourceId)
-        .eq('is_del', 0)
-        .selectOne()
+    var datasource = metadataDatasourceById[datasourceId]
     if (datasource == null) {
         return { config: {}, schema: '' }
     }
@@ -551,78 +601,27 @@ var dictionaryLookupFallback = (relation, sourceTable) => {
     }
 }
 var normalizeSourceKey = (dbType, cfg) => {
-    var type = text(dbType).trim().toUpperCase()
-    if (type == 'MYSQL') { return 'source.mysql' }
-    if (type == 'TDSQL_MYSQL') { return 'source.tdsql-mysql' }
-    if (type == 'POSTGRES' || type == 'POSTGRESQL') { return 'source.postgresql' }
-    if (type == 'GAUSSDB' || type == 'OPENGAUSS') { return 'source.gaussdb' }
-    if (type == 'TDSQL_PG') { return 'source.tdsql-pg' }
-    if (type == 'ORACLE' || type == 'ORACLE12' || type == 'ORACLE_12') { return 'source.oracle' }
-    if (type == 'SQLSERVER' || type == 'MSSQL' || type == 'MS_SQL') { return 'source.sqlserver' }
-    if (type == 'MARIADB') { return 'source.mariadb' }
-    if (type == 'DB2') { return 'source.db2' }
-    if (type == 'DM' || type == 'DAMENG') { return 'source.dameng' }
-    if (type == 'KINGBASE') { return 'source.kingbase' }
-    if (type == 'GBASE8A') { return 'source.gbase8a' }
-    if (type == 'GBASE8S') { return 'source.gbase8s' }
-    if (type == 'OSCAR') { return 'source.oscar' }
-    if (type == 'HIGHGO') { return 'source.highgo' }
-    if (type == 'HAILIANG' || type == 'VASTBASE') { return 'source.hailiang' }
-    if (type == 'OCEANBASE') { return 'source.oceanbase' }
-    if (type == 'CLICKHOUSE') { return 'source.clickhouse' }
-    if (type == 'ELASTICSEARCH') { return 'source.elasticsearch' }
-    if (type == 'FTP' || type == 'SFTP') {
-        var ftpProtocol = text(first(cfg, ['ftpProtocol', 'ftp_protocol', 'protocol'])).trim().toLowerCase()
-        return type == 'SFTP' || ftpProtocol == 'sftp' ? 'source.sftp' : 'source.ftp'
-    }
-    if (type == 'MINIO') { return 'source.minio' }
-    return 'source.mysql'
+    try { return sourceTypes.sourceManifest(text(dbType), cfg) }
+    catch (e) { exit 400, '无法生成来源组件：' + e.getMessage() }
 }
-var normalizeSinkType = (dbType) => {
-    var type = text(dbType).trim().toUpperCase()
-    if (type == 'DM' || type == 'DAMENG') { return 'DM' }
-    if (type == 'MYSQL' || type == 'TDSQL_MYSQL') { return 'MySQL' }
-    if (type == 'POSTGRES' || type == 'POSTGRESQL' || type == 'TDSQL_PG' || type == 'GAUSSDB' || type == 'OPENGAUSS') { return 'PostgreSQL' }
-    if (type == 'ORACLE' || type == 'ORACLE12' || type == 'ORACLE_12') { return 'Oracle' }
-    if (type == 'SQLSERVER' || type == 'MSSQL' || type == 'MS_SQL') { return 'SQLSERVER' }
-    if (type == 'KINGBASE') { return 'KINGBASE' }
-    if (type == 'GBASE8A') { return 'GBASE8A' }
-    if (type == 'GBASE8S') { return 'GBASE8S' }
-    if (type == 'OSCAR') { return 'OSCAR' }
-    if (type == 'HIGHGO') { return 'HIGHGO' }
-    if (type == 'OCEANBASE') { return 'OCEANBASE' }
-    if (type == 'CLICKHOUSE') { return 'CLICKHOUSE' }
-    if (type == 'ELASTICSEARCH') { return 'ELASTICSEARCH' }
-    return blank(dbType) ? 'MySQL' : text(dbType)
+var normalizeSinkType = (dbType, cfg) => {
+    try { return sourceTypes.sinkType(text(dbType), cfg) }
+    catch (e) { exit 400, '无法生成目标组件：' + e.getMessage() }
+}
+var normalizeConfigType = (dbType, cfg) => {
+    try { return sourceTypes.configType(text(dbType), cfg) }
+    catch (e) { exit 400, '数据源类型配置不完整：' + e.getMessage() }
 }
 // Huawei MRS Hive is a server-managed target.  Its registered datasource
 // intentionally has no browser-side jdbc_url, so the generated DSL must use
 // the dedicated Hive sink rather than falling into the generic JDBC sink.
 var isServerManagedHuaweiMrsHive = (dbType, cfg) => {
-    if (text(dbType).trim().toUpperCase() != 'HIVE') { return false }
+    if (blank(dbType)) { return false }
+    if (normalizeConfigType(dbType, cfg) != 'HIVE') { return false }
     var mode = text(first(cfg, ['metadataAccessMode', 'metadata_access_mode'])).trim().toLowerCase()
     var connectionMode = text(first(cfg, ['hiveConnectionMode', 'hive_connection_mode'])).trim().toLowerCase()
     var profile = text(first(cfg, ['hiveProfile', 'hive_profile'])).trim()
     return mode == 'server-managed-mrs' || connectionMode == 'huawei-mrs' || !blank(profile)
-}
-var jdbcUrl = (dbType, cfg, row) => {
-    var url = first(cfg, ['jdbcURL', 'jdbcUrl', 'url'])
-    if (!blank(url)) { return text(url) }
-    var type = text(dbType).trim().toUpperCase()
-    var host = first(cfg, ['host', 'dbMetaIp']) || first(row, ['host', 'db_meta_ip']) || '127.0.0.1'
-    var port = first(cfg, ['port', 'dbMetaPort']) || first(row, ['port', 'db_meta_port'])
-    var database = first(cfg, ['database', 'serviceName', 'sid', 'dbName', 'dbMetaDbName']) || first(row, ['dbName', 'db_name']) || ''
-    if (type == 'DM' || type == 'DAMENG') { return 'jdbc:dm://' + host + ':' + (blank(port) ? '5236' : port) + '/' + database }
-    if (type == 'ORACLE' || type == 'ORACLE12' || type == 'ORACLE_12') {
-        var connectionType = text(first(cfg, ['connectionType', 'jdbcType'])).trim().toUpperCase()
-        if (connectionType == 'SID') {
-            return 'jdbc:oracle:thin:@' + host + ':' + (blank(port) ? '1521' : port) + ':' + database
-        }
-        return 'jdbc:oracle:thin:@//' + host + ':' + (blank(port) ? '1521' : port) + '/' + database
-    }
-    if (type == 'KINGBASE') { return 'jdbc:kingbase8://' + host + ':' + (blank(port) ? '54321' : port) + '/' + database }
-    if (type == 'POSTGRES' || type == 'POSTGRESQL') { return 'jdbc:postgresql://' + host + ':' + (blank(port) ? '5432' : port) + '/' + database }
-    return 'jdbc:mysql://' + host + ':' + (blank(port) ? '3306' : port) + '/' + database + '?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true'
 }
 var columnList = (rows) => {
     var list = []
@@ -814,21 +813,118 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
 }
 
 var sourceTableId = text(body?.tableId || body?.sourceTableId || body?.tid).trim()
-var tenantId = tenantRuntime.id()
+var tenantId = text(tenantRuntime.id()).trim()
+if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录' }
 // Rebuilding an existing task is opt-in. Normal requests preserve a saved
 // pipeline even when a newer generator can produce richer mappings.
 var forceRebuild = text(body?.repair || body?.forceRebuild || body?.rebuild).trim().toLowerCase()
 forceRebuild = forceRebuild == 'true' || forceRebuild == '1' || forceRebuild == 'yes'
+var now = new Date()
 if (blank(sourceTableId)) {
     exit 400, 'tableId不能为空'
 }
 
 var sourceTable = db.table('db_table_t').where()
     .eq('tid', sourceTableId)
+    .eq('tenant_id', tenantId)
     .eq('is_del', 0)
     .selectOne()
 if (sourceTable == null) {
     exit 404, '来源表不存在'
+}
+var sourceDbId = text(first(sourceTable, ['datasourceId', 'datasource_id']))
+var sourceDb = db.table('db_datasource_t').where()
+    .eq('tenant_id', tenantId).eq('tid', sourceDbId).eq('is_del', 0).selectOne()
+if (sourceDb == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [sourceDb]).size() != 1) {
+    exit 403, '来源数据源不在当前租户或角色数据范围内'
+}
+
+var sourceColumns = db.table('db_table_column_t').where()
+    .eq('tenant_id', tenantId).eq('table_id', sourceTableId).eq('is_del', 0)
+    .orderBy('ordinal_position', 'asc').select()
+metadataColumnsByTableId[sourceTableId] = sourceColumns == null ? [] : sourceColumns
+loadGovernanceForTableIds([sourceTableId])
+var sourceGovernanceConfig = governanceConfigOf(sourceTable)
+var dictionaryTableIds = []
+var dictionaryTableNames = []
+for (sourceColumn in metadataColumnsByTableId[sourceTableId]) {
+    var dictionaryId = text(first(sourceColumn, ['codeTableId', 'code_table_id', 'dictId', 'dict_id'])).trim()
+    if (!blank(dictionaryId) && !dictionaryTableIds.contains(dictionaryId)) { dictionaryTableIds.add(dictionaryId) }
+}
+for (field in (sourceGovernanceConfig.fields == null ? [] : sourceGovernanceConfig.fields)) {
+    var relation = first(field, ['dictionaryRelation', 'dictionary_relation', 'dictionaryConfig', 'dictionary_config'])
+    if (relation == null) { continue }
+    var dictionaryId = text(first(relation, ['dictionaryTableId', 'dictionary_table_id'])).trim()
+    if (!blank(dictionaryId) && !dictionaryTableIds.contains(dictionaryId)) { dictionaryTableIds.add(dictionaryId) }
+    var dictionaryReference = dictionaryTableReference(first(relation, ['dictionaryTable', 'dictionary_table', 'dictTable', 'dict_table']))
+    if (!blank(dictionaryReference.table) && !dictionaryTableNames.contains(dictionaryReference.table)) {
+        dictionaryTableNames.add(dictionaryReference.table)
+    }
+}
+if (dictionaryTableIds.size() > 200 || dictionaryTableNames.size() > 200) {
+    exit 400, '单次最多处理200个字典表关联'
+}
+var dictionaryRowsById = dictionaryTableIds.size() == 0 ? [] : db.table('db_table_t').where()
+    .eq('tenant_id', tenantId).in('tid', dictionaryTableIds).eq('is_del', 0).select()
+var dictionaryRowsByName = []
+if (dictionaryTableNames.size() > 0) {
+    var dictionaryNamePage = db.table('db_table_t').where()
+        .eq('tenant_id', tenantId).in('table_name', dictionaryTableNames).eq('is_del', 0).page(201, 0)
+    if (dictionaryNamePage != null && dictionaryNamePage.total > 200) {
+        exit 400, '同名字典登记表超过200个，请先缩小字典关联范围'
+    }
+    dictionaryRowsByName = dictionaryNamePage == null || dictionaryNamePage.list == null
+        ? [] : dictionaryNamePage.list
+}
+var dictionaryDatasourceIds = []
+for (dictionaryTable in dictionaryRowsById) {
+    var dictionaryId = text(first(dictionaryTable, ['tid']))
+    metadataTableById[dictionaryId] = dictionaryTable
+    var dictionaryDbId = text(first(dictionaryTable, ['datasourceId', 'datasource_id']))
+    if (!blank(dictionaryDbId) && !dictionaryDatasourceIds.contains(dictionaryDbId)) { dictionaryDatasourceIds.add(dictionaryDbId) }
+}
+for (dictionaryTable in dictionaryRowsByName) {
+    var dictionaryId = text(first(dictionaryTable, ['tid']))
+    metadataTableById[dictionaryId] = dictionaryTable
+    var dictionaryDbId = text(first(dictionaryTable, ['datasourceId', 'datasource_id']))
+    if (!blank(dictionaryDbId) && !dictionaryDatasourceIds.contains(dictionaryDbId)) { dictionaryDatasourceIds.add(dictionaryDbId) }
+}
+if (dictionaryDatasourceIds.size() > 200) { exit 400, '单次最多处理200个字典数据源' }
+var dictionaryDatasourceRows = dictionaryDatasourceIds.size() == 0 ? [] : db.table('db_datasource_t').where()
+    .eq('tenant_id', tenantId).in('tid', dictionaryDatasourceIds).eq('is_del', 0).select()
+var visibleDictionaryDatasources = dataScope.visibleDataSourcesFor(
+    'MENU:2081000000000000002', dictionaryDatasourceRows)
+for (dictionaryDatasource in visibleDictionaryDatasources) {
+    metadataDatasourceById[text(first(dictionaryDatasource, ['tid']))] = dictionaryDatasource
+}
+for (dictionaryId in dictionaryTableIds) {
+    var dictionaryTable = metadataTableById[dictionaryId]
+    if (dictionaryTable != null) {
+        var dictionaryDbId = text(first(dictionaryTable, ['datasourceId', 'datasource_id']))
+        if (metadataDatasourceById[dictionaryDbId] == null) {
+            exit 403, '字典表关联的数据源不在当前租户或角色数据范围内'
+        }
+    }
+}
+var governedDictionaryTableIds = []
+for (dictionaryId in dictionaryTableIds) {
+    if (metadataTableById[dictionaryId] != null) { governedDictionaryTableIds.add(dictionaryId) }
+}
+loadGovernanceForTableIds(governedDictionaryTableIds)
+var dictionaryColumns = governedDictionaryTableIds.size() == 0 ? [] : db.table('db_table_column_t').where()
+    .eq('tenant_id', tenantId).in('table_id', governedDictionaryTableIds).eq('is_del', 0)
+    .orderBy('ordinal_position', 'asc').select()
+for (dictionaryColumn in dictionaryColumns) {
+    var dictionaryTableId = text(first(dictionaryColumn, ['tableId', 'table_id']))
+    if (metadataColumnsByTableId[dictionaryTableId] == null) { metadataColumnsByTableId[dictionaryTableId] = [] }
+    metadataColumnsByTableId[dictionaryTableId].add(dictionaryColumn)
+}
+for (dictionaryTable in dictionaryRowsByName) {
+    var dictionaryDbId = text(first(dictionaryTable, ['datasourceId', 'datasource_id']))
+    if (metadataDatasourceById[dictionaryDbId] == null) { continue }
+    var dictionaryName = text(first(dictionaryTable, ['tableName', 'table_name'])).toLowerCase()
+    if (metadataTablesByName[dictionaryName] == null) { metadataTablesByName[dictionaryName] = [] }
+    metadataTablesByName[dictionaryName].add(dictionaryTable)
 }
 
 // Validate dictionary metadata before retiring an existing task. Otherwise a
@@ -882,10 +978,17 @@ var catalogId = text(body?.catalogId || sourceTable.sourceCatalogId || sourceTab
 if (blank(catalogId)) {
     catalogId = findCatalogBySource(sourceTableId)
 }
-var materializedTargets = db.table('db_table_t').where()
+var materializedTargetsPage = db.table('db_table_t').where()
+    .eq('tenant_id', tenantId)
     .eq('source_table_id', sourceTableId)
     .eq('is_del', 0)
-    .select()
+    .orderBy('created_time', 'asc')
+    .page(101, 0)
+if (materializedTargetsPage != null && materializedTargetsPage.total > 100) {
+    exit 400, '单次最多处理100个物化目标表，请缩小目标范围'
+}
+var materializedTargets = materializedTargetsPage == null || materializedTargetsPage.list == null
+    ? [] : materializedTargetsPage.list
 var targetTables = []
 var targetTableIds = []
 for (candidateTarget in (materializedTargets == null ? [] : materializedTargets)) {
@@ -902,8 +1005,9 @@ if (targetTables.size() == 0) {
     var legacyTargetTableId = readProp(catalogId, 'targetTableId')
     if (!blank(legacyTargetTableId)) {
         var legacyTargetTable = db.table('db_table_t').where()
-            .eq('tid', legacyTargetTableId).eq('is_del', 0).selectOne()
-        if (legacyTargetTable != null) {
+            .eq('tenant_id', tenantId).eq('tid', legacyTargetTableId).eq('is_del', 0).selectOne()
+        var legacySourceId = text(first(legacyTargetTable, ['sourceTableId', 'source_table_id']))
+        if (legacyTargetTable != null && (blank(legacySourceId) || legacySourceId == sourceTableId)) {
             targetTables.add(legacyTargetTable)
             targetTableIds.add(legacyTargetTableId)
         }
@@ -912,33 +1016,68 @@ if (targetTables.size() == 0) {
 if (targetTables.size() == 0) {
     exit 400, '请先完成物化建表，生成至少一个目标表后才能创建接入任务'
 }
+if (targetTables.size() > 100) { exit 400, '单次最多处理100个物化目标表，请缩小目标范围' }
 
-// A generated access task must have one mapping for every physical target
-// column.  A lower count means a previous batch failed part way through and
-// cannot be treated as an existing usable task.
-var expectedMappingCount = 0
-for (expectedTargetTable in targetTables) {
-    var expectedTargetTableId = text(first(expectedTargetTable, ['tid'])).trim()
-    if (!blank(expectedTargetTableId)) {
-        expectedMappingCount = expectedMappingCount + db.table('db_table_column_t').where()
-            .eq('table_id', expectedTargetTableId)
-            .eq('is_del', 0)
-            .count()
+// Authorize every target database ID before reading columns or creating a
+// pipeline.  A mixed authorized/unauthorized target set fails as a whole.
+var targetDatasourceIds = []
+for (candidateTarget in targetTables) {
+    var candidateDbId = text(first(candidateTarget, ['datasourceId', 'datasource_id'])).trim()
+    if (blank(candidateDbId)) { exit 400, '物化目标表缺少目标数据源' }
+    if (!targetDatasourceIds.contains(candidateDbId)) { targetDatasourceIds.add(candidateDbId) }
+}
+var targetDatasourceRows = db.table('db_datasource_t').where()
+    .eq('tenant_id', tenantId).in('tid', targetDatasourceIds).eq('is_del', 0).select()
+var visibleTargetDatasources = dataScope.visibleDataSourcesFor(
+    'MENU:2081000000000000002', targetDatasourceRows == null ? [] : targetDatasourceRows)
+var targetDatasourceById = {}
+for (visibleTargetDatasource in visibleTargetDatasources) {
+    targetDatasourceById[text(first(visibleTargetDatasource, ['tid']))] = visibleTargetDatasource
+}
+for (candidateDbId in targetDatasourceIds) {
+    if (targetDatasourceById[candidateDbId] == null) {
+        exit 403, '物化目标数据源不在当前租户或角色数据范围内'
     }
 }
+loadGovernanceForTableIds(targetTableIds)
 
+// One bounded column query serves all target sinks.  The field-enrichment
+// node and task mapping rows are shared by the sinks and use the first target.
+var targetColumnRows = db.table('db_table_column_t').where()
+    .eq('tenant_id', tenantId).in('table_id', targetTableIds).eq('is_del', 0)
+    .orderBy('ordinal_position', 'asc').select()
+var targetColumnsById = {}
+for (targetColumnRow in (targetColumnRows == null ? [] : targetColumnRows)) {
+    var ownerTableId = text(first(targetColumnRow, ['tableId', 'table_id']))
+    if (targetColumnsById[ownerTableId] == null) { targetColumnsById[ownerTableId] = [] }
+    targetColumnsById[ownerTableId].add(targetColumnRow)
+}
+for (candidateTargetId in targetTableIds) {
+    if (targetColumnsById[candidateTargetId] == null || targetColumnsById[candidateTargetId].size() == 0) {
+        exit 409, '物化目标表缺少当前租户的字段元数据，请重新物化建表'
+    }
+}
 var exists = db.table('data_access_agg_task_t').where()
+    .eq('tenant_id', tenantId)
     .eq('source_table_id', sourceTableId)
     .eq('is_del', 0)
     .orderBy('updated_time', 'desc')
     .selectOne()
 if (exists != null) {
+    // The task stores one shared mapping set, based on its primary target.
+    // Counting every sink's columns would retire a healthy multi-target task
+    // on every subsequent ensure call.
+    var mappingTargetId = text(first(exists, ['targetTableId', 'target_table_id']))
+    if (!targetTableIds.contains(mappingTargetId)) { mappingTargetId = targetTableIds[0] }
+    var expectedMappingCount = targetColumnsById[mappingTargetId].size()
     var existingMappingCount = db.table('data_access_field_mapping').where()
+        .eq('tenant_id', tenantId)
         .eq('task_id', exists.tid)
         .eq('is_del', 0)
         .count()
     var existingPipelineId = text(exists.pipelineId || exists.pipeline_id)
     var existingPipeline = blank(existingPipelineId) ? null : db.table('nifi_pipeline_t').where()
+        .eq('tenant_id', tenantId)
         .eq('id', existingPipelineId)
         .eq('is_del', 0)
         .selectOne()
@@ -948,29 +1087,56 @@ if (exists != null) {
     // property names themselves; a real missing lookup still triggers repair.
     var needsDictionaryLookupUpgrade = dictionaryRelations(sourceTable).size() > 0
         && (existingDsl.indexOf('lookup') < 0 || existingDsl.indexOf('dataSource') < 0)
-    var needsTargetSinkUpgrade = false
+    // Compare actual sink nodes.  A table ID may also appear in the mapping
+    // node or another property, and a removed target can leave an old sink.
+    var existingDslObject = blank(existingDsl) ? {} : parseGovernanceConfig(existingDsl)
+    var existingSinkTargetIds = []
+    var existingSinkNodes = 0
+    for (existingNode in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
+        if (text(first(existingNode, ['category'])).toLowerCase() != 'sink') { continue }
+        existingSinkNodes = existingSinkNodes + 1
+        var existingNodeConfig = existingNode.config == null ? {} : existingNode.config
+        var existingSinkTargetId = text(first(existingNodeConfig, ['targetTableId'])).trim()
+        if (!blank(existingSinkTargetId) && !existingSinkTargetIds.contains(existingSinkTargetId)) {
+            existingSinkTargetIds.add(existingSinkTargetId)
+        }
+    }
+    var needsTargetSinkUpgrade = existingSinkNodes != targetTableIds.size()
+        || existingSinkTargetIds.size() != targetTableIds.size()
     for (expectedTargetTableId in targetTableIds) {
-        if (existingDsl.indexOf(text(expectedTargetTableId)) < 0) {
+        if (!existingSinkTargetIds.contains(text(expectedTargetTableId))) {
             needsTargetSinkUpgrade = true
             break
         }
     }
-    // A task with fewer mappings than target columns is not a usable
-    // user-owned task: it can only be left behind when this endpoint failed
-    // during its final mapping batch. Retire that incomplete pair and recreate
-    // it below. A complete task remains untouched, even when an upgrade is
-    // available.
-    // An explicit rebuild is an operator instruction to regenerate the
-    // registration-derived draft.  This is necessary after a source datasource
-    // or schema binding changes even when the previous mapping count and target
-    // sink still look structurally complete.
-    if (existingMappingCount < expectedMappingCount || forceRebuild) {
-        db.table('data_access_agg_task_t').where().eq('tid', exists.tid).update({
+    var needsHuaweiHiveWriteUpgrade = false
+    if (existingDsl.indexOf('HIVE_RECORD_PUT') >= 0) {
+        for (existingNode in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
+            var existingNodeConfig = existingNode.config == null ? {} : existingNode.config
+            var existingNodeTargetId = text(first(existingNodeConfig, ['targetTableId']))
+            var existingNodeTargetDbId = text(first(existingNodeConfig, ['targetDbId']))
+            var existingTargetDb = targetDatasourceById[existingNodeTargetDbId]
+            if (first(existingNode, ['manifestKey']) == 'sink.hive'
+                && targetTableIds.contains(existingNodeTargetId)
+                && existingTargetDb != null
+                && isServerManagedHuaweiMrsHive(first(existingTargetDb, ['dbType', 'db_type']), readCfg(existingTargetDb))
+                && text(first(existingNodeConfig, ['hiveWriteMode'])).toUpperCase() == 'HIVE_RECORD_PUT') {
+                needsHuaweiHiveWriteUpgrade = true
+                break
+            }
+        }
+    }
+    // A user may intentionally leave some target columns unmapped. Never
+    // replace a saved canvas during normal ensure, even when its mapping count
+    // is lower than the primary target's column count. Only an explicit repair
+    // request may regenerate the registration-derived draft.
+    if (forceRebuild) {
+        db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId).eq('tid', exists.tid).update({
             is_del: 1,
             updated_time: now
         })
         if (existingPipeline != null) {
-            db.table('nifi_pipeline_t').where().eq('id', existingPipelineId).update({
+            db.table('nifi_pipeline_t').where().eq('tenant_id', tenantId).eq('id', existingPipelineId).update({
                 is_del: 1,
                 updated_time: now
             })
@@ -979,8 +1145,10 @@ if (exists != null) {
     var repairReasons = []
     if (existingPipeline == null) { repairReasons.add('关联流程不存在或已删除') }
     if (blank(existingDsl)) { repairReasons.add('关联流程没有可读取的画布定义') }
+    if (existingMappingCount < expectedMappingCount) { repairReasons.add('字段映射少于主目标表字段，请确认后显式修复') }
     if (needsDictionaryLookupUpgrade) { repairReasons.add('字典关联配置需要显式升级') }
     if (needsTargetSinkUpgrade) { repairReasons.add('目标表关联发生变化，需要显式确认重建') }
+    if (needsHuaweiHiveWriteUpgrade) { repairReasons.add('华为 MRS Hive 写入方式需显式确认升级为 PutHwHDFS') }
     return {
         created: false,
         taskId: exists.tid,
@@ -995,23 +1163,12 @@ if (exists != null) {
 var targetTable = targetTables[0]
 var targetTableId = text(first(targetTable, ['tid']))
 
-var sourceDbId = text(first(sourceTable, ['datasourceId', 'datasource_id']))
 var targetDbId = text(first(targetTable, ['datasourceId', 'datasource_id']))
-var sourceDb = db.table('db_datasource_t').where().eq('tid', sourceDbId).eq('is_del', 0).selectOne()
-var targetDb = db.table('db_datasource_t').where().eq('tid', targetDbId).eq('is_del', 0).selectOne()
+var targetDb = targetDatasourceById[targetDbId]
 var sourceCfg = readCfg(sourceDb)
 var targetCfg = readCfg(targetDb)
 
-var sourceColumns = db.table('db_table_column_t').where()
-    .eq('table_id', sourceTableId)
-    .eq('is_del', 0)
-    .orderBy('ordinal_position', 'asc')
-    .select()
-var targetColumns = db.table('db_table_column_t').where()
-    .eq('table_id', targetTableId)
-    .eq('is_del', 0)
-    .orderBy('ordinal_position', 'asc')
-    .select()
+var targetColumns = targetColumnsById[targetTableId]
 var sourceColumnMap = {}
 for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
     sourceColumnMap[text(colName(sourceColumn)).toLowerCase()] = sourceColumn
@@ -1019,11 +1176,12 @@ for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
 var sourceDictionaryRelations = dictionaryRelations(sourceTable)
 var dictionaryLookupSources = validatedDictionaryLookupSources
 
-var now = new Date()
 var nowMs = new Date().getTime()
 var taskId = IdUtil.getSnowflakeNextIdStr()
 var pipelineId = IdUtil.getSnowflakeNextIdStr()
 var sourceTableName = first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
+var sourceTableLabel = text(first(sourceTable, ['tableNameCn', 'table_name_cn'])).trim()
+if (blank(sourceTableLabel)) { sourceTableLabel = text(sourceTableName).trim() }
 var targetTableName = first(targetTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
 var taskName = (first(sourceTable, ['tableNameCn', 'table_name_cn', 'tableComment', 'table_comment']) || sourceTableName) + '接入任务'
 var sourceDbType = first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
@@ -1038,7 +1196,9 @@ var sourceSchema = first(sourceCfg, ['defaultSchema', 'schema', 'currentSchema',
 if (blank(sourceSchema)) {
     sourceSchema = first(sourceTable, ['schemaName', 'schema_name', 'owner', 'tableSchema', 'table_schema'])
 }
-var sourceJdbcUrl = jdbcUrl(sourceDbType, sourceCfg, sourceDb)
+var sourceManifestKey = pushFileSource == null ? normalizeSourceKey(sourceDbType, sourceCfg)
+    : normalizeSourceKey(pushFileSource.dbType, pushFileSource.config)
+var sourceJdbcUrl = pushFileSource == null ? jdbcUrl(sourceDbType, sourceCfg, sourceDb) : null
 
 // A valid explicit target binding is preferred.  Imported metadata may carry
 // an incomplete binding array though, so ensure every registered dictionary or
@@ -1113,13 +1273,15 @@ if (missingTranslationColumns.size() > 0) {
         }
         if (translationMetadata.size() > 0) {
             metadataAsset.batchInsertTableColumns(translationMetadata)
-            db.table('db_table_t').where().eq('tid', targetTableId).eq('is_del', 0)
+            db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
                 .update({ field_count: targetColumns.size() + translationMetadata.size(), updated_time: now })
             targetColumns = db.table('db_table_column_t').where()
                 .eq('table_id', targetTableId)
+                .eq('tenant_id', tenantId)
                 .eq('is_del', 0)
                 .orderBy('ordinal_position', 'asc')
                 .select()
+            targetColumnsById[targetTableId] = targetColumns
         }
     }
 }
@@ -1162,6 +1324,8 @@ var canUpsert = !blank(sourcePrimaryKeys) && !blank(targetPrimaryKeys)
 var sourceNodeId = 'source-' + sourceTableId
 var mapNodeId = 'map-' + taskId
 var sourceNodeConfig = {
+    dbType: pushFileSource == null ? normalizeConfigType(sourceDbType, sourceCfg) : 'FTP',
+    registeredDatasourceId: sourceDbId,
     host: first(sourceCfg, ['host', 'dbMetaIp']),
     port: first(sourceCfg, ['port', 'dbMetaPort']),
     database: sourceService,
@@ -1190,10 +1354,26 @@ var sourceNodeConfig = {
     softDeleteEnabled: false,
     deleteReconcileStrategy: 'NONE'
 }
+// Preserve the connector's registered options instead of silently taking manifest defaults.
+// Server-managed Hive keeps only a tenant-owned reference; client secrets stay on the server.
+if (isServerManagedHuaweiMrsHive(sourceDbType, sourceCfg)) {
+    sourceNodeConfig.hiveProfile = first(sourceCfg, ['hiveProfile', 'hive_profile']) || 'default'
+    sourceNodeConfig.metadataAccessMode = 'server-managed-mrs'
+    sourceNodeConfig.hiveConnectionMode = 'huawei-mrs'
+    sourceNodeConfig.remove('jdbcUrl')
+    sourceNodeConfig.remove('username')
+    sourceNodeConfig.remove('password')
+} else {
+    for (connectionKey in sourceCfg.keySet()) {
+        if (sourceNodeConfig[connectionKey] == null) { sourceNodeConfig[connectionKey] = sourceCfg[connectionKey] }
+    }
+}
+if (sourceManifestKey == 'source.oceanbase') {
+    sourceNodeConfig.compatibleMode = normalizeConfigType(sourceDbType, sourceCfg) == 'OCEANBASE_ORACLE' ? 'ORACLE' : 'MYSQL'
+}
 // 普通 FTP/SFTP 探查接入也必须使用登记的连接，而不是 JDBC 默认配置。
 // 一条任务只读取其来源数据集，不能把目录里的其它表一起送入同一个目标。
-if (pushFileSource == null && (text(sourceDbType).trim().toLowerCase() == 'ftp'
-        || text(sourceDbType).trim().toLowerCase() == 'sftp')) {
+if (pushFileSource == null && (sourceManifestKey == 'source.ftp' || sourceManifestKey == 'source.sftp')) {
     var directProtocol = text(first(sourceCfg, ['ftpProtocol', 'ftp_protocol', 'protocol'])).trim().toLowerCase()
     if (blank(directProtocol)) { directProtocol = text(sourceDbType).trim().toLowerCase() == 'sftp' ? 'sftp' : 'ftp' }
     var directPort = first(sourceCfg, ['ftpPort', 'ftp_port', 'port'])
@@ -1241,7 +1421,7 @@ if (pushFileSource != null) {
 }
 // API 拉取的请求、分页、增量与调度来自第一步的同一条 API 定义。这里仅在
 // 明确创建任务时读取并写入 NiFi 画布；不在第二步新增任何规则编辑入口。
-if (pushFileSource == null && text(sourceDbType).trim().toLowerCase() == 'api') {
+if (pushFileSource == null && sourceManifestKey == 'source.api') {
     var apiRuntimeConfig = apiPullConfig.resolvePipelineSource(sourceDbId, text(sourceTableName))
     for (apiKey in apiRuntimeConfig) { sourceNodeConfig[apiKey] = apiRuntimeConfig[apiKey] }
     sourceNodeConfig.sourceDbId = sourceDbId
@@ -1254,7 +1434,7 @@ if (pushFileSource == null && text(sourceDbType).trim().toLowerCase() == 'api') 
 // MinIO is an S3-compatible object store, not a JDBC database.  Preserve the
 // object-storage connection and the registered object key for the MinIO canvas
 // compiler; otherwise the generic MySQL fallback creates an empty task.
-if (text(sourceDbType).trim().toLowerCase() == 'minio') {
+if (sourceManifestKey == 'source.minio') {
     var minioEndpoint = text(first(sourceCfg, ['minioEndpoint', 'endpoint', 'url'])).trim()
     if (blank(minioEndpoint)) {
         var minioUseSsl = text(first(sourceCfg, ['minioUseSSL', 'useSSL'])).trim().toLowerCase() == 'true'
@@ -1280,8 +1460,8 @@ if (text(sourceDbType).trim().toLowerCase() == 'minio') {
 var dslNodes = [
     {
         id: sourceNodeId,
-        manifestKey: pushFileSource == null ? normalizeSourceKey(sourceDbType, sourceCfg) : normalizeSourceKey(pushFileSource.dbType, pushFileSource.config),
-        label: pushFileSource == null ? '来源表' : 'FTP 文件来源',
+        manifestKey: sourceManifestKey,
+        label: sourceTableLabel,
         category: 'source',
         x: 0,
         y: 120,
@@ -1293,7 +1473,7 @@ var dslNodes = [
         // compatible with the existing mapping DSL while adding dictionary
         // translation, standard-format processing and source-SQL pushdown.
         manifestKey: 'transform.field-enrichment',
-        label: '字段增强',
+        label: '字段映射',
         category: 'transform',
         x: 540,
         y: 120,
@@ -1311,17 +1491,13 @@ var targetSummaries = []
 for (targetIndex, targetCandidate in targetTables) {
     var candidateTargetId = text(first(targetCandidate, ['tid']))
     var candidateTargetDbId = text(first(targetCandidate, ['datasourceId', 'datasource_id']))
-    var candidateTargetDb = db.table('db_datasource_t').where()
-        .eq('tid', candidateTargetDbId).eq('is_del', 0).selectOne()
-    if (candidateTargetDb == null) {
-        exit 404, '目标数据源不存在：' + candidateTargetDbId
-    }
+    var candidateTargetDb = targetDatasourceById[candidateTargetDbId]
     var candidateTargetCfg = readCfg(candidateTargetDb)
     var candidateTargetDbType = first(candidateTargetDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
     var candidateTargetTableName = first(targetCandidate, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
-    var candidateTargetColumns = db.table('db_table_column_t').where()
-        .eq('table_id', candidateTargetId).eq('is_del', 0)
-        .orderBy('ordinal_position', 'asc').select()
+    var candidateTargetTableLabel = text(first(targetCandidate, ['tableNameCn', 'table_name_cn'])).trim()
+    if (blank(candidateTargetTableLabel)) { candidateTargetTableLabel = text(candidateTargetTableName).trim() }
+    var candidateTargetColumns = targetColumnsById[candidateTargetId]
     var candidateTargetKeys = []
     for (candidateTargetColumn in (candidateTargetColumns == null ? [] : candidateTargetColumns)) {
         var candidateTargetName = text(colName(candidateTargetColumn))
@@ -1359,17 +1535,17 @@ for (targetIndex, targetCandidate in targetTables) {
             table: candidateTargetTableName,
             schema: first(candidateTargetCfg, ['schema', 'defaultSchema', 'currentSchema', 'schemaName'])
                 || first(targetCandidate, ['schemaName', 'schema_name'])
-                || ((normalizeSinkType(candidateTargetDbType) == 'DM') ? first(candidateTargetCfg, ['database', 'databaseName']) : null),
+                || ((normalizeSinkType(candidateTargetDbType, candidateTargetCfg) == 'DM') ? first(candidateTargetCfg, ['database', 'databaseName']) : null),
             targetColumns: columnList(candidateTargetColumns),
-            // Materialized Hive tables use the dedicated standard writer;
-            // generic JDBC UPSERT is not a valid Hive write operation.
-            hiveWriteMode: 'HIVE_RECORD_PUT',
+            // The production-proven MRS path converts records to CSV and
+            // writes them through PutHwHDFS; generic JDBC UPSERT is invalid.
+            hiveWriteMode: 'LINEWELL_HDFS',
             statementType: 'INSERT',
             updateKeys: ''
         }
     } else {
         candidateSinkConfig = {
-            dbType: normalizeSinkType(candidateTargetDbType),
+            dbType: normalizeSinkType(candidateTargetDbType, candidateTargetCfg),
             jdbcUrl: jdbcUrl(candidateTargetDbType, candidateTargetCfg, candidateTargetDb),
             username: first(candidateTargetCfg, ['username', 'dbMetaUser']),
             password: first(candidateTargetCfg, ['password', 'dbMetaPassword']),
@@ -1386,7 +1562,7 @@ for (targetIndex, targetCandidate in targetTables) {
     dslNodes.add({
         id: candidateSinkId,
         manifestKey: candidateSinkManifestKey,
-        label: targetTables.size() > 1 ? '目标表 ' + (targetIndex + 1) : '目标表',
+        label: candidateTargetTableLabel,
         category: 'sink',
         x: 1080,
         y: 120 + targetIndex * 300,
@@ -1597,6 +1773,7 @@ if (mappings.size() > 0) {
 }
 
 var task = db.table('data_access_agg_task_t').where()
+    .eq('tenant_id', tenantId)
     .eq('tid', taskId)
     .eq('is_del', 0)
     .selectOne()

@@ -10,6 +10,8 @@ import com.linewell.dataelement.metautil.service.MetadataExplorerService;
 import com.linewell.dataelement.metautil.service.TargetTableDeletionService;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,11 +24,16 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.magicapi.modules.db.ColumnMapperAdapter;
 import org.ssssssss.magicapi.modules.db.SQLModule;
+import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
+import org.ssssssss.magicapi.modules.db.dialect.DialectAdapter;
+import org.ssssssss.magicapi.modules.db.dialect.MySQLDialect;
 import org.ssssssss.magicapi.modules.db.provider.CamelColumnMapperProvider;
 import org.ssssssss.magicapi.modules.db.provider.DefaultColumnMapperProvider;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
+import org.ssssssss.magicapi.modules.db.BoundSql;
+import org.ssssssss.magicapi.core.context.RequestEntity;
 
 /** Executes the released reset script with real Magic/H2 persistence and a mocked Hive connection. */
 class HuaweiHiveTargetDeletionMagicTest {
@@ -36,6 +43,7 @@ class HuaweiHiveTargetDeletionMagicTest {
     private HiveModule hive;
     private MetadataExplorerService explorer;
     private Fixture fixture;
+    private QueryCounter queryCounter;
 
     @BeforeEach
     void setUp() {
@@ -45,12 +53,19 @@ class HuaweiHiveTargetDeletionMagicTest {
         sources.setDefault(source);
         db = new SQLModule(sources);
         db.setDataSourceNode(sources.getDataSource());
+        var dialects = new DialectAdapter();
+        dialects.add(new MySQLDialect() {
+            @Override public boolean match(String productName) { return true; }
+        });
+        db.setDialectAdapter(dialects);
+        db.setResultProvider((request, status, message, data) -> data);
         var columns = new ColumnMapperAdapter();
         columns.add(new DefaultColumnMapperProvider());
         columns.add(new CamelColumnMapperProvider());
         columns.setDefault("camel");
         db.setColumnMapperProvider(columns);
-        db.setSqlInterceptors(List.of());
+        queryCounter = new QueryCounter();
+        db.setSqlInterceptors(List.of(queryCounter));
         db.setNamedTableInterceptors(List.of());
         db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());
         db.setRowMapColumnMapper(value -> value);
@@ -60,7 +75,7 @@ class HuaweiHiveTargetDeletionMagicTest {
                     table_name varchar(100),source_table_id varchar(32),source_catalog_id varchar(32),
                     catalog_name varchar(100),is_del int,updated_time timestamp)
                 """);
-        jdbc.execute("create table db_datasource_t(tid varchar(32),tenant_id varchar(32),db_type varchar(32),is_del int)");
+        jdbc.execute("create table db_datasource_t(tid varchar(32),tenant_id varchar(32),db_type varchar(32),pool_cfg varchar(512),is_del int)");
         jdbc.execute("""
                 create table data_access_agg_task_t(tid varchar(32),tenant_id varchar(32),
                     source_table_id varchar(32),target_table_id varchar(32),target_db_id varchar(32),
@@ -73,7 +88,8 @@ class HuaweiHiveTargetDeletionMagicTest {
         jdbc.execute("create table da_catalog_t(tid varchar(32),is_del int,updated_time timestamp)");
         jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values('source-1','police','source-db','person',0)");
         jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) values('target-1','police','target-db','ods_person','source-1',0)");
-        jdbc.update("insert into db_datasource_t values('target-db','police','hive',0)");
+        jdbc.update("insert into db_datasource_t values('source-db','police','mysql','{}',0)");
+        jdbc.update("insert into db_datasource_t values('target-db','police','hive','{\"database\":\"target_db\",\"metadataAccessMode\":\"server-managed-mrs\",\"hiveConnectionMode\":\"huawei-mrs\"}',0)");
         jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) values('task-1','police','source-1','target-1','target-db',0)");
         jdbc.update("insert into data_access_field_mapping(tid,task_id,is_del) values('mapping-1','task-1',0)");
         jdbc.update("insert into db_table_column_t(tid,table_id,is_del) values('target-column','target-1',0),('source-column','source-1',0)");
@@ -206,11 +222,184 @@ class HuaweiHiveTargetDeletionMagicTest {
         verifyNoInteractions(hive, explorer);
     }
 
+    @Test
+    void twentyBatchPreflightsUseBoundedTenantQueriesAndNoWrites() throws Exception {
+        when(hive.showTables("target_db")).thenReturn(List.of());
+        List<Map<String, Object>> targets = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            targets.add(Map.of("targetDbId", "target-db", "targetTableName", "ods_person_" + i,
+                    "confirmUnmanagedTarget", true));
+        }
+        Map<?, ?> result = assertInstanceOf(Map.class, run(batchRequest(targets)));
+        assertEquals(20, ((Collection<?>) result.get("results")).size());
+        assertTrue(queryCounter.queries <= 6, "tenant SQL must be bounded across targets");
+        assertEquals(0, queryCounter.writes);
+        assertLifecycleIntact();
+        verify(hive, times(1)).showTables("target_db");
+    }
+
+    @Test
+    void hundredBatchTargetsAreRejectedBeforeAnyQuery() throws Exception {
+        List<Map<String, Object>> targets = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            targets.add(Map.of("targetDbId", "target-db", "targetTableName", "ods_person_" + i,
+                    "confirmUnmanagedTarget", true));
+        }
+        assertInstanceOf(ExitValue.class, run(batchRequest(targets)));
+        assertEquals(0, queryCounter.queries);
+        assertEquals(0, queryCounter.writes);
+        verifyNoInteractions(hive, explorer);
+    }
+
+    @Test
+    void batchPreflightRejectsInvisibleTargetDatasourceBeforePhysicalProbe() throws Exception {
+        fixture.deniedDatasourceId = "target-db";
+        var targets = List.<Map<String, Object>>of(Map.of(
+                "targetDbId", "target-db", "targetTableName", "ods_person", "targetTableId", "target-1"));
+        assertInstanceOf(ExitValue.class, run(batchRequest(targets)));
+        assertTrue(queryCounter.queries <= 2);
+        assertEquals(0, queryCounter.writes);
+        verifyNoInteractions(hive, explorer);
+    }
+
+    @Test
+    void unlinkedRegisteredTargetIsShownAsAConflictWithoutDeletingIt() throws Exception {
+        prepareUnlinkedTargetWithAnotherActiveTask();
+        when(hive.showTables("target_db")).thenReturn(List.of("ods_person"));
+
+        var targets = List.<Map<String, Object>>of(Map.of(
+                "targetDbId", "target-db", "targetTableName", "ods_person",
+                "confirmUnmanagedTarget", true));
+        Map<?, ?> result = assertInstanceOf(Map.class, run(batchRequest(targets)));
+        Map<?, ?> target = assertInstanceOf(Map.class, ((List<?>) result.get("results")).getFirst());
+
+        assertEquals("target-1", target.get("targetTableId"));
+        assertEquals(true, target.get("targetUnlinked"));
+        assertEquals(true, target.get("targetPhysicalExists"));
+        assertEquals(false, target.get("sideEffectsApplied"));
+        assertEquals(0, queryCounter.writes);
+        assertTrue(queryCounter.queries <= 8);
+        assertLifecycleIntact();
+        verify(hive, never()).execDDLSqlInDatabase(any(), any());
+    }
+
+    @Test
+    void unlinkedTargetDeleteRequiresPreviewedIdAndExplicitConfirmation() throws Exception {
+        prepareUnlinkedTargetWithAnotherActiveTask();
+        when(hive.showTables("target_db")).thenReturn(List.of("ods_person"));
+        Map<String, Object> byName = request();
+        byName.remove("targetTableId");
+        byName.put("dryRun", true);
+
+        Map<?, ?> preview = assertInstanceOf(Map.class, run(byName));
+        assertEquals("target-1", preview.get("targetTableId"));
+        assertEquals(true, preview.get("targetUnlinked"));
+        byName.remove("dryRun");
+        byName.put("confirmUnlinkedTarget", true);
+        assertInstanceOf(ExitValue.class, run(byName));
+        assertInstanceOf(ExitValue.class, run(request()));
+        assertEquals(0, queryCounter.writes);
+        assertLifecycleIntact();
+        verify(hive, never()).execDDLSqlInDatabase(any(), any());
+    }
+
+    @Test
+    void confirmedUnlinkedTargetDeleteLeavesOtherSourceTasksUntouched() throws Exception {
+        prepareUnlinkedTargetWithAnotherActiveTask();
+        when(hive.showTables("target_db")).thenReturn(List.of("ods_person"), List.of("ods_person"), List.of());
+        Map<String, Object> request = request();
+        request.put("confirmUnlinkedTarget", true);
+
+        Map<?, ?> result = assertInstanceOf(Map.class, run(request));
+
+        assertEquals(true, result.get("targetPhysicalDeleted"));
+        assertEquals(true, result.get("targetUnlinked"));
+        assertEquals(0, result.get("taskCount"));
+        assertEquals(1, deleted("db_table_t", "target-1"));
+        assertEquals(1, deleted("db_table_column_t", "target-column"));
+        assertEquals(0, deleted("db_table_t", "source-1"));
+        assertEquals(0, deleted("db_table_t", "target-2"));
+        assertEquals(0, deleted("data_access_agg_task_t", "task-1"));
+        assertEquals(0, deleted("data_access_field_mapping", "mapping-1"));
+    }
+
+    @Test
+    void unlinkedMetadataWithAnotherSourcesTaskIsNeverOfferedForDeletion() throws Exception {
+        jdbc.update("update db_table_t set source_table_id=null where tid='target-1'");
+        jdbc.update("update data_access_agg_task_t set source_table_id='other-source' where tid='task-1'");
+        var targets = List.<Map<String, Object>>of(Map.of(
+                "targetDbId", "target-db", "targetTableName", "ods_person",
+                "confirmUnmanagedTarget", true));
+
+        assertInstanceOf(ExitValue.class, run(batchRequest(targets)));
+        assertEquals(0, queryCounter.writes);
+        assertLifecycleIntact();
+        verifyNoInteractions(hive, explorer);
+    }
+
+    @Test
+    void unlinkedMetadataUsedAsAnotherSourcesInputIsNotDeletable() throws Exception {
+        prepareUnlinkedTargetWithAnotherActiveTask();
+        jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) "
+                + "values('other-task','police','target-1','missing-target','target-db',0)");
+
+        Map<String, Object> request = request();
+        request.put("confirmUnlinkedTarget", true);
+        assertInstanceOf(ExitValue.class, run(request));
+        assertEquals(0, queryCounter.writes);
+        assertLifecycleIntact();
+        verifyNoInteractions(hive, explorer);
+    }
+
+    @Test
+    void singleTargetDeleteRechecksRoleScopeAfterAnyEarlierDryRun() throws Exception {
+        fixture.deniedDatasourceId = "target-db";
+        assertInstanceOf(ExitValue.class, run(request()));
+        assertLifecycleIntact();
+        verifyNoInteractions(hive, explorer);
+    }
+
+    @Test
+    void cancellationWithTwentyOrHundredTasksUsesTheSameReadCount() throws Exception {
+        prepareCancellationCandidates(20);
+        Object twentyResult = run(Map.of("sourceTableId", "source-1", "dryRun", true));
+        assertEquals("target-20", assertInstanceOf(Map.class, twentyResult).get("targetTableId"));
+        int twentyQueries = queryCounter.queries;
+        assertEquals(0, queryCounter.writes);
+
+        setUp();
+        prepareCancellationCandidates(100);
+        Object hundredResult = run(Map.of("sourceTableId", "source-1", "dryRun", true));
+        assertEquals("target-100", assertInstanceOf(Map.class, hundredResult).get("targetTableId"));
+        assertEquals(twentyQueries, queryCounter.queries);
+        assertTrue(queryCounter.queries <= 4);
+        assertEquals(0, queryCounter.writes);
+    }
+
+    private void prepareCancellationCandidates(int count) {
+        jdbc.update("update data_access_agg_task_t set target_table_id='missing-1' where tid='task-1'");
+        for (int i = 2; i <= count; i++) {
+            jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) values(?,?,?,?,?,0)",
+                    "task-" + i, "police", "source-1", "missing-" + i, "target-db");
+        }
+        jdbc.update("update data_access_agg_task_t set target_table_id=? where tid=?",
+                "target-" + count, "task-" + count);
+        jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) values(?,?,?,?,?,0)",
+                "target-" + count, "police", "target-db", "ods_person_" + count, "source-1");
+    }
+
+    private void prepareUnlinkedTargetWithAnotherActiveTask() {
+        jdbc.update("update db_table_t set source_table_id=null where tid='target-1'");
+        jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) "
+                + "values('target-2','police','target-db','ods_other','source-1',0)");
+        jdbc.update("update data_access_agg_task_t set target_table_id='target-2' where tid='task-1'");
+    }
+
     private Object run(Map<String, Object> body) throws Exception {
         // Replace only runtime imports with test adapters; execute every validation and
         // cleanup statement from the actual released API using the project's Magic engine.
         String script = CanonicalMagicSources.byId(SOURCE_ID)
-                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.model\\.|java\\.util\\.Map)[^\\n]*\\n", "");
+                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.model\\.|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
         String prefix = "var datasourceConnectionConfig = (action, datasourceId, values, clearAll) => fixture.connectionConfig(datasourceId);\n"
                 + "var huaweiHiveGateway = () => fixture.gateway(body);\n";
         Map<String, Object> inputs = new LinkedHashMap<>();
@@ -218,6 +407,9 @@ class HuaweiHiveTargetDeletionMagicTest {
         inputs.put("db", db);
         inputs.put("fixture", fixture);
         inputs.put("tenantRuntime", fixture);
+        inputs.put("dataScope", fixture);
+        inputs.put("jsons", fixture);
+        inputs.put("poolJsons", fixture);
         inputs.put("targetTableDeletionService", new TargetTableDeletionService(explorer, hive));
         inputs.put("esCommonService", mock(EsCommonService.class));
         inputs.put("nifiClient", mock(NifiClient.class));
@@ -228,6 +420,16 @@ class HuaweiHiveTargetDeletionMagicTest {
     private Map<String, Object> request() {
         return new LinkedHashMap<>(Map.of("sourceTableId", "source-1", "targetTableId", "target-1",
                 "targetDbId", "target-db", "targetTableName", "ods_person", "deleteTargetTable", true));
+    }
+
+    private Map<String, Object> batchRequest(List<Map<String, Object>> targets) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("sourceTableId", "source-1");
+        result.put("deleteTargetTable", true);
+        result.put("dryRun", true);
+        result.put("batchDryRun", true);
+        result.put("targets", targets);
+        return result;
     }
 
     private void assertLifecycleIntact() {
@@ -244,9 +446,18 @@ class HuaweiHiveTargetDeletionMagicTest {
 
     public static class Fixture {
         boolean managed = true;
+        String deniedDatasourceId;
         private final HiveModule hive;
         Fixture(HiveModule hive) { this.hive = hive; }
         public String id() { return "police"; }
+        public List<Map<String, Object>> visibleDataSourcesFor(String resource, Collection<Map<String, Object>> rows) {
+            assertEquals("MENU:2081000000000000002", resource);
+            return rows.stream().filter(row -> !String.valueOf(row.get("tid")).equals(deniedDatasourceId)).toList();
+        }
+        public Map<String, Object> parse(String raw) {
+            return Map.of("database", "target_db", "metadataAccessMode", "server-managed-mrs",
+                    "hiveConnectionMode", "huawei-mrs");
+        }
         public Map<String, Object> connectionConfig(String datasourceId) {
             return Map.of("database", "target_db", "hiveProfile", "default",
                     "hiveConnectionMode", managed ? "huawei-mrs" : "open-source",
@@ -269,6 +480,17 @@ class HuaweiHiveTargetDeletionMagicTest {
                 return Map.of("success", true);
             }
             throw new IllegalArgumentException("unexpected gateway action: " + action);
+        }
+    }
+
+    private static final class QueryCounter implements SQLInterceptor {
+        int queries;
+        int writes;
+        @Override
+        public void preHandle(BoundSql sql, RequestEntity request) {
+            String statement = sql.getSql().stripLeading().toLowerCase();
+            if (statement.startsWith("select")) { queries++; }
+            else { writes++; }
         }
     }
 }

@@ -42,6 +42,9 @@ import java.util.regex.Pattern;
 public class HiveModule {
 
     private static final String HIVE_DRIVER = "org.apache.hive.jdbc.HiveDriver";
+    /** Server-side read timeout shared by queryTable and showTables. */
+    private static final String READ_QUERY_TIMEOUT_PROPERTY = "hive.query.table.timeout.seconds";
+    private static final int DEFAULT_READ_QUERY_TIMEOUT_SECONDS = 10;
     private static final Pattern HIVE_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     private static final String ZOOKEEPER_SERVER_PRINCIPAL_KEY = "zookeeper.server.principal";
@@ -252,20 +255,36 @@ public class HiveModule {
         }
         List<Map<String, Object>> resultList = new ArrayList<>();
         try (Connection connection = getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            ResultSetMetaData metaData = resultSet.getMetaData();
-            int columnCount = metaData.getColumnCount();
-            while (resultSet.next()) {
-                Map<String, Object> row = new HashMap<>(columnCount);
-                for (int i = 1; i <= columnCount; i++) {
-                    row.put(metaData.getColumnLabel(i), resultSet.getObject(i));
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(readQueryTimeoutSeconds());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                ResultSetMetaData metaData = resultSet.getMetaData();
+                int columnCount = metaData.getColumnCount();
+                while (resultSet.next()) {
+                    Map<String, Object> row = new HashMap<>(columnCount);
+                    for (int i = 1; i <= columnCount; i++) {
+                        row.put(metaData.getColumnLabel(i), resultSet.getObject(i));
+                    }
+                    resultList.add(row);
                 }
-                resultList.add(row);
             }
         }
         log.info("Hive 查询返回 {} 行", resultList.size());
         return resultList;
+    }
+
+    private static int readQueryTimeoutSeconds() {
+        String configured = System.getProperty(READ_QUERY_TIMEOUT_PROPERTY, "").trim();
+        if (configured.isEmpty()) return DEFAULT_READ_QUERY_TIMEOUT_SECONDS;
+        try {
+            int seconds = Integer.parseInt(configured);
+            if (seconds > 0) return seconds;
+        } catch (NumberFormatException ignored) {
+            // A malformed server setting must not disable the query timeout.
+        }
+        log.warn("Hive 查询超时配置 {} 无效，使用默认值 {} 秒",
+                READ_QUERY_TIMEOUT_PROPERTY, DEFAULT_READ_QUERY_TIMEOUT_SECONDS);
+        return DEFAULT_READ_QUERY_TIMEOUT_SECONDS;
     }
 
     private String redactSql(String sql) {
@@ -286,10 +305,12 @@ public class HiveModule {
                 ? "SHOW TABLES IN " + databaseName
                 : "SHOW TABLES";
         try (Connection connection = getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                tableList.add(resultSet.getString(1));
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(readQueryTimeoutSeconds());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    tableList.add(resultSet.getString(1));
+                }
             }
         }
         log.info("Hive 数据库 {} 共有 {} 张表",

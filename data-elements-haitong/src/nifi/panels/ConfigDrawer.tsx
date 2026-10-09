@@ -1,3 +1,4 @@
+import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from "./registeredDatasourceType";
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip, Modal, Segmented } from 'antd';
 import {
@@ -178,55 +179,6 @@ function dbOptionText(item: DbDictItem) {
   return [item.label, item.dbName, item.database, item.dbType, item.host].filter(Boolean).join(' ');
 }
 
-function normalizeSourceManifestKey(dbType?: string, protocol?: string) {
-  const key = String(dbType ?? '').trim().toLowerCase().replace(/[\s_-]+/g, '');
-  if (!key) return undefined;
-  if (key === 'ftp' || key === 'sftp') {
-    return String(protocol ?? '').trim().toLowerCase() === 'sftp' || key === 'sftp'
-      ? 'source.sftp'
-      : 'source.ftp';
-  }
-  if (key === 'api') return 'source.api';
-  // OceanBase Oracle/MySQL compatibility modes must be classified before the
-  // generic vendor checks below.  "oceanbaseoracle" otherwise also matches
-  // "oracle" and would incorrectly switch the node to source.oracle.
-  if (key.includes('oceanbase')) return 'source.oceanbase';
-  if (key.includes('mysql')) return 'source.mysql';
-  if (key.includes('postgres') || key.includes('tdsqlpg') || key.includes('gauss')) return 'source.postgresql';
-  if (key.includes('oracle')) return 'source.oracle';
-  if (key.includes('sqlserver') || key.includes('mssql')) return 'source.sqlserver';
-  if (key.includes('dm') || key.includes('dameng')) return 'source.dameng';
-  if (key.includes('kingbase')) return 'source.kingbase';
-  if (key.includes('clickhouse')) return 'source.clickhouse';
-  if (key.includes('mariadb')) return 'source.mariadb';
-  if (key.includes('db2')) return 'source.db2';
-  if (key.includes('gbase8a')) return 'source.gbase8a';
-  if (key.includes('gbase8s')) return 'source.gbase8s';
-  if (key.includes('hailiang') || key.includes('vastbase')) return 'source.hailiang';
-  if (key.includes('oscar')) return 'source.oscar';
-  if (key.includes('highgo')) return 'source.highgo';
-  return undefined;
-}
-
-function sinkDbType(dbType?: string) {
-  const text = String(dbType ?? '').trim();
-  if (!text) return undefined;
-  const normalized = text.toLowerCase().replace(/[\s_-]+/g, '');
-  if (normalized.includes('oceanbaseoracle')) return 'OCEANBASE_ORACLE';
-  if (normalized.includes('oceanbasemysql') || normalized === 'oceanbase') return 'OCEANBASE_MYSQL';
-  if (normalized.includes('mysql')) return 'MySQL';
-  if (normalized.includes('postgres') || normalized.includes('tdsqlpg') || normalized.includes('gauss')) return 'PostgreSQL';
-  if (normalized.includes('oracle')) return 'Oracle';
-  if (normalized.includes('sqlserver') || normalized.includes('mssql')) return 'SQLSERVER';
-  if (normalized.includes('dm') || normalized.includes('dameng')) return 'DM';
-  if (normalized.includes('kingbase')) return 'KINGBASE';
-  if (normalized.includes('clickhouse')) return 'CLICKHOUSE';
-  if (normalized.includes('hive')) return 'HIVE';
-  if (normalized.includes('mariadb')) return 'MARIADB';
-  if (normalized.includes('db2')) return 'DB2';
-  return text;
-}
-
 const LINEWELL_JDBC_WRITER = 'LINEWELL_PUT_DATABASE_RECORD';
 const NATIVE_JDBC_WRITER = 'NIFI_PUT_DATABASE_RECORD';
 
@@ -316,22 +268,6 @@ function apiPullHeaders(definition: ApiPullItem | undefined, fallback?: string) 
   } catch {
     return undefined;
   }
-}
-
-function buildJdbcUrl(dbType: string | undefined, host?: string, port?: string, database?: string) {
-  if (!host || !database) return undefined;
-  const type = sinkDbType(dbType);
-  const p = port || (type === 'PostgreSQL' ? '5432' : type === 'Oracle' ? '1521' : type === 'SQLSERVER' ? '1433' : '3306');
-  if (type === 'PostgreSQL') return `jdbc:postgresql://${host}:${p}/${database}`;
-  if (type === 'Oracle') return `jdbc:oracle:thin:@//${host}:${p}/${database}`;
-  if (type === 'SQLSERVER') return `jdbc:sqlserver://${host}:${p};databaseName=${database};encrypt=true;trustServerCertificate=false`;
-  if (type === 'DM') return `jdbc:dm://${host}:${p}/${database}`;
-  if (type === 'KINGBASE') return `jdbc:kingbase8://${host}:${p}/${database}`;
-  if (type === 'CLICKHOUSE') return `jdbc:clickhouse://${host}:${p}/${database}`;
-  if (type === 'HIVE') return `jdbc:hive2://${host}:${port || '10000'}/${database}`;
-  if (type === 'OCEANBASE_ORACLE') return `jdbc:oceanbase:oracle://${host}:${p}/${database}`;
-  if (type === 'OCEANBASE_MYSQL') return `jdbc:mysql://${host}:${p}/${database}?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true`;
-  return `jdbc:mysql://${host}:${p}/${database}?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true`;
 }
 
 function buildHuaweiMrsHiveJdbcUrl(item: DbDictItem, host?: string, port?: string, database?: string) {
@@ -957,7 +893,12 @@ export default function ConfigDrawer() {
     const sourceManifestKey = node.category === 'source'
       ? normalizeSourceManifestKey(item.dbType, item.ftpProtocol ?? item.protocol)
       : undefined;
-    const normalizedDbType = sinkDbType(item.dbType);
+    const normalizedDbType = sinkDbType(item.dbType, item.compatibleMode);
+    if (!normalizedDbType || (node.category === 'source' && (!sourceManifestKey
+      || !manifests.some((candidate) => candidate.key === sourceManifestKey)))) {
+      message.error(`当前画布尚未支持此数据源类型：${item.dbType || '未登记类型'}`);
+      return;
+    }
     const isOracleSource = sourceManifestKey === 'source.oracle';
     const isOceanBaseSource = sourceManifestKey === 'source.oceanbase' || Boolean(normalizedDbType?.startsWith('OCEANBASE'));
     const isFtpSource = sourceManifestKey === 'source.ftp' || sourceManifestKey === 'source.sftp';
@@ -986,7 +927,7 @@ export default function ConfigDrawer() {
     const oceanBaseCompatibleMode = isOceanBaseSource
       ? (declaredOceanBaseMode === 'ORACLE' || normalizedDbType === 'OCEANBASE_ORACLE' ? 'ORACLE' : 'MYSQL')
       : undefined;
-    const isHuaweiMrsHive = String(item.dbType || '').trim().toUpperCase() === 'HIVE'
+    const isHuaweiMrsHive = normalizedDbType === 'HIVE'
       && (String(item.metadataAccessMode || '').toLowerCase() === 'server-managed-mrs'
         || String(item.hiveConnectionMode || '').toLowerCase() === 'huawei-mrs'
         || Boolean(item.hiveProfile)
@@ -1016,7 +957,7 @@ export default function ConfigDrawer() {
       jdbcType: oracleConnectionType,
       sid: oracleService,
       serviceName: oracleService,
-      compatibleMode: oceanBaseCompatibleMode,
+      compatibleMode: sourceManifestKey === 'source.kingbase' ? item.compatibleMode : oceanBaseCompatibleMode,
       tenant: isOceanBaseSource ? item.tenant : undefined,
       clusterId: isOceanBaseSource ? item.clusterId : undefined,
     };
@@ -1115,14 +1056,20 @@ export default function ConfigDrawer() {
         const sinkManifest = manifests.find((candidate) => candidate.key === sinkKey);
         if (sinkManifest) switchNodeManifest(node.id, sinkManifest);
       }
-      const dbType = sinkDbType(item.dbType);
+      // A manually configured Hive LOCATION belongs to the previous target.
+      // Selecting another registered Hive database must not reuse that path.
+      const previousDbId = String(node.config?.selectedDatabaseId || node.config?.registeredDatasourceId || '');
+      if (sinkKey === 'sink.hive' && previousDbId !== String(dbId)) {
+        basePatch.hdfsDirectory = '';
+      }
+      const dbType = normalizedDbType;
       basePatch.dbType = dbType;
       if (sinkKey === 'sink.jdbc') {
         Object.assign(basePatch, jdbcWriterDefaults(dbType));
       }
       const jdbcUrl = usesServerManagedHiveProfile ? undefined : (isHuaweiMrsHive
         ? (item.jdbcUrl || item.jdbcURL || buildHuaweiMrsHiveJdbcUrl(item, host, port, database))
-        : (item.jdbcUrl || item.jdbcURL || buildJdbcUrl(dbType, host, port, database)));
+        : (item.jdbcUrl || item.jdbcURL || buildJdbcUrl(dbType, host, port, database, item.connectionType ?? item.jdbcType)));
       if (jdbcUrl) basePatch.jdbcUrl = jdbcUrl;
       updateConfig(node.id, basePatch);
       message.success(`已选择目标库：${item.label || database || host}`);
@@ -1137,7 +1084,7 @@ export default function ConfigDrawer() {
       basePatch.dbType = normalizedDbType;
       const jdbcUrl = usesServerManagedHiveProfile ? undefined : (isHuaweiMrsHive
         ? (item.jdbcUrl || item.jdbcURL || buildHuaweiMrsHiveJdbcUrl(item, host, port, database))
-        : (item.jdbcUrl || item.jdbcURL || buildJdbcUrl(item.dbType, host, port, database)));
+        : (item.jdbcUrl || item.jdbcURL || buildJdbcUrl(item.dbType, host, port, database, item.connectionType ?? item.jdbcType)));
       if (jdbcUrl) basePatch.jdbcUrl = jdbcUrl;
     }
     updateConfig(node.id, basePatch);

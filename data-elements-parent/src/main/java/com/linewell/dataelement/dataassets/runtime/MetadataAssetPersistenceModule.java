@@ -52,6 +52,24 @@ public class MetadataAssetPersistenceModule {
         this.dataSource = dataSource;
     }
 
+    @Comment("按当前租户全部有效表的登记状态同步数据源；finish=true 表示结束登记")
+    public Map<String, Object> refreshRegistrationStatus(String datasourceId, boolean finish) {
+        if (TenantContext.isIgnored()) throw new BizException(401, "无法识别当前租户");
+        return DatasourceRegistrationStatus.refresh(dataSource, TenantContext.getTenantId(), datasourceId, finish);
+    }
+
+    @Comment("只读预检结束登记后的数据源状态")
+    public Map<String, Object> reviewRegistrationStatus(String datasourceId) {
+        if (TenantContext.isIgnored()) throw new BizException(401, "无法识别当前租户");
+        return DatasourceRegistrationStatus.evaluate(dataSource, TenantContext.getTenantId(), datasourceId, true, true);
+    }
+
+    @Comment("批量同步当前租户数据源状态；最多100个ID，集合外一次聚合查询")
+    public List<Map<String, Object>> refreshRegistrationStatuses(List<String> datasourceIds) {
+        if (TenantContext.isIgnored()) throw new BizException(401, "无法识别当前租户");
+        return DatasourceRegistrationStatus.evaluateMany(dataSource, TenantContext.getTenantId(), datasourceIds, false, false);
+    }
+
     @Comment("跨数据库批量保存数据表字段元数据")
     public int batchInsertTableColumns(List<Map<String, Object>> rows) {
         if (rows == null || rows.isEmpty()) {

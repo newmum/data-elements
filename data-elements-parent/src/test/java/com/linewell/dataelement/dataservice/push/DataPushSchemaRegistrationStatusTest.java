@@ -48,8 +48,16 @@ class DataPushSchemaRegistrationStatusTest {
     }
 
     @Test
+    void sourceWithRemainingUnregisteredTablesCanPublishRegisteredTables() {
+        insertSource(1);
+        assertThatThrownBy(() -> service.publish("tenant-1", "source-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("数据源尚无登记成功的数据表，无法发布推送契约");
+    }
+
+    @Test
     void publishesMultipleRegisteredTablesAndBuildsStandaloneSnapshot() {
-        insertSource(2);
+        insertSource(1);
         jdbc.execute("create table db_table_column_t(tid varchar(32),tenant_id varchar(32),table_id varchar(32),column_name varchar(255),column_comment varchar(255),data_type varchar(64),column_type varchar(64),nullable int,primary_key int,ordinal_position int,is_del int)");
         jdbc.execute("create table data_push_schema_t(tid varchar(64),datasource_id varchar(32),table_id varchar(32),table_name varchar(255),schema_version bigint,schema_hash varchar(128),status varchar(32),delivery_config varchar(1000),tenant_id varchar(32),published_time timestamp,updated_time timestamp,is_del int)");
         jdbc.execute("create table data_push_schema_field_t(tid varchar(64),schema_id varchar(64),field_name varchar(255),data_type varchar(64),required_flag int,ordinal_position int,tenant_id varchar(32),is_del int)");

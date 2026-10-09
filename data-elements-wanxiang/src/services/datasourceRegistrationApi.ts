@@ -109,7 +109,7 @@ export const datasourceRegistrationApi = {
   detail: (tid: string) => platformApi<Record<string, unknown>>('/dst/database/detail', { tid }),
   // Commit the authoritative record first. ES projection is refreshed separately
   // after the editor closes, using the platform's existing deferred-save contract.
-  save: (draft: SourceDraft, tid?: string) => platformApi<{ tid: string; indexRefreshPending?: boolean }>('/dst/database/saveOrUpdate', { tid: tid || '', assetType: 'db', deferIndexRefresh: true, propList: { ...sourceProperties(draft), ...(!tid ? { assetStatus: 2 } : {}) } }),
+  save: (draft: SourceDraft, tid?: string) => platformApi<{ tid: string; indexRefreshPending?: boolean }>('/dst/database/saveOrUpdate', { tid: tid || '', assetType: 'db', deferIndexRefresh: true, propList: { ...sourceProperties(draft), ...(!tid ? { assetStatus: 0 } : {}) } }),
   async refreshIndex(tid: string): Promise<void> {
     const result = await platformApi<{ refreshed?: boolean; removed?: boolean }>('/dst/maintenance/refresh', { tid, assetType: 'db' }, { timeoutMs: 120000 });
     if (result.refreshed !== true) throw new Error(result.removed ? '数据源主记录已不存在，请刷新列表核对' : '索引接口未确认同步成功，请重试同步');

@@ -16,6 +16,9 @@
   --text: #262626;
   --secondary: #595959;
   --border: #d9d9d9;
+  --error-card-bg: #fafafa;
+  --error-card-border: #f0f0f0;
+  --error-suggestion: #1677ff;
 }
 
 :root[data-theme='dark'] .nifi-workspace {
@@ -43,6 +46,9 @@
   --text: #f0f0f0;
   --secondary: #bfbfbf;
   --border: #434343;
+  --error-card-bg: #262626;
+  --error-card-border: #434343;
+  --error-suggestion: #69b1ff;
   --fm-bg-canvas: #141414;
   --fm-bg-panel: #1f1f1f;
   --fm-bg-row-hover: #303030;

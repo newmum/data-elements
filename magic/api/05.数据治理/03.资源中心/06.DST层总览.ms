@@ -64,7 +64,7 @@ var statsRows = db.select("""
        AND t.is_del = 0
        AND t.asset_status = 2
      WHERE d.is_del = 0
-       AND d.asset_status = 2
+       AND d.asset_status IN (1, 2)
      GROUP BY d.org_id
 """)
 var statsByOrg = {}

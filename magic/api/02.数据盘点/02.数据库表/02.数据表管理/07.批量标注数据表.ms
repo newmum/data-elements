@@ -31,7 +31,8 @@ import jsons
 import log
 import metadataAsset
 import tenantRuntime
-import '@post:/dst/maintenance/refresh' as refreshAssetIndex
+import dataScope
+import '@post:/dst/maintenance/batchRefresh' as refreshAssetIndex
 
 /*
  * 数据表管理 07：第二步批量标注数据表。
@@ -82,12 +83,14 @@ var tableItems = body == null ? null : (body.tables == null ? (body.rows == null
 if (tableItems == null || tableItems.size() == 0) {
     exit 400, 'tables 不能为空'
 }
+if (tableItems.size() > 100) { exit 400, '单次最多标注 100 张表' }
 var requestDatasourceId = body == null ? null : (body.datasourceId == null ? body.dbId : body.datasourceId)
 var requestAnnotated = body == null || body.annotated == null ? 1 : body.annotated
 var annotatedFlag = textOf(requestAnnotated) == '0' ? 0 : 1
 var dryRun = body != null && body.dryRun == true
 var refreshDatasource = body == null || body.refreshDatasource != false
 var tenantId = tenantRuntime.id()
+if (blank(tenantId)) { exit 401, '缺少当前租户上下文' }
 
 // 先完成整批参数校验，避免第 N 条业务参数错误时前 N-1 条已经落库。
 var preparedItems = []
@@ -122,45 +125,81 @@ for (item in tableItems) {
     })
 }
 
-// 同一分片通常只有一个数据源；每个数据源只查一次已有表，替代逐表最多两次查询。
+// 整批预取来源、现有表和字段；循环中只读内存，不逐表或逐数据源补查。
+var batchSourceIds = []
+var requestedTableIds = []
+var requestedNames = []
+for (prepared in preparedItems) {
+    var sourceId = textOf(prepared.datasourceId)
+    if (!batchSourceIds.contains(sourceId)) { batchSourceIds.add(sourceId) }
+    var requestedId = rowValue(prepared.item, ['tid', 'tableId', 'id'])
+    if (blank(requestedId)) { requestedId = rowValue(prepared.props, ['tid', 'tableId', 'id']) }
+    if (!blank(requestedId) && !requestedTableIds.contains(textOf(requestedId))) { requestedTableIds.add(textOf(requestedId)) }
+    var nameKey = normalizeKey(prepared.tableName)
+    if (!requestedNames.contains(nameKey)) { requestedNames.add(nameKey) }
+}
+var sources = db.table('db_datasource_t').where().in('tid', batchSourceIds)
+    .eq('tenant_id', tenantId).eq('is_del', 0).select()
+var visibleSources = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', sources)
+var visibleSourceIds = []
+for (source in visibleSources) { visibleSourceIds.add(textOf(rowValue(source, ['tid']))) }
+for (sourceId in batchSourceIds) {
+    if (!visibleSourceIds.contains(sourceId)) { exit 403, '数据源不存在或不在当前租户和角色范围内' }
+}
+if (requestedTableIds.size() == 0) { requestedTableIds.add('') }
+var existingRows = db.select("""
+    SELECT * FROM db_table_t WHERE tenant_id=#{tenantId}
+      AND (tid IN (#{requestedTableIds}) OR
+           (datasource_id IN (#{batchSourceIds}) AND LOWER(table_name) IN (#{requestedNames})))
+""")
 var existingCache = {}
-var existingQueryCount = 0
-var existingMapsOf = (datasourceId) => {
-    var datasourceKey = textOf(datasourceId)
-    var cached = existingCache[datasourceKey]
-    if (cached != null) {
-        return cached
+var existingQueryCount = 1
+var requestedIdSource = {}
+for (sourceId in batchSourceIds) { existingCache[sourceId] = { byId: {}, byName: {} } }
+for (existingRow in existingRows) {
+    var existingId = textOf(rowValue(existingRow, ['tid']))
+    var sourceKey = textOf(rowValue(existingRow, ['datasourceId', 'datasource_id']))
+    if (!visibleSourceIds.contains(sourceKey)) { exit 403, '数据表不在本批次获授权的数据源内' }
+    var maps = existingCache[sourceKey]
+    maps.byId[existingId] = existingRow
+    requestedIdSource[existingId] = sourceKey
+    if (textOf(rowValue(existingRow, ['isDel', 'is_del'])) == '0') {
+        maps.byName[normalizeKey(rowValue(existingRow, ['tableName', 'table_name']))] = existingRow
     }
-    var byId = {}
-    var byName = {}
-    var existingRows = db.table('db_table_t').where()
-        .eq('datasource_id', datasourceId).select()
-    existingQueryCount = existingQueryCount + 1
-    for (existingRow in existingRows) {
-        var existingId = rowValue(existingRow, ['tid'])
-        if (!blank(existingId)) {
-            byId[textOf(existingId)] = existingRow
-        }
-        if (textOf(rowValue(existingRow, ['isDel', 'is_del'])) == '0') {
-            var existingName = rowValue(existingRow, ['tableName', 'table_name'])
-            if (!blank(existingName)) {
-                byName[normalizeKey(existingName)] = existingRow
-            }
-        }
+}
+var existingMapsOf = (datasourceId) => existingCache[textOf(datasourceId)]
+var resolvedTableIds = []
+for (prepared in preparedItems) {
+    var requestedId = rowValue(prepared.item, ['tid', 'tableId', 'id'])
+    if (blank(requestedId)) { requestedId = rowValue(prepared.props, ['tid', 'tableId', 'id']) }
+    if (!blank(requestedId) && requestedIdSource[textOf(requestedId)] != null
+        && requestedIdSource[textOf(requestedId)] != textOf(prepared.datasourceId)) {
+        exit 403, '数据表与提交的数据源不匹配'
     }
-    cached = { byId: byId, byName: byName }
-    existingCache[datasourceKey] = cached
-    return cached
+    var maps = existingMapsOf(prepared.datasourceId)
+    var existing = blank(requestedId) ? null : maps.byId[textOf(requestedId)]
+    if (existing == null) { existing = maps.byName[normalizeKey(prepared.tableName)] }
+    if (existing != null) {
+        var resolvedId = textOf(rowValue(existing, ['tid']))
+        if (!resolvedTableIds.contains(resolvedId)) { resolvedTableIds.add(resolvedId) }
+    }
+}
+var oldColumnsByTable = {}
+if (resolvedTableIds.size() > 0 && annotatedFlag == 1) {
+    var oldColumns = db.table('db_table_column_t').where().in('table_id', resolvedTableIds)
+        .eq('tenant_id', tenantId).eq('is_del', 0).select()
+    for (oldColumn in oldColumns) {
+        var parentId = textOf(rowValue(oldColumn, ['tableId', 'table_id']))
+        if (oldColumnsByTable[parentId] == null) { oldColumnsByTable[parentId] = {} }
+        oldColumnsByTable[parentId][normalizeKey(rowValue(oldColumn, ['columnName', 'column_name']))] = oldColumn
+    }
 }
 var saveColumns = (tableId, columns, tenantId) => {
     if (columns == null || columns.size() == 0) {
         return 0
     }
-    var oldRows = db.table('db_table_column_t').where().eq('table_id', tableId).eq('is_del', 0).select()
-    var oldMap = {}
-    for (old in oldRows) {
-        oldMap[normalizeKey(rowValue(old, ['columnName', 'column_name']))] = old
-    }
+    var oldMap = oldColumnsByTable[textOf(tableId)]
+    if (oldMap == null) { oldMap = {} }
     var ordinal = 0
     var newRows = []
     for (column in columns) {
@@ -382,19 +421,21 @@ if (!dryRun && esDocs.size() > 0) {
     }
 }
 
+if (!dryRun) {
+    var statusSourceIds = []
+    for (statusRow in resultRows) {
+        var statusSourceId = textOf(statusRow.datasourceId)
+        if (!blank(statusSourceId) && !statusSourceIds.contains(statusSourceId)) { statusSourceIds.add(statusSourceId) }
+    }
+    metadataAsset.refreshRegistrationStatuses(statusSourceIds)
+}
+
 if (!dryRun && refreshDatasource) {
-    var refreshedDatasourceIds = {}
-    for (row in resultRows) {
-        var rowDatasourceId = textOf(row.datasourceId)
-        if (!blank(rowDatasourceId) && refreshedDatasourceIds[rowDatasourceId] == null) {
-            refreshedDatasourceIds[rowDatasourceId] = true
-            try {
-                body = { tid: rowDatasourceId }
-                refreshAssetIndex()
-            } catch (e) {
-                log.warn('sync datasource ES stats failed, tid: {}, error: {}', rowDatasourceId, e.message)
-            }
-        }
+    try {
+        body = { tids: batchSourceIds, assetType: ['db'], purgeStale: false }
+        refreshAssetIndex()
+    } catch (e) {
+        log.warn('sync datasource ES stats failed, count: {}, error: {}', batchSourceIds.size(), e.message)
     }
 }
 

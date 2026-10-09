@@ -124,7 +124,7 @@ for (hit in hits) {
     item.putAll(datasource)
     item.tid = datasourceId
     var registered = text(datasource.asset_status == null ? datasource.assetStatus : datasource.asset_status) == '2'
-    if (blank(registrationState) || registrationState == (registered ? 'completed' : 'pending')) {
+    if (blank(registrationState) || registrationState == (registered ? 'completed' : text(datasource.asset_status == null ? datasource.assetStatus : datasource.asset_status) == '1' ? 'incomplete' : 'pending')) {
         item.assetStatus = datasource.asset_status == null ? datasource.assetStatus : datasource.asset_status
         validItems.add(item)
     }
@@ -133,7 +133,7 @@ for (hit in hits) {
 var orgCounts = {}
 var orgApps = {}
 var dbTypes = {}
-var assetStatuses = { completed: 0, pending: 0 }
+var assetStatuses = { completed: 0, incomplete: 0, pending: 0 }
 var appAccumulators = {}
 for (item in validItems) {
     var orgId = text(item?.orgId).trim()
@@ -141,7 +141,7 @@ for (item in validItems) {
     var appName = text(item?.appName).trim()
     var dbName = text(item?.dbName).trim()
     var dbTypeValue = text(item?.dbType).trim()
-    var assetStatusValue = text(item?.assetStatus) == '2' ? 'completed' : 'pending'
+    var assetStatusValue = text(item?.assetStatus) == '2' ? 'completed' : text(item?.assetStatus) == '1' ? 'incomplete' : 'pending'
 
     if (!blank(orgId)) {
         orgCounts[orgId] = (orgCounts[orgId] == null ? 0 : orgCounts[orgId]) + 1

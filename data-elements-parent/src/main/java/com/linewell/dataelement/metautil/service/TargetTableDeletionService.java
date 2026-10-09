@@ -51,6 +51,56 @@ public class TargetTableDeletionService {
     }
 
     /**
+     * Checks a bounded set of tables in one registered datasource. The physical
+     * table directory is fetched once, then every requested name is matched in
+     * memory. Historical materialization rows may carry an obsolete qualifier;
+     * these are searched only inside the datasource's configured scope.
+     */
+    public List<Map<String, Object>> preflightBatch(DataSourceConfig source, List<String> requestedNames) {
+        if (requestedNames == null || requestedNames.isEmpty() || requestedNames.size() > 20) {
+            throw new IllegalArgumentException("一次最多预检20个目标表");
+        }
+        DataSourceConfig config = scopedCopy(source);
+        String scope = configuredScope(config);
+        List<Name> parsed = new ArrayList<>(requestedNames.size());
+        List<Boolean> normalized = new ArrayList<>(requestedNames.size());
+        for (String requestedName : requestedNames) {
+            Name name = parseName(requestedName);
+            boolean historical = name.scope() != null && !name.scope().equalsIgnoreCase(scope);
+            parsed.add(name);
+            normalized.add(historical);
+        }
+
+        Map<String, List<TableInfo>> physicalByName = new LinkedHashMap<>();
+        for (TableInfo candidate : physicalTables(config)) {
+            if (candidate == null || blank(candidate.getTableName())) continue;
+            if (!blank(candidate.getSchemaName()) && !candidate.getSchemaName().equalsIgnoreCase(scope)) continue;
+            physicalByName.computeIfAbsent(candidate.getTableName().toUpperCase(Locale.ROOT),
+                    ignored -> new ArrayList<>()).add(candidate);
+        }
+
+        List<Map<String, Object>> results = new ArrayList<>(parsed.size());
+        for (int index = 0; index < parsed.size(); index++) {
+            Name name = parsed.get(index);
+            List<TableInfo> matches = physicalByName.getOrDefault(
+                    name.table().toUpperCase(Locale.ROOT), List.of());
+            if (matches.size() > 1) {
+                throw new IllegalStateException("目标数据源中存在同名表，无法确认唯一物理表：" + name.table());
+            }
+            String physicalName = matches.isEmpty() ? name.table() : matches.getFirst().getTableName();
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("physicalExists", !matches.isEmpty());
+            result.put("targetTableName", physicalName);
+            result.put("physicalTargetTableName", physicalName);
+            result.put("targetScope", scope);
+            result.put("databaseType", config.getDatabaseType().getCode());
+            result.put("historicalScopeNormalized", normalized.get(index));
+            results.add(result);
+        }
+        return results;
+    }
+
+    /**
      * Drops the resolved table and confirms that metadata discovery no longer finds it.
      * A missing physical table is a successful no-op: its stale platform metadata can then
      * be cleaned up safely.  Any failed execution or failed post-check throws, leaving the

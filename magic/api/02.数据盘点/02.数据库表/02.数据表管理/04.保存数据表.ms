@@ -31,6 +31,7 @@ import jsons
 import log
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import tenantRuntime
+import metadataAsset
 
 /*
  * 数据表管理 04：新增或修改 db_table_t。
@@ -173,6 +174,7 @@ try {
 } catch (e) {
     log.warn('同步数据表 ES 失败, tid: {}, error: {}', tableId, e.message)
 }
+metadataAsset.refreshRegistrationStatus(datasourceId, false)
 // 返回当前业务分支的标准结果。
 try {
     body = { tid: datasourceId }

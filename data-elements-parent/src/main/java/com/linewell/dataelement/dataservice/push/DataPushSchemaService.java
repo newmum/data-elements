@@ -355,7 +355,8 @@ public class DataPushSchemaService {
         return grouped;
     }
     private void requirePushSource(Source source) {
-        if (source.assetStatus() != 2) throw new IllegalStateException("数据源尚未完成登记");
+        if (source.assetStatus() != 1 && source.assetStatus() != 2)
+            throw new IllegalStateException("数据源尚未完成登记");
         requirePushAccessMode(source);
     }
     private void requirePushAccessMode(Source source) {

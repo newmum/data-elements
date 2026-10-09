@@ -2030,18 +2030,10 @@ function isTableAnnotated(table) {
   return [true, 1, "1", "true", "yes"].includes(table?.annotated);
 }
 
-// 与第三、四步统一：assetStatus=2 只是元数据可用，不等于治理登记已保存。
+// 与数据源完成状态使用同一事实来源；表标注不等于登记完成。
 function isCompletedTableRegistration(table) {
-  const deleted = table?.isDel ?? table?.is_del;
-  if ([true, 1, "1", "true"].includes(deleted)) return false;
-  if (!isTableAnnotated(table) || !validBusinessTypes.includes(table?.businessType)) return false;
-  if (isPendingBusinessType(table.businessType)) return false;
-  const expectedPhase = table.businessType === "字典表" ? "dictionary"
-    : ["业务表", "日志表"].includes(table.businessType) ? "business" : "";
-  if (!expectedPhase) return true; // 已标注的过程表、备份表不进入第三、四步。
-  const config = governanceConfig(table);
-  return config?.registrationSavedPhase === expectedPhase &&
-    (!config.businessType || config.businessType === table.businessType);
+  return ![true, 1, "1", "true"].includes(table?.isDel ?? table?.is_del) &&
+    Number(table?.assetStatus ?? table?.asset_status) === 2;
 }
 const annotatedTables = computed(() => uniqueTables(realtimeTables.value).filter((table) =>
   isTableAnnotated(table) && ![true, 1, "1", "true"].includes(table?.isDel ?? table?.is_del)
@@ -4347,23 +4339,7 @@ function ensureReady() {
   if (tables.value.length < physicalTableCount.value) {
     throw new Error("数据表清单不完整，请重新读取或返回第二步重新采集后再结束登记。");
   }
-  if (blockingIssues.value.length) {
-    reviewShaking.value = false;
-    clearTimeout(reviewShakeTimer);
-    requestAnimationFrame(() => {
-      reviewShaking.value = true;
-      reviewShakeTimer = setTimeout(() => {
-        reviewShaking.value = false;
-      }, 720);
-    });
-    const pending = pendingRegistrationTables.value;
-    const unmarked = pending.filter((table) => !isTableAnnotated(table)).length;
-    const count = (type) => pending.filter((table) => isTableAnnotated(table) && table.businessType === type).length;
-    const reasons = [unmarked && `${unmarked} 张表未完成标注`, count("字典表") && `${count("字典表")} 张字典表未完成登记`,
-      count("业务表") && `${count("业务表")} 张业务表未完成登记`, count("日志表") && `${count("日志表")} 张日志表未完成登记`].filter(Boolean);
-    const names = blockingIssues.value.slice(0, 3).map((issue) => issue.title).join("；");
-    throw new Error(`不能结束登记：${reasons.join("、") || `仍有 ${blockingIssues.value.length} 个必改项`}。${names}${blockingIssues.value.length > 3 ? "等；请点击审查提示查看并定位。" : "。"}`);
-  }
+  // 未完成的表保留审查提示，允许结束登记，由服务器保存为状态 1。
 }
 
 async function finish() {
@@ -4376,7 +4352,7 @@ async function finish() {
         tid: source.value.tid || source.value.id,
         dbName: source.value.dbName,
         assetType: "db",
-        assetStatus: 2,
+        assetStatus: pendingRegistrationTableCount.value > 0 || uncertainTables.value.length > 0 || !physicalTableCount.value ? 1 : 2,
       }
     : null;
   // 数据表与字段已在第二至四步分别保存。第五步仅需要确认数据源的登记状态；
@@ -4390,20 +4366,20 @@ async function persistCompletion(items) {
   const propList = {
     tid: completedSource.tid,
     dbName: completedSource.dbName || completedSource.assetName,
-    assetStatus: 2,
     completeOnly: true,
   };
-  await $common.post("/dst/database/saveOrUpdate", {
+  const result = await $common.post("/dst/database/saveOrUpdate", {
     tid: completedSource.tid,
     propList,
   });
+  completedSource.assetStatus = Number(result.assetStatus);
 }
 
 async function commit(items) {
   items = items || await finish();
   await persistCompletion(items);
   const completedSource = items.find((item) => item.assetType === "db" && item.tid);
-  if (completedSource && isDataPushSource.value) {
+  if (completedSource && isDataPushSource.value && completedRegistrationTableCount.value > 0) {
     await $common.post("/dws/push/schema/publish", { datasourceId: completedSource.tid });
     await loadPushContract(true);
   }

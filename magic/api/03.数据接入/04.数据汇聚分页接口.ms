@@ -28,6 +28,7 @@
 import tenantEs
 import '@/common/configData' as configData
 import tenantRuntime
+import dataScope
 
 /*
  * 数据汇聚分页
@@ -96,6 +97,9 @@ if (blank(tenantId)) {
 
 var pageNum = body?.pageNum == null ? 1 : body.pageNum::int
 var pageSize = body?.pageSize == null ? 20 : body.pageSize::int
+if (pageNum < 1) { pageNum = 1 }
+if (pageSize < 1) { pageSize = 20 }
+if (pageSize > 100) { pageSize = 100 }
 // 接入表清单的口径固定为 db_table_t 最后修改时间倒序。不要使用 ES 的
 // createdTime / updatedTime 投影，也不要让前端请求字段改变登记表排序。
 var sortField = 'updatedTime'
@@ -127,6 +131,14 @@ if (viewLevel == 'tableDetail') {
     var tableDetailRow = db.table('db_table_t')
         .where().eq('tid', selectedTableId).eq('is_del', 0)
         .selectOne()
+    if (tableDetailRow == null || text(first(tableDetailRow, ['assetStatus', 'asset_status'])) != '2') {
+        return { viewLevel: 'tableDetail', detail: null }
+    }
+    var detailSourceId = first(tableDetailRow, ['datasourceId', 'datasource_id'])
+    var detailSources = db.table('db_datasource_t').where().eq('tid', detailSourceId)
+        .eq('tenant_id', tenantId).eq('is_del', 0).in('asset_status', [1, 2]).select()
+    detailSources = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', detailSources)
+    if (detailSources.size() != 1) { return { viewLevel: 'tableDetail', detail: null } }
     var tableDetailResult = safeAssetSearch({
         from: 0,
         size: 1,
@@ -233,11 +245,12 @@ if (viewLevel == 'table') {
     var tableKeyword = text(body?.keyword).trim()
     var requestedAccessStatus = text(body?.accessStatus)
 
-    // 任务管理只展示已完成登记的数据源：资产已生效，且第五步已确认
-    // asset_status=2。flow_status 不是登记完成的判断条件。
+    // 第五步已结束的数据源（1/2）下，只有表状态 2 才可接入。
+    // flow_status 不作为登记完成的判断条件。
     var registeredDatasourceRows = db.table('db_datasource_t').where()
         .eq('tenant_id', tenantId).eq('is_del', 0)
-        .eq('asset_status', 2).select()
+        .in('asset_status', [1, 2]).select()
+    registeredDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', registeredDatasourceRows)
     var registeredDatasourceIds = []
     var registeredDatasourceMap = {}
     for (registeredDatasourceRow in (registeredDatasourceRows == null ? [] : registeredDatasourceRows)) {
@@ -574,6 +587,29 @@ if (viewLevel == 'table') {
             tableIndex = tableIndex + 1
         }
     }
+
+    // 所属部门取当前数据源主表的 org_id，不使用表创建人、前端部门或 ES 旧投影。
+    // 数据源已经通过当前租户及角色数据范围校验；仅为当前页最多 100 行补齐部门。
+    var pageOrgIds = []
+    for (pageTable in tablePage) {
+        var pageDatasource = registeredDatasourceMap[text(pageTable.datasourceId)]
+        var pageOrgId = text(first(pageDatasource, ['orgId', 'org_id']))
+        pageTable.orgId = pageOrgId
+        if (!blank(pageOrgId) && !pageOrgIds.contains(pageOrgId)) {
+            pageOrgIds.add(pageOrgId)
+        }
+    }
+    var pageOrgNameMap = {}
+    if (pageOrgIds.size() > 0) {
+        var pageOrgRows = db.table('rm_org_t').columns('id', 'name').where()
+            .in('id', pageOrgIds).eq('tenant_id', tenantId).eq('deleted', 0).select()
+        for (pageOrg in (pageOrgRows == null ? [] : pageOrgRows)) {
+            pageOrgNameMap[text(first(pageOrg, ['id']))] = first(pageOrg, ['name'])
+        }
+    }
+    for (pageTable in tablePage) {
+        pageTable.orgName = pageOrgNameMap[text(pageTable.orgId)] || ''
+    }
     return {
         viewLevel: 'table',
         scopeType: text(body?.scopeType),
@@ -658,7 +694,7 @@ for (hit in (result?.hits?.hits == null ? [] : result.hits.hits)) {
 if (candidates.size() == 0) {
     var fallbackDatasourceRows = db.table('db_datasource_t').where()
         .eq('tenant_id', tenantId).eq('is_del', 0)
-        .eq('asset_status', 2).select()
+        .in('asset_status', [1, 2]).select()
     for (fallbackDatasource in (fallbackDatasourceRows == null ? [] : fallbackDatasourceRows)) {
         fallbackDatasource.tid = text(first(fallbackDatasource, ['tid']))
         candidates.add(fallbackDatasource)
@@ -670,7 +706,8 @@ var candidateSearchFinishedAt = System.currentTimeMillis()
 // 的登记完成状态作为任务管理的准入条件，并补回 ES 尚未投影的新登记数据源。
 var completedDatasourceRows = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId).eq('is_del', 0)
-    .eq('asset_status', 2).select()
+    .in('asset_status', [1, 2]).select()
+completedDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', completedDatasourceRows)
 var completedDatasourceMap = {}
 for (completedDatasource in (completedDatasourceRows == null ? [] : completedDatasourceRows)) {
     var completedDatasourceId = text(first(completedDatasource, ['tid', 'id']))
@@ -713,7 +750,7 @@ if (accessStatus == '0' || accessStatus == '1') {
             ON source.tid = t.datasource_id
            AND source.tenant_id = #{tenantId}
            AND source.is_del = 0
-           AND source.asset_status = 2
+           AND source.asset_status IN (1, 2)
           LEFT JOIN (
                SELECT DISTINCT tenant_id, source_table_id
                  FROM data_access_agg_task_t
@@ -777,7 +814,7 @@ if (datasourceIds.size() > 0) {
     // 当前页再回主表修正数据源真实字段，避免 ES 旧投影误导页面。
     var datasourceRows = db.table('db_datasource_t').where().in('tid', datasourceIds)
         .eq('tenant_id', tenantId).eq('is_del', 0)
-        .eq('asset_status', 2).select()
+        .in('asset_status', [1, 2]).select()
     for (row in datasourceRows) {
         datasourceMap[text(first(row, ['tid']))] = row
     }

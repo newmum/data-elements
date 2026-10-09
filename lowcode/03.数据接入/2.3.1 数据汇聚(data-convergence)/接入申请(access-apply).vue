@@ -25,7 +25,7 @@
             :class="{ 'is-active': ddlMode }"
             role="tab"
             :aria-selected="ddlMode"
-            :disabled="ddlGenerating"
+            :disabled="ddlGenerating || templateLoading || !!loadError"
             @click="showDdlView"
           >查看DDL语句</button>
         </div>
@@ -44,7 +44,11 @@
       element-loading-background="rgba(255, 255, 255, 0.88)"
       class="access-apply-content"
     >
-      <div v-show="!ddlMode" class="materialization-form-view">
+      <div v-if="loadError && !templateLoading" class="template-load-error" role="alert">
+        <el-alert :title="loadError" type="error" :closable="false" show-icon />
+        <el-button type="primary" plain @click="init">重试加载</el-button>
+      </div>
+      <div v-show="!ddlMode && !loadError" class="materialization-form-view">
       <u-title name="建表信息" />
       <div v-if="knownTargets.length" class="existing-target-panel">
         <strong>已有目标表</strong>
@@ -91,7 +95,7 @@
         </template>
       </v-table>
       </div>
-      <div v-if="ddlMode" class="ddl-inline-panel">
+      <div v-if="ddlMode && !loadError" class="ddl-inline-panel">
         <el-tabs v-if="ddlPlans.length > 1" v-model="activeDdlKey" class="ddl-target-tabs">
           <el-tab-pane v-for="plan in ddlPlans" :key="plan.key" :name="plan.key" :label="plan.dbName" />
         </el-tabs>
@@ -123,7 +127,7 @@
           v-if="editable"
           type="primary"
           :loading="isSaveing"
-          :disabled="templateLoading || isSaveing"
+          :disabled="templateLoading || isSaveing || !!loadError"
           @click="handleSave"
         >
           <Icon v-if="!isSaveing" icon="save" class="mr-1" />
@@ -145,6 +149,9 @@
     <p>{{ existingDecisionSummary }}</p>
     <p v-if="!existingDecision.canReuse" class="existing-target-warning">
       当前选择的目标表缺少完整、有效的本来源表登记关系，不能直接复用建流程。请删除后重新物化，或取消并修改目标表名。
+    </p>
+    <p v-if="existingDecisionHasUnlinked" class="existing-target-warning">
+      其中有目标表已单独登记、但未关联当前来源表。删除前请核对其数据用途；确认删除后只清理所选目标表，不影响当前来源表的其他任务。
     </p>
     <template #footer>
       <el-button @click="resolveExistingDecision('cancel')">取消</el-button>
@@ -180,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from "vue";
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from "vue";
 import { FormUtils } from "@/utils/form";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDictStore } from "@/store";
@@ -228,6 +235,9 @@ const knownTargets = ref<any[]>([]);
 const existingDecisionVisible = ref(false);
 const existingDecision = ref<{ targets: any[]; canReuse: boolean }>({ targets: [], canReuse: false });
 let existingDecisionResolve: ((choice: string) => void) | null = null;
+const existingDecisionHasUnlinked = computed(() =>
+  existingDecision.value.targets.some((target: any) => target.probe?.targetUnlinked === true),
+);
 const existingDecisionSummary = computed(() => {
   const rows = existingDecision.value.targets;
   return `目标表已存在：${rows.map((row: any) => `${row.targetDbName || row.targetDbId} / ${row.targetTableName}`).join('、')}。请选择保留目标表只创建流程，或删除目标表后重新物化。`;
@@ -245,6 +255,9 @@ const askExistingDecision = (targets: any[], canReuse: boolean): Promise<string>
 };
 const recoveryDeleting = ref(false);
 const templateLoading = ref(false);
+const loadError = ref("");
+const loadPending = ref({ datasource: false, node: false, source: false });
+let initRun = 0;
 const datasourceOptions = ref<any[]>([]);
 const datasourceMap = ref<Record<string, any>>({});
 const datasourcePathMap = ref<Record<string, any[]>>({});
@@ -266,9 +279,16 @@ const nifiNodeTreeOptions = computed(() =>
     .filter((network: any) => network.children.length)
 );
 const sourceTableName = ref("");
-const loadingText = computed(() =>
-  isSaveing.value ? "正在物化目标表并登记接入信息..." : "正在读取来源表结构..."
-);
+const loadingText = computed(() => {
+  if (isSaveing.value) return "正在物化目标表并登记接入信息...";
+  const { datasource, node, source } = loadPending.value;
+  if (source && (datasource || node)) return "正在读取来源表结构和建表选项...";
+  if (source) return "正在读取来源表结构...";
+  if (datasource && node) return "正在读取目标数据源和接入节点...";
+  if (datasource) return "正在读取目标数据源...";
+  if (node) return "正在读取接入节点...";
+  return "正在准备建表信息...";
+});
 
 // 默认字段数据
 const defaultFieldsData = ref([
@@ -758,9 +778,12 @@ const syncNifiNodeSelection = (value: any) => {
   });
 };
 
-const buildDatasourceOptions = async () => {
-  const response = await $common.post("/ods/targetDatasource/options", {});
+const buildDatasourceOptions = (response: any) => {
+  if (response instanceof Error) throw response;
   const payload = response?.data || response || {};
+  if (!Array.isArray(payload?.options) || !Array.isArray(payload?.list)) {
+    throw new Error("目标数据源选项返回不完整，请重试加载");
+  }
   const options = payload?.options || [];
   const list = payload?.list || [];
   const map: Record<string, any> = {};
@@ -799,14 +822,14 @@ const buildDatasourceOptions = async () => {
   datasourceMap.value = map;
   datasourcePathMap.value = pathMap;
   datasourceLeafIds.value = leafIds;
-  formRules.value = createFormRules();
-  await nextTick();
-  jsonFormRef.value?.updateFieldOptions?.("dbId", datasourceOptions.value);
 };
 
-const loadManagedNifiNodeOptions = async () => {
-  const response = await $common.post("/ods/nifi-node/access-options", {});
+const loadManagedNifiNodeOptions = (response: any) => {
+  if (response instanceof Error) throw response;
   const payload = response?.data || response || {};
+  if (!Array.isArray(payload?.networks) || !Array.isArray(payload?.list)) {
+    throw new Error("接入节点选项返回不完整，请重试加载");
+  }
   const networks = payload?.networks || [];
   nifiNetworkOptions.value = networks
     .map((item: any) => ({
@@ -831,9 +854,6 @@ const loadManagedNifiNodeOptions = async () => {
       isDefault: nodeDefault(item),
     }))
     .filter((item: any) => item.label && item.value);
-  formRules.value = createFormRules();
-  await nextTick();
-  jsonFormRef.value?.updateFieldOptions?.("nifiNodePath", nifiNodeTreeOptions.value);
 };
 
 const materializationTimeType = (dbType: any) => {
@@ -871,23 +891,21 @@ const syncOdsSystemTimeTypes = (dbType: any) => {
   }
 };
 
-/**
- * 将来源表字段稳定灌入 VxeGrid。
- *
- * setData 用于保持 v-table 的响应式 options；loadData 用于表格实例已经
- * 创建但正处于 options merge 时的场景。两步均在 nextTick 后执行，确保
- * 打开抽屉时不会出现接口已有字段、界面却显示“暂无数据”的竞态。
- */
+/** 等待 Grid 就绪后一次写入来源字段，避免大字段表重复渲染。 */
 const loadTemplateTableItems = async (items: any) => {
   const rows = Array.isArray(items) ? items.map((item: any) => ({ ...item })) : [];
   templateTableItems.value = rows;
   await nextTick();
 
   const table = tableRef.value;
-  if (!table) return;
-  table.setData?.(rows);
-  await nextTick();
-  table.loadData?.(rows);
+  if (!table) throw new Error("字段表格尚未就绪，请重新打开物化建表窗口");
+  const grid = table.$grid?.value || table.$grid;
+  if (grid?.loadData) {
+    await table.loadData?.(rows);
+  } else {
+    // v-table 尚未挂好内部 Grid 时，响应式 options 是单次写入的兜底。
+    table.setData?.(rows);
+  }
 };
 
 const syncDbTypeByDatasource = (value: any) => {
@@ -973,7 +991,20 @@ const normalizeFormPayload = (data: any) => {
   };
 };
 
+const isCurrentInit = (runId: number) => runId === initRun && open.value;
+const trackLoad = (key: "datasource" | "node" | "source", request: Promise<any>, runId: number) =>
+  request.finally(() => {
+    if (isCurrentInit(runId)) loadPending.value = { ...loadPending.value, [key]: false };
+  });
+const cancelPendingInit = () => {
+  initRun += 1;
+  templateLoading.value = false;
+  loadPending.value = { datasource: false, node: false, source: false };
+};
+
 const init = async () => {
+  const runId = ++initRun;
+  loadError.value = "";
   knownTargets.value = (Array.isArray(props.existingTargets) ? props.existingTargets : [])
     .filter((target: any) => target?.targetTableId && target?.targetDbId && target?.targetTableName)
     .map((target: any) => ({ ...target }));
@@ -985,15 +1016,37 @@ const init = async () => {
     return;
   }
   templateLoading.value = true;
+  loadPending.value = { datasource: true, node: true, source: true };
   try {
-    await buildDatasourceOptions();
-    await loadManagedNifiNodeOptions();
     const addUrl = "/ods/getTableTempalte";
     const viewUrl = "/ods/queryTargetTableInfo";
-    const res = await $common.post(props.type === "add" ? addUrl : viewUrl, {
-      tid: sourceTableId,
-    });
+    // 三个请求互不依赖；收到全部结果后再设置表单默认目标库和接入节点。
+    const [datasourceResult, nodeResult, sourceResult] = await Promise.allSettled([
+      trackLoad("datasource", $common.post("/ods/targetDatasource/options", {}), runId),
+      trackLoad("node", $common.post("/ods/nifi-node/access-options", {}), runId),
+      trackLoad("source", $common.post(props.type === "add" ? addUrl : viewUrl, {
+        tid: sourceTableId,
+      }), runId),
+    ]);
+    if (!isCurrentInit(runId)) return;
+    if (datasourceResult.status === "rejected") throw datasourceResult.reason;
+    if (nodeResult.status === "rejected") throw nodeResult.reason;
+    if (sourceResult.status === "rejected") throw sourceResult.reason;
+    const datasourceResponse = datasourceResult.value;
+    const nodeResponse = nodeResult.value;
+    const res = sourceResult.value;
+    buildDatasourceOptions(datasourceResponse);
+    loadManagedNifiNodeOptions(nodeResponse);
+    formRules.value = createFormRules();
+    await nextTick();
+    if (!isCurrentInit(runId)) return;
+    jsonFormRef.value?.updateFieldOptions?.("dbId", datasourceOptions.value);
+    jsonFormRef.value?.updateFieldOptions?.("nifiNodePath", nifiNodeTreeOptions.value);
+    if (res instanceof Error) throw res;
     const payload = res?.data || res || {};
+    if (!payload?.propList || !Array.isArray(payload?.tableItems)) {
+      throw new Error("来源表模板返回不完整，请重试加载");
+    }
     // 设置表单数据（表信息）。JsonForm 的受控入参是 data，不是 v-model；
     // 仅调用实例 setValue 时，遇到动态规则重建会丢失只读字段，导致来源信息
     // 和接入方式回显为“--”。先写入响应式 data，再同步给已创建的表单实例。
@@ -1049,29 +1102,30 @@ const init = async () => {
       : [];
     formData.value = { ...propList };
     await nextTick();
+    if (!isCurrentInit(runId)) return;
     jsonFormRef.value?.setValue(formData.value);
     syncTargetDatasourceSelection(propList.dbId);
     // 设置表格数据(字段列表)。即使字段为空也明确清空上一张来源表的数据，
     // 避免复用抽屉时残留旧内容；非空时由 loadTemplateTableItems 等待 Grid
     // 就绪后再写入，避免首次打开偶发的空表竞态。
     await loadTemplateTableItems(payload.tableItems);
+    if (!isCurrentInit(runId)) return;
     if (templateTableItems.value.length) {
       const selected = datasourceMap.value[normalizeDbId(propList.dbId)];
       syncOdsSystemTimeTypes(selected?.dbType || propList.dbType);
     }
   } catch (error: any) {
+    if (!isCurrentInit(runId)) return;
     console.error("物化建表模板加载失败", error);
-    // The common request layer has already displayed server-side failures.
-    // Keep local feedback only for errors produced before a request is made.
-    if (!error?.handled) {
-      ElMessage.error(error?.message || error || "物化建表模板加载失败");
-    }
+    // 保留错误与重试入口；全局请求层可能已提示，避免再弹重复消息。
+    loadError.value = String(error?.message || "物化建表信息加载失败，请重试");
   } finally {
-    templateLoading.value = false;
+    if (isCurrentInit(runId)) templateLoading.value = false;
   }
 };
 
 const handleCancel = () => {
+  cancelPendingInit();
   emit("close");
   open.value = false;
 };
@@ -1096,6 +1150,7 @@ const currentDdlInput = async () => {
   await tableRef.value?.validate();
   const data = normalizeFormPayload(await jsonFormRef.value?.getFormData());
   if (!data.targetDbIds.length) throw new Error("请至少选择一个目标数据源");
+  if (data.targetDbIds.length > 20) throw new Error("一次最多选择 20 个目标数据源");
   syncOdsSystemTimeTypes(data.dbType);
   const tableItems = tableRef.value?.getData() || [];
   if (!tableItems.length) throw new Error("请至少添加一个字段");
@@ -1112,7 +1167,7 @@ const regenerateDdl = async (input: any) => {
   ddlGenerating.value = true;
   try {
     const statements: Record<string, string> = {};
-    for (const target of input.targets) {
+    const targets = input.targets.map((target: any) => {
       const targetTimeType = materializationTimeType(target.propList.dbType);
       const targetItems = input.tableItems.map((item: any) => {
         const name = String(item.columnName || "").trim().toUpperCase();
@@ -1120,11 +1175,24 @@ const regenerateDdl = async (input: any) => {
           ? { ...item, dataType: targetTimeType, columnType: targetTimeType, length: 0 }
           : item;
       });
-      const response = await $common.post("/dst/database/metadata/getCreateTableDDL", {
-        propList: target.propList,
-        tableItems: targetItems,
-      }, { _hiddenErrorMsg: true });
-      const statement = String(response?.data || response || "").trim();
+      return { propList: target.propList, tableItems: targetItems };
+    });
+    const response = await $common.post("/dst/database/metadata/getCreateTableDDL", {
+      batchGenerate: true,
+      canvas: true,
+      targets,
+    }, { _hiddenErrorMsg: true });
+    const generated = response?.data || response || {};
+    if (generated.batchGenerate !== true || !Array.isArray(generated.results)
+      || generated.results.length !== input.targets.length) {
+      throw new Error("目标表批量建表语句生成结果不完整，请重试");
+    }
+    for (const [index, target] of input.targets.entries()) {
+      const result = generated.results[index];
+      if (String(result?.dbId) !== String(target.dbId)) {
+        throw new Error("目标表批量建表语句生成结果与所选数据源不一致，请重试");
+      }
+      const statement = String(result?.ddl || "").trim();
       if (!statement) throw new Error(`目标数据源“${target.dbName}”未生成建表语句`);
       statements[target.key] = statement;
     }
@@ -1178,6 +1246,7 @@ const handleSave = async () => {
     const ddlInput = await currentDdlInput();
     const formData = normalizeFormPayload(await jsonFormRef.value?.getFormData());
     const tableFields = ddlInput.tableItems;
+    if (!ddlSourceFingerprint.value) await regenerateDdl(ddlInput);
     if (ddlSourceFingerprint.value && ddlSourceFingerprint.value !== ddlInput.fingerprint) {
       if (ddlWasEdited.value) {
         await ElMessageBox.confirm(
@@ -1194,16 +1263,33 @@ const handleSave = async () => {
     const validateEditedDdl = async () => {
       if (!ddlSourceFingerprint.value) return;
       // Validate every edited statement before any existing target can be removed.
-      for (const target of ddlInput.targets) {
+      const targets = ddlInput.targets.map((target: any) => {
         const ddl = String(ddlSqlByTarget.value[target.key] || "").trim();
         if (!ddl) throw new Error(`请填写“${target.dbName}”的建表语句`);
-        await $common.post("/dst/database/metadata/createTable", {
-          canvas: true,
-          validateOnly: true,
+        return {
           dbId: target.dbId,
           tableName: target.propList.tableName,
           ddl,
-        }, { _hiddenErrorMsg: true });
+        };
+      });
+      const response = await $common.post("/dst/database/metadata/createTable", {
+        canvas: true,
+        validateOnly: true,
+        batchValidateOnly: true,
+        targets,
+      }, { _hiddenErrorMsg: true });
+      const validation = response?.data || response || {};
+      if (validation.batchValidateOnly !== true || validation.sideEffectsApplied !== false
+        || !Array.isArray(validation.results) || validation.results.length !== targets.length) {
+        throw new Error("批量建表语句校验结果不完整，请重试");
+      }
+      for (const [index, target] of targets.entries()) {
+        const result = validation.results[index];
+        if (String(result?.dbId) !== String(target.dbId)
+          || String(result?.requestedTableName).trim().toUpperCase() !== target.tableName.toUpperCase()
+          || result?.valid !== true || result?.sideEffectsApplied !== false) {
+          throw new Error("批量建表语句校验结果与所选目标不一致，请重试");
+        }
       }
     };
     const plannedTargets = ddlInput.targets.map((target: any) => ({
@@ -1211,25 +1297,54 @@ const handleSave = async () => {
       targetTableName: target.propList.tableName,
       targetDbName: target.dbName,
     }));
-    const conflicts: any[] = [];
-    for (const plan of plannedTargets) {
+    const preflightTargets = plannedTargets.map((plan: any) => {
       const known = knownTargets.value.find((target: any) =>
         String(target.targetDbId) === String(plan.targetDbId)
         && String(target.targetTableName).trim().toUpperCase() === plan.targetTableName.toUpperCase(),
       );
-      const response = await $common.post('/ods/dataAggReset', {
-        sourceTableId: props.id,
-        targetTableId: known?.targetTableId || '',
+      return {
         targetDbId: plan.targetDbId,
         targetTableName: plan.targetTableName,
-        deleteTargetTable: true,
+        targetTableId: known?.targetTableId || '',
         confirmUnmanagedTarget: true,
+      };
+    });
+    const preflightResponse = await $common.post('/ods/dataAggReset', {
+        batchDryRun: true,
+        sourceTableId: props.id,
+        deleteTargetTable: true,
         dryRun: true,
-      }, { _hiddenErrorMsg: true });
-      const probe = response?.data || response || {};
-      if (probe.targetPhysicalExists || known) conflicts.push({ ...plan, known, probe });
+        targets: preflightTargets,
+      }, { _hiddenErrorMsg: true }, 120 * 1000);
+    const preflight = preflightResponse?.data || preflightResponse || {};
+    if (preflight.batchDryRun !== true || preflight.sideEffectsApplied !== false
+      || !Array.isArray(preflight.results) || preflight.results.length !== plannedTargets.length) {
+      throw new Error('目标表批量预检结果不完整，请重试');
+    }
+    const conflicts: any[] = [];
+    for (const [index, plan] of plannedTargets.entries()) {
+      const probe = preflight.results[index];
+      if (String(probe?.targetDbId) !== String(plan.targetDbId)
+        || String(probe?.targetTableName).trim().toUpperCase() !== plan.targetTableName.toUpperCase()
+        || probe?.sideEffectsApplied !== false) {
+        throw new Error('目标表批量预检结果与所选目标不一致，请重试');
+      }
+      const known = knownTargets.value.find((target: any) =>
+        String(target.targetDbId) === String(plan.targetDbId)
+        && String(target.targetTableName).trim().toUpperCase() === plan.targetTableName.toUpperCase(),
+      );
+      if (probe.targetPhysicalExists || probe.targetUnlinked || known) conflicts.push({ ...plan, known, probe });
     }
     if (conflicts.length) {
+      const recoveryConflict = conflicts.find((item: any) => !item.known);
+      if (recoveryConflict) {
+        recoveryTarget.value = {
+          sourceTableId: props.id,
+          targetTableId: recoveryConflict.probe?.targetTableId || '',
+          targetDbId: recoveryConflict.targetDbId,
+          targetTableName: recoveryConflict.targetTableName,
+        };
+      }
       const canReuse = conflicts.length === plannedTargets.length
         && conflicts.every((item: any) => item.known?.targetTableId
           && item.probe.targetPhysicalExists === true && item.probe.targetMetadataMissing !== true);
@@ -1250,11 +1365,12 @@ const handleSave = async () => {
       for (const item of conflicts) {
         const result = await $common.post('/ods/dataAggReset', {
           sourceTableId: props.id,
-          targetTableId: item.known?.targetTableId || '',
+          targetTableId: item.probe?.targetTableId || item.known?.targetTableId || '',
           targetDbId: item.targetDbId,
           targetTableName: item.targetTableName,
           deleteTargetTable: true,
           confirmUnmanagedTarget: true,
+          confirmUnlinkedTarget: item.probe?.targetUnlinked === true,
         }, { _hiddenErrorMsg: true }, 120 * 1000);
         const outcome = result?.data || result || {};
         if (item.probe.targetPhysicalExists && outcome.targetPhysicalDeleted !== true) {
@@ -1354,13 +1470,20 @@ const handleDeleteExistingTarget = async (selectedTarget: any = null) => {
     if (target.targetTableId && String(preview.targetTableId || '') !== String(target.targetTableId)) {
       throw new Error('目标表归属校验失败，已停止删除');
     }
+    if (preview.targetUnlinked && !preview.targetTableId) {
+      throw new Error('未关联目标表缺少可核验的元数据 ID，已停止删除');
+    }
     await ElMessageBox.confirm(
-      `将删除目标数据源中的物理表“${target.targetTableName}”及其元数据，该操作不可恢复。确认继续吗？`,
+      `${preview.targetUnlinked ? '该目标表未关联当前来源表，请先核对数据用途。' : ''}将删除目标数据源中的物理表“${target.targetTableName}”及其元数据，该操作不可恢复。确认继续吗？`,
       '删除已有目标表',
       { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
     );
     recoveryDeleting.value = true;
-    const result = await $common.post('/ods/dataAggReset', request,
+    const result = await $common.post('/ods/dataAggReset', {
+      ...request,
+      targetTableId: preview.targetTableId || request.targetTableId,
+      confirmUnlinkedTarget: preview.targetUnlinked === true,
+    },
       { _hiddenErrorMsg: true }, 120 * 1000);
     const outcome = result?.data || result || {};
     if (preview.targetPhysicalExists && outcome.targetPhysicalDeleted !== true) {
@@ -1466,10 +1589,15 @@ const handleConfirmDefaultFields = () => {
 };
 
 onMounted(() => {
-  if (props.id) {
+  if (props.modelValue && props.id) {
     init();
   }
 });
+watch(() => props.modelValue, (visible, previous) => {
+  if (visible && !previous && props.id) init();
+  if (!visible && previous) cancelPendingInit();
+});
+onBeforeUnmount(cancelPendingInit);
 </script>
 
 <style lang="scss" scoped>
@@ -1572,6 +1700,14 @@ onMounted(() => {
 }
 .access-apply-view-tab:hover:not(:disabled) { color: #1b67f8; }
 .access-apply-view-tab:disabled { cursor: wait; opacity: .65; }
+.template-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 0;
+}
+.template-load-error .el-alert { width: 100%; }
 .materialization-form-view { min-width: 0; }
 .access-apply-content:has(.ddl-inline-panel) {
   display: flex;

@@ -166,7 +166,7 @@ if (!esAvailable) {
         item.createdTime = blank(item.createdTime) ? item.created_time : item.createdTime
         item.assetStatus = item.assetStatus == null ? item.asset_status : item.assetStatus
         item.flowStatus = item.flowStatus == null ? item.flow_status : item.flowStatus
-        item.displayStatus = text(item.assetStatus) == '2' ? 2 : 0
+        item.displayStatus = text(item.assetStatus) == '2' ? 2 : text(item.assetStatus) == '1' ? 1 : 0
         item.display_status = item.displayStatus
         item.asset_status = item.displayStatus
         item.tableNum = item.tableNum == null ? 0 : item.tableNum
@@ -182,7 +182,7 @@ if (!esAvailable) {
             if (field == 'assetType') {
                 matched = text(value) == 'db'
             } else if (field == 'registrationState') {
-                matched = (text(item.assetStatus) == '2' ? 'completed' : 'pending') == text(value)
+                matched = (text(item.assetStatus) == '2' ? 'completed' : text(item.assetStatus) == '1' ? 'incomplete' : 'pending') == text(value)
             } else if (field == 'keyword') {
                 var keyword = text(value).toLowerCase()
                 matched = text(item.dbName).toLowerCase().indexOf(keyword) >= 0
@@ -251,7 +251,7 @@ for (hit in hits) {
 
     var assetStatus = datasource.asset_status == null ? datasource.assetStatus : datasource.asset_status
     var flowStatus = item.flowStatus
-    var displayStatus = text(assetStatus) == '2' ? 2 : 0
+    var displayStatus = text(assetStatus) == '2' ? 2 : text(assetStatus) == '1' ? 1 : 0
     item.tid = tid
     item.assetStatus = assetStatus
     item.asset_status = assetStatus
@@ -274,7 +274,7 @@ for (hit in hits) {
             requestedRegistrationState = text(condition.value)
         }
     }
-    if (blank(requestedRegistrationState) || requestedRegistrationState == (displayStatus == 2 ? 'completed' : 'pending')) {
+    if (blank(requestedRegistrationState) || requestedRegistrationState == (displayStatus == 2 ? 'completed' : displayStatus == 1 ? 'incomplete' : 'pending')) {
         validItems.add(item)
     }
 }

@@ -72,7 +72,8 @@ apiClient.interceptors.response.use(
           antdMessage.warning('网络连接异常，请检查后端服务是否可用');
         }
       }
-    } else if (error.response.status >= 500) {
+    } else if (error.response.status >= 500
+      && !/\/pipelines\/[^/]+\/deploy(?:\?|$)/.test(String(error.config?.url ?? ''))) {
       // Server error — not 404 (which some APIs handle locally)
       const now = Date.now();
       if (now - lastNetworkErrorTime > NETWORK_ERROR_COOLDOWN) {

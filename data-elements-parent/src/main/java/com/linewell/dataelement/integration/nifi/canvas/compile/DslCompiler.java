@@ -70,6 +70,7 @@ public class DslCompiler {
     private static final String JSON_READER_TYPE = "org.apache.nifi.json.JsonTreeReader";
     private static final String JSON_WRITER_TYPE = "org.apache.nifi.json.JsonRecordSetWriter";
     private static final String CSV_READER_TYPE = "org.apache.nifi.csv.CSVReader";
+    private static final String CSV_WRITER_TYPE = "org.apache.nifi.csv.CSVRecordSetWriter";
     private static final String EXCEL_READER_TYPE = "org.apache.nifi.excel.ExcelReader";
     private static final String CONVERT_RECORD_TYPE = "org.apache.nifi.processors.standard.ConvertRecord";
     private static final String ROUTE_ON_ATTRIBUTE_TYPE = "org.apache.nifi.processors.standard.RouteOnAttribute";
@@ -89,6 +90,8 @@ public class DslCompiler {
     private static final String HIVE_BATCH_LAKE_WRITER = "PutHDFS";
     private static final String HIVE_BATCH_LAKE_MODE = "HDFS_BATCH";
     private static final String HIVE_STANDARD_WRITE_MODE = "HIVE_RECORD_PUT";
+    private static final String HIVE_HDFS_CSV_WRITER_NAME_PROPERTY = "nifi.hive.hdfs.csv.writer.name";
+    private static final String HIVE_HDFS_CSV_WRITER_DEFAULT_NAME = "PUBLIC-WRITER-CSV-HDFS";
     /**
      * ExecuteSQLRecord enrichment aliases are evaluated by the dictionary
      * database, rather than QueryRecord.  These otherwise-valid field names
@@ -223,7 +226,9 @@ public class DslCompiler {
             }
             cfgByNode.put(n.id(), cfg);
 
-            if (spec.controllerServices() != null) {
+            // HDFS writers use the server-managed CSV writer and Kerberos files,
+            // not the HiveServer2 connection pool declared for HiveRecordPut.
+            if (spec.controllerServices() != null && !isHiveBatchPutHdfs(m, "put", cfg)) {
                 for (var csSpec : spec.controllerServices()) {
                     Map<String, String> resolved = resolveProps(csSpec.properties(), cfg, nc.csIds, sharedCs);
                     String serviceType = resolveString(csSpec.type(), cfg, nc.csIds, sharedCs);
@@ -296,6 +301,23 @@ public class DslCompiler {
                 compiled.get(n.id()).csIds.put("sql-dbcp", cs.id());
             }
         }
+        // Resolve once per deployment. Several Hive targets can share one
+        // server-managed writer without a NiFi read per sink.
+        String hiveCsvWriterId = null;
+        Map<String, String> hiveHdfsWriterTypes = new LinkedHashMap<>();
+        if (pipeline.dsl().nodes().stream().anyMatch(node ->
+                isHiveBatchPutHdfs(manifestByNode.get(node.id()), "put", cfgByNode.get(node.id())))) {
+            hiveCsvWriterId = resolveHiveCsvWriterServiceId(controllerServiceScopeId);
+            for (Pipeline.Node node : pipeline.dsl().nodes()) {
+                ComponentManifest manifest = manifestByNode.get(node.id());
+                Map<String, Object> cfg = cfgByNode.get(node.id());
+                if (!isHiveBatchPutHdfs(manifest, "put", cfg)) continue;
+                String mode = hiveHdfsWriterMode(cfg);
+                hiveHdfsWriterTypes.computeIfAbsent(mode,
+                        ignored -> resolveProcessorType(manifest, "put", HIVE_RECORD_PUT_TYPE, cfg));
+            }
+        }
+
         sourceConfigOnlyNodes.addAll(resolveSourceConfigOnlyNodes(pipeline, manifestByNode, cfgByNode));
         attachExternalSqlPreStatementsToDownstreamSinks(pipeline, manifestByNode, cfgByNode);
 
@@ -313,6 +335,9 @@ public class DslCompiler {
         for (String csId : allCs) {
             // 若 CS 因校验失败回落到 DISABLED，这里会抛出带 validationErrors 的异常。
             nifi.waitForControllerServiceEnabled(csId, 30_000L);
+        }
+        if (hiveCsvWriterId != null) {
+            nifi.waitForControllerServiceEnabled(hiveCsvWriterId, 30_000L);
         }
 
         // ---- PHASE 3：创建处理器，并建立节点内部连线。----
@@ -334,6 +359,12 @@ public class DslCompiler {
 
             if (isMinioObjectSource(m.key())) {
                 buildMinioObjectSource(pgId, n, nc, nodeLayout, cfg, sharedCs);
+                continue;
+            }
+
+            if (isHiveBatchPutHdfs(m, "put", cfg)) {
+                buildHiveHdfsSink(pgId, n, nc, nodeLayout, cfg, sharedCs, hiveCsvWriterId,
+                        hiveHdfsWriterTypes.get(hiveHdfsWriterMode(cfg)));
                 continue;
             }
 
@@ -417,12 +448,6 @@ public class DslCompiler {
                     }
                     if (strategy != null && strategy.isBlank()) strategy = null;
                     String processorType = resolveProcessorType(m, pSpec.localId(), pSpec.type(), cfg);
-                    if (isHiveBatchPutHdfs(m, pSpec.localId(), cfg)) {
-                        // PutHDFS writes the FlowFile to HDFS directly.  Its property
-                        // contract is different from HiveRecordPut: it must not receive
-                        // Hive JDBC/controller-service properties from the manifest.
-                        resolved = buildHiveBatchPutHdfsProperties(cfg);
-                    }
                     log.info("Create processor node={} manifest={} localId={} type={}",
                             n.id(), m.key(), pSpec.localId(), processorType);
                     //创建处理器
@@ -1168,9 +1193,14 @@ public class DslCompiler {
     private void materializeServerManagedHuaweiMrsProfile(String manifestKey, Map<String, Object> cfg) {
         if (!"source.hive".equals(manifestKey) && !"sink.hive".equals(manifestKey)) return;
         String profile = firstNonBlank(stringConfig(cfg, "hiveProfile"), stringConfig(cfg, "hive_profile"));
+        if (profile == null) profile = "";
+        boolean hdfsSink = "sink.hive".equals(manifestKey)
+                && isHiveHdfsWriteMode(stringConfig(cfg, "hiveWriteMode"));
+        if (hdfsSink && profile.isBlank()) profile = "default";
         String mode = firstNonBlank(stringConfig(cfg, "metadataAccessMode"), stringConfig(cfg, "metadata_access_mode"));
         String connectionMode = firstNonBlank(stringConfig(cfg, "hiveConnectionMode"), stringConfig(cfg, "hive_connection_mode"));
-        boolean serverManaged = !profile.isBlank()
+        boolean serverManaged = hdfsSink
+                || !profile.isBlank()
                 || "server-managed-mrs".equalsIgnoreCase(mode)
                 || "huawei-mrs".equalsIgnoreCase(connectionMode);
         if (!serverManaged) return;
@@ -2879,6 +2909,54 @@ public class DslCompiler {
         }
     }
 
+    /**
+     * The production Hive flow names a server-managed CSV writer. A freshly
+     * created CSV writer would emit commas and a header by default, which is
+     * unsafe for a Hive table without a matching SerDe. Deployment still needs
+     * to verify that this writer's delimiter, null and escaping rules match the
+     * selected target table. Only an ancestor service is visible to the task PG.
+     */
+    private String resolveHiveCsvWriterServiceId(String applicationScopeId) {
+        String name = System.getProperty(HIVE_HDFS_CSV_WRITER_NAME_PROPERTY,
+                HIVE_HDFS_CSV_WRITER_DEFAULT_NAME).trim();
+        if (name.isEmpty()) {
+            throw new IllegalStateException("Hive HDFS 写入缺少服务端 CSV Record Writer 名称");
+        }
+        Set<String> scopes = new LinkedHashSet<>();
+        if (applicationScopeId != null && !applicationScopeId.isBlank()) scopes.add(applicationScopeId);
+        String rootId = nifi.getRootProcessGroupId();
+        if (rootId != null && !rootId.isBlank()) scopes.add(rootId);
+        for (String scopeId : scopes) {
+            List<JsonNode> services = nifi.listControllerServices(scopeId);
+            if (services == null) continue;
+            for (JsonNode service : services) {
+                JsonNode component = service.path("component");
+                if (!name.equals(component.path("name").asText())) continue;
+                if (!CSV_WRITER_TYPE.equals(component.path("type").asText())) {
+                    throw new IllegalStateException("Hive HDFS Record Writer 服务类型不正确：" + name);
+                }
+                String id = component.path("id").asText();
+                if (id.isBlank()) id = service.path("id").asText();
+                if (id.isBlank()) throw new IllegalStateException("Hive HDFS Record Writer 缺少 NiFi ID：" + name);
+                JsonNode properties = component.path("properties");
+                if (!"false".equalsIgnoreCase(properties.path("Include Header Line").asText())) {
+                    throw new IllegalStateException("Hive HDFS Record Writer 不能写入表头：" + name);
+                }
+                JsonNode separator = properties.path("Value Separator");
+                if (!separator.isTextual() || separator.asText().isEmpty()) {
+                    throw new IllegalStateException("Hive HDFS Record Writer 必须显式配置目标表字段分隔符：" + name);
+                }
+                String csvFormat = properties.path("CSV Format").asText();
+                if (!csvFormat.isBlank() && !"custom".equalsIgnoreCase(csvFormat)
+                        && !"Custom Format".equalsIgnoreCase(csvFormat)) {
+                    throw new IllegalStateException("Hive HDFS Record Writer 的 CSV Format 必须为 Custom Format：" + name);
+                }
+                return id;
+            }
+        }
+        throw new IllegalStateException("当前 NiFi 节点缺少受管的 Hive HDFS CSV Record Writer：" + name);
+    }
+
     private static boolean isApplicationShareable(String type) {
         return "org.apache.nifi.dbcp.DBCPConnectionPool".equals(type)
                 || "org.apache.nifi.kerberos.KerberosKeytabUserService".equals(type);
@@ -3014,9 +3092,58 @@ public class DslCompiler {
         if (manifest == null || !"sink.hive".equals(manifest.key()) || !"put".equals(localId)) {
             return false;
         }
-        String mode = stringConfig(cfg, "hiveWriteMode").toUpperCase(Locale.ROOT);
+        return isHiveHdfsWriteMode(stringConfig(cfg, "hiveWriteMode"));
+    }
+
+    private static boolean isHiveHdfsWriteMode(String configuredMode) {
+        String mode = configuredMode == null ? "" : configuredMode.trim().toUpperCase(Locale.ROOT);
         return mode.isBlank() || HIVE_LINEWELL_HDFS_MODE.equals(mode) || "LINEWELL".equals(mode)
                 || HIVE_BATCH_LAKE_MODE.equals(mode) || "BATCH".equals(mode);
+    }
+
+    private String hiveHdfsWriterMode(Map<String, Object> cfg) {
+        String mode = stringConfig(cfg, "hiveWriteMode").toUpperCase(Locale.ROOT);
+        return HIVE_BATCH_LAKE_MODE.equals(mode) || "BATCH".equals(mode)
+                ? HIVE_BATCH_LAKE_MODE : HIVE_LINEWELL_HDFS_MODE;
+    }
+
+    /** Expand one Hive sink into the production-proven record-to-HDFS chain. */
+    private void buildHiveHdfsSink(String pgId, Pipeline.Node node, NodeCompilation nc,
+                                   NodeLayout layout, Map<String, Object> cfg,
+                                   Map<String, String> sharedCs, String csvWriterId, String putType) {
+        if (csvWriterId == null || csvWriterId.isBlank()) {
+            throw new IllegalStateException("Hive HDFS 写入缺少受管的 CSV Record Writer");
+        }
+        if (putType == null || putType.isBlank()) {
+            throw new IllegalStateException("Hive HDFS 写入组件类型未解析");
+        }
+        boolean linewell = HIVE_LINEWELL_HDFS_MODE.equals(hiveHdfsWriterMode(cfg));
+        double x = nodeOriginX(layout);
+        double y = nodeOriginY(layout);
+
+        NifiEntity merge = nifi.createProcessor(pgId, MERGE_RECORD_TYPE, node.label() + "/merge",
+                x, y, jdbcBatchMergeProperties(sharedCs), null, null);
+        NifiEntity convert = nifi.createProcessor(pgId, CONVERT_RECORD_TYPE, node.label() + "/convert",
+                x + PROCESSOR_COLUMN_GAP, y, Map.of(
+                        "Record Reader", sharedCs.get("jsonReader"),
+                        "Record Writer", csvWriterId,
+                        "Include Zero Record FlowFiles", "false"), null, null);
+        NifiEntity filename = nifi.createProcessor(pgId, UPDATE_ATTRIBUTE_TYPE, node.label() + "/filename",
+                x + 2 * PROCESSOR_COLUMN_GAP, y, Map.of("filename", "${uuid}"), null, null);
+        NifiEntity put = nifi.createProcessor(pgId, putType, node.label() + "/put",
+                x + 3 * PROCESSOR_COLUMN_GAP, y, buildHiveBatchPutHdfsProperties(cfg, linewell), null, null);
+
+        nc.processorIds.put("merge", merge.id());
+        nc.processorIds.put("convert", convert.id());
+        nc.processorIds.put("filename", filename.id());
+        nc.processorIds.put("put", put.id());
+        nc.inletProcessorId = merge.id();
+        nifi.createConnection(pgId, merge.id(), "PROCESSOR", convert.id(), "PROCESSOR", List.of("merged"));
+        nifi.createConnection(pgId, convert.id(), "PROCESSOR", filename.id(), "PROCESSOR", List.of("success"));
+        nifi.createConnection(pgId, filename.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));
+        nc.usedOutgoing.computeIfAbsent(merge.id(), ignored -> new LinkedHashSet<>()).add("merged");
+        nc.usedOutgoing.computeIfAbsent(convert.id(), ignored -> new LinkedHashSet<>()).add("success");
+        nc.usedOutgoing.computeIfAbsent(filename.id(), ignored -> new LinkedHashSet<>()).add("success");
     }
 
     /**
@@ -3025,7 +3152,8 @@ public class DslCompiler {
      * and does not speak to HiveServer2, so Hive database/table JDBC properties
      * must never be carried across to this processor.
      */
-    private static Map<String, String> buildHiveBatchPutHdfsProperties(Map<String, Object> cfg) {
+    private static Map<String, String> buildHiveBatchPutHdfsProperties(Map<String, Object> cfg,
+                                                                        boolean linewell) {
         String clientConfigDir = configText(cfg, "clientConfigDir");
         if (clientConfigDir.isBlank()) {
             throw new IllegalStateException("批量入湖（PutHDFS）缺少 MRS 客户端配置目录");
@@ -3039,11 +3167,20 @@ public class DslCompiler {
         Map<String, String> properties = new LinkedHashMap<>();
         properties.put("Hadoop Configuration Resources", joinHadoopConfigResources(clientConfigDir));
         properties.put("Directory", directory);
+        properties.put("Conflict Resolution Strategy", "replace");
         String principal = firstNonBlankStatic(configText(cfg, "userPrincipal"),
                 configText(cfg, "kerberosPrincipal"), configText(cfg, "clientPrincipal"));
         String keytab = firstNonBlankStatic(configText(cfg, "keytabPath"), configText(cfg, "keytab"));
         if (!principal.isBlank()) properties.put("Kerberos Principal", principal);
         if (!keytab.isBlank()) properties.put("Kerberos Keytab", keytab);
+        properties.put("Kerberos Relogin Period", "4 hours");
+        if (linewell) {
+            String krb5ConfPath = configText(cfg, "krb5ConfPath");
+            if (krb5ConfPath.isBlank()) {
+                throw new IllegalStateException("PutHwHDFS 缺少服务端 krb5.conf 路径");
+            }
+            properties.put("krb5 conf", krb5ConfPath);
+        }
         return properties;
     }
 

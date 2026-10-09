@@ -134,7 +134,7 @@ if (action == 'sourceOptions') {
     // 在数据库分页之前施加当前角色的 ALL/ORG/OWNER 条件；不先取全量再过滤。
     var scope = dataScope.resource('MENU:2081000000000000002')
     var query = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
-        .eq('is_del', 0).eq('asset_status', 2)
+        .eq('is_del', 0).in('asset_status', [1, 2])
     if (scope.scope == 'OWNER') { query = query.eq('created_by', scope.userId) }
     if (scope.scope == 'ORG') {
         if (scope.organizationIds == null || scope.organizationIds.size() == 0) {
@@ -199,7 +199,7 @@ if (action == 'preview') {
         exit 400, '来源表分页参数无效'
     }
     var previewDb = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
-        .eq('tid', previewDbId).eq('is_del', 0).eq('asset_status', 2).selectOne()
+        .eq('tid', previewDbId).eq('is_del', 0).in('asset_status', [1, 2]).selectOne()
     if (previewDb == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [previewDb]).size() != 1) {
         exit 403, '来源库不存在或不在当前角色的数据范围内'
     }
@@ -325,7 +325,7 @@ if (action == 'create') {
         .eq('tid', sourceDbId).eq('is_del', 0).selectOne()
     var targetDb = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
         .eq('tid', targetDbId).eq('is_del', 0).selectOne()
-    if (sourceDb == null || targetDb == null || text(sourceDb.assetStatus) != '2') {
+    if (sourceDb == null || targetDb == null || !['1', '2'].contains(text(first(sourceDb, ['assetStatus', 'asset_status'])))) {
         exit 400, '所选数据库不存在、不属于当前租户或来源库尚未完成登记'
     }
     // 当前会话角色的 ALL/ORG/OWNER 数据源范围只计算一次，随后每个

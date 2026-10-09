@@ -85,6 +85,39 @@ class NifiFailureRetentionTest {
     }
 
     @Test
+    void retainsFailuresAtEveryProcessorInTheHiveHdfsRecordChain() throws Exception {
+        var client = spy(new NifiClient(null, json));
+        doReturn(json.readTree("""
+                {"processGroupFlow":{"flow":{"processors":[
+                  {"id":"merge","component":{"type":"org.apache.nifi.processors.standard.MergeRecord","relationships":[{"name":"merged"},{"name":"failure"}]}},
+                  {"id":"convert","component":{"type":"org.apache.nifi.processors.standard.ConvertRecord","relationships":[{"name":"success"},{"name":"failure"}]}},
+                  {"id":"filename","component":{"type":"org.apache.nifi.processors.attributes.UpdateAttribute","relationships":[{"name":"success"}]}},
+                  {"id":"put","component":{"type":"com.linewell.microservice.processor.hadoop.PutHwHDFS","relationships":[{"name":"success"},{"name":"failure"}]}}
+                ],"connections":[
+                  {"id":"merge-convert","component":{"source":{"id":"merge"},"destination":{"id":"convert"},"selectedRelationships":["merged"]}},
+                  {"id":"convert-filename","component":{"source":{"id":"convert"},"destination":{"id":"filename"},"selectedRelationships":["success"]}},
+                  {"id":"filename-put","component":{"source":{"id":"filename"},"destination":{"id":"put"},"selectedRelationships":["success"]}}
+                ]}}}
+                """)).when(client).get("/flow/process-groups/pg", JsonNode.class);
+        var sequence = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> new NifiEntity(null, Map.of("id", "failure-loop-" + sequence.incrementAndGet()), null, null))
+                .when(client).createConnection(anyString(), anyString(), anyString(), anyString(), anyString(), anyList());
+        doReturn(null).when(client).putWithRevision(anyString(), anyString(), any(ObjectNode.class));
+
+        client.finalizeGeneratedProcessGroup("pg");
+
+        for (String id : List.of("merge", "convert", "put")) {
+            verify(client).createConnection("pg", id, "PROCESSOR", id, "PROCESSOR", List.of("failure"));
+        }
+        verify(client, never()).createConnection(eq("pg"), eq("filename"), eq("PROCESSOR"),
+                eq("filename"), eq("PROCESSOR"), anyList());
+        var updates = ArgumentCaptor.forClass(ObjectNode.class);
+        verify(client).putWithRevision(eq("/processors/put"), eq("/processors/put"), updates.capture());
+        assertThat(updates.getValue().path("config").path("autoTerminatedRelationships").toString())
+                .isEqualTo("[\"success\"]");
+    }
+
+    @Test
     void refusesRedeployWithQueuedRecordsWithoutDroppingThem() throws Exception {
         var client = spy(new NifiClient(null, json));
         doReturn(json.createObjectNode()).when(client).getProcessGroup("pg");

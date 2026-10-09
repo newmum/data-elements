@@ -63,7 +63,7 @@ for (main in db.table('db_datasource_t').where().eq('app_id', appId).eq('is_del'
     item.showConnect = hasConnection ? 1 : 0
     item.tableNum = first(main, ['tableNum', 'table_num'])
     item.appId = appId
-    item.assetStatus = 2
+    item.assetStatus = first(main, ['assetStatus', 'asset_status'])
     result.add(item)
 }
 return result

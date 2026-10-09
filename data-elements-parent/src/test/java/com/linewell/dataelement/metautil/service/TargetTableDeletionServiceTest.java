@@ -17,10 +17,65 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 class TargetTableDeletionServiceTest {
+
+    @Test
+    void twentyOracleTargetsShareOnePhysicalTableDirectoryLookup() {
+        MetadataExplorerService explorer = mock(MetadataExplorerService.class);
+        List<TableInfo> physical = IntStream.range(0, 20).mapToObj(index -> {
+            TableInfo table = new TableInfo();
+            table.setTableName("ODS_PERSON_" + index);
+            table.setSchemaName("FJHYJ");
+            return table;
+        }).toList();
+        when(explorer.getTables(any())).thenReturn(physical);
+        List<String> names = IntStream.range(0, 20)
+                .mapToObj(index -> index == 0 ? "OLD.ODS_PERSON_0" : "ODS_PERSON_" + index).toList();
+
+        List<Map<String, Object>> result = new TargetTableDeletionService(explorer, mock(HiveModule.class))
+                .preflightBatch(oceanBaseOracle(), names);
+
+        assertEquals(20, result.size());
+        assertTrue(result.stream().allMatch(row -> Boolean.TRUE.equals(row.get("physicalExists"))));
+        assertEquals(true, result.getFirst().get("historicalScopeNormalized"));
+        assertEquals("ODS_PERSON_0", result.getFirst().get("physicalTargetTableName"));
+        verify(explorer, times(1)).getTables(any());
+    }
+
+    @Test
+    void twentyManagedHiveTargetsShareOneServerSideShowTables() throws Exception {
+        MetadataExplorerService explorer = mock(MetadataExplorerService.class);
+        HiveModule hive = mock(HiveModule.class);
+        when(hive.showTables("target_db")).thenReturn(IntStream.range(0, 20)
+                .mapToObj(index -> "ods_person_" + index).toList());
+        List<String> names = IntStream.range(0, 20)
+                .mapToObj(index -> "ods_person_" + index).toList();
+
+        List<Map<String, Object>> result = new TargetTableDeletionService(explorer, hive)
+                .preflightBatch(managedHive(), names);
+
+        assertEquals(20, result.size());
+        assertTrue(result.stream().allMatch(row -> Boolean.TRUE.equals(row.get("physicalExists"))));
+        verify(hive, times(1)).showTables("target_db");
+        verifyNoInteractions(explorer);
+    }
+
+    @Test
+    void hundredTargetsAreRejectedBeforeOpeningPhysicalDatasource() {
+        MetadataExplorerService explorer = mock(MetadataExplorerService.class);
+        HiveModule hive = mock(HiveModule.class);
+        List<String> names = IntStream.range(0, 100)
+                .mapToObj(index -> "ods_person_" + index).toList();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> new TargetTableDeletionService(explorer, hive).preflightBatch(managedHive(), names));
+
+        verifyNoInteractions(hive, explorer);
+    }
 
     @Test
     void dropsOceanBaseOracleTableWithOwnerScopeAndVerifiesItIsGone() {

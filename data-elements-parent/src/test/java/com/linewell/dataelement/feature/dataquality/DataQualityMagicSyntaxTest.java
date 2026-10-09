@@ -12,7 +12,7 @@ import org.ssssssss.script.MagicScript;
 class DataQualityMagicSyntaxTest {
     @TestFactory
     List<DynamicTest> compileEditableQualityInterfaces() throws Exception {
-        var scripts = CanonicalMagicSources.under("api/05.数据治理/02.数据质量");
+        var scripts = CanonicalMagicSources.under("api/05.数据治理/02.质量规则");
         assertFalse(scripts.isEmpty(), "Current Magic resource tree is missing");
         return scripts.stream().map(script -> DynamicTest.dynamicTest(
                 script.relativePath() + " [" + script.metadataId() + "]",

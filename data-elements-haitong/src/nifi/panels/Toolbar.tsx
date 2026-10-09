@@ -230,19 +230,28 @@ export default function Toolbar() {
     message.success(isChengtianIntegration ? `设计已保存并发布：${name}。外部执行需另行授权。` : `已保存并部署:${name}`);
   };
 
+  const reportSaveOrDeployFailure = (error: any, deploymentAttempted: boolean, action: string) => {
+    if (deploymentAttempted) {
+      openErrorPanel();
+    } else {
+      message.error(`${action}失败: ${error?.response?.data?.error ?? error?.message ?? error}`);
+    }
+  };
+
   // ---- Save + deploy in-place ----
   const doSaveInPlace = async () => {
     if (!isCurrentSession()) return;
     if (save.isPending || deploy.isPending) return;
     const dsl = toDsl();
     if (currentPipelineId && currentPipelineName) {
+      let deploymentAttempted = false;
       try {
         const saved = await save.mutateAsync({ id: currentPipelineId, name: currentPipelineName, dsl });
         setCurrentPipeline(saved.id, saved.name);
+        deploymentAttempted = true;
         await deploySavedPipeline(saved.id, saved.name);
       } catch (e: any) {
-        message.error(`保存或部署失败: ${e?.response?.data?.error ?? e?.message ?? e}`);
-        openErrorPanel();
+        reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
       }
     } else {
       setSaveAsDraft(currentPipelineName ?? '');
@@ -448,15 +457,16 @@ export default function Toolbar() {
     }
     if (currentPipelineId) {
       const dsl = toDsl();
+      let deploymentAttempted = false;
       save
         .mutateAsync({ id: currentPipelineId, name, dsl })
         .then(async (saved) => {
           setCurrentPipeline(saved.id, saved.name);
+          deploymentAttempted = true;
           await deploySavedPipeline(saved.id, saved.name);
         })
         .catch((e) => {
-          message.error(`重命名或部署失败: ${e?.response?.data?.error ?? e?.message ?? e}`);
-          openErrorPanel();
+          reportSaveOrDeployFailure(e, deploymentAttempted, '重命名');
         });
     } else {
       setCurrentPipeline(currentPipelineId, name);
@@ -736,6 +746,7 @@ export default function Toolbar() {
           if (!isCurrentSession()) return;
           const name = saveAsDraft.trim();
           if (!name) { message.warning('请填写流程名称'); return; }
+          let deploymentAttempted = false;
           try {
             const isCopy = Boolean(currentPipelineId);
             const saved = await save.mutateAsync({ id: undefined, name, dsl: toDsl(), copy: isCopy });
@@ -745,12 +756,12 @@ export default function Toolbar() {
                 detail: { pipelineId: saved.id },
               }));
             }
-            await deploySavedPipeline(saved.id, saved.name, isCopy ? null : getTid());
             setOpenSaveAs(false);
+            deploymentAttempted = true;
+            await deploySavedPipeline(saved.id, saved.name, isCopy ? null : getTid());
           } catch (e: any) {
             message.destroy('start-flow');
-            message.error(`保存或部署失败: ${e?.response?.data?.error ?? e?.message ?? e}`);
-            openErrorPanel();
+            reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
           }
         }}
         onCancel={() => {

@@ -6,6 +6,7 @@ import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyR
 import com.linewell.dataelement.dataservice.pull.ApiPullConfigurationMagicModule;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
+import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineRepository;
@@ -325,9 +326,9 @@ public class PipelineController {
         String sourceDbType = firstNonBlank(physicalSourceDs, "dbType", "db_type", "databaseType", "database_type");
         if (isBlank(sourceDbType)) sourceDbType = firstNonBlank(catalog, "sourceDbType");
         String sourceNodeType = normalizeSourceNodeType(sourceDbType, physicalSourceDs);
-        String sourceNodeLabel = "source.api".equals(sourceNodeType) ? "API 接口来源"
-                : ("source.ftp".equals(sourceNodeType) || "source.sftp".equals(sourceNodeType)
-                ? "FTP 文件来源" : "源表");
+        String sourceNodeLabel = firstNonBlank(sourceTableAsset, "tableNameCn", "table_name_cn");
+        if (isBlank(sourceNodeLabel)) sourceNodeLabel = firstNonBlank(source, "tableNameCn", "table_name_cn");
+        if (isBlank(sourceNodeLabel)) sourceNodeLabel = sourceTable.trim();
 
         Map<String, Object> transformConfig = new LinkedHashMap<>();
         transformConfig.put("mappings", buildMappingConfig(sourceColumns, targetColumns, sourceTableId, targetTableId));
@@ -335,6 +336,9 @@ public class PipelineController {
         Map<String, Object> targetDs = targetDbAsset != null ? targetDbAsset : firstNonEmptyMap(catalog,
                 "targetDatasource", "targetDataSource", "targetDs", "targetBelongDataSource");
         String targetTableName = firstNonBlank(target, "tableName", "targetTableName", "table", "name");
+        String targetNodeLabel = firstNonBlank(targetTableAsset, "tableNameCn", "table_name_cn");
+        if (isBlank(targetNodeLabel)) targetNodeLabel = firstNonBlank(target, "tableNameCn", "table_name_cn");
+        if (isBlank(targetNodeLabel)) targetNodeLabel = targetTableName;
         targetDs = loadDatasourceDetail(firstNonBlank(targetDs, "tid", "id", "dbId", "datasourceId", "dataSourceId"), targetDs);
         Map<String, Object> sinkConfig = buildSinkConfig(targetDs,
                 targetTableAsset == null ? target : targetTableAsset, targetColumns);
@@ -355,10 +359,10 @@ public class PipelineController {
                         List.of(
                                 new Pipeline.Node(sourceNodeId, sourceNodeType, sourceNodeLabel, "source", -120, 120,
                                         sourceConfig),
-                                new Pipeline.Node(transformNodeId, "transform.field-enrichment", "字段增强", "transform", 420, 120, transformConfig),
+                                new Pipeline.Node(transformNodeId, "transform.field-enrichment", "字段映射", "transform", 420, 120, transformConfig),
                                 new Pipeline.Node(sinkNodeId,
                                         "HIVE".equalsIgnoreCase(String.valueOf(sinkConfig.get("dbType"))) ? "sink.hive" : "sink.jdbc",
-                                        "目标表", "sink", 960, 120, sinkConfig)
+                                        targetNodeLabel, "sink", 960, 120, sinkConfig)
                         ),
                         List.of(
                                 new Pipeline.Edge("edge-1", sourceNodeId, transformNodeId, null),
@@ -512,16 +516,24 @@ public class PipelineController {
             String nodeType = normalizeSourceNodeType(firstNonBlank(physicalSourceDs,
                     "dbType", "db_type", "databaseType", "database_type"), physicalSourceDs);
             boolean pushFileSource = isPushReceiveDatasource(sourceDs);
+            boolean generatedMysqlFallback = !pushFileSource
+                    && "source.mysql".equals(currentSource.manifestKey()) && !nodeType.equals(currentSource.manifestKey())
+                    && currentSource.id().equals("source-" + sourceTableId)
+                    && Objects.equals(firstNonBlank(currentSource.config(), "sourceDbId", "registeredDatasourceId"),
+                            firstNonBlank(sourceDs, "tid", "id", "datasourceId", "dataSourceId"));
             boolean incompleteFileSource = !pushFileSource
                     && ("source.ftp".equals(nodeType) || "source.sftp".equals(nodeType))
                     && (isBlank(firstNonBlank(currentSource.config(), "hostname", "host"))
                     || isBlank(firstNonBlank(currentSource.config(), "remotePath"))
                     || isBlank(firstNonBlank(currentSource.config(), "username")));
-            if (!pushFileSource && (!"source.api".equals(nodeType)
+            if (!pushFileSource && !generatedMysqlFallback && (!"source.api".equals(nodeType)
                     || !isBlank(firstNonBlank(currentSource.config(), "url"))) && !incompleteFileSource) {
                 return refreshRegisteredSourceMetadata(pipeline, currentSource, sourceTable, sourceTableId);
             }
             Map<String, Object> config = buildSourceConfig(physicalSourceDs, sourceTable, loadColumnsByTableId(sourceTableId));
+            if (generatedMysqlFallback) {
+                config = repairMistypedSourceConfig(config, currentSource.config());
+            }
             if (incompleteFileSource) {
                 config = repairFileSourceConfig(config, currentSource.config());
             }
@@ -552,16 +564,19 @@ public class PipelineController {
                     config.put("pushStorageDomain", firstNonBlank(physicalSourceDs,
                             "pushStorageDomain", "push_storage_domain"));
                 }
-            } else if (isBlank(firstNonBlank(config, "url"))) {
+            } else if (!generatedMysqlFallback && isBlank(firstNonBlank(config, "url"))) {
                 return pipeline;
             }
             List<Pipeline.Node> nodes = new ArrayList<>();
             for (Pipeline.Node node : pipeline.dsl().nodes()) {
                 if (node.id().equals(currentSource.id())) {
-                    String label = pushFileSource || incompleteFileSource
-                            ? "FTP 文件来源"
-                            : ("来源表".equals(node.label()) || "源表".equals(node.label())
-                            ? "API 接口来源" : node.label());
+                    String label = node.label();
+                    if ("来源表".equals(label) || "源表".equals(label) || "FTP 文件来源".equals(label)
+                            || "API 接口来源".equals(label)) {
+                        String tableLabel = firstNonBlank(sourceTable, "tableNameCn", "table_name_cn");
+                        if (isBlank(tableLabel)) tableLabel = firstNonBlank(sourceTable, "tableName", "table_name");
+                        if (!isBlank(tableLabel)) label = tableLabel;
+                    }
                     nodes.add(new Pipeline.Node(node.id(), nodeType, label, node.category(), node.x(), node.y(), config));
                 } else {
                     nodes.add(node);
@@ -593,6 +608,18 @@ public class PipelineController {
             String table = firstNonBlank(repaired, "sourceTableName", "table");
             if (!isBlank(table)) repaired.put("fileFilterRegex", "(?i)^" + java.util.regex.Pattern.quote(table)
                     + "\\.(csv|json|xlsx|xls)$");
+        }
+        return repaired;
+    }
+
+    /** Repair the generated connector identity while retaining manually edited query/schedule/mapping options. */
+    static Map<String, Object> repairMistypedSourceConfig(Map<String, Object> registered, Map<String, Object> saved) {
+        Map<String, Object> repaired = new LinkedHashMap<>(registered);
+        repaired.putAll(saved);
+        for (String key : List.of("dbType", "jdbcUrl", "jdbcURL", "host", "port", "database", "sid",
+                "serviceName", "connectionType", "defaultSchema", "schema", "compatibleMode")) {
+            if (registered.containsKey(key)) repaired.put(key, registered.get(key));
+            else repaired.remove(key);
         }
         return repaired;
     }
@@ -1196,13 +1223,22 @@ public class PipelineController {
             sourceConfig.put("incrementalConfigJson", firstNonBlank(api, "incrementalConfigJson", "incremental_config_json"));
             return sourceConfig;
         }
+        // Non-JDBC connectors need their own registered endpoint/security options too.
+        for (String option : List.of("apiKey", "authMethod", "bootstrapServers", "credentialRef", "defaultIndex",
+                "fileFilterRegex", "groupId", "kerberosPrincipal", "kerberosServiceName", "maxPollRecords",
+                "messageFormat", "minioAccessKey", "minioBucket", "minioEndpoint", "minioFilePattern",
+                "minioPrefix", "minioSecretKey", "nodes", "path", "protocol", "queryJson", "rowStart",
+                "rowStop", "saslMechanism", "schemaRegistryUrl", "schemaRequired", "securityProtocol",
+                "topic", "trustStorePath", "version", "extraParams", "compatibleMode")) {
+            if (sourceDs.get(option) != null) sourceConfig.put(option, sourceDs.get(option));
+        }
         sourceConfig.put("host", firstNonBlank(sourceDs, "host", "dbMetaIp"));
         sourceConfig.put("port", parsePort(sourceDs, "port", "dbMetaPort"));
         sourceConfig.put("database", firstNonBlank(sourceDs, "database", "dbName", "dbMetaDbName"));
         sourceConfig.put("username", firstNonBlank(sourceDs, "username", "dbMetaUser"));
         sourceConfig.put("password", firstNonBlank(sourceDs, "password", "dbMetaPassword"));
-        String normalizedDbType = normalizeSinkDbType(firstNonBlank(sourceDs,
-                "dbType", "db_type", "databaseType", "database_type"));
+        String normalizedDbType = RegisteredDatasourceType.configType(firstNonBlank(sourceDs,
+                "dbType", "db_type", "databaseType", "database_type"), sourceDs);
         sourceConfig.put("dbType", normalizedDbType);
         // The node manifest and the connection payload are separate concerns:
         // retain the registered endpoint contract when a source template is
@@ -1220,6 +1256,9 @@ public class PipelineController {
                 sourceConfig.put("serviceName", service);
                 sourceConfig.put("database", service);
             }
+        }
+        if ("source.kingbase".equals(sourceNodeType)) {
+            copyIfPresent(sourceDs, sourceConfig, "compatibleMode", "compatibleMode", "compatible_mode");
         }
         if ("source.oceanbase".equals(sourceNodeType)) {
             sourceConfig.put("compatibleMode", "OCEANBASE_ORACLE".equals(normalizedDbType) ? "ORACLE" : "MYSQL");
@@ -1239,8 +1278,13 @@ public class PipelineController {
         if (!usesServerManagedHiveProfile(sourceConfig)) {
             copyHuaweiMrsConnectionSettings(sourceDs, sourceConfig);
         }
-        sourceConfig.put("jdbcUrl", firstNonBlank(sourceDs, "jdbcUrl", "jdbcURL", "jdbc_url"));
+        sourceConfig.put("jdbcUrl", RegisteredDatasourceType.jdbcUrl(firstNonBlank(sourceDs,
+                "dbType", "db_type", "databaseType", "database_type"), sourceDs, Map.of()));
         if (usesServerManagedHiveProfile(sourceConfig)) {
+            for (String privateKey : List.of("jdbcURL", "jdbc_url", "keytabPath", "krb5ConfPath",
+                    "jaasConfPath", "trustStorePassword", "userPrincipal", "principal", "password")) {
+                sourceConfig.remove(privateKey);
+            }
             sourceConfig.remove("jdbcUrl");
         } else if ("HIVE".equalsIgnoreCase(String.valueOf(sourceConfig.get("dbType")))
                 && isBlank(firstNonBlank(sourceConfig, "jdbcUrl"))) {
@@ -1489,11 +1533,10 @@ public class PipelineController {
         sinkConfig.put("targetTableId", firstNonBlank(tableAsset, "tid", "id", "tableId"));
         copyJdbcDriverProperties(targetDs, sinkConfig);
         String dbType = firstNonBlank(targetDs, "dbType", "db_type", "databaseType", "database_type");
-        if (isBlank(dbType)) dbType = "MySQL";
         String host = firstNonBlank(targetDs, "host", "dbMetaIp");
         Integer port = parsePort(targetDs, "port", "dbMetaPort");
         String database = firstNonBlank(targetDs, "database", "dbName", "dbMetaDbName");
-        String normalizedDbType = normalizeSinkDbType(dbType);
+        String normalizedDbType = normalizeSinkDbType(dbType, targetDs);
         sinkConfig.put("dbType", normalizedDbType);
         sinkConfig.put("hiveProfile", firstNonBlank(targetDs, "hiveProfile", "hive_profile"));
         sinkConfig.put("metadataAccessMode", firstNonBlank(targetDs,
@@ -1506,7 +1549,7 @@ public class PipelineController {
         sinkConfig.put("jdbcUrl", firstNonBlank(targetDs, "jdbcUrl", "jdbcURL", "jdbc_url") == null
                 ? ("HIVE".equalsIgnoreCase(normalizedDbType)
                         ? buildHuaweiMrsHiveJdbcUrl(mergeConnectionBasics(sinkConfig, host, port, database))
-                        : buildJdbcUrl(normalizedDbType, host, port, database))
+                        : RegisteredDatasourceType.jdbcUrl(dbType, targetDs, Map.of()))
                 : firstNonBlank(targetDs, "jdbcUrl", "jdbcURL", "jdbc_url"));
         if (usesServerManagedHiveProfile(sinkConfig)) {
             sinkConfig.remove("jdbcUrl");
@@ -1918,97 +1961,12 @@ public class PipelineController {
         return null;
     }
 
-    private static String buildJdbcUrl(String dbType, String host, Integer port, String database) {
-        String type = isBlank(dbType) ? "mysql" : dbType.toLowerCase(Locale.ROOT);
-        String h = isBlank(host) ? "127.0.0.1" : host;
-        int p = port == null ? 3306 : port;
-        String db = isBlank(database) ? "" : database;
-        if ("mysql".equals(type) || "oceanbase_mysql".equals(type)) {
-            return "jdbc:mysql://" + h + ":" + p + "/" + db + "?useSSL=false&serverTimezone=Asia/Shanghai";
-        }
-        if ("oceanbase_oracle".equals(type)) {
-            return "jdbc:oceanbase:oracle://" + h + ":" + p + "/" + db;
-        }
-        if ("hive".equals(type)) {
-            return "jdbc:hive2://" + h + ":" + p + "/" + db;
-        }
-        if ("hetu".equals(type) || "trino".equals(type) || "presto".equals(type)) {
-            return "jdbc:trino://" + h + ":" + p + "/" + (isBlank(db) ? "hive/default" : db);
-        }
-        if ("doris".equals(type) || "starrocks".equals(type)) {
-            return "jdbc:mysql://" + h + ":" + p + "/" + db + "?characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false";
-        }
-        if ("clickhouse".equals(type)) {
-            return "jdbc:clickhouse://" + h + ":" + p + "/" + db + "?compress=1";
-        }
-        if ("iotdb".equals(type)) {
-            return "jdbc:iotdb://" + h + ":" + p + "/";
-        }
-        return "jdbc:" + type + "://" + h + ":" + p + "/" + db;
-    }
-
-    /**
-     * 规范化 sink 的数据库类型，兼容目录资产中的大小写/别名，并与画布选项及 NiFi 可识别值保持一致。
-     */
     static String normalizeSourceNodeType(String dbType, Map<String, Object> source) {
-        if (isBlank(dbType)) return "source.mysql";
-        String upper = dbType.trim().toUpperCase(Locale.ROOT);
-        return switch (upper) {
-            case "MYSQL" -> "source.mysql";
-            case "TDSQL_MYSQL" -> "source.tdsql-mysql";
-            case "POSTGRES", "POSTGRESQL" -> "source.postgresql";
-            case "GAUSSDB", "OPENGAUSS" -> "source.gaussdb";
-            case "TDSQL_PG" -> "source.tdsql-pg";
-            case "ORACLE", "ORACLE12", "ORACLE_12", "ORACLE 12", "ORACLE12+", "ORACLE 12+" -> "source.oracle";
-            case "MSSQL", "MS_SQL", "MS SQL", "MS SQL 2012+", "MS SQL 2008", "SQLSERVER" -> "source.sqlserver";
-            case "MARIADB" -> "source.mariadb";
-            case "DB2" -> "source.db2";
-            case "DM", "DAMENG" -> "source.dameng";
-            case "KINGBASE" -> "source.kingbase";
-            case "GBASE8A" -> "source.gbase8a";
-            case "GBASE8S" -> "source.gbase8s";
-            case "OSCAR" -> "source.oscar";
-            case "HIGHGO" -> "source.highgo";
-            case "HAILIANG", "VASTBASE" -> "source.hailiang";
-            case "OCEANBASE", "OCEANBASEMYSQL", "OCEANBASE_MYSQL", "OCEANBASEORACLE", "OCEANBASE_ORACLE" -> "source.oceanbase";
-            case "CLICKHOUSE" -> "source.clickhouse";
-            case "HIVE" -> "source.hive";
-            case "HETU", "TRINO", "PRESTO" -> "source.hetu";
-            case "DORIS" -> "source.doris";
-            case "STARROCKS" -> "source.starrocks";
-            case "IOTDB" -> "source.iotdb";
-            case "HDFS" -> "source.hdfs";
-            case "HBASE" -> "source.hbase";
-            case "FTP", "SFTP" -> "sftp".equalsIgnoreCase(firstNonBlank(source, "ftpProtocol", "ftp_protocol", "protocol"))
-                    || "SFTP".equals(upper) ? "source.sftp" : "source.ftp";
-            case "API" -> "source.api";
-            case "KAFKA" -> "source.kafka";
-            case "ELASTICSEARCH", "ES" -> "source.elasticsearch";
-            default -> "source.mysql";
-        };
+        return RegisteredDatasourceType.sourceManifest(dbType, source);
     }
 
-    /**
-     * 规范化 sink 的数据库类型，兼容目录资产中的大小写/别名，并与画布选项及 NiFi 可识别值保持一致。
-     */
-    private static String normalizeSinkDbType(String dbType) {
-        if (isBlank(dbType)) return "MySQL";
-        String raw = dbType.trim();
-        String upper = raw.toUpperCase(Locale.ROOT);
-        return switch (upper) {
-            case "DM", "DAMENG" -> "dm";
-            case "MYSQL", "TDSQL_MYSQL" -> "MySQL";
-            case "POSTGRES", "POSTGRESQL", "TDSQL_PG", "GAUSSDB", "OPENGAUSS" -> "PostgreSQL";
-            case "ORACLE", "ORACLE12", "ORACLE_12", "ORACLE 12", "ORACLE12+", "ORACLE 12+" -> "Oracle";
-            case "MSSQL", "MS_SQL", "MS SQL", "MS SQL 2012+", "MS SQL 2008", "SQLSERVER" -> "SQLSERVER";
-            case "OCEANBASEMYSQL", "OCEANBASE_MYSQL" -> "OCEANBASE_MYSQL";
-            case "OCEANBASEORACLE", "OCEANBASE_ORACLE" -> "OCEANBASE_ORACLE";
-            case "OCEANBASE" -> "OCEANBASE_MYSQL";
-            case "MARIADB", "DB2", "KINGBASE", "GBASE8A", "GBASE8S", "OSCAR",
-                 "HIGHGO", "CLICKHOUSE", "HIVE", "HETU", "DORIS", "STARROCKS",
-                 "IOTDB", "HDFS", "HBASE", "ELASTICSEARCH" -> upper;
-            default -> raw;
-        };
+    private static String normalizeSinkDbType(String dbType, Map<String, Object> source) {
+        return RegisteredDatasourceType.sinkType(dbType, source);
     }
 
     private static boolean isLinewellOracleWriterTarget(String dbType) {

@@ -2556,6 +2556,10 @@
   padding-left: 20px !important;
   padding-right: 20px !important;
 }
+.error-panel-card {
+  background: var(--error-card-bg);
+  border: 1px solid var(--error-card-border);
+}
 .error-panel-resizer {
   position: absolute;
   top: 0;

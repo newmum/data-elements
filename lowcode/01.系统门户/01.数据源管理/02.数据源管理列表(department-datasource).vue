@@ -45,7 +45,7 @@
         <div class="card-breakdown">
           <span :class="{ 'attention-danger': stats.unreachableDatasourceTotal > 0 }">无法连通 {{ stats.unreachableDatasourceTotal }} 个</span>
           <span :class="{ 'attention-warning': stats.pendingDatasourceTotal > 0 }">
-            未完成登记 {{ stats.pendingDatasourceTotal }} 个
+            待登记 {{ stats.draftDatasourceTotal }} 个 / 未登记完成 {{ stats.incompleteDatasourceTotal }} 个
           </span>
         </div>
       </article>
@@ -420,7 +420,9 @@ const state = reactive({
 
 const filterOptions = [
   { label: "全部", value: "all" },
-  { label: "未完成登记", value: "pending" },
+  { label: "待登记", value: "pending" },
+  { label: "未登记完成", value: "incomplete" },
+  { label: "已完成", value: "completed" },
   { label: "待标注", value: "unannotated" },
   { label: "有变更", value: "changed" },
 ];
@@ -770,8 +772,10 @@ const clearKeyword = () => {
 
 const matchedFilter = (item) => {
   if (state.filter === "pending") {
-    return !isRegistrationComplete(item);
+    return normalizeNumber(item.assetStatus ?? item.asset_status) === 0;
   }
+  if (state.filter === "incomplete") return normalizeNumber(item.assetStatus ?? item.asset_status) === 1;
+  if (state.filter === "completed") return isRegistrationComplete(item);
   if (state.filter === "unannotated") return normalizeNumber(item.unannotatedTableNum) > 0;
   if (state.filter === "changed") return normalizeNumber(item.changedTableNum) > 0;
   return true;
@@ -903,6 +907,8 @@ const stats = computed(() => {
         acc.completedTotal += 1;
       } else {
         acc.pendingDatasourceTotal += 1;
+        if (normalizeNumber(item.assetStatus ?? item.asset_status) === 1) acc.incompleteDatasourceTotal += 1;
+        else acc.draftDatasourceTotal += 1;
       }
       return acc;
     },
@@ -913,6 +919,8 @@ const stats = computed(() => {
       datasourceTotal: 0,
       completedTotal: 0,
       pendingDatasourceTotal: 0,
+      draftDatasourceTotal: 0,
+      incompleteDatasourceTotal: 0,
       unreachableDatasourceTotal: 0,
       tableTotal: 0,
       annotatedTableTotal: 0,
@@ -988,8 +996,7 @@ const appSystemKey = (item) =>
 
 const hasAppSystem = (item) => appSystemKey(item).length > 0;
 
-// 数据源完成态只由第五步“结束登记”写回的 asset_status 决定。
-// 表数量、未标注数、暂不处理数和核心表数量属于登记过程统计，不再覆盖已完成状态。
+// 状态由服务端聚合有效表完成情况；0 待登记，1 未登记完成，2 已完成。
 const hasCompletedRegistrationStatus = (item) =>
   normalizeNumber(item.assetStatus ?? item.asset_status) === 2;
 
@@ -999,7 +1006,7 @@ const isConnectionUnavailable = (item) => connectionStatusOf(item) !== "success"
 
 const sourceHasPrimaryIssue = (item) => isConnectionUnavailable(item) || !isRegistrationComplete(item);
 
-const statusText = (item) => (isRegistrationComplete(item) ? "已完成" : "未完成登记");
+const statusText = (item) => ["待登记", "未登记完成", "已完成"][normalizeNumber(item.assetStatus ?? item.asset_status)] || "待登记";
 
 const statusTagType = (item) => {
   return isRegistrationComplete(item) ? "success" : "warning";

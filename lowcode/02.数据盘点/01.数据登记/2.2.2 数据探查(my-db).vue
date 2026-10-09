@@ -92,12 +92,13 @@
         <el-select
           v-model="state.registrationState"
           clearable
-          placeholder="是否注册"
+          placeholder="登记状态"
           class="filter-select filter-select--status"
           @change="handleAction('query')"
         >
-          <el-option label="未完成登记" value="pending" />
-          <el-option label="已注册" value="completed" />
+          <el-option label="待登记" value="pending" />
+          <el-option label="未登记完成" value="incomplete" />
+          <el-option label="已完成" value="completed" />
         </el-select>
         <el-input
           v-model.trim="state.keyword"
@@ -226,6 +227,11 @@
           />
         </div>
       </template>
+      <template #column-displayStatus="{ row }">
+        <el-tag :type="datasourceStatusType(row)" size="small" effect="light">
+          {{ datasourceStatusText(row) }}
+        </el-tag>
+      </template>
     </data-table>
 
     <el-drawer
@@ -281,12 +287,6 @@
             />
           </div>
         </div>
-      </template>
-
-      <template #column-displayStatus="{ row }">
-        <el-tag :type="datasourceStatusType(row)" size="small" effect="light">
-          {{ datasourceStatusText(row) }}
-        </el-tag>
       </template>
 
       <div
@@ -427,7 +427,7 @@ const treeStatistics = ref({
   dbTypes: {},
 });
 const datasourceStatusText = (row) => {
-  return Number(row?.assetStatus ?? row?.asset_status) === 2 ? "已注册" : "未完成登记";
+  return ["待登记", "未登记完成", "已完成"][Number(row?.assetStatus ?? row?.asset_status ?? 0)] || "待登记";
 };
 const datasourceStatusType = (row) => {
   return Number(row?.assetStatus ?? row?.asset_status) === 2 ? "success" : "warning";
@@ -896,8 +896,9 @@ const fetchData = async ({ pageNo: pageNum, pageSize }) => {
       .map((item) => ({
         ...item,
         tableNum: Number(item.tableNum ?? item.table_num ?? 0),
-        displayStatus: Number(item.assetStatus ?? item.asset_status) === 2 ? 2 : 0,
-      })),
+        displayStatus: Number(item.assetStatus ?? item.asset_status ?? 0),
+      }))
+,
     total,
   };
 };
@@ -962,7 +963,7 @@ const cols = [
   //   props: { suffix: "个" },
   //   sortable: true,
   // },
-  { label: "状态", prop: "displayStatus", options: "status", align: "center" },
+  { label: "状态", prop: "displayStatus", align: "center" },
   {
     type: "buttons",
     label: "操作",

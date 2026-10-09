@@ -17,22 +17,25 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "建表接口（POST /dst/database/metadata/createTable）。写接口；根据 dbId 连接已登记的目标数据源并执行 DDL。默认严格执行；物化业务可传 tableName 与 skipIfExists=true，在同名物理表已存在时返回复用结果而不重复执行 DDL。 画布可传 canvas=true，按当前租户解析目标库，校验单表 DDL，返回 created/exists 状态；托管 Hive 使用服务端 hwhive；涉及 db_datasource_t 等业务表。",
+  "description": "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只校验单表 DDL。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：15.建表接口
 // 路由：POST /dst/database/metadata/createTable
-// 业务说明：建表接口（POST /dst/database/metadata/createTable）。写接口；根据 dbId 连接已登记的目标数据源并执行 DDL。默认严格执行；物化业务可传 tableName 与 skipIfExists=true，在同名物理表已存在时返回复用结果而不重复执行 DDL。 画布可传 canvas=true，按当前租户解析目标库，校验单表 DDL，返回 created/exists 状态；托管 Hive 使用服务端 hwhive；涉及 db_datasource_t 等业务表。
+// 业务说明：默认执行单目标 DDL；batchValidateOnly=true 仅做最多 20 个目标表的批量只读校验，一次预取当前租户目标数据源并逐 ID 核验角色范围。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
+import cn.hutool.json.JSONUtil as poolJsons
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
 import java.util.Map
+import java.util.List
 import tenantRuntime
+import dataScope
 import canvasTableDdl
 import hwhive
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
@@ -159,6 +162,85 @@ var dataSourceOf = (asset) => {
     dsConfig.setJdbcProperties(JdbcDriverPropertyResolver.resolve(asset))
     // 返回当前业务分支的标准结果。
     return dsConfig
+}
+
+// Multi-target materialization validates all edited DDL in one request. This
+// branch has no physical write and resolves every datasource from one tenant
+// query before checking the role's scope for every requested ID.
+if (body?.batchValidateOnly == true) {
+    if (body?.canvas != true || body?.validateOnly != true) {
+        exit 400, '批量建表语句校验只支持 canvas=true 且 validateOnly=true'
+    }
+    var submitted = body?.targets
+    if (!(submitted instanceof List) || submitted.size() < 1 || submitted.size() > 20) {
+        exit 400, '一次最多校验20个目标表的建表语句'
+    }
+    var tenantId = textOf(tenantRuntime.id())
+    if (blank(tenantId)) { exit 401, '登录状态已失效，请重新登录' }
+    var targetIds = []
+    var checkedTargets = []
+    var seenTargets = []
+    for (item in submitted) {
+        var selectedId = textOf(item?.dbId)
+        var selectedName = textOf(item?.tableName)
+        var selectedDdl = textOf(item?.ddl)
+        if (blank(selectedId) || selectedId.length() > 64 || blank(selectedName)
+            || selectedName.length() > 256 || blank(selectedDdl) || selectedDdl.length() > 1000000) {
+            exit 400, '批量校验包含无效的目标数据源、表名或建表语句'
+        }
+        var duplicateKey = selectedId + '|' + selectedName.trim().toUpperCase()
+        if (seenTargets.contains(duplicateKey)) { exit 400, '批量校验包含重复目标表' }
+        seenTargets.add(duplicateKey)
+        checkedTargets.add({dbId: selectedId, tableName: selectedName, ddl: selectedDdl})
+        if (!targetIds.contains(selectedId)) { targetIds.add(selectedId) }
+    }
+    var registeredRows = db.table('db_datasource_t').where()
+        .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', targetIds).select()
+    var visibleRows = dataScope.visibleDataSourcesFor(
+        'MENU:2081000000000000002', registeredRows == null ? [] : registeredRows)
+    var registeredById = {}
+    for (registeredRow in visibleRows) {
+        registeredById[textOf(rowValue(registeredRow, ['tid']))] = registeredRow
+    }
+    for (targetId in targetIds) {
+        if (registeredById[targetId] == null) {
+            exit 403, '目标数据源不存在或不在当前角色的数据范围内'
+        }
+    }
+    var validated = []
+    for (target in checkedTargets) {
+        var row = registeredById[target.dbId]
+        var rawPool = rowValue(row, ['poolCfg', 'pool_cfg'])
+        var pool = blank(rawPool) ? {} : (rawPool instanceof Map ? rawPool : poolJsons.parse(textOf(rawPool)))
+        if (!(pool instanceof Map)) { exit 500, '目标数据源 pool_cfg 不是有效 JSON 对象' }
+        var registered = {}
+        registered.putAll(pool)
+        var masterDbType = rowValue(row, ['dbType', 'db_type'])
+        var masterUser = rowValue(row, ['username'])
+        if (masterDbType != null) { registered.dbType = masterDbType }
+        if (masterUser != null) { registered.username = masterUser }
+        if (blank(registered.dbType)) { exit 400, '目标数据源未配置数据库类型' }
+        var managedHive = textOf(registered.dbType).toLowerCase() == 'hive'
+            && (registered.metadataAccessMode == 'server-managed-mrs'
+                || registered.hiveConnectionMode == 'huawei-mrs' || !blank(registered.hiveProfile))
+        var config = null
+        if (managedHive) {
+            config = new DataSourceConfig()
+            config.setDatabaseType(DatabaseType.HIVE)
+            config.setDatabase(firstValue(registered, ['database', 'dbName', 'dbMetaDbName']))
+        } else {
+            config = dataSourceOf(registered)
+        }
+        var parsed = null
+        try { parsed = canvasTableDdl.parse(target.ddl, config) }
+        catch (e) { exit 400, '目标表“' + target.tableName + '”建表语句校验失败：' + e.getMessage() }
+        if (!canvasTableDdl.matches(parsed, target.tableName.trim(), parsed.schemaName)) {
+            exit 400, '目标表“' + target.tableName + '”与建表语句中的表名不一致'
+        }
+        validated.add({dbId: target.dbId, requestedTableName: target.tableName, tableName: parsed.tableName,
+            targetScope: parsed.schemaName, ddl: parsed.ddl, valid: true, sideEffectsApplied: false})
+    }
+    return {batchValidateOnly: true, results: validated, sideEffectsApplied: false}
 }
 
 // 解析请求体并为可选参数设置默认值。

@@ -221,7 +221,7 @@
                   >
                     {{ row.datasourceName || row.dbName || "-" }}
                   </span>
-                  <small>{{ row.appName || row.applicationName || row.systemName || "-" }}</small>
+                  <small :title="row.orgName || '-'">{{ row.orgName || "-" }}</small>
                 </div>
               </template>
             </el-table-column>
@@ -865,10 +865,11 @@ const openNifiDesigner = (taskId, sourceTableId = "") => {
   scheduleVisible.value = true;
 };
 
-const ensureAccessTask = async (row) => {
+const ensureAccessTask = async (row, forceRebuild = false) => {
   const payload = {
     tableId: getSourceTableId(row),
     catalogId: row?.sourceCatalogId || row?.catalogId || "",
+    ...(forceRebuild ? { forceRebuild: true } : {}),
   };
   if (!payload.tableId) {
     $message.warning("无法读取来源表标识，暂不能创建接入任务");
@@ -882,6 +883,13 @@ const ensureAccessTask = async (row) => {
     return null;
   }
   const pipelineId = task?.pipelineId || task?.pipeline_id || result?.pipelineId || result?.data?.pipelineId || "";
+  const repairRequired = Boolean(result?.repairRequired ?? result?.data?.repairRequired);
+  const repairReasons = Array.isArray(result?.repairReasons)
+    ? result.repairReasons
+    : (Array.isArray(result?.data?.repairReasons) ? result.data.repairReasons : []);
+  if (repairRequired) {
+    return { ...(task || {}), tid: taskId, pipelineId, repairRequired, repairReasons };
+  }
   const datasourceId = row?.datasourceId || row?.dbId || row?.sourceDbId || "";
   // 所有来源都可安全调用：后端会对非 API 拉取来源返回 applicable=false。
   // 这里发生在用户明确点击“创建任务”之后，绝不在浏览/打开页面时隐式创建或启动任务。
@@ -899,7 +907,14 @@ const ensureAccessTask = async (row) => {
       bindingWarning = "任务已创建，但 API 表规则绑定失败；可先在画布中配置流程";
     }
   }
-  return { ...(task || {}), tid: taskId, pipelineId, bindingWarning };
+  return {
+    ...(task || {}),
+    tid: taskId,
+    pipelineId,
+    bindingWarning,
+    repairRequired,
+    repairReasons,
+  };
 };
 
 const handleTaskRecovery = async (task, row, command, target = null) => {
@@ -1079,6 +1094,30 @@ const handleApplySave = async (materializedTarget = null) => {
     }
     const task = await ensureAccessTask({ ...row, targetTableId });
     if (task?.tid) {
+      if (task.repairRequired) {
+        const reasons = task.repairReasons.length
+          ? task.repairReasons.join("；")
+          : "已有接入画布需要更新";
+        try {
+          await ElMessageBox.confirm(
+            `目标表已物化，但已有接入画布需要更新：${reasons}。重新生成会替换旧任务和画布中的人工配置，目标表及数据会保留。是否重新生成并打开画布？`,
+            "接入画布需要更新",
+            { type: "warning", confirmButtonText: "重新生成并打开", cancelButtonText: "保留旧画布" },
+          );
+        } catch (decision) {
+          if (decision !== "cancel" && decision !== "close") throw decision;
+          tableRef.value?.refresh?.();
+          return;
+        }
+        const rebuilt = await ensureAccessTask({ ...row, targetTableId }, true);
+        if (!rebuilt?.tid || rebuilt.repairRequired) {
+          throw new Error("接入画布重新生成失败，请在任务设置中检查后重试");
+        }
+        $message.success("接入画布已按当前目标表重新生成");
+        tableRef.value?.refresh?.();
+        openNifiDesigner(rebuilt.tid, row?.sourceTableId || row?.tid || row?.tableId || "");
+        return;
+      }
       $message.success(materializedTarget?.reusedExisting
         ? "已复用现有目标表并创建接入任务"
         : "物化建表完成，接入任务已创建");

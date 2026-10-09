@@ -298,6 +298,7 @@ try {
 } catch (e) {
     log.warn('同步数据表治理配置到 ES 失败, tid: {}, error: {}', tableId, e.message)
 }
+metadataAsset.refreshRegistrationStatus(rowValue(table, ['datasourceId', 'datasource_id']), false)
 // 返回当前业务分支的标准结果。
 return {
     tid: tableId,

@@ -30,6 +30,7 @@
 ================================
 // 07.共享库表的资源归属登记。直接维护 db_table_t，不复制技术实体、不创建物理表。
 import tenantRuntime
+import metadataAsset
 import jsons
 import cn.hutool.core.util.IdUtil
 import cn.dev33.satoken.stp.StpUtil
@@ -46,7 +47,7 @@ var id = text(input.id); var action = text(input.action); var method = text(inpu
 var find = (rows,key) => { for (r in rows) { if (r.id == key) { return r } }; exit 404,'对象不存在或不属于当前租户' }
 if (id == '' && method == 'POST') {
     id = text(payload.entityId)
-    var table = db.selectOne('SELECT tid,table_name,table_name_cn,resource_domain_id,resource_state FROM db_table_t WHERE tenant_id=#{tenantId} AND tid=#{id} AND is_del=0')
+    var table = db.selectOne('SELECT tid,datasource_id,table_name,table_name_cn,resource_domain_id,resource_state FROM db_table_t WHERE tenant_id=#{tenantId} AND tid=#{id} AND is_del=0')
     if (table == null) { exit 404,'技术实体不存在' }
     if (text(table.resourceDomainId) != '' && table.resourceState == 'ACTIVE') { exit 409,'该技术实体已有有效资源登记' }
     var domain = find(readPlanning({}).databases,text(payload.databaseId))
@@ -58,6 +59,7 @@ if (id == '' && method == 'POST') {
     var changed = db.update("UPDATE db_table_t SET resource_domain_id=#{domainId},resource_owner=#{owner},resource_state='ACTIVE',resource_revision_no=resource_revision_no+1,table_name_cn=#{name},business_type=#{domain},asset_desc=#{description},asset_status=2,flow_status=2,reg_time=#{now},updated_time=#{now},updated_by=#{actorId} WHERE tid=#{id} AND tenant_id=#{tenantId} AND is_del=0 AND (resource_domain_id IS NULL OR resource_state='ARCHIVED')",
         {domainId:domain.id,owner:owner,name:name,domain:text(payload.domain),description:text(payload.description),now:now,actorId:actorId,id:id,tenantId:tenantId})
     if (changed != 1) { exit 409,'该技术实体已由另一请求登记' }
+    if (text(table.datasourceId) != '') { metadataAsset.refreshRegistrationStatus(table.datasourceId, false) }
     db.table('res_resource_operation_log').primary('tid').insert({tid:IdUtil.fastSimpleUUID(),tenant_id:tenantId,actor_id:actorId,action_name:'登记仓库资源',object_id:id,object_name:name,detail_text:'沿用共享技术实体，未复制数据表',created_time:now})
     return find(readModels({}).resources,id)
 }

@@ -22,6 +22,7 @@
 // 业务说明：接入发现登记信息有误时驳回修改。仅无接入任务的数据表允许驳回；只重置来源表的标注与登记状态，数据源保持已注册，并刷新资产索引；使用请求参数 tableId、datasourceId；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表；执行数据库写入并返回处理结果。
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import tenantRuntime
+import metadataAsset
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -56,6 +57,7 @@ db.table('db_table_t').where().eq('tid', tableId).eq('is_del', 0).update({
     flow_status: 0,
     updated_time: nowTime
 })
+metadataAsset.refreshRegistrationStatus(datasourceId, false)
 body = { tid: tableId }
 refreshAssetIndex()
 return { tableId: tableId, datasourceId: datasourceId, assetStatus: 0 }

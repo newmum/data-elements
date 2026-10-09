@@ -29,7 +29,9 @@ class HiveManifestKerberosTest {
                     .containsExactly("Linewell PutHwHDFS（默认）", "NiFi 原生 PutHDFS", "标准写入（HiveRecordPut）");
             assertThat(field.options()).extracting(FieldSchema.Option::value)
                     .containsExactly("LINEWELL_HDFS", "HDFS_BATCH", "HIVE_RECORD_PUT");
-            assertThat(manifest.fields()).extracting(FieldSchema::key).contains("hdfsDirectory");
+            var directory = manifest.fields().stream().filter(candidate -> "hdfsDirectory".equals(candidate.key()))
+                    .findFirst().orElseThrow();
+            assertThat(directory.help()).contains("CSV", "replace");
         }
     }
 

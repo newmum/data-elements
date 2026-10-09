@@ -30,6 +30,7 @@ import jsons
 import cn.hutool.json.JSONUtil
 import java.util.Map
 import tenantRuntime
+import metadataAsset
 
 /*
  * 元数据管理 18：级联删除已登记但物理库已不存在的数据表资产。
@@ -338,6 +339,7 @@ for (requestedTableId in tableIds) {
         failed.add({ tableId: requestedTableId, reason: textOf(e) })
     }
 }
+if (!dryRun) { metadataAsset.refreshRegistrationStatus(datasourceId, false) }
 if (tableIds.size() == 1) {
     return results[0]
 }

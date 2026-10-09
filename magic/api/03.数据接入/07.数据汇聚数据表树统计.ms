@@ -27,6 +27,7 @@
 // 业务说明：数据接入左侧树数据表统计（POST /ods/dataAggTreeStatistics）。只读接口；关系库限定已完成登记的数据源，Elasticsearch dataassets 投影提供层级信息并统计可接入数据表（业务表/日志表/字典表）；没有表的数据源统计为 0。与右侧列表使用相同的数据源资格边界；使用请求参数 keyword、orgIds；涉及 db_datasource_t、db_table_t 等业务表。
 import tenantEs
 import tenantRuntime
+import dataScope
 import '@/common/configData' as configData
 
 /*
@@ -91,7 +92,8 @@ var orgIds = body?.orgIds
 // 实际计数另以 /ods/dataAggPage 的已登记资产状态作为准入条件。
 var registeredDatasourceRows = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId).eq('is_del', 0)
-    .eq('asset_status', 2).select()
+    .in('asset_status', [1, 2]).select()
+registeredDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', registeredDatasourceRows)
 var registeredDatasourceIds = []
 var registeredDatasourceMap = {}
 for (registeredDatasourceRow in (registeredDatasourceRows == null ? [] : registeredDatasourceRows)) {
@@ -164,7 +166,9 @@ for (hit in (dbSearch?.hits?.hits == null ? [] : dbSearch.hits.hits)) {
     if (blank(datasourceId)) {
         continue
     }
+    if (registeredDatasourceMap[datasourceId] == null) { continue }
     doc.tid = datasourceId
+    doc.assetStatus = first(registeredDatasourceMap[datasourceId], ['assetStatus', 'asset_status'])
     datasourceMap[datasourceId] = doc
     addUnique(datasourceIds, datasourceId)
 }

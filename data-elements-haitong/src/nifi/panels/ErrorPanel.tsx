@@ -181,11 +181,10 @@ export default function ErrorPanel() {
             {filtered.map((e) => (
               <div
                 key={e.id}
+                className="error-panel-card"
                 style={{
                   display: 'flex',
                   borderRadius: 6,
-                  background: '#fafafa',
-                  border: '1px solid #f0f0f0',
                   overflow: 'hidden',
                 }}
               >
@@ -204,17 +203,17 @@ export default function ErrorPanel() {
                     )}
                     <span style={{ flex: 1 }} />
                     <Tooltip title={e.occurredAt}>
-                      <span style={{ fontSize: 12, color: '#8c8c8c' }}>{relativeTime(e.occurredAt)}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{relativeTime(e.occurredAt)}</span>
                     </Tooltip>
                   </div>
-                  <div style={{ fontSize: 13, color: '#262626', wordBreak: 'break-word' }}>{e.message}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word' }}>{e.message}</div>
                   {e.detail && (
-                    <div style={{ fontSize: 12, color: '#595959', marginTop: 4, wordBreak: 'break-word' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, wordBreak: 'break-word' }}>
                       {e.detail}
                     </div>
                   )}
                   {e.suggestion && (
-                    <div style={{ fontSize: 12, color: '#1677ff', marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: 'var(--error-suggestion)', marginTop: 4, wordBreak: 'break-word' }}>
                       建议: {e.suggestion}
                     </div>
                   )}
