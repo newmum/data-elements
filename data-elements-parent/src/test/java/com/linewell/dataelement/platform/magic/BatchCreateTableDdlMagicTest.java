@@ -4,6 +4,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
+import com.linewell.dataelement.metautil.ddl.CanvasTableDdl;
+import com.linewell.dataelement.metautil.explorer.impl.HiveMetadataExplorer;
+import com.linewell.dataelement.metautil.explorer.impl.MySqlMetadataExplorer;
+import com.linewell.dataelement.metautil.explorer.impl.OracleMetadataExplorer;
+import com.linewell.dataelement.metautil.explorer.impl.OceanBaseMetadataExplorer;
 import com.linewell.dataelement.platform.magic.module.JsonModule;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -78,13 +83,49 @@ class BatchCreateTableDdlMagicTest {
         assertEquals(0, fixture.ddlGenerator.calls);
     }
 
+    @Test
+    void oracleAndHiveUseTheSameConfirmedDefaultOrCustomTargetName() throws Exception {
+        for (String mode : List.of("oracle", "oceanbaseoracle")) {
+          for (String name : List.of("ODS_T_SJYCC_CKB", "ODS_CONFIRMED_CUSTOM")) {
+            Fixture fixture = new Fixture(2);
+            fixture.jdbc.update("update db_datasource_t set db_type=?,username='OB_OWNER' where tid='db-0'", mode);
+            fixture.jdbc.update("update db_datasource_t set db_type='hive' where tid='db-1'");
+            fixture.targetNames(name);
+
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.run());
+            List<?> results = assertInstanceOf(List.class, response.get("results"));
+            for (Object value : results) {
+                Map<?, ?> result = assertInstanceOf(Map.class, value);
+                assertEquals(name, result.get("requestedTableName"));
+                assertEquals(name, result.get("tableName"));
+                assertTrue(String.valueOf(result.get("ddl")).contains(name));
+            }
+            assertEquals(1, fixture.counter.reads);
+            assertEquals(0, fixture.counter.writes);
+          }
+        }
+    }
+
+    @Test
+    void qualifiedInputOrUnexpectedGeneratorRenameFailsDuringPreview() throws Exception {
+        Fixture qualified = new Fixture(1);
+        qualified.targetNames("ODS_TC_RKXT.T_SJYCC_CKB");
+        assertInstanceOf(ExitValue.class, qualified.run());
+        assertEquals(0, qualified.counter.writes);
+
+        Fixture renamed = new Fixture(1);
+        renamed.ddlGenerator.rename = true;
+        assertInstanceOf(ExitValue.class, renamed.run());
+        assertEquals(0, renamed.counter.writes);
+    }
+
     private static final class Fixture {
         final JdbcTemplate jdbc;
         final SQLModule db;
         final QueryCounter counter = new QueryCounter();
         final ScopeRuntime scope = new ScopeRuntime();
         final DdlGenerator ddlGenerator = new DdlGenerator();
-        final DdlParser ddlParser = new DdlParser();
+        final CanvasTableDdl ddlParser = new CanvasTableDdl();
         final List<Map<String, Object>> targets = new ArrayList<>();
 
         Fixture(int targetCount) {
@@ -137,6 +178,17 @@ class BatchCreateTableDdlMagicTest {
             return MagicScript.create(script, null)
                     .execute(new MagicScriptContext(inputs));
         }
+
+        void targetNames(String name) {
+            for (int index = 0; index < targets.size(); index++) {
+                var target = new LinkedHashMap<>(targets.get(index));
+                @SuppressWarnings("unchecked")
+                var props = new LinkedHashMap<>((Map<String, Object>) target.get("propList"));
+                props.put("tableName", name);
+                target.put("propList", props);
+                targets.set(index, target);
+            }
+        }
     }
 
     public static final class ScopeRuntime {
@@ -151,18 +203,18 @@ class BatchCreateTableDdlMagicTest {
 
     public static final class DdlGenerator {
         int calls;
+        boolean rename;
         public String generateCreateTableDdl(DataSourceConfig config, String tableName,
                                              List<ColumnInfo> columns, String tableComment) {
             calls++;
-            assertEquals("mysql", config.getDatabaseType().getCode());
             assertEquals(1, columns.size());
-            return "CREATE TABLE " + tableName + " (person_id varchar(32) PRIMARY KEY)";
-        }
-    }
-
-    public static final class DdlParser {
-        public Map<String, Object> parse(String ddl, DataSourceConfig ignored) {
-            return Map.of("ddl", ddl);
+            String name = rename ? "UNEXPECTED_TABLE" : tableName;
+            return switch (config.getDatabaseType().getCode()) {
+                case "oracle" -> new OracleMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
+                case "oceanbaseoracle" -> new OceanBaseMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
+                case "hive" -> new HiveMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
+                default -> new MySqlMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);
+            };
         }
     }
 

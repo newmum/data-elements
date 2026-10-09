@@ -917,13 +917,15 @@ const syncDbTypeByDatasource = (value: any) => {
   syncOdsSystemTimeTypes(dbType);
 };
 
-const buildTargetTableName = (value: any) => {
-  const selected = datasourceMap.value[normalizeDbId(value)] || {};
-  const prefix = String(selected.tablePrefix || selected.layerCode || "ODS").trim().toUpperCase();
-  const rawName = String(sourceTableName.value || "").trim();
-  if (!prefix || !rawName) return "";
-  const prefixPattern = new RegExp(`^${prefix}_`, "i");
-  return prefixPattern.test(rawName) ? rawName : `${prefix}_${rawName}`;
+const buildTargetTableName = () => {
+  // Keep the qualified source name for reading; only the default target uses its leaf name.
+  const parts = String(sourceTableName.value || "").trim()
+    .match(/"(?:""|[^"])*"|`(?:``|[^`])*`|\[(?:\]\]|[^\]])*\]|[^.]+/g) || [];
+  const leaf = String(parts.at(-1) || "").trim();
+  const rawName = leaf.replace(/^"(.*)"$/, "$1").replace(/^`(.*)`$/, "$1")
+    .replace(/^\[(.*)\]$/, "$1");
+  if (!rawName) return "";
+  return /^ODS_/i.test(rawName) ? rawName : `ODS_${rawName}`;
 };
 
 const sameStringList = (left: string[] = [], right: string[] = []) =>
@@ -933,15 +935,13 @@ const sameStringList = (left: string[] = [], right: string[] = []) =>
 // project the selected target data sources into the drawer header; they never write
 // a changed dbId back to formData, so a form change cannot trigger itself again.
 const targetDatasourceIds = ref<string[]>([]);
-const targetPrimaryTableName = ref("");
+const targetTableNameInput = ref("");
 
 const targetTablePlans = computed(() =>
   targetDatasourceIds.value
-    .map((dbId, index) => {
+    .map((dbId) => {
       const selected = datasourceMap.value[dbId];
-      const tableName = index === 0 && targetPrimaryTableName.value
-        ? targetPrimaryTableName.value
-        : buildTargetTableName(dbId);
+      const tableName = targetTableNameInput.value;
       return { dbId, dbName: selected?.datasourceName || selected?.dbName || selected?.label || "所选目标库", tableName };
     })
     .filter((item) => Boolean(item.dbId && item.tableName)),
@@ -957,20 +957,11 @@ const syncTargetDatasourceSelection = (value: any) => {
   const nextIds = normalizeDbIds(value);
   if (!sameStringList(targetDatasourceIds.value, nextIds)) targetDatasourceIds.value = nextIds;
   syncDbTypeByDatasource(value);
-  syncTargetTableName(value);
 };
 
 const syncTargetTableNameInput = (value: any) => {
   const nextName = String(value || "").trim();
-  if (targetPrimaryTableName.value !== nextName) targetPrimaryTableName.value = nextName;
-};
-
-const syncTargetTableName = (value: any) => {
-  const tableName = buildTargetTableName(normalizeDbIds(value)[0]);
-  if (!tableName) return;
-  if (targetPrimaryTableName.value !== tableName) targetPrimaryTableName.value = tableName;
-  const currentTableName = String(jsonFormRef.value?.getValue?.("tableName") || "").trim();
-  if (currentTableName !== tableName) jsonFormRef.value?.setValue({ tableName });
+  if (targetTableNameInput.value !== nextName) targetTableNameInput.value = nextName;
 };
 
 const normalizeFormPayload = (data: any) => {
@@ -983,6 +974,7 @@ const normalizeFormPayload = (data: any) => {
   const nifiNetworkCode = String(selectedPath[0] || data?.nifiNetworkCode || selectedNode?.networkCode || "").trim();
   return {
     ...data,
+    tableName: String(data?.tableName || "").trim(),
     dbId,
     targetDbIds,
     dbType: selected?.dbType || data?.dbType || "",
@@ -1071,6 +1063,7 @@ const init = async () => {
     };
     sourceTableName.value = String(propList.sourceTableName || propList.tableName || "").trim();
     if (props.type === "add") {
+      propList.tableName = buildTargetTableName();
       const defaultDbPaths = getDefaultDatasourcePaths();
       propList.dbId = defaultDbPaths.length
         ? defaultDbPaths
@@ -1100,6 +1093,7 @@ const init = async () => {
     propList.nifiNodePath = propList.nifiNetworkCode && propList.nifiNodeId
       ? [propList.nifiNetworkCode, propList.nifiNodeId]
       : [];
+    syncTargetTableNameInput(propList.tableName);
     formData.value = { ...propList };
     await nextTick();
     if (!isCurrentInit(runId)) return;
@@ -1130,7 +1124,7 @@ const handleCancel = () => {
   open.value = false;
 };
 
-const buildDdlTargets = (data: any) => data.targetDbIds.map((dbId: string, index: number) => {
+const buildDdlTargets = (data: any) => data.targetDbIds.map((dbId: string) => {
   const datasource = datasourceMap.value[dbId] || {};
   return {
     key: dbId,
@@ -1140,7 +1134,7 @@ const buildDdlTargets = (data: any) => data.targetDbIds.map((dbId: string, index
       ...data,
       dbId,
       dbType: datasource.dbType || data.dbType,
-      tableName: index === 0 ? String(data.tableName || "").trim() : buildTargetTableName(dbId),
+      tableName: String(data.tableName || "").trim(),
     },
   };
 });
@@ -1156,6 +1150,8 @@ const currentDdlInput = async () => {
   if (!tableItems.length) throw new Error("请至少添加一个字段");
   const targets = buildDdlTargets(data);
   if (targets.some((target: any) => !target.propList.tableName)) throw new Error("请填写目标表名");
+  if (data.tableName.includes(".")) throw new Error("目标表名只填写表名，不能包含用户名或 Schema 前缀");
+  syncTargetTableNameInput(data.tableName);
   const fingerprint = JSON.stringify({
     targets: targets.map((target: any) => ({ dbId: target.dbId, dbType: target.propList.dbType, tableName: target.propList.tableName, tableNameCn: target.propList.tableNameCn })),
     tableItems,
@@ -1191,6 +1187,10 @@ const regenerateDdl = async (input: any) => {
       const result = generated.results[index];
       if (String(result?.dbId) !== String(target.dbId)) {
         throw new Error("目标表批量建表语句生成结果与所选数据源不一致，请重试");
+      }
+      if (String(result?.requestedTableName || "") !== target.propList.tableName
+        || String(result?.tableName || "") !== target.propList.tableName) {
+        throw new Error(`目标数据源“${target.dbName}”生成的表名与输入框不一致，请刷新后重试`);
       }
       const statement = String(result?.ddl || "").trim();
       if (!statement) throw new Error(`目标数据源“${target.dbName}”未生成建表语句`);
@@ -1244,7 +1244,6 @@ const handleSave = async () => {
   let lastTargetForm: any = null;
   try {
     const ddlInput = await currentDdlInput();
-    const formData = normalizeFormPayload(await jsonFormRef.value?.getFormData());
     const tableFields = ddlInput.tableItems;
     if (!ddlSourceFingerprint.value) await regenerateDdl(ddlInput);
     if (ddlSourceFingerprint.value && ddlSourceFingerprint.value !== ddlInput.fingerprint) {
@@ -1385,18 +1384,11 @@ const handleSave = async () => {
     }
     if (!conflicts.length) await validateEditedDdl();
     const targetTables: any[] = [];
-    for (const [targetIndex, targetDbId] of formData.targetDbIds.entries()) {
+    for (const target of ddlInput.targets) {
+      const targetDbId = target.dbId;
       const targetDatasource = datasourceMap.value[targetDbId] || {};
-      const targetForm = {
-        ...formData,
-        dbId: targetDbId,
-        dbType: targetDatasource.dbType || formData.dbType,
-        // 首个（单目标时即唯一）目标库使用用户在表单中确认的名称；
-        // 只有附加的目标库才自动带 ODS 前缀，避免多库写入重名。
-        tableName: targetIndex === 0
-          ? String(formData.tableName || "").trim()
-          : buildTargetTableName(targetDbId),
-      };
+      // Reuse the exact target configuration used by DDL preview and preflight validation.
+      const targetForm = { ...target.propList };
       lastTargetForm = targetForm;
       const result = await $common.post("/ods/createTapleApply", {
         propList: targetForm,

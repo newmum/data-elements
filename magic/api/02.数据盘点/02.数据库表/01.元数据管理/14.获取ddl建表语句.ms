@@ -289,7 +289,13 @@ if (body?.batchGenerate == true) {
         try {
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 submittedProps.tableName, batchColumns, submittedProps.tableNameCn)
-            generated.add({dbId: submittedDbId, ddl: canvasTableDdl.parse(ddl, batchConfig).ddl})
+            var parsed = canvasTableDdl.parse(ddl, batchConfig)
+            var requestedTableName = textOf(submittedProps.tableName).trim()
+            if (!canvasTableDdl.matches(parsed, requestedTableName, parsed.schemaName)) {
+                exit 400, '目标表“' + requestedTableName + '”与生成的建表语句表名不一致，请只填写目标表名'
+            }
+            generated.add({dbId: submittedDbId, requestedTableName: requestedTableName,
+                tableName: parsed.lookupName, ddl: parsed.ddl})
         } catch (e) {
             exit 400, '目标库“' + submittedDbId + '”生成建表语句失败：' + e.getMessage()
         }
@@ -409,6 +415,9 @@ try {
     if (body.canvas == true) {
         // Use the same single-table and target-scope validation as physical creation.
         var parsed = canvasTableDdl.parse(ddl, dsConfig)
+        if (!canvasTableDdl.matches(parsed, textOf(propList.tableName).trim(), parsed.schemaName)) {
+            exit 400, '目标表“' + propList.tableName + '”与生成的建表语句表名不一致，请只填写目标表名'
+        }
         return parsed.ddl
     }
     return ddl

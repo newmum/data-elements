@@ -34,6 +34,19 @@ class MaterializationTemplateMagicTest {
     private static final String SOURCE_ID = "f93a8e653ac6413e89660f5d77d45769";
 
     @Test
+    void qualifiedSourceKeepsItsReadIdentityAndOnlyPrefixesTheTargetLeaf() throws Exception {
+        for (String sourceName : List.of("TC_RKXT.T_SJYCC_CKB", "public.ODS_person")) {
+            Fixture fixture = new Fixture(2);
+            fixture.jdbc.update("update db_table_t set table_name=? where tid='source-1'", sourceName);
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+            Map<?, ?> props = assertInstanceOf(Map.class, response.get("propList"));
+            assertEquals(sourceName, props.get("sourceTableName"));
+            assertEquals(sourceName.startsWith("TC_RKXT") ? "ODS_T_SJYCC_CKB" : "ODS_person", props.get("tableName"));
+            assertEquals(0, fixture.explorer.calls);
+        }
+    }
+
+    @Test
     void twentyAndHundredLegacyCatalogsAndDomainsUseConstantReadsWithoutPhysicalProbe() throws Exception {
         Fixture twenty = new Fixture(20);
         Fixture hundred = new Fixture(100);

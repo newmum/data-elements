@@ -592,7 +592,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
-      "baseSha256": "3993c9385df33e170b294203d72c8fbd5e29a65a365c449d65817450ce07531b"
+      "baseSha256": "d749916f67dacf652cd1a4d1d7695bd0d2ca4335ad6840e6a5ba590fe2bc7b4b"
     },
     {
       "id": "2066782132212649984",
@@ -622,7 +622,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
-      "baseSha256": "60183097ba58ec9aec946b547ae1e6d077c71b3c3975367ad100cf3f4dce08d0"
+      "baseSha256": "d6bb6c588c134da9c6a678ff7aa5c57226ece803e5e34084a36da2e9f2457e91"
     },
     {
       "id": "2046880498703695872",
