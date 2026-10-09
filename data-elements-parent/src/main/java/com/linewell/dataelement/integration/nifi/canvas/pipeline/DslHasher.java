@@ -26,6 +26,7 @@ public final class DslHasher {
     /** Current NiFi compiler contract; shared by deployment and safe historical lineage recovery. */
     public static final String CURRENT_COMPILER_REVISION = "nifi-execsqlrecord-avro-logical-types-v30";
     private static final String HIVE_HDFS_COMPILER_REVISION = "hive-hdfs-record-chain-v1";
+    private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-v1";
 
     private static final ObjectMapper SORTED = new ObjectMapper()
             .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
@@ -56,6 +57,7 @@ public final class DslHasher {
         if (baseHash == null) return null;
         String effectiveRevision = compilerRevision == null ? "" : compilerRevision;
         if (usesHiveHdfsSink(dsl)) effectiveRevision += "|" + HIVE_HDFS_COMPILER_REVISION;
+        if (usesFieldMapping(dsl)) effectiveRevision += "|" + FIELD_MAPPING_COMPILER_REVISION;
         try {
             return sha256((baseHash + "|" + effectiveRevision)
                     .getBytes(StandardCharsets.UTF_8));
@@ -74,6 +76,13 @@ public final class DslHasher {
                     || "HDFS_BATCH".equals(mode) || "BATCH".equals(mode)) return true;
         }
         return false;
+    }
+
+    private static boolean usesFieldMapping(Pipeline.Dsl dsl) {
+        if (dsl.nodes() == null) return false;
+        return dsl.nodes().stream().anyMatch(node -> node != null
+                && ("transform.field-mapping".equals(node.manifestKey())
+                    || "transform.field-enrichment".equals(node.manifestKey())));
     }
 
     private static String sha256(byte[] input) throws NoSuchAlgorithmException {

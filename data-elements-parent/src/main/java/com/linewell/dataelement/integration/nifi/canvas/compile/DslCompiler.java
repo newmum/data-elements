@@ -7,6 +7,7 @@ import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingServ
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
+import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.model.nifi.NifiEntity;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
@@ -268,7 +269,8 @@ public class DslCompiler {
                     if (usesRegisteredChineseHeaders(sourceCfg)) {
                         cfg.put("mappings", mapFileHeaderFieldsToRegisteredNames(cfg.get("mappings"), sourceCfg));
                     }
-                    FieldMappingService.CompiledMapping plan = fieldMappingService.compilePlan(cfg.get("mappings"));
+                    FieldMappingService.CompiledMapping plan = withLookupDataSources(
+                            fieldMappingService.compilePlan(cfg.get("mappings")), sourceCfg);
                     fieldMappingPlans.put(n.id(), plan);
                     if (isFieldEnrichmentTransform(manifest)
                             && sourceDbPushdownRequested(cfg)
@@ -1799,6 +1801,32 @@ public class DslCompiler {
         return "lookup-dbcp-" + value.replaceAll("[^A-Za-z0-9_-]", "_");
     }
 
+    private FieldMappingService.CompiledMapping withLookupDataSources(
+            FieldMappingService.CompiledMapping plan, Map<String, Object> sourceCfg) {
+        if (plan.lookups().isEmpty()) return plan;
+        List<FieldMappingService.LookupPlan> lookups = new ArrayList<>();
+        for (FieldMappingService.LookupPlan lookup : plan.lookups()) {
+            Map<String, Object> effective = lookup.dataSource() == null || lookup.dataSource().isEmpty()
+                    ? sourceCfg : lookup.dataSource();
+            Map<String, Object> config = new LinkedHashMap<>(effective == null ? Map.of() : effective);
+            DatabaseType type = lookupDatabaseType(config);
+            if (type == null) {
+                throw new IllegalStateException("字典查询数据源未配置数据库类型或可识别的 JDBC 地址");
+            }
+            // The DBCP service and its SQL must use the same resolved connection,
+            // including legacy rules that inherit the upstream source connection.
+            config.put("dbType", type.name());
+            String url = firstNonBlank(stringValue(config.get("jdbcUrl")),
+                    stringValue(config.get("jdbcURL")), stringValue(config.get("jdbc_url")));
+            if (url != null) config.put("jdbcUrl", url);
+            lookups.add(new FieldMappingService.LookupPlan(lookup.targetField(), lookup.resultColumn(),
+                    lookup.parameterizedSql(), lookup.parameterFields(), lookup.parameterRecordFields(),
+                    lookup.onMissing(), config, lookup.multiValue()));
+        }
+        return new FieldMappingService.CompiledMapping(plan.baseQuery(), plan.finalQuery(), List.copyOf(lookups),
+                plan.baseFields(), plan.outputFields(), plan.runtimeFields());
+    }
+
     private Set<String> downstreamTargetTemporalFields(Pipeline pipeline,
                                                        String nodeId,
                                                        Map<String, ComponentManifest> manifestByNode,
@@ -2044,8 +2072,7 @@ public class DslCompiler {
         }
         StringBuilder query = new StringBuilder("SELECT ")
                 .append(String.join(", ", projections))
-                .append(" FROM (SELECT 1 AS ").append(jdbcAlias("__lookup_anchor", dialectLookup))
-                .append(" FROM DUAL) lookup_anchor");
+                .append(" FROM (").append(lookupAnchorQuery(dialectLookup)).append(") lookup_anchor");
         for (int i = 0; i < lookups.size(); i++) {
             query.append(" LEFT JOIN (")
                     .append(lookups.get(i).parameterizedSql())
@@ -2055,23 +2082,46 @@ public class DslCompiler {
     }
 
     /**
-     * Build the single-lookup form with the dictionary datasource's identifier
-     * rules. The production canvas groups lookups by connection and uses the
-     * list overload above; retaining this focused form keeps one-lookup SQL
-     * generation correct for callers that need the datasource-specific alias
-     * dialect (notably MySQL's backticks for reserved aliases).
+     * Single and grouped lookups share the same SQL dialect and anchor rules.
      */
     private String buildLookupEnrichmentQuery(FieldMappingService.LookupPlan lookup,
                                               List<String> passThroughFields) {
-        List<String> projections = new ArrayList<>();
-        for (String field : passThroughFields) {
-            projections.add("NULLIF(?, '') AS " + jdbcAlias(field, lookup));
+        return buildLookupEnrichmentQuery(List.of(lookup), passThroughFields);
+    }
+
+    private String lookupAnchorQuery(FieldMappingService.LookupPlan lookup) {
+        DatabaseType type = lookupDatabaseType(lookup.dataSource());
+        String from = type == null ? " FROM DUAL" : switch (type) {
+            case ORACLE, OCEANBASE_ORACLE, DAMENG -> " FROM DUAL";
+            case DB2 -> " FROM SYSIBM.SYSDUMMY1";
+            case GBASE8S -> " FROM systables WHERE tabid = 1";
+            default -> "";
+        };
+        return "SELECT 1 AS " + jdbcAlias("__lookup_anchor", lookup) + from;
+    }
+
+    private DatabaseType lookupDatabaseType(Map<String, Object> config) {
+        if (config == null || config.isEmpty()) return null;
+        String raw = firstNonBlank(stringValue(config.get("dbType")), stringValue(config.get("databaseType")),
+                stringValue(config.get("database_type")));
+        if (raw == null) {
+            String url = firstNonBlank(stringValue(config.get("jdbcUrl")), stringValue(config.get("jdbcURL")),
+                    stringValue(config.get("jdbc_url")));
+            if (url == null || !url.toLowerCase(Locale.ROOT).startsWith("jdbc:")) return null;
+            String protocol = url.substring(5).split(":", 2)[0].toLowerCase(Locale.ROOT);
+            raw = switch (protocol) {
+                case "kingbase8" -> "kingbase";
+                case "dm" -> "dameng";
+                case "oceanbase" -> url.toLowerCase(Locale.ROOT).startsWith("jdbc:oceanbase:oracle:")
+                        ? "oceanbaseoracle" : "oceanbasemysql";
+                default -> protocol;
+            };
         }
-        projections.add(lookupResultColumnReference("lookup_result", lookup, lookup)
-                + " AS " + jdbcAlias(lookup.targetField(), lookup));
-        return "SELECT " + String.join(", ", projections)
-                + " FROM (SELECT 1 AS " + jdbcAlias("__lookup_anchor", lookup) + ") lookup_anchor"
-                + " LEFT JOIN (" + lookup.parameterizedSql() + ") lookup_result ON 1 = 1";
+        try {
+            return RegisteredDatasourceType.databaseType("pg".equalsIgnoreCase(raw) ? "postgresql" : raw, config);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException("字典查询数据源的数据库类型不受支持", ex);
+        }
     }
 
     private String lookupAttr(String field) {
@@ -2117,22 +2167,23 @@ public class DslCompiler {
     }
 
     private String jdbcAlias(String field, FieldMappingService.LookupPlan lookup) {
-        String databaseType = lookup.dataSource() == null ? "" : firstNonBlank(
-                stringValue(lookup.dataSource().get("dbType")),
-                stringValue(lookup.dataSource().get("databaseType")),
-                stringValue(lookup.dataSource().get("database_type")));
-        databaseType = databaseType == null ? "" : databaseType;
+        DatabaseType databaseType = lookupDatabaseType(lookup.dataSource());
         // A missing dialect historically represents the Oracle/ANSI execution
         // path. Quote every projection there so Oracle preserves the field's
         // original case, including generated __lookup_* aliases.
-        if (databaseType.isBlank() || databaseType.toLowerCase(Locale.ROOT).contains("oracle")) {
+        // PostgreSQL folds unquoted output labels to lower case. Preserve the
+        // mapping's exact field names for the following QueryRecord/JSON stage.
+        if (databaseType == null || Set.of(DatabaseType.ORACLE, DatabaseType.OCEANBASE_ORACLE,
+                DatabaseType.POSTGRESQL, DatabaseType.GAUSSDB, DatabaseType.KINGBASE,
+                DatabaseType.HIGHGO).contains(databaseType)) {
             return "\"" + field.replace("\"", "\"\"") + "\"";
         }
 
         boolean plainIdentifier = field.matches("[A-Za-z_][A-Za-z0-9_]*");
         boolean reserved = JDBC_RESERVED_ALIASES.contains(field.toUpperCase(Locale.ROOT));
         if (plainIdentifier && !reserved) return field;
-        if (databaseType.toLowerCase(Locale.ROOT).contains("mysql")) {
+        if (Set.of(DatabaseType.MYSQL, DatabaseType.OCEANBASE_MYSQL, DatabaseType.MARIADB,
+                DatabaseType.GBASE8A, DatabaseType.DORIS, DatabaseType.STARROCKS).contains(databaseType)) {
             return "`" + field.replace("`", "``") + "`";
         }
         return "\"" + field.replace("\"", "\"\"") + "\"";

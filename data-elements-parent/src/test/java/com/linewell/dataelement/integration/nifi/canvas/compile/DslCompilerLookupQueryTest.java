@@ -21,7 +21,8 @@ class DslCompilerLookupQueryTest {
         assertThat(sql)
                 .contains("NULLIF(?, '') AS \"TIME\"")
                 .contains("NULLIF(?, '') AS ROWKEY")
-                .contains("lookup_result.FOREIGN_ABROAD_FLAG_cn AS FOREIGN_ABROAD_FLAG_cn");
+                .contains("lookup_result_0.FOREIGN_ABROAD_FLAG_cn AS FOREIGN_ABROAD_FLAG_cn")
+                .contains("FROM DUAL");
     }
 
     @Test

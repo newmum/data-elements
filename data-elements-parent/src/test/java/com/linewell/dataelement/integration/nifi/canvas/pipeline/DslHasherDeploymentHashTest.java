@@ -39,6 +39,20 @@ class DslHasherDeploymentHashTest {
                 .isNotEqualTo(previousDeploymentHash(nativeHdfs, revision));
     }
 
+    @Test
+    void fieldMappingDialectChangeRebuildsExistingMappingFlowsWithoutChangingOrdinaryFlows() throws Exception {
+        String revision = DslHasher.CURRENT_COMPILER_REVISION;
+        for (String key : List.of("transform.field-mapping", "transform.field-enrichment")) {
+            Pipeline.Dsl dsl = singleSink(key, Map.of());
+            assertThat(DslHasher.deploymentHash(dsl, revision))
+                    .isNotEqualTo(previousDeploymentHash(dsl, revision));
+            assertThat(DslHasher.deploymentHash(dsl, revision)).hasSize(64);
+        }
+        Pipeline.Dsl ordinary = singleSink("sink.jdbc", Map.of());
+        assertThat(DslHasher.deploymentHash(ordinary, revision))
+                .isEqualTo(previousDeploymentHash(ordinary, revision));
+    }
+
     private static Pipeline.Dsl singleSink(String manifestKey, Map<String, Object> config) {
         return new Pipeline.Dsl(1,
                 List.of(new Pipeline.Node("sink", manifestKey, "Target", "sink", 0, 0, config)), List.of());
