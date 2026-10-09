@@ -132,7 +132,7 @@ class BatchCreateTableDdlMagicTest {
     }
 
     @Test
-    void oracleAndHiveUseTheSameConfirmedDefaultOrCustomTargetName() throws Exception {
+    void oraclePreservesConfirmedNamesWhileHiveLowercasesThem() throws Exception {
         for (String mode : List.of("oracle", "oceanbaseoracle")) {
           for (String name : List.of("ODS_T_SJYCC_CKB", "ODS_CONFIRMED_CUSTOM")) {
             Fixture fixture = new Fixture(2);
@@ -142,11 +142,13 @@ class BatchCreateTableDdlMagicTest {
 
             Map<?, ?> response = assertInstanceOf(Map.class, fixture.run());
             List<?> results = assertInstanceOf(List.class, response.get("results"));
-            for (Object value : results) {
+            for (int index = 0; index < results.size(); index++) {
+                Object value = results.get(index);
                 Map<?, ?> result = assertInstanceOf(Map.class, value);
-                assertEquals(name, result.get("requestedTableName"));
-                assertEquals(name, result.get("tableName"));
-                assertTrue(String.valueOf(result.get("ddl")).contains(name));
+                String expectedName = index == 1 ? name.toLowerCase(java.util.Locale.ROOT) : name;
+                assertEquals(expectedName, result.get("requestedTableName"));
+                assertEquals(expectedName, result.get("tableName"));
+                assertTrue(String.valueOf(result.get("ddl")).contains(expectedName));
             }
             assertEquals(1, fixture.counter.reads);
             assertEquals(0, fixture.counter.writes);
@@ -165,6 +167,27 @@ class BatchCreateTableDdlMagicTest {
         renamed.ddlGenerator.rename = true;
         assertInstanceOf(ExitValue.class, renamed.run());
         assertEquals(0, renamed.counter.writes);
+    }
+
+    @Test
+    void hiveOnlyLowercasesTableIdentityWhilePreservingFieldAndCommentText() throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='hive' where tid='db-0'");
+        fixture.targets.set(0, Map.of("propList", Map.of("dbId", "db-0", "dbType", "mysql",
+                        "tableName", "ODS_Mixed_TABLE", "tableNameCn", "Keep_UPPER_Comment"),
+                "tableItems", List.of(Map.of("columnName", "Mixed_FIELD", "dataType", "varchar",
+                        "length", 32, "columnComment", "Keep_UPPER_FieldComment"))));
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run());
+        Map<?, ?> result = (Map<?, ?>) ((List<?>) response.get("results")).getFirst();
+        assertEquals("ods_mixed_table", result.get("requestedTableName"));
+        assertEquals("ods_mixed_table", result.get("tableName"));
+        String ddl = result.get("ddl").toString();
+        assertTrue(ddl.contains("`ods_mixed_table`"));
+        assertTrue(ddl.contains("Mixed_FIELD"));
+        assertTrue(ddl.contains("Keep_UPPER_Comment"));
+        assertTrue(ddl.contains("Keep_UPPER_FieldComment"));
+        assertEquals(1, fixture.counter.reads);
+        assertEquals(0, fixture.counter.writes);
     }
 
     private static final class Fixture {

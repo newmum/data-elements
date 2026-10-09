@@ -209,11 +209,15 @@ public class NifiClient {
     }
 
     public <T> T put(String path, Object body, Class<T> type) {
+        return put(runtimeResolver.resolve(), path, body, type);
+    }
+
+    <T> T put(RuntimeNode node, String path, Object body, Class<T> type) {
         try {
-            var spec = http().put().uri(API_PREFIX + path)
+            var spec = http(node).put().uri(API_PREFIX + path)
                     .contentType(APPLICATION_JSON_UTF8)
                     .accept(MediaType.APPLICATION_JSON);
-            String auth = authHeader();
+            String auth = authHeader(node);
             if (auth != null) spec.header(HttpHeaders.AUTHORIZATION, auth);
             return spec.body(jsonBody(body)).retrieve().body(type);
         } catch (HttpStatusCodeException e) {
@@ -348,6 +352,43 @@ public class NifiClient {
         envelope.set("revision", mapper.valueToTree(RevisionDto.initial(clientId)));
         envelope.set("component", component);
         return post("/process-groups/" + pgId + "/processors", envelope, NifiEntity.class);
+    }
+
+    /** A single trigger may expand to many records, but the next trigger must wait for all of them. */
+    public NifiEntity createSerialBatchGroup(String parentId, String name, double x, double y) {
+        NifiEntity group = createProcessGroup(parentId, name, x, y);
+        ObjectNode update = mapper.createObjectNode().put("id", group.id())
+                .put("flowfileConcurrency", "SINGLE_FLOWFILE_PER_NODE");
+        putWithRevision("/process-groups/" + group.id(), "/process-groups/" + group.id(), update);
+        return group;
+    }
+
+    public NifiEntity createInputPort(String groupId, String name) {
+        ObjectNode component = mapper.createObjectNode().put("name", name).put("type", "INPUT_PORT");
+        component.set("position", mapper.createObjectNode().put("x", 160).put("y", 30));
+        ObjectNode envelope = mapper.createObjectNode();
+        envelope.set("revision", mapper.valueToTree(RevisionDto.initial(clientId)));
+        envelope.set("component", component);
+        return post("/process-groups/" + groupId + "/input-ports", envelope, NifiEntity.class);
+    }
+
+    public NifiEntity connectBatchTrigger(String parentId, String processorId, String childId, String portId) {
+        ObjectNode component = mapper.createObjectNode();
+        component.set("source", mapper.createObjectNode().put("id", processorId).put("type", "PROCESSOR").put("groupId", parentId));
+        component.set("destination", mapper.createObjectNode().put("id", portId).put("type", "INPUT_PORT").put("groupId", childId));
+        component.set("selectedRelationships", mapper.createArrayNode().add("success"));
+        component.put("backPressureObjectThreshold", 1).put("backPressureDataSizeThreshold", "1 MB").put("loadBalanceStrategy", "DO_NOT_LOAD_BALANCE");
+        ObjectNode envelope = mapper.createObjectNode();
+        envelope.set("revision", mapper.valueToTree(RevisionDto.initial(clientId)));
+        envelope.set("component", component);
+        return post("/process-groups/" + parentId + "/connections", envelope, NifiEntity.class);
+    }
+
+    public void executeOnPrimaryNode(String processorId) {
+        ObjectNode config = mapper.createObjectNode().put("executionNode", "PRIMARY").put("concurrentlySchedulableTaskCount", 1);
+        ObjectNode update = mapper.createObjectNode().put("id", processorId);
+        update.set("config", config);
+        putWithRevision("/processors/" + processorId, "/processors/" + processorId, update);
     }
 
     public NifiEntity createControllerService(String pgId, String type, String name, Map<String, String> properties) {
@@ -534,6 +575,50 @@ public class NifiClient {
         return put("/flow/process-groups/" + pgId, body, JsonNode.class);
     }
 
+    /** Start downstream in bulk and run full-table sources once, independently of the browser lifetime. */
+    public void startWithOneShotSources(String pgId, java.util.Set<String> sourceIds) {
+        if (sourceIds.isEmpty() || sourceIds.size() > 20) {
+            throw new IllegalStateException("单次全量启动必须包含 1 至 20 个数据库来源");
+        }
+        JsonNode snapshot = getProcessGroupStatus(pgId).path("processGroupStatus").path("aggregateSnapshot");
+        if (snapshot.path("queuedCount").asLong(-1) != 0 || snapshot.path("activeThreadCount").asInt(-1) != 0) {
+            throw new IllegalStateException("上一轮全量仍有排队数据或活跃线程，请处理完成后再启动新一轮");
+        }
+        JsonNode processors = get("/flow/process-groups/" + pgId, JsonNode.class)
+                .path("processGroupFlow").path("flow").path("processors");
+        ObjectNode sources = mapper.createObjectNode();
+        ObjectNode downstream = mapper.createObjectNode();
+        for (JsonNode processor : processors) {
+            String id = processor.path("id").asText();
+            JsonNode component = processor.path("component");
+            if (sourceIds.contains(id)) {
+                if (!"STOPPED".equals(component.path("state").asText())) {
+                    throw new IllegalStateException("全量来源尚未停止，请等待本轮结束：" + component.path("name").asText());
+                }
+                sources.set(id, processor.path("revision"));
+            } else {
+                downstream.set(id, processor.path("revision"));
+            }
+        }
+        if (sources.size() != sourceIds.size()) throw new IllegalStateException("全量来源的部署映射不完整，请重新保存并部署");
+        if (!downstream.isEmpty()) scheduleComponents(pgId, "RUNNING", downstream);
+        RuntimeNode runtimeNode = runtimeResolver.resolve();
+        // NiFi 2.9 accepts RUN_ONCE on the group endpoint but does not execute it.
+        // Its native processor endpoint is required. Revisions were prefetched
+        // with the one flow-tree read; never read each processor again here.
+        sources.fields().forEachRemaining(entry -> {
+            ObjectNode body = mapper.createObjectNode().put("state", "RUN_ONCE").put("disconnectedNodeAcknowledged", false);
+            body.set("revision", entry.getValue());
+            put(runtimeNode, "/processors/" + entry.getKey() + "/run-status", body, NifiEntity.class);
+        });
+    }
+
+    private void scheduleComponents(String pgId, String state, ObjectNode components) {
+        ObjectNode body = mapper.createObjectNode().put("id", pgId).put("state", state).put("disconnectedNodeAcknowledged", false);
+        body.set("components", components);
+        put("/flow/process-groups/" + pgId, body, JsonNode.class);
+    }
+
     /**
      * NiFi normally starts every processor when a process group is set to
      * RUNNING.  Some installed NiFi versions can leave individual processors
@@ -634,7 +719,8 @@ public class NifiClient {
             var used = new java.util.LinkedHashSet<String>();
             links.stream().filter(l -> id.equals(l.source())).forEach(l -> used.addAll(l.relationships()));
             var retained = new java.util.ArrayList<String>();
-            if (!type.endsWith(".GenerateTableFetch") && !type.endsWith(".RouteOnAttribute")) {
+            boolean triggeredFetch = type.endsWith(".GenerateTableFetch") && links.stream().anyMatch(link -> id.equals(link.target()));
+            if ((!type.endsWith(".GenerateTableFetch") || triggeredFetch) && !type.endsWith(".RouteOnAttribute")) {
                 for (JsonNode relationship : processor.path("relationships")) {
                     String name = relationship.path("name").asText();
                     if (("failure".equals(name) || "retry".equals(name)) && !used.contains(name)) retained.add(name);

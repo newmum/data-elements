@@ -1,4 +1,4 @@
-import { registeredDatasourceId } from './datasourceIdentity';
+import { registeredDatasourceId } from './datasourceIdentity.ts';
 type ResponseObject = Record<string, unknown>;
 
 function asObject(value: unknown): ResponseObject | undefined {
@@ -39,6 +39,25 @@ export function getApiErrorMessage(value: unknown, fallback: string): string {
   const trace = object.traceId ?? object.requestId ?? nestedError?.traceId;
   return [message ?? fallback, code == null ? '' : `错误码：${code}`, trace == null ? '' : `跟踪号：${trace}`]
     .filter(Boolean).join('；');
+}
+
+/** Reject platform errors while preserving a probe's controlled { success:false, error }. */
+export function unwrapSuccessfulEnvelope<T = unknown>(body: unknown): T {
+  const payload = unwrapResponse(body);
+  const object = asObject(payload);
+  if (object && ('code' in object || 'status' in object) && isFailure(object)) {
+    throw new Error(getApiErrorMessage(object, '接口执行失败'));
+  }
+  return payload as T;
+}
+
+/** HTTP 200 can still carry a failed platform envelope; never expose it as a list. */
+export function requireListResponse<T>(body: unknown, label: string): T[] {
+  const payload = unwrapResponse(body);
+  if (!Array.isArray(payload)) {
+    throw new Error(getApiErrorMessage(payload, `${label}接口返回了无效列表`));
+  }
+  return payload as T[];
 }
 
 /** Runtime-check metadata endpoints before a component can read result.success. */

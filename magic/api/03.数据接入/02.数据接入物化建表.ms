@@ -539,6 +539,10 @@ if (targetDatasource == null) {
 if (targetDatasource.showConnect == 0) {
     exit 400, '目标数据源未提供连接信息'
 }
+// Hive 的物理表名和登记名统一小写，包括 ODS_ 前缀；目标类型只能取服务端登记。
+if (['hive', 'mrshive'].contains(text(targetDatasource.dbType).trim().toLowerCase())) {
+    propList.tableName = propList.tableName.toLowerCase()
+}
 // The submitted rows are editable client data, so normalize the two protected
 // ODS time columns again from the authoritative target datasource before DDL
 // generation and metadata persistence.

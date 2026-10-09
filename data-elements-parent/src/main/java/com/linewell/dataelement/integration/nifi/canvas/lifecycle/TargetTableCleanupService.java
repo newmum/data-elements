@@ -2,6 +2,7 @@ package com.linewell.dataelement.integration.nifi.canvas.lifecycle;
 
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
+import com.linewell.dataelement.integration.nifi.canvas.compile.SyncPolicy;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
@@ -35,7 +36,7 @@ public class TargetTableCleanupService {
     public static boolean requested(Pipeline pipeline) {
         if (pipeline.dsl() == null || pipeline.dsl().nodes() == null) return false;
         return pipeline.dsl().nodes().stream().anyMatch(node -> "source".equals(node.category())
-                && List.of("FULL", "FULL_THEN_INCR").contains(text(node.config(), "syncMode").toUpperCase(Locale.ROOT))
+                && List.of("FULL", "FULL_THEN_INCR").contains(SyncPolicy.mode(node.config()))
                 && Boolean.parseBoolean(text(node.config(), "deleteTargetData")));
     }
 

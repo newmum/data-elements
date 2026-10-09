@@ -233,6 +233,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
   - `表数据查看` should be `表数据预览`.
 - 字段登记的统一格式 `DATE`（日期）/`DATETIME`（时间）必须进入 ODS 物化字段、DDL 与接入映射：日期使用目标库的 `DATE`；时间按目标方言使用 Oracle/达梦/OceanBase Oracle 的 `DATE`、PostgreSQL/人大金仓/Hive 等的 `TIMESTAMP`、MySQL/OceanBase MySQL 的 `DATETIME`、SQL Server 的 `DATETIME2`。多选目标库时分别生成类型，DDL 预览与提交元数据使用同一份目标字段。来源物理字段类型保持不变，字符型日期/时间由生成的字段映射显式转换，空字符串转 NULL；转换规则同时保存在画布 DSL 与字段映射记录中。仅采用已保存的登记配置，尊重显式清空，不从字段名猜测时间格式，也不自动改造已经存在的目标物理表。
 - 物化建表多选目标库时，按选择顺序生成独立级联任务：原来源表→目标1、目标1→目标2，继续选择时依次递进。每个任务和画布只包含一个目标库，任务记录的来源表/来源库必须是该跳的真实来源；在原来源表的展开列表汇总全部任务。后续跳直接映射前一跳物化字段，保留 `ODS_UUID`、`ODS_RKSJ`、`ODS_GXSJ` 和翻译结果，不重复生成主键或重复治理。重复提交按真实来源与目标复用任务；历史多目标画布只在明确确认后重建，任一目标校验失败不得留下部分任务。删除任务只影响指定任务；物化表仍被下游任务使用时拒绝物理删除。
+- Hive（含华为 MRS Hive）物化目标表名统一使用小写，包含 `ods_` 前缀。按每个目标数据源的真实类型规范表名，混选其他数据库时保留其确认名称；目标计划、DDL 预览、提交、元数据与后续画布必须使用同一规范名称。手工 DDL 中的大写 Hive 表名在实际建表前拒绝，不改写字段、注释、字符串或既有物理表。
 - For `register-confirm`, dictionary tables do not need timestamp validation. Only `业务表` and `日志表` require a timestamp field, and each table only needs one timestamp field.
 - 多值字典翻译与标准枚举的拆分、匹配、拼接在 NiFi 记录处理中执行，不按来源库、字典库或目标库类型限制能力，不使用 MySQL 专属的 `JSON_TABLE`、`GROUP_CONCAT` 查询。标准枚举使用已登记的编码映射，不借来源库执行查询；字典关联保留真实数据源、schema 和附加条件，只按有界编码批次执行参数化 `IN` 查询。保留原始顺序和重复值，忽略空编码，部分匹配时保留未匹配的原始编码，全部未匹配时遵守 NULL/KEEP_SOURCE/FAIL 策略。旧自动生成的多值规则在恢复画布时根据登记元数据修复，不能退化成单值匹配或丢弃字典过滤条件。已物化并关联的目标表可保留并只补建任务流程。
 - For `db-table` preview:

@@ -234,6 +234,10 @@ if (body?.batchValidateOnly == true) {
         var parsed = null
         try { parsed = canvasTableDdl.parse(target.ddl, config) }
         catch (e) { exit 400, '目标表“' + target.tableName + '”建表语句校验失败：' + e.getMessage() }
+        if (config.getDatabaseType() == DatabaseType.HIVE
+            && textOf(parsed.lookupName) != textOf(parsed.lookupName).toLowerCase()) {
+            exit 400, 'Hive目标表名必须使用小写，包括ods_前缀，请重新生成建表语句'
+        }
         if (!canvasTableDdl.matches(parsed, target.tableName.trim(), parsed.schemaName)) {
             exit 400, '目标表“' + target.tableName + '”与建表语句中的表名不一致'
         }
@@ -277,6 +281,10 @@ if (body.canvas == true) {
     var parsed = null
     try { parsed = canvasTableDdl.parse(textOf(ddl), config) }
     catch (e) { exit 400, '建表语句校验失败：' + e.getMessage() }
+    if (config.getDatabaseType() == DatabaseType.HIVE
+        && textOf(parsed.lookupName) != textOf(parsed.lookupName).toLowerCase()) {
+        exit 400, 'Hive目标表名必须使用小写，包括ods_前缀，请重新生成建表语句'
+    }
     if (!blank(tableName) && !canvasTableDdl.matches(parsed, textOf(tableName).trim(), parsed.schemaName)) {
         exit 400, '建表语句中的目标表名与当前填写的目标表名不一致'
     }

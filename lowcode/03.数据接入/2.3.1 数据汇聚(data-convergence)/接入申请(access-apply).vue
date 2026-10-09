@@ -955,6 +955,12 @@ const buildTargetTableName = () => {
 const sameStringList = (left: string[] = [], right: string[] = []) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
+const normalizeTargetTableName = (value: any, dbType: any) => {
+  const name = String(value || "").trim();
+  const type = String(dbType || "").trim().toLowerCase();
+  return type === "hive" || type === "mrshive" ? name.toLowerCase() : name;
+};
+
 // JsonForm/form-create is the sole owner of editable form values. These refs only
 // project the selected target data sources into the drawer header; they never write
 // a changed dbId back to formData, so a form change cannot trigger itself again.
@@ -965,7 +971,7 @@ const targetTablePlans = computed(() =>
   targetDatasourceIds.value
     .map((dbId) => {
       const selected = datasourceMap.value[dbId];
-      const tableName = targetTableNameInput.value;
+      const tableName = normalizeTargetTableName(targetTableNameInput.value, selected?.dbType);
       return { dbId, dbName: selected?.datasourceName || selected?.dbName || selected?.label || "所选目标库", tableName };
     })
     .filter((item) => Boolean(item.dbId && item.tableName)),
@@ -981,11 +987,19 @@ const syncTargetDatasourceSelection = (value: any) => {
   const nextIds = normalizeDbIds(value);
   if (!sameStringList(targetDatasourceIds.value, nextIds)) targetDatasourceIds.value = nextIds;
   syncDbTypeByDatasource(value);
+  syncTargetTableNameInput(jsonFormRef.value?.getValue?.("tableName") || targetTableNameInput.value);
 };
 
 const syncTargetTableNameInput = (value: any) => {
-  const nextName = String(value || "").trim();
+  const rawName = String(value || "").trim();
+  const onlyHive = targetDatasourceIds.value.length > 0 && targetDatasourceIds.value.every((dbId) =>
+    ["hive", "mrshive"].includes(String(datasourceMap.value[dbId]?.dbType || "").trim().toLowerCase()));
+  const nextName = onlyHive ? normalizeTargetTableName(rawName, "hive") : rawName;
   if (targetTableNameInput.value !== nextName) targetTableNameInput.value = nextName;
+  if (props.type === "add" && nextName !== rawName
+    && jsonFormRef.value?.getValue?.("tableName") !== nextName) {
+    jsonFormRef.value?.setValue({ tableName: nextName });
+  }
 };
 
 const normalizeFormPayload = (data: any) => {
@@ -1158,7 +1172,7 @@ const buildDdlTargets = (data: any) => data.targetDbIds.map((dbId: string) => {
       ...data,
       dbId,
       dbType: datasource.dbType || data.dbType,
-      tableName: String(data.tableName || "").trim(),
+      tableName: normalizeTargetTableName(data.tableName, datasource.dbType || data.dbType),
     },
   };
 });

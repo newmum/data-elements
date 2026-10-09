@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient as api } from './client';
-import { hiveMetadataConfigError, normalizeProbeResponse } from './response';
+import { hiveMetadataConfigError, normalizeProbeResponse, requireListResponse } from './response';
 import type { CanvasDsl } from '@/types/dsl';
 import { getTid } from './iframeBridge';
 import { getBridgeToken, getSessionRevision, useSessionRevision, useTokenReady, waitForToken } from './bridgeSession';
@@ -116,7 +116,7 @@ export function usePipelineList(enabled = true) {
   return useQuery({
     enabled: tokenReady && enabled,
     queryKey: [...KEY, sessionRevision],
-    queryFn: async () => (await api.get<PipelineSummary[]>('/pipelines')).data,
+    queryFn: async () => requireListResponse<PipelineSummary>((await api.get<unknown>('/pipelines')).data, '流程列表'),
   });
 }
 
@@ -126,7 +126,7 @@ export function usePipelineRuntimeList() {
   return useQuery({
     enabled: tokenReady,
     queryKey: ['pipeline-runtime-list', sessionRevision],
-    queryFn: async () => (await api.get<PipelineRuntimeSummary[]>('/pipelines/runtime-list')).data,
+    queryFn: async () => requireListResponse<PipelineRuntimeSummary>((await api.get<unknown>('/pipelines/runtime-list')).data, '流程运行列表'),
   });
 }
 
@@ -289,8 +289,8 @@ export function fetchPipelineStatus(id: string) {
 export function useStartPipeline() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, force = false }: { id: string; force?: boolean }) =>
-      (await api.post(`/pipelines/${id}/start`, undefined, { params: force ? { force: true } : undefined })).data,
+    mutationFn: async ({ id, force = false, confirmCleanup = false }: { id: string; force?: boolean; confirmCleanup?: boolean }) =>
+      (await api.post(`/pipelines/${id}/start`, undefined, { params: { force, confirmCleanup } })).data,
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['pipeline-status', id] });
       qc.invalidateQueries({ queryKey: KEY });
@@ -320,7 +320,7 @@ export function useFlowErrors(id: string | null) {
   return useQuery<FlowError[]>({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-errors', id, sessionRevision],
-    queryFn: async () => (await api.get<FlowError[]>(`/pipelines/${id}/errors`)).data,
+    queryFn: async () => requireListResponse<FlowError>((await api.get<unknown>(`/pipelines/${id}/errors`)).data, '流程错误列表'),
     refetchInterval: () => {
       const status = statusQuery.data?.status;
       return status === 'RUNNING' ? 3000 : 30000;

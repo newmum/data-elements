@@ -24,7 +24,7 @@ import java.util.TreeMap;
 public final class DslHasher {
 
     /** Current NiFi compiler contract; shared by deployment and safe historical lineage recovery. */
-    public static final String CURRENT_COMPILER_REVISION = "nifi-execsqlrecord-avro-logical-types-v30";
+    public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v31";
     private static final String HIVE_HDFS_COMPILER_REVISION = "hive-hdfs-record-chain-v1";
     private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-v1";
 

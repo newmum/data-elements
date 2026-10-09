@@ -35,6 +35,26 @@ import org.ssssssss.script.runtime.ExitValue;
 class MaterializationTemplateMagicTest {
     private static final String SOURCE_ID = "f93a8e653ac6413e89660f5d77d45769";
 
+    @Test
+    void hiveTemplateAndSubmitBoundaryNormalizeOnlyTheTargetTableName() throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_table_t set table_name='OWNER.Mixed_TABLE' where tid='source-1'");
+        fixture.jdbc.update("update db_datasource_t set db_type='hive' where tid='targetdb-0'");
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        Map<?, ?> props = assertInstanceOf(Map.class, response.get("propList"));
+        assertEquals("OWNER.Mixed_TABLE", props.get("sourceTableName"));
+        assertEquals("ods_mixed_table", props.get("tableName"));
+        String canonical = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
+        String helpers = canonical.substring(canonical.indexOf("var text ="), canonical.indexOf("var upsertCatalogProp"));
+        String boundary = canonical.substring(canonical.indexOf("// Hive 的物理表名"), canonical.indexOf("// The submitted rows"));
+        for (String type : List.of("hive", "mrshive", "oracle", "postgresql", "mysql")) {
+            Map<String, Object> submitted = new LinkedHashMap<>(Map.of("tableName", "ODS_Mixed_TABLE", "dbType", "mysql"));
+            Map<?, ?> normalized = assertInstanceOf(Map.class, MagicScript.create(helpers + boundary + "return propList", null)
+                    .execute(new MagicScriptContext(Map.of("propList", submitted, "targetDatasource", Map.of("dbType", type)))));
+            assertEquals(type.equals("hive") || type.equals("mrshive") ? "ods_mixed_table" : "ODS_Mixed_TABLE", normalized.get("tableName"));
+        }
+    }
+
     @ParameterizedTest
     @CsvSource({"mysql,datetime", "oceanbasemysql,datetime", "oceanbaseoracle,date", "oracle,date",
             "dameng,date", "postgresql,timestamp", "kingbase8,timestamp", "hive,timestamp",

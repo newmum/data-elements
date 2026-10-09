@@ -268,6 +268,8 @@ if (body?.batchGenerate == true) {
             || firstValue(registered, ['dbName', 'db_name']))
         batchConfig.setUsername(firstValue(registered, ['username']) || firstValue(pool, ['username', 'user']))
         batchConfig.setSchema(firstValue(pool, ['schema', 'defaultSchema', 'currentSchema', 'schemaName']))
+        var requestedTableName = textOf(submittedProps.tableName).trim()
+        if (targetType == DatabaseType.HIVE) { requestedTableName = requestedTableName.toLowerCase() }
         var batchColumns = []
         for (item in submittedItems) {
             var columnInfo = new ColumnInfo()
@@ -306,10 +308,9 @@ if (body?.batchGenerate == true) {
         }
         try {
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
-                submittedProps.tableName, batchColumns, submittedProps.tableNameCn)
+                requestedTableName, batchColumns, submittedProps.tableNameCn)
             ddl = withHuaweiHiveStorage(ddl, targetType, pool, targetTypeCode)
             var parsed = canvasTableDdl.parse(ddl, batchConfig)
-            var requestedTableName = textOf(submittedProps.tableName).trim()
             if (!canvasTableDdl.matches(parsed, requestedTableName, parsed.schemaName)) {
                 exit 400, '目标表“' + requestedTableName + '”与生成的建表语句表名不一致，请只填写目标表名'
             }
@@ -436,12 +437,14 @@ for (item in tableItems) {
 
 // 返回当前业务分支的标准结果。
 try {
-    var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, propList.tableName, columns, propList.tableNameCn)
+    var targetTableName = textOf(propList.tableName).trim()
+    if (dsConfig.getDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
+    var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, columns, propList.tableNameCn)
     ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
     if (body.canvas == true) {
         // Use the same single-table and target-scope validation as physical creation.
         var parsed = canvasTableDdl.parse(ddl, dsConfig)
-        if (!canvasTableDdl.matches(parsed, textOf(propList.tableName).trim(), parsed.schemaName)) {
+        if (!canvasTableDdl.matches(parsed, targetTableName, parsed.schemaName)) {
             exit 400, '目标表“' + propList.tableName + '”与生成的建表语句表名不一致，请只填写目标表名'
         }
         return parsed.ddl

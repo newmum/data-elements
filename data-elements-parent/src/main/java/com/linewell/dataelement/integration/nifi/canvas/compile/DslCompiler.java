@@ -40,7 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>边连接通过“源节点 outlet 处理器”直连“目标节点 inlet 处理器”。</li>
  * </ul>
  *
- * <p>为简化实现，组件暂不再嵌套子 PG，全部处理器/服务直接挂在 pipeline 根 PG 下。
+ * <p>普通流程的处理器/服务直接挂在根 PG 下；定时全量将单轮处理放入串行批次子 PG。
  */
 @Component
 public class DslCompiler {
@@ -160,6 +160,8 @@ public class DslCompiler {
     public CompileResult compile(Pipeline pipeline, Consumer<String> processGroupCreatedCallback,
             com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer.Layout layout) {
         Objects.requireNonNull(pipeline.dsl(), "Pipeline DSL is required");
+        Pipeline.Node periodicSource = SyncPolicy.periodicSource(pipeline);
+        if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
         String pgName = pipeline.name() == null ? pipeline.id() : pipeline.name();
         var position = layout == null
@@ -168,11 +170,22 @@ public class DslCompiler {
         NifiEntity pg = layout == null
                 ? nifi.createProcessGroup(parentId, pgName, position.x(), position.y())
                 : nifi.createProcessGroup(parentId, pgName, position.x(), position.y(), layout.comments());
-        String pgId = pg.id();
-        String controllerServiceScopeId = layout == null ? "" : layout.controllerServiceScopeId();
-        if (processGroupCreatedCallback != null) {
-            processGroupCreatedCallback.accept(pgId);
+        String rootPgId = pg.id();
+        if (processGroupCreatedCallback != null) processGroupCreatedCallback.accept(rootPgId);
+        String pgId = periodicSource == null ? rootPgId
+                : nifi.createSerialBatchGroup(rootPgId, "全量同步批次（上一轮完成后再执行）", 700, 120).id();
+        String batchInputId = periodicSource == null ? null : nifi.createInputPort(pgId, "单轮全量触发").id();
+        String triggerId = null;
+        if (periodicSource != null) {
+            Map<String, Object> sourceCfg = periodicSource.config();
+            triggerId = nifi.createProcessor(rootPgId, "org.apache.nifi.processors.standard.GenerateFlowFile",
+                    "定时全量触发", 160, 120, Map.of("Batch Size", "1", "Custom Text", "full-sync"),
+                    firstNonBlankStatic(configText(sourceCfg, "schedulingPeriod"), "60 sec"),
+                    firstNonBlankStatic(configText(sourceCfg, "schedulingStrategy"), "TIMER_DRIVEN")).id();
+            nifi.executeOnPrimaryNode(triggerId);
+            nifi.connectBatchTrigger(rootPgId, triggerId, pgId, batchInputId);
         }
+        String controllerServiceScopeId = layout == null ? "" : layout.controllerServiceScopeId();
         log.info("Created NiFi PG {} for pipeline {}", pgId, pipeline.id());
 
         // 创建全局共享 Controller Service，供多个节点处理器复用。
@@ -212,6 +225,12 @@ public class DslCompiler {
                 }
             }
             if (n.config() != null) cfg.putAll(n.config());
+            if (periodicSource != null && "sink.jdbc".equals(m.key())) {
+                String strategy = SyncPolicy.fullStrategy(periodicSource.config());
+                cfg.put("statementType", "TRUNCATE_RELOAD".equals(strategy) ? "INSERT"
+                        : usesLinewellJdbcWriter(cfg) && isLinewellOracleWriterTarget(configText(cfg, "dbType")) ? "MERGE" : "UPSERT");
+                if ("TRUNCATE_RELOAD".equals(strategy)) cfg.put("writerType", NATIVE_DATABASE_RECORD_MODE);
+            }
             materializeServerManagedHuaweiMrsProfile(n.manifestKey(), cfg);
             if ("sink.hive".equals(m.key())) {
                 // HiveRecordPut receives database and table separately and renders
@@ -376,6 +395,13 @@ public class DslCompiler {
                 continue;
             }
 
+            if ("source".equals(m.category()) && "INCREMENTAL".equals(SyncPolicy.mode(cfg))
+                    && "START_AT_CURRENT_MAX".equals(configText(cfg, "initialStrategy"))
+                    && spec.processors() != null && spec.processors().stream().anyMatch(p -> p.type().endsWith(".GenerateTableFetch"))) {
+                buildCurrentMaxSource(pgId, n, m, nc, nodeLayout, cfg, sharedCs);
+                continue;
+            }
+
             if ("sink.jdbc".equals(m.key())) {
                 Set<String> availableFields = resolveUpstreamOutputFields(
                         pipeline, n.id(), manifestByNode, cfgByNode, fieldMappingPlans);
@@ -446,8 +472,13 @@ public class DslCompiler {
                     String strategy = pSpec.schedulingStrategy() == null ? null
                             : resolveString(pSpec.schedulingStrategy(), cfg, nc.csIds, sharedCs);
                     String configuredStrategy = stringConfig(cfg, "schedulingStrategy");
-                    if (!configuredStrategy.isBlank()) {
+                    if (pSpec.schedulingPeriod() != null && !configuredStrategy.isBlank()) {
                         strategy = configuredStrategy;
+                    }
+                    if (periodicSource != null) {
+                        // The parent trigger owns the schedule. All child processors consume inputs.
+                        period = null;
+                        strategy = "TIMER_DRIVEN";
                     }
                     if (strategy != null && strategy.isBlank()) strategy = null;
                     String processorType = resolveProcessorType(m, pSpec.localId(), pSpec.type(), cfg);
@@ -458,6 +489,7 @@ public class DslCompiler {
                             n.label() + "/" + pSpec.localId(),
                             x, y, resolved, period, strategy);
                     nc.processorIds.put(pSpec.localId(), proc.id());
+                    if (pSpec.type().endsWith(".GenerateTableFetch")) nifi.executeOnPrimaryNode(proc.id());
                     row++;
                 }
             }
@@ -511,9 +543,132 @@ public class DslCompiler {
         }
 
         // Finalize the expanded native graph, rather than individual DSL-node blocks.
+        if (periodicSource != null) {
+            NodeCompilation source = compiled.get(periodicSource.id());
+            source.processorIds.put("periodic-trigger", triggerId);
+            String previousId = batchInputId;
+            String previousType = "INPUT_PORT";
+            if ("TRUNCATE_RELOAD".equals(SyncPolicy.fullStrategy(periodicSource.config()))) {
+                Set<String> cleared = new LinkedHashSet<>();
+                int index = 0;
+                for (Pipeline.Node target : pipeline.dsl().nodes()) {
+                    if (!"sink".equals(target.category())) continue;
+                    Map<String, Object> cfg = cfgByNode.get(target.id());
+                    String dbcp = compiled.get(target.id()).csIds.get("dbcp");
+                    String table = periodicTargetTable(cfg);
+                    if (!cleared.add(dbcp + ":" + table)) continue;
+                    NifiEntity clear = nifi.createProcessor(pgId, PUT_SQL_TYPE, "每轮清空/" + target.label(),
+                            160 + index++ * 520, 30, Map.of("JDBC Connection Pool", dbcp,
+                                    "SQL Statement", "TRUNCATE TABLE " + table, "Batch Size", "1",
+                                    "Support Fragmented Transactions", "false"), null, "TIMER_DRIVEN");
+                    source.processorIds.put("periodic-clear-" + index, clear.id());
+                    nifi.createConnection(pgId, previousId, previousType, clear.id(), "PROCESSOR",
+                            "INPUT_PORT".equals(previousType) ? List.of() : List.of("success"));
+                    previousId = clear.id();
+                    previousType = "PROCESSOR";
+                }
+            }
+            nifi.createConnection(pgId, previousId, previousType, source.processorIds.get("fetch"), "PROCESSOR",
+                    "INPUT_PORT".equals(previousType) ? List.of() : List.of("success"));
+        }
         nifi.finalizeGeneratedProcessGroup(pgId);
+        if (periodicSource != null) nifi.finalizeGeneratedProcessGroup(rootPgId);
 
-        return new CompileResult(pgId, sharedCs, compiled, edgeConnectionIds);
+        return new CompileResult(rootPgId, sharedCs, compiled, edgeConnectionIds);
+    }
+
+    public boolean supportsSyncSettings(String manifestKey) {
+        ComponentManifest manifest = registry.get(manifestKey);
+        return manifest != null && manifest.compile() != null && manifest.compile().processors() != null
+                && manifest.compile().processors().stream().anyMatch(p -> p.type().endsWith(".GenerateTableFetch"));
+    }
+
+    private void validatePeriodicPolicy(Pipeline pipeline, Pipeline.Node source) {
+        if (!supportsSyncSettings(source.manifestKey())) {
+            throw new IllegalStateException("定时全量仅支持可探查的数据库表来源");
+        }
+        String strategy = SyncPolicy.fullStrategy(source.config());
+        String schedule = configText(source.config(), "schedulingStrategy");
+        if (!schedule.isBlank() && !Set.of("TIMER_DRIVEN", "CRON_DRIVEN").contains(schedule)) {
+            throw new IllegalStateException("定时全量仅支持周期或 Cron 调度");
+        }
+        Set<String> reachable = new LinkedHashSet<>(List.of(source.id()));
+        boolean expanded;
+        do {
+            expanded = false;
+            for (Pipeline.Edge edge : pipeline.dsl().edges()) {
+                if (reachable.contains(edge.source())) expanded |= reachable.add(edge.target());
+            }
+        } while (expanded);
+        for (Pipeline.Node node : pipeline.dsl().nodes()) {
+            if (!reachable.contains(node.id())) throw new IllegalStateException("定时全量不能包含未连接到来源的节点：" + node.label());
+            ComponentManifest nodeManifest = registry.get(node.manifestKey());
+            if (isExternalTransformSqlNode(nodeManifest, node.config()) || isSourceDbFieldEnrichmentNode(nodeManifest, node.config())) {
+                throw new IllegalStateException("定时全量暂不支持自行查询来源库的 SQL 节点，请使用流内转换：" + node.label());
+            }
+        }
+        List<Pipeline.Node> targets = pipeline.dsl().nodes().stream().filter(n -> "sink".equals(n.category())).toList();
+        if (targets.isEmpty()) throw new IllegalStateException("定时全量必须配置目标表");
+        for (Pipeline.Node target : targets) {
+            if (!"sink.jdbc".equals(target.manifestKey())) throw new IllegalStateException("定时全量写入策略仅支持 JDBC 目标表");
+            if ("UPSERT".equals(strategy)) {
+                String dbType = configText(target.config(), "dbType").toUpperCase(Locale.ROOT);
+                if (!usesLinewellJdbcWriter(target.config()) && Set.of("GBASE8A", "CLICKHOUSE", "ELASTICSEARCH").contains(dbType)) {
+                    throw new IllegalStateException("该目标库不支持全量 UPSERT，不能回退为追加写入：" + dbType);
+                }
+            }
+            if ("TRUNCATE_RELOAD".equals(strategy)) {
+                String dbType = configText(target.config(), "dbType").toUpperCase(Locale.ROOT);
+                String url = configText(target.config(), "jdbcUrl").toLowerCase(Locale.ROOT);
+                if (!Set.of("MYSQL", "MARIADB", "DM", "DAMENG", "达梦").contains(dbType)
+                        && !(dbType.isBlank() && (url.startsWith("jdbc:mysql:") || url.startsWith("jdbc:dm:")))) {
+                    throw new IllegalStateException("定时清空重载仅支持 MySQL 和达梦目标库");
+                }
+                periodicTargetTable(target.config());
+            }
+        }
+    }
+
+    private String periodicTargetTable(Map<String, Object> cfg) {
+        String table = configText(cfg, "table");
+        String schema = firstNonBlankStatic(configText(cfg, "schema"), configText(cfg, "schemaName"));
+        if (!table.contains(".") && !schema.isBlank()) table = schema + "." + table;
+        String type = configText(cfg, "dbType").toUpperCase(Locale.ROOT);
+        String quote = type.contains("MYSQL") || type.contains("MARIADB") || configText(cfg, "jdbcUrl").startsWith("jdbc:mysql:") ? "`" : "\"";
+        StringJoiner result = new StringJoiner(".");
+        for (String part : table.split("\\.", -1)) {
+            String name = part.replace("`", "").replace("\"", "").trim();
+            if (!name.matches("[A-Za-z_][A-Za-z0-9_$]*")) throw new IllegalStateException("清空重载目标表名必须是有效的物理标识符");
+            result.add(quote + name + quote);
+        }
+        return result.toString();
+    }
+
+    /** NiFi owns the initial MAX query and cluster watermark; the backend never reads source rows. */
+    private void buildCurrentMaxSource(String pgId, Pipeline.Node node, ComponentManifest manifest,
+            NodeCompilation compiled, NodeLayout layout, Map<String, Object> cfg, Map<String, String> sharedCs) {
+        Map<String, String> fetch = new LinkedHashMap<>();
+        fetch.put("Maximum-value Columns", "");
+        applyIncrementalSourceOptions(manifest, "fetch", cfg, fetch);
+        Map<String, String> properties = new LinkedHashMap<>();
+        properties.put("Database Connection Pooling Service", compiled.csIds.get("dbcp"));
+        properties.put("Table Name", configText(cfg, "table"));
+        properties.put("Maximum-value Columns", fetch.get("Maximum-value Columns"));
+        properties.put("Database Type", nifiDatabaseType(configText(cfg, "dbType")));
+        properties.put("Record Writer", sharedCs.get("jsonWriter"));
+        properties.put("Initial Load Strategy", "Start at Current Maximum Values");
+        properties.put("Max Rows Per FlowFile", firstNonBlankStatic(configText(cfg, "batchSize"), "10000"));
+        properties.put("Fetch Size", firstNonBlankStatic(configText(cfg, "defaultFetchSize"), "1000"));
+        properties.put("Set Auto Commit", "false");
+        properties.put("Use Avro Logical Types", "true");
+        if (fetch.containsKey("Additional WHERE Clause")) properties.put("Additional WHERE Clause", fetch.get("Additional WHERE Clause"));
+        NifiEntity processor = nifi.createProcessor(pgId, "org.apache.nifi.processors.standard.QueryDatabaseTableRecord",
+                node.label() + "/fetch", nodeOriginX(layout), nodeOriginY(layout), properties,
+                firstNonBlankStatic(configText(cfg, "schedulingPeriod"), "60 sec"),
+                firstNonBlankStatic(configText(cfg, "schedulingStrategy"), "TIMER_DRIVEN"));
+        nifi.executeOnPrimaryNode(processor.id());
+        compiled.processorIds.put("fetch", processor.id());
+        compiled.outlets.put("default", new Outlet(processor.id(), "success"));
     }
 
     /**
@@ -3501,12 +3656,13 @@ public class DslCompiler {
     private void applyIncrementalSourceOptions(ComponentManifest manifest, String localProcessorId,
                                                Map<String, Object> cfg, Map<String, String> resolved) {
         if (!"source".equals(manifest.category()) || !"fetch".equals(localProcessorId)) return;
-        if (!resolved.containsKey("Maximum-value Columns")) return;
+        if (manifest.compile() == null || manifest.compile().processors() == null
+                || manifest.compile().processors().stream().noneMatch(p -> localProcessorId.equals(p.localId()) && p.type().endsWith(".GenerateTableFetch"))) return;
 
-        String defaultSyncMode = stringConfig(cfg, "incrementalColumn").isBlank() ? "FULL" : "INCREMENTAL";
-        String syncMode = String.valueOf(cfg.getOrDefault("syncMode", defaultSyncMode)).trim().toUpperCase(Locale.ROOT);
-        if (syncMode.isBlank() || "FULL".equals(syncMode)) {
+        String syncMode = SyncPolicy.mode(cfg);
+        if ("FULL".equals(syncMode) || "PERIODIC_FULL".equals(syncMode)) {
             resolved.remove("Maximum-value Columns");
+            resolved.keySet().removeIf(key -> key.startsWith("initial.maxvalue."));
         } else {
             String primary = stringConfig(cfg, "incrementalColumn");
             String tie = stringConfig(cfg, "tieBreakerColumn");
@@ -3520,6 +3676,16 @@ public class DslCompiler {
                 columns = columns + "," + tie.trim();
             }
             resolved.put("Maximum-value Columns", columns);
+            String initialStrategy = "FULL_THEN_INCR".equals(syncMode) ? "START_AT_BEGINNING"
+                    : firstNonBlankStatic(stringConfig(cfg, "initialStrategy"), "START_AT_BEGINNING");
+            if ("START_AT_VALUE".equals(initialStrategy)) {
+                String value = stringConfig(cfg, "initialValue");
+                if (value.isBlank()) throw new IllegalStateException("从指定值开始时必须填写起始值");
+                if (primary.contains(",")) throw new IllegalStateException("指定起始值只支持单个主增量字段");
+                resolved.put("initial.maxvalue." + primary.trim(), value);
+            } else if (!"START_AT_BEGINNING".equals(initialStrategy) && !"START_AT_CURRENT_MAX".equals(initialStrategy)) {
+                throw new IllegalStateException("不支持的首次启动策略：" + initialStrategy);
+            }
         }
 
         String batchSize = stringConfig(cfg, "batchSize");
@@ -3527,9 +3693,26 @@ public class DslCompiler {
             resolved.put("Partition Size", String.valueOf(Math.max(1, (int) Math.round(Double.parseDouble(batchSize)))));
         }
 
+        if ("FULL".equals(syncMode) || "PERIODIC_FULL".equals(syncMode)) {
+            String order = firstNonBlankStatic(configText(cfg, "fullOrderColumn"), configText(cfg, "incrementalColumn"));
+            if (order.isBlank() && cfg.get("sourceColumns") instanceof List<?> columns) {
+                order = columns.stream().filter(Map.class::isInstance).map(Map.class::cast)
+                        .filter(column -> Boolean.parseBoolean(String.valueOf(column.get("primaryKey"))))
+                        .map(column -> String.valueOf(column.get("columnName"))).collect(java.util.stream.Collectors.joining(","));
+            }
+            if (!order.isBlank()) {
+                validateColumnList(order, "全量分页排序字段");
+                resolved.put("Custom ORDER BY Column", order);
+            } else {
+                // Arbitrary OFFSET pages can omit/duplicate rows. Without a stable sort,
+                // stream a single SQL result rather than pretending unordered paging is safe.
+                resolved.put("Partition Size", "0");
+            }
+        }
+
         String where = stringConfig(cfg, "customWherePredicate");
         if (!where.isBlank()) {
-            resolved.put("Where Clause", validateWherePredicate(where));
+            resolved.put("Additional WHERE Clause", validateWherePredicate(where));
         }
     }
 

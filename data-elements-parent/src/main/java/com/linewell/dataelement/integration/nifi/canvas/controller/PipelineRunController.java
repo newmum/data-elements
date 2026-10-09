@@ -1,6 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.controller;
 
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
+import com.linewell.dataelement.integration.nifi.canvas.compile.SyncPolicy;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
 import com.linewell.dataelement.integration.nifi.canvas.errors.FlowError;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineRuntimeStatusResolver;
@@ -141,9 +142,18 @@ public class PipelineRunController {
     @Operation(summary = "开始(start)")
     public ResponseEntity<?> start(@ApiParam(value = "pipeline ID", required = true)
                                    @PathVariable String id,
-                                   @RequestParam(value = "force", required = false, defaultValue = "false") boolean force) {
+                                   @RequestParam(value = "force", required = false, defaultValue = "false") boolean force,
+                                   @RequestParam(value = "confirmCleanup", required = false, defaultValue = "false") boolean confirmCleanup) {
         Pipeline p = bindAccessTaskMappings(repo.findById(id).orElse(null));
         if (p == null) return ResponseEntity.notFound().build();
+        try {
+            if (SyncPolicy.needsCleanupConfirmation(p) && !confirmCleanup) {
+                return ResponseEntity.status(409).body(Map.of("error", "cleanup-confirmation-required",
+                        "message", "请在启动弹框中确认目标表及清空范围，再启动流程。"));
+            }
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
 
         String currentHash = deploymentHash(p);
         boolean hasDeployed = p.nifiProcessGroupId() != null && p.lastDeployedHash() != null;
@@ -163,7 +173,7 @@ public class PipelineRunController {
                 return deploymentRequired(p, currentHash,
                         "流程配置了启动前清空目标数据。请先明确执行“保存并部署”，再启动流程。");
             }
-            if (isNifiAlreadyRunning(p)) {
+            if (oneShotSourceIds(p, p.nodeMapping()).isEmpty() && isNifiAlreadyRunning(p)) {
                 return reconcileAlreadyRunning(p);
             }
             return fastStart(p);
@@ -183,7 +193,11 @@ public class PipelineRunController {
 
     /** Java-call convenience overload retained for service tests and internal callers. */
     public ResponseEntity<?> start(String id) {
-        return start(id, false);
+        return start(id, false, false);
+    }
+
+    public ResponseEntity<?> start(String id, boolean force) {
+        return start(id, force, false);
     }
 
     @PostMapping("/deploy")
@@ -401,9 +415,8 @@ public class PipelineRunController {
     private ResponseEntity<?> fastStart(Pipeline p) {
         repo.updateStatus(p.id(), PipelineStatus.DEPLOYING);
         try {
-            targetCleanup.clear(p);
-            nifi.setProcessGroupState(p.nifiProcessGroupId(), "RUNNING");
-            nifi.resumeStoppedProcessors(p.nifiProcessGroupId());
+            if (TargetTableCleanupService.requested(p)) targetCleanup.clear(p);
+            startNativeFlow(p, p.nifiProcessGroupId(), p.nodeMapping());
             Pipeline updated = repo.update(p.id(), cur -> new Pipeline(cur.id(), cur.name(), cur.description(),
                     cur.createdAt(), cur.updatedAt(), cur.dsl(),
                     cur.nifiProcessGroupId(), PipelineStatus.RUNNING,
@@ -421,6 +434,10 @@ public class PipelineRunController {
             errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT, "快速启动失败", e.getMessage()));
             return errorResponse(e);
         } catch (IllegalStateException e) {
+            if (!oneShotSourceIds(p, p.nodeMapping()).isEmpty() && !TargetTableCleanupService.requested(p)) {
+                repo.updateStatus(p.id(), p.status());
+                return ResponseEntity.status(409).body(Map.of("error", "full-source-not-ready", "message", e.getMessage()));
+            }
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
             taskLifecycle.statusOnly(p.id(), 2);
             errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.VALIDATION, "Target cleanup failed", e.getMessage()));
@@ -442,6 +459,24 @@ public class PipelineRunController {
         } catch (Exception error) {
             log.debug("Unable to preflight NiFi runtime state for pipeline {}: {}", pipeline.id(), error.getMessage());
             return false;
+        }
+    }
+
+    private java.util.Set<String> oneShotSourceIds(Pipeline p, NifiNodeMapping mapping) {
+        if (mapping == null || mapping.primaryProcessorIds() == null || p.dsl() == null) return java.util.Set.of();
+        return p.dsl().nodes().stream().filter(node -> "source".equals(node.category())
+                && compiler.supportsSyncSettings(node.manifestKey()) && "FULL".equals(SyncPolicy.mode(node.config())))
+                .map(node -> mapping.primaryProcessorIds().get(node.id())).filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    private void startNativeFlow(Pipeline p, String groupId, NifiNodeMapping mapping) {
+        java.util.Set<String> oneShot = oneShotSourceIds(p, mapping);
+        // Only database sources whose compiled head is GenerateTableFetch have four-mode semantics.
+        if (!oneShot.isEmpty()) nifi.startWithOneShotSources(groupId, oneShot);
+        else {
+            nifi.setProcessGroupState(groupId, "RUNNING");
+            nifi.resumeStoppedProcessors(groupId);
         }
     }
 
@@ -555,13 +590,12 @@ public class PipelineRunController {
             // Note: CS were enabled + waited inside compiler.compile() so that
             // processors are created against already-ENABLED services. We only
             // start the PG here.
+            NifiNodeMapping mapping = buildMapping(p, res);
             if (start) {
-                targetCleanup.clear(p);
-                nifi.setProcessGroupState(res.processGroupId(), "RUNNING");
-                nifi.resumeStoppedProcessors(res.processGroupId());
+                if (TargetTableCleanupService.requested(p)) targetCleanup.clear(p);
+                startNativeFlow(p, res.processGroupId(), mapping);
             }
 
-            NifiNodeMapping mapping = buildMapping(p, res);
             long now = System.currentTimeMillis();
             Pipeline updated = repo.update(p.id(), cur -> new Pipeline(cur.id(), cur.name(), cur.description(),
                     cur.createdAt(), cur.updatedAt(), cur.dsl(),

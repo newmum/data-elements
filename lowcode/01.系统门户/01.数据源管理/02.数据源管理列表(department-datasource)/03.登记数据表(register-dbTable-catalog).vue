@@ -2944,15 +2944,22 @@ function suggestField(row) {
   if (/(^|_)(lxdh|phone|mobile|telephone|tel|contact_phone|sjhm|dhhm)($|_)/.test(name) || /联系电话|联系方式|手机号码|电话号码/.test(comment)) {
     return fieldSuggestion("LXDH", "联系方式号码", "识别为联系方式号码，建议统一为字符型 11 位");
   }
-  if (
-    /(time|date|datetime|rq|sj|create_time|update_time|created_at|updated_at)/.test(name) ||
-    /日期|时间/.test(comment) ||
-    /date|time|timestamp/.test(type)
-  ) {
-    const dateOnly =
-      (/\bdate\b/.test(type) && !/(datetime|timestamp|time)/.test(type)) ||
-      (((/(^|_)(date|rq)($|_)/.test(name) || /日期/.test(comment)) && !/时间/.test(comment)) &&
-        !/(datetime|timestamp|time)/.test(type));
+  // 时间类型以物理类型、明确中文语义或完整英文单词识别。
+  // sj/rq 等缩写含义不唯一，不能仅因 fxasjdd 等字段名包含它们就套用时间格式。
+  const temporalType = type.trim().match(/^(date|datetime2?|smalldatetime|timestamptz|timestamp|timetz|time)(?=\s|\(|$)/);
+  const temporalName = String(row.columnName || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase();
+  const nameHasDate = /(^|_)date($|_)/.test(temporalName);
+  const nameHasTime = /(^|_)(time|datetime|timestamp)($|_)/.test(temporalName) ||
+    /(^|_)(created|updated|deleted)_at$/.test(temporalName);
+  const commentHasDate = /日期/.test(comment);
+  const commentHasTime = /时间/.test(comment);
+  if (temporalType || nameHasDate || nameHasTime || commentHasDate || commentHasTime) {
+    // 实际 DATE 列保留日期精度，实际 DATETIME/TIMESTAMP 列保留时间精度。
+    const dateOnly = temporalType
+      ? temporalType[1] === "date"
+      : (nameHasDate || commentHasDate) && !nameHasTime && !commentHasTime;
     return dateOnly
       ? fieldSuggestion("DATE", comment || "日期", "识别为日期，建议统一为 YYYY-MM-DD")
       : fieldSuggestion("DATETIME", comment || "时间", "识别为时间，建议统一为 YYYY-MM-DD HH:mm:ss");

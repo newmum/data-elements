@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
 import { message as antdMessage } from 'antd';
-import { unwrapResponse } from './response';
+import { unwrapSuccessfulEnvelope } from './response';
 import { getBridgeToken, getSessionRevision, waitForToken } from './bridgeSession';
 import { isPlatformAuthenticationFailure } from '../../api/platformApi';
 import { redirectToPlatformLogin } from '../../services/platformSession';
@@ -46,7 +46,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(new Error('数据中台登录已失效，正在前往登录页'));
     }
     // Automatically unwrap { code, data, message } wrapper so callers get the inner data directly
-    response.data = unwrapResponse(response.data);
+    response.data = unwrapSuccessfulEnvelope(response.data);
     return response;
   },
   (error) => {

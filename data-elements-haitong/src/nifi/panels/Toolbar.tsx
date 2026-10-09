@@ -8,6 +8,8 @@ import {
   Dropdown,
   List,
   Empty,
+  Alert,
+  Checkbox,
   type MenuProps,
 } from 'antd';
 import {
@@ -53,18 +55,16 @@ import { appConfig, isChengtianIntegration } from '@/config/appConfig';
 import { getNifiOverlayContainer } from './overlayContainer';
 import { getSessionRevision, useSessionRevision } from '@/api/bridgeSession';
 import CanvasThemeToggle from './CanvasThemeToggle';
+import SyncSettingsEditor from './SyncSettingsEditor';
+import { useComponentManifests } from '@/api/manifests';
+import { syncSettings, syncSettingsPatch, syncSettingsError, needsCleanupConfirmation, syncModeLabel, sameSavedContent, type SyncSettings } from '../utils/syncSettings';
+import { normalizeCanvasDsl } from '@/types/dsl';
 
 interface StatusViz {
   color: string;
   label: string;
   clickable: boolean;
   spinning?: boolean;
-}
-
-interface StartOptions {
-  syncMode: string;
-  fullSyncStrategy?: string;
-  deleteTargetData: boolean;
 }
 
 function vizFor(status: PipelineStatus | undefined, errorCount: number): StatusViz {
@@ -195,6 +195,23 @@ export default function Toolbar() {
   const list = usePipelineList(openOpener);
   const pendingOpen = usePipeline(pendingOpenId);
   const currentPipelineQuery = usePipeline(currentPipelineId);
+  const [startDialogOpen, setStartDialogOpen] = useState(false);
+  const [startDraft, setStartDraft] = useState<SyncSettings>(() => syncSettings());
+  const [cleanupAcknowledged, setCleanupAcknowledged] = useState(false);
+  const canvasNodes = useCanvasStore(s => s.nodes);
+  const sourceNodes = Object.values(canvasNodes).filter(node => node.category === 'source');
+  const sourceNode = sourceNodes[0];
+  const { data: componentManifests, isPending: manifestsPending } = useComponentManifests();
+  const supportsSyncSettings = Boolean(componentManifests?.find(item => item.key === sourceNode?.manifestKey)
+    ?.compile?.processors?.some(processor => processor.type.endsWith('.GenerateTableFetch')));
+  const currentMode = sourceNode ? syncSettings(sourceNode.config).syncMode : undefined;
+  const targetNames = Object.values(canvasNodes).filter(node => node.category === 'sink')
+    .map(node => `${node.label}（${String(node.config.dbType ?? node.manifestKey.replace('sink.', ''))}）：${String(node.config.table ?? node.config.tableName ?? '未配置表名')}`);
+  const otherSourcesNeedCleanup = sourceNodes.slice(1).some(node => needsCleanupConfirmation(syncSettings(node.config)));
+  const startNeedsSave = !currentPipelineId || !currentPipelineQuery.data?.dsl
+    || !sameSavedContent(toDsl(), normalizeCanvasDsl(currentPipelineQuery.data.dsl))
+    || (supportsSyncSettings && sourceNode && Object.entries(syncSettingsPatch(sourceNode.config, startDraft))
+      .some(([key, value]) => sourceNode.config[key] !== value));
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const completionWatchRef = useRef<{ pipelineId: string; baseline: number; armedAt: number; syncMode: string } | null>(null);
@@ -272,32 +289,22 @@ export default function Toolbar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPipelineId, currentPipelineName, renderSessionRevision]);
 
-  const startOptionsForDsl = (dsl = toDsl()): StartOptions => {
+  const startOptionsForDsl = (dsl = toDsl()): SyncSettings => {
     const source = dsl.nodes.find((node) => node.category === 'source');
     const config = source?.config ?? {};
-    return {
-      syncMode: String(config.syncMode ?? 'FULL'),
-      fullSyncStrategy: String(config.fullSyncStrategy ?? 'UPSERT'),
-      deleteTargetData: Boolean(config.deleteTargetData),
-    };
+    return syncSettings(config);
   };
 
-  const syncModeText = (mode: string) => {
-    if (mode === 'INCREMENTAL') return '增量同步';
-    if (mode === 'FULL_THEN_INCR') return '首次全量后增量';
-    if (mode === 'PERIODIC_FULL') return '定时全量同步';
-    return '全量同步';
-  };
-
-  const startDeployedPipeline = async (pipelineId: string, options: StartOptions) => {
-    const forceRebuild = options.deleteTargetData;
+  const startDeployedPipeline = async (pipelineId: string, options: SyncSettings) => {
+    const forceRebuild = currentPipelineQuery.data?.dsl.nodes.some(node => node.category === 'source'
+      && syncSettings(node.config).deleteTargetData) ?? options.deleteTargetData;
     message.loading({
       content: forceRebuild ? '正在按清空目标数据的设置重新部署并启动...' : '正在启动 NiFi 任务...',
       key: 'start-flow',
     });
-    const res: any = await start.mutateAsync({ id: pipelineId, force: forceRebuild });
+    const res: any = await start.mutateAsync({ id: pipelineId, force: forceRebuild, confirmCleanup: cleanupAcknowledged });
     setOptimisticStatus('RUNNING');
-    completionWatchRef.current = options.syncMode === 'FULL'
+    completionWatchRef.current = supportsSyncSettings && sourceNodes.every(node => syncSettings(node.config).syncMode === 'FULL')
       ? {
           pipelineId,
           baseline: statusWorkScore(statusQuery.data),
@@ -310,13 +317,36 @@ export default function Toolbar() {
     void res;
     setSyncCompletion(null);
     message.destroy('start-flow');
-    message.success(`已启动：${syncModeText(options.syncMode)}`);
+    message.success(`已启动：${syncModeLabel(options.syncMode)}`);
   };
 
   const handleStart = async () => {
     if (!isCurrentSession()) return;
-    if (!currentPipelineId) {
-      message.warning('当前流程尚未部署，请先点击“保存并部署”。');
+    if (manifestsPending) { message.info('正在加载来源配置，请稍后启动'); return; }
+    setStartDraft(startOptionsForDsl());
+    setCleanupAcknowledged(false);
+    setStartDialogOpen(true);
+  };
+
+  const confirmStart = async () => {
+    if (!isCurrentSession()) return;
+    if (!sourceNode) { message.warning('请先配置来源节点'); return; }
+    const error = supportsSyncSettings ? syncSettingsError(sourceNode.config, startDraft) : undefined;
+    if (error) { message.warning(error); return; }
+    if (sourceNodes.length > 1 && startDraft.syncMode === 'PERIODIC_FULL') {
+      message.warning('定时全量仅支持单个数据库来源，请将多来源拆分为独立任务'); return;
+    }
+    if ((supportsSyncSettings && needsCleanupConfirmation(startDraft) || otherSourcesNeedCleanup) && !cleanupAcknowledged) {
+      message.warning('请确认目标表及清空范围'); return;
+    }
+    const canvasDsl = toDsl();
+    const patch = supportsSyncSettings ? syncSettingsPatch(sourceNode.config, startDraft) : {};
+    const changed = Object.entries(patch).some(([key, value]) => sourceNode.config[key] !== value);
+    if (changed) useCanvasStore.getState().updateNodeConfig(sourceNode.id, patch);
+    const savedDsl = currentPipelineQuery.data?.dsl;
+    if (changed || !currentPipelineId || !savedDsl || !sameSavedContent(canvasDsl, normalizeCanvasDsl(savedDsl))) {
+      setStartDialogOpen(false);
+      message.info('同步设置已应用到画布。请先点击“保存并部署”，再点击“启动”确认运行。');
       return;
     }
     try {
@@ -340,9 +370,10 @@ export default function Toolbar() {
       // Start exactly the deployed version. Unsaved canvas edits remain local
       // and do not turn a single click into a save/deploy confirmation chain.
       await startDeployedPipeline(currentPipelineId, startOptionsForDsl(currentPipelineQuery.data?.dsl));
+      setStartDialogOpen(false);
     } catch (e: any) {
       message.destroy('start-flow');
-      message.error(`启动失败: ${e?.response?.data?.error ?? e?.message ?? e}`);
+      message.error(`启动失败: ${e?.response?.data?.message ?? e?.response?.data?.error ?? e?.message ?? e}`);
       openErrorPanel();
     }
   };
@@ -661,7 +692,7 @@ export default function Toolbar() {
             </span>
           </Dropdown>
         )}
-        <Tooltip title={viz.clickable ? '点击查看错误详情' : viz.label}>
+        <Tooltip title={`${viz.clickable ? '点击查看错误详情' : viz.label}${supportsSyncSettings && currentMode ? `；同步方式：${syncModeLabel(currentMode)}` : ''}`}>
           <span
             onClick={() => { if (viz.clickable) openErrorPanel(); }}
             style={{
@@ -673,13 +704,19 @@ export default function Toolbar() {
               cursor: viz.clickable ? 'pointer' : 'default',
               marginTop: 2,
               userSelect: 'none',
+              minWidth: 0,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
             }}
           >
             {viz.spinning
               ? <LoadingOutlined style={{ fontSize: 10, color: viz.color }} spin />
-              : <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: viz.color }} />}
-            <span>{viz.label}</span>
-            {viz.clickable && <span style={{ fontSize: 11, opacity: 0.7 }}>· 查看详情</span>}
+              : <span style={{ display: 'inline-block', flexShrink: 0, width: 8, height: 8, borderRadius: '50%', background: viz.color }} />}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {viz.label}
+              {viz.clickable && <span style={{ fontSize: 11, opacity: 0.7 }}> · 查看详情</span>}
+              {supportsSyncSettings && currentMode && <span style={{ color: '#64748b' }}> · {syncModeLabel(currentMode)}</span>}
+            </span>
           </span>
         </Tooltip>
       </div>
@@ -737,6 +774,20 @@ export default function Toolbar() {
           <Button icon={<CloseOutlined />} onClick={handleCloseTab} />
         </Tooltip>
       </div>
+
+      <Modal title="选择本次启动方式" open={startDialogOpen} width={600} style={{ top: 24 }}
+        onCancel={() => setStartDialogOpen(false)} onOk={() => void confirmStart()}
+        okText={startNeedsSave ? '应用到画布' : '确认启动'} cancelText="取消" confirmLoading={start.isPending}
+        getContainer={getNifiOverlayContainer} styles={{ body: { maxHeight: 'min(65vh, calc(100vh - 180px))', overflowY: 'auto' } }}>
+        <Alert type="info" showIcon style={{ marginBottom: 16 }} message="设置变化或存在未保存修改时，先应用到画布，再保存并部署；本窗口不会自动保存或部署。" />
+        {sourceNodes.length > 1 && <Alert type="info" style={{ marginBottom: 12 }} message={`本窗口设置来源“${sourceNode?.label}”；其余来源沿用各自节点配置。定时全量须拆分为单来源任务。`} />}
+        {supportsSyncSettings ? <SyncSettingsEditor value={startDraft} onChange={setStartDraft}
+          targetNames={targetNames} acknowledged={cleanupAcknowledged} onAcknowledge={setCleanupAcknowledged} />
+          : <Alert type="info" message="当前来源使用其原生接入配置。确认后启动已部署版本。" />}
+        {otherSourcesNeedCleanup && <Alert type="warning" showIcon style={{ marginTop: 12 }} message="其他来源的已保存配置也要求清空目标表"
+          description={<><div>目标表：{targetNames.join('、')}</div><Checkbox checked={cleanupAcknowledged}
+            onChange={event => setCleanupAcknowledged(event.target.checked)}>我确认上述目标表及全部来源的清空范围</Checkbox></>} />}
+      </Modal>
 
       <Modal
         getContainer={getNifiOverlayContainer}

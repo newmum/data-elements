@@ -1,6 +1,7 @@
 import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from "./registeredDatasourceType";
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip, Modal, Segmented } from 'antd';
+import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import {
   DatabaseOutlined,
   FunctionOutlined,
@@ -396,9 +397,10 @@ function isVisible(field: FieldSchema, config: Record<string, unknown>): boolean
     return (config.tableMode ?? 'SINGLE') === field.visibleWhen.equals;
   }
   if (field.group === 'incremental' && field.visibleWhen.key === 'syncMode') {
-    const syncMode = config.syncMode ?? 'FULL';
+    const syncMode = syncSettings(config).syncMode;
     return syncMode === 'INCREMENTAL' || syncMode === 'FULL_THEN_INCR';
   }
+  if (field.key === 'deleteTargetData') return ['FULL', 'FULL_THEN_INCR'].includes(syncSettings(config).syncMode);
   return config[field.visibleWhen.key] === field.visibleWhen.equals;
 }
 
@@ -412,6 +414,7 @@ const GROUP_LABELS: Record<string, string> = {
   schedule: '调度策略',
   advanced: '高级选项',
   default: '基础配置',
+  sync: '同步方式',
 };
 
 const FIELD_MAPPING_DEFAULT = JSON.stringify({
@@ -468,6 +471,7 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       label: '主增量字段',
       required: false,
       group: 'incremental',
+      visibleWhen: { key: 'syncMode', equals: 'INCREMENTAL' },
       placeholder: field.placeholder ?? '如 update_time / id / version',
       help: '登记表已配置“抽取时间”时会自动回填；未配置时可手工选择。时间戳字段建议配合次级字段避免同秒多条漏数。',
     },
@@ -476,6 +480,7 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       label: '次级字段',
       type: 'text',
       group: 'incremental',
+      visibleWhen: { key: 'syncMode', equals: 'INCREMENTAL' },
       placeholder: '可选，通常填写主键 id',
       help: '主增量字段精度不足时用于排序裁断。',
     },
@@ -485,6 +490,7 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       type: 'select',
       default: 'START_AT_BEGINNING',
       group: 'incremental',
+      visibleWhen: { key: 'syncMode', equals: 'INCREMENTAL' },
       options: [
         { label: '从最早数据开始', value: 'START_AT_BEGINNING' },
         { label: '从当前最大值开始', value: 'START_AT_CURRENT_MAX' },
@@ -564,8 +570,9 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
 }
 
 function isIncrementalVisible(field: FieldSchema, config: Record<string, unknown>): boolean {
-  if (!field.visibleWhen) return true;
-  return config[field.visibleWhen.key] === field.visibleWhen.equals;
+  if (field.key === 'initialValue' && syncSettings(config).syncMode === 'FULL_THEN_INCR') return false;
+  if (field.group === 'incremental' && !['INCREMENTAL', 'FULL_THEN_INCR'].includes(syncSettings(config).syncMode)) return false;
+  return isVisible(field, config);
 }
 
 export default function ConfigDrawer() {
@@ -692,7 +699,15 @@ export default function ConfigDrawer() {
   };
 
   const enhancedFields = useMemo(() => {
-    return (manifest?.fields ?? []).flatMap(expandIncrementalField);
+    const fields = (manifest?.fields ?? []).flatMap(expandIncrementalField);
+    if (manifest?.category !== 'source' || !manifest.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch'))) return fields;
+    return [
+      { key: 'syncMode', label: '同步方式', type: 'select', required: true, group: 'sync', options: syncModes.map(item => ({ value: item.value, label: item.label })), help: '修改后请保存并部署；启动使用已部署版本的同步方式。' },
+      { key: 'fullSyncStrategy', label: '全量写入策略', type: 'select', default: 'UPSERT', group: 'sync', visibleWhen: { key: 'syncMode', equals: 'PERIODIC_FULL' }, options: [{ value: 'UPSERT', label: '有则更新、无则新增（需要业务主键/唯一键）' }, { value: 'TRUNCATE_RELOAD', label: '每轮清空重载（MySQL / 达梦）' }] },
+      { key: 'deleteTargetData', label: '启动前删除目标表存量数据', type: 'switch', default: false, group: 'sync', visibleWhen: { key: 'syncMode', equals: 'FULL' }, help: '仅在明确启动时执行，保存或部署不会清理数据；启动前还须确认目标表。' },
+      { key: 'fullOrderColumn', label: '全量分页排序字段', type: 'text', group: 'sync', help: '建议填写主键或稳定唯一字段；未指定且没有主键时，使用单条流式查询，避免无序分页漏数。', placeholder: '如 id，复合排序可用逗号分隔' },
+      ...fields,
+    ] as FieldSchema[];
   }, [manifest]);
 
   // The fourth registration step owns the source table's extraction timestamp.
@@ -730,6 +745,9 @@ export default function ConfigDrawer() {
   useEffect(() => {
     if (!node || !open || enhancedFields.length === 0) return;
     const patch: Record<string, unknown> = {};
+    if (node.category === 'source' && enhancedFields.some(field => field.key === 'syncMode') && !node.config.syncMode) {
+      patch.syncMode = syncSettings(node.config).syncMode;
+    }
     enhancedFields.forEach((field) => {
       if (field.default === undefined || node.config[field.key] !== undefined) return;
       // schedulingPeriod 在 Timer/Cron 下共用同一 config key，展开成两个字段。
@@ -1245,7 +1263,9 @@ export default function ConfigDrawer() {
     // Existing saved Hive targets predate hiveWriteMode. Render the manifest
     // default for them so the new default is visible immediately; deployment
     // also applies the same default when the legacy DSL has no explicit value.
-    const value = manifest.key === 'sink.jdbc' && field.key === 'writerType'
+    const value = field.key === 'initialStrategy' && syncSettings(node.config).syncMode === 'FULL_THEN_INCR'
+      ? 'START_AT_BEGINNING'
+      : manifest.key === 'sink.jdbc' && field.key === 'writerType'
       ? effectiveJdbcWriterType(node.config.dbType, node.config.writerType)
       : manifest.key === 'sink.jdbc' && field.key === 'statementType'
         && !String(node.config.statementType ?? '').trim()
@@ -1256,7 +1276,7 @@ export default function ConfigDrawer() {
             ? field.default
             : undefined
         );
-    const disabled = isFieldReadOnly(field);
+    const disabled = isFieldReadOnly(field) || field.key === 'initialStrategy' && syncSettings(node.config).syncMode === 'FULL_THEN_INCR';
     const isDbAttachField = (manifest.category === 'source' && field.key === 'host')
       || (manifest.category === 'sink' && field.key === 'dbType');
     if (isDbAttachField) {
@@ -1448,7 +1468,9 @@ export default function ConfigDrawer() {
       <FieldEditor
         field={field}
         value={value}
-        onChange={(v) => updateConfig(node.id, { [field.key]: v })}
+        onChange={(v) => updateConfig(node.id, field.key === 'syncMode'
+          ? syncSettingsPatch(node.config, { ...syncSettings(node.config), syncMode: v as ReturnType<typeof syncSettings>['syncMode'], deleteTargetData: false })
+          : { [field.key]: v })}
         disabled={disabled}
       />
     );
@@ -1596,6 +1618,10 @@ export default function ConfigDrawer() {
 
   const handleSave = () => {
     if (!node || !manifest) return;
+    if (manifest.category === 'source' && enhancedFields.some(field => field.key === 'syncMode')) {
+      const error = syncSettingsError(node.config, syncSettings(node.config));
+      if (error) { message.error(error); return false; }
+    }
     const missing = validateRequired();
     if (missing.length > 0) {
       message.error('请填写必填项：' + missing.join('、'), 5);

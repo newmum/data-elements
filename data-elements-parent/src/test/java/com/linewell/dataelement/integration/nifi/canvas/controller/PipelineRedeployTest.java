@@ -134,7 +134,7 @@ class PipelineRedeployTest {
         when(groups.isCurrent(any(), eq("old-group"))).thenReturn(true);
         compileNewGroup();
 
-        assertThat(controller.start("p1", true).getStatusCode().value()).isEqualTo(200);
+        assertThat(controller.start("p1", true, true).getStatusCode().value()).isEqualTo(200);
 
         var order = inOrder(nifi, compiler, cleanup, tasks);
         order.verify(nifi).cleanupProcessGroup("old-group");
@@ -153,7 +153,7 @@ class PipelineRedeployTest {
         compileNewGroup();
         doThrow(new IllegalStateException("Hive 清理失败")).when(cleanup).clear(any());
 
-        assertThat(controller.start("p1", true).getStatusCode().value()).isEqualTo(400);
+        assertThat(controller.start("p1", true, true).getStatusCode().value()).isEqualTo(400);
 
         verify(nifi, never()).setProcessGroupState(anyString(), eq("RUNNING"));
         verify(tasks, never()).started(anyString());
@@ -167,7 +167,7 @@ class PipelineRedeployTest {
     void failureToStopOldFlowPreventsTargetCleanup() {
         setFullLoad("FULL", true);
         doThrow(new IllegalStateException("still running")).when(nifi).cleanupProcessGroup("old-group");
-        assertThat(controller.start("p1", true).getStatusCode().value()).isEqualTo(500);
+        assertThat(controller.start("p1", true, true).getStatusCode().value()).isEqualTo(500);
         verifyNoInteractions(cleanup, compiler);
         verify(nifi, never()).setProcessGroupState(anyString(), eq("RUNNING"));
     }
@@ -182,12 +182,52 @@ class PipelineRedeployTest {
     }
 
     @Test
+    void neitherForceNorDeploymentAllowsCleanupWithoutExplicitAcknowledgement() {
+        setFullLoad("FULL", true);
+        assertThat(controller.start("p1", true).getStatusCode().value()).isEqualTo(409);
+        assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(409);
+        verifyNoInteractions(nifi, compiler, cleanup, tasks);
+    }
+
+    @Test
+    void periodicTruncateNeedsAcknowledgementButDoesNotUseOneTimeCleanup() {
+        var source = new Pipeline.Node("source", "source.mysql", "来源", "source", 0, 0,
+                Map.of("syncMode", "PERIODIC_FULL", "fullSyncStrategy", "TRUNCATE_RELOAD"));
+        var dsl = new Pipeline.Dsl(1, List.of(source), List.of());
+        stored.set(new Pipeline("p1", "流程", null, 1L, 1L, dsl, "old-group",
+                PipelineStatus.STOPPED, deployedHash(dsl), 1L, null, null, null));
+        assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(409);
+        verifyNoInteractions(nifi, compiler, cleanup);
+        assertThat(controller.start("p1", false, true).getStatusCode().value()).isEqualTo(200);
+        verifyNoInteractions(cleanup, compiler);
+        verify(nifi).setProcessGroupState("old-group", "RUNNING");
+    }
+
+    @Test
     void uncheckedUnchangedFlowStillUsesFastStart() {
         setFullLoad("FULL", false);
         assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(200);
         verifyNoInteractions(compiler);
         verify(nifi, never()).cleanupProcessGroup(anyString());
         verify(nifi).setProcessGroupState("old-group", "RUNNING");
+    }
+
+    @Test
+    void fullDatabaseSourceUsesOneShotExecutionEvenWhenDownstreamIsRunning() {
+        setFullLoad("FULL", false);
+        when(compiler.supportsSyncSettings("source.jdbc")).thenReturn(true);
+        Pipeline p = stored.get();
+        stored.set(new Pipeline(p.id(), p.name(), p.description(), p.createdAt(), p.updatedAt(), p.dsl(),
+                p.nifiProcessGroupId(), p.status(), p.lastDeployedHash(), p.lastDeployedAt(), p.lastStoppedAt(),
+                new NifiNodeMapping(Map.of("source", "full-fetch"), Map.of("full-fetch", "source"), Map.of()), null));
+        assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(200);
+        verify(nifi).startWithOneShotSources("old-group", java.util.Set.of("full-fetch"));
+        verify(nifi, never()).setProcessGroupState(anyString(), eq("RUNNING"));
+        clearInvocations(nifi);
+        doThrow(new IllegalStateException("上一轮仍有排队数据")).when(nifi).startWithOneShotSources(anyString(), anySet());
+        assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(409);
+        assertThat(stored.get().status()).isEqualTo(PipelineStatus.RUNNING);
+        verify(nifi, never()).cleanupProcessGroup(anyString());
     }
 
     @Test

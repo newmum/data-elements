@@ -805,6 +805,7 @@ var dbId = targetDatasource == null ? '' : text(first(targetDatasource, ['tid'])
 var dbName = targetDatasource == null ? '' : text(first(targetDatasource, ['dbName', 'db_name']))
 var nodeId = targetDatasource == null ? '' : text(first(targetDatasource, ['nodeId', 'node_id']))
 var dbType = targetDatasource == null ? '' : text(first(targetDatasource, ['dbType', 'db_type']))
+if (['hive', 'mrshive'].contains(dbType.trim().toLowerCase())) { tableName = tableName.toLowerCase() }
 // 统一格式是目标 ODS 的类型约定，来源物理类型仍保留在 sourceDataType。
 // 只采用登记值，不通过字段名推断日期；字符型来源的默认值不能沿用到时间列。
 for (item in tableItems) {

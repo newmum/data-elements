@@ -76,11 +76,45 @@ class CanvasCreateTableBatchValidationMagicTest {
     }
 
     @Test
+    void hiveRejectsUppercaseEditedTableNamesWithoutChangingFieldsOrComments() throws Exception {
+        for (String name : List.of("ODS_person", "ods_Person")) {
+            Object response = run(Map.of("canvas", true, "validateOnly", true, "batchValidateOnly", true,
+                    "targets", List.of(Map.of("dbId", "target-db", "tableName", name,
+                            "ddl", "CREATE TABLE `" + name + "` (`Mixed_FIELD` STRING COMMENT 'Keep_UPPER_ODS')"))));
+            assertInstanceOf(ExitValue.class, response);
+            assertEquals(0, counter.writes);
+        }
+        Map<?, ?> lower = assertInstanceOf(Map.class, run(Map.of("canvas", true, "validateOnly", true, "batchValidateOnly", true,
+                "targets", List.of(Map.of("dbId", "target-db", "tableName", "ods_person",
+                        "ddl", "CREATE TABLE `ods_person` (`Mixed_FIELD` STRING COMMENT 'Keep_UPPER_ODS')")))));
+        String ddl = ((Map<?, ?>) ((List<?>) lower.get("results")).getFirst()).get("ddl").toString();
+        assertTrue(ddl.contains("`ods_person`"));
+        assertTrue(ddl.contains("Mixed_FIELD"));
+        assertTrue(ddl.contains("Keep_UPPER_ODS"));
+        assertEquals(0, counter.writes);
+    }
+
+    @Test
     void hiddenDatasourceIsRejectedBeforeDdlParsing() throws Exception {
         scope.deniedId = "target-db";
         assertInstanceOf(ExitValue.class, run(request(1)));
         assertEquals(1, counter.queries);
         assertEquals(0, counter.writes);
+    }
+
+    @Test
+    void singleHiveValidationEnforcesTheSameLowercaseRule() throws Exception {
+        for (String name : List.of("ODS_person", "ods_person")) {
+            Object response = run(Map.of("canvas", true, "validateOnly", true, "dbId", "target-db", "tableName", name,
+                    "ddl", "CREATE TABLE `" + name + "` (id STRING COMMENT 'Keep_UPPER')"));
+            if (name.startsWith("ODS_")) assertInstanceOf(ExitValue.class, response);
+            else {
+                Map<?, ?> lower = assertInstanceOf(Map.class, response);
+                assertEquals(true, lower.get("valid"));
+                assertTrue(lower.get("ddl").toString().contains("Keep_UPPER"));
+            }
+            assertEquals(0, counter.writes);
+        }
     }
 
     private Map<String, Object> request(int count) {
@@ -101,6 +135,7 @@ class CanvasCreateTableBatchValidationMagicTest {
         inputs.put("db", db);
         inputs.put("tenantRuntime", scope);
         inputs.put("dataScope", scope);
+        inputs.put("connectionProperties", scope);
         inputs.put("poolJsons", new JsonFixture());
         inputs.put("canvasTableDdl", new CanvasTableDdl());
         return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
@@ -109,6 +144,11 @@ class CanvasCreateTableBatchValidationMagicTest {
     public static class Scope {
         String deniedId;
         public String id() { return "police"; }
+        public Map<String, Object> resolve(String tenantId, String datasourceId) {
+            assertEquals("police", tenantId);
+            assertEquals("target-db", datasourceId);
+            return Map.of("dbType", "hive", "database", "warehouse", "metadataAccessMode", "server-managed-mrs");
+        }
         public List<Map<String, Object>> visibleDataSourcesFor(String resource, Collection<Map<String, Object>> rows) {
             assertEquals("MENU:2081000000000000002", resource);
             return rows.stream().filter(row -> !String.valueOf(row.get("tid")).equals(deniedId)).toList();

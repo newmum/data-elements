@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Drawer, Segmented, Empty, Button, App as AntdApp, Tag, Tooltip } from 'antd';
+import { Drawer, Segmented, Empty, Button, App as AntdApp, Tag, Tooltip, Alert } from 'antd';
 import { CopyOutlined, AimOutlined, ClearOutlined, ReloadOutlined, CloseOutlined } from '@ant-design/icons';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -174,8 +174,11 @@ export default function ErrorPanel() {
         style={{ marginBottom: 12 }}
       />
       <div style={{ flex: 1, overflowY: 'auto' }}>
+        {errorsQuery.isError && (
+          <Alert type="error" showIcon message="错误列表加载失败" description={errorsQuery.error.message} style={{ marginBottom: 12 }} />
+        )}
         {filtered.length === 0 ? (
-          <Empty description="暂无错误" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ marginTop: 32 }} />
+          <Empty description={errorsQuery.isError ? '请重试加载' : '暂无错误'} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ marginTop: 32 }} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {filtered.map((e) => (

@@ -15,7 +15,7 @@ const ast = babel.Babel.transform(script, {
 }).ast;
 const names = [
   'normalizeDbId', 'normalizeDbIds', 'syncDbTypeByDatasource', 'buildTargetTableName',
-  'sameStringList', 'targetDatasourceIds', 'targetTableNameInput', 'targetTablePlans',
+  'sameStringList', 'normalizeTargetTableName', 'targetDatasourceIds', 'targetTableNameInput', 'targetTablePlans',
   'syncTargetDatasourceSelection', 'syncTargetTableNameInput', 'normalizeFormPayload',
   'isCurrentInit', 'trackLoad', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
@@ -131,9 +131,14 @@ multi.actual.syncTargetTableNameInput(multi.form.tableName);
 for (const paths of [[['ODS', 'db-0'], ['ODS', 'db-1']], [['ODS', 'db-1']], [['ODS', 'db-1'], ['ODS', 'db-0']]]) {
   multi.form.dbId = paths;
   multi.actual.syncTargetDatasourceSelection(paths);
-  assert.equal(multi.form.tableName, 'ODS_USER_CONFIRMED', 'Changing targets must preserve custom input');
-  assert.ok(multi.actual.targetTablePlans.value.every(plan => plan.tableName === multi.form.tableName));
+  assert.equal(multi.form.tableName, paths.length === 1 ? 'ods_user_confirmed' : multi.actual.targetTableNameInput.value);
+  for (const plan of multi.actual.targetTablePlans.value) {
+    assert.equal(plan.tableName, multi.actual.normalizeTargetTableName(multi.form.tableName, multi.context.datasourceMap.value[plan.dbId].dbType));
+  }
 }
+// Mixed targets share the entered base name while each uses its own physical naming policy.
+multi.form.tableName = 'ODS_User_CONFIRMED';
+multi.actual.syncTargetTableNameInput(multi.form.tableName);
 await multi.actual.handleSave();
 assert.equal(multi.notices.filter(n => n.key === 'error').length, 0);
 const generated = multi.calls.find(c => c.route.endsWith('/getCreateTableDDL')).body.targets;
@@ -141,8 +146,9 @@ const validated = multi.calls.find(c => c.route.endsWith('/createTable')).body.t
 const saved = multi.calls.filter(c => c.route === '/ods/createTapleApply');
 assert.equal(saved.length, 2);
 for (let i = 0; i < saved.length; i++) {
-  assert.equal(generated[i].propList.tableName, 'ODS_USER_CONFIRMED');
-  assert.equal(validated[i].tableName, 'ODS_USER_CONFIRMED');
+  const expectedName = generated[i].propList.dbType === 'hive' ? 'ods_user_confirmed' : 'ODS_User_CONFIRMED';
+  assert.equal(generated[i].propList.tableName, expectedName);
+  assert.equal(validated[i].tableName, expectedName);
   assert.deepEqual(saved[i].body.propList, generated[i].propList, 'Saving must reuse the preview target configuration');
   assert.deepEqual(saved[i].body.tableItems, generated[i].tableItems, 'Persisted types must match this target DDL');
   const fields = generated[i].tableItems;
@@ -153,6 +159,18 @@ for (let i = 0; i < saved.length; i++) {
   assert.equal(fields.find(f => f.columnName === 'occurred_at').defaultValue, null);
 }
 assert.equal(multi.emitted.at(-1)[0], 'save');
+
+for (const type of ['hive', 'Hive', 'mrshive']) {
+  const hive = fixture();
+  hive.context.datasourceMap.value['db-0'].dbType = type;
+  await hive.actual.init();
+  assert.equal(hive.form.tableName, 'ods_t_sjycc_ckb');
+  hive.form.tableName = 'ODS_Manually_EDITED';
+  hive.actual.syncTargetTableNameInput(hive.form.tableName);
+  assert.equal(hive.form.tableName, 'ods_manually_edited');
+  const input = await hive.actual.currentDdlInput();
+  assert.equal(input.targets[0].propList.tableName, 'ods_manually_edited');
+}
 
 const renamed = fixture();
 await renamed.actual.init();
@@ -173,5 +191,5 @@ for (const size of [20, 100]) {
   requestCounts.push({ targets: size, ddlRequests: f.calls.length - before, rejected: size > 20 });
 }
 console.log(JSON.stringify({ defaultCases: defaults.length, existingNamePreserved: true,
-  multiTargetCustomNamePreserved: true, previewValidationAndSaveAgree: true,
+  hiveTargetNamesLowercase: true, mixedTargetNamesFollowDialect: true, previewValidationAndSaveAgree: true,
   mismatchedPreviewRejected: true, requestCounts }));
