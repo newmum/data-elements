@@ -19,6 +19,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.net.ftp.FTPClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.doReturn;
 
 class StructuredSourceProbeServiceTest {
 
@@ -277,5 +280,69 @@ class StructuredSourceProbeServiceTest {
         source.put("apiMethod", "GET");
         source.put("apiUrl", "https://example.test/data");
         return source;
+    }
+
+    @Test
+    void registeredFileSelectionReadsOnlyOneFileForTwentyAndHundredDirectoryEntries() throws Exception {
+        for (int size : List.of(20, 100)) {
+            List<StructuredSourceProbeService.RemoteFile> files = new java.util.ArrayList<>();
+            for (int i=0; i<size; i++) files.add(new StructuredSourceProbeService.RemoteFile(
+                    "/data/person-" + i + ".json", "person-" + i + ".json", 32));
+            AtomicInteger reads = new AtomicInteger();
+            StructuredProbeResult result = new StructuredProbeResult();
+            service.parseRemoteFiles(Map.of("_registeredTableName", "person_7"), files,
+                    file -> { reads.incrementAndGet(); return new ByteArrayInputStream("[{\"id\":7}]".getBytes(StandardCharsets.UTF_8)); }, result);
+            assertThat(reads.get()).isEqualTo(1);
+            assertThat(result.getTables()).extracting(StructuredTableData::getSourcePath).containsExactly("/data/person-7.json");
+        }
+    }
+
+    @Test
+    void ambiguousSanitizedNamesFailBeforeReadingAnyFile() {
+        AtomicInteger reads = new AtomicInteger();
+        assertThrows(IllegalArgumentException.class, () -> service.parseRemoteFiles(
+                Map.of("_registeredTableName", "person_7"), List.of(
+                        new StructuredSourceProbeService.RemoteFile("/data/person-7.json", "person-7.json",32),
+                        new StructuredSourceProbeService.RemoteFile("/data/person_7.csv", "person_7.csv",32)),
+                file -> { reads.incrementAndGet(); return new ByteArrayInputStream(new byte[0]); }, new StructuredProbeResult()));
+        assertThat(reads.get()).isZero();
+    }
+
+    @Test
+    void resolvedFileUsesActualPathAndJsonDatasetAndOmitsCredentials() throws Exception {
+        StructuredProbeResult sample=service.parseRemoteFileSampleForTest("person-7.json", 64,
+                "{\"data\":{\"people\":[{\"id\":7}]}}".getBytes(StandardCharsets.UTF_8));
+        sample.getTables().getFirst().setSourcePath("/managed/nested/person-7.json#$.data.people");
+        StructuredSourceProbeService resolving=spy(service);
+        doReturn(sample).when(resolving).probeFtp(any());
+        var managed=Map.<String,Object>of("ftpPassword", "not-a-real-password", "ftpPath", "/managed", "ftpCharset", "UTF-8");
+        var result=resolving.resolveFtpFileSource(managed,"person_7_people",
+                Map.of("remotePath","/wrong","fileFilterRegex",".*","jsonRecordPath","$"));
+        assertThat(result).containsEntry("remotePath","/managed/nested")
+                .containsEntry("fileFilterRegex","^\\Qperson-7.json\\E$")
+                .containsEntry("jsonRecordPath","$.data.people");
+        assertThat(result).doesNotContainKeys("ftpPassword","password","hostname");
+    }
+
+    @Test
+    void tabDelimitedTxtRetainsDetectedParser() throws Exception {
+        StructuredProbeResult sample=service.parseRemoteFileSampleForTest("person-7.txt", 64,
+                "id\tname\n7\t张三\n".getBytes(StandardCharsets.UTF_8));
+        StructuredSourceProbeService resolving=spy(service);
+        doReturn(sample).when(resolving).probeFtp(any());
+        var result=resolving.resolveFtpFileSource(Map.of("ftpDelimiter",","),"person_7",null);
+        assertThat(result).containsEntry("format","csv").containsEntry("delimiter","\t");
+    }
+
+    @Test
+    void literalTabDelimiterAndGb18030SurviveManagedCsvSampling() throws Exception {
+        StructuredProbeResult result = new StructuredProbeResult();
+        service.parseRemoteFiles(Map.of("ftpCharset", "GB18030", "ftpDelimiter", "\t"),
+                List.of(new StructuredSourceProbeService.RemoteFile("/data/person.csv", "person.csv", 64)),
+                file -> new ByteArrayInputStream("id\tlabel\n1\t采集验证\n"
+                        .getBytes(java.nio.charset.Charset.forName("GB18030"))), result);
+        assertThat(result.getTables().getFirst().getColumns()).hasSize(2);
+        assertThat(result.getTables().getFirst().getRows().getFirst()).containsEntry("label", "采集验证");
+        assertThat(result.getTables().getFirst().getFileDelimiter()).isEqualTo("\t");
     }
 }

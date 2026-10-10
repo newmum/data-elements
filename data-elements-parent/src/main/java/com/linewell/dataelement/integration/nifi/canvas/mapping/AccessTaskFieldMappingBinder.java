@@ -171,6 +171,8 @@ public class AccessTaskFieldMappingBinder {
         if (!"enumMap".equals(existing.path("transform").path("fn").asText())) {
             return false;
         }
+        if (!isBlank(rule.getSourceDataType()) && !trim(rule.getSourceDataType())
+                .equalsIgnoreCase(existing.path("sourceDataType").asText().trim())) return false;
         JsonNode values = existing.path("transform").path("args").path(0);
         if (!values.isObject()) {
             return false;
@@ -414,6 +416,7 @@ public class AccessTaskFieldMappingBinder {
             throw new IllegalStateException("统一格式字段 " + rule.getTargetField()
                     + " 未保存可执行的代码映射，请在登记配置中补充枚举值后重新部署");
         }
+        putIfPresent(mapping, "sourceDataType", rule.getSourceDataType());
         ObjectNode transform = mapping.putObject("transform");
         transform.put("fn", "enumMap");
         ArrayNode args = transform.putArray("args");
@@ -492,6 +495,8 @@ public class AccessTaskFieldMappingBinder {
             return Map.of();
         }
         Map<String, String> result = new LinkedHashMap<>(values);
+        // Text-only historical aliases cannot occur in a numeric source field.
+        if (FieldMappingService.isNumericEnumSource(rule.getSourceDataType())) return result;
         String field = normalizedRuleField(rule);
         if (field.contains("certificate") || field.contains("cert_type")) {
             addAliasForLabel(result, "IDCARD", "居民身份证", "身份证");

@@ -317,6 +317,8 @@
             {{ targetDrawerTask?.taskName || '尚未创建接入任务' }}
           </el-descriptions-item>
         </el-descriptions>
+        <el-alert v-if="targetDrawerTables.some(isHiveTarget)" type="info" :closable="false" show-icon class="mb-4"
+          title="Hive 仅移除接入登记和流程，物理表及数据保留；重新物化需修改表名或由运维手动删表。" />
         <el-table :data="targetDrawerTables" border size="small" empty-text="暂未创建目标表">
           <el-table-column type="index" label="序号" width="64" />
           <el-table-column prop="targetDbName" label="目标数据源" min-width="160" show-overflow-tooltip>
@@ -331,9 +333,9 @@
               <el-tag size="small" type="success">已创建</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="112" align="center">
+          <el-table-column label="操作" width="132" align="center">
             <template #default="{ row: target }">
-              <el-button link type="danger" :disabled="deletingAllTargets" @click="deleteSingleTarget(target)">删除目标表</el-button>
+              <el-button link type="danger" :disabled="deletingAllTargets" @click="deleteSingleTarget(target)">{{ isHiveTarget(target) ? "移除登记和流程" : "删除目标表" }}</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -357,7 +359,7 @@
             :disabled="deletingAllTargets"
             @click="deleteAllTargets"
           >
-            删除全部目标表和流程
+            清理全部目标和流程
           </el-button>
           <el-button :disabled="deletingAllTargets" @click="targetDrawerVisible = false">关闭</el-button>
         </div>
@@ -849,6 +851,8 @@ const ensureAccessTask = async (row) => {
     // 只传本阶段物化建表返回的目录。不能回退到 OB 阶段遗留目录，
     // 否则历史 targetTableId 会被错误地当作 Hive 阶段目标表。
     catalogId: row?.hiveCatalogId || row?.catalogId || "__hive_stage__",
+    ...(row?.targetTableId ? { targetTableId: row.targetTableId } : {}),
+    ...(row?.sourceFileConfig ? { sourceFileConfig: row.sourceFileConfig } : {}),
   };
   if (!payload.tableId) {
     $message.warning("无法读取来源表标识，暂不能创建接入任务");
@@ -875,6 +879,30 @@ const ensureAccessTask = async (row) => {
   return { ...(task || {}), tid: taskId, pipelineId };
 };
 
+// 页面只负责说明策略，删除类型与权限由服务端登记记录决定。
+const isHiveTarget = (target) => ['hive', 'mrshive', 'huaweihive', 'huaweimrshive'].includes(
+  String(target?.targetDatabaseType || target?.targetDbType || target?.dbType || '')
+    .trim().toLowerCase().replace(/[_-]/g, ''),
+);
+const targetCleanupConfirmText = (target, preview = {}) => {
+  const name = target?.targetTableName || target?.tableName || '当前目标表';
+  if (preview.targetHivePhysicalRetained === true || isHiveTarget(target)) {
+    return `将移除“${name}”的接入流程和目标登记，Hive 物理表及数据保留。重新物化需修改表名或联系运维手动删除原表。确认继续吗？`;
+  }
+  if (preview.targetCleanupPending === true) {
+    return `目标库暂时无法检查，将取消可清理的接入流程，并保留“${name}”的目标登记供重试。确认继续吗？`;
+  }
+  return `将删除目标物理表“${name}”及其元数据，并移除接入流程。该操作不可恢复；若目标库删除失败会保留登记供重试。确认继续吗？`;
+};
+const targetCleanupSummary = (outcomes) => {
+  const pending = outcomes.filter((item) => item.targetCleanupPending === true || Number(item.processGroupCleanupPendingCount || 0) > 0).length;
+  const hive = outcomes.filter((item) => item.targetHivePhysicalRetained === true).length;
+  const message = outcomes.length === 1 && outcomes[0].message
+    ? outcomes[0].message
+    : `已处理 ${outcomes.length} 个目标的接入清理${hive ? `；${hive} 个 Hive 物理表及数据保留` : ''}${pending ? `；${pending} 个目标有清理待重试，相关登记或流程记录已保留` : ''}`;
+  return { pending, message };
+};
+
 const handleTaskRecovery = async (task, row, command, target = null) => {
   const sourceTableId =
     task?.sourceTableId ||
@@ -887,17 +915,18 @@ const handleTaskRecovery = async (task, row, command, target = null) => {
     return;
   }
   const deleteTargetTable = command === "target";
-  const actionText = deleteTargetTable ? "删除目标表并移除流程" : "删除任务";
+  const actionText = deleteTargetTable ? (isHiveTarget(target) ? "移除 Hive 接入登记和流程" : "删除目标表并移除流程") : "删除任务";
   try {
     await ElMessageBox.confirm(
       deleteTargetTable
-        ? `将删除目标物理表“${target?.targetTableName || target?.tableName || '当前目标表'}”及其元数据，并移除当前接入流程。该操作不可恢复，确认继续吗？`
+        ? targetCleanupConfirmText(target)
         : "将删除当前接入任务和关联流程，已创建的目标表及其数据会保留，可通过“查看建表情况”统一管理。确认继续吗？",
       actionText,
       { type: "warning", confirmButtonText: "确认", cancelButtonText: "取消" },
     );
-    await $common.post("/ods/dataAggReset", {
+    const response = await $common.post("/ods/dataAggReset", {
       sourceTableId,
+      ...(!deleteTargetTable && task?.tid ? { taskId: task.tid } : {}),
       targetTableId: target?.targetTableId || task?.targetTableId || task?.target_table_id || row?.targetTableId || "",
       targetDbId: target?.targetDbId || "",
       targetTableName: target?.targetTableName || target?.tableName || "",
@@ -906,7 +935,9 @@ const handleTaskRecovery = async (task, row, command, target = null) => {
     scheduleVisible.value = false;
     accessTaskId.value = "";
     targetDrawerVisible.value = false;
-    $message.success(deleteTargetTable ? "已删除目标表并移除流程，可重新创建任务" : "已删除任务和关联流程，可重新创建任务");
+    const outcome = response?.data || response || {};
+    const summary = targetCleanupSummary([outcome]);
+    $message[summary.pending ? 'warning' : 'success'](summary.message || '接入清理已处理');
     await tableRef.value?.refresh?.();
   } catch (error) {
     if (error === "cancel" || error === "close") return;
@@ -928,8 +959,8 @@ const deleteAllTargets = async () => {
 
   try {
     await ElMessageBox.confirm(
-      `将删除 ${targets.length} 个目标物理表、对应元数据和当前接入流程。该操作不可恢复，确认继续吗？`,
-      "删除全部目标表和流程",
+      `将清理 ${targets.length} 个目标的登记和关联流程。Hive 物理表及数据保留，其他数据库会执行删表；清理失败的目标保留登记供重试。确认继续吗？`,
+      "清理全部目标和流程",
       { type: "warning", confirmButtonText: "确认删除", cancelButtonText: "取消" },
     );
   } catch (error) {
@@ -943,21 +974,24 @@ const deleteAllTargets = async () => {
   deletingAllTargets.value = true;
   deleteAllTargetCount.value = targets.length;
   deleteAllTargetProgress.value = 0;
+  const outcomes = [];
   try {
     for (let index = 0; index < targets.length; index += 1) {
       const target = targets[index];
       deleteAllTargetProgress.value = index + 1;
-      await $common.post("/ods/dataAggReset", {
+      const response = await $common.post("/ods/dataAggReset", {
         sourceTableId: getSourceTableId(targetDrawerContext.value),
         targetTableId: target.targetTableId,
         targetDbId: target.targetDbId || "",
         targetTableName: target.targetTableName || "",
         deleteTargetTable: true,
       });
+      outcomes.push(response?.data || response || {});
     }
     targetDrawerVisible.value = false;
     accessTaskId.value = "";
-    $message.success("已删除全部目标表和流程，可重新创建任务");
+    const summary = targetCleanupSummary(outcomes);
+    $message[summary.pending ? 'warning' : 'success'](summary.message);
     await tableRef.value?.refresh?.();
   } catch (error) {
     console.error("删除全部目标表失败", error);
@@ -1062,6 +1096,7 @@ const handleApplySave = async (materializedTarget = null) => {
     const task = await ensureAccessTask({
       ...row,
       targetTableId,
+      sourceFileConfig: materializedTarget?.sourceFileConfig,
       hiveCatalogId: materializedTarget?.catalogId || materializedTarget?.sourceCatalogId || "",
     });
     if (task?.tid) {

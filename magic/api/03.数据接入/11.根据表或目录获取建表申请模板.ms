@@ -37,6 +37,7 @@
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import tenantRuntime
 import dataScope
+import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService as structuredFileProbe
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
@@ -637,6 +638,15 @@ for (registeredField in (registeredFields == null ? [] : registeredFields)) {
 }
 
 var sourceTableName = text(first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])).trim()
+var sourceFileConfig = null
+var sourceTypeCode = lower(first(sourceDatasource, ['dbType', 'db_type']))
+if (['ftp', 'sftp'].contains(sourceTypeCode) && body?.resolveSourceFile == true) {
+    try {
+        sourceFileConfig = structuredFileProbe.resolveFtpFileSource(sourcePoolCfg, sourceTableName, body?.sourceFileConfig)
+    } catch (fileError) {
+        exit 409, '来源文件解析未通过，请检查文件是否存在、文件编码及分隔符，必要时重新采集字段'
+    }
+}
 var columns = db.table('db_table_column_t').where()
     .eq('tenant_id', tenantId)
     .eq('table_id', sourceTableId)
@@ -649,7 +659,7 @@ if (!refreshPhysicalColumns && (columns == null || columns.size() == 0)) {
 var physicalColumns = []
 if (refreshPhysicalColumns) {
     try {
-        physicalColumns = sourcePhysicalColumns(sourceDatasource, sourceTableName)
+        physicalColumns = sourceFileConfig == null ? sourcePhysicalColumns(sourceDatasource, sourceTableName) : sourceFileConfig.columns
     } catch (e) {
         // Do not expose JDBC URLs, credentials or vendor connection details.
         exit 502, '读取来源物理字段失败，请检查数据源连接并重试'
@@ -826,6 +836,12 @@ return {
         sourceTableId: sourceTableId,
         catalogId: catalogId,
         sourceDatasourceName: sourceDatasourceName,
+        sourceDbType: sourceTypeCode,
+        sourceFileConfig: sourceFileConfig == null ? null : {
+            fileName: sourceFileConfig.fileName, remotePath: sourceFileConfig.remotePath,
+            format: sourceFileConfig.format, charset: sourceFileConfig.charset, delimiter: sourceFileConfig.delimiter,
+            excelSheetName: sourceFileConfig.excelSheetName, jsonRecordPath: sourceFileConfig.jsonRecordPath
+        },
         sourceAccessMode: sourceAccessMode,
         sourceAccessModeCode: sourceAccessModeCode,
         sourceNetworkCode: sourceNetworkCode,

@@ -58,6 +58,17 @@ class DslHasherDeploymentHashTest {
                 List.of(new Pipeline.Node("sink", manifestKey, "Target", "sink", 0, 0, config)), List.of());
     }
 
+    @Test
+    void fileDatasetParserRevisionRequiresRedeploymentOnlyForFtpSources() throws Exception {
+        String revision=DslHasher.CURRENT_COMPILER_REVISION;
+        for (String key:List.of("source.ftp","source.sftp")) {
+            Pipeline.Dsl dsl=singleSink(key,Map.of("fileFilterRegex","^people.json$"));
+            assertThat(DslHasher.deploymentHash(dsl,revision)).isNotEqualTo(previousDeploymentHash(dsl,revision));
+        }
+        Pipeline.Dsl jdbc=singleSink("source.mysql",Map.of("table","people"));
+        assertThat(DslHasher.deploymentHash(jdbc,revision)).isEqualTo(previousDeploymentHash(jdbc,revision));
+    }
+
     private static String previousDeploymentHash(Pipeline.Dsl dsl, String revision) throws Exception {
         byte[] digest = MessageDigest.getInstance("SHA-256")
                 .digest((DslHasher.hash(dsl) + "|" + revision).getBytes(StandardCharsets.UTF_8));

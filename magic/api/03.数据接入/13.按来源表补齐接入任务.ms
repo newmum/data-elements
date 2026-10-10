@@ -32,6 +32,7 @@ import cn.hutool.json.JSONUtil as poolJsons
 import apiPullConfig
 import tenantRuntime
 import dataScope
+import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService as structuredFileProbe
 import java.util.Map
 import java.util.List
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType as sourceTypes
@@ -713,9 +714,11 @@ var temporalMappingsOf = (sourceColumns, governanceConfig) => {
 }
 var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, transformBindings, sourceLookupConfig, temporalMappings, preserveSystemFields) => {
     var sourceNames = {}
+    var sourceDataTypes = {}
     var relations = preserveSystemFields ? {} : dictionaryRelations(sourceTable)
     for (c in (sourceColumns == null ? [] : sourceColumns)) {
         sourceNames[text(colName(c)).toLowerCase()] = colName(c)
+        sourceDataTypes[text(colName(c)).toLowerCase()] = first(c, ['dataType', 'data_type', 'columnType', 'column_type'])
     }
     var bindingsByTarget = {}
     for (binding in (transformBindings == null ? [] : transformBindings)) {
@@ -748,6 +751,7 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
                         multiValueSeparator: relation.multiValueSeparator } })
             } else {
                 mappings.add({ from: '/' + relation.sourceName, to: '/' + name,
+                    sourceDataType: sourceDataTypes[text(relation.sourceName).toLowerCase()],
                     transform: { fn: 'enumMap', args: [standardValueMap, null] } })
             }
         } else if (relation != null && relation.relationKind == 'DICTIONARY' && safeIdentifier(name)) {
@@ -1152,6 +1156,17 @@ for (existingTask in existingTasks) {
         continue
     }
     var taskReasons = []
+    for (fileNode in (existingDslObject.nodes == null ? [] : existingDslObject.nodes)) {
+        if (['source.ftp', 'source.sftp'].contains(text(fileNode.manifestKey))
+            && blank(fileNode.config?.sourceFileName) && blank(fileNode.config?.logicalSourceDatasourceId)) {
+            taskReasons.add('文件来源仍使用旧表名匹配规则，需确认后重新生成精确文件采集配置')
+        }
+        if (['source.ftp', 'source.sftp'].contains(text(fileNode.manifestKey)) && body?.sourceFileConfig != null
+            && ((body.sourceFileConfig.charset != null && text(body.sourceFileConfig.charset) != text(fileNode.config?.csvEncoding))
+                || (body.sourceFileConfig.delimiter != null && text(body.sourceFileConfig.delimiter) != text(fileNode.config?.csvDelimiter)))) {
+            taskReasons.add('文件解析参数已变化，请确认后重新生成采集配置')
+        }
+    }
     if (wrongHopSource) { taskReasons.add('已有任务的来源与所选目标顺序不一致，需确认后按级联链路重建') }
     if (legacyMultiTarget) { taskReasons.add('历史任务包含多个目标库，需确认后拆分为独立任务') }
     if (pipeline == null || blank(existingDsl)) { taskReasons.add('关联流程不存在或没有画布定义') }
@@ -1265,6 +1280,21 @@ if (sourceManifestKey == 'source.oceanbase') {
 // 普通 FTP/SFTP 探查接入也必须使用登记的连接，而不是 JDBC 默认配置。
 // 一条任务只读取其来源数据集，不能把目录里的其它表一起送入同一个目标。
 if (pushFileSource == null && (sourceManifestKey == 'source.ftp' || sourceManifestKey == 'source.sftp')) {
+    // Resolve from the authenticated, tenant-owned registration. Client parser options
+    // cannot replace the connection, path, file filter, sheet or JSON dataset selector.
+    var directFile = null
+    try {
+        directFile = structuredFileProbe.resolveFtpFileSource(sourceCfg, text(sourceTableName), body?.sourceFileConfig)
+    } catch (fileError) {
+        exit 409, '来源文件无法唯一定位或解析，请检查文件及登记字段后重新创建流程'
+    }
+    var fileColumnNames = []
+    for (fileColumn in directFile.columns) { fileColumnNames.add(text(fileColumn.columnName).toLowerCase()) }
+    for (registeredColumn in sourceColumnsForNifi) {
+        if (!fileColumnNames.contains(text(registeredColumn.columnName).toLowerCase())) {
+            exit 409, '来源文件字段与登记快照不一致，请重新采集来源字段后再创建流程'
+        }
+    }
     var directProtocol = text(first(sourceCfg, ['ftpProtocol', 'ftp_protocol', 'protocol'])).trim().toLowerCase()
     if (blank(directProtocol)) { directProtocol = text(sourceDbType).trim().toLowerCase() == 'sftp' ? 'sftp' : 'ftp' }
     var directPort = first(sourceCfg, ['ftpPort', 'ftp_port', 'port'])
@@ -1275,8 +1305,12 @@ if (pushFileSource == null && (sourceManifestKey == 'source.ftp' || sourceManife
         port: directPort,
         username: first(sourceCfg, ['ftpUsername', 'ftp_username', 'username']),
         password: first(sourceCfg, ['ftpPassword', 'ftp_password', 'password']),
-        remotePath: first(sourceCfg, ['ftpPath', 'ftp_path', 'remotePath', 'path']) || '/',
-        fileFilterRegex: '(?i)^\\Q' + text(sourceTableName) + '\\E\\.(csv|json|xlsx|xls)$',
+        remotePath: directFile.remotePath,
+        fileFilterRegex: directFile.fileFilterRegex,
+        sourceFileName: directFile.fileName,
+        fileFormat: directFile.format,
+        csvEncoding: directFile.charset, csvDelimiter: directFile.delimiter,
+        excelSheetName: directFile.excelSheetName, jsonRecordPath: directFile.jsonRecordPath,
         passiveMode: first(sourceCfg, ['ftpPassiveMode', 'ftp_passive_mode', 'passiveMode']),
         schedulingPeriod: '60 sec', syncMode: 'FULL',
         sourceDbId: sourceDbId, registeredDatasourceId: sourceDbId,

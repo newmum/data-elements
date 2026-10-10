@@ -44,6 +44,7 @@ class HuaweiHiveTargetDeletionMagicTest {
     private MetadataExplorerService explorer;
     private Fixture fixture;
     private QueryCounter queryCounter;
+    private NifiClient nifi;
 
     @BeforeEach
     void setUp() {
@@ -86,6 +87,7 @@ class HuaweiHiveTargetDeletionMagicTest {
         jdbc.execute("create table db_table_column_t(tid varchar(32),table_id varchar(32),is_del int,updated_time timestamp)");
         jdbc.execute("create table da_prop_t(parent_id varchar(32),prop_name varchar(100),prop_value varchar(100),is_del int,updated_time timestamp)");
         jdbc.execute("create table da_catalog_t(tid varchar(32),is_del int,updated_time timestamp)");
+        jdbc.execute("create table nifi_pipeline_t(id varchar(32),tenant_id varchar(32),nifi_process_group_id varchar(32),is_del int,updated_at bigint,dsl_json varchar(1000))");
         jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values('source-1','police','source-db','person',0)");
         jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) values('target-1','police','target-db','ods_person','source-1',0)");
         jdbc.update("insert into db_datasource_t values('source-db','police','mysql','{}',0)");
@@ -96,109 +98,185 @@ class HuaweiHiveTargetDeletionMagicTest {
         hive = mock(HiveModule.class);
         explorer = mock(MetadataExplorerService.class);
         fixture = new Fixture(hive);
+        nifi = mock(NifiClient.class);
     }
 
     @Test
-    void managedHiveDryRunDoesNotRequireJdbcFieldsAndNeverDeletes() throws Exception {
-        when(hive.showTables("target_db")).thenReturn(List.of("ods_person"));
+    void managedHiveDryRunDoesNotProbeOrDeleteAndExplicitlyRetainsPhysicalTable() throws Exception {
         Map<String, Object> body = request();
         body.put("dryRun", true);
-
         Map<?, ?> result = assertInstanceOf(Map.class, run(body));
-
-        assertEquals(true, result.get("targetPhysicalExists"));
+        assertEquals(true, result.get("targetHivePhysicalRetained"));
         assertEquals("hive", result.get("targetDatabaseType"));
         assertEquals(false, result.get("sideEffectsApplied"));
         assertLifecycleIntact();
-        verify(hive, never()).execDDLSqlInDatabase(any(), any());
-        verifyNoInteractions(explorer);
+        verifyNoInteractions(hive, explorer, nifi);
     }
 
     @Test
-    void historicalQualifiedHiveTargetUsesCreatedPhysicalTableNameInsideSelectedDatabase() throws Exception {
+    void historicalQualifiedHiveTargetDoesNotRequirePhysicalNameResolution() throws Exception {
         jdbc.update("update db_table_t set table_name='ODS_SIMDEV.CORP' where tid='target-1'");
-        when(hive.showTables("target_db")).thenReturn(List.of("CORP"));
         Map<String, Object> request = request();
         request.put("targetTableName", "ODS_SIMDEV.CORP");
-        request.put("dryRun", true);
-
         Map<?, ?> result = assertInstanceOf(Map.class, run(request));
-
-        assertEquals("CORP", result.get("physicalTargetTableName"));
-        assertEquals("target_db", result.get("targetScope"));
-        assertEquals(true, result.get("historicalScopeNormalized"));
-        assertEquals(true, result.get("targetPhysicalExists"));
-        assertLifecycleIntact();
-        verify(hive, never()).execDDLSqlInDatabase(any(), any());
+        assertEquals(true, result.get("targetHivePhysicalRetained"));
+        assertEquals(false, result.get("targetPhysicalDeleted"));
+        assertEquals(1, deleted("db_table_t", "target-1"));
+        assertEquals(0, deleted("db_table_t", "source-1"));
+        verifyNoInteractions(hive, explorer);
     }
 
     @Test
-    void managedHiveDeletesAndVerifiesBeforeCleaningTaskAndTargetOnly() throws Exception {
-        when(hive.showTables("target_db")).thenReturn(List.of("ods_person"), List.of("ods_person"), List.of());
-
+    void hiveAuthenticationDriverAndDropFailuresCannotBlockLogicalCleanup() throws Exception {
+        when(hive.showTables("target_db")).thenThrow(new SQLException("Kerberos authentication failed"));
+        doThrow(new SQLException("permission denied")).when(hive).execDDLSqlInDatabase(any(), any());
         Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
-
-        assertEquals(true, result.get("targetPhysicalDeleted"));
-        verify(hive).execDDLSqlInDatabase("target_db", "DROP TABLE IF EXISTS `target_db`.`ods_person`");
-        verifyNoInteractions(explorer);
+        assertEquals(true, result.get("targetHivePhysicalRetained"));
+        assertEquals(false, result.get("targetPhysicalDeleted"));
         assertEquals(1, deleted("db_table_t", "target-1"));
         assertEquals(1, deleted("data_access_agg_task_t", "task-1"));
         assertEquals(1, deleted("data_access_field_mapping", "mapping-1"));
         assertEquals(1, deleted("db_table_column_t", "target-column"));
         assertEquals(0, deleted("db_table_t", "source-1"));
         assertEquals(0, deleted("db_table_column_t", "source-column"));
+        verifyNoInteractions(hive, explorer);
     }
 
     @Test
-    void authenticationFailureLeavesTaskAndMetadataIntact() throws Exception {
-        when(hive.showTables("target_db")).thenThrow(new SQLException("Kerberos authentication failed"));
-
-        assertInstanceOf(ExitValue.class, run(request()));
-
-        assertLifecycleIntact();
-        verify(hive, never()).execDDLSqlInDatabase(any(), any());
-    }
-
-    @Test
-    void missingHiveDatabaseDoesNotSilentlyDiscardTargetMetadata() throws Exception {
-        when(hive.showTables("target_db")).thenThrow(new SQLException("database does not exist"));
-
-        assertInstanceOf(ExitValue.class, run(request()));
-
-        assertLifecycleIntact();
-        verify(hive, never()).execDDLSqlInDatabase(any(), any());
-    }
-
-    @Test
-    void dropPermissionFailureLeavesTaskAndMetadataIntact() throws Exception {
-        when(hive.showTables("target_db")).thenReturn(List.of("ods_person"));
-        doThrow(new SQLException("permission denied")).when(hive).execDDLSqlInDatabase(any(), any());
-
-        assertInstanceOf(ExitValue.class, run(request()));
-
-        assertLifecycleIntact();
-    }
-
-    @Test
-    void gatewayPostDeleteCheckMustConfirmAbsenceBeforeMetadataCleanup() throws Exception {
-        when(hive.showTables("target_db")).thenReturn(List.of("ods_person"));
-
-        assertInstanceOf(ExitValue.class, run(request()));
-
-        assertLifecycleIntact();
-        verify(hive).execDDLSqlInDatabase("target_db", "DROP TABLE IF EXISTS `target_db`.`ods_person`");
-    }
-
-    @Test
-    void missingPhysicalHiveTableAllowsStaleTargetCleanup() throws Exception {
-        when(hive.showTables("target_db")).thenReturn(List.of());
-
+    void nonHiveExecutesPhysicalDropAndVerifiesItBeforeRemovingMetadata() throws Exception {
+        configureNonHive();
+        var table = new com.linewell.dataelement.metautil.model.dto.TableInfo();
+        table.setTableName("ods_person");
+        when(explorer.getTables(any())).thenReturn(List.of(table), List.of(table), List.of());
         Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
-
-        assertEquals(false, result.get("targetPhysicalDeleted"));
+        assertEquals(true, result.get("targetPhysicalDeleted"));
+        assertEquals(false, result.get("targetHivePhysicalRetained"));
         assertEquals(1, deleted("db_table_t", "target-1"));
-        assertEquals(0, deleted("db_table_t", "source-1"));
-        verify(hive, never()).execDDLSqlInDatabase(any(), any());
+        verify(explorer).createTable(any(), eq("DROP TABLE `ods_person`"));
+        verifyNoInteractions(hive);
+    }
+
+    @Test
+    void nonHivePreflightUnavailableCancelsTaskButRetainsRegistrationForRetry() throws Exception {
+        configureNonHive();
+        when(explorer.getTables(any())).thenThrow(new IllegalStateException("connection timed out"));
+        Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
+        assertEquals(true, result.get("targetCleanupPending"));
+        assertEquals(true, result.get("targetMetadataRetained"));
+        assertEquals("unknown", result.get("targetPhysicalState"));
+        assertEquals(0, deleted("db_table_t", "target-1"));
+        assertEquals(0, deleted("db_table_column_t", "target-column"));
+        assertEquals(1, deleted("data_access_agg_task_t", "task-1"));
+        verify(explorer, never()).createTable(any(), any());
+    }
+
+    @Test
+    void nonHiveDropDeniedCancelsTaskButNeverClaimsTableWasDeleted() throws Exception {
+        configureNonHive();
+        var table = new com.linewell.dataelement.metautil.model.dto.TableInfo();
+        table.setTableName("ods_person");
+        when(explorer.getTables(any())).thenReturn(List.of(table));
+        doThrow(new IllegalStateException("permission denied")).when(explorer).createTable(any(), any());
+        Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
+        assertEquals(true, result.get("targetCleanupPending"));
+        assertEquals(false, result.get("targetPhysicalDeleted"));
+        assertEquals(0, deleted("db_table_t", "target-1"));
+        assertEquals(1, deleted("data_access_agg_task_t", "task-1"));
+    }
+
+    @Test
+    void nifiFailurePreservesRetryableTaskAndRegistrationAndDoesNotDropTable() throws Exception {
+        configureNonHive();
+        jdbc.update("update data_access_agg_task_t set process_group_id='pg-1' where tid='task-1'");
+        doThrow(new IllegalStateException("NiFi unavailable")).when(nifi).cleanupProcessGroup("pg-1");
+        Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
+        assertEquals(1, result.get("processGroupCleanupPendingCount"));
+        assertEquals(true, result.get("targetCleanupPending"));
+        assertEquals(0, deleted("db_table_t", "target-1"));
+        assertEquals(0, deleted("data_access_agg_task_t", "task-1"));
+        verify(explorer, never()).createTable(any(), any());
+    }
+
+    @Test
+    void oldTaskUsesTenantPipelineProcessGroupAndRetainsItWhenCleanupFails() throws Exception {
+        jdbc.update("update data_access_agg_task_t set pipeline_id='pipeline-1' where tid='task-1'");
+        jdbc.update("insert into nifi_pipeline_t(id,tenant_id,nifi_process_group_id,is_del,updated_at) values('pipeline-1','police','old-pg',0,0)");
+        doThrow(new IllegalStateException("NiFi unavailable")).when(nifi).cleanupProcessGroup("old-pg");
+        Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
+        assertEquals(1, result.get("processGroupCleanupPendingCount"));
+        assertEquals(0, deleted("data_access_agg_task_t", "task-1"));
+        assertEquals(0, jdbc.queryForObject("select is_del from nifi_pipeline_t where id='pipeline-1'", Integer.class));
+        assertEquals(0, deleted("db_table_t", "target-1"));
+        verify(nifi).cleanupProcessGroup("old-pg");
+        verifyNoInteractions(hive, explorer);
+    }
+
+    @Test
+    void hiveGatewayFirstColumnExtractionWorksWithActualMagicIteration() throws Exception {
+        String gateway = CanonicalMagicSources.byId("mrs_hive_jdbc_debug_23");
+        String helper = gateway.substring(gateway.indexOf("var valuesOf ="), gateway.indexOf("var requireConfirm ="));
+        var row1 = new LinkedHashMap<String, Object>();
+        row1.put("tab_name", "ods_person"); row1.put("other", "ignored");
+        var rows = List.of(row1, Map.of("database_name", "target_db"), Map.of());
+        Object values = MagicScript.create("import java.util.Map\n" + helper + "return valuesOf(rows)", null)
+                .execute(new MagicScriptContext(Map.of("rows", rows)));
+        assertEquals(List.of("ods_person", "target_db"), values);
+    }
+
+    private void configureNonHive() {
+        jdbc.update("update db_datasource_t set db_type='mysql' where tid='target-db'");
+        fixture.nonHive = true;
+    }
+
+    @Test
+    void hiveCleanupBatchDoesNotOpenHiveConnectionEvenWhenGatewayIsUnavailable() throws Exception {
+        var body = batchRequest(List.of(Map.of("targetDbId", "target-db", "targetTableName", "ods_person",
+                "targetTableId", "target-1")));
+        body.remove("checkPhysicalExistence");
+        Map<?, ?> result = assertInstanceOf(Map.class, run(body));
+        Map<?, ?> target = assertInstanceOf(Map.class, ((List<?>) result.get("results")).getFirst());
+        assertEquals(true, target.get("targetHivePhysicalRetained"));
+        assertEquals("retained", target.get("targetPhysicalState"));
+        assertEquals(0, queryCounter.writes);
+        verifyNoInteractions(hive, explorer);
+    }
+
+    @Test
+    void materializationDuplicateReferenceReadsStayAtFiveForTwentyAndHundredCandidates() throws Exception {
+        String materialization = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
+        String helpers = materialization.substring(materialization.indexOf("var text ="), materialization.indexOf("var upsertCatalogProp"));
+        String duplicateCheck = materialization.substring(materialization.indexOf("var duplicateRows ="), materialization.indexOf("// 表字段名称去重"));
+        for (int size : List.of(20, 100)) {
+            setUp();
+            for (int i = 0; i < size; i++) {
+                jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values(?,?,?,?,0)",
+                        "placeholder-" + i, "police", "target-db", " ods_duplicate ");
+            }
+            jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values('foreign','other','target-db','ods_duplicate',0)");
+            Map<String, Object> inputs = Map.of("db", db, "tenantId", "police", "sourceTableId", "source-1",
+                    "propList", Map.of("dbId", "target-db", "tableName", "ods_duplicate"),
+                    "targetDatasource", Map.of("dbName", "target"));
+            Object result = MagicScript.create(helpers + duplicateCheck + "return stalePlaceholderIds", null)
+                    .execute(new MagicScriptContext(inputs));
+            assertEquals(size, assertInstanceOf(List.class, result).size());
+            assertEquals(5, queryCounter.queries);
+            assertEquals(0, queryCounter.writes, "Do not remove placeholder rows before physical creation succeeds");
+        }
+    }
+
+    @Test
+    void materializingExistingHiveTableStopsBeforeAnyPlaceholderMetadataWrite() throws Exception {
+        String materialization = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
+        String helpers = materialization.substring(materialization.indexOf("var text ="), materialization.indexOf("var upsertCatalogProp"));
+        String boundary = materialization.substring(materialization.indexOf("var originalBody = body"),
+                materialization.indexOf("// Hive 重名或物理建表失败之前"));
+        String prefix = "var createTable = () => {return {created:false}}; var getCreateTableDDL = () => 'CREATE TABLE ods_person (id string)';";
+        Map<String, Object> inputs = Map.of("body", Map.of(), "db", db, "reuseTargetTable", true,
+                "targetDatasource", Map.of("dbType", "hive"), "submittedDdl", "CREATE TABLE ods_person (id string)",
+                "propList", Map.of("dbId", "target-db", "tableName", "ods_person"), "tableItems", List.of());
+        ExitValue result = assertInstanceOf(ExitValue.class, MagicScript.create(helpers + prefix + boundary, null)
+                .execute(new MagicScriptContext(inputs)));
+        assertEquals(0, queryCounter.writes);
     }
 
     @Test
@@ -215,10 +293,11 @@ class HuaweiHiveTargetDeletionMagicTest {
     }
 
     @Test
-    void ordinaryHiveStillRequiresRegisteredJdbcConnection() throws Exception {
+    void ordinaryHiveCleanupDoesNotRequireRegisteredJdbcConnection() throws Exception {
         fixture.managed = false;
-        assertInstanceOf(ExitValue.class, run(request()));
-        assertLifecycleIntact();
+        Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
+        assertEquals(true, result.get("targetHivePhysicalRetained"));
+        assertEquals(1, deleted("db_table_t", "target-1"));
         verifyNoInteractions(hive, explorer);
     }
 
@@ -312,7 +391,8 @@ class HuaweiHiveTargetDeletionMagicTest {
 
         Map<?, ?> result = assertInstanceOf(Map.class, run(request));
 
-        assertEquals(true, result.get("targetPhysicalDeleted"));
+        assertEquals(false, result.get("targetPhysicalDeleted"));
+        assertEquals(true, result.get("targetHivePhysicalRetained"));
         assertEquals(true, result.get("targetUnlinked"));
         assertEquals(0, result.get("taskCount"));
         assertEquals(1, deleted("db_table_t", "target-1"));
@@ -435,7 +515,7 @@ class HuaweiHiveTargetDeletionMagicTest {
         inputs.put("poolJsons", fixture);
         inputs.put("targetTableDeletionService", new TargetTableDeletionService(explorer, hive));
         inputs.put("esCommonService", mock(EsCommonService.class));
-        inputs.put("nifiClient", mock(NifiClient.class));
+        inputs.put("nifiClient", nifi);
         inputs.put("log", LoggerFactory.getLogger(getClass()));
         return MagicScript.create(prefix + script, null).execute(new MagicScriptContext(inputs));
     }
@@ -451,6 +531,7 @@ class HuaweiHiveTargetDeletionMagicTest {
         result.put("deleteTargetTable", true);
         result.put("dryRun", true);
         result.put("batchDryRun", true);
+        result.put("checkPhysicalExistence", true);
         result.put("targets", targets);
         return result;
     }
@@ -469,6 +550,7 @@ class HuaweiHiveTargetDeletionMagicTest {
 
     public static class Fixture {
         boolean managed = true;
+        boolean nonHive;
         String deniedDatasourceId;
         private final HiveModule hive;
         Fixture(HiveModule hive) { this.hive = hive; }
@@ -482,6 +564,7 @@ class HuaweiHiveTargetDeletionMagicTest {
                     "hiveConnectionMode", "huawei-mrs");
         }
         public Map<String, Object> connectionConfig(String datasourceId) {
+            if (nonHive) return Map.of("database", "target_db", "host", "localhost", "username", "test-fixture");
             return Map.of("database", "target_db", "hiveProfile", "default",
                     "hiveConnectionMode", managed ? "huawei-mrs" : "open-source",
                     "metadataAccessMode", managed ? "server-managed-mrs" : "jdbc");

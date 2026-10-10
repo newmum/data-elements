@@ -2560,6 +2560,44 @@
   padding-left: 20px !important;
   padding-right: 20px !important;
 }
+
+/* Fixed-size border animation also works in Chrome 108/109, without SVG spin transitions. */
+.canvas-action-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: canvas-action-rotate .8s linear infinite;
+  will-change: transform;
+}
+@keyframes canvas-action-rotate { to { transform: rotate(360deg); } }
+.canvas-save-action { min-width: 130px; }
+.canvas-start-actions { display: inline-flex; align-items: stretch; }
+.canvas-start-actions__main { border-top-right-radius: 0; border-bottom-right-radius: 0; min-width: 88px; }
+.canvas-start-actions__more { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: rgba(255,255,255,.3); width: 32px; padding-inline: 6px; }
+.canvas-sync-modal .ant-modal-content { padding: 24px 28px; }
+.canvas-sync-modal .ant-modal-header { margin-bottom: 24px; }
+.canvas-sync-modal .ant-modal-title { font-size: 18px; }
+.canvas-sync-modal .ant-modal-footer { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--node-border, #e5e7eb); }
+.canvas-sync-source { margin-bottom: 20px; color: var(--text-secondary, #4e5969); }
+.canvas-sync-editor .ant-space-item { width: 100%; }
+.canvas-sync-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
+.canvas-sync-mode.ant-radio-wrapper { margin: 0; padding: 18px 16px; align-items: flex-start; border: 1px solid var(--node-border, #e5e7eb); border-radius: 10px; }
+.canvas-sync-mode .ant-radio { margin-top: 3px; }
+.canvas-sync-mode.ant-radio-wrapper-checked { border-color: #1677ff; background: rgba(22,119,255,.06); }
+.canvas-sync-mode:hover { border-color: #91caff; }
+.canvas-sync-mode__title { font-size: 14px; font-weight: 600; line-height: 22px; }
+.canvas-sync-mode__description { margin-top: 8px; font-size: 13px; line-height: 1.65; color: var(--text-secondary, #4e5969); }
+.canvas-sync-mode__default { margin-left: 8px; font-size: 11px; font-weight: 400; color: #1677ff; }
+.canvas-sync-cleanup { padding: 16px; border-radius: 8px; background: var(--canvas-bg, #f7f8fa); }
+@media (max-width: 600px) {
+  .canvas-sync-modes { grid-template-columns: 1fr; }
+  .canvas-sync-modal .ant-modal-content { padding: 20px; }
+}
 .error-panel-card {
   background: var(--error-card-bg);
   border: 1px solid var(--error-card-border);

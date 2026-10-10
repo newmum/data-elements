@@ -679,9 +679,16 @@ public class DslCompiler {
     private void createFileTransferReaderServices(String pgId, Pipeline.Node node,
                                                   NodeCompilation nc, Map<String, Object> cfg) {
         String encoding = firstNonBlankStatic(configText(cfg, "csvEncoding"),
-                configText(cfg, "csvCharset"), configText(cfg, "charset"), "UTF-8");
-        String delimiter = firstNonBlankStatic(configText(cfg, "csvDelimiter"),
-                configText(cfg, "csvSeparator"), ",");
+                configText(cfg, "csvCharset"), configText(cfg, "ftpCharset"), configText(cfg, "charset"), "UTF-8");
+        String delimiter = ",";
+        for (String key : List.of("csvDelimiter", "csvSeparator", "ftpDelimiter")) {
+            Object value = cfg.get(key);
+            if (value != null && !String.valueOf(value).isEmpty()) {
+                delimiter = String.valueOf(value);
+                break;
+            }
+        }
+        if ("\\t".equals(delimiter)) delimiter = "\t";
         if (delimiter.length() != 1) {
             throw new NodeConfigException(node.id(), node.label(), "csvDelimiter",
                     "CSV 分隔符必须是单个字符", null);
@@ -737,7 +744,7 @@ public class DslCompiler {
         String port = firstNonBlankStatic(configText(cfg, "port"), sftp ? "22" : "21");
         String remotePath = firstNonBlankStatic(configText(cfg, "remotePath"), "/");
         String fileFilter = firstNonBlankStatic(configText(cfg, "fileFilterRegex"),
-                "(?i).*\\.(csv|json|xlsx|xls)$");
+                "(?i).*\\.(csv|json|xlsx|xls|txt)$");
         String schedulingPeriod = firstNonBlankStatic(configText(cfg, "schedulingPeriod"), "60 sec");
 
         Map<String, String> fetchProperties = new LinkedHashMap<>();
@@ -767,6 +774,10 @@ public class DslCompiler {
         routes.put("json", "${filename:toLower():matches('.*\\.json$')}");
         routes.put("xls", "${filename:toLower():matches('.*\\.xls$')}");
         routes.put("xlsx", "${filename:toLower():matches('.*\\.xlsx$')}");
+        String textFormat = firstNonBlankStatic(configText(cfg, "fileFormat"), "csv");
+        if ("csv".equals(textFormat) || "json".equals(textFormat)) {
+            routes.put(textFormat, "${filename:toLower():matches('.*\\.(" + textFormat + "|txt)$')}");
+        }
         NifiEntity route = nifi.createProcessor(pgId, ROUTE_ON_ATTRIBUTE_TYPE,
                 node.label() + "/文件类型分流", x, y + PROCESSOR_ROW_GAP,
                 routes, null, null);
@@ -789,8 +800,18 @@ public class DslCompiler {
 
         connectInternal(pgId, nc, fetch.id(), route.id(), "success");
         connectInternal(pgId, nc, route.id(), csv.id(), "csv");
-        // JSON 已是下游 JsonTreeReader 可识别的 RecordSet，不重复转换以保留结构。
-        connectInternal(pgId, nc, route.id(), normalized.id(), "json");
+        // Registration can expose a nested JSON array as a separate logical dataset.
+        String recordPath = firstNonBlankStatic(configText(cfg, "jsonRecordPath"), "$");
+        if (!"$".equals(recordPath)) {
+            NifiEntity json = nifi.createProcessor(pgId, EVALUATE_JSON_PATH_TYPE,
+                    node.label() + "/JSON 数据集", x + PROCESSOR_COLUMN_GAP, y + 3 * PROCESSOR_ROW_GAP,
+                    Map.of("Destination", "flowfile-content", "Return Type", "json", "dataset", recordPath), null, null);
+            nc.processorIds.put("extract-json-dataset", json.id());
+            connectInternal(pgId, nc, route.id(), json.id(), "json");
+            connectInternal(pgId, nc, json.id(), normalized.id(), "matched");
+        } else {
+            connectInternal(pgId, nc, route.id(), normalized.id(), "json");
+        }
         connectInternal(pgId, nc, route.id(), xls.id(), "xls");
         connectInternal(pgId, nc, route.id(), xlsx.id(), "xlsx");
         connectInternal(pgId, nc, csv.id(), normalized.id(), "success");

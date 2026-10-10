@@ -17,8 +17,9 @@ const names = [
   'normalizeDbId', 'normalizeDbIds', 'syncDbTypeByDatasource', 'buildTargetTableName',
   'sameStringList', 'normalizeTargetTableName', 'targetDatasourceIds', 'targetTableNameInput', 'targetTablePlans',
   'syncTargetDatasourceSelection', 'syncTargetTableNameInput', 'normalizeFormPayload',
-  'isCurrentInit', 'trackLoad', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
+  'isCurrentInit', 'trackLoad', 'init', 'collectSourceFields', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
+  'isHiveTarget',
 ];
 const selected = names.map(name => {
   const node = ast.program.body.find(n => n.type === 'VariableDeclaration'
@@ -49,6 +50,8 @@ function fixture(size = 2) {
   const context = vm.createContext({
     ref, computed: getter => ({ get value() { return getter(); } }),
     sourceTableName: ref('TC_RKXT.T_SJYCC_CKB'), datasourceMap: ref(datasource),
+    sourceFileConfig: ref(null),
+    fieldCollecting: ref(false),
     jsonFormRef: ref({
       validate: async () => {}, getValue: name => form[name],
       setValue: value => Object.assign(form, plain(value)), getFormData: async () => plain(form),
@@ -73,8 +76,10 @@ function fixture(size = 2) {
     $common: { post: async (route, body) => {
       calls.push({ route, body: plain(body) });
       if (route === '/ods/targetDatasource/options' || route === '/ods/nifi-node/access-options') return {};
+      if (route === '/dst/database/metadata/collectColumns') return { data: columns };
       if (route === '/ods/getTableTempalte' || route === '/ods/queryTargetTableInfo') return { data: {
-        propList: { sourceTableName: context.sourceTableName.value, tableName: 'ODS_SAVED_CUSTOM', dbId: [['ODS', 'db-0']] },
+        propList: { sourceTableName: context.sourceTableName.value, tableName: 'ODS_SAVED_CUSTOM', dbId: [['ODS', 'db-0']],
+          sourceFileConfig: context.ftpTemplate || null },
         tableItems: columns,
       } };
       if (route.endsWith('/getCreateTableDDL')) return { data: { batchGenerate: true,
@@ -87,7 +92,9 @@ function fixture(size = 2) {
       if (route === '/ods/dataAggReset') {
         assert.equal(body.dryRun, true, 'No deletion is allowed in this test');
         return { data: { batchDryRun: true, sideEffectsApplied: false,
-          results: body.targets.map(target => ({ ...target, sideEffectsApplied: false })),
+          results: body.targets.map(target => ({ ...target, sideEffectsApplied: false,
+            targetPhysicalExists: context.existingPhysical === true,
+            targetDatabaseType: datasource[target.targetDbId].dbType })),
         } };
       }
       if (route.endsWith('/createTable')) {
@@ -160,6 +167,18 @@ for (let i = 0; i < saved.length; i++) {
 }
 assert.equal(multi.emitted.at(-1)[0], 'save');
 
+// An existing Hive table must block the entire mixed-target plan before any write.
+const existingHive = fixture();
+await existingHive.actual.init();
+existingHive.form.dbId = [['ODS', 'db-0'], ['ODS', 'db-1']];
+existingHive.actual.syncTargetDatasourceSelection(existingHive.form.dbId);
+existingHive.context.existingPhysical = true;
+await existingHive.actual.handleSave();
+assert.equal(existingHive.calls.filter(c => c.route === '/ods/createTapleApply').length, 0);
+assert.equal(existingHive.calls.filter(c => c.route === '/ods/dataAggReset' && !c.body.dryRun).length, 0);
+assert.ok(existingHive.notices.some(n => n.key === 'warning' && /Hive.*修改目标表名.*手动删除/.test(n.message)));
+assert.equal(existingHive.emitted.length, 0);
+
 for (const type of ['hive', 'Hive', 'mrshive']) {
   const hive = fixture();
   hive.context.datasourceMap.value['db-0'].dbType = type;
@@ -193,3 +212,30 @@ for (const size of [20, 100]) {
 console.log(JSON.stringify({ defaultCases: defaults.length, existingNamePreserved: true,
   hiveTargetNamesLowercase: true, mixedTargetNamesFollowDialect: true, previewValidationAndSaveAgree: true,
   mismatchedPreviewRejected: true, requestCounts }));
+
+const ftpRequestCounts = [];
+for (const fields of [20, 100]) {
+  const f = fixture(1);
+  f.context.ftpTemplate = { fileName: 'People.csv', remotePath: '/managed', format: 'csv',
+    charset: 'GB18030', delimiter: '\t', jsonRecordPath: '$', excelSheetName: '' };
+  await f.actual.init();
+  f.context.tableRef.value.setData(Array.from({ length: fields }, (_, i) => ({
+    columnName: `field_${i}`, dataType: 'varchar', length: 100,
+  })));
+  assert.equal(f.calls.length, 3);
+  assert.equal(f.calls.find(c => c.route === '/ods/getTableTempalte').body.resolveSourceFile, true);
+  const before = f.calls.length;
+  await f.actual.handleSave();
+  assert.deepEqual(f.emitted.at(-1)[1].sourceFileConfig, f.context.ftpTemplate);
+  const checks = f.calls.filter(c => c.route === '/ods/getTableTempalte' && c.body.sourceFileConfig);
+  assert.equal(checks.length, 1);
+  assert.equal(checks[0].body.sourceFileConfig.delimiter, '\t');
+  ftpRequestCounts.push({ fields, initialRequests: before, saveRequests: f.calls.length - before });
+  await f.actual.collectSourceFields();
+  const collection = f.calls.find(c => c.route === '/dst/database/metadata/collectColumns');
+  assert.equal(collection.body.sourceFileConfig.delimiter, '\t');
+  assert.equal(collection.body.sourceFileConfig.charset, 'GB18030');
+  assert.deepEqual(f.calls.filter(c => c.route === '/ods/getTableTempalte').at(-1).body.sourceFileConfig, f.context.ftpTemplate);
+}
+assert.equal(ftpRequestCounts[0].saveRequests, ftpRequestCounts[1].saveRequests);
+console.log(JSON.stringify({ ftpParserForwarded: true, literalTabPreserved: true, ftpRequestCounts }));

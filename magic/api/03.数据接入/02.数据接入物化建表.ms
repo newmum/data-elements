@@ -17,15 +17,16 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"tid\": \"17fe19f8f69849f88a34352550039ee3\",\n  \"targetTableId\": \"17fe19f8f69849f88a34352550039ee3\",\n  \"catalogId\": \"faae1bc3ebaa4611aded5ed4a52d6a03\",\n  \"sourceTableId\": \"015c09572d174e89b9bea9c765ef72df\",\n  \"physicalTableReused\": false\n}",
-  "description": "数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，幂等创建或复用目标库同名物理表，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。",
+  "description": "数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，非 Hive 幂等创建或复用已登记目标物理表；Hive 已有物理表时拒绝重建并提示改名或运维手动删除，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：02.数据接入物化建表
 // 路由：POST /ods/createTapleApply
-// 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，幂等创建或复用目标库同名物理表，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
+// 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，非 Hive 幂等创建或复用已登记目标物理表；Hive 已有物理表时拒绝重建并提示改名或运维手动删除，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
 import tenantRuntime
+import dataScope
 import metadataAsset
 /*
  * 物化建表并自动补目录。
@@ -515,6 +516,7 @@ if (blank(sourceTableId)) {
 }
 
 var sourceTable = db.table('db_table_t').where()
+    .eq('tenant_id', tenantId)
     .eq('tid', sourceTableId)
     .eq('is_del', 0)
     .selectOne()
@@ -524,6 +526,7 @@ if (sourceTable == null) {
 tableItems = appendDictionaryTranslationColumns(tableItems, sourceTable)
 
 var sourceDatasource = db.table('db_datasource_t').where()
+    .eq('tenant_id', tenantId)
     .eq('tid', sourceTable.datasourceId)
     .eq('is_del', 0)
     .selectOne()
@@ -535,6 +538,16 @@ var targetDatasource = db.table('db_datasource_t').where()
     .selectOne()
 if (targetDatasource == null) {
     exit 404, '目标数据源不存在'
+}
+if (sourceDatasource == null) { exit 404, '来源数据源不存在或不属于当前租户' }
+var visibleDatabases = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [sourceDatasource, targetDatasource])
+var visibleDatabaseIds = []
+for (databaseRow in (visibleDatabases == null ? [] : visibleDatabases)) {
+    visibleDatabaseIds.add(text(databaseRow.tid))
+}
+if (sourceDatasource == null || !visibleDatabaseIds.contains(text(sourceDatasource.tid))
+    || !visibleDatabaseIds.contains(text(targetDatasource.tid))) {
+    exit 403, '来源或目标数据源不在当前角色数据范围内'
 }
 if (targetDatasource.showConnect == 0) {
     exit 400, '目标数据源未提供连接信息'
@@ -603,16 +616,38 @@ if (!blank(submittedDdl)) {
 // 表名由用户在物化抽屉中最终确认。按当前目标数据源枚举后做 trim + 不区分大小写
 // 对比，避免历史空格或数据库大小写规则造成“看似不同、实际重复”的误导。
 var duplicateRows = db.table('db_table_t').where()
+    .eq('tenant_id', tenantId)
     .eq('datasource_id', propList.dbId)
     .eq('is_del', 0)
     .select()
 var duplicate = null
 var reuseTargetTable = false
 var duplicateCheckTime = new Date()
+var candidateIds = []
+var matchingRows = []
 for (candidate in (duplicateRows == null ? [] : duplicateRows)) {
-    if (text(first(candidate, ['tableName', 'table_name'])).trim().toLowerCase() != propList.tableName.toLowerCase()) {
-        continue
+    if (text(first(candidate, ['tableName', 'table_name'])).trim().toLowerCase() == propList.tableName.toLowerCase()) {
+        candidateIds.add(text(candidate.tid))
+        matchingRows.add(candidate)
     }
+}
+if (candidateIds.size() > 100) { exit 409, '目标表同名登记异常，请先核对登记记录' }
+var referencedIds = []
+if (candidateIds.size() > 0) {
+    // 四次批量预取，候选 20/100 行时均不逐项查询。
+    var candidateColumns = db.table('db_table_column_t').where().in('table_id', candidateIds).eq('is_del', 0).select()
+    var candidateSourceTasks = db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId)
+        .in('source_table_id', candidateIds).eq('is_del', 0).select()
+    var candidateTargetTasks = db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId)
+        .in('target_table_id', candidateIds).eq('is_del', 0).select()
+    var candidateProps = db.table('da_prop_t').where().in('parent_id', candidateIds).eq('is_del', 0).select()
+    for (row in candidateColumns) { referencedIds.add(text(first(row, ['tableId', 'table_id']))) }
+    for (row in candidateSourceTasks) { referencedIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
+    for (row in candidateTargetTasks) { referencedIds.add(text(first(row, ['targetTableId', 'target_table_id']))) }
+    for (row in candidateProps) { referencedIds.add(text(first(row, ['parentId', 'parent_id']))) }
+}
+var stalePlaceholderIds = []
+for (candidate in matchingRows) {
     var candidateId = text(candidate.tid)
     var candidateSourceId = text(candidate.sourceTableId)
     if (candidateSourceId == sourceTableId) {
@@ -620,30 +655,10 @@ for (candidate in (duplicateRows == null ? [] : duplicateRows)) {
         reuseTargetTable = true
         break
     }
-    var columnCount = db.table('db_table_column_t').where()
-        .eq('table_id', candidateId)
-        .eq('is_del', 0)
-        .count()
-    var sourceTaskCount = db.table('data_access_agg_task_t').where()
-        .eq('source_table_id', candidateId)
-        .eq('is_del', 0)
-        .count()
-    var targetTaskCount = db.table('data_access_agg_task_t').where()
-        .eq('target_table_id', candidateId)
-        .eq('is_del', 0)
-        .count()
-    var propCount = db.table('da_prop_t').where()
-        .eq('parent_id', candidateId)
-        .eq('is_del', 0)
-        .count()
     var stalePlaceholder = (blank(candidateSourceId) || candidateSourceId == candidateId)
-        && columnCount == 0
-        && sourceTaskCount == 0
-        && targetTaskCount == 0
-        && propCount == 0
+        && !referencedIds.contains(candidateId)
     if (stalePlaceholder) {
-        db.table('db_table_t').where().eq('tid', candidateId)
-            .update({ is_del: 1, updated_time: duplicateCheckTime })
+        stalePlaceholderIds.add(candidateId)
     } else {
         exit 400, '目标数据表「' + propList.tableName + '」已存在于目标数据源「'
             + text(first(targetDatasource, ['dbName', 'db_name'])) + '」，请修改表名后重试'
@@ -668,7 +683,11 @@ for (index, item in tableItems) {
 // 本次重试直接复用同一目标表，避免重复建表/重复插主表。
 var originalBody = body
 var physicalTableReused = reuseTargetTable
-if (!reuseTargetTable) {
+// Hive 物理表存在时不自动复用或覆盖；仅创建流程应走显式任务创建操作。
+var materializationDbType = text(first(targetDatasource, ['dbType', 'db_type'])).toLowerCase().replace('_', '').replace('-', '')
+var hiveMaterialization = materializationDbType == 'hive' || materializationDbType == 'mrshive'
+    || materializationDbType == 'huaweihive' || materializationDbType == 'huaweimrshive'
+if (!reuseTargetTable || hiveMaterialization) {
     var ddl = submittedDdl
     if (blank(ddl)) {
         var ddlRequestBody = {
@@ -697,9 +716,17 @@ if (!reuseTargetTable) {
     // A physical table that is not registered for this source must not be adopted silently.
     // Otherwise the next task creation can point at an incomplete target and open an empty canvas.
     if (createResult != null && createResult.created == false) {
+        if (hiveMaterialization) {
+            exit 409, 'Hive 目标物理表已存在，请修改目标表名，或联系运维手动删除原表后重新物化；系统不会自动删除 Hive 表'
+        }
         exit 409, '目标物理表已存在，请先删除目标表或改用其他目标表名后再创建任务'
     }
     physicalTableReused = createResult != null && createResult.created == false
+}
+// Hive 重名或物理建表失败之前不得清理任何占位登记。
+if (stalePlaceholderIds.size() > 0) {
+    db.table('db_table_t').where().eq('tenant_id', tenantId).in('tid', stalePlaceholderIds)
+        .eq('is_del', 0).update({ is_del: 1, updated_time: duplicateCheckTime })
 }
 
 var now = new Date()

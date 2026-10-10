@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { nanoid } from 'nanoid';
 import { normalizeCanvasDsl, type CanvasDsl, type CanvasEdge, type CanvasMode, type CanvasNode } from '@/types/dsl';
 import type { ComponentManifest } from '@/types/manifest';
+import { reconcileDeployedDsl } from '../utils/pipelineVersion';
 
 export const FIELD_MAPPING_DEFAULT = JSON.stringify({
   version: '1.0',
@@ -55,6 +56,7 @@ interface CanvasState {
   setEdgeOutlet: (id: string, outlet: string) => void;
 
   loadDsl: (dsl: CanvasDsl) => void;
+  acceptDeployment: (submitted: CanvasDsl, deployed: CanvasDsl) => boolean;
   toDsl: () => CanvasDsl;
   clear: () => void;
 }
@@ -68,6 +70,12 @@ function defaultsFromManifest(m: ComponentManifest): Record<string, unknown> {
         : f.default;
     }
   });
+  if (m.category === 'source' && m.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch'))) {
+    out.syncMode = 'FULL_THEN_INCR';
+    out.initialStrategy = 'START_AT_BEGINNING';
+    out.deleteTargetData = false;
+    out.fullSyncStrategy = 'UPSERT';
+  }
   return out;
 }
 
@@ -212,6 +220,16 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       if (!e) return s;
       return { edges: { ...s.edges, [id]: { ...e, outlet } } };
     }),
+
+  acceptDeployment: (submitted, deployed) => {
+    const accepted = reconcileDeployedDsl(get().toDsl(), submitted, deployed);
+    if (!accepted) return false;
+    set({
+      nodes: Object.fromEntries(accepted.nodes.map(n => [n.id, n])),
+      edges: Object.fromEntries(accepted.edges.map(e => [e.id, e])),
+    });
+    return true;
+  },
 
   loadDsl: (dsl) => {
     const normalized = normalizeCanvasDsl(dsl);

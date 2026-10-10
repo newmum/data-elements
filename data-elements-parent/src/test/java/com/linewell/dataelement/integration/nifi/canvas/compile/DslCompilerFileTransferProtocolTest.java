@@ -63,7 +63,8 @@ class DslCompilerFileTransferProtocolTest {
                                 "port", "22",
                                 "username", "report-user",
                                 "password", "not-a-real-password",
-                                "remotePath", "/home"))), List.of()),
+                                "remotePath", "/home", "ftpCharset", "GB18030", "ftpDelimiter", "\t",
+                                "fileFormat", "json", "jsonRecordPath", "$.data.people"))), List.of()),
                 null, null, null, null, null, null, null);
 
         new DslCompiler(nifi, registry, mock(FieldMappingService.class), mock(HiveModule.class)).compile(pipeline);
@@ -76,6 +77,15 @@ class DslCompilerFileTransferProtocolTest {
                 "XLSX".equals(properties.get("Input File Type"))
                         && "${filename:replaceFirst('^(?:report_[^_]+_[^_]+_)?([^_]+)_.*$', '$1')}"
                         .equals(properties.get("Required Sheets"))));
+        verify(nifi).createControllerService(eq("pg"), anyString(), anyString(), argThat(properties ->
+                "GB18030".equals(properties.get("Character Set")) && "\t".equals(properties.get("Value Separator"))));
+        verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.EvaluateJsonPath"),
+                eq("FTP 文件来源/JSON 数据集"), anyDouble(), anyDouble(), argThat(properties ->
+                        "$.data.people".equals(properties.get("dataset")) && "flowfile-content".equals(properties.get("Destination"))),
+                nullable(String.class), nullable(String.class));
+        verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.RouteOnAttribute"),
+                eq("FTP 文件来源/文件类型分流"), anyDouble(), anyDouble(), argThat(properties ->
+                        properties.get("json").contains("json|txt")), nullable(String.class), nullable(String.class));
     }
 
     @Test

@@ -36,6 +36,32 @@ class MaterializationTemplateMagicTest {
     private static final String SOURCE_ID = "f93a8e653ac6413e89660f5d77d45769";
 
     @Test
+    void ftpFieldCollectionReadsStayConstantAndUnauthorizedIdsNeverProbe() throws Exception {
+        List<Integer> reads = new ArrayList<>();
+        for (int count : List.of(20, 100)) {
+            Fixture fixture = new Fixture(1);
+            fixture.jdbc.update("update db_datasource_t set db_type='ftp' where tid='source-db'");
+            List<Map<String, Object>> columns = new ArrayList<>();
+            for (int i = 0; i < count; i++) columns.add(Map.of("columnName", "field_" + i, "dataType", "varchar"));
+            fixture.fileProbe.columns = columns;
+            Map<?, ?> result = assertInstanceOf(Map.class, fixture.runCollection());
+            assertEquals(count, ((Number) result.get("sourceFieldCount")).intValue());
+            assertEquals(1, fixture.fileProbe.calls);
+            reads.add(fixture.counter.queries);
+        }
+        assertEquals(reads.get(0), reads.get(1));
+        System.out.println("FTP collection 20/100 fields: SQL reads=" + reads);
+        for (boolean foreignTenant : List.of(false, true)) {
+            Fixture fixture = new Fixture(1);
+            fixture.jdbc.update("update db_datasource_t set db_type='ftp' where tid='source-db'");
+            if (foreignTenant) fixture.jdbc.update("update db_table_t set tenant_id='other' where tid='source-1'");
+            else fixture.scope.deniedId = "source-db";
+            assertInstanceOf(ExitValue.class, fixture.runCollection());
+            assertEquals(0, fixture.fileProbe.calls);
+        }
+    }
+
+    @Test
     void hiveTemplateAndSubmitBoundaryNormalizeOnlyTheTargetTableName() throws Exception {
         Fixture fixture = new Fixture(1);
         fixture.jdbc.update("update db_table_t set table_name='OWNER.Mixed_TABLE' where tid='source-1'");
@@ -245,6 +271,7 @@ class MaterializationTemplateMagicTest {
         final Counter counter = new Counter();
         final Scope scope = new Scope();
         final Explorer explorer = new Explorer();
+        final FtpSourceProbeStub fileProbe = new FtpSourceProbeStub();
 
         Fixture(int count) {
             var source = new DriverManagerDataSource("jdbc:h2:mem:material_template_" + UUID.randomUUID()
@@ -301,7 +328,7 @@ class MaterializationTemplateMagicTest {
 
         Object run(boolean refresh) throws Exception {
             String script = CanonicalMagicSources.byId(SOURCE_ID).replace("\r\n", "\n")
-                    .replaceAll("(?m)^import (?:'@/common/datasourceConnectionConfig' as datasourceConnectionConfig|tenantRuntime|dataScope|com\\.linewell\\.dataelement\\.metautil\\.service\\.MetadataExplorerService as metadataExplorerService)\\n", "");
+                    .replaceAll("(?m)^import (?:'@/common/datasourceConnectionConfig' as datasourceConnectionConfig|tenantRuntime|dataScope|com\\.linewell\\.dataelement\\.metautil\\.service\\.MetadataExplorerService as metadataExplorerService|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\n", "");
             String prelude = "var datasourceConnectionConfig = (action, id, values, clearAll) => fixture.connectionConfig(id);\n";
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("body", Map.of("tid", "source-1", "refreshPhysicalColumns", refresh));
@@ -310,6 +337,25 @@ class MaterializationTemplateMagicTest {
             inputs.put("dataScope", scope);
             inputs.put("jsons", new JsonModule());
             inputs.put("metadataExplorerService", explorer);
+            inputs.put("fixture", this);
+            inputs.put("structuredFileProbe", new FtpSourceProbeStub());
+            counter.reset();
+            return MagicScript.create(prelude + script, null).execute(new MagicScriptContext(inputs));
+        }
+
+        Object runCollection() throws Exception {
+            String script = CanonicalMagicSources.byId("metadata_columns_collect_24").replace("\r\n", "\n")
+                    .replaceAll("(?m)^import (?:'@/common/datasourceConnectionConfig' as datasourceConnectionConfig|tenantRuntime|dataScope|hwhive|metadataAsset|jsons|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredSourceProbeService|com\\.linewell\\.dataelement\\.metautil\\.service\\.MetadataExplorerService as metadataExplorerService)\\n", "");
+            String prelude = "var datasourceConnectionConfig = (action, id, values, clearAll) => fixture.connectionConfig(id);\n";
+            Map<String, Object> inputs = new LinkedHashMap<>();
+            inputs.put("body", Map.of("tableId", "source-1", "force", true, "dryRun", true,
+                    "sourceFileConfig", Map.of("charset", "GB18030", "delimiter", "\t")));
+            inputs.put("db", db);
+            inputs.put("tenantRuntime", scope);
+            inputs.put("dataScope", scope);
+            inputs.put("jsons", new JsonModule());
+            inputs.put("metadataExplorerService", explorer);
+            inputs.put("structuredSourceProbeService", fileProbe);
             inputs.put("fixture", this);
             counter.reset();
             return MagicScript.create(prelude + script, null).execute(new MagicScriptContext(inputs));

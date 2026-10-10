@@ -27,6 +27,41 @@ class AccessTaskFieldMappingBinderTest {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     @Test
+    void repairsLegacyNumericEnumTypeBeforeCompilingAndRemainsIdempotent() throws Exception {
+        IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
+        IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
+        when(tasks.findByPipelineId("pipeline-1")).thenReturn(new DataAccessAggTaskT().setTid("task-1"));
+        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(new DataAccessFieldMapping()
+                .setSourceField("APPLY_FLAG").setTargetField("APPLY_FLAG_cn").setSourceDataType("NUMBER(10,0)")
+                .setFuncEnable(1).setFuncCode("ENUM_MAP").setFuncValue("{\"values\":{\"0\":\"审核中\",\"1\":\"审核通过\"}}")));
+        var original = pipelineWithLegacyDirectMappings();
+        var mappingNode = new Pipeline.Node("mapping", "transform.field-mapping", "字段映射", "transform", 0, 0,
+                Map.of("mappings", "{\"mappings\":[{\"from\":\"/APPLY_FLAG\",\"to\":\"/APPLY_FLAG_cn\",\"transform\":{\"fn\":\"enumMap\",\"args\":[{\"0\":\"审核中\",\"1\":\"审核通过\"},null]}}]}"));
+        var pipeline = new Pipeline(original.id(), original.name(), null, 1L, 1L,
+                new Pipeline.Dsl(1, List.of(original.dsl().nodes().getFirst(), mappingNode), List.of()), null, null, null, null, null, null, null);
+        var binder = new AccessTaskFieldMappingBinder(tasks, mappings);
+        var bound = binder.bind(pipeline);
+        var spec = mappingsSpec(bound);
+        assertEquals("NUMBER(10,0)", mapping(spec, "/APPLY_FLAG_cn").path("sourceDataType").asText());
+        assertTrue(new FieldMappingService().compileQuery(spec).contains("WHEN 0 THEN _UTF-8'审核中'"));
+        assertSame(bound, binder.bind(bound), "An already typed enum must not be regenerated on every bind");
+    }
+
+    @Test
+    void numericCertificateEnumsDoNotAcquireTextOnlyLegacyAliases() throws Exception {
+        IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
+        IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
+        when(tasks.findByPipelineId("pipeline-1")).thenReturn(new DataAccessAggTaskT().setTid("task-1"));
+        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(new DataAccessFieldMapping()
+                .setSourceField("source_certificate_type").setTargetField("source_certificate_type_cn").setSourceDataType("int")
+                .setFuncEnable(1).setFuncCode("ENUM_MAP").setFuncValue("{\"values\":{\"111\":\"身份证\",\"414\":\"护照\"}}")));
+        var spec = mappingsSpec(new AccessTaskFieldMappingBinder(tasks, mappings).bind(pipelineWithLegacyDirectMappings()));
+        var values = mapping(spec, "/source_certificate_type_cn").path("transform").path("args").get(0);
+        assertFalse(values.has("IDCARD"));
+        assertTrue(new FieldMappingService().compileQuery(spec).contains("WHEN 111 THEN"));
+    }
+
+    @Test
     void restoresDictionaryMarkerAndMandatoryStandardRulesBeforeDeploy() throws Exception {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);

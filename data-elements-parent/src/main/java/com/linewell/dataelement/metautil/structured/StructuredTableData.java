@@ -13,6 +13,8 @@ public class StructuredTableData {
 
     private TableInfo table;
     private String sourcePath;
+    private String fileRecordFormat = "csv";
+    private String fileDelimiter;
     private List<ColumnInfo> columns = new ArrayList<>();
     private List<Map<String, Object>> rows = new ArrayList<>();
 

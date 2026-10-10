@@ -7,6 +7,7 @@ import { getTid } from './iframeBridge';
 import { getBridgeToken, getSessionRevision, useSessionRevision, useTokenReady, waitForToken } from './bridgeSession';
 import { isPlatformAuthenticationFailure } from '../../api/platformApi';
 import { redirectToPlatformLogin } from '../../services/platformSession';
+import { acceptDeploymentResult } from '../utils/deploymentCache';
 
 export type PipelineStatus =
   | 'DRAFT'
@@ -106,6 +107,16 @@ export interface Pipeline {
   updatedAt?: number | null;
   dsl: CanvasDsl;
   nifiProcessGroupId?: string | null;
+  status?: PipelineStatus;
+  lastDeployedHash?: string | null;
+  lastDeployedAt?: number | null;
+}
+
+export interface DeploymentResult {
+  pipeline?: Pipeline;
+  processGroupId?: string;
+  started?: boolean;
+  mode?: string;
 }
 
 const KEY = ['pipelines'] as const;
@@ -136,7 +147,7 @@ export function usePipeline(id: string | null) {
   return useQuery({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline', id, sessionRevision],
-    queryFn: async () => (await api.get<Pipeline>(`/pipelines/${id}`)).data,
+    queryFn: async ({ signal }) => (await api.get<Pipeline>(`/pipelines/${id}`, { signal })).data,
     staleTime: 5_000,
   });
 }
@@ -152,9 +163,12 @@ export function useSavePipeline() {
         params: p.copy ? undefined : { catalogTid: getTid() || undefined },
       })).data;
     },
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: KEY });
-      qc.setQueryData(['pipeline', data.id, getSessionRevision()], data);
+    onSuccess: async (data) => {
+      const revision = getSessionRevision();
+      await qc.cancelQueries({ queryKey: ['pipeline', data.id, revision] });
+      if (revision !== getSessionRevision()) return;
+      qc.setQueryData(['pipeline', data.id, revision], data);
+      void qc.invalidateQueries({ queryKey: [...KEY, revision] });
     },
   });
 }
@@ -174,10 +188,10 @@ export function useDeployPipeline() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, catalogTid }: { id: string; catalogTid?: string | null }) =>
-      (await api.post(`/pipelines/${id}/deploy`, { catalogTid })).data,
-    onSuccess: (_, { id }) => {
-      qc.invalidateQueries({ queryKey: KEY });
-      qc.invalidateQueries({ queryKey: ['pipeline-status', id] });
+      (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid })).data,
+    onSuccess: async (data, { id }) => {
+      const revision = getSessionRevision();
+      await acceptDeploymentResult(qc, data, id, revision, () => revision === getSessionRevision());
     },
     onError: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['pipeline-errors', id] });
@@ -304,11 +318,11 @@ export function useFlowStatus(id: string | null, intervalMs = 3000) {
   return useQuery<FlowStatusPayload>({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-status', id, sessionRevision],
-    queryFn: async () => (await api.get<FlowStatusPayload>(`/pipelines/${id}/status`)).data,
+    queryFn: async ({ signal }) => (await api.get<FlowStatusPayload>(`/pipelines/${id}/status`, { signal })).data,
     refetchInterval: (query) => {
-      const data = (query as { data?: FlowStatusPayload }).data;
+      const data = query.state.data;
       if (!data) return intervalMs;
-      return data.status === 'RUNNING' ? intervalMs : 30000;
+      return ['RUNNING', 'DEPLOYING', 'STOPPING'].includes(data.status) ? intervalMs : 30000;
     },
   });
 }

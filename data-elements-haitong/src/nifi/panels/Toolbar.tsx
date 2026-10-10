@@ -58,7 +58,12 @@ import CanvasThemeToggle from './CanvasThemeToggle';
 import SyncSettingsEditor from './SyncSettingsEditor';
 import { useComponentManifests } from '@/api/manifests';
 import { syncSettings, syncSettingsPatch, syncSettingsError, needsCleanupConfirmation, syncModeLabel, sameSavedContent, type SyncSettings } from '../utils/syncSettings';
-import { normalizeCanvasDsl } from '@/types/dsl';
+import { sameExecutableDsl, sameDesignDsl } from '../utils/pipelineVersion';
+import type { CanvasDsl } from '@/types/dsl';
+
+function BusyIndicator() {
+  return <span className="canvas-action-spinner" aria-hidden="true" />;
+}
 
 interface StatusViz {
   color: string;
@@ -198,6 +203,9 @@ export default function Toolbar() {
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [startDraft, setStartDraft] = useState<SyncSettings>(() => syncSettings());
   const [cleanupAcknowledged, setCleanupAcknowledged] = useState(false);
+  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
+  const [activeAction, setActiveAction] = useState<'save' | 'start' | null>(null);
+  const actionLock = useRef(false);
   const canvasNodes = useCanvasStore(s => s.nodes);
   const sourceNodes = Object.values(canvasNodes).filter(node => node.category === 'source');
   const sourceNode = sourceNodes[0];
@@ -208,10 +216,6 @@ export default function Toolbar() {
   const targetNames = Object.values(canvasNodes).filter(node => node.category === 'sink')
     .map(node => `${node.label}（${String(node.config.dbType ?? node.manifestKey.replace('sink.', ''))}）：${String(node.config.table ?? node.config.tableName ?? '未配置表名')}`);
   const otherSourcesNeedCleanup = sourceNodes.slice(1).some(node => needsCleanupConfirmation(syncSettings(node.config)));
-  const startNeedsSave = !currentPipelineId || !currentPipelineQuery.data?.dsl
-    || !sameSavedContent(toDsl(), normalizeCanvasDsl(currentPipelineQuery.data.dsl))
-    || (supportsSyncSettings && sourceNode && Object.entries(syncSettingsPatch(sourceNode.config, startDraft))
-      .some(([key, value]) => sourceNode.config[key] !== value));
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const completionWatchRef = useRef<{ pipelineId: string; baseline: number; armedAt: number; syncMode: string } | null>(null);
@@ -242,8 +246,13 @@ export default function Toolbar() {
     }
   }, [optimisticStatus, liveStatus]);
 
-  const deploySavedPipeline = async (id: string, name: string, catalogTid: string | null = getTid()) => {
-    await deploy.mutateAsync({ id, catalogTid });
+  const deploySavedPipeline = async (id: string, name: string, submitted: CanvasDsl, catalogTid: string | null = getTid()) => {
+    const result = await deploy.mutateAsync({ id, catalogTid });
+    if (!isCurrentSession()) return;
+    if (useCanvasStore.getState().currentPipelineId === id && result.pipeline?.id === id) {
+      const accepted = useCanvasStore.getState().acceptDeployment(submitted, result.pipeline.dsl);
+      if (!accepted) message.info('已部署保存时的版本；部署期间新增的修改保留在画布中，请保存后再启动。');
+    }
     message.success(isChengtianIntegration ? `设计已保存并发布：${name}。外部执行需另行授权。` : `已保存并部署:${name}`);
   };
 
@@ -258,17 +267,29 @@ export default function Toolbar() {
   // ---- Save + deploy in-place ----
   const doSaveInPlace = async () => {
     if (!isCurrentSession()) return;
-    if (save.isPending || deploy.isPending) return;
-    const dsl = toDsl();
+    if (actionLock.current || save.isPending || deploy.isPending || isRunning || isTransitioning) return;
     if (currentPipelineId && currentPipelineName) {
+      actionLock.current = true;
+      setActiveAction('save');
       let deploymentAttempted = false;
       try {
-        const saved = await save.mutateAsync({ id: currentPipelineId, name: currentPipelineName, dsl });
-        setCurrentPipeline(saved.id, saved.name);
+        // Let the busy state paint before serialization, especially on older workstations.
+        await new Promise<void>(resolve => window.requestAnimationFrame(() => window.setTimeout(resolve, 0)));
+        if (!isCurrentSession()) return;
+        const dsl = toDsl();
+        const unchanged = currentPipelineQuery.data?.name === currentPipelineName
+          && sameDesignDsl(dsl, currentPipelineQuery.data.dsl);
+        const saved = unchanged ? currentPipelineQuery.data!
+          : await save.mutateAsync({ id: currentPipelineId, name: currentPipelineName, dsl });
+        if (!isCurrentSession()) return;
+        if (useCanvasStore.getState().currentPipelineId === currentPipelineId) setCurrentPipeline(saved.id, saved.name);
         deploymentAttempted = true;
-        await deploySavedPipeline(saved.id, saved.name);
+        await deploySavedPipeline(saved.id, saved.name, dsl);
       } catch (e: any) {
         reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
+      } finally {
+        actionLock.current = false;
+        setActiveAction(null);
       }
     } else {
       setSaveAsDraft(currentPipelineName ?? '');
@@ -287,7 +308,7 @@ export default function Toolbar() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPipelineId, currentPipelineName, renderSessionRevision]);
+  }, [currentPipelineId, currentPipelineName, renderSessionRevision, currentPipelineQuery.data, isRunning, isTransitioning]);
 
   const startOptionsForDsl = (dsl = toDsl()): SyncSettings => {
     const source = dsl.nodes.find((node) => node.category === 'source');
@@ -295,14 +316,11 @@ export default function Toolbar() {
     return syncSettings(config);
   };
 
-  const startDeployedPipeline = async (pipelineId: string, options: SyncSettings) => {
-    const forceRebuild = currentPipelineQuery.data?.dsl.nodes.some(node => node.category === 'source'
-      && syncSettings(node.config).deleteTargetData) ?? options.deleteTargetData;
-    message.loading({
-      content: forceRebuild ? '正在按清空目标数据的设置重新部署并启动...' : '正在启动 NiFi 任务...',
-      key: 'start-flow',
-    });
-    const res: any = await start.mutateAsync({ id: pipelineId, force: forceRebuild, confirmCleanup: cleanupAcknowledged });
+  const startDeployedPipeline = async (pipelineId: string, options: SyncSettings, acknowledged: boolean) => {
+    const forceRebuild = toDsl().nodes.some(node => node.category === 'source'
+      && syncSettings(node.config).deleteTargetData);
+    const res: any = await start.mutateAsync({ id: pipelineId, force: forceRebuild, confirmCleanup: acknowledged });
+    if (!isCurrentSession()) return;
     setOptimisticStatus('RUNNING');
     completionWatchRef.current = supportsSyncSettings && sourceNodes.every(node => syncSettings(node.config).syncMode === 'FULL')
       ? {
@@ -316,19 +334,16 @@ export default function Toolbar() {
     completionErrorNotifiedRef.current = null;
     void res;
     setSyncCompletion(null);
-    message.destroy('start-flow');
     message.success(`已启动：${syncModeLabel(options.syncMode)}`);
   };
 
-  const handleStart = async () => {
-    if (!isCurrentSession()) return;
-    if (manifestsPending) { message.info('正在加载来源配置，请稍后启动'); return; }
+  const openAdvancedSettings = () => {
     setStartDraft(startOptionsForDsl());
     setCleanupAcknowledged(false);
     setStartDialogOpen(true);
   };
 
-  const confirmStart = async () => {
+  const applyAdvancedSettings = () => {
     if (!isCurrentSession()) return;
     if (!sourceNode) { message.warning('请先配置来源节点'); return; }
     const error = supportsSyncSettings ? syncSettingsError(sourceNode.config, startDraft) : undefined;
@@ -336,24 +351,46 @@ export default function Toolbar() {
     if (sourceNodes.length > 1 && startDraft.syncMode === 'PERIODIC_FULL') {
       message.warning('定时全量仅支持单个数据库来源，请将多来源拆分为独立任务'); return;
     }
-    if ((supportsSyncSettings && needsCleanupConfirmation(startDraft) || otherSourcesNeedCleanup) && !cleanupAcknowledged) {
-      message.warning('请确认目标表及清空范围'); return;
+    const changed = !sameSavedContent(syncSettings(sourceNode.config), startDraft);
+    if (changed && supportsSyncSettings) {
+      useCanvasStore.getState().updateNodeConfig(sourceNode.id, syncSettingsPatch(sourceNode.config, startDraft));
+      message.success('高级设置已应用，请保存并部署后启动。');
     }
+    setStartDialogOpen(false);
+  };
+
+  const handleStart = async (acknowledged = false) => {
+    if (!isCurrentSession() || actionLock.current || isRunning || isTransitioning) return;
+    if (manifestsPending) { message.info('正在加载来源配置，请稍后启动'); return; }
     const canvasDsl = toDsl();
-    const patch = supportsSyncSettings ? syncSettingsPatch(sourceNode.config, startDraft) : {};
-    const changed = Object.entries(patch).some(([key, value]) => sourceNode.config[key] !== value);
-    if (changed) useCanvasStore.getState().updateNodeConfig(sourceNode.id, patch);
+    const sources = canvasDsl.nodes.filter(node => node.category === 'source');
+    if (!sources.length) { message.warning('请先配置来源节点'); return; }
+    for (const node of sources) {
+      const databaseSource = componentManifests?.find(item => item.key === node.manifestKey)
+        ?.compile?.processors?.some(processor => processor.type.endsWith('.GenerateTableFetch'));
+      if (!databaseSource) continue;
+      const options = syncSettings(node.config);
+      const error = syncSettingsError(node.config, options);
+      if (error) { message.warning(`${node.label}：${error}`); return; }
+      if (sources.length > 1 && options.syncMode === 'PERIODIC_FULL') {
+        message.warning('定时全量仅支持单个数据库来源，请将多来源拆分为独立任务'); return;
+      }
+    }
     const savedDsl = currentPipelineQuery.data?.dsl;
-    if (changed || !currentPipelineId || !savedDsl || !sameSavedContent(canvasDsl, normalizeCanvasDsl(savedDsl))) {
-      setStartDialogOpen(false);
-      message.info('同步设置已应用到画布。请先点击“保存并部署”，再点击“启动”确认运行。');
+    if (!currentPipelineId || !savedDsl || !sameExecutableDsl(canvasDsl, savedDsl)) {
+      message.info('画布有未保存的运行配置，请先保存并部署。');
       return;
     }
+    if (sources.some(node => needsCleanupConfirmation(syncSettings(node.config))) && !acknowledged) {
+      setCleanupAcknowledged(false);
+      setCleanupDialogOpen(true);
+      return;
+    }
+    actionLock.current = true;
+    setActiveAction('start');
     try {
-      // The initial status poll can still be in flight when the toolbar first
-      // renders. Resolve it on this click so a deployed flow never needs a
-      // second click merely because the polling cache is not ready yet.
-      const status = statusQuery.data ?? (await statusQuery.refetch()).data;
+      // Refresh on this click: a polling result may predate the completed deployment.
+      const status = (await statusQuery.refetch({ throwOnError: true })).data;
       const deployedVersionIsCurrent = Boolean(status?.deployed
         && status.currentHash
         && status.currentHash === status.lastDeployedHash);
@@ -369,12 +406,21 @@ export default function Toolbar() {
       }
       // Start exactly the deployed version. Unsaved canvas edits remain local
       // and do not turn a single click into a save/deploy confirmation chain.
-      await startDeployedPipeline(currentPipelineId, startOptionsForDsl(currentPipelineQuery.data?.dsl));
-      setStartDialogOpen(false);
+      // Recheck after the asynchronous status read; do not run while the user changes configuration.
+      if (!isCurrentSession() || useCanvasStore.getState().currentPipelineId !== currentPipelineId) return;
+      if (!sameExecutableDsl(toDsl(), savedDsl)) {
+        message.info('启动检查期间配置已改变，请保存并部署后再启动。');
+        return;
+      }
+      await startDeployedPipeline(currentPipelineId, startOptionsForDsl(savedDsl), acknowledged);
+      setCleanupDialogOpen(false);
     } catch (e: any) {
       message.destroy('start-flow');
       message.error(`启动失败: ${e?.response?.data?.message ?? e?.response?.data?.error ?? e?.message ?? e}`);
       openErrorPanel();
+    } finally {
+      actionLock.current = false;
+      setActiveAction(null);
     }
   };
 
@@ -492,9 +538,10 @@ export default function Toolbar() {
       save
         .mutateAsync({ id: currentPipelineId, name, dsl })
         .then(async (saved) => {
-          setCurrentPipeline(saved.id, saved.name);
+          if (!isCurrentSession()) return;
+          if (useCanvasStore.getState().currentPipelineId === currentPipelineId) setCurrentPipeline(saved.id, saved.name);
           deploymentAttempted = true;
-          await deploySavedPipeline(saved.id, saved.name);
+          await deploySavedPipeline(saved.id, saved.name, dsl);
         })
         .catch((e) => {
           reportSaveOrDeployFailure(e, deploymentAttempted, '重命名');
@@ -710,7 +757,7 @@ export default function Toolbar() {
             }}
           >
             {viz.spinning
-              ? <LoadingOutlined style={{ fontSize: 10, color: viz.color }} spin />
+              ? <BusyIndicator />
               : <span style={{ display: 'inline-block', flexShrink: 0, width: 8, height: 8, borderRadius: '50%', background: viz.color }} />}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {viz.label}
@@ -735,35 +782,43 @@ export default function Toolbar() {
         </Tooltip>
         <Tooltip title={isChengtianIntegration ? "保存并发布设计版本 (Ctrl+S)" : "保存并部署 (Ctrl+S)"}>
           <Button
-            icon={<SaveOutlined />}
-            loading={save.isPending || deploy.isPending}
-            disabled={isTransitioning || isRunning}
+            className="canvas-save-action"
+            aria-busy={activeAction === 'save' || save.isPending || deploy.isPending}
+            icon={activeAction === 'save' || save.isPending || deploy.isPending ? <BusyIndicator /> : <SaveOutlined />}
+            disabled={!!activeAction || save.isPending || deploy.isPending || isTransitioning || isRunning}
             onClick={doSaveInPlace}
           >
-            {isChengtianIntegration ? '保存并发布' : '保存并部署'}
+            {deploy.isPending ? (isChengtianIntegration ? '发布中…' : '部署中…')
+              : activeAction === 'save' || save.isPending ? '保存中…'
+                : isChengtianIntegration ? '保存并发布' : '保存并部署'}
           </Button>
         </Tooltip>
 
         {isRunning ? (
           <Button
             danger
-            icon={<PauseCircleOutlined />}
-            loading={stop.isPending || (effectiveStatus as string) === 'STOPPING'}
-            disabled={isTransitioning}
+            aria-busy={stop.isPending || (effectiveStatus as string) === 'STOPPING'}
+            icon={stop.isPending || (effectiveStatus as string) === 'STOPPING' ? <BusyIndicator /> : <PauseCircleOutlined />}
+            disabled={stop.isPending || isTransitioning}
             onClick={handleStop}
           >
-            停止
+            {stop.isPending || (effectiveStatus as string) === 'STOPPING' ? '停止中…' : '停止'}
           </Button>
         ) : (
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            loading={start.isPending || effectiveStatus === 'DEPLOYING'}
-            disabled={isChengtianIntegration || isTransitioning}
-            onClick={handleStart}
-          >
-            {isChengtianIntegration ? '等待授权' : '启动'}
-          </Button>
+          <div className="canvas-start-actions">
+            <Button type="primary" className="canvas-start-actions__main"
+              aria-busy={activeAction === 'start' || start.isPending}
+              icon={activeAction === 'start' || start.isPending ? <BusyIndicator /> : <PlayCircleOutlined />}
+              disabled={isChengtianIntegration || !!activeAction || save.isPending || deploy.isPending || isTransitioning}
+              onClick={() => void handleStart()}>
+              {isChengtianIntegration ? '等待授权' : activeAction === 'start' || start.isPending ? '启动中…' : '启动'}
+            </Button>
+            <Dropdown trigger={['click']} placement="bottomRight" getPopupContainer={getNifiOverlayContainer}
+              menu={{ items: [{ key: 'advanced', label: '高级设置', icon: <EditOutlined />, onClick: openAdvancedSettings }] }}>
+              <Button type="primary" className="canvas-start-actions__more" aria-label="启动高级设置菜单"
+                icon={<DownOutlined />} disabled={isChengtianIntegration || !!activeAction || isTransitioning || save.isPending || deploy.isPending} />
+            </Dropdown>
+          </div>
         )}
 
         <Dropdown menu={{ items: moreMenu }} trigger={['click']} placement="bottomRight">
@@ -775,18 +830,28 @@ export default function Toolbar() {
         </Tooltip>
       </div>
 
-      <Modal title="选择本次启动方式" open={startDialogOpen} width={600} style={{ top: 24 }}
-        onCancel={() => setStartDialogOpen(false)} onOk={() => void confirmStart()}
-        okText={startNeedsSave ? '应用到画布' : '确认启动'} cancelText="取消" confirmLoading={start.isPending}
-        getContainer={getNifiOverlayContainer} styles={{ body: { maxHeight: 'min(65vh, calc(100vh - 180px))', overflowY: 'auto' } }}>
-        <Alert type="info" showIcon style={{ marginBottom: 16 }} message="设置变化或存在未保存修改时，先应用到画布，再保存并部署；本窗口不会自动保存或部署。" />
-        {sourceNodes.length > 1 && <Alert type="info" style={{ marginBottom: 12 }} message={`本窗口设置来源“${sourceNode?.label}”；其余来源沿用各自节点配置。定时全量须拆分为单来源任务。`} />}
+      <Modal title="启动高级设置" className="canvas-sync-modal" open={startDialogOpen} width={760} style={{ top: 32 }}
+        onCancel={() => setStartDialogOpen(false)} onOk={applyAdvancedSettings}
+        okText="应用设置" cancelText="取消"
+        getContainer={getNifiOverlayContainer} styles={{ body: { maxHeight: 'min(65vh, calc(100vh - 240px))', overflowY: 'auto' } }}>
+        {sourceNodes.length > 1 && <div className="canvas-sync-source">来源：{sourceNode?.label}（其他来源在各自节点中设置）</div>}
         {supportsSyncSettings ? <SyncSettingsEditor value={startDraft} onChange={setStartDraft}
-          targetNames={targetNames} acknowledged={cleanupAcknowledged} onAcknowledge={setCleanupAcknowledged} />
-          : <Alert type="info" message="当前来源使用其原生接入配置。确认后启动已部署版本。" />}
+          targetNames={targetNames} />
+          : <Empty description="当前来源使用原生接入配置，可在来源节点中修改。" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
         {otherSourcesNeedCleanup && <Alert type="warning" showIcon style={{ marginTop: 12 }} message="其他来源的已保存配置也要求清空目标表"
-          description={<><div>目标表：{targetNames.join('、')}</div><Checkbox checked={cleanupAcknowledged}
-            onChange={event => setCleanupAcknowledged(event.target.checked)}>我确认上述目标表及全部来源的清空范围</Checkbox></>} />}
+          description={<div>目标表：{targetNames.join('、')}</div>} />}
+      </Modal>
+
+      <Modal title="确认清空目标数据" open={cleanupDialogOpen} width={620}
+        getContainer={getNifiOverlayContainer} onCancel={() => setCleanupDialogOpen(false)}
+        onOk={() => void handleStart(cleanupAcknowledged)} okText="确认并启动" cancelText="取消"
+        okButtonProps={{ danger: true, disabled: !cleanupAcknowledged || !!activeAction,
+          icon: activeAction === 'start' ? <BusyIndicator /> : undefined }}>
+        <Alert type="warning" showIcon message="已保存的同步设置要求清空目标表"
+          description={<><div>目标表：{targetNames.join('、') || '未配置目标表'}</div>
+            <div>已有数据将被删除；清理失败时不会继续抽取。</div></>} />
+        <Checkbox style={{ marginTop: 20 }} checked={cleanupAcknowledged}
+          onChange={event => setCleanupAcknowledged(event.target.checked)}>我确认上述目标表及全部来源的清空范围</Checkbox>
       </Modal>
 
       <Modal
@@ -794,13 +859,17 @@ export default function Toolbar() {
         title={currentPipelineId ? '另存为' : '保存流程'}
         open={openSaveAs}
         onOk={async () => {
-          if (!isCurrentSession()) return;
+          if (!isCurrentSession() || actionLock.current) return;
           const name = saveAsDraft.trim();
           if (!name) { message.warning('请填写流程名称'); return; }
+          actionLock.current = true;
+          setActiveAction('save');
           let deploymentAttempted = false;
           try {
             const isCopy = Boolean(currentPipelineId);
-            const saved = await save.mutateAsync({ id: undefined, name, dsl: toDsl(), copy: isCopy });
+            const submitted = toDsl();
+            const saved = await save.mutateAsync({ id: undefined, name, dsl: submitted, copy: isCopy });
+            if (!isCurrentSession()) return;
             setCurrentPipeline(saved.id, saved.name);
             if (!isCopy) {
               window.dispatchEvent(new CustomEvent('haitong:nifi-pipeline-saved', {
@@ -809,16 +878,22 @@ export default function Toolbar() {
             }
             setOpenSaveAs(false);
             deploymentAttempted = true;
-            await deploySavedPipeline(saved.id, saved.name, isCopy ? null : getTid());
+            await deploySavedPipeline(saved.id, saved.name, submitted, isCopy ? null : getTid());
           } catch (e: any) {
             message.destroy('start-flow');
             reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
+          } finally {
+            actionLock.current = false;
+            setActiveAction(null);
           }
         }}
         onCancel={() => {
           setOpenSaveAs(false);
         }}
-        confirmLoading={save.isPending || deploy.isPending}
+        okText={deploy.isPending ? '部署中…' : save.isPending || activeAction === 'save' ? '保存中…' : '保存'}
+        okButtonProps={{ disabled: save.isPending || deploy.isPending || !!activeAction,
+          icon: save.isPending || deploy.isPending || activeAction === 'save' ? <BusyIndicator /> : undefined }}
+        cancelButtonProps={{ disabled: save.isPending || deploy.isPending || !!activeAction }}
       >
         <Input
           placeholder="流程名称"

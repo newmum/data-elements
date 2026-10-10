@@ -41,6 +41,11 @@ public class FieldMappingService {
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION.mappedFeature()));
     private static final Pattern FIELD_REF = Pattern.compile("\\$\\{field:([^}]+)}");
     private static final Pattern TARGET_REF = Pattern.compile("\\$\\{target:([^}]+)}");
+    private static final Pattern NUMERIC_ENUM_CODE = Pattern.compile("[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?");
+    private static final Set<String> NUMERIC_ENUM_TYPES = Set.of(
+            "TINYINT", "SMALLINT", "MEDIUMINT", "INT", "INTEGER", "BIGINT", "INT2", "INT4", "INT8",
+            "NUMBER", "NUMERIC", "DECIMAL", "DEC", "FLOAT", "REAL", "DOUBLE", "DOUBLE PRECISION",
+            "FLOAT4", "FLOAT8", "BINARY_FLOAT", "BINARY_DOUBLE", "SMALLSERIAL", "SERIAL", "BIGSERIAL");
     private static final Set<String> SUPPORTED_SQL_TRANSFORMS = Set.of(
             "upper", "lower", "trim", "ltrim", "rtrim", "toInt", "toLong", "toDouble", "toDecimal", "cast", "coalesce", "nvl", "enumMap", "jsonValue");
     private final DataSourceConnectionPropertyResolver registeredSources;
@@ -258,7 +263,8 @@ public class FieldMappingService {
         }
         String field = columnName(requiredText(mapping, "from", "映射必须配置源字段、常量、表达式或字典查询"), "源字段");
         String expression = sourceAlias + "." + identifier.apply(field);
-        return mapping.has("transform") ? transformSql(expression, mapping.path("transform"), false) : expression;
+        return mapping.has("transform") ? transformSql(expression, mapping.path("transform"), false,
+                mapping.path("sourceDataType").asText("")) : expression;
     }
 
     private String replaceLookupParameters(String sql, List<String> parameters) {
@@ -770,7 +776,8 @@ public class FieldMappingService {
         }
         String from = columnName(requiredText(mapping, "from", "映射必须配置 from、fromList、constant 或 expression 之一"), "源字段");
         String expr = quoteSqlIdentifier(from);
-        if (mapping.has("transform")) expr = transformSql(expr, mapping.path("transform"), false);
+        if (mapping.has("transform")) expr = transformSql(expr, mapping.path("transform"), false,
+                mapping.path("sourceDataType").asText(""));
         return expr;
     }
 
@@ -789,7 +796,7 @@ public class FieldMappingService {
         return String.join(" || ", parts);
     }
 
-    private String transformSql(String expr, JsonNode transform, boolean allowComplex) {
+    private String transformSql(String expr, JsonNode transform, boolean allowComplex, String sourceDataType) {
         String fn = transform.path("fn").asText("");
         JsonNode args = transform.path("args");
         if (!allowComplex && !SUPPORTED_SQL_TRANSFORMS.contains(fn)) {
@@ -807,7 +814,7 @@ public class FieldMappingService {
             case "toDecimal" -> "CAST(" + expr + " AS DECIMAL" + decimalSuffix(args) + ")";
             case "cast" -> "CAST(" + expr + " AS " + sqlType(args != null && args.size() > 0 ? args.get(0).asText("STRING") : "STRING") + ")";
             case "coalesce", "nvl" -> "COALESCE(" + expr + ", " + literal(args != null && args.size() > 0 ? args.get(0) : MAPPER.getNodeFactory().nullNode()) + ")";
-            case "enumMap" -> enumMapSql(expr, args);
+            case "enumMap" -> enumMapSql(expr, args, sourceDataType);
             case "jsonValue" -> {
                 String path=args.path(0).asText("");
                 if(!path.matches("\\$(?:\\.[A-Za-z_][A-Za-z0-9_]*|\\[[0-9]{1,6}\\]){1,16}"))throw new IllegalStateException("JSON 路径须为有界的 $.字段 或 [序号] 路径");
@@ -822,13 +829,13 @@ public class FieldMappingService {
      * CASE expression.  This lets a source code keep its original value while
      * the generated {@code _cn} field stores the governed Chinese description.
      */
-    private String enumMapSql(String sourceExpression, JsonNode args) {
+    private String enumMapSql(String sourceExpression, JsonNode args, String sourceDataType) {
         if (args == null || !args.isArray() || args.isEmpty() || !args.get(0).isObject()) {
             throw new IllegalStateException("transform.fn=enumMap 必须提供代码到描述的映射对象");
         }
         JsonNode values = args.get(0);
         List<String> branches = new ArrayList<>();
-        values.fields().forEachRemaining(entry -> branches.add("WHEN " + literal(MAPPER.getNodeFactory().textNode(entry.getKey()))
+        values.fields().forEachRemaining(entry -> branches.add("WHEN " + enumCodeLiteral(entry.getKey(), sourceDataType)
                 + " THEN " + literal(entry.getValue())));
         if (branches.isEmpty()) {
             throw new IllegalStateException("transform.fn=enumMap 的映射对象不能为空");
@@ -836,6 +843,36 @@ public class FieldMappingService {
         JsonNode fallback = args.size() > 1 ? args.get(1) : MAPPER.getNodeFactory().nullNode();
         return "CASE " + sourceExpression + " " + String.join(" ", branches)
                 + " ELSE " + literal(fallback) + " END";
+    }
+
+    // JSON object keys are always strings. Their SQL type comes from the source
+    // field, never from how a code looks (varchar codes such as 01 must stay text).
+    static boolean isNumericEnumSource(String sourceDataType) {
+        if (sourceDataType == null) return false;
+        String type = sourceDataType.trim().toUpperCase(Locale.ROOT).replaceAll("\\s+", " ");
+        int precision = type.indexOf('(');
+        if (precision >= 0) type = type.substring(0, precision).trim();
+        type = type.replaceFirst("(?: (?:UNSIGNED|ZEROFILL))+$", "");
+        return NUMERIC_ENUM_TYPES.contains(type);
+    }
+
+    private String enumCodeLiteral(String code, String sourceDataType) {
+        return isNumericEnumSource(sourceDataType) ? numericEnumCode(code).toPlainString()
+                : literal(MAPPER.getNodeFactory().textNode(code));
+    }
+
+    private BigDecimal numericEnumCode(String code) {
+        String value = code == null ? "" : code.trim();
+        if (value.length() > 128 || !NUMERIC_ENUM_CODE.matcher(value).matches()) {
+            throw new IllegalStateException("数字类型字段的枚举编码必须是有效数字，请检查关联枚举配置");
+        }
+        try {
+            BigDecimal number = new BigDecimal(value);
+            if (Math.abs((long) number.scale()) > 128) throw new NumberFormatException();
+            return number;
+        } catch (NumberFormatException exception) {
+            throw new IllegalStateException("数字类型字段的枚举编码超出支持范围，请检查关联枚举配置");
+        }
     }
 
     private String expressionToSql(String expression) {
@@ -894,17 +931,17 @@ public class FieldMappingService {
         else if (mapping.has("fromList")) {
             List<Object> values = new ArrayList<>();
             mapping.path("fromList").forEach(v -> values.add(row.get(columnName(v.asText(), "源字段"))));
-            value = applyTransform(values, mapping.path("transform"));
+            value = applyTransform(values, mapping.path("transform"), mapping.path("sourceDataType").asText(""));
         } else if (mapping.hasNonNull("expression")) {
             value = evalSimpleExpression(mapping.path("expression").asText(), row, target, rowIndex);
         } else {
             value = row.get(columnName(requiredText(mapping, "from", "映射必须配置 from"), "源字段"));
-            if (mapping.has("transform")) value = applyTransform(value, mapping.path("transform"));
+            if (mapping.has("transform")) value = applyTransform(value, mapping.path("transform"), mapping.path("sourceDataType").asText(""));
         }
         return value;
     }
 
-    private Object applyTransform(Object value, JsonNode transform) {
+    private Object applyTransform(Object value, JsonNode transform, String sourceDataType) {
         String fn = transform.path("fn").asText("");
         JsonNode args = transform.path("args");
         try {
@@ -920,7 +957,7 @@ public class FieldMappingService {
                 case "toDecimal" -> value == null ? null : new BigDecimal(value.toString());
                 case "coalesce", "nvl" -> value != null ? value : argValue(args, 0, null);
                 case "concat" -> concat(value, args != null && args.size() > 0 ? args.get(0).asText("") : "");
-                case "enumMap" -> enumMap(value, args);
+                case "enumMap" -> enumMap(value, args, sourceDataType);
                 case "jsonValue" -> jsonValue(value, args);
                 case "md5", "sha1", "sha256" -> digest(fn, value == null ? "" : value.toString());
                 case "urlEncode" -> value == null ? null : URLEncoder.encode(value.toString(), StandardCharsets.UTF_8);
@@ -992,8 +1029,19 @@ public class FieldMappingService {
         return value == null ? null : value.toString();
     }
 
-    private Object enumMap(Object value, JsonNode args) {
+    private Object enumMap(Object value, JsonNode args, String sourceDataType) {
         if (args == null || args.size() == 0 || !args.get(0).isObject()) return value;
+        if (isNumericEnumSource(sourceDataType) && value != null) {
+            BigDecimal numericValue = numericEnumCode(String.valueOf(value));
+            var entries = args.get(0).fields();
+            while (entries.hasNext()) {
+                var entry = entries.next();
+                if (numericValue.compareTo(numericEnumCode(entry.getKey())) == 0) {
+                    return MAPPER.convertValue(entry.getValue(), Object.class);
+                }
+            }
+            return args.size() > 1 ? MAPPER.convertValue(args.get(1), Object.class) : value;
+        }
         String key = value == null ? "" : String.valueOf(value);
         JsonNode mapped = args.get(0).path(key);
         if (!mapped.isMissingNode()) return MAPPER.convertValue(mapped, Object.class);

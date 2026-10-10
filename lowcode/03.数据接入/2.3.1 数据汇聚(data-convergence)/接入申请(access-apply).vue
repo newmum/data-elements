@@ -49,15 +49,16 @@
       <div v-if="loadError && !templateLoading" class="template-load-error" role="alert">
         <el-alert :title="loadError" type="error" :closable="false" show-icon />
         <el-button type="primary" plain @click="init">重试加载</el-button>
+        <el-button v-if="editable" type="primary" :loading="fieldCollecting" @click="collectSourceFields">采集来源字段并重新加载</el-button>
       </div>
       <div v-show="!ddlMode && !loadError" class="materialization-form-view">
       <u-title name="建表信息" />
       <div v-if="knownTargets.length" class="existing-target-panel">
         <strong>已有目标表</strong>
-        <span>以下目标表已与当前来源表关联，可保留并只创建流程，或单独删除后重新物化。</span>
+        <span>以下目标表已与当前来源表关联，可保留并只创建流程。Hive 仅移除登记和流程，物理表及数据保留；重新物化需修改表名或由运维手动删表。</span>
         <div v-for="target in knownTargets" :key="target.targetTableId" class="existing-target-row">
           <span :title="target.targetTableName">{{ target.targetDbName || target.targetDbId }} / {{ target.targetTableName }}</span>
-          <el-button link type="danger" :disabled="isSaveing || recoveryDeleting" @click="handleDeleteExistingTarget(target)">删除目标表</el-button>
+          <el-button link type="danger" :disabled="isSaveing || recoveryDeleting" @click="handleDeleteExistingTarget(target)">{{ isHiveTarget(target) ? "移除登记和流程" : "删除目标表" }}</el-button>
         </div>
       </div>
       <JsonForm
@@ -68,6 +69,23 @@
         bordered
         class="mb-2"
       ></JsonForm>
+      <section v-if="sourceFileConfig" class="source-file-panel">
+        <div class="source-file-heading"><strong>来源文件解析</strong><el-button link type="primary" :loading="fieldCollecting" :disabled="!editable" @click="collectSourceFields">重新采集字段</el-button></div>
+        <el-form label-width="100px" :disabled="!editable">
+          <el-form-item label="来源文件"><el-input :model-value="`${sourceFileConfig.remotePath}/${sourceFileConfig.fileName}`" readonly /></el-form-item>
+          <div class="source-file-grid">
+            <el-form-item label="文件格式"><el-input :model-value="sourceFileConfig.format.toUpperCase()" readonly /></el-form-item>
+            <el-form-item v-if="sourceFileConfig.format === 'csv'" label="文件编码" required>
+              <el-select v-model="sourceFileConfig.charset"><el-option v-for="encoding in ['UTF-8', 'GB18030', 'GBK', 'UTF-16LE']" :key="encoding" :label="encoding" :value="encoding" /></el-select>
+            </el-form-item>
+            <el-form-item v-if="sourceFileConfig.format === 'csv'" label="分隔符" required>
+              <el-select v-model="sourceFileConfig.delimiter"><el-option label="逗号 ," value="," /><el-option label="制表符 Tab" :value="'\t'" /><el-option label="竖线 |" value="|" /><el-option label="分号 ;" value=";" /></el-select>
+            </el-form-item>
+            <el-form-item v-if="['xls', 'xlsx'].includes(sourceFileConfig.format)" label="工作表"><el-input v-model="sourceFileConfig.excelSheetName" readonly /></el-form-item>
+            <el-form-item v-if="sourceFileConfig.format === 'json'" label="数据路径"><el-input v-model="sourceFileConfig.jsonRecordPath" readonly /></el-form-item>
+          </div>
+        </el-form>
+      </section>
       <div class="materialization-field-toolbar">
         <el-button type="primary" :disabled="!editable || ddlMode" @click="handleAddField">＋ 新增数据项</el-button>
         <el-button type="primary" plain :disabled="!editable || ddlMode" @click="handleOpenDefaultFieldsDrawer">默认字段</el-button>
@@ -125,7 +143,7 @@
           :disabled="isSaveing || recoveryDeleting"
           @click="handleDeleteExistingTarget()"
         >
-          删除已有目标表
+          {{ isHiveTarget(recoveryTarget) ? "移除已有登记和流程" : "删除已有目标表" }}
         </el-button>
         <el-button
           v-if="editable"
@@ -300,6 +318,21 @@ const nifiNodeTreeOptions = computed(() =>
     .filter((network: any) => network.children.length)
 );
 const sourceTableName = ref("");
+const sourceFileConfig = ref<any>(null);
+const fieldCollecting = ref(false);
+const collectSourceFields = async () => {
+  if (fieldCollecting.value || !props.id) return;
+  try {
+    await ElMessageBox.confirm("重新采集将更新来源字段快照，并重载当前建表字段；已有治理设置会保留。是否继续？", "采集来源字段", { type: "warning" });
+    fieldCollecting.value = true;
+    const parserOptions = sourceFileConfig.value ? { ...sourceFileConfig.value } : null;
+    await $common.post("/dst/database/metadata/collectColumns", { tableId: props.id, force: true, sourceFileConfig: parserOptions }, { _hiddenErrorMsg: true }, 120 * 1000);
+    await init(parserOptions);
+    ElMessage.success("来源字段已更新");
+  } catch (error: any) {
+    if (error !== "cancel" && error !== "close") ElMessage.error(error?.message || "来源字段采集失败，请检查文件及连接配置");
+  } finally { fieldCollecting.value = false; }
+};
 const loadingText = computed(() => {
   if (isSaveing.value) return "正在物化目标表并登记接入信息...";
   const { datasource, node, source } = loadPending.value;
@@ -1032,9 +1065,10 @@ const cancelPendingInit = () => {
   loadPending.value = { datasource: false, node: false, source: false };
 };
 
-const init = async () => {
+const init = async (parserOptions: any = null) => {
   const runId = ++initRun;
   loadError.value = "";
+  sourceFileConfig.value = null;
   knownTargets.value = (Array.isArray(props.existingTargets) ? props.existingTargets : [])
     .filter((target: any) => target?.targetTableId && target?.targetDbId && target?.targetTableName)
     .map((target: any) => ({ ...target }));
@@ -1056,7 +1090,9 @@ const init = async () => {
       trackLoad("node", $common.post("/ods/nifi-node/access-options", {}), runId),
       trackLoad("source", $common.post(props.type === "add" ? addUrl : viewUrl, {
         tid: sourceTableId,
-      }), runId),
+        resolveSourceFile: props.type === "add",
+        sourceFileConfig: parserOptions,
+      }, { _hiddenErrorMsg: true }, 120 * 1000), runId),
     ]);
     if (!isCurrentInit(runId)) return;
     if (datasourceResult.status === "rejected") throw datasourceResult.reason;
@@ -1081,6 +1117,7 @@ const init = async () => {
     // 仅调用实例 setValue 时，遇到动态规则重建会丢失只读字段，导致来源信息
     // 和接入方式回显为“--”。先写入响应式 data，再同步给已创建的表单实例。
     const rawPropList = { ...(payload.propList || {}) };
+    sourceFileConfig.value = rawPropList.sourceFileConfig ? { ...rawPropList.sourceFileConfig } : null;
     const propList = {
       ...rawPropList,
       // 兼容历史任务/不同接入方式的字段命名，优先使用来源表模板的标准字段。
@@ -1274,6 +1311,13 @@ const handleSave = async () => {
   isSaveing.value = true;
   let lastTargetForm: any = null;
   try {
+    if (sourceFileConfig.value) {
+      // Revalidate the managed file selector and parser before creating any physical table.
+      const check = await $common.post("/ods/getTableTempalte", { tid: props.id, resolveSourceFile: true, sourceFileConfig: sourceFileConfig.value }, { _hiddenErrorMsg: true }, 120 * 1000);
+      const checked = (check?.data || check)?.propList?.sourceFileConfig;
+      if (!checked) throw new Error("来源文件解析校验失败");
+      sourceFileConfig.value = { ...checked };
+    }
     const ddlInput = await currentDdlInput();
     if (!ddlSourceFingerprint.value) await regenerateDdl(ddlInput);
     if (ddlSourceFingerprint.value && ddlSourceFingerprint.value !== ddlInput.fingerprint) {
@@ -1340,6 +1384,7 @@ const handleSave = async () => {
     });
     const preflightResponse = await $common.post('/ods/dataAggReset', {
         batchDryRun: true,
+        checkPhysicalExistence: true,
         sourceTableId: props.id,
         deleteTargetTable: true,
         dryRun: true,
@@ -1364,6 +1409,12 @@ const handleSave = async () => {
       );
       if (probe.targetPhysicalExists || probe.targetUnlinked || known) conflicts.push({ ...plan, known, probe });
     }
+    const existingHive = conflicts.filter((item: any) => item.probe.targetPhysicalExists === true
+      && isHiveTarget({ ...item, targetDatabaseType: item.probe.targetDatabaseType }));
+    if (existingHive.length) {
+      ElMessage.warning(`Hive 目标物理表已存在：${existingHive.map((item: any) => item.targetTableName).join('、')}。请修改目标表名，或联系运维手动删除原表后重新物化；系统不会自动删除 Hive 表。`);
+      return;
+    }
     if (conflicts.length) {
       const recoveryConflict = conflicts.find((item: any) => !item.known);
       if (recoveryConflict) {
@@ -1382,7 +1433,7 @@ const handleSave = async () => {
       if (choice === 'flow') {
         if (!canReuse) throw new Error('目标表未完整登记，不能直接创建流程');
         const targetTables = conflicts.map((item: any) => item.known);
-        emit('save', { ...targetTables[0], targetTables, reusedExisting: true });
+        emit('save', { ...targetTables[0], targetTables, reusedExisting: true, sourceFileConfig: sourceFileConfig.value });
         return;
       }
       await validateEditedDdl();
@@ -1402,7 +1453,8 @@ const handleSave = async () => {
           confirmUnlinkedTarget: item.probe?.targetUnlinked === true,
         }, { _hiddenErrorMsg: true }, 120 * 1000);
         const outcome = result?.data || result || {};
-        if (item.probe.targetPhysicalExists && outcome.targetPhysicalDeleted !== true) {
+        if (outcome.targetCleanupPending || outcome.processGroupCleanupPendingCount > 0
+          || (item.probe.targetPhysicalExists && outcome.targetPhysicalDeleted !== true)) {
           throw new Error(`目标物理表“${item.targetTableName}”未确认删除，已停止重新物化`);
         }
         if (item.known) {
@@ -1445,6 +1497,7 @@ const handleSave = async () => {
       ...targetTables[0],
       targetTableId: targetTables[0]?.targetTableId || "",
       targetTables,
+      sourceFileConfig: sourceFileConfig.value,
     });
   } catch (error: any) {
     const message = String(error?.message || error || "");
@@ -1458,13 +1511,15 @@ const handleSave = async () => {
     if (error !== 'cancel' && error !== 'close' && !message.includes('目标物理表已存在') && !error?.handled) {
       ElMessage.error(error?.message || error || '物化建表失败');
     }
-    if (message.includes('目标物理表已存在') && recoveryTarget.value) {
+    if (message.includes('目标物理表已存在') && isHiveTarget(recoveryTarget.value)) {
+      ElMessage.warning(message);
+    } else if (message.includes('目标物理表已存在') && recoveryTarget.value) {
       const known = knownTargets.value.find((target: any) =>
         String(target.targetDbId) === String(recoveryTarget.value.targetDbId)
         && String(target.targetTableName).toUpperCase() === String(recoveryTarget.value.targetTableName).toUpperCase(),
       );
       const choice = await askExistingDecision([{ ...recoveryTarget.value, known }], Boolean(known));
-      if (choice === 'flow' && known) emit('save', { ...known, targetTables: [known], reusedExisting: true });
+      if (choice === 'flow' && known) emit('save', { ...known, targetTables: [known], reusedExisting: true, sourceFileConfig: sourceFileConfig.value });
       if (choice === 'delete') ElMessage.info('请使用“删除已有目标表”操作，删除后重新提交');
     }
   } finally {
@@ -1474,6 +1529,30 @@ const handleSave = async () => {
 
 // A pre-existing physical target is never adopted implicitly. Operators can
 // remove it explicitly and then retry the same materialization request.
+// 页面只负责说明策略，删除类型与权限由服务端登记记录决定。
+const isHiveTarget = (target) => ['hive', 'mrshive', 'huaweihive', 'huaweimrshive'].includes(
+  String(target?.targetDatabaseType || target?.targetDbType || target?.dbType || datasourceMap.value[target?.targetDbId]?.dbType || '')
+    .trim().toLowerCase().replace(/[_-]/g, ''),
+);
+const targetCleanupConfirmText = (target, preview = {}) => {
+  const name = target?.targetTableName || target?.tableName || '当前目标表';
+  if (preview.targetHivePhysicalRetained === true || isHiveTarget(target)) {
+    return `将移除“${name}”的接入流程和目标登记，Hive 物理表及数据保留。重新物化需修改表名或联系运维手动删除原表。确认继续吗？`;
+  }
+  if (preview.targetCleanupPending === true) {
+    return `目标库暂时无法检查，将取消可清理的接入流程，并保留“${name}”的目标登记供重试。确认继续吗？`;
+  }
+  return `将删除目标物理表“${name}”及其元数据，并移除接入流程。该操作不可恢复；若目标库删除失败会保留登记供重试。确认继续吗？`;
+};
+const targetCleanupSummary = (outcomes) => {
+  const pending = outcomes.filter((item) => item.targetCleanupPending === true || Number(item.processGroupCleanupPendingCount || 0) > 0).length;
+  const hive = outcomes.filter((item) => item.targetHivePhysicalRetained === true).length;
+  const message = outcomes.length === 1 && outcomes[0].message
+    ? outcomes[0].message
+    : `已处理 ${outcomes.length} 个目标的接入清理${hive ? `；${hive} 个 Hive 物理表及数据保留` : ''}${pending ? `；${pending} 个目标有清理待重试，相关登记或流程记录已保留` : ''}`;
+  return { pending, message };
+};
+
 const handleDeleteExistingTarget = async (selectedTarget: any = null) => {
   const target = selectedTarget || recoveryTarget.value;
   if (!target || recoveryDeleting.value) return;
@@ -1496,7 +1575,7 @@ const handleDeleteExistingTarget = async (selectedTarget: any = null) => {
       throw new Error('未关联目标表缺少可核验的元数据 ID，已停止删除');
     }
     await ElMessageBox.confirm(
-      `${preview.targetUnlinked ? '该目标表未关联当前来源表，请先核对数据用途。' : ''}将删除目标数据源中的物理表“${target.targetTableName}”及其元数据，该操作不可恢复。确认继续吗？`,
+      `${preview.targetUnlinked ? '该目标表未关联当前来源表，请先核对数据用途。' : ''}${targetCleanupConfirmText(target, preview)}`,
       '删除已有目标表',
       { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
     );
@@ -1508,14 +1587,13 @@ const handleDeleteExistingTarget = async (selectedTarget: any = null) => {
     },
       { _hiddenErrorMsg: true }, 120 * 1000);
     const outcome = result?.data || result || {};
-    if (preview.targetPhysicalExists && outcome.targetPhysicalDeleted !== true) {
-      throw new Error('目标物理表未确认删除，请检查目标库连接与删除结果后重试');
+    const summary = targetCleanupSummary([outcome]);
+    if (outcome.targetMetadataRetained !== true && outcome.targetCleanupPending !== true) {
+      knownTargets.value = knownTargets.value.filter((item: any) => item.targetTableId !== target.targetTableId);
+      recoveryTarget.value = null;
+      emit('target-deleted', target);
     }
-    knownTargets.value = knownTargets.value.filter((item: any) => item.targetTableId !== target.targetTableId);
-    recoveryTarget.value = null;
-    emit('target-deleted', target);
-    ElMessage.success(preview.targetPhysicalExists
-      ? '目标表已删除，请重新提交创建任务' : '已清理失效的目标表登记，请重新提交创建任务');
+    ElMessage[summary.pending ? 'warning' : 'success'](summary.message);
   } catch (error: any) {
     if (error === 'cancel' || error === 'close') return;
     if (!error?.handled) ElMessage.error(error?.message || error || '删除目标表失败');
@@ -1636,6 +1714,12 @@ onBeforeUnmount(stopDdlEditorSizing);
 </script>
 
 <style lang="scss" scoped>
+.source-file-panel { padding: 16px; margin: 16px 0; border: 1px solid #dce6f5; border-radius: 8px; background: #f8faff; }
+.source-file-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.source-file-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.source-file-panel :deep(.el-select) { width: 100%; }
+.source-file-panel :deep(.el-form-item) { margin-bottom: 14px; }
+@media (max-width: 640px) { .source-file-grid { grid-template-columns: 1fr; } }
 .existing-target-panel {
   display: flex;
   flex-direction: column;

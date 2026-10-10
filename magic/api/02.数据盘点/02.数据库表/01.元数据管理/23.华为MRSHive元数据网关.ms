@@ -277,8 +277,10 @@ var valuesOf = (rows) => {
     var values = []
     for (row in rows == null ? [] : rows) {
         if (row instanceof Map && !row.isEmpty()) {
-            for (entry in row.entrySet()) {
-                values.add(entry.getValue())
+            // MagicScript 对 entrySet 的迭代值不是稳定的 Map.Entry 契约。
+            // 按列名读取首列，兼容 SHOW TABLES/SHOW DATABASES 的不同列名。
+            for (key in row.keySet()) {
+                values.add(row.get(key))
                 break
             }
         }

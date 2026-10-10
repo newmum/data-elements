@@ -34,6 +34,49 @@ import org.ssssssss.script.runtime.ExitValue;
 class DataAggTaskEnsureBatchMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
+    @Test
+    void ftpSelectedFileIsResolvedOnceAndClientCannotOverrideItsManagedLocator() throws Exception {
+        Fixture fixture = new Fixture(20);
+        fixture.prepareCreation();
+        fixture.jdbc.update("update db_datasource_t set db_type='ftp',pool_cfg=? where tid='source-db'",
+                "{\"ftpProtocol\":\"sftp\",\"ftpHost\":\"managed.invalid\",\"ftpPath\":\"/managed/data\"}");
+        var result = assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true,
+                "sourceFileConfig", Map.of("remotePath", "/unauthorized", "fileFilterRegex", ".*"))));
+        assertEquals(20, result.get("plannedCreateCount"));
+        assertEquals(1, fixture.fileProbe.calls);
+        assertEquals(0, fixture.counter.writes);
+        assertInstanceOf(Map.class, fixture.run());
+        String dsl = fixture.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'", String.class);
+        var config = cn.hutool.json.JSONUtil.parseObj(dsl).getJSONArray("nodes").getJSONObject(0).getJSONObject("config");
+        assertEquals("/managed/data", config.getStr("remotePath"));
+        assertEquals("^\\Qperson-1.json\\E$", config.getStr("fileFilterRegex"));
+        assertEquals("$.data.people", config.getStr("jsonRecordPath"));
+        assertFalse(dsl.contains("unauthorized"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"NUMBER(10,0)", "varchar(2)"})
+    void registeredEnumCarriesSourceFieldTypeIntoGeneratedDslAndPersistence(String type) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.prepareCreation();
+        fixture.jdbc.update("insert into db_table_column_t values('translated','police','target-0','person_id_cn',null,2,0)");
+        fixture.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");
+        fixture.jdbc.update("update db_table_column_t set data_type=? where tid='source-col'", type);
+        fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'", """
+                {"fields":[{"columnName":"person_id","dictionaryRelation":{"enabled":true,"sourceType":"enum",
+                 "enumItems":[{"value":"0","label":"审核中"},{"value":"1","label":"审核通过"}]}}]}
+                """);
+        assertInstanceOf(Map.class, fixture.run());
+        String dsl = fixture.jdbc.queryForObject("select dsl_json from nifi_pipeline_t", String.class);
+        String spec = cn.hutool.json.JSONUtil.parseObj(dsl).getJSONArray("nodes").getJSONObject(1)
+                .getJSONObject("config").getStr("mappings");
+        var mapping = cn.hutool.json.JSONUtil.parseObj(spec).getJSONArray("mappings").getJSONObject(1);
+        assertEquals(type, mapping.getStr("sourceDataType"));
+        String sql = new com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService().compileQuery(spec);
+        assertTrue(sql.contains(type.startsWith("NUMBER") ? "WHEN 0 THEN" : "WHEN '0' THEN"));
+        assertEquals(type, fixture.jdbc.queryForObject("select source_data_type from data_access_field_mapping where target_field='person_id_cn'", String.class));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"oracle", "oceanbaseoracle", "oceanbasemysql", "kingbase8", "postgresql",
             "mysql", "mariadb", "dm", "gaussdb", "db2", "sqlserver", "hive", "hetu", "clickhouse",
@@ -503,6 +546,7 @@ class DataAggTaskEnsureBatchMagicTest {
         final SQLModule db;
         final QueryCounter counter = new QueryCounter();
         final ScopeRuntime scope = new ScopeRuntime();
+        final FtpSourceProbeStub fileProbe = new FtpSourceProbeStub();
 
         Fixture(int targetCount) {
             var source = new DriverManagerDataSource("jdbc:h2:mem:agg_ensure_" + UUID.randomUUID()
@@ -624,7 +668,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
         Object run(Map<String, Object> body) throws Exception {
             String script = CanonicalMagicSources.byId(SOURCE_ID)
-                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|apiPullConfig|tenantRuntime|dataScope)\\r?\\n", "");
+                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|apiPullConfig|tenantRuntime|dataScope|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("db", db);
             inputs.put("body", body);
@@ -632,6 +676,7 @@ class DataAggTaskEnsureBatchMagicTest {
             inputs.put("dataScope", scope);
             inputs.put("jsons", new JsonModule());
             inputs.put("apiPullConfig", new ApiPullStub());
+            inputs.put("structuredFileProbe", fileProbe);
             counter.queries = 0;
             counter.writes = 0;
             return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));

@@ -184,6 +184,52 @@ public class StructuredSourceProbeService {
         return findTable(source, tableName).getColumns();
     }
 
+    /** Resolves one registered dataset from managed credentials; never trusts a client file path. */
+    public Map<String, Object> resolveFtpFileSource(Map<String, Object> source, String tableName,
+                                                   Map<String, Object> parserOptions) {
+        if (blank(tableName)) throw new IllegalArgumentException("请选择已登记的来源文件数据表");
+        Map<String, Object> probeConfig = new LinkedHashMap<>(source);
+        probeConfig.put("dbType", "ftp");
+        probeConfig.put("_registeredTableName", tableName);
+        Map<String, Object> options = parserOptions == null ? Map.of() : parserOptions;
+        String charset = defaultText(first(options, "charset"), defaultText(first(source, "ftpCharset"), "UTF-8"));
+        Charset.forName(charset);
+        Object configuredDelimiter = options.get("delimiter") == null ? source.get("ftpDelimiter") : options.get("delimiter");
+        String delimiter = configuredDelimiter == null ? "," : String.valueOf(configuredDelimiter);
+        if ("\\t".equals(delimiter)) delimiter = "\t";
+        if (delimiter.length() != 1) throw new IllegalArgumentException("文件分隔符必须为单个字符");
+        probeConfig.put("ftpCharset", charset);
+        probeConfig.put("ftpDelimiter", delimiter);
+        StructuredTableData dataset = probeFtp(probeConfig).getTables().stream()
+                .filter(item -> tableName.equalsIgnoreCase(item.getTable().getTableName()))
+                .findFirst().orElseThrow(() -> new IllegalArgumentException("来源文件或数据集已变化，请重新登记文件及字段后再物化"));
+        String locator = dataset.getSourcePath();
+        int fragment = locator.indexOf('#');
+        String path = fragment < 0 ? locator : locator.substring(0, fragment);
+        String datasetName = fragment < 0 ? "" : locator.substring(fragment + 1);
+        String fileName = objectFileName(path);
+        String format = extension(fileName);
+        if ("txt".equals(format)) {
+            format = defaultText(first(options, "format"), dataset.getFileRecordFormat());
+            if (!Set.of("csv", "json").contains(format)) throw new IllegalArgumentException("TXT 文件仅支持分隔文本或 JSON 解析");
+        }
+        if (!Set.of("csv", "json", "xls", "xlsx").contains(format)) {
+            throw new IllegalArgumentException("请选择 CSV、JSON 或 Excel 文件解析方式");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("fileName", fileName);
+        result.put("remotePath", path.substring(0, Math.max(1, path.lastIndexOf('/'))));
+        result.put("fileFilterRegex", "^" + Pattern.quote(fileName) + "$");
+        result.put("format", format);
+        result.put("charset", charset);
+        result.put("delimiter", "csv".equals(format) && dataset.getFileDelimiter() != null
+                ? dataset.getFileDelimiter() : delimiter);
+        result.put("excelSheetName", Set.of("xls", "xlsx").contains(format) ? datasetName : "");
+        result.put("jsonRecordPath", "json".equals(format) && !datasetName.isBlank() ? datasetName : "$");
+        result.put("columns", dataset.getColumns());
+        return result;
+    }
+
     public SampleDataResult sampleData(Map<String, Object> source, String tableName, Integer limit) {
         StructuredTableData table = findTable(source, tableName);
         int sampleSize = limit == null || limit < 1 ? 20 : Math.min(limit, MAX_SAMPLE_ROWS);
@@ -304,7 +350,7 @@ public class StructuredSourceProbeService {
         }
     }
 
-    private StructuredProbeResult probeFtp(Map<String, Object> source) {
+    StructuredProbeResult probeFtp(Map<String, Object> source) {
         String protocol = defaultText(first(source, "ftpProtocol", "protocol"), "ftp").toLowerCase(Locale.ROOT);
         String host = required(source, "FTP host cannot be empty", "ftpHost", "hostname", "host");
         int port = integer(first(source, "ftpPort", "port"), "sftp".equals(protocol) ? 22 : 21);
@@ -536,6 +582,19 @@ public class StructuredSourceProbeService {
                 .filter(item -> pattern.test(item.name))
                 .sorted(Comparator.comparing(item -> item.path))
                 .toList();
+        String registeredTable = first(source, "_registeredTableName");
+        if (!blank(registeredTable)) {
+            // Logical table names sanitize punctuation and append sheet/JSON dataset names.
+            // Limit network reads to the selected candidate; reject ambiguous old registrations.
+            matched = matched.stream().filter(file -> {
+                String base = safeName(fileStem(file.name));
+                return registeredTable.equalsIgnoreCase(base)
+                        || registeredTable.toLowerCase(Locale.ROOT).startsWith(base + "_");
+            }).toList();
+            if (matched.size() != 1) {
+                throw new IllegalArgumentException("来源文件无法唯一定位，请检查同名文件及登记信息后重试");
+            }
+        }
         if ((bool(source, "ftpSingleFile", false) || bool(source, "minioSingleFile", false))
                 && !matched.isEmpty()) {
             // A daily/drop folder commonly contains partitions of one logical
@@ -607,7 +666,9 @@ public class StructuredSourceProbeService {
         int first = firstNonWhitespaceByte(buffered);
         buffered.reset();
         if (first == '{' || first == '[') {
+            int before = result.getTables().size();
             parseRemoteJsonFile(buffered, file, names, result);
+            result.getTables().subList(before, result.getTables().size()).forEach(table -> table.setFileRecordFormat("json"));
             return;
         }
         StringBuilder text = new StringBuilder();
@@ -619,7 +680,10 @@ public class StructuredSourceProbeService {
                 lines++;
             }
         }
+        int before = result.getTables().size();
         parseTextFile(source, text.toString().getBytes(ftpCharset(source)), file, names, result, FTP_PROBE_SAMPLE_ROWS);
+        String format = parseJsonLines(text.toString(), FTP_PROBE_SAMPLE_ROWS).isEmpty() ? "csv" : "json";
+        result.getTables().subList(before, result.getTables().size()).forEach(table -> table.setFileRecordFormat(format));
     }
 
     private int firstNonWhitespaceByte(InputStream input) throws Exception {
@@ -656,7 +720,9 @@ public class StructuredSourceProbeService {
     ) throws Exception {
         DelimitedData data = parseDelimited(source, content, autoDetectDelimiter, MAX_SAMPLE_ROWS);
         String tableName = uniqueName(fileStem(file.name), names);
-        result.getTables().add(buildTable(tableName, file.name, file.path, data.rows, data.headers));
+        StructuredTableData table = buildTable(tableName, file.name, file.path, data.rows, data.headers);
+        table.setFileDelimiter(String.valueOf(data.delimiter));
+        result.getTables().add(table);
     }
 
     private void addDelimitedTable(
@@ -670,7 +736,9 @@ public class StructuredSourceProbeService {
     ) throws Exception {
         DelimitedData data = parseDelimited(source, reader, autoDetectDelimiter, rowLimit);
         String tableName = uniqueName(fileStem(file.name), names);
-        result.getTables().add(buildTable(tableName, file.name, file.path, data.rows, data.headers));
+        StructuredTableData table = buildTable(tableName, file.name, file.path, data.rows, data.headers);
+        table.setFileDelimiter(String.valueOf(data.delimiter));
+        result.getTables().add(table);
     }
 
     private void parseTextFile(
@@ -917,7 +985,9 @@ public class StructuredSourceProbeService {
             int rowLimit,
             String delimiterDetectionText
     ) throws Exception {
-        String delimiterText = defaultText(first(source, "ftpDelimiter"), ",");
+        Object rawDelimiter = source.get("ftpDelimiter");
+        String delimiterText = rawDelimiter == null || String.valueOf(rawDelimiter).isEmpty()
+                ? "," : String.valueOf(rawDelimiter);
         char configuredDelimiter = "\\t".equals(delimiterText) ? '\t' : delimiterText.charAt(0);
         char delimiter = autoDetectDelimiter ? detectDelimiter(delimiterDetectionText, configuredDelimiter) : configuredDelimiter;
         CSVFormat format = CSVFormat.DEFAULT.builder()
@@ -938,7 +1008,7 @@ public class StructuredSourceProbeService {
                 rows.add(row);
             }
         }
-        return new DelimitedData(headers, rows);
+        return new DelimitedData(headers, rows, delimiter);
     }
 
     private char detectDelimiter(String text, char configuredDelimiter) {
@@ -1614,7 +1684,7 @@ public class StructuredSourceProbeService {
 
     private record CachedProbe(long createdAt, StructuredProbeResult result) { }
     record RemoteFile(String path, String name, long size) { }
-    private record DelimitedData(List<String> headers, List<Map<String, Object>> rows) { }
+    private record DelimitedData(List<String> headers, List<Map<String, Object>> rows, char delimiter) { }
     private record JsonSampleCollection(String path, List<Map<String, Object>> rows) { }
     record RemoteFileProbeStats(int matchedFiles, List<String> skippedFiles) { }
     @FunctionalInterface interface RemoteStreamOpener { InputStream open(RemoteFile file); }

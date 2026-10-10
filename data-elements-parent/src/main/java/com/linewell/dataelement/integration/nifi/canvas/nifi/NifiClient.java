@@ -723,7 +723,9 @@ public class NifiClient {
             if ((!type.endsWith(".GenerateTableFetch") || triggeredFetch) && !type.endsWith(".RouteOnAttribute")) {
                 for (JsonNode relationship : processor.path("relationships")) {
                     String name = relationship.path("name").asText();
-                    if (("failure".equals(name) || "retry".equals(name)) && !used.contains(name)) retained.add(name);
+                    boolean missingFileDataset = "unmatched".equals(name) && type.endsWith(".EvaluateJsonPath")
+                            && "flowfile-content".equals(processor.path("config").path("properties").path("Destination").asText());
+                    if (("failure".equals(name) || "retry".equals(name) || missingFileDataset) && !used.contains(name)) retained.add(name);
                 }
             }
             if (!retained.isEmpty()) {
