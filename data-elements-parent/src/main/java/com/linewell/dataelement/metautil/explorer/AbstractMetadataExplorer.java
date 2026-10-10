@@ -325,6 +325,12 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             args = upper.substring(leftParen + 1, rightParen).trim();
         }
 
+        // Low-code keeps binary length separately. A shared BLOB/VARBINARY
+        // template must be rendered using the actual destination dialect.
+        if (base.equals("BLOB") || base.equals("BINARY") || base.equals("VARBINARY")) {
+            return normalizeBinaryColumnType(dbType, base, args, upper, col);
+        }
+
         if (dbType == DatabaseType.ORACLE
                 || dbType == DatabaseType.DAMENG
                 || dbType == DatabaseType.OCEANBASE_ORACLE) {
@@ -333,6 +339,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         if (dbType == DatabaseType.POSTGRESQL
                 || dbType == DatabaseType.KINGBASE
                 || dbType == DatabaseType.GAUSSDB
+                || dbType == DatabaseType.HIGHGO
                 || dbType == DatabaseType.VERTICA
                 || dbType == DatabaseType.HETU) {
             return normalizePostgresLikeColumnType(base, args, upper, col);
@@ -342,13 +349,49 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
         if (dbType == DatabaseType.MYSQL
                 || dbType == DatabaseType.MARIADB
+                || dbType == DatabaseType.GBASE8A
                 || dbType == DatabaseType.OCEANBASE_MYSQL
                 || dbType == DatabaseType.DORIS
                 || dbType == DatabaseType.STARROCKS) {
             return normalizeMySqlLikeColumnType(base, args, upper, col);
         }
+        if (dbType == DatabaseType.SQLSERVER) {
+            return switch (base) {
+                case "VARCHAR", "CHAR" -> base + "(" + normalizeLength(args, columnLength(col, "255")) + ")";
+                case "TEXT" -> "NVARCHAR(MAX)";
+                case "DOUBLE" -> "FLOAT(53)";
+                case "FLOAT" -> "REAL";
+                default -> upper;
+            };
+        }
 
         return t;
+    }
+
+    private static String normalizeBinaryColumnType(
+            DatabaseType dbType, String base, String args, String originalUpper, ColumnInfo column) {
+        String length = normalizeLength(args, columnLength(column, "0"));
+        long size = Long.parseLong(length);
+        boolean bounded = !base.equals("BLOB") && size > 0;
+        return switch (dbType) {
+            case ORACLE, OCEANBASE_ORACLE, DAMENG -> {
+                if (bounded && size <= 2000) {
+                    yield "RAW(" + length + ")";
+                }
+                if (Boolean.TRUE.equals(column.getPrimaryKey())) {
+                    throw new IllegalArgumentException("字段 " + column.getColumnName()
+                            + " 的二进制主键长度超出 RAW(2000) 安全范围，请确认目标库类型和主键设计");
+                }
+                yield "BLOB";
+            }
+            case POSTGRESQL, KINGBASE, GAUSSDB, HIGHGO -> "BYTEA";
+            case MYSQL, MARIADB, OCEANBASE_MYSQL, GBASE8A -> bounded
+                    ? "VARBINARY(" + length + ")" : "LONGBLOB";
+            case SQLSERVER -> bounded && size <= 8000 ? "VARBINARY(" + length + ")" : "VARBINARY(MAX)";
+            case HIVE -> "BINARY";
+            case HETU -> "VARBINARY";
+            default -> bounded ? "VARBINARY(" + length + ")" : originalUpper;
+        };
     }
 
     private static String normalizeOracleLikeColumnType(
@@ -392,6 +435,10 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
     private static String normalizePostgresLikeColumnType(
             String base, String args, String originalUpper, ColumnInfo column) {
         switch (base) {
+            case "VARCHAR":
+            case "CHAR":
+                return args.isEmpty() && (column == null || column.getLength() == null || column.getLength() <= 0)
+                        ? originalUpper : base + "(" + normalizeLength(args, columnLength(column, "255")) + ")";
             case "VARCHAR2":
             case "NVARCHAR2":
                 return "VARCHAR(" + normalizeLength(args, columnLength(column, "255")) + ")";

@@ -215,6 +215,83 @@ class MaterializationTemplateMagicTest {
         assertEquals(0, legalHiveString.explorer.calls);
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "oracle,RAW,RAW(16),0,varbinary,16", "oracle,NCLOB,NCLOB,0,text,0",
+            "oracle,BINARY_FLOAT,BINARY_FLOAT,0,float,0", "oracle,BINARY_DOUBLE,BINARY_DOUBLE,0,double,0",
+            "oracle,ROWID,ROWID,0,varchar,18", "oracle,UROWID,UROWID,0,varchar,4000",
+            "oracle,LONG,LONG,0,text,0", "api,long,long,0,bigint,20",
+            "postgresql,USER-DEFINED,uuid,16,varchar,36", "postgresql,bytea,bytea,0,blob,0",
+            "postgresql,double precision,float8,0,double,0", "postgresql,real,float4,0,float,0",
+            "postgresql,bigint,int8,0,bigint,20", "sqlserver,uniqueidentifier,uniqueidentifier,16,varchar,36"
+    })
+    void nativeSnapshotsProduceUsableTypesAndKeepSourceIdentity(String dbType, String sourceType,
+            String columnType, int length, String targetType, int targetLength) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'", dbType);
+        fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=?,length=? where tid='col-1'",
+                sourceType, columnType, length);
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        Map<?, ?> item = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
+        assertEquals(targetType, item.get("dataType"));
+        assertEquals(targetType, item.get("columnType"));
+        assertEquals(targetLength, ((Number) item.get("length")).intValue());
+        assertEquals(sourceType, item.get("sourceDataType"));
+        assertEquals(columnType, item.get("sourceColumnType"));
+        assertEquals("col-1", item.get("sourceColumnId"));
+        assertEquals(0, fixture.explorer.calls);
+    }
+
+    @Test
+    void decimalArgumentsRecoverMissingSeparatePrecisionAndScale() throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_table_column_t set data_type='NUMBER',column_type='NUMBER(24,6)',length=0 where tid='col-1'");
+        Map<?, ?> result = assertInstanceOf(Map.class, fixture.run(false));
+        Map<?, ?> item = (Map<?, ?>) ((List<?>) result.get("tableItems")).getFirst();
+        assertEquals(24, ((Number) item.get("precisionLength")).intValue());
+        assertEquals(6, ((Number) item.get("scale")).intValue());
+    }
+
+    @Test
+    void missingSnapshotsAndUnsupportedNativeTypesHaveDifferentActionableErrors() throws Exception {
+        for (String type : List.of("", "字符串", "mystery_type", "业务自定义类型")) {
+            Fixture fixture = new Fixture(1);
+            fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=? where tid='col-1'", type, type);
+            ExitValue result = assertInstanceOf(ExitValue.class, fixture.run(false));
+            boolean missing = type.isEmpty() || type.equals("字符串");
+            assertEquals(missing ? 409 : 422, ((Number) result.getValues()[0]).intValue());
+            String message = String.valueOf(result.getValues()[1]);
+            assertTrue(message.contains("person_id"), message);
+            assertTrue(message.contains("dataType="), message);
+            assertTrue(message.contains(missing ? "快照缺少" : "重复采集不会"), message);
+            assertEquals(0, fixture.explorer.calls);
+        }
+    }
+
+    @Test
+    void nativeFieldReadsAndBoundedDiagnosticsStayConstantForTwentyAndHundredFields() throws Exception {
+        List<Integer> reads = new ArrayList<>();
+        for (int count : List.of(20, 100)) {
+            Fixture fixture = new Fixture(1);
+            fixture.jdbc.update("update db_table_column_t set data_type='RAW',column_type='RAW(16)',length=16 where tid='col-1'");
+            for (int i = 1; i < count; i++) fixture.jdbc.update("insert into db_table_column_t "
+                    + "(tid,tenant_id,table_id,column_name,data_type,column_type,length,nullable,is_del) "
+                    + "values(?,'police','source-1',?,'uuid','uuid',16,1,0)", "col-" + (i + 1), "f_" + i);
+            Map<?, ?> result = assertInstanceOf(Map.class, fixture.run(false));
+            assertEquals(count + 3, ((List<?>) result.get("tableItems")).size());
+            reads.add(fixture.counter.queries);
+            fixture.jdbc.update("update db_table_column_t set data_type='mystery_type',column_type='mystery_type'");
+            ExitValue error = assertInstanceOf(ExitValue.class, fixture.run(false));
+            assertEquals(422, ((Number) error.getValues()[0]).intValue());
+            String message = String.valueOf(error.getValues()[1]);
+            assertTrue(message.contains("共 " + count + " 项"), message);
+            assertEquals(10, message.split("dataType=", -1).length - 1);
+            assertEquals(0, fixture.explorer.calls);
+        }
+        assertEquals(reads.get(0), reads.get(1));
+        System.out.println("Native type template 20/100 fields: SQL reads=" + reads);
+    }
+
     @Test
     void hiddenOrForeignSourceIsRejectedBeforeExplicitExternalRefresh() throws Exception {
         Fixture hidden = new Fixture(2);

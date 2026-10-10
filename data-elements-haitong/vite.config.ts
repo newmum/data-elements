@@ -31,7 +31,7 @@ export default defineConfig(({ command, isPreview }) => ({
     },
   },
   preview: { host: '127.0.0.1', port: 4173 },
-  // Production workstations include Chrome 108/109; lower JS and CSS syntax
-  // for that engine instead of using its newer default browser targets.
-  build: { target: 'chrome108', cssTarget: 'chrome108', chunkSizeWarningLimit: 1200 },
+  // Production workstations include Chrome 104. Syntax lowering does not
+  // polyfill DOM APIs or selectors; keep runtime styles compatible as well.
+  build: { target: 'chrome104', cssTarget: 'chrome104', chunkSizeWarningLimit: 1200 },
 }));

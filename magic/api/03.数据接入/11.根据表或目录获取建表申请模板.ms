@@ -391,38 +391,46 @@ var appendDictionaryTranslationColumns = (items, columns, config) => {
 
 var knownTypeCode = (value) => {
     var code = lower(value).trim()
+    code = code.replaceAll('\\s+', ' ').replaceAll(' (unsigned|zerofill)$', '').trim()
     var modifier = code.indexOf('(')
     if (modifier > 0) { code = code.substring(0, modifier).trim() }
     var generic = code.indexOf('<')
     if (generic > 0) { code = code.substring(0, generic).trim() }
-    if (code.indexOf('char') >= 0 || code == 'string' || code == 'keyword'
-        || code == 'text' || code == 'clob' || code == 'number' || code == 'numeric'
-        || code == 'decimal' || code == 'float' || code == 'double' || code == 'real'
-        || code == 'bigint' || code == 'long' || code == 'int' || code == 'integer'
-        || code == 'smallint' || code == 'tinyint' || code == 'date'
-        || code.indexOf('time') >= 0 || code == 'boolean' || code == 'bool'
-        || code.indexOf('blob') >= 0 || code == 'binary' || code == 'varbinary'
-        || code == 'json' || code == 'object' || code == 'array') {
+    if (['char', 'nchar', 'varchar', 'varchar2', 'nvarchar', 'nvarchar2', 'character',
+        'character varying', 'bpchar', 'string', 'keyword', 'uuid', 'uniqueidentifier', 'rowid', 'urowid',
+        'text', 'tinytext', 'mediumtext', 'longtext', 'clob', 'nclob', 'longvarchar', 'long nvarchar',
+        'number', 'numeric', 'decimal', 'dec', 'float', 'double', 'double precision', 'real',
+        'binary_float', 'binary_double', 'float4', 'float8',
+        'bigint', 'long', 'int8', 'bigserial', 'int', 'integer', 'mediumint', 'int4', 'serial',
+        'smallint', 'tinyint', 'int2', 'smallserial', 'date',
+        'datetime', 'datetime2', 'smalldatetime', 'timestamp', 'timestamptz',
+        'timestamp without time zone', 'timestamp with time zone', 'timestamp with local time zone',
+        'time', 'timetz', 'time without time zone', 'time with time zone', 'boolean', 'bool',
+        'blob', 'tinyblob', 'mediumblob', 'longblob', 'binary', 'varbinary', 'raw', 'long raw',
+        'bytea', 'image', 'long varbinary', 'json', 'jsonb', 'object', 'array'].contains(code)) {
         return code
     }
     return ''
 }
-var mapDataType = (sourceType, columnType, lengthValue) => {
+var mapDataType = (sourceType, columnType, lengthValue, sourceDbType) => {
     var t = knownTypeCode(sourceType)
     if (blank(t)) { t = knownTypeCode(columnType) }
-    if (t.indexOf('char') >= 0 || t == 'string' || t == 'keyword') {
-        return 'varchar'
-    }
-    if (t == 'text' || t == 'clob' || t.indexOf('longvarchar') >= 0) {
+    if (['text', 'tinytext', 'mediumtext', 'longtext', 'clob', 'nclob', 'longvarchar', 'long nvarchar'].contains(t)
+        || (t == 'long' && ['oracle', 'oceanbaseoracle', 'dameng', 'dm'].contains(sourceDbType))) {
         return 'text'
     }
-    if (t == 'number' || t == 'numeric' || t == 'decimal' || t == 'float' || t == 'double' || t == 'real') {
+    if (t.indexOf('char') >= 0 || ['bpchar', 'string', 'keyword', 'uuid', 'uniqueidentifier', 'rowid', 'urowid'].contains(t)) {
+        return 'varchar'
+    }
+    if (['number', 'numeric', 'decimal', 'dec', 'float'].contains(t)) {
         return 'decimal'
     }
-    if (t == 'bigint' || t == 'long') {
+    if (['double', 'double precision', 'binary_double', 'float8'].contains(t)) { return 'double' }
+    if (['real', 'binary_float', 'float4'].contains(t)) { return 'float' }
+    if (['bigint', 'long', 'int8', 'bigserial'].contains(t)) {
         return 'bigint'
     }
-    if (t == 'int' || t == 'integer' || t == 'smallint' || t == 'tinyint') {
+    if (['int', 'integer', 'mediumint', 'int4', 'serial', 'smallint', 'tinyint', 'int2', 'smallserial'].contains(t)) {
         return 'int'
     }
     if (t == 'date') {
@@ -434,14 +442,28 @@ var mapDataType = (sourceType, columnType, lengthValue) => {
     if (t == 'boolean' || t == 'bool') {
         return 'tinyint'
     }
-    if (t.indexOf('blob') >= 0 || t == 'binary' || t == 'varbinary') {
+    if (['binary', 'varbinary', 'raw'].contains(t) && toInt(lengthValue, 0) > 0) { return 'varbinary' }
+    if (t.indexOf('blob') >= 0 || ['binary', 'varbinary', 'raw', 'long raw', 'bytea', 'image', 'long varbinary'].contains(t)) {
         return 'blob'
     }
-    if (t == 'json' || t == 'object' || t == 'array') {
+    if (t == 'json' || t == 'jsonb' || t == 'object' || t == 'array') {
         return 'json'
     }
-    return 'varchar'
+    // A new native type must be reviewed, never silently reduced to varchar(255).
+    return ''
 }
+var typeArgument = (value, position) => {
+    var code = text(value).trim()
+    var start = code.indexOf('(')
+    var end = code.indexOf(')')
+    if (start < 0 || end <= start) { return 0 }
+    var args = code.substring(start + 1, end).split(',')
+    return args.size() > position ? toInt(text(args[position]).trim(), 0) : 0
+}
+var displayOnlyType = (value) => blank(value) || [
+    '字符串', '字符', '文本', '长文本', '数字', '数值', '整数', '长整数', '小数', '浮点数',
+    '日期', '时间', '日期时间', '布尔', '二进制', '对象', '数组', 'user-defined', 'user defined', 'other', 'unknown'
+].contains(lower(value).trim())
 // Physical probing is reserved for an explicit refresh. Ordinary template
 // reads use only the registered snapshot, and reject incomplete old snapshots
 // rather than silently mapping display labels such as “字符串” to varchar(255).
@@ -681,6 +703,9 @@ if ((columns == null || columns.size() == 0) && physicalColumns != null && physi
 }
 
 var tableItems = []
+var snapshotIssues = []
+var snapshotIssueCount = 0
+var incompleteSnapshot = false
 for (col in (columns == null ? [] : columns)) {
     var columnName = first(col, ['columnName', 'column_name'])
     var physicalColumn = physicalColumnsByName[lower(columnName)]
@@ -695,10 +720,35 @@ for (col in (columns == null ? [] : columns)) {
         ? first(col, ['precisionLength', 'precision_length']) : physicalColumn.precision
     var sourceScale = physicalColumn == null || toInt(physicalColumn.scale, 0) < 0
         ? first(col, ['scale']) : physicalColumn.scale
-    if (blank(columnName) || (blank(knownTypeCode(sourceType)) && blank(knownTypeCode(columnType)))) {
-        exit 409, '来源字段快照不完整，请先重新采集来源表字段'
+    var typeCode = knownTypeCode(sourceType)
+    if (blank(typeCode)) { typeCode = knownTypeCode(columnType) }
+    if (blank(columnName) || blank(typeCode)) {
+        var missing = blank(columnName) || (displayOnlyType(sourceType) && displayOnlyType(columnType))
+        incompleteSnapshot = incompleteSnapshot || missing
+        snapshotIssueCount = snapshotIssueCount + 1
+        if (snapshotIssues.size() < 10) {
+            var fieldLabel = blank(columnName) ? '字段ID=' + text(first(col, ['tid'])) : text(columnName)
+            snapshotIssues.add(fieldLabel + ' [dataType=' + (blank(sourceType) ? '空' : text(sourceType))
+                + ', columnType=' + (blank(columnType) ? '空' : text(columnType)) + ']：'
+                + (missing ? '快照缺少字段名/原生类型或仅保存展示名称' : '原生类型暂未支持自动物化映射'))
+        }
+        continue
     }
-    var targetType = mapDataType(sourceType, columnType, sourceLength)
+    // Snapshot lengths can be absent while columnType still carries valid arguments.
+    if (toInt(sourceLength, 0) <= 0) { sourceLength = typeArgument(columnType, 0) }
+    if (toInt(sourceLength, 0) <= 0) { sourceLength = typeArgument(sourceType, 0) }
+    if (['uuid', 'uniqueidentifier'].contains(typeCode)) { sourceLength = 36 }
+    if (typeCode == 'rowid') { sourceLength = 18 }
+    if (typeCode == 'urowid' && toInt(sourceLength, 0) <= 0) { sourceLength = 4000 }
+    if (toInt(sourcePrecision, 0) <= 0 && ['number', 'numeric', 'decimal', 'dec'].contains(typeCode)) {
+        var parsedPrecision = typeArgument(columnType, 0)
+        if (parsedPrecision <= 0) { parsedPrecision = typeArgument(sourceType, 0) }
+        if (parsedPrecision > 0) {
+            sourcePrecision = parsedPrecision
+            sourceScale = typeArgument(blank(columnType) ? sourceType : columnType, 1)
+        }
+    }
+    var targetType = mapDataType(sourceType, columnType, sourceLength, sourceTypeCode)
     var registeredField = registeredFormats[text(columnName).trim().toLowerCase()]
     var explicitlyCleared = registeredField != null && isPrimaryKey(registeredField.standardFieldExplicitlyCleared)
     var standardField = explicitlyCleared ? '' : text(first(col, ['dataStandardId', 'data_standard_id'])).trim().toUpperCase()
@@ -714,7 +764,7 @@ for (col in (columns == null ? [] : columns)) {
         standardField: standardField,
         dataType: targetType,
         columnType: targetType,
-        length: normalizeLength(targetType, sourceLength, sourcePrecision),
+        length: ['text', 'blob', 'float', 'double', 'json'].contains(targetType) ? 0 : normalizeLength(targetType, sourceLength, sourcePrecision),
         precisionLength: toInt(sourcePrecision, 0),
         scale: toInt(sourceScale, 0),
         primaryKey: isPrimaryKey(first(col, ['primaryKey', 'primary_key', 'isPrimaryKey', 'is_primary_key'])) || registeredPrimaryKeys[text(columnName).trim().toLowerCase()] == true ? 1 : 0,
@@ -725,6 +775,11 @@ for (col in (columns == null ? [] : columns)) {
         indexed: toInt(first(col, ['indexed']), 0),
         isUnique: toInt(first(col, ['isUnique', 'is_unique']), 0)
     })
+}
+if (snapshotIssueCount > 0) {
+    var summary = '来源字段检查未通过（共 ' + snapshotIssueCount + ' 项，最多列出 10 项）：' + snapshotIssues.join('；')
+    if (incompleteSnapshot) { exit 409, summary + '。快照缺失的字段请重新采集；暂未支持的原生类型需要补充映射，不会猜测为字符串。' }
+    exit 422, summary + '。请补充对应类型映射；重复采集不会改变原生类型。'
 }
 tableItems = appendDictionaryTranslationColumns(tableItems, columns, sourceGovernanceConfig)
 

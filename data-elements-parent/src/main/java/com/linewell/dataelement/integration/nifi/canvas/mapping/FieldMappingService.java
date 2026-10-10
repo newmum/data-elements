@@ -1489,6 +1489,10 @@ public class FieldMappingService {
 
     private String platformType(String type) {
         String t = type == null ? "STRING" : type.toUpperCase(Locale.ROOT);
+        String base = t.replaceFirst("\\s*\\(.*$", "").trim();
+        if (Set.of("RAW", "LONG RAW", "BYTEA", "IMAGE", "LONG VARBINARY").contains(base)) return "BLOB";
+        if (Set.of("NUMBER", "DEC", "REAL", "FLOAT4", "FLOAT8").contains(base)) return "DECIMAL";
+        if (Set.of("INT2", "INT4", "INT8", "SERIAL", "SMALLSERIAL", "BIGSERIAL").contains(base)) return "INT";
         if (t.contains("INT")) return "INT";
         if (t.contains("DATE") || t.contains("TIME")) return "DATETIME";
         if (t.contains("DECIMAL") || t.contains("NUMERIC") || t.contains("DOUBLE") || t.contains("FLOAT")) return "DECIMAL";

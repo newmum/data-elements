@@ -33,7 +33,7 @@ import CustomSqlEditor, { type CustomSqlEditorHandle } from './CustomSqlEditor';
 import FilterEditor from './FilterEditor';
 import BranchEditor, { type BranchRoute } from './BranchEditor';
 import type { BusinessCondition } from './ConditionBuilder';
-import { COMPONENT_ICONS } from './databaseIcons';
+import { COMPONENT_ICONS, getComponentIcon } from './databaseIcons';
 
 const CAT_ICON: Record<ComponentCategory, React.ReactNode> = {
   source: <DatabaseOutlined />,
@@ -801,7 +801,7 @@ export default function ConfigDrawer() {
   }, [enhancedFields, manifest?.fields]);
 
   const cat: ComponentCategory = node?.category ?? 'source';
-  const headerIcon = COMPONENT_ICONS[manifest?.key ?? ''] ?? COMPONENT_ICONS[cat] ?? CAT_ICON[cat] ?? <AppstoreOutlined />;
+  const headerIcon = getComponentIcon(manifest?.key ?? '', node?.config.dbType) ?? COMPONENT_ICONS[cat] ?? CAT_ICON[cat] ?? <AppstoreOutlined />;
   const isFieldMappingDrawer = ['transform.field-mapping', 'transform.field-enrichment'].includes(manifest?.key ?? '');
   const isCustomSqlDrawer = manifest?.key === 'transform.sql';
   const isFilterDrawer = manifest?.key === 'transform.filter';
@@ -1340,7 +1340,7 @@ export default function ConfigDrawer() {
             {menu}
             {manifest.category === 'sink' && <>
               <Divider style={{ margin: '6px 0' }} />
-              <Button type="text" block icon={<PlusOutlined />} style={{ textAlign: 'left', color: '#4f46e5' }}
+              <Button type="text" block icon={<PlusOutlined />} className="table-picker-create-action" style={{ textAlign: 'left' }}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => {
                   if (!targetDatabaseId) {
@@ -1665,6 +1665,13 @@ export default function ConfigDrawer() {
         }).map((field) => (
           <Form.Item
             key={field.key}
+            className={
+              (isUnifiedFieldMapping && field.key === 'mappings')
+              || (manifest.key === 'transform.sql' && field.key === 'sql')
+              || (manifest.key === 'transform.filter' && field.key === 'whereClause')
+                ? 'nifi-editor-field'
+                : undefined
+            }
             label={
               (manifest.key === 'transform.sql' && field.key === 'sql')
               || (isUnifiedFieldMapping && field.key === 'mappings')

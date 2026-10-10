@@ -49,7 +49,7 @@
       <div v-if="loadError && !templateLoading" class="template-load-error" role="alert">
         <el-alert :title="loadError" type="error" :closable="false" show-icon />
         <el-button type="primary" plain @click="init">重试加载</el-button>
-        <el-button v-if="editable" type="primary" :loading="fieldCollecting" @click="collectSourceFields">采集来源字段并重新加载</el-button>
+        <el-button v-if="editable && loadErrorCode !== 'MAGIC-BUSINESS-422'" type="primary" :loading="fieldCollecting" @click="collectSourceFields">采集来源字段并重新加载</el-button>
       </div>
       <div v-show="!ddlMode && !loadError" class="materialization-form-view">
       <u-title name="建表信息" />
@@ -232,7 +232,14 @@ const emit = defineEmits<{
 }>();
 
 const dictStore = useDictStore();
-const colTypeOptions = dictStore.getDictItems("tableColType");
+const registeredColTypeOptions = dictStore.getDictItems("tableColType");
+// 原生类型映射可返回这些通用类型，旧租户字典没有时仍须正确回显和编辑。
+const colTypeOptions = [
+  ...registeredColTypeOptions,
+  ...["varbinary", "float", "double"].filter((value) =>
+    !registeredColTypeOptions.some((item: any) => String(item.value).toLowerCase() === value)
+  ).map((value) => ({ label: value.toUpperCase(), value })),
+];
 const formData = ref<any>({});
 const jsonFormRef = ref<any>(null);
 const drawerTitle = ref("物化建表");
@@ -295,6 +302,7 @@ const askExistingDecision = (targets: any[], canReuse: boolean): Promise<string>
 const recoveryDeleting = ref(false);
 const templateLoading = ref(false);
 const loadError = ref("");
+const loadErrorCode = ref("");
 const loadPending = ref({ datasource: false, node: false, source: false });
 let initRun = 0;
 const datasourceOptions = ref<any[]>([]);
@@ -327,8 +335,8 @@ const collectSourceFields = async () => {
     fieldCollecting.value = true;
     const parserOptions = sourceFileConfig.value ? { ...sourceFileConfig.value } : null;
     await $common.post("/dst/database/metadata/collectColumns", { tableId: props.id, force: true, sourceFileConfig: parserOptions }, { _hiddenErrorMsg: true }, 120 * 1000);
-    await init(parserOptions);
-    ElMessage.success("来源字段已更新");
+    const loaded = await init(parserOptions);
+    if (loaded) ElMessage.success("来源字段已更新，建表信息已重新加载");
   } catch (error: any) {
     if (error !== "cancel" && error !== "close") ElMessage.error(error?.message || "来源字段采集失败，请检查文件及连接配置");
   } finally { fieldCollecting.value = false; }
@@ -1068,6 +1076,7 @@ const cancelPendingInit = () => {
 const init = async (parserOptions: any = null) => {
   const runId = ++initRun;
   loadError.value = "";
+  loadErrorCode.value = "";
   sourceFileConfig.value = null;
   knownTargets.value = (Array.isArray(props.existingTargets) ? props.existingTargets : [])
     .filter((target: any) => target?.targetTableId && target?.targetDbId && target?.targetTableName)
@@ -1077,7 +1086,7 @@ const init = async (parserOptions: any = null) => {
   // 运行时会预加载该组件；没有实际打开抽屉时不允许以空 tid 请求来源表模板。
   if (!sourceTableId) {
     templateLoading.value = false;
-    return;
+    return false;
   }
   templateLoading.value = true;
   loadPending.value = { datasource: true, node: true, source: true };
@@ -1094,7 +1103,7 @@ const init = async (parserOptions: any = null) => {
         sourceFileConfig: parserOptions,
       }, { _hiddenErrorMsg: true }, 120 * 1000), runId),
     ]);
-    if (!isCurrentInit(runId)) return;
+    if (!isCurrentInit(runId)) return false;
     if (datasourceResult.status === "rejected") throw datasourceResult.reason;
     if (nodeResult.status === "rejected") throw nodeResult.reason;
     if (sourceResult.status === "rejected") throw sourceResult.reason;
@@ -1105,7 +1114,7 @@ const init = async (parserOptions: any = null) => {
     loadManagedNifiNodeOptions(nodeResponse);
     formRules.value = createFormRules();
     await nextTick();
-    if (!isCurrentInit(runId)) return;
+    if (!isCurrentInit(runId)) return false;
     jsonFormRef.value?.updateFieldOptions?.("dbId", datasourceOptions.value);
     jsonFormRef.value?.updateFieldOptions?.("nifiNodePath", nifiNodeTreeOptions.value);
     if (res instanceof Error) throw res;
@@ -1171,23 +1180,26 @@ const init = async (parserOptions: any = null) => {
     syncTargetTableNameInput(propList.tableName);
     formData.value = { ...propList };
     await nextTick();
-    if (!isCurrentInit(runId)) return;
+    if (!isCurrentInit(runId)) return false;
     jsonFormRef.value?.setValue(formData.value);
     syncTargetDatasourceSelection(propList.dbId);
     // 设置表格数据(字段列表)。即使字段为空也明确清空上一张来源表的数据，
     // 避免复用抽屉时残留旧内容；非空时由 loadTemplateTableItems 等待 Grid
     // 就绪后再写入，避免首次打开偶发的空表竞态。
     await loadTemplateTableItems(payload.tableItems);
-    if (!isCurrentInit(runId)) return;
+    if (!isCurrentInit(runId)) return false;
     if (templateTableItems.value.length) {
       const selected = datasourceMap.value[normalizeDbId(propList.dbId)];
       syncOdsSystemTimeTypes(selected?.dbType || propList.dbType);
     }
+    return true;
   } catch (error: any) {
-    if (!isCurrentInit(runId)) return;
+    if (!isCurrentInit(runId)) return false;
     console.error("物化建表模板加载失败", error);
     // 保留错误与重试入口；全局请求层可能已提示，避免再弹重复消息。
     loadError.value = String(error?.message || "物化建表信息加载失败，请重试");
+    loadErrorCode.value = String(error?.errorCode || "");
+    return false;
   } finally {
     if (isCurrentInit(runId)) templateLoading.value = false;
   }

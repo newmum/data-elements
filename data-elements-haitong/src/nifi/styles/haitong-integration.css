@@ -24,10 +24,21 @@ body.haitong-nifi-active {
   --surface: #fff;
   --text: #262626;
   --secondary: #595959;
+  --muted: #8c8c8c;
   --border: #d9d9d9;
   --error-card-bg: #fafafa;
   --error-card-border: #f0f0f0;
   --error-suggestion: #1677ff;
+  --picker-type-bg: #eef2ff;
+  --picker-type-text: #4f46e5;
+  --picker-schema-bg: #f1f5f9;
+  --picker-schema-text: #475569;
+  --picker-action-text: #4f46e5;
+  --picker-error-bg: #fff7e6;
+  --picker-error-border: #ffd8bf;
+  --picker-error-title: #ad4e00;
+  --picker-error-text: #8a3b12;
+  --picker-error-tip: #9a6a3a;
 }
 
 :root[data-theme='dark'] .nifi-workspace {
@@ -54,10 +65,21 @@ body.haitong-nifi-active {
   --surface: #1f1f1f;
   --text: #f0f0f0;
   --secondary: #bfbfbf;
+  --muted: #8c8c8c;
   --border: #434343;
   --error-card-bg: #262626;
   --error-card-border: #434343;
   --error-suggestion: #69b1ff;
+  --picker-type-bg: #343434;
+  --picker-type-text: #e0e0e0;
+  --picker-schema-bg: #343434;
+  --picker-schema-text: #d9d9d9;
+  --picker-action-text: #91caff;
+  --picker-error-bg: #33271b;
+  --picker-error-border: #71502e;
+  --picker-error-title: #ffd591;
+  --picker-error-text: #f8c590;
+  --picker-error-tip: #deb58d;
   --fm-bg-canvas: #141414;
   --fm-bg-panel: #1f1f1f;
   --fm-bg-row-hover: #303030;
@@ -260,4 +282,33 @@ body.haitong-nifi-active {
   color: #ffffff !important;
   background: #177ddc !important;
   border-color: #177ddc !important;
+}
+
+/* Start is a single black split action in dark mode, including its menu trigger. */
+:root[data-theme='dark'] .nifi-workspace .canvas-start-actions .ant-btn-primary:not(:disabled) {
+  color: #ffffff !important;
+  background: #101010 !important;
+  border-color: #595959 !important;
+  box-shadow: none;
+}
+:root[data-theme='dark'] .nifi-workspace .canvas-start-actions .ant-btn-primary:not(:disabled):hover {
+  background: #252525 !important;
+  border-color: #8c8c8c !important;
+}
+:root[data-theme='dark'] .nifi-workspace .canvas-start-actions .ant-btn-primary:not(:disabled):active {
+  background: #000000 !important;
+}
+:root[data-theme='dark'] .nifi-workspace .canvas-start-actions .ant-btn-primary:focus-visible {
+  outline: 2px solid #bfbfbf;
+  outline-offset: 2px;
+}
+:root[data-theme='dark'] .nifi-workspace .canvas-start-actions .ant-btn-primary:disabled {
+  color: #8c8c8c;
+  background: #181818;
+  border-color: #383838;
+  box-shadow: none;
+}
+:root[data-theme='dark'] .nifi-workspace .ant-select-disabled .ant-select-selection-item,
+:root[data-theme='dark'] .nifi-workspace .ant-select-disabled .ant-select-selection-placeholder {
+  color: var(--text-tertiary);
 }

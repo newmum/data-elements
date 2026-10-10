@@ -20,7 +20,7 @@ import { useComponentManifests } from '@/api/manifests';
 import { useFlowErrors, type FlowError } from '@/api/pipelines';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import type { NodeRuntimeMetric } from '@/runtime/runtimeMetrics';
-import { COMPONENT_ICONS } from '@/panels/databaseIcons';
+import { COMPONENT_ICONS, getComponentIcon } from '@/panels/databaseIcons';
 
 const CATEGORY_ICON: Record<ComponentCategory, React.ReactNode> = {
   source: <DatabaseOutlined />,
@@ -40,9 +40,9 @@ interface NodeStatus {
   state: 'idle' | 'ready' | 'running' | 'success' | 'warning' | 'error';
 }
 
-function pickIcon(manifest: ComponentManifest | undefined, cat: ComponentCategory) {
+function pickIcon(manifest: ComponentManifest | undefined, cat: ComponentCategory, dbType?: unknown) {
   if (!manifest) return COMPONENT_ICONS[cat] ?? CATEGORY_ICON[cat] ?? <AppstoreOutlined />;
-  return COMPONENT_ICONS[manifest.key] ?? COMPONENT_ICONS[cat] ?? MANIFEST_ICON[manifest.key] ?? CATEGORY_ICON[cat] ?? <AppstoreOutlined />;
+  return getComponentIcon(manifest.key, dbType) ?? COMPONENT_ICONS[cat] ?? MANIFEST_ICON[manifest.key] ?? CATEGORY_ICON[cat] ?? <AppstoreOutlined />;
 }
 
 function getCanvasPopupContainer(trigger: HTMLElement) {
@@ -198,7 +198,7 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
     >
       {/* Header */}
       <div className="coze-node__header">
-        <div className="coze-node__icon">{pickIcon(manifest, cat)}</div>
+        <div className="coze-node__icon">{pickIcon(manifest, cat, cn.config.dbType)}</div>
         <div className="coze-node__title">{cn.label || manifest?.label || '未命名'}</div>
         <span
           className={`coze-node__status-dot is-${effectiveState}`}

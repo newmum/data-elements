@@ -23,13 +23,22 @@ const nifiTheme = (dark: boolean) => ({
   colorBgContainer: dark ? '#1f1f1f' : '#ffffff',
   colorBgElevated: dark ? '#262626' : '#ffffff',
   colorText: dark ? '#f0f0f0' : '#262626',
+  colorTextPlaceholder: '#8c8c8c',
   colorBorder: dark ? '#434343' : '#d9d9d9',
   fontFamily: "'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif",
   controlHeight: 36,
  },
  components: {
   Button: {fontWeight: 500, controlHeight: 36, paddingInline: 16},
-  Drawer: {paddingLG: 0}, Input: {controlHeight: 36}, Select: {controlHeight: 36},
+  Drawer: {paddingLG: 0}, Input: {controlHeight: 36},
+  Select: {
+   controlHeight: 36,
+   optionPadding: '8px 12px',
+   ...(dark ? {
+    selectorBg: '#1f1f1f', optionActiveBg: '#343434', optionSelectedBg: '#3b3b3b',
+    optionSelectedColor: '#ffffff', multipleItemBg: '#303030', clearBg: '#1f1f1f',
+   } : {}),
+  },
  },
 });
 
