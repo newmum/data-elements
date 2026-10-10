@@ -2,6 +2,7 @@ package com.linewell.dataelement.feature.reconciliation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.linewell.dataelement.testsupport.BackendTestSources;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 class PlatformSqlArchitectureTest {
 
-    private static final Path SOURCE_ROOT = Path.of("src/main/java/com/linewell/dataelement");
+    private static final Path SOURCE_ROOT = BackendTestSources.javaPackageRoot();
 
     @Test
     void tenantAndReconciliationControlCodeDoNotUseJdbcTemplate() throws Exception {
@@ -38,7 +39,7 @@ class PlatformSqlArchitectureTest {
 
     private List<Path> sourceFiles(String... packages) throws IOException {
         try (var paths = Files.walk(SOURCE_ROOT)) {
-            return paths.filter(path -> path.toString().endsWith(".java"))
+            List<Path> sources = paths.filter(path -> path.toString().endsWith(".java"))
                     .filter(path -> {
                         String normalized = path.toString().replace('\\', '/');
                         for (String packageName : packages) {
@@ -49,6 +50,8 @@ class PlatformSqlArchitectureTest {
                         return false;
                     })
                     .toList();
+            assertThat(sources).as("production sources for %s", List.of(packages)).isNotEmpty();
+            return sources;
         }
     }
 

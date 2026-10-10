@@ -4,13 +4,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 class RegisteredDatasourceTypeTest {
     @ParameterizedTest
@@ -49,11 +48,12 @@ class RegisteredDatasourceTypeTest {
     @Test
     void everyShippedSourceManifestIsReachableFromRegistration() throws Exception {
         ObjectMapper json = new ObjectMapper();
-        Path directory = Path.of("src/main/resources/manifests/sources");
+        var resolver = new PathMatchingResourcePatternResolver(getClass().getClassLoader());
+        var files = resolver.getResources("classpath*:manifests/sources/*.json");
         int count = 0;
-        try (var files = Files.list(directory)) {
-            for (Path file : files.filter(path -> path.toString().endsWith(".json")).toList()) {
-                String manifest = json.readTree(file.toFile()).get("key").asText();
+        for (var file : files) {
+            try (var input = file.getInputStream()) {
+                String manifest = json.readTree(input).get("key").asText();
                 String raw = manifest.substring("source.".length());
                 assertEquals(manifest, RegisteredDatasourceType.sourceManifest(raw, Map.of()), file.toString());
                 count++;

@@ -7,13 +7,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import com.linewell.dataelement.DataElementApplication;
+import com.linewell.dataelement.testsupport.BackendTestSources;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.annotation.MapperScan;
 
 class PackageArchitectureTest {
 
-    private static final Path JAVA_ROOT =
-            Path.of("src/main/java/com/linewell/dataelement");
+    private static final Path JAVA_ROOT = BackendTestSources.javaPackageRoot();
 
     @Test
     void tenantAndReconciliationDoNotReturnToLegacyRootPackages() throws Exception {
@@ -79,6 +79,7 @@ class PackageArchitectureTest {
                 })
                 .toList();
 
+        assertThat(domainFiles).isNotEmpty();
         assertThat(violations).isEmpty();
     }
 
@@ -99,6 +100,7 @@ class PackageArchitectureTest {
                 })
                 .toList();
 
+        assertThat(apiFiles).isNotEmpty();
         assertThat(violations).isEmpty();
     }
 
@@ -146,6 +148,7 @@ class PackageArchitectureTest {
         List<Path> sources = javaFiles(JAVA_ROOT);
 
         assertThat(sources)
+                .isNotEmpty()
                 .allSatisfy(path -> assertThat(read(path).trim())
                         .as("production source %s", path)
                         .isNotEmpty());

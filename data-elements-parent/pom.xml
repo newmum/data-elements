@@ -640,6 +640,9 @@
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
 					<reportsDirectory>${project.basedir}/../logs/backend/surefire</reportsDirectory>
+					<systemPropertyVariables>
+						<backend.javaSourceDirectory>${project.build.sourceDirectory}</backend.javaSourceDirectory>
+					</systemPropertyVariables>
 				</configuration>
 			</plugin>
 			<plugin>

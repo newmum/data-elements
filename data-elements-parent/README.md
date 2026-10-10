@@ -72,11 +72,18 @@ spring:
 # 编译
 mvn -DskipTests compile
 
-# 打包
-mvn -DskipTests package
+# 完整测试、打包并安装到本地 Maven 仓库
+mvn install
+
+# 只需要打包时（同样执行测试）
+mvn package
 ```
 
 打包产物位于 `target/` 目录，最终文件名由 `pom.xml` 中的 `finalName` 控制。
+
+从仓库根目录构建时使用 `mvn -f data-elements-parent/pom.xml install`。测试报告默认在根目录 `logs/backend/surefire/`。`logs/` 下的临时 POM 属于当次运行材料，不作为日常构建入口。
+
+源码架构测试使用 Maven 提供的 `backend.javaSourceDirectory`（取自实际 `project.build.sourceDirectory`），不依赖测试工作目录；直接在 IDE 运行时会按测试类所在工程定位源码。重定向编译输出目录不会改变架构检查范围，源码缺失会明确报错。数据源清单测试读取实际打包的 classpath 资源。
 
 ## magic-api 说明
 
