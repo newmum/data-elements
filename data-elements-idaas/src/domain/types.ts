@@ -12,6 +12,8 @@ export interface Base {
     version: number;
 }
 export interface User extends Base {
+    authorizedAppCount?: number;
+    lastLoginAt?: string;
     subjectCode?: string;
     employeeId?: string;
     employmentType?: 'employee' | 'partner' | 'temporary';
@@ -107,6 +109,9 @@ export interface PermissionGroup extends Base {
     }[];
 }
 export interface Grant extends Base {
+    subjectName?: string;
+    appName?: string;
+    roleNames?: Array<{id:string;name:string}>;
     source: 'user' | 'org' | 'group';
     subjectId: string;
     appId: string;
@@ -178,6 +183,7 @@ export interface Catalog extends Base {
     subjectType: string;
 }
 export interface LegalEntity extends Base {
+    subAccountCount?: number;
     code: string;
     registrationCode?: string;
     verificationStatus?: string;

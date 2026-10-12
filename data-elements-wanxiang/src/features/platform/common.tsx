@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, App, Button, Checkbox, Drawer, Empty, Form, Input, Modal, Popover, Segmented, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { ReloadOutlined, SearchOutlined, DownloadOutlined, SettingOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { useServerSort } from '../../shared/serverSort';
 import { api, canWrite, versionOf, type Row } from '../../services/api';
 import { useWorkspaceQuery } from '../../services/useWorkspaceQuery';
 import { getModuleVisual } from '../../design/moduleVisuals';
@@ -49,35 +50,10 @@ export function Page({ title, description, actions, children }: {
     }
     return <section className="platform-page" data-page={title} data-module={visual?.id}><header className={`platform-page-heading ${visual ? 'has-module-art' : ''}`}><div className="page-heading-copy"><span className="platform-eyebrow">{visual?.category ?? '万象数据治理'} <i /> {visual?.english ?? 'WANXIANG'}</span><h1>{title}</h1><p>{visual?.description ?? description}</p>{visual && <div className="module-highlights">{visual.highlights.map(label => <span key={label}><i aria-hidden="true"/>{label}</span>)}</div>}</div>{visual && <><picture className="module-hero-art" aria-hidden="true"><img className="hero-light" src={heroAsset(visual.id,'light')} alt=""/><img className="hero-dark" src={heroAsset(visual.id,'dark')} alt=""/></picture><div className="module-promise" aria-hidden="true"><ModuleIcon name={visual.id}/><span>{visual.promise}</span></div></>}<Space className="page-heading-actions" wrap>{actions}</Space></header>{children}</section>;
 }
-const tableNameTitle = /名称|姓名|字段名|数据元|数据表|数据源|数据来源|关系图|表\s*\/\s*视图|任务|标题/;
+const tableNameTitle = /名称|姓名|字段名|数据元|数据表|数据源|数据来源|关系图|表\s*\/\s*视图|任务|标题|工单/;
 const tableTimeTitle = /时间|日期|触发|最近更新|最近采集/;
-const tableSortCollator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' });
-function tableSortValue(row: Row, title: string, dataIndex: unknown): string {
-    if (typeof dataIndex === 'string') {
-        const value = row[dataIndex];
-        if (value != null && typeof value !== 'object') return String(value);
-    }
-    const keys = tableTimeTitle.test(title)
-      ? title.includes('创建') ? ['createdAt', 'created_at', 'created_time']
-        : title.includes('开始') ? ['startedAt', 'started_at', 'started_time']
-        : title.includes('完成') || title.includes('结束') ? ['finishedAt', 'finished_at', 'finished_time']
-        : title.includes('采集') ? ['lastCollectedAt', 'last_collected_at', 'collected_at']
-        : ['updatedAt', 'updated_at', 'updatedTime', 'updated_time', 'created_at']
-      : ['displayName', 'name', 'task_name', 'table_name_cn', 'table_name', 'db_name', 'title', 'column_name'];
-    for (const key of keys) { const value = row[key]; if (value != null && typeof value !== 'object') return String(value); }
-    const source = row.source;
-    return source && typeof source === 'object' && 'name' in source ? String(source.name ?? '') : '';
-}
-function compareTableValues(left: string, right: string, time: boolean): number {
-    if (!left || !right) return left ? -1 : right ? 1 : 0;
-    if (time) {
-        const timestamp = (value: string) => /^\d{13}$/.test(value) ? Number(value) : /^\d{10}$/.test(value) ? Number(value) * 1000 : Date.parse(value);
-        const a = timestamp(left), b = timestamp(right);
-        if (Number.isFinite(a) && Number.isFinite(b)) return a - b;
-    }
-    return tableSortCollator.compare(left, right);
-}
-export function DataTable({ rows = [], columns, loading, error, onRefresh, actions, rowSelection, onRow, titleKey, serverPagination, onSearch, onExport, searchPlaceholder, initialSearch = '', showSearch = true, showExport = true, emptyTitle, emptyDescription }: {
+const tableCountTitle = /已采集结构|数量|总数|次数|条数|字段数|规则数|检查项数|异常检查项|质量评分|探查行数|记录数|用户数|权限数|表数|大小|容量|占比|率|耗时|延迟|长度/;
+export function DataTable({ rows = [], columns, loading, error, onRefresh, actions, rowSelection, onRow, titleKey, serverPagination, onSearch, onExport, searchPlaceholder, initialSearch = '', showSearch = true, showExport = true, serverSort, emptyTitle, emptyDescription }: {
     rows?: Row[] | null;
     columns: ColumnsType<Row>;
     loading?: boolean;
@@ -87,6 +63,7 @@ export function DataTable({ rows = [], columns, loading, error, onRefresh, actio
     rowSelection?: any;
     onRow?: any;
     titleKey?: string;
+    serverSort?: ReturnType<typeof useServerSort>;
     serverPagination?: { page: number; size: number; total: number; onChange: (page: number, size: number) => void };
     onSearch?: (keyword: string) => void;
     onExport?: () => Promise<void>;
@@ -121,9 +98,11 @@ export function DataTable({ rows = [], columns, loading, error, onRefresh, actio
     useEffect(() => { if (!serverPagination) setPage(p => Math.min(p, Math.max(1, Math.ceil(filtered.length / prefs.size)))); }, [filtered.length, prefs.size, serverPagination]);
     const named = columns.map((col, i) => ({ col, key: String(col.key ?? ('dataIndex' in col ? col.dataIndex : undefined) ?? i), mandatory: i === 0 || col.fixed === 'right' || col.title === '操作' }));
     const visible = named.filter(c => c.mandatory || !prefs.hidden.includes(c.key)).map((c, index) => ({ ...c.col,
-      ...(typeof c.col.title === 'string' && c.col.title !== '操作' && (tableNameTitle.test(c.col.title) || tableTimeTitle.test(c.col.title)) && !c.col.sorter && filtered.some(row=>tableSortValue(row,c.col.title as string,'dataIndex' in c.col ? c.col.dataIndex : undefined))
-        ? { sorter: (a: Row, b: Row) => compareTableValues(tableSortValue(a, c.col.title as string, 'dataIndex' in c.col ? c.col.dataIndex : undefined), tableSortValue(b, c.col.title as string, 'dataIndex' in c.col ? c.col.dataIndex : undefined), tableTimeTitle.test(c.col.title as string)), showSorterTooltip: { title: serverPagination ? '仅对当前页排序' : '按全部记录排序' } }
-        : {}),
+      ...(serverSort && typeof c.col.title === 'string' && c.col.title !== '操作' &&
+        (c.col.sorter === true || (index === 0 && tableNameTitle.test(c.col.title)) || tableTimeTitle.test(c.col.title) || tableCountTitle.test(c.col.title)) &&
+        (c.col.key || ('dataIndex' in c.col && c.col.dataIndex))
+        ? { sorter: true, sortOrder: serverSort.sort.sortField === String(c.col.key ?? ('dataIndex' in c.col ? c.col.dataIndex : '')) ? (serverSort.sort.sortDir === 'asc' ? 'ascend' as const : 'descend' as const) : null, showSorterTooltip: { title: '按全部查询结果排序' } }
+        : { sorter: undefined }),
       ...(c.col.title === '操作' ? { className: 'wx-action-column', fixed: 'right' as const, align: 'center' as const } : {}),
       ...(index === 0 && !c.col.render ? { className: 'wx-primary-column' } : {}),
       ellipsis: c.col.ellipsis ?? false }));
@@ -141,7 +120,7 @@ export function DataTable({ rows = [], columns, loading, error, onRefresh, actio
     const settings = <div className="wx-table-settings"><h4>表格显示</h4><Segmented aria-label="表格密度" block value={prefs.density} options={[{ value: 'small', label: '紧凑' }, { value: 'middle', label: '舒适' }]} onChange={value => updatePrefs({ ...prefs, density: value as 'small' | 'middle' })}/><p>显示列</p>{named.map(c => <Checkbox key={c.key} disabled={c.mandatory} checked={c.mandatory || !prefs.hidden.includes(c.key)} onChange={e => updatePrefs({ ...prefs, hidden: e.target.checked ? prefs.hidden.filter(k => k !== c.key) : [...prefs.hidden, c.key] })}>{typeof c.col.title === 'string' ? c.col.title : c.key}</Checkbox>)}<Button block onClick={() => updatePrefs(compactPreference(null))}>恢复默认</Button><small>隐藏列仅影响显示，不改变导出权限或数据范围。</small></div>;
     return <div className="platform-panel"><ErrorNotice error={error} retry={onRefresh}/><div className="platform-table-toolbar">{showSearch && <Input className="wx-table-search" aria-label="搜索当前表格" prefix={<SearchOutlined />} allowClear value={q} placeholder={searchPlaceholder || '搜索名称、代码或字段…'} onChange={e => { setQ(e.target.value); setPage(1); if (!e.target.value) onSearch?.(''); }} onPressEnter={() => onSearch?.(q.trim())} suffix={onSearch ? <Button type="text" aria-label="查询当前表格" icon={<SearchOutlined />} onClick={() => onSearch(q.trim())}/> : undefined}/>}<span className="table-count">{error && !rows?.length ? '读取失败' : loading && !rows?.length ? '读取中…' : `${serverPagination?.total ?? filtered.length} 条记录`}</span><span className="grow"/><div className="table-toolbar-actions">{actions}{onRefresh && <Tooltip title="刷新"><Button aria-label="刷新工作区数据" icon={<ReloadOutlined spin={!!loading}/>} onClick={onRefresh}/></Tooltip>}<Popover trigger="click" placement="bottomRight" content={settings}><Button aria-label="列设置与密度" icon={<SettingOutlined />}/></Popover>{showExport&&<Tooltip title={serverPagination?'导出当前页':'导出筛选后的全部记录'}><Button aria-label={serverPagination?'导出当前页':'导出当前筛选结果'} loading={exporting} disabled={loading || !filtered.length} icon={<DownloadOutlined />} onClick={() => void exportResult()}/></Tooltip>}</div></div>
  {rowSelection?.selectedRowKeys?.length > 0 && <div className="wx-selection-bar"><span>已选择 <b>{rowSelection.selectedRowKeys.length}</b> 项</span><Button type="link" size="small" onClick={() => rowSelection.onChange?.([], [], { type: 'none' })}>清除选择</Button></div>}
- <Table<Row> rowKey="id" loading={loading && !(rows?.length)} dataSource={filtered} size={prefs.density} scroll={{ x: 'max-content' }} columns={[{ title: '#', key: '__row_number', width: 54, align: 'center', render: (_v, _r, i) => <span className="row-index">{((serverPagination?.page ?? page) - 1) * (serverPagination?.size ?? prefs.size) + i + 1}</span> }, ...visible]} rowSelection={rowSelection} onRow={onRow} pagination={{ current: serverPagination?.page ?? page, pageSize: serverPagination?.size ?? prefs.size, total: serverPagination?.total ?? filtered.length, showSizeChanger: true, pageSizeOptions: [15, 30, 50, 100], showTotal: n => `共 ${n} 条`, onChange: (p, size) => { if (serverPagination) serverPagination.onChange(size !== serverPagination.size ? 1 : p, size); else setPage(size !== prefs.size ? 1 : p); updatePrefs({ ...prefs, size }); } }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<><strong>{q ? '没有匹配的记录' : error ? '暂时无法读取数据' : (emptyTitle ?? '暂无业务记录')}</strong><p>{q ? '调整关键词，或清除搜索查看全部。' : error ? '页面配置已保留，请检查连接后重试。' : (emptyDescription ?? '登记数据或创建业务对象后，内容将在此显示。')}</p>{q && <Button size="small" onClick={() => { setQ(''); onSearch?.(''); }}>清除搜索</Button>}</>}/> }}/></div>;
+ <Table<Row> onChange={(_p,_f,sorter,extra)=>{if(extra.action==='sort')serverSort?.change(sorter);}} rowKey="id" loading={loading && !(rows?.length)} dataSource={filtered} size={prefs.density} scroll={{ x: 'max-content' }} columns={[{ title: '#', key: '__row_number', width: 54, align: 'center', render: (_v, _r, i) => <span className="row-index">{((serverPagination?.page ?? page) - 1) * (serverPagination?.size ?? prefs.size) + i + 1}</span> }, ...visible]} rowSelection={rowSelection} onRow={onRow} pagination={{ current: serverPagination?.page ?? page, pageSize: serverPagination?.size ?? prefs.size, total: serverPagination?.total ?? filtered.length, showSizeChanger: true, pageSizeOptions: [15, 30, 50, 100], showTotal: n => `共 ${n} 条`, onChange: (p, size) => { if (serverPagination) serverPagination.onChange(size !== serverPagination.size ? 1 : p, size); else setPage(size !== prefs.size ? 1 : p); updatePrefs({ ...prefs, size }); } }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={<><strong>{q ? '没有匹配的记录' : error ? '暂时无法读取数据' : (emptyTitle ?? '暂无业务记录')}</strong><p>{q ? '调整关键词，或清除搜索查看全部。' : error ? '页面配置已保留，请检查连接后重试。' : (emptyDescription ?? '登记数据或创建业务对象后，内容将在此显示。')}</p>{q && <Button size="small" onClick={() => { setQ(''); onSearch?.(''); }}>清除搜索</Button>}</>}/> }}/></div>;
 }
 export function download(value: string, name: string, type = 'application/json') { const url = URL.createObjectURL(new Blob([value], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 const resultLabels: Record<string, string> = { status: '状态', eligibleRows: '参与检查行数', violationRows: '违例行数', matchedRows: '匹配行数', sourceDistinctTuples: '源去重元组', targetDistinctTuples: '目标去重元组', sampleRows: '样本行数', sourceRows: '源行数', coverage: '覆盖情况', message: '结果说明', method: '统计方法', observedAt: '观测时间', created_at: '创建时间', name: '名称', kind: '类型', fieldIds: '字段标识', nullable: '可空', enforced: '是否强制', validated: '是否验证', metrics: '统计指标', results: '检查结果', count: '数量', scope: '检查范围', warnings: '注意事项', error: '执行异常', code: '代码', version: '版本', entityId: '实体标识', fieldId: '字段标识' };

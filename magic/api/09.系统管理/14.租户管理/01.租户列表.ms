@@ -25,6 +25,7 @@
 // 接口：01.租户列表
 // 路由：POST /sym/tenant/list
 // 业务说明：POST /sym/tenant/list，分页查询租户；使用请求参数 pageNum、pageSize、keyword。
+import tableSort
 import tenantRuntime
 
 var text = value => value == null ? '' : (value + '').trim()
@@ -54,6 +55,7 @@ for (item in db.table('baseline.sym_tenant_t').where().eq('is_del', 0).orderBy('
     rows.add({ tid: rowValue(item,['tid']), code: rowValue(item,['code']), name: rowValue(item,['name']), status: rowValue(item,['status']), initFlag: rowValue(item,['initFlag','init_flag']), isolationMode: rowValue(item,['isolationMode','isolation_mode']), jsonConfig: rowValue(item,['jsonConfig','json_config']), sortNo: rowValue(item,['sortNo','sort_no']), createdTime: rowValue(item,['createdTime','created_time']), updatedTime: rowValue(item,['updatedTime','updated_time']) })
   }
 }
+rows=tableSort.rows(rows,body,{name:'name',createdTime:'createdTime',updatedTime:'updatedTime',sortNo:'sortNo'},'sortNo','tid')
 var from = (pageNum - 1) * pageSize
 if (from > rows.size()) {
   from = rows.size()

@@ -16,6 +16,7 @@
       <div>
         <h4 class="api-test-req">请求参数</h4>
         <v-table
+      draft-sort
           ref="paramsRef"
           :options="paramsOptions"
           :show-toolbar="true"

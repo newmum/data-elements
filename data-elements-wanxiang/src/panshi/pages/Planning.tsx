@@ -1,3 +1,4 @@
+import { useServerSort } from '../../shared/serverSort';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, App, Button, Drawer, Form, Input, Select, Space, Table, Tag } from 'antd';
 import { ArrowRightOutlined, PlusOutlined } from '@ant-design/icons';
@@ -52,10 +53,10 @@ export function LayersPage() {
         <article key={layer.id}><b>{layer.name} <small>({layer.code})</small></b><p>{layerPurpose(layer)}</p></article>)}</div></Panel>
       <Panel title="规划建议"><ol className="ps-advice"><li><b>先明确层级用途</b><p>每一层负责不同的数据加工阶段。</p></li><li><b>在层下维护分库</b><p>分库是逻辑分域，可关联已有数据源。</p></li><li><b>核对已采集表</b><p>绑定数据源后查看实际表清单，再开展建模。</p></li></ol></Panel>
     </div>
-    <PTable title="分层定义列表" rows={sorted} onRefresh={refresh} columns={[
+    <PTable tableSource="layers" title="分层定义列表" rows={sorted} onRefresh={refresh} columns={[
       { title: '分层名称', dataIndex: 'name', render: (value, row) => <NameCell name={value} code={row.code} /> },
       { title: '功能定位', key: 'purpose', width: 260, render: (_, row) => layerPurpose(row) },
-      { title: '分库数量', key: 'count', render: (_, row) => state.databases.filter(domain => domain.layerId === row.id).length },
+      { title: '分库数量', key: 'count', render: (_, row) => Number((row as unknown as {count?:number}).count || 0) },
       { title: '关联数据源', key: 'source', sorter: (left, right) => (left.sourceName || '').localeCompare(right.sourceName || '', 'zh-CN'), render: (_, row) => row.sourceName || '未配置' },
       { title: '已采集表', key: 'tables', render: (_, row) => row.sourceId ? tableCount(row.tableCount) : '—' },
       { title: '状态', key: 'state', render: (_, row) => <StateTag state={row.state} /> },
@@ -109,14 +110,14 @@ export function DatabasesPage() {
     <div className="ps-split-page">
       <Panel title="数仓分层"><div className="ps-tree-list"><button className={!layerId ? 'selected' : ''} onClick={() => setLayerId('')}>全部分库 <b>{state.databases.length}</b></button>{state.layers.map(layer =>
         <button key={layer.id} className={layerId === layer.id ? 'selected' : ''} onClick={() => setLayerId(layer.id)}><PsIcon name="layers" />{layer.name}<b>{state.databases.filter(domain => domain.layerId === layer.id).length}</b></button>)}</div></Panel>
-      <PTable rows={selected} onRefresh={refresh} columns={[
+      <PTable tableSource="databases" rows={selected} onRefresh={refresh} columns={[
         { title: '业务分库', key: 'name', width: 210, render: (_, domain) => <NameCell name={domain.name} code={domain.code} /> },
         { title: '所属分层', key: 'layer', render: (_, domain) => state.layers.find(layer => layer.id === domain.layerId)?.name },
         { title: '关联数据源', key: 'source', sorter: (left, right) => (left.sourceName || '').localeCompare(right.sourceName || '', 'zh-CN'), render: (_, domain) => domain.sourceName || '未配置' },
         { title: '已采集表', key: 'tables', render: (_, domain) => domain.sourceId ? tableCount(domain.tableCount) : '—' },
         { title: '业务域', dataIndex: 'domain' },
         { title: '管理模式', key: 'mode', render: (_, domain) => <StateTag state={domain.mode} /> },
-        { title: '仓库资源', key: 'count', render: (_, domain) => state.resources.filter(resource => resource.databaseId === domain.id).length },
+        { title: '仓库资源', key: 'count', render: (_, domain) => Number((domain as unknown as {count?:number}).count || 0) },
         { title: '状态', key: 'state', render: (_, domain) => <StateTag state={domain.state} /> },
         { title: '操作', key: 'ops', render: (_, domain) => <Space><Button type="link" onClick={() => navigate(`/resource/planning/bindings?database=${domain.id}`)}>配置</Button><More items={[
           { label: '编辑分库', onClick: () => setEdit(domain) },
@@ -132,7 +133,7 @@ export function DatabasesPage() {
         <Metric label="已登记业务库" value={dstInfo.dbCount} note="元数据平台注册的数据源" icon="warehouse" tone="blue" />
         <Metric label="已采集表" value={tableCount(dstInfo.dstTableCount)} note="来源层已登记的数据表" icon="bindings" />
       </div>
-      <PTable title="来源层现有资源" rows={dstInfo.dst.map(group => ({ ...group, id: group.orgId }))} columns={[
+      <PTable tableSource="dst" title="来源层现有资源" rows={dstInfo.dst.map(group => ({ ...group, id: group.orgId }))} columns={[
         { title: '来源单位', dataIndex: 'name', sorter: (left, right) => left.name.localeCompare(right.name, 'zh-CN') },
         { title: '应用系统', dataIndex: 'appCount' },
         { title: '业务库', dataIndex: 'dbCount' },
@@ -179,6 +180,7 @@ export function BindingsPage() {
   const [tablesLoading, setTablesLoading] = useState(false);
   const [tableError, setTableError] = useState('');
   const [tableRetry, setTableRetry] = useState(0);
+  const tableOrder=useServerSort(()=>setPage(1));
   const [form] = Form.useForm();
   const [physicalForm] = Form.useForm();
   const watchedSourceId = Form.useWatch('sourceId', form);
@@ -209,13 +211,13 @@ export function BindingsPage() {
     let active = true;
     setTablesLoading(true);
     setTableError('');
-    sourceTablesPage(preview.sourceId, page, 10, keyword).then(result => {
+    sourceTablesPage(preview.sourceId, page, 10, keyword,tableOrder.sort).then(result => {
       if (active) setTablePage(result);
     }).catch(error => {
       if (active) { setTablePage(null); setTableError(error instanceof Error ? error.message : '已采集表读取失败'); }
     }).finally(() => { if (active) setTablesLoading(false); });
     return () => { active = false; };
-  }, [preview?.sourceId, page, keyword, tableRetry]);
+  }, [preview?.sourceId, page, keyword, tableRetry,tableOrder.sort]);
 
   const showTables = (row: PlanningNode) => { setPage(1); setKeyword(''); setTablePage(null); setTableError(''); setPreview(row); };
   const openEdit = (row: PlanningNode) => setEdit(row);
@@ -238,7 +240,7 @@ export function BindingsPage() {
   };
   return <div className="ps-page">
     <Hero page="bindings" actions={<Button type="primary" icon={<ArrowRightOutlined />} onClick={() => goCenter('wanxiang', '/governance/metadata/sources')}>管理共享数据源</Button>} />
-    <PTable title="分库与数据源配置" rows={rows} onRefresh={refresh} columns={[
+    <PTable tableSource="bindings" title="分库与数据源配置" rows={rows} onRefresh={refresh} columns={[
       { title: '层级 / 分库', key: 'name', width: 220, render: (_, row) => <NameCell name={row.name} code={`${row.type === 'layer' ? '分层' : state.layers.find(layer => layer.id === row.layerId)?.code || '分库'} · ${row.code}`} /> },
       { title: '关联数据源', key: 'source', width: 260, sorter: (left, right) => left.sourceName.localeCompare(right.sourceName, 'zh-CN'), render: (_, row) => row.sourceId ? <div className="ps-source-cell"><SourceIcon engine={data.sources.find(source => source.id === row.sourceId)?.engine} small /><NameCell name={row.sourceName || data.sources.find(source => source.id === row.sourceId)?.name || '数据源已不可用'} code={data.sources.find(source => source.id === row.sourceId)?.engine} /></div> : <span className="ps-warning">未配置</span> },
       { title: '已采集表', key: 'tableCount', render: (_, row) => row.sourceId ? tableCount(row.tableCount) : '—' },
@@ -283,10 +285,10 @@ export function BindingsPage() {
     <Drawer open={!!preview} width={620} title={preview ? `${preview.name} · 已采集数据表` : '已采集数据表'} onClose={() => setPreview(null)} destroyOnHidden>
       <Input.Search placeholder="搜索表名" allowClear onSearch={value => { setPage(1); setKeyword(value.trim()); }} />
       {tableError && <Alert style={{ marginTop: 16 }} type="error" showIcon title={tableError} action={<Button size="small" onClick={() => setTableRetry(value => value + 1)}>重试</Button>} />}
-      {!tableError && <Table className="ps-planning-tables" style={{ marginTop: 16 }} rowKey="id" loading={tablesLoading} dataSource={tablePage?.rows || []} size="middle"
-        columns={[{ title: '数据表', key: 'name', render: (_, row) => <NameCell name={row.displayName} code={row.name} /> },
+      {!tableError && <Table className="ps-planning-tables" style={{ marginTop: 16 }} rowKey="id" loading={tablesLoading} dataSource={tablePage?.rows || []} size="middle" onChange={(_p,_f,sorter,extra)=>{if(extra.action==='sort')tableOrder.change(sorter);}}
+        columns={[{ title: '数据表', key: 'name',sorter:true,sortOrder:tableOrder.sort.sortField==='name'?(tableOrder.sort.sortDir==='asc'?'ascend':'descend'):null, render: (_, row) => <NameCell name={row.displayName} code={row.name} /> },
           { title: '类型', dataIndex: 'kind', width: 80, render: value => value === 'view' ? '视图' : '表' },
-          { title: '字段数', dataIndex: 'fieldCount', width: 88 }]}
+          { title: '字段数', dataIndex: 'fieldCount',sorter:true,sortOrder:tableOrder.sort.sortField==='fieldCount'?(tableOrder.sort.sortDir==='asc'?'ascend':'descend'):null, width: 88 }]}
         pagination={{ current: page, pageSize: 10, total: tablePage?.total || 0, showSizeChanger: false, onChange: next => setPage(next) }} />}
     </Drawer>
   </div>;

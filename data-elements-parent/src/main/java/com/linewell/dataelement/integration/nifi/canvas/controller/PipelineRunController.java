@@ -287,6 +287,21 @@ public class PipelineRunController {
         }
     }
 
+    @GetMapping("/status/page")
+    public ResponseEntity<?> statusPage(@PathVariable String id,@RequestParam(required=false) String sortField,
+            @RequestParam(required=false) String sortDir,@RequestParam(defaultValue="1") int page,
+            @RequestParam(defaultValue="20") int size) {
+        com.linewell.dataelement.platform.tenant.domain.TenantContext.requireTenantId();
+        if(com.linewell.dataelement.platform.tenant.domain.TenantContext.usesControlDatabase()
+            ||com.linewell.dataelement.platform.tenant.domain.TenantContext.isIgnored())throw new IllegalStateException("流程状态必须绑定行业租户");
+        Pipeline pipeline=repo.findById(id).orElse(null);
+        if(pipeline==null)return ResponseEntity.notFound().build();
+        JsonNode snapshot=pipeline.nifiProcessGroupId()==null?null:nifi.getProcessGroupStatus(pipeline.nifiProcessGroupId());
+        Map<String,Object> result=new LinkedHashMap<>(ProcessorStatusPage.page(snapshot,sortField,sortDir,page,size));
+        result.put("deployed",pipeline.nifiProcessGroupId()!=null);
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/status")
     @ApiOperation(value = "查询流程状态")
     @Operation(summary = "状态(status)")

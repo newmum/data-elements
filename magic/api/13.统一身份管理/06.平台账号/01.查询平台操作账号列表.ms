@@ -34,6 +34,8 @@ import '@/idaas/directory-scope' as directoryScope;
 import '@/idaas/operator-name' as operatorName;
 import cn.hutool.core.util.IdUtil;
 import identityRuntime;
+import tableSort;
+import request;
 import '@/idaas/api-call' as apiCall;
 
 
@@ -49,18 +51,24 @@ return identityRuntime.control(()=>apiCall(()=>{
     // 先校验当前会话的功能权限、身份域和应用管理范围。
     var ctx=guard(operation=='list'?'operators:read':'operators:write',null,'workforce');
     if(operation=='list') {
-        return sql.select("""
-select o.tid as id,o.username,o.display_name,o.subject_id,o.subject_version,o.status,o.version,o.must_change_password,
-       date_format(o.last_login_time, '%Y-%m-%dT%H:%i:%sZ') as last_login_time, s.failed_count,date_format(s.locked_until,
-
-        '%Y-%m-%dT%H:%i:%sZ') as locked_until,
-       s.security_version
-from iam_operator_profile_v o
-left join iam_account_security_t s on s.principal_kind='OPERATOR'
-and s.principal_id=o.tid
-where o.is_del=0
-order by o.username
-""");
+        var values=request.getValues('paged');var paged=values!=null&&values.size()>0&&values[0]=='true';
+        var query=(key,fallback)=>{var values=request.getValues(key);return values==null||values.size()==0?fallback:values[0];};
+        var page=Math.max(1,query('page','1')::int);var size=Math.min(100,Math.max(1,query('size','20')::int));
+        var offset=(page-1)*size;var limit=paged?size:1001;
+        var orderRequest={sortField:query('sortField',null),sortDir:query('sortDir',null)};
+        var where=" WHERE o.is_del=0";
+        if(query('locked','false')=='true'){where=where+' AND s.locked_until>utc_timestamp(6)';}
+        var from=" FROM iam_operator_profile_v o LEFT JOIN iam_account_security_t s ON s.principal_kind='OPERATOR' AND s.principal_id=o.tid"+where;
+        var total=sql.selectOne('SELECT COUNT(*) total'+from).total;
+        var order=tableSort.field(orderRequest,{display_name:'o.display_name',username:'o.username',locked_until:'s.locked_until',last_login_time:'o.last_login_time'},'username');
+        var direction=tableSort.direction(orderRequest);
+        var rows=sql.select("""
+SELECT o.tid id,o.username,o.display_name,o.subject_id,o.subject_version,o.status,o.version,o.must_change_password,
+ date_format(o.last_login_time,'%Y-%m-%dT%H:%i:%sZ') last_login_time,s.failed_count,
+ date_format(s.locked_until,'%Y-%m-%dT%H:%i:%sZ') locked_until,s.security_version
+"""+from+' ORDER BY CASE WHEN '+order+' IS NULL THEN 1 ELSE 0 END ASC,'+order+' '+direction+',o.tid ASC LIMIT #{limit} OFFSET '+(paged?offset:0));
+        if(!paged&&rows.size()>1000){exit 400,'账号数量过多，请使用分页查询';}
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     // 写入通过共享的幂等事务处理，并记录审计；版本冲突直接返回。
     return mutate(ctx,'operators:'+operation,p,()=>{

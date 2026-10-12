@@ -112,11 +112,18 @@ import "@post:/dst/catalog/catalog-items/list" as getCatalogItem;
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService;
 import "@post:/dst/database/metadata/remote-table/data" as remoteTableData;
 import "@get:/dst/catalog/files/create-table" as createTable;
+import "@post:/dst/database/metadata/table/preview-data" as registeredPreview;
 
 // 获取字段数
 body = {tid}
 cols = getCatalogItem();
 var { resName, tableId, dbId } = queryById();
+
+if(action == 'get'){
+    if (!tableId){exit 409,'文件目录尚未关联已登记目标表，请先完成物化建表';}
+    body={tableId:tableId,pageNo:pageNo == null ? 1 : pageNo,pageSize:pageSize == null ? 20 : pageSize,sortField:sortField,sortDir:sortDir};
+    return registeredPreview();
+}
 
 if (!tableId){
   createTable();
@@ -133,30 +140,6 @@ var datasourceParam = {
     "serviceName": db.serviceName, //ORACLE
     "charset": "UTF-8"
 };
-
-// ==== 查询 ====
-if(action == 'get'){
-    body = {action: "preview", dbType: db.dbType, connection: datasourceParam, tableName: resName, pageNo: pageNo || 1, pageSize: pageSize || 20, sortField: "ins_time", sortDirection: "DESC"};
-    result = remoteTableData();
-    var { columns, rows } = result;
-    var formattedRows = rows.map(row => {
-        var obj = {};
-        columns.each((key, index) => {
-            obj[key] = row[index];
-        });
-        // 返回当前业务分支的标准结果。
-        return obj;
-    });
-    body = {action: "count", dbType: db.dbType, connection: datasourceParam, tableName: resName};
-    var total = remoteTableData();
-    // 返回当前业务分支的标准结果。
-    return {
-        columns, 
-        rows: formattedRows,
-        originRows,
-        total
-    }
-}
 
 // ==== 删除记录 ====
 if(action == 'delete'){

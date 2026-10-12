@@ -242,13 +242,15 @@ const tableColumns = ref<UColumnProps[]>([
 
 const fetchRoleData = async ({
   pageNo: pageNum,
-  pageSize,
+  pageSize, sortField, sortDir,
 }: {
   pageNo: number;
   pageSize: number;
+  sortField?: string; sortDir?: "asc" | "desc";
 }) => {
   const response = await $common.post("/sym/role/page", {
     name: searchKeyword.value || undefined,
+    sortField, sortDir,
     pageNum,
     pageSize,
   });

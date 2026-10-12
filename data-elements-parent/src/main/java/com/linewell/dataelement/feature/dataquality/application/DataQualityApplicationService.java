@@ -26,6 +26,10 @@ public class DataQualityApplicationService {
         return repository.taskPage(tenantId(), status, keyword, positive(page), bounded(size), kind);
     }
 
+    public Map<String, Object> taskPage(String status, String keyword, int page, int size, String kind,String sortField,String sortDir) {
+        return repository.taskPage(tenantId(), status, keyword, positive(page), bounded(size), kind,sortField,sortDir);
+    }
+
     public Map<String, Object> taskDetail(String taskId) { return repository.taskDetail(tenantId(), taskId); }
 
     public String persistTask(Map<String, Object> body) {
@@ -56,6 +60,16 @@ public class DataQualityApplicationService {
         return repository.runPage(tenantId(), status, keyword, positive(page), bounded(size), kind);
     }
 
+    public Map<String, Object> runPage(String status, String keyword, int page, int size, String kind,String sortField,String sortDir) {
+        return repository.runPage(tenantId(), status, keyword, positive(page), bounded(size), kind,sortField,sortDir);
+    }
+
+    public Map<String,Object> runDetail(String runId, Map<String,Object> order) {
+        return repository.runDetail(tenantId(),runId,order);
+    }
+    public Map<String,Object> issuePage(String runId,String status,String severity,int page,int size,String sortField,String sortDir) {
+        return repository.issuePage(tenantId(),runId,status,severity,positive(page),bounded(size),sortField,sortDir);
+    }
     public Map<String, Object> runDetail(String runId) { return repository.runDetail(tenantId(), runId); }
 
     public Map<String, Object> issuePage(String runId, String status, String severity, int page, int size) {

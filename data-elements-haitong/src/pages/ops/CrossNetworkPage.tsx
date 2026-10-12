@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { useServerSort } from '../../components/serverSort';
 import { Alert, Button, Tag } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -9,7 +11,9 @@ import { DataTable, InsightStrip, Panel } from '../../components/Common';
 export default function CrossNetworkPage() {
   const navigate = useNavigate();
   const query = useQuery({ queryKey: ['platform', 'cross-network', 'nodes'], queryFn: integrationNodesApi.accessOptions, refetchInterval: 60000 });
-  const nodes = query.data?.nodes || [];
+  const [page,setPage]=useState(1);const serverSort=useServerSort(()=>setPage(1));
+  const nodeQuery=useQuery({queryKey:['platform','cross-network','node-list',serverSort.sort],queryFn:()=>integrationNodesApi.page(serverSort.sort)});
+  const nodes = nodeQuery.data || [];
   const networks = query.data?.networks || [];
   return <div className="ht-page">
     <PageHero kicker="任务运维" title="跨网传输" description="核查不同网络的数据接入节点，为跨网发送、签收和目标落地准备真实链路。" kind="cross" tags={['网络分区', '接入节点', '回执待接入']} />
@@ -20,9 +24,10 @@ export default function CrossNetworkPage() {
       { label: '已启用节点', value: nodes.filter(node => node.enabled).length, icon: 'clusters', hint: '当前租户接入节点', tone: 'cyan' },
       { label: '跨网签收', value: '—', icon: 'warning', hint: '尚无实际回执来源', tone: 'amber' },
     ]} />
-    <Panel title="网络节点" extra={<Button onClick={() => void query.refetch()} loading={query.isFetching}>刷新</Button>}>
-      <DataTable<IntegrationNode> rowKey="tid" loading={query.isLoading} dataSource={nodes} pagination={false} locale={{ emptyText: '当前租户暂无已登记的 NiFi 节点' }} columns={[
-        { title: '节点名称', width: 230, render: (_, node) => node.nodeName },
+    <Panel title="网络节点" extra={<Button onClick={() => {void query.refetch();void nodeQuery.refetch();}} loading={query.isFetching||nodeQuery.isFetching}>刷新</Button>}>
+      {nodeQuery.isError&&<Alert type="error" showIcon message="节点列表读取失败" description={nodeQuery.error instanceof Error?nodeQuery.error.message:'请稍后重试'}/>}
+      <DataTable<IntegrationNode> serverSort={serverSort} rowKey="tid" loading={nodeQuery.isLoading} dataSource={nodes} pagination={{current:page,pageSize:20,onChange:setPage}} locale={{ emptyText: '当前租户暂无已登记的 NiFi 节点' }} columns={[
+        { title: '节点名称',key:'nodeName', width: 230, render: (_, node) => node.nodeName },
         { title: '所属网络', width: 180, render: (_, node) => node.networkName || node.networkCode || '未指定' },
         { title: '节点编码', width: 170, render: (_, node) => node.nodeCode || '—' },
         { title: '状态', width: 110, render: (_, node) => <Tag color={node.enabled ? 'success' : 'default'}>{node.enabled ? '已启用' : '未启用'}</Tag> },

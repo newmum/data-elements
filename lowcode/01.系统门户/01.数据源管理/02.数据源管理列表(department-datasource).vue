@@ -304,8 +304,9 @@
                 stripe
                 size="small"
                 class="table-preview"
+                @sort-change="sortTables(item, $event)"
               >
-                <el-table-column label="数据表名称" min-width="260">
+                <el-table-column prop="tableName" sortable="custom" label="数据表名称" min-width="260">
                   <template #default="{ row }">
                     <div class="table-name-cell is-link" @click.stop="openTableDetail(row, item)">
                       <span class="table-icon" :class="{ 'is-view': isView(row) }">
@@ -331,8 +332,8 @@
                 <el-table-column label="业务类型" width="120">
                   <template #default="{ row }">{{ businessTypeText(row.businessType) }}</template>
                 </el-table-column>
-                <el-table-column prop="fieldCount" label="字段数" width="90" align="center" />
-                <el-table-column label="创建时间" width="190">
+                <el-table-column prop="fieldCount" sortable="custom" label="字段数" width="90" align="center" />
+                <el-table-column prop="createdTime" sortable="custom" label="创建时间" width="190">
                   <template #default="{ row }">
                     <div class="table-created-cell">
                       <span>{{ tableCreatedTimeText(row) }}</span>
@@ -342,7 +343,7 @@
                     </div>
                   </template>
                 </el-table-column>
-                <el-table-column label="最后修改时间" width="190">
+                <el-table-column prop="updatedTime" sortable="custom" label="最后修改时间" width="190">
                   <template #default="{ row }">
                     <div class="table-created-cell">
                       <span>{{ tableUpdatedTimeText(row) }}</span>
@@ -574,9 +575,12 @@ const tableArrayStats = (tables) => {
       if (isTableRegistered(table)) result.registeredCoreTableNum += 1;
     }
     if (isDeferredTable) result.deferredTableNum += 1;
-    if (["business", "业务表"].includes(businessType)) result.businessTableNum += 1;
-    else if (["dict", "dictionary", "字典表"].includes(businessType)) result.dictionaryTableNum += 1;
-    else if (["log", "日志表"].includes(businessType)) result.logTableNum += 1;
+    // 卡片类型数量包含部分登记和完成登记的表，不能复用“完全登记”的状态 2 判断。
+    if (normalizeNumber(table.assetStatus ?? table.asset_status) > 0) {
+      if (["business", "业务表"].includes(businessType)) result.businessTableNum += 1;
+      else if (["dict", "dictionary", "字典表"].includes(businessType)) result.dictionaryTableNum += 1;
+      else if (["log", "日志表"].includes(businessType)) result.logTableNum += 1;
+    }
 
     if (tableHasIssue(table)) result.issueTableNum += 1;
     if (!isTableRegistered(table) || tableHasIssue(table)) result.problemTableNum += 1;
@@ -967,16 +971,16 @@ const pagedTables = (item) => tableLoadState(item).list || [];
 const loadTablePage = async (item, pageNum) => {
   const key = tablePageKey(item);
   const cached = tableLoadState(item);
-  if (cached.loading) return;
+
   const request = { ...cached, loading: true, error: "", requestedPage: pageNum, generation: loadGeneration, requestId: Symbol() };
   state.tableLoads[key] = request;
   try {
     const result = await $common.post("/dst/database/departmentDataSources", {
-      mode: "tables", datasourceId: key, pageNum, pageSize: tablePageSize,
+      mode: "tables", datasourceId: key, pageNum, pageSize: tablePageSize,...(cached.sort||{}),
     });
     if (state.tableLoads[key]?.requestId !== request.requestId || request.generation !== loadGeneration) return;
     state.tableLoads[key] = {
-      loading: false, loaded: true, error: "", requestedPage: result?.pageNum || pageNum,
+      loading: false, loaded: true, error: "", sort:cached.sort, requestedPage: result?.pageNum || pageNum,
       pageNum: result?.pageNum || pageNum, total: normalizeNumber(result?.total),
       list: Array.isArray(result?.list) ? result.list : [],
     };
@@ -985,6 +989,7 @@ const loadTablePage = async (item, pageNum) => {
     state.tableLoads[key] = { ...cached, loading: false, error: "数据表加载失败，请重试。", requestedPage: pageNum };
   }
 };
+const sortTables=(item,event)=>{const key=tablePageKey(item);state.tableLoads[key]={...tableLoadState(item),sort:event.order?{sortField:event.prop,sortDir:event.order==='ascending'?'asc':'desc'}:{}};loadTablePage(item,1);};
 const changeTablePage = (item, delta) => {
   if (tableLoadState(item).loading) return;
   const nextPage = Math.min(Math.max(tablePage(item) + delta, 1), tableTotalPages(item));

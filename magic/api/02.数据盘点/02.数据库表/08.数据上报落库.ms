@@ -25,6 +25,8 @@
 // 接口：08.数据上报落库
 // 路由：POST /dst/database/report-data
 // 业务说明：数据上报工作区接口。按登记表字段白名单校验，将实际上报数据和批次记录写入 test1；支持批次列表、实际入库数据预览、导入与删除；使用请求参数 tables；涉及 db_datasource_t、db_table_t、db_table_column_t 等业务表。
+import tableSort
+import dataScope
 import tenantRuntime
 import approvalRuntime
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
@@ -119,6 +121,7 @@ if (blank(datasourceId)) { exit 400, '数据源不能为空' }
 var source = db.table('db_datasource_t').where()
     .eq('tid', datasourceId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
 if (source == null) { exit 404, '数据源不存在或不属于当前租户' }
+if (!dataScope.canReadDataSource(source)) { exit 403,'无权读取此数据源' }
 var sourceConfig = datasourceConnectionConfig('read', datasourceId, null, false)
 var accessMode = firstText(sourceConfig, ['accessMode', 'access_mode']).toLowerCase()
 if (accessMode == 'report') { accessMode = 'upload' }
@@ -127,6 +130,12 @@ if (accessMode != 'upload') { exit 400, '只有数据上报方式的数据源可
 ensureMetadataTables()
 var action = firstText(body, ['action']).toLowerCase()
 if (blank(action)) { action = 'list' }
+var batchPage=body.pageNo==null?1:body.pageNo::int
+var batchSize=body.pageSize==null?20:body.pageSize::int
+if(batchPage<1 || batchSize<1 || batchSize>100){exit 400,'每页最多100条记录'}
+var batchOffset=(batchPage-1)*batchSize
+var batchSort=tableSort.field(action=='list'?body:{},{fileName:'b.file_name',createdTime:'b.created_time',rowCount:'b.row_count',tableCount:'b.table_count'},'createdTime')
+var batchDirection=tableSort.direction(action=='list'?body:{})
 var listBatches = () => db.select("""
     select b.batch_id as batchId,
            b.file_id as fileId,
@@ -148,10 +157,14 @@ var listBatches = () => db.select("""
        and b.is_del = 0
      group by b.batch_id, b.file_id, b.file_name, b.file_url, b.table_count, b.row_count,
               b.status, b.created_by, b.created_name, b.created_time
-     order by b.created_time desc
-""")
-if (action == 'list') {
-    return { storageDatabase: storageSchema, list: listBatches() }
+     """+' ORDER BY CASE WHEN '+batchSort+' IS NULL THEN 1 ELSE 0 END,'+batchSort+' '+batchDirection+',b.batch_id ASC LIMIT #{batchSize} OFFSET #{batchOffset}')
+if(action=='list'){
+ var summary=db.selectOne("""
+   SELECT COUNT(*) as total,COALESCE(SUM(row_count),0) as rowTotal
+   FROM test1.de_data_report_batch_t
+   WHERE tenant_id=#{tenantId} AND datasource_id=#{datasourceId} AND is_del=0
+ """)
+ return {storageDatabase:storageSchema,list:listBatches(),total:summary.total,rowTotal:summary.rowTotal}
 }
 
 /*
@@ -243,7 +256,11 @@ if (action == 'preview') {
     }
     var previewParams = { datasourceId: datasourceId, tenantId: tenantId, pageSize: pageSize, offset: (pageNo - 1) * pageSize }
     var previewTotal = db.selectInt('select count(1) from `test1`.`' + previewTableName + '` where `_report_datasource_id` = #{datasourceId} and `_report_tenant_id` = #{tenantId}', previewParams)
-    var previewRows = db.select('select ' + selectColumns.join(', ') + ' from `test1`.`' + previewTableName + '` where `_report_datasource_id` = #{datasourceId} and `_report_tenant_id` = #{tenantId} order by `_report_uploaded_at` desc, `_report_row_id` desc limit #{pageSize} offset #{offset}', previewParams)
+    var previewSortFields={}
+    for (column in previewColumns) { previewSortFields[column.name]='`'+column.sourceName+'`' }
+    var previewSort=tableSort.field(body,previewSortFields,previewColumns[previewColumns.size()-1].name)
+    var previewDirection=tableSort.direction(body)
+    var previewRows = db.select('select ' + selectColumns.join(', ') + ' from `test1`.`' + previewTableName + '` where `_report_datasource_id` = #{datasourceId} and `_report_tenant_id` = #{tenantId} ORDER BY CASE WHEN '+previewSort+' IS NULL THEN 1 ELSE 0 END,'+previewSort+' '+previewDirection+',`_report_row_id` ASC limit #{pageSize} offset #{offset}', previewParams)
     return { storageDatabase: storageSchema, tables: previewTableOptions, tableName: previewTableName,
              columns: previewColumns, list: previewRows, total: previewTotal, pageNo: pageNo, pageSize: pageSize, tableExists: true }
 }

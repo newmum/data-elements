@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTableOrder } from '../hooks/useTableOrder';
 import { Alert, App, Button, Card, Form, Input, Modal, Space, Table, Tag } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { identityRequest } from '../services/identity';
@@ -10,16 +11,17 @@ const relationNames: Record<string, string> = { PENDING: '待授权', ACTIVE: '�
 export function SelfLegalEntities({ currentEntityId }: { currentEntityId?: string }) {
     const [rows, setRows] = useState<Entity[]>([]); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [registering, setRegistering] = useState(false); const [verifying, setVerifying] = useState<Entity | null>(null);
     const [form] = Form.useForm(); const requestId = useRef(crypto.randomUUID()); const { message } = App.useApp(); const navigate = useNavigate();
-    const load = async () => { try { setRows(await identityRequest<Entity[]>('/idaas/self-entities/mine')); } catch (e) { setError(e instanceof Error ? e.message : '无法读取法人资料'); } };
-    useEffect(() => { void load(); }, []);
+    const order=useTableOrder();const [total,setTotal]=useState(0);const generation=useRef(0);
+    const load=async()=>{const current=++generation.current;try{const result=await identityRequest<{list:Entity[];total:number}>('/idaas/self-entities/mine?'+order.query);if(current!==generation.current)return;setRows(result.list);setTotal(result.total);setError('');}catch(e){if(current===generation.current)setError(e instanceof Error?e.message:'无法读取法人资料');}};
+    useEffect(() => { void load();return()=>{generation.current++;}; }, [order.query]);
     const execute = async (action: () => Promise<void>) => { setBusy(true); try { await action(); } catch (e) { message.error(formErrorText(e, '操作未完成')); } finally { setBusy(false); } };
     const select = (entityId: string | null) => execute(async () => { await identityRequest('/idaas/auth-account/select-entity', { entityId }); message.success('办理身份已更新，请重新登录'); navigate('/auth/identity/login'); });
     return <Card size="small" title="法人资料与办理身份" extra={<Button disabled={busy} onClick={() => { requestId.current = crypto.randomUUID(); form.resetFields(); setRegistering(true); }}>登记法人</Button>}>
         <Alert type="info" showIcon title="核验与经办授权分别确认" description="登记资料后可以申请法人核验。只有法人核验有效、经办关系已授权且在有效期内，才能选择该法人办理身份。" />
         {error && <Alert type="error" title={error} showIcon style={{ marginTop: 16 }} />}
         {currentEntityId && <Button style={{ marginTop: 16 }} disabled={busy} onClick={() => void select(null)}>恢复自然人办理身份</Button>}
-        <Table size="small" rowKey="id" dataSource={rows} scroll={{ x: 'max-content' }} columns={[
-            { title: '法人名称', dataIndex: 'name' }, { title: '信用代码', dataIndex: 'registrationCode' },
+        <Table size="small" rowKey="memberId" dataSource={rows} onChange={order.onChange} pagination={order.pagination(total)} scroll={{ x: 'max-content' }} columns={[
+            { title: '法人名称', dataIndex: 'name',...order.column('name') }, { title: '信用代码', dataIndex: 'registrationCode' },
             { title: '核验', dataIndex: 'verificationStatus', render: s => <Tag color={s === 'VERIFIED' ? 'success' : 'default'}>{verificationNames[s] || s}</Tag> },
             { title: '经办关系', dataIndex: 'relationStatus', render: s => relationNames[s] || s },
             { title: '操作', render: (_, row) => <Space><Button disabled={busy || row.relationStatus === 'REVOKED'} onClick={() => { requestId.current = crypto.randomUUID(); setVerifying(row); }}>申请法人核验</Button><Button disabled={busy || row.relationStatus !== 'ACTIVE' || row.verificationStatus !== 'VERIFIED' || row.id === currentEntityId} onClick={() => void select(row.id)}>{row.id === currentEntityId ? '当前办理身份' : '选择办理身份'}</Button></Space> },

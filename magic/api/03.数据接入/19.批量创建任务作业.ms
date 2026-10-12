@@ -27,6 +27,7 @@
 // 业务说明：按当前租户保存批量作业及逐项结果；领取一项后由调用方执行既有
 // /ods/dataAggTaskEnsure，再携租约回报结果。页面离开时不在后台继续执行。
 import tenantRuntime
+import tableSort
 import dataScope
 import cn.hutool.core.util.IdUtil
 import cn.hutool.json.JSONUtil
@@ -72,9 +73,10 @@ var publicItem = row => ({
     claimedTime: row.claimedTime, completedTime: row.completedTime
 })
 var itemsOf = id => {
-    var rows = db.table('ods_batch_create_item_t').where()
-        .eq('tenant_id', tenantId).eq('job_id', id)
-        .orderBy('item_index', 'asc').select()
+    var itemColumn=tableSort.field(body,{sourceTableName:'source_table_name',attemptCount:'attempt_count',item_index:'item_index'},'item_index')
+    var itemDirection=body?.sortDir==null?'asc':tableSort.direction(body)
+    var rows=db.select('select * from ods_batch_create_item_t where tenant_id=#{tenantId} and job_id=#{id} order by '+itemColumn+' '+itemDirection+',item_index asc,item_id asc limit 501')
+    if(rows.size()>500){exit 413,'作业项超过500，请缩小作业范围';}
     var result = []
     for (row in rows) { result.add(publicItem(row)) }
     return result
@@ -134,7 +136,7 @@ if (action == 'sourceOptions') {
     // 在数据库分页之前施加当前角色的 ALL/ORG/OWNER 条件；不先取全量再过滤。
     var scope = dataScope.resource('MENU:2081000000000000002')
     var query = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
-        .eq('is_del', 0).in('asset_status', [1, 2])
+        .eq('is_del', 0).gt('asset_status', 0)
     if (scope.scope == 'OWNER') { query = query.eq('created_by', scope.userId) }
     if (scope.scope == 'ORG') {
         if (scope.organizationIds == null || scope.organizationIds.size() == 0) {
@@ -195,18 +197,17 @@ if (action == 'preview') {
     var previewDbId = text(body?.datasourceId).trim()
     var pageNum = body?.pageNum == null ? 1 : body.pageNum::int
     var pageSize = body?.pageSize == null ? 20 : body.pageSize::int
-    if (blank(previewDbId) || pageNum < 1 || pageNum > 100000 || pageSize < 1 || pageSize > 50) {
+    if (blank(previewDbId) || pageNum < 1 || pageNum > 100000 || pageSize < 1 || pageSize > 100) {
         exit 400, '来源表分页参数无效'
     }
     var previewDb = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
-        .eq('tid', previewDbId).eq('is_del', 0).in('asset_status', [1, 2]).selectOne()
+        .eq('tid', previewDbId).eq('is_del', 0).gt('asset_status', 0).selectOne()
     if (previewDb == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [previewDb]).size() != 1) {
         exit 403, '来源库不存在或不在当前角色的数据范围内'
     }
-    var tablePage = db.table('db_table_t').where().eq('tenant_id', tenantId)
-        .eq('datasource_id', previewDbId).eq('is_del', 0).eq('asset_status', 2)
-        .in('business_type', ['业务表', '日志表', '字典表'])
-        .orderBy('updated_time', 'desc').page(pageSize, (pageNum - 1) * pageSize)
+    var sourceColumn=tableSort.field(body,{tableName:"coalesce(nullif(table_name_cn,''),table_name)"},'tableName')
+    var sourceDirection=tableSort.direction(body)
+    var tablePage=db.page("""select * from db_table_t where tenant_id=#{tenantId} and datasource_id=#{previewDbId} and is_del=0 and asset_status>0 and business_type in ('业务表','日志表','字典表') order by ${sourceColumn} ${sourceDirection},tid asc""",pageSize,(pageNum-1)*pageSize)
     var tableRows = tablePage == null || tablePage.list == null ? [] : tablePage.list
     if (tableRows.size() == 0) {
         return {list: [], total: tablePage == null ? 0 : tablePage.total}
@@ -325,7 +326,7 @@ if (action == 'create') {
         .eq('tid', sourceDbId).eq('is_del', 0).selectOne()
     var targetDb = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
         .eq('tid', targetDbId).eq('is_del', 0).selectOne()
-    if (sourceDb == null || targetDb == null || !['1', '2'].contains(text(first(sourceDb, ['assetStatus', 'asset_status'])))) {
+    if (sourceDb == null || targetDb == null || (first(sourceDb, ['assetStatus', 'asset_status']) == null || first(sourceDb, ['assetStatus', 'asset_status'])::int <= 0)) {
         exit 400, '所选数据库不存在、不属于当前租户或来源库尚未完成登记'
     }
     // 当前会话角色的 ALL/ORG/OWNER 数据源范围只计算一次，随后每个
@@ -391,7 +392,7 @@ if (action == 'create') {
             var sourceTable = sourceRows['id:' + sourceId]
             var linkedTargets = targetGroups['id:' + sourceId]
             var targetTable = linkedTargets == null || linkedTargets.size() != 1 ? null : linkedTargets[0]
-            if (sourceTable == null || text(sourceTable.assetStatus) != '2'
+            if (sourceTable == null || (sourceTable.assetStatus == null || sourceTable.assetStatus::int <= 0)
                 || !['业务表', '日志表', '字典表'].contains(text(sourceTable.businessType))
                 || targetTable == null || text(targetTable.tid) != targetId
                 || text(targetTable.datasourceId) != targetDbId) {

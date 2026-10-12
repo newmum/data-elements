@@ -33,6 +33,7 @@ public class IdaasDirectoryReadTest {
             default -> throw new IllegalArgumentException("Unknown current IAM function: " + name);
         };
         return CanonicalMagicSources.byId(id)
+                .replace("import tableSort;", "")
                 .replaceAll("(?m)^import (db|identityTransport);\\r?\\n", "")
                 .replaceAll("(?m)^import '@/[^\\r\\n]+;\\r?\\n", "");
     }
@@ -143,7 +144,7 @@ public class IdaasDirectoryReadTest {
             String prelude = "var directoryScope=(permission,domain)=>({ctx:{userId:'operator'},all:false,orgIds:allowedIds});\n"
                     + "var fieldValues=(operation,entityType,domain,objectId,values,prior)=>collector.read(operation,values);\n";
             Map<String,Object> args = Map.of("db",db,"collector",collector,"allowedIds",allowedIds,
-                    "entity","orgs","operation","list","payload",Map.of("domain","workforce","page",page,"size",size));
+                    "tableSort",new TableSortMagicModule(),"entity","orgs","operation","list","payload",Map.of("domain","workforce","page",page,"size",size));
             return (Map<String,Object>)assertInstanceOf(Map.class,
                     MagicScript.create(prelude+source("directory"),null).execute(new MagicScriptContext(args)));
         }

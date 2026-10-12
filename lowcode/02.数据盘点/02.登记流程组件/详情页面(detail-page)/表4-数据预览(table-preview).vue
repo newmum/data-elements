@@ -42,7 +42,7 @@ const init = async () => {
   try {
     await $common.get("/dst/database/metadata/columns", { tid: tableId }).then((cols) => {
       // 设置预览表格列配置
-      state.previewCols = cols?.map((el) => ({ label: el.columnName, prop: el.columnName }));
+      state.previewCols = cols?.map((el) => ({ label: el.columnName, prop: el.columnName,sortable:"custom" }));
       if (!state.previewCols.length) {
         state.errMsg = "无表字段数据";
       }
@@ -52,7 +52,7 @@ const init = async () => {
   }
 };
 
-const fetchData = async ({ pageNo, pageSize }) => {
+const fetchData = async ({ pageNo, pageSize,sortField,sortDir }) => {
   try {
     const tableId = props.tableId;
     if (!tableId) {
@@ -65,7 +65,7 @@ const fetchData = async ({ pageNo, pageSize }) => {
       {
         tableId,
         pageNo,
-        pageSize,
+        pageSize,sortField,sortDir,
       },
       { _hiddenErrorMsg: true }
     );
@@ -78,7 +78,7 @@ const fetchData = async ({ pageNo, pageSize }) => {
     if (!state.previewCols.length) {
       state.previewCols = columns?.map((el) => ({
         label: el,
-        prop: el,
+        prop: el,sortable:"custom",
       }));
     }
     return {

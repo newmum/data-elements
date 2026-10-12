@@ -25,8 +25,16 @@ public class ReconciliationApplicationService {
         return repository.policyPage(tenantId(), keyword, positive(page), bounded(size));
     }
 
+    public Map<String, Object> policyPage(String keyword, int page, int size,String sortField,String sortDir) {
+        return repository.policyPage(tenantId(), keyword, positive(page), bounded(size),sortField,sortDir);
+    }
+
     public Map<String, Object> runPage(String status, String keyword, int page, int size) {
         return repository.runPage(tenantId(), status, keyword, positive(page), bounded(size));
+    }
+
+    public Map<String, Object> runPage(String status, String keyword, int page, int size,String sortField,String sortDir) {
+        return repository.runPage(tenantId(), status, keyword, positive(page), bounded(size),sortField,sortDir);
     }
 
     public Map<String, Object> diffPage(String runId, String type, int page, int size) {

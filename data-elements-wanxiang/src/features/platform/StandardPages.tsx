@@ -1,12 +1,14 @@
+import { readCatalogTablesPage } from '../../services/metadata';
 import { useMemo, useRef, useState } from 'react';
 import { Alert, App, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Segmented, Select, Space, Table, Tooltip } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { Row } from '../../services/api';
 import { useWorkspaceQuery } from '../../services/useWorkspaceQuery';
+import { useServerSort } from '../../shared/serverSort';
 import { dataTypeLabel } from '../../shared/businessLabels';
 import { Panel } from '../../design/Visuals';
-import { canMaintainStandards, deleteCode, deleteElement, elementForm, fieldTypes, listCodes, listElements, loadLanding, readCode, readElement, saveBinding, saveCode, saveElement, saveEncoding, segmentsFromPattern, setCodePublished, setElementPublished, standardChoices, testEncoding, type StandardChoices } from '../../services/standards';
+import { canMaintainStandards, codePage, deleteCode, deleteElement, elementForm, elementPage, fieldTypes, loadLanding, readCode, readElement, saveBinding, saveCode, saveElement, saveEncoding, segmentsFromPattern, setCodePublished, setElementPublished, standardChoices, testEncoding, type StandardChoices } from '../../services/standards';
 import { DataTable, EditorModal, ErrorNotice, JsonDetail, Page, Status, opts, required, statusColumn, text, timeColumn, useAction } from './common';
 
 const emptyChoices:StandardChoices={classes:[],codes:[],types:[],rules:[]};
@@ -54,13 +56,16 @@ function ElementInformation({row}:{row:Row}) {
 }
 
 export function ElementsPage() {
- const q=useWorkspaceQuery('shared-elements',listElements);
+ const [page,setPage]=useState(1),[size,setSize]=useState(20),[keyword,setKeyword]=useState('');
+ const serverSort=useServerSort(()=>setPage(1));
  const choices=useWorkspaceQuery('shared-element-options',standardChoices);
  const [edit,setEdit]=useState<Row|null>(),[detail,setDetail]=useState<Row|null>(null),[category,setCategory]=useState<string>(),[state,setState]=useState<string>();
+ const query={pageNum:page,pageSize:size,metaName:keyword,dataCategoryId:category,publishStatus:state==null?undefined:state==='PUBLISHED'?1:0,...serverSort.sort};
+ const q=useWorkspaceQuery('shared-elements:'+JSON.stringify(query),signal=>elementPage(query,signal));
  const {busy,run}=useAction(),{modal,message}=App.useApp(),navigate=useNavigate();
  const confirm=(row:Row,remove=false)=>modal.confirm({title:remove?'删除未发布数据元？':'下线数据元？',content:remove?`删除“${row.name}”的标准定义，不删除源数据库字段。`:`“${row.name}”下线后可修改，保存后需重新审批发布；已有字段引用会标记为未发布。`,okText:remove?'确认删除':'确认下线',okButtonProps:{danger:remove},onOk:async()=>{try{remove?await deleteElement(row):await setElementPublished(row,false);message.success(remove?'数据元已删除':'已下线，可修改后重新审批');}catch(e){message.error(e instanceof Error?e.message:String(e));throw e;}}});
  return <Page title="数据元" description="保存后进入待审批列表，审批发布后生效；已发布内容先下线再修改。" actions={canMaintainStandards()&&<Button type="primary" icon={<PlusOutlined/>} onClick={()=>setEdit(null)}>新建数据元</Button>}>
-  <DataTable rows={(q.data||[]).filter(r=>(!category||r.dataCategoryId===category)&&(!state||r.status===state))} loading={q.loading} error={q.error} onRefresh={q.refresh} actions={<Space wrap><Select aria-label="标准分类筛选" allowClear placeholder="全部分类" style={{width:150}} options={opts(choices.data?.classes||[])} value={category} onChange={setCategory}/><Select aria-label="发布状态筛选" allowClear placeholder="全部状态" style={{width:120}} options={[{value:'PENDING',label:'待审批'},{value:'PUBLISHED',label:'已发布'}]} value={state} onChange={setState}/></Space>} columns={[
+  <DataTable rows={q.data?.list||[]} serverSort={serverSort} serverPagination={{page,size,total:q.data?.total||0,onChange:(p,n)=>{setPage(p);setSize(n);}}} onSearch={v=>{setPage(1);setKeyword(v);}} loading={q.loading} error={q.error} onRefresh={q.refresh} actions={<Space wrap><Select aria-label="标准分类筛选" allowClear placeholder="全部分类" style={{width:150}} options={opts(choices.data?.classes||[])} value={category} onChange={v=>{setPage(1);setCategory(v);}}/><Select aria-label="发布状态筛选" allowClear placeholder="全部状态" style={{width:120}} options={[{value:'PENDING',label:'待审批'},{value:'PUBLISHED',label:'已发布'}]} value={state} onChange={v=>{setPage(1);setState(v);}}/></Space>} columns={[
    {title:'名称',dataIndex:'name',width:180,render:(v,r)=><Button type="link" onClick={()=>run(async()=>setDetail(await readElement(r.id)),'')}>{v}</Button>},
    {title:'英文代码',dataIndex:'code',width:170},{title:'标准编码',dataIndex:'standardEncode',width:140,render:text},
    {title:'定义',dataIndex:'definition',width:240,ellipsis:true},{title:'数据类型',dataIndex:'type',width:145,render:v=><div className="wx-cell-stack"><span>{dataTypeLabel(v)}</span><small>{v}</small></div>},
@@ -75,13 +80,15 @@ export function ElementsPage() {
  </Page>;
 }
 export function ReviewPage() {
- const q=useWorkspaceQuery('shared-standard-review',listElements),[item,setItem]=useState<Row|null>(null);const {busy,run}=useAction();
+ const [page,setPage]=useState(1),[size,setSize]=useState(20),[keyword,setKeyword]=useState(''),[item,setItem]=useState<Row|null>(null);
+ const serverSort=useServerSort(()=>setPage(1)),query={pageNum:page,pageSize:size,metaName:keyword,publishStatus:0,...serverSort.sort};
+ const q=useWorkspaceQuery('shared-standard-review:'+JSON.stringify(query),signal=>elementPage(query,signal));const {busy,run}=useAction();
  return <Page title="数据元审核" description="已保存但未发布的数据元自动进入本列表；核对内容后审批并发布。">
-  <DataTable rows={(q.data||[]).filter(r=>!published(r))} loading={q.loading} error={q.error} onRefresh={q.refresh} columns={[
-   {title:'数据元 / 标准编码',width:240,render:(_,r)=><div className="wx-cell-stack"><strong>{r.name}</strong><small>{r.standardEncode||'未填写标准编码'}</small></div>},
+  <DataTable rows={q.data?.list||[]} serverSort={serverSort} serverPagination={{page,size,total:q.data?.total||0,onChange:(p,n)=>{setPage(p);setSize(n);}}} onSearch={v=>{setPage(1);setKeyword(v);}} loading={q.loading} error={q.error} onRefresh={q.refresh} columns={[
+   {title:'数据元 / 标准编码',key:'name',width:240,render:(_,r)=><div className="wx-cell-stack"><strong>{r.name}</strong><small>{r.standardEncode||'未填写标准编码'}</small></div>},
    {title:'英文代码',dataIndex:'code',width:170},{title:'业务定义',dataIndex:'definition',width:260,ellipsis:true},{title:'标准分类',dataIndex:'dataCategoryName',width:160,render:text},
    {title:'数据类型',width:145,render:(_,r)=><div className="wx-cell-stack"><span>{dataTypeLabel(r.type)}</span><small>{r.type} ({r.fieldLength??'—'})</small></div>},
-   {title:'提交修订',key:'submittedRevision',width:120,render:unavailable},{title:'提交时间',key:'submittedAt',width:160,render:unavailable},statusColumn,timeColumn,
+   {title:'提交修订',key:'submittedRevision',width:120,render:unavailable},{title:'提交时间',key:'createdTime',width:160,render:(_,r)=>r.createdTime?new Date(r.createdTime).toLocaleString('zh-CN'):'—'},statusColumn,timeColumn,
    {title:'操作',width:116,render:(_,r)=><Button type="link" disabled={busy} onClick={()=>run(async()=>setItem(await readElement(r.id)),'')}>审批并发布</Button>},
   ]}/>
   <Modal width={660} open={!!item} title={`审批 · ${item?.name||''}`} onCancel={()=>!busy&&setItem(null)} okText="审批并发布" confirmLoading={busy} okButtonProps={{disabled:!canMaintainStandards()||!item||published(item)}} onOk={()=>run(async()=>{await setElementPublished(item!,true);setItem(null);},'审批完成，数据元已发布')}>
@@ -92,21 +99,27 @@ export function ReviewPage() {
 
 function MappingFields({entities,elements,edit,rules,bindings,landing}:{entities:Row[];elements:Row[];edit?:Row|null;rules:Row[];bindings:Row[];landing:boolean}) {
  const form=Form.useFormInstance(),entityId=Form.useWatch('entityId',form),fieldId=Form.useWatch('fieldId',form),mode=Form.useWatch('mode',form)||'STANDARD';
- const entity=entities.find(e=>e.id===entityId),field=entity?.fields.find((f:Row)=>f.id===fieldId);
- const current=elements.find(e=>e.id===field?.standardId);
- const targets=elements.filter(published);if(current&&!published(current))targets.push(current);
+ const [entitySearch,setEntitySearch]=useState(''),[fieldSearch,setFieldSearch]=useState(''),[standardSearch,setStandardSearch]=useState('');
+ const entityOptions=useWorkspaceQuery('mapping-tables:'+entitySearch,signal=>readCatalogTablesPage(undefined,undefined,entitySearch,1,100,signal));
+ const fieldOptions=useWorkspaceQuery('mapping-fields:'+JSON.stringify({entityId,fieldSearch}),signal=>entityId?loadLanding(signal,{entityId,fieldKeyword:fieldSearch,pageSize:100}):Promise.resolve({items:[],entities:[],elements:[],coverage:{},total:0}));
+ const standardOptions=useWorkspaceQuery('mapping-standard-options:'+standardSearch,signal=>elementPage({metaName:standardSearch,publishStatus:1,pageSize:100},signal));
+ const allEntities=[...new Map([...entities,...(fieldOptions.data?.entities||[])].map(row=>[String(row.id),row])).values()];
+ const entity=allEntities.find(e=>e.id===entityId),field=entity?.fields.find((f:Row)=>f.id===fieldId);
+ const targets=[...new Map([...elements,...(standardOptions.data?.list||[])].map(row=>[String(row.id),row])).values()];
+ const tableOptions=[...new Map([...entities.map(row=>({value:row.id,label:`${row.displayName||row.name} · ${row.sourceName||''}`})),...(entityOptions.data?.rows||[]).map(row=>({value:row.tid,label:`${row.table_name_cn||row.table_comment||row.table_name} · ${row.datasource_name||''}`}))].map(row=>[String(row.value),row])).values()];
  return <>
-  <Form.Item name="entityId" label="元数据实体" rules={required}><Select showSearch optionFilterProp="label" disabled={!!edit} options={entities.map(e=>({value:e.id,label:`${e.displayName||e.name} · ${e.sourceName||''}`}))} onChange={()=>form.setFieldsValue({fieldId:undefined,targetId:undefined,expectedStandardId:null})}/></Form.Item>
-  <Form.Item name="fieldId" label="字段" rules={required}><Select showSearch optionFilterProp="label" disabled={!!edit} options={(entity?.fields||[]).map((f:Row)=>({value:f.id,label:`${f.displayName||f.name} · ${f.name}`}))} onChange={id=>{const selected=entity?.fields.find((f:Row)=>f.id===id),existing=bindings.find(b=>b.field_id===id&&b.mapping_mode===mode);form.setFieldsValue({targetId:mode==='STANDARD'?selected?.standardId||undefined:existing?.target_id,expectedStandardId:selected?.standardId||null,expectedTargetId:existing?.target_id||null});}}/></Form.Item>
+  <ErrorNotice error={entityOptions.error||fieldOptions.error||standardOptions.error} retry={()=>{entityOptions.refresh();fieldOptions.refresh();standardOptions.refresh();}}/>
+  <Form.Item name="entityId" label="元数据实体" rules={required}><Select showSearch filterOption={false} loading={entityOptions.loading} onSearch={setEntitySearch} disabled={!!edit} options={tableOptions} onChange={()=>form.setFieldsValue({fieldId:undefined,targetId:undefined,expectedStandardId:null})}/></Form.Item>
+  <Form.Item name="fieldId" label="字段" rules={required}><Select showSearch filterOption={false} loading={fieldOptions.loading} onSearch={setFieldSearch} disabled={!!edit} options={(entity?.fields||[]).map((f:Row)=>({value:f.id,label:`${f.displayName||f.name} · ${f.name}`}))} onChange={id=>{const selected=entity?.fields.find((f:Row)=>f.id===id),existing=bindings.find(b=>b.field_id===id&&b.mapping_mode===mode);form.setFieldsValue({targetId:mode==='STANDARD'?selected?.standardId||undefined:existing?.target_id,expectedStandardId:selected?.standardId||null,expectedTargetId:existing?.target_id||null});}}/></Form.Item>
   {!landing&&<Form.Item name="mode" label="对标类型"><Select disabled={!!edit?.target_id} onChange={m=>{const current=bindings.find(b=>b.field_id===fieldId&&b.mapping_mode===m);form.setFieldsValue({targetId:m==='STANDARD'?field?.standardId:current?.target_id,expectedTargetId:current?.target_id||null});}} options={[{value:'STANDARD',label:'已发布的数据元标准'},{value:'QUALITY',label:'已配置的质量规则'},{value:'REFERENCE',label:'其他技术字段参照'}]}/></Form.Item>}
-  <Form.Item name="targetId" label={mode==='STANDARD'?'目标标准':mode==='QUALITY'?'质检任务规则':'参照字段'} rules={required}><Select showSearch optionFilterProp="label" options={mode==='STANDARD'?targets.map(e=>({value:e.id,label:`${e.name} · ${e.code}`,disabled:!published(e)})):mode==='QUALITY'?rules.filter(r=>r.tableId===entityId&&r.columnName===field?.name&&Number(r.enabled)===1).map(r=>({value:r.id,label:`${r.taskName} · ${r.ruleName}`})):entities.flatMap(e=>e.fields.filter((f:Row)=>f.id!==fieldId).map((f:Row)=>({value:f.id,label:`${e.displayName||e.name}.${f.displayName||f.name} · ${f.name}`})))}/></Form.Item>
+  <Form.Item name="targetId" label={mode==='STANDARD'?'目标标准':mode==='QUALITY'?'质检任务规则':'参照字段'} rules={required}><Select showSearch filterOption={false} loading={standardOptions.loading} onSearch={setStandardSearch} options={mode==='STANDARD'?targets.map(e=>({value:e.id,label:`${e.name} · ${e.code}`,disabled:!published(e)})):mode==='QUALITY'?rules.filter(r=>r.tableId===entityId&&r.columnName===field?.name&&Number(r.enabled)===1).map(r=>({value:r.id,label:`${r.taskName} · ${r.ruleName}`})):entities.flatMap(e=>e.fields.filter((f:Row)=>f.id!==fieldId).map((f:Row)=>({value:f.id,label:`${e.displayName||e.name}.${f.displayName||f.name} · ${f.name}`})))}/></Form.Item>
   <Form.Item name="expectedStandardId" hidden><Input/></Form.Item>
   <Form.Item name="expectedTargetId" hidden><Input/></Form.Item>
  </>;
 }
 export function MappingPage({landing=false}:{landing?:boolean}) {
- const q=useWorkspaceQuery('shared-standard-landing',async signal=>{const [data,elements]=await Promise.all([loadLanding(signal),listElements(signal)]);return {...data,items:data.items.map(r=>({...r,id:r.field_id+':STANDARD',mapping_mode:'STANDARD'})),elements};});
- const [edit,setEdit]=useState<Row|null>(),[scope,setScope]=useState('ALL');const {modal,message}=App.useApp();
+ const [edit,setEdit]=useState<Row|null>(),[scope,setScope]=useState('ALL'),[page,setPage]=useState(1),[size,setSize]=useState(20),[keyword,setKeyword]=useState('');const serverSort=useServerSort(()=>setPage(1));const {modal,message}=App.useApp();
+ const query={scope,pageNum:page,pageSize:size,keyword,...serverSort.sort};const q=useWorkspaceQuery('shared-standard-landing:'+JSON.stringify(query),signal=>loadLanding(signal,query));
  const data=q.data,rows:Row[]=data?.items||[],entities=data?.entities||[],elements=data?.elements||[],coverage=data?.coverage||{};
  const fieldIndex=useMemo(()=>new Map<string,{entity:Row;field:Row}>(entities.flatMap(entity=>(entity.fields||[]).map((field:Row)=>[String(field.id),{entity,field}] as const))),[entities]);
  const standardIndex=useMemo(()=>new Map<string,Row>(elements.map(element=>[String(element.id),element])),[elements]);
@@ -117,10 +130,10 @@ export function MappingPage({landing=false}:{landing?:boolean}) {
  const targetCell=(id:string)=>{const e=standardFor(id);if(e)return <div className="wx-cell-stack wx-mapping-standard"><Tooltip title={e.name}><strong>{e.name}</strong></Tooltip><Tooltip title={e.code}><small>{e.code}</small></Tooltip></div>;if(!id)return <span className="muted">未关联标准</span>;const legacy=/^\d+$/.test(id);return <Tooltip title={legacy?`当前租户未查到标准 ID：${id}`:`字段保存的历史标准标识为 ${id}；当前标准库按记录 ID 查询，尚未完成对应关系核对。`}><span className="wx-mapping-unresolved">{legacy?'当前租户未找到该标准':`历史引用 · ${id}`}</span></Tooltip>;};
  return <Page title={landing?'标准落地':'元数据对标'} description="查看业务字段的数据标准关联情况，并维护已发布的数据元标准。" actions={canMaintainStandards()&&<Button type="primary" onClick={()=>setEdit(null)}>关联数据标准</Button>}>
   {landing&&<div className="mb16"><Panel title="标准落地进度" description="按真实已采集字段和有效已发布标准统计；覆盖率不代表通过质检。"><div className="wx-coverage-body"><div className="wx-coverage-number"><strong>{data?Number(coverage.coverage||0).toFixed(1):'—'}<small>%</small></strong><span>标准覆盖率</span></div><div className="wx-coverage-track"><span style={{width:`${Math.min(100,Math.max(0,Number(coverage.coverage||0)))}%`}}/></div><div className="wx-coverage-split"><div><b>{data?coverage.mappedFields:'—'}</b><span>有效标准引用</span></div><div><b>{data?Number(coverage.totalFields)-Number(coverage.boundFields):'—'}</b><span>尚未绑定字段</span></div><div><b>{data?Number(coverage.boundFields)-Number(coverage.mappedFields):'—'}</b><span>引用未发布 / 不可用</span></div></div></div></Panel></div>}
-  <DataTable rows={rows.filter(r=>scope==='ALL'||(scope==='BOUND'?!!r.target_id:!r.target_id))} loading={q.loading} error={q.error} onRefresh={q.refresh} actions={<Segmented aria-label="数据标准关联筛选" value={scope} onChange={value=>setScope(String(value))} options={[{value:'ALL',label:'全部'},{value:'BOUND',label:'已绑定'},{value:'UNBOUND',label:'未绑定'}]}/>} columns={[
-   {title:'字段名',dataIndex:'field_id',width:220,sorter:(a,b)=>String(info(a.field_id)?.field.displayName||info(a.field_id)?.field.name||'').localeCompare(String(info(b.field_id)?.field.displayName||info(b.field_id)?.field.name||''),'zh-CN',{numeric:true}),render:fieldCell},
+  <DataTable rows={rows} serverSort={serverSort} serverPagination={{page,size,total:q.data?.total||0,onChange:(p,n)=>{setPage(p);setSize(n);}}} onSearch={v=>{setKeyword(v);setPage(1);}} loading={q.loading} error={q.error} onRefresh={q.refresh} actions={<Segmented aria-label="数据标准关联筛选" value={scope} onChange={value=>{setScope(String(value));setPage(1);}} options={[{value:'ALL',label:'全部'},{value:'BOUND',label:'已绑定'},{value:'UNBOUND',label:'未绑定'}]}/>} columns={[
+   {title:'字段名',dataIndex:'field_id',width:220,sorter:true,render:fieldCell},
    {title:'原字段类型 / 长度',key:'source_type',render:(_,r)=>{const field=info(r.field_id)?.field;return typeCell(field?.type,field?.length);}},
-   {title:'数据标准',dataIndex:'target_id',width:190,className:'wx-mapping-standard-column',sorter:(a,b)=>String(standardFor(a.target_id)?.name||a.target_id||'').localeCompare(String(standardFor(b.target_id)?.name||b.target_id||''),'zh-CN',{numeric:true}),render:targetCell},
+   {title:'数据标准',dataIndex:'target_id',width:190,className:'wx-mapping-standard-column',sorter:true,render:targetCell},
    {title:'标准类型 / 长度',key:'standard_type',render:(_,r)=>{const standard=standardFor(r.target_id);return standard?typeCell(standard.fieldType??standard.type,standard.fieldLength??standard.length,true):<span className="muted">—</span>;}},...(landing?[statusColumn]:[]),
    {title:'操作',width:132,render:(_,r)=><Space className="wx-mapping-action-buttons"><Button type="link" disabled={!canMaintainStandards()} onClick={()=>setEdit(r)}>{r.target_id?'替换标准':'关联标准'}</Button>{r.target_id&&<Button danger type="link" disabled={!canMaintainStandards()} onClick={()=>modal.confirm({title:'解除数据标准关联？',content:'只解除当前字段与数据标准的关联，不删除数据标准。',onOk:async()=>{try{await saveBinding({entityId:r.entity_id,fieldId:r.field_id,mode:'STANDARD',targetId:null,expectedStandardId:r.target_id});message.success('数据标准关联已解除');}catch(e){message.error(e instanceof Error?e.message:String(e));throw e;}}})}>解除</Button>}</Space>},
   ]}/>
@@ -131,18 +144,19 @@ export function MappingPage({landing=false}:{landing?:boolean}) {
 }
 
 export function CodesPage() {
- const q=useWorkspaceQuery('shared-code-sets',async signal=>{const [codes,elements]=await Promise.all([listCodes(signal),listElements(signal)]);return {codes,elements};});
+ const [page,setPage]=useState(1),[size,setSize]=useState(20),[keyword,setKeyword]=useState('');const serverSort=useServerSort(()=>setPage(1));
+ const query={pageNum:page,pageSize:size,dictName:keyword,...serverSort.sort};const q=useWorkspaceQuery('shared-code-sets:'+JSON.stringify(query),signal=>codePage(query,signal));
  const choices=useWorkspaceQuery('shared-code-options',standardChoices);
  const [edit,setEdit]=useState<Row|null>(),[set,setSet]=useState<Row|null>(null),[items,setItems]=useState<Row[]>([]);const dirty=useRef(false);
  const {busy,run}=useAction(),{modal,message}=App.useApp();
- const references=(id:string)=>(q.data?.elements||[]).filter(e=>e.valueDomainId===id).length;
+ const references=(id:string)=>Number(q.data?.list.find(e=>e.id===id)?.referenceCount||0);
  const open=async(row:Row)=>{const current=await readCode(row.id);setItems(current.items);dirty.current=false;setSet(current);};
  const close=()=>{if(dirty.current)modal.confirm({title:'放弃未保存的代码条目？',okText:'放弃修改',cancelText:'继续编辑',onOk:()=>setSet(null)});else setSet(null);};
  const update=(next:Row[])=>{dirty.current=true;setItems(next);};
  const transition=(row:Row,remove=false)=>modal.confirm({title:remove?'删除代码集？':published(row)?'下线代码集？':'发布代码集？',content:remove?'删除前会检查数据元引用；仍被引用的代码集不能删除。':published(row)?`有 ${references(row.id)} 个数据元引用此值域。下线后可编辑，修改完成后再发布。`:'发布后可供数据元引用；修改前需先下线。',okText:remove?'确认删除':published(row)?'确认下线':'确认发布',okButtonProps:{danger:remove},onOk:async()=>{try{if(!choices.data||choices.error)throw new Error('请先成功读取分类选项');remove?await deleteCode(row):await setCodePublished(row,!published(row),choices.data.classes);message.success(remove?'代码集已删除':published(row)?'代码集已下线':'代码集已发布');}catch(e){message.error(e instanceof Error?e.message:String(e));throw e;}}});
  return <Page title="标准代码" description="维护共享值域的代码和名称；已发布代码集先下线再修改。" actions={canMaintainStandards()&&<Button type="primary" icon={<PlusOutlined/>} onClick={()=>setEdit(null)}>新建代码集</Button>}>
-  <DataTable rows={q.data?.codes||[]} loading={q.loading} error={q.error} onRefresh={q.refresh} columns={[
-   {title:'名称',dataIndex:'name',width:200},{title:'代码',dataIndex:'code',width:150},statusColumn,{title:'代码条目数',width:120,render:(_,r)=>r.items.length},{title:'引用数据元',width:120,render:(_,r)=>references(r.id)},
+  <DataTable rows={q.data?.list||[]} serverSort={serverSort} serverPagination={{page,size,total:q.data?.total||0,onChange:(p,n)=>{setPage(p);setSize(n);}}} onSearch={v=>{setPage(1);setKeyword(v);}} loading={q.loading} error={q.error} onRefresh={q.refresh} columns={[
+   {title:'名称',dataIndex:'name',width:200},{title:'代码',dataIndex:'code',width:150},statusColumn,{title:'代码条目数',key:'itemCount',sorter:true,width:120,render:(_,r)=>r.itemCount},{title:'引用数据元',key:'referenceCount',sorter:true,width:120,render:(_,r)=>r.referenceCount},
    {title:'标准分类',dataIndex:'dataCategoryName',width:160,render:text},timeColumn,
    {title:'操作',width:208,render:(_,r)=><Space><Button type="link" disabled={busy} onClick={()=>run(()=>open(r),'')}>代码条目</Button>{canMaintainStandards()&&<><Button type="link" disabled={published(r)||busy} onClick={()=>run(async()=>setEdit(await readCode(r.id)),'')}>编辑</Button><Button type="link" disabled={busy} onClick={()=>transition(r)}>{published(r)?'下线':'发布'}</Button>{!published(r)&&<Button danger type="link" disabled={busy} onClick={()=>transition(r,true)}>删除</Button>}</>}</Space>},
   ]}/>
@@ -166,12 +180,13 @@ function EncodingFields({legacy=false,choices}:{legacy?:boolean;choices:Standard
  </>;
 }
 export function EncodingPage() {
- const q=useWorkspaceQuery('shared-encoding-standards',listElements),choices=useWorkspaceQuery('shared-encoding-options',standardChoices);
+ const [page,setPage]=useState(1),[size,setSize]=useState(20),[keyword,setKeyword]=useState('');const serverSort=useServerSort(()=>setPage(1));const query={pageNum:page,pageSize:size,metaName:keyword,encodingOnly:true,...serverSort.sort};
+ const q=useWorkspaceQuery('shared-encoding-standards:'+JSON.stringify(query),signal=>elementPage(query,signal)),choices=useWorkspaceQuery('shared-encoding-options',standardChoices);
  const [edit,setEdit]=useState<Row|null>(),[test,setTest]=useState<Row|null>(null),[value,setValue]=useState(''),[result,setResult]=useState<Row|null>(null);
  const {busy,run}=useAction(),{modal,message}=App.useApp(),navigate=useNavigate();
  const initial=edit?{...edit,description:edit.definition,definition:{segments:segmentsFromPattern(edit.formatPattern)||undefined}}:{definition:{segments:[{type:'LITERAL',value:'WX-'},{type:'DIGITS',length:6}]},dataLevel:'2',isNullable:0};
  return <Page title="编码标准" description="编码规则与共享数据元的格式规则一致；格式校验不发号，不承担号码全局唯一性。" actions={canMaintainStandards()&&<Button type="primary" icon={<PlusOutlined/>} onClick={()=>setEdit(null)}>新建编码规范</Button>}>
-  <DataTable rows={(q.data||[]).filter(r=>r.formatPattern)} error={q.error} loading={q.loading} onRefresh={q.refresh} columns={[
+  <DataTable rows={q.data?.list||[]} serverSort={serverSort} serverPagination={{page,size,total:q.data?.total||0,onChange:(p,n)=>{setPage(p);setSize(n);}}} onSearch={v=>{setPage(1);setKeyword(v);}} error={q.error} loading={q.loading} onRefresh={q.refresh} columns={[
    {title:'名称',dataIndex:'name',width:180},{title:'英文代码',dataIndex:'code',width:160},{title:'标准编码',dataIndex:'standardEncode',width:150},statusColumn,
    {title:'格式规则',dataIndex:'formatPattern',width:250,ellipsis:true},{title:'说明',dataIndex:'definition',width:220,ellipsis:true},timeColumn,
    {title:'操作',width:176,render:(_,r)=><Space>{published(r)?<Button type="link" disabled={busy} onClick={()=>modal.confirm({title:'下线编码规范？',content:'与数据元共享发布状态。下线后修改，再到数据元审核菜单审批发布。',onOk:async()=>{try{await setElementPublished(r,false);message.success('编码规范已下线');}catch(e){message.error(e instanceof Error?e.message:String(e));throw e;}}})}>下线</Button>:<><Button type="link" disabled={!canMaintainStandards()||busy} onClick={()=>run(async()=>setEdit(await readElement(r.id)),'')}>编辑</Button><Button type="link" onClick={()=>navigate('/governance/standards/review')}>待审批</Button></>}<Button type="link" disabled={busy} onClick={()=>{setTest(r);setResult(null);setValue('');}}>格式校验</Button></Space>},

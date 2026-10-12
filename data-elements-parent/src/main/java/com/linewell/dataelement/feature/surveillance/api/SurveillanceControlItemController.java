@@ -28,4 +28,13 @@ public class SurveillanceControlItemController {
             @RequestParam(required = false) String keyword) {
         return repository.findAll(TenantContext.requireTenantId(), engineCode, channelCode, status, keyword);
     }
+
+    @GetMapping("/page")
+    public java.util.Map<String,Object> page(
+        @RequestParam(defaultValue=ENGINE) String engineCode,@RequestParam(required=false) String channelCode,
+        @RequestParam(required=false) String keyword,@RequestParam(defaultValue="1") int pageNo,
+        @RequestParam(defaultValue="20") int pageSize,@RequestParam(required=false) String sortField,
+        @RequestParam(required=false) String sortDir) {
+        return java.util.Map.of("code",0,"msg","success","data",repository.page(TenantContext.requireTenantId(),engineCode,channelCode,keyword,pageNo,pageSize,sortField,sortDir));
+    }
 }

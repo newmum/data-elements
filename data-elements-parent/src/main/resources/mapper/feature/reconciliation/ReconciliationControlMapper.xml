@@ -47,7 +47,7 @@
                r.status last_run_status, r.consistency_rate,
                r.diff_count last_diff_count, r.finished_at last_finished_at
         <include refid="PolicySearch"/>
-        order by p.updated_time desc
+        order by ${orderBy}
     </select>
 
     <select id="selectRunPage" resultType="org.springframework.util.LinkedCaseInsensitiveMap">
@@ -63,7 +63,7 @@
         <if test="keyword != null and keyword != ''">
             and p.policy_name like concat(concat('%', #{keyword}), '%')
         </if>
-         order by r.created_time desc
+         order by ${orderBy}
     </select>
 
     <select id="selectDiffPage" resultType="org.springframework.util.LinkedCaseInsensitiveMap">

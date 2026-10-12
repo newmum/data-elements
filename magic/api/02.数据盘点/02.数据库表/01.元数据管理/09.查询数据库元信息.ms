@@ -24,6 +24,12 @@
       "error": null,
       "expression": null,
       "children": null
+    },
+    {
+      "name": "tableId",
+      "description": "可选：当前数据源下的表资产 ID，仅查询该表概览",
+      "required": false,
+      "dataType": "String"
     }
   ],
   "options": [],
@@ -31,7 +37,7 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "元数据管理 09：查询数据库概览信息；涉及 db_datasource_t 等业务表。",
+  "description": "查询当前租户及角色范围内的数据源概览；传 tableId 时仅查询当前表的实时概览，不写入资产。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -40,6 +46,10 @@
 // 路由：GET /dst/database/metadata/dbInfo
 // 业务说明：元数据管理 09：查询数据库概览信息；涉及 db_datasource_t 等业务表。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
+import tenantRuntime
+import dataScope
+import hwhive
+import cn.hutool.core.date.DateUtil
 import jsons
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
@@ -57,6 +67,8 @@ import java.util.Map
 
 var textOf = (value) => value == null ? null : value + ''
 var blank = (value) => value == null || textOf(value).trim() == ''
+var currentTenantId = tenantRuntime.id()
+if (blank(currentTenantId)) { exit 401, '当前登录租户无效，请重新登录' }
 var rowValue = (row, keys) => {
     if (row == null) {
         // 返回当前业务分支的标准结果。
@@ -89,10 +101,13 @@ var loadAsset = (assetId) => {
         return null
     }
     // 从 MySQL 业务表读取当前有效数据。
-    var main = db.table('db_datasource_t').where().eq('tid', assetId).eq('is_del', 0).selectOne()
+    var main = db.table('db_datasource_t').where().eq('tenant_id', currentTenantId).eq('tid', assetId).eq('is_del', 0).selectOne()
     if (main == null) {
         // 返回当前业务分支的标准结果。
         return null
+    }
+    if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [main]).size() != 1) {
+        exit 403, '数据源不在当前角色数据范围内'
     }
     var result = {
         tid: rowValue(main, ['tid']), id: rowValue(main, ['tid']), assetType: 'db',
@@ -174,29 +189,123 @@ var dataSourceOf = (asset) => {
 var countValue = (value) => value == null ? 0 : value
 var sizeValue = (value) => blank(value) ? '0 B' : value
 
-if (blank(tid)) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 500, 'tid 不能为空'
+if (blank(tid)) { exit 400, 'tid 不能为空' }
+var requestedTableId = tableId
+var tableAsset = null
+if (!blank(requestedTableId)) {
+    tableAsset = db.table('db_table_t').where().eq('tenant_id', currentTenantId)
+        .eq('tid', requestedTableId).eq('is_del', 0).selectOne()
+    if (tableAsset == null) { exit 404, '数据表不存在或无访问权限' }
+    if (textOf(firstValue(tableAsset, ['datasourceId', 'datasource_id'])) != textOf(tid)) {
+        exit 403, '数据表不属于指定数据源'
+    }
 }
 var asset = loadAsset(tid)
-if (asset == null) {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 404, '数据源资产不存在'
+if (asset == null) { exit 404, '数据源资产不存在或无访问权限' }
+var sourceType = textOf(firstValue(asset, ['dbType', 'databaseType', 'dataSourceType'])).toLowerCase()
+var managedHive = sourceType == 'hive' && (
+    textOf(firstValue(asset, ['metadataAccessMode', 'metadata_access_mode'])) == 'server-managed-mrs'
+    || !blank(firstValue(asset, ['hiveProfile', 'hive_profile']))
+)
+var dateValue = (value) => value == null ? null : DateUtil.format(value, 'yyyy-MM-dd HH:mm:ss')
+if (tableAsset != null) {
+    // A single detail action probes only this table. Never load a whole database or its indexes.
+    var physicalName = firstValue(tableAsset, ['tableName', 'table_name'])
+    if (blank(physicalName)) { exit 400, '数据表缺少物理表名' }
+    var sourceConfig = managedHive ? null : dataSourceOf(asset)
+    var info = null
+    if (managedHive) {
+        var hiveDatabase = firstValue(asset, ['database', 'dbName', 'db_name'])
+        if (!textOf(hiveDatabase).matches('[A-Za-z_][A-Za-z0-9_]*')
+            || !textOf(physicalName).matches('[A-Za-z_][A-Za-z0-9_]*')) {
+            exit 400, 'Hive 库名或表名格式不正确'
+        }
+        var qualified = '`' + hiveDatabase + '`.`' + physicalName + '`'
+        var details = hwhive.queryTable('DESCRIBE FORMATTED ' + qualified)
+        var fieldCount = 0
+        var fieldSection = true
+        var totalBytes = null
+        var createTime = null
+        for (row in details == null ? [] : details) {
+            var key = firstValue(row, ['col_name', 'COL_NAME'])
+            var value = firstValue(row, ['data_type', 'DATA_TYPE'])
+            if (blank(key)) { fieldSection = false; continue }
+            key = textOf(key).trim()
+            if (key.startsWith('#')) { continue }
+            if (fieldSection && !blank(value)) { fieldCount = fieldCount + 1 }
+            if (key == 'totalSize' && textOf(value).trim().matches('[0-9]+')) { totalBytes = textOf(value).trim()::long }
+            if (key == 'CreateTime:') { createTime = textOf(value).trim() }
+        }
+        var counted = hwhive.queryTable('SELECT COUNT(*) AS row_count FROM ' + qualified)
+        info = { columnCount: fieldCount, rowCount: rowValue(counted[0], ['row_count', 'ROW_COUNT']),
+            totalSizeBytes: totalBytes, totalSizeFormatted: totalBytes == null ? null : totalBytes + ' B',
+            createTime: createTime, updateTime: null }
+    } else {
+        var probeName = physicalName + ''
+        if (sourceConfig.getDatabaseType().isRelational()) {
+            // Normalize an owner/schema-qualified identifier before passing it to dialect explorers.
+            var parts = probeName.split('\\.')
+            if (parts.size() > 2) { exit 400, '仅支持表名或模式.表名' }
+            for (index, part in parts) {
+                part = part.trim()
+                if (part.startsWith('"') && part.endsWith('"')) { part = part.substring(1, part.length() - 1) }
+                else if (part.startsWith('`') && part.endsWith('`')) { part = part.substring(1, part.length() - 1) }
+                else if (part.startsWith('[') && part.endsWith(']')) { part = part.substring(1, part.length() - 1) }
+                if (!part.matches('[\\p{L}_][\\p{L}\\p{N}_$#]*')) { exit 400, '物理表名格式不正确' }
+                parts[index] = part
+            }
+            probeName = parts[parts.size() - 1]
+            if (parts.size() == 2) {
+                if (sourceType == 'mysql' || sourceType == 'oceanbasemysql' || sourceType == 'hive') {
+                    if (!parts[0].equalsIgnoreCase(sourceConfig.getDatabase())) { exit 403, '表名中的库名不匹配当前数据源' }
+                } else { sourceConfig.setSchema(parts[0]) }
+            }
+            var page = metadataExplorerService.getTablesPage(sourceConfig, 1, 100, probeName)
+            for (candidate in page.rows) {
+                var candidateName = textOf(candidate.tableName)
+                if (candidateName.equalsIgnoreCase(probeName)
+                    || candidateName.equalsIgnoreCase(parts.join('.'))) { info = candidate; break }
+            }
+            if (info == null) { exit 422, '未读取到当前表概览，请检查来源表和模式配置' }
+            info.rowCount = metadataExplorerService.getTableRowCount(sourceConfig, probeName)
+            if (info.columnCount == null) {
+                info.columnCount = metadataExplorerService.getColumns(sourceConfig, probeName).size()
+            }
+        } else {
+            info = metadataExplorerService.getTableInfo(sourceConfig, probeName)
+        }
+    }
+    return {
+        tid: requestedTableId, datasourceId: tid,
+        recordCount: info.rowCount, fieldCount: info.columnCount,
+        storageSize: info.totalSizeFormatted, totalSizeFormatted: info.totalSizeFormatted,
+        totalSizeBytes: info.totalSizeBytes,
+        ddlCreateTime: managedHive ? info.createTime : dateValue(info.createTime),
+        ddlUpdateTime: managedHive ? info.updateTime : dateValue(info.updateTime)
+    }
 }
-var info = metadataExplorerService.getDatabaseInfo(dataSourceOf(asset))
-var totalSize = sizeValue(info == null ? null : info.totalSizeFormatted)
-var dataSize = sizeValue(info == null ? null : info.dataSizeFormatted)
-if (dataSize == '0 B' && totalSize != '0 B') {
-    dataSize = totalSize
-}
-// 返回当前业务分支的标准结果。
+var info = null
+if (managedHive) {
+    var hiveDatabase = firstValue(asset, ['database', 'dbName', 'db_name'])
+    if (blank(hiveDatabase) || !textOf(hiveDatabase).matches('[A-Za-z_][A-Za-z0-9_]*')) { exit 400, 'Hive 库名格式不正确' }
+    var connection = null
+    try {
+        connection = hwhive.getConnection()
+        info = { version: connection.getMetaData().getDatabaseProductVersion(),
+            tableCount: hwhive.queryTable('SHOW TABLES IN `' + hiveDatabase + '`').size(),
+            viewCount: null, procedureCount: null, userCount: null,
+            totalSizeFormatted: null, dataSizeFormatted: null }
+    } finally { if (connection != null) { connection.close() } }
+} else { info = metadataExplorerService.getDatabaseInfo(dataSourceOf(asset)) }
+var totalSize = managedHive ? info.totalSizeFormatted : sizeValue(info == null ? null : info.totalSizeFormatted)
+var dataSize = managedHive ? info.dataSizeFormatted : sizeValue(info == null ? null : info.dataSizeFormatted)
+if (dataSize == '0 B' && totalSize != '0 B') { dataSize = totalSize }
 return {
     dbVersion: info == null ? '' : (blank(info.version) ? '' : info.version),
     db_version: info == null ? '' : (blank(info.version) ? '' : info.version),
-    dataSize: dataSize,
-    tableCount: countValue(info == null ? null : info.tableCount),
-    viewCount: countValue(info == null ? null : info.viewCount),
-    procedureCount: countValue(info == null ? null : info.procedureCount),
-    totalSize: totalSize,
-    userCount: countValue(info == null ? null : info.userCount)
+    dataSize: dataSize, totalSize: totalSize,
+    tableCount: info == null ? null : info.tableCount,
+    viewCount: info == null ? null : info.viewCount,
+    procedureCount: info == null ? null : info.procedureCount,
+    userCount: info == null ? null : info.userCount
 }

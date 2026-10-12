@@ -24,6 +24,7 @@
 // 路由：GET /idaas/password-recovery/requests
 import db;
 import identityRuntime;
+import tableSort;
 import request;
 import java.lang.Long;
 import '@/idaas/api-call' as apiCall;
@@ -72,10 +73,13 @@ where e.action='password:recovery-request' and e.result='SUCCESS'
     if(realm=='auth-account') {
         filter=filter+" and a.identity_domain=#{domain}";
     }
+    var orderRequest={sortField:param('sortField',null),sortDir:param('sortDir',null)};
+    var order=tableSort.field(orderRequest,{requestedAt:'e.event_time',username:'a.username',name:nameColumn},'requestedAt');
+    var direction=tableSort.direction(orderRequest);
     var total=sql.selectOne('select count(*) total '+filter).total;
     var offset=(page-1)*size;
     var rows=sql.select("select e.tid as id,e.object_id account_id,e.event_time requested_at,a.username,"
-        +nameColumn+" display_name,a.version "+filter+" order by e.event_time desc,e.tid desc limit #{size} offset #{offset}");
+        +nameColumn+" display_name,a.version "+filter+" ORDER BY "+order+" "+direction+",e.tid ASC limit #{size} offset #{offset}");
     return {list:rows.map(row=>({
         id:row.id,accountId:row.account_id,username:row.username,name:row.display_name,
         version:row.version,requestedAt:row.requested_at,realm:realm,domain:domain

@@ -38,8 +38,10 @@ public class SurveillanceResourceTopicRepository {
             sql.append(" AND status = ?");
             args.add(status.trim().toUpperCase());
         }
-        sql.append(" ORDER BY channel_code, resource_code");
-        return jdbc.query(sql.toString(), this::map, args.toArray());
+        sql.append(" ORDER BY channel_code, resource_code LIMIT 1001");
+        var rows=jdbc.query(sql.toString(), this::map, args.toArray());
+        if(rows.size()>1000)throw new IllegalArgumentException("单个引擎资源配置超过1000项，请缩小配置范围");
+        return rows;
     }
 
     public Optional<SurveillanceResourceTopic> find(String tenantId, String engineCode, String resourceCode) {

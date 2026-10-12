@@ -2,6 +2,26 @@ import { expect, type Page } from '@playwright/test';
 import { createSeed } from '../../src/domain/seed';
 import type { Database, EntityTable, Session } from '../../src/domain/types';
 
+/** Match the paged HTTP contract; fixture ordering is deliberately separate from UI ordering. */
+function tablePage(database: Database, params: URLSearchParams, domain: string) {
+    const table = params.get('table') as EntityTable;
+    let rows = ((database[table] || []) as Array<Record<string, any>>).filter(row => row.domain === domain);
+    if (params.get('appId')) rows = rows.filter(row => row.appId === params.get('appId'));
+    if (params.get('category')) rows = rows.filter(row => row.category === params.get('category'));
+    const q = (params.get('q') || '').toLowerCase(), status = params.get('status') || 'all';
+    rows = rows.filter(row => (status === 'all' || row.status === status) && (!q || [row.name, row.code, row.description].some(value => String(value || '').toLowerCase().includes(q))));
+    const key = params.get('sortField') || 'name', direction = params.get('sortDir') === 'asc' ? 1 : -1;
+    rows = [...rows].sort((a, b) => {
+        const x = a[key], y = b[key];
+        if (x == null) return y == null ? String(a.id).localeCompare(String(b.id)) : 1;
+        if (y == null) return -1;
+        const result = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'zh-CN');
+        return result * direction || String(a.id).localeCompare(String(b.id));
+    });
+    const page = Math.max(1, Number(params.get('page') || 1)), size = Math.min(100, Math.max(1, Number(params.get('size') || 20)));
+    return { list: rows.slice((page - 1) * size, page * size), total: rows.length, page, size };
+}
+
 /** Browser contract fixtures exercise React over HTTP. They do not certify a live database. */
 export async function installContract(page: Page) {
     const database: Database = createSeed();
@@ -24,7 +44,10 @@ export async function installContract(page: Page) {
             expect(body.tenantId).toBeUndefined();
             data = { token: 'browser-contract-token', session };
         } else if (pathname.endsWith('/idaas/session/me')) data = session;
-        else if (pathname.endsWith('/idaas/workspace/bootstrap')) data = { session, database, capabilities: session.capabilities };
+        else if (pathname.endsWith('/idaas/workspace/bootstrap')) {
+            const params = new URL(route.request().url()).searchParams;
+            data = params.has('table') ? tablePage(database, params, session.domain) : { session, database, capabilities: session.capabilities };
+        }
         else if (pathname.endsWith('/idaas/auth/logout')) data = true;
         else if (pathname.endsWith('/idaas/password-recovery/request')) {
             recoveryRequests.push(route.request().postDataJSON());
@@ -62,7 +85,14 @@ export async function installContract(page: Page) {
             data = { id: record.id, version: record.version };
         } else if (pathname.endsWith('/idaas/assignments/list')) {
             const appId = new URL(route.request().url()).searchParams.get('appId');
-            data = { subjects: assignments.filter(item => item.app_id === appId), orgs: [] };
+            const params = new URL(route.request().url()).searchParams;
+            const subjects = assignments.filter(item => item.app_id === appId);
+            if (params.get('summary') === 'true') data = { subjectCount: subjects.length, orgCount: 0 };
+            else if (params.has('kind')) {
+                const list = params.get('kind') === 'subject' ? subjects : [];
+                const size = Number(params.get('size') || 20), page = Number(params.get('page') || 1);
+                data = { list: list.slice((page - 1) * size, page * size), total: list.length };
+            } else data = { subjects, orgs: [] };
         } else if (pathname.endsWith('/idaas/assignments/save')) {
             const body = route.request().postDataJSON() as { record: { id?: string; subjectId: string; appId: string; accountAlias: string; version?: number } };
             if (!session.appAssignableIds?.includes(body.record.appId) || !database.users.some(item => item.id === body.record.subjectId && item.domain === session.domain))
@@ -141,7 +171,10 @@ export async function installConsoleContract(page: Page, options: { publicAllowe
         if (path.endsWith('/idaas/auth/public-settings')) data = database.settings.workforce;
         else if (path.endsWith('/idaas/auth/login')) data = { token: 'console-contract-token', session };
         else if (path.endsWith('/idaas/session/me')) data = session;
-        else if (path.endsWith('/idaas/workspace/bootstrap')) data = bootstrap();
+        else if (path.endsWith('/idaas/workspace/bootstrap')) {
+            const params = new URL(route.request().url()).searchParams;
+            data = params.has('table') ? tablePage(database, params, session.domain) : bootstrap();
+        }
         else if (path.endsWith('/idaas/session/domain')) {
             const domain = route.request().postDataJSON().domain;
             transitions.push(domain);

@@ -37,9 +37,9 @@ class MagicApplicationBoundaryTest {
                 .mapToObj(id -> Map.<String, Object>of("tid", "record-" + id)).toList();
         var page = new Page<Map<String, Object>>(1, size, size);
         page.setRecords(rows);
-        when(qualityMapper.selectTaskPage(any(), eq("tenant-a"), isNull(), isNull(), isNull()))
+        when(qualityMapper.selectTaskPage(any(), eq("tenant-a"), isNull(), isNull(), isNull(), anyString()))
                 .thenReturn(page);
-        when(reconcileMapper.selectPolicyPage(any(), eq("tenant-a"), eq(""))).thenReturn(page);
+        when(reconcileMapper.selectPolicyPage(any(), eq("tenant-a"), eq(""), anyString())).thenReturn(page);
         var quality = qualityModule(qualityMapper);
         var reconcile = new ReconciliationMagicModule(new ReconciliationApplicationService(
                 new ReconciliationRepository(reconcileMapper, new ObjectMapper(), null,
@@ -50,8 +50,8 @@ class MagicApplicationBoundaryTest {
             assertThat(reconcile.policyPage(null, 1, size).get("list")).isEqualTo(rows);
         });
 
-        verify(qualityMapper).selectTaskPage(any(), eq("tenant-a"), isNull(), isNull(), isNull());
-        verify(reconcileMapper).selectPolicyPage(any(), eq("tenant-a"), eq(""));
+        verify(qualityMapper).selectTaskPage(any(), eq("tenant-a"), isNull(), isNull(), isNull(), anyString());
+        verify(reconcileMapper).selectPolicyPage(any(), eq("tenant-a"), eq(""), anyString());
         verifyNoMoreInteractions(qualityMapper, reconcileMapper);
     }
 

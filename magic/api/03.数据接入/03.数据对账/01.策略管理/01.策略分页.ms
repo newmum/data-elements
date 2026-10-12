@@ -16,6 +16,7 @@
   "script": null
 }
 ================================
+
 // 接口：01.策略分页
 // 路由：POST /page（完整路由由目录分组组合）
 // 业务说明：POST /ods/reconciliation/policy/page；只读；分页查询当前租户对账策略及最近一次执行结果；策略列表主接口。
@@ -31,4 +32,4 @@ var page = body?.page == null || !('' + body.page).matches('^[0-9]+$') ? 1 : Num
 var size = body?.size == null || !('' + body.size).matches('^[0-9]+$') ? 20 : NumberUtil.parseInt('' + body.size)
 
 // 仓储只查询当前租户的策略，保留既有排序和最近执行结果。
-return reconcile.policyPage(keyword, page, size)
+return reconcile.policyPage(keyword, page, size,body?.sortField,body?.sortDir)

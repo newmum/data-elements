@@ -391,6 +391,7 @@ export type VersionDraftInput = {
 
 /** DRAFT可编辑；VALIDATED开始契约冻结，只可转PUBLISHED/ABANDONED。驳回后创建新候选草稿；历史PUBLISHED版本不改写，是否当前版只看head指针。 attachments中的DIRECTORY参考项从publication.metadata_snapshot.references读取冻结的目录发布版本引用；物理资源快照仅包含TABLE/API/FILE，不将参考目录转换为可订阅或可交付资源。publication.request_id为流程关联，VALIDATED期允许从NULL一次绑定合法同租户/同目录的res_catalog_publish_request标识；绑定后不可变，不能改契约。PUBLISHED全部字段冻结。 */
 export type VersionDetail = {
+  itemPage?: {total:number;pageNo:number;pageSize:number};
   "version": VersionSummary;
   /** 目录名称快照 */
   "catalogName": string;

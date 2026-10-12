@@ -30,4 +30,4 @@ var taskId = body?.taskId == null ? '' : ('' + body.taskId).trim()
 if (taskId == '') { exit 400, '任务ID不能为空' }
 var requestId = body?.requestId == null || ('' + body.requestId).trim() == '' ? UUID.randomUUID().toString() : '' + body.requestId
 var runId = dataQuality.createRun(taskId, requestId)
-return dataQuality.runDetail(runId)
+return dataQuality.runDetail(runId,body||{})

@@ -15,7 +15,7 @@ export interface AssetAttachment { id?: string; resource: AssetRef; resourceType
 export interface ApiParameter { name: string; location: string; dataType: string; required: boolean; description?: string; example?: string }
 export interface ObjectDetail {
   summary: AssetSummary; revision: string; description?: string; relatedObjects: AssetRef[]; relationsHasMore: boolean;
-  details: Record<string, unknown> & { fields?: DataItem[]; items?: DataItem[]; attachments?: AssetAttachment[]; parameters?: ApiParameter[]; technical?: Record<string, unknown>; fieldPage?: { total: number }; itemPage?: { total: number } };
+  details: Record<string, unknown> & { fields?: DataItem[]; items?: DataItem[]; attachments?: AssetAttachment[]; parameters?: ApiParameter[]; technical?: Record<string, unknown>; fieldPage?: { total: number }; itemPage?: { total: number }; parameterPage?: {total:number}; relatedPage?: {total:number} };
 }
 export const assetKindLabels: Record<AssetKind, string> = { APPLICATION: '应用系统', DATASOURCE: '业务库', TABLE: '数据表', CATALOG: '资源目录', API: 'API 服务', FILE: '文件资源' };
 export const registrationKinds: Record<RegistrationType, AssetKind> = { applications: 'APPLICATION', databases: 'DATASOURCE', catalogs: 'CATALOG', apis: 'API' };

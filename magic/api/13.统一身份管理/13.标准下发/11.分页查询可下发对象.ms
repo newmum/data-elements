@@ -23,6 +23,7 @@
 // 接口：按应用和当前操作人权限分页查询可手动下发的对象
 // 路由：GET /idaas/provision/objects
 import db;
+import tableSort;
 import identityRuntime;
 import request;
 import java.lang.Long;
@@ -77,11 +78,14 @@ where t.identity_domain='workforce' and t.is_del=0 and t.name like #{keyword}
       and (t.tid=root.tid or (ao.include_children=1 and t.path like concat(root.path,'%')))
   )
 """;
+    var sorting={sortField:param('sortField',null),sortDir:param('sortDir',null)};
+    var field=tableSort.field(sorting,{name:'t.name'},'name');
+    var direction=tableSort.direction(sorting);
     var total=sql.selectOne('select count(*) total '+filter).total;
     var rows=sql.select("""
 select t.tid as id,t.name,t.version,t.status,
   """+(kind=='user'?'t.account_hint as account':'t.code')+"""
-"""+filter+" order by t.tid limit #{size} offset #{offset}");
+"""+filter+' ORDER BY '+field+' '+direction+',t.tid ASC LIMIT #{size} OFFSET #{offset}');
     return {list:rows.map(row=>({
         id:row.id,name:row.name,version:row.version,
         status:row.status=='ACTIVE'?'enabled':'disabled',

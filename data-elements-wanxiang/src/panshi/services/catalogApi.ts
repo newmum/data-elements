@@ -1,3 +1,4 @@
+import type { ServerSort } from '../../shared/serverSort';
 import { resourceGet, resourcePost, resourceSessionScope } from './transport';
 import type { ResourceState } from '../domain/types';
 
@@ -72,11 +73,11 @@ export function centerSourceIds(state: ResourceState): string[] {
     .map(item => String(item.sourceId)))];
 }
 
-export async function centerTablePage(sourceIds: string[], pageNo: number, keyword = '', sourceId = '', pageSize = 15): Promise<CenterTablePage> {
+export async function centerTablePage(sourceIds: string[], pageNo: number, keyword = '', sourceId = '', pageSize = 15,sort:ServerSort={}): Promise<CenterTablePage> {
   if (!sourceIds.length) return { rows: [], catalogs: [], total: 0, pageNo, pageSize };
   const eligibleIds = sourceId && sourceIds.includes(sourceId) ? [sourceId] : sourceIds;
   return resourceGet('/dwm/metadata-governance/tables/page', {
-    sourceIds: eligibleIds.join(','), pageNo, pageSize, keyword,
+    sourceIds: eligibleIds.join(','), pageNo, pageSize, keyword,...sort,
   });
 }
 
@@ -123,3 +124,7 @@ export function itemsFromColumns(columns: CenterColumn[]): DirectoryItem[] {
     sortNo: index + 1,
   }));
 }
+
+export const centerColumnsPage=(tableId:string,page:number,size:number,sort:ServerSort={})=>resourceGet<{list:CenterColumn[];total:number}>('/dwm/metadata-governance/tables/columns/page',{tableId,page,size,...sort});
+
+export const directoryItemsPage=(tid:string,pageNo:number,pageSize:number,sort:ServerSort={})=>resourcePost<{list:DirectoryItem[];total:number}>('/dst/catalog/catalog-items/list',{tid,paged:true,pageNo,pageSize,...sort});

@@ -1,3 +1,4 @@
+import { useServerSort } from '../../components/serverSort';
 import { Alert, App, Button, Input, Modal, Select, Tag } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -18,8 +19,9 @@ export default function TaskListPage({multi=false}:{multi?:boolean}){
  const tokenReady=useTokenReady(),sessionRevision=useSessionRevision();
  const [query,setQuery]=useState(''),[keyword,setKeyword]=useState(''),[filter,setFilter]=useState('all'),[page,setPage]=useState(1),[size,setSize]=useState(20);
  const [createOpen,setCreateOpen]=useState(false),[sourceQuery,setSourceQuery]=useState(''),[sourceKeyword,setSourceKeyword]=useState(''),[sourcePage,setSourcePage]=useState(1),[creatingId,setCreatingId]=useState<string>();
- const tasksQuery=useQuery({queryKey:['platform','access-tasks',page,size,filter,keyword],queryFn:()=>integrationPlatformService.taskPage({page,size,status:filter,keyword})});
- const sourcesQuery=useQuery({queryKey:['platform','source-tables',sourcePage,sourceKeyword],queryFn:()=>integrationPlatformService.sourceTablePage({page:sourcePage,size:10,keyword:sourceKeyword}),enabled:createOpen});
+ const taskSort=useServerSort(()=>setPage(1)),sourceSort=useServerSort(()=>setSourcePage(1));
+ const tasksQuery=useQuery({queryKey:['platform','access-tasks',page,size,filter,keyword,taskSort.sort],queryFn:()=>integrationPlatformService.taskPage({page,size,status:filter,keyword,...taskSort.sort})});
+ const sourcesQuery=useQuery({queryKey:['platform','source-tables',sourcePage,sourceKeyword,sourceSort.sort],queryFn:()=>integrationPlatformService.sourceTablePage({page:sourcePage,size:10,keyword:sourceKeyword,...sourceSort.sort}),enabled:createOpen});
  const tasks=multi?(tasksQuery.data?.list||[]).filter(task=>(task.syncTables?.length||0)>1):tasksQuery.data?.list||[];
  const warmCanvas=()=>{if(tokenReady)preloadCanvasReadiness(queryClient,sessionRevision);};
  useEffect(() => {
@@ -61,13 +63,13 @@ export default function TaskListPage({multi=false}:{multi?:boolean}){
   <Panel><div className="ht-toolbar"><Input allowClear prefix={<Icon name="search" size={17}/>} value={query} onChange={event=>setQuery(event.target.value)} onPressEnter={search} placeholder="搜索任务名称" style={{width:310,maxWidth:'100%'}}/>{!multi&&<Select value={filter} style={{width:138}} onChange={value=>{setPage(1);setFilter(value);}} options={[{value:'all',label:'全部任务状态'},{value:'1',label:'运行中'},{value:'0',label:'未启用'},{value:'2',label:'运行异常'}]}/>}<Button onClick={search}>查询</Button><span className="toolbar-spacer"/><span className="helper">{multi?tasks.length:tasksQuery.data?.total??0} 项真实任务</span></div>
    {tasksQuery.isError&&<Alert type="error" showIcon message="任务读取失败" description={tasksQuery.error instanceof Error?tasksQuery.error.message:'请检查数据中台会话与接口'} action={<Button size="small" onClick={()=>void tasksQuery.refetch()}>重试</Button>} style={{marginBottom:16}}/>}
    {multi&&<Alert type="info" showIcon message="平台任务接口当前每个任务只关联一张来源表；多表任务的创建、汇总和逐表状态接口尚未提供。" style={{marginBottom:16}}/>}
-   <DataTable<AccessTask> rowKey="tid" dataSource={tasks} loading={tasksQuery.isLoading||tasksQuery.isFetching} pagination={{current:page,pageSize:size,total:multi?tasks.length:tasksQuery.data?.total??0,showSizeChanger:!multi,pageSizeOptions:[10,20,50],onChange:(nextPage,nextSize)=>{setPage(nextPage);setSize(nextSize);}}} columns={[
-    {title:'任务名称',width:260,render:(_,task)=><div className="task-name-cell"><span className="task-type-icon kind-接入"><Icon name="tasks" size={22}/></span><div><button className="text-link strong" onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>openCanvas(task)}>{text(task.taskName)||'未命名任务'}</button><small>{task.recordSource==='pipeline'?'NiFi 流程':'接入任务'} · {task.tid}</small></div></div>},
+   <DataTable<AccessTask> serverSort={taskSort} rowKey="tid" dataSource={tasks} loading={tasksQuery.isLoading||tasksQuery.isFetching} pagination={{current:page,pageSize:size,total:multi?tasks.length:tasksQuery.data?.total??0,showSizeChanger:!multi,pageSizeOptions:[10,20,50],onChange:(nextPage,nextSize)=>{setPage(nextPage);setSize(nextSize);}}} columns={[
+    {title:'任务名称',key:'taskName',width:260,render:(_,task)=><div className="task-name-cell"><span className="task-type-icon kind-接入"><Icon name="tasks" size={22}/></span><div><button className="text-link strong" onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>openCanvas(task)}>{text(task.taskName)||'未命名任务'}</button><small>{task.recordSource==='pipeline'?'NiFi 流程':'接入任务'} · {task.tid}</small></div></div>},
     {title:'业务类型',width:104,render:()=> <Tag>接入</Tag>},
     {title:'数据路径',width:220,render:(_,task)=><div className="path-summary"><FlowMini/><small>{text(task.sourceDbName)||text(task.sourceTableName)||'来源待配置'} → {text(task.targetDbName)||text(task.targetTableName)||'目标待配置'}</small></div>},
     {title:'运行状态',width:118,render:(_,task)=>statusTag(task.taskStatus)},
     {title:'NiFi 关联',width:126,render:(_,task)=>task.pipelineId?<Tag color="success">已关联</Tag>:<span className="muted">待关联</span>},
-    {title:'最近运行',width:138,render:(_,task)=>task.lastRunning?formatTime(task.lastRunning).slice(5,16):<span className="muted">尚未运行</span>},
+    {title:'最近运行',key:'lastRunning',width:138,render:(_,task)=>task.lastRunning?formatTime(task.lastRunning).slice(5,16):<span className="muted">尚未运行</span>},
     {title:'触发策略',width:114,render:(_,task)=>text(task.scheduleFrequency)||'—'},
     {title:'操作',fixed:'right',className:'ht-task-action-column',width:120,render:(_,task)=><Button type="link" onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>openCanvas(task)}>NiFi 画布</Button>},
    ]}/>
@@ -75,8 +77,8 @@ export default function TaskListPage({multi=false}:{multi?:boolean}){
   <Modal title="选择已登记来源表" width={880} open={createOpen} onCancel={()=>setCreateOpen(false)} footer={<Button onClick={()=>setCreateOpen(false)}>关闭</Button>} destroyOnClose>
    <div className="ht-toolbar"><Input allowClear value={sourceQuery} onChange={event=>setSourceQuery(event.target.value)} onPressEnter={()=>{setSourcePage(1);setSourceKeyword(sourceQuery.trim());}} placeholder="搜索来源表" style={{width:280}}/><Button onClick={()=>{setSourcePage(1);setSourceKeyword(sourceQuery.trim());}}>查询</Button></div>
    {sourcesQuery.isError&&<Alert type="error" showIcon message="来源表读取失败" description={sourcesQuery.error instanceof Error?sourcesQuery.error.message:'请检查会话与接口'} style={{marginBottom:12}}/>}
-   <DataTable<AccessTable> rowKey={row=>text(row.sourceTableId||row.tableId||row.tid)} dataSource={sourcesQuery.data?.list||[]} loading={sourcesQuery.isLoading} pagination={{current:sourcePage,pageSize:10,total:sourcesQuery.data?.total||0,onChange:setSourcePage}} columns={[
-    {title:'来源表',width:260,render:(_,row)=><div className="entity-name"><b>{text(row.tableNameCn||row.tableName)||'未命名表'}</b><small>{text(row.tableName)}</small></div>},
+   <DataTable<AccessTable> serverSort={sourceSort} rowKey={row=>text(row.sourceTableId||row.tableId||row.tid)} dataSource={sourcesQuery.data?.list||[]} loading={sourcesQuery.isLoading} pagination={{current:sourcePage,pageSize:10,total:sourcesQuery.data?.total||0,onChange:setSourcePage}} columns={[
+    {title:'来源表',key:'tableName',width:260,render:(_,row)=><div className="entity-name"><b>{text(row.tableNameCn||row.tableName)||'未命名表'}</b><small>{text(row.tableName)}</small></div>},
     {title:'数据源',width:180,render:(_,row)=>text(row.datasourceName)||'—'},
     {title:'说明',render:(_,row)=>text(row.tableComment)||'—'},
     {title:'操作',width:130,render:(_,row)=><Button type="link" loading={creatingId===text(row.sourceTableId||row.tableId||row.tid)} onClick={()=>void create(row)}>创建并编排</Button>},

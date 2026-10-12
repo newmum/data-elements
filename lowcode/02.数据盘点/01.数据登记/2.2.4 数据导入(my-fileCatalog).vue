@@ -56,12 +56,12 @@ const openDetail = (row) => {
   });
 };
 
-const fetchData = async ({ pageNo: pageNum, pageSize }) => {
+const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
   const result = await $common.post('/dst/catalog/page', {
     pageNum,
     pageSize,
-    sortField: 'updatedTime',
-    sortDir: 'desc',
+    sortField: sortField || 'updatedTime',
+    sortDir: sortDir || 'desc',
     conditions: state.keyword
       ? [{ field: 'keyword', value: state.keyword, type: 'like' }]
       : [],

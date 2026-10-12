@@ -91,6 +91,45 @@ public class PipelineController {
         this.accessTaskFieldMappingBinder = accessTaskFieldMappingBinder;
     }
 
+    /** Count and order the complete tenant flow set before pagination; no DSL or NiFi call per row. */
+    private final Map<String,Boolean> flowDialects=new java.util.concurrent.ConcurrentHashMap<>();
+    private String flowSql(String sql) {
+        String tenant=TenantContext.requireTenantId();
+        boolean dm=flowDialects.computeIfAbsent(tenant,key->Boolean.TRUE.equals(jdbcTemplate.execute((org.springframework.jdbc.core.ConnectionCallback<Boolean>)c->c.getMetaData().getURL().toLowerCase(Locale.ROOT).contains(":dm:"))));
+        return dm?sql.replaceAll("\\b(nifi_pipeline_t|tenant_id|is_del|id|name|description|status|dsl_json|nifi_process_group_id|last_deployed_at|last_stopped_at|created_at|updated_at)\\b", "\"$1\""):sql;
+    }
+
+    public Map<String,Object> listPage(int page,int size,String sortField,String sortDir) {
+        return listPage(page,size,sortField,sortDir,null);
+    }
+
+    @GetMapping("/page")
+    public Map<String,Object> listPage(@RequestParam(defaultValue="1") int page,
+            @RequestParam(defaultValue="20") int size,
+            @RequestParam(required=false) String sortField,@RequestParam(required=false) String sortDir,
+            @RequestParam(required=false) String q) {
+        String tenant=TenantContext.requireTenantId();
+        if(TenantContext.usesControlDatabase()||TenantContext.isIgnored())throw new IllegalStateException("流程查询必须绑定行业租户");
+        String order=com.linewell.dataelement.platform.persistence.ServerTableOrder.sql(sortField,sortDir,
+            Map.of("name","p.name","nodeCount","coalesce(nodes.node_count,0)","createdAt","p.created_at","updatedAt","p.updated_at"),"updatedAt","desc","p.id");
+        page=Math.max(1,page);size=Math.min(100,Math.max(1,size));
+        String keyword=q==null?"":q.trim().toLowerCase(Locale.ROOT);
+        if(keyword.length()>200)throw new IllegalArgumentException("搜索内容最多 200 个字符");
+        String filter=" AND (?='' OR LOCATE(?,LOWER(CONCAT_WS(' ',name,description)))>0)";
+        Long total=jdbcTemplate.queryForObject(flowSql("SELECT COUNT(*) FROM nifi_pipeline_t WHERE tenant_id=? AND is_del=0"+filter),Long.class,tenant,keyword,keyword);
+        String from="""
+            FROM nifi_pipeline_t p LEFT JOIN (
+              SELECT flow.id,COUNT(node.ordinal) node_count FROM nifi_pipeline_t flow
+              LEFT JOIN JSON_TABLE(CASE WHEN JSON_VALID(flow.dsl_json)=1 THEN flow.dsl_json ELSE '{}' END,'$.nodes[*]'
+                COLUMNS(ordinal FOR ORDINALITY)) node ON 1=1 WHERE flow.tenant_id=? AND flow.is_del=0 GROUP BY flow.id
+            ) nodes ON nodes.id=p.id WHERE p.tenant_id=? AND p.is_del=0
+            """;
+        List<Map<String,Object>> raw=jdbcTemplate.queryForList(flowSql("SELECT p.id,p.name,p.description,p.nifi_process_group_id,p.created_at,p.updated_at,coalesce(nodes.node_count,0) node_count "+from+filter+" ORDER BY "+order+" LIMIT ? OFFSET ?"),tenant,tenant,keyword,keyword,size,(long)(page-1)*size);
+        List<Map<String,Object>> rows=new ArrayList<>();
+        for(var r:raw){Map<String,Object> row=new LinkedHashMap<>();row.put("id",r.get("id"));row.put("name",r.get("name"));row.put("description",r.get("description"));row.put("nifiProcessGroupId",r.get("nifi_process_group_id"));row.put("createdAt",r.get("created_at"));row.put("updatedAt",r.get("updated_at"));row.put("nodeCount",r.get("node_count"));rows.add(row);}
+        return Map.of("list",rows,"total",total==null?0:total,"page",page,"size",size);
+    }
+
     @GetMapping
     @Operation(summary = "查询流程列表(list)")
     public List<PipelineSummary> list() {
@@ -150,28 +189,22 @@ public class PipelineController {
         }
     }
 
-    /**
-     * Overview needs lifecycle counts and five recent rows, not one NiFi status call per flow.
-     * findAll still deserializes every tenant pipeline to keep counts identical to runtimeList;
-     * use database aggregates and a page query if a tenant grows beyond this small flow set.
-     */
+    public Map<String,Object> runtimeOverview() {return runtimeOverview(null,null);}
+
+    /** Lifecycle counts and the selected five flows are read in two tenant-scoped SQL statements. */
     @GetMapping("/runtime-overview")
-    @Operation(summary = "查询流程总览(runtimeOverview)")
-    public Map<String, Object> runtimeOverview() {
-        List<Pipeline> pipelines = repo.findAll();
-        long running = pipelines.stream().filter(p -> p.status() == PipelineStatus.RUNNING).count();
-        long failed = pipelines.stream().filter(p -> p.status() == PipelineStatus.RUN_ERROR
-                || p.status() == PipelineStatus.DEPLOY_FAILED).count();
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (int i = 0; i < Math.min(5, pipelines.size()); i++) {
-            rows.add(runtimeRow(pipelines.get(i), i + 1));
-        }
-        Map<String, Object> overview = new LinkedHashMap<>();
-        overview.put("total", pipelines.size());
-        overview.put("running", running);
-        overview.put("failed", failed);
-        overview.put("flows", rows);
-        return overview;
+    @Operation(summary="查询流程总览(runtimeOverview)")
+    public Map<String,Object> runtimeOverview(@RequestParam(required=false) String sortField,
+                                             @RequestParam(required=false) String sortDir) {
+        String tenant=TenantContext.requireTenantId();
+        if(TenantContext.usesControlDatabase()||TenantContext.isIgnored())throw new IllegalStateException("流程查询必须绑定行业租户");
+        String order=com.linewell.dataelement.platform.persistence.ServerTableOrder.sql(sortField,sortDir,
+          Map.of("taskName","name","latestRunTime","last_deployed_at","updatedAt","updated_at"),"updatedAt","desc","id");
+        Map<String,Object> counts=jdbcTemplate.queryForMap(flowSql("SELECT COUNT(*) total,SUM(CASE WHEN status='RUNNING' THEN 1 ELSE 0 END) running,SUM(CASE WHEN status IN ('RUN_ERROR','DEPLOY_FAILED') THEN 1 ELSE 0 END) failed FROM nifi_pipeline_t WHERE tenant_id=? AND is_del=0"),tenant);
+        List<Map<String,Object>> selected=jdbcTemplate.queryForList(flowSql("SELECT id,name,status,nifi_process_group_id,last_deployed_at,last_stopped_at FROM nifi_pipeline_t WHERE tenant_id=? AND is_del=0 ORDER BY "+order+" LIMIT 5"),tenant);
+        List<Map<String,Object>> rows=new ArrayList<>();
+        for(var source:selected) {Map<String,Object> row=new LinkedHashMap<>();row.put("id",source.get("id"));row.put("taskName",source.get("name"));row.put("currentStatus",source.get("status"));row.put("processGroupId",source.get("nifi_process_group_id"));row.put("latestRunTime",source.get("last_deployed_at"));row.put("endTime",source.get("last_stopped_at"));rows.add(row);}
+        Map<String,Object> result=new LinkedHashMap<>();result.put("total",counts.get("total"));result.put("running",counts.get("running")==null?0:counts.get("running"));result.put("failed",counts.get("failed")==null?0:counts.get("failed"));result.put("flows",rows);return result;
     }
 
     private Map<String, Object> runtimeRow(Pipeline p, int seq) {
@@ -221,13 +254,10 @@ public class PipelineController {
     @Operation(summary = "查询流程详情(get)")
     public ResponseEntity<Pipeline> get(@PathVariable String id) {
         return repo.findById(id)
-                // Existing tasks created before API-pull support used an empty
-                // JDBC source node.  Repair only that invalid legacy shape as
-                // the task is reopened; user-configured valid nodes stay intact.
-                .map(this::repairLegacySource)
-                // Registration-derived dictionary/standard rules must be visible
-                // in the editor, not only materialized on deploy/start.
-                .map(this::bindAccessTaskMappings)
+                // A detail read must preserve the saved design and version. In a
+                // chained task the catalog identifies the root business source,
+                // while this pipeline's source is the previous materialized hop.
+                // Registration-rule binding remains an explicit deploy/start action.
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

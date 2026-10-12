@@ -109,7 +109,7 @@
         stripe
         class="serve-table"
       >
-        <el-table-column label="服务名称" min-width="190" align="left" header-align="left" show-overflow-tooltip>
+        <el-table-column prop="serviceName" sortable="custom" label="服务名称" min-width="190" align="left" header-align="left" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link class="serve-link" type="primary" :underline="false" @click="handleDetailClick(row)">
               {{ row.serviceName || "-" }}
@@ -140,7 +140,7 @@
             <el-tag size="small" :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isCompactTable" prop="updatedTime" label="更新时间" width="170" align="left" header-align="left" show-overflow-tooltip />
+        <el-table-column v-if="!isCompactTable" prop="updatedTime" sortable="custom" label="更新时间" width="170" align="left" header-align="left" show-overflow-tooltip />
         <el-table-column
           label="操作"
           width="158"
@@ -325,10 +325,10 @@ const loadGroups = async () => {
   }
 };
 
-const fetchServices = async ({ pageNo = 1, pageSize = 20 } = {}) => {
+const fetchServices = async ({ pageNo = 1, pageSize = 20, sortField = undefined, sortDir = undefined } = {}) => {
   const res = await $common.post("/dws/flowserve/gateway/api/list", {
     pageNum: pageNo,
-    pageSize,
+    pageSize,sortField,sortDir,
     keyword: filters.keyword,
     method: filters.method,
     status: filters.status,

@@ -1,3 +1,4 @@
+import { useServerSort } from '../../shared/serverSort';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Descriptions, Drawer, Table, Tag } from 'antd';
 import { DatabaseOutlined, DownOutlined, FolderOpenOutlined, RightOutlined } from '@ant-design/icons';
@@ -9,7 +10,7 @@ import { Hero, NameCell, timeText } from '../components/ui';
 import type { Layer, ResourceState, Warehouse } from '../domain/types';
 import { useResource } from '../services/context';
 import {
-  centerTableById, centerTableColumns, centerTablePage,
+  centerTableById, centerColumnsPage, centerTablePage,
   type CenterColumn, type CenterTable, type CenterTablePage,
 } from '../services/catalogApi';
 
@@ -137,6 +138,9 @@ export function WarehousePage() {
   const [columns, setColumns] = useState<CenterColumn[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const order=useServerSort(()=>setPageNo(1));
+  const [columnPage,setColumnPage]=useState(1),[columnSize,setColumnSize]=useState(20),[columnTotal,setColumnTotal]=useState(0),[columnLoading,setColumnLoading]=useState(false);
+  const columnOrder=useServerSort(()=>setColumnPage(1));
   const tableId = params.get('table');
   const legacyResourceId = params.get('resource');
   const detailOpen = !!(tableId || legacyResourceId);
@@ -161,14 +165,14 @@ export function WarehousePage() {
     setPage(emptyPage(pageNo, pageSize));
     setLoading(true);
     setError('');
-    void centerTablePage(sourceIds, pageNo, keyword, '', pageSize)
+    void centerTablePage(sourceIds, pageNo, keyword, '', pageSize,order.sort)
       .then(result => { if (active) setPage(result); })
       .catch(cause => {
         if (active) { setPage(emptyPage(pageNo, pageSize)); setError(cause instanceof Error ? cause.message : String(cause)); }
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [sourceKey, pageNo, pageSize, keyword, revision]);
+  }, [sourceKey, pageNo, pageSize, keyword, revision,order.sort]);
 
   useEffect(() => {
     let active = true;
@@ -192,8 +196,7 @@ export function WarehousePage() {
         if (!table) table = await centerTableById([sourceId], resource.entityId.replace(/^shared-table:/, ''));
       }
       if (!table) throw new Error('未找到对应的已采集数据表，请刷新数据源的元数据');
-      const fields = await centerTableColumns(table.tid);
-      if (active) { setDetail(table); setColumns(fields); }
+      if (active) { setColumnPage(1);setDetail(table); }
     };
     void load().catch(cause => {
       if (active) setDetailError(cause instanceof Error ? cause.message : String(cause));
@@ -201,6 +204,7 @@ export function WarehousePage() {
     return () => { active = false; };
   }, [tableId, legacyResourceId, allSourceKey, state.resources]);
 
+  useEffect(()=>{if(!detail?.tid)return;let active=true;setColumnLoading(true);setDetailError('');centerColumnsPage(detail.tid,columnPage,columnSize,columnOrder.sort).then(result=>{if(active){setColumns(result.list);setColumnTotal(result.total);}}).catch(cause=>{if(active){setColumns([]);setColumnTotal(0);setDetailError(cause instanceof Error?cause.message:String(cause));}}).finally(()=>{if(active)setColumnLoading(false);});return()=>{active=false;};},[detail?.tid,columnPage,columnSize,columnOrder.sort]);
   const select = (scope: WarehouseScope) => {
     setPageNo(1);
     setKeyword('');
@@ -238,7 +242,7 @@ export function WarehousePage() {
         databases={state.databases} sourceCounts={sourceCounts}/>
       <section className="ps-table-panel">
         <DataTable key={`${selected.kind}:${selected.id}`} titleKey="resource:warehouse-tables"
-          rows={rows as Row[]} loading={loading} error={error} onRefresh={reload}
+          serverSort={order} rows={rows as Row[]} loading={loading} error={error} onRefresh={reload}
           searchPlaceholder="搜索数据表中文名、技术名…" onSearch={value => { setKeyword(value); setPageNo(1); }}
           emptyTitle={sourceIds.length ? '该范围暂无已采集数据表' : '尚未关联数据源'}
           emptyDescription={sourceIds.length
@@ -247,7 +251,7 @@ export function WarehousePage() {
           serverPagination={{ page: pageNo, size: pageSize, total: page.total,
             onChange: (nextPage, nextSize) => { setPageNo(nextPage); setPageSize(nextSize); } }}
           columns={[
-            { title: '数据表', key: 'table_name', width: 250, ellipsis: true,
+            { title: '数据表', key: 'tableName', width: 250, ellipsis: true,
               render: (_value, row) => <button className="ps-text-button ps-warehouse-table-name"
                 onClick={() => open(row as WarehouseRow)}>
                 <NameCell name={row.table_name_cn || row.table_comment || row.table_name}
@@ -263,9 +267,9 @@ export function WarehousePage() {
               </div> },
             { title: '表类型', dataIndex: 'table_type', width: 100,
               render: value => value || '数据表' },
-            { title: '字段数', dataIndex: 'field_count', width: 92,
+            { title: '字段数', key:'fieldCount',dataIndex: 'field_count', width: 92,
               render: value => value ?? '—' },
-            { title: '采集更新时间', dataIndex: 'updated_time', width: 165,
+            { title: '采集更新时间', key:'updatedTime',dataIndex: 'updated_time', width: 165,
               render: value => timeText(value) },
             { title: '目录状态', key: 'catalog', width: 110,
               render: (_value, row) => catalogFor(row as WarehouseRow)
@@ -306,10 +310,10 @@ export function WarehousePage() {
           { key: 'updated', label: '采集更新时间', children: timeText(detail.updated_time) },
           { key: 'comment', label: '表说明', children: detail.table_comment || '—', span: 2 },
         ]}/>
-        <h3 className="ps-section-title">表字段 <small>{columns.length} 个</small></h3>
-        <Table rowKey="tid" size="small" dataSource={columns} pagination={{ pageSize: 15 }}
+        <h3 className="ps-section-title">表字段 <small>{columnTotal} 个</small></h3>
+        <Table rowKey="tid" size="small" loading={columnLoading} onChange={(_p,_f,sorter,extra)=>{if(extra.action==='sort')columnOrder.change(sorter);}} dataSource={columns} pagination={{current:columnPage,pageSize:columnSize,total:columnTotal,showSizeChanger:true,pageSizeOptions:[20,50,100],onChange:(p,n)=>{setColumnPage(n===columnSize?p:1);setColumnSize(n);}}}
           scroll={{ x: 720 }} columns={[
-            { title: '字段名', dataIndex: 'column_name', width: 190, ellipsis: true },
+            { title: '字段名',key:'column_name',sorter:true,sortOrder:columnOrder.sort.sortField==='column_name'?(columnOrder.sort.sortDir==='asc'?'ascend':'descend'):null,dataIndex: 'column_name', width: 190, ellipsis: true },
             { title: '中文名 / 说明', dataIndex: 'column_comment', width: 220, ellipsis: true,
               render: value => value || '—' },
             { title: '字段类型', width: 155,

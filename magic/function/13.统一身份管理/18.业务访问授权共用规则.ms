@@ -48,6 +48,7 @@
 // 函数输入：operation：本次执行的业务操作；payload：请求资料或筛选条件。
 // 返回与副作用：核验业务应用授权对象、角色、有效期及版本，更新授权与角色关联并记录审计。
 import db;
+import tableSort;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
 import '@/idaas/guard' as guard;
@@ -88,23 +89,38 @@ where tid=#{p.subjectId}
 }
 // 列表分支：先确定当前操作人可见的应用和身份域，再读取并映射业务记录。
 if(operation=='list') {
-    var rows=sql.select("""
-select *,tid as id,date_format(valid_from, '%Y-%m-%dT%H:%i:%sZ') start_utc,
-       date_format(valid_until, '%Y-%m-%dT%H:%i:%sZ') end_utc,date_format(created_time,
-        '%Y-%m-%dT%H:%i:%sZ') created_utc,
-       date_format(updated_time, '%Y-%m-%dT%H:%i:%sZ') updated_utc
-from iam_access_grant_t
-where identity_domain=#{domain}
-    and is_del=0
-order by tid
-""");
-    return rows.filter(x=>(appId==null || x.app_id==appId) && ctx.pairs.filter(pair=>pair.codes.contains(permission) && pair.scopes.filter(s=>s.identity_domain==domain && (s.scope_kind=='ALL' || s.scope_kind=='APPLICATION' && s.app_id==x.app_id)).size()>0).size()>0).map(x=>({
-        id:x.id,domain:x.identity_domain,appId:x.app_id,name:'应用访问授权',source:x.principal_type=='SUBJECT'?'user':x.principal_type.toLowerCase(),subjectId:x.subject_id||x.org_id||x.group_id||x.client_id,roleIds:sql.select("""
-select role_id
-from iam_grant_role_rela_t
-where grant_id=#{x.id}
-""").map(t=>t.role_id),includeChildren:x.include_children==1,status:x.status=='ACTIVE'?'enabled':'revoked',startsAt:x.start_utc,expiresAt:x.end_utc,reason:x.reason||'',version:x.version,createdAt:x.created_utc,updatedAt:x.updated_utc
-    }));
+    var scopes=[];
+    for(pair in ctx.pairs) {if(pair.codes.contains(permission)) {scopes.addAll(pair.scopes.filter(scope=>scope.identity_domain==domain));}}
+    var global=scopes.filter(scope=>scope.scope_kind=='ALL').size()>0;
+    var allowedApps=scopes.filter(scope=>scope.scope_kind=='APPLICATION').map(scope=>scope.app_id).distinct();
+    var paged=p.paged==true || p.paged=='true';
+    var page=Math.max(1,(p.page||1)::int);
+    var size=Math.min(100,Math.max(1,(p.size||20)::int));
+    if(!global && allowedApps.size()==0) {return paged?{list:[],total:0,page:page,size:size}:[];}
+    var scopeSql=global?'':' and g.app_id in (#{allowedApps})';
+    var subjectId=p.subjectId;
+    var principal=p.principalType;
+    if(principal!=null && !['SUBJECT','ORG','GROUP','CLIENT'].contains(principal)) {exit 400,'授权对象类型不正确';}
+    var search=(p.q||'').trim();
+    if(search.length()>200) {exit 400,'搜索内容过长';}
+    var status=p.status||'all';
+    var objectName="coalesce(s.name,o.name,pg.name,c.name,'对象已移除')";
+    var state="case when g.status!='ACTIVE' then 'revoked' when g.valid_until<=utc_timestamp(6) then 'expired' else 'enabled' end";
+    var from=" from iam_access_grant_t g join iam_application_t a on a.tid=g.app_id and a.kind='BUSINESS' and a.is_del=0 left join iam_subject_t s on s.tid=g.subject_id and s.identity_domain=g.identity_domain and s.is_del=0 left join iam_org_t o on o.tid=g.org_id and o.identity_domain=g.identity_domain and o.is_del=0 left join iam_permission_group_t pg on pg.tid=g.group_id and pg.identity_domain=g.identity_domain and pg.is_del=0 left join iam_auth_client_t c on c.tid=g.client_id and c.app_id=g.app_id and c.is_del=0 where g.is_del=0 and g.identity_domain=#{domain} and (#{appId} is null or g.app_id=#{appId}) and (#{principal} is null or g.principal_type=#{principal}) and (#{subjectId} is null or coalesce(g.subject_id,g.org_id,g.group_id,g.client_id)=#{subjectId})"+scopeSql+" and (#{status}='all' or ("+state+")=#{status}) and (#{search}='' or locate(lower(#{search}),lower(concat_ws(' ',"+objectName+",a.name,g.reason)))>0)";
+    var field=tableSort.field(p,{subjectName:objectName,name:objectName,appName:'a.name',startsAt:'g.valid_from',expiresAt:'g.valid_until',createdAt:'g.created_time',updatedAt:'g.updated_time'},'createdAt');
+    var total=sql.selectOne('select count(*) total'+from).total;
+    if(!paged && total>1000) {exit 400,'授权超过 1000 项，请使用分页查询';}
+    var take=paged?size:1000;
+    var offset=paged?(page-1)*size:0;
+    var rows=sql.select("select g.*,g.tid as id,"+objectName+" subject_name,a.name app_name,"+state+" view_status,date_format(g.valid_from,'%Y-%m-%dT%H:%i:%sZ') start_utc,date_format(g.valid_until,'%Y-%m-%dT%H:%i:%sZ') end_utc,date_format(g.created_time,'%Y-%m-%dT%H:%i:%sZ') created_utc,date_format(g.updated_time,'%Y-%m-%dT%H:%i:%sZ') updated_utc"+from+' order by case when '+field+' is null then 1 else 0 end,'+field+' '+tableSort.direction(p)+',g.tid asc limit #{take} offset #{offset}');
+    var ids=rows.map(x=>x.id);
+    var roles=ids.size()==0?[]:sql.select("select rr.grant_id,rr.role_id,r.name from iam_grant_role_rela_t rr join iam_access_grant_t g on g.tid=rr.grant_id and g.app_id=rr.app_id and g.identity_domain=#{domain} and g.is_del=0 left join iam_role_t r on r.tid=rr.role_id and r.app_id=g.app_id and r.identity_domain=g.identity_domain and r.is_del=0 where rr.grant_id in (#{ids}) order by rr.grant_id,rr.role_id limit 100001");
+    if(roles.size()>100000) {exit 400,'角色关联过多，请缩小分页范围';}
+    var result=rows.map(x=>{
+        var related=roles.filter(r=>r.grant_id==x.id);
+        return {id:x.id,domain:x.identity_domain,appId:x.app_id,appName:x.app_name,subjectName:x.subject_name,name:x.subject_name,source:x.principal_type=='SUBJECT'?'user':x.principal_type.toLowerCase(),subjectId:x.subject_id||x.org_id||x.group_id||x.client_id,roleIds:related.map(r=>r.role_id),roleNames:related.map(r=>({id:r.role_id,name:r.name||'失效角色'})),includeChildren:x.include_children==1,status:paged?x.view_status:x.status=='ACTIVE'?'enabled':'revoked',startsAt:x.start_utc,expiresAt:x.end_utc,reason:x.reason||'',version:x.version,createdAt:x.created_utc,updatedAt:x.updated_utc};
+    });
+    return paged?{list:result,total:total,page:page,size:size}:result;
 }
 // 写入通过共享的幂等事务处理，并记录审计；版本冲突直接返回。
 // 事务边界：通过共享幂等写入统一处理版本冲突、提交与审计。

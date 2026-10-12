@@ -1,6 +1,7 @@
 package com.linewell.dataelement.feature.dataquality.infrastructure.persistence;
 
 import com.linewell.dataelement.platform.persistence.id.NumericId;
+import com.linewell.dataelement.platform.persistence.ServerTableOrder;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -22,6 +23,7 @@ import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -52,8 +54,12 @@ public class DataQualityRepository {
         return taskPage(tenantId,status,keyword,page,size,null);
     }
     public Map<String, Object> taskPage(String tenantId, String status, String keyword, int page, int size,String kind) {
+        return taskPage(tenantId, status, keyword, page, size, kind,null,null);
+    }
+    public Map<String, Object> taskPage(String tenantId, String status, String keyword, int page, int size,String kind,String sortField,String sortDir) {
+        String orderBy = ServerTableOrder.sql(sortField,sortDir,Map.ofEntries(Map.entry("task_name","q.task_name"),Map.entry("taskName","q.task_name"),Map.entry("shard_count","q.shard_count"),Map.entry("updated_time","q.updated_time"),Map.entry("created_time","q.created_time"),Map.entry("latest_score","CASE WHEN r.checked_count>0 THEN r.quality_score ELSE NULL END"),Map.entry("latest_violation_count","r.violation_count"),Map.entry("rule_count","(SELECT COUNT(*) FROM dq_quality_task_rule_t qr WHERE qr.tenant_id=q.tenant_id AND qr.task_id=q.tid AND qr.is_del=0)")),"updated_time","desc","q.tid");
         IPage<Map<String, Object>> result = mapper.selectTaskPage(Page.of(page, size), tenantId,
-                text(status), text(keyword),kind);
+                text(status), text(keyword),kind,orderBy);
         return page(result, page, size);
     }
 
@@ -61,15 +67,23 @@ public class DataQualityRepository {
         return runPage(tenantId,status,keyword,page,size,null);
     }
     public Map<String, Object> runPage(String tenantId, String status, String keyword, int page, int size,String kind) {
+        return runPage(tenantId, status, keyword, page, size, kind,null,null);
+    }
+    public Map<String, Object> runPage(String tenantId, String status, String keyword, int page, int size,String kind,String sortField,String sortDir) {
+        String orderBy = ServerTableOrder.sql(sortField,sortDir,Map.ofEntries(Map.entry("task_name","q.task_name"),Map.entry("taskName","q.task_name"),Map.entry("row_count","r.row_count"),Map.entry("checked_count","r.checked_count"),Map.entry("violation_count","r.violation_count"),Map.entry("quality_score","CASE WHEN r.checked_count>0 THEN r.quality_score ELSE NULL END"),Map.entry("started_at","COALESCE(r.started_at,r.created_time)"),Map.entry("finished_at","r.finished_at"),Map.entry("created_time","r.created_time"),Map.entry("updated_time","r.updated_time")),"created_time","desc","r.tid");
         IPage<Map<String, Object>> result = mapper.selectRunPage(Page.of(page, size), tenantId,
-                text(status), text(keyword),kind);
+                text(status), text(keyword),kind,orderBy);
         return page(result, page, size);
     }
 
     public Map<String, Object> issuePage(String tenantId, String runId, String status,
             String severity, int page, int size) {
-        IPage<Map<String, Object>> result = mapper.selectIssuePage(Page.of(page, size), tenantId,
-                runId, text(status), text(severity));
+        return issuePage(tenantId,runId,status,severity,page,size,null,null);
+    }
+    public Map<String,Object> issuePage(String tenantId,String runId,String status,String severity,int page,int size,String field,String direction) {
+        required(mapper.selectRun(tenantId,runId));
+        String order=ServerTableOrder.sql(field,direction,Map.of("rule_name","m.rule_name","column_name","i.column_name","created_time","i.created_time"),"created_time","desc","i.tid");
+        IPage<Map<String,Object>> result=mapper.selectIssuePage(Page.of(page,size),tenantId,runId,text(status),text(severity),order);
         return page(result, page, size);
     }
 
@@ -80,19 +94,24 @@ public class DataQualityRepository {
         return task;
     }
 
-    public Map<String, Object> runDetail(String tenantId, String runId) {
+    public Map<String,Object> runDetail(String tenantId,String runId) {return runDetail(tenantId,runId,Map.of());}
+    public Map<String, Object> runDetail(String tenantId, String runId,Map<String,Object> sort) {
         Map<String, Object> run = required(mapper.selectRun(tenantId, runId));
         List<Map<String,Object>> metrics = JdbcValueNormalizer.maps(mapper.selectRunMetrics(tenantId, runId));
         for (Map<String,Object> metric : metrics) {
-            metric.put("profile",jsonMap(metric.get("profile_json")));
+            Map<String,Object> profile=jsonMap(metric.get("profile_json"));metric.put("profile",profile);
+            for(String key:List.of("scannedRows","nullCount","nullRate","blankCount","blankRate","distinctCount"))metric.put(key,profile.get(key));
             if (longValue(metric.get("checked_count")) == 0) {
                 metric.put("pass_rate",null);
                 metric.put("score",null);
             }
         }
-        run.put("metrics", metrics);
+        var ordering=new com.linewell.dataelement.platform.magic.TableSortMagicModule();
+        Map<String,Object> metricOrder=new HashMap<>();metricOrder.put("sortField",sort.get("metricSortField"));metricOrder.put("sortDir",sort.get("metricSortDir"));
+        run.put("metrics", ordering.rows(metrics,metricOrder,Map.ofEntries(Map.entry("rule_name","rule_name"),Map.entry("column_name","column_name"),Map.entry("checked_count","checked_count"),Map.entry("violation_count","violation_count"),Map.entry("pass_rate","pass_rate"),Map.entry("scannedRows","scannedRows"),Map.entry("nullCount","nullCount"),Map.entry("nullRate","nullRate"),Map.entry("blankCount","blankCount"),Map.entry("blankRate","blankRate"),Map.entry("distinctCount","distinctCount")),"rule_name","tid"));
         run.put("task_kind",defaultText(text(jsonMap(run.get("task_snapshot")).get("task_kind")),"QUALITY"));
-        run.put("shards", JdbcValueNormalizer.maps(mapper.selectRunShards(tenantId, runId)));
+        Map<String,Object> shardOrder=new HashMap<>();shardOrder.put("sortField",sort.get("shardSortField"));shardOrder.put("sortDir",sort.get("shardSortDir"));
+        run.put("shards",ordering.rows(JdbcValueNormalizer.maps(mapper.selectRunShards(tenantId,runId)),shardOrder,Map.of("shard_no","shard_no","row_count","row_count","violation_count","violation_count"),"shard_no","tid"));
         return run;
     }
 

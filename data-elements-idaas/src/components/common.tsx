@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode, Key } from 'react';
 import { App, Button, Card, Col, ColorPicker, Descriptions, Drawer, Empty, Form, Input, InputNumber, Row, Select, Space, Switch, Table, Tag, Typography, DatePicker, theme, TreeSelect, Segmented } from 'antd';
 import type { TableProps } from 'antd';
+import type { SorterResult } from 'antd/es/table/interface';
 import { ApartmentOutlined, DownloadOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, RightOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { encodeCsv } from '../domain/csv';
@@ -49,7 +50,7 @@ export function useAction() {
 }
 export function useEditable(section: string) { return canEdit(useSession(), section); }
 export function exportCsv(filename: string, headers: string[], rows: unknown[][]) { const blob = new Blob([encodeCsv([headers, ...rows])], { type: 'text/csv;charset=utf-8' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 500); }
-export function DataTable<T extends Base>({ data, columns, title, searchPlaceholder = '搜索名称或编码', searchFields = ['name'], actions, selection, onSelection, loading = false, extraFilters, hideStatus = false, exporter, remote, instantSearch = false, filterAction }: {
+export function DataTable<T extends Base>({ data, columns, title, searchPlaceholder = '搜索名称或编码', searchFields = ['name'], actions, selection, onSelection, loading = false, extraFilters, hideStatus = false, exporter, remote, serverSort, source, instantSearch = false, filterAction }: {
     data: T[];
     columns: TableProps<T>['columns'];
     title?: string;
@@ -62,10 +63,16 @@ export function DataTable<T extends Base>({ data, columns, title, searchPlacehol
     extraFilters?: ReactNode;
     hideStatus?: boolean;
     exporter?: (rows: T[]) => void;
+    source?: {table:'apps'|'roles'|'resources'|'groups'|'catalog'|'legalEntities'|'grants'|'effectiveAccess';appId?:string;category?:string;subjectId?:string;orgId?:string;principalType?:string};
+    serverSort?: { sort: {sortField?: string;sortDir?: 'asc'|'desc'}; change: (sorter:SorterResult<T>|SorterResult<T>[])=>void };
     remote?: { total: number; page: number; size: number; onChange: (page: number, size: number, query: string, status: string) => void };
     instantSearch?: boolean;
     filterAction?: ReactNode;
 }) {
+    const {message}=App.useApp();
+    const [serverRows,setServerRows]=useState<T[]>([]),[serverTotal,setServerTotal]=useState(0),[serverLoading,setServerLoading]=useState(false);
+    const [order,setOrder]=useState<{sortField?:string;sortDir?:'asc'|'desc'}>({});
+    const sourceKey=JSON.stringify(source),dataVersion=data.map(r=>r.id+':'+r.version).join('|');
     const [input, setInput] = useState('');
     const [query, setQuery] = useState('');
     const [status, setStatus] = useState('all');
@@ -75,9 +82,17 @@ export function DataTable<T extends Base>({ data, columns, title, searchPlacehol
     const appliedFilter = useRef('\0all');
     const remoteChange = useRef(remote?.onChange);
     remoteChange.current = remote?.onChange;
-    const filtered = remote ? data : data.filter(r => (status === 'all' || r.status === status) && (!query || searchFields.some(k => String((r as unknown as Record<string, unknown>)[k] ?? '').toLowerCase().includes(query.toLowerCase()))));
+    const filtered = source ? serverRows : remote ? data : data.filter(r => (status === 'all' || r.status === status) && (!query || searchFields.some(k => String((r as unknown as Record<string, unknown>)[k] ?? '').toLowerCase().includes(query.toLowerCase()))));
+    useEffect(()=>{
+        if(!source) return;
+        let current=true;setServerLoading(true);
+        api.tablePage<T>(source,{page,size:pageSize,q:query,status,...order}).then(value=>{if(current){setServerRows(value.list);setServerTotal(value.total);}})
+            .catch(error=>{if(current){setServerRows([]);setServerTotal(0);message.error(error instanceof Error?error.message:'列表读取失败，请重试');}})
+            .finally(()=>{if(current)setServerLoading(false);});
+        return ()=>{current=false;};
+    },[sourceKey,dataVersion,page,pageSize,query,status,order.sortField,order.sortDir]);
     useEffect(() => {
-        if (!remote && page > Math.max(1, Math.ceil(filtered.length / pageSize)))
+        if (!source && !remote && page > Math.max(1, Math.ceil(filtered.length / pageSize)))
             setPage(1);
     }, [filtered.length, page, pageSize, remote]);
     useEffect(() => {
@@ -94,13 +109,21 @@ export function DataTable<T extends Base>({ data, columns, title, searchPlacehol
         }, 300);
         return () => window.clearTimeout(timer);
     }, [input, chosen, instantSearch, remote?.size, pageSize]);
+    const activeSort=serverSort?.sort||order;
+    const remoteColumns=columns?.map((column,index)=>{
+        const title=String(column.title||''),key=String(column.key??('dataIndex' in column?column.dataIndex:''));
+        const eligible=title!=='操作'&&(column.sorter===true||(index===0&&/名称|姓名|账号|策略|任务|应用|字段|权限组/.test(title))||/时间|日期|有效期限|最近登录|数量|总数|次数|条数|数$|已授权应用|率|耗时|得分/.test(title));
+        return {...column,sorter:(serverSort||source)&&key&&eligible?true:undefined,
+            sortOrder:activeSort.sortField===key?(activeSort.sortDir==='asc'?'ascend' as const:'descend' as const):null,
+            showSorterTooltip:{title:'按全部符合条件的记录排序'}};
+    });
     const search = () => { setQuery(input); setStatus(chosen); setPage(1); onSelection?.([]); remote?.onChange(1, remote.size, input, chosen); };
     const reset = () => { setInput(''); setQuery(''); setStatus('all'); setChosen('all'); setPage(1); onSelection?.([]); remote?.onChange(1, remote.size, '', 'all'); };
     return <Card size="small" className="table-card" styles={{ body: { padding: 0 } }}>
  <div className="table-filter"><Input aria-label={searchPlaceholder} prefix={<SearchOutlined />} placeholder={searchPlaceholder} value={input} onChange={e => setInput(e.target.value)} onPressEnter={instantSearch ? undefined : search} allowClear style={{ width: 260, maxWidth: '100%' }}/>{!hideStatus && <Select aria-label="状态筛选" value={chosen} onChange={setChosen} style={{ width: 132, maxWidth: '100%' }} options={remote ? [{ value: 'all', label: '全部状态' }, { value: 'enabled', label: '已启用' }, { value: 'disabled', label: '已停用' }] : [{ value: 'all', label: '全部状态' }, ...Array.from(new Set(data.map(r => r.status))).map(s => ({ value: s, label: labels[s] || s }))]}/>} {extraFilters}
  {!instantSearch && <><Button type="primary" onClick={search}>查询</Button><Button onClick={reset}>重置</Button></>}{filterAction && <div className="table-filter-action">{filterAction}</div>}</div>
- <div className="table-toolbar"><Space wrap><Text strong className="table-title">{title || '数据列表'}</Text><span className="table-count">共 {(remote?.total ?? filtered.length).toLocaleString()} 项</span>{!!selection?.length && <Tag color="blue">已选 {selection.length} 项</Tag>}</Space><Space wrap>{exporter && <Button icon={<DownloadOutlined />} onClick={() => exporter(filtered)}>{remote ? '导出当前页' : '导出'}</Button>}{actions}</Space></div>
- <Table<T> rowKey="id" dataSource={filtered} columns={columns} size="small" loading={loading} rowSelection={onSelection ? { selectedRowKeys: selection, onChange: keys => onSelection(keys), preserveSelectedRowKeys: false } : undefined} pagination={{ current: remote?.page ?? page, onChange: (p, size) => { if(remote) remote.onChange(p,size,query,status); else { setPage(p); setPageSize(size); } onSelection?.([]); }, pageSize: remote?.size ?? pageSize, total: remote?.total ?? filtered.length, pageSizeOptions: [10, 20, 50, 100], showSizeChanger: true, showTotal: n => `共 ${n} 项` }} scroll={{ x: 'max-content' }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query || status !== 'all' ? '未找到符合条件的结果' : '暂无数据'}/> }}/>
+ <div className="table-toolbar"><Space wrap><Text strong className="table-title">{title || '数据列表'}</Text><span className="table-count">共 {(source ? serverTotal : remote?.total ?? filtered.length).toLocaleString()} 项</span>{!!selection?.length && <Tag color="blue">已选 {selection.length} 项</Tag>}</Space><Space wrap>{exporter && <Button icon={<DownloadOutlined />} onClick={() => exporter(filtered)}>{remote||source ? '导出当前页' : '导出'}</Button>}{actions}</Space></div>
+ <Table<T> rowKey="id" dataSource={filtered} columns={remoteColumns} onChange={(_p,_f,sorter,extra)=>{if(extra.action==='sort'){if(source){const sort=Array.isArray(sorter)?sorter[0]:sorter;setOrder(sort.order?{sortField:String(sort.columnKey??sort.field),sortDir:sort.order==='ascend'?'asc':'desc'}:{});setPage(1);}else serverSort?.change(sorter);onSelection?.([]);}}} size="small" loading={loading||serverLoading} rowSelection={onSelection ? { selectedRowKeys: selection, onChange: keys => onSelection(keys), preserveSelectedRowKeys: false } : undefined} pagination={{ current: remote?.page ?? page, onChange: (p, size) => { if(remote) remote.onChange(p,size,query,status); else { setPage(p); setPageSize(size); } onSelection?.([]); }, pageSize: remote?.size ?? pageSize, total: source ? serverTotal : remote?.total ?? filtered.length, pageSizeOptions: [10, 20, 50, 100], showSizeChanger: true, showTotal: n => `共 ${n} 项` }} scroll={{ x: 'max-content' }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={query || status !== 'all' ? '未找到符合条件的结果' : '暂无数据'}/> }}/>
  </Card>;
 }
 export interface Field {

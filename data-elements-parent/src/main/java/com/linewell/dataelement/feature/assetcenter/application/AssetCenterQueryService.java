@@ -2,6 +2,7 @@ package com.linewell.dataelement.feature.assetcenter.application;
 
 import static com.linewell.dataelement.feature.assetcenter.application.AssetCenterStore.*;
 import java.util.*;
+import com.linewell.dataelement.platform.persistence.ServerTableOrder;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
@@ -139,14 +140,28 @@ public class AssetCenterQueryService {
         List<Map<String,Object>> related=new ArrayList<>();
         int pn=Math.max(1,number(query.get("itemPageNo"),number(query.get("fieldsPage"),number(query.get("fieldPageNo"),1)))),ps=Math.min(100,Math.max(1,number(query.get("fieldsPageSize"),number(query.get("pageSize"),100))));
         switch(kind){
-            case "APPLICATION"->{details.put("systemCode",text(row,"client_id"));details.put("technical",map());related.addAll(refs("DATASOURCE","app_id",id));}
-            case "DATASOURCE"->{details.putAll(map("engine",text(row,"db_type"),"databaseName",text(row,"db_name"),"connectionStatus",connection(text(row,"connection_status")),"credentialConfigured",!text(row,"password").isBlank(),"tableCount",count("db_table_t","datasource_id",id)));related.addAll(refs("TABLE","datasource_id",id));addRef(related,"APPLICATION",text(row,"app_id"));}
-            case "TABLE"->{var fields=dataItems("TABLE",id,pn,ps);long total=count("db_table_column_t","table_id",id);details.putAll(map("datasourceId",text(row,"datasource_id"),"physicalName",text(row,"table_name"),"fieldCount",total,"fieldCollectionStatus",total>0?"SUCCEEDED":"NOT_COLLECTED","fields",fields,"fieldsHasMore",(long)pn*ps<total,"fieldPage",page(pn,ps,total,"name","asc")));addRef(related,"DATASOURCE",text(row,"datasource_id"));related.addAll(refs("CATALOG","source_table_id",id));}
-            case "CATALOG"->{var items=dataItems("CATALOG",id,pn,ps);long total=count("da_catalog_item_t","catalog_id",id);details.putAll(map("catalogCode",text(row,"catalog_name_en"),"items",items,"itemsHasMore",(long)pn*ps<total,"itemPage",page(pn,ps,total,"name","asc"),"attachments",attachments(id)));addRef(related,"APPLICATION",text(row,"app_id"));addRef(related,"TABLE",text(row,"source_table_id"));if(summary.get("publishedVersionId")!=null){details.put("versionId",summary.get("publishedVersionId"));details.put("versionStatus","PUBLISHED");}}
-            case "API"->{List<Map<String,Object>> params=db.rows("SELECT param_name,param_desc,param_type,param_position,required_flag,param_scope FROM api_param_t WHERE tenant_id=? AND api_id=? AND COALESCE(is_del,0)=0 ORDER BY sort_no,tid LIMIT 100",db.tenant(),id).stream().map(r->map("name",text(r,"param_name"),"location",parameterLocation(r),"dataType",text(r,"param_type"),"required",truth(r.get("required_flag")),"description",text(r,"param_desc"))).toList();details.putAll(map("serviceCode",text(row,"service_code"),"version",text(row,"version"),"method",text(row,"method").toUpperCase(Locale.ROOT),"publicEndpoint",safeEndpoint(text(row,"publish_address_full")),"parameters",params,"statisticsAvailable",row.get("call_count")!=null,"calls",row.get("call_count")));addRef(related,"CATALOG",text(row,"catalog_id"));}
+            case "APPLICATION"->{details.put("systemCode",text(row,"client_id"));details.put("technical",map());}
+            case "DATASOURCE"->{details.putAll(map("engine",text(row,"db_type"),"databaseName",text(row,"db_name"),"connectionStatus",connection(text(row,"connection_status")),"credentialConfigured",!text(row,"password").isBlank(),"tableCount",count("db_table_t","datasource_id",id)));}
+            case "TABLE"->{var fields=dataItems("TABLE",id,pn,ps,query.get("fieldsSortField"),query.get("fieldsSortDir"),query);long total=countItems("TABLE",id,query);details.putAll(map("datasourceId",text(row,"datasource_id"),"physicalName",text(row,"table_name"),"fieldCount",total,"fieldCollectionStatus",total>0?"SUCCEEDED":"NOT_COLLECTED","fields",fields,"fieldsHasMore",(long)pn*ps<total,"fieldPage",page(pn,ps,total,query.getOrDefault("fieldsSortField","ordinal"),query.getOrDefault("fieldsSortDir","asc"))));}
+            case "CATALOG"->{var items=dataItems("CATALOG",id,pn,ps,query.get("fieldsSortField"),query.get("fieldsSortDir"),query);long total=countItems("CATALOG",id,query);details.putAll(map("catalogCode",text(row,"catalog_name_en"),"items",items,"itemsHasMore",(long)pn*ps<total,"itemPage",page(pn,ps,total,query.getOrDefault("fieldsSortField","ordinal"),query.getOrDefault("fieldsSortDir","asc")),"attachments",attachments(id)));if(summary.get("publishedVersionId")!=null){details.put("versionId",summary.get("publishedVersionId"));details.put("versionStatus","PUBLISHED");}}
+            case "API"->{int parameterPage=Math.max(1,number(query.get("parameterPage"),1)),parameterSize=Math.min(100,Math.max(1,number(query.get("parameterSize"),100)));
+                String parameterOrder=ServerTableOrder.sql(query.get("parameterSortField"),query.get("parameterSortDir"),Map.of("name","param_name","ordinal","sort_no"),"ordinal","asc","tid");
+                List<Object> parameterArgs=new ArrayList<>(List.of(db.tenant(),id));
+                String parameterFilter=" FROM api_param_t WHERE tenant_id=? AND api_id=? AND COALESCE(is_del,0)=0";
+                String parameterQuery=query.getOrDefault("fieldsQuery","").trim().toLowerCase(Locale.ROOT);
+                if(parameterQuery.length()>200)throw error(400,"INVALID_ARGUMENT","字段查询条件过长");
+                if(!parameterQuery.isBlank()){parameterFilter+=" AND (LOWER(param_name) LIKE ? OR LOWER(param_desc) LIKE ?)";parameterArgs.add("%"+parameterQuery+"%");parameterArgs.add("%"+parameterQuery+"%");}
+                if("RESPONSE".equals(query.get("parameterScope")))parameterFilter+=" AND LOWER(param_scope)='response'";
+                List<String> parameterCodes=itemCodes(query);
+                if(!parameterCodes.isEmpty()){parameterFilter+=" AND LOWER(param_name) IN ("+String.join(",",Collections.nCopies(parameterCodes.size(),"?"))+")";parameterArgs.addAll(parameterCodes);}
+                long parameterTotal=db.jdbc.queryForObject("SELECT COUNT(*)"+parameterFilter,Long.class,parameterArgs.toArray());
+                parameterArgs.add(parameterSize);parameterArgs.add((long)(parameterPage-1)*parameterSize);
+                List<Map<String,Object>> params=db.rows("SELECT param_name,param_desc,param_type,param_position,required_flag,param_scope"+parameterFilter+" ORDER BY "+parameterOrder+" LIMIT ? OFFSET ?",parameterArgs.toArray()).stream().map(r->map("name",text(r,"param_name"),"location",parameterLocation(r),"dataType",text(r,"param_type"),"required",truth(r.get("required_flag")),"description",text(r,"param_desc"))).toList();
+                details.put("parameterPage",page(parameterPage,parameterSize,parameterTotal,query.getOrDefault("parameterSortField","ordinal"),query.getOrDefault("parameterSortDir","asc")));details.putAll(map("serviceCode",text(row,"service_code"),"version",text(row,"version"),"method",text(row,"method").toUpperCase(Locale.ROOT),"publicEndpoint",safeEndpoint(text(row,"publish_address_full")),"parameters",params,"statisticsAvailable",row.get("call_count")!=null,"calls",row.get("call_count")));}
         }
         String description=switch(kind){case "APPLICATION"->text(row,"app_desc");case "DATASOURCE"->text(row,"remark");case "TABLE"->text(row,"table_comment");case "CATALOG"->text(row,"asset_desc");default->text(row,"service_desc");};
-        return map("summary",summary,"revision",row.get("revision")==null?"0":String.valueOf(row.get("revision")),"ownerUserId",text(row,"created_by"),"description",description,"details",details,"relatedObjects",related,"relationsHasMore",related.size()>=100);
+        var relatedResult=relatedPage(kind,id,row,query);related=(List<Map<String,Object>>)relatedResult.get("items");details.put("relatedPage",relatedResult.get("page"));
+        return map("summary",summary,"revision",row.get("revision")==null?"0":String.valueOf(row.get("revision")),"ownerUserId",text(row,"created_by"),"description",description,"details",details,"relatedObjects",related,"relationsHasMore",db.object(relatedResult.get("page")).get("hasMore"));
     }
     public Map<String,Object> summaryRow(String kind,Map<String,Object> row){
         return summary(summaryInput(kind,row),false);
@@ -168,9 +183,63 @@ public class AssetCenterQueryService {
     private void addRef(List<Map<String,Object>> list,String kind,String id){if(id.isBlank())return;try{list.add(ref(kind,id));}catch(AssetCenterException e){if(e.status()!=404)throw e;}}
     private List<Map<String,Object>> refs(String kind,String column,String id){var inputs=db.rows("SELECT * FROM "+table(kind)+" WHERE tenant_id=? AND "+column+"=? AND COALESCE(is_del,0)=0 ORDER BY updated_time DESC,tid LIMIT 100",db.tenant(),id).stream().map(r->summaryInput(kind,r)).toList();return summaries(inputs,false).stream().map(r->(Map<String,Object>)r.get("object")).toList();}
     public long count(String table,String column,String id){return db.jdbc.queryForObject("SELECT COUNT(*) FROM "+table+" WHERE tenant_id=? AND "+column+"=? AND COALESCE(is_del,0)=0",Long.class,db.tenant(),id);}
-    public List<Map<String,Object>> dataItems(String kind,String id,int pn,int ps){
+    private Map<String,Object> relatedPage(String kind,String id,Map<String,Object> row,Map<String,String> q) {
+        List<String> kinds=new ArrayList<>(),columns=new ArrayList<>(),values=new ArrayList<>();
+        switch(kind) {
+            case "APPLICATION"->{kinds.add("DATASOURCE");columns.add("app_id");values.add(id);}
+            case "DATASOURCE"->{kinds.addAll(List.of("TABLE","APPLICATION"));columns.addAll(List.of("datasource_id","tid"));values.addAll(List.of(id,text(row,"app_id")));}
+            case "TABLE"->{kinds.addAll(List.of("CATALOG","DATASOURCE"));columns.addAll(List.of("source_table_id","tid"));values.addAll(List.of(id,text(row,"datasource_id")));}
+            case "CATALOG"->{kinds.addAll(List.of("APPLICATION","TABLE"));columns.addAll(List.of("tid","tid"));values.addAll(List.of(text(row,"app_id"),text(row,"source_table_id")));}
+            case "API"->{kinds.add("CATALOG");columns.add("tid");values.add(text(row,"catalog_id"));}
+            default->{}
+        }
+        int pn=Math.max(1,number(q.get("relatedPage"),1)),ps=Math.min(100,Math.max(1,number(q.get("relatedSize"),20)));
+        List<String> parts=new ArrayList<>();List<Object> args=new ArrayList<>();
+        for(int i=0;i<kinds.size();i++) {
+            if(values.get(i).isBlank())continue;String k=kinds.get(i);
+            String app=Set.of("DATASOURCE","CATALOG").contains(k)?"app_id":"NULL";
+            parts.add("SELECT tid id,'"+k+"' kind,"+NAMES.get(k)+" name,"+CODES.get(k)+" code,org_id department_id,"+app+" application_id,"+(k.equals("CATALOG")?"business_type":"NULL")+" topic_code,created_by,created_time,updated_time FROM "+table(k)+" WHERE tenant_id=? AND "+columns.get(i)+"=? AND COALESCE(is_del,0)=0");
+            args.add(db.tenant());args.add(values.get(i));
+        }
+        if(parts.isEmpty())return map("items",List.of(),"page",page(pn,ps,0,"name","asc"));
+        String from=" FROM ("+String.join(" UNION ALL ",parts)+") related";
+        long total=db.jdbc.queryForObject("SELECT COUNT(*)"+from,Long.class,args.toArray());
+        String order=ServerTableOrder.sql(q.get("relatedSortField"),q.get("relatedSortDir"),Map.of("name","name","createdAt","created_time","updatedAt","updated_time"),"name","asc","kind,id");
+        List<Object> bound=new ArrayList<>(args);bound.add(ps);bound.add((long)(pn-1)*ps);
+        var rows=db.rows("SELECT *"+from+" ORDER BY "+order+" LIMIT ? OFFSET ?",bound.toArray());
+        return map("items",summaries(rows,false).stream().map(r->r.get("object")).toList(),"page",page(pn,ps,total,"name",q.getOrDefault("relatedSortDir","asc")));
+    }
+    public List<Map<String,Object>> dataItems(String kind,String id,int pn,int ps){return dataItems(kind,id,pn,ps,null,null);}
+    public List<Map<String,Object>> dataItems(String kind,String id,int pn,int ps,String field,String direction){return dataItems(kind,id,pn,ps,field,direction,Map.of());}
+    public List<Map<String,Object>> dataItems(String kind,String id,int pn,int ps,String field,String direction,Map<String,String> filters){
         boolean catalog=kind.equals("CATALOG");String table=catalog?"da_catalog_item_t":"db_table_column_t",key=catalog?"catalog_id":"table_id",sort=catalog?"sort_no":"ordinal_position";
-        return db.rows("SELECT * FROM "+table+" WHERE tenant_id=? AND "+key+"=? AND COALESCE(is_del,0)=0 ORDER BY "+sort+",tid LIMIT ? OFFSET ?",db.tenant(),id,ps,(pn-1)*ps).stream().map(r->{Map<String,Object> item=map("id",text(r,"tid"),"name",text(r,catalog?"col_name":"column_comment"),"code",text(r,catalog?"col_en":"column_name"),"dataType",text(r,catalog?"col_type":"data_type"),"length",r.get(catalog?"col_length":"length"),"nullable",truth(r.get(catalog?"is_nullable":"nullable")),"primaryKey",truth(r.get(catalog?"is_pk":"primary_key")),"ordinal",Math.max(1,number(r.get(sort),1)),"definition",text(r,catalog?"col_comment":"column_comment"));if(!text(r,"data_standard_id").isBlank())item.put("standardId",text(r,"data_standard_id"));if(catalog&&!text(r,"source_table_column_id").isBlank())item.put("sourceColumnId",text(r,"source_table_column_id"));return item;}).toList();
+        String order=ServerTableOrder.sql(field,direction,Map.of("name",catalog?"COALESCE(NULLIF(col_name,''),col_en)":"COALESCE(NULLIF(column_comment,''),column_name)","length",catalog?"col_length":"length","ordinal",sort),"ordinal","asc","tid");
+        ItemFilter filter=itemFilter(catalog,id,filters);List<Object> args=new ArrayList<>(filter.args());args.add(Math.min(100,Math.max(1,ps)));args.add((long)(Math.max(1,pn)-1)*Math.min(100,Math.max(1,ps)));
+        return db.rows("SELECT *"+filter.sql()+" ORDER BY "+order+" LIMIT ? OFFSET ?",args.toArray()).stream().map(r->{Map<String,Object> item=map("id",text(r,"tid"),"name",text(r,catalog?"col_name":"column_comment").isBlank()?text(r,catalog?"col_en":"column_name"):text(r,catalog?"col_name":"column_comment"),"code",text(r,catalog?"col_en":"column_name"),"dataType",text(r,catalog?"col_type":"data_type"),"length",r.get(catalog?"col_length":"length"),"nullable",truth(r.get(catalog?"is_nullable":"nullable")),"primaryKey",truth(r.get(catalog?"is_pk":"primary_key")),"ordinal",Math.max(1,number(r.get(sort),1)),"definition",text(r,catalog?"col_comment":"column_comment"));if(!text(r,"data_standard_id").isBlank())item.put("standardId",text(r,"data_standard_id"));if(catalog&&!text(r,"source_table_column_id").isBlank())item.put("sourceColumnId",text(r,"source_table_column_id"));return item;}).toList();
+    }
+    private record ItemFilter(String sql,List<Object> args) {}
+    private List<String> itemCodes(Map<String,String> query) {
+        String encoded=query.get("fieldsCodes");if(encoded==null||encoded.isBlank())return List.of();
+        if(encoded.length()>20000)throw error(400,"INVALID_ARGUMENT","字段编码查询过长");
+        try {
+            List<?> values=db.json.readValue(encoded,List.class);
+            if(values.isEmpty()||values.size()>100||values.stream().anyMatch(v->!(v instanceof String)||((String)v).isBlank()||((String)v).length()>200))throw error(400,"INVALID_ARGUMENT","每次最多查询 100 个有效字段编码");
+            return values.stream().map(v->((String)v).toLowerCase(Locale.ROOT)).distinct().toList();
+        }catch(com.fasterxml.jackson.core.JsonProcessingException ex){throw error(400,"INVALID_ARGUMENT","字段编码查询格式不正确");}
+    }
+    private ItemFilter itemFilter(boolean catalog,String id,Map<String,String> query) {
+        String table=catalog?"da_catalog_item_t":"db_table_column_t",parent=catalog?"catalog_id":"table_id",name=catalog?"col_name":"column_comment",code=catalog?"col_en":"column_name";
+        String filter=" FROM "+table+" WHERE tenant_id=? AND "+parent+"=? AND COALESCE(is_del,0)=0";
+        List<Object> args=new ArrayList<>(List.of(db.tenant(),id));
+        String keyword=query.getOrDefault("fieldsQuery","").trim().toLowerCase(Locale.ROOT);
+        if(keyword.length()>200)throw error(400,"INVALID_ARGUMENT","字段查询条件过长");
+        if(!keyword.isBlank()){filter+=" AND (LOWER("+name+") LIKE ? OR LOWER("+code+") LIKE ?)";args.add("%"+keyword+"%");args.add("%"+keyword+"%");}
+        List<String> codes=itemCodes(query);
+        if(!codes.isEmpty()){filter+=" AND LOWER("+code+") IN ("+String.join(",",Collections.nCopies(codes.size(),"?"))+")";args.addAll(codes);}
+        return new ItemFilter(filter,args);
+    }
+    public long countItems(String kind,String id,Map<String,String> query) {
+        ItemFilter filter=itemFilter(kind.equals("CATALOG"),id,query);return db.jdbc.queryForObject("SELECT COUNT(*)"+filter.sql(),Long.class,filter.args().toArray());
     }
     public List<Map<String,Object>> attachments(String catalogId){
         if(!db.table("da_catalog_resource_binding_t"))return List.of();
@@ -195,7 +264,7 @@ public class AssetCenterQueryService {
     public Map<String,Object> mapGraph(Map<String,String> query){
         String kind=query.getOrDefault("rootKind",query.getOrDefault("kind","CATALOG")),id=query.getOrDefault("rootId",query.getOrDefault("id",""));
         if(id.isBlank())throw error(400,"INVALID_ARGUMENT","请选择地图中心资产");
-        var detail=object(kind,id,Map.of());var summary=(Map<String,Object>)detail.get("summary");var root=(Map<String,Object>)summary.get("object");
+        var detail=object(kind,id,Map.of("relatedSize","100"));var summary=(Map<String,Object>)detail.get("summary");var root=(Map<String,Object>)summary.get("object");
         List<Map<String,Object>> nodes=new ArrayList<>();nodes.add(root);
         List<Map<String,Object>> edges=new ArrayList<>();int i=0;for(var related:(List<Map<String,Object>>)detail.get("relatedObjects")){nodes.add(related);String edgeKind="CONTAINS";if(kind.equals("CATALOG"))edgeKind="ATTACHED_TO";edges.add(map("id",id+"-"+(++i),"source",root,"target",related,"kind",edgeKind,"evidenceType",kind.equals("CATALOG")?"CATALOG_ATTACHMENT":"MASTER_RELATION","label",kind.equals("CATALOG")?"挂接":"归属"));}
         if(kind.equals("CATALOG"))for(var attachment:attachments(id)){var related=db.object(attachment.get("resource"));if(nodes.stream().noneMatch(n->Objects.equals(n.get("id"),related.get("id"))&&Objects.equals(n.get("kind"),related.get("kind")))){nodes.add(related);edges.add(map("id",id+"-attachment-"+(++i),"source",root,"target",related,"kind","ATTACHED_TO","evidenceType","CATALOG_ATTACHMENT","evidenceId",attachment.get("id"),"label","挂接资源"));}}

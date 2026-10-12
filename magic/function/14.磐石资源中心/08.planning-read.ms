@@ -30,10 +30,19 @@
 ================================
 // 共享数仓规划投影：字典层/分域、节点数据源关联和已采集表均来自当前租户。
 import tenantRuntime
+import dataScope
 import jsons
 import cn.hutool.crypto.digest.DigestUtil
 
 var tenantId = tenantRuntime.id()
+var scope = dataScope.dataSource()
+var scopeMode = scope.scope + ''
+var scopeUserId = scope.userId + ''
+var scopeOrgIds = scope.organizationIds == null ? [] : scope.organizationIds
+var scopeOrgCount = scopeOrgIds.size()
+if (scopeOrgCount == 0) { scopeOrgIds = [''] }
+if (!['ALL','ORG','OWNER'].contains(scopeMode) || scopeUserId == '') { exit 403,'无法确定当前数据范围' }
+
 var text = value => value == null ? '' : value + ''
 var json = value => text(value) == '' ? {} : jsons.toJSONObject(value)
 var root = db.selectOne("""
@@ -55,6 +64,7 @@ var layerRows = root == null ? [] : db.select("""
       FROM sym_dict_t
      WHERE tenant_id = #{tenantId} AND parent_id = #{root.tid} AND is_del = 0
      ORDER BY sort_no, dict_name, tid
+     LIMIT 1001
 """)
 var domainRows = root == null ? [] : db.select("""
     SELECT d.tid, d.dict_name AS name, d.dict_code AS domain_code, d.parent_id,
@@ -65,6 +75,7 @@ var domainRows = root == null ? [] : db.select("""
       JOIN sym_dict_t p ON p.tid = d.parent_id AND p.tenant_id = d.tenant_id AND p.is_del = 0
      WHERE d.tenant_id = #{tenantId} AND d.is_del = 0 AND p.parent_id = #{root.tid}
      ORDER BY p.sort_no, d.sort_no, d.dict_name, d.tid
+     LIMIT 1001
 """)
 var classRows = classRoot == null ? [] : db.select("""
     SELECT tid, dict_name AS name, dict_code AS class_code,
@@ -72,13 +83,8 @@ var classRows = classRoot == null ? [] : db.select("""
       FROM sym_dict_t
      WHERE tenant_id = #{tenantId} AND parent_id = #{classRoot.tid} AND is_del = 0
      ORDER BY sort_no, dict_name, tid
+     LIMIT 1001
 """)
-var tableCounts = {}
-for (row in db.select("""
-    SELECT datasource_id AS source_id, COUNT(*) AS table_count
-      FROM db_table_t WHERE tenant_id = #{tenantId} AND is_del = 0
-     GROUP BY datasource_id
-""")) { tableCounts[text(row.sourceId)] = row.tableCount }
 var relationRows = db.select("""
     SELECT b.tid, b.target_id, b.target_type,
            b.datasource_id AS source_id, b.configuration_json AS config,
@@ -86,9 +92,24 @@ var relationRows = db.select("""
            s.db_name AS source_name, s.db_type AS profile, s.updated_time AS source_updated_at
       FROM dwm_center_layer_source_t b
       LEFT JOIN db_datasource_t s ON s.tid = b.datasource_id AND s.tenant_id = b.tenant_id AND s.is_del = 0
+        AND (#{scopeMode}='ALL' OR (#{scopeMode}='OWNER' AND s.created_by=#{scopeUserId})
+          OR (#{scopeMode}='ORG' AND #{scopeOrgCount}>0 AND s.org_id IN
+            <foreach collection="scopeOrgIds" item="oid" open="(" close=")" separator=",">#{oid}</foreach>))
      WHERE b.tenant_id = #{tenantId} AND b.is_del = 0 AND b.target_type IN ('layer', 'domain')
      ORDER BY b.updated_time DESC, b.tid DESC
+     LIMIT 1001
 """)
+if (layerRows.size() > 1000 || domainRows.size() > 1000 || classRows.size() > 1000 || relationRows.size() > 1000) { exit 400,'规划配置超过视图上限' }
+var relationSourceIds = []
+for (row in relationRows) { if (row.sourceName != null && row.sourceId != null && !relationSourceIds.contains(row.sourceId)) { relationSourceIds.add(row.sourceId) } }
+if (relationSourceIds.size() == 0) { relationSourceIds = [''] }
+var tableCounts = {}
+for (row in db.select("""
+    SELECT datasource_id AS source_id, COUNT(*) AS table_count
+      FROM db_table_t WHERE tenant_id = #{tenantId} AND is_del = 0
+        AND datasource_id IN <foreach collection="relationSourceIds" item="sid" open="(" close=")" separator=",">#{sid}</foreach>
+     GROUP BY datasource_id
+""")) { tableCounts[text(row.sourceId)] = row.tableCount }
 var relationByTarget = {}
 for (row in relationRows) {
     var key = text(row.targetType) + ':' + text(row.targetId)
@@ -110,7 +131,7 @@ for (row in layerRows) {
         bindingId:source == null ? '' : text(source.tid),
         bindingVersion:source == null ? null : source.version,
         tableCount:tableCounts[sourceId] == null ? 0 : tableCounts[sourceId],
-        version:row.version, createdAt:row.createdAt, updatedAt:row.updatedAt}
+        version:row.version, createdAt:row.createdTime, updatedAt:row.updatedTime}
     layers.add(layer)
     layerById[layer.id] = layer
 }
@@ -132,7 +153,7 @@ for (row in domainRows) {
         bindingId:source == null ? '' : text(source.tid),
         bindingVersion:source == null ? null : source.version,
         tableCount:tableCounts[sourceId] == null ? 0 : tableCounts[sourceId],
-        version:row.version, createdAt:row.createdAt, updatedAt:row.updatedAt}
+        version:row.version, createdAt:row.createdTime, updatedAt:row.updatedTime}
     databases.add(domain)
     domainById[domain.id] = domain
 }
@@ -150,11 +171,11 @@ for (row in relationRows) {
         tableCount:tableCounts[text(row.sourceId)] == null ? 0 : tableCounts[text(row.sourceId)],
         state:row.sourceName == null ? 'INVALID' : config.checkedHash == hash ? 'VALID' : 'NOT_CHECKED',
         checkedHash:config.checkedHash, checkedAt:config.checkedAt, currentHash:hash,
-        version:row.version, createdAt:row.createdAt, updatedAt:row.updatedAt})
+        version:row.version, createdAt:row.createdTime, updatedAt:row.updatedTime})
 }
 var classes = []
 for (row in classRows) {
     classes.add({id:text(row.tid), name:row.name, code:text(row.classCode), version:row.version,
-        createdAt:row.createdAt, updatedAt:row.updatedAt})
+        createdAt:row.createdTime, updatedAt:row.updatedTime})
 }
 return {layers:layers, databases:databases, bindings:bindings, classifications:classes}

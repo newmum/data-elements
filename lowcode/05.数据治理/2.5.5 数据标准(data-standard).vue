@@ -328,7 +328,7 @@ const getCategoryPath = (dataCategoryId: string): string => {
 };
 const tableColumns = [
   { prop: "standardEncode", label: "标准编码", showOverflowTooltip: true },
-  { prop: "metaName", label: "数据元名称", showOverflowTooltip: true },
+  { prop: "metaName", sortable: "custom", label: "数据元名称", showOverflowTooltip: true },
   { prop: "metaCode", label: "数据元英文名", showOverflowTooltip: true },
   { prop: "dictionaryCount", label: "数据字典（项）", width: 120, type: "num", precision: 0 },
   {
@@ -573,17 +573,18 @@ const deleteDictionaryItem = (item: any) => {
 // 请求表格数据
 const fetchTableData = async ({
   pageNo: pageNum,
-  pageSize,
+  pageSize, sortField, sortDir,
 }: {
   pageNo: number;
   pageSize: number;
+  sortField?: string; sortDir?: "asc" | "desc";
 }) => {
   const response = await $common.post("/dwm/standard/element/page", {
     metaName: state.keyword || null,
     publishStatus: state.activeStatus || null,
     categoryPath: getSelectedCategoryPath(),
     pageNum,
-    pageSize,
+    pageSize, sortField, sortDir,
   });
   const data = getApiData(response);
   const list = Array.isArray(data.list) ? data.list : [];

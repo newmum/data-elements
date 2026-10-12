@@ -14,7 +14,10 @@
   "script": null
 }
 ================================
+import tableSort
 import tenantRuntime
+var sortColumn=tableSort.field(body,{taskName:'task_name',progress:'progress',createdTime:'created_time',updatedTime:'updated_time',startedTime:'started_time',finishedTime:'finished_time'},'createdTime')
+var sortDirection=tableSort.direction(body)
 
 var tenantId = tenantRuntime.id()
 if (tenantId == null || ('' + tenantId).trim() == '') {
@@ -54,7 +57,7 @@ var result = db.page("""
        AND (#{keyword} = '' OR task_name LIKE #{keywordPattern}
             OR task_code LIKE #{keywordPattern})
        AND (#{status} = '' OR task_status = #{status})
-     ORDER BY created_time DESC, tid DESC
+     ORDER BY ${sortColumn} ${sortDirection}, tid ASC
 """, pageSize, (pageNum - 1) * pageSize)
 var items = []
 var value = (row, key) => {

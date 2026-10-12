@@ -1,3 +1,4 @@
+import { useServerSort } from '../../components/serverSort';
 import { Alert, App, Button, Input, Modal, Space, Tag } from 'antd';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -31,10 +32,11 @@ export default function MultiTableSyncPage() {
   const [sourcePage, setSourcePage] = useState(1), [selected, setSelected] = useState<MultiTableCandidate[]>([]);
   const [draftId, setDraftId] = useState(newDraftId), [working, setWorking] = useState(false);
   const [retryKey, setRetryKey] = useState('');
-  const groupsQuery = useQuery({ queryKey: ['platform', 'multi-table-groups', page, size, keyword],
-    queryFn: () => multiTableService.page({ page, size, keyword }) });
-  const sourcesQuery = useQuery({ queryKey: ['platform', 'multi-table-sources', sourcePage, sourceKeyword],
-    queryFn: () => multiTableService.candidates({ page: sourcePage, size: 10, keyword: sourceKeyword }), enabled: createOpen });
+  const order=useServerSort(()=>setPage(1)),sourceOrder=useServerSort(()=>setSourcePage(1)),itemOrder=useServerSort(()=>{});
+  const groupsQuery = useQuery({ queryKey: ['platform', 'multi-table-groups', page, size, keyword,order.sort,itemOrder.sort],
+    queryFn: () => multiTableService.page({ page, size, keyword,...order.sort,itemSortField:itemOrder.sort.sortField,itemSortDir:itemOrder.sort.sortDir }) });
+  const sourcesQuery = useQuery({ queryKey: ['platform', 'multi-table-sources', sourcePage, sourceKeyword,sourceOrder.sort],
+    queryFn: () => multiTableService.candidates({ page: sourcePage, size: 10, keyword: sourceKeyword,...sourceOrder.sort }), enabled: createOpen });
   const groups = groupsQuery.data?.list || [], items = groups.flatMap(group => group.items || []);
   const refresh = () => client.invalidateQueries({ queryKey: ['platform', 'multi-table-groups'] });
   const resetDraft = () => { setSelected([]); setGroupName(''); setDraftId(newDraftId()); };
@@ -91,24 +93,24 @@ export default function MultiTableSyncPage() {
       {groupsQuery.isError && <Alert type="error" showIcon message="多表编组读取失败"
         description={groupsQuery.error instanceof Error ? groupsQuery.error.message : '请检查数据中台会话与接口'}
         action={<Button size="small" onClick={() => void groupsQuery.refetch()}>重试</Button>} style={{ marginBottom: 16 }} />}
-      <DataTable<MultiTableGroup> rowKey="groupId" dataSource={groups} loading={groupsQuery.isLoading || groupsQuery.isFetching}
+      <DataTable<MultiTableGroup> serverSort={order} rowKey="groupId" dataSource={groups} loading={groupsQuery.isLoading || groupsQuery.isFetching}
         pagination={{ current: page, pageSize: size, total: groupsQuery.data?.total || 0, showSizeChanger: true,
-          pageSizeOptions: [10, 20], onChange: (nextPage, nextSize) => { setPage(nextPage); setSize(nextSize); } }}
-        expandable={{ expandedRowRender: group => <DataTable<MultiTableItem> rowKey="itemId" dataSource={group.items || []} pagination={false} columns={[
+          pageSizeOptions: [10,20,50,100], onChange: (nextPage, nextSize) => { setPage(nextPage); setSize(nextSize); } }}
+        expandable={{ expandedRowRender: group => <DataTable<MultiTableItem> serverSort={itemOrder} rowKey="itemId" dataSource={group.items || []} pagination={false} columns={[
           { title: '顺序', dataIndex: 'sortNo', width: 68 },
-          { title: '来源表', width: 230, render: (_, row) => <div className="entity-name"><b>{text(row.sourceTableNameCn || row.sourceTableName) || '来源表已失效'}</b><small>{text(row.sourceTableName) || row.sourceTableId}</small></div> },
+          { title: '来源表', key:'sourceTableName',sorter:true,width: 230, render: (_, row) => <div className="entity-name"><b>{text(row.sourceTableNameCn || row.sourceTableName) || '来源表已失效'}</b><small>{text(row.sourceTableName) || row.sourceTableId}</small></div> },
           { title: '单表接入任务', width: 250, render: (_, row) => <div className="entity-name"><b>{text(row.taskName) || (row.taskAvailable === false ? '任务已失效' : '未命名任务')}</b><small>{row.taskId}</small></div> },
           { title: '状态', width: 125, render: (_, row) => statusTag(row) },
           { title: '监控', width: 160, render: (_, row) => text(row.monitorMessage || row.monitorStatus) || '—' },
-          { title: '最近运行', width: 150, render: (_, row) => row.lastRunning ? formatTime(row.lastRunning) : '—' },
+          { title: '最近运行', key:'lastRunning',width: 150, render: (_, row) => row.lastRunning ? formatTime(row.lastRunning) : '—' },
           { title: '操作', width: 235, render: (_, row) => <Space><Button type="link" disabled={row.taskAvailable === false} onClick={() => openCanvas(row)}>单表 NiFi 画布</Button>
             <Button type="link" disabled={!group.canManage} loading={retryKey === `${group.groupId}:${row.sourceTableId}`} onClick={() => void retry(group, row)}>检查并补齐</Button></Space> },
         ]} /> }} columns={[
           { title: '编组名称', dataIndex: 'groupName', width: 280, render: (name: string) => <strong>{name}</strong> },
-          { title: '来源表数', width: 115, render: (_, row) => `${row.items?.length || 0} 张` },
-          { title: '运行中', width: 100, render: (_, row) => row.items?.filter(item => item.taskAvailable !== false && Number(item.taskStatus) === 1).length || 0 },
-          { title: '异常/失效', width: 110, render: (_, row) => row.items?.filter(item => item.taskAvailable === false || Number(item.taskStatus) === 2).length || 0 },
-          { title: '创建时间', width: 170, render: (_, row) => row.createdTime ? formatTime(row.createdTime) : '—' },
+          { title: '来源表数', key:'tableCount',width:115,render:(_,row)=>`${row.tableCount} 张` },
+          { title:'运行中',dataIndex:'runningCount',width:100,sorter:true },
+          { title:'异常/失效',dataIndex:'errorCount',width:110,sorter:true },
+          { title: '创建时间', key:'createdTime',width: 170, render: (_, row) => row.createdTime ? formatTime(row.createdTime) : '—' },
           { title: '说明', width: 225, render: () => <span className="muted">独立单表任务的管理编组</span> },
           { title: '操作', width: 140, render: (_, row) => <Button type="link" danger disabled={!row.canManage} onClick={() => remove(row)}>删除编组</Button> },
         ]} />
@@ -126,10 +128,10 @@ export default function MultiTableSyncPage() {
         <span className="toolbar-spacer" /><span className="helper">已选 {selected.length} 个任务</span></div>
       {sourcesQuery.isError && <Alert type="error" showIcon message="单表任务读取失败"
         description={sourcesQuery.error instanceof Error ? sourcesQuery.error.message : '请检查会话与接口'} style={{ marginBottom: 10 }} />}
-      <DataTable<MultiTableCandidate> rowKey="taskId" dataSource={sourcesQuery.data?.list || []} loading={sourcesQuery.isLoading}
+      <DataTable<MultiTableCandidate> serverSort={sourceOrder} rowKey="taskId" dataSource={sourcesQuery.data?.list || []} loading={sourcesQuery.isLoading}
         pagination={{ current: sourcePage, pageSize: 10, total: sourcesQuery.data?.total || 0, onChange: setSourcePage }} columns={[
-          { title: '单表任务', width: 270, render: (_, row) => <div className="entity-name"><b>{text(row.taskName) || row.taskId}</b><small>{row.taskId}</small></div> },
-          { title: '来源表', width: 260, render: (_, row) => <div className="entity-name"><b>{sourceLabel(row)}</b><small>{text(row.sourceTableName)}</small></div> },
+          { title: '单表任务', key:'taskName',sorter:true,width: 270, render: (_, row) => <div className="entity-name"><b>{text(row.taskName) || row.taskId}</b><small>{row.taskId}</small></div> },
+          { title: '来源表', key:'sourceTableName',sorter:true,width: 260, render: (_, row) => <div className="entity-name"><b>{sourceLabel(row)}</b><small>{text(row.sourceTableName)}</small></div> },
           { title: '数据源', render: (_, row) => text(row.datasourceName) || '—' },
           { title: '操作', width: 125, render: (_, row) => <Button type="link" disabled={working || selected.length >= 100 || selected.some(item => sourceId(item) === sourceId(row))}
             onClick={() => { if (sourceId(row)) setSelected(items => [...items, row]); else message.error('来源表缺少标识'); }}>

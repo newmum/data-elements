@@ -1,7 +1,12 @@
-import { platformApi } from '../shared/platformApi';
+import { platformApi,platformApiGet } from '../shared/platformApi';
 import { changed,type Row } from './api';
 /** NiFi's tenant-scoped repository is authoritative. No graph is inferred from an ER join. */
 export async function lineageTasks(signal?:AbortSignal):Promise<Row[]>{const data=await platformApi<unknown>('/nifi/api/pipelines',undefined,{signal});if(!Array.isArray(data))throw new Error('接入任务返回格式不正确');return data.map(r=>({id:String(r.id),name:String(r.name||''),description:String(r.description||''),nodeCount:Number(r.nodeCount||0),updatedAt:r.updatedAt,nifiProcessGroupId:r.nifiProcessGroupId||null,status:r.nifiProcessGroupId?'DEPLOYED':'NOT_DEPLOYED'}));}
+export async function lineageTasksPage(page:number,size:number,keyword:string,sort:Row,signal?:AbortSignal):Promise<{list:Row[];total:number}>{
+ const data=await platformApiGet<{list:Row[];total:number}>('/nifi/api/pipelines/page',{page,size,q:keyword,...sort},{signal});
+ if(!Array.isArray(data.list)||!Number.isFinite(Number(data.total)))throw new Error('接入任务分页格式不正确');
+ return {list:data.list.map(r=>({id:String(r.id),name:String(r.name||''),description:String(r.description||''),nodeCount:Number(r.nodeCount||0),updatedAt:r.updatedAt,nifiProcessGroupId:r.nifiProcessGroupId||null,status:r.nifiProcessGroupId?'DEPLOYED':'NOT_DEPLOYED'})),total:Number(data.total)};
+}
 export async function lineageGraph(id:string):Promise<Row>{const row=await platformApi<Row>('/nifi/api/pipelines/'+encodeURIComponent(id));if(!Array.isArray(row.dsl?.nodes)||!Array.isArray(row.dsl?.edges))throw new Error('此任务没有可展示的已保存链路');return row;}
 /** Save the original shared DSL; credentials/configuration are preserved in memory, never rendered or persisted in browser storage. */
 export async function saveLineageGraph(row:Row){validateProcessingGraph(row.dsl);const result=await platformApi<Row>('/nifi/api/pipelines'+(row.id?'/'+encodeURIComponent(row.id)+'?expectedUpdatedAt='+encodeURIComponent(row.updatedAt):''),{name:row.name,description:row.description||'',dsl:row.dsl});changed();return result;}

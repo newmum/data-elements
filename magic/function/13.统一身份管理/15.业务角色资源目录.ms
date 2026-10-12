@@ -87,14 +87,36 @@ var permission=entity+':'+(operation=='list'?'read':'write');
 if(operation=='list') {
     // 按操作员的应用管理范围过滤可见数据。
     var ctx=listContext(permission,p.appId||null,domain);
-    var rows=sql.select('select t.*,t.tid as id,date_format(t.created_time,\'%Y-%m-%dT%H:%i:%sZ\') created_utc,date_format(t.updated_time,\'%Y-%m-%dT%H:%i:%sZ\') updated_utc from '+table+" t join iam_application_t a on a.tid=t.app_id and a.kind='BUSINESS' and a.is_del=0 where t.is_del=0 and t.identity_domain=#{domain} order by t.tid");
-    var visible=rows.filter(x=>ctx.pairs.filter(pair=>pair.codes.contains(permission) && pair.scopes.filter(s=>s.identity_domain==domain && (s.scope_kind=='ALL' || s.scope_kind=='APPLICATION' && s.app_id==x.app_id)).size()>0).size()>0 && (p.appId==null || x.app_id==p.appId));
+    var scopes=[];
+    for(pair in ctx.pairs) {
+        if(pair.codes.contains(permission)) {scopes.addAll(pair.scopes.filter(scope=>scope.identity_domain==domain));}
+    }
+    var allScope=scopes.filter(scope=>scope.scope_kind=='ALL').size()>0;
+    var scopedAppIds=scopes.filter(scope=>scope.scope_kind=='APPLICATION').map(scope=>scope.app_id).distinct();
+    if(!allScope && scopedAppIds.size()==0) {return [];}
+    var scopeSql=allScope?'':' AND t.app_id IN (#{scopedAppIds})';
+    if(p.appId!=null) {scopeSql=scopeSql+' AND t.app_id=#{p.appId}';}
+    var visible=sql.select('select t.*,t.tid as id,date_format(t.created_time,\'%Y-%m-%dT%H:%i:%sZ\') created_utc,date_format(t.updated_time,\'%Y-%m-%dT%H:%i:%sZ\') updated_utc from '+table+" t join iam_application_t a on a.tid=t.app_id and a.kind='BUSINESS' and a.is_del=0 where t.is_del=0 and t.identity_domain=#{domain}"+scopeSql+' order by t.tid LIMIT 1001');
+    var visibleIds=visible.map(x=>x.id);
+    if(visibleIds.size()>1000) {exit 400,'配置列表超过 1000 项，请缩小应用范围';}
+    var edges=[];
+    if(entity=='roles' && visibleIds.size()>0) {
+        edges=sql.select("""
+SELECT rr.role_id,rr.resource_id FROM iam_role_resource_rela_t rr
+JOIN iam_role_t role ON role.tid=rr.role_id AND role.app_id=rr.app_id AND role.identity_domain=#{domain} AND role.is_del=0
+JOIN iam_resource_t resource ON resource.tid=rr.resource_id AND resource.app_id=rr.app_id AND resource.identity_domain=#{domain} AND resource.is_del=0
+WHERE rr.role_id IN (#{visibleIds})
+""");
+    }
+    var extensions=entity=='resources'?fieldValues('view-many','RESOURCE',domain,null,
+        visible.map(x=>({id:x.id,values:x.ext_json==null?{}:JSONUtil.parseObj(x.ext_json)})),{}):{};
     return visible.map(x=>({
-        id:x.id,appId:x.app_id,domain:x.identity_domain,name:x.name,code:x.code,status:x.status=='ACTIVE'?'enabled':'disabled',version:x.version,createdAt:x.created_utc,updatedAt:x.updated_utc,description:entity=='roles'?x.description||'':'',resourceIds:entity=='roles'?sql.select("""
-select resource_id
-from iam_role_resource_rela_t
-where role_id=#{x.id}
-""").map(v=>v.resource_id):[],parentId:entity=='resources'?x.parent_id:null,type:entity=='resources'?x.resource_type.toLowerCase():'',path:entity=='resources'?x.path||'':'',method:entity=='resources'?x.http_method||'GET':'',ext:entity=='resources'?fieldValues('view','RESOURCE',domain,x.id,x.ext_json==null?{}:JSONUtil.parseObj(x.ext_json),{}):{}
+        id:x.id,appId:x.app_id,domain:x.identity_domain,name:x.name,code:x.code,status:x.status=='ACTIVE'?'enabled':'disabled',version:x.version,
+        createdAt:x.created_utc,updatedAt:x.updated_utc,description:entity=='roles'?x.description||'':'',
+        resourceIds:entity=='roles'?edges.filter(v=>v.role_id==x.id).map(v=>v.resource_id):[],
+        resourceCount:entity=='roles'?edges.filter(v=>v.role_id==x.id).size():0,
+        parentId:entity=='resources'?x.parent_id:null,type:entity=='resources'?x.resource_type.toLowerCase():'',path:entity=='resources'?x.path||'':'',
+        method:entity=='resources'?x.http_method||'GET':'',ext:entity=='resources'?extensions.get(x.id)||{}:{}
     }));
 }
 // 先校验当前会话的功能权限、身份域和应用管理范围。

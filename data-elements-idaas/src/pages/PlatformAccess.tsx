@@ -3,6 +3,7 @@ import { Alert, App, Button, Checkbox, Form, Input, Modal, Select, Space, Table,
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { PageTitle, formErrorText } from '../components/common';
 import { foundationApi, refreshWorkspace, useDatabase, useSession } from '../mock/store';
+import { useTableOrder } from '../hooks/useTableOrder';
 import PasswordRecoveryRequests from '../components/PasswordRecoveryRequests';
 
 interface Operator { id: string; username: string; display_name: string; subject_id?: string; subject_version?: number; status: string; version: number; must_change_password: number; locked_until?: string; }
@@ -31,19 +32,20 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
     const [passwordForm] = Form.useForm();
     const { message, modal } = App.useApp();
     const can = (permission: string) => session.permissions?.includes(permission) === true;
+    const order=useTableOrder();const [total,setTotal]=useState(0);
     const rolePage = kind === 'roles';
     const load = async () => {
         setBusy(true); setError('');
         try {
-            if (can('operators:read')) setOperators(await foundationApi.list<Operator>('/idaas/operators/list'));
+            if (!rolePage&&can('operators:read')) {const result=await foundationApi.read<{list:Operator[];total:number}>('/idaas/operators/list?'+order.query+(kind==='locked'?'&locked=true':''));setOperators(result.list);setTotal(result.total);}
             if (can('platform-roles:read')) {
-                setRoles(await foundationApi.list<Role>('/idaas/platform-roles/list'));
+                if(rolePage){const result=await foundationApi.read<{list:Role[];total:number}>('/idaas/platform-roles/list?'+order.query);setRoles(result.list);setTotal(result.total);}else setRoles(await foundationApi.list<Role>('/idaas/platform-roles/list'));
                 setResources(await foundationApi.list<Resource>('/idaas/platform-roles/resources'));
             }
         } catch (e) { setError(e instanceof Error ? e.message : '读取失败'); }
         finally { setBusy(false); }
     };
-    useEffect(() => { void load(); }, [kind]);
+    useEffect(() => { void load(); }, [kind,order.query]);
     const perform = async (action: () => Promise<unknown>, success: string) => {
         setBusy(true);
         try { await action(); await refreshWorkspace(); message.success(success); await load(); }
@@ -94,16 +96,16 @@ export default function PlatformAccess({ kind = 'operators' }: { kind?: 'operato
             if (request.accountId === session.userId) { message.error('请由另一名有权限的管理员核验并重置此账号'); return; }
             passwordForm.resetFields(); setResetting({ id: request.accountId, version: request.version });
         }}/>}
-        {rolePage ? <Table<Role> size="small" rowKey="id" loading={busy} dataSource={roles} scroll={{ x: 800 }} columns={[
-            { title: '角色名称', dataIndex: 'name' }, { title: '编码', dataIndex: 'code' },
+        {rolePage ? <Table<Role> onChange={order.onChange} pagination={order.pagination(total)} size="small" rowKey="id" loading={busy} dataSource={roles} scroll={{ x: 800 }} columns={[
+            { title: '角色名称', dataIndex: 'name',...order.column('name') }, { title: '编码', dataIndex: 'code' },
             { title: '功能权限', render: (_, row) => <Space wrap>{row.resourceIds.map(id => <Tag key={id}>{resources.find(r => r.id === id)?.code || id}</Tag>)}</Space> },
             { title: '状态', dataIndex: 'status', render: value => value === 'ACTIVE' ? '启用' : '停用' },
             { title: '操作', render: (_, row) => <Button type="link" disabled={!can('platform-roles:write')} onClick={() => edit(row)}>编辑</Button> },
-        ]}/> : <Table<Operator> size="small" rowKey="id" loading={busy} dataSource={operatorRows} scroll={{ x: 900 }} columns={[
-            { title: '姓名', dataIndex: 'display_name' }, { title: '登录账号', dataIndex: 'username' },
+        ]}/> : <Table<Operator> onChange={order.onChange} pagination={order.pagination(total)} size="small" rowKey="id" loading={busy} dataSource={operatorRows} scroll={{ x: 900 }} columns={[
+            { title: '姓名', dataIndex: 'display_name',...order.column('display_name') }, { title: '登录账号', dataIndex: 'username' },
             { title: '状态', dataIndex: 'status', render: value => value === 'ACTIVE' ? '启用' : '停用' },
             { title: '密码状态', render: (_, row) => row.must_change_password ? '登录后需改密' : '正常' },
-            { title: '锁定截止', dataIndex: 'locked_until', render: value => value || '—' },
+            { title: '锁定截止', dataIndex: 'locked_until',...order.column('locked_until'), render: value => value || '—' },
             { title: '操作', width: 290, render: (_, row) => <Space wrap>
                 <Button type="link" disabled={!can('operators:write')} onClick={() => edit(row)}>编辑</Button>
                 <Button type="link" disabled={!can('operators:grant') || !can('platform-roles:read')} onClick={() => void assign(row)}>角色与范围</Button>

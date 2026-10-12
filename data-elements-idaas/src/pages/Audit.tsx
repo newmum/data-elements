@@ -19,24 +19,26 @@ interface AuditEvent {
     action: string; app_id?: string; object_id?: string; result: string; reason_code?: string; trace_id: string; ip?: string;
     request_path?: string; http_method?: string; http_status?: number; duration_ms?: number; snapshot_json?: string;
 }
-function FoundationAudit({ type }: { type: 'operation' | 'login' | 'api' }) {
+function FoundationAudit({ type,domain }: { type: 'operation' | 'login' | 'api';domain:Domain }) {
     const db = useDatabase();
     const generation = useRef(0);
     const [rows, setRows] = useState<AuditEvent[]>([]), [total, setTotal] = useState(0), [page, setPage] = useState(1), [size, setSize] = useState(20);
     const [query, setQuery] = useState(''), [result, setResult] = useState('all'), [busy, setBusy] = useState(false), [error, setError] = useState('');
     const [detail, setDetail] = useState<AuditEvent | null>(null);
+    const [sort,setSort]=useState<{sortField?:string;sortDir?:string}>({});
     const title = type === 'api' ? 'API 日志' : type === 'login' ? '登录日志' : '操作日志';
     const load = async () => {
         const current = ++generation.current;
         setBusy(true); setError('');
         const args = new URLSearchParams({ page: String(page), size: String(size), type: type === 'api' ? 'API' : type === 'login' ? 'AUTH' : 'OPERATION', q: query });
+        if(sort.sortField){args.set('sortField',sort.sortField);args.set('sortDir',sort.sortDir||'desc');}
         if (result !== 'all') args.set('result', result);
-        try { const response = await foundationApi.read<{ list: AuditEvent[]; total: number }>('/idaas/audit/list?' + args); if (current === generation.current) { setRows(response.list); setTotal(response.total); } }
+        try { const response = await foundationApi.read<{ list: AuditEvent[]; total: number }>('/idaas/audit/list?' + args+'&domain='+domain); if (current === generation.current) { setRows(response.list); setTotal(response.total); } }
         catch (e) { if (current === generation.current) { setRows([]); setTotal(0); setError(e instanceof Error ? e.message : '审计查询失败'); } }
         finally { if (current === generation.current) setBusy(false); }
     };
     useEffect(() => { setPage(1); setDetail(null); }, [type]);
-    useEffect(() => { void load(); }, [type, page, size, query, result]);
+    useEffect(() => { void load(); }, [type,domain, page, size, query, result, sort]);
     const actorLabel = (row: AuditEvent) => row.actor_kind === 'SYSTEM' ? '系统任务' : auditActorLabel(row.actor_id, db, null, row.actor_name || row.actor_username);
     const targetLabel = (row: AuditEvent) => row.event_type === 'API' && !row.object_id ? row.request_path || '平台接口' : auditTargetLabel({ action: row.action, target: row.object_id, domain: row.identity_domain, appId: row.app_id }, db);
     const exportRows = () => exportCsv(title + '-当前页', ['发生时间', '操作人', '动作', '目标', '结果', '原因', '来源IP', '追踪ID', '动作编码', '对象ID'], rows.map(r => [r.event_time, actorLabel(r), auditActionLabel(r.action), targetLabel(r), r.result, r.reason_code, r.ip, r.trace_id, r.action, r.object_id]));
@@ -53,8 +55,8 @@ function FoundationAudit({ type }: { type: 'operation' | 'login' | 'api' }) {
             <Input.Search aria-label="查询审计记录" placeholder="搜索账号、事件、来源IP或追踪ID" allowClear style={{ width: 330, maxWidth: '100%' }} onSearch={value => { setPage(1); setQuery(value); }}/>
             <Select aria-label="审计结果" value={result} style={{ width: 160 }} onChange={value => { setPage(1); setResult(value); }} options={[{ value: 'all', label: '全部结果' }, { value: 'SUCCESS', label: '成功' }, { value: 'DENIED', label: '拒绝' }, { value: 'FAILED', label: '失败' }]}/>
         </Space></Card>
-        <Table<AuditEvent> size="small" rowKey="id" loading={busy} dataSource={rows} scroll={{ x: 1150 }} pagination={{ current: page, pageSize: size, total, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], showTotal: value => `共 ${value} 条`, onChange: (next, length) => { setPage(next); setSize(length); } }} columns={[
-            { title: '发生时间', dataIndex: 'event_time', width: 170, render: dateText },
+        <Table<AuditEvent> onChange={(_p,_f,sorter,extra)=>{if(extra.action!=='sort')return;const s=Array.isArray(sorter)?sorter[0]:sorter;setPage(1);setSort(s.order?{sortField:String(s.field),sortDir:s.order==='ascend'?'asc':'desc'}:{});}} size="small" rowKey="id" loading={busy} dataSource={rows} scroll={{ x: 1150 }} pagination={{ current: page, pageSize: size, total, showSizeChanger: true, pageSizeOptions: [10, 20, 50, 100], showTotal: value => `共 ${value} 条`, onChange: (next, length) => { setPage(next); setSize(length); } }} columns={[
+            { title: '发生时间', dataIndex: 'event_time', sorter:true, sortOrder:sort.sortField==='event_time'?(sort.sortDir==='asc'?'ascend':'descend'):null, width: 170, render: dateText },
             { title: '事件', dataIndex: 'action', width: 260, ellipsis: true, render: (value: string) => <span title={auditActionLabel(value)}>{auditActionLabel(value)}</span> },
             { title: '操作人', width: 140, render: (_, row) => actorLabel(row) },
             { title: '对象 / 路径', width: 260, ellipsis: true, render: (_, row) => <span title={targetLabel(row)}>{targetLabel(row)}</span> },
@@ -84,7 +86,7 @@ export default function Audit({ domain, type }: {
     ] | null>(null);
     const [result, setResult] = useState('all'), [appId, setAppId] = useState('all'), [risk, setRisk] = useState('all'), [ip, setIp] = useState('');
     useEffect(() => { setDetail(null); setResult('all'); setAppId('all'); setRisk('all'); setIp(''); setRange(null); }, [domain, type]);
-    if (session.realm === 'platform') return <FoundationAudit type={type}/>;
+    if (session.realm === 'platform') return <FoundationAudit type={type} domain={domain}/>;
     const allowed = accessibleAppIds(db, session);
     const visible = db.logs.filter(l => l.domain === domain && (session.role !== 'appmanager' || allowed.includes(l.appId)));
     const logs = visible.filter(l => l.type === type);

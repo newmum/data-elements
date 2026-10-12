@@ -24,7 +24,7 @@ export function Overview({ catalog = false }: { catalog?: boolean }) {
     return `${item.color} ${start}% ${cursor}%`;
   }).join(',');
   const recent = state.logs.slice(0, 4);
-  const recentCatalogs = [...cataloged].sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '')).slice(0, 6);
+  const recentCatalogs = cataloged;
 
   return <div className="ps-page">
     <Hero page={catalog ? 'catalog-overview' : 'overview'} actions={<Button type="primary" onClick={() => nav(catalog ? '/resource/catalog/entries/new' : '/resource/models?create=1')}>{catalog ? '编制资源目录' : '新建逻辑模型'}</Button>}/>
@@ -64,7 +64,7 @@ export function Overview({ catalog = false }: { catalog?: boolean }) {
       { name: '创建目录', note: '从技术快照编制业务资源目录', key: 'catalog-entries', path: '/resource/catalog/entries/new' },
       { name: '新建模型', note: '基于标准创建与复用业务模型', key: 'models', path: '/resource/models?create=1' },
     ].map(action => <button key={action.key} onClick={() => nav(action.path)}><span><PsIcon name={action.key}/></span><div><b>{action.name}</b><small>{action.note}</small></div><ArrowRightOutlined/></button>)}</div>
-    <PTable title="最近编目的目录" rows={recentCatalogs} onRefresh={refresh} emptyTitle="暂无已编目目录" emptyDescription="目录草稿补全来源和数据项后，将显示在这里。" columns={[
+    <PTable tableSource="catalogs" tableQuery={{cataloged:true}} title="最近编目的目录" rows={recentCatalogs} onRefresh={refresh} emptyTitle="暂无已编目目录" emptyDescription="目录草稿补全来源和数据项后，将显示在这里。" columns={[
       { title: '目录名称', key: 'name', width: 230, render: (_, entry) => <NameCell name={entry.draft.name} code={entry.draft.code}/> },
       { title: '提供部门', key: 'provider', render: (_, entry) => data.organizations.find(org => org.value === entry.draft.provider)?.label ?? entry.draft.provider },
       { title: '业务分类', key: 'cat', render: (_, entry) => state.classifications.find(item => item.id === entry.draft.classificationId)?.name ?? '未分类' },

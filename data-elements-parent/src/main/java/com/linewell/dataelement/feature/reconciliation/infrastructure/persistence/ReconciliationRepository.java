@@ -1,6 +1,7 @@
 package com.linewell.dataelement.feature.reconciliation.infrastructure.persistence;
 
 import com.linewell.dataelement.platform.persistence.id.NumericId;
+import com.linewell.dataelement.platform.persistence.ServerTableOrder;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -52,11 +53,15 @@ public class ReconciliationRepository {
             int page,
             int size
     ) {
+        return policyPage(tenantId, keyword, page, size,null,null);
+    }
+    public Map<String, Object> policyPage(String tenantId, String keyword, int page, int size,String sortField,String sortDir) {
+        String orderBy = ServerTableOrder.sql(sortField,sortDir,Map.ofEntries(Map.entry("policy_name","p.policy_name"),Map.entry("policyName","p.policy_name"),Map.entry("updated_time","p.updated_time"),Map.entry("created_time","p.created_time"),Map.entry("consistency_rate","r.consistency_rate"),Map.entry("last_finished_at","r.finished_at"),Map.entry("last_diff_count","r.diff_count")),"updated_time","desc","p.tid");
         String search = keyword == null ? "" : keyword.trim();
         IPage<Map<String, Object>> result = controlMapper.selectPolicyPage(
                 Page.of(page, size),
                 tenantId,
-                search
+                search,orderBy
         );
         return page(result.getRecords(), result.getTotal(), page, size);
     }
@@ -68,13 +73,17 @@ public class ReconciliationRepository {
             int page,
             int size
     ) {
+        return runPage(tenantId, status, keyword, page, size,null,null);
+    }
+    public Map<String, Object> runPage(String tenantId, String status, String keyword, int page, int size,String sortField,String sortDir) {
+        String orderBy = ServerTableOrder.sql(sortField,sortDir,Map.ofEntries(Map.entry("policy_name","p.policy_name"),Map.entry("policyName","p.policy_name"),Map.entry("source_count","r.source_count"),Map.entry("target_count","r.target_count"),Map.entry("diff_count","r.diff_count"),Map.entry("matched_count","r.matched_count"),Map.entry("consistency_rate","r.consistency_rate"),Map.entry("started_at","COALESCE(r.started_at,r.created_time)"),Map.entry("finished_at","r.finished_at"),Map.entry("created_time","r.created_time"),Map.entry("updated_time","r.updated_time")),"created_time","desc","r.tid");
         String state = status == null ? "" : status.trim();
         String search = keyword == null ? "" : keyword.trim();
         IPage<Map<String, Object>> result = controlMapper.selectRunPage(
                 Page.of(page, size),
                 tenantId,
                 state,
-                search
+                search,orderBy
         );
         return page(result.getRecords(), result.getTotal(), page, size);
     }

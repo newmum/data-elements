@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Drawer, Button, Tag, Table, Space, Empty, Tooltip } from 'antd';
+import { useServerSort } from '../../components/serverSort';
+import { useEffect, useState } from 'react';
+import { Alert, Drawer, Button, Tag, Table, Space, Empty, Tooltip } from 'antd';
 import { LineChartOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { fetchPipelineStatus } from '@/api/pipelines';
+import { fetchProcessorStatusPage } from '@/api/pipelines';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { getNifiOverlayContainer } from './overlayContainer';
 import { useSessionRevision, useTokenReady } from '@/api/bridgeSession';
@@ -19,35 +20,6 @@ interface ProcessorStatRow {
   tasks: string;
 }
 
-function flatProcessors(status: any): ProcessorStatRow[] {
-  if (!status) return [];
-  const rows: ProcessorStatRow[] = [];
-  const walk = (pg: any) => {
-    if (!pg) return;
-    const procs = pg.processorStatusSnapshots ?? [];
-    for (const p of procs) {
-      const s = p.processorStatusSnapshot ?? p;
-      rows.push({
-        key: s.id,
-        name: s.name,
-        type: s.type ?? '',
-        state: s.runStatus ?? '',
-        flowFilesIn: s.input ?? '0',
-        flowFilesOut: s.output ?? '0',
-        bytesIn: s.read ?? '0 B',
-        bytesOut: s.written ?? '0 B',
-        tasks: s.tasks ?? '0',
-      });
-    }
-    const groups = pg.processGroupStatusSnapshots ?? [];
-    for (const g of groups) walk(g.processGroupStatusSnapshot ?? g);
-  };
-  // top-level: { processGroupStatus: { aggregateSnapshot: { ... } } }
-  const root = status?.processGroupStatus?.aggregateSnapshot ?? status?.aggregateSnapshot ?? status;
-  walk(root);
-  return rows;
-}
-
 const stateColor: Record<string, string> = {
   Running: 'green',
   Stopped: 'default',
@@ -60,6 +32,7 @@ export default function StatusDrawer(props: {
   onClose?: () => void;
   pipelineId?: string | null;
 } = {}) {
+  const [page,setPage]=useState(1),[size,setSize]=useState(20);const order=useServerSort(()=>setPage(1));
   const [internalOpen, setInternalOpen] = useState(false);
   const currentPipelineIdFromStore = useCanvasStore((s) => s.currentPipelineId);
 
@@ -78,12 +51,12 @@ export default function StatusDrawer(props: {
 
   const q = useQuery({
     enabled: tokenReady && open && !!currentPipelineId,
-    queryKey: ['pipeline-status', currentPipelineId, sessionRevision],
-    queryFn: () => fetchPipelineStatus(currentPipelineId!),
+    queryKey: ['pipeline-status-page', currentPipelineId, sessionRevision,page,size,order.sort],
+    queryFn: () => fetchProcessorStatusPage(currentPipelineId!,{page,size,...order.sort}),
     refetchInterval: open ? 4000 : false,
   });
 
-  const rows = useMemo(() => flatProcessors(q.data?.status), [q.data]);
+  const rows:ProcessorStatRow[]=q.data?.list||[];
 
   // Close drawer if pipeline pointer is cleared.
   useEffect(() => {
@@ -125,12 +98,13 @@ export default function StatusDrawer(props: {
         open={open}
         onClose={() => setOpen(false)}
       >
+        {q.error && <Alert type="error" showIcon message={q.error instanceof Error?q.error.message:"读取处理器状态失败"}/> }
         {rows.length === 0 ? (
           <Empty description={q.data?.deployed === false ? '尚未部署到 NiFi' : '暂无处理器'} />
         ) : (
           <Table
             size="small"
-            pagination={false}
+            rowKey="key" loading={q.isFetching} onChange={(_p,_f,sorter,extra)=>{if(extra.action==='sort')order.change(sorter);}} pagination={{current:page,pageSize:size,total:q.data?.total||0,showSizeChanger:true,pageSizeOptions:[20,50,100],onChange:(p,n)=>{setPage(p);setSize(n);}}}
             dataSource={rows}
             scroll={{ y: 240 }}
             columns={[
@@ -139,7 +113,7 @@ export default function StatusDrawer(props: {
                 title: '状态',
                 dataIndex: 'state',
                 width: 100,
-                render: (v) => <Tag color={stateColor[v] ?? 'default'}>{v}</Tag>,
+                render: (v:string) => <Tag color={stateColor[v] ?? 'default'}>{v}</Tag>,
               },
               { title: '输入', dataIndex: 'flowFilesIn', width: 120 },
               { title: '输出', dataIndex: 'flowFilesOut', width: 120 },
@@ -152,7 +126,7 @@ export default function StatusDrawer(props: {
                 ellipsis: true,
                 render: (v: string) => v.split('.').pop(),
               },
-            ]}
+            ].map(column=>({...column,key:column.dataIndex,sorter:column.dataIndex!=='state'&&column.dataIndex!=='type',sortOrder:order.sort.sortField===column.dataIndex?(order.sort.sortDir==='asc'?'ascend' as const:'descend' as const):null}))}
           />
         )}
       </Drawer>

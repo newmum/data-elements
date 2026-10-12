@@ -1,4 +1,5 @@
 import { platformApi, platformApiGet } from '../shared/platformApi';
+import type { ServerSort } from '../shared/serverSort';
 import { getSession, changed, type Row } from './api';
 import { listSources } from './datasources';
 import { organizationOptions, sourceOptions, type SourceOption } from './datasourceRegistrationApi';
@@ -50,17 +51,27 @@ export async function readCatalogScope(signal?:AbortSignal):Promise<{organizatio
  return {sources:sourceRows.map(r=>({tid:String(r.id),db_name:String(r.name||''),db_type:String(r.backendType||r.engine||''),org_id:String(r.orgId||''),org_name:String(r.orgName||''),app_id:String(r.appId||''),app_name:String(r.businessSystem||appNames.get(String(r.appId||''))||'')})),organizations:organizationOptions(orgs),applications};
 }
 export type CatalogTablesPage = {rows:LiveMetadataTable[];catalogs:{tid:string;catalogName:string;catalogNameEn:string;assetDesc:string;sourceTableId:string;dbId:string}[];total:number;page:number;size:number};
-export async function readCatalogTablesPage(sourceIds:string[]|undefined,kind:string|undefined,keyword:string,page:number,size:number,signal?:AbortSignal,tableId?:string):Promise<CatalogTablesPage>{
- const query={sourceIds:sourceIds?.join(','),kind,keyword,pageNo:page,pageSize:size,tableId};
+export async function readCatalogTablesPage(sourceIds:string[]|undefined,kind:string|undefined,keyword:string,page:number,size:number,signal?:AbortSignal,tableId?:string,sort:ServerSort={}):Promise<CatalogTablesPage>{
+ const query={sourceIds:sourceIds?.join(','),kind,keyword,pageNo:page,pageSize:size,tableId,...sort};
  const raw=await platformApiGet<Row>('/dwm/metadata-governance/tables/page',query,{signal});
  signal?.throwIfAborted();
  if(!Array.isArray(raw?.rows)||!Array.isArray(raw?.catalogs)||!Number.isFinite(Number(raw.total)))throw new Error('数据表分页返回格式不正确');
  return {rows:raw.rows.map((r:Row)=>snake(r) as LiveMetadataTable),catalogs:raw.catalogs.map((r:Row)=>{const c=snake(r);return {tid:String(c.tid),catalogName:String(c.catalog_name||''),catalogNameEn:String(c.catalog_name_en||''),assetDesc:String(c.asset_desc||''),sourceTableId:String(c.source_table_id||''),dbId:String(c.db_id||'')};}),total:Number(raw.total),page:Number(raw.pageNo||page),size:Number(raw.pageSize||size)};
 }
-export async function catalogTableColumns(tableId:string):Promise<Row[]>{
- const raw=await platformApiGet<unknown>('/dwm/metadata-governance/tables/columns',{tableId});
+export async function catalogTableColumns(tableId:string,sort:ServerSort={}):Promise<Row[]>{
+ const raw=await platformApiGet<unknown>('/dwm/metadata-governance/tables/columns',{tableId,...sort});
  if(!Array.isArray(raw))throw new Error('数据表字段返回格式不正确');
  return raw.map((r:Row)=>snake(r));
+}
+export async function catalogColumnsPage(tableId:string,page:number,size:number,sort:ServerSort={}):Promise<{list:Row[];total:number}>{
+ const raw=await platformApiGet<{list:Row[];total:number}>('/dwm/metadata-governance/tables/columns/page',{tableId,page,size,...sort});
+ if(!Array.isArray(raw.list))throw new Error('字段分页返回格式不正确');return {list:raw.list.map(r=>snake(r)),total:Number(raw.total)};
+}
+export async function catalogColumnsBatch(tableIds:string[]):Promise<Record<string,Row[]>>{
+ const ids=[...new Set(tableIds)];if(!ids.length||ids.length>100)throw new Error('每批请选择 1 至 100 张表');
+ const result=await platformApi<Record<string,Row[]>>('/dwm/metadata-governance/tables/columns/batch',{tableIds:ids});
+ if(Object.keys(result).some(id=>!ids.includes(id))||ids.some(id=>!Array.isArray(result[id])))throw new Error('字段批量结果不完整或超出请求范围');
+ return Object.fromEntries(ids.map(id=>[id,result[id].map(r=>snake(r))]));
 }
 export async function storedColumns(tableId:string):Promise<Row[]>{return (await readMetadata()).columns.filter(c=>c.table_id===tableId);}
 export async function previewMetadataRecords(tableId:string):Promise<Row[]>{const result=await platformApi<Row>('/dst/database/metadata/table/sample-data',{tableId,sampleSize:10},{timeoutMs:30000});const rows=result?.data??result?.rows??result?.items;if(!Array.isArray(rows))throw new Error('数据预览未返回有效记录集合');return rows.slice(0,10);}

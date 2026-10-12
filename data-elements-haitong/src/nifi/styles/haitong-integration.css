@@ -312,3 +312,23 @@ body.haitong-nifi-active {
 :root[data-theme='dark'] .nifi-workspace .ant-select-disabled .ant-select-selection-placeholder {
   color: var(--text-tertiary);
 }
+
+/* Task selection reuses the authorized chain; the graph owns the remaining viewport. */
+.nifi-workspace .canvas-workarea {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+.nifi-workspace .canvas-workarea__graph { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
+.nifi-workspace .coze-node.is-context { border-style: dashed; opacity: .8; }
+
+.nifi-workspace button.coze-toolbar__state { cursor: pointer; font: inherit; font-size: 12px; }
+.nifi-workspace .canvas-runtime-popover { max-width: calc(100vw - 32px); }
+.canvas-runtime-metrics { display: grid; grid-template-columns: repeat(3, minmax(70px, 1fr)); gap: 14px 24px; min-width: 280px; }
+.canvas-runtime-metrics div { display: flex; flex-direction: column; gap: 4px; }
+.canvas-runtime-metrics span { color: var(--text-secondary); font-size: 12px; }
+.canvas-runtime-metrics strong { color: var(--text-primary); font-size: 14px; }
+.canvas-runtime-metrics__warning { grid-column: 1 / -1; margin: 0; color: var(--status-warning); font-size: 12px; }

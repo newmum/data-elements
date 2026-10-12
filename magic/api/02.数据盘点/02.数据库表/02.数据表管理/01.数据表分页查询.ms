@@ -158,116 +158,70 @@ var matches = (item, condition) => {
     return textOf(actual) == textOf(expected)
 }
 
-// 先将精确的表/数据源范围下推到 MySQL，避免登记一张表时读取整个租户的治理配置。
-var requestedTableId = body?.tid
-var requestedSourceId = blank(body?.dbId) ? body?.datasourceId : body.dbId
-var tableRows = []
-if (!blank(requestedTableId)) {
-    tableRows = db.table('db_table_t').where().eq('tenant_id', tenantId)
-        .eq('is_del', 0).eq('tid', requestedTableId).select()
-} else if (!blank(requestedSourceId)) {
-    tableRows = db.select("""
-        SELECT * FROM db_table_t
-         WHERE tenant_id = #{tenantId} AND is_del = 0 AND datasource_id = #{requestedSourceId}
-         ORDER BY updated_time DESC, created_time DESC
-    """)
-} else {
-    tableRows = db.select("""
-        SELECT * FROM db_table_t
-         WHERE tenant_id = #{tenantId} AND is_del = 0
-         ORDER BY updated_time DESC, created_time DESC
-    """)
+// Sort and page the authorized, deduplicated source-table set in the database.
+import tableSort;
+import dataScope;
+import java.util.List;
+var whereSql=' WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t._row_rank=1';
+var scope=dataScope.resource('MENU:2081000000000000002');
+var scopeUserId=scope.userId;
+var scopeOrgIds=scope.organizationIds;
+if(scope.scope=='OWNER') {whereSql=whereSql+' AND d.created_by=#{scopeUserId}';}
+else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND d.org_id IN (#{scopeOrgIds})');}
+else if(scope.scope!='ALL') {exit 403,'数据范围无效';}
+var fields={tid:'t.tid',dbId:'t.datasource_id',datasourceId:'t.datasource_id',tableName:'t.table_name',
+    tableNameEn:'t.table_name',tableNameCn:'t.table_name_cn',tableComment:'t.table_comment',
+    appId:'d.app_id',orgId:'coalesce(t.org_id,d.org_id)',businessType:'t.business_type',
+    dataSourceType:'t.data_source_type',assetStatus:'t.asset_status',fieldCount:'t.field_count',
+    recordCount:'t.record_count',createdTime:'t.created_time',updatedTime:'t.updated_time',regTime:'t.reg_time'};
+var conditions=[];
+if(body?.conditions!=null) {conditions.addAll(body.conditions);}
+for(field in ['tid','dbId','datasourceId','businessType','dataSourceType','orgId','assetStatus']) {
+    if(!blank(body?.get(field))) {conditions.add({field:field,value:body.get(field),type:'match'});}
 }
-// 从 MySQL 业务表读取当前有效数据。
-var datasourceRows = db.select("""
-    SELECT tid, db_name, app_id, org_id
-      FROM db_datasource_t
-     WHERE is_del = 0
-""")
-var datasourceMap = {}
-for (source in datasourceRows) {
-    datasourceMap[firstValue(source, ['tid'])] = source
+var values={};
+for(i,condition in conditions) {
+    var field=condition?.field;
+    if(field=='assetType') {if(condition.value!='table') {whereSql=whereSql+' AND 1=0';};continue;}
+    if(fields.get(field)==null) {exit 400,'不支持的数据表筛选字段：'+field;}
+    var key='filter'+i;
+    var type=condition.type||'match';
+    values.put(key,condition.value);
+    if(type=='null') {whereSql=whereSql+' AND '+fields.get(field)+' IS NULL';}
+    else if(type=='in') {
+        if(!(condition.value instanceof List) || condition.value.size()>1000) {exit 400,'多值筛选最多 1000 项';}
+        whereSql=whereSql+(condition.value.size()==0?' AND 1=0':' AND '+fields.get(field)+' IN (#{values.'+key+'})');
+    } else if(type=='like') {
+        values.put(key,'%'+textOf(condition.value).replace('!','!!').replace('%','!%').replace('_','!_')+'%');
+        whereSql=whereSql+' AND '+fields.get(field)+" LIKE #{values."+key+"} ESCAPE '!'";
+    } else if(type=='match' || type=='eq') {whereSql=whereSql+' AND '+fields.get(field)+'=#{values.'+key+'}';}
+    else {exit 400,'不支持的数据表筛选方式：'+type;}
 }
-
-// 解析请求体并为可选参数设置默认值。
-var conditions = body == null || body.conditions == null ? [] : body.conditions
-for (field in ['tid', 'dbId', 'datasourceId', 'businessType', 'dataSourceType', 'orgId', 'assetStatus']) {
-    if (body != null && !blank(body[field])) {
-        conditions.add({ field: field, value: body[field], type: 'match' })
-    }
+var keyword=body?.keyword;
+if(!blank(keyword)) {
+    keyword='%'+textOf(keyword).replace('!','!!').replace('%','!%').replace('_','!_')+'%';
+    whereSql=whereSql+" AND (t.table_name LIKE #{keyword} ESCAPE '!' OR t.table_name_cn LIKE #{keyword} ESCAPE '!' OR t.table_comment LIKE #{keyword} ESCAPE '!')";
 }
-var keyword = body == null ? null : body.keyword
-var rows = []
-for (tableRow in tableRows) {
-    var item = tableData(tableRow)
-    var source = datasourceMap[item.datasourceId]
-    if (source != null) {
-        item.dbName = firstValue(source, ['dbName', 'db_name'])
-        item.appId = firstValue(source, ['appId', 'app_id'])
-        if (blank(item.orgId)) {
-            item.orgId = firstValue(source, ['orgId', 'org_id'])
-        }
-    }
-    var accepted = true
-    for (condition in conditions) {
-        if (!matches(item, condition)) {
-            accepted = false
-        }
-    }
-    if (accepted && !blank(keyword)) {
-        var searchText = lower(item.tableName) + ' ' + lower(item.tableNameCn) + ' ' + lower(item.tableComment)
-        accepted = searchText.indexOf(lower(keyword)) >= 0
-    }
-    if (accepted) {
-        rows.add(item)
-    }
-}
-
-var betterRow = (next, current) => {
-    if (current == null) { return true }
-    var nextFields = next.fieldCount == null ? 0 : next.fieldCount::int
-    var currentFields = current.fieldCount == null ? 0 : current.fieldCount::int
-    if (nextFields != currentFields) { return nextFields > currentFields }
-    var nextAnnotated = next.annotated == null ? 0 : next.annotated::int
-    var currentAnnotated = current.annotated == null ? 0 : current.annotated::int
-    return nextAnnotated > currentAnnotated
-}
-var rowByKey = {}
-var dedupedRows = []
-for (item in rows) {
-    var key = firstValue(item, ['datasourceId', 'dbId']) + '@@' + lower(item.tableName)
-    if (blank(item.tableName) || blank(firstValue(item, ['datasourceId', 'dbId']))) {
-        dedupedRows.add(item)
-    } else if (rowByKey[key] == null) {
-        rowByKey[key] = item
-        dedupedRows.add(item)
-    } else if (betterRow(item, rowByKey[key])) {
-        var oldItem = rowByKey[key]
-        rowByKey[key] = item
-        for (idx, existing in dedupedRows) { if (existing.tid == oldItem.tid) { dedupedRows[idx] = item } }
-    }
-}
-rows = dedupedRows
-
-var pageNum = body == null || body.pageNum == null ? 1 : body.pageNum::int
-var pageSize = body == null || body.pageSize == null ? 20 : body.pageSize::int
-if (pageNum < 1) {
-    pageNum = 1
-}
-if (pageSize < 1) {
-    pageSize = 20
-}
-var offset = (pageNum - 1) * pageSize
-var pageRows = []
-for (index, item in rows) {
-    if (index >= offset && index < offset + pageSize) {
-        pageRows.add(item)
-    }
-}
-// 返回当前业务分支的标准结果。
-return {
-    pageNum: pageNum,
-    pageSize: pageSize,
-    total: rows.size(),
-    list: pageRows
-}
+var fromSql="""
+ FROM (SELECT original.*,ROW_NUMBER() OVER (
+    PARTITION BY original.tenant_id,original.datasource_id,
+        CASE WHEN original.table_name IS NULL OR trim(original.table_name)='' THEN original.tid ELSE lower(original.table_name) END
+    ORDER BY coalesce(original.field_count,0) DESC,coalesce(original.annotated,0) DESC,original.updated_time DESC,original.tid ASC
+ ) _row_rank FROM db_table_t original WHERE original.tenant_id=#{tenantId} AND original.is_del=0) t
+ JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0
+""";
+var pageNum=Math.max(1,body?.pageNum::int(1));
+var pageSize=Math.min(100,Math.max(1,body?.pageSize::int(20)));
+var offset=(pageNum-1)*pageSize;
+var allowed={tableName:"coalesce(nullif(t.table_name_cn,''),nullif(t.table_comment,''),t.table_name)",tableNameEn:'t.table_name',
+    tableNameCn:'t.table_name_cn',name:"coalesce(nullif(t.table_name_cn,''),nullif(t.table_comment,''),t.table_name)",
+    fieldCount:'t.field_count',recordCount:'t.record_count',totalSizeBytes:'t.total_size_bytes',
+    ddlCreatTime:'t.ddl_create_time',ddlCreateTime:'t.ddl_create_time',ddlUpdateTime:'t.ddl_update_time',
+    regTime:'t.reg_time',createdTime:'t.created_time',updatedTime:'t.updated_time'};
+var field=tableSort.field(body,allowed,'updatedTime');
+var direction=tableSort.direction(body);
+var total=db.selectOne('SELECT COUNT(*) total'+fromSql+whereSql).total;
+var rows=db.select('SELECT t.*,d.db_name,d.app_id'+fromSql+whereSql+' ORDER BY CASE WHEN '+field+' IS NULL THEN 1 ELSE 0 END ASC,'+field+' '+direction+',t.tid ASC LIMIT #{pageSize} OFFSET #{offset}');
+return {pageNum:pageNum,pageSize:pageSize,total:total,list:rows.map(row=>{
+    var item=tableData(row);item.dbName=rowValue(row,['dbName','db_name']);item.appId=rowValue(row,['appId','app_id']);return item;
+})};

@@ -71,7 +71,7 @@
       empty-title="暂无质检任务"
       empty-description="新建任务后，先预检再启用或手动执行"
     >
-      <el-table-column label="任务名称" min-width="230">
+      <el-table-column prop="task_name" sortable="custom" label="任务名称" min-width="230">
         <template #default="{ row }">
           <button class="name-link" type="button" @click="openTask(row)">{{ row.task_name || row.tid }}</button>
           <span class="subline mono">{{ row.task_code }}</span>
@@ -86,7 +86,7 @@
       <el-table-column label="执行方式" width="110" align="center">
         <template #default="{ row }">{{ row.trigger_mode === 'CRON' ? '定时' : '手动' }}</template>
       </el-table-column>
-      <el-table-column label="分片" width="90" align="right">
+      <el-table-column prop="shard_count" sortable="custom" label="分片" width="90" align="right">
         <template #default="{ row }">{{ row.shard_count }} 片</template>
       </el-table-column>
       <el-table-column label="预检" width="110" align="center">
@@ -126,28 +126,28 @@
       empty-title="暂无执行记录"
       empty-description="质检实例由手动操作或定时策略异步创建"
     >
-      <el-table-column label="任务 / 实例" min-width="245">
+      <el-table-column prop="task_name" sortable="custom" label="任务 / 实例" min-width="245">
         <template #default="{ row }"><button class="name-link" type="button" @click="openRun(row)">{{ row.task_name }}</button><span class="subline mono">{{ row.tid }}</span></template>
       </el-table-column>
       <el-table-column label="质检表" min-width="200">
         <template #default="{ row }"><strong class="object-name">{{ row.table_name_cn || row.table_name || '历史关联已失效' }}</strong><span class="subline">{{ row.datasource_name || '原数据源不可用' }}</span></template>
       </el-table-column>
       <el-table-column label="状态" width="135" align="center"><template #default="{ row }"><el-tag :type="runType(row.status)" effect="light">{{ runText(row.status) }}</el-tag></template></el-table-column>
-      <el-table-column label="数据行" width="120" align="right"><template #default="{ row }">{{ formatNumber(row.row_count) }}</template></el-table-column>
-      <el-table-column label="异常数" width="115" align="right"><template #default="{ row }"><span :class="{ danger: Number(row.violation_count) > 0 }">{{ formatNumber(row.violation_count) }}</span></template></el-table-column>
-      <el-table-column label="质量得分" width="115" align="right"><template #default="{ row }"><strong>{{ evaluatedScore(row) }}</strong></template></el-table-column>
-      <el-table-column label="开始时间" width="175"><template #default="{ row }">{{ formatTime(row.started_at || row.created_time) }}</template></el-table-column>
+      <el-table-column prop="row_count" sortable="custom" label="数据行" width="120" align="right"><template #default="{ row }">{{ formatNumber(row.row_count) }}</template></el-table-column>
+      <el-table-column prop="violation_count" sortable="custom" label="异常数" width="115" align="right"><template #default="{ row }"><span :class="{ danger: Number(row.violation_count) > 0 }">{{ formatNumber(row.violation_count) }}</span></template></el-table-column>
+      <el-table-column prop="quality_score" sortable="custom" label="质量得分" width="115" align="right"><template #default="{ row }"><strong>{{ evaluatedScore(row) }}</strong></template></el-table-column>
+      <el-table-column prop="started_at" sortable="custom" label="开始时间" width="175"><template #default="{ row }">{{ formatTime(row.started_at || row.created_time) }}</template></el-table-column>
       <el-table-column label="操作" width="130" fixed="right" align="center" :show-overflow-tooltip="false">
         <template #default="{ row }"><el-button type="primary" link @click="openRun(row)">详情</el-button><el-button v-if="isRunning(row.status)" type="danger" link @click="cancelRun(row)">取消</el-button></template>
       </el-table-column>
     </data-table>
 
     <data-table v-else ref="orderTableRef" :columns="[]" :data="fetchOrders" row-key="tid" height="100%" flex-type="flex-[1_1_200px]" :show-search="false" :show-reset="false" empty-title="暂无整改工单" empty-description="从执行详情的真实问题样例创建工单，可分派、整改、复检和关闭">
-      <el-table-column prop="title" label="整改工单" min-width="240" />
+      <el-table-column prop="title" sortable="custom" label="整改工单" min-width="240" />
       <el-table-column prop="detail" label="问题说明" min-width="220" show-overflow-tooltip />
       <el-table-column label="责任组织" min-width="180"><template #default="{row}">{{ organizations.find(item=>item.tid===row.assignee_org_id)?.name || row.assignee_org_id || '待分派' }}</template></el-table-column>
       <el-table-column label="状态" width="120"><template #default="{row}"><el-tag>{{ orderStatus(row.status) }}</el-tag></template></el-table-column>
-      <el-table-column label="更新时间" width="175"><template #default="{row}">{{ formatTime(row.updated_time) }}</template></el-table-column>
+      <el-table-column prop="updated_time" sortable="custom" label="更新时间" width="175"><template #default="{row}">{{ formatTime(row.updated_time) }}</template></el-table-column>
       <el-table-column label="操作" width="100" fixed="right" align="center"><template #default="{row}"><el-button type="primary" link @click="openOrder(row)">{{ row.status === 'CLOSED' ? '查看' : '处理' }}</el-button></template></el-table-column>
     </data-table>
     <el-drawer v-model="orderVisible" title="质量整改工单" size="620px" destroy-on-close>
@@ -275,8 +275,8 @@ const numericColumns=computed(()=>columns.value.filter(item=>/int|number|decimal
 const record=value=>{if(!value||typeof value!=="object"||Array.isArray(value))return value;const out={...value};for(const [key,item] of Object.entries(value)){const snake=key.replace(/[A-Z]/g,c=>"_"+c.toLowerCase());if(!(snake in out))out[snake]=item}for(const key of ["rules","metrics","shards"])if(Array.isArray(out[key]))out[key]=out[key].map(record);return out};
 const normalize=value=>{const data=value?.data??value;return Array.isArray(data)?data.map(record):record(data)||{}};
 const normalizePage=value=>{const data=normalize(value);const nested=Array.isArray(data.list)?data:data.list||{};return{list:(Array.isArray(nested.list)?nested.list:[]).map(record),total:Number(data.total??nested.total??0)}};
-const fetchTasks=async({pageNo=1,pageSize=20}={})=>normalizePage(await $common.post(API.taskPage,{page:pageNo,size:pageSize,keyword:keyword.value,kind:taskKind.value}));
-const fetchRuns=async({pageNo=1,pageSize=20}={})=>normalizePage(await $common.post(API.runPage,{page:pageNo,size:pageSize,keyword:keyword.value,status:runStatus.value,kind:taskKind.value}));
+const fetchTasks=async({pageNo=1,pageSize=20,sortField,sortDir}={})=>normalizePage(await $common.post(API.taskPage,{page:pageNo,size:pageSize,sortField,sortDir,keyword:keyword.value,kind:taskKind.value}));
+const fetchRuns=async({pageNo=1,pageSize=20,sortField,sortDir}={})=>normalizePage(await $common.post(API.runPage,{page:pageNo,size:pageSize,sortField,sortDir,keyword:keyword.value,status:runStatus.value,kind:taskKind.value}));
 const loadSummary=async()=>Object.assign(summary,normalize(await $common.post(API.summary,{})));
 const refreshActive=()=>{(activeView.value==="task"?taskTableRef:activeView.value==="run"?runTableRef:orderTableRef).value?.refresh?.(true);loadSummary().catch(error=>ElMessage.error(error.message||"质量概览读取失败"))};
 const switchView=(view,status="")=>{activeView.value=view;runStatus.value=status;setTimeout(refreshActive)};
@@ -332,7 +332,7 @@ const evaluatedScore=row=>Number(row.checked_count)>0&&row.task_kind!=='PROFILE'
 const orderTableRef=ref(),orderVisible=ref(false),selectedOrder=ref({}),orderOwner=ref(''),orderOpinion=ref(''),orderBusy=ref(false),creatingIssue=ref(''),organizations=ref([]),orderFilter=ref('');
 const orderStatusOptions=[{label:'待分派',value:'OPEN'},{label:'整改中',value:'IN_PROGRESS'},{label:'待复检',value:'PENDING_RECHECK'},{label:'已关闭',value:'CLOSED'}];
 const orderStatus=value=>({OPEN:'待分派',ASSIGNED:'已分派',IN_PROGRESS:'整改中',PENDING_RECHECK:'待复检',CLOSED:'已关闭'}[value]||value);
-const fetchOrders=async({pageNo=1,pageSize=20}={})=>{const [result,orgs]=await Promise.all([$common.post('/dwm/quality/workorders/page',{page:pageNo,size:pageSize,status:orderFilter.value}),$common.post('/dwm/quality/options/organizations',{})]);organizations.value=normalize(orgs);return normalizePage(result)};
+const fetchOrders=async({pageNo=1,pageSize=20,sortField,sortDir}={})=>{const [result,orgs]=await Promise.all([$common.post('/dwm/quality/workorders/page',{page:pageNo,size:pageSize,status:orderFilter.value,sortField,sortDir}),$common.post('/dwm/quality/options/organizations',{})]);organizations.value=normalize(orgs);return normalizePage(result)};
 const openOrder=async row=>{organizations.value=normalize(await $common.post('/dwm/quality/options/organizations',{}));selectedOrder.value=row;orderOwner.value=row.assignee_org_id||'';orderOpinion.value='';orderVisible.value=true};
 const createOrder=async row=>{if(creatingIssue.value)return;creatingIssue.value=row.tid;try{await $common.post('/dwm/quality/workorders/create',{issueId:row.tid});ElMessage.success('已创建或关联整改工单，请在整改工单视图处理');await loadIssues()}finally{creatingIssue.value=''}};
 const transitionOrder=async action=>{if(orderBusy.value)return;if(action==='START'&&!orderOwner.value){ElMessage.warning('请选择责任组织');return}if(action!=='START'&&!orderOpinion.value.trim()){ElMessage.warning('请填写整改或复检说明');return}orderBusy.value=true;try{await $common.post('/dwm/quality/workorders/transition',{orderId:selectedOrder.value.tid,action,assigneeOrgId:orderOwner.value,opinion:orderOpinion.value.trim()});ElMessage.success('工单与问题状态已同步');orderVisible.value=false;refreshActive()}finally{orderBusy.value=false}};

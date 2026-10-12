@@ -1,3 +1,4 @@
+import type { ServerSort } from '../components/serverSort';
 import { asPage, type PageResult } from './integrationPlatformService';
 import { platformApi } from './platformApi';
 
@@ -20,6 +21,7 @@ export type MultiTableItem = {
 };
 
 export type MultiTableGroup = {
+  tableCount:number; runningCount:number; errorCount:number;
   groupId: string;
   groupName: string;
   createdBy?: string;
@@ -41,14 +43,15 @@ export type MultiTableCandidate = {
 };
 
 export const multiTableService = {
-  async candidates(query: { page?: number; size?: number; keyword?: string } = {}): Promise<PageResult<MultiTableCandidate>> {
+  async candidates(query: { page?: number; size?: number; keyword?: string } & ServerSort = {}): Promise<PageResult<MultiTableCandidate>> {
     return asPage<MultiTableCandidate>(await platformApi('/ods/task/multi/candidates', {
-      pageNum: query.page || 1, pageSize: query.size || 10, keyword: query.keyword || '',
+      pageNum: query.page || 1, pageSize: query.size || 10, keyword: query.keyword || '',sortField:query.sortField,sortDir:query.sortDir,
     }));
   },
-  async page(query: { page?: number; size?: number; keyword?: string } = {}): Promise<PageResult<MultiTableGroup>> {
+  async page(query: { page?: number; size?: number; keyword?: string; itemSortField?:string; itemSortDir?:string } & ServerSort = {}): Promise<PageResult<MultiTableGroup>> {
     const result = await platformApi<unknown>('/ods/task/multi/page', {
-      pageNum: query.page || 1, pageSize: query.size || 20, keyword: query.keyword || '',
+      itemSortField:query.itemSortField,itemSortDir:query.itemSortDir,
+      pageNum: query.page || 1, pageSize: query.size || 20, keyword: query.keyword || '',sortField:query.sortField,sortDir:query.sortDir,
     });
     return asPage<MultiTableGroup>(result);
   },

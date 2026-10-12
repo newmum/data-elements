@@ -1,3 +1,4 @@
+import type { ServerSort } from '../components/serverSort';
 import { platformApi } from './platformApi';
 
 export type BatchItemStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
@@ -32,7 +33,7 @@ const call = <T>(action: string, body: Record<string, unknown> = {}) =>
 
 export const batchJobService = {
   list: async () => (await call<{ jobs: BatchJob[] }>('list')).jobs,
-  detail: (jobId: string) => call<BatchJobDetail>('detail', { jobId }),
+  detail: (jobId: string, sort:ServerSort = {}) => call<BatchJobDetail>('detail', { jobId,...sort }),
   create: (request: BatchCreateRequest) => call<BatchJobDetail>('create', request),
   claim: (jobId: string) => call<BatchClaim>('claim', { jobId }),
   complete: (jobId: string, itemId: string, leaseToken: string, result: {

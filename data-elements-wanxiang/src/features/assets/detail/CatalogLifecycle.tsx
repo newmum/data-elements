@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useServerSort } from '../../../shared/serverSort';
 import { Alert, App, Button, Checkbox, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Skeleton, Space, Table, Tag, TreeSelect } from 'antd';
 import { DeleteOutlined, LinkOutlined, PlusOutlined, SafetyCertificateOutlined, SendOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -15,35 +16,49 @@ function departmentTree(options: SourceOption[]): { value: string; title: string
   return options.flatMap(option => option.value === 'ROOT' ? departmentTree(option.children || []) : [{ value: option.value, title: option.label, children: departmentTree(option.children || []) }]);
 }
 
-async function allCatalogItems(id: string): Promise<DataItem[]> {
-  const first = await assetsApi.get<ObjectDetail>(`/objects/CATALOG/${encodeURIComponent(id)}`, { fieldsPage: 1, fieldsPageSize: 100 });
-  const items = [...first.details.items || []]; const total = first.details.itemPage?.total ?? items.length;
-  for (let page = 2; items.length < total; page++) {
-    const next = await assetsApi.get<ObjectDetail>(`/objects/CATALOG/${encodeURIComponent(id)}`, { fieldsPage: page, fieldsPageSize: 100 });
-    const chunk = next.details.items || []; const seen = new Set(items.map(item => item.id || item.code)); if (!chunk.length || chunk.some(item => seen.has(item.id || item.code))) throw new Error('目录数据项未完整读取，请刷新后重试'); items.push(...chunk);
-  }
-  return items;
+type MappingChoice={id:string;code:string;name:string};
+function mappingChoices(target:ObjectDetail,kind:string):MappingChoice[] {
+  return kind==='API'?(target.details.parameters||[]).filter(item=>item.location==='RESPONSE').map(item=>({id:'',code:item.name,name:item.description||item.name}))
+    :(target.details.fields||[]).map(item=>({id:item.id||'',code:item.code,name:item.name}));
 }
-
 function MappingEditor({ attachment, catalogId, onClose, onSave }: { attachment: Attachment; catalogId: string; onClose: () => void; onSave: (mappings: ResourceMapping[]) => void }) {
-  const [mappings, setMappings] = useState(attachment.mappings || []);
-  const query = useAssetQuery(`attachment-map:${catalogId}:${attachmentKey(attachment)}`, async () => {
-    const [catalog, target] = await Promise.all([allCatalogItems(catalogId), assetsApi.get<ObjectDetail>(`/objects/${attachment.resource.kind}/${encodeURIComponent(attachment.resource.id)}`, { fieldsPage: 1, fieldsPageSize: 100 })]);
-    const fields = [...target.details.fields || []]; const total = target.details.fieldPage?.total ?? fields.length;
-    for (let page = 2; fields.length < total; page++) { const next = await assetsApi.get<ObjectDetail>(`/objects/${attachment.resource.kind}/${encodeURIComponent(attachment.resource.id)}`, { fieldsPage: page, fieldsPageSize: 100 }); const chunk = next.details.fields || []; const seen = new Set(fields.map(item => item.id || item.code)); if (!chunk.length || chunk.some(item => seen.has(item.id || item.code))) throw new Error('资源字段未完整读取，请刷新后重试'); fields.push(...chunk); }
-    const choices = attachment.resource.kind === 'API' ? (target.details.parameters || []).filter(item => item.location === 'RESPONSE').map(item => ({ id: '', code: item.name, name: item.description || item.name })) : fields.map(item => ({ id: item.id || '', code: item.code, name: item.name }));
-    return { catalog, choices };
-  });
-  const assign = (itemId: string, path?: string) => {
-    const field = query.data?.choices.find(choice => choice.code === path);
-    setMappings(previous => [...previous.filter(mapping => mapping.catalogItemId !== itemId), ...(field ? [{ catalogItemId: itemId, ...(field.id ? { resourceFieldId: field.id } : {}), resourceFieldPath: field.code, mappingKind: 'DIRECT' as const, mappingVersion: 1 }] : [])]);
+  const {message}=App.useApp();
+  const [mappings,setMappings]=useState(attachment.mappings||[]),[page,setPage]=useState(1),[size,setSize]=useState(20);
+  const [search,setSearch]=useState(''),[keyword,setKeyword]=useState(''),[matching,setMatching]=useState(false);
+  const order=useServerSort(()=>setPage(1));
+  useEffect(()=>{const timer=setTimeout(()=>setKeyword(search.trim()),250);return()=>clearTimeout(timer);},[search]);
+  const targetPath=`/objects/${attachment.resource.kind}/${encodeURIComponent(attachment.resource.id)}`;
+  const catalog=useAssetQuery(`attachment-catalog:${catalogId}:${page}:${size}:${JSON.stringify(order.sort)}`,()=>assetsApi.get<ObjectDetail>(`/objects/CATALOG/${encodeURIComponent(catalogId)}`,{
+    fieldsPage:page,fieldsPageSize:size,fieldsSortField:order.sort.sortField,fieldsSortDir:order.sort.sortDir}));
+  const target=useAssetQuery(`attachment-choices:${attachmentKey(attachment)}:${keyword}`,()=>assetsApi.get<ObjectDetail>(targetPath,{
+    fieldsPage:1,fieldsPageSize:100,parameterPage:1,parameterSize:100,parameterScope:'RESPONSE',fieldsQuery:keyword}));
+  const rows=catalog.data?.details.items||[],choices=target.data?mappingChoices(target.data,attachment.resource.kind):[];
+  const assign=(itemId:string,path?:string)=>{
+    const field=choices.find(choice=>choice.code===path);
+    setMappings(previous=>[...previous.filter(mapping=>mapping.catalogItemId!==itemId),...(field?[{catalogItemId:itemId,...(field.id?{resourceFieldId:field.id}:{}),resourceFieldPath:field.code,mappingKind:'DIRECT' as const,mappingVersion:1}]:[])]);
   };
-  return <Modal open width={850} title={`数据项映射 · ${attachment.resource.name}`} onCancel={onClose} onOk={() => onSave(mappings)} okText="保存映射" cancelText="取消" okButtonProps={{ disabled: query.loading || Boolean(query.error) }}>
-    <AssetError error={query.error} retry={query.refresh}/><div className="hy-lifecycle-toolbar"><span>{query.data?.catalog.length ?? 0} 个目录数据项</span><Button disabled={!query.data} onClick={() => { const data = query.data; if (!data) return; const generated: ResourceMapping[] = []; for (const item of data.catalog) { const matches = data.choices.filter(field => field.code.toLowerCase() === item.code.toLowerCase()); if (item.id && matches.length === 1) generated.push({ catalogItemId: item.id, ...(matches[0].id ? { resourceFieldId: matches[0].id } : {}), resourceFieldPath: matches[0].code, mappingKind: 'DIRECT', mappingVersion: 1 }); } setMappings(generated); }}>按英文代码匹配</Button></div>
-    <Table<DataItem> className="hy-asset-table" rowKey={item => item.id || item.code} dataSource={query.data?.catalog || []} loading={query.loading} tableLayout="fixed" pagination={{ pageSize: 10, showSizeChanger: false }} scroll={{ x: 650 }} columns={[
-      { title: '目录数据项', width: 220, ellipsis: true, render: (_value, item) => <span title={`${item.name} · ${item.code}`}>{item.name}<small className="hy-name-code">{item.code}</small></span> },
-      { title: '类型 / 长度', width: 145, ellipsis: true, render: (_value, item) => dataTypeLabel(item) },
-      { title: '资源字段', width: 265, render: (_value, item) => <Select style={{ width: '100%' }} value={mappings.find(mapping => mapping.catalogItemId === item.id)?.resourceFieldPath} disabled={!item.id} allowClear showSearch optionFilterProp="label" placeholder="选择关联字段" options={query.data?.choices.map(field => ({ value: field.code, label: `${field.name} · ${field.code}` }))} onChange={path => assign(item.id || '', path)}/> },
+  const match=async()=>{
+    setMatching(true);
+    try {
+      const codes=[...new Set(rows.map(item=>item.code).filter(Boolean))];if(!codes.length)return;
+      const result=await assetsApi.get<ObjectDetail>(targetPath,{fieldsPage:1,fieldsPageSize:100,parameterPage:1,parameterSize:100,parameterScope:'RESPONSE',fieldsCodes:JSON.stringify(codes)});
+      const options=mappingChoices(result,attachment.resource.kind),total=attachment.resource.kind==='API'?result.details.parameterPage?.total:result.details.fieldPage?.total;
+      if((total||0)>100)throw new Error('匹配结果超过 100 个字段，请减少当前页条数后重试。');
+      const generated:ResourceMapping[]=[];
+      for(const item of rows){const matches=options.filter(field=>field.code.toLowerCase()===item.code.toLowerCase());if(item.id&&matches.length===1)generated.push({catalogItemId:item.id,...(matches[0].id?{resourceFieldId:matches[0].id}:{}),resourceFieldPath:matches[0].code,mappingKind:'DIRECT',mappingVersion:1});}
+      const currentIds=new Set(generated.map(mapping=>mapping.catalogItemId));setMappings(previous=>[...previous.filter(mapping=>!currentIds.has(mapping.catalogItemId)),...generated]);
+      message.success(`当前页已匹配 ${generated.length} 个数据项`);
+    }catch(cause){message.error(cause instanceof Error?cause.message:'字段匹配失败');}finally{setMatching(false);}
+  };
+  return <Modal open width={850} title={`数据项映射 · ${attachment.resource.name}`} onCancel={onClose} onOk={()=>onSave(mappings)} okText="保存映射" cancelText="取消" okButtonProps={{disabled:catalog.loading||matching||Boolean(catalog.error)}}>
+    <AssetError error={catalog.error||target.error} retry={()=>{catalog.refresh();target.refresh();}}/>
+    <div className="hy-lifecycle-toolbar"><span>{catalog.data?.details.itemPage?.total??0} 个目录数据项</span><Button disabled={!rows.length} loading={matching} onClick={()=>void match()}>按英文代码匹配当前页</Button></div>
+    <Table<DataItem> className="hy-asset-table" rowKey={item=>item.id||item.code} dataSource={rows} loading={catalog.loading} tableLayout="fixed"
+      onChange={(_page,_filters,sorter,extra)=>{if(extra.action==='sort')order.change(sorter);}}
+      pagination={{current:page,pageSize:size,total:catalog.data?.details.itemPage?.total||0,showSizeChanger:true,pageSizeOptions:[20,50,100],onChange:(next,amount)=>{setPage(amount===size?next:1);setSize(amount);}}} scroll={{x:650}} columns={[
+      {title:'目录数据项',...order.column('name'),width:220,ellipsis:true,render:(_value,item)=><span title={`${item.name} · ${item.code}`}>{item.name}<small className="hy-name-code">{item.code}</small></span>},
+      {title:'类型 / 长度',...order.column('length'),width:145,ellipsis:true,render:(_value,item)=>dataTypeLabel(item)},
+      {title:'资源字段',width:265,render:(_value,item)=><Select style={{width:'100%'}} value={mappings.find(mapping=>mapping.catalogItemId===item.id)?.resourceFieldPath} disabled={!item.id} allowClear showSearch filterOption={false} onSearch={setSearch} loading={target.loading} placeholder="搜索关联字段" options={choices.map(field=>({value:field.code,label:`${field.name} · ${field.code}`}))} onChange={path=>assign(item.id||'',path)}/>},
     ]}/>
   </Modal>;
 }
@@ -108,7 +123,8 @@ export function CatalogLifecycle({ mode, detail, refresh }: { mode: 'attachments
   const [form] = Form.useForm(); const operation = useRef(assetOperation()); const id = detail.summary.object.id;
   const visibility = Form.useWatch(['sharingPolicy', 'visibility'], form);
   const departments = useAssetQuery(`publication-departments:${createOpen}`, () => createOpen ? datasourceRegistrationApi.choices().then(value => value.organizations) : Promise.resolve(null));
-  const versions = useAssetQuery(`catalog-versions:${id}:${page}:${mode}`, signal => mode === 'versions' ? assetsApi.get<VersionPage>(`/catalogs/${encodeURIComponent(id)}/versions`, { pageNo: page, pageSize: 10, sortBy: 'createdAt', sortOrder: 'desc' }, { signal }) : Promise.resolve(null));
+  const sorting=useServerSort(()=>setPage(1));
+  const versions = useAssetQuery(`catalog-versions:${id}:${page}:${mode}:${JSON.stringify(sorting.sort)}`, signal => mode === 'versions' ? assetsApi.get<VersionPage>(`/catalogs/${encodeURIComponent(id)}/versions`, { pageNo: page, pageSize: 10, sortBy: sorting.sort.sortField||'createdAt', sortOrder: sorting.sort.sortDir||'desc' }, { signal }) : Promise.resolve(null));
   useEffect(() => { if (createOpen) form.setFieldsValue({ changeReason: '', sharingPolicy: { visibility: 'DEPARTMENT', shareType: 'CONDITIONAL', previewMode: 'NONE', maxUseDays: 365, ...(detail.details.sharingPolicy && typeof detail.details.sharingPolicy === 'object' ? detail.details.sharingPolicy : {}) } }); }, [createOpen, form, detail.details.sharingPolicy]);
   const create = async () => {
     if (busy) return; let values: { changeReason: string; sharingPolicy: SharingPolicy }; try { values = await form.validateFields(); } catch { return; } setBusy(true); setError('');
@@ -123,12 +139,12 @@ export function CatalogLifecycle({ mode, detail, refresh }: { mode: 'attachments
     finally { setBusy(false); }
   };
   if (mode === 'attachments') return <><div className="hy-lifecycle-toolbar"><span>{detail.details.attachments?.length || 0} 项资源</span>{canManage(detail) && <Button icon={<LinkOutlined/>} type="primary" onClick={() => setOpenAttachments(true)}>管理挂接</Button>}</div><Table<Attachment> className="hy-asset-table" rowKey={attachmentKey} tableLayout="fixed" dataSource={(detail.details.attachments || []) as Attachment[]} scroll={{ x: 690 }} columns={[{ title: '资源名称', width: 280, ellipsis: true, render: (_value, item) => <AssetName name={item.resource.name} code={item.resource.code} icon={assetIcon(item.resource.kind)} onClick={() => navigate(assetDetailPath(item.resource))}/> }, { title: '用途', width: 105, render: (_value, item) => roleLabel[item.bindingRole] }, { title: '交付方式', width: 115, render: (_value, item) => item.channel ? channelLabel[item.channel] : '—' }, { title: '资源状态', width: 110, render: (_value, item) => <AssetStatus value={item.resourceAvailability || 'AVAILABLE'}/> }, { title: '操作', width: 100, align: 'center', className: 'wx-action-column', fixed: 'right', render: (_value, item) => <Button type="link" onClick={() => navigate(assetDetailPath(item.resource))}>详情</Button> }]}/>{openAttachments && <AttachmentEditor detail={detail} onClose={() => setOpenAttachments(false)} onSaved={() => { setOpenAttachments(false); refresh(); }}/>}</>;
-  return <><AssetError error={versions.error || (!createOpen && !listingAction ? error : undefined)} retry={versions.refresh}/><div className="hy-lifecycle-toolbar"><span>版本发布后保留历史快照</span>{canManage(detail) && <Space size={12}>{detail.summary.publishedVersionId && <Button onClick={() => { setError(''); setListingReason(''); setListingAction(detail.summary.listingStatus === 'LISTED' ? 'OFFLINE' : 'LIST'); }}>{detail.summary.listingStatus === 'LISTED' ? '下架目录' : '上架目录'}</Button>}<Button type="primary" icon={<PlusOutlined/>} onClick={() => { setError(''); setCreateOpen(true); }}>{detail.summary.publishedVersionId ? '创建升级版本' : '创建发布版本'}</Button></Space>}</div><Table<VersionSummary> rowKey="id" className="hy-asset-table" tableLayout="fixed" loading={versions.loading} dataSource={versions.data?.items || []} scroll={{ x: 700 }} pagination={{ current: page, pageSize: 10, total: versions.data?.page.total || 0, onChange: setPage, showSizeChanger: false }} columns={[
+  return <><AssetError error={versions.error || (!createOpen && !listingAction ? error : undefined)} retry={versions.refresh}/><div className="hy-lifecycle-toolbar"><span>版本发布后保留历史快照</span>{canManage(detail) && <Space size={12}>{detail.summary.publishedVersionId && <Button onClick={() => { setError(''); setListingReason(''); setListingAction(detail.summary.listingStatus === 'LISTED' ? 'OFFLINE' : 'LIST'); }}>{detail.summary.listingStatus === 'LISTED' ? '下架目录' : '上架目录'}</Button>}<Button type="primary" icon={<PlusOutlined/>} onClick={() => { setError(''); setCreateOpen(true); }}>{detail.summary.publishedVersionId ? '创建升级版本' : '创建发布版本'}</Button></Space>}</div><Table<VersionSummary> rowKey="id" className="hy-asset-table" tableLayout="fixed" loading={versions.loading} dataSource={versions.data?.items || []} onChange={(_p,_f,o,e)=>{if(e.action==='sort')sorting.change(o);}} scroll={{ x: 700 }} pagination={{ current: page, pageSize: 10, total: versions.data?.page.total || 0, onChange: setPage, showSizeChanger: false }} columns={[
     { title: '版本', width: 110, render: (_value, row) => <Space>V{row.versionNo}{row.isCurrent && <Tag color="gold">当前</Tag>}</Space> },
     { title: '版本状态', width: 120, render: (_value, row) => <AssetStatus value={row.status}/> },
     { title: '发布申请', width: 135, render: (_value, row) => row.publicationRequestStatus === 'NOT_SUBMITTED' ? '未提交' : <AssetStatus value={row.publicationRequestStatus}/> },
-    { title: '创建时间', width: 160, sorter: (a, b) => a.createdAt.localeCompare(b.createdAt), showSorterTooltip: { title: '按当前页时间排序' }, render: (_value, row) => formatAssetTime(row.createdAt) },
-    { title: '发布时间', width: 160, sorter: (a, b) => (a.publishedAt || '').localeCompare(b.publishedAt || ''), showSorterTooltip: { title: '按当前页时间排序' }, render: (_value, row) => formatAssetTime(row.publishedAt) },
+    { title: '创建时间', width: 160, ...sorting.column('createdAt'), render: (_value, row) => formatAssetTime(row.createdAt) },
+    { title: '发布时间', width: 160, ...sorting.column('publishedAt'), render: (_value, row) => formatAssetTime(row.publishedAt) },
     { title: '操作', width: 110, fixed: 'right', align: 'center', className: 'wx-action-column', render: (_value, row) => <Button type="link" onClick={() => setOpenVersion(row.id)}>查看版本</Button> },
   ]}/>
     <Modal open={createOpen} title="创建目录发布版本" width={650} onCancel={() => !busy && setCreateOpen(false)} onOk={() => void create()} confirmLoading={busy} okText="创建版本" cancelText="取消"><AssetError error={error}/><Form form={form} layout="vertical"><Form.Item name="changeReason" label="版本说明" rules={[{ required: true, whitespace: true, message: '请填写版本说明' }]}><Input.TextArea rows={3} maxLength={2000}/></Form.Item><Form.Item name={['sharingPolicy', 'visibility']} label="可发现范围"><Select options={[{ value: 'DEPARTMENT', label: '本部门' }, { value: 'AUTHORIZED_ORGS', label: '指定部门' }, { value: 'TENANT', label: '当前工作空间' }]}/></Form.Item>{visibility === 'AUTHORIZED_ORGS' && <><AssetError error={departments.error} retry={departments.refresh}/><Form.Item name={['sharingPolicy', 'allowedDepartmentIds']} label="可见部门" rules={[{ required: true, message: '请选择可见部门' }]}><TreeSelect treeData={departmentTree(departments.data || [])} treeCheckable showSearch treeNodeFilterProp="title" loading={departments.loading}/></Form.Item></>}<Form.Item name={['sharingPolicy', 'shareType']} label="共享类型"><Select options={[{ value: 'CONDITIONAL', label: '有条件共享' }, { value: 'UNCONDITIONAL', label: '无条件共享' }, { value: 'PROHIBITED', label: '不予共享' }]}/></Form.Item><Form.Item name={['sharingPolicy', 'previewMode']} label="数据预览"><Select options={[{ value: 'NONE', label: '不开放预览' }, { value: 'MASKED_SAMPLE', label: '允许脱敏预览' }]}/></Form.Item><Form.Item name={['sharingPolicy', 'maxUseDays']} label="最长使用天数"><InputNumber min={1} max={3650} precision={0} style={{ width: '100%' }}/></Form.Item><Form.Item name={['sharingPolicy', 'useConditions']} label="使用条件"><Input.TextArea rows={2} maxLength={2000}/></Form.Item></Form></Modal>

@@ -37,6 +37,7 @@ import '@/idaas/guard' as guard;
 import '@/idaas/mutate' as mutate;
 import '@/idaas/audit' as audit;
 import identityRuntime;
+import tableSort;
 import request;
 import '@/idaas/api-call' as apiCall;
 
@@ -154,13 +155,17 @@ values(#{cid},'VERIFY_PROVIDER',#{id},'HMAC_KEY',#{revision},'AES256_GCM',#{ciph
     }
     if(operation=='list') {
         guard('public:read',null,'public');
-        return sql.select("""
-select tid as id,version,target_type targetType,target_id targetId,provider_code providerCode,status,
-       result_code resultCode,requested_time requestedTime,completed_time completedTime,expires_at expiresAt
-from iam_verification_t
-order by requested_time desc
-limit 250
-""");
+        var values=request.getValues('paged');var paged=values!=null&&values.size()>0&&values[0]=='true';
+        var query=(key,fallback)=>{var values=request.getValues(key);return values==null||values.size()==0?fallback:values[0];};
+        var page=Math.max(1,query('page','1')::int);var size=Math.min(100,Math.max(1,query('size','20')::int));
+        var offset=(page-1)*size;var limit=paged?size:1001;
+        var orderRequest={sortField:query('sortField',null),sortDir:query('sortDir',null)};
+        var from=" FROM iam_verification_t";
+        var total=sql.selectOne('SELECT COUNT(*) total'+from).total;
+        var order=tableSort.field(orderRequest,{requestedTime:'requested_time',completedTime:'completed_time',expiresAt:'expires_at'},'requestedTime');
+        var rows=sql.select('SELECT tid id,version,target_type targetType,target_id targetId,provider_code providerCode,status,result_code resultCode,requested_time requestedTime,completed_time completedTime,expires_at expiresAt'+from+' ORDER BY CASE WHEN '+order+' IS NULL THEN 1 ELSE 0 END ASC,'+order+' '+tableSort.direction(orderRequest)+',tid ASC LIMIT #{limit} OFFSET '+(paged?offset:0));
+        if(!paged&&rows.size()>1000){exit 400,'核验记录数量过多，请使用分页查询';}
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     var ctx=accountContext();
     if(ctx.account.identity_domain!='public' || ctx.account.must_change_password==1) {

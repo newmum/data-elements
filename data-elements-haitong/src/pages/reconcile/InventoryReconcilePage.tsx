@@ -1,3 +1,4 @@
+import { useServerSort } from '../../components/serverSort';
 import { Alert, Button, Form, Input, Modal, Radio, Select, Space, Switch, Tag } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -29,10 +30,11 @@ export default function InventoryReconcilePage(){
  const [policies,setPolicies]=useState<ReconcilePolicy[]>([]),[tasks,setTasks]=useState<ReconcileAccessTask[]>([]);
  const [policyTotal,setPolicyTotal]=useState(0),[enabledTotal,setEnabledTotal]=useState<number|string>('—'),[runTotal,setRunTotal]=useState<number|string>('—');
  const [page,setPage]=useState(1),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(''),[edit,setEdit]=useState<Editor>();
+ const serverSort=useServerSort(()=>setPage(1));
  const load=useCallback(async(currentPage:number)=>{
   setLoading(true);setLoadError('');
   try{
-   const [policiesResponse,accessTasks,summary,runsResponse]=await Promise.allSettled([reconciliationLive.policies(currentPage,20),reconciliationLive.accessTasks(),integrationPlatformService.reconciliationSummary(),reconciliationLive.runs(1,1)]);
+   const [policiesResponse,accessTasks,summary,runsResponse]=await Promise.allSettled([reconciliationLive.policies(currentPage,20,'',serverSort.sort),reconciliationLive.accessTasks(),integrationPlatformService.reconciliationSummary(),reconciliationLive.runs(1,1)]);
    if(policiesResponse.status==='rejected'||accessTasks.status==='rejected'){
     const error=policiesResponse.status==='rejected'?policiesResponse.reason:accessTasks.status==='rejected'?accessTasks.reason:new Error('对账数据不可用');
     setPolicies([]);setTasks([]);setPolicyTotal(0);setEnabledTotal('—');setRunTotal('—');throw error;
@@ -43,7 +45,7 @@ export default function InventoryReconcilePage(){
    const errors=[summary,runsResponse].filter(result=>result.status==='rejected').map(result=>errorText((result as PromiseRejectedResult).reason));
    if(errors.length)setLoadError(`概览统计暂不可用：${errors.join('；')}`);
   }catch(error){setLoadError(errorText(error));throw error;}finally{setLoading(false);}
- },[]);
+ },[serverSort.sort]);
  useEffect(()=>{void load(page).catch(()=>undefined);},[load,page]);
  const taskOptions=useMemo(()=>tasks.map(task=>({value:String(task.tid),label:`${field(task,'task_name','taskName')||task.tid} / ${field(task,'source_table_name','sourceTableName')} → ${field(task,'target_table_name','targetTableName')}`})),[tasks]);
  const selectedTask=edit?tasks.find(task=>String(task.tid)===edit.accessTaskId):undefined;
@@ -72,8 +74,8 @@ export default function InventoryReconcilePage(){
   <Panel title="盘点策略">
    {loadError&&<Alert type="error" showIcon message="对账数据接口异常" description={loadError} action={<Button size="small" onClick={()=>void load(page).catch(()=>undefined)}>重试</Button>} style={{marginBottom:16}}/>}
    {!loading&&!loadError&&!tasks.length&&<Alert type="info" showIcon message="暂无可配置的接入任务" description="请先在数据接入中完成来源表、目标表与主键配置。" style={{marginBottom:16}}/>}
-   <DataTable<ReconcilePolicy> rowKey="tid" loading={loading} dataSource={policies} pagination={{current:page,pageSize:20,total:policyTotal,showSizeChanger:false,showTotal:total=>`共 ${total} 条记录`}} onChange={pagination=>setPage(pagination.current||1)} columns={[
-    {title:'策略',width:236,render:(_,policy)=><div className="entity-name"><b>{field(policy,'policy_name','policyName')}</b><small>修订 v{num(policy,'version')||1} · {field(policy,'source_key_fields','sourceKeyFields')||'未配置主键'}</small></div>},
+   <DataTable<ReconcilePolicy> serverSort={serverSort} rowKey="tid" loading={loading} dataSource={policies} pagination={{current:page,pageSize:20,total:policyTotal,showSizeChanger:false,showTotal:total=>`共 ${total} 条记录`}} onChange={pagination=>setPage(pagination.current||1)} columns={[
+    {title:'策略',key:'policy_name',width:236,render:(_,policy)=><div className="entity-name"><b>{field(policy,'policy_name','policyName')}</b><small>修订 v{num(policy,'version')||1} · {field(policy,'source_key_fields','sourceKeyFields')||'未配置主键'}</small></div>},
     {title:'来源 / 目标',width:255,render:(_,policy)=><div className="entity-name"><span>{field(policy,'source_table_name','sourceTableName')||'—'}</span><small>→ {field(policy,'target_table_name','targetTableName')||'—'}</small></div>},
     {title:'比较方式',render:(_,policy)=><Tag color="blue">{compareLabels[compare(policy)]}</Tag>},
     {title:'频次约定',render:(_,policy)=>triggerLabels[trigger(policy)]},

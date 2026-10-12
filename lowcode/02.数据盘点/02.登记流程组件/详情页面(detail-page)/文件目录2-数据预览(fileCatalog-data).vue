@@ -116,6 +116,7 @@ const state = reactive({
   total: 0,
   pageNo: 1,
   pageSize: 20,
+  sortField: undefined, sortDir: undefined,
 });
 // refs
 const colRef = ref();
@@ -184,6 +185,7 @@ const handleAction = (type: string, item?: any) => {
     case "page-change":
       state.pageNo = item.pageNo;
       state.pageSize = item.pageSize;
+      state.sortField = item.sortField; state.sortDir = item.sortDir;
       handleAction("init");
       break;
 
@@ -250,7 +252,7 @@ const init = async () => {
         return;
       }
       state.total = total;
-      const cols = columns?.map((col) => ({ title: col, field: col, minWidth: 120 }));
+      const cols = columns?.map((col) => ({ title: col, field: col, minWidth: 120, sortable:true }));
 
       const tableCols = [{ type: "checkbox", width: 60, field: "left" }, ...cols];
       tableCols.push({
@@ -292,7 +294,7 @@ const detailApi = (tid: string) => {
   return $common.get("/dst/catalog/files/curd-data?action=get", {
     tid,
     pageNo: state.pageNo,
-    pageSize: state.pageSize,
+    pageSize: state.pageSize, sortField:state.sortField, sortDir:state.sortDir,
   });
 };
 

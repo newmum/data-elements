@@ -196,17 +196,18 @@ const tableColumns = ref<UColumnProps[]>([
 /** DataTable 的 data 函数 */
 const fetchData = async ({
   pageNo: pageNum,
-  pageSize,
+  pageSize, sortField, sortDir,
 }: {
   pageNo: number;
   pageSize: number;
+  sortField?: string; sortDir?: "asc" | "desc";
 }): Promise<{ list: any[]; total: number }> => {
   // 从 JsonForm 获取实时表单值（搜索结果），回退到 searchForm ref
   const formData = jsonFormRef.value?.formData() || searchForm.value;
 
   const params: Record<string, any> = {
     pageNum,
-    pageSize,
+    pageSize, sortField, sortDir,
     taskId: props.taskId,
     monitorStatus: formData.monitorStatus,
     beginTime: formData.beginTime || "",

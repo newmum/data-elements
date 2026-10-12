@@ -166,7 +166,7 @@
       </el-table-column>
 
       <el-table-column label="序号" type="index" width="70" align="center" />
-      <el-table-column prop="taskName" label="任务名称" min-width="180" show-overflow-tooltip />
+      <el-table-column sortable="custom" prop="taskName" label="任务名称" min-width="180" show-overflow-tooltip />
       <el-table-column prop="taskStatus" label="当前状态" width="120" align="center">
         <template #default="{ row }">
           <el-tag :type="statusTagType(row.taskStatus)" effect="light">
@@ -174,10 +174,10 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="lastRunning" label="最新运行时间" width="175">
+      <el-table-column sortable="custom" prop="lastRunning" label="最新运行时间" width="175">
         <template #default="{ row }">{{ formatDateTime(row.lastRunning || row.latestRunTime) }}</template>
       </el-table-column>
-      <el-table-column prop="endRunning" label="结束时间" width="175">
+      <el-table-column sortable="custom" prop="endRunning" label="结束时间" width="175">
         <template #default="{ row }">{{ formatDateTime(row.endRunning || row.endTime) }}</template>
       </el-table-column>
       <el-table-column prop="scheduleRunning" label="执行时间" width="140" show-overflow-tooltip>
@@ -418,14 +418,14 @@ const normalizeListData = (response) => {
   };
 };
 
-const fetchTasks = async ({ pageNo = 1, pageSize = 20 } = {}) => {
+const fetchTasks = async ({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}) => {
   const response = await $common.post("/ods/task/page", {
     taskStatus: activeTab.value === "all" ? "all" : activeTab.value,
     taskName: searchVal.value,
     nifiNetworkCode: selectedNetworkCode.value,
     nifiNodeId: selectedNodeId.value,
     pageNum: pageNo,
-    pageSize,
+    pageSize, sortField, sortDir,
   });
   const data = normalizeListData(response);
   return {

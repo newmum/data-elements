@@ -7,7 +7,7 @@
       :loading="state.loading.data"
       :columns="state.cols"
       :data="fetchData"
-      :show-page="false"
+      :show-page="true"
       show-overflow-tooltip
     >
       <template #column-tableName="{ row }">
@@ -168,7 +168,7 @@
         :operation-width="80"
         :loading="state.loading.mapping"
         :columns="state.mappingCols"
-        :data="state.mappingData"
+        :data="state.mappingData" :preview-sort="{colName:'text'}"
       >
         <template #column-sourceTableColumnId="{ row }">
           <el-select
@@ -569,15 +569,10 @@ const saveRelaType = async () => {
 };
 
 // 列表接口
-const fetchData = async () => {
-  const list = await $common.post("/dst/catalog/relations/list", {
-    catalogId: props.catalogId,
-  });
-  // 保存列表数据到state.data，用于关联关系选择
-  state.data = list || [];
-  return {
-    list,
-  };
+const fetchData = async ({pageNo=1,pageSize=20,sortField,sortDir}={}) => {
+  const result=await $common.get('/dwm/metadata-governance/catalog-resources/page',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
+  state.data=result.list;
+  return result;
 };
 
 // 表单规则

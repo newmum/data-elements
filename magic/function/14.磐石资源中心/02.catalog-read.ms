@@ -30,6 +30,8 @@
 ================================
 // 03.读取数据中心编目及兼容的历史交付台账。编目和审核状态以 da_catalog_t 为准。
 import tenantRuntime
+import tableSort
+import dataScope
 import jsons
 import cn.dev33.satoken.stp.StpUtil
 import java.time.Instant
@@ -45,6 +47,48 @@ var val = (row, name) => row == null ? null : row[name] == null ?
 var parse = value => text(value) == '' ? {} : jsons.toJSONObject(value)
 var mode = input == null ? '' : text(input.mode)
 var id = input == null ? '' : text(input.id)
+var pageMode = mode == 'page'
+var q = pageMode ? input.query : {}
+var pageNo = pageMode ? input.page : 1
+var pageSize = pageMode ? input.size : 20
+var keyword = text(q.keyword).trim()
+if (keyword.length() > 200) { exit 400,'检索关键词过长' }
+var search = '%' + keyword + '%'
+var sourceId = text(q.sourceId)
+var status = text(q.status)
+if (!['','DRAFT','PENDING_REVIEW','RETURNED','APPROVED'].contains(status)) { exit 400,'审核状态无效' }
+var cataloged = q.cataloged == true
+var sourceScope = dataScope.dataSource()
+var scopeMode = text(sourceScope.scope)
+var scopeUserId = text(sourceScope.userId)
+var scopeOrgIds = sourceScope.organizationIds == null ? [] : sourceScope.organizationIds
+var scopeOrgCount = scopeOrgIds.size()
+if (scopeOrgCount == 0) { scopeOrgIds = [''] }
+if (!['ALL','ORG','OWNER'].contains(scopeMode) || scopeUserId == '') { exit 403,'无法确定当前数据范围' }
+var fieldCountSql = "(SELECT COUNT(*) FROM da_catalog_item_t ci WHERE ci.tenant_id=c.tenant_id AND ci.catalog_id=c.tid AND ci.is_del=0)"
+var statusSql = "CASE WHEN c.flow_status=1 THEN 'PENDING_REVIEW' WHEN c.flow_status=3 THEN 'RETURNED' WHEN c.asset_status=2 AND c.flow_status=2 THEN 'APPROVED' ELSE 'DRAFT' END"
+var catalogOrder = tableSort.field(q,{name:'c.catalog_name',updatedAt:'c.updated_time',createdAt:'c.created_time',itemCount:fieldCountSql,fields:fieldCountSql},'updatedAt')
+var catalogDir = tableSort.direction(q)
+var catalogWhere = """
+      WHERE c.tenant_id = #{tenantId} AND c.is_del = 0
+        AND (#{mode} != 'one' OR c.tid = #{id})
+        AND (#{keyword}='' OR c.catalog_name LIKE #{search} OR c.catalog_name_en LIKE #{search} OR c.source_table_name LIKE #{search})
+        AND (#{sourceId}='' OR c.db_id=#{sourceId})
+        AND (#{status}='' OR """ + statusSql + """ =#{status})
+        AND (#{cataloged}=false OR """ + fieldCountSql + """ >0)
+        AND EXISTS (
+            SELECT 1 FROM db_table_t t
+            JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0
+            JOIN dwm_center_layer_source_t b
+              ON b.datasource_id = t.datasource_id AND b.tenant_id = t.tenant_id
+             AND b.is_del = 0 AND b.target_type IN ('layer', 'domain')
+            WHERE t.tid = c.source_table_id AND t.tenant_id = c.tenant_id AND t.is_del = 0
+              AND (#{scopeMode}='ALL' OR (#{scopeMode}='OWNER' AND d.created_by=#{scopeUserId})
+                OR (#{scopeMode}='ORG' AND #{scopeOrgCount}>0 AND d.org_id IN
+                    <foreach collection="scopeOrgIds" item="oid" open="(" close=")" separator=",">#{oid}</foreach>))
+        )
+"""
+
 var structure = tableId => {
     var table = db.selectOne("""
         SELECT tid AS id, datasource_id AS sourceId, table_name AS name,
@@ -67,7 +111,7 @@ var structure = tableId => {
 if (mode == 'structure') { return structure(id) }
 // 数据中心目录只关联已纳入分层/分库规划的数据表。审核状态以目录主表为准，
 // 不再从资源发布申请或 resourceCenterDraft 属性推断。
-var catalogRows = db.select("""
+var catalogSql = """
     SELECT c.tid AS id, c.catalog_name AS name, c.catalog_name_en AS code,
            c.asset_desc AS summary, c.org_id AS provider,
            c.source_table_id AS resourceId, c.source_table_name AS resourceName,
@@ -77,18 +121,12 @@ var catalogRows = db.select("""
            c.created_by AS createdBy, c.created_time AS createdAt,
            c.updated_by AS updatedBy, c.updated_time AS updatedAt
       FROM da_catalog_t c
-     WHERE c.tenant_id = #{tenantId} AND c.is_del = 0
-       AND (#{mode} != 'one' OR c.tid = #{id})
-       AND EXISTS (
-           SELECT 1 FROM db_table_t t
-           JOIN dwm_center_layer_source_t b
-             ON b.datasource_id = t.datasource_id AND b.tenant_id = t.tenant_id
-            AND b.is_del = 0 AND b.target_type IN ('layer', 'domain')
-           WHERE t.tid = c.source_table_id AND t.tenant_id = c.tenant_id AND t.is_del = 0
-       )
-     ORDER BY c.updated_time DESC, c.tid DESC
-""")
-var requestRows = db.select("""
+""" + catalogWhere + " ORDER BY (" + catalogOrder + ") IS NULL, " + catalogOrder + " " + catalogDir + ",c.tid ASC"
+var catalogPage = pageMode ? db.page(catalogSql,pageSize,(pageNo-1)*pageSize) : null
+var catalogRows = pageMode ? catalogPage.list : db.select(catalogSql)
+var catalogIds = []; for (row in catalogRows) { catalogIds.add(text(val(row,'id'))) }
+if (catalogIds.size() == 0) { catalogIds = [''] }
+var requestRows = pageMode ? [] : db.select("""
     SELECT tid AS id, catalog_id AS catalogId, request_status AS status, snapshot_json AS snapshot,
            revision_number AS revisionNumber, revision_no AS version, created_by AS submittedBy,
            created_time AS submittedAt, reviewer_id AS reviewer, reviewed_time AS reviewedAt,
@@ -139,6 +177,7 @@ var itemRows = db.select("""
       FROM da_catalog_item_t i
       JOIN da_catalog_t c ON c.tid = i.catalog_id AND c.tenant_id = i.tenant_id AND c.is_del = 0
      WHERE i.tenant_id = #{tenantId} AND i.is_del = 0
+        AND (#{pageMode}=false OR i.catalog_id IN <foreach collection="catalogIds" item="cid" open="(" close=")" separator=",">#{cid}</foreach>)
        AND EXISTS (
            SELECT 1 FROM db_table_t t
            JOIN dwm_center_layer_source_t b ON b.datasource_id = t.datasource_id
@@ -183,6 +222,7 @@ for (row in catalogRows) {
     if (mode == 'one' && entry.id == id) { return entry }
 }
 if (mode == 'one') { exit 404, '资源目录不存在' }
+if (pageMode) { return {list:catalogs,total:catalogPage.total,page:pageNo,size:pageSize} }
 var formRows = db.select("""
     SELECT tid AS id, apply_user_id AS applicantId, apply_org_id AS department,
            resource_scope_json AS scope, resource_revision_no AS version,

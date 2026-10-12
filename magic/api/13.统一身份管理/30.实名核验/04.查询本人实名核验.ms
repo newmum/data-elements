@@ -38,12 +38,13 @@ import '@/idaas/mutate' as mutate;
 import '@/idaas/audit' as audit;
 import identityRuntime;
 import request;
+import tableSort;
 import '@/idaas/api-call' as apiCall;
 
 
 return identityRuntime.control(()=>apiCall(()=>{
     var payload={};
-    for(key in ['id','appId','domain']) {
+    for(key in ['id','appId','domain','paged','page','size','sortField','sortDir']) {
         var value=request.getValues(key);
         if(value!=null && value.size()>0) {
             payload.put(key,value[0]);
@@ -157,17 +158,14 @@ values(#{cid},'VERIFY_PROVIDER',#{id},'HMAC_KEY',#{revision},'AES256_GCM',#{ciph
         exit 403,'请使用已完成密码设置的公众认证账号';
     }
     if(operation=='mine') {
-        return sql.select("""
-select tid as id,target_type targetType,target_id targetId,status,result_code resultCode,
-       requested_time requestedTime,completed_time completedTime,expires_at expiresAt
-from iam_verification_t
-where (target_type='SUBJECT'
-       and target_id=#{ctx.account.subject_id})
-    or (target_type='LEGAL_ENTITY'
-        and created_by=#{ctx.userId})
-order by requested_time desc
-limit 100
-""");
+        var paged=p.paged=='true';
+        var page=Math.max(1,(p.page||1)::int);var size=Math.min(100,Math.max(1,(p.size||20)::int));
+        var offset=paged?(page-1)*size:0;var take=paged?size:100;
+        var from=" FROM iam_verification_t WHERE (target_type='SUBJECT' AND target_id=#{ctx.account.subject_id}) OR (target_type='LEGAL_ENTITY' AND created_by=#{ctx.userId})";
+        var sort=tableSort.field(p,{requestedTime:'requested_time',completedTime:'completed_time',expiresAt:'expires_at'},'requestedTime');
+        var total=paged?sql.selectInt('SELECT count(*)'+from):0;
+        var rows=sql.select('SELECT tid id,target_type targetType,target_id targetId,status,result_code resultCode,requested_time requestedTime,completed_time completedTime,expires_at expiresAt'+from+' ORDER BY CASE WHEN '+sort+' IS NULL THEN 1 ELSE 0 END,'+sort+' '+tableSort.direction(p)+',tid ASC LIMIT #{take} OFFSET #{offset}');
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     var provider=sql.selectOne("""
 select *,tid as id

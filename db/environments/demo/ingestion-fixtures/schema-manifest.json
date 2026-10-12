@@ -1,0 +1,47 @@
+{
+  "purpose": "演示环境外部接入验证库，不属于行业租户统一业务结构",
+  "schemas": [
+    {
+      "database": "demo_ingest_source",
+      "dialect": "mysql",
+      "file": "demo_ingest_source/init.sql",
+      "counts": {
+        "tables": 1,
+        "views": 0,
+        "indexes": 2,
+        "foreignKeys": 0,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "notes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      },
+      "sha256": "9ed47e4d8903308ac82f9c9b1206e6a30c5f715cc769c75b019e7d214d099811"
+    },
+    {
+      "database": "demo_ingest_target",
+      "dialect": "mysql",
+      "file": "demo_ingest_target/init.sql",
+      "counts": {
+        "tables": 1,
+        "views": 0,
+        "indexes": 1,
+        "foreignKeys": 0,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "notes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      },
+      "sha256": "f161cc2d1637f9c5e2a3c11f9191106e150a7550d8f3e544d570f24761a27028"
+    }
+  ]
+}

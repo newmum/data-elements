@@ -1,6 +1,9 @@
 package com.linewell.dataelement.feature.metadatagovernance.application;
 
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import com.linewell.dataelement.platform.persistence.ServerTableOrder;
+import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService;
+import com.linewell.dataelement.feature.identity.application.DataSourceScopeSql;
 import com.linewell.dataelement.metautil.service.MetadataRelationJdbcService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -27,14 +30,67 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class MetadataGovernanceService {
+    public Map<String,Object> catalogServices(String catalogId,int page,int size,String field,String direction){
+        String tenant=TenantContext.requireTenantId();
+        if(catalogId==null||catalogId.isBlank()||page<1||page>100000||size<1||size>100)throw new IllegalArgumentException("目录和分页参数无效");
+        var args=new ArrayList<Object>(List.of(tenant,catalogId));
+        String catalogScope=DataSourceScopeSql.predicate(scopes,"c",args);
+        var parents=jdbc.queryForList("SELECT c.tid FROM da_catalog_t c WHERE c.tenant_id=? AND c.tid=? AND c.is_del=0 AND "+catalogScope,args.toArray());
+        if(parents.size()!=1)throw new IllegalArgumentException("目录不存在或无访问权限");
+        String order=ServerTableOrder.sql(field,direction,Map.of("assetName","a.service_name","count","COALESCE(p.param_count,0)","updateTime","a.updated_time"),"assetName","asc","a.tid");
+        args=new ArrayList<Object>(List.of(tenant,catalogId));
+        String where=" WHERE a.tenant_id=? AND a.catalog_id=? AND a.is_del=0 AND "+DataSourceScopeSql.predicate(scopes,"a",args);
+        Long total=jdbc.queryForObject("SELECT COUNT(*) FROM api_info_t a"+where,Long.class,args.toArray());
+        args.add(size);args.add((long)(page-1)*size);
+        // Aggregate parameter counts once, scoped to this catalog; no query is issued for individual APIs.
+        var queryArgs=new ArrayList<Object>(List.of(tenant,catalogId));queryArgs.addAll(args);
+        var rows=jdbc.queryForList("""
+            SELECT a.tid AS "id",a.service_name AS "assetName",COALESCE(p.param_count,0) AS "count",a.updated_time AS "updateTime"
+            FROM api_info_t a LEFT JOIN (
+                SELECT ap.api_id,COUNT(*) AS param_count FROM api_param_t ap
+                JOIN api_info_t owner ON owner.tid=ap.api_id AND owner.tenant_id=ap.tenant_id AND owner.is_del=0
+                WHERE ap.tenant_id=? AND owner.catalog_id=? AND ap.is_del=0 GROUP BY ap.api_id
+            ) p ON p.api_id=a.tid
+            """+where+" ORDER BY "+order+" LIMIT ? OFFSET ?",queryArgs.toArray());
+        return Map.of("list",rows,"total",total==null?0:total);
+    }
+
+    /** Reads the current catalog's authoritative target association, with both catalog and source scope checked. */
+    public Map<String,Object> catalogResources(String catalogId,int page,int size,String field,String direction){
+        String tenant=TenantContext.requireTenantId();
+        if(catalogId==null||catalogId.isBlank()||page<1||page>100000||size<1||size>100)throw new IllegalArgumentException("目录和分页参数无效");
+        String order=ServerTableOrder.sql(field,direction,Map.ofEntries(
+            Map.entry("tableName","t.table_name"),Map.entry("tableNameCn","COALESCE(NULLIF(t.table_name_cn,''),t.table_name)"),
+            Map.entry("fieldCount","t.field_count"),Map.entry("recordCount","t.record_count"),Map.entry("createdTime","t.created_time"),Map.entry("updatedTime","t.updated_time")),"tableName","asc","t.tid");
+        var args=new ArrayList<Object>(List.of(tenant,catalogId));
+        String catalogScope=DataSourceScopeSql.predicate(scopes,"c",args);
+        var parents=jdbc.queryForList("SELECT c.target_table_id FROM da_catalog_t c WHERE c.tenant_id=? AND c.tid=? AND c.is_del=0 AND "+catalogScope,args.toArray());
+        if(parents.size()!=1)throw new IllegalArgumentException("目录不存在或无访问权限");
+        Object target=parents.getFirst().get("target_table_id");
+        if(target==null||target.toString().isBlank())return Map.of("list",List.of(),"total",0);
+        args=new ArrayList<Object>(List.of(tenant,target));
+        String sourceScope=DataSourceScopeSql.predicate(scopes,"d",args);
+        var rows=jdbc.queryForList("""
+            SELECT t.tid AS "tableId",t.table_name AS "tableName",COALESCE(NULLIF(t.table_name_cn,''),t.table_name) AS "tableNameCn",
+                   d.tid AS "dbId",d.db_name AS "dbName",d.db_type AS "dbType",d.app_id AS "appId",a.app_name AS "appName",
+                   t.field_count AS "fieldCount",t.record_count AS "recordCount",t.created_time AS "createdTime",t.updated_time AS "updatedTime",'0' AS "relaType"
+            FROM db_table_t t JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0
+            LEFT JOIN sym_application_t a ON a.tid=d.app_id AND a.tenant_id=d.tenant_id AND a.is_del=0
+            WHERE t.tenant_id=? AND t.tid=? AND t.is_del=0 AND
+            """+sourceScope+" ORDER BY "+order+" LIMIT 2",args.toArray());
+        if(rows.size()!=1)throw new IllegalArgumentException("关联资源不存在或无访问权限，请刷新目录");
+        return Map.of("list",page==1?rows:List.of(),"total",1);
+    }
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final MetadataRelationJdbcService physical;
 
     public MetadataGovernanceService(JdbcTemplate jdbc) { this(jdbc,new ObjectMapper(),null); }
+    private final DataScopeAuthorizationService scopes;
+    public MetadataGovernanceService(JdbcTemplate jdbc,ObjectMapper json,MetadataRelationJdbcService physical) { this(jdbc,json,physical,null); }
     @Autowired
-    public MetadataGovernanceService(JdbcTemplate jdbc,ObjectMapper json,MetadataRelationJdbcService physical) { this.jdbc=jdbc;this.json=json;this.physical=physical; }
+    public MetadataGovernanceService(JdbcTemplate jdbc,ObjectMapper json,MetadataRelationJdbcService physical,DataScopeAuthorizationService scopes) { this.jdbc=jdbc;this.json=json;this.physical=physical;this.scopes=scopes; }
 
     public Map<String, Object> catalog() {
         String tenantId = tenantId();
@@ -76,11 +132,18 @@ public class MetadataGovernanceService {
 
     /** Exact tenant-scoped lookup used by asset-to-governance deep links. */
     public Map<String, Object> catalogTablesPage(List<String> sourceIds, String kind, String keyword, int pageNo, int pageSize, String tableId) {
+        return catalogTablesPage(sourceIds,kind,keyword,pageNo,pageSize,tableId,null,null);
+    }
+
+    public Map<String, Object> catalogTablesPage(List<String> sourceIds, String kind, String keyword, int pageNo, int pageSize, String tableId, String sortField, String sortDir) {
         String tenantId = tenantId();
         int page = Math.max(1, pageNo), size = Math.min(100, Math.max(1, pageSize));
         StringBuilder where = new StringBuilder(" FROM db_table_t t JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0 WHERE t.tenant_id=? AND t.is_del=0");
         List<Object> args = new ArrayList<>();
         args.add(tenantId);
+        where.append(" AND ").append(DataSourceScopeSql.predicate(scopes,"d",args));
+        String order = ServerTableOrder.sql(sortField,sortDir,Map.of("tableName","COALESCE(NULLIF(t.table_name_cn,''),NULLIF(t.table_comment,''),t.table_name)","fieldCount","t.field_count","recordCount","t.record_count","createdTime","t.created_time","updatedTime","t.updated_time"),"tableName","asc","t.tid");
+        if (sourceIds != null && sourceIds.size() > 1000) throw new IllegalArgumentException("单次最多选择 1000 个数据源");
         if (tableId != null && !tableId.isBlank()) {
             where.append(" AND t.tid=?");
             args.add(tableId.trim());
@@ -104,8 +167,8 @@ public class MetadataGovernanceService {
         pageArgs.add(size); pageArgs.add((long) (page - 1) * size);
         List<Map<String, Object>> rows = jdbc.queryForList("""
             SELECT t.tid, t.datasource_id, t.table_name, t.table_name_cn, t.table_comment,
-                   t.table_type, t.field_count, t.updated_time
-            """ + where + " ORDER BY d.db_name, COALESCE(t.table_name_cn,t.table_comment,t.table_name), t.table_name, t.tid LIMIT ? OFFSET ?", pageArgs.toArray());
+                   t.table_type, t.field_count, t.record_count, t.created_time, t.updated_time
+            """ + where + " ORDER BY " + order + " LIMIT ? OFFSET ?", pageArgs.toArray());
         List<Map<String, Object>> catalogs = List.of();
         if (!rows.isEmpty()) {
             List<String> tableIds = rows.stream().map(row -> text(row.get("tid"))).toList();
@@ -122,16 +185,54 @@ public class MetadataGovernanceService {
     }
 
     public List<Map<String, Object>> catalogTableColumns(String tableId) {
+        return catalogTableColumns(tableId,null,null);
+    }
+
+    public List<Map<String, Object>> catalogTableColumns(String tableId,String sortField,String sortDir) {
         String tenantId = tenantId();
-        return jdbc.queryForList("""
+        List<Object> args = new ArrayList<>(List.of(tenantId,tableId));
+        String scope = DataSourceScopeSql.predicate(scopes,"d",args);
+        String order = ServerTableOrder.sql(sortField,sortDir,Map.of("column_name","c.column_name","length","c.length","updated_time","c.updated_time","ordinal_position","c.ordinal_position"),"ordinal_position","asc","c.tid");
+        var rows=jdbc.queryForList("""
             SELECT c.tid, c.table_id, c.column_name, c.column_comment, c.data_type, c.column_type,
                    c.length, c.nullable, c.primary_key, c.is_unique, c.indexed, c.ordinal_position
               FROM db_table_column_t c
               JOIN db_table_t t ON t.tid=c.table_id AND t.tenant_id=c.tenant_id AND t.is_del=0
               JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0
-             WHERE c.tenant_id=? AND c.table_id=? AND c.is_del=0
-             ORDER BY c.ordinal_position,c.column_name
-            """, tenantId, tableId);
+             WHERE c.tenant_id=? AND c.table_id=? AND c.is_del=0 AND
+            """ + scope + " ORDER BY " + order+" LIMIT 1001",args.toArray());
+        if(rows.size()>1000)throw new IllegalArgumentException("字段超过 1000 项，请使用字段分页查询");
+        return rows;
+    }
+
+    public Map<String,Object> catalogColumnsPage(String tableId,int pageNo,int pageSize,String sortField,String sortDir) {
+        String tenant=tenantId();int page=Math.max(1,pageNo),size=Math.min(100,Math.max(1,pageSize));
+        List<Object> args=new ArrayList<>(List.of(tenant,tableId));
+        String scope=DataSourceScopeSql.predicate(scopes,"d",args);
+        String from=" FROM db_table_column_t c JOIN db_table_t t ON t.tid=c.table_id AND t.tenant_id=c.tenant_id AND t.is_del=0 JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0 WHERE c.tenant_id=? AND c.table_id=? AND c.is_del=0 AND "+scope;
+        String order=ServerTableOrder.sql(sortField,sortDir,Map.of("column_name","c.column_name","length","c.length","updated_time","c.updated_time","ordinal_position","c.ordinal_position"),"ordinal_position","asc","c.tid");
+        long total=jdbc.queryForObject("SELECT COUNT(*)"+from,Long.class,args.toArray());
+        args.add(size);args.add((long)(page-1)*size);
+        var rows=jdbc.queryForList("SELECT c.tid,c.table_id,c.column_name,c.column_comment,c.data_type,c.column_type,c.length,c.nullable,c.primary_key,c.ordinal_position"+from+" ORDER BY "+order+" LIMIT ? OFFSET ?",args.toArray());
+        return Map.of("list",rows,"total",total,"page",page,"size",size);
+    }
+
+    /** Every requested parent is authorized in one read, followed by one bounded field read. */
+    public Map<String,List<Map<String,Object>>> catalogColumnsBatch(List<String> requested) {
+        if(requested==null||requested.isEmpty()||requested.size()>100)throw new IllegalArgumentException("每批请选择 1 至 100 张表");
+        if(requested.stream().anyMatch(id->id==null||id.isBlank()||id.length()>64))throw new IllegalArgumentException("表标识不正确");
+        var ids=requested.stream().distinct().toList();String tenant=tenantId();
+        List<Object> args=new ArrayList<>(List.of(tenant));args.addAll(ids);
+        String scope=DataSourceScopeSql.predicate(scopes,"d",args);
+        String in=String.join(",",java.util.Collections.nCopies(ids.size(),"?"));
+        String from=" FROM db_table_t t JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0 WHERE t.tenant_id=? AND t.tid IN ("+in+") AND t.is_del=0 AND "+scope;
+        var parents=jdbc.queryForList("SELECT t.tid"+from,args.toArray());
+        if(parents.size()!=ids.size())throw new IllegalArgumentException("包含不存在或无权读取的数据表");
+        String fields="SELECT c.tid,c.table_id,c.column_name,c.column_comment,c.data_type,c.column_type,c.length,c.nullable,c.primary_key,c.is_unique,c.indexed,c.ordinal_position FROM db_table_column_t c JOIN db_table_t t ON t.tid=c.table_id AND t.tenant_id=c.tenant_id JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=t.tenant_id AND d.is_del=0 WHERE t.tenant_id=? AND t.tid IN ("+in+") AND t.is_del=0 AND c.is_del=0 AND "+scope+" ORDER BY c.table_id,c.ordinal_position,c.tid LIMIT 10001";
+        var rows=jdbc.queryForList(fields,args.toArray());
+        if(rows.size()>10000)throw new IllegalArgumentException("字段超过 10000 项，请缩小批次");
+        Map<String,List<Map<String,Object>>> result=new LinkedHashMap<>();ids.forEach(id->result.put(id,new ArrayList<>()));
+        rows.forEach(row->result.get(String.valueOf(row.get("table_id"))).add(row));return result;
     }
 
     /** Structure-only discovery against the latest collected physical snapshots. */

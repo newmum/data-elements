@@ -65,8 +65,8 @@ const columns = [
     ]
   }
 ]
-const fetchData = async ({ pageNo = 1, pageSize = 20 } = {}) => {
-  const result = await $common.post('/sym/tenant/list', { pageNum: pageNo, pageSize, keyword: keyword.value })
+const fetchData = async ({ pageNo = 1, pageSize = 20,sortField,sortDir } = {}) => {
+  const result = await $common.post('/sym/tenant/list', { pageNum: pageNo, pageSize,sortField,sortDir, keyword: keyword.value })
   const data = result?.data || result || {}
   return { list: data.list || [], total: Number(data.total || 0) }
 }

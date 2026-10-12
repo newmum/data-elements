@@ -15,13 +15,13 @@
           </div>
         </div>
       </template>
-      <el-table v-loading="loading" :data="rows" height="calc(100vh - 265px)" empty-text="当前租户暂无在线用户">
-        <el-table-column prop="userName" label="账号" min-width="140" show-overflow-tooltip />
+      <el-table @sort-change="sortChanged" v-loading="loading" :data="rows" height="calc(100vh - 265px)" empty-text="当前租户暂无在线用户">
+        <el-table-column prop="userName" sortable="custom" label="账号" min-width="140" show-overflow-tooltip />
         <el-table-column prop="realName" label="姓名" min-width="120" show-overflow-tooltip />
         <el-table-column prop="deviceType" label="终端类型" min-width="120"><template #default="{ row }">{{ row.deviceType || '-' }}</template></el-table-column>
         <el-table-column prop="deviceId" label="终端标识" min-width="160" show-overflow-tooltip><template #default="{ row }">{{ row.deviceId || '-' }}</template></el-table-column>
-        <el-table-column label="登录时间" min-width="175"><template #default="{ row }">{{ formatTime(row.loginTime) }}</template></el-table-column>
-        <el-table-column label="最近活跃" min-width="175"><template #default="{ row }">{{ formatTime(row.lastActiveTime) }}</template></el-table-column>
+        <el-table-column prop="loginTime" sortable="custom" label="登录时间" min-width="175"><template #default="{ row }">{{ formatTime(row.loginTime) }}</template></el-table-column>
+        <el-table-column prop="lastActiveTime" sortable="custom" label="最近活跃" min-width="175"><template #default="{ row }">{{ formatTime(row.lastActiveTime) }}</template></el-table-column>
         <el-table-column label="会话状态" width="105"><template #default="{ row }"><el-tag :type="row.current ? 'success' : 'info'">{{ row.current ? '当前会话' : '在线' }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
@@ -45,6 +45,8 @@ const total = ref(0)
 const keyword = ref('')
 const pageNum = ref(1)
 const pageSize = 20
+const order=ref({})
+const sortChanged=({prop,order:direction})=>{order.value=direction?{sortField:prop,sortDir:direction==='ascending'?'asc':'desc'}:{};pageNum.value=1;load()}
 
 const formatTime = (value) => {
   if (!value) return '-'
@@ -55,7 +57,7 @@ const formatTime = (value) => {
 const load = async () => {
   loading.value = true
   try {
-    const result = await $common.post('/sym/user/online/page', { pageNum: pageNum.value, pageSize, keyword: keyword.value })
+    const result = await $common.post('/sym/user/online/page', { pageNum: pageNum.value, pageSize,...order.value, keyword: keyword.value })
     const data = result?.data || result || {}
     rows.value = data.list || []
     total.value = Number(data.total || 0)

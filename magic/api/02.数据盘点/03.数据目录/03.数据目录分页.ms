@@ -29,6 +29,8 @@ import tenantRuntime
 import java.util.LinkedHashMap
 import java.util.ArrayList
 import java.util.List
+import tableSort
+import dataScope
 
 /* 数据目录分页（只读）：da_catalog_t 为权威来源，不以源表登记状态作为准入条件。
  * 组织树统计复用同一查询条件。所有主表、属性和关联对象均限制在登录租户内。
@@ -56,10 +58,17 @@ var fields = {
   appName:"coalesce(nullif(c.app_name,''),a.app_name)",
   dbName:"coalesce(nullif(c.db_name,''),d.db_name)",
   dataSourceType:"coalesce(nullif(c.data_source_type,'')," + propExpr('dataSourceType') + ",'ods')",
-  dataLevel:propExpr('dataLevel'), shareType:propExpr('shareType')
+  dataLevel:propExpr('dataLevel'), shareType:propExpr('shareType'),
+  recordCount:'t.record_count',fieldCount:'t.field_count',totalSizeBytes:'t.total_size_bytes'
 }
-var fromSql = " from da_catalog_t c left join sym_application_t a on a.tid=c.app_id and a.tenant_id=c.tenant_id and ifnull(a.is_del,0)=0 left join db_datasource_t d on d.tid=c.db_id and d.tenant_id=c.tenant_id and ifnull(d.is_del,0)=0 "
+var fromSql = " from da_catalog_t c left join sym_application_t a on a.tid=c.app_id and a.tenant_id=c.tenant_id and ifnull(a.is_del,0)=0 left join db_datasource_t d on d.tid=c.db_id and d.tenant_id=c.tenant_id and ifnull(d.is_del,0)=0 left join db_table_t t on t.tid=c.source_table_id and t.tenant_id=c.tenant_id and t.is_del=0 "
 var whereSql = " where c.tenant_id=" + sqlValue(tenantId) + " and ifnull(c.is_del,0)=0 "
+var scope=dataScope.resource('MENU:2081000000000000002')
+var scopeUserId=scope.userId
+var scopeOrgIds=scope.organizationIds
+if(scope.scope=='OWNER') {whereSql=whereSql+' AND c.created_by=#{scopeUserId}'}
+else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND c.org_id IN (#{scopeOrgIds})')}
+else if(scope.scope!='ALL') {exit 403,'数据范围无效'}
 var conditions = body == null || body.conditions == null ? [] : body.conditions
 for (condition in conditions) {
   if (condition == null || blank(condition.field) || condition.value == null || text(condition.value) == '') { continue }
@@ -131,12 +140,11 @@ if (pageSize < 1) { pageSize = 20 }
 if (pageSize > 100) { pageSize = 100 }
 var countRows = db.select('select count(1) total' + fromSql + whereSql)
 var total = rowValue(countRows[0],['total','TOTAL'])::int
-var sortField = body == null ? '' : text(body.sortField)
-if (!['updatedTime','createdTime','regTime','catalogName','tid'].contains(sortField)) { sortField = 'updatedTime' }
-var sortDir = body != null && text(body.sortDir).toLowerCase() == 'asc' ? 'asc' : 'desc'
+var sortExpr=tableSort.field(body,{catalogName:fields.catalogName,regTime:fields.regTime,createdTime:fields.createdTime,updatedTime:fields.updatedTime,recordCount:fields.recordCount,fieldCount:fields.fieldCount,totalSizeBytes:fields.totalSizeBytes},'updatedTime')
+var sortDir=tableSort.direction(body)
 var columns = []
 for (field in fields.keySet()) { columns.add(fields[field] + ' ' + field) }
-var rows = db.select('select ' + columns.join(',') + fromSql + whereSql + ' order by ' + fields[sortField] + ' ' + sortDir + ',c.tid ' + sortDir + ' limit ' + ((pageNum-1)*pageSize) + ',' + pageSize)
+var rows = db.select('select ' + columns.join(',') + fromSql + whereSql + ' order by ' + 'CASE WHEN '+sortExpr+' IS NULL THEN 1 ELSE 0 END ASC,'+sortExpr + ' ' + sortDir + ',c.tid ASC' + ' limit ' + ((pageNum-1)*pageSize) + ',' + pageSize)
 var list = []
 var ids = []
 var itemMap = {}

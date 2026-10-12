@@ -366,10 +366,11 @@ const handleDetailClick = (info: any) => {
 // 获取表格数据
 const fetchTableData = async ({
   pageNo: pageNum,
-  pageSize,
+  pageSize,sortField,sortDir,
 }: {
   pageNo: number;
   pageSize: number;
+  sortField?:string;sortDir?:"asc"|"desc";
 }) => {
   const conditions = [
     // 资产类型
@@ -410,8 +411,8 @@ const fetchTableData = async ({
   }
 
   const response = await $common.post("/dst/catalog/page", {
-    sortField: "updatedTime",
-    sortDir: "desc",
+    sortField: sortField||"updatedTime",
+    sortDir: sortDir||"desc",
     pageNum,
     pageSize,
     conditions,

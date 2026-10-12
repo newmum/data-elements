@@ -6,6 +6,7 @@ import {
   sourceTablesPage, startCollection, type CollectionJob, type SourceTablePage,
 } from '../../services/datasources';
 import { DataTable, Status, date } from './common';
+import { useServerSort } from '../../shared/serverSort';
 import { objectKindLabel } from '../../shared/sourcePresentation';
 
 const emptyPage: SourceTablePage = { rows: [], total: 0, page: 1, size: 15 };
@@ -34,6 +35,8 @@ export function SourceCollectionDrawer({ source, onClose, onComplete }: { source
   const [tableView, setTableView] = useState<TableView>('saved'), [changes, setChanges] = useState<SourceTablePage>(emptyPage);
   const [changePage, setChangePage] = useState(1), [changeSize, setChangeSize] = useState(15);
   const [changeLoading, setChangeLoading] = useState(false), [changeError, setChangeError] = useState('');
+  const savedSort=useServerSort(()=>setSavedPage(1));
+  const changeSort=useServerSort(()=>setChangePage(1));
   const [fieldMode, setFieldMode] = useState<FieldMode>('none');
   const [fieldProgress, setFieldProgress] = useState<{ done: number; total: number; failures: string[] } | null>(null);
   const [preRun, setPreRun] = useState<{ saved: number; exploredAt?: string } | null>(null);
@@ -56,25 +59,25 @@ export function SourceCollectionDrawer({ source, onClose, onComplete }: { source
     if (!source) return;
     let live = true;
     setSavedLoading(true); setSavedError('');
-    void sourceTablesPage(source.id, savedPage, savedSize, keyword).then(page => {
+    void sourceTablesPage(source.id, savedPage, savedSize, keyword,savedSort.sort).then(page => {
       if (!live) return;
       setSaved(page);
       if (!keyword) setSavedTotal(page.total);
     }).catch(cause => { if (live) setSavedError(cause instanceof Error ? cause.message : String(cause)); })
       .finally(() => { if (live) setSavedLoading(false); });
     return () => { live = false; };
-  }, [source?.id, savedPage, savedSize, keyword, revision]);
+  }, [source?.id, savedPage, savedSize, keyword, revision,savedSort.sort]);
 
   useEffect(() => {
     if (!source || job?.status !== 'SUCCEEDED' || tableView === 'saved') { setChanges(emptyPage); return; }
     let live = true;
     setChangeLoading(true); setChangeError('');
     const load = tableView === 'added' ? addedSourceTablesPage : missingSourceTablesPage;
-    void load(source.id, changePage, changeSize).then(page => { if (live) setChanges(page); })
+    void load(source.id, changePage, changeSize,changeSort.sort).then(page => { if (live) setChanges(page); })
       .catch(cause => { if (live) setChangeError(cause instanceof Error ? cause.message : String(cause)); })
       .finally(() => { if (live) setChangeLoading(false); });
     return () => { live = false; };
-  }, [source?.id, job?.jobId, job?.status, tableView, changePage, changeSize, revision]);
+  }, [source?.id, job?.jobId, job?.status, tableView, changePage, changeSize, revision,changeSort.sort]);
 
   // Reopening an active task follows its durable status instead of starting a second scan.
   useEffect(() => {
@@ -171,7 +174,7 @@ export function SourceCollectionDrawer({ source, onClose, onComplete }: { source
         { key: 'saved', label: `平台保留 ${savedTotal}` },
       ] : [{ key: 'saved', label: `平台保留 ${savedTotal}` }]}/>
       <p className="wx-collection-tab-note">{tableNote}</p>
-      <DataTable rows={activePage.rows} loading={activeView === 'saved' ? savedLoading : changeLoading} error={activeView === 'saved' ? savedError : changeError} titleKey="source-collection-tables" showSearch={activeView === 'saved'} showExport={false} onSearch={value => { setKeyword(value); setSavedPage(1); }} searchPlaceholder="按表名或说明查询平台保留记录" serverPagination={{ page: activePageNumber, size: activePageSize, total: activePage.total, onChange: (page, size) => { if (activeView === 'saved') { setSavedPage(page); setSavedSize(size); } else { setChangePage(page); setChangeSize(size); } } }} columns={[{ title: '表 / 视图', dataIndex: 'displayName', render: (_, row) => <div className="wx-cell-stack"><b>{row.displayName || row.name}</b><small>{row.name}</small></div> }, { title: '类型', dataIndex: 'kind', render: objectKindLabel }, { title: '已采集字段', dataIndex: 'fieldCount' }]}/>
+      <DataTable serverSort={activeView==='saved'?savedSort:changeSort} rows={activePage.rows} loading={activeView === 'saved' ? savedLoading : changeLoading} error={activeView === 'saved' ? savedError : changeError} titleKey="source-collection-tables" showSearch={activeView === 'saved'} showExport={false} onSearch={value => { setKeyword(value); setSavedPage(1); }} searchPlaceholder="按表名或说明查询平台保留记录" serverPagination={{ page: activePageNumber, size: activePageSize, total: activePage.total, onChange: (page, size) => { if (activeView === 'saved') { setSavedPage(page); setSavedSize(size); } else { setChangePage(page); setChangeSize(size); } } }} columns={[{ title: '表 / 视图', key:'tableNameCn', dataIndex: 'displayName', render: (_, row) => <div className="wx-cell-stack"><b>{row.displayName || row.name}</b><small>{row.name}</small></div> }, { title: '类型', dataIndex: 'kind', render: objectKindLabel }, { title: '字段数', dataIndex: 'fieldCount' }]}/>
     </section>
   </Drawer>;
 }

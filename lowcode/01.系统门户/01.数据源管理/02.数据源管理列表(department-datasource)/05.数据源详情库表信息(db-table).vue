@@ -396,6 +396,7 @@ const state = reactive({
   previewMessage: "",
   fieldRows: [],
   currentTableName: "",
+  diffViewId:"",allTableTotal:0,
 });
 
 /**
@@ -459,7 +460,7 @@ const setDiffFilter = (value) => {
   refreshTable(true);
 };
 
-const fetchData = async ({ pageNo = 1, pageSize = 20 }) => {
+const fetchData = async ({ pageNo = 1, pageSize = 20, sortField, sortDir }) => {
   if (!props.dbId) {
     resetRows();
     return { list: [], total: 0 };
@@ -477,18 +478,24 @@ const fetchData = async ({ pageNo = 1, pageSize = 20 }) => {
       await loadReExploreData();
     }
 
-    state.filteredRows = applyToolbarFilters(state.diffRows);
-    updateStats(state.diffRows, state.filteredRows);
-
-    const start = Math.max(pageNo - 1, 0) * pageSize;
-    return {
-      list: state.filteredRows.slice(start, start + pageSize),
-      total: state.filteredRows.length,
-    };
+    const readPage=()=> $common.post('/dst/database/metadata/tables/diff-view/page',{viewId:state.diffViewId,pageNo,pageSize,sortField,sortDir,
+      businessType:state.businessTypeFilter,changeStatus:state.diffFilter,overrides:state.metaCache});
+    let result;
+    try { result=await readPage(); } catch(error) {
+      if(!String(error?.message||'').includes('探查结果已过期')) throw error;
+      const filter=state.diffFilter;
+      await loadReExploreData();state.diffFilter=filter;
+      result=await readPage();
+    }
+    state.businessStats=result.businessStats;state.summary=result.summary;state.allTableTotal=result.allTotal;
+    state.diffStats={total:result.allTotal,added:result.changeStats['新增']||0,deleted:result.changeStats['删除']||0,modified:result.changeStats['变更']||0,unchanged:result.changeStats['无变化']||0};
+    state.diffRows=normalizeRows(result.list||[]);state.tableRows=state.diffRows;state.filteredRows=state.diffRows;
+    return {list:state.diffRows,total:result.total};
   } catch (error) {
     console.error("探查数据表列表失败:", error);
     resetRows();
-    return { list: [], total: 0 };
+    $message.error(error?.message || "数据表读取失败，请稍后重试");
+    throw error;
   } finally {
     state.loading = false;
     if (autoExplore) {
@@ -503,8 +510,6 @@ const runReExplore = async () => {
   state.loading = true;
   try {
     const result = await loadReExploreData();
-    state.filteredRows = applyToolbarFilters(state.tableRows);
-    updateStats(state.tableRows, state.filteredRows);
     refreshTable(true);
     const summary = result?.summary || {};
     $message.success(
@@ -520,39 +525,26 @@ const runReExplore = async () => {
 };
 
 const loadReExploreData = async () => {
-  await ensureRegisteredTablesLoaded();
   const result = await $common.post(
     "/dst/database/metadata/tables/reExplore",
     {
       dbId: props.dbId,
-      limit: 0,
+      diffViewOnly: true,
     },
     {},
     300 * 1000
   );
   state.diffReady = true;
   state.diffFilter = "全部";
-  state.diffRows = normalizeDiffRows(result || {});
-  state.tableRows = state.diffRows;
+  state.diffViewId=result.viewId;
   return result || {};
 };
 
 const resetRows = () => {
+  state.allTableTotal=0;
   state.tableRows = [];
   state.filteredRows = [];
   updateStats([], []);
-};
-
-const applyToolbarFilters = (rows) => {
-  return rows.filter((row) => {
-    if (state.businessTypeFilter !== "全部" && row.businessType !== state.businessTypeFilter) {
-      return false;
-    }
-    if (state.diffReady && state.diffFilter !== "全部" && (row.changeStatus || "无变化") !== state.diffFilter) {
-      return false;
-    }
-    return true;
-  });
 };
 
 const normalizeRows = (rows) => {
@@ -563,71 +555,19 @@ const normalizeRows = (rows) => {
     };
     const key = getRowKey(normalized);
     const cached = state.metaCache[key] || {};
-    const registeredAsset = state.registeredTableMap[normalizeTableKey(normalized.tableName)];
+
     return {
       ...normalized,
       businessType: cached.businessType || normalized.businessType || "业务表",
       tableComment: cached.tableComment ?? normalized.tableComment ?? normalized.tableNameCn ?? "",
-      registered: !!registeredAsset,
-      tableAssetId: registeredAsset?.tid || "",
+      registered: !!normalized.registered,
+      tableAssetId: normalized.tableAssetId || normalized.tid || "",
       changeStatus: state.diffReady ? normalized.changeStatus || "无变化" : "",
       changes: normalized.changes || null,
       before: normalized.before || null,
       businessTypeReason: cached.businessTypeReason || normalizeBusinessReason(normalized),
     };
   });
-};
-
-const normalizeDiffRows = (result) => {
-  const rows = [];
-  const pushRow = (row, status, extra = {}) => {
-    if (!row) return;
-    rows.push({
-      serialNo: rows.length + 1,
-      ...row,
-      ...extra,
-      tableComment: row.tableComment || row.tableNameCn || row.tableName || "",
-      registered: status !== "新增",
-      changeStatus: status,
-      tableAssetId: row.tid || row.id || extra.tableAssetId || "",
-      businessType: row.businessType || extra.businessType || "业务表",
-    });
-  };
-
-  for (const row of result.added || []) {
-    pushRow(row, "新增", { registered: false });
-  }
-  for (const item of result.modified || []) {
-    const before = item.before || {};
-    const after = item.after || {};
-    pushRow(after, "变更", {
-      before,
-      changes: item.changes || {},
-      registered: true,
-      tableAssetId: before.tid || before.id || "",
-      businessType: before.businessType || after.businessType || "业务表",
-    });
-  }
-  for (const row of result.deleted || []) {
-    pushRow(row, "删除", {
-      registered: true,
-      physicallyDeleted: true,
-      tableAssetId: row.tid || row.id || "",
-      tableComment: row.tableNameCn || row.tableComment || row.tableName || "",
-    });
-  }
-  for (const row of result.unchanged || []) {
-    pushRow(row, "无变化", { registered: true });
-  }
-
-  state.diffStats = {
-    total: rows.length,
-    added: (result.added || []).length,
-    deleted: (result.deleted || []).length,
-    modified: (result.modified || []).length,
-    unchanged: (result.unchanged || []).length,
-  };
-  return normalizeRows(rows).map((row, index) => ({ ...row, serialNo: index + 1 }));
 };
 
 const getRowKey = (row) => row.tableName || row.name || String(row.serialNo || "");
@@ -641,8 +581,7 @@ const updateBusinessType = (row, value) => {
   };
   row.businessType = value;
   row.businessTypeReason = "人工调整业务类型";
-  state.filteredRows = applyToolbarFilters(state.tableRows);
-  updateStats(state.tableRows, state.filteredRows);
+  refreshTable(false);
 };
 
 const updateTableComment = (row, value) => {
@@ -711,21 +650,7 @@ const loadDbContextInBackground = () => {
         state.dbAssetLoading = false;
       });
   }
-  if (state.registeredLoadDbId !== props.dbId && !state.registeredLoading) {
-    state.registeredLoading = true;
-    state.registeredLoadDbId = props.dbId;
-    state.registeredTableMap = {};
-    loadRegisteredTables()
-      .then((tableAssets) => {
-        state.registeredTableMap = buildRegisteredTableMap(tableAssets);
-        state.tableRows = normalizeRows(state.tableRows);
-        state.filteredRows = applyToolbarFilters(state.tableRows);
-        updateStats(state.tableRows, state.filteredRows);
-      })
-      .finally(() => {
-        state.registeredLoading = false;
-      });
-  }
+
 };
 
 const ensureDbAsset = async () => {
@@ -748,40 +673,6 @@ const loadDbAsset = async () => {
   }
 };
 
-const loadRegisteredTables = async () => {
-  try {
-    const result = await $common.get("/dst/database/metadata/tables", { dbId: props.dbId });
-    return Array.isArray(result) ? result : [];
-  } catch (error) {
-    console.warn("读取已登记表列表失败:", error);
-    return [];
-  }
-};
-
-const ensureRegisteredTablesLoaded = async () => {
-  if (state.registeredLoadDbId === props.dbId && Object.keys(state.registeredTableMap || {}).length) return;
-  state.registeredLoading = true;
-  state.registeredLoadDbId = props.dbId;
-  try {
-    const tableAssets = await loadRegisteredTables();
-    state.registeredTableMap = buildRegisteredTableMap(tableAssets);
-  } finally {
-    state.registeredLoading = false;
-  }
-};
-
-const buildRegisteredTableMap = (rows) => {
-  const map = {};
-  for (const row of rows || []) {
-    const name = row.tableName || row.tableNameEn || row.sourceTableName || row.name;
-    const key = normalizeTableKey(name);
-    if (key) {
-      map[key] = row;
-    }
-  }
-  return map;
-};
-
 const updateStats = (allRows, filteredRows) => {
   const rows = filteredRows || allRows || [];
   const businessStats = {};
@@ -801,7 +692,7 @@ const updateStats = (allRows, filteredRows) => {
 };
 
 const businessTypeCount = (value) => {
-  if (value === "全部") return state.tableRows.length;
+  if (value === "全部") return state.allTableTotal;
   return state.businessStats[value] || 0;
 };
 

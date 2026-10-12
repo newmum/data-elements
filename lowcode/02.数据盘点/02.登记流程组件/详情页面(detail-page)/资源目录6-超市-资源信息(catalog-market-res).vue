@@ -6,7 +6,7 @@
         show-index
         :show-page="false"
         :columns="state.cols"
-        :data="state.data"
+        :data="fetchResources"
         size="large"
       >
         <template #column-tableNameCn="{ row }">
@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted } from "vue";
+import { reactive } from "vue";
 
 const props = defineProps({
   catalogId: String,
@@ -50,42 +50,9 @@ state.cols = [
   { label: "数据量", prop: "recordCount", maxWidth: 120, props: { suffix: "条" } },
 ];
 
-state.data = [
-  {
-    assetName: "广电家庭用户收视行为统计数据表",
-    tableName: "statistical_radio_users_table",
-    dbType: "oracle",
-    columnTotal: "14",
-    dataTotal: "18",
-  },
-];
-
-onMounted(() => {
-  init();
-});
-
-const init = async () => {
-  if (!props.catalogId) return;
-  state.loading = true;
-  try {
-    const catalog = await $common.post("/dst/catalog/detail", {
-      tid: props.catalogId,
-    });
-    const table = await $common.post("/dst/catalog/detail", {
-      tid: catalog.targetTableId,
-    });
-    const db = await $common.post("/dst/catalog/detail", {
-      tid: table.dbId,
-    });
-    state.data = [
-      {
-        ...table,
-        dbType: db.dbType,
-      },
-    ];
-  } finally {
-    state.loading = false;
-  }
+const fetchResources=async ({pageNo=1,pageSize=20,sortField,sortDir}={})=> {
+ if(!props.catalogId)return {list:[],total:0};
+ return await $common.get('/dwm/metadata-governance/catalog-resources/page',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
 };
 
 state.api = {

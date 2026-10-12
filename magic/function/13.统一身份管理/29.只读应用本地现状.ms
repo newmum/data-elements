@@ -48,6 +48,7 @@
 // 函数输入：operation：本次执行的业务操作；payload：请求资料或筛选条件。
 // 返回与副作用：按已核验的运行绑定读取租户人员、机构、角色及资源汇总；不向控制库导入或改写租户数据。
 import db;
+import tableSort;
 import identityRuntime;
 import '@/idaas/guard' as guard;
 
@@ -121,6 +122,64 @@ where u.tenant_id=#{tenantId}
         };
     });
 }
+
+if(operation=='page') {
+    var kind=p.kind||'users';
+    if(!['users','authorizedUsers','orgs','roles','resources'].contains(kind)){exit 400,'列表类型不正确';}
+    var page=Math.max(1,(p.page||1)::int);
+    var size=Math.min(100,Math.max(1,(p.size||20)::int));
+    var offset=(page-1)*size;
+    return identityRuntime.inTenant(tenantId,()=>{
+        var tenantSql=db.normal();
+        var authorized=" EXISTS (SELECT 1 FROM rm_user_role_rela_t ur JOIN rm_role_t ar ON ar.id=ur.role_id AND ar.tenant_id=ur.tenant_id AND ar.app_id=#{localApp} AND ar.deleted=0 AND ar.status=0 WHERE ur.tenant_id=#{tenantId} AND ur.user_id=u.id AND COALESCE(ur.auth_from,0)<>9 AND (ur.end_time IS NULL OR ur.end_time>current_timestamp))";
+        var from='';var fields='';var orderFields={name:'u.real_name'};
+        if(kind=='users'||kind=='authorizedUsers') {
+            from=' FROM rm_user_t u WHERE u.tenant_id=#{tenantId} AND u.deleted=0';
+            if(kind=='authorizedUsers'){from=from+' AND u.status=0 AND '+authorized;}
+            fields='u.id,u.real_name name,u.user_name account,u.status,CASE WHEN u.status=0 AND '+authorized+' THEN 1 ELSE 0 END authorized';
+        } else if(kind=='orgs') {
+            from=" FROM rm_org_t u LEFT JOIN rm_org_t parent ON parent.id=u.parent_id AND parent.tenant_id=u.tenant_id AND parent.deleted=0 WHERE u.tenant_id=#{tenantId} AND u.deleted=0 AND u.id<>'ROOT'";
+            fields="u.id,u.name,u.dept_code code,u.parent_id parentId,COALESCE(parent.name,'根机构') parentName,u.status";orderFields={name:'u.name'};
+        } else if(kind=='resources') {
+            from=' FROM rm_menu_t u WHERE u.tenant_id=#{tenantId} AND u.app_id=#{localApp} AND u.deleted=0';
+            fields='u.id,u.name,u.code,u.url path,u.status';orderFields={name:'u.name'};
+        } else {
+            var users="(SELECT COUNT(DISTINCT edge.user_id) FROM rm_user_role_rela_t edge JOIN rm_user_t person ON person.id=edge.user_id AND person.tenant_id=edge.tenant_id AND person.deleted=0 AND person.status=0 WHERE edge.tenant_id=#{tenantId} AND edge.role_id=u.id AND u.status=0 AND COALESCE(edge.auth_from,0)<>9 AND (edge.end_time IS NULL OR edge.end_time>current_timestamp))";
+            var resources="(SELECT COUNT(DISTINCT edge.app_resource_id) FROM rm_role_menu_rela_t edge JOIN rm_menu_t menu ON menu.id=edge.app_resource_id AND menu.tenant_id=edge.tenant_id AND menu.app_id=#{localApp} AND menu.deleted=0 WHERE edge.tenant_id=#{tenantId} AND edge.role_id=u.id)";
+            from=' FROM rm_role_t u WHERE u.tenant_id=#{tenantId} AND u.app_id=#{localApp} AND u.deleted=0';
+            fields='u.id,u.name,u.code_num code,u.status,'+users+' userCount,'+resources+' resourceCount';
+            orderFields={name:'u.name',userCount:users,resourceCount:resources};
+        }
+        var total=tenantSql.selectOne('SELECT COUNT(*) total'+from).total;
+        var order=tableSort.field(p,orderFields,'name');
+        var rows=tenantSql.select('SELECT '+fields+from+' ORDER BY CASE WHEN '+order+' IS NULL THEN 1 ELSE 0 END ASC,'+order+' '+tableSort.direction(p)+',u.id ASC LIMIT #{size} OFFSET #{offset}');
+        var orgsByUser={};var rolesByUser={};
+        if((kind=='users'||kind=='authorizedUsers')&&rows.size()>0) {
+            var ids=rows.map(x=>x.id);
+            var orgLinks=tenantSql.select("""
+SELECT edge.user_id,org.name FROM rm_user_org_rela_t edge
+JOIN rm_user_t person ON person.id=edge.user_id AND person.tenant_id=edge.tenant_id AND person.deleted=0
+JOIN rm_org_t org ON org.id=edge.org_id AND org.tenant_id=edge.tenant_id AND org.deleted=0
+WHERE edge.tenant_id=#{tenantId} AND edge.user_id IN (#{ids}) ORDER BY edge.user_id,edge.job_type,edge.id
+""");
+            var roleLinks=tenantSql.select("""
+SELECT DISTINCT edge.user_id,role.name FROM rm_user_role_rela_t edge
+JOIN rm_user_t person ON person.id=edge.user_id AND person.tenant_id=edge.tenant_id AND person.deleted=0 AND person.status=0
+JOIN rm_role_t role ON role.id=edge.role_id AND role.tenant_id=edge.tenant_id AND role.app_id=#{localApp} AND role.deleted=0 AND role.status=0
+WHERE edge.tenant_id=#{tenantId} AND edge.user_id IN (#{ids}) AND COALESCE(edge.auth_from,0)<>9 AND (edge.end_time IS NULL OR edge.end_time>current_timestamp)
+ORDER BY edge.user_id,role.name
+""");
+            for(edge in orgLinks){if(orgsByUser[edge.user_id]==null){orgsByUser[edge.user_id]=[];}orgsByUser[edge.user_id].add(edge.name);}
+            for(edge in roleLinks){if(rolesByUser[edge.user_id]==null){rolesByUser[edge.user_id]=[];}rolesByUser[edge.user_id].add(edge.name);}
+        }
+        for(row in rows){
+            row.status=row.status==0?'enabled':'disabled';
+            if(kind=='users'||kind=='authorizedUsers'){row.orgNames=orgsByUser[row.id]||[];row.roleNames=rolesByUser[row.id]||[];row.authorized=row.authorized==1;}
+        }
+        return {available:true,source:'TENANT_LOCAL',list:rows,total:total,page:page,size:size};
+    });
+}
+
 var local=identityRuntime.inTenant(tenantId,()=>{
     var tenantSql=db.normal();
     var people=tenantSql.select("""

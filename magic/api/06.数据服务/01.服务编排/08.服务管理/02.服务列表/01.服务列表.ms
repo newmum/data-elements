@@ -32,6 +32,13 @@ import magicResourceLink
  * 读取 api_info_t 作为服务主表，api_param_t/api_file_t 只聚合当前页服务，
  * sym_dict_t 中 biz_type=apiServiceGroup 的字典项作为左侧分组名称。
  */
+import tenantRuntime
+import dataScope
+import tableSort
+var tenantId=tenantRuntime.id()
+var scope=dataScope.dataSource()
+var scopeOrgIds=scope.organizationIds
+var scopeUserId=scope.userId
 var blank = value => value == null || (value + '').trim() == ''
 var sqlValue = value => "'" + ((value + '').replace("'", "''")) + "'"
 var likeValue = value => "'%" + ((value + '').replace("'", "''")) + "%'"
@@ -39,10 +46,13 @@ var pageNum = body?.pageNum == null ? 1 : body.pageNum::int(1)
 var pageSize = body?.pageSize == null ? 20 : body.pageSize::int(20)
 if (pageNum < 1) { pageNum = 1 }
 if (pageSize < 1) { pageSize = 20 }
-if (pageSize > 200) { pageSize = 200 }
+if (pageSize > 100) { pageSize = 100 }
 
 var statusExpr = "coalesce(a.status, case when coalesce(a.is_use, 1) = 1 then 'published' else 'offline' end)"
-var whereSql = " where a.is_del = 0 "
+var whereSql = " where a.is_del = 0 AND a.tenant_id=#{tenantId} "
+if(scope.scope=='OWNER') {whereSql=whereSql+' AND a.created_by=#{scopeUserId}'}
+else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND a.org_id IN (#{scopeOrgIds})')}
+else if(scope.scope!='ALL') {exit 403,'数据范围无效'}
 
 // 关键字同时命中服务名称、服务编码、服务地址，避免前端多个输入框造成理解成本。
 if (!blank(body?.keyword)) {
@@ -66,6 +76,8 @@ if (!blank(body?.status)) {
 
 var offset = (pageNum - 1) * pageSize
 
+var sortColumn=tableSort.field(body,{serviceName:'a.service_name',name:'a.service_name',createdTime:'a.created_time',updatedTime:'a.updated_time',requestCount:'coalesce(a.call_count,0)',successPercent:'coalesce(a.success_percent,0)',paramCount:'(select count(*) from api_param_t param where param.api_id=a.tid and param.tenant_id=#{tenantId} and param.is_del=0)'},'updatedTime')
+var sortDirection=tableSort.direction(body)
 var listSql = """
 select
   a.tid as id,
@@ -97,14 +109,13 @@ select
   (select count(1)
      from api_param_t p
     where p.api_id = a.tid
-      and p.is_del = 0) as paramCount,
+      and p.is_del = 0 AND p.tenant_id=#{tenantId}) as paramCount,
   0 as apiFileCount,
   a.created_time as createdTime,
   a.updated_time as updatedTime
 from api_info_t a
 """ + whereSql + """
-order by a.updated_time desc, a.created_time desc
-limit """ + offset + ", " + pageSize
+"""+' ORDER BY CASE WHEN '+sortColumn+' IS NULL THEN 1 ELSE 0 END ASC,'+sortColumn+' '+sortDirection+',a.tid ASC LIMIT #{pageSize} OFFSET #{offset}'
 
 var list = db.select(listSql)
 list = magicResourceLink.attachApiFileCounts(list)
@@ -115,7 +126,7 @@ var groupRows = db.select("""
 select tid as id, dict_name as name
   from sym_dict_t
  where is_del = 0
-   and biz_type = 'apiServiceGroup'
+   and biz_type = 'apiServiceGroup' AND tenant_id=#{tenantId}
 """)
 var groupMap = {}
 for (group in groupRows) {

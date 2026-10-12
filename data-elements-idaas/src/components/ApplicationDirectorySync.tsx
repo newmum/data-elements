@@ -81,7 +81,7 @@ export function ApplicationDirectorySync({ app, domain, canSync, canImport, canP
                         const task = await provisionApi.create(receiver.id, crypto.randomUUID(), type, ids);
                         for (let round = 0; round < 100; round++) {
                             await provisionApi.execute(task.id);
-                            const current = (await provisionApi.tasks()).find(entry => entry.id === task.id);
+                            const current = await provisionApi.task(task.id);
                             if (!current) throw new Error('下发任务未返回执行结果');
                             if (current.status === 'success') { count++; break; }
                             if (current.status !== 'pending') throw new Error('下发存在失败项，请在同步任务中查看回执');

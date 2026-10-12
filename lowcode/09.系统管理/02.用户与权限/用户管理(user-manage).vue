@@ -282,18 +282,19 @@ const buildUserParams = (pageNum: number, pageSize: number): Record<string, any>
   return params;
 };
 
-const requestUserPage = async (pageNum: number, pageSize: number) => {
-  const response = await $common.post("/sym/user/page", buildUserParams(pageNum, pageSize));
+const requestUserPage = async (pageNum: number, pageSize: number, sort: Record<string, unknown> = {}) => {
+  const response = await $common.post("/sym/user/page", { ...buildUserParams(pageNum, pageSize), ...sort });
   return response.data || response || {};
 };
 
 /** 分页查询用户 */
 const fetchUserData = async ({
   pageNo: pageNum,
-  pageSize,
+  pageSize, sortField, sortDir,
 }: {
   pageNo: number;
   pageSize: number;
+  sortField?: string; sortDir?: "asc" | "desc";
 }) => {
   try {
     const onlineUsers = await fetchOnlineUsers();
@@ -304,7 +305,7 @@ const fetchUserData = async ({
       let queryPageNum = 1;
       let total = 0;
       do {
-        const data = await requestUserPage(queryPageNum, queryPageSize);
+        const data = await requestUserPage(queryPageNum, queryPageSize, { sortField, sortDir });
         const rows = data.list || [];
         total = Number(data.total || 0);
         allUsers.push(...rows);
@@ -319,7 +320,7 @@ const fetchUserData = async ({
       return { list: rows.slice(start, start + pageSize), total: rows.length };
     }
 
-    const data = await requestUserPage(pageNum, pageSize);
+    const data = await requestUserPage(pageNum, pageSize, { sortField, sortDir });
     return {
       list: (data.list || []).map((user: any) => ({ ...user, online: isUserOnline(user, onlineUsers) })),
       total: data.total || 0,

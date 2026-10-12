@@ -32,6 +32,10 @@ import com.linewell.dataelement.metautil.service.MetadataExplorerService as meta
 import jsons
 import cn.hutool.json.JSONUtil
 import java.util.Map
+import tenantRuntime
+import dataScope
+import metadataDiffView
+var tenantId = tenantRuntime.id()
 
 /*
  * 元数据管理 17：比较物理库与 db_table_t 登记快照。
@@ -146,7 +150,7 @@ var reconcileDictionaryRelations = (datasourceId, registeredRows, deletedRows) =
             }
         }
         if (tableChanged) {
-            db.table('db_table_t').where().eq('tid', ownerId).eq('is_del', 0)
+            db.table('db_table_t').where().eq('tenant_id',tenantId).eq('tid', ownerId).eq('is_del', 0)
                 // Hutool's parser preserves JSON nulls as JSONNull; use its own
                 // serializer here so legacy nullable governance fields remain valid JSON.
                 .update({ field_governance_config: JSONUtil.toJsonStr(config), updated_time: new Date() })
@@ -184,7 +188,8 @@ var normalizeColumnTypeForDiff = (value) => {
 }
 var loadSource = (datasourceId) => {
     // 从 MySQL 业务表读取当前有效数据。
-    var source = db.table('db_datasource_t').where().eq('tid', datasourceId).eq('is_del', 0).selectOne()
+    var source = db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('tid', datasourceId).eq('is_del', 0).selectOne()
+    if (source != null && !dataScope.canReadDataSource(source)) { exit 403,'无权读取此数据源' }
     if (source == null) {
         // 返回当前业务分支的标准结果。
         return null
@@ -261,7 +266,8 @@ var config = dataSourceOf(source)
 var physicalRows = metadataExplorerService.getTables(config)
 // 从 MySQL 业务表读取当前有效数据。
 var registeredRows = db.table('db_table_t').where()
-    .eq('datasource_id', datasourceId).eq('is_del', 0).select()
+    .eq('tenant_id',tenantId).eq('datasource_id', datasourceId).eq('is_del', 0).limit(10001).select()
+if (registeredRows.size() > 10000 || physicalRows.size() > 10000) { exit 400,'本次探查超过10000张表，请缩小范围' }
 // 结构化数据源会随着文件、对象或接口响应变化。先形成本轮可发现表的集合，
 // 仅对仍存在的登记表读取字段；不再用已经消失的历史表名调用远端读取。
 var physicalTableKeys = {}
@@ -290,8 +296,11 @@ for (row in registeredRows) {
 var physicalColumnsByTable = metadataExplorerService.getColumnsByTables(config, registeredTableNames)
 var storedColumnsByTable = {}
 if (registeredTableIds.size() > 0) {
-    var storedColumns = db.table('db_table_column_t').where()
-        .in('table_id', registeredTableIds).eq('is_del', 0).select()
+    var storedColumns = db.select("""
+      SELECT c.* FROM db_table_column_t c
+      JOIN db_table_t t ON t.tid=c.table_id AND t.tenant_id=c.tenant_id AND t.is_del=0
+      WHERE c.tenant_id=#{tenantId} AND c.is_del=0 AND t.datasource_id=#{datasourceId}
+    """)
     for (column in storedColumns) {
         var storedTableId = textOf(firstValue(column, ['tableId', 'table_id']))
         if (storedColumnsByTable[storedTableId] == null) {
@@ -337,6 +346,8 @@ for (physical in physicalRows == null ? [] : physicalRows) {
         continue
     }
     var tableId = firstValue(before, ['tid'])
+    current.tid=tableId;current.businessType=firstValue(before,['businessType','business_type']);
+    current.createdTime=firstValue(before,['createdTime','created_time']);current.updatedTime=firstValue(before,['updatedTime','updated_time'])
     // 从 MySQL 业务表读取当前有效数据。
     var oldColumns = storedColumnsByTable[textOf(tableId)]
     if (oldColumns == null) {
@@ -424,9 +435,9 @@ for (key in registeredMap.keySet()) {
         })
     }
 }
-var relationRepair = reconcileDictionaryRelations(datasourceId, registeredRows, deleted)
+var relationRepair = body.diffViewOnly == true ? {} : reconcileDictionaryRelations(datasourceId, registeredRows, deleted)
 // 返回当前业务分支的标准结果。
-return {
+var output = {
     summary: {
         totalScanned: physicalRows == null ? 0 : physicalRows.size(),
         addedCount: added.size(),
@@ -441,3 +452,4 @@ return {
     unchanged: unchanged,
     relationRepair: relationRepair
 }
+return body.diffViewOnly == true ? metadataDiffView.store(datasourceId,output) : output

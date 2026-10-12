@@ -2,9 +2,10 @@ import { Alert, Button, Space } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useServerSort } from '../../components/serverSort';
 import PageHero from '../../components/PageHero';
 import { DataTable, EmptyState, Panel } from '../../components/Common';
-import { usePipelineList, type PipelineSummary } from '../../nifi/api/pipelines';
+import { usePipelinePage, type PipelineSummary } from '../../nifi/api/pipelines';
 import { getBridgeToken, useSessionRevision, useTokenReady } from '../../nifi/api/bridgeSession';
 import { getPlatformLoginUrl, redirectToPlatformLogin, syncNifiPlatformSession } from '../../services/platformSession';
 import { preloadCanvasReadiness, preloadCanvasWhenIdle } from '../../app/preloadCanvas';
@@ -40,7 +41,9 @@ export default function NifiFlowsPage() {
  const tokenReady = useTokenReady();
  const sessionRevision = useSessionRevision();
  const queryClient = useQueryClient();
- const list = usePipelineList();
+ const [page,setPage]=useState(1),[size,setSize]=useState(20);
+ const order=useServerSort(()=>setPage(1));
+ const list = usePipelinePage(page,size,order.sort);
  const [showSession, setShowSession] = useState(false);
  const warmCanvas = () => { if (tokenReady) preloadCanvasReadiness(queryClient,sessionRevision); };
  useEffect(() => tokenReady ? preloadCanvasWhenIdle(() => preloadCanvasReadiness(queryClient,sessionRevision)) : undefined, [tokenReady,queryClient,sessionRevision]);
@@ -53,11 +56,11 @@ export default function NifiFlowsPage() {
    {tokenReady&&list.isLoading&&<p role="status">正在读取 NiFi 流程…</p>}
    {tokenReady&&!list.isLoading&&!list.isError&&<DataTable<PipelineSummary>
     rowKey="id"
-    dataSource={list.data??[]}
+    dataSource={list.data?.list??[]} serverSort={order} pagination={{current:page,pageSize:size,total:list.data?.total||0,onChange:(p,n)=>{setPage(n===size?p:1);setSize(n);}}}
     columns={[
      {title:'流程名称',dataIndex:'name',key:'name',render:(name:string,item:PipelineSummary)=><Button type="link" onClick={()=>open(item.id)}>{name}</Button>},
      {title:'流程 ID',dataIndex:'id',key:'id',ellipsis:true},
-     {title:'组件',dataIndex:'nodeCount',key:'nodeCount',width:100,render:(value:number|undefined)=>value??'—'},
+     {title:'组件数',dataIndex:'nodeCount',key:'nodeCount',width:100,render:(value:number|undefined)=>value??'—'},
      {title:'NiFi Process Group',dataIndex:'nifiProcessGroupId',key:'nifiProcessGroupId',ellipsis:true,render:(value:string|null|undefined)=>value||'未部署'},
      {title:'操作',key:'action',width:110,render:(_:unknown,item:PipelineSummary)=><Button onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>open(item.id)}>打开画布</Button>},
     ]}

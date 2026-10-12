@@ -15,6 +15,7 @@
 }
 ================================
 import tenantRuntime
+import tableSort
 
 var tenantId = tenantRuntime.id()
 if (tenantId == null || ('' + tenantId).trim() == '') {
@@ -29,6 +30,8 @@ if (keyword.length() > 100) {
     exit 400, '搜索词过长'
 }
 var keywordPattern = '%' + keyword + '%'
+var order=tableSort.field(body,{externalFlowId:'r.external_flow_id',pipelineName:'p.name',createdTime:'r.created_time'},'createdTime');
+var direction=tableSort.direction(body);
 var result = db.page("""
     SELECT r.tid,
            r.external_flow_id AS externalFlowId,
@@ -43,8 +46,7 @@ var result = db.page("""
      WHERE r.tenant_id = #{tenantId}
        AND (#{keyword} = '' OR r.external_flow_id LIKE #{keywordPattern}
             OR p.name LIKE #{keywordPattern})
-     ORDER BY r.created_time DESC, r.tid DESC
-""", pageSize, (pageNum - 1) * pageSize)
+"""+' ORDER BY '+order+' '+direction+',r.tid ASC', pageSize, (pageNum - 1) * pageSize)
 var items = []
 var value = (row, key) => {
     if (row[key] != null) { return row[key] }

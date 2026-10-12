@@ -516,7 +516,7 @@ const handleAction = (type: string, row?: any) => {
 };
 
 // 列表接口
-const fetchData = async ({ pageNo: pageNum, pageSize }) => {
+const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
   const conditions = [
     {
       field: "assetType",
@@ -555,8 +555,8 @@ const fetchData = async ({ pageNo: pageNum, pageSize }) => {
     }
   }
   const { list = [], total } = await $common.post("/dst/application/page", {
-    sortField: "updatedTime",
-    sortDir: "desc",
+    sortField: sortField || "updatedTime",
+    sortDir: sortDir || "desc",
     pageNum,
     pageSize,
     conditions,
@@ -567,7 +567,7 @@ const fetchData = async ({ pageNo: pageNum, pageSize }) => {
         ...item,
         displayStatus: 2,
       }))
-      .sort((a, b) => b.tableNum - a.tableNum),
+      ,
     total,
   };
 };

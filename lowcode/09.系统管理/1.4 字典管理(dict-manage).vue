@@ -160,6 +160,7 @@
             v-bind="gridOptions"
             :row-config="sortRowConfig"
             :row-drag-config="sortRowDragConfig"
+            @sort-change="sortDictionaryItems"
             @row-dragstart="onRowDragStart"
             @row-dragend="onRowDragEnd"
           >
@@ -301,7 +302,9 @@ const gridRef = ref();
 const parentOptions = ref<any[]>([]);
 
 // ─── 表格配置 ─────────────────────────────────────────────────────────────────
+const dictionaryOrder=ref({});
 const gridOptions = {
+  sortConfig:{remote:true,multiple:false},
   maxHeight: "100%",
   rowConfig: {
     isHover: true,
@@ -325,6 +328,7 @@ const gridOptions = {
     { type: "seq", title: "序号", width: 72, align: "center" },
     {
       field: "dictName",
+      sortable:true,
       title: "字典名称",
       minWidth: 160,
       treeNode: true,
@@ -345,6 +349,12 @@ const gridOptions = {
     },
   ],
 };
+
+async function sortDictionaryItems({field,order}){
+  dictionaryOrder.value=field&&order?{sortField:field,sortDir:order}:{};
+  state.sortMode=false;
+  if(state.selectedNode)handleAction('nodeClick',state.selectedNode);
+}
 
 /** 排序模式下的 rowConfig（覆盖 drag 开关） */
 const sortRowConfig = computed(() => ({
@@ -631,7 +641,7 @@ const handleAction = (type: string, item?: DictTreeNode | DictItem | null) => {
       // 加载该字典类型下所有子项
       state.loading = true;
       $common
-        .post("/sym/getDict", { dictCode: item.dictCode, showRow: true })
+        .post("/sym/getDict", { dictCode: item.dictCode, showRow: true,...dictionaryOrder.value })
         .then((data: DictItem[]) => {
           // 接口返回扁平列表，vxe-table treeConfig.transform:true 根据 parentId 自动构建树
           state.tableData = data || [];

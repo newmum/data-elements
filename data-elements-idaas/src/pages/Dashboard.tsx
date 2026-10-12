@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
-import { Badge, Button, Card, Empty, Segmented, Table, Tag } from 'antd';
+import { useTableOrder } from '../hooks/useTableOrder';
+import { Alert, Badge, Button, Card, Empty, Segmented, Table, Tag } from 'antd';
 import { AppstoreOutlined, ArrowRightOutlined, CheckCircleFilled, ClockCircleOutlined, KeyOutlined, LoginOutlined, SafetyCertificateOutlined, SyncOutlined, TeamOutlined, WarningOutlined, LockOutlined, ApartmentOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -16,6 +17,7 @@ export interface TrendPoint {
     date: string;
     count: number;
     people: number;
+    failures?: number;
 }
 export function TrendChart({ data, compact = false }: {
     data: TrendPoint[];
@@ -47,32 +49,55 @@ export default function Dashboard({ domain, statistics = false }: {
     const db = useDatabase(), session = useSession()!, nav = useNavigate();
     const [days, setDays] = useState(7), [chart, setChart] = useState('chart');
     const [actorNames, setActorNames] = useState<Record<string, string>>({});
+    const operationOrder=useTableOrder(),trendOrder=useTableOrder();
+    const [latestActivity,setLatestActivity]=useState<Log[]>([]);
+    const [operations,setOperations]=useState<Log[]>([]),[points,setPoints]=useState<TrendPoint[]>([]),[auditError,setAuditError]=useState('');
     const canReadAudit = session.capabilities?.includes('audit') ?? false;
     useEffect(() => {
-        if (session.realm !== 'platform' || !canReadAudit) { setActorNames({}); return; }
-        let active = true;
-        setActorNames({});
-        // The paged audit API already resolves platform operator names; bootstrap retains immutable IDs.
-        void foundationApi.read<{ list: { actor_id?: string; actor_name?: string; actor_username?: string }[] }>('/idaas/audit/list?page=1&size=200&type=OPERATION')
-            .then(response => {
-                if (!active) return;
-                const names: Record<string, string> = {};
-                for (const row of response.list || []) if (row.actor_id && (row.actor_name || row.actor_username)) names[row.actor_id] = row.actor_name || row.actor_username || '';
-                setActorNames(names);
-            })
-            .catch(() => { if (active) setActorNames({}); });
-        return () => { active = false; };
-    }, [session.realm, session.userId, canReadAudit]);
+        if(session.realm!=='platform'||!canReadAudit){setActorNames({});setOperations([]);return;}
+        let active=true;
+        const query=new URLSearchParams(operationOrder.query);query.set('size','5');query.set('type','OPERATION');query.set('business','true');query.set('domain',domain);
+        void foundationApi.read<{list:Array<Record<string,any>>}>('/idaas/audit/list?'+query).then(response=>{
+            if(!active)return;const names:Record<string,string>={};
+            const rows=(response.list||[]).map(row=>{
+                if(row.actor_id&&(row.actor_name||row.actor_username))names[row.actor_id]=row.actor_name||row.actor_username;
+                return {id:row.id,domain:row.identity_domain,name:row.action,status:'enabled',version:1,createdAt:row.event_time,updatedAt:row.event_time,type:'operation',actor:row.actor_id||'未知账号',
+                    module:'统一身份管理',action:row.action,target:row.object_id||'',result:row.result==='SUCCESS'?'成功':row.result==='DENIED'?'拒绝':'失败',ip:row.ip||'',appId:row.app_id||'',traceId:row.trace_id,before:'',after:row.snapshot_json||''} as Log;
+            });setOperations(rows);setActorNames(previous=>({...previous,...names}));setAuditError('');
+        }).catch(cause=>{if(active)setAuditError(cause instanceof Error?cause.message:'审计记录读取失败');});
+        return()=>{active=false;};
+    },[session.realm,session.userId,canReadAudit,domain,operationOrder.query]);
+    useEffect(()=>{
+        if(session.realm!=='platform'||!canReadAudit){setPoints([]);return;}
+        let active=true;const query=new URLSearchParams(trendOrder.query);query.set('mode','trend');query.set('domain',domain);query.set('days',String(days));
+        void foundationApi.read<{list:TrendPoint[]}>('/idaas/audit/list?'+query).then(result=>{if(active)setPoints(result.list);})
+            .catch(cause=>{if(active)setAuditError(cause instanceof Error?cause.message:'登录统计读取失败');});
+        return()=>{active=false;};
+    },[session.realm,session.userId,canReadAudit,domain,days,trendOrder.query]);
+    useEffect(()=>{
+        if(session.realm!=='platform'||!canReadAudit){setLatestActivity([]);return;}
+        let active=true;
+        const query=new URLSearchParams({size:'4',type:'OPERATION',business:'true',domain,sortField:'event_time',sortDir:'desc'});
+        void foundationApi.read<{list:Array<Record<string,any>>}>('/idaas/audit/list?'+query).then(response=>{
+            if(!active)return;const names:Record<string,string>={};
+            setLatestActivity((response.list||[]).map(row=>{
+                if(row.actor_id&&(row.actor_name||row.actor_username))names[row.actor_id]=row.actor_name||row.actor_username;
+                return {id:row.id,domain:row.identity_domain,name:row.action,status:'enabled',version:1,createdAt:row.event_time,updatedAt:row.event_time,type:'operation',actor:row.actor_id||'未知账号',module:'统一身份管理',action:row.action,target:row.object_id||'',result:row.result==='SUCCESS'?'成功':row.result==='DENIED'?'拒绝':'失败',ip:row.ip||'',appId:row.app_id||'',traceId:row.trace_id,before:'',after:row.snapshot_json||''} as Log;
+            }));setActorNames(previous=>({...previous,...names}));
+        }).catch(cause=>{if(active)setAuditError(cause instanceof Error?cause.message:'业务动态读取失败');});
+        return()=>{active=false;};
+    },[session.realm,session.userId,canReadAudit,domain]);
     const actorLabel = (log: Log) => auditActorLabel(log.actor, db, session, actorNames[log.actor]);
     const base = `/console/${domain}/`;
     const apps = db.apps.filter(a => accessibleAppIds(db, session).includes(a.id));
     const users = db.users.filter(u => allowedUser(db, session, u) && u.kind !== 'admin');
     const logsAll = db.logs.filter(l => l.domain === domain && (!l.appId || apps.some(a => a.id === l.appId)));
     const logs = logsAll.filter(l => l.type === 'login' && dayjs(l.createdAt).isAfter(dayjs().startOf('day').subtract(days - 1, 'day')));
-    const today = logs.filter(l => dayjs(l.createdAt).isSame(dayjs(), 'day'));
-    const points: TrendPoint[] = Array.from({ length: days }, (_, i) => { const d = dayjs().subtract(days - 1 - i, 'day'); const records = logs.filter(l => dayjs(l.createdAt).isSame(d, 'day')); return { date: d.format('MM-DD'), count: records.length, people: new Set(records.map(l => l.actor)).size }; });
+    const today = points.find(point=>point.date===new Date().toISOString().slice(0,10));
+
     const failures = logs.filter(l => l.result !== '成功');
-    const rate = logs.length ? ((logs.length - failures.length) / logs.length * 100).toFixed(2) + '%' : '—';
+    const loginCount=points.reduce((sum,point)=>sum+Number(point.count),0),failureCount=points.reduce((sum,point)=>sum+Number(point.failures||0),0);
+    const rate = loginCount ? ((loginCount - failureCount) / loginCount * 100).toFixed(2) + '%' : '—';
     const grants = db.grants.filter(g => g.domain === domain);
     const expiring = grants.filter(g => grantIsCurrent(g) && g.expiresAt && dayjs(g.expiresAt).isBefore(dayjs().add(30, 'day')));
     const accessByUser = users.map(u => ({ user: u, access: effectiveAccess(db, u.id) }));
@@ -86,23 +111,23 @@ export default function Dashboard({ domain, statistics = false }: {
     ] : [
         { title: '自然人尚未完成核验', text: '实名状态与启用状态独立管理', count: users.filter(u => !u.verified).length, to: 'persons', icon: <SafetyCertificateOutlined />, color: '#F39736', bg: '#FFF4E9' },
         { title: '法人信息待核验', text: '核对联系人与经办账号关系', count: db.legalEntities.filter(e => !e.verified).length, to: 'entities', icon: <ApartmentOutlined />, color: '#6682F4', bg: '#ECF1FF' },
-        { title: '登录失败事件', text: `最近${days}天失败记录`, count: failures.length, to: 'audit/logins', icon: <LockOutlined />, color: '#F2647B', bg: '#FFEFF2' },
+        { title: '登录失败事件', text: `最近${days}天失败记录`, count: failureCount, to: 'audit/logins', icon: <LockOutlined />, color: '#F2647B', bg: '#FFEFF2' },
     ];
-    const operations = logsAll.filter(l => l.type === 'operation' && l.action !== 'profile:domain' && !l.action.endsWith(':read')).slice(0, 5);
-    const activity = operations.filter(l => !l.action.startsWith('profile:')).slice(0, 4);
+    const activity = latestActivity;
     const departments = domain === 'workforce' ? [
         { name: '内部员工', value: users.filter(u => (u.employmentType || 'employee') === 'employee').length, color: '#6381F6' },
         { name: '外部合作伙伴', value: users.filter(u => u.employmentType === 'partner').length, color: '#A382F5' },
         { name: '临时人员', value: users.filter(u => u.employmentType === 'temporary').length, color: '#55BDEB' },
     ] : [{ name: '已核验', value: users.filter(u => u.verified).length, color: '#6381F6' }, { name: '未核验', value: users.filter(u => !u.verified).length, color: '#A382F5' }];
     return <>
+    {auditError && <Alert type="error" showIcon title={auditError} className="section-gap"/>}
     {statistics && <PageTitle title="统计分析" description="从访问趋势到身份分布，了解当前身份域的使用情况。"/>}
     <div className="metric-grid five">
       <CardMetric label="身份用户总数" value={users.length} description={`${users.filter(u => u.status === 'enabled').length} 位用户已启用`} icon={<TeamOutlined />} onClick={() => nav(base + (domain === 'workforce' ? 'organization' : 'persons'))}/>
       <CardMetric label="登记应用" value={apps.length} description={`${apps.filter(a => a.status === 'enabled').length} 个应用登记已启用`} icon={<AppstoreOutlined />} tone="cyan" onClick={() => nav(base + 'apps')}/>
-      <CardMetric label="今日登录次数" value={today.length} description={`${new Set(today.map(l => l.actor)).size} 位独立登录用户`} icon={<LoginOutlined />} tone="purple" onClick={() => nav(base + 'audit/logins')}/>
+      <CardMetric label="今日登录次数" value={today?.count||0} description={`${today?.people||0} 位独立登录用户`} icon={<LoginOutlined />} tone="purple" onClick={() => nav(base + 'audit/logins')}/>
       <CardMetric label={domain === 'workforce' ? '生效授权记录' : '已核验自然人'} value={domain === 'workforce' ? (session.capabilities?.includes('grants') ? grants.filter(g => grantIsCurrent(g)).length : '—') : users.filter(u => u.verified).length} description={domain === 'workforce' ? (session.capabilities?.includes('grants') ? `${expiring.length} 项将在30天内到期` : '应用授权服务尚未开通') : '核验状态独立于账号状态'} icon={<KeyOutlined />} tone="purple" onClick={() => nav(base + (domain === 'workforce' ? 'grants/users' : 'persons'))}/>
-      <CardMetric label="登录失败事件" value={failures.length} description={`最近 ${days} 天 · 点击查看记录`} icon={<WarningOutlined />} tone="red" onClick={() => nav(base + 'audit/logins')}/>
+      <CardMetric label="登录失败事件" value={failureCount} description={`最近 ${days} 天 · 点击查看记录`} icon={<WarningOutlined />} tone="red" onClick={() => nav(base + 'audit/logins')}/>
     </div>
     <div className="dashboard-feature-row">
       <section className="hero-card">
@@ -111,7 +136,7 @@ export default function Dashboard({ domain, statistics = false }: {
         <div className="hero-health"><div className="hero-health-title">工作区数据 <span className="hero-live">已加载</span></div>{['身份资料', '应用登记', '角色资源', '审计记录'].map(t => <div className="health-row" key={t}><CheckCircleFilled style={{ color: '#18B789', fontSize: 10 }}/><span>{t}</span><span>已读取</span></div>)}<div className="health-rate"><span>近{days}天认证成功率</span><strong>{rate}</strong></div></div>
       </section>
       <Card size="small" className="dashboard-card" title="登录趋势" extra={<Segmented size="small" value={days} onChange={v => setDays(Number(v))} options={[{ label: '近7天', value: 7 }, { label: '近14天', value: 14 }]}/>} styles={{ body: { padding: '12px 16px' } }}>
-        <div className="chart-legend"><Badge color="#5F7BFC" text={<span style={{ fontSize: 'var(--iam-font-caption)', color: '#7B8CAC' }}>总登录次数</span>}/><Badge color="#A085FA" text={<span style={{ fontSize: 'var(--iam-font-caption)', color: '#7B8CAC' }}>独立用户数</span>}/></div><TrendChart data={points}/>
+        <div className="chart-legend"><Badge color="#5F7BFC" text={<span style={{ fontSize: 'var(--iam-font-caption)', color: '#7B8CAC' }}>总登录次数</span>}/><Badge color="#A085FA" text={<span style={{ fontSize: 'var(--iam-font-caption)', color: '#7B8CAC' }}>独立用户数</span>}/></div><TrendChart data={[...points].sort((a,b)=>a.date.localeCompare(b.date))}/>
       </Card>
     </div>
     <div className="dashboard-three">
@@ -128,7 +153,7 @@ export default function Dashboard({ domain, statistics = false }: {
     <div className="dashboard-bottom">
       <Card size="small" className="dashboard-card" title="身份分布" extra={<span className="screen-top-note">共 {users.length} 位</span>}><div className="identity-distribution">{departments.map(item => { const percent = users.length ? Math.round(item.value / users.length * 100) : 0; return <div className="distribution-row" key={item.name}><div className="distribution-summary"><span><i style={{ background: item.color }}/>{item.name}</span><strong>{item.value} 人</strong><span>{percent}%</span></div><div className="distribution-track" role="meter" aria-label={item.name} aria-valuenow={item.value} aria-valuemin={0} aria-valuemax={users.length || 1}><span style={{ width: `${percent}%`, background: item.color }}/></div></div>; })}</div></Card>
       <Card size="small" className="dashboard-card" title="最近操作记录" extra={<Button type="link" size="small" className="card-link" onClick={() => nav(base + 'audit/operations')}>查看全部 <ArrowRightOutlined /></Button>} styles={{ body: { padding: '0 16px 10px' } }}>
-        <div className="dashboard-audit-table"><Table<Log> size="small" rowKey="id" dataSource={operations} pagination={false} scroll={{ x: 700 }} locale={{ emptyText: '暂无操作记录' }} columns={[{ title: '时间', dataIndex: 'createdAt', width: 148, render: (value: string) => <time className="dashboard-audit-time" dateTime={value}>{dayjs(value).format('YYYY-MM-DD HH:mm')}</time> }, { title: '操作人', width: 128, ellipsis: true, render: (_, row) => <span className="dashboard-audit-actor" title={actorLabel(row)}>{actorLabel(row)}</span> }, { title: '操作类型', dataIndex: 'action', width: 160, ellipsis: true, render: (value: string) => <span className="dashboard-audit-action" title={auditActionLabel(value)}>{auditActionLabel(value)}</span> }, { title: '目标对象', ellipsis: true, render: (_, row) => <span className="dashboard-audit-target" title={auditTargetLabel(row, db)}>{auditTargetLabel(row, db)}</span> }]}/></div>
+        <div className="dashboard-audit-table"><Table<Log> size="small" rowKey="id" dataSource={operations} onChange={operationOrder.onChange} pagination={false} scroll={{ x: 700 }} locale={{ emptyText: '暂无操作记录' }} columns={[{ title: '时间', dataIndex: 'createdAt',...operationOrder.column('event_time'), width: 148, render: (value: string) => <time className="dashboard-audit-time" dateTime={value}>{dayjs(value).format('YYYY-MM-DD HH:mm')}</time> }, { title: '操作人', width: 128, ellipsis: true, render: (_, row) => <span className="dashboard-audit-actor" title={actorLabel(row)}>{actorLabel(row)}</span> }, { title: '操作类型', dataIndex: 'action', width: 160, ellipsis: true, render: (value: string) => <span className="dashboard-audit-action" title={auditActionLabel(value)}>{auditActionLabel(value)}</span> }, { title: '目标对象', ellipsis: true, render: (_, row) => <span className="dashboard-audit-target" title={auditTargetLabel(row, db)}>{auditTargetLabel(row, db)}</span> }]}/></div>
         <div className="dashboard-audit-list">{operations.map(row => <div className="dashboard-audit-item" key={row.id}>
           <div className="dashboard-audit-item-top"><strong title={auditActionLabel(row.action)}>{auditActionLabel(row.action)}</strong><time dateTime={row.createdAt}>{dayjs(row.createdAt).format('YYYY-MM-DD HH:mm')}</time></div>
           <div className="dashboard-audit-item-bottom"><span title={actorLabel(row)}>{actorLabel(row)}</span><span title={auditTargetLabel(row, db)}>{auditTargetLabel(row, db)}</span></div>
@@ -136,6 +161,6 @@ export default function Dashboard({ domain, statistics = false }: {
       </Card>
     </div>
     {statistics && <Card size="small" title="访问趋势明细" style={{ marginTop: 20 }} extra={<Segmented size="small" value={chart} onChange={v => setChart(String(v))} options={[{ label: '数据表', value: 'table' }, { label: '趋势图', value: 'chart' }]}/>}>
-      {chart === 'chart' ? <TrendChart data={points}/> : <Table size="small" rowKey="date" dataSource={points} pagination={false} columns={[{ title: '日期', dataIndex: 'date' }, { title: '登录次数', dataIndex: 'count' }, { title: '独立用户数', dataIndex: 'people' }]} scroll={{ x: 'max-content' }}/>}</Card>}
+      {chart === 'chart' ? <TrendChart data={[...points].sort((a,b)=>a.date.localeCompare(b.date))}/> : <Table size="small" rowKey="date" dataSource={points} onChange={trendOrder.onChange} pagination={false} columns={[{ title: '日期', dataIndex: 'date',...trendOrder.column('date') }, { title: '登录次数', dataIndex: 'count',...trendOrder.column('count') }, { title: '独立用户数', dataIndex: 'people',...trendOrder.column('people') }]} scroll={{ x: 'max-content' }}/>}</Card>}
   </>;
 }

@@ -26,6 +26,7 @@
 // 路由：POST /dst/database/departmentDataSources
 // 业务说明：本部门数据源管理：mode=summary 返回轻量概要与批量统计；mode=tables 按 datasourceId 分页读取已登记表；mode=reportTables 批量分页读取可见上报数据源的业务表和日志表。当前租户及菜单数据权限校验；默认模式兼容历史调用者；公安LOCAL账号使用本地库与令牌会话，其他租户保留原机制；涉及 db_datasource_t、db_table_t、sym_application_t、rm_org_t 等业务表。
 import "@post:/sym/user/me" as me
+import tableSort
 import tenantRuntime
 import tenantEs
 import dataScope
@@ -135,6 +136,9 @@ if (requestMode == 'reportTables') {
         total: numberValue(reportPage.total), list: reportRows }
 }
 if (requestMode == 'tables') {
+    var sortColumn=tableSort.field(body,{tableName:"coalesce(nullif(table_name_cn,''),nullif(table_comment,''),table_name)",fieldCount:'field_count',createdTime:'created_time',updatedTime:'updated_time'},'createdTime')
+    var sortDirection=tableSort.direction(body)
+
     var datasourceId = text(body?.datasourceId).trim()
     if (blank(datasourceId)) { exit 400, '缺少数据源标识' }
     var sourceRows = db.table('db_datasource_t').where()
@@ -164,7 +168,7 @@ if (requestMode == 'tables') {
                business_type as businessType, field_count as fieldCount,
                asset_status as assetStatus, created_time as createdTime, updated_time as updatedTime
           from db_table_t where ${pageWhere}
-         order by created_time desc, updated_time desc, table_name asc, tid asc
+         order by ${sortColumn} ${sortDirection},tid asc
          limit ${offset}, ${pageSize}
     """)
     var pageList = []
@@ -624,11 +628,11 @@ for (item in result) {
         if (deferredTable) {
             item.deferredTableNum = item.deferredTableNum + 1
         }
-        if (businessType == 'business' || businessType == '业务表') {
+        if (numberValue(table.assetStatus) > 0 && (businessType == 'business' || businessType == '业务表')) {
             item.businessTableNum = item.businessTableNum + 1
-        } else if (businessType == 'dict' || businessType == 'dictionary' || businessType == '字典表') {
+        } else if (numberValue(table.assetStatus) > 0 && (businessType == 'dict' || businessType == 'dictionary' || businessType == '字典表')) {
             item.dictionaryTableNum = item.dictionaryTableNum + 1
-        } else if (businessType == 'log' || businessType == '日志表') {
+        } else if (numberValue(table.assetStatus) > 0 && (businessType == 'log' || businessType == '日志表')) {
             item.logTableNum = item.logTableNum + 1
         }
         if (table.hasIssue) {
@@ -686,9 +690,9 @@ if (datasourceIds.size() > 0) {
                sum(case when ifnull(annotated, 0) = 1 then 1 else 0 end) as annotatedTableNum,
                sum(case when ifnull(annotated, 0) <> 1 then 1 else 0 end) as unannotatedTableNum,
                sum(case when ifnull(asset_status, 0) = 2 then 1 else 0 end) as registeredTableNum,
-               sum(case when lower(ifnull(business_type, '')) in ('business', '业务表') then 1 else 0 end) as businessTableNum,
-               sum(case when lower(ifnull(business_type, '')) in ('dict', 'dictionary', '字典表') then 1 else 0 end) as dictionaryTableNum,
-               sum(case when lower(ifnull(business_type, '')) in ('log', '日志表') then 1 else 0 end) as logTableNum,
+               sum(case when asset_status > 0 and lower(ifnull(business_type, '')) in ('business', '业务表') then 1 else 0 end) as businessTableNum,
+               sum(case when asset_status > 0 and lower(ifnull(business_type, '')) in ('dict', 'dictionary', '字典表') then 1 else 0 end) as dictionaryTableNum,
+               sum(case when asset_status > 0 and lower(ifnull(business_type, '')) in ('log', '日志表') then 1 else 0 end) as logTableNum,
                sum(case when lower(ifnull(business_type, '')) in ('business', '业务表', 'dict', 'dictionary', '字典表', 'log', '日志表') then 1 else 0 end) as coreTableNum,
                sum(case when lower(ifnull(business_type, '')) in ('business', '业务表', 'dict', 'dictionary', '字典表', 'log', '日志表')
                          and ifnull(asset_status, 0) = 2 then 1 else 0 end) as registeredCoreTableNum,
@@ -734,6 +738,10 @@ if (datasourceIds.size() > 0) {
             // MySQL 主表是数据源描述的权威来源，覆盖 ES 可能滞后的空投影。
             item.description = storedDatasource.description
         }
+        // 类型数量只认可当前租户主表的有效登记记录；无主表记录时不沿用 ES 旧投影。
+        item.businessTableNum = 0
+        item.dictionaryTableNum = 0
+        item.logTableNum = 0
         if (mysqlStats != null) {
             var displayTableNum = mysqlStats.tableNum
             if (exploredTotal > displayTableNum) {

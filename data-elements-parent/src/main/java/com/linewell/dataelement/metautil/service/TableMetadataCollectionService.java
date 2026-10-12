@@ -9,6 +9,10 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import com.linewell.dataelement.platform.persistence.id.NumericId;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import com.linewell.dataelement.platform.persistence.ServerTableOrder;
+import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService;
+import com.linewell.dataelement.feature.identity.application.DataSourceScopeSql;
+import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PreDestroy;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -54,6 +58,7 @@ public class TableMetadataCollectionService {
     private final DataSourceConnectionPropertyResolver connections;
     private final HiveModule huaweiMrsHive;
     private final ObjectMapper json;
+    private final DataScopeAuthorizationService scopes;
     private final ExecutorService workers = Executors.newFixedThreadPool(2,
             Thread.ofPlatform().name("table-metadata-collection-", 0).factory());
     private final Set<String> inFlightJobIds = ConcurrentHashMap.newKeySet();
@@ -65,6 +70,13 @@ public class TableMetadataCollectionService {
             HiveModule huaweiMrsHive,
             ObjectMapper json
     ) {
+        this(jdbc,explorer,connections,huaweiMrsHive,json,null);
+    }
+
+    @Autowired
+    public TableMetadataCollectionService(JdbcTemplate jdbc,MetadataExplorerService explorer,
+            DataSourceConnectionPropertyResolver connections,HiveModule huaweiMrsHive,ObjectMapper json,DataScopeAuthorizationService scopes) {
+        this.scopes = scopes;
         this.jdbc = jdbc;
         this.explorer = explorer;
         this.connections = connections;
@@ -227,11 +239,16 @@ public class TableMetadataCollectionService {
 
     /** A database-paged list of every saved table/view for this tenant and datasource. */
     public Map<String, Object> savedTables(String datasourceId, int pageNo, int pageSize, String keyword) {
+        return savedTables(datasourceId,pageNo,pageSize,keyword,null,null);
+    }
+
+    public Map<String, Object> savedTables(String datasourceId, int pageNo, int pageSize, String keyword,String sortField,String sortDir) {
         String tenantId = TenantContext.requireTenantId();
         String sourceId = requiredDatasourceId(datasourceId);
         requireSavedDatasource(tenantId, sourceId);
         int safePage = Math.max(1, pageNo);
         int safeSize = Math.min(100, Math.max(1, pageSize));
+        String order = ServerTableOrder.sql(sortField,sortDir,Map.of("tableName","lower(saved.table_name)","name","COALESCE(NULLIF(saved.table_name_cn,''),NULLIF(saved.table_comment,''),saved.table_name)","fieldCount","saved.field_count","tableNameCn","COALESCE(NULLIF(saved.table_name_cn,''),NULLIF(saved.table_comment,''),saved.table_name)","createdAt","saved.created_time","updatedAt","saved.updated_time"),"tableName","asc","saved.tid");
         String dedup = """
                 from (
                     select t.tid, t.datasource_id, t.table_name, t.table_name_en,
@@ -258,7 +275,8 @@ public class TableMetadataCollectionService {
         pageArgs.add((long) safePage * safeSize);
         List<Map<String, Object>> pageRows = jdbc.queryForList("""
                 select * from (
-                    select saved.*, row_number() over (order by lower(saved.table_name), saved.tid) as page_rank
+                    select saved.*, row_number() over (order by """ + " " + order + """
+                    ) as page_rank
                 """ + dedup + filter + """
                 ) numbered where numbered.page_rank>? and numbered.page_rank<=?
                  order by numbered.page_rank
@@ -268,6 +286,10 @@ public class TableMetadataCollectionService {
 
     /** Newly inserted table headers from the latest successful run, returned one page at a time. */
     public Map<String, Object> addedTables(String datasourceId, int pageNo, int pageSize) {
+        return addedTables(datasourceId,pageNo,pageSize,null,null);
+    }
+    public Map<String, Object> addedTables(String datasourceId, int pageNo, int pageSize,String sortField,String sortDir) {
+        String order=collectionTableOrder(sortField,sortDir,"");
         String tenantId = TenantContext.requireTenantId();
         String sourceId = requiredDatasourceId(datasourceId);
         requireSavedDatasource(tenantId, sourceId);
@@ -276,7 +298,7 @@ public class TableMetadataCollectionService {
         List<Map<String, Object>> jobs = jdbc.queryForList("""
                 select started_time, finished_time from metadata_table_collection_job_t
                  where tenant_id=? and datasource_id=? and is_del=0 and status=?
-                 order by created_time desc, tid desc
+                 order by created_time desc, tid desc limit 1
                 """, tenantId, sourceId, SUCCEEDED);
         if (jobs.isEmpty()) return pagedTables(List.of(), safePage, safeSize, 0);
         Map<String, Object> job = jobs.getFirst();
@@ -289,7 +311,8 @@ public class TableMetadataCollectionService {
                 select * from (
                     select tid, datasource_id, table_name, table_name_en, table_name_cn,
                            table_comment, table_type, field_count, annotated, created_time, updated_time,
-                           row_number() over (order by created_time, tid) as page_rank
+                           row_number() over (order by """ + " " + order + """
+                           ) as page_rank
                 """ + where + """
                 ) numbered where numbered.page_rank>? and numbered.page_rank<=?
                  order by numbered.page_rank
@@ -307,6 +330,7 @@ public class TableMetadataCollectionService {
             item.put("tableNameCn", first(row, "table_name_cn", "table_comment", "table_name"));
             item.put("tableType", first(row, "table_type"));
             item.put("fieldCount", number(row.get("field_count")));
+            item.put("recordCount",number(row.get("record_count")));
             item.put("createdAt", row.get("created_time"));
             item.put("updatedAt", row.get("updated_time"));
             rows.add(item);
@@ -315,10 +339,34 @@ public class TableMetadataCollectionService {
     }
 
     private void requireSavedDatasource(String tenantId, String sourceId) {
-        Long count = jdbc.queryForObject("""
-                select count(*) from db_datasource_t where tid=? and tenant_id=? and is_del=0
-                """, Long.class, sourceId, tenantId);
+        List<Object> args = new ArrayList<>(List.of(sourceId,tenantId));
+        String scope = DataSourceScopeSql.predicate(scopes,"d",args);
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM db_datasource_t d WHERE d.tid=? AND d.tenant_id=? AND d.is_del=0 AND " + scope,Long.class,args.toArray());
         if (count == null || count == 0) throw new IllegalArgumentException("数据源不存在或无访问权限");
+    }
+
+    /** Orders the complete selected review scope using persisted metadata, then returns one page of keys. */
+    public Map<String,Object> reviewOrder(String datasourceId,Map<String,Object> body){
+        String tenantId=TenantContext.requireTenantId(),sourceId=requiredDatasourceId(datasourceId);
+        requireSavedDatasource(tenantId,sourceId);
+        if(!(body.get("names") instanceof Collection<?> names)||names.size()>10000)
+            throw new IllegalArgumentException("审查范围最多10000张表");
+        var wanted=new LinkedHashSet<String>();
+        for(Object name:names){String key=text(name);if(key.isBlank()||key.length()>256||!wanted.add(key))throw new IllegalArgumentException("数据表名称为空或重复");}
+        int page=body.get("pageNo")==null?1:Integer.parseInt(text(body.get("pageNo")));
+        int size=body.get("pageSize")==null?20:Integer.parseInt(text(body.get("pageSize")));
+        if(page<1||page>100000||size<1||size>100)throw new IllegalArgumentException("分页参数无效，每页最多100张表");
+        String order=ServerTableOrder.sql(text(body.get("sortField")),text(body.get("sortDir")),
+            Map.of("tableName","t.table_name","name","COALESCE(NULLIF(t.table_name_cn,''),NULLIF(t.table_comment,''),t.table_name)",
+                "fieldCount","t.field_count","createdTime","t.created_time","updatedTime","t.updated_time"),"tableName","asc","t.tid");
+        // The datasource is the bounded review snapshot; no large IN clause or per-table read is issued.
+        var stored=jdbc.queryForList("SELECT t.table_name FROM (SELECT original.*,ROW_NUMBER() OVER(PARTITION BY lower(original.table_name) ORDER BY COALESCE(original.annotated,0) DESC,original.updated_time DESC,original.tid DESC) name_rank FROM db_table_t original WHERE original.tenant_id=? AND original.datasource_id=? AND original.is_del=0) t WHERE t.name_rank=1 ORDER BY "+order+" LIMIT 10001",tenantId,sourceId);
+        if(stored.size()>10000)throw new IllegalArgumentException("数据源超过10000张表，请缩小审查范围");
+        var ordered=new LinkedHashSet<String>();
+        for(var row:stored){String name=text(row.get("table_name"));if(wanted.contains(name))ordered.add(name);}
+        if(ordered.size()!=wanted.size())throw new IllegalArgumentException("审查范围包含不存在或无权访问的数据表，请刷新清单");
+        var keys=new ArrayList<>(ordered);int start=(int)Math.min((long)(page-1)*size,keys.size());
+        return Map.of("keys",keys.subList(start,Math.min(start+size,keys.size())),"total",keys.size());
     }
 
     /**
@@ -327,40 +375,44 @@ public class TableMetadataCollectionService {
      * JSON, but the browser must not receive every changed row at once.
      */
     public Map<String, Object> changedTables(String datasourceId, int pageNo, int pageSize, String keyword) {
-        String tenantId = TenantContext.requireTenantId();
-        String sourceId = requiredDatasourceId(datasourceId);
-        int safePage = Math.max(1, pageNo);
-        int safeSize = Math.min(100, Math.max(1, pageSize));
-        List<Map<String, Object>> jobs = jdbc.queryForList("""
-                select deleted_detail from metadata_table_collection_job_t
-                 where tenant_id=? and datasource_id=? and is_del=0
-                 order by created_time desc, tid desc
-                """, tenantId, sourceId);
-        List<Map<String, Object>> all = jobs.isEmpty() ? List.of() : deletedRows(jobs.getFirst().get("deleted_detail"));
-        String normalizedKeyword = text(keyword).toLowerCase(Locale.ROOT);
-        List<Map<String, Object>> matched = new ArrayList<>();
-        for (Map<String, Object> row : all) {
-            String tableName = first(row, "tableName", "tableNameEn", "name");
-            if (normalizedKeyword.isEmpty() || tableName.toLowerCase(Locale.ROOT).contains(normalizedKeyword)) {
-                matched.add(row);
-            }
-        }
-        int maxPage = Math.max(1, (matched.size() + safeSize - 1) / safeSize);
-        int effectivePage = Math.min(safePage, maxPage);
-        int from = Math.min((effectivePage - 1) * safeSize, matched.size());
-        int to = Math.min(from + safeSize, matched.size());
-        List<Map<String, Object>> pageRows = new ArrayList<>();
-        for (int index = from; index < to; index++) {
-            Map<String, Object> row = new LinkedHashMap<>(matched.get(index));
-            row.put("serialNo", index + 1);
-            pageRows.add(row);
-        }
-        return Map.of(
-                "pageNo", effectivePage,
-                "pageSize", safeSize,
-                "total", matched.size(),
-                "rows", pageRows,
-                "list", pageRows);
+        return changedTables(datasourceId,pageNo,pageSize,keyword,null,null);
+    }
+    public Map<String, Object> changedTables(String datasourceId,int pageNo,int pageSize,String keyword,String sortField,String sortDir) {
+        String tenantId=TenantContext.requireTenantId(),sourceId=requiredDatasourceId(datasourceId);
+        requireSavedDatasource(tenantId,sourceId);
+        String order=ServerTableOrder.sql(sortField,sortDir,Map.of("tableName","changed.table_name","name","changed.table_name","tableNameCn","coalesce(changed.table_name_cn,changed.table_name)","fieldCount","changed.field_count","recordCount","changed.record_count"),"tableName","asc","changed.tid");
+        int page=Math.max(1,pageNo),size=Math.min(100,Math.max(1,pageSize));
+        String details=latestChangeDocument(tenantId,sourceId,false);
+        String from="""
+                FROM JSON_TABLE(CASE WHEN JSON_VALID(?)=1 THEN ? ELSE '[]' END,'$[*]' COLUMNS(
+                  tid VARCHAR(64) PATH '$.tid',table_name VARCHAR(255) PATH '$.tableName',
+                  table_name_cn VARCHAR(1000) PATH '$.tableNameCn',table_comment VARCHAR(1000) PATH '$.tableComment',
+                  table_type VARCHAR(30) PATH '$.tableType',field_count BIGINT PATH '$.fieldCount',record_count BIGINT PATH '$.recordCount'
+                )) changed WHERE 1=1
+                """;
+        List<Object> args=new ArrayList<>(List.of(details,details));
+        if(!blank(keyword)){from+=" AND (lower(changed.table_name) LIKE ? OR lower(changed.table_name_cn) LIKE ?)";String match="%"+keyword.toLowerCase(Locale.ROOT)+"%";args.add(match);args.add(match);}
+        Long total=jdbc.queryForObject("SELECT COUNT(*) "+from,Long.class,args.toArray());
+        args.add(size);args.add((long)(page-1)*size);
+        List<Map<String,Object>> rows=jdbc.queryForList("SELECT changed.* "+from+" ORDER BY "+order+" LIMIT ? OFFSET ?",args.toArray());
+        return pagedTables(rows,page,size,total==null?0:total);
+    }
+
+    private String latestChangeDocument(String tenantId,String sourceId,boolean successfulOnly) {
+        List<Object> args=new ArrayList<>(List.of(tenantId,sourceId));
+        String success=successfulOnly?" AND status=?":"";if(successfulOnly)args.add(SUCCEEDED);
+        List<Map<String,Object>> jobs=jdbc.queryForList("SELECT deleted_detail FROM metadata_table_collection_job_t WHERE tenant_id=? AND datasource_id=? AND is_del=0"+success+" ORDER BY created_time DESC,tid DESC LIMIT 1",args.toArray());
+        String detail=jobs.isEmpty()?null:text(jobs.getFirst().get("deleted_detail"));
+        return blank(detail)?"[]":detail;
+    }
+
+    private String collectionTableOrder(String field,String direction,String prefix) {
+        return ServerTableOrder.sql(field,direction,Map.ofEntries(
+            Map.entry("name",prefix+"table_name"),Map.entry("tableName",prefix+"table_name"),
+            Map.entry("tableNameCn","COALESCE(NULLIF("+prefix+"table_name_cn,''),"+prefix+"table_name)"),
+            Map.entry("fieldCount",prefix+"field_count"),Map.entry("recordCount",prefix+"record_count"),
+            Map.entry("createdAt",prefix+"created_time"),Map.entry("createdTime",prefix+"created_time"),
+            Map.entry("updatedAt",prefix+"updated_time"),Map.entry("updatedTime",prefix+"updated_time")),"tableName","asc",prefix+"tid");
     }
 
     /**
@@ -368,50 +420,29 @@ public class TableMetadataCollectionService {
      * does not call a metadata explorer: opening step 2 is now a local-MySQL
      * operation even for a datasource with tens of thousands of physical tables.
      */
-    public Map<String, Object> snapshot(String datasourceId, int pageNo, int pageSize, Integer offset,
-                                        String keyword, String businessType) {
-        String tenantId = TenantContext.requireTenantId();
-        String sourceId = requiredDatasourceId(datasourceId);
-        int safePage = Math.max(1, pageNo);
-        // The registration UI can append a deliberately chosen 200/500/1000
-        // records in one snapshot read.  This stays bounded while avoiding
-        // several 100-record round trips for one user action.
-        int safeSize = Math.min(1000, Math.max(1, pageSize));
-        Set<String> missing = latestDeletedNames(tenantId, sourceId);
-        StringBuilder where = new StringBuilder(" tenant_id=? and datasource_id=? and is_del=0 and (annotated=0 or annotated is null) ");
-        List<Object> args = new ArrayList<>(List.of(tenantId, sourceId));
-        if (!blank(keyword)) {
-            where.append(" and (lower(table_name) like ? or lower(coalesce(table_comment, table_name_cn, '')) like ?)");
-            String match = "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
-            args.add(match);
-            args.add(match);
-        }
-        if (!blank(businessType) && !"全部".equals(businessType.trim())) {
-            where.append(" and business_type=?");
-            args.add(businessType.trim());
-        }
-        List<Map<String, Object>> candidateRows = jdbc.queryForList("select * from db_table_t where " + where
-                + " order by updated_time desc, tid desc", args.toArray());
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (Map<String, Object> row : candidateRows) {
-            if (!missing.contains(normalize(text(row.get("table_name"))))) rows.add(snapshotRow(row));
-        }
-        int requestedOffset = offset == null ? (safePage - 1) * safeSize : Math.max(0, offset);
-        int from = Math.min(requestedOffset, rows.size());
-        int to = Math.min(from + safeSize, rows.size());
-        long marked = jdbc.queryForObject("""
-                select count(*) from db_table_t
-                 where tenant_id=? and datasource_id=? and is_del=0 and annotated=1
-                """, Long.class, tenantId, sourceId);
-        return Map.of(
-                "pageNo", safePage,
-                "pageSize", safeSize,
-                "offset", from,
-                "total", rows.size(),
-                "physicalTotal", rows.size() + marked,
-                "unmarkedTotal", rows.size(),
-                "rows", rows.subList(from, to),
-                "list", rows.subList(from, to));
+    public Map<String,Object> snapshot(String datasourceId,int pageNo,int pageSize,Integer offset,String keyword,String businessType) {
+        return snapshot(datasourceId,pageNo,pageSize,offset,keyword,businessType,null,null);
+    }
+    public Map<String,Object> snapshot(String datasourceId,int pageNo,int pageSize,Integer offset,String keyword,String businessType,String sortField,String sortDir) {
+        String tenantId=TenantContext.requireTenantId(),sourceId=requiredDatasourceId(datasourceId);
+        requireSavedDatasource(tenantId,sourceId);
+        String order=collectionTableOrder(sortField,sortDir,"t.");
+        int page=Math.max(1,pageNo),size=Math.min(1000,Math.max(1,pageSize));
+        long start=offset==null?(long)(page-1)*size:Math.max(0,offset);
+        String details=latestChangeDocument(tenantId,sourceId,true);
+        String where="""
+                FROM db_table_t t WHERE t.tenant_id=? AND t.datasource_id=? AND t.is_del=0 AND (t.annotated=0 OR t.annotated IS NULL)
+                AND NOT EXISTS(SELECT 1 FROM JSON_TABLE(CASE WHEN JSON_VALID(?)=1 THEN ? ELSE '[]' END,'$[*]'
+                  COLUMNS(missing_name VARCHAR(255) PATH '$.tableName')) missing WHERE CAST(lower(trim(missing.missing_name)) AS CHAR(255))=CAST(lower(trim(t.table_name)) AS CHAR(255)))
+                """;
+        List<Object> args=new ArrayList<>(List.of(tenantId,sourceId,details,details));
+        if(!blank(keyword)){where+=" AND (lower(t.table_name) LIKE ? OR lower(coalesce(t.table_comment,t.table_name_cn,'')) LIKE ?)";String match="%"+keyword.toLowerCase(Locale.ROOT)+"%";args.add(match);args.add(match);}
+        if(!blank(businessType)&&!"全部".equals(businessType.trim())){where+=" AND t.business_type=?";args.add(businessType.trim());}
+        Long count=jdbc.queryForObject("SELECT COUNT(*) "+where,Long.class,args.toArray());long total=count==null?0:count;
+        args.add(size);args.add(start);
+        List<Map<String,Object>> rows=jdbc.queryForList("SELECT t.* "+where+" ORDER BY "+order+" LIMIT ? OFFSET ?",args.toArray()).stream().map(this::snapshotRow).toList();
+        Long marked=jdbc.queryForObject("SELECT COUNT(*) FROM db_table_t WHERE tenant_id=? AND datasource_id=? AND is_del=0 AND annotated=1",Long.class,tenantId,sourceId);
+        return Map.of("pageNo",page,"pageSize",size,"offset",Math.min(start,total),"total",total,"physicalTotal",total+(marked==null?0:marked),"unmarkedTotal",total,"rows",rows,"list",rows);
     }
 
     /**

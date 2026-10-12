@@ -47,23 +47,29 @@ public class TableMetadataCollectionController {
     public Map<String, Object> changes(@RequestParam("dbId") String dbId,
                                        @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
                                        @RequestParam(value = "pageSize", defaultValue = "20") int pageSize,
-                                       @RequestParam(value = "keyword", required = false) String keyword) {
-        return success(collection.changedTables(dbId, pageNo, pageSize, keyword));
+                                       @RequestParam(value = "keyword", required = false) String keyword,
+                                       @RequestParam(value="sortField",required=false) String sortField,
+                                       @RequestParam(value="sortDir",required=false) String sortDir) {
+        return success(collection.changedTables(dbId, pageNo, pageSize, keyword,sortField,sortDir));
     }
 
     @GetMapping("/saved")
     public Map<String, Object> saved(@RequestParam("dbId") String dbId,
                                      @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
                                      @RequestParam(value = "pageSize", defaultValue = "15") int pageSize,
-                                     @RequestParam(value = "keyword", required = false) String keyword) {
-        return success(collection.savedTables(dbId, pageNo, pageSize, keyword));
+                                     @RequestParam(value = "keyword", required = false) String keyword,
+                                     @RequestParam(value = "sortField", required = false) String sortField,
+                                     @RequestParam(value = "sortDir", required = false) String sortDir) {
+        return success(collection.savedTables(dbId, pageNo, pageSize, keyword,sortField,sortDir));
     }
 
     @GetMapping("/collection/additions")
     public Map<String, Object> additions(@RequestParam("dbId") String dbId,
                                          @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
-                                         @RequestParam(value = "pageSize", defaultValue = "15") int pageSize) {
-        return success(collection.addedTables(dbId, pageNo, pageSize));
+                                         @RequestParam(value = "pageSize", defaultValue = "15") int pageSize,
+                                         @RequestParam(value="sortField",required=false) String sortField,
+                                         @RequestParam(value="sortDir",required=false) String sortDir) {
+        return success(collection.addedTables(dbId, pageNo, pageSize,sortField,sortDir));
     }
 
     @GetMapping("/snapshot")
@@ -72,8 +78,16 @@ public class TableMetadataCollectionController {
                                         @RequestParam(value = "pageSize", defaultValue = "100") int pageSize,
                                         @RequestParam(value = "offset", required = false) Integer offset,
                                         @RequestParam(value = "keyword", required = false) String keyword,
-                                        @RequestParam(value = "businessType", required = false) String businessType) {
-        return success(collection.snapshot(dbId, pageNo, pageSize, offset, keyword, businessType));
+                                        @RequestParam(value = "businessType", required = false) String businessType,
+                                        @RequestParam(value="sortField",required=false) String sortField,
+                                        @RequestParam(value="sortDir",required=false) String sortDir) {
+        return success(collection.snapshot(dbId, pageNo, pageSize, offset, keyword, businessType,sortField,sortDir));
+    }
+
+    /** Review calculations stay in the editor; persisted names and order are validated by the server. */
+    @PostMapping("/review-order")
+    public Map<String,Object> reviewOrder(@RequestBody Map<String,Object> body){
+        return success(collection.reviewOrder(value(body,"dbId"),body));
     }
 
     @PostMapping("/collection/rename-missing")

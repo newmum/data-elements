@@ -55,9 +55,9 @@ export function ModelLogsPage() {
         onChange={value => setStage(value || '')}
         options={(['设计', '标准化', '版本', '物化'] as const).map(value => ({ value, label: value }))}
       />
-      <span className="ps-log-count">{shown.length} 条过程记录</span>
+      
     </div>
-    <PTable
+    <PTable tableSource="modelLogs" tableQuery={{modelId,stage}}
       rows={shown}
       onRefresh={refresh}
       searchText={row => `${row.modelName} ${row.modelCode} ${row.event} ${row.stage} ${row.detail} ${actorName(row)}`}

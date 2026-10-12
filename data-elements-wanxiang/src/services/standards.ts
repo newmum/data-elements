@@ -15,9 +15,13 @@ export function pageOf(value:unknown):{list:Row[];total:number} {
 /** Only business fields cross this boundary. Tenant ownership/audit rows are never editable DTOs. */
 export function elementRow(raw:Row):Row {
  const row:Row={id:string(raw.tid??raw.id)};
- for(const [camel,snake] of [['metaName','meta_name'],['metaCode','meta_code'],['standardEncode','standard_encode'],['bizDef','biz_def'],['dataTypeId','data_type_id'],['fieldType','field_type'],['fieldLength','field_length'],['numericPrecision','numeric_precision'],['numericScale','numeric_scale'],['formatPattern','format_pattern'],['exampleValue','example_value'],['standardCodeSet','standard_code_set'],['valueDomainId','value_domain_id'],['isNullable','is_nullable'],['dataLevel','data_level'],['dataCategoryId','data_category_id'],['dataCategoryName','data_category_name'],['dataCategoryPath','data_category_path'],['qualityRule','quality_rule'],['customRule','custom_rule'],['versionNo','version_no'],['publishStatus','publish_status'],['updatedTime','updated_time']])row[camel]=pick(raw,camel,snake)??null;
+ for(const [camel,snake] of [['metaName','meta_name'],['metaCode','meta_code'],['standardEncode','standard_encode'],['bizDef','biz_def'],['dataTypeId','data_type_id'],['fieldType','field_type'],['fieldLength','field_length'],['numericPrecision','numeric_precision'],['numericScale','numeric_scale'],['formatPattern','format_pattern'],['exampleValue','example_value'],['standardCodeSet','standard_code_set'],['valueDomainId','value_domain_id'],['isNullable','is_nullable'],['dataLevel','data_level'],['dataCategoryId','data_category_id'],['dataCategoryName','data_category_name'],['dataCategoryPath','data_category_path'],['qualityRule','quality_rule'],['customRule','custom_rule'],['versionNo','version_no'],['publishStatus','publish_status'],['updatedTime','updated_time'],['createdTime','created_time']])row[camel]=pick(raw,camel,snake)??null;
  row.name=string(row.metaName);row.code=string(row.metaCode);row.definition=string(row.bizDef);row.type=string(row.fieldType||row.dataTypeId);row.length=row.fieldLength;row.domain=string(row.dataCategoryName);row.status=Number(row.publishStatus)===1?'PUBLISHED':'PENDING';row.updatedAt=row.updatedTime;
  return row;
+}
+export async function elementPage(query:Row,signal?:AbortSignal):Promise<{list:Row[];total:number}> {
+ const page=pageOf(await platformApi('/dwm/standard/element/page',query,{signal}));
+ return {...page,list:page.list.map(elementRow)};
 }
 export async function listElements(signal?:AbortSignal):Promise<Row[]> {
  const rows=new Map<string,Row>();
@@ -73,7 +77,7 @@ export async function setElementPublished(row:Row,published:boolean) {
  const saved=elementRow(await platformApi<Row>('/dwm/standard/element/updatePublishStatus',{tid:row.id,publishStatus:published?1:0,expectedPublishStatus:current.publishStatus,updatedBy:getSession()?.principalId}));
  if(saved.status!==(published?'PUBLISHED':'PENDING'))throw new Error('发布状态未更新，请刷新核实');changed();return saved;
 }
-export async function deleteElement(row:Row) {if((await readElement(row.id)).status==='PUBLISHED')throw new Error('请先下线再删除');const references=(await loadLanding()).items.filter(item=>item.target_id===row.id);if(references.length)throw new Error(`该数据元仍被 ${references.length} 个字段引用，请先解除引用`);await platformApi('/dwm/standard/element/meatDeleteById',{tid:row.id});changed();}
+export async function deleteElement(row:Row) {if((await readElement(row.id)).status==='PUBLISHED')throw new Error('请先下线再删除');const references=await loadLanding(undefined,{targetId:row.id,pageSize:1});if(references.total>0)throw new Error(`该数据元仍被 ${references.total} 个字段引用，请先解除引用`);await platformApi('/dwm/standard/element/meatDeleteById',{tid:row.id});changed();}
 
 export function parseCodeItems(value:unknown):Row[] {
  let parsed:unknown=value;if(typeof value==='string'){try{parsed=JSON.parse(value||'[]');}catch{throw new Error('代码条目格式损坏，当前内容不会被空数据覆盖');}}
@@ -81,6 +85,7 @@ export function parseCodeItems(value:unknown):Row[] {
  return parsed.map((r:Row)=>({value:string(r.code??r.value),label:string(r.name??r.label),parent:string(r.parent??r.parentCode),description:string(r.description)}));
 }
 export function codeRow(raw:Row):Row {return {id:string(raw.tid),name:string(raw.dictName??raw.dict_name),code:string(raw.dictCode??raw.dict_code),description:string(raw.description),dataCategoryId:pick(raw,'dataCategoryId','data_category_id'),dataCategoryName:pick(raw,'dataCategoryName','data_category_name'),dataCategoryPath:pick(raw,'dataCategoryPath','data_category_path'),codeSet:pick(raw,'codeSet','code_set'),parentCode:pick(raw,'parentCode','parent_code'),sortNo:pick(raw,'sortNo','sort_no')??0,items:parseCodeItems(pick(raw,'dictItemValue','dict_item_value')),status:Number(raw.status)===0?'DRAFT':'PUBLISHED',updatedAt:pick(raw,'updatedTime','updated_time')};}
+export async function codePage(query:Row,signal?:AbortSignal):Promise<{list:Row[];total:number}> {const page=pageOf(await platformApi('/dwm/standard/code/page',query,{signal}));return {...page,list:page.list.map(raw=>({...codeRow(raw),itemCount:Number(raw.itemCount??raw.item_count??0),referenceCount:Number(raw.referenceCount??raw.reference_count??0)}))};}
 export async function listCodes(signal?:AbortSignal):Promise<Row[]> {const raw=await platformApi<Row[]>('/dwm/standard/code/list',{}, {signal});if(!Array.isArray(raw))throw new Error('代码集列表返回格式不正确');return raw.map(codeRow);}
 export async function readCode(id:string) {const row=codeRow(await platformApi<Row>('/dwm/standard/code/queryById',{tid:id}));if(row.id!==id)throw new Error('代码集不存在或无权访问');return row;}
 export function codeBody(values:Row,existing?:Row|null,classes:Row[]=[]):Row {
@@ -96,7 +101,7 @@ export async function saveCode(values:Row,classes:Row[],existing?:Row|null) {if(
 export async function setCodePublished(row:Row,published:boolean,classes:Row[]) {const current=await readCode(row.id);if(current.status!==(published?'DRAFT':'PUBLISHED'))throw new Error('代码集状态已变化，请刷新');const result=codeRow(await platformApi<Row>('/dwm/standard/code/saveOrUpdate',codeBody({...current,status:published?'PUBLISHED':'DRAFT'},current,classes)));changed();return result;}
 export async function deleteCode(row:Row) {if((await readCode(row.id)).status==='PUBLISHED')throw new Error('请先下线再删除代码集');const references=(await listElements()).filter(e=>e.valueDomainId===row.id);if(references.length)throw new Error(`该代码集仍被 ${references.length} 个数据元引用，请先解除引用`);await platformApi('/dwm/standard/code/deleteById',{tid:row.id});changed();}
 
-export const loadLanding=(signal?:AbortSignal)=>platformApi<{items:Row[];entities:Row[];coverage:Row}>('/dwm/standard/landing/list',{}, {signal});
+export const loadLanding=(signal?:AbortSignal,query:Row={})=>platformApi<{items:Row[];entities:Row[];elements:Row[];coverage:Row;total:number}>('/dwm/standard/landing/list',query, {signal});
 export const loadMetadataBindings=(signal?:AbortSignal)=>platformApi<{items:Row[];rules:Row[]}>('/dwm/metadata-governance/bindings/list',{}, {signal});
 export async function saveBinding(values:Row) {const mode=values.mode||'STANDARD';if(!['STANDARD','QUALITY','REFERENCE'].includes(mode))throw new Error('无效的对标类型');const result=await platformApi(mode==='STANDARD'?'/dwm/standard/landing/save':'/dwm/metadata-governance/bindings/save',mode==='STANDARD'?{tableId:values.entityId,columnId:values.fieldId,standardId:values.targetId||null,expectedStandardId:values.expectedStandardId??null}:{tableId:values.entityId,columnId:values.fieldId,mode,targetId:values.targetId||null,expectedTargetId:values.expectedTargetId??null});changed();return result;}
 

@@ -34,8 +34,8 @@
         </el-input>
       </div>
 
-      <el-table :data="filteredRows" stripe>
-        <el-table-column v-for="column in current.columns" :key="column.prop" :prop="column.prop" :label="column.label" :min-width="column.minWidth || 140">
+      <DataTable :columns="[]" ref="mainTable" :data="type==='rules'?fetchControlPage:filteredRows" :preview-sort="type==='rules'?undefined:{name:'text',count:'number'}" :show-page="type==='rules'" stripe>
+        <el-table-column v-for="column in current.columns" :key="column.prop" :prop="column.prop" :label="column.label" :sortable="['name','count','effectiveAt','expiresAt'].includes(column.prop)?'custom':false" :min-width="column.minWidth || 140">
           <template #default="scope">
             <el-tag v-if="column.type === 'status'" :type="statusType(scope.row[column.prop])" effect="light">
               {{ scope.row[column.prop] }}
@@ -53,7 +53,7 @@
         <template #empty>
           <el-empty description="暂无匹配数据" />
         </template>
-      </el-table>
+      </DataTable>
     </section>
 
     <el-dialog v-model="inputEditVisible" title="编辑布控资源 Topic 集合" width="620px">
@@ -188,7 +188,7 @@
           </div>
           <el-tag :type="outputKindType(viewingOutput.kind)">{{ viewingOutput.kind }}</el-tag>
         </div>
-        <el-table :data="outputRecords" stripe border class="output-result-table">
+        <DataTable :columns="[]" :data="outputRecords" :show-page="false" :preview-sort="{occurredAt:'time'}" stripe border class="output-result-table">
           <el-table-column prop="eventId" label="事件 ID" min-width="190" fixed="left" />
           <el-table-column prop="channel" label="业务通道" min-width="120" />
           <el-table-column prop="status" label="处理结果" min-width="100">
@@ -197,9 +197,9 @@
           <el-table-column prop="subject" label="主体信息" min-width="210" />
           <el-table-column prop="ruleId" label="命中规则" min-width="150" />
           <el-table-column prop="snapshotVersion" label="规则快照" min-width="110" />
-          <el-table-column prop="occurredAt" label="事件时间" min-width="170" />
+          <el-table-column prop="occurredAt" sortable="custom" label="事件时间" min-width="170" />
           <el-table-column prop="detail" label="结果详情" min-width="240" show-overflow-tooltip />
-        </el-table>
+        </DataTable>
         <el-alert title="当前展示模拟消费结果；正式环境应从结果 Topic 查询服务读取，并支持按事件 ID、规则和时间范围筛选。" type="info" :closable="false" show-icon class="output-view-alert" />
       </template>
       <template #footer><el-button @click="outputViewVisible = false">关闭</el-button></template>
@@ -210,10 +210,10 @@
         <div class="output-view-toolbar">
           <div>
             <strong>{{ viewingControlItems[0].channel }} · 布控数据列表</strong>
-            <span>当前通道共 {{ viewingControlItems.length }} 条布控数据，展示身份证、手机号或车牌等具体布控对象。</span>
+            <span>当前通道共 {{ controlDetailTotal }} 条布控数据，展示身份证、手机号或车牌等具体布控对象。</span>
           </div>
         </div>
-        <el-table :data="viewingControlItems" stripe border class="output-result-table">
+        <DataTable :columns="[]" ref="controlDetailsTable" :data="fetchControlDetails" :show-page="true" stripe border class="output-result-table">
           <el-table-column prop="itemId" label="布控数据 ID" min-width="170" fixed="left" />
           <el-table-column prop="ruleCode" label="规则定义" min-width="180" />
           <el-table-column prop="identifierType" label="标识类型" min-width="110" />
@@ -221,12 +221,12 @@
           <el-table-column prop="subjectName" label="关联信息" min-width="160" />
           <el-table-column prop="sourceSystem" label="来源系统" min-width="150" />
           <el-table-column prop="reason" label="布控原因" min-width="170" />
-          <el-table-column prop="effectiveAt" label="开始时间" min-width="160" />
-          <el-table-column prop="expiresAt" label="结束时间" min-width="160" />
+          <el-table-column sortable="custom" prop="effectiveAt" label="开始时间" min-width="160" />
+          <el-table-column sortable="custom" prop="expiresAt" label="结束时间" min-width="160" />
           <el-table-column prop="status" label="状态" min-width="100">
             <template #default="scope"><el-tag :type="statusType(scope.row.status)">{{ scope.row.status }}</el-tag></template>
           </el-table-column>
-        </el-table>
+        </DataTable>
       </template>
       <template #footer><el-button @click="controlItemViewVisible = false">关闭</el-button></template>
     </el-dialog>
@@ -344,9 +344,9 @@
 </template>
 
 <script setup lang="ts">
-import { createSurveillanceResourceTopic, updateSurveillanceResourceTopic, listSurveillanceControlItems, listSurveillanceDailyStats, listSurveillanceResourceTopics, type SurveillanceControlItem, type SurveillanceResourceTopic, type SurveillanceDailyStat } from "@/api/surveillance-api";
+import { createSurveillanceResourceTopic, updateSurveillanceResourceTopic, pageSurveillanceControlItems, listSurveillanceDailyStats, listSurveillanceResourceTopics, type SurveillanceControlItem, type SurveillanceResourceTopic, type SurveillanceDailyStat } from "@/api/surveillance-api";
 import { getSurveillanceKafkaConnection, listSurveillanceKafkaTopics, saveSurveillanceKafkaConnection, testSurveillanceKafkaConnection, type SurveillanceKafkaConnection, type SurveillanceKafkaRole } from "@/api/surveillance-api";
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Plus, Search } from "@element-plus/icons-vue";
@@ -536,8 +536,7 @@ const controlIdentifierTitle = (identifierType: string) => ({
   PLATE_NO: "车牌号",
 }[identifierType] || identifierType);
 const displayTime = (value?: string) => value ? value.replace("T", " ").replace(/\.\d+Z$/, "").replace(/Z$/, "") : "—";
-const applyControlItems = (items: SurveillanceControlItem[]) => {
-  controlItems.value = items.map(item => ({
+const normalizeControlItems = (items: SurveillanceControlItem[]) => items.map(item => ({
     itemId: item.controlItemId,
     channel: controlChannelTitle(item.channelCode),
     ruleCode: item.ruleCode,
@@ -550,7 +549,7 @@ const applyControlItems = (items: SurveillanceControlItem[]) => {
     expiresAt: displayTime(item.effectiveTo),
     status: item.status === "ACTIVE" ? "生效中" : item.status === "DISABLED" ? "已停用" : item.status,
   }));
-};
+const applyControlItems = (items: SurveillanceControlItem[]) => {controlItems.value=normalizeControlItems(items);};
 const detailValue = (rule: RuleRow, labels: string[]) => rule.details.find(detail => labels.includes(detail.label))?.value || "—";
 const ruleRows = computed(() => rules.value.map(rule => ({
   ...rule,
@@ -735,14 +734,18 @@ const refreshResourceTopics = async () => {
     dailyStats.value = [];
   }
 };
+const mainTable=ref();
+const controlTotals=ref({total:0,activeCount:0,channelCount:0});
+async function fetchControlPage({pageNo=1,pageSize=20,sortField,sortDir}: {pageNo?:number;pageSize?:number;sortField?:string;sortDir?:string}={}){
+ const result=await pageSurveillanceControlItems({pageNo,pageSize,sortField,sortDir,keyword:keyword.value,engineCode:'structured-surveillance'});
+ applyControlItems(result.list);
+ controlTotals.value=result.summary;
+ return {list:controlItemRows.value,total:result.total};
+}
 const refreshControlItems = async () => {
-  try {
-    const items = await listSurveillanceControlItems({ engineCode: "structured-surveillance" });
-    if (Array.isArray(items) && items.length) applyControlItems(items);
-  } catch {
-    // 后端未登录或尚未完成迁移时，保留本地演示数据，页面仍可操作。
-  }
+ if(type.value==='rules')mainTable.value?.refresh(true);
 };
+watch([type,keyword],()=>mainTable.value?.refresh(true));
 void refreshResourceTopics();
 void refreshControlItems();
 const rows = computed(() => type.value === "input" ? inputRows.value : type.value === "rules" ? controlItemRows.value : current.value.rows);
@@ -754,9 +757,9 @@ const currentSummary = computed(() => type.value === "input"
     ]
   : type.value === "rules"
     ? [
-        { label: "布控数据总数", value: String(controlItems.value.length) },
-        { label: "生效数据", value: String(controlItems.value.filter(item => item.status === "生效中").length) },
-        { label: "固定匹配通道", value: String(new Set(controlItems.value.map(item => item.channel)).size) },
+        { label: "布控数据总数", value: String(controlTotals.value.total) },
+        { label: "生效数据", value: String(controlTotals.value.activeCount) },
+        { label: "固定匹配通道", value: String(controlTotals.value.channelCount) },
       ]
   : current.value.summary);
 const filteredRows = computed(() => {
@@ -809,6 +812,16 @@ const ruleDraft = reactive<RuleRow>({ name: "", subject: "人员", source: "布�
 const controlItemViewVisible = ref(false);
 const controlItemEditVisible = ref(false);
 const viewingControlItems = ref<ControlItemRow[]>([]);
+const controlDetailsTable=ref(),controlDetailTotal=ref(0);
+async function fetchControlDetails({pageNo=1,pageSize=20,sortField,sortDir}: {pageNo?:number;pageSize?:number;sortField?:string;sortDir?:string}={}){
+ const channel=viewingControlItems.value[0]?.channel;
+ const channelCode=Object.entries({person:'人员通道',mobile:'手机通道',vehicle:'车辆通道'}).find(([,title])=>title===channel)?.[0];
+ if(!channelCode)return {list:[],total:0};
+ const result=await pageSurveillanceControlItems({engineCode:'structured-surveillance',channelCode,pageNo,pageSize,sortField,sortDir});
+ controlDetailTotal.value=result.total;
+ return {list:normalizeControlItems(result.list),total:result.total};
+}
+watch(controlItemViewVisible,()=>{if(controlItemViewVisible.value)nextTick(()=>controlDetailsTable.value?.refresh(true));});
 const editingControlItemIndex = ref<number | null>(null);
 const controlItemDraft = reactive<ControlItemRow>({ itemId: "", channel: "人员通道", ruleCode: "person.id_card.equal", identifierType: "身份证号", identifier: "", subjectName: "", sourceSystem: "", reason: "", effectiveAt: "", expiresAt: "", status: "生效中" });
 

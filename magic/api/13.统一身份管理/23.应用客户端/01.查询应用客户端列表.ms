@@ -24,6 +24,7 @@
 // 路由：GET /idaas/clients/list
 // 业务说明：读取符合请求筛选条件的应用客户端，应用权限及身份域过滤后返回可展示字段；不发生写入。维护应用接入客户端及其协议配置；客户端凭据不随普通列表接口明文返回。
 import db;
+import tableSort;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
 import '@/idaas/guard' as guard;
@@ -37,7 +38,7 @@ import '@/idaas/api-call' as apiCall;
 
 return identityRuntime.control(()=>apiCall(()=>{
     var payload={};
-    for(key in ['domain','appId','subjectId','page','size','q']) {
+    for(key in ['domain','appId','subjectId','page','size','q','paged','sortField','sortDir']) {
         var input=request.getValues(key);
         if(input!=null && input.size()>0) {
             payload.put(key,input[0]);
@@ -63,13 +64,29 @@ where tid=#{id}
     // 核验会话的功能权限及对象范围，超出范围的请求在读取或写入前拒绝。
     var ctx=operation=='list'?listContext(permission,appId,domain):guard(permission,appId,domain);
     if(operation=='list') {
+    var scopes=[];
+    for(pair in ctx.pairs) {
+        if(pair.codes.contains(permission)) {scopes.addAll(pair.scopes.filter(s=>s.identity_domain==domain));}
+    }
+    var allScope=scopes.filter(s=>s.scope_kind=='ALL').size()>0;
+    var scopedAppIds=scopes.filter(s=>s.scope_kind=='APPLICATION').map(s=>s.app_id).distinct();
+    var scopeSql=allScope?'':scopedAppIds.size()==0?' AND 1=0':' AND t.app_id IN (#{scopedAppIds})';
+    if(p.appId!=null) {scopeSql=scopeSql+' AND t.app_id=#{p.appId}';}
+
+        var paged=p.paged=='true';
+        var page=Math.max(1,p.page::int(1));
+        var size=paged?Math.min(100,Math.max(1,p.size::int(20))):1001;
+        var offset=paged?(page-1)*size:0;
+        var field=tableSort.field(p,{name:'t.name'},'name');
+        var direction=tableSort.direction(p);
+        var filter=' FROM iam_auth_client_t t JOIN iam_application_t a ON a.tid=t.app_id AND a.kind=\'BUSINESS\' AND a.is_del=0 WHERE t.is_del=0'+scopeSql;
+        var total=sql.selectOne('SELECT COUNT(*) total'+filter).total;
+        if(!paged && total>1000) {exit 400,'客户端超过 1000 项，请使用分页查询';}
         var rows=sql.select("""
-select tid as id,app_id appId,client_key clientKey,name,client_type clientType,protocol,status,
-       require_pkce requirePkce,access_ttl_seconds accessTtl,refresh_ttl_seconds refreshTtl,version
-from iam_auth_client_t
-where is_del=0
-""");
-        return rows.filter(x=>(appId==null || x.appId==appId) && ctx.pairs.filter(pair=>pair.codes.contains(permission) && pair.scopes.filter(s=>s.identity_domain==domain && (s.scope_kind=='ALL' || s.scope_kind=='APPLICATION' && s.app_id==x.appId)).size()>0).size()>0);
+SELECT t.tid AS id,t.app_id AS appId,t.client_key AS clientKey,t.name,t.client_type AS clientType,t.protocol,t.status,
+       t.require_pkce AS requirePkce,t.access_ttl_seconds AS accessTtl,t.refresh_ttl_seconds AS refreshTtl,t.version
+"""+filter+' ORDER BY '+field+' '+direction+',t.tid ASC LIMIT #{size} OFFSET #{offset}');
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     // 写入通过共享的幂等事务处理，并记录审计；版本冲突直接返回。
     return mutate(ctx,'clients:'+operation,p,()=>{

@@ -27,7 +27,7 @@
               OR d.db_name LIKE CONCAT('%', #{keyword}, '%')
               OR t.table_name LIKE CONCAT('%', #{keyword}, '%'))
         </if>
-        ORDER BY q.updated_time DESC
+        ORDER BY ${orderBy}
     </select>
 
     <select id="selectRunPage" resultType="java.util.LinkedHashMap">
@@ -50,7 +50,7 @@
               OR q.task_code LIKE CONCAT('%', #{keyword}, '%')
               OR t.table_name LIKE CONCAT('%', #{keyword}, '%'))
         </if>
-        ORDER BY r.created_time DESC
+        ORDER BY ${orderBy}
     </select>
 
     <select id="selectIssuePage" resultType="java.util.LinkedHashMap">
@@ -61,7 +61,7 @@
         WHERE i.tenant_id = #{tenantId} AND i.run_id = #{runId}
         <if test="status != null and status != ''">AND i.issue_status = #{status}</if>
         <if test="severity != null and severity != ''">AND i.severity = #{severity}</if>
-        ORDER BY i.created_time DESC
+        ORDER BY ${orderBy}
     </select>
 
     <select id="selectTask" resultType="java.util.LinkedHashMap">
@@ -100,13 +100,13 @@
     <select id="selectRunMetrics" resultType="java.util.LinkedHashMap">
         SELECT * FROM dq_quality_metric_t
         WHERE tenant_id = #{tenantId} AND run_id = #{runId}
-        ORDER BY quality_dimension, rule_name
+        ORDER BY quality_dimension, rule_name LIMIT 1001
     </select>
 
     <select id="selectRunShards" resultType="java.util.LinkedHashMap">
         SELECT * FROM dq_quality_run_shard_t
         WHERE tenant_id = #{tenantId} AND run_id = #{runId}
-        ORDER BY shard_no
+        ORDER BY shard_no LIMIT 1001
     </select>
 
     <select id="selectDatasourceOptions" resultType="java.util.LinkedHashMap">

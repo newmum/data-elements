@@ -68,12 +68,12 @@ class IdaasBootstrapPermissionTest {
     @Test
     void actualBootstrapFinallyClearsSnapshotWhenMagicExits() throws Exception {
         String source=CanonicalMagicSources.byId("9d76df5fd4ad5e05ba9ff2f10dfa75e4")
-                .replaceAll("(?m)^import (db|platformSession|request|identityRuntime);\\r?\\n","")
+                .replaceAll("(?m)^import (db|platformSession|request|identityRuntime|tableSort);\\r?\\n","")
                 .replaceAll("(?m)^import '@/[^\\r\\n]+;\\r?\\n","");
         String script="var apiCall=(callback)=>callback();"
                 +"var sessionInfo=()=>{exit 403,'denied';};\n"+source;
         Map<String,Object> args=Map.of("db",db,"platformSession",platform,"request",new RequestStub(http),
-                "identityRuntime",new ControlStub());
+                "identityRuntime",new ControlStub(),"tableSort",new TableSortMagicModule());
         Object previous=Map.of("previous","sentinel");
         attributes.put("idaas.bootstrap.permissionSnapshot",previous);
         assertInstanceOf(ExitValue.class,MagicScript.create(script,null).execute(new MagicScriptContext(args)));

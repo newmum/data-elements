@@ -70,34 +70,33 @@ select *,tid as id,date_format(created_time, '%Y-%m-%dT%H:%i:%sZ') created_utc,
 from iam_permission_group_t
 where identity_domain=#{domain}
     and is_del=0
-order by tid
+order by tid LIMIT 1001
+""");
+    var groupIds=rows.map(x=>x.id);
+    if(groupIds.size()>1000) {exit 400,'权限组列表超过 1000 项';}
+    if(groupIds.size()==0) {return [];}
+    var members=sql.select("""
+SELECT m.group_id,m.subject_id subjectId,date_format(m.valid_from,'%Y-%m-%dT%H:%i:%sZ') startsAt,date_format(m.valid_until,'%Y-%m-%dT%H:%i:%sZ') expiresAt
+FROM iam_group_member_t m JOIN iam_subject_t s ON s.tid=m.subject_id AND s.identity_domain=#{domain} AND s.is_del=0
+WHERE m.group_id IN (#{groupIds}) AND m.status='ACTIVE'
+""");
+    var grants=sql.select("""
+SELECT tid as id,group_id,app_id FROM iam_access_grant_t
+WHERE group_id IN (#{groupIds}) AND identity_domain=#{domain} AND status='ACTIVE' AND is_del=0
+""");
+    var edges=sql.select("""
+SELECT rr.grant_id,rr.role_id FROM iam_grant_role_rela_t rr
+JOIN iam_access_grant_t g ON g.tid=rr.grant_id AND g.app_id=rr.app_id AND g.identity_domain=#{domain} AND g.is_del=0 AND g.status='ACTIVE'
+JOIN iam_role_t r ON r.tid=rr.role_id AND r.app_id=rr.app_id AND r.identity_domain=#{domain} AND r.is_del=0
+WHERE g.group_id IN (#{groupIds})
 """);
     return rows.map(x=>({
-        id:x.id,domain:x.identity_domain,name:x.name,code:x.code,description:x.description||'',status:x.status=='ACTIVE'?'enabled':'disabled',version:x.version,createdAt:x.created_utc,updatedAt:x.updated_utc,userIds:sql.select("""
-select subject_id
-from iam_group_member_t
-where group_id=#{x.id}
-    and status='ACTIVE'
-""").map(m=>m.subject_id),members:sql.select("""
-select subject_id subjectId,date_format(valid_from,
-        '%Y-%m-%dT%H:%i:%sZ') startsAt,
-       date_format(valid_until, '%Y-%m-%dT%H:%i:%sZ') expiresAt
-from iam_group_member_t
-where group_id=#{x.id}
-    and status='ACTIVE'
-"""),items:sql.select("""
-select tid as id,app_id
-from iam_access_grant_t
-where group_id=#{x.id}
-    and status='ACTIVE'
-    and is_del=0
-""").map(g=>({
-            appId:g.app_id,roleIds:sql.select("""
-select role_id
-from iam_grant_role_rela_t
-where grant_id=#{g.id}
-""").map(y=>y.role_id)
-        }))
+        id:x.id,domain:x.identity_domain,name:x.name,code:x.code,description:x.description||'',status:x.status=='ACTIVE'?'enabled':'disabled',
+        version:x.version,createdAt:x.created_utc,updatedAt:x.updated_utc,
+        userIds:members.filter(m=>m.group_id==x.id).map(m=>m.subjectId).distinct(),
+        memberCount:members.filter(m=>m.group_id==x.id).map(m=>m.subjectId).distinct().size(),
+        members:members.filter(m=>m.group_id==x.id),
+        items:grants.filter(g=>g.group_id==x.id).map(g=>({appId:g.app_id,roleIds:edges.filter(e=>e.grant_id==g.id).map(e=>e.role_id)}))
     }));
 }
 // 写入通过共享的幂等事务处理，并记录审计；版本冲突直接返回。

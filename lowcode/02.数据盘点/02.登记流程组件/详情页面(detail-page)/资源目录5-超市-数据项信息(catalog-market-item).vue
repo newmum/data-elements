@@ -3,9 +3,9 @@
     <data-table
       show-index
       flex-type="flex-[0_1_auto]"
-      :show-page="false"
+      :show-page="true"
       :columns="state.cols"
-      :data="state.data"
+      :data="fetchData"
       :loading="state.loading"
       size="large"
     >
@@ -48,24 +48,10 @@ state.cols = [
   { label: "非空", prop: "isNullable", maxWidth: 120 },
 ];
 
-onMounted(() => {
-  init();
-});
-
-const init = async () => {
-  if (!props.catalogId) return;
-  state.loading = true;
-  try {
-    const data = await $common.post("/dst/catalog/catalog-items/list", {
-      tid: props.catalogId,
-    });
-    state.data = data || [];
-  } catch (error) {
-    console.error("获取catalog数据项失败", error);
-  } finally {
-    state.loading = false;
-  }
-};
-</script>
+const fetchData=async ({pageNo,pageSize,sortField,sortDir})=> {
+   if(!props.catalogId) return {list:[],total:0};
+   return $common.post('/dst/catalog/catalog-items/list',{tid:props.catalogId,paged:true,pageNo,pageSize,sortField,sortDir});
+ };
+ </script>
 
 <style scoped lang="scss"></style>

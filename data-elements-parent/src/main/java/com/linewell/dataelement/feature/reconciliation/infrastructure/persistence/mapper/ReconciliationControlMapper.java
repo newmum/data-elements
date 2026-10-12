@@ -20,14 +20,16 @@ public interface ReconciliationControlMapper {
     IPage<Map<String, Object>> selectPolicyPage(
             IPage<Map<String, Object>> page,
             @Param("tenantId") String tenantId,
-            @Param("keyword") String keyword
+            @Param("keyword") String keyword,
+            @Param("orderBy") String orderBy
     );
 
     IPage<Map<String, Object>> selectRunPage(
             IPage<Map<String, Object>> page,
             @Param("tenantId") String tenantId,
             @Param("status") String status,
-            @Param("keyword") String keyword
+            @Param("keyword") String keyword,
+            @Param("orderBy") String orderBy
     );
 
     IPage<Map<String, Object>> selectDiffPage(

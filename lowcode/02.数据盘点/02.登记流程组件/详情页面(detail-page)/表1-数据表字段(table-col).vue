@@ -3,6 +3,7 @@
     <v-table
       ref="colRef"
       :options="tableOptions"
+      :sort-provider="sortFields" show-page :page="pageState" @page-change="loadPage"
       show-operation
       @btn-click="({ code }) => handleAction(code)"
     >
@@ -71,14 +72,20 @@ const handleAction = (type: string, item?: any) => {
   }
 };
 
+const pageState = reactive({pageNo:1,pageSize:20,total:0});
+let sorting = {};
+const sortFields = async (sort) => { sorting=sort; pageState.pageNo=1; await init(); };
+const loadPage = async ({pageNo,pageSize}) => {pageState.pageNo=pageNo;pageState.pageSize=pageSize;await init();};
 const init = async () => {
   const tableId = props.tableId;
   if (!tableId) return;
 
   colRef.value?.setLoading(true);
   try {
-    const data = await $common.get("/dst/database/metadata/columns", { tid: tableId });
-    colRef.value.setData(data || []);
+    const fieldNames={columnName:'column_name',length:'length'};
+    const data = await $common.get('/dwm/metadata-governance/tables/columns/page',{tableId,page:pageState.pageNo,size:pageState.pageSize,sortDir:sorting.sortDir,sortField:fieldNames[sorting.sortField]});
+    pageState.total=data.total;
+    colRef.value.setData((data.list||[]).map(row=>({...row,columnName:row.column_name,columnComment:row.column_comment,dataType:row.data_type,primaryKey:row.primary_key})));
   } finally {
     colRef.value?.setLoading(false);
   }

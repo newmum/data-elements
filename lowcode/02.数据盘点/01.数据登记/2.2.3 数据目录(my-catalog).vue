@@ -482,10 +482,10 @@ const buildConditions = (includeTree = true) => {
 };
 
 // 列表接口仅查询保存的目录，无补建和源表状态准入。
-const fetchData = async ({ pageNo: pageNum, pageSize }) => {
+const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
   const { list = [], total } = await $common.post("/dst/catalog/page", {
-    sortField: "updatedTime",
-    sortDir: "desc",
+    sortField: sortField || "updatedTime",
+    sortDir: sortDir || "desc",
     pageNum,
     pageSize,
     conditions: buildConditions(),

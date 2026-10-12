@@ -3,6 +3,7 @@ import { App, Button, Dropdown, Form, Modal, Tag, type TableColumnsType, type Fo
 import { ArrowRightOutlined, MoreOutlined } from '@ant-design/icons';
 import { pages, type PageKey } from '../app/config';
 import type { Row } from '../../services/api';
+import { useResourceTable, type ResourceTable } from '../services/useResourceTable';
 import { DataTable } from '../../features/platform/common';
 import { ResourceIcon } from '../design/ResourceIcon';
 import { artworkFor, layersDiagram } from '../design/artwork';
@@ -33,29 +34,28 @@ function actionWidth(node: ReactNode): number {
  });
  visit(node); return widths.length ? Math.max(80, Math.min(256, 24 + widths.reduce((a,b) => a+b,0) + (widths.length-1)*10)) : 128;
 }
-function sortingValue(row:Row, title:string, dataIndex:unknown):string {
- if(typeof dataIndex==='string')return String(row[dataIndex]??'');
- if(Array.isArray(dataIndex))return String(dataIndex.reduce((value,key)=>value?.[key],row)??'');
- const nested=row.draft??row.revision??row;
- if(/时间|日期/.test(title))return String(row.createdAt??row.updatedAt??row.time??row.scheduledFor??'');
- return String(nested.name??row.name??row.filename??nested.code??'');
-}
-/** Reuse metadata mapping's toolbar, density, sorting and fixed action treatment. */
-export function PTable<T extends {id:string}>({rows,columns,tools,title,onRefresh,onSelect,searchText,initialSearch,emptyTitle,emptyDescription}:{rows:T[];columns:TableColumnsType<T>;tools?:ReactNode;title?:string;onRefresh?:()=>void;onSelect?:(keys:string[])=>void;searchText?:(row:T)=>string;initialSearch?:string;emptyTitle?:string;emptyDescription?:string}){
- const normalized=columns.map(column=>{
+/** Shared table presentation. All sorting and pagination are performed by the authorized read endpoint. */
+export function PTable<T extends {id:string}>({rows,columns,tools,title,onRefresh,onSelect,searchText,initialSearch,emptyTitle,emptyDescription,tableSource,tableQuery}:{rows:T[];columns:TableColumnsType<T>;tools?:ReactNode;title?:string;onRefresh?:()=>void|Promise<void>;onSelect?:(keys:string[])=>void;searchText?:(row:T)=>string;initialSearch?:string;emptyTitle?:string;emptyDescription?:string;tableSource?:ResourceTable;tableQuery?:Record<string,unknown>}){
+ const remote=useResourceTable(rows,tableSource,tableQuery,initialSearch);
+ const shown=tableSource?remote.rows:rows;
+ const normalized=columns.map((column,index)=>{
   if(column.title==='操作'){
-   const sample=rows.slice(0,30).map((row,i)=>column.render?.(undefined,row,i));
+   const sample=shown.slice(0,30).map((row,i)=>column.render?.(undefined,row,i));
    const width=sample.length?Math.max(...sample.map(node=>actionWidth(node as ReactNode))):Math.min(Number(column.width)||128,224);
    return {...column,width,fixed:'right' as const,align:'center' as const,className:'wx-action-column'};
   }
-  if(typeof column.title==='string'&&/名称|名字|字段名|分库(?:\s*\/|$)|共享数据源|资源目录|时间|日期|最近检查/.test(column.title)){
-   const titleText=column.title,index='dataIndex' in column?column.dataIndex:undefined;
-   return {...column,width:/时间|日期|最近检查/.test(titleText)?(column.width??168):Math.min(Number(column.width)||220,240),ellipsis:true,sorter:column.sorter??((a:T,b:T)=>sortingValue(a,titleText,index).localeCompare(sortingValue(b,titleText,index),'zh-CN',{numeric:true}))};
-  }
-  return {...column,ellipsis:column.ellipsis??true};
+  const titleText=typeof column.title==='string'?column.title:'';
+  const eligible=index===0||/时间|日期|最近更新|最近检查|数量|总数|字段数|实体数|数据项|已采集表|仓库资源|应用系统|业务库|结果|候选受理/.test(titleText)||!!column.sorter;
+  const key=String(column.key??('dataIndex' in column?column.dataIndex:undefined)??(index===0?'name':/时间|最近更新/.test(titleText)?'updatedAt':''));
+  return {...column,key:key||column.key,sorter:tableSource&&eligible&&key?true:undefined,
+   ellipsis:column.ellipsis??true,width:/时间|日期|最近更新/.test(titleText)?(column.width??168):column.width};
  });
- const records=searchText?rows.map(row=>({...row,__search:searchText(row)})):rows;
- return <section className="ps-table-panel">{title&&<header className="ps-table-title"><h2>{title}</h2></header>}<DataTable titleKey={`resource:${title??columns.map(c=>String(c.title)).join('|')}`} rows={records} columns={normalized as TableColumnsType<Row>} onRefresh={onRefresh} actions={tools} initialSearch={initialSearch} emptyTitle={emptyTitle} emptyDescription={emptyDescription} rowSelection={onSelect?{onChange:(keys:Array<string|number>)=>onSelect(keys.map(String))}:undefined}/></section>;
+ const records=searchText?shown.map(row=>({...row,__search:searchText(row)})):shown;
+ return <section className="ps-table-panel">{title&&<header className="ps-table-title"><h2>{title}</h2></header>}<DataTable titleKey={`resource:${title??columns.map(c=>String(c.title)).join('|')}`} rows={records} columns={normalized as TableColumnsType<Row>}
+  loading={tableSource?remote.loading:undefined} error={tableSource?remote.error:undefined}
+  serverSort={tableSource?remote.order:undefined} serverPagination={tableSource?remote.pagination:undefined} onSearch={tableSource?remote.search:undefined}
+  onRefresh={onRefresh?()=>{void Promise.resolve(onRefresh()).then(remote.refresh);}:tableSource?remote.refresh:undefined}
+  actions={tools} initialSearch={initialSearch} emptyTitle={emptyTitle} emptyDescription={emptyDescription} rowSelection={onSelect?{onChange:(keys:Array<string|number>)=>onSelect(keys.map(String))}:undefined}/></section>;
 }
 export const required=[{required:true,message:'请填写此项'}];
 export function EditDialog({title,open,initial,onClose,onSave,children,width=600,form:external}:{title:string;open:boolean;initial?:Row;onClose:()=>void;onSave:(v:Row)=>Promise<unknown>;children:ReactNode;width?:number;form?:FormInstance}){const [internal]=Form.useForm();const form=external??internal;const [busy,setBusy]=useState(false),[dirty,setDirty]=useState(false);const lock=useRef(false);const {message,modal}=App.useApp();useEffect(()=>{if(open){form.resetFields();form.setFieldsValue(initial??{});setDirty(false);}},[open,initial?.id]);const close=()=>{if(busy)return;if(dirty)modal.confirm({title:'放弃未保存的修改？',okText:'放弃修改',cancelText:'继续编辑',onOk:onClose});else onClose();};return <Modal open={open} title={title} width={width} onCancel={close} maskClosable={false} destroyOnHidden afterOpenChange={visible=>{if(visible){form.resetFields();form.setFieldsValue(initial??{});setDirty(false);}}} okText="保存" cancelText="取消" confirmLoading={busy} onOk={async()=>{if(lock.current)return;lock.current=true;try{const value=await form.validateFields();setBusy(true);await onSave(value);setDirty(false);message.success('已保存');onClose();}catch(e){if(e instanceof Error)message.error(e.message);}finally{lock.current=false;setBusy(false);}}}><Form form={form} initialValues={initial} layout="vertical" onValuesChange={()=>setDirty(true)} className="ps-form" preserve={false}>{children}</Form></Modal>;}

@@ -76,8 +76,8 @@
           <template v-else-if="pushContract">
             <div class="push-contract-endpoint-grid"><div v-for="item in pushContractEndpointItems" :key="item.key" class="push-contract-endpoint"><span>{{ item.label }}</span><strong><em>{{ item.method }}</em>{{ item.path }}</strong><small>{{ item.description }}</small></div></div>
             <section class="push-contract-section"><div class="push-contract-section-head"><strong>请求头要求</strong><span>密钥用于识别业务数据生产方；仅首次签发或主动轮换时展示</span></div><div class="push-contract-header-list"><div v-for="header in pushContract.requestHeaders || []" :key="header.name"><code>{{ header.name }}</code><strong>{{ header.name === 'X-Api-Key' ? (pushCredential?.revealed ? '已生成，可复制' : '业务调用方身份密钥') : header.value }}</strong><small>{{ header.name === 'X-Api-Key' ? '用于识别推送业务数据的调用方，并校验其对当前数据源及已登记数据表的推送权限；平台不保存密钥明文' : header.description }}</small></div></div><div class="push-credential-card" :class="{ 'is-ready': pushCredential?.revealed, 'is-error': pushCredentialError }"><div class="push-credential-info"><span class="push-credential-label">当前数据源 X-Api-Key</span><strong v-if="pushCredential?.revealed">已为当前业务数据生产方生成专属密钥</strong><strong v-else-if="pushCredentialError">业务调用方密钥签发未完成</strong><strong v-else>密钥已签发</strong><small v-if="pushCredential?.revealed">请立即复制并妥善保存。密钥明文仅在签发时返回，平台不保存；离开当前页面后将不再显示。</small><small v-else-if="pushCredentialError">{{ pushCredentialError }} 请检查推送服务配置后在此重新生成。</small><small v-else>为保护业务调用方凭据安全，平台不回显已签发密钥；如遗失，请主动重新生成。</small></div><template v-if="pushCredential?.revealed"><el-input :model-value="pushCredential.apiKey" readonly class="push-credential-input"><template #append><el-button @click="copyPushCredential">复制</el-button></template></el-input></template><el-button v-else type="primary" plain :loading="pushCredentialLoading" @click="rotatePushCredential">重新生成密钥</el-button></div></section>
-            <section class="push-contract-section"><div class="push-contract-section-head"><strong>请求体参数要求</strong><span>一次请求仅推送一张当前登记范围内的数据表的一批记录</span></div><DataTable :data="pushContract.requiredParameters || []" :show-page="false" border size="small" max-height="240"><el-table-column prop="name" label="参数" min-width="160"><template #default="{ row }"><code>{{ row.name }}</code></template></el-table-column><el-table-column label="是否必填" width="108" align="center"><template #default="{ row }"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{ row.required ? '必填' : '可选' }}</el-tag></template></el-table-column><el-table-column prop="description" label="说明" min-width="360" /></DataTable></section>
-            <section class="push-contract-section"><div class="push-contract-section-head"><strong>{{ pushContract.tableSource === 'registration' ? '已登记数据表' : '已发布数据表' }}</strong><span>{{ pushContract.tables?.length || 0 }} 张表</span></div><el-empty v-if="!(pushContract.tables || []).length" description="尚未读取到本次登记的数据表，请返回第二步确认标注结果" :image-size="72" /><el-collapse v-else v-model="pushContractOpenTables" class="push-contract-tables"><el-collapse-item v-for="table in pushContract.tables || []" :key="table.tableId" :name="table.tableId"><template #title><div class="push-contract-table-title"><strong>{{ table.tableName }}</strong><span>V{{ table.schemaVersion }} · {{ table.fieldCount }} 个字段</span></div></template><div class="push-contract-table-toolbar"><div><strong>推送字段约束</strong><span>下表说明该 JSON 的 <code>records[0]</code> 可传字段；所有字段已在示例中以空字符串预置，标有“必填”的字段不可为空。</span></div><el-button link type="primary" @click.stop="copyPushSample(table)"><Icon icon="el-icon-DocumentCopy" />复制示例</el-button></div><div class="push-contract-code"><pre>{{ pushContractSample(table) }}</pre></div><LoadingState v-if="pushContractFieldsLoading(table)" type="list" compact class="push-contract-field-loading" /><DataTable v-else-if="(table.fields || []).length" :data="table.fields || []" :show-page="false" border size="small" max-height="260"><el-table-column prop="ordinal" label="序号" width="72" align="center" /><el-table-column prop="fieldName" label="字段名" min-width="180"><template #default="{ row }"><code>{{ row.fieldName }}</code></template></el-table-column><el-table-column prop="dataType" label="数据类型" min-width="140" /><el-table-column label="是否必填" width="108" align="center"><template #default="{ row }"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{ row.required ? '必填' : '可选' }}</el-tag></template></el-table-column></DataTable><el-empty v-else description="暂未读取到已登记字段，请返回第三步确认字段登记" :image-size="56" /></el-collapse-item></el-collapse></section>
+            <section class="push-contract-section"><div class="push-contract-section-head"><strong>请求体参数要求</strong><span>一次请求仅推送一张当前登记范围内的数据表的一批记录</span></div><DataTable :data="pushContract.requiredParameters || []" :preview-sort="{name:'text'}" :show-page="false" border size="small" max-height="240"><el-table-column prop="name" label="参数" sortable="custom" min-width="160"><template #default="{ row }"><code>{{ row.name }}</code></template></el-table-column><el-table-column label="是否必填" width="108" align="center"><template #default="{ row }"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{ row.required ? '必填' : '可选' }}</el-tag></template></el-table-column><el-table-column prop="description" label="说明" min-width="360" /></DataTable></section>
+            <section class="push-contract-section"><div class="push-contract-section-head"><strong>{{ pushContract.tableSource === 'registration' ? '已登记数据表' : '已发布数据表' }}</strong><span>{{ pushContract.tables?.length || 0 }} 张表</span></div><el-empty v-if="!(pushContract.tables || []).length" description="尚未读取到本次登记的数据表，请返回第二步确认标注结果" :image-size="72" /><el-collapse v-else v-model="pushContractOpenTables" class="push-contract-tables"><el-collapse-item v-for="table in pushContract.tables || []" :key="table.tableId" :name="table.tableId"><template #title><div class="push-contract-table-title"><strong>{{ table.tableName }}</strong><span>V{{ table.schemaVersion }} · {{ table.fieldCount }} 个字段</span></div></template><div class="push-contract-table-toolbar"><div><strong>推送字段约束</strong><span>下表说明该 JSON 的 <code>records[0]</code> 可传字段；所有字段已在示例中以空字符串预置，标有“必填”的字段不可为空。</span></div><el-button link type="primary" @click.stop="copyPushSample(table)"><Icon icon="el-icon-DocumentCopy" />复制示例</el-button></div><div class="push-contract-code"><pre>{{ pushContractSample(table) }}</pre></div><LoadingState v-if="pushContractFieldsLoading(table)" type="list" compact class="push-contract-field-loading" /><DataTable v-else-if="(table.fields || []).length" :data="table.fields || []" :preview-sort="{fieldName:'text'}" :show-page="false" border size="small" max-height="260"><el-table-column prop="ordinal" label="序号" width="72" align="center" /><el-table-column prop="fieldName" label="字段名" sortable="custom" min-width="180"><template #default="{ row }"><code>{{ row.fieldName }}</code></template></el-table-column><el-table-column prop="dataType" label="数据类型" min-width="140" /><el-table-column label="是否必填" width="108" align="center"><template #default="{ row }"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{ row.required ? '必填' : '可选' }}</el-tag></template></el-table-column></DataTable><el-empty v-else description="暂未读取到已登记字段，请返回第三步确认字段登记" :image-size="56" /></el-collapse-item></el-collapse></section>
           </template>
           <div v-else class="push-contract-empty"><Icon icon="el-icon-Document" /><span>尚未读取到已发布的推送契约。</span></div>
         </div>
@@ -136,7 +136,7 @@
           <div class="report-summary-grid">
             <div><span>可上报数据表</span><strong>{{ reportableTables.length }} 张</strong></div>
             <div><span>模板字段</span><strong>{{ reportTemplateFieldCount }} 个</strong></div>
-            <div><span>已上报批次</span><strong>{{ reportBatches.length }} 批</strong></div>
+            <div><span>已上报批次</span><strong>{{ reportTotals.total }} 批</strong></div>
             <div><span>累计入库</span><strong>{{ reportTotalRows }} 行</strong></div>
           </div>
           <el-tabs v-model="reportWorkspaceTab" class="report-workspace-tabs" @tab-change="handleReportWorkspaceTabChange">
@@ -154,23 +154,23 @@
                 </div>
                 <DataTable
                   v-if="reportBatches.length"
-                  :data="reportBatches"
+                  :data="fetchReportBatches"
                   :loading="reportBatchLoading"
-                  :show-page="false"
+                  :show-page="true"
                   border
                   stripe
                   max-height="320"
                 >
                   <el-table-column prop="batchId" label="上报批次" min-width="170" show-overflow-tooltip />
-                  <el-table-column prop="fileName" label="上报文件" min-width="180" show-overflow-tooltip />
+                  <el-table-column sortable="custom" prop="fileName" label="上报文件" min-width="180" show-overflow-tooltip />
                   <el-table-column prop="tableSummary" label="入库数据表" min-width="300" show-overflow-tooltip />
-                  <el-table-column prop="rowCount" label="数据量" width="90" align="right">
+                  <el-table-column sortable="custom" prop="rowCount" label="数据量" width="90" align="right">
                     <template #default="{ row }">{{ row.rowCount }} 行</template>
                   </el-table-column>
                   <el-table-column prop="createdName" label="上报人" width="110" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.createdName || row.createdBy || "-" }}</template>
                   </el-table-column>
-                  <el-table-column prop="createdTime" label="上报时间" width="168" />
+                  <el-table-column sortable="custom" prop="createdTime" label="上报时间" width="168" />
                   <el-table-column label="状态" width="90" align="center">
                     <template #default="{ row }">
                       <el-tag size="small" :type="row.status === 'completed' ? 'success' : 'warning'" effect="light">
@@ -228,7 +228,7 @@
                 </div>
                 <DataTable
                   v-if="reportPreview.list.length"
-                  :data="reportPreview.list"
+                  :data="reportPreview.list" @sort-change="sortReportPreview"
                   :loading="reportPreviewLoading"
                   :show-page="false"
                   border
@@ -238,7 +238,7 @@
                   <el-table-column
                     v-for="column in reportPreview.columns"
                     :key="column.name"
-                    :prop="column.name"
+                    :prop="column.name" sortable="custom"
                     :label="column.label"
                     min-width="150"
                     show-overflow-tooltip
@@ -557,6 +557,7 @@
             :expand-row-keys="activeTableDetails"
             class="review-table"
             @expand-change="syncTableDetailExpansion"
+            @sort-change="sortReviewTables"
           >
             <el-table-column
               type="expand"
@@ -596,7 +597,7 @@
             <el-table-column label="序号" width="62" align="center">
               <template #default="{ $index }">{{ reviewTableRowNumber($index) }}</template>
             </el-table-column>
-            <el-table-column label="数据表" min-width="230" show-overflow-tooltip>
+            <el-table-column prop="name" sortable="custom" label="数据表" min-width="230" show-overflow-tooltip>
               <template #default="{ row: table }">
                 <div class="review-table-name">
                   <span
@@ -623,7 +624,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="类型 / 字段" min-width="142">
+            <el-table-column prop="fieldCount" sortable="custom" label="类型 / 字段" min-width="142">
               <template #default="{ row: table }">
                 <div class="review-table-stacked">
                   <el-tag size="small" effect="light" :class="['business-tag', businessClass(table.businessType)]">
@@ -722,7 +723,7 @@
         <el-tab-pane label="字段结构" name="fields">
           <DataTable
             v-if="tablePreviewTable && fieldsFor(tablePreviewTable).length"
-            :data="displayFieldsFor(tablePreviewTable)"
+            :data="displayFieldsFor(tablePreviewTable)" :preview-sort="{columnName:'text',columnComment:'text'}"
             :show-page="false"
             flex-type="flex-[0_0_360px]"
             height="360"
@@ -730,7 +731,7 @@
             stripe
           >
             <el-table-column prop="serialNo" label="序号" width="60" align="center" />
-            <el-table-column label="字段英文名" min-width="220">
+            <el-table-column prop="columnName" sortable="custom" label="字段英文名" min-width="220">
               <template #default="{ row }">
                 <div class="field-preview-name">
                   <span>{{ row.columnName }}</span>
@@ -740,7 +741,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="字段中文名" min-width="160">
+            <el-table-column prop="columnComment" sortable="custom" label="字段中文名" min-width="160">
               <template #default="{ row }">{{ row.columnComment || '未填写' }}</template>
             </el-table-column>
             <el-table-column label="字段类型" min-width="130">
@@ -1741,6 +1742,7 @@ function openReportWorkspace() {
 const reportFileInput = ref(null);
 const reportBatches = ref([]);
 const reportBatchLoading = ref(false);
+const reportTotals=ref({total:0,rowTotal:0});
 const reportImporting = ref(false);
 const deletingReportBatchId = ref("");
 const reportStorageDatabase = ref("test1");
@@ -1772,7 +1774,14 @@ function normalizeReportBatch(row = {}) {
   };
 }
 
-async function loadReportBatches() {
+async function fetchReportBatches({pageNo=1,pageSize=20,sortField,sortDir}={}){
+   if(!sourceTid.value || !isDataUploadSource.value)return {list:[],total:0};
+   const result=await $common.post('/dst/database/report-data',{action:'list',datasourceId:sourceTid.value,pageNo,pageSize,sortField,sortDir});
+   reportStorageDatabase.value=result.storageDatabase;
+   reportTotals.value={total:Number(result.total||0),rowTotal:Number(result.rowTotal||0)};
+   return {list:(result.list||[]).map(normalizeReportBatch),total:Number(result.total||0)};
+ }
+ async function loadReportBatches() {
   if (!sourceTid.value || !isDataUploadSource.value) {
     reportBatches.value = [];
     return;
@@ -1785,6 +1794,7 @@ async function loadReportBatches() {
     });
     reportStorageDatabase.value = result?.storageDatabase || "test1";
     reportBatches.value = Array.isArray(result?.list) ? result.list.map(normalizeReportBatch) : [];
+    reportTotals.value={total:Number(result.total||0),rowTotal:Number(result.rowTotal||0)};
   } catch (error) {
     reportBatches.value = [];
     console.warn("读取数据上报批次失败:", error);
@@ -1852,7 +1862,9 @@ function reportPreviewCellValue(row, name) {
   return value === undefined || value === null || value === "" ? "-" : String(value);
 }
 
-async function loadReportPreview(resetPage = true) {
+const reportPreviewSort=ref({});
+ function sortReportPreview({prop,order}){reportPreviewSort.value=order&&prop?{sortField:prop,sortDir:order==='ascending'?'asc':'desc'}:{};loadReportPreview(true);}
+ async function loadReportPreview(resetPage = true) {
   if (!sourceTid.value || !isDataUploadSource.value) {
     resetReportPreview();
     return;
@@ -1869,6 +1881,7 @@ async function loadReportPreview(resetPage = true) {
       action: "preview",
       datasourceId: sourceTid.value,
       tableName,
+      ...reportPreviewSort.value,
       pageNo: reportPreview.value.pageNo,
       pageSize: reportPreview.value.pageSize,
     });
@@ -2255,9 +2268,7 @@ const reportableTables = computed(() => [...businessTables.value, ...logTables.v
 const reportTemplateFieldCount = computed(() =>
   reportableTables.value.reduce((total, table) => total + fieldsFor(table).length, 0)
 );
-const reportTotalRows = computed(() =>
-  reportBatches.value.reduce((total, batch) => total + Number(batch.rowCount || 0), 0)
-);
+const reportTotalRows = computed(() => reportTotals.value.rowTotal);
 const uncertainTables = computed(() => tables.value.filter((table) =>
   isTableAnnotated(table) && isPendingBusinessType(table.businessType)
 ));
@@ -3465,12 +3476,24 @@ const filteredReviewTables = computed(() => {
   });
 });
 const visibleTableTotal = computed(() => filteredReviewTables.value.length);
-const visibleTables = computed(() => {
-  const totalPages = Math.max(1, Math.ceil(visibleTableTotal.value / reviewTablePageSize));
-  const page = Math.min(reviewTablePage.value, totalPages);
-  const start = (page - 1) * reviewTablePageSize;
-  return filteredReviewTables.value.slice(start, start + reviewTablePageSize);
-});
+const reviewSort=ref({});
+const visibleTables=ref([]);
+let reviewOrderSequence=0;
+function sortReviewTables({prop,order}){
+  reviewSort.value=order&&prop?{sortField:prop,sortDir:order==='ascending'?'asc':'desc'}:{};
+  reviewTablePage.value=1;
+}
+watch(()=>[sourceTid.value,filteredReviewTables.value.map(table=>table.tableName).join('\n'),reviewTablePage.value,reviewSort.value],async()=>{
+  const sequence=++reviewOrderSequence,rows=filteredReviewTables.value;
+  if(!rows.length){visibleTables.value=[];return;}
+  try{
+    const result=await $common.post('/dst/database/metadata/tables/review-order',{dbId:sourceTid.value,names:rows.map(row=>row.tableName),pageNo:reviewTablePage.value,pageSize:reviewTablePageSize,...reviewSort.value});
+    if(sequence!==reviewOrderSequence)return;
+    const byName=new Map(rows.map(row=>[row.tableName,row]));
+    if(result.total!==rows.length||result.keys.some(key=>!byName.has(key))||new Set(result.keys).size!==result.keys.length)throw new Error('审查排序结果不完整或超出当前范围');
+    visibleTables.value=result.keys.map(key=>byName.get(key));
+  }catch(error){if(sequence!==reviewOrderSequence)return;visibleTables.value=[];$message.error(error?.message||'审查列表读取失败');}
+},{immediate:true});
 const allTableDetailsExpanded = computed(() => {
   const tableNames = visibleTables.value.map((table) => table.tableName).filter(Boolean);
   return tableNames.length > 0 && tableNames.every((tableName) => activeTableDetails.value.includes(tableName));
@@ -3905,7 +3928,7 @@ async function handleReportFileSelected(event) {
       tables: payloadTables,
     });
     reportStorageDatabase.value = result?.storageDatabase || "test1";
-    reportBatches.value = Array.isArray(result?.list) ? result.list.map(normalizeReportBatch) : [];
+    await loadReportBatches();
     const rowCount = payloadTables.reduce((sum, item) => sum + item.rows.length, 0);
     if (reportWorkspaceTab.value === "preview") await loadReportPreview();
     $message.success(`上报成功，${payloadTables.length} 张表共 ${rowCount} 行数据已写入 ${reportStorageDatabase.value} 库`);
@@ -3947,7 +3970,7 @@ async function deleteReportBatch(row) {
       datasourceId: sourceTid.value,
       batchId: row.batchId,
     });
-    reportBatches.value = Array.isArray(result?.list) ? result.list.map(normalizeReportBatch) : [];
+    await loadReportBatches();
     if (reportWorkspaceTab.value === "preview") await loadReportPreview();
     if (row.fileId) {
       try { await FileAPI.delete(row.fileId); } catch (fileError) { console.warn("删除上报原始文件失败:", fileError); }

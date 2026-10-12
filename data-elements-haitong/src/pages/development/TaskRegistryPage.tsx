@@ -4,6 +4,7 @@ import { json } from '@codemirror/lang-json';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useServerSort } from '../../components/serverSort';
 import PageHero from '../../components/PageHero';
 import { useWorkbench, Workbench } from '../../app/Workbench';
 import { useOceanTheme } from '../../design/theme';
@@ -40,7 +41,8 @@ function NativeRegistry(){
  const pageOptions=(pipelines.data?.list||[]).map(p=>({value:p.id,label:`${p.name} / ${p.id}`}));
  const pipelineOptions=selectedPipelineOption&&!pageOptions.some(p=>p.value===selectedPipelineOption.value)?[selectedPipelineOption,...pageOptions]:pageOptions;
  const pipelinePageCount=Math.max(1,Math.ceil((pipelines.data?.total||0)/20));
- const history=useQuery({queryKey:['external-flow-registry',revision,pageNum],queryFn:()=>externalFlowRegistry.page(pageNum,20),enabled:tokenReady});
+ const historySort=useServerSort(()=>setPageNum(1));
+ const history=useQuery({queryKey:['external-flow-registry',revision,pageNum,historySort.sort],queryFn:()=>externalFlowRegistry.page(pageNum,20,historySort.sort),enabled:tokenReady});
  const reset=()=>{setValid(false);setChecks([]);setPendingPipelineId(undefined);};
  const plan=async()=>{
   const externalId=externalFlowId.trim();
@@ -89,10 +91,10 @@ function NativeRegistry(){
   {checks.length>0&&<Alert style={{marginTop:12}} type="error" message={checks.join('；')}/>} {valid&&<Alert style={{marginTop:12}} type="success" message="格式与外部标识已通过预检；登记后将在 NiFi 画布继续配置。"/>}
   </Panel></div>
   <Panel title="真实登记历史">{history.isError&&<Alert type="error" showIcon message="登记历史读取失败" description={history.error instanceof Error?history.error.message:''} action={<Button size="small" onClick={()=>void history.refetch()}>重试</Button>}/>}
-   <DataTable rowKey="tid" loading={history.isLoading} dataSource={history.data?.list||[]} pagination={{current:pageNum,pageSize:20,total:history.data?.total||0,onChange:setPageNum}} columns={[
+   <DataTable serverSort={historySort} rowKey="tid" loading={history.isLoading} dataSource={history.data?.list||[]} pagination={{current:pageNum,pageSize:20,total:history.data?.total||0,onChange:setPageNum}} columns={[
     {title:'外部流程标识',dataIndex:'externalFlowId'},
     {title:'NiFi 流程',render:(_,r)=><Button type="link" onClick={()=>navigate(`/development/canvas?pipelineId=${encodeURIComponent(r.pipelineId)}`,{state:{returnTo:'/development/registry'}})}>{r.pipelineName||r.pipelineId}</Button>},
-    {title:'登记时间',render:(_,r)=>formatTime(r.createdTime)},
+    {title:'登记时间',key:'createdTime',render:(_,r)=>formatTime(r.createdTime)},
     {title:'状态',render:(_,r)=><Tag color={r.processGroupId?'green':'blue'}>{r.processGroupId?'已部署':'已保存草稿'}</Tag>},
    ]}/>
   </Panel>

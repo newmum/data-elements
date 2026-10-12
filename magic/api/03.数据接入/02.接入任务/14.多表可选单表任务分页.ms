@@ -26,6 +26,7 @@
 // 仅展示当前租户、当前角色数据范围内已经存在且有来源表的真实单表任务。
 import tenantRuntime
 import dataScope
+import tableSort
 import cn.hutool.core.util.NumberUtil
 
 var text = value => value == null ? '' : ('' + value).trim()
@@ -37,7 +38,7 @@ if (tenantId == '') { exit 401, '当前租户无效' }
 var pageNum = text(body?.pageNum).matches('^[0-9]+$') ? NumberUtil.parseInt(text(body.pageNum)) : 1
 var pageSize = text(body?.pageSize).matches('^[0-9]+$') ? NumberUtil.parseInt(text(body.pageSize)) : 10
 if (pageNum < 1 || pageNum > 100000) { pageNum = 1 }
-if (pageSize < 1 || pageSize > 50) { pageSize = 10 }
+if (pageSize < 1 || pageSize > 100) { pageSize = 10 }
 var keyword = text(body?.keyword)
 if (keyword.length() > 100) { exit 400, '搜索词过长' }
 var likeKeyword = '%' + keyword + '%'
@@ -52,6 +53,8 @@ var visibleSql = scopeMode == 'ALL' ? '1=1' :
      (scopeOrgIds.size() == 0 ? '1=0' :
       'd.org_id in <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>'))
 
+var sortColumn=tableSort.field(body,{taskName:'a.task_name',sourceTableName:"coalesce(t.table_name_cn,t.table_name)"},'taskName')
+var sortDirection=tableSort.direction(body)
 var result = db.page("""
     select a.tid as taskId, a.task_name as taskName, a.task_status as taskStatus,
            a.pipeline_id as pipelineId, t.tid as sourceTableId,
@@ -66,7 +69,7 @@ var result = db.page("""
        and (#{keyword}='' or a.task_name like #{likeKeyword}
             or t.table_name like #{likeKeyword} or t.table_name_cn like #{likeKeyword})
        and ${visibleSql}
-     order by a.updated_time desc, a.tid desc
+     order by case when ${sortColumn} is null then 1 else 0 end asc,${sortColumn} ${sortDirection},a.tid asc
 """, pageSize, (pageNum - 1) * pageSize)
 var list = []
 for (row in (result?.list == null ? [] : result.list)) {

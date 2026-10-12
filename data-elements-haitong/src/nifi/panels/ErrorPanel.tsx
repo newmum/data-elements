@@ -124,11 +124,6 @@ export default function ErrorPanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span>错误与告警</span>
           <Tag color="default">{counts.ALL}</Tag>
-          <div style={{ flex: 1 }} />
-          <Button size="small" icon={<ReloadOutlined />} onClick={() => errorsQuery.refetch()} />
-          <Button size="small" icon={<ClearOutlined />} danger onClick={handleClear} disabled={!pipelineId || counts.ALL === 0}>
-            清空
-          </Button>
         </div>
       }
       placement="bottom"
@@ -138,9 +133,17 @@ export default function ErrorPanel() {
       closeIcon={null}
       mask={false}
       extra={(
-        <Tooltip title="关闭">
-          <Button size="small" type="text" icon={<CloseOutlined />} onClick={close} />
-        </Tooltip>
+        <div className="error-panel-actions">
+          <Tooltip title="刷新">
+            <Button size="small" aria-label="刷新错误记录" icon={<ReloadOutlined />} onClick={() => errorsQuery.refetch()} />
+          </Tooltip>
+          <Button size="small" icon={<ClearOutlined />} danger onClick={handleClear} disabled={!pipelineId || counts.ALL === 0}>
+            清空
+          </Button>
+          <Tooltip title="关闭">
+            <Button className="error-panel-close" size="small" type="text" aria-label="关闭错误与告警面板" icon={<CloseOutlined />} onClick={close} />
+          </Tooltip>
+        </div>
       )}
       styles={{ body: { padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 } }}
     >

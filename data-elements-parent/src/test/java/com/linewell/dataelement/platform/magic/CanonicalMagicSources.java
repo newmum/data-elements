@@ -74,7 +74,9 @@ public final class CanonicalMagicSources {
         if (content.startsWith("\uFEFF")) {
             content = content.substring(1);
         }
-        int split = content.indexOf(SEPARATOR);
+        // A separator inside an older JSON script string is content, not the resource boundary.
+        var separator = java.util.regex.Pattern.compile("(?m)^={32}\\r?$").matcher(content);
+        int split = separator.find() ? separator.start() : -1;
         // Older valid functions store the script in the JSON object rather than after a separator.
         var metadata = JSONUtil.parseObj(split < 0 ? content : content.substring(0, split));
         if (!entry.metadataId.equals(metadata.getStr("id"))) {

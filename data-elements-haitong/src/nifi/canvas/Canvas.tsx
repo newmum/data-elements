@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Graph, Shape } from '@antv/x6';
+import { useQueryClient } from '@tanstack/react-query';
 import { Selection } from '@antv/x6-plugin-selection';
 import { Snapline } from '@antv/x6-plugin-snapline';
 import { Keyboard } from '@antv/x6-plugin-keyboard';
@@ -23,6 +24,9 @@ import { buildFlowRuntimeMetrics, type EdgeRuntimeMetric } from '@/runtime/runti
 import { useOceanTheme } from '../../design/theme';
 import BaseNode from './BaseNode';
 import NodeSelector from '@/panels/NodeSelector';
+import { useTaskChainStore } from '../stores/taskChainStore';
+import { buildCompositeCanvas } from '../utils/compositeCanvas';
+import { selectTaskNode } from '../utils/taskSelection';
 
 const NODE_WIDTH = 360;
 const NODE_HEIGHT = 220; // approximate; X6 will keep node at this size
@@ -56,21 +60,6 @@ function portsForCategory(cat: string) {
   return items;
 }
 
-function flowStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    UNKNOWN: '未部署',
-    DRAFT: '草稿',
-    SAVED: '已保存',
-    DEPLOYING: '部署中',
-    RUNNING: '运行中',
-    STOPPING: '停止中',
-    STOPPED: '已停止',
-    DEPLOY_FAILED: '部署失败',
-    RUN_ERROR: '运行错误',
-  };
-  return labels[status] ?? status;
-}
-
 function attrsForEdge(metric: EdgeRuntimeMetric | undefined, emphasized: boolean, selected = false) {
   const color = metric?.state === 'error'
     ? 'var(--status-error)'
@@ -93,10 +82,11 @@ function attrsForEdge(metric: EdgeRuntimeMetric | undefined, emphasized: boolean
   };
 }
 
-function labelsForEdge(metric: EdgeRuntimeMetric | undefined, outlet?: string) {
+function labelsForEdge(metric: EdgeRuntimeMetric | undefined, outlet?: string, distance = 0.5) {
   const text = metric?.label ?? outlet;
   if (!text) return [];
   return [{
+    position: { distance },
     attrs: {
       label: {
         text,
@@ -142,9 +132,12 @@ function edgeOutletLabel(outlet: string | undefined, sourceId: string) {
 }
 
 export default function Canvas() {
+  const queryClient = useQueryClient();
   const { dark } = useOceanTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<Graph | null>(null);
+  const syncingGraphRef = useRef(false);
+  const initialGraphFitRef = useRef(false);
   const plusHoveredRef = useRef(false);
   const [zoom, setZoom] = useState(1);
   const [canUndo, setCanUndo] = useState(false);
@@ -179,6 +172,12 @@ export default function Canvas() {
     () => buildFlowRuntimeMetrics(statusQuery.data, nodes, edges),
     [statusQuery.data, nodes, edges],
   );
+  const taskChain = useTaskChainStore(state => state.chain);
+  const drafts = useTaskChainStore(state => state.drafts);
+  const composite = useMemo(() => buildCompositeCanvas(taskChain, currentPipelineId,
+    { version: 1, nodes: Object.values(nodes), edges: Object.values(edges) }, drafts), [taskChain, currentPipelineId, nodes, edges, drafts]);
+  const compositeRef = useRef(composite);
+  compositeRef.current = composite;
 
   const isEmpty = Object.keys(nodes).length === 0;
 
@@ -220,7 +219,8 @@ export default function Canvas() {
         allowNode: false,
         allowMulti: 'withPort',
         highlight: true,
-        validateConnection: () => useCanvasStore.getState().canvasMode === 'EDIT',
+        validateConnection: ({ sourceCell, targetCell }) => useCanvasStore.getState().canvasMode === 'EDIT'
+          && !sourceCell?.getData()?.readonly && !targetCell?.getData()?.readonly,
         createEdge() {
           return new Shape.Edge({
             attrs: {
@@ -240,8 +240,8 @@ export default function Canvas() {
           args: { padding: 4, attrs: { strokeWidth: 4, stroke: '#4d53e8' } },
         },
       },
-      interacting: () => ({
-        nodeMovable: useCanvasStore.getState().canvasMode === 'EDIT',
+      interacting: (cellView) => ({
+        nodeMovable: useCanvasStore.getState().canvasMode === 'EDIT' && !cellView.cell.getData()?.readonly,
         edgeMovable: false,
         edgeLabelMovable: false,
       }),
@@ -255,15 +255,22 @@ export default function Canvas() {
     graphRef.current = graph;
 
     // ------ events: state sync ------
+    const selectClickedNode = (node: import('@antv/x6').Node) => {
+      const display = compositeRef.current.nodes[node.id] ?? node.getData();
+      return selectTaskNode(display, useCanvasStore.getState(), useTaskChainStore.getState(), Boolean(queryClient.isMutating()));
+    };
     graph.on('node:click', ({ node }) => {
+      if (!selectClickedNode(node)) return;
       setSelectedEdgeId(null);
-      selectNode(node.id);
     });
     graph.on('node:dblclick', ({ node }) => {
-      openDrawer(node.id);
+      if (!selectClickedNode(node)) return;
+      const display = compositeRef.current.nodes[node.id] ?? node.getData();
+      openDrawer(display.originalNodeId);
     });
     graph.on('node:contextmenu', ({ e, node }) => {
       e.preventDefault?.();
+      if (node.getData()?.readonly) return;
       const st = useCanvasStore.getState();
       const pid = st.currentPipelineId;
       if (!pid) return;
@@ -281,13 +288,17 @@ export default function Canvas() {
     });
 
     graph.on('edge:click', ({ edge }) => {
+      if (edge.getData()?.readonly) return;
       selectNode(null);
       setSelectedEdgeId(edge.id);
     });
 
     graph.on('node:moved', ({ node }) => {
+      if (syncingGraphRef.current) return;
+      const display = compositeRef.current.nodes[node.id];
+      if (!display || display.readonly) return;
       const { x, y } = node.position();
-      moveNode(node.id, x, y);
+      moveNode(display.originalNodeId, x - display.offsetX, y - display.offsetY);
     });
 
     const computeAnchor = (node: import('@antv/x6').Node) => {
@@ -296,6 +307,7 @@ export default function Canvas() {
       return { x: point.x, y: point.y, nodeId: node.id };
     };
     graph.on('node:mouseenter', ({ node }) => {
+      if (node.getData()?.readonly) return;
       if (useCanvasStore.getState().canvasMode !== 'EDIT') return;
       setHoverPlus(computeAnchor(node));
     });
@@ -330,6 +342,7 @@ export default function Canvas() {
 
     graph.on('edge:removed', ({ edge }) => {
       // only if user-driven (not store-driven)
+      if (syncingGraphRef.current) return;
       if (edge.id.startsWith('e_')) removeEdge(edge.id);
     });
 
@@ -344,6 +357,7 @@ export default function Canvas() {
       if (useCanvasStore.getState().canvasMode !== 'EDIT') return false;
       const sel = graph.getSelectedCells();
       sel.forEach((c) => {
+        if (c.getData()?.readonly) return;
         if (c.isNode()) removeNode(c.id);
         else if (c.isEdge() && c.id.startsWith('e_')) removeEdge(c.id);
       });
@@ -366,6 +380,7 @@ export default function Canvas() {
     return () => {
       graph.dispose();
       graphRef.current = null;
+      initialGraphFitRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -387,8 +402,9 @@ export default function Canvas() {
     const g = graphRef.current;
     if (!g) return;
 
+    syncingGraphRef.current = true;
     const existingNodeIds = new Set(g.getNodes().map((n) => n.id));
-    const desiredNodeIds = new Set(Object.keys(nodes));
+    const desiredNodeIds = new Set(Object.keys(composite.nodes));
 
     // remove gone
     existingNodeIds.forEach((id) => {
@@ -397,7 +413,10 @@ export default function Canvas() {
 
     // add / update
     let addedAny = false;
-    Object.values(nodes).forEach((n) => {
+    Object.values(composite.nodes).forEach((display) => {
+      const n = display.node;
+      const data = { node: n, runtime: display.readonly ? undefined : runtimeMetrics.nodeMetrics[n.id], mode: canvasMode,
+        readonly: display.readonly, taskName: display.taskName, pipelineId: display.pipelineId, originalNodeId: display.originalNodeId };
       const existing = g.getCellById(n.id);
       if (!existing) {
         g.addNode({
@@ -408,20 +427,21 @@ export default function Canvas() {
           width: NODE_WIDTH,
           height: NODE_HEIGHT,
           ports: { groups: PORT_GROUPS as never, items: portsForCategory(n.category) },
-          data: { node: n, runtime: runtimeMetrics.nodeMetrics[n.id], mode: canvasMode },
+          data,
         });
         addedAny = true;
       } else if (existing.isNode()) {
         const pos = existing.position();
         if (pos.x !== n.x || pos.y !== n.y) existing.position(n.x, n.y);
-        existing.setData({ node: n, runtime: runtimeMetrics.nodeMetrics[n.id], mode: canvasMode }, { overwrite: true });
+        existing.setData(data, { overwrite: true });
       }
     });
 
     // When nodes are loaded asynchronously (e.g. via accessTaskId), the initial
     // centerContent() runs on an empty canvas. Re-center once nodes appear.
-    if (addedAny) {
-      setTimeout(() => g.centerContent(), 0);
+    if (addedAny && !initialGraphFitRef.current) {
+      initialGraphFitRef.current = true;
+      setTimeout(() => taskChain && taskChain.items.length > 1 ? g.zoomToFit({ maxScale: 1, padding: 60 }) : g.centerContent(), 0);
     }
 
     // selection highlight
@@ -436,7 +456,8 @@ export default function Canvas() {
     } else {
       g.cleanSelection();
     }
-  }, [nodes, selectedNodeId, selectedEdgeId, runtimeMetrics.nodeMetrics, canvasMode]);
+    syncingGraphRef.current = false;
+  }, [composite.nodes, selectedNodeId, selectedEdgeId, runtimeMetrics.nodeMetrics, canvasMode, taskChain]);
 
   // ------------------------------------------------------------
   // Sync store edges -> graph
@@ -445,35 +466,40 @@ export default function Canvas() {
     const g = graphRef.current;
     if (!g) return;
 
+    syncingGraphRef.current = true;
     const existingEdgeIds = new Set(g.getEdges().map((e) => e.id));
-    const desiredEdgeIds = new Set(Object.keys(edges));
+    const desiredEdgeIds = new Set(Object.keys(composite.edges));
 
     existingEdgeIds.forEach((id) => {
       if (!desiredEdgeIds.has(id)) g.removeEdge(id);
     });
 
-    Object.values(edges).forEach((e) => {
-      const metric = runtimeMetrics.edgeMetrics[e.id];
+    Object.values(composite.edges).forEach((e) => {
+      const metric = e.readonly ? undefined : runtimeMetrics.edgeMetrics[e.id];
+      const attrs = e.relationship ? { line: { stroke: 'var(--text-secondary)', strokeWidth: 2, strokeDasharray: '7 6',
+        targetMarker: { name: 'block', width: 8, height: 8 } } } : attrsForEdge(metric, !e.readonly && canvasMode !== 'EDIT', selectedEdgeId === e.id);
+      const labels = labelsForEdge(metric, e.relationship ? e.outlet : e.readonly ? undefined : edgeOutletLabel(e.outlet, e.source), e.relationship ? 0.65 : 0.5);
       const existing = g.getCellById(e.id);
       if (!existing) {
         const edge = g.addEdge({
           id: e.id,
-          source: { cell: e.source, port: 'out' },
-          target: { cell: e.target, port: 'in' },
-          attrs: attrsForEdge(metric, canvasMode !== 'EDIT', selectedEdgeId === e.id),
-          labels: labelsForEdge(metric, edgeOutletLabel(e.outlet, e.source)),
+          source: e.relationship ? { cell: e.source } : { cell: e.source, port: 'out' },
+          target: e.relationship ? { cell: e.target } : { cell: e.target, port: 'in' },
+          attrs,
+          labels,
           router: 'normal',
           connector: { name: 'smooth' },
           zIndex: 0,
         });
-        edge.setData({ metric, mode: canvasMode });
+        edge.setData({ metric, mode: canvasMode, readonly: e.readonly });
       } else if (existing.isEdge()) {
-        existing.setAttrs(attrsForEdge(metric, canvasMode !== 'EDIT', selectedEdgeId === e.id));
-        existing.setLabels(labelsForEdge(metric, edgeOutletLabel(e.outlet, e.source)));
-        existing.setData({ metric, mode: canvasMode });
+        existing.setAttrs(attrs);
+        existing.setLabels(labels);
+        existing.setData({ metric, mode: canvasMode, readonly: e.readonly });
       }
     });
-  }, [edges, runtimeMetrics.edgeMetrics, canvasMode, selectedEdgeId]);
+    syncingGraphRef.current = false;
+  }, [composite.edges, runtimeMetrics.edgeMetrics, canvasMode, selectedEdgeId]);
 
   // ------------------------------------------------------------
   // When a node's plus button is clicked (BaseNode -> store), compute
@@ -573,7 +599,8 @@ export default function Canvas() {
       cx = c.x + c.width / 2 - NODE_WIDTH / 2;
       cy = c.y + c.height / 2 - NODE_HEIGHT / 2;
     }
-    const n = addNodeFromManifest(m, cx, cy);
+    const activeDisplay = Object.values(compositeRef.current.nodes).find(item => !item.readonly);
+    const n = addNodeFromManifest(m, cx - (activeDisplay?.offsetX ?? 0), cy - (activeDisplay?.offsetY ?? 0));
     setAddAnyOpen(false);
     setTimeout(() => selectNode(n.id), 0);
   };
@@ -592,8 +619,10 @@ export default function Canvas() {
       ? 'transform'
       : 'sink';
 
+
   return (
-    <div className="canvas-shell" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+    <div className="canvas-shell" style={{ position: 'relative', display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden' }}>
+      <div className="canvas-viewport" style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden' }}>
       <X6PortalProvider />
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
@@ -715,43 +744,6 @@ export default function Canvas() {
         </NodeSelector>
       )}
 
-      {!isEmpty && (
-        <div className="runtime-overview">
-          <div className="runtime-overview__header">
-            <span className={`runtime-overview__dot is-${runtimeMetrics.status.toLowerCase()}`} />
-            <span>{canvasMode === 'EDIT' ? '流量概览' : '运行监控'}</span>
-          </div>
-          <div className="runtime-overview__grid">
-            <div>
-              <span>状态</span>
-              <strong>{flowStatusLabel(runtimeMetrics.status)}</strong>
-            </div>
-            <div>
-              <span>队列</span>
-              <strong>{runtimeMetrics.totals.queued}</strong>
-            </div>
-            <div>
-              <span>线程</span>
-              <strong>{runtimeMetrics.totals.activeThreads}</strong>
-            </div>
-            <div>
-              <span>瓶颈</span>
-              <strong>{runtimeMetrics.bottleneckEdgeIds.length}</strong>
-            </div>
-            <div>
-              <span>输入</span>
-              <strong>{runtimeMetrics.totals.flowFilesIn}</strong>
-            </div>
-            <div>
-              <span>输出</span>
-              <strong>{runtimeMetrics.totals.flowFilesOut}</strong>
-            </div>
-          </div>
-          {runtimeMetrics.nifiStatusError && (
-            <div className="runtime-overview__warning">NiFi 实时流量暂不可用：{runtimeMetrics.nifiStatusError}</div>
-          )}
-        </div>
-      )}
 
       {/* Bottom-right controls */}
       <div className="canvas-controls">
@@ -778,6 +770,7 @@ export default function Canvas() {
         <button className="canvas-controls__btn" onClick={redo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)">
           <RedoOutlined />
         </button>
+      </div>
       </div>
     </div>
   );

@@ -25,6 +25,7 @@
 // 接口：02.字典树查询
 // 路由：POST /sym/getDict
 // 业务说明：字典数据查询接口（树形结构）；使用请求参数 tid、parentId、dictCode、dictName、levelNo、isDel、showRow；涉及 sym_dict_t 等业务表。
+import tableSort
 import tenantRuntime
 /**
  * 字典数据查询接口（树形结构）
@@ -59,11 +60,11 @@ const toTree = (list, rootId) => {
 
     // 返回当前业务分支的标准结果。
     return list.filter(i => {
-        const p = map[i.parentId || root]
+        const p = map[i.parentId || rootId]
         p ? p.children.push(i) : null
         // 返回当前业务分支的标准结果。
         return !p
-    }).sort((a, b) => a.sortNo - b.sortNo)
+    })
 }
 
 
@@ -75,7 +76,7 @@ if (dictCode) {
     // 1. 先查当前 dictCode 对应的节点
     rootNode = db.table('sym_dict_t')
         .where()
-        .eq('is_del', isDel)
+        .eq('is_del', isDel).eq('tenant_id',tenantId)
         .eq('dict_code', dictCode)
         .orderBy('sort_no')
         .selectOne()
@@ -90,54 +91,23 @@ if (parentId) {
     // 从 MySQL 业务表读取当前有效数据。
     rootNode = db.table('sym_dict_t')
         .where()
-        .eq('is_del', isDel)
+        .eq('is_del', isDel).eq('tenant_id',tenantId)
         .eq('tid', parentId)
         .orderBy('sort_no')
         .selectOne()
 }
 
-// 从 MySQL 业务表读取当前有效数据。
-var list = db.table('sym_dict_t')
-            .excludes(["updatedTime", "updatedBy", "createdTime", "createdBy", "isDel", "tenantId"])
-            .where()
-            .eq('is_del', isDel)
-
-
-if (dictName) {
-    list = list.like('dict_name', '%' + dictName + '%')
-}
-
-// 有根节点
-if (rootNode){
-    // 根据 tree_path 查询所有子孙节点（核心！）
-    var rows = list
-        .like('tree_path', rootNode.treePath + '.%')
-        .orderBy('sort_no')
-        .select()
-    rows.each(item => {
-        item.label = item.dictName
-        item.value = item.dictCode
-    })
-    // 返回当前业务分支的标准结果。
-    return showRow ? rows : toTree(rows, rootNode.tid)
-}
-
-// 多个根节点
-if (levelNo) {
-    list = list.eq('level_no', levelNo)
-}
-
-// 单个节点
-if (tid) {
-    list = list.eq('tid', tid)
-}
-
-var rows = list.orderBy('sort_no').select() || []
-
-rows.each(item => {
-    item.label = item.dictName
-    item.value = item.dictCode
-})
-
-// 返回当前业务分支的标准结果。
-return rows
+// Complete dictionary configuration: one bounded SQL read; tree sibling order follows SQL order.
+var sortField=tableSort.field(body,{dictName:'d.dict_name',createdTime:'d.created_time',updatedTime:'d.updated_time',sortNo:'d.sort_no'},'sortNo')
+var direction=body.sortDir==null?'asc':tableSort.direction(body)
+var where=' WHERE d.tenant_id=#{tenantId} AND d.is_del=#{isDel}'
+if(dictName){where+=' AND d.dict_name LIKE #{nameMatch}'}
+var nameMatch='%'+(dictName||'')+'%'
+if(rootNode){where+=' AND d.tree_path LIKE #{pathMatch}'}
+var pathMatch=rootNode==null?'':rootNode.treePath+'.%'
+if(rootNode==null && levelNo){where+=' AND d.level_no=#{levelNo}'}
+if(rootNode==null && tid){where+=' AND d.tid=#{tid}'}
+var rows=db.select('SELECT d.* FROM sym_dict_t d'+where+' ORDER BY CASE WHEN '+sortField+' IS NULL THEN 1 ELSE 0 END,'+sortField+' '+direction+',d.tid ASC LIMIT 10001')
+if(rows.size()>10000){exit 400,'当前字典配置超过10000项，请选择具体字典类型'}
+rows.each(item=>{item.label=item.dictName;item.value=item.dictCode})
+return rootNode!=null && !showRow ? toTree(rows,rootNode.tid) : rows

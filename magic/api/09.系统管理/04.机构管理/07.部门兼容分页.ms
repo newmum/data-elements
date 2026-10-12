@@ -57,8 +57,14 @@ import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.util.NumberUtil;
 import "@post:/sym/user/me" as me;
 import log;
+import tenantRuntime;
+import tableSort;
 import '@/common/configData' as configData
 
+var tenantId=tenantRuntime.id();
+if(tenantId==null){exit 401,'当前租户无效';}
+var sortColumn=tableSort.field(param,{name:'name',updateTime:'update_time',updatedTime:'update_time',sortNum:'sort_num'},'sortNum');
+var sortDirection=param?.sortDir==null?'asc':tableSort.direction(param);
 var isPage = false
 if (limit){
     offset = (offset || 0).asInt();
@@ -68,11 +74,11 @@ if (limit){
 
 // 从 MySQL 业务表读取当前有效数据。
 var parent = db.table("rm_org_t").where()
-                          .eq("id", me().orgRootId)
+                          .eq("tenant_id",tenantId).eq("id", me().orgRootId)
                           .eq("deleted", 0) 
                           .selectOne();
 // 构建查询条件
-var result = db.table("rm_org_t").where().eq("deleted", 0)
+var result = db.table("rm_org_t").where().eq("tenant_id",tenantId).eq("deleted", 0)
 
 if (parent){
     result = result.like('serial_number', parent.serialNumber + '%');
@@ -82,6 +88,7 @@ var idList = []
 // 根据ID列表查询
 if (ids && ids != "") {
     var idList = ids.split(",");
+    if(idList.size()>1000){exit 400,"机构选择超过1000项";}
     result = result.in("id", idList);
 }
 
@@ -91,14 +98,16 @@ if (name && name != "") {
 }
 
 // 查询总数
-var total = result.count();
+if(isPage && (limit<1||limit>100||offset<0||offset>10000000)){exit 400,"机构分页参数无效";}
 
 if (isPage){
     // 分页查询
-    return result.orderBy("sort_num").page(limit, offset)
+    return result.orderBy(sortColumn,sortDirection).orderBy("id","asc").page(limit, offset)
 } else {
     // 返回当前业务分支的标准结果。
-    var list = result.orderBy("sort_num").select();
+    var treePage=result.orderBy(sortColumn,sortDirection).orderBy("id","asc").page(10001,0);
+    if(treePage.total>10000){exit 413,"组织树超过10000项，请缩小机构范围";}
+    var list=treePage.list;
     list.addFirst({
         id:"ROOT",
         name:"全部机构"

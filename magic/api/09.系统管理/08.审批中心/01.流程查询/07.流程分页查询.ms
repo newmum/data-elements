@@ -27,6 +27,7 @@
 // 业务说明：按当前人员的角色和组织范围，结合节点、实例、状态及分页条件查询审批流程。
 import tenantRuntime
 import approvalRuntime
+import tableSort
 import tenantAccounts
 import jsons
 
@@ -36,8 +37,8 @@ var principal = approvalRuntime.principal()
 var tenantId = tenantRuntime.id()
 var currentUserId = principal.userId
 var permissionList = principal.permissionKeys
-var pageNum = body?.pageNum::long(1)
-var pageSize = body?.pageSize::long(20)
+var pageNum = Math.max(1,body?.pageNum::long(1))
+var pageSize = Math.min(100,Math.max(1,body?.pageSize::long(20)))
 var offset = (pageNum - 1) * pageSize
 var view = body?.flowSatusType || "todo"
 var flowCode = body?.flowCode
@@ -48,7 +49,7 @@ var todoSql = """
            t.definition_id, t.instance_id, t.create_time, t.update_time,
            t.tenant_id, t.flow_status, i.business_id, i.activity_status,
            i.create_by, i.ext, d.flow_code, d.flow_name, t.form_custom, t.form_path,
-           null as create_name
+           coalesce(JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(i.ext)=1 THEN i.ext ELSE '{}' END,'$.businessName')),d.flow_name) as business_name, null as create_name
       from flow_task t
       join flow_user fu on fu.associated = t.id
       join flow_instance i on i.id = t.instance_id
@@ -68,7 +69,7 @@ var todoSql = """
        <if test="keyword != null and keyword != ''">
          and (d.flow_name like concat('%', #{keyword}, '%') or i.ext like concat('%', #{keyword}, '%'))
        </if>
-     order by t.create_time desc
+
 """
 
 var instanceSql = """
@@ -76,7 +77,7 @@ var instanceSql = """
            i.id as instance_id, i.create_time, i.update_time, i.tenant_id,
            i.flow_status, i.business_id, i.activity_status, i.create_by, i.ext,
            d.flow_code, d.flow_name, d.form_custom, d.form_path,
-           null as create_name
+           coalesce(JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(i.ext)=1 THEN i.ext ELSE '{}' END,'$.businessName')),d.flow_name) as business_name, null as create_name
       from flow_instance i
       join flow_definition d on d.id = i.definition_id
      where i.tenant_id = #{tenantId}
@@ -90,7 +91,7 @@ var instanceSql = """
        <if test="keyword != null and keyword != ''">
          and (d.flow_name like concat('%', #{keyword}, '%') or i.ext like concat('%', #{keyword}, '%'))
        </if>
-     order by i.create_time desc
+
 """
 
 var doneSql = """
@@ -98,7 +99,7 @@ var doneSql = """
            h.instance_id, h.create_time, h.update_time, h.tenant_id,
            i.flow_status, i.business_id, i.activity_status, i.create_by, i.ext,
            h.message, h.form_path, d.flow_code, d.flow_name,
-           null as create_name
+           coalesce(JSON_UNQUOTE(JSON_EXTRACT(CASE WHEN JSON_VALID(i.ext)=1 THEN i.ext ELSE '{}' END,'$.businessName')),d.flow_name) as business_name, null as create_name
       from flow_his_task h
       join flow_instance i on i.id = h.instance_id
       join flow_definition d on d.id = h.definition_id
@@ -118,11 +119,13 @@ var doneSql = """
        <if test="keyword != null and keyword != ''">
          and (d.flow_name like concat('%', #{keyword}, '%') or i.ext like concat('%', #{keyword}, '%'))
        </if>
-     order by h.create_time desc
+
 """
 
 var sql = view == "todo" ? todoSql : (view == "done" ? doneSql : instanceSql)
-var result = db.page(sql, pageSize, offset)
+var sortColumn=tableSort.field(body,{businessName:'business_name',flowName:'flow_name',createTime:'create_time',updateTime:'update_time'},'createTime');
+var sortDirection=tableSort.direction(body);
+var result = db.page('SELECT page_rows.* FROM ('+sql+') page_rows ORDER BY CASE WHEN '+sortColumn+' IS NULL THEN 1 ELSE 0 END ASC,'+sortColumn+' '+sortDirection+',id ASC', pageSize, offset)
 result.list = result.list || []
 var names = tenantAccounts.names(result.list.map(item => item.createBy))
 result.list.each(item -> {

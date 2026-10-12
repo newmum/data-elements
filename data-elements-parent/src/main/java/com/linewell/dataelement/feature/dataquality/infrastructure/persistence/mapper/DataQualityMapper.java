@@ -10,12 +10,16 @@ import org.apache.ibatis.annotations.Param;
 @InterceptorIgnore(tenantLine = "true")
 public interface DataQualityMapper {
     IPage<Map<String, Object>> selectTaskPage(IPage<?> page, @Param("tenantId") String tenantId,
-            @Param("status") String status, @Param("keyword") String keyword,@Param("kind") String kind);
+            @Param("status") String status, @Param("keyword") String keyword,@Param("kind") String kind,
+            @Param("orderBy") String orderBy
+    );
     IPage<Map<String, Object>> selectRunPage(IPage<?> page, @Param("tenantId") String tenantId,
-            @Param("status") String status, @Param("keyword") String keyword,@Param("kind") String kind);
+            @Param("status") String status, @Param("keyword") String keyword,@Param("kind") String kind,
+            @Param("orderBy") String orderBy
+    );
     IPage<Map<String, Object>> selectIssuePage(IPage<?> page, @Param("tenantId") String tenantId,
             @Param("runId") String runId, @Param("status") String status,
-            @Param("severity") String severity);
+            @Param("severity") String severity,@Param("orderBy") String orderBy);
     Map<String, Object> selectTask(@Param("tenantId") String tenantId, @Param("taskId") String taskId);
     Map<String, Object> lockTask(@Param("tenantId") String tenantId, @Param("taskId") String taskId);
     int activeRuns(@Param("tenantId") String tenantId, @Param("taskId") String taskId);

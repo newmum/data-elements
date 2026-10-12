@@ -4,6 +4,7 @@
     <v-table
       ref="colRef"
       :options="tableOptions"
+      :sort-provider="sortItems" show-page :page="pageState" @page-change="loadPage"
       show-operation
       :show-toolbar="false"
       @btn-click="({ code }) => handleAction(code)"
@@ -54,17 +55,23 @@ const handleAction = (type: string, item?: any) => {
   }
 };
 
+const pageState=reactive({pageNo:1,pageSize:20,total:0});
+let sorting={};
+const sortItems=async(sort)=>{sorting=sort;pageState.pageNo=1;await init();};
+const loadPage=async({pageNo,pageSize})=>{pageState.pageNo=pageNo;pageState.pageSize=pageSize;await init();};
 const init = async () => {
   if (!props.fileCatalogId) return;
 
   colRef.value?.setLoading(true);
   try {
     const data = await $common.post("/dst/catalog/catalog-items/list", {
-      sortField: "sortNo",
-      sortDir: "asc",
+      sortField: sorting.sortField || 'sortNo',
+      sortDir: sorting.sortDir || 'asc',
+      ...(true ? {pageNo:pageState.pageNo,pageSize:pageState.pageSize} : {}),
       tid: props.fileCatalogId,
     });
-    colRef.value.setData(data || []);
+    pageState.total = Array.isArray(data) ? data.length : data.total;
+    colRef.value.setData(Array.isArray(data) ? data : data.list || []);
   } catch (error) {
     console.error("获取catalog数据项失败", error);
   } finally {
@@ -137,7 +144,7 @@ const tableOptions = reactive({
     { type: "seq", width: 70, dragSort: true },
     {
       field: "colName", // 可编辑-插槽渲染
-      title: "数据项信息",
+      title: "数据项名称",
       minWidth: 200,
       editRender: {},
       slots: { default: "colName" },

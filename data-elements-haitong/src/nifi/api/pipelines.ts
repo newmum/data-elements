@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient as api } from './client';
+import { apiClient as api, BACKGROUND_REQUEST_OPTIONS } from './client';
 import { hiveMetadataConfigError, normalizeProbeResponse, requireListResponse } from './response';
 import type { CanvasDsl } from '@/types/dsl';
 import { getTid } from './iframeBridge';
@@ -8,6 +8,17 @@ import { getBridgeToken, getSessionRevision, useSessionRevision, useTokenReady, 
 import { isPlatformAuthenticationFailure } from '../../api/platformApi';
 import { redirectToPlatformLogin } from '../../services/platformSession';
 import { acceptDeploymentResult } from '../utils/deploymentCache';
+import type { TaskChain } from '../types/taskChain';
+
+/** One bounded, authorized read contains every related design; no per-task loading loop. */
+export async function fetchTaskChain(selection: { accessTaskId?: string; pipelineId?: string }): Promise<TaskChain> {
+  const path = selection.accessTaskId ? '/pipelines/task-chain' : `/pipelines/${selection.pipelineId}/chain`;
+  return (await api.get<TaskChain>(path, { params: selection.accessTaskId ? { accessTaskId: selection.accessTaskId } : undefined })).data;
+}
+
+export async function fetchTaskChainNative(accessTaskId: string): Promise<TaskChain> {
+  return (await api.get<TaskChain>('/pipelines/task-chain/native', { params: { accessTaskId } })).data;
+}
 
 export type PipelineStatus =
   | 'DRAFT'
@@ -121,6 +132,14 @@ export interface DeploymentResult {
 
 const KEY = ['pipelines'] as const;
 
+export function usePipelinePage(page:number,size:number,sort:{sortField?:string;sortDir?:string}={}) {
+  const tokenReady=useTokenReady(),sessionRevision=useSessionRevision();
+  return useQuery({enabled:tokenReady,queryKey:[...KEY,'page',sessionRevision,page,size,sort],queryFn:async()=>{
+    const result=(await api.get<{list:PipelineSummary[];total:number}>('/pipelines/page',{params:{page,size,...sort}})).data;
+    if(!Array.isArray(result.list)||!Number.isFinite(result.total))throw new Error('流程分页响应不完整');
+    return result;
+  }});
+}
 export function usePipelineList(enabled = true) {
   const tokenReady = useTokenReady();
   const sessionRevision = useSessionRevision();
@@ -141,14 +160,22 @@ export function usePipelineRuntimeList() {
   });
 }
 
-export function usePipeline(id: string | null) {
+export function usePipeline(id: string | null, allowNetwork = true) {
   const tokenReady = useTokenReady();
   const sessionRevision = useSessionRevision();
   return useQuery({
-    enabled: tokenReady && !!id,
+    enabled: tokenReady && !!id && allowNetwork,
     queryKey: ['pipeline', id, sessionRevision],
-    queryFn: async ({ signal }) => (await api.get<Pipeline>(`/pipelines/${id}`, { signal })).data,
-    staleTime: 5_000,
+    queryFn: async ({ signal }) => {
+      // Task-chain reads seed this exact query with the authorized saved design.
+      // Do not revisit the legacy detail route when selecting or focusing a related task.
+      if (!allowNetwork) throw new Error('关联任务设计由只读链路快照提供，请重新打开画布刷新');
+      return (await api.get<Pipeline>(`/pipelines/${id}`, { signal })).data;
+    },
+    staleTime: allowNetwork ? 5_000 : Infinity,
+    refetchOnMount: allowNetwork,
+    refetchOnWindowFocus: allowNetwork,
+    refetchOnReconnect: allowNetwork,
   });
 }
 
@@ -296,6 +323,8 @@ export function useStopPipeline() {
   });
 }
 
+export function fetchProcessorStatusPage(id:string,query:Record<string,unknown>) {return api.get(`/pipelines/${id}/status/page`,{params:query}).then(r=>r.data);}
+
 export function fetchPipelineStatus(id: string) {
   return api.get(`/pipelines/${id}/status`).then((r) => r.data);
 }
@@ -318,7 +347,7 @@ export function useFlowStatus(id: string | null, intervalMs = 3000) {
   return useQuery<FlowStatusPayload>({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-status', id, sessionRevision],
-    queryFn: async ({ signal }) => (await api.get<FlowStatusPayload>(`/pipelines/${id}/status`, { signal })).data,
+    queryFn: async ({ signal }) => (await api.get<FlowStatusPayload>(`/pipelines/${id}/status`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data,
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data) return intervalMs;
@@ -334,7 +363,7 @@ export function useFlowErrors(id: string | null) {
   return useQuery<FlowError[]>({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-errors', id, sessionRevision],
-    queryFn: async () => requireListResponse<FlowError>((await api.get<unknown>(`/pipelines/${id}/errors`)).data, '流程错误列表'),
+    queryFn: async ({ signal }) => requireListResponse<FlowError>((await api.get<unknown>(`/pipelines/${id}/errors`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, '流程错误列表'),
     refetchInterval: () => {
       const status = statusQuery.data?.status;
       return status === 'RUNNING' ? 3000 : 30000;

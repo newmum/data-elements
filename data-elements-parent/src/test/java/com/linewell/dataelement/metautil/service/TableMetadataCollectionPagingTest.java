@@ -2,8 +2,10 @@ package com.linewell.dataelement.metautil.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -18,10 +20,11 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 class TableMetadataCollectionPagingTest {
     private JdbcTemplate jdbc;
     private TableMetadataCollectionService service;
+    private DataScopeAuthorizationService scopes;
 
     @BeforeEach
     void setUp() {
-        jdbc = new JdbcTemplate(new DriverManagerDataSource("jdbc:h2:mem:collection_paging;DB_CLOSE_DELAY=-1", "sa", ""));
+        jdbc = spy(new JdbcTemplate(new DriverManagerDataSource("jdbc:h2:mem:collection_paging;DB_CLOSE_DELAY=-1", "sa", "")));
         jdbc.execute("drop all objects");
         jdbc.execute("create table db_datasource_t (tid varchar(64), tenant_id varchar(64), is_del int)");
         jdbc.execute("""
@@ -41,7 +44,9 @@ class TableMetadataCollectionPagingTest {
                 """);
         jdbc.update("insert into db_datasource_t values ('source', 'tenant_a', 0)");
         jdbc.update("insert into db_datasource_t values ('source', 'tenant_b', 0)");
-        service = new TableMetadataCollectionService(jdbc, null, null, null, new ObjectMapper());
+        scopes=mock(DataScopeAuthorizationService.class);
+        when(scopes.currentScope(anyString())).thenReturn(new DataScopeAuthorizationService.ScopeDecision("DATA_SOURCE",DataScopeAuthorizationService.Scope.ALL,"owner",List.of(),List.of(),true));
+        service = new TableMetadataCollectionService(jdbc, null, null, null, new ObjectMapper(),scopes);
     }
 
     @AfterEach
@@ -65,6 +70,11 @@ class TableMetadataCollectionPagingTest {
             assertThat((List<?>) first.get("rows")).hasSize(15);
             assertThat((List<?>) second.get("rows")).hasSize(15);
             assertThat(((Map<?, ?>) ((List<?>) first.get("rows")).getFirst()).get("fieldCount")).isEqualTo(99L);
+            var sorted=service.savedTables("source",1,20,"","fieldCount","desc");
+            assertThat(((Map<?,?>)((List<?>)sorted.get("rows")).getFirst()).get("fieldCount")).isEqualTo(99L);
+            var tail=service.savedTables("source",2,20,"","fieldCount","desc");
+            assertThat((List<?>)tail.get("rows")).hasSize(10);
+            assertThatThrownBy(()->service.savedTables("source",1,20,"","field_count;--","asc")).isInstanceOf(IllegalArgumentException.class);
             Map<String, Object> search = service.savedTables("source", 1, 15, "说明29");
             assertThat(search.get("total")).isEqualTo(1L);
             assertThat((List<?>) search.get("rows")).hasSize(1);
@@ -72,6 +82,43 @@ class TableMetadataCollectionPagingTest {
         });
         TenantContext.call("tenant_b", () -> {
             assertThat(service.savedTables("source", 1, 15, "").get("total")).isEqualTo(1L);
+            return null;
+        });
+    }
+
+    @Test
+    void reviewOrdersPersistedValuesBeforePagingWithTwoReadsAndChecksEveryName() {
+        Timestamp time=Timestamp.from(Instant.parse("2026-10-01T00:00:00Z"));
+        var names=new java.util.ArrayList<String>();
+        for(int i=0;i<120;i++) {
+            String name=String.format("table_%03d",i);names.add(name);
+            jdbc.update("insert into db_table_t values (?, 'tenant_a', 'source', 0, ?, ?, ?, '', 'TABLE', ?, 0, ?, ?)",
+                "id-"+i,name,name,"名称"+i,i,time,time);
+        }
+        jdbc.update("insert into db_table_t values ('chosen', 'tenant_a', 'source', 0, 'table_001', 'table_001', '权威', '', 'TABLE', 999, 1, ?, ?)",time,time);
+        jdbc.update("insert into db_table_t values ('secret', 'tenant_b', 'source', 0, 'foreign', 'foreign', '秘密', '', 'TABLE', 1000, 1, ?, ?)",time,time);
+        TenantContext.call("tenant_a",()->{
+            Map<String,Object> body=new java.util.HashMap<>(Map.of("names",names,"sortField","fieldCount","sortDir","desc","pageSize",20));
+            clearInvocations(jdbc);var small=service.reviewOrder("source",body);
+            verify(jdbc,times(1)).queryForObject(anyString(),eq(Long.class),any(Object[].class));
+            verify(jdbc,times(1)).queryForList(anyString(),eq("tenant_a"),eq("source"));
+            body.put("pageSize",100);clearInvocations(jdbc);var large=service.reviewOrder("source",body);
+            verify(jdbc,times(1)).queryForObject(anyString(),eq(Long.class),any(Object[].class));
+            verify(jdbc,times(1)).queryForList(anyString(),eq("tenant_a"),eq("source"));
+            assertThat(large.get("total")).isEqualTo(120);
+            assertThat((List<?>)large.get("keys")).hasSize(100);
+            assertThat(small.get("keys")).isEqualTo(((List<?>)large.get("keys")).subList(0,20));
+            assertThat(((List<?>)large.get("keys")).getFirst()).isEqualTo("table_001");
+            body.put("names",List.of("table_001","foreign"));
+            assertThatThrownBy(()->service.reviewOrder("source",body)).isInstanceOf(IllegalArgumentException.class);
+            body.put("names",List.of("table_001","missing"));
+            assertThatThrownBy(()->service.reviewOrder("source",body)).isInstanceOf(IllegalArgumentException.class);
+            body.put("names",List.of("table_001","table_001"));
+            assertThatThrownBy(()->service.reviewOrder("source",body)).isInstanceOf(IllegalArgumentException.class);
+            body.put("names",names);body.put("sortField","field_count;--");
+            assertThatThrownBy(()->service.reviewOrder("source",body)).isInstanceOf(IllegalArgumentException.class);
+            when(scopes.currentScope(anyString())).thenReturn(new DataScopeAuthorizationService.ScopeDecision("DATA_SOURCE",DataScopeAuthorizationService.Scope.ORG,"owner",List.of(),List.of(),true));
+            assertThatThrownBy(()->service.reviewOrder("source",Map.of("names",names))).isInstanceOf(IllegalArgumentException.class);
             return null;
         });
     }

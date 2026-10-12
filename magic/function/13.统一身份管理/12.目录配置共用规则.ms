@@ -85,7 +85,7 @@ var fields=entity=='field-definitions';
 var table=fields?'iam_field_definition_t':'iam_dict_item_t';
 // 列表分支：先确定当前操作人可见的应用和身份域，再读取并映射业务记录。
 if(operation=='list') {
-    var rows=sql.select('select *,tid as id,date_format(created_time,\'%Y-%m-%dT%H:%i:%sZ\') created_utc,date_format(updated_time,\'%Y-%m-%dT%H:%i:%sZ\') updated_utc from '+table+' where identity_domain=#{domain} and is_del=0 order by tid');
+    var rows=sql.select('select *,tid as id,date_format(created_time,\'%Y-%m-%dT%H:%i:%sZ\') created_utc,date_format(updated_time,\'%Y-%m-%dT%H:%i:%sZ\') updated_utc from '+table+' where identity_domain=#{domain} and is_del=0 order by tid LIMIT 1001');
     return rows.map(x=>({
         id:x.id,domain:x.identity_domain,name:fields?x.label:x.name,code:fields?x.field_key:x.code,status:x.status=='ACTIVE'?'enabled':'disabled',version:x.version,createdAt:x.created_utc,updatedAt:x.updated_utc,category:fields?'extension':x.category=='LINE'?'line':'dictionary',value:fields?x.value_type:x.category,parentId:fields?'':x.parent_id||'',subjectType:fields?x.entity_type:'',required:fields?x.required_flag==1:false,sensitive:fields?x.sensitive_flag==1:false,validation:fields && x.validation_json!=null?JSONUtil.parseObj(x.validation_json):{},description:'',permissions:[],memberIds:[],appId:'',orgId:'',userId:'',expiresAt:''
     }));

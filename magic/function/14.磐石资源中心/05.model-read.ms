@@ -37,8 +37,9 @@ var tenantId = tenantRuntime.id()
 var text = v => v == null ? '' : v + ''
 var parse = v => text(v) == '' ? {} : JSONUtil.parse(v)
 var models = []
-var modelRows = db.select('SELECT * FROM res_logical_model WHERE tenant_id=#{tenantId} AND is_del=0 ORDER BY updated_time DESC')
-var revisionRows = db.select('SELECT * FROM res_logical_model_revision WHERE tenant_id=#{tenantId} ORDER BY revision_number')
+var modelRows = db.select('SELECT * FROM res_logical_model WHERE tenant_id=#{tenantId} AND is_del=0 ORDER BY updated_time DESC LIMIT 1001')
+var revisionRows = db.select('SELECT * FROM res_logical_model_revision WHERE tenant_id=#{tenantId} ORDER BY revision_number LIMIT 10001')
+if (modelRows.size() > 1000 || revisionRows.size() > 10000) { exit 400,'模型配置超过视图上限，请缩小配置范围' }
 for (r in modelRows) {
     var design = parse(r.designJson)
     var frozen = []
@@ -55,13 +56,16 @@ for (r in modelRows) {
         nodes:design.nodes == null ? [] : design.nodes,outputEntityId:design.outputEntityId,fusion:design.fusion,frozen:frozen})
 }
 var plans = []
-for (r in db.select('SELECT * FROM res_materialization_plan WHERE tenant_id=#{tenantId} AND is_del=0 AND plan_json IS NOT NULL ORDER BY updated_time DESC')) {
+var planRows = db.select('SELECT * FROM res_materialization_plan WHERE tenant_id=#{tenantId} AND is_del=0 AND plan_json IS NOT NULL ORDER BY updated_time DESC LIMIT 1001')
+if (planRows.size() > 1000) { exit 400,'物化配置超过视图上限' }
+for (r in planRows) {
     var plan = parse(r.planJson)
     plan.id = text(r.tid); plan.version = r.revisionNo; plan.state = r.planStatus
     plan.createdAt = r.createdTime; plan.updatedAt = r.updatedTime
     plans.add(plan)
 }
-var tables = db.select('SELECT * FROM db_table_t WHERE tenant_id=#{tenantId} AND is_del=0 AND resource_domain_id IS NOT NULL ORDER BY updated_time DESC')
+var projectionOnly = input != null && input.projectionOnly == true
+var tables = projectionOnly ? [] : db.select('SELECT * FROM db_table_t WHERE tenant_id=#{tenantId} AND is_del=0 AND resource_domain_id IS NOT NULL ORDER BY updated_time DESC')
 var ids = []; for (r in tables) { ids.add(text(r.tid)) }
 var entities = input != null && input.entities != null ? input.entities : (ids.size() == 0 ? [] : technicalRead({entityIds:ids}).entities)
 var entityMap = {}; for (e in entities) { entityMap[e.id] = e }
@@ -76,12 +80,14 @@ for (r in tables) {
         modelId:r.resourceModelId,deploymentId:r.resourcePlanId,designFieldMap:parse(r.resourceFieldMap)})
 }
 var itemsets = []
-for (r in db.select('SELECT * FROM res_model_itemset WHERE tenant_id=#{tenantId} AND is_del=0 ORDER BY updated_time DESC')) {
+var itemRows = db.select('SELECT * FROM res_model_itemset WHERE tenant_id=#{tenantId} AND is_del=0 ORDER BY updated_time DESC LIMIT 1001')
+if (itemRows.size() > 1000) { exit 400,'数据项集配置超过视图上限' }
+for (r in itemRows) {
     itemsets.add({id:text(r.tid),version:r.revisionNo,createdAt:r.createdTime,updatedAt:r.updatedTime,
         name:r.itemsetName,modelId:r.modelId,items:JSONUtil.parse(r.itemsJson),state:r.itemsetStatus})
 }
 // Magic's SQL mapper folds unquoted aliases; normalize both forms before returning logs.
-var logs = db.select('SELECT tid AS `id`,actor_id AS `actorId`,action_name AS `action`,object_id AS `objectId`,object_name AS `name`,detail_text AS `detail`,created_time AS `time` FROM res_resource_operation_log WHERE tenant_id=#{tenantId} ORDER BY created_time DESC LIMIT 2000')
+var logs = projectionOnly ? [] : db.select('SELECT tid AS `id`,actor_id AS `actorId`,action_name AS `action`,object_id AS `objectId`,object_name AS `name`,detail_text AS `detail`,created_time AS `time` FROM res_resource_operation_log WHERE tenant_id=#{tenantId} ORDER BY created_time DESC LIMIT 2000')
 var actorIds = []
 for (log in logs) {
     log.actorId = text(log.actorId) == '' ? text(log.actorid) : text(log.actorId)

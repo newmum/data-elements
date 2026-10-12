@@ -23,9 +23,17 @@ public class ReconciliationMagicModule {
         return service.policyPage(keyword, page, size);
     }
 
+    public Map<String, Object> policyPage(String keyword, int page, int size,String sortField,String sortDir) {
+        return service.policyPage(keyword, page, size,sortField,sortDir);
+    }
+
     @Comment("按当前租户读取执行实例分页")
     public Map<String, Object> runPage(String status, String keyword, int page, int size) {
         return service.runPage(status, keyword, page, size);
+    }
+
+    public Map<String, Object> runPage(String status, String keyword, int page, int size,String sortField,String sortDir) {
+        return service.runPage(status, keyword, page, size,sortField,sortDir);
     }
 
     @Comment("按当前租户读取脱敏差异明细分页")

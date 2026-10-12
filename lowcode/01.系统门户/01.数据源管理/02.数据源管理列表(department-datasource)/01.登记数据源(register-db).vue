@@ -173,27 +173,27 @@
                   />
                 </div>
               </div>
-              <el-table
-                :data="metadataImportRows"
+              <DataTable
+                :data="metadataImportRows" :preview-sort="{tableName:'text',tableNameCn:'text',fieldCount:'number'}" :show-page="false"
                 size="small"
                 class="data-upload-result-table"
                 max-height="260"
               >
                 <el-table-column type="index" label="序号" width="68" />
                 <el-table-column
-                  prop="tableName"
+                  prop="tableName" sortable="custom"
                   label="数据表名称"
                   min-width="220"
                   show-overflow-tooltip
                 />
                 <el-table-column
-                  prop="tableNameCn"
+                  prop="tableNameCn" sortable="custom"
                   label="数据表中文名"
                   min-width="220"
                   show-overflow-tooltip
                 />
                 <el-table-column
-                  prop="fieldCount"
+                  prop="fieldCount" sortable="custom"
                   label="字段数"
                   width="94"
                   align="center"
@@ -205,7 +205,7 @@
                     ></template
                   >
                 </el-table-column>
-              </el-table>
+              </DataTable>
             </div>
             <div v-else class="guide-hero-card">
               <div class="guide-hero-copy">
@@ -2149,10 +2149,10 @@
                 :show-option="false"
                 :show-copy="false"
               />
-              <el-table
+              <DataTable
                 v-if="sourceType === 'api'"
                 ref="apiProbeTableRef"
-                :data="connectionTestState.tables"
+                :data="connectionTestState.tables" :preview-sort="{tableComment:'text',fieldCount:'number'}" :show-page="false"
                 row-key="sourcePath"
                 class="api-probe-dataset-table"
                 size="small"
@@ -2163,7 +2163,7 @@
                   width="50"
                   :reserve-selection="true"
                 />
-                <el-table-column label="数据集名称" min-width="240">
+                <el-table-column prop="tableComment" sortable="custom" label="数据集名称" min-width="240">
                   <template #default="{ row }">
                     <el-input
                       v-model="row.tableComment"
@@ -2179,7 +2179,7 @@
                   </template>
                 </el-table-column>
                 <el-table-column
-                  prop="fieldCount"
+                  prop="fieldCount" sortable="custom"
                   label="字段数"
                   width="96"
                   align="center"
@@ -2198,7 +2198,7 @@
                     >{{ row.recordCount || 0 }} 行</template
                   >
                 </el-table-column>
-              </el-table>
+              </DataTable>
               <div v-else class="probe-table-list">
                 <div
                   v-for="table in connectionTestState.tables"
@@ -2291,27 +2291,27 @@
                     />
                   </div>
                 </div>
-                <el-table
-                  :data="metadataImportRows"
+                <DataTable
+                  :data="metadataImportRows" :preview-sort="{tableName:'text',tableNameCn:'text',fieldCount:'number'}" :show-page="false"
                   size="small"
                   class="data-upload-result-table"
                   max-height="260"
                 >
                   <el-table-column type="index" label="序号" width="68" />
                   <el-table-column
-                    prop="tableName"
+                    prop="tableName" sortable="custom"
                     label="数据表名称"
                     min-width="220"
                     show-overflow-tooltip
                   />
                   <el-table-column
-                    prop="tableNameCn"
+                    prop="tableNameCn" sortable="custom"
                     label="数据表中文名"
                     min-width="220"
                     show-overflow-tooltip
                   />
                   <el-table-column
-                    prop="fieldCount"
+                    prop="fieldCount" sortable="custom"
                     label="字段数"
                     width="94"
                     align="center"
@@ -2323,7 +2323,7 @@
                       ></template
                     >
                   </el-table-column>
-                </el-table>
+                </DataTable>
               </div>
               <div
                 v-else-if="accessMode === 'upload' || accessMode === 'capture' || accessMode === 'proxy'"
@@ -5904,33 +5904,18 @@ const loadMetadataImportResult = async (dbId) => {
     console.warn("读取已导入登记模板结果失败", error);
   }
 };
-const asyncMetadataApi = (tid) => {
-  return $common.post(
-    "/dst/database/metadata/refreshDbInfoAsync",
-    { tid },
-    {},
-    5 * 60 * 1000,
-  );
-};
-const startAsyncMetadataExplore = (tid, formData) => {
+const refreshSavedDatasourceMetadata = async (tid, formData) => {
   if (
     !tid ||
-    formData?.showConnect !== "1" ||
+    String(formData?.showConnect) !== "1" ||
     !relationalSourceTypes.includes(sourceType.value)
-  )
-    return;
-  // 保存完成后异步探查元数据，不阻塞登记主流程。
-  asyncMetadataApi(tid)
-    .then((result) => {
-      if (result?.success === false) {
-        console.warn(
-          "异步元数据探查失败",
-          result.errorCode,
-          result.detail || result.message,
-        );
-      }
-    })
-    .catch((error) => console.warn("异步元数据探查请求失败", error));
+  ) return { metadata: {}, warning: false };
+  try {
+    const metadata = await $common.getSilently("/dst/database/metadata/refreshDbInfo", { tid });
+    return { metadata: metadata || {}, warning: false };
+  } catch {
+    return { metadata: {}, warning: true };
+  }
 };
 const detailApi = (tid, silent = false) => {
   return $common.post("/dst/database/detail", {
@@ -6035,9 +6020,10 @@ const save = async () => {
       await persistImportedMetadataSnapshot(savedDbId, importedMetadata);
       markMetadataImportPersisted(importedMetadata);
     }
+    const metadataRefresh = await refreshSavedDatasourceMetadata(savedDbId, formData);
     // 新增成功后始终保留首项“新建数据源”草稿，并把已保存的数据源放入可编辑列表。
     // 修改已有数据源则只更新当前项；工作流状态始终只保留当前选中项。
-    const newObj = Object.assign({}, formData, data, {
+    const newObj = Object.assign({}, formData, data, metadataRefresh.metadata, {
       tid: savedDbId,
       id: savedDbId,
       detailMissing: false,
@@ -6068,9 +6054,12 @@ const save = async () => {
     }
     syncCurrentDatasourceToStore();
     loadedDatasourceDid.value = currentDid.value;
+    if (metadataRefresh.warning) {
+      $message.warning("数据源已保存，但元数据刷新失败，可在详情中重试");
+    }
     return {
       success: true,
-      msg: "保存成功",
+      msg: metadataRefresh.warning ? "数据源已保存，元数据待刷新" : "保存成功",
       data: newObj,
     };
   } catch (err) {

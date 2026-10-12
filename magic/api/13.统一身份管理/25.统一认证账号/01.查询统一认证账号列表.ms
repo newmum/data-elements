@@ -32,6 +32,7 @@ import '@/idaas/mutate' as mutate;
 import '@/idaas/audit' as audit;
 import '@/idaas/password-policy' as passwordPolicy;
 import identityRuntime;
+import tableSort;
 import request;
 import '@/idaas/api-call' as apiCall;
 
@@ -57,17 +58,20 @@ return identityRuntime.control(()=>apiCall(()=>{
     var ctx=guard(operation=='list'?'auth-accounts:read':'auth-accounts:write',null,domain);
     var id=r.id||p.id;
     if(operation=='list') {
-        return sql.select("""
-select a.tid as id,a.subject_id subjectId,a.identity_domain domain,a.username,a.status,
-        a.must_change_password mustChangePassword,a.legal_entity_id legalEntityId,
-        a.version,s.name
-from iam_auth_account_t a
-join iam_subject_t s on s.tid=a.subject_id
-where a.identity_domain=#{domain}
-    and a.is_del=0
-order by a.created_time desc
-limit 250
-""");
+        var values=request.getValues('paged');var paged=values!=null&&values.size()>0&&values[0]=='true';
+        var query=(key,fallback)=>{var values=request.getValues(key);return values==null||values.size()==0?fallback:values[0];};
+        var page=Math.max(1,query('page','1')::int);var size=Math.min(100,Math.max(1,query('size','20')::int));
+        var offset=(page-1)*size;var limit=paged?size:1001;
+        var orderRequest={sortField:query('sortField',null),sortDir:query('sortDir',null)};
+        var from=" FROM iam_auth_account_t a JOIN iam_subject_t s ON s.tid=a.subject_id AND s.identity_domain=a.identity_domain AND s.is_del=0 WHERE a.identity_domain=#{domain} AND a.is_del=0";
+        var total=sql.selectOne('SELECT COUNT(*) total'+from).total;
+        var order=tableSort.field(orderRequest,{name:'s.name',username:'a.username',createdTime:'a.created_time',updatedTime:'a.updated_time'},'createdTime');
+        var rows=sql.select("""
+SELECT a.tid id,a.subject_id subjectId,a.identity_domain domain,a.username,a.status,
+ a.must_change_password mustChangePassword,a.legal_entity_id legalEntityId,a.version,s.name
+"""+from+' ORDER BY '+order+' '+tableSort.direction(orderRequest)+',a.tid ASC LIMIT #{limit} OFFSET '+(paged?offset:0));
+        if(!paged&&rows.size()>1000){exit 400,'认证账号数量过多，请使用分页查询';}
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     var output=mutate(ctx,'auth-accounts:'+operation,p,()=>{
         var old=id==null?null:sql.selectOne("""

@@ -20,6 +20,9 @@ const names = [
   'isCurrentInit', 'trackLoad', 'init', 'collectSourceFields', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
   'isHiveTarget',
+  'normalizeCode', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
+  'materializationProgress', 'materializationElapsed', 'materializationAwaitingDecision',
+  'materializationStartedAt', 'materializationTimer', 'startMaterializationProgress', 'stopMaterializationProgress', 'confirmMaterialization',
 ];
 const selected = names.map(name => {
   const node = ast.program.body.find(n => n.type === 'VariableDeclaration'
@@ -39,15 +42,19 @@ function fixture(size = 2) {
   const calls = [];
   const notices = [];
   const emitted = [];
+  const timers = new Map();
+  let timerId=0;
   const columns = [{ columnName: 'person_id', dataType: 'varchar', length: 32 },
     { columnName: 'occurred_at', dataType: 'varchar', columnType: 'varchar', sourceDataType: 'varchar',
       standardField: 'DATETIME', length: 100, defaultValue: '' },
     { columnName: 'birth_date', dataType: 'varchar', sourceDataType: 'varchar', standardField: 'DATE', length: 32 },
     { columnName: 'ODS_RKSJ', dataType: 'date', length: 0 }];
   const datasource = Object.fromEntries(Array.from({ length: size }, (_, i) => [
-    `db-${i}`, { dbType: i === 1 ? 'hive' : 'oracle', dbName: `target-${i}` },
+    `db-${i}`, { value: `db-${i}`, layerCode: 'ODS', domainCode: i === 0 ? 'huiju' : i === 1 ? 'yuanshi' : 'other',
+      dbType: i === 1 ? 'hive' : 'oracle', dbName: `target-${i}` },
   ]));
   const context = vm.createContext({
+    setInterval: callback=>{timers.set(++timerId,callback);return timerId;},clearInterval: id=>timers.delete(id),
     ref, computed: getter => ({ get value() { return getter(); } }),
     sourceTableName: ref('TC_RKXT.T_SJYCC_CKB'), datasourceMap: ref(datasource),
     sourceFileConfig: ref(null),
@@ -61,11 +68,11 @@ function fixture(size = 2) {
       setData: rows => columns.splice(0, columns.length, ...rows) }),
     nifiNodeOptions: ref([]), resolveNifiNodeId: () => 'node-1',
     props: { type: 'add', id: 'source-table', existingTargets: [] }, initRun: 0, open: ref(true),
-    loadError: ref(''), knownTargets: ref([]), recoveryTarget: ref(null), templateLoading: ref(false),
+    loadError: ref(''), loadErrorCode: ref(''), knownTargets: ref([]), recoveryTarget: ref(null), templateLoading: ref(false),
     loadPending: ref({}), formRules: ref([]), formData: ref({}), templateTableItems: ref([]),
-    datasourceOptions: ref([]), nifiNodeTreeOptions: ref([]),
-    buildDatasourceOptions: () => {}, loadManagedNifiNodeOptions: () => {}, createFormRules: () => [],
-    nextTick: async () => {}, getDefaultDatasourcePaths: () => [['ODS', 'db-0']],
+    datasourceOptions: ref([]), datasourcePathMap: ref({}), datasourceLeafIds: ref([]), nifiNodeTreeOptions: ref([]),
+    loadManagedNifiNodeOptions: () => {}, createFormRules: () => [],
+    nextTick: async () => {},
     normalizeDatasourcePaths: value => value, loadTemplateTableItems: async items => {
       context.templateTableItems.value = items;
     },
@@ -75,7 +82,11 @@ function fixture(size = 2) {
     ElMessageBox: { confirm: async () => {} }, emit: (...args) => emitted.push(plain(args)), console,
     $common: { post: async (route, body) => {
       calls.push({ route, body: plain(body) });
-      if (route === '/ods/targetDatasource/options' || route === '/ods/nifi-node/access-options') return {};
+      if (route === '/ods/targetDatasource/options') {
+        const list = context.optionRows || Object.values(context.datasourceMap.value);
+        return { data: { list, options: list.length ? [{ value: body.taskCategory === 'distribution' ? 'dept-1' : 'ODS', children: list }] : [] } };
+      }
+      if (route === '/ods/nifi-node/access-options') return {};
       if (route === '/dst/database/metadata/collectColumns') return { data: columns };
       if (route === '/ods/getTableTempalte' || route === '/ods/queryTargetTableInfo') return { data: {
         propList: { sourceTableName: context.sourceTableName.value, tableName: 'ODS_SAVED_CUSTOM', dbId: [['ODS', 'db-0']],
@@ -109,7 +120,7 @@ function fixture(size = 2) {
     } },
   });
   vm.runInContext(executable + expose, context);
-  return { context, form, calls, notices, emitted, actual: context.actual };
+  return { context, form, calls, notices, emitted, timers, actual: context.actual };
 }
 
 const defaults = [
@@ -130,6 +141,51 @@ const view = fixture();
 view.context.props.type = 'view';
 await view.actual.init();
 assert.equal(view.form.tableName, 'ODS_SAVED_CUSTOM', 'Viewing an existing target must keep its registered name');
+assert.deepEqual(view.form.dbId, [['ODS', 'db-0']], 'Viewing must not replace the saved target selection');
+
+const domainCases = [
+  { codes: ['other', 'yuanshi', 'huiju'], expected: ['db-2', 'db-1'] },
+  { codes: ['yuanshi'], expected: ['db-0'] },
+  { codes: ['huiju'], expected: ['db-0'] },
+  { codes: ['other'], expected: [] },
+  { codes: [], expected: [] },
+  { codes: [' huiju ', 'YUANSHI', 'huiju', 'yuanshi'], expected: ['db-0', 'db-2', 'db-1', 'db-3'] },
+];
+for (const { codes, expected } of domainCases) {
+  const f = fixture();
+  f.context.optionRows = codes.map((domainCode, i) => ({ value: `db-${i}`, domainCode, layerCode: 'ODS',
+    dbType: 'oracle', label: '名称与编码无关' }));
+  await f.actual.init();
+  assert.deepEqual(f.form.dbId, expected.map(id => ['ODS', id]));
+  assert.equal(f.calls.length, 3, 'Default selection must not add per-domain or per-datasource reads');
+}
+const authorizedLeaves = fixture();
+authorizedLeaves.context.optionRows = [
+  { value: 'allowed', layerCode: 'ODS', domainCode: 'huiju', dbType: 'oracle' },
+  { value: 'allowed', layerCode: 'ODS', domainCode: 'huiju', dbType: 'oracle' },
+  { value: 'another-layer', layerCode: 'DWD', domainCode: 'yuanshi', dbType: 'oracle' },
+];
+await authorizedLeaves.actual.init();
+assert.deepEqual(authorizedLeaves.form.dbId, [['ODS', 'allowed']], 'Only authorized ODS leaves can be selected, without duplicates');
+console.log(JSON.stringify({ odsDomainDefaultCases: domainCases.length, savedSelectionPreserved: true,
+  defaultsDeduplicated: true, unrelatedDomainsExcluded: true }));
+
+for (const size of [20, 100]) {
+  const f = fixture(size);
+  f.context.props.taskCategory = 'distribution';
+  await f.actual.init();
+  assert.equal(f.context.loadError.value, '');
+  assert.deepEqual(f.form.dbId, [], 'Distribution must wait for an explicit department datasource selection');
+  assert.equal(f.calls.length, 3, 'Department targets must keep the three fixed initialization reads');
+  assert.equal(f.calls[0].body.taskCategory, 'distribution');
+  assert.deepEqual(plain(f.context.datasourcePathMap.value['db-0']), ['dept-1', 'db-0']);
+  f.actual.syncTargetDatasourceSelection([['dept-1', 'db-1']]);
+  assert.equal(f.actual.targetTablePlans.value[0].tableName, 'ods_t_sjycc_ckb', 'Department paths retain Hive target naming');
+  f.context.props.type = 'view';
+  await f.actual.init();
+  assert.deepEqual(f.form.dbId, [['ODS', 'db-0']], 'Viewing saved distribution targets must preserve their existing paths');
+  console.log(JSON.stringify({ distributionChoices: size, initialRequests: 3, noImplicitSelection: true, departmentPaths: true }));
+}
 
 const multi = fixture();
 await multi.actual.init();
@@ -166,6 +222,8 @@ for (let i = 0; i < saved.length; i++) {
   assert.equal(fields.find(f => f.columnName === 'occurred_at').defaultValue, null);
 }
 assert.equal(multi.emitted.at(-1)[0], 'save');
+assert.equal(multi.timers.size,0,'Successful materialization stops its local clock');
+assert.equal(multi.actual.materializationProgress.value.completed,2,'Completion comes from successful target responses');
 
 // An existing Hive table must block the entire mixed-target plan before any write.
 const existingHive = fixture();
@@ -178,6 +236,22 @@ assert.equal(existingHive.calls.filter(c => c.route === '/ods/createTapleApply')
 assert.equal(existingHive.calls.filter(c => c.route === '/ods/dataAggReset' && !c.body.dryRun).length, 0);
 assert.ok(existingHive.notices.some(n => n.key === 'warning' && /Hive.*修改目标表名.*手动删除/.test(n.message)));
 assert.equal(existingHive.emitted.length, 0);
+assert.equal(existingHive.timers.size,0,'Early exit also stops its local clock');
+
+const timed=fixture();
+timed.actual.startMaterializationProgress();
+timed.actual.startMaterializationProgress();
+assert.equal(timed.timers.size,1,'Repeated starts cannot leak clock intervals');
+const readsBeforeTick=timed.calls.length;
+[...timed.timers.values()][0]();
+assert.equal(timed.calls.length,readsBeforeTick,'Elapsed-time updates never poll a backend');
+timed.actual.stopMaterializationProgress();
+assert.equal(timed.timers.size,0,'Unmount/finish cleanup stops the interval');
+const failed=fixture();
+failed.context.jsonFormRef.value.validate=async()=>{throw new Error('invalid form');};
+await failed.actual.handleSave();
+assert.equal(failed.timers.size,0,'Validation failure also stops the interval');
+assert.equal(failed.context.isSaveing.value,false,'Validation failure restores submit state');
 
 for (const type of ['hive', 'Hive', 'mrshive']) {
   const hive = fixture();
@@ -204,10 +278,11 @@ for (const size of [20, 100]) {
   await f.actual.init();
   f.form.dbId = Array.from({ length: size }, (_, i) => ['ODS', `db-${i}`]);
   const before = f.calls.length;
+  assert.equal(before, 3, '20/100 option initialization must use the same three reads');
   if (size === 20) await f.actual.regenerateDdl(await f.actual.currentDdlInput());
   else await assert.rejects(f.actual.currentDdlInput(), /最多选择 20/);
   assert.equal(f.calls.length - before, size === 20 ? 1 : 0);
-  requestCounts.push({ targets: size, ddlRequests: f.calls.length - before, rejected: size > 20 });
+  requestCounts.push({ targets: size, initialRequests: before, ddlRequests: f.calls.length - before, rejected: size > 20 });
 }
 console.log(JSON.stringify({ defaultCases: defaults.length, existingNamePreserved: true,
   hiveTargetNamesLowercase: true, mixedTargetNamesFollowDialect: true, previewValidationAndSaveAgree: true,

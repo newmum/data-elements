@@ -54,8 +54,23 @@ const txtRules = computed(() => {
   // eslint-disable-next-line vue/no-side-effects-in-computed-properties
   state.rules = state.ruleMap[detailClass.value] ? state.ruleMap[detailClass.value] : [];
 
-  return FormUtils.transFormText(state.rules);
+  const displayRules = state.rules.map(metadataDisplayRule);
+  return FormUtils.transFormText(displayRules);
 });
+
+const metadataDisplayRule = (rule: any) => {
+  if (detailClass.value === "table" && rule.field === "dataUpdateTime") {
+    return { ...rule, title: "元数据更新时间" };
+  }
+  if (detailClass.value === "db" && rule.field === "procCount") {
+    return { ...rule, field: "procedureCount" };
+  }
+  if (detailClass.value === "db" && rule.field === "totalData") {
+    // The overview provides total bytes, not an exact sum of every table's row count.
+    return { ...rule, field: "totalSize", title: "总占用空间", props: { ...rule.props, suffix: "" } };
+  }
+  return rule;
+};
 
 onMounted(() => {
   // 表单规则
@@ -111,8 +126,17 @@ const handleAction = (type: string) => {
 };
 
 const titleActions = (rule: any) => {
-  const actions = rule?.props?.actions;
-  if (!Array.isArray(actions)) return [];
+  const actions = Array.isArray(rule?.props?.actions) ? [...rule.props.actions] : [];
+  if (detailClass.value === "table" && String(rule?.props?.name || "").includes("元数据")) {
+    if (!actions.some((action) => action.request?.url === "/dst/database/metadata/refreshDbInfo")) {
+      actions.push({
+        key: "refreshMetadata", label: "刷新元数据", icon: "Refresh", visibleWhen: "view",
+        reloadDetail: true, successMessage: "元数据已刷新",
+        request: { url: "/dst/database/metadata/refreshDbInfo", method: "get",
+          payload: { tid: "$datasourceId", tableId: "$tid" } },
+      });
+    }
+  }
   return actions.filter((action) => {
     if (!action?.key || !action?.label) return false;
     const visibleWhen = action.visibleWhen || "always";
@@ -129,6 +153,7 @@ const isTitleActionDisabled = (action: any) =>
 
 const resolveActionValue = (value: any): any => {
   if (value === "$tid") return props.tid;
+  if (value === "$datasourceId") return state.formData.datasourceId || state.formData.dbId;
   if (value === "$detailClass") return detailClass.value;
   if (Array.isArray(value)) return value.map(resolveActionValue);
   if (value && typeof value === "object") {
@@ -166,10 +191,12 @@ const handleTitleAction = async (action: any) => {
     const method = String(request.method || "post").toLowerCase();
     const payload = resolveActionValue(request.payload || {});
     const data = method === "get" ? await $common.get(request.url, payload) : await $common.post(request.url, payload);
-    if (data && typeof data === "object") {
-      state.formData = { ...state.formData, ...data };
-      formRef.value?.setValue(state.formData);
-      store.setData({ ...get(store, "data", {}), ...data });
+    const refreshed = action.reloadDetail || request.url === "/dst/database/metadata/refreshDbInfo"
+      ? await detailApi(props.tid) : data;
+    if (refreshed && typeof refreshed === "object") {
+      state.formData = { ...state.formData, ...refreshed };
+      formRef.value?.setValue(displayDataForDetail(state.formData));
+      store.setData(state.formData);
     }
     $message.success(action.successMessage || "操作成功");
   } catch (error: any) {
@@ -252,12 +279,22 @@ const save = async (): Promise<any> => {
       return;
     }
     const saveResult = await saveApi(omit(formData, ["updatedTime", "regTime", "createdTime", "publishTime"]));
+    let metadataWarning = false;
     if (detailClass.value === "db") {
+      // Keep a committed save successful if the remote datasource is unavailable.
+      if (String(formData.showConnect ?? state.formData.showConnect ?? "1") === "1") {
+        try {
+          await $common.getSilently("/dst/database/metadata/refreshDbInfo", { tid: saveResult?.tid || currentData.value.tid });
+        } catch {
+          metadataWarning = true;
+        }
+      }
       refreshDbIndexInBackground(saveResult?.tid || currentData.value.tid);
     }
 
     set(store, "data", Object.assign({}, formData, get(store, "data", {})));
-    $message.success("保存成功");
+    if (metadataWarning) $message.warning("数据源已保存，但元数据刷新失败，可在详情中重试");
+    else $message.success("保存成功");
     state.editing = false;
     handleAction("init");
   } catch (err: any) {

@@ -27,6 +27,7 @@
 // 接口：01.在线用户分页
 // 路由：POST /sym/user/online/page
 // 业务说明：在线用户分页（POST /sym/user/online/page）。读取当前租户 Sa-Token/Redis 会话，不返回可复用登录令牌；公安LOCAL账号使用本地库与令牌会话，其他租户保留原机制；使用请求参数 pageNum、pageSize、keyword。
+import tableSort
 import tenantAccounts
 
 import '@/tenant-account/users' as localUsers
@@ -104,6 +105,7 @@ for (session in sessionRows) {
     result.add(session)
   }
 }
+result=tableSort.rows(result,body,{userName:'userName',realName:'realName',loginTime:'loginTime',lastActiveTime:'lastActiveTime'},'loginTime','sessionKey')
 var from = (pageNum - 1) * pageSize
 if (from > result.size()) {
   from = result.size()

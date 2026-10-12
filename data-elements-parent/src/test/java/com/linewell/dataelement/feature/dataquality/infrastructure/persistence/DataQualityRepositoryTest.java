@@ -11,6 +11,16 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import org.junit.jupiter.api.Test;
 class DataQualityRepositoryTest {
+ @Test void twentyAndHundredMetricsKeepThreeReadsAndSortActualNumericStatistics() {
+  for(int size:List.of(20,100)) {
+   var mapper=mock(DataQualityMapper.class);when(mapper.selectRun("tenant-a","run")).thenReturn(new LinkedHashMap<>(Map.of("tid","run")));
+   var rows=new java.util.ArrayList<Map<String,Object>>();for(int i=0;i<size;i++)rows.add(new LinkedHashMap<>(Map.of("tid","metric-"+i,"rule_name","Name "+i,"checked_count",size,"profile_json","{\"scannedRows\":"+i+"}")));
+   when(mapper.selectRunMetrics("tenant-a","run")).thenReturn(rows);when(mapper.selectRunShards("tenant-a","run")).thenReturn(List.of());
+   var repository=new DataQualityRepository(mapper,null,new DataQualityProperties(),new ObjectMapper());
+   var result=(List<Map<String,Object>>)repository.runDetail("tenant-a","run",Map.of("metricSortField","scannedRows","metricSortDir","desc")).get("metrics");
+   assertThat(result.getFirst()).containsEntry("scannedRows",size-1);verify(mapper).selectRun("tenant-a","run");verify(mapper).selectRunMetrics("tenant-a","run");verify(mapper).selectRunShards("tenant-a","run");verifyNoMoreInteractions(mapper);
+  }
+ }
  @Test void zeroCheckMetricsReturnUnknownInsteadOfStoredNeutralScore() {
   var mapper=mock(DataQualityMapper.class);when(mapper.selectRun("tenant","run")).thenReturn(new java.util.LinkedHashMap<>(Map.of("tid","run")));
   when(mapper.selectRunMetrics("tenant","run")).thenReturn(java.util.List.of(new java.util.LinkedHashMap<>(Map.of("checked_count",0,"pass_rate",0,"score",0))));

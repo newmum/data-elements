@@ -34,6 +34,29 @@ import org.ssssssss.script.runtime.ExitValue;
 class DataAggTaskEnsureBatchMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
+    @ParameterizedTest @ValueSource(ints = {1, 2})
+    void positiveRegistrationStatesAllowTaskPlanning(int status) throws Exception {
+        Fixture fixture = new Fixture(2);
+        fixture.prepareCreation();
+        fixture.jdbc.update("update db_datasource_t set asset_status=? where tid='source-db'", status);
+        fixture.jdbc.update("update db_table_t set asset_status=? where tid='source-1'", status);
+        assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true)));
+        assertEquals(0, fixture.counter.writes);
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"source", "table"})
+    void zeroNullOrNegativeRegistrationStatesRejectTaskPlanning(String entity) throws Exception {
+        for (Integer status : java.util.Arrays.asList(0, -1, null)) {
+            Fixture fixture = new Fixture(2);
+            fixture.prepareCreation();
+            fixture.jdbc.update(entity.equals("source")
+                ? "update db_datasource_t set asset_status=? where tid='source-db'"
+                : "update db_table_t set asset_status=? where tid='source-1'", status);
+            assertInstanceOf(ExitValue.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true)));
+            assertEquals(0, fixture.counter.writes);
+        }
+    }
+
     @Test
     void ftpSelectedFileIsResolvedOnceAndClientCannotOverrideItsManagedLocator() throws Exception {
         Fixture fixture = new Fixture(20);
@@ -471,7 +494,7 @@ class DataAggTaskEnsureBatchMagicTest {
             List<String> ids = new ArrayList<>();
             for (int i = 0; i < size; i++) {
                 String root = "root-" + i; ids.add(root);
-                rows.add(Map.of("tid", root, "datasourceId", "source-db", "tableName", root));
+                rows.add(Map.of("tid", root, "datasourceId", "source-db", "tableName", root, "assetStatus", 2));
                 f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values(?,'police','source-db',?,0)",root,root);
                 for (int hop = 0; hop < 2; hop++) {
                     String target = root+"-target-"+hop;
@@ -497,6 +520,7 @@ class DataAggTaskEnsureBatchMagicTest {
             inputs.put("db",f.db); inputs.put("tenantId","police"); inputs.put("dataScope",f.scope);
             inputs.put("candidateIds",ids); inputs.put("tableCandidates",rows);
             inputs.put("requestedAccessStatus","all"); inputs.put("selectedDatasourceNameMap",Map.of("source-db","来源库"));
+            inputs.put("registeredDatasourceMap",Map.of("source-db",Map.of("tid","source-db","assetStatus",2,"dbType","mysql")));
             inputs.put("selectedDatasourceAppNameMap",Map.of());
             f.counter.queries=0;
             Map<?,?> debug = assertInstanceOf(Map.class,MagicScript.create(helpers+aggregation+"\nreturn {items:tableItems, groups:taskGroups, roots:chainRootBySource}",null).execute(new MagicScriptContext(inputs)));
@@ -521,15 +545,23 @@ class DataAggTaskEnsureBatchMagicTest {
     }
 
     @Test
-    void hiveStageReadsItsRealSourceAndResolvesChainedTaskTarget() throws Exception {
+    void distributionReadsConfiguredWarehouseSourceAndResolvesChainedTaskTarget() throws Exception {
         Fixture f=new Fixture(2); f.prepareCreation();
         assertInstanceOf(Map.class,f.run());
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
+        f.jdbc.execute("alter table db_table_t add business_type varchar(64)");
+        f.jdbc.execute("alter table db_datasource_t add db_name varchar(100)");
+        f.jdbc.execute("create table sym_dict_t(tid varchar(64),tenant_id varchar(32),parent_id varchar(64),dict_code varchar(64),is_del int)");
+        f.jdbc.execute("create table dwm_center_layer_source_t(tenant_id varchar(32),target_id varchar(64),target_type varchar(32),datasource_id varchar(64),is_del int)");
+        f.jdbc.update("insert into sym_dict_t values('root','police','0','dataSourceType',0),('ods','police','root','ods',0),('domain','police','ods','business',0)");
+        f.jdbc.update("insert into dwm_center_layer_source_t values('police','domain','domain','target-db-0',0)");
+        f.jdbc.update("update db_table_t set business_type='业务表'");
         String script=CanonicalMagicSources.byId("1f475a245fda4ba4a885b3ac4f8e2d59")
-                .replaceAll("(?m)^import (tenantRuntime|dataScope)\\r?\\n", "");
+                .replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n", "");
         Map<String,Object> inputs=new LinkedHashMap<>();
         inputs.put("db",f.db); inputs.put("tenantRuntime",f.scope); inputs.put("dataScope",f.scope);
         inputs.put("body",Map.of("pageNum",1,"pageSize",20));
+        inputs.put("tableSort",new TableSortMagicModule());
         Map<?,?> result=assertInstanceOf(Map.class,MagicScript.create(script,null).execute(new MagicScriptContext(inputs)));
         List<?> list=assertInstanceOf(List.class,result.get("list"));
         Map<?,?> first=list.stream().map(value->(Map<?,?>)value).filter(row->"target-0".equals(row.get("tid"))).findFirst().orElseThrow();
@@ -577,11 +609,11 @@ class DataAggTaskEnsureBatchMagicTest {
             jdbc.execute("""
                     create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),
                         table_name varchar(100),table_name_cn varchar(100),source_table_id varchar(64),source_catalog_id varchar(64),
-                        field_governance_config clob,created_time timestamp,is_del int)
+                        field_governance_config clob,created_time timestamp,is_del int,asset_status int default 2)
                     """);
             jdbc.execute("""
                     create table db_datasource_t(tid varchar(64),tenant_id varchar(32),db_type varchar(32),
-                        pool_cfg clob,is_del int)
+                        pool_cfg clob,is_del int,asset_status int default 2)
                     """);
             jdbc.execute("""
                     create table db_table_column_t(tid varchar(64),tenant_id varchar(32),table_id varchar(64),

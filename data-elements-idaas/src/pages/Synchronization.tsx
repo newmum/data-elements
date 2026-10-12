@@ -1,59 +1,67 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useTableOrder } from '../hooks/useTableOrder';
 import type { Key } from 'react';
 import { Alert, Button, Card, Descriptions, Drawer, Empty, Input, Segmented, Select, Space, Table } from 'antd';
 import { PlusOutlined, SyncOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { provisionApi, useDatabase, type ReceiverConfig, type ProvisionTask, type ProvisionObject, type TenantOption } from '../mock/store';
+import { provisionApi, type ReceiverConfig, type ProvisionTask, type ProvisionObject, type ProvisionItem, type TenantOption } from '../mock/store';
 import type { Domain } from '../domain/types';
 import { PageTitle, RecordEditor, StatusTag, Text, dateText, useAction, useEditable, type FormValues } from '../components/common';
 
 export default function Synchronization({ domain, view }: { domain: Domain; view: 'configs' | 'entities' | 'tasks' }) {
-    const db = useDatabase(); const nav = useNavigate(); const { run, busy } = useAction(); const editable = useEditable('tasks');
+    const nav = useNavigate(); const { run, busy } = useAction(); const editable = useEditable('tasks');
+    const configOrder=useTableOrder(),taskOrder=useTableOrder(),objectOrder=useTableOrder(),itemOrder=useTableOrder();
+    const [configTotal,setConfigTotal]=useState(0),[taskTotal,setTaskTotal]=useState(0),[itemTotal,setItemTotal]=useState(0);
+    const [allConfigs,setAllConfigs]=useState<ReceiverConfig[]>([]),[items,setItems]=useState<ProvisionItem[]>([]);
     const [configs, setConfigs] = useState<ReceiverConfig[]>([]); const [tasks, setTasks] = useState<ProvisionTask[]>([]);
     const [targets, setTargets] = useState<TenantOption[]>([]); const [error, setError] = useState(''); const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState<ReceiverConfig | null>(null); const [open, setOpen] = useState(false);
     const [configId, setConfigId] = useState(''); const [kind, setKind] = useState('user'); const [selected, setSelected] = useState<Key[]>([]);
-    const [objectPage, setObjectPage] = useState(1); const [objectSize, setObjectSize] = useState(20);
+    const setObjectPage=()=>objectOrder.reset();
     const [objectQuery, setObjectQuery] = useState(''); const [objects, setObjects] = useState<ProvisionObject[]>([]);
     const [objectTotal, setObjectTotal] = useState(0); const [objectLoading, setObjectLoading] = useState(false);
     const [taskId, setTaskId] = useState(''); const [progress, setProgress] = useState('');
     const [submission, setSubmission] = useState<{ key: string; requestId: string } | null>(null);
     const ready = (config: ReceiverConfig) => config.enabled && config.lastTestResult === 'SUCCESS';
-    const readyConfigs = configs.filter(ready);
+    const readyConfigs = allConfigs.filter(ready);
     const selectedConfig = readyConfigs.find(config => config.id === configId);
+    const generation=useRef(0);
     const load = async () => {
+        const current=++generation.current;
         setLoading(true); setError('');
         try {
-            const [connections, history, options] = await Promise.all([provisionApi.configs(), provisionApi.tasks(), provisionApi.options()]);
-            setConfigs(connections); setTasks(history); setTargets(options);
+            const [connections, options, result] = await Promise.all([provisionApi.configs(), provisionApi.options(),view==='configs'?provisionApi.configPage(configOrder.query):view==='tasks'?provisionApi.taskPage(taskOrder.query):Promise.resolve(null)]);
+            if(current!==generation.current)return;
+            setAllConfigs(connections);setTargets(options);
+            if(view==='configs' && result) {setConfigs(result.list as ReceiverConfig[]);setConfigTotal(result.total);}
+            if(view==='tasks' && result) {setTasks(result.list as ProvisionTask[]);setTaskTotal(result.total);}
             setConfigId(current => connections.some(c => c.id === current && ready(c)) ? current : connections.find(ready)?.id || '');
-        } catch (e) { setError(e instanceof Error ? e.message : '无法读取下发配置'); }
-        finally { setLoading(false); }
+        } catch (e) { if(current===generation.current)setError(e instanceof Error ? e.message : '无法读取下发配置'); }
+        finally { if(current===generation.current)setLoading(false); }
     };
-    useEffect(() => { if (editable) void load(); else setLoading(false); }, [view, editable]);
+    useEffect(() => { if (editable) void load(); else setLoading(false);return()=>{generation.current++;}; }, [view, editable,configOrder.query,taskOrder.query]);
     useEffect(() => {
         if (selectedConfig?.mappingMode === 'EXISTING_LOCAL' && kind !== 'user') {
-            setKind('user'); setSelected([]); setObjectPage(1);
+            setKind('user'); setSelected([]); setObjectPage();
         }
     }, [selectedConfig?.mappingMode, kind]);
     useEffect(() => {
         if (view !== 'entities' || !editable || !selectedConfig) return;
         let active = true;
         setObjectLoading(true);
-        void provisionApi.objects({ configId: selectedConfig.id, kind, page: objectPage, size: objectSize, q: objectQuery })
+        void provisionApi.objects({ configId: selectedConfig.id, kind, page: objectOrder.page, size: objectOrder.size, q: objectQuery,sortField:new URLSearchParams(objectOrder.query).get('sortField')||undefined,sortDir:new URLSearchParams(objectOrder.query).get('sortDir')||undefined })
             .then(result => { if (active) { setObjects(result.list); setObjectTotal(result.total); setError(''); } })
             .catch(failure => { if (active) setError(failure instanceof Error ? failure.message : '同步对象加载失败'); })
             .finally(() => { if (active) setObjectLoading(false); });
         return () => { active = false; };
-    }, [view, editable, selectedConfig?.id, kind, objectPage, objectSize, objectQuery, db]);
+    }, [view, editable, selectedConfig?.id, kind, objectOrder.query, objectQuery]);
     const execute = async (id: string) => {
         try {
             for (let round = 0; round < 100; round++) {
                 await provisionApi.execute(id);
-                const history = await provisionApi.tasks(); setTasks(history);
-                const current = history.find(t => t.id === id);
+                const current = await provisionApi.task(id);
                 if (!current) throw new Error('任务记录暂时不可读取，请通过任务编号查看结果');
-                setProgress(`已处理 ${current.items.filter(i => i.status === 'success').length} / ${current.items.length} 项`);
+                setProgress(`已处理 ${current.successCount} / ${current.totalCount} 项`);
                 if (current.status !== 'pending') {
                     if (current.status !== 'success') throw new Error('下发包含失败项，请查看任务明细，修正后重试');
                     return;
@@ -72,6 +80,12 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
         await execute(task.id); nav(`/console/${domain}/sync/tasks`);
     }, '下发已完成');
     const task = tasks.find(t => t.id === taskId);
+    useEffect(()=>{
+        if(!taskId)return;let active=true;
+        void provisionApi.itemPage(taskId,itemOrder.query).then(result=>{if(active){setItems(result.list);setItemTotal(result.total);}})
+            .catch(cause=>{if(active)setError(cause instanceof Error?cause.message:'任务明细读取失败');});
+        return ()=>{active=false;};
+    },[taskId,itemOrder.query]);
     const defaults = editing ? { ...editing, secret: '' } : { name: '', targetTenantId: '', receiverInstanceId: '', endpoint: '', keyId: '', secret: '', timeout: 10, enabled: false };
     const targetName = (id: string) => targets.find(t => t.tenantId === id)?.tenantName || id;
     return <>
@@ -79,25 +93,25 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
         {!editable ? <Empty description="当前账号尚未获得下发权限"/> : <>
             {error && <Alert className="section-gap" type="error" showIcon title={error} action={<Button onClick={() => void load()}>重试读取</Button>}/>}
             {progress && <Alert className="section-gap" type="info" showIcon title={progress}/>}
-            {view === 'configs' ? <Card size="small" title="接收系统配置"><Table size="small" rowKey="id" loading={loading} dataSource={configs} scroll={{ x: 'max-content' }} columns={[
-                { title: '配置名称', dataIndex: 'name' }, { title: '目标租户', render: (_, c) => targetName(c.targetTenantId) },
+            {view === 'configs' ? <Card size="small" title="接收系统配置"><Table size="small" rowKey="id" loading={loading} dataSource={configs} onChange={configOrder.onChange} pagination={configOrder.pagination(configTotal)} scroll={{ x: 'max-content' }} columns={[
+                { title: '配置名称', dataIndex: 'name',...configOrder.column('name') }, { title: '目标租户', render: (_, c) => targetName(c.targetTenantId) },
                 { title: '接收地址', dataIndex: 'endpoint', ellipsis: true, width: 360 },
                 { title: '角色下发', render: (_, c) => c.mappingMode === 'EXISTING_LOCAL' ? '关联已有本地角色' : '由接收端创建角色' },
                 { title: '状态', render: (_, c) => <StatusTag value={c.enabled ? 'enabled' : 'disabled'}/> },
                 { title: '操作', render: (_, c) => <Space wrap><Button type="link" disabled={busy} onClick={() => { setEditing(c); setOpen(true); }}>编辑</Button><Button type="link" disabled={busy} onClick={() => run(() => provisionApi.test(c.id), '接收接口认证与目标校验通过')}>测试连接</Button><Button type="link" disabled={busy || !ready(c)} onClick={() => { setConfigId(c.id); nav(`/console/${domain}/sync/entities`); }}>选择下发对象</Button></Space> },
             ]}/></Card> : view === 'entities' ? <>
-                <Card size="small" className="section-gap"><Space wrap><Text strong><span className="form-required-mark" aria-hidden="true">*</span>目标配置</Text><Select aria-label="目标同步配置" style={{ minWidth: 220 }} value={selectedConfig?.id} options={readyConfigs.map(c => ({ value: c.id, label: c.name }))} onChange={value => { setConfigId(value); setSelected([]); setSubmission(null); setObjectPage(1); }}/><Segmented value={kind} onChange={v => { setKind(String(v)); setSelected([]); setSubmission(null); setObjectPage(1); }} options={selectedConfig?.mappingMode === 'EXISTING_LOCAL' ? [{ label: '人员', value: 'user' }] : [{ label: '人员', value: 'user' }, { label: '机构', value: 'org' }]}/><Button type="primary" icon={<SyncOutlined />} disabled={!selectedConfig || busy || (selected.length === 0 && objectTotal === 0)} loading={busy} onClick={submit}>下发{selected.length ? `选中 ${selected.length} 项` : '全部对象'}</Button></Space></Card>
+                <Card size="small" className="section-gap"><Space wrap><Text strong><span className="form-required-mark" aria-hidden="true">*</span>目标配置</Text><Select aria-label="目标同步配置" style={{ minWidth: 220 }} value={selectedConfig?.id} options={readyConfigs.map(c => ({ value: c.id, label: c.name }))} onChange={value => { setConfigId(value); setSelected([]); setSubmission(null); setObjectPage(); }}/><Segmented value={kind} onChange={v => { setKind(String(v)); setSelected([]); setSubmission(null); setObjectPage(); }} options={selectedConfig?.mappingMode === 'EXISTING_LOCAL' ? [{ label: '人员', value: 'user' }] : [{ label: '人员', value: 'user' }, { label: '机构', value: 'org' }]}/><Button type="primary" icon={<SyncOutlined />} disabled={!selectedConfig || busy || (selected.length === 0 && objectTotal === 0)} loading={busy} onClick={submit}>下发{selected.length ? `选中 ${selected.length} 项` : '全部对象'}</Button></Space></Card>
                 {!loading && !readyConfigs.length && <Alert className="section-gap" type="warning" showIcon title="尚无已测试并启用的接收配置" description="请先在同步配置中测试连接并启用目标配置，再人工下发。"/>}
                 <Alert className="section-gap" type="info" showIcon title="单独下发不设置登录密码" description={selectedConfig?.mappingMode === 'EXISTING_LOCAL' ? '已关联的机构和角色直接使用目标系统现有记录；下发人员时自动绑定映射角色。新建用户时可在“用户信息”中填写初始密码并立即下发。' : '下发会先补齐所需机构与角色。新建用户时可在“用户信息”中填写初始密码并立即下发；已有账号保留本地密码及停用设置。'}/>
-                <Card size="small" title="中央目录对象" extra={<Input.Search placeholder="搜索名称或账号" allowClear onSearch={value => { setObjectQuery(value.trim()); setObjectPage(1); }} style={{ width: 240 }}/>}><Table<ProvisionObject> size="small" rowKey="id" dataSource={objects} loading={objectLoading} pagination={{ current: objectPage, pageSize: objectSize, total: objectTotal, showSizeChanger: true, pageSizeOptions: [20, 50, 100], onChange: (page, size) => { setObjectPage(page); setObjectSize(size); } }} scroll={{ x: 'max-content' }} rowSelection={{ selectedRowKeys: selected, onChange: setSelected, preserveSelectedRowKeys: true }} columns={[
-                    { title: '名称', dataIndex: 'name' }, { title: '拟用账号 / 机构编码', render: (_, record) => kind === 'user' ? record.account : record.code },
+                <Card size="small" title="中央目录对象" extra={<Input.Search placeholder="搜索名称或账号" allowClear onSearch={value => { setObjectQuery(value.trim()); setObjectPage(); }} style={{ width: 240 }}/>}><Table<ProvisionObject> size="small" rowKey="id" dataSource={objects} loading={objectLoading} pagination={objectOrder.pagination(objectTotal)} onChange={objectOrder.onChange} scroll={{ x: 'max-content' }} rowSelection={{ selectedRowKeys: selected, onChange: setSelected, preserveSelectedRowKeys: true }} columns={[
+                    { title: '名称', dataIndex: 'name',...objectOrder.column('name') }, { title: '拟用账号 / 机构编码', render: (_, record) => kind === 'user' ? record.account : record.code },
                     { title: '版本', dataIndex: 'version' }, { title: '状态', dataIndex: 'status', render: value => <StatusTag value={value}/> },
                 ]}/></Card>
-            </> : <Card size="small" title="下发任务记录"><Space className="section-gap"><Button disabled={busy} onClick={() => void load()}>查看最新结果</Button><Text type="secondary">共 {tasks.length} 个最近任务</Text></Space><Table size="small" rowKey="id" loading={loading} dataSource={tasks} scroll={{ x: 'max-content' }} columns={[
-                { title: '目标配置', dataIndex: 'name' }, { title: '创建时间', dataIndex: 'createdAt', render: dateText },
-                { title: '处理结果', render: (_, t) => `${t.items.filter(i => i.status === 'success').length} 成功 / ${t.items.filter(i => i.status === 'failed').length} 失败 / ${t.items.filter(i => i.status === 'pending').length} 待处理` },
+            </> : <Card size="small" title="下发任务记录"><Space className="section-gap"><Button disabled={busy} onClick={() => void load()}>查看最新结果</Button><Text type="secondary">共 {taskTotal} 个任务</Text></Space><Table size="small" rowKey="id" loading={loading} dataSource={tasks} onChange={taskOrder.onChange} pagination={taskOrder.pagination(taskTotal)} scroll={{ x: 'max-content' }} columns={[
+                { title: '目标配置', dataIndex: 'name',...taskOrder.column('name') }, { title: '创建时间', dataIndex: 'createdAt', render: dateText,...taskOrder.column('createdAt') },
+                {title:'成功',dataIndex:'successCount',...taskOrder.column('successCount')},{title:'失败',dataIndex:'failedCount',...taskOrder.column('failedCount')},{title:'待处理',dataIndex:'pendingCount',...taskOrder.column('pendingCount')},
                 { title: '状态', dataIndex: 'status', render: value => <StatusTag value={value}/> },
-                { title: '操作', render: (_, t) => <Space><Button type="link" onClick={() => setTaskId(t.id)}>明细</Button>{!['success', 'cancelled'].includes(t.status) && <><Button type="link" disabled={busy} onClick={() => run(async () => { if (['failed', 'partial'].includes(t.status)) await provisionApi.retry(t); await execute(t.id); await load(); }, '任务已完成')}>继续执行 / 重试</Button><Button type="link" disabled={busy} onClick={() => run(async () => { await provisionApi.cancel(t); await load(); }, '任务已取消')}>取消</Button></>}</Space> },
+                { title: '操作', render: (_, t) => <Space><Button type="link" onClick={() => {itemOrder.reset();setTaskId(t.id);}}>明细</Button>{!['success', 'cancelled'].includes(t.status) && <><Button type="link" disabled={busy} onClick={() => run(async () => { if (['failed', 'partial'].includes(t.status)) await provisionApi.retry(t); await execute(t.id); await load(); }, '任务已完成')}>继续执行 / 重试</Button><Button type="link" disabled={busy} onClick={() => run(async () => { await provisionApi.cancel(t); await load(); }, '任务已取消')}>取消</Button></>}</Space> },
             ]}/></Card>}
         </>}
         <RecordEditor open={open} title={editing ? '编辑同步配置' : '新建同步配置'} width={736} initial={defaults as unknown as FormValues} onClose={() => setOpen(false)} fields={[
@@ -110,9 +124,9 @@ export default function Synchronization({ domain, view }: { domain: Domain; view
         ]} onSave={async values => { await provisionApi.save({ ...editing, ...values } as Partial<ReceiverConfig> & { secret?: string }); await load(); }}/>
         <Drawer title="下发任务明细" open={!!task} onClose={() => setTaskId('')} size={900} destroyOnHidden>{task && <>
             <Descriptions size="small" column={1} items={[{ key: 'id', label: '任务编号', children: task.id }, { key: 'target', label: '目标租户', children: targetName(task.targetTenantId) }]}/>
-            <Table size="small" rowKey="eventId" dataSource={task.items} scroll={{ x: 'max-content' }} columns={[
-                { title: '中央对象', render: (_, i) => (i.type === 'user' ? db.users : db.orgs).find(r => r.id === i.objectId)?.name || i.objectId },
-                { title: '类型', dataIndex: 'type', render: v => ({ user: '人员', org: '机构', role: '角色', resource: '资源' } as Record<string, string>)[v] || v }, { title: '版本', dataIndex: 'version' }, { title: '尝试次数', dataIndex: 'attempt' },
+            <Table size="small" rowKey="eventId" dataSource={items} onChange={itemOrder.onChange} pagination={itemOrder.pagination(itemTotal)} scroll={{ x: 'max-content' }} columns={[
+                {title:'中央对象',dataIndex:'name',...itemOrder.column('name')},
+                { title: '类型', dataIndex: 'type', render: v => ({ user: '人员', org: '机构', role: '角色', resource: '资源' } as Record<string, string>)[v] || v }, { title: '版本', dataIndex: 'version' }, { title: '尝试次数', dataIndex: 'attempt',...itemOrder.column('attempt') },
                 { title: '状态', dataIndex: 'status', render: v => <StatusTag value={v}/> },
                 { title: '回执', render: (_, i) => i.result?.message || ({ APPLIED: '已生效', DUPLICATE: '已接收，重复请求已忽略', STALE: '已有更新版本，本次已忽略' } as Record<string, string>)[i.result?.result || ''] || '待处理' },
             ]}/>

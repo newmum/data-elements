@@ -22,6 +22,12 @@
   "responseBodyDefinition": null
 }
 ================================
+
+
+import tableSort
+var sortColumn = tableSort.field(body, {'taskName': 'task_name', 'lastRunning': 'last_running', 'endRunning': 'end_running', 'createdTime': 'created_time', 'updatedTime': 'updated_time','flowFilesIn':'flow_files_in','flowFilesOut':'flow_files_out','queuedCount':'queued_count','bytesIn':'bytes_in','bytesOut':'bytes_out','activeThreadCount':'active_thread_count'}, 'updatedTime')
+var sortDirection = tableSort.direction(body)
+
 // 接口：01.任务监控分页查询
 // 路由：POST /ods/task/page
 // 业务说明：任务监控分页查询（POST /ods/task/page）。只读接口；优先读取 data_access_agg_task_t，并补充 db_datasource_t、db_table_t 形成任务-表同步明细；旧任务表为空时兼容读取 nifi_pipeline_t 流水线快照；用于任务管理页面主表展开查看表同步情况；使用请求参数 pageNum、pageSize、taskStatus、taskName、nifiNetworkCode、nifiNodeId。
@@ -62,7 +68,7 @@ var firstText = (config, keys) => {
 var pageNum = body?.pageNum == null ? 1 : body.pageNum::long
 var pageSize = body?.pageSize == null ? 20 : body.pageSize::long
 pageNum = pageNum < 1 ? 1 : pageNum
-pageSize = pageSize < 1 ? 20 : pageSize
+pageSize = Math.min(100,pageSize < 1 ? 20 : pageSize)
 var offset = (pageNum - 1) * pageSize
 var status = text(body?.taskStatus)
 var keyword = text(body?.taskName).toLowerCase()
@@ -99,23 +105,11 @@ var statusOf = value => {
     return 0
 }
 
-var datasourceName = id => {
-    if (blank(id)) {
-        return null
-    }
-    var row = db.table('db_datasource_t').columns('db_name').where()
-        .eq('tid', id).eq('is_del', 0).selectOne()
-    return row == null ? null : row.dbName
-}
-
-var tableRow = id => {
-    if (blank(id)) {
-        return null
-    }
-    return db.table('db_table_t').columns('tid', 'table_name', 'table_name_cn', 'catalog_name', 'record_count').where()
-        .eq('tid', id).eq('is_del', 0).selectOne()
-}
-
+// Page enrichment is two bulk reads, independent of row count.
+var datasourceById={}
+var tableById={}
+var datasourceName=id=>datasourceById[text(id)]?.dbName
+var tableRow=id=>tableById[text(id)]
 var tableDisplayName = row => {
     if (row == null) {
         return null
@@ -205,29 +199,48 @@ var decorateTaskRow = row => {
 }
 
 // 主任务表查询：这里保持按 data_access_agg_task_t 分页，避免一次性读取大量运行监控数据。
-var query = db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId).eq('is_del', 0)
-if (!blank(status) && status != 'all') {
-    var statusValue = status::int
-    if (statusValue == 2) {
-        query.eq('task_status', 1).in('monitor_status', ['ERROR', 'Error', 'error'])
-    } else if (statusValue == 1) {
-        query.eq('task_status', 1).notIn('monitor_status', ['ERROR', 'Error', 'error'])
-    } else {
-        query.eq('task_status', statusValue)
-    }
+import dataScope
+var scope=dataScope.dataSource();
+var scopeMode=text(scope?.scope);
+var scopeUserId=text(scope?.userId);
+var scopeOrgIds=scope?.organizationIds||[];
+if(!['ALL','ORG','OWNER'].contains(scopeMode)||scopeUserId=='') {exit 403,'无法确定当前数据范围';}
+var sourceScope=scopeMode=='ALL'?'1=1':scopeMode=='OWNER'?'d.created_by=#{scopeUserId}':scopeOrgIds.size()==0?'1=0':'d.org_id in <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>';
+var keywordPattern='%'+text(body?.taskName)+'%';
+var statusSql='';
+if(!blank(status)&&status!='all') {
+ var statusValue=status::int;
+ statusSql=statusValue==2?" AND a.task_status=1 AND LOWER(a.monitor_status)='error'":statusValue==1?" AND a.task_status=1 AND LOWER(a.monitor_status)<>'error'":" AND a.task_status=#{statusValue}";
 }
-if (!blank(body?.taskName)) {
-    query.like('task_name', '%' + body.taskName + '%')
-}
-
-var result = query.orderBy('updated_time', 'desc').page(pageSize, offset)
+var result=db.page("""
+ SELECT a.* FROM data_access_agg_task_t a
+ LEFT JOIN db_datasource_t d ON d.tid=a.source_db_id AND d.tenant_id=a.tenant_id AND d.is_del=0
+ WHERE a.tenant_id=#{tenantId} AND a.is_del=0 AND (${sourceScope})
+ AND (#{keyword}='' OR a.task_name LIKE #{keywordPattern})
+ """+statusSql+" ORDER BY a."+sortColumn+" "+sortDirection+",a.tid ASC",pageSize,offset);
+var taskFields={task_name:'taskName',task_desc:'taskDesc',source_db_id:'sourceDbId',target_db_id:'targetDbId',source_table_id:'sourceTableId',target_table_id:'targetTableId',source_table_primary_key:'sourceTablePrimaryKey',source_table_increment_key:'sourceTableIncrementKey',schedule_strategy:'scheduleStrategy',schedule_cycle:'scheduleCycle',schedule_running:'scheduleRunning',last_running:'lastRunning',end_running:'endRunning',created_time:'createdTime',updated_time:'updatedTime',pipeline_id:'pipelineId',process_group_id:'processGroupId',task_status:'taskStatus',monitor_status:'monitorStatus',monitor_msg:'monitorMsg',flow_files_in:'flowFilesIn',flow_files_out:'flowFilesOut',queued_count:'queuedCount',bytes_in:'bytesIn',bytes_out:'bytesOut',active_thread_count:'activeThreadCount',monitor_time:'monitorTime'};
+for(row in result.list||[]) {for(field in taskFields.keySet()) {var camel=taskFields.get(field);row[camel]=row[camel]==null?row[field]:row[camel];}}
 result.list = result.list == null ? [] : result.list
+var pageDatasourceIds=[]
+var pageTableIds=[]
+for(row in result.list) {
+    for(value in [row.sourceDbId,row.targetDbId]) {if(!blank(value) && !pageDatasourceIds.contains(value)) {pageDatasourceIds.add(value)}}
+    for(value in [row.sourceTableId,row.targetTableId]) {if(!blank(value) && !pageTableIds.contains(value)) {pageTableIds.add(value)}}
+}
+if(pageDatasourceIds.size()>0) {
+    var sources=db.table('db_datasource_t').columns('tid','db_name').where()
+        .eq('tenant_id',tenantId).eq('is_del',0).in('tid',pageDatasourceIds).select()
+    for(source in sources) {datasourceById[text(source.tid)]=source}
+}
+if(pageTableIds.size()>0) {
+    var tables=db.table('db_table_t').columns('tid','table_name','table_name_cn','record_count').where()
+        .eq('tenant_id',tenantId).eq('is_del',0).in('tid',pageTableIds).select()
+    for(table in tables) {tableById[text(table.tid)]=table}
+}
 var decorated = new ArrayList()
 for (row in result.list) {
     var item = decorateTaskRow(row)
-    if (matchesKeyword(item)) {
-        decorated.add(item)
-    }
+    decorated.add(item)
 }
 result.list = decorated
 
@@ -297,8 +310,19 @@ var extractDslInfo = pipeline => {
 }
 
 var filtered = new ArrayList()
-var pipelines = db.table('nifi_pipeline_t').where().eq('tenant_id', tenantId).eq('is_del', 0).orderBy('updated_at', 'desc').select()
+var pipelineSortColumn=tableSort.field(body,{taskName:'name',lastRunning:'last_deployed_at',endRunning:'last_stopped_at',createdTime:'created_at',updatedTime:'updated_at',flowFilesIn:'NULLIF(id,id)',flowFilesOut:'NULLIF(id,id)',queuedCount:'NULLIF(id,id)',bytesIn:'NULLIF(id,id)',bytesOut:'NULLIF(id,id)',activeThreadCount:'NULLIF(id,id)'},'updatedTime');
+var pipelineStatusSql='';
+if(!blank(status)&&status!='all') {
+ pipelineStatusSql=status::int==1?" AND status='RUNNING'":status::int==2?" AND status in ('RUN_ERROR','DEPLOY_FAILED')":" AND status not in ('RUNNING','RUN_ERROR','DEPLOY_FAILED')";
+}
+// Unbound legacy pipelines are visible only to the all-data role. They have no source ownership relation.
+var pipelineScopeSql=scopeMode=='ALL'?'1=1':'1=0';
+var pipelinePage=db.page("SELECT * FROM nifi_pipeline_t WHERE tenant_id=#{tenantId} AND is_del=0 AND (${pipelineScopeSql}) AND (#{keyword}='' OR LOWER(name) LIKE #{keywordPattern})"+pipelineStatusSql+" ORDER BY "+pipelineSortColumn+" "+sortDirection+",id ASC",pageSize,offset);
+var pipelines=pipelinePage.list||[];
+
+var pipelineFields={dsl_json:'dslJson',nifi_process_group_id:'nifiProcessGroupId',last_deployed_at:'lastDeployedAt',last_stopped_at:'lastStoppedAt',created_at:'createdAt',updated_at:'updatedAt'};
 for (pipeline in pipelines) {
+    for(field in pipelineFields.keySet()) {var camel=pipelineFields.get(field);pipeline[camel]=pipeline[camel]==null?pipeline[field]:pipeline[camel];}
     var taskStatus = statusOf(pipeline.status)
     if (!blank(status) && status != 'all' && taskStatus != status::int) {
         continue
@@ -340,22 +364,7 @@ for (pipeline in pipelines) {
             monitorMsg: pipeline.description
         }]
     }
-    if (matchesKeyword(item)) {
-        filtered.add(item)
-    }
+    filtered.add(item)
 }
 
-var start = offset
-var end = offset + pageSize
-if (start < 0) {
-    start = 0
-}
-if (end > filtered.size()) {
-    end = filtered.size()
-}
-return {
-    pageNum: pageNum,
-    pageSize: pageSize,
-    total: filtered.size(),
-    list: start >= filtered.size() ? [] : new ArrayList(filtered.subList(start::int, end::int))
-}
+return {pageNum:pageNum,pageSize:pageSize,total:pipelinePage.total,list:filtered};

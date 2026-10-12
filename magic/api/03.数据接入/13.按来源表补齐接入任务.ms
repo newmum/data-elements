@@ -830,6 +830,12 @@ var sourceDb = db.table('db_datasource_t').where()
 if (sourceDb == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [sourceDb]).size() != 1) {
     exit 403, '来源数据源不在当前租户或角色数据范围内'
 }
+var sourceTableStatus = first(sourceTable, ['assetStatus', 'asset_status'])
+var sourceDatasourceStatus = first(sourceDb, ['assetStatus', 'asset_status'])
+if (sourceTableStatus == null || sourceTableStatus::int <= 0
+    || sourceDatasourceStatus == null || sourceDatasourceStatus::int <= 0) {
+    exit 409, '来源数据源和来源表均须有登记状态，请完成登记后再创建接入任务'
+}
 
 var sourceColumns = db.table('db_table_column_t').where()
     .eq('tenant_id', tenantId).eq('table_id', sourceTableId).eq('is_del', 0)

@@ -27,4 +27,4 @@ var tenantId = tenantRuntime.id()
 // 返回实例指标和分片进度；仓储限定当前租户。
 var runId = body?.runId == null ? '' : ('' + body.runId).trim()
 if (runId == '') { exit 400, '实例ID不能为空' }
-return dataQuality.runDetail(runId)
+return dataQuality.runDetail(runId,body||{})

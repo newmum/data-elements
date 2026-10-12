@@ -35,9 +35,9 @@
 
 <script lang="ts" setup>
 import { useVxeGrid, UseVxeGridOptions } from "../_utils/useVxeGrid";
-import { reactive } from "vue";
+import { reactive, watch } from "vue";
 
-const emit = defineEmits(["page-change", "btn-click", "edit-row"]);
+const emit = defineEmits(["page-change", "sort-change", "btn-click", "edit-row"]);
 
 const props = withDefaults(
   defineProps<
@@ -47,6 +47,7 @@ const props = withDefaults(
       page?: {
         pageNo: number;
         pageSize: number;
+        total?: number;
       };
       editable?: boolean;
     }
@@ -62,13 +63,16 @@ const pageVO = reactive({
   pageNo: props?.page.pageNo ?? 1,
   pageSize: props?.page.pageSize ?? 20,
 });
+watch(() => [props.page.pageNo, props.page.pageSize], ([pageNo,pageSize]) => {
+  pageVO.pageNo=pageNo;pageVO.pageSize=pageSize;
+});
 const { gridRef, gridOptions, gridEvents, setData, getData, removeRow, validate } = useVxeGrid(
   props,
   emit
 );
 
 const pageChange = (data: { page: number; limit: number }) => {
-  emit("page-change", { pageNo: data.page, pageSize: data.limit });
+  gridEvents.pageChange?.({currentPage:data.page,pageSize:data.limit} as any);
 };
 
 // 暴露组件方法
@@ -82,9 +86,9 @@ defineExpose({
   gridRef,
   $grid: gridRef,
   getCheckData: () => gridRef.value?.getCheckboxRecords(),
-  loadData: (data: []) => gridRef.value?.loadData(data),
-  reloadData: (data: []) => gridRef.value?.reloadData(data),
-  setLoading: (val) => (gridOptions.loading = val),
+  loadData: setData,
+  reloadData: setData,
+  setLoading: (val:boolean) => (gridOptions.loading = val),
 });
 </script>
 

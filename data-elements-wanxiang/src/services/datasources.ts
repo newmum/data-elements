@@ -40,12 +40,16 @@ export function sourceChoices():Promise<SourceChoices> {
  if(!choicesCache||choicesCache.tenant!==tenant){const promise=datasourceRegistrationApi.choices().then(c=>({...c,organizations:flattenOrganizations(c.organizations)}));choicesCache={tenant,promise};promise.catch(()=>{if(choicesCache?.promise===promise)choicesCache=undefined;});}
  return choicesCache.promise;
 }
+export async function sourcesPage(query:Row,signal?:AbortSignal):Promise<{list:Row[];total:number;summary:Row;distributions:Row[]}> {
+ const raw=await platformApi<Row>('/dst/database/page',query,{signal});
+ return {list:rowsOf(raw).map(sourceRow),total:Number(raw.total||0),summary:raw.summary||{},distributions:raw.distributions||[]};
+}
 export async function listSources(signal?:AbortSignal):Promise<Row[]> {
  const result:Row[]=[];const seen=new Set<string>();
  for(let pageNum=1;pageNum<=1000;pageNum++){
-  const data=await platformApi<Row>('/dst/database/page',{pageNum,pageSize:1000,conditions:[],sortField:'updatedTime',sortDir:'desc',includeMetadataCounts:true},{signal});
+  const data=await platformApi<Row>('/dst/database/page',{pageNum,pageSize:100,conditions:[],sortField:'updatedTime',sortDir:'desc',includeMetadataCounts:true},{signal});
   const page=rowsOf(data);for(const raw of page){const row=sourceRow(raw);if(row.id&&!seen.has(row.id)){seen.add(row.id);result.push(row);}}
-  if(page.length<1000 || (Number(data.total)>0&&result.length>=Number(data.total)))return result;
+  if(page.length<100 || (Number(data.total)>0&&result.length>=Number(data.total)))return result;
  }
  throw new Error('数据源列表超出读取范围，请缩小查询条件');
 }
@@ -84,16 +88,16 @@ export async function testSource(id:string):Promise<void> {
 export interface SourceTablePage {rows:Row[];total:number;page:number;size:number}
 const tableRow=(t:Row,id:string):Row=>({id:String(t.tid||t.tableId||''),sourceId:id,name:String(t.tableNameEn||t.table_name_en||t.tableName||t.table_name||''),displayName:String(t.tableNameCn||t.table_name_cn||t.tableComment||t.tableName||''),kind:/view/i.test(String(t.tableType||t.table_type||''))?'view':'table',fieldCount:Number(t.fieldCount??t.field_count??0)});
 const asTablePage=(raw:Row,id:string,page:number,size:number):SourceTablePage=>({rows:rowsOf(raw).map(t=>tableRow(t,id)).filter(t=>t.id),total:Number(raw.total??0),page:Number(raw.pageNo??page),size:Number(raw.pageSize??size)});
-export async function sourceTablesPage(id:string,page=1,size=15,keyword=''):Promise<SourceTablePage> {
- const raw=await platformApiGet<Row>('/dst/database/metadata/tables/saved',{dbId:id,pageNo:page,pageSize:size,...(keyword?{keyword}:{})});
+export async function sourceTablesPage(id:string,page=1,size=15,keyword='',sort:Row={}):Promise<SourceTablePage> {
+ const raw=await platformApiGet<Row>('/dst/database/metadata/tables/saved',{dbId:id,pageNo:page,pageSize:size,...sort,...(keyword?{keyword}:{})});
  return asTablePage(raw,id,page,size);
 }
-export async function addedSourceTablesPage(id:string,page=1,size=15):Promise<SourceTablePage> {
- const raw=await platformApiGet<Row>('/dst/database/metadata/tables/collection/additions',{dbId:id,pageNo:page,pageSize:size});
+export async function addedSourceTablesPage(id:string,page=1,size=15,sort:Row={}):Promise<SourceTablePage> {
+ const raw=await platformApiGet<Row>('/dst/database/metadata/tables/collection/additions',{dbId:id,pageNo:page,pageSize:size,...sort});
  return asTablePage(raw,id,page,size);
 }
-export async function missingSourceTablesPage(id:string,page=1,size=15):Promise<SourceTablePage> {
- const raw=await platformApiGet<Row>('/dst/database/metadata/tables/collection/changes',{dbId:id,pageNo:page,pageSize:size});
+export async function missingSourceTablesPage(id:string,page=1,size=15,sort:Row={}):Promise<SourceTablePage> {
+ const raw=await platformApiGet<Row>('/dst/database/metadata/tables/collection/changes',{dbId:id,pageNo:page,pageSize:size,...sort});
  return asTablePage(raw,id,page,size);
 }
 export interface CollectionJob {exists?:boolean;jobId?:string;datasourceId?:string;status:string;phase?:string;progressPercent?:number;totalCount?:number;persistedCount?:number;addedCount?:number;unchangedCount?:number;deletedCount?:number;startedAt?:string;finishedAt?:string;previousSuccessfulAt?:string;savedBeforeCount?:number;error?:string}

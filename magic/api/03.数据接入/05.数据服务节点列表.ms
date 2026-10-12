@@ -18,6 +18,7 @@
 // 接口：05.数据服务节点列表
 // 路由：POST /ods/service-node/page
 // 业务说明：数据服务节点列表（POST /ods/service-node/page）。读取当前租户服务发布节点，不返回部署凭证引用以外的敏感信息；使用请求参数 keyword；涉及 service_node_t 等业务表。
+import tableSort
 import tenantRuntime
 
 var text = value => value == null ? '' : value + ''
@@ -52,4 +53,5 @@ for (row in (rows == null ? [] : rows)) {
         updatedTime: row.updatedTime == null ? row.updated_time : row.updatedTime
     })
 }
+list=tableSort.rows(list,body,{name:'nodeName',nodeName:'nodeName',updatedTime:'updatedTime'},'updatedTime','tid')
 return { list: list, total: list.size() }

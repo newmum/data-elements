@@ -1,6 +1,7 @@
 import type { QueryClient, Query } from '@tanstack/react-query';
 import { onNifiSessionChange } from './bridgeSession';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useTaskChainStore } from '../stores/taskChainStore';
 
 // The NiFi canvas and live platform pages both use the same tenant session.
 // Keep unrelated local workbench queries, but never retain another tenant's data.
@@ -12,6 +13,7 @@ const NIFI_QUERY_ROOTS = new Set([
   'pipeline-status',
   'pipeline-errors',
   'access-task-detail',
+  'task-chain',
 ]);
 
 const isSessionQuery = (query: Query) =>
@@ -22,6 +24,7 @@ export function registerNifiQueryClient(queryClient: QueryClient): () => void {
     // Clear the previously loaded DSL synchronously with the credential change.
     // The route wrapper then remounts and fetches under the new session.
     useCanvasStore.getState().clear();
+    useTaskChainStore.getState().clear();
     void queryClient.cancelQueries({ predicate: isSessionQuery });
     queryClient.removeQueries({ predicate: isSessionQuery });
   });

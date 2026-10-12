@@ -56,6 +56,7 @@
   "mappingPath": null
 }
 ================================
+
 // 共享函数：11.中央人员机构共用规则
 // 业务说明：封装多处使用的人员、机构和任职资料校验与映射，保持中央目录与租户本地账号隔离。
 // 函数输入：entity：中央目录对象类别；operation：本次执行的业务操作；payload：请求资料或筛选条件。
@@ -114,7 +115,7 @@ var dto=(row)=>{
     var main=primary.size()==0?null:primary[0];
     return {
         id:row.id,domain:row.identity_domain,name:row.name,subjectCode:row.subject_code,account:row.account_hint||'',email:row.email||'',phone:row.phone||'',employeeId:row.employee_no||'',employmentType:(row.employment_type||'EMPLOYEE').toLowerCase(),joinDate:row.join_date==null?'':row.join_date.toString(),status:row.status=='ACTIVE'?'enabled':'disabled',version:row.version,
-        createdAt:row.created_utc,updatedAt:row.updated_utc,orgId:main==null?'':main.org_id,orgName:main==null?'':main.org_name||'',post:main==null?'':main.post_code||'',kind:row.identity_domain=='public'?'citizen':'person',locked:false,verified:verified,verificationStatus:profile==null?'UNVERIFIED':profile.verification_status=='VERIFIED' && !verified?'EXPIRED':profile.verification_status,history:[],
+        authorizedAppCount:row.authorized_app_count==null?0:row.authorized_app_count,lastLoginAt:row.last_login_utc||'',createdAt:row.created_utc,updatedAt:row.updated_utc,orgId:main==null?'':main.org_id,orgName:main==null?'':main.org_name||'',post:main==null?'':main.post_code||'',kind:row.identity_domain=='public'?'citizen':'person',locked:false,verified:verified,verificationStatus:profile==null?'UNVERIFIED':profile.verification_status=='VERIFIED' && !verified?'EXPIRED':profile.verification_status,history:[],
         appointments:jobs.map(a=>({
             id:a.id,orgId:a.org_id,post:a.post_code||'',position:a.position_code||'',rank:a.rank_code||'',title:a.title_code||'',primary:a.is_primary==1,version:a.version
         })),ext:extensionViews.get(row.id)||{}
@@ -192,12 +193,74 @@ where t.identity_domain=#{domain} and t.is_del=0
         <foreach collection="scopeIds" item="scopeId" open="(" close=")" separator=",">#{scopeId}</foreach>
   ))
 """;
+    var appCountSql='0';
+    var lastLoginSql='NULL';
+    var derivedColumns='';
+    if(entity=='subjects') {
+        // Resolve grant-read scopes from the same current operator context once.
+        var allReadApps=0;
+        var readAppIds=[];
+        for(pair in ctx.pairs) {
+            if(!pair.codes.contains('grants:read')) {continue;}
+            for(scope in pair.scopes) {
+                if(scope.identity_domain!=domain) {continue;}
+                if(scope.scope_kind=='ALL') {allReadApps=1;}
+                if(scope.scope_kind=='APPLICATION' && !readAppIds.contains(scope.app_id)) {readAppIds.add(scope.app_id);}
+            }
+        }
+        if(readAppIds.size()==0) {readAppIds=['__none__'];}
+        appCountSql="""
+(CASE WHEN t.status!='ACTIVE' THEN 0 ELSE (
+  SELECT COUNT(*) FROM iam_application_t app
+  WHERE app.kind='BUSINESS' AND app.is_del=0 AND app.status='ACTIVE'
+    AND JSON_CONTAINS(app.identity_domains,JSON_QUOTE(#{domain}))
+    AND (#{allReadApps}=1 OR app.tid IN (#{readAppIds}))
+    AND EXISTS (
+      SELECT 1 FROM iam_access_grant_t grantRow
+      WHERE grantRow.app_id=app.tid AND grantRow.identity_domain=#{domain}
+        AND grantRow.is_del=0 AND grantRow.status='ACTIVE'
+        AND grantRow.valid_from<=UTC_TIMESTAMP(6)
+        AND (grantRow.valid_until IS NULL OR grantRow.valid_until>UTC_TIMESTAMP(6))
+        AND (grantRow.principal_type='SUBJECT' AND grantRow.subject_id=t.tid
+          OR grantRow.principal_type='GROUP' AND EXISTS (
+            SELECT 1 FROM iam_group_member_t gm JOIN iam_permission_group_t pg
+            ON pg.tid=gm.group_id AND pg.identity_domain=#{domain} AND pg.is_del=0 AND pg.status='ACTIVE'
+            WHERE gm.subject_id=t.tid AND gm.group_id=grantRow.group_id AND gm.status='ACTIVE'
+              AND gm.valid_from<=UTC_TIMESTAMP(6) AND (gm.valid_until IS NULL OR gm.valid_until>UTC_TIMESTAMP(6)))
+          OR grantRow.principal_type='ORG' AND EXISTS (
+            SELECT 1 FROM iam_appointment_t job
+            JOIN iam_org_t org ON org.tid=job.org_id AND org.identity_domain=#{domain} AND org.is_del=0 AND org.status='ACTIVE'
+            JOIN iam_org_t grantedOrg ON grantedOrg.tid=grantRow.org_id AND grantedOrg.identity_domain=#{domain} AND grantedOrg.is_del=0 AND grantedOrg.status='ACTIVE'
+            WHERE job.subject_id=t.tid AND job.is_del=0 AND job.status='ACTIVE'
+              AND job.valid_from<=UTC_TIMESTAMP(6) AND (job.valid_until IS NULL OR job.valid_until>UTC_TIMESTAMP(6))
+              AND (org.tid=grantRow.org_id OR grantRow.include_children=1 AND org.path LIKE CONCAT(grantedOrg.path,'%'))
+              AND NOT EXISTS (SELECT 1 FROM iam_org_t ancestor WHERE LOCATE(CONCAT('/',ancestor.tid,'/'),org.path)>0 AND (ancestor.is_del=1 OR ancestor.status!='ACTIVE'))
+          )
+        )
+    )
+) END)
+""";
+        lastLoginSql="""
+(SELECT MAX(e.event_time) FROM iam_audit_event_t e
+ LEFT JOIN iam_operator_t operatorRow ON e.actor_kind='OPERATOR' AND operatorRow.tid=e.actor_id AND operatorRow.is_del=0
+ LEFT JOIN iam_auth_account_t accountRow ON e.actor_kind='AUTH_ACCOUNT' AND accountRow.tid=e.actor_id AND accountRow.identity_domain=#{domain} AND accountRow.is_del=0
+ WHERE e.identity_domain=#{domain} AND e.event_type='AUTH' AND e.result='SUCCESS'
+   AND e.action IN ('auth:login','auth:mfa-login','auth:account-login')
+   AND (operatorRow.subject_id=t.tid OR accountRow.subject_id=t.tid))
+""";
+        derivedColumns=','+appCountSql+' authorized_app_count,date_format('+lastLoginSql+",'%Y-%m-%dT%H:%i:%sZ') last_login_utc";
+    }
+    import tableSort;
+    var allowedSort={name:'t.name',account:'t.account_hint',createdAt:'t.created_time',updatedAt:'t.updated_time',createdTime:'t.created_time',updatedTime:'t.updated_time',sortNo:'t.sort_no'};
+    if(entity=='subjects') {allowedSort.remove('sortNo');allowedSort.apps=appCountSql;allowedSort.lastLogin=lastLoginSql;} else {allowedSort.remove('account');}
+    var sortColumn=tableSort.field(p,allowedSort,entity=='orgs'?'sortNo':'name');
+    var sortDirection=p.sortField==null?'asc':tableSort.direction(p);
     var total=sql.selectOne('select count(*) as total '+filter).total;
     var list=sql.select("""
 select t.*,t.tid as id,
        date_format(t.created_time,'%Y-%m-%dT%H:%i:%sZ') created_utc,
        date_format(t.updated_time,'%Y-%m-%dT%H:%i:%sZ') updated_utc
-"""+filter+(entity=='orgs'?" order by t.sort_no,t.tid":" order by t.tid")+" limit #{size} offset #{offset}");
+"""+derivedColumns+filter+" order by CASE WHEN "+sortColumn+" IS NULL THEN 1 ELSE 0 END ASC,"+sortColumn+" "+sortDirection+",t.tid asc limit #{size} offset #{offset}");
     if(entity=='subjects' && list.size()>0) {
         var subjectIds=list.map(row=>row.id);
         var jobs=sql.select("""

@@ -288,7 +288,7 @@
           :show-overflow-tooltip="false"
         >
           <template #default="{ row, $index }">
-            <slot name="operation" :row="row" :index="$index"></slot>
+            <slot name="operation" :row="row" :index="props.previewSort && Array.isArray(props.data) ? props.data.indexOf(row) : $index"></slot>
           </template>
         </OperationColumn>
 
@@ -317,10 +317,13 @@
 
 <script setup lang="ts">
 import { getTextWidth } from "@/utils";
-import { TableInstance } from "element-plus";
+import { TableInstance, ElMessage } from "element-plus";
+import request from "@/utils/request";
+import { get } from "lodash-es";
 import { VueDraggable } from "vue-draggable-plus";
 import type { TableColumnCtx } from "element-plus";
-import { computed, ref, shallowRef, useSlots, watch, unref } from "vue";
+import { computed, ref, shallowRef, useSlots, useAttrs, watch, unref, getCurrentInstance } from "vue";
+import { isRequiredSortColumn } from "./table-sorting";
 import { cloneDeep, isFunction } from "lodash-es";
 
 // 按钮项属性
@@ -399,6 +402,8 @@ interface fetchDataParams {
   pageNo: number; // 当前页码
   pageSize: number; // 每页显示条数
   search?: string; // 搜索内容
+  sortField?: string;
+  sortDir?: "asc" | "desc";
 }
 
 // 表格属性
@@ -428,6 +433,7 @@ interface UTableProps {
   showPaginationTotal?: boolean; // 是否显示分页左侧总记录数
   hidePaginationOnSinglePage?: boolean; // 单页数据时是否隐藏分页区域
   immediate?: boolean; // 是否立即加载数据
+  previewSort?: Record<string,"text"|"number"|"time">; // Complete editor/schema definitions only, never a persisted business page
   rowSort?: boolean; // 是否行排序
   flexType?: string | "flex-[0_0_200px]" | "flex-[1_1_200px]" | "flex-[0_1_auto]"; // 展示形态，确定高度等
   loading?: boolean; // 加载与loading共同控制
@@ -441,7 +447,7 @@ interface UTableEmits {
   (e: "selection-change", selection: any[]): void;
   (
     e: "sort-change",
-    sortInfo: { column: TableColumnCtx<any>; prop: string; order: "ascending" | "descending" }
+    sortInfo: { column: TableColumnCtx<any>; prop: string | null; order: "ascending" | "descending" | null }
   ): void;
   (e: "filter-change", filters: any): void;
   (e: "row-click", row: any): void;
@@ -480,7 +486,9 @@ const props = withDefaults(defineProps<UTableProps>(), {
 
 // 定义emit事件
 const emit = defineEmits<UTableEmits>();
+const instance=getCurrentInstance();
 const slots = useSlots();
+const attrs = useAttrs();
 const tableSlotNames = computed(() =>
   Object.keys(slots).filter(
     (name) => !["default", "toolbar", "pagination", "operation", "empty"].includes(name)
@@ -502,6 +510,7 @@ const shouldShowPagination = computed(
 // 筛选过滤
 const columnFilters = ref<Record<string, any>>({});
 const curIndex = ref(-1); // 当前操作的行索引
+const remoteSort = ref<{ sortField?: string; sortDir?: "asc" | "desc" }>({});
 
 // 展示数据列
 const dataColumns = ref<UColumnProps[]>(props.columns);
@@ -531,8 +540,13 @@ const formatNumberValue = (value: unknown, column: UColumnProps) => {
 };
 
 const freshColumns = () => {
+  let businessIndex = 0;
   dataColumns.value = props.columns?.map((col) => {
     const column = cloneDeep(col);
+    if ((typeof props.data === "function" || props.previewSort?.[col.prop]) && col.prop && !["selection", "index", "seq", "checkbox", "buttons"].includes(col.type ?? "")) {
+      if (isRequiredSortColumn(col, businessIndex === 0) || col.sortable) column.sortable = "custom";
+      businessIndex++;
+    }
     // 默认内容溢出时显示省略提示；如果页面列配置显式关闭，则尊重页面配置。
     column["showOverflowTooltip"] = col.showOverflowTooltip ?? true;
 
@@ -650,7 +664,19 @@ const fetchTableData = async () => {
   const fetchData = props.data;
   try {
     localLoading.value = true;
-    if (Array.isArray(fetchData)) {
+    if (Array.isArray(fetchData) && props.previewSort && remoteSort.value.sortField) {
+      const field=remoteSort.value.sortField,kind=props.previewSort[field];
+      if(!kind) throw new Error('当前配置不支持该排序字段');
+      const items=fetchData.map((row,index)=>{
+        let value=get(row,field);
+        if(kind==='time' && value){const date=new Date(value);value=Number.isNaN(date.getTime())?null:date.toISOString();}
+        return {id:String(index),value:value??null};
+      });
+      const result=await request.post<any,{keys:string[];total:number}>('/sym/table/preview-order',{items,kind,direction:remoteSort.value.sortDir,page:currentPage.value,size:pageSize.value,wholeCollection:!props.showPage});
+      if(requestId!==latestFetchRequestId) return;
+      if(result.total!==fetchData.length || new Set(result.keys).size!==result.keys.length || result.keys.some(id=>!/^\d+$/.test(id)||Number(id)>=fetchData.length))throw new Error('配置排序结果不完整或超出当前范围');
+      tableData.value=result.keys.map(id=>fetchData[Number(id)]);total.value=result.total;
+    } else if (Array.isArray(fetchData)) {
       // 分页
       if (props.showPage) {
         tableData.value = fetchData.slice(
@@ -665,6 +691,7 @@ const fetchTableData = async () => {
       const params = {
         pageNo: currentPage.value,
         pageSize: pageSize.value,
+        ...remoteSort.value,
       };
       const { list, total: totalCount } = await fetchData(params);
 
@@ -688,6 +715,7 @@ const fetchTableData = async () => {
     freshColumns();
   } catch (error) {
     console.error("获取表格数据失败:", error);
+    ElMessage.error(error instanceof Error ? error.message : "表格读取失败，请稍后重试");
   } finally {
     if (requestId === latestFetchRequestId) {
       localLoading.value = false;
@@ -713,10 +741,14 @@ const handleSortChange = ({
   order,
 }: {
   column: any;
-  prop: string;
-  order: "ascending" | "descending";
+  prop: string | null;
+  order: "ascending" | "descending" | null;
 }) => {
+  remoteSort.value = order && prop ? { sortField: prop, sortDir: order === "ascending" ? "asc" : "desc" } : {};
+  currentPage.value = 1;
   emit("sort-change", { column, prop, order });
+  // Explicit slot-column handlers own their fetch; ordinary configured lists use this request path.
+  if ((typeof props.data === "function" || props.previewSort) && !instance?.vnode.props?.onSortChange) fetchTableData();
 };
 
 // 刷新表格数据, isInit 是否初始化分页
@@ -768,6 +800,8 @@ watch(
 // 暴露方法给父组件
 defineExpose({
   $table: elTableRef, // 引用
+  clearSelection: () => elTableRef.value?.clearSelection(),
+  toggleRowSelection: (row: any, selected?: boolean) => elTableRef.value?.toggleRowSelection(row,selected),
   tableData,
   refresh,
   setCurIndex, // 设置当前操作的行索引

@@ -116,11 +116,11 @@ export function ModelsPage() {
         </article>;
       })}
       {!models.length && <Empty description="暂无模型，请先选择分层和分库并新建逻辑模型" />}
-    </div> : <PTable rows={models} onRefresh={refresh} columns={[
+    </div> : <PTable tableSource="models" rows={models} onRefresh={refresh} columns={[
       { title: '模型', render: (_, model) => <NameCell name={model.name} code={model.code} /> },
       { title: '目标分层', render: (_, model) => locationOf(model).layer?.name || '未指定' },
       { title: '目标分库', render: (_, model) => locationOf(model).database?.name || '未指定' },
-      { title: '实体数', render: (_, model) => model.entities.length },
+      { title: '实体数',key:'entityCount', render: (_, model) => model.entities.length },
       { title: '来源', render: (_, model) => methodLabel[model.method] },
       { title: '冻结版本', render: (_, model) => model.frozen.length ? `v${model.frozen.at(-1)!.number}` : '未冻结' },
       { title: '更新时间', render: (_, model) => timeText(model.updatedAt) },

@@ -48,9 +48,9 @@ export const externalFlowRegistry = {
     platformApi<{ tid: string; externalFlowId: string; pipelineId: string; created: boolean }>(
       '/ods/task/registry/save', { externalFlowId, pipelineId, sourceFormat: 'CANVAS_DSL_V1' },
     ),
-  page: (pageNum = 1, pageSize = 20) =>
+  page: (pageNum = 1, pageSize = 20, sort: {sortField?:string;sortDir?:string} = {}) =>
     platformApi<{ pageNum: number; pageSize: number; total: number; list: ExternalFlowRegistration[] }>(
-      '/ods/task/registry/page', { pageNum, pageSize },
+      '/ods/task/registry/page', { pageNum, pageSize, ...sort },
     ),
   createDraft: async (name: string, description: string, dsl: CanvasDsl) =>
     (await apiClient.post<Pipeline>('/pipelines', { name, description, dsl })).data,

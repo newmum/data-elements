@@ -26,6 +26,7 @@
 // 服务端分页后一次关联读取本页全部成员，按来源数据源角色范围过滤整组。
 import tenantRuntime
 import dataScope
+import tableSort
 import cn.hutool.core.util.NumberUtil
 
 var text = value => value == null ? '' : ('' + value).trim()
@@ -38,7 +39,7 @@ if (tenantId == '') { exit 401, '当前租户无效' }
 var pageNum = text(body?.pageNum).matches('^[0-9]+$') ? NumberUtil.parseInt(text(body.pageNum)) : 1
 var pageSize = text(body?.pageSize).matches('^[0-9]+$') ? NumberUtil.parseInt(text(body.pageSize)) : 20
 if (pageNum < 1 || pageNum > 100000) { pageNum = 1 }
-if (pageSize < 1 || pageSize > 20) { pageSize = 20 }
+if (pageSize < 1 || pageSize > 100) { pageSize = 20 }
 var keyword = text(body?.keyword)
 if (keyword.length() > 100) { exit 400, '搜索词过长' }
 var likeKeyword = '%' + keyword + '%'
@@ -55,9 +56,17 @@ var visibleSql = scopeMode == 'ALL' ? '1=1' :
       'd.org_id in <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>'))
 
 // 一组任一来源超出范围时隐藏整组，不返回部分成员造成信息泄露。
+var tableCountSql='(select count(*) from data_access_multi_group_item_t cm where cm.tenant_id=g.tenant_id and cm.group_id=g.tid)'
+var runningCountSql='(select count(*) from data_access_multi_group_item_t cm join data_access_agg_task_t ca on ca.tid=cm.access_task_id and ca.source_table_id=cm.source_table_id and ca.tenant_id=cm.tenant_id and ca.is_del=0 where cm.tenant_id=g.tenant_id and cm.group_id=g.tid and ca.task_status=1)'
+var errorCountSql='(select count(*) from data_access_multi_group_item_t cm left join data_access_agg_task_t ca on ca.tid=cm.access_task_id and ca.source_table_id=cm.source_table_id and ca.tenant_id=cm.tenant_id and ca.is_del=0 where cm.tenant_id=g.tenant_id and cm.group_id=g.tid and (ca.tid is null or ca.task_status=2))'
+var sortColumn=tableSort.field(body,{groupName:'g.group_name',createdTime:'g.created_time',tableCount:tableCountSql,runningCount:runningCountSql,errorCount:errorCountSql},'createdTime')
+var sortDirection=tableSort.direction(body)
+var memberColumn=tableSort.field({sortField:body?.itemSortField},{sourceTableName:'coalesce(t.table_name_cn,t.table_name)',lastRunning:'a.last_running',endRunning:'a.end_running'},'sourceTableName')
+var memberDirection=tableSort.direction({sortDir:body?.itemSortDir})
 var groupSql = """
     select g.tid as groupId, g.group_name as groupName, g.created_by as createdBy,
-           g.created_time as createdTime, g.updated_time as updatedTime
+           g.created_time as createdTime, g.updated_time as updatedTime,
+           ${tableCountSql} as tableCount,${runningCountSql} as runningCount,${errorCountSql} as errorCount
       from data_access_multi_group_t g
      where g.tenant_id=#{tenantId} and g.is_del=0
        and (#{keyword}='' or g.group_name like #{likeKeyword})
@@ -70,7 +79,7 @@ var groupSql = """
            where m.group_id=g.tid and m.tenant_id=g.tenant_id
              and (t.tid is null or d.tid is null or not (${visibleSql}))
        )
-     order by g.created_time desc, g.tid desc
+     order by case when ${sortColumn} is null then 1 else 0 end asc,${sortColumn} ${sortDirection},g.tid asc
 """
 var groupPage = db.page(groupSql, pageSize, (pageNum - 1) * pageSize)
 var groupRows = groupPage?.list == null ? [] : groupPage.list
@@ -101,8 +110,10 @@ if (groupIds.size() > 0) {
          where m.tenant_id=#{tenantId}
            and m.group_id in <foreach collection="groupIds" item="id" open="(" close=")" separator=",">#{id}</foreach>
            and ${visibleSql}
-         order by m.group_id, m.sort_no, m.tid
+         order by m.group_id,case when ${memberColumn} is null then 1 else 0 end asc,${memberColumn} ${memberDirection},m.sort_no,m.tid
+         limit 10001
     """)
+    if(members.size()>10000){exit 413,'本页编组成员超过10000，请缩小分页范围';}
     for (member in members) {
         var id = text(field(member, 'groupId'))
         if (itemMap[id] != null) {
@@ -132,7 +143,7 @@ for (group in groupRows) {
     groups.add({groupId: id, groupName: field(group, 'groupName'),
         createdBy: creator, canManage: creator == scopeUserId,
         createdTime: field(group, 'createdTime'),
-        updatedTime: field(group, 'updatedTime'), items: itemMap[id]})
+        updatedTime: field(group, 'updatedTime'),tableCount:field(group,'tableCount'),runningCount:field(group,'runningCount'),errorCount:field(group,'errorCount'), items: itemMap[id]})
 }
 return {list: groups, total: groupPage?.total == null ? 0 : groupPage.total,
     pageNum: pageNum, pageSize: pageSize}

@@ -155,7 +155,7 @@
             :operation-width="80"
             :loading="state.loading.mapping"
             :columns="state.mappingCols"
-            :data="state.tableFields"
+            :data="state.tableFields" :preview-sort="{columnName:'text',length:'number',scale:'number'}"
           >
             <template #column-nullable="{ row }">
               <Icon v-if="row.nullable == 0" icon="yes" />
@@ -219,10 +219,10 @@
       <data-table
         flex-type="flex-[1_1_auto]"
         show-index
-        :show-page="false"
+        :show-page="true"
         :loading="state.loading.api"
-        :columns="state.api.cols"
-        :data="state.api.data"
+        :columns="state.api.cols" ref="relatedApisTable"
+        :data="fetchRelatedApis"
       >
         <template #empty>
           <empty description="暂无关联API服务">
@@ -538,7 +538,6 @@ const handleAction = (type: string, item?: any) => {
     case "init":
       // 初始化获取挂接表、关联API、关联文件资源
       initTable();
-      initApi();
       initFile();
       break;
     case "detail":
@@ -677,35 +676,14 @@ const loadTableFields = async () => {
   }
 };
 
-// 初始化获取关联API
-const initApi = async () => {
-  if (!props.catalogId) return;
-
-  state.loading.api = true;
-  try {
-    // 调用获取API服务列表的接口，根据catalogId匹配
-    const apiRes = await $common.post("/dst/catalog/list", {
-      assetType: "api",
-      catalogId: props.catalogId,
-    });
-
-    if (apiRes && apiRes.length > 0) {
-      state.api.data = apiRes.map((api: any) => ({
-        id: api.tid,
-        assetName: api.assetName,
-        count: api.paramCount || 0,
-        updateTime: api.updateTime,
-      }));
-    } else {
-      state.api.data = [];
-    }
-  } catch (error) {
-    console.error("获取关联API失败", error);
-    $message.error("获取关联API失败");
-  } finally {
-    state.loading.api = false;
-  }
+const relatedApisTable=ref();
+const fetchRelatedApis=async ({pageNo=1,pageSize=20,sortField,sortDir}={})=>{
+ if(!props.catalogId)return {list:[],total:0};
+ const result=await $common.get('/dwm/metadata-governance/catalog-services/page',{catalogId:props.catalogId,pageNo,pageSize,sortField,sortDir});
+ state.api.data=result.list;
+ return result;
 };
+const initApi=async ()=>relatedApisTable.value?.refresh(true);
 
 // 初始化获取关联文件
 const initFile = async () => {

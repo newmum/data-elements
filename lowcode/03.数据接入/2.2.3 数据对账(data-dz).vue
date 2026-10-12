@@ -53,7 +53,7 @@
       :page-sizes="[10, 20, 50, 100]"
       empty-text="暂无对账策略"
     >
-      <el-table-column label="策略名称" min-width="210">
+      <el-table-column prop="policy_name" sortable="custom" label="策略名称" min-width="210">
         <template #default="{ row }">
           <button class="name-link" type="button" @click="openPolicy(row)">
             {{ row.policy_name }}
@@ -83,7 +83,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="一致率" width="110" align="right">
+      <el-table-column prop="consistency_rate" sortable="custom" label="一致率" width="110" align="right">
         <template #default="{ row }">
           {{ row.consistency_rate == null ? "-" : `${Number(row.consistency_rate).toFixed(2)}%` }}
         </template>
@@ -126,7 +126,7 @@
       :page-sizes="[10, 20, 50, 100]"
       empty-text="暂无对账实例"
     >
-      <el-table-column label="策略 / 实例" min-width="225">
+      <el-table-column prop="policy_name" sortable="custom" label="策略 / 实例" min-width="225">
         <template #default="{ row }">
           <button class="name-link" type="button" @click="openRun(row)">
             {{ row.policy_name }}
@@ -144,24 +144,24 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="来源数据" prop="source_count" width="120" align="right" />
-      <el-table-column label="目标数据" prop="target_count" width="120" align="right" />
-      <el-table-column label="差异" width="100" align="right">
+      <el-table-column label="来源数据" prop="source_count" sortable="custom" width="120" align="right" />
+      <el-table-column label="目标数据" prop="target_count" sortable="custom" width="120" align="right" />
+      <el-table-column prop="diff_count" sortable="custom" label="差异" width="100" align="right">
         <template #default="{ row }">
           <span :class="{ 'danger-text': Number(row.diff_count) > 0 }">
             {{ formatNumber(row.diff_count) }}
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="一致率" width="105" align="right">
+      <el-table-column prop="consistency_rate" sortable="custom" label="一致率" width="105" align="right">
         <template #default="{ row }">
           {{ row.consistency_rate == null ? "-" : `${Number(row.consistency_rate).toFixed(2)}%` }}
         </template>
       </el-table-column>
-      <el-table-column label="开始时间" width="175">
+      <el-table-column prop="started_at" sortable="custom" label="开始时间" width="175">
         <template #default="{ row }">{{ formatDateTime(row.started_at || row.created_time) }}</template>
       </el-table-column>
-      <el-table-column label="结束时间" width="175">
+      <el-table-column prop="finished_at" sortable="custom" label="结束时间" width="175">
         <template #default="{ row }">{{ formatDateTime(row.finished_at) }}</template>
       </el-table-column>
       <el-table-column
@@ -510,19 +510,19 @@ const normalizePage = (value) => {
   };
 };
 
-const fetchPolicies = async ({ pageNo = 1, pageSize = 20 } = {}) => {
+const fetchPolicies = async ({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}) => {
   const result = await $common.post(API.policyPage, {
     page: pageNo,
-    size: pageSize,
+    size: pageSize, sortField, sortDir,
     keyword: keyword.value,
   });
   return normalizePage(result);
 };
 
-const fetchRuns = async ({ pageNo = 1, pageSize = 20 } = {}) => {
+const fetchRuns = async ({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}) => {
   const result = await $common.post(API.runPage, {
     page: pageNo,
-    size: pageSize,
+    size: pageSize, sortField, sortDir,
     keyword: keyword.value,
     status: runStatus.value,
   });

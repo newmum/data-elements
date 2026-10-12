@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useServerSort } from '../../../shared/serverSort';
 import { App, Button, Descriptions, Empty, Form, Input, Skeleton, Space, Table, Tabs, Tag, Tooltip } from 'antd';
 import { ArrowLeftOutlined, ArrowRightOutlined, EditOutlined, KeyOutlined, ReloadOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -12,11 +13,11 @@ const can = (detail: ObjectDetail, ...actions: string[]) => detail.summary.allow
 const propertyLabels: Record<string, string> = { systemCode: '系统编码', businessScope: '业务范围', serviceAudience: '服务对象', operatorName: '运营单位', managementDepartmentId: '管理部门编码', systemType: '系统类型', deploymentMode: '部署方式', constructionStatus: '建设状态', publicServiceAddress: '服务地址', engine: '数据库类型', databaseName: '数据库名称', lastCollectedAt: '最近采集时间', tableCount: '已采集表', physicalName: '物理表名', schemaName: 'Schema', fieldCount: '字段数', structureVersionId: '当前结构版本', catalogCode: '目录编码', versionId: '当前发布版本', serviceCode: '服务编码', version: '服务版本', method: '请求方法', publicEndpoint: '服务地址', responseDescription: '返回说明', authScheme: '鉴权方式', filename: '文件名称', mimeType: '文件类型', sizeBytes: '文件大小（字节）' };
 const detailKeys: Record<AssetKind, string[]> = { APPLICATION: ['systemCode', 'businessScope', 'serviceAudience', 'operatorName'], DATASOURCE: ['engine', 'databaseName', 'tableCount', 'lastCollectedAt'], TABLE: ['physicalName', 'schemaName', 'fieldCount', 'structureVersionId'], CATALOG: ['catalogCode', 'versionId'], API: ['serviceCode', 'version', 'method', 'publicEndpoint', 'authScheme', 'responseDescription'], FILE: ['filename', 'mimeType', 'sizeBytes'] };
 
-function FieldsTable({ items, total, page, onPage }: { items: DataItem[]; total: number; page: number; onPage: (page: number) => void }) {
-  return <Table<DataItem> className="hy-asset-table" rowKey={item => item.id || item.code} tableLayout="fixed" dataSource={items} scroll={{ x: 760 }} pagination={{ current: page, pageSize: 30, total, onChange: onPage, showSizeChanger: false, showTotal: value => `共 ${value} 个数据项` }} columns={[
+function FieldsTable({ items, total, page, onPage, sorting }: { sorting: ReturnType<typeof useServerSort>; items: DataItem[]; total: number; page: number; onPage: (page: number) => void }) {
+  return <Table<DataItem> className="hy-asset-table" rowKey={item => item.id || item.code} tableLayout="fixed" dataSource={items} onChange={(_p,_f,o,e)=>{if(e.action==='sort')sorting.change(o);}} scroll={{ x: 760 }} pagination={{ current: page, pageSize: 30, total, onChange: onPage, showSizeChanger: false, showTotal: value => `共 ${value} 个数据项` }} columns={[
     { title: '#', width: 52, align: 'center', render: (_value, _row, index) => (page - 1) * 30 + index + 1 },
-    { title: '字段名', key: 'name', width: 230, ellipsis: true, sorter: (a, b) => a.name.localeCompare(b.name, 'zh-CN'), showSorterTooltip: { title: '按当前页名称排序' }, render: (_value, item) => <div className="hy-detail-field"><strong title={item.name}>{item.name}{item.primaryKey && <Tooltip title="主键"><KeyOutlined className="hy-primary-key"/></Tooltip>}</strong><code title={item.code}>{item.code}</code></div> },
-    { title: '类型 / 长度', width: 180, ellipsis: true, render: (_value, item) => <span title={dataTypeLabel(item)}>{dataTypeLabel(item)}</span> },
+    { title: '字段名', width: 230, ellipsis: true, ...sorting.column('name'), render: (_value, item) => <div className="hy-detail-field"><strong title={item.name}>{item.name}{item.primaryKey && <Tooltip title="主键"><KeyOutlined className="hy-primary-key"/></Tooltip>}</strong><code title={item.code}>{item.code}</code></div> },
+    { title: '类型 / 长度', ...sorting.column('length'), width: 180, ellipsis: true, render: (_value, item) => <span title={dataTypeLabel(item)}>{dataTypeLabel(item)}</span> },
     { title: '可空', width: 72, align: 'center', render: (_value, item) => item.nullable ? '是' : '否' },
     { title: '数据标准', width: 180, ellipsis: true, render: (_value, item) => item.standardCode ? <span className="hy-standard-bound" title={item.standardCode}>{item.standardCode}</span> : '未关联标准' },
     { title: '业务定义', width: 200, ellipsis: true, render: (_value, item) => asText(item.definition) },
@@ -50,8 +51,11 @@ const textValue = (value: unknown) => value == null ? '' : String(value);
 export function AssetDetailPage() {
   const { type, id = '' } = useParams(); const [params] = useSearchParams(); const navigate = useNavigate(); const { message } = App.useApp();
   const kind = assetKind(type); const [tab, setTab] = useState('info'), [fieldPage, setFieldPage] = useState(1), [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [relatedPage,setRelatedPage]=useState(1),[parameterPage,setParameterPage]=useState(1);
+  const fieldSort=useServerSort(()=>setFieldPage(1)),relatedSort=useServerSort(()=>setRelatedPage(1)),parameterSort=useServerSort(()=>setParameterPage(1));
+  const readOrder={fieldsSortField:fieldSort.sort.sortField,fieldsSortDir:fieldSort.sort.sortDir,relatedSortField:relatedSort.sort.sortField,relatedSortDir:relatedSort.sort.sortDir,parameterSortField:parameterSort.sort.sortField,parameterSortDir:parameterSort.sort.sortDir,relatedPage,relatedSize:10,parameterPage,parameterSize:10};
   const operation = useRef(assetOperation()); const visitKey = useRef('');
-  const query = useAssetQuery(`asset-detail:${kind || ''}:${id}:${fieldPage}`, async signal => { if (!kind || !id) throw new Error('资产地址无效，请从资产地图重新进入'); return assertAssetDetail(await assetsApi.get<ObjectDetail>(`/objects/${kind}/${encodeURIComponent(id)}`, { fieldsPage: fieldPage, fieldsPageSize: 30, versionId: params.get('versionId') || undefined }, { signal }), kind, id); });
+  const query = useAssetQuery(`asset-detail:${kind || ''}:${id}:${fieldPage}:${JSON.stringify(readOrder)}`, async signal => { if (!kind || !id) throw new Error('资产地址无效，请从资产地图重新进入'); return assertAssetDetail(await assetsApi.get<ObjectDetail>(`/objects/${kind}/${encodeURIComponent(id)}`, { ...readOrder,fieldsPage: fieldPage, fieldsPageSize: 30, versionId: params.get('versionId') || undefined }, { signal }), kind, id); });
   useEffect(() => { setTab('info'); setFieldPage(1); }, [kind, id]);
   useEffect(() => {
     if (!query.data) return; const key = `${query.data.summary.object.kind}:${query.data.summary.object.id}`; if (visitKey.current === key) return; visitKey.current = key;
@@ -64,8 +68,8 @@ export function AssetDetailPage() {
     catch (cause) { message.error(cause instanceof Error ? cause.message : String(cause)); }
     finally { setFavoriteBusy(false); }
   };
-  const related = <Table<AssetRef> rowKey={row => `${row.kind}:${row.id}`} className="hy-asset-table" tableLayout="fixed" dataSource={detail?.relatedObjects || []} scroll={{ x: 620 }} pagination={{ pageSize: 10, showSizeChanger: false }} columns={[
-    { title: '资产名称', width: 300, sorter: (a, b) => a.name.localeCompare(b.name, 'zh-CN'), ellipsis: true, render: (_value, row) => <AssetName name={row.name} code={row.code} icon={assetIcon(row.kind)} onClick={() => navigate(assetDetailPath(row))}/> },
+  const related = <Table<AssetRef> rowKey={row => `${row.kind}:${row.id}`} className="hy-asset-table" tableLayout="fixed" dataSource={detail?.relatedObjects || []} onChange={(_p,_f,o,e)=>{if(e.action==='sort')relatedSort.change(o);}} scroll={{ x: 620 }} pagination={{ current:relatedPage,pageSize:10,total:detail?.details.relatedPage?.total||0,onChange:setRelatedPage,showSizeChanger:false }} columns={[
+    { title: '资产名称', width: 300, ...relatedSort.column('name'), ellipsis: true, render: (_value, row) => <AssetName name={row.name} code={row.code} icon={assetIcon(row.kind)} onClick={() => navigate(assetDetailPath(row))}/> },
     { title: '资产类型', width: 130, render: (_value, row) => assetKindLabels[row.kind] },
     { title: '操作', width: 100, fixed: 'right', className: 'wx-action-column', align: 'center', render: (_value, row) => <Button type="link" onClick={() => navigate(assetDetailPath(row))}>查看详情</Button> },
   ]}/>;
@@ -87,11 +91,11 @@ export function AssetDetailPage() {
       <div className="hy-detail-topline"><div>{assetIcon(detail.summary.object.kind)}<span>{detail.summary.departmentName || '未设置提供部门'}</span>{detail.summary.tags?.map(tag => <Tag key={tag}>{tag}</Tag>)}</div><span>更新于 {formatAssetTime(detail.summary.updatedAt)}</span></div>
       <div className="hy-detail-layout"><AssetPanel className="hy-detail-main"><Tabs activeKey={tab} onChange={setTab} destroyOnHidden items={[
         { key: 'info', label: '基本信息', children: <Descriptions column={{ xs: 1, sm: 2 }} layout="vertical" items={infoItems}/> },
-        ...(['TABLE', 'CATALOG'].includes(kind || '') ? [{ key: 'fields', label: `${kind === 'TABLE' ? '字段结构' : '数据项'} ${totalFields}`, children: <FieldsTable items={fields} total={totalFields} page={fieldPage} onPage={setFieldPage}/> }] : []),
+        ...(['TABLE', 'CATALOG'].includes(kind || '') ? [{ key: 'fields', label: `${kind === 'TABLE' ? '字段结构' : '数据项'} ${totalFields}`, children: <FieldsTable items={fields} total={totalFields} page={fieldPage} onPage={setFieldPage} sorting={fieldSort}/> }] : []),
         { key: 'related', label: `关联资产 ${detail.relatedObjects.length}${detail.relationsHasMore ? '+' : ''}`, children: <>{related}{detail.relationsHasMore && <div className="hy-detail-related-more"><Button onClick={() => navigate(`/assets/map?kind=${kind}&id=${encodeURIComponent(id)}`)}>在地图展开全部关联</Button></div>}</> },
         ...(kind === 'CATALOG' ? [{ key: 'attachments', label: `挂接资源 ${values?.attachments?.length || 0}`, children: <CatalogLifecycle mode="attachments" detail={detail} refresh={query.refresh}/> }, { key: 'versions', label: '发布与版本', children: <CatalogLifecycle mode="versions" detail={detail} refresh={query.refresh}/> }] : []),
-        ...(kind === 'API' ? [{ key: 'parameters', label: '请求与响应参数', children: <><Table<ApiParameter> className="hy-asset-table" rowKey={row => `${row.location}:${row.name}`} tableLayout="fixed" dataSource={values?.parameters || []} scroll={{ x: 720 }} columns={[
-          { title: '参数名称', dataIndex: 'name', width: 200, sorter: (a, b) => a.name.localeCompare(b.name), ellipsis: true }, { title: '位置', dataIndex: 'location', width: 100 }, { title: '类型', dataIndex: 'dataType', width: 120 }, { title: '必填', width: 70, align: 'center', render: (_value, parameter) => parameter.required ? '是' : '否' }, { title: '说明', dataIndex: 'description', width: 240, ellipsis: true },
+        ...(kind === 'API' ? [{ key: 'parameters', label: '请求与响应参数', children: <><Table<ApiParameter> className="hy-asset-table" rowKey={row => `${row.location}:${row.name}`} tableLayout="fixed" dataSource={values?.parameters || []} pagination={{current:parameterPage,pageSize:10,total:values?.parameterPage?.total||0,onChange:setParameterPage,showSizeChanger:false}} onChange={(_p,_f,o,e)=>{if(e.action==='sort')parameterSort.change(o);}} scroll={{ x: 720 }} columns={[
+          { title: '参数名称', dataIndex: 'name', width: 200, ...parameterSort.column('name'), ellipsis: true }, { title: '位置', dataIndex: 'location', width: 100 }, { title: '类型', dataIndex: 'dataType', width: 120 }, { title: '必填', width: 70, align: 'center', render: (_value, parameter) => parameter.required ? '是' : '否' }, { title: '说明', dataIndex: 'description', width: 240, ellipsis: true },
         ]}/>{values?.responseExample != null && <div className="hy-response-example"><h3>响应示例</h3><pre>{textValue(values.responseExample)}</pre></div>}</> }, ...(can(detail, 'DEBUG') ? [{ key: 'debug', label: '在线调试', children: <ApiDebug detail={detail}/> }] : [])] : []),
         ...(can(detail, 'PREVIEW') && ['TABLE', 'CATALOG'].includes(kind || '') ? [{ key: 'preview', label: '数据预览', children: <AssetPreview object={detail.summary.object} versionId={textValue(values?.versionId) || undefined} attachments={values?.attachments || []}/> }] : []),
       ]}/></AssetPanel>

@@ -1,12 +1,17 @@
 import axios from 'axios';
-import type { InternalAxiosRequestConfig } from 'axios';
+import type { InternalAxiosRequestConfig, AxiosRequestConfig } from 'axios';
 import { message as antdMessage } from 'antd';
 import { unwrapSuccessfulEnvelope } from './response';
 import { getBridgeToken, getSessionRevision, waitForToken } from './bridgeSession';
 import { isPlatformAuthenticationFailure } from '../../api/platformApi';
 import { redirectToPlatformLogin } from '../../services/platformSession';
+import { globalRequestFailureMessage } from '../utils/requestFailure';
 
-type SessionRequestConfig = InternalAxiosRequestConfig & { nifiSessionRevision?: number };
+type SessionRequestConfig = InternalAxiosRequestConfig & { nifiSessionRevision?: number; nifiSilentGlobalErrors?: boolean };
+
+export const BACKGROUND_REQUEST_OPTIONS: AxiosRequestConfig & { nifiSilentGlobalErrors: true } = {
+  nifiSilentGlobalErrors: true,
+};
 
 function rejectStaleSession(config?: SessionRequestConfig) {
   if (config?.nifiSessionRevision !== undefined && config.nifiSessionRevision !== getSessionRevision()) {
@@ -61,24 +66,12 @@ apiClient.interceptors.response.use(
     }
     // Only show global toast for unexpected errors
     // React Query handles retry logic; we just provide user feedback here
-    if (!error.response) {
-      // Network error (server unreachable, timeout, CORS, etc.)
+    const globalMessage = globalRequestFailureMessage(error);
+    if (globalMessage) {
       const now = Date.now();
       if (now - lastNetworkErrorTime > NETWORK_ERROR_COOLDOWN) {
         lastNetworkErrorTime = now;
-        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-          antdMessage.warning('请求超时，请检查网络连接');
-        } else {
-          antdMessage.warning('网络连接异常，请检查后端服务是否可用');
-        }
-      }
-    } else if (error.response.status >= 500
-      && !/\/pipelines\/[^/]+\/deploy(?:\?|$)/.test(String(error.config?.url ?? ''))) {
-      // Server error — not 404 (which some APIs handle locally)
-      const now = Date.now();
-      if (now - lastNetworkErrorTime > NETWORK_ERROR_COOLDOWN) {
-        lastNetworkErrorTime = now;
-        antdMessage.error(`服务器异常 (${error.response.status})，请稍后重试`);
+        antdMessage.warning(globalMessage);
       }
     }
     // Always reject so individual callers can handle specific errors

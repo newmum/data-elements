@@ -107,6 +107,26 @@ public class SurveillanceControlItemRepository {
         return jdbc.query(sql.toString(), (rs, rowNum) -> mapView(rs), args.toArray());
     }
 
+    /** The management table sorts its complete authorized SQL scope before returning a page. */
+    public Map<String,Object> page(String tenantId,String engineCode,String channelCode,String keyword,
+                                   int page,int size,String sortField,String sortDir) {
+        if(page<1||page>100000||size<1||size>100)throw new IllegalArgumentException("每页最多100条布控数据");
+        String order=com.linewell.dataelement.platform.persistence.ServerTableOrder.sql(sortField,sortDir,
+            Map.of("itemId","control_item_id","effectiveAt","effective_from","expiresAt","effective_to"),
+            "itemId","asc","tid");
+        String where=" FROM surveillance_control_item_t WHERE tenant_id=? AND engine_code=? AND is_del=0";
+        var args=new ArrayList<Object>(List.of(tenantId,engineCode));
+        if(channelCode!=null&&!channelCode.isBlank()){where+=" AND channel_code=?";args.add(channelCode);}
+        if(keyword!=null&&!keyword.isBlank()){
+            where+=" AND (control_item_id LIKE ? OR rule_code LIKE ? OR identifier_value LIKE ? OR attributes_json LIKE ?)";
+            String match="%"+keyword.trim()+"%";args.addAll(List.of(match,match,match,match));
+        }
+        Map<String,Object> totals=jdbc.queryForMap("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='ACTIVE' THEN 1 ELSE 0 END),0) AS activeCount,COUNT(DISTINCT channel_code) AS channelCount"+where,args.toArray());
+        args.add(size);args.add((long)(page-1)*size);
+        var list=jdbc.query("SELECT tid,tenant_id,engine_code,channel_code,control_item_id,rule_code,subject_type,identifier_type,identifier_value,attributes_json,control_reason,effective_from,effective_to,status,snapshot_version"+where+" ORDER BY "+order+" LIMIT ? OFFSET ?",(rs,n)->mapView(rs),args.toArray());
+        return Map.of("list",list,"total",totals.get("total"),"summary",Map.of("total",totals.get("total"),"activeCount",totals.get("activeCount"),"channelCount",totals.get("channelCount")));
+    }
+
     private SurveillanceControlItem mapView(java.sql.ResultSet rs) throws java.sql.SQLException {
         Map<String, Object> attributes = readMap(rs.getString("attributes_json"));
         return new SurveillanceControlItem(

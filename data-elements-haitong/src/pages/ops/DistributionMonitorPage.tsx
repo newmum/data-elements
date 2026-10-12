@@ -1,3 +1,4 @@
+import { useServerSort } from '../../components/serverSort';
 import { Alert, Button, Descriptions, Drawer, Input, Progress, Tag } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -22,9 +23,10 @@ export default function DistributionMonitorPage() {
   const [detail, setDetail] = useState<DistributionTask>();
   const [detailError, setDetailError] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
+  const serverSort=useServerSort(()=>setPage(1));
   const tasks = useQuery({
-    queryKey: ['platform', 'distribution-tasks', page, size, keyword],
-    queryFn: () => integrationPlatformService.distributionTaskPage({ page, size, keyword }),
+    queryKey: ['platform', 'distribution-tasks', page, size, keyword, serverSort.sort],
+    queryFn: () => integrationPlatformService.distributionTaskPage({ page, size, keyword, ...serverSort.sort }),
     refetchInterval: 30000,
   });
   const rows = tasks.data?.list || [];
@@ -46,13 +48,13 @@ export default function DistributionMonitorPage() {
     <Alert type="info" showIcon message="分发任务以真实任务账本为准" description="当前已有分发任务表，但执行引擎尚无稳定的 NiFi 流程关联；待接入执行的任务不会显示为已运行或已交付。" />
     {tasks.isError && <Alert type="error" showIcon message="分发任务读取失败" description={tasks.error instanceof Error ? tasks.error.message : '请检查数据中台会话与接口'} action={<Button size="small" onClick={() => void tasks.refetch()}>重试</Button>} />}
     <Panel><div className="ht-toolbar"><Input prefix={<Icon name="search" size={17}/>} allowClear value={query} placeholder="搜索分发任务" onChange={event => setQuery(event.target.value)} onPressEnter={search} style={{ width: 300, maxWidth: '100%' }} /><Button onClick={search}>查询</Button><span className="toolbar-spacer"/><Button loading={tasks.isFetching} onClick={() => void tasks.refetch()}>刷新</Button></div>
-      <DataTable<DistributionTask> rowKey="tid" dataSource={rows} loading={tasks.isLoading} pagination={{current:page,pageSize:size,total:tasks.data?.total||0,showSizeChanger:true,pageSizeOptions:[10,20,50],onChange:(next,nextSize)=>{setPage(next);setSize(nextSize);}}} columns={[
-        { title: '分发任务', width: 250, render: (_, row) => <div className="entity-name"><button className="text-link strong" onClick={() => void openDetail(row)}>{field(row, 'taskName', 'task_name') || '未命名任务'}</button><small>{field(row, 'taskCode', 'task_code') || row.tid.slice(-8)}</small></div> },
+      <DataTable<DistributionTask> serverSort={serverSort} rowKey="tid" dataSource={rows} loading={tasks.isLoading} pagination={{current:page,pageSize:size,total:tasks.data?.total||0,showSizeChanger:true,pageSizeOptions:[10,20,50],onChange:(next,nextSize)=>{setPage(next);setSize(nextSize);}}} columns={[
+        { title: '分发任务', key:'taskName',sorter:true, width: 250, render: (_, row) => <div className="entity-name"><button className="text-link strong" onClick={() => void openDetail(row)}>{field(row, 'taskName', 'task_name') || '未命名任务'}</button><small>{field(row, 'taskCode', 'task_code') || row.tid.slice(-8)}</small></div> },
         { title: '来源表', width: 180, render: (_, row) => field(row, 'sourceTableName', 'source_table_name') || '—' },
         { title: '资源目录', width: 180, render: (_, row) => field(row, 'catalogName', 'catalog_name') || '—' },
         { title: '任务状态', width: 155, render: (_, row) => { const status=field(row,'taskStatus','task_status'); return <Tag color={status==='FAILED'?'error':status==='SUCCESS'?'success':status==='RUNNING'?'processing':'default'}>{statusLabel(status)}</Tag>; } },
-        { title: '执行进度', width: 150, render: (_, row) => <Progress percent={Math.max(0,Math.min(100,Number(field(row,'progress'))||0))} size="small" /> },
-        { title: '创建时间', width: 170, render: (_, row) => { const time=field(row,'createdTime','created_time'); return time?formatTime(time):'—'; } },
+        { title: '执行进度', key:'progress',sorter:true, width: 150, render: (_, row) => <Progress percent={Math.max(0,Math.min(100,Number(field(row,'progress'))||0))} size="small" /> },
+        { title: '创建时间', key:'createdTime',sorter:true, width: 170, render: (_, row) => { const time=field(row,'createdTime','created_time'); return time?formatTime(time):'—'; } },
         { title: '操作', fixed: 'right', width: 90, render: (_, row) => <Button type="link" onClick={() => void openDetail(row)}>详情</Button> },
       ]}/>
     </Panel>

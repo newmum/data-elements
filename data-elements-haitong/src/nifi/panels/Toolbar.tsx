@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Tooltip,
+  Popover,
   Modal,
   Input,
   App as AntdApp,
@@ -60,6 +61,8 @@ import { useComponentManifests } from '@/api/manifests';
 import { syncSettings, syncSettingsPatch, syncSettingsError, needsCleanupConfirmation, syncModeLabel, sameSavedContent, type SyncSettings } from '../utils/syncSettings';
 import { sameExecutableDsl, sameDesignDsl } from '../utils/pipelineVersion';
 import type { CanvasDsl } from '@/types/dsl';
+import { useTaskChainStore } from '../stores/taskChainStore';
+import { buildFlowRuntimeMetrics } from '../runtime/runtimeMetrics';
 
 function BusyIndicator() {
   return <span className="canvas-action-spinner" aria-hidden="true" />;
@@ -153,6 +156,10 @@ export default function Toolbar() {
   const currentPipelineId = useCanvasStore((s) => s.currentPipelineId);
   const currentPipelineName = useCanvasStore((s) => s.currentPipelineName);
   const setCurrentPipeline = useCanvasStore((s) => s.setCurrentPipeline);
+  const taskChain = useTaskChainStore((s) => s.chain);
+  const hasTaskChain = Boolean(taskChain && taskChain.items.length > 1 && taskChain.items.some(item => item.pipeline.id === currentPipelineId));
+  const hasSelectedChainTask = Boolean(taskChain?.items.some(item => item.taskId && item.pipeline.id === currentPipelineId));
+  const [nativeChecking, setNativeChecking] = useState(false);
   const canvasMode = useCanvasStore((s) => s.canvasMode);
   const setCanvasMode = useCanvasStore((s) => s.setCanvasMode);
   const syncCompletion = useCanvasStore((s) => s.syncCompletion);
@@ -199,14 +206,18 @@ export default function Toolbar() {
   const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
   const list = usePipelineList(openOpener);
   const pendingOpen = usePipeline(pendingOpenId);
-  const currentPipelineQuery = usePipeline(currentPipelineId);
+  const currentPipelineQuery = usePipeline(currentPipelineId, !hasSelectedChainTask);
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [startDraft, setStartDraft] = useState<SyncSettings>(() => syncSettings());
   const [cleanupAcknowledged, setCleanupAcknowledged] = useState(false);
   const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
   const [activeAction, setActiveAction] = useState<'save' | 'start' | null>(null);
   const actionLock = useRef(false);
+  const setOperationBusy = useTaskChainStore(state => state.setOperationBusy);
   const canvasNodes = useCanvasStore(s => s.nodes);
+  const canvasEdges = useCanvasStore(s => s.edges);
+  const runtimeMetrics = useMemo(() => buildFlowRuntimeMetrics(statusQuery.data, canvasNodes, canvasEdges),
+    [statusQuery.data, canvasNodes, canvasEdges]);
   const sourceNodes = Object.values(canvasNodes).filter(node => node.category === 'source');
   const sourceNode = sourceNodes[0];
   const { data: componentManifests, isPending: manifestsPending } = useComponentManifests();
@@ -221,6 +232,16 @@ export default function Toolbar() {
   const completionWatchRef = useRef<{ pipelineId: string; baseline: number; armedAt: number; syncMode: string } | null>(null);
   const completionNotifiedRef = useRef<string | null>(null);
   const completionErrorNotifiedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setOptimisticStatus(null);
+    setStartDialogOpen(false);
+    setCleanupDialogOpen(false);
+    setEditingName(false);
+    completionWatchRef.current = null;
+    completionNotifiedRef.current = null;
+    completionErrorNotifiedRef.current = null;
+  }, [currentPipelineId]);
 
   useEffect(() => {
     if (statusQuery.data?.errors?.length
@@ -246,7 +267,8 @@ export default function Toolbar() {
     }
   }, [optimisticStatus, liveStatus]);
 
-  const deploySavedPipeline = async (id: string, name: string, submitted: CanvasDsl, catalogTid: string | null = getTid()) => {
+  const deploySavedPipeline = async (id: string, name: string, submitted: CanvasDsl,
+    catalogTid: string | null = taskChain?.items.find(item => item.pipeline.id === id)?.sourceTableId || getTid()) => {
     const result = await deploy.mutateAsync({ id, catalogTid });
     if (!isCurrentSession()) return;
     if (useCanvasStore.getState().currentPipelineId === id && result.pipeline?.id === id) {
@@ -270,6 +292,7 @@ export default function Toolbar() {
     if (actionLock.current || save.isPending || deploy.isPending || isRunning || isTransitioning) return;
     if (currentPipelineId && currentPipelineName) {
       actionLock.current = true;
+      setOperationBusy(true);
       setActiveAction('save');
       let deploymentAttempted = false;
       try {
@@ -289,6 +312,7 @@ export default function Toolbar() {
         reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
       } finally {
         actionLock.current = false;
+        setOperationBusy(false);
         setActiveAction(null);
       }
     } else {
@@ -354,7 +378,7 @@ export default function Toolbar() {
     const changed = !sameSavedContent(syncSettings(sourceNode.config), startDraft);
     if (changed && supportsSyncSettings) {
       useCanvasStore.getState().updateNodeConfig(sourceNode.id, syncSettingsPatch(sourceNode.config, startDraft));
-      message.success('高级设置已应用，请保存并部署后启动。');
+      message.success('高级设置已应用，请点击“保存”后启动。');
     }
     setStartDialogOpen(false);
   };
@@ -378,7 +402,7 @@ export default function Toolbar() {
     }
     const savedDsl = currentPipelineQuery.data?.dsl;
     if (!currentPipelineId || !savedDsl || !sameExecutableDsl(canvasDsl, savedDsl)) {
-      message.info('画布有未保存的运行配置，请先保存并部署。');
+      message.info('画布有未保存的运行配置，请先点击“保存”。');
       return;
     }
     if (sources.some(node => needsCleanupConfirmation(syncSettings(node.config))) && !acknowledged) {
@@ -387,6 +411,7 @@ export default function Toolbar() {
       return;
     }
     actionLock.current = true;
+    setOperationBusy(true);
     setActiveAction('start');
     try {
       // Refresh on this click: a polling result may predate the completed deployment.
@@ -396,12 +421,12 @@ export default function Toolbar() {
         && status.currentHash === status.lastDeployedHash);
 
       if (!status?.deployed) {
-        message.warning('当前流程尚未部署，请先点击“保存并部署”。');
+        message.warning('当前流程尚未部署，请先点击“保存”。');
         return;
       }
 
       if (!deployedVersionIsCurrent) {
-        message.warning('当前保存版本尚未部署，请先点击“保存并部署”，再启动流程。');
+        message.warning('当前保存版本尚未部署，请先点击“保存”，再启动流程。');
         return;
       }
       // Start exactly the deployed version. Unsaved canvas edits remain local
@@ -409,7 +434,7 @@ export default function Toolbar() {
       // Recheck after the asynchronous status read; do not run while the user changes configuration.
       if (!isCurrentSession() || useCanvasStore.getState().currentPipelineId !== currentPipelineId) return;
       if (!sameExecutableDsl(toDsl(), savedDsl)) {
-        message.info('启动检查期间配置已改变，请保存并部署后再启动。');
+        message.info('启动检查期间配置已改变，请点击“保存”后再启动。');
         return;
       }
       await startDeployedPipeline(currentPipelineId, startOptionsForDsl(savedDsl), acknowledged);
@@ -420,6 +445,7 @@ export default function Toolbar() {
       openErrorPanel();
     } finally {
       actionLock.current = false;
+      setOperationBusy(false);
       setActiveAction(null);
     }
   };
@@ -480,6 +506,7 @@ export default function Toolbar() {
   const handleStop = async () => {
     if (!isCurrentSession()) return;
     if (!currentPipelineId) return;
+    setOperationBusy(true);
     try {
       setOptimisticStatus('STOPPING');
       await stop.mutateAsync(currentPipelineId);
@@ -488,12 +515,15 @@ export default function Toolbar() {
     } catch (e: any) {
       setOptimisticStatus(null);
       message.error(`停止失败: ${e?.response?.data?.error ?? e?.message ?? e}`);
+    } finally {
+      setOperationBusy(false);
     }
   };
 
   const handleOpenNifi = async () => {
+    if (!isCurrentSession()) return;
     if (!currentPipelineId || !canOpenNative) {
-      message.warning('当前版本尚未成功部署到 NiFi，请先保存并部署。');
+      message.warning('当前版本尚未成功部署到 NiFi，请先点击“保存”。');
       return;
     }
     // The native NiFi URL is resolved asynchronously. Open a blank tab while
@@ -504,8 +534,11 @@ export default function Toolbar() {
       message.error('浏览器拦截了原生 NiFi 页面，请允许本页面打开新窗口后重试');
       return;
     }
+    setNativeChecking(true);
+    nativeWindow.opener = null;
     try {
       const target = await getNifiUiLink(currentPipelineId);
+      if (!isCurrentSession()) { nativeWindow.close(); return; }
       // The canvas is embedded below /haitong/, whereas the native UI is
       // served by the same public gateway's /nifi-ui proxy. Do not resolve
       // this browser navigation against VITE_APP_API_URL: that variable is a
@@ -516,11 +549,12 @@ export default function Toolbar() {
         String(apiClient.defaults.baseURL ?? ''),
         window.location.origin,
       );
-      nativeWindow.opener = null;
       nativeWindow.location.replace(nifiUiUrl);
     } catch (error: any) {
       nativeWindow.close();
-      message.error(error?.response?.data?.error ?? '当前流程尚未部署到 NiFi');
+      message.error(error?.response?.data?.error ?? error?.message ?? '当前流程尚未部署到 NiFi');
+    } finally {
+      setNativeChecking(false);
     }
   };
 
@@ -770,48 +804,60 @@ export default function Toolbar() {
 
       <div style={{ flex: 1 }} />
 
-      <span className={`coze-toolbar__state${isRunning ? ' is-running' : ''}`}>
-        {isRunning ? <LineChartOutlined /> : <EditFilled />}
-        {isRunning ? '监控状态' : '编辑状态'}
-      </span>
+      <Popover trigger={['hover', 'click']} placement="bottom" getPopupContainer={getNifiOverlayContainer}
+        overlayClassName="canvas-runtime-popover" title={isRunning ? '运行监控' : '流量概览'}
+        content={<div className="canvas-runtime-metrics" aria-label="当前任务运行指标">
+          <div><span>状态</span><strong>{viz.label}</strong></div>
+          <div><span>队列</span><strong>{runtimeMetrics.totals.queued}</strong></div>
+          <div><span>线程</span><strong>{runtimeMetrics.totals.activeThreads}</strong></div>
+          <div><span>瓶颈</span><strong>{runtimeMetrics.bottleneckEdgeIds.length}</strong></div>
+          <div><span>输入</span><strong>{runtimeMetrics.totals.flowFilesIn}</strong></div>
+          <div><span>输出</span><strong>{runtimeMetrics.totals.flowFilesOut}</strong></div>
+          {runtimeMetrics.nifiStatusError && <p className="canvas-runtime-metrics__warning">实时流量暂不可用</p>}
+          {statusQuery.isError && <p className="canvas-runtime-metrics__warning">运行状态暂不可用，已保存画布仍可编辑</p>}
+        </div>}>
+        <button type="button" className={`coze-toolbar__state${isRunning ? ' is-running' : ''}`} aria-label="查看当前任务运行指标">
+          {isRunning ? <LineChartOutlined /> : <EditFilled />}
+          {isRunning ? '监控状态' : '编辑状态'}
+        </button>
+      </Popover>
 
       <div style={{ display: 'inline-flex', gap: 8 }}>
         <CanvasThemeToggle />
-        <Tooltip title={isChengtianIntegration ? '外部运行端尚未配置到当前租户，画布只保存和发布设计版本' : statusQuery.isPending ? '正在确认 NiFi 部署状态' : statusQuery.isError ? '无法确认 NiFi 部署状态，请稍后重试' : canOpenNative ? '在 NiFi 原生页面中查看当前流程' : '当前版本尚未成功部署到 NiFi，请先保存并部署'}>
-          <span><Button icon={<LinkOutlined />} disabled={isChengtianIntegration || !canOpenNative} onClick={handleOpenNifi}>{isChengtianIntegration ? '运行端' : 'NiFi'}</Button></span>
+        <Tooltip title={isChengtianIntegration ? '外部运行端尚未配置到当前租户，画布只保存和发布设计版本' : statusQuery.isPending ? '正在确认 NiFi 部署状态' : statusQuery.isError ? '无法确认 NiFi 部署状态，请稍后重试' : canOpenNative ? '在 NiFi 原生页面中查看当前任务' : '当前任务尚未成功部署到 NiFi，请先点击“保存”'}>
+          <span><Button className="coze-toolbar__action" icon={nativeChecking ? <BusyIndicator /> : <LinkOutlined />} disabled={isChengtianIntegration || nativeChecking || !canOpenNative} onClick={handleOpenNifi}>详情</Button></span>
         </Tooltip>
-        <Tooltip title={isChengtianIntegration ? "保存并发布设计版本 (Ctrl+S)" : "保存并部署 (Ctrl+S)"}>
+        <Tooltip title={`${hasTaskChain ? `当前操作任务：${currentPipelineName}；` : ''}${isChengtianIntegration ? '保存并发布设计版本 (Ctrl+S)' : '保存并部署 (Ctrl+S)'}`}>
           <Button
-            className="canvas-save-action"
+            className="coze-toolbar__action canvas-save-action"
             aria-busy={activeAction === 'save' || save.isPending || deploy.isPending}
             icon={activeAction === 'save' || save.isPending || deploy.isPending ? <BusyIndicator /> : <SaveOutlined />}
             disabled={!!activeAction || save.isPending || deploy.isPending || isTransitioning || isRunning}
             onClick={doSaveInPlace}
           >
-            {deploy.isPending ? (isChengtianIntegration ? '发布中…' : '部署中…')
-              : activeAction === 'save' || save.isPending ? '保存中…'
-                : isChengtianIntegration ? '保存并发布' : '保存并部署'}
+            {activeAction === 'save' || save.isPending || deploy.isPending ? '保存中' : '保存'}
           </Button>
         </Tooltip>
 
         {isRunning ? (
           <Button
             danger
+            className="coze-toolbar__action"
             aria-busy={stop.isPending || (effectiveStatus as string) === 'STOPPING'}
             icon={stop.isPending || (effectiveStatus as string) === 'STOPPING' ? <BusyIndicator /> : <PauseCircleOutlined />}
             disabled={stop.isPending || isTransitioning}
             onClick={handleStop}
           >
-            {stop.isPending || (effectiveStatus as string) === 'STOPPING' ? '停止中…' : '停止'}
+            {stop.isPending || (effectiveStatus as string) === 'STOPPING' ? '停止中' : '停止'}
           </Button>
         ) : (
           <div className="canvas-start-actions">
-            <Button type="primary" className="canvas-start-actions__main"
+            <Button type="primary" className="coze-toolbar__action canvas-start-actions__main"
               aria-busy={activeAction === 'start' || start.isPending}
               icon={activeAction === 'start' || start.isPending ? <BusyIndicator /> : <PlayCircleOutlined />}
               disabled={isChengtianIntegration || !!activeAction || save.isPending || deploy.isPending || isTransitioning}
               onClick={() => void handleStart()}>
-              {isChengtianIntegration ? '等待授权' : activeAction === 'start' || start.isPending ? '启动中…' : '启动'}
+              {isChengtianIntegration ? '等待授权' : activeAction === 'start' || start.isPending ? '启动中' : '启动'}
             </Button>
             <Dropdown trigger={['click']} placement="bottomRight" getPopupContainer={getNifiOverlayContainer}
               menu={{ items: [{ key: 'advanced', label: '高级设置', icon: <EditOutlined />, onClick: openAdvancedSettings }] }}>
@@ -863,6 +909,7 @@ export default function Toolbar() {
           const name = saveAsDraft.trim();
           if (!name) { message.warning('请填写流程名称'); return; }
           actionLock.current = true;
+          setOperationBusy(true);
           setActiveAction('save');
           let deploymentAttempted = false;
           try {
@@ -884,13 +931,14 @@ export default function Toolbar() {
             reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
           } finally {
             actionLock.current = false;
+            setOperationBusy(false);
             setActiveAction(null);
           }
         }}
         onCancel={() => {
           setOpenSaveAs(false);
         }}
-        okText={deploy.isPending ? '部署中…' : save.isPending || activeAction === 'save' ? '保存中…' : '保存'}
+        okText={deploy.isPending || save.isPending || activeAction === 'save' ? '保存中…' : '保存'}
         okButtonProps={{ disabled: save.isPending || deploy.isPending || !!activeAction,
           icon: save.isPending || deploy.isPending || activeAction === 'save' ? <BusyIndicator /> : undefined }}
         cancelButtonProps={{ disabled: save.isPending || deploy.isPending || !!activeAction }}

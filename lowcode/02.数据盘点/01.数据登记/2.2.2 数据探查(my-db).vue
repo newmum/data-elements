@@ -826,7 +826,7 @@ const handleAction = (type, row) => {
   }
 };
 // 列表接口
-const fetchData = async ({ pageNo: pageNum, pageSize }) => {
+const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
   const conditions = [
     {
       field: "assetType",
@@ -885,8 +885,8 @@ const fetchData = async ({ pageNo: pageNum, pageSize }) => {
     }
   }
   const { list = [], total } = await $common.post("/dst/database/page", {
-    sortField: "updatedTime",
-    sortDir: "desc",
+    sortField: sortField || "updatedTime",
+    sortDir: sortDir || "desc",
     pageNum,
     pageSize,
     conditions,
@@ -1204,7 +1204,7 @@ const canCollectCatalogTables = () => {
 
 // 与第二步同一落库快照；每次只读当前页，不全量下载、不连接物理源库。
 let catalogPageRequest = 0;
-const fetchCatalogPage = async ({ pageNo, pageSize }) => {
+const fetchCatalogPage = async ({ pageNo, pageSize,sortField,sortDir }) => {
   const requestId = ++catalogPageRequest;
   const dbId = tableState.db?.tid;
   const segment = tableState.seg;
@@ -1216,7 +1216,7 @@ const fetchCatalogPage = async ({ pageNo, pageSize }) => {
   gridRef.value?.$table?.clearSelection?.();
   try {
     const result = await $common.get("/dst/database/metadata/tables", {
-      dbId, catalogPaged: 1, pageNo, pageSize, includeGovernance: false,
+      dbId, catalogPaged: 1, pageNo, pageSize,sortField,sortDir, includeGovernance: false,
       catalogStatus: segment === "已登记" ? "registered" : "pending",
       tableNames: tableState.filters.tableName || "",
       catalogNames: tableState.filters.catalogName || "",

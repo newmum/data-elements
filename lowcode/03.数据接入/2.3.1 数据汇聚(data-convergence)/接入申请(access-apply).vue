@@ -6,7 +6,9 @@
     direction="rtl"
     size="760px"
     :body-class="ddlMode ? 'access-apply access-apply-ddl' : 'access-apply'"
-    :close-on-click-modal="true"
+    :close-on-click-modal="!isSaveing && !recoveryDeleting"
+    :close-on-press-escape="!isSaveing && !recoveryDeleting"
+    :show-close="!isSaveing && !recoveryDeleting"
     @close="handleCancel"
   >
     <template #header>
@@ -18,6 +20,7 @@
             :class="{ 'is-active': !ddlMode }"
             role="tab"
             :aria-selected="!ddlMode"
+            :disabled="isSaveing"
             @click="showFormView"
           >物化建表</button>
           <button
@@ -26,7 +29,7 @@
             :class="{ 'is-active': ddlMode }"
             role="tab"
             :aria-selected="ddlMode"
-            :disabled="ddlGenerating || templateLoading || !!loadError"
+            :disabled="isSaveing || ddlGenerating || templateLoading || !!loadError"
             @click="showDdlView"
           >查看DDL语句</button>
         </div>
@@ -40,12 +43,33 @@
       </div>
     </template>
     <div
-      v-loading="templateLoading || isSaveing"
+      v-loading="templateLoading"
       :element-loading-text="loadingText"
       element-loading-background="rgba(255, 255, 255, 0.88)"
       class="access-apply-content"
+      :aria-busy="isSaveing"
       :class="{ 'is-ddl-mode': ddlMode }"
     >
+      <div v-if="isSaveing && !materializationAwaitingDecision" class="materialization-progress-overlay">
+        <div class="materialization-progress-card" role="status" aria-live="polite">
+          <div class="materialization-progress-symbol" aria-hidden="true"><span></span><Icon icon="database" /></div>
+          <h3>正在物化建表</h3>
+          <p class="materialization-progress-detail">{{ materializationProgress.detail }}</p>
+          <div class="materialization-progress-meta">
+            <span v-if="materializationProgress.total">已完成 {{ materializationProgress.completed }} / {{ materializationProgress.total }} 张目标表</span>
+            <span aria-hidden="true">已用时 {{ materializationElapsed }} 秒</span>
+          </div>
+          <ol class="materialization-progress-steps">
+            <li v-for="(label, index) in ['校验字段和配置', '预检目标表与建表语句', '执行建表并登记']" :key="label"
+              :class="{ 'is-complete': index < materializationProgress.phase, 'is-current': index === materializationProgress.phase }">
+              <span class="materialization-step-mark" aria-hidden="true">{{ index < materializationProgress.phase ? '✓' : index + 1 }}</span>
+              <span>{{ label }}</span>
+              <small>{{ index < materializationProgress.phase ? '已完成' : index === materializationProgress.phase ? '处理中' : '待处理' }}</small>
+            </li>
+          </ol>
+          <p class="materialization-progress-note">建表期间请勿关闭窗口或重复提交<span v-if="materializationElapsed >= 30">。目标库响应较慢，仍在等待处理结果</span>。</p>
+        </div>
+      </div>
       <div v-if="loadError && !templateLoading" class="template-load-error" role="alert">
         <el-alert :title="loadError" type="error" :closable="false" show-icon />
         <el-button type="primary" plain @click="init">重试加载</el-button>
@@ -220,8 +244,8 @@ const props = defineProps<{
   type: string; // add/view
   id: string;
   existingTargets?: any[];
-  // 可由入口页面指定目标域编码；未指定时保持原有的首项默认行为。
-  defaultTargetDomainCode?: string;
+  // 分发使用部门数据源；接入默认使用 ODS 分域。
+  taskCategory?: "ingestion" | "distribution";
 }>();
 
 const emit = defineEmits<{
@@ -276,6 +300,32 @@ const activeDdlSql = computed({
   },
 });
 const isSaveing = ref(false);
+const materializationProgress = ref({ phase: 0, detail: "", total: 0, completed: 0 });
+const materializationElapsed = ref(0);
+const materializationAwaitingDecision = ref(false);
+let materializationStartedAt = 0;
+let materializationTimer: ReturnType<typeof setInterval> | undefined;
+const stopMaterializationProgress = () => {
+  if (materializationTimer !== undefined) clearInterval(materializationTimer);
+  materializationTimer = undefined;
+  materializationAwaitingDecision.value = false;
+};
+const startMaterializationProgress = () => {
+  stopMaterializationProgress();
+  materializationProgress.value = { phase: 0, detail: "正在校验表名、字段和目标配置", total: 0, completed: 0 };
+  materializationElapsed.value = 0;
+  materializationStartedAt = Date.now();
+  // 只更新本地耗时，不轮询接口、不模拟完成百分比。
+  materializationTimer = setInterval(() => {
+    materializationElapsed.value = Math.max(0, Math.floor((Date.now() - materializationStartedAt) / 1000));
+  }, 1000);
+};
+const confirmMaterialization = async (...args: Parameters<typeof ElMessageBox.confirm>) => {
+  materializationAwaitingDecision.value = true;
+  try { return await ElMessageBox.confirm(...args); }
+  finally { materializationAwaitingDecision.value = false; }
+};
+
 const recoveryTarget = ref<any>(null);
 const knownTargets = ref<any[]>([]);
 const existingDecisionVisible = ref(false);
@@ -289,12 +339,14 @@ const existingDecisionSummary = computed(() => {
   return `目标表已存在：${rows.map((row: any) => `${row.targetDbName || row.targetDbId} / ${row.targetTableName}`).join('、')}。请选择保留目标表只创建流程，或删除目标表后重新物化。`;
 });
 const resolveExistingDecision = (choice: string) => {
+  materializationAwaitingDecision.value = false;
   existingDecisionVisible.value = false;
   const resolve = existingDecisionResolve;
   existingDecisionResolve = null;
   resolve?.(choice);
 };
 const askExistingDecision = (targets: any[], canReuse: boolean): Promise<string> => {
+  materializationAwaitingDecision.value = true;
   existingDecision.value = { targets, canReuse };
   existingDecisionVisible.value = true;
   return new Promise((resolve) => { existingDecisionResolve = resolve; });
@@ -342,7 +394,6 @@ const collectSourceFields = async () => {
   } finally { fieldCollecting.value = false; }
 };
 const loadingText = computed(() => {
-  if (isSaveing.value) return "正在物化目标表并登记接入信息...";
   const { datasource, node, source } = loadPending.value;
   if (source && (datasource || node)) return "正在读取来源表结构和建表选项...";
   if (source) return "正在读取来源表结构...";
@@ -765,42 +816,23 @@ const normalizeDatasourcePaths = (dbIds: any) =>
 
 const normalizeCode = (value: any) => String(value ?? "").trim().toLowerCase();
 
-const getDefaultDatasourcePathByDomainCode = () => {
-  const targetDomainCode = normalizeCode(props.defaultTargetDomainCode);
-  if (!targetDomainCode) return [];
-
-  const targetDbId = datasourceLeafIds.value.find((dbId) => {
-    const datasource = datasourceMap.value[dbId] || {};
-    return normalizeCode(
-      datasource.domainCode
-      ?? datasource.domain_code
-      ?? datasource.targetDomainCode
-      ?? datasource.target_domain_code,
-    ) === targetDomainCode;
-  });
-
-  const path = targetDbId ? datasourcePathMap.value[targetDbId] : [];
-  return path?.length ? [...path] : [];
-};
-
-const getDefaultDatasourcePath = () => {
-  const configuredPath = getDefaultDatasourcePathByDomainCode();
-  if (configuredPath.length) return configuredPath;
-
-  const firstLeafId = datasourceLeafIds.value[0];
-  if (firstLeafId && datasourcePathMap.value[firstLeafId]?.length) {
-    return [...datasourcePathMap.value[firstLeafId]];
-  }
-  const groups = datasourceOptions.value || [];
-  const firstGroup = groups.find((group: any) => group?.children?.length);
-  const firstDatasource = firstGroup?.children?.[0];
-  const dbId = getOptionValue(firstDatasource);
-  return firstGroup && dbId ? [firstGroup.value, dbId] : [];
-};
-
 const getDefaultDatasourcePaths = () => {
-  const path = getDefaultDatasourcePath();
-  return path.length ? [path] : [];
+  if (props.taskCategory === "distribution") return [];
+  const paths: any[][] = [];
+  const selectedIds = new Set<string>();
+  // 仅使用接口已校验权限的 ODS 叶节点；级联任务默认按汇聚→原始排列。
+  for (const domainCode of ["huiju", "yuanshi"]) {
+    for (const dbId of datasourceLeafIds.value) {
+      const datasource = datasourceMap.value[dbId] || {};
+      const path = datasourcePathMap.value[dbId];
+      if (normalizeCode(datasource.layerCode) !== "ods"
+        || normalizeCode(datasource.domainCode ?? datasource.domain_code) !== domainCode
+        || !path?.length || selectedIds.has(dbId)) continue;
+      selectedIds.add(dbId);
+      paths.push([...path]);
+    }
+  }
+  return paths;
 };
 
 const nodeEnabled = (item: any) => {
@@ -1095,7 +1127,9 @@ const init = async (parserOptions: any = null) => {
     const viewUrl = "/ods/queryTargetTableInfo";
     // 三个请求互不依赖；收到全部结果后再设置表单默认目标库和接入节点。
     const [datasourceResult, nodeResult, sourceResult] = await Promise.allSettled([
-      trackLoad("datasource", $common.post("/ods/targetDatasource/options", {}), runId),
+      trackLoad("datasource", $common.post("/ods/targetDatasource/options", {
+        taskCategory: props.taskCategory || "ingestion",
+      }), runId),
       trackLoad("node", $common.post("/ods/nifi-node/access-options", {}), runId),
       trackLoad("source", $common.post(props.type === "add" ? addUrl : viewUrl, {
         tid: sourceTableId,
@@ -1148,10 +1182,7 @@ const init = async (parserOptions: any = null) => {
     sourceTableName.value = String(propList.sourceTableName || propList.tableName || "").trim();
     if (props.type === "add") {
       propList.tableName = buildTargetTableName();
-      const defaultDbPaths = getDefaultDatasourcePaths();
-      propList.dbId = defaultDbPaths.length
-        ? defaultDbPaths
-        : normalizeDatasourcePaths(propList.dbId);
+      propList.dbId = getDefaultDatasourcePaths();
     } else if (propList.dbId) {
       propList.dbId = normalizeDatasourcePaths(propList.dbId);
     }
@@ -1206,6 +1237,7 @@ const init = async (parserOptions: any = null) => {
 };
 
 const handleCancel = () => {
+  if (isSaveing.value || recoveryDeleting.value) return;
   cancelPendingInit();
   emit("close");
   open.value = false;
@@ -1321,6 +1353,7 @@ const handleAddField = async () => {
 const handleSave = async () => {
   if (isSaveing.value) return;
   isSaveing.value = true;
+  startMaterializationProgress();
   let lastTargetForm: any = null;
   try {
     if (sourceFileConfig.value) {
@@ -1331,10 +1364,11 @@ const handleSave = async () => {
       sourceFileConfig.value = { ...checked };
     }
     const ddlInput = await currentDdlInput();
+    materializationProgress.value.total = ddlInput.targets.length;
     if (!ddlSourceFingerprint.value) await regenerateDdl(ddlInput);
     if (ddlSourceFingerprint.value && ddlSourceFingerprint.value !== ddlInput.fingerprint) {
       if (ddlWasEdited.value) {
-        await ElMessageBox.confirm(
+        await confirmMaterialization(
           "字段或目标配置已变化，重新生成建表语句会覆盖手工修改的 SQL。是否继续？",
           "更新建表语句",
           { type: "warning", confirmButtonText: "重新生成", cancelButtonText: "取消" },
@@ -1394,6 +1428,8 @@ const handleSave = async () => {
         confirmUnmanagedTarget: true,
       };
     });
+    materializationProgress.value.phase = 1;
+    materializationProgress.value.detail = "正在检查目标表是否存在，并核对建表语句";
     const preflightResponse = await $common.post('/ods/dataAggReset', {
         batchDryRun: true,
         checkPhysicalExistence: true,
@@ -1449,11 +1485,12 @@ const handleSave = async () => {
         return;
       }
       await validateEditedDdl();
-      await ElMessageBox.confirm(
+      await confirmMaterialization(
         `将删除 ${conflicts.length} 个同名目标物理表及其关联元数据，然后重新物化。删除不可恢复，确认继续吗？`,
         '删除目标表并重新物化',
         { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
       );
+      materializationProgress.value.detail = "正在清理已确认重新物化的目标表";
       for (const item of conflicts) {
         const result = await $common.post('/ods/dataAggReset', {
           sourceTableId: props.id,
@@ -1477,6 +1514,7 @@ const handleSave = async () => {
       recoveryTarget.value = null;
     }
     if (!conflicts.length) await validateEditedDdl();
+    materializationProgress.value.phase = 2;
     const targetTables: any[] = [];
     for (const target of ddlInput.targets) {
       const targetDbId = target.dbId;
@@ -1484,6 +1522,7 @@ const handleSave = async () => {
       // Reuse the exact target configuration used by DDL preview and preflight validation.
       const targetForm = { ...target.propList };
       lastTargetForm = targetForm;
+      materializationProgress.value.detail = `正在创建第 ${targetTables.length + 1} / ${ddlInput.targets.length} 张：${target.dbName} · ${targetForm.tableName}`;
       const result = await $common.post("/ods/createTapleApply", {
         propList: targetForm,
         tableItems: targetTableItems(ddlInput.tableItems, targetForm.dbType),
@@ -1495,6 +1534,7 @@ const handleSave = async () => {
       if (!targetTableId) {
         throw new Error(`目标数据源“${targetDatasource.dbName || targetDbId}”的目标表未创建成功`);
       }
+      materializationProgress.value.completed = targetTables.length + 1;
       targetTables.push({
         ...payload,
         targetTableId,
@@ -1504,7 +1544,7 @@ const handleSave = async () => {
         targetTableName: targetForm.tableName,
       });
     }
-    ElMessage.success(`已完成 ${targetTables.length} 个目标表物化，将创建包含全部目标写入节点的接入任务`);
+    ElMessage.success(`已完成 ${targetTables.length} 个目标表物化，正在准备任务画布`);
     emit("save", {
       ...targetTables[0],
       targetTableId: targetTables[0]?.targetTableId || "",
@@ -1535,6 +1575,7 @@ const handleSave = async () => {
       if (choice === 'delete') ElMessage.info('请使用“删除已有目标表”操作，删除后重新提交');
     }
   } finally {
+    stopMaterializationProgress();
     isSaveing.value = false;
   }
 };
@@ -1710,6 +1751,7 @@ watch(() => props.modelValue, (visible, previous) => {
   if (!visible && previous) cancelPendingInit();
 });
 onBeforeUnmount(cancelPendingInit);
+onBeforeUnmount(stopMaterializationProgress);
 watch([open, ddlMode, activeDdlKey], ([visible, isDdl]) => {
   stopDdlEditorSizing();
   if (!visible || !isDdl) return;
@@ -1777,6 +1819,10 @@ onBeforeUnmount(stopDdlEditorSizing);
 // 确保 body-class 真正命中。保留紧凑但不贴边的首区块间距。
 :global(.el-drawer__body.access-apply) {
   padding-top: 8px !important;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 :global(.el-drawer__body.access-apply-ddl) {
@@ -1839,7 +1885,22 @@ onBeforeUnmount(stopDdlEditorSizing);
   padding: 16px 0;
 }
 .template-load-error .el-alert { width: 100%; }
-.materialization-form-view { min-width: 0; }
+// 内容在弹框可见高度内滚动，遮罩始终覆盖这个可见区域，不跟随字段总高度。
+.access-apply-content { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+.materialization-form-view { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
+.materialization-progress-overlay { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(248, 250, 255, .94); }
+.materialization-progress-card { width: min(100%, 410px); max-height: 100%; overflow: auto; padding: 26px 28px 22px; box-sizing: border-box; border: 1px solid #e2eaf8; border-radius: 14px; background: #fff; box-shadow: 0 10px 40px rgba(33, 78, 145, .1); text-align: center; }
+.materialization-progress-symbol { position: relative; display: flex; align-items: center; justify-content: center; width: 60px; height: 60px; margin: 0 auto 16px; color: #2269ed; background: #eef4ff; border-radius: 50%; font-size: 25px; span { position: absolute; inset: -4px; border: 2px solid #dce8ff; border-top-color: #2269ed; border-radius: 50%; animation: materialization-spin 1.4s linear infinite; } }
+.materialization-progress-card h3 { margin: 0 0 10px; color: #24364e; font-size: 18px; font-weight: 600; }
+.materialization-progress-detail { margin: 0; color: #5b6d87; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.materialization-progress-meta { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 20px; color: #7c8ba2; font-size: 12px; }
+.materialization-progress-steps { display: flex; flex-direction: column; gap: 9px; margin: 0; padding: 0; list-style: none; text-align: left; li { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 7px; color: #8591a4; font-size: 13px; background: #f8f9fc; small { margin-left: auto; font-size: 11px; white-space: nowrap; } } li.is-current { color: #2269ed; background: #eef4ff; } li.is-complete { color: #429068; } }
+.materialization-step-mark { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: 0 0 20px; border-radius: 50%; border: 1px solid currentColor; font-size: 11px; }
+.materialization-progress-note { margin: 18px 0 0; color: #8a96a8; font-size: 12px; line-height: 1.7; }
+@keyframes materialization-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .materialization-progress-symbol span { animation: none; } }
+@media (max-height: 550px) { .materialization-progress-card { padding: 14px 18px; } .materialization-progress-symbol { display: none; } .materialization-progress-meta { margin-bottom: 10px; } .materialization-progress-note { margin-top: 10px; } }
+
 .access-apply-content.is-ddl-mode {
   display: flex;
   flex: 1;
@@ -1892,7 +1953,6 @@ onBeforeUnmount(stopDdlEditorSizing);
 .ddl-inline-panel :deep(.ace_editor) { min-height: 200px !important; }
 
 @media (max-height: 430px) {
-  :global(.el-drawer__body.access-apply-ddl) { overflow: auto; }
-  .access-apply-content.is-ddl-mode { min-height: 260px; }
+  .ddl-editor-host { overflow: auto; }
 }
 </style>

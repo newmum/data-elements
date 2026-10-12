@@ -27,6 +27,11 @@
 // 业务说明：元数据管理 13：数据表分页预览；使用请求参数 tableId、pageNo、pageSize、columns、conditions、sorts、groupByColumn、groupNameColumn；涉及 db_datasource_t、db_table_t 等业务表。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
+import tenantRuntime
+import dataScope
+import tableSort
+var tenantId=tenantRuntime.id()
+if(tenantId==null){exit 401,"当前租户无效";}
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
 import com.linewell.dataelement.metautil.model.dto.PageQueryCondition
@@ -77,11 +82,11 @@ var loadAsset = (assetId) => {
         return null
     }
     // 从 MySQL 业务表读取当前有效数据。
-    var main = db.table('db_datasource_t').where().eq('tid', assetId).eq('is_del', 0).selectOne()
+    var main = db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('tid', assetId).eq('is_del', 0).selectOne()
     var assetType = 'db'
     if (main == null) {
         // 从 MySQL 业务表读取当前有效数据。
-        main = db.table('db_table_t').where().eq('tid', assetId).eq('is_del', 0).selectOne()
+        main = db.table('db_table_t').where().eq('tenant_id',tenantId).eq('tid', assetId).eq('is_del', 0).selectOne()
         assetType = 'table'
     }
     if (main == null) {
@@ -90,6 +95,7 @@ var loadAsset = (assetId) => {
     }
     var result = {
         tid: rowValue(main, ['tid']), id: rowValue(main, ['tid']), assetType: assetType,
+        tenantId:tenantId,orgId:rowValue(main,['orgId','org_id']),createdBy:rowValue(main,['createdBy','created_by']),
         dbName: rowValue(main, ['dbName', 'db_name']),
         dbId: rowValue(main, ['datasourceId', 'datasource_id']),
         tableName: rowValue(main, ['tableName', 'table_name']),
@@ -238,6 +244,7 @@ if (dbAsset == null) {
     exit 500, '表所属数据源不存在'
 }
 
+if(dataScope.visibleDataSourcesFor('MENU:2081000000000000002',[dbAsset]).size()!=1){exit 403,'表所属数据源不在当前角色数据范围内';}
 var request = new PageQueryRequest()
 request.setDataSource(dataSourceOf(dbAsset))
 request.setTableName(firstValue(table, ['tableName', 'tableNameEn']))
@@ -247,7 +254,32 @@ if (body != null && body.columns != null) {
     request.setColumns(body.columns)
 }
 request.setConditions(toConditionList(body == null ? null : body.conditions))
-request.setSorts(toSortList(body == null ? null : body.sorts))
+var requestedSorts=body?.sorts==null?[]:body.sorts
+if(!blank(body?.sortField)){requestedSorts=[{field:body.sortField,direction:tableSort.direction(body)}]}
+if(requestedSorts.size()>10){exit 400,'最多选择10个排序字段';}
+if(requestedSorts.size()>0){
+    var fieldRows=db.table('db_table_column_t').where().eq('tenant_id',tenantId).eq('table_id',tableId).eq('is_del',0).page(1001,0)
+    if(fieldRows.total>1000){exit 413,'字段超过1000项，不能使用此预览排序';}
+    var allowedFields={}
+    for(row in fieldRows.list){var fieldName=rowValue(row,['columnName','column_name']);if(!blank(fieldName)){allowedFields[fieldName]=fieldName}}
+    var sorts=[]
+    var selectedFields=[]
+    for(item in requestedSorts){
+        var fieldName=firstValue(item,['field','column','name'])
+        var chosen=tableSort.field({sortField:fieldName},allowedFields,fieldName)
+        var direction=firstValue(item,['direction','order'])
+        sorts.add({field:chosen,direction:tableSort.direction({sortDir:direction==null?'asc':direction})})
+        selectedFields.add(chosen)
+    }
+    for(row in fieldRows.list){
+        var primary=rowValue(row,['primaryKey','primary_key'])
+        var fieldName=rowValue(row,['columnName','column_name'])
+        if((''+primary=='1'||primary==true)&&!selectedFields.contains(fieldName)){sorts.add({field:fieldName,direction:'asc'})}
+    }
+    requestedSorts=sorts
+}
+if(request.getPageNo()<1||request.getPageNo()>100000||request.getPageSize()<1||request.getPageSize()>100){exit 400,'数据预览分页参数无效';}
+request.setSorts(toSortList(requestedSorts))
 
 if (body != null && !blank(body.groupByColumn)) {
     // 多类别码表按真实数据源全量分组，不能从分页预览样例推导类别。

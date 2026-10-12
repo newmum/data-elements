@@ -1,9 +1,10 @@
+import { useServerSort } from '../../shared/serverSort';
 import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { Alert,App,Button,Drawer,Empty,Form,Input,Select,Space } from 'antd';
 import { ReactFlow,Background,Controls,MiniMap,applyNodeChanges } from '@xyflow/react';
 import type { Connection,Node,Edge,NodeChange } from '@xyflow/react';
 import type { Row } from '../../services/api';
-import { lineageTasks,lineageGraph,runtimeLineage,saveLineageGraph,processingNodeTemplate,validateProcessingGraph,deleteLineageGraph,lineageLifecycle,lineageStatus,processingEdge } from '../../services/lineage';
+import { lineageTasksPage,lineageGraph,runtimeLineage,saveLineageGraph,processingNodeTemplate,validateProcessingGraph,deleteLineageGraph,lineageLifecycle,lineageStatus,processingEdge } from '../../services/lineage';
 import { readMetadata,metadataWritable } from '../../services/metadata';
 import { useWorkspaceQuery } from '../../services/useWorkspaceQuery';
 import { useStudio } from '../er/store';
@@ -11,7 +12,9 @@ import { FullscreenWorkspace } from '../../app/FullscreenWorkspace';
 import { FieldMappingEditor } from './FieldMappingEditor';
 import { DataTable,EditorModal,ErrorNotice,Page,date,useAction,required } from './common';
 export function SharedLineagePage({embedded=false,initialPipelineId}:{embedded?:boolean;initialPipelineId?:string}={}){
- const q=useWorkspaceQuery('shared-lineage-tasks',s=>lineageTasks(s)),metadata=useWorkspaceQuery('lineage-owned-tables',readMetadata);
+ const [page,setPage]=useState(1),[size,setSize]=useState(20),[keyword,setKeyword]=useState('');
+ const order=useServerSort(()=>setPage(1));
+ const q=useWorkspaceQuery('shared-lineage-tasks:'+JSON.stringify({page,size,keyword,...order.sort}),s=>lineageTasksPage(page,size,keyword,order.sort,s)),metadata=useWorkspaceQuery('lineage-owned-tables',readMetadata);
  const [current,setCurrent]=useState<Row|null>(null),[node,setNode]=useState<string>(),[edge,setEdge]=useState<string>(),[evidence,setEvidence]=useState<Row|null>(null),[error,setError]=useState(''),[mapping,setMapping]=useState<Row|null>(null),[create,setCreate]=useState(false),[add,setAdd]=useState(false),[editing,setEditing]=useState(false);
  const {busy,run}=useAction(),{message,modal}=App.useApp();const theme=useStudio(s=>s.theme),dirty=useRef(false),lastDeepLink=useRef('');
  const status=useWorkspaceQuery('shared-lineage-status:'+current?.id,s=>current?.id?lineageStatus(current.id,s):Promise.resolve(null),current?.nifiProcessGroupId?5000:false);
@@ -31,8 +34,8 @@ export function SharedLineagePage({embedded=false,initialPipelineId}:{embedded?:
  const edges:Edge[]=(current?.dsl.edges||[]).map((e:Row)=>({id:e.id,source:e.source,target:e.target,label:e.outlet,selected:edge===e.id}));
  const selected=current?.dsl.nodes.find((n:Row)=>n.id===node);
  const headerActions=<Space><Button loading={q.loading} onClick={q.refresh}>刷新接入任务</Button><Button type="primary" disabled={!metadataWritable()} onClick={()=>setCreate(true)}>新建加工图</Button></Space>;
- const content=<>{embedded&&<div className="lineage-embedded-actions">{headerActions}</div>}<DataTable rows={q.data} loading={q.loading} error={q.error} onRefresh={q.refresh} titleKey="shared-lineage-tasks" columns={[
-  {title:'链路 / 接入任务',dataIndex:'name',width:270},{title:'节点数',dataIndex:'nodeCount',align:'right',width:100},{title:'运行血缘',width:140,render:(_,r)=>r.nifiProcessGroupId?'可查询运行事件':'尚未部署'},{title:'更新时间',dataIndex:'updatedAt',width:175,render:date},{title:'说明',dataIndex:'description',width:260},{title:'操作',width:184,render:(_,r)=><Space><Button type="link" loading={busy&&current?.id===r.id} onClick={()=>open(r)}>全屏加工与血缘</Button><Button type="link" danger disabled={busy||!metadataWritable()} onClick={()=>removeGraph(r)}>删除</Button></Space>}
+ const content=<>{embedded&&<div className="lineage-embedded-actions">{headerActions}</div>}<DataTable serverSort={order} serverPagination={{page,size,total:q.data?.total||0,onChange:(p,n)=>{setPage(n===size?p:1);setSize(n);}}} onSearch={v=>{setKeyword(v);setPage(1);}} rows={q.data?.list} loading={q.loading} error={q.error} onRefresh={q.refresh} titleKey="shared-lineage-tasks" columns={[
+  {title:'链路 / 接入任务',dataIndex:'name',sorter:true,width:270},{title:'节点数',dataIndex:'nodeCount',sorter:true,align:'right',width:100},{title:'运行血缘',width:140,render:(_,r)=>r.nifiProcessGroupId?'可查询运行事件':'尚未部署'},{title:'更新时间',dataIndex:'updatedAt',width:175,render:date},{title:'说明',dataIndex:'description',width:260},{title:'操作',width:184,render:(_,r)=><Space><Button type="link" loading={busy&&current?.id===r.id} onClick={()=>open(r)}>全屏加工与血缘</Button><Button type="link" danger disabled={busy||!metadataWritable()} onClick={()=>removeGraph(r)}>删除</Button></Space>}
  ]}/>{current&&<FullscreenWorkspace kind="lineage" title={current.name} busy={busy} onClose={close} onSave={editing?save:undefined}>
  <div className="lineage-workspace"><div className="lineage-toolbar"><Space wrap>
  <Button type={editing?'primary':'default'} disabled={busy||!metadataWritable()} onClick={()=>setEditing(v=>!v)}>{editing?'结束编辑':'编辑加工图'}</Button>

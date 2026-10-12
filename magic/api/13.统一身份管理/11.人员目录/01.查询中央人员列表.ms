@@ -29,7 +29,7 @@ import '@/idaas/directory' as directory;
 
 return identityRuntime.control(()=>apiCall(()=>{
     var payload={};
-    for(key in ['domain','page','size','q','status','orgId','includeChildren']) {
+    for(key in ['domain','page','size','q','status','orgId','includeChildren','sortField','sortDir']) {
         var input=request.getValues(key);
         if(input!=null && input.size()>0) {
             payload.put(key,input[0]);

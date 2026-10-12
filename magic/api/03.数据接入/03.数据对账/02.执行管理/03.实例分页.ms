@@ -16,6 +16,7 @@
   "script": null
 }
 ================================
+
 // 接口：03.实例分页
 // 路由：POST /page（完整路由由目录分组组合）
 // 业务说明：POST /ods/reconciliation/run/page；只读；分页查询当前租户历史执行实例及一致率；历史对账单主接口。
@@ -30,4 +31,4 @@ var status = body?.status == null ? '' : ('' + body.status).trim()
 var keyword = body?.keyword == null ? '' : ('' + body.keyword).trim()
 var page = body?.page == null || !('' + body.page).matches('^[0-9]+$') ? 1 : NumberUtil.parseInt('' + body.page)
 var size = body?.size == null || !('' + body.size).matches('^[0-9]+$') ? 20 : NumberUtil.parseInt('' + body.size)
-return reconcile.runPage(status, keyword, page, size)
+return reconcile.runPage(status, keyword, page, size,body?.sortField,body?.sortDir)

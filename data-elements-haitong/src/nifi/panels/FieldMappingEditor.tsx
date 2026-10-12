@@ -52,6 +52,7 @@ import {
   type PreviewResponse,
   type TransformSpec,
 } from '@/api/fieldMapping';
+import { DraftTable } from '../../components/DraftTable';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { findUniqueCaseInsensitiveFieldMatches, identifierMatchKey } from '@/utils/fieldNameMatching';
 import { getNifiOverlayContainer } from './overlayContainer';
@@ -903,13 +904,13 @@ function MappingListView({ spec, sourceFields, targetFields, rowIssues, selected
       render: (kind: RowKind, row) => <MappingKindTag kind={kind} mapping={row.mapping} />,
     },
     {
-      title: '来源表字段',
+      title: '来源表字段',key:'sourceName',
       dataIndex: 'mapping',
       ellipsis: true,
       render: (mapping: MappingRule) => <MappingSourceCell mapping={mapping} labelByPath={sourceLabelByPath} />,
     },
     {
-      title: '目标表字段',
+      title: '目标表字段',key:'targetName',
       dataIndex: 'mapping',
       ellipsis: true,
       render: (mapping: MappingRule) => <MappingTargetCell mapping={mapping} labelByPath={targetLabelByPath} />,
@@ -925,7 +926,7 @@ function MappingListView({ spec, sourceFields, targetFields, rowIssues, selected
       ),
     },
     {
-      title: '校验',
+      title: '校验',key:'issueCount',
       dataIndex: 'issues',
       width: 120,
       render: (issues: MappingIssue[]) => issues.length
@@ -966,7 +967,7 @@ function MappingListView({ spec, sourceFields, targetFields, rowIssues, selected
           <Button size="small" icon={<PlusOutlined />}>添加映射规则</Button>
         </Dropdown>
       </div>
-      <Table
+      <DraftTable fields={{sourceName:{kind:'text',value:row=>fieldLabel(row.mapping.from,sourceLabelByPath)||row.mapping.from||row.mapping.fromList?.join(',')||''},targetName:{kind:'text',value:row=>fieldLabel(row.mapping.to,targetLabelByPath)||row.mapping.to||''},issueCount:{kind:'number',value:row=>row.issues.length}}}
         size="small"
         className="fm-list-table"
         rowKey="key"
@@ -1573,7 +1574,9 @@ function PreviewDrawer({ open, data, onClose }: { open: boolean; data: PreviewRe
       {!data ? <Empty /> : <>
         <Alert type="info" showIcon message={`样本输出 ${data.resultRows.length} 行`} style={{ marginBottom: 12 }} />
         {failedRows.length > 0 && <Alert type="error" showIcon message="预览中存在失败行" description={failedRows.map((row) => <div key={row.rowIndex}>第 {row.rowIndex + 1} 行：{row.errors.join('；')}</div>)} style={{ marginBottom: 12 }} />}
-        {columns.length === 0 ? <Empty description="暂无输出字段" /> : <Table size="small" rowKey={(_, i) => String(i)} columns={columns} dataSource={data.resultRows} pagination={false} scroll={{ x: true, y: 220 }} />}
+        {columns.length === 0 ? <Empty description="暂无输出字段" /> : <DraftTable<Record<string,unknown>> size="small" rowKey={(_, i) => String(i)} columns={columns} dataSource={data.resultRows}
+           fields={Object.fromEntries(Object.keys(data.resultRows[0]??{}).map(key=>[key,{kind:typeof data.resultRows[0]?.[key]==='number'?'number' as const:'text' as const,value:(row:Record<string,unknown>)=>row[key]==null?null:String(row[key])}]))}
+           scroll={{x:true,y:220}}/>}
       </>}
     </Drawer>
   );
@@ -1581,27 +1584,17 @@ function PreviewDrawer({ open, data, onClose }: { open: boolean; data: PreviewRe
 
 function RecommendModal({ open, recommendations, onCancel, onApply }: { open: boolean; recommendations: LocalRecommendation[]; onCancel: () => void; onApply: (rows: LocalRecommendation[]) => void }) {
   const [selected, setSelected] = useState<React.Key[]>([]);
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
   useEffect(() => {
     setSelected(recommendations.filter((r) => r.confidence >= 0.85).map((r) => r.id));
-    setPagination({ current: 1, pageSize: 10 });
   }, [recommendations]);
   const picked = recommendations.filter((r) => selected.includes(r.id));
   return (
     <Modal open={open} onCancel={onCancel} title="智能推荐字段映射" width={760} onOk={() => onApply(picked)} okText={`应用 ${picked.length} 条已选映射`} getContainer={getNifiOverlayContainer}>
-      {recommendations.length === 0 ? <Empty description="暂无可推荐映射" /> : <Table
+      {recommendations.length === 0 ? <Empty description="暂无可推荐映射" /> : <DraftTable fields={{from:{kind:'text',value:row=>row.fromLabel||row.from},to:{kind:'text',value:row=>row.toLabel||row.to},confidence:{kind:'number',value:row=>row.confidence}}}
         size="small"
         rowKey="id"
         dataSource={recommendations}
         scroll={{ y: '500px' }}
-        pagination={{
-          current: pagination.current,
-          pageSize: pagination.pageSize,
-          total: recommendations.length,
-          showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条推荐`,
-          onChange: (page, pageSize) => setPagination({ current: page, pageSize }),
-        }}
         rowSelection={{ selectedRowKeys: selected, onChange: setSelected, preserveSelectedRowKeys: true }}
         columns={[
           { title: '源字段', dataIndex: 'from', render: (_v: string, record: LocalRecommendation) => <FieldLabelCell path={record.from} label={record.fromLabel} /> },

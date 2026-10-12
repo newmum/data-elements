@@ -100,6 +100,21 @@ public class AssetCenterWorkbenchService {
     public Object withdraw(String id,Map<String,Object> input,String key){return db.idempotent("SUBSCRIPTION_WITHDRAW",key,input,()->{var row=form(id,true);db.revision(row,input);if(!status(row).equals("IN_REVIEW"))throw error(409,"INVALID_STATE","仅审批中的申请可撤回");var cmd=new ApprovalRevokeRequest();cmd.setTid(text(row,"flow_instance_id"));cmd.setFlowOrderId(id);cmd.setMessage(text(input,"reason"));approvals.revoke(cmd);db.jdbc.update("UPDATE da_apply_scope_t SET status='WITHDRAWN',updated_time=?,revision=revision+1 WHERE tenant_id=? AND apply_form_id=? AND submission_version=? AND status='SUBMITTED'",now(),db.tenant(),id,row.get("submission_version"));db.jdbc.update("UPDATE data_apply_form_t SET flow_status=4,revision=COALESCE(CAST(revision AS UNSIGNED),0)+1,updated_time=? WHERE tenant_id=? AND tid=?",now(),db.tenant(),id);event("SUBSCRIPTION",id,"WITHDRAWN",key,map());return subscription(id);});}
 
     public Map<String,Object> subscription(String id){var row=db.owned("data_apply_form_t",id,false);boolean owner=db.user().equals(text(row,"apply_user_id"));if(!owner&&tasks(id).isEmpty())throw error(404,"NOT_FOUND","申请不存在或无权访问");var draft=db.object(row.get("asset_payload_json"));String status=status(row);List<Map<String,Object>> scopes=db.table("da_apply_scope_t")?db.rows("SELECT * FROM da_apply_scope_t WHERE tenant_id=? AND apply_form_id=? AND submission_version=? ORDER BY scope_no",db.tenant(),id,number(row.get("submission_version"),0)).stream().map(this::scopeDto).toList():List.of();return map("id",id,"revision",revisionValue(row),"requestType","CATALOG_SUBSCRIPTION","title",text(row,"apply_name"),"status",status,"applicantUserId",text(row,"apply_user_id"),"departmentId",text(row,"apply_org_id"),"resources",draft.getOrDefault("resources",List.of()),"updatedAt",iso(row.get("updated_time")),"allowedActions",owner?(status.equals("IN_REVIEW")?List.of("VIEW","WITHDRAW"):Set.of("DRAFT","REJECTED","RETURNED","WITHDRAWN").contains(status)?List.of("VIEW","EDIT","SUBMIT"):List.of("VIEW","DELIVERY")):List.of("VIEW"),"submissionVersion",number(row.get("submission_version"),0),"scopes",scopes,"draft",draft);}
+    public Map<String,Object> progress(String id,Map<String,String> q){
+        var result=progress(id);
+        if(!q.containsKey("resourcePage"))return result;
+        var sub=db.object(result.get("subscription"));
+        var resources=db.array(sub.get("resources"));
+        if(resources.size()>1000)throw error(413,"INVALID_ARGUMENT","申请资源超过1000项，请拆分申请");
+        List<Map<String,Object>> candidates=new ArrayList<>();
+        for(var original:resources){var row=new LinkedHashMap<String,Object>(original);row.put("_count",db.array(row.get("itemIds")).size());row.put("_identity",text(row,"catalogId")+":"+text(row,"attachmentId"));candidates.add(row);}
+        Map<String,Object> request=map("sortField",q.getOrDefault("resourceSortField","catalogId"),"sortDir",q.getOrDefault("resourceSortDir","asc"));
+        var sorted=new com.linewell.dataelement.platform.magic.TableSortMagicModule().rows(candidates,request,Map.of("catalogId","catalogId","itemCount","_count"),"catalogId","_identity");
+        int page=Math.max(1,number(q.get("resourcePage"),1)),size=Math.min(100,Math.max(1,number(q.get("resourceSize"),20)));
+        int start=(int)Math.min(sorted.size(),(long)(page-1)*size),end=Math.min(sorted.size(),start+size);
+        List<Map<String,Object>> selected=new ArrayList<>();for(var row:sorted.subList(start,end)){row.remove("_count");row.remove("_identity");selected.add(row);}
+        sub.put("resources",selected);sub.put("resourcePage",map("total",resources.size(),"page",page,"size",size));result.put("subscription",sub);return result;
+    }
     public Map<String,Object> progress(String id){var sub=subscription(id);return map("subscription",sub,"events",events("SUBSCRIPTION",id),"activeTasks",tasks(id),"deliveryStatus",sub.get("status").equals("APPROVED")?"PROVISIONING":"PREPARING");}
     public Object delivery(String id){
         var form=form(id,false);db.require("da_apply_scope_t","da_authorization_scope_t");

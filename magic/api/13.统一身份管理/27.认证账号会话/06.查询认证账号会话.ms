@@ -37,12 +37,13 @@ import '@/idaas/audit' as audit;
 import '@/idaas/auth-session-policy' as sessionPolicy;
 import identityRuntime;
 import request;
+import tableSort;
 import '@/idaas/api-call' as apiCall;
 
 
 return identityRuntime.control(()=>apiCall(()=>{
     var payload={};
-    for(key in ['id','appId','domain']) {
+    for(key in ['id','appId','domain','paged','page','size','sortField','sortDir']) {
         var value=request.getValues(key);
         if(value!=null && value.size()>0) {
             payload.put(key,value[0]);
@@ -76,18 +77,14 @@ where p.subject_id=#{a.subject_id}
     var a=ctx.account;
     var id=a.id;
     if(operation=='sessions') {
-        return sql.select("""
-select tid as id,app_id appId,client_id clientId,date_format(issued_at,
-        '%Y-%m-%dT%H:%i:%sZ') issuedAt,
-       date_format(expires_at, '%Y-%m-%dT%H:%i:%sZ') expiresAt,date_format(revoked_at,
-        '%Y-%m-%dT%H:%i:%sZ') revokedAt,revoke_reason revokeReason
-from iam_auth_session_t
-where principal_kind='AUTH_ACCOUNT'
-    and principal_id=#{id}
-    and authorization_key not like 'consent:%'
-order by issued_at desc
-limit 100
-""");
+        var paged=p.paged=='true';
+        var page=Math.max(1,(p.page||1)::int);var size=Math.min(100,Math.max(1,(p.size||20)::int));
+        var offset=paged?(page-1)*size:0;var take=paged?size:100;
+        var from=" FROM iam_auth_session_t s LEFT JOIN iam_application_t app ON app.tid=s.app_id WHERE s.principal_kind='AUTH_ACCOUNT' AND s.principal_id=#{id} AND s.authorization_key NOT LIKE 'consent:%'";
+        var sort=tableSort.field(p,{appId:'s.app_id',appName:'app.name',issuedAt:'s.issued_at',expiresAt:'s.expires_at',revokedAt:'s.revoked_at'},'issuedAt');
+        var total=paged?sql.selectInt('SELECT count(*)'+from):0;
+        var rows=sql.select("SELECT s.tid id,s.app_id appId,app.name appName,s.client_id clientId,date_format(s.issued_at,'%Y-%m-%dT%H:%i:%sZ') issuedAt,date_format(s.expires_at,'%Y-%m-%dT%H:%i:%sZ') expiresAt,date_format(s.revoked_at,'%Y-%m-%dT%H:%i:%sZ') revokedAt,s.revoke_reason revokeReason"+from+' ORDER BY CASE WHEN '+sort+' IS NULL THEN 1 ELSE 0 END,'+sort+' '+tableSort.direction(p)+',s.tid ASC LIMIT #{take} OFFSET #{offset}');
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     if(operation!='password') {
         exit 400,'认证账号操作不正确';

@@ -298,52 +298,5 @@
   }
 }
 ================================
-// 接口：02.标准代码分页查询
-// 路由：POST /dwm/standard/code/page
-// 业务说明：支持按字典名称、字典编码、数据分类ID模糊查询；使用请求参数 pageNum、pageSize、dictName、categoryPath；涉及 da_metadata_code_t 等业务表。
-// 核心业务逻辑：按接口约定编排当前请求并返回业务处理结果。
-import log
-
-/**
- * 分页查询标准代码表
- * POST /api/gov/standard/code/page
- * 
- * 支持分页查询标准代码表列表
- * 支持按字典名称、字典编码、数据分类ID模糊查询
- */
-
-// 获取分页参数
-var pageNum = body?.pageNum::long(1)
-var pageSize = body?.pageSize::long(20)
-var offsetLimit = pageNum == 0 ? 0 : (pageNum - 1) * pageSize
-
-// 获取查询条件
-var dictName = body?.dictName
-var categoryPath = body?.categoryPath
-
-// 构建查询条件
-var query = db.table('da_metadata_code_t')
-    .where()
-    .eq('is_del', 0)
-    .eq('code_value', '__HEADER__')
-
-if (dictName != null && dictName != '') {
-    query = query.like('dict_name', '%' + dictName + '%')
-}
-
-if (categoryPath != null) {
-    query = query.like('data_category_path', categoryPath + "%")
-}
-
-// ========== 查询总数 ==========
-var total = query.count()
-
-// ========== 查询列表 ==========
-var list = query
-    .orderBy('created_time', 'desc')
-    .page(pageSize, offsetLimit)
-
-log.info('分页查询标准代码表成功, pageNum: {}, pageSize: {}, total: {}', pageNum, pageSize, total)
-
-// ========== 返回结果 ==========
-return list
+import dataStandardPages
+return dataStandardPages.codes(body)

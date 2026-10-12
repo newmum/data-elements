@@ -75,8 +75,8 @@ export type NodeDraft = {
 };
 
 export const integrationNodesApi = {
-  async page(): Promise<IntegrationNode[]> {
-    const value = await platformApi<NodePayload>('/ods/nifi-node/page', {});
+  async page(sort: {sortField?:string;sortDir?:'asc'|'desc'} = {}): Promise<IntegrationNode[]> {
+    const value = await platformApi<NodePayload>('/ods/nifi-node/page', sort);
     const rows = Array.isArray(value?.list) ? value.list : [];
     return rows.map(item => normalizeNode(item as NodePayload, [])).filter(item => item.tid && item.nodeName);
   },

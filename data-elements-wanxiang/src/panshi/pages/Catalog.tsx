@@ -3,12 +3,14 @@ import { App, Button, Drawer, Empty, Form, Input, InputNumber, Select, Space, Ta
 import { FileSearchOutlined, PlusOutlined, SaveOutlined, SendOutlined, SyncOutlined } from '@ant-design/icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useResource } from '../services/context';
+import { useServerSort } from '../../shared/serverSort';
+import { PreviewTable } from '../../shared/PreviewTable';
 import { Hero, Metric, NameCell, PTable, StateTag, timeText, useCommand } from '../components/ui';
 import type { CatalogEntry } from '../domain/types';
 import { getSession } from '../../services/api';
 import { draftState, useDraftGuard } from '../app/leave';
 import {
-  centerSourceIds, centerTableColumns, centerTablePage, directoryDictionaries, itemsFromColumns, loadDirectory,
+  centerSourceIds, centerTableColumns, centerTablePage, directoryDictionaries, directoryItemsPage, itemsFromColumns, loadDirectory,
   type CenterTable, type CenterTablePage, type DirectoryDictionary, type DirectoryItem,
 } from '../services/catalogApi';
 import { resourceGet } from '../services/transport';
@@ -145,7 +147,7 @@ export function CatalogEntriesPage() {
       <Metric icon="catalog-reviews" label="已审核" value={count('APPROVED')}
         note={`${s.catalogs.filter(entry => catalogState(entry) === 'APPROVED' && !entry.draft.fieldIds.length).length} 份需补充数据项`}/>
     </div>
-    <PTable rows={rows} onRefresh={refresh} initialSearch={params.get('q') ?? ''}
+    <PTable tableSource="catalogs" tableQuery={{status,sourceId}} rows={rows} onRefresh={refresh} initialSearch={params.get('q') ?? ''}
       searchText={entry => `${entry.draft.name} ${entry.draft.code} ${(entry.draft as unknown as Record<string, unknown>).resourceName || ''}`}
       tools={<>
         <Select allowClear placeholder="全部审核状态" value={status || undefined} onChange={value => setStatus(value || '')}
@@ -163,7 +165,7 @@ export function CatalogEntriesPage() {
             code={entry.draft.resourceId}/> },
         { title: '所属数据源', width: 170, render: (_, entry) =>
           sourceName(data.sources, text((entry.draft as unknown as Record<string, unknown>).sourceId)) },
-        { title: '数据项', width: 110, render: (_, entry) => entry.draft.fieldIds.length
+        { title: '数据项',key:'itemCount', width: 110, render: (_, entry) => entry.draft.fieldIds.length
           ? `${entry.draft.fieldIds.length} 项` : <Tag color="orange">待补充</Tag> },
         { title: '审核状态', width: 110, render: (_, entry) => <StateTag state={catalogState(entry)}/> },
         { title: '更新时间', width: 170, render: (_, entry) => timeText(entry.updatedAt) },
@@ -187,18 +189,18 @@ function CatalogItemEditor({ items, dicts, standards, disabled, onChange }: {
 }) {
   const patch = (index: number, value: Partial<DirectoryItem>) =>
     onChange(items.map((item, position) => position === index ? { ...item, ...value } : item));
-  return <Table<DirectoryItem> rowKey={(item, index) => item.sourceTableColumnId || item.tid || `manual-${index}`}
+  return <PreviewTable<DirectoryItem> fields={{colName:{kind:'text',value:item=>item.colName},colLength:{kind:'number',value:item=>item.colLength}}} rowKey={(item, index) => item.sourceTableColumnId || item.tid || `manual-${index}`}
     size="small" pagination={{ pageSize: 10 }} scroll={{ x: 1260 }} dataSource={items}
     columns={[
       { title: '序号', width: 60, render: (_, __, index) => index + 1 },
-      { title: '数据项名称', width: 220, render: (_, item, index) => <Input disabled={disabled} value={item.colName}
+      { title: '数据项名称',key:'colName', width: 220, render: (_, item, index) => <Input disabled={disabled} value={item.colName}
         onChange={event => patch(index, { colName: event.target.value })}/> },
       { title: '英文名', width: 200, render: (_, item, index) => <Input disabled={disabled} value={item.colEn}
         onChange={event => patch(index, { colEn: event.target.value })}/> },
       { title: '类型', width: 170, render: (_, item, index) => <Select disabled={disabled} showSearch optionFilterProp="label"
         value={item.colType || undefined} options={dictOptions(dicts, 'colType', item.colType)} style={{ width: '100%' }}
         onChange={value => patch(index, { colType: value })}/> },
-      { title: '长度', width: 95, render: (_, item, index) => <InputNumber disabled={disabled} min={0} max={999999}
+      { title: '长度',key:'colLength', width: 95, render: (_, item, index) => <InputNumber disabled={disabled} min={0} max={999999}
         value={item.colLength} style={{ width: '100%' }} onChange={value => patch(index, { colLength: value ?? undefined })}/> },
       { title: '主键', width: 65, render: (_, item) => item.isPk === '1' ? <Tag color="gold">是</Tag> : '否' },
       { title: '数据标准', width: 185, render: (_, item, index) => <Select disabled={disabled} allowClear showSearch optionFilterProp="label"
@@ -486,18 +488,10 @@ export function CatalogReviewsPage() {
   const { data, act, refresh } = useResource(), { message } = App.useApp();
   const [filter, setFilter] = useState('PENDING_REVIEW');
   const [entryId, setEntryId] = useState('');
-  const [items, setItems] = useState<DirectoryItem[]>([]);
   const [opinion, setOpinion] = useState('');
   const [busy, setBusy] = useState(false);
   const entry = data.state.catalogs.find(item => item.id === entryId);
   const selfSubmitted = !!entry && entry.draft.submittedBy === getSession()?.principalId;
-  useEffect(() => {
-    if (!entryId) return;
-    let active = true;
-    void loadDirectory(entryId).then(result => { if (active) setItems(result.items); })
-      .catch(error => { if (active) message.error(error instanceof Error ? error.message : String(error)); });
-    return () => { active = false; };
-  }, [entryId]);
   const decide = async (approve: boolean) => {
     if (!entry) return;
     if (!approve && !opinion.trim()) { message.warning('退回时请填写原因'); return; }
@@ -511,7 +505,7 @@ export function CatalogReviewsPage() {
   };
   return <>
     <Hero page="catalog-reviews"/>
-    <PTable rows={data.state.catalogs.filter(item => !filter || catalogState(item) === filter)}
+    <PTable tableSource="catalogs" tableQuery={{status:filter}} rows={data.state.catalogs.filter(item => !filter || catalogState(item) === filter)}
       onRefresh={refresh} emptyTitle={filter === 'PENDING_REVIEW' ? '暂无待审核目录' : '暂无符合条件的目录'}
       emptyDescription="目录提交审核后，会在此按目录主表的审核字段显示。"
       searchText={item => item.draft.name + ' ' + item.draft.code}
@@ -523,11 +517,11 @@ export function CatalogReviewsPage() {
         { title: '目录名称', width: 240, render: (_, item) => <NameCell name={item.draft.name} code={item.draft.code}/> },
         { title: '关联数据表', width: 220, render: (_, item) =>
           text((item.draft as unknown as Record<string, unknown>).resourceName) || item.draft.resourceId },
-        { title: '数据项', width: 100, render: (_, item) => `${item.draft.fieldIds.length} 项` },
+        { title: '数据项',key:'itemCount', width: 100, render: (_, item) => `${item.draft.fieldIds.length} 项` },
         { title: '审核状态', width: 120, render: (_, item) => <StateTag state={item.draft.state}/> },
         { title: '更新时间', width: 170, render: (_, item) => timeText(item.updatedAt) },
         { title: '操作', width: 95, fixed: 'right', align: 'center', className: 'wx-action-column', render: (_, item) =>
-          <Button type="link" onClick={() => { setEntryId(item.id); setOpinion(''); setItems([]); }}>
+          <Button type="link" onClick={() => { setEntryId(item.id); setOpinion(''); }}>
             {item.draft.state === 'PENDING_REVIEW' ? '审核' : '查看'}</Button> },
       ]}/>
     <Drawer open={!!entry} width={980} title="目录审核" onClose={() => setEntryId('')}
@@ -541,15 +535,7 @@ export function CatalogReviewsPage() {
         <p className="ps-muted">{entry.draft.code} · {text((entry.draft as unknown as Record<string, unknown>).resourceName)}</p>
         <p>{entry.draft.summary || '暂无目录描述'}</p>
         <h3 className="ps-section-title">目录数据项</h3>
-        <Table rowKey={(item, index) => item.tid || item.sourceTableColumnId || String(index)} size="small"
-          dataSource={items} pagination={{ pageSize: 10 }} scroll={{ x: 800 }} columns={[
-            { title: '名称', dataIndex: 'colName', width: 190 },
-            { title: '英文名', dataIndex: 'colEn', width: 170 },
-            { title: '类型', dataIndex: 'colType', width: 130 },
-            { title: '长度', dataIndex: 'colLength', width: 80 },
-            { title: '数据标准', dataIndex: 'dataStandardId', width: 160,
-              render: value => text(data.standards.find(item => text(item.id) === text(value))?.name) || text(value) || '—' },
-          ]}/>
+        <ReviewDirectoryItems catalogId={entry.id} standards={data.standards}/>
         {entry.draft.state === 'PENDING_REVIEW' && <Form.Item label="审核意见">
           <Input.TextArea value={opinion} maxLength={1000} showCount rows={3}
             onChange={event => setOpinion(event.target.value)} placeholder="通过可选填；退回请说明原因"/>
@@ -558,3 +544,25 @@ export function CatalogReviewsPage() {
     </Drawer>
   </>;
 }
+
+ function ReviewDirectoryItems({catalogId,standards}:{catalogId:string;standards:ReturnType<typeof useResource>['data']['standards']}) {
+   const {message}=App.useApp();
+   const [page,setPage]=useState(1),[size,setSize]=useState(20),[result,setResult]=useState<{list:DirectoryItem[];total:number}>({list:[],total:0}),[loading,setLoading]=useState(false);
+   const order=useServerSort(()=>setPage(1));
+   useEffect(()=>{let active=true;setLoading(true);
+     directoryItemsPage(catalogId,page,size,order.sort).then(value=>{if(active)setResult(value);})
+       .catch(cause=>{if(active){setResult({list:[],total:0});message.error(cause instanceof Error?cause.message:'目录数据项读取失败');}})
+       .finally(()=>{if(active)setLoading(false);});
+     return()=>{active=false;};
+   },[catalogId,page,size,order.sort.sortField,order.sort.sortDir,message]);
+   return <Table<DirectoryItem> rowKey={item=>item.tid||item.sourceTableColumnId||item.colEn} size="small" loading={loading} dataSource={result.list}
+     onChange={(_p,_f,sorter,extra)=>{if(extra.action==='sort')order.change(sorter);}}
+     pagination={{current:page,pageSize:size,total:result.total,showSizeChanger:true,pageSizeOptions:[20,50,100],onChange:(p,n)=>{setPage(p);setSize(n);}}}
+     columns={[
+       {title:'名称',dataIndex:'colName',...order.column('colName'),width:190},
+       {title:'英文名',dataIndex:'colEn',width:170},{title:'类型',dataIndex:'colType',width:130},
+       {title:'长度',dataIndex:'colLength',...order.column('colLength'),width:80},
+       {title:'数据标准',dataIndex:'dataStandardId',width:160,render:value=>text(standards.find(item=>text(item.id)===text(value))?.name)||text(value)||'—'},
+     ]}/>;
+ }
+ 

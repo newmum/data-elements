@@ -95,9 +95,9 @@
         </json-form>
 
         <div v-else class="org-users-panel">
-          <el-table v-loading="orgUsersLoading" :data="orgUsers" class="w-full">
+          <el-table v-loading="orgUsersLoading" :data="orgUsers" class="w-full" @sort-change="sortOrgUsers">
             <el-table-column type="index" label="序号" width="70" align="center" />
-            <el-table-column prop="userName" label="用户账号" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="userName" sortable="custom" label="用户账号" min-width="130" show-overflow-tooltip />
             <el-table-column prop="realName" label="姓名" min-width="110" show-overflow-tooltip />
             <el-table-column prop="phone" label="手机号" min-width="130" />
             <el-table-column prop="roleNames" label="角色" min-width="150" show-overflow-tooltip>
@@ -111,6 +111,7 @@
               </template>
             </el-table-column>
           </el-table>
+          <el-pagination v-model:current-page="orgUserPage" v-model:page-size="orgUserSize" :total="orgUserTotal" :page-sizes="[20,50,100]" layout="total, sizes, prev, pager, next" @current-change="loadOrgUsers" @size-change="()=>{orgUserPage=1;loadOrgUsers();}"/>
         </div>
       </div>
       <template #footer>
@@ -125,7 +126,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, ref, nextTick } from "vue";
+import { computed, ref, nextTick, watch } from "vue";
 import { Search } from "@element-plus/icons-vue";
 import { FormUtils } from "@/utils/form";
 import { VueDraggable } from "vue-draggable-plus";
@@ -146,6 +147,10 @@ const drawerVisible = ref(false);
 const formData = ref({});
 const drawerTab = ref<"info" | "users">("info");
 const orgUsers = ref<any[]>([]);
+const orgUserPage=ref(1),orgUserSize=ref(20),orgUserTotal=ref(0);
+const orgUserSort=ref<{sortField?:string;sortDir?:'asc'|'desc'}>({});
+let orgUserRequest=0;
+const sortOrgUsers=({prop,order}:any)=>{orgUserSort.value=order?{sortField:prop,sortDir:order==='ascending'?'asc':'desc'}:{};orgUserPage.value=1;loadOrgUsers();};
 const orgUsersLoading = ref(false);
 const dataTableRef = ref<any>();
 const formRef = ref<any>();
@@ -209,22 +214,26 @@ const loadOrgUsers = async () => {
     orgUsers.value = [];
     return;
   }
+  const request=++orgUserRequest;
   try {
     orgUsersLoading.value = true;
     const result = await $common.post(API.USER_PAGE, {
-      pageNum: 1,
-      pageSize: 200,
+      pageNum: orgUserPage.value,
+      pageSize: orgUserSize.value,...orgUserSort.value,
       orgId: formData.value.id,
     });
-    orgUsers.value = result?.list || [];
+    if(request!==orgUserRequest)return;orgUsers.value = result?.list || [];orgUserTotal.value=Number(result?.total||0);
   } catch (error) {
+    if(request!==orgUserRequest)return;
     console.error("获取机构用户失败:", error);
     $message.error("获取机构用户失败");
     orgUsers.value = [];
   } finally {
-    orgUsersLoading.value = false;
+    if(request===orgUserRequest)orgUsersLoading.value = false;
   }
 };
+
+watch(()=>formData.value?.id,()=>{orgUserRequest++;orgUserPage.value=1;orgUsers.value=[];orgUserTotal.value=0;});
 
 const handleDrawerTabChange = (tab: string | number) => {
   if (tab === "users") loadOrgUsers();
@@ -736,9 +745,9 @@ const fetchOrgList = async (params?: { name?: string }) => {
 };
 
 // 获取数据函数（供 DataTable 调用）
-const fetchData = async (params: { pageNo: number; pageSize: number }) => {
+const fetchData = async (params: { pageNo: number; pageSize: number;sortField?:string;sortDir?:string }) => {
   // 构建请求参数
-  const queryParams: any = {};
+  const queryParams: any = {sortField:params.sortField,sortDir:params.sortDir};
   if (searchKeyword.value) {
     queryParams.name = searchKeyword.value;
   }

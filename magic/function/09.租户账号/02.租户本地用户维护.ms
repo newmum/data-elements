@@ -25,6 +25,11 @@
   "description": "复用租户本地用户的查询、保存及状态规则，读写本地账号资料而不修改控制库统一认证账号。"
 }
 ================================
+
+import tableSort
+var sortColumn = tableSort.field(payload, {'userName': 'u.user_name', 'realName': 'u.real_name', 'createTime': 'u.create_time', 'updateTime': 'u.update_time'}, 'createTime')
+var sortDirection = tableSort.direction(payload)
+
 // 共享函数：02.租户本地用户维护
 // 函数路径：/tenant-account/users
 // 业务说明：复用租户本地用户的查询、保存及状态规则，读写本地账号资料而不修改控制库统一认证账号。
@@ -55,7 +60,7 @@ select u.id,u.real_name as "realName",u.user_name as "userName",u.phone,u.gender
        u.update_time as "updateTime", u.id_card as "idCard",u.date_birth as "dateBirth",u.nation,
        u.office_address as "officeAddress",u.job_number as "jobNumber", u.authorized_strength as "authorizedStrength",
        u.origin_position as "originPosition",u.origin_rank as "originRank"
-"""+where+` order by u.create_time,u.id limit #{size} offset #{offset}`);
+"""+where+` order by ${sortColumn} ${sortDirection},u.id asc limit #{size} offset #{offset}`);
  return operation=='list'?rows:{list:rows,total:total,pageNum:page,pageSize:size};
 }
 var id=text(p.id);var creating=id=='';if(creating) {id=IdUtil.getSnowflakeNextIdStr();}

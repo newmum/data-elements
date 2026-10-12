@@ -1,3 +1,4 @@
+import { useServerSort } from '../../components/serverSort';
 import { Alert, Button, Descriptions, Drawer, Select, Space } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import PageHero from '../../components/PageHero';
@@ -32,16 +33,17 @@ export default function InventoryStatementsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  const serverSort=useServerSort(()=>setPage(1));
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const backendStatus = ({ MATCH: 'CONSISTENT', DIFFERENT: 'INCONSISTENT', BLOCKED: 'FAILED' } as Record<string, string>)[filter] || '';
-      const result = await reconciliationLive.runs(page, size, backendStatus);
+      const result = await reconciliationLive.runs(page, size, backendStatus,'',serverSort.sort);
       setRecords(result.list); setTotal(result.total); setError('');
     } catch (cause) {
       setRecords([]); setTotal(0); setError(cause instanceof Error ? cause.message : String(cause));
     } finally { setLoading(false); }
-  }, [filter, page, size]);
+  }, [filter, page, size, serverSort.sort]);
   useEffect(() => { void load(); }, [load]);
 
   const openDetail = async (run: ReconcileRun) => {
@@ -89,7 +91,7 @@ export default function InventoryStatementsPage() {
     <InsightStrip items={[{label:'执行记录',value:total,icon:'statements',hint:'来自后端执行实例'},{label:'结果一致',value:consistent,icon:'check',hint:'当前页一致的实例',tone:'cyan'},{label:'存在差异 / 阻断',value:different,icon:'warning',hint:'当前页差异或失败的实例',tone:'amber'}]}/>
     {error && <Alert type="error" showIcon message={error} action={<Button size="small" onClick={()=>void load()}>重试</Button>}/>}
     <Panel><div className="ht-toolbar"><Select value={filter} onChange={value=>{setPage(1);setFilter(value);}} style={{width:170}} options={[{value:'ALL',label:'全部结果'},{value:'MATCH',label:'一致'},{value:'DIFFERENT',label:'有差异'},{value:'BLOCKED',label:'配对阻断'}]}/><span className="helper">历史结果保存执行时的策略快照，不随策略编辑改变。</span></div>
-      <DataTable<ReconcileRun> rowKey="tid" loading={loading} dataSource={records} pagination={{current:page,pageSize:size,total,showSizeChanger:true,pageSizeOptions:[10,20,50,100],showTotal:n=>`共 ${n} 条记录`}} onChange={pagination=>{setPage(pagination.current||1);setSize(pagination.pageSize||10);}} columns={[{title:'盘点策略 / 版本',width:245,render:(_,run)=><div className="entity-name"><button className="text-link strong" onClick={()=>void openDetail(run)}>{str(run,'policy_name','policyName')||'对账策略'}</button><small>{run.tid.slice(-8)}</small></div>},{title:'来源条数',width:104,render:(_,run)=>num(run,'source_count','sourceCount')},{title:'目标条数',width:104,render:(_,run)=>num(run,'target_count','targetCount')},{title:'比较结果',width:120,render:(_,run)=><StateTag state={displayStatus(run)}/>},{title:'差异项数',width:95,render:(_,run)=>num(run,'diff_count','diffCount')},{title:'创建时间',width:180,render:(_,run)=>formatTime(str(run,'created_time','createdTime'))},{title:'操作',fixed:'right',width:110,render:(_,run)=><Button type="link" onClick={()=>void openDetail(run)}>差异详情</Button>}]}/></Panel>
+      <DataTable<ReconcileRun> serverSort={serverSort} rowKey="tid" loading={loading} dataSource={records} pagination={{current:page,pageSize:size,total,showSizeChanger:true,pageSizeOptions:[10,20,50,100],showTotal:n=>`共 ${n} 条记录`}} onChange={pagination=>{setPage(pagination.current||1);setSize(pagination.pageSize||10);}} columns={[{title:'盘点策略 / 版本',key:'policyName',sorter:true,width:245,render:(_,run)=><div className="entity-name"><button className="text-link strong" onClick={()=>void openDetail(run)}>{str(run,'policy_name','policyName')||'对账策略'}</button><small>{run.tid.slice(-8)}</small></div>},{title:'来源条数',key:'source_count',sorter:true,width:104,render:(_,run)=>num(run,'source_count','sourceCount')},{title:'目标条数',key:'target_count',sorter:true,width:104,render:(_,run)=>num(run,'target_count','targetCount')},{title:'比较结果',width:120,render:(_,run)=><StateTag state={displayStatus(run)}/>},{title:'差异项数',key:'diff_count',sorter:true,width:95,render:(_,run)=>num(run,'diff_count','diffCount')},{title:'创建时间',key:'created_time',sorter:true,width:180,render:(_,run)=>formatTime(str(run,'created_time','createdTime'))},{title:'操作',fixed:'right',width:110,render:(_,run)=><Button type="link" onClick={()=>void openDetail(run)}>差异详情</Button>}]}/></Panel>
     <Drawer width={980} open={!!detail} onClose={()=>setDetail(undefined)} title="盘点记录 · 差异明细" extra={<Space><Button icon={<Icon name="download" size={17}/>} onClick={()=>void exportDiff(true)} loading={exporting} disabled={!detail||diffTotal===0}>完整 CSV</Button><Button onClick={()=>void exportDiff(false)} loading={exporting} disabled={!detail||diffTotal===0}>完整 JSON</Button></Space>}>
       {detail && <><Descriptions column={2} items={[{key:'name',label:'策略',children:str(detail,'policy_name','policyName')},{key:'rev',label:'执行实例',children:detail.tid},{key:'date',label:'执行时间',children:formatTime(str(detail,'created_time','createdTime'))},{key:'state',label:'结果',children:<StateTag state={displayStatus(detail)}/>},{key:'mode',label:'比较口径',children:str(detail,'compare_mode','compareMode')},{key:'keys',label:'触发方式',children:str(detail,'trigger_type','triggerType')},{key:'window',label:'时间窗口',children:`${str(detail,'lower_watermark','lowerWatermark') || '起始'} 至 ${str(detail,'upper_watermark','upperWatermark') || '结束'}`},{key:'rows',label:'来源 / 目标',children:`${num(detail,'source_count','sourceCount')} / ${num(detail,'target_count','targetCount')}`}]} />
         {detailError && <Alert type="error" showIcon message={detailError}/>}

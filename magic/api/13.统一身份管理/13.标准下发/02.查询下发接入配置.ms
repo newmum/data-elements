@@ -24,6 +24,7 @@
 // 路由：GET /idaas/provision/configs
 // 业务说明：读取指定应用的接收地址、认证方式和启用状态；对接入凭据脱敏，不主动连接租户。
 import db;
+import tableSort;
 import identityTransport;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
@@ -38,7 +39,7 @@ import '@/idaas/api-call' as apiCall;
 
 return identityRuntime.control(()=>apiCall(()=>{
     var payload={};
-    for(key in ['appId','configId','id']) {
+    for(key in ['appId','configId','id','page','size','paged','sortField','sortDir']) {
         var input=request.getValues(key);
         if(input!=null && input.size()>0) {
             payload.put(key,input[0]);
@@ -63,11 +64,25 @@ where tid=#{id}
     var ctx=operation=='configs' || operation=='options'?listContext(permission,appId,'workforce'):guard(permission,appId,'workforce');
     var visible=x=>ctx.pairs.filter(pair=>pair.codes.contains(permission) && pair.scopes.filter(s=>s.identity_domain=='workforce' && (s.scope_kind=='ALL' || s.scope_kind=='APPLICATION' && s.app_id==x)).size()>0).size()>0;
     if(operation=='configs') {
-        var configs=sql.select("""
-select *,tid as id
-from iam_sync_config_t
-where is_del=0
-""").filter(x=>visible(x.app_id));
+    var scopes=[];
+    for(pair in ctx.pairs) {
+        if(pair.codes.contains(permission)) {scopes.addAll(pair.scopes.filter(s=>s.identity_domain=='workforce'));}
+    }
+    var allScope=scopes.filter(s=>s.scope_kind=='ALL').size()>0;
+    var scopedAppIds=scopes.filter(s=>s.scope_kind=='APPLICATION').map(s=>s.app_id).distinct();
+    var scopeSql=allScope?'':scopedAppIds.size()==0?' AND 1=0':' AND t.app_id IN (#{scopedAppIds})';
+    if(p.appId!=null) {scopeSql=scopeSql+' AND t.app_id=#{p.appId}';}
+
+        var paged=p.paged=='true';
+        var page=Math.max(1,p.page::int(1));
+        var size=paged?Math.min(100,Math.max(1,p.size::int(20))):1001;
+        var offset=paged?(page-1)*size:0;
+        var field=tableSort.field(p,{name:'t.display_name'},'name');
+        var direction=tableSort.direction(p);
+        var filter=' FROM iam_sync_config_t t JOIN iam_application_t a ON a.tid=t.app_id AND a.kind=\'BUSINESS\' AND a.is_del=0 WHERE t.is_del=0'+scopeSql;
+        var total=sql.selectOne('SELECT COUNT(*) total'+filter).total;
+        if(!paged && total>1000) {exit 400,'接收配置超过 1000 项，请使用分页查询';}
+        var configs=sql.select('SELECT t.*,t.tid AS id'+filter+' ORDER BY '+field+' '+direction+',t.tid ASC LIMIT #{size} OFFSET #{offset}');
         var configIds=configs.map(x=>x.id);
         var keys=configIds.size()==0?[]:sql.select("""
 select owner_id,public_data
@@ -77,13 +92,14 @@ where owner_kind='SYNC_CONFIG'
     and credential_type='HMAC_KEY'
     and status='ACTIVE'
 """);
-        return configs.map(x=>{
+        var rows=configs.map(x=>{
             var matches=keys.filter(key=>key.owner_id==x.id);
             var key=matches.size()==0?null:matches[0];
             return {
                 id:x.id,appId:x.app_id,targetTenantId:x.app_id,name:x.display_name,endpoint:x.endpoint,receiverInstanceId:x.receiver_instance_id,enabled:x.enabled==1,timeout:x.timeout_seconds,version:x.version,keyId:key==null?'':JSONUtil.parseObj(key.public_data).keyId,hasSecret:key!=null,lastTestResult:x.last_test_result,protocol:x.protocol_version,mappingMode:x.mapping_json==null?'':JSONUtil.parseObj(x.mapping_json).getStr('mode')
             };
         });
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     if(old==null && operation!='save-config') {
         exit 404,'接收配置不存在';

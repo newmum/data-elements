@@ -27,8 +27,9 @@ import {
   notifyCanvasContentError,
   notifyCanvasContentReady,
 } from '@/api/iframeBridge';
-import { fetchPipelineTemplate, fetchAccessTaskDetail, fetchPipelineById } from '@/api/pipelines';
+import { fetchPipelineTemplate, fetchTaskChain, fetchPipelineById } from '@/api/pipelines';
 import { getSessionRevision } from '@/api/bridgeSession';
+import { useTaskChainStore } from '../stores/taskChainStore';
 
 // These tools are only needed after the canvas is interactive. Keep their
 // editors, CodeMirror languages and metadata forms out of the first paint.
@@ -46,6 +47,7 @@ export default function EditorPage() {
   const loadDsl = useCanvasStore((s) => s.loadDsl);
   const setCurrentPipeline = useCanvasStore((s) => s.setCurrentPipeline);
   const setPendingAutoRecommend = useCanvasStore((s) => s.setPendingAutoRecommend);
+  const setChain = useTaskChainStore((s) => s.setChain);
   const drawerNodeId = useCanvasStore((s) => s.drawerNodeId);
   const errorPanelVisible = useErrorPanelStore((s) => s.visible);
   const lineageNodeId = useLineageStore((s) => s.nodeId);
@@ -68,54 +70,43 @@ export default function EditorPage() {
     const revision = getSessionRevision();
     let active = true;
     const isCurrent = () => active && revision === getSessionRevision();
-    const loadPipeline = (id: string) => queryClient.fetchQuery({
-      queryKey: ['pipeline', id, revision],
-      queryFn: () => fetchPipelineById(id),
-      staleTime: 5_000,
-    });
-    const loadAccessTask = (id: string) => queryClient.fetchQuery({
-      queryKey: ['access-task-detail', id, revision],
-      queryFn: () => fetchAccessTaskDetail(id),
+    const loadChain = () => queryClient.fetchQuery({
+      queryKey: ['task-chain', hasAccessTask ? accessTaskId : pipelineId, revision],
+      queryFn: async () => {
+        try { return await fetchTaskChain(hasAccessTask ? { accessTaskId } : { pipelineId: pipelineId! }); }
+        catch (error: any) {
+          // Generic independent flows have no access-task relationship; keep their single canvas.
+          if (hasAccessTask || !pipelineId || error?.response?.status !== 404) throw error;
+          const pipeline = await fetchPipelineById(pipelineId);
+          return { rootSourceTableId: '', selectedPipelineId: pipeline.id, links: [], nativeCanvas: { mode: 'NONE' as const },
+            items: [{ taskId: '', taskName: pipeline.name, sourceTableId: '', sourceDbId: '', sourceDbName: '', sourceTableName: '', pipeline }] };
+        }
+      },
       staleTime: 5_000,
     });
 
-    if (pipelineId) {
-      loadPipeline(pipelineId)
-        .then((pipeline) => {
+    if (pipelineId || hasAccessTask) {
+      // Related task designs arrive in one authorized read. Never load a pipeline per lane.
+      loadChain()
+        .then((chain) => {
           if (!isCurrent()) return;
-          loadDsl(arrangeLegacyGeneratedPipelineLayout(normalizeCanvasDsl(pipeline?.dsl)));
-          setCurrentPipeline(pipeline.id, pipeline.name);
-          message.success('已加载当前租户的集成任务设计');
-        })
-        .catch((e: any) => {
-          if (!isCurrent()) return;
-          const errorMessage = e?.response?.data?.detail ?? e?.response?.data?.error ?? e?.message ?? '画布数据加载失败';
-          message.error('画布数据加载失败，请刷新重试');
-          notifyCanvasContentError(String(errorMessage));
-        })
-        .finally(() => { if (isCurrent()) setCanvasDataLoading(false); });
-    } else if (hasAccessTask) {
-      // 已配置场景：先查任务详情拿到 pipelineId，再加载画布
-      loadAccessTask(accessTaskId)
-        .then((res) => {
-          if (!isCurrent()) return;
-          // The task API is deployed against both camelCase and snake_case mappings.
-          // Prefer the normalized field while accepting an unchanged legacy response.
-          const pipelineId = String(res.data?.pipelineId ?? res.data?.pipeline_id ?? '').trim();
-          if (!pipelineId) {
-            throw new Error('接入任务尚未关联流程，无法读取画布数据');
+          if (!Array.isArray(chain?.items) || !chain.items.length || chain.items.length > 100) {
+            throw new Error('任务链路返回格式无效或超过100项，请刷新重试');
           }
-          return loadPipeline(pipelineId).then((pipeline) => {
-            if (!isCurrent()) return;
-            loadDsl(arrangeLegacyGeneratedPipelineLayout(normalizeCanvasDsl(pipeline?.dsl)));
-            setCurrentPipeline(pipeline.id, pipeline.name);
-            message.success('画布数据加载成功');
+          const normalized = { ...chain, items: chain.items.map(item => ({ ...item,
+            pipeline: { ...item.pipeline, dsl: arrangeLegacyGeneratedPipelineLayout(normalizeCanvasDsl(item.pipeline.dsl)) } })) };
+          const selected = normalized.items.find(item => item.pipeline.id === chain.selectedPipelineId);
+          if (!selected) throw new Error('任务链路缺少当前流程，请刷新重试');
+          setChain(normalized);
+          normalized.items.forEach(item => {
+            queryClient.setQueryData(['pipeline', item.pipeline.id, revision], item.pipeline);
           });
+          loadDsl(selected.pipeline.dsl);
+          setCurrentPipeline(selected.pipeline.id, selected.pipeline.name);
         })
         .catch((e: any) => {
           if (!isCurrent()) return;
           const errorMessage = e?.response?.data?.error ?? e?.message ?? '画布数据加载失败';
-          console.warn('画布回填失败:', errorMessage);
           message.error('画布数据加载失败，请刷新重试');
           notifyCanvasContentError(String(errorMessage));
         })
@@ -161,7 +152,7 @@ export default function EditorPage() {
         });
     }
     return () => { active = false; fetchStartedRef.current = false; };
-  }, [loadDsl, setCurrentPipeline, message, queryClient]);
+  }, [loadDsl, setCurrentPipeline, setChain, message, queryClient]);
 
   useEffect(() => {
     if (!manifestQuery.isLoading && !canvasDataLoading && !manifestQuery.isError) {
@@ -242,8 +233,8 @@ export default function EditorPage() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--canvas-bg)' }}>
       <Toolbar />
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <Canvas />
+      <div className="canvas-workarea">
+        <div className="canvas-workarea__graph"><Canvas /></div>
         <Suspense fallback={null}>{drawerNodeId && <ConfigDrawer />}</Suspense>
         <Suspense fallback={null}>{errorPanelVisible && <ErrorPanel />}</Suspense>
         <Suspense fallback={null}>{lineageNodeId && <LineageModal />}</Suspense>

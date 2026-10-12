@@ -18,6 +18,7 @@
 // 接口：01.数据同步节点列表
 // 路由：POST /ods/nifi-node/page
 // 业务说明：数据同步节点列表（POST /ods/nifi-node/page）。读取当前登录租户的 nifi_node_t，仅返回本租户未删除节点；使用请求参数 keyword。
+import tableSort
 import tenantRuntime
 
 var text = value => value == null ? '' : value + ''
@@ -44,7 +45,8 @@ if (root != null) {
 }
 
 var rows = db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('is_del', 0)
-    .orderBy('is_default', 'desc').orderBy('updated_time', 'desc').select()
+    .orderBy('is_default', 'desc').orderBy('updated_time', 'desc').limit(1001).select()
+if(rows.size()>1000) {exit 422,'节点超过1000项，请使用节点分页查询';}
 var list = []
 for (row in (rows == null ? [] : rows)) {
     var nodeName = row.nodeName == null ? row.node_name : row.nodeName
@@ -79,4 +81,5 @@ for (row in (rows == null ? [] : rows)) {
         updatedTime: row.updatedTime == null ? row.updated_time : row.updatedTime
     })
 }
+list=tableSort.rows(list,body,{name:'nodeName',nodeName:'nodeName',updatedTime:'updatedTime'},'updatedTime','tid')
 return { list: list, total: list.size() }

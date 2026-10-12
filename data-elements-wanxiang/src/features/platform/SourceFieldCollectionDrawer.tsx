@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { useServerSort } from '../../shared/serverSort';
 import { Alert, App, Button, Drawer, Input, Progress, Space, Table, Tag } from 'antd';
 import type { Row } from '../../services/api';
 import { collectTableFields, sourceTablesPage, type SourceTablePage } from '../../services/datasources';
-import { catalogTableColumns, invalidateMetadata } from '../../services/metadata';
+import { catalogColumnsPage,catalogColumnsBatch, invalidateMetadata } from '../../services/metadata';
 import { diffFieldSnapshots, type FieldSnapshotDiff } from '../../services/fieldSnapshotDiff';
 import { objectKindLabel } from '../../shared/sourcePresentation';
 
@@ -24,6 +25,8 @@ export function SourceFieldCollectionDrawer({ source, onClose, onComplete }: { s
   const [currentFields, setCurrentFields] = useState<Row[]>([]), [fieldsLoading, setFieldsLoading] = useState(false), [fieldsError, setFieldsError] = useState('');
   const stop = useRef(false), lock = useRef(false), generation = useRef(0), resultRef = useRef<Record<string, TableResult>>({});
   const { message } = App.useApp();
+  const [fieldPage,setFieldPage]=useState(1),[fieldSize,setFieldSize]=useState(20),[fieldTotal,setFieldTotal]=useState(0);
+  const tableOrder=useServerSort(()=>setPageNo(1)),fieldOrder=useServerSort(()=>setFieldPage(1));
 
   useEffect(() => {
     generation.current++; stop.current = true; resultRef.current = {};
@@ -35,21 +38,21 @@ export function SourceFieldCollectionDrawer({ source, onClose, onComplete }: { s
     if (!source) return;
     let live = true;
     setLoading(true); setLoadError('');
-    void sourceTablesPage(String(source.id), pageNo, pageSize, keyword).then(value => { if (live) { setPage(value); if (!keyword) setSavedTotal(value.total); } })
+    void sourceTablesPage(String(source.id), pageNo, pageSize, keyword,tableOrder.sort).then(value => { if (live) { setPage(value); if (!keyword) setSavedTotal(value.total); } })
       .catch(cause => { if (live) setLoadError(errorText(cause)); })
       .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [source?.id, pageNo, pageSize, keyword, revision]);
+  }, [source?.id, pageNo, pageSize, keyword, revision,tableOrder.sort.sortField,tableOrder.sort.sortDir]);
 
   useEffect(() => {
     if (!selected) { setCurrentFields([]); setFieldsError(''); return; }
     let live = true;
     setCurrentFields([]); setFieldsLoading(true); setFieldsError('');
-    void catalogTableColumns(selected.id).then(rows => { if (live) setCurrentFields(rows); })
+    void catalogColumnsPage(selected.id,fieldPage,fieldSize,fieldOrder.sort).then(value => { if (live) {setCurrentFields(value.list);setFieldTotal(value.total);} })
       .catch(cause => { if (live) setFieldsError(errorText(cause)); })
       .finally(() => { if (live) setFieldsLoading(false); });
     return () => { live = false; };
-  }, [selected?.id, results[selected?.id || '']?.status]);
+  }, [selected?.id, results[selected?.id || '']?.status,fieldPage,fieldSize,fieldOrder.sort.sortField,fieldOrder.sort.sortDir]);
 
   const collect = async () => {
     if (!source || lock.current || !savedTotal) return;
@@ -65,26 +68,34 @@ export function SourceFieldCollectionDrawer({ source, onClose, onComplete }: { s
         const batch = await sourceTablesPage(sourceId, batchPage, 30);
         total = batch.total;
         if (!batch.rows.length) break;
+        const beforeRows=await catalogColumnsBatch(batch.rows.map(row=>row.id));
+        const completed:Array<{table:Row;before:Row[]}>=[];
         let next = 0;
         const worker = async () => {
           while (!stop.current && valid() && next < batch.rows.length) {
             const table = batch.rows[next++];
             if (resultRef.current[table.id]?.status === 'done') continue;
-            let result: TableResult;
-            let before = resultRef.current[table.id]?.snapshotBefore;
+            const before=resultRef.current[table.id]?.snapshotBefore||beforeRows[table.id];
             try {
-              before ??= await catalogTableColumns(table.id);
               await collectTableFields(table.id, true);
-              const after = await catalogTableColumns(table.id);
-              result = { status: 'done', diff: diffFieldSnapshots(before, after) };
-            } catch (cause) { result = { status: 'failed', error: errorText(cause), snapshotBefore: before }; }
-            if (!valid()) return;
-            resultRef.current[table.id] = result;
-            done = Object.keys(resultRef.current).length; setProgress({ done, total });
-            if (done % 10 === 0 || done === total) setResults({ ...resultRef.current });
+              if (!valid()) return;
+              completed.push({table,before});
+            } catch (cause) {
+              if (!valid()) return;
+              resultRef.current[table.id]={status:'failed',error:errorText(cause),snapshotBefore:before};
+            }
           }
         };
         await Promise.all([worker(), worker()]);
+        if(valid()&&completed.length){
+          try {
+            const afterRows=await catalogColumnsBatch(completed.map(row=>row.table.id));
+            if(valid())for(const entry of completed)resultRef.current[entry.table.id]={status:'done',diff:diffFieldSnapshots(entry.before,afterRows[entry.table.id])};
+          } catch(cause) {
+            if(valid())for(const entry of completed)resultRef.current[entry.table.id]={status:'failed',error:errorText(cause),snapshotBefore:entry.before};
+          }
+        }
+        done=Object.keys(resultRef.current).length;setProgress({done,total});
         if (valid()) setResults({ ...resultRef.current });
         if (batchPage * 30 >= total) break;
         batchPage++;
@@ -119,12 +130,12 @@ export function SourceFieldCollectionDrawer({ source, onClose, onComplete }: { s
     {runError && <Alert type="error" showIcon title="字段采集中断" description={runError} className="mb16"/>}
     {loadError && <Alert type="error" showIcon title="读取已保存表失败" description={loadError} action={<Button onClick={() => setRevision(n => n + 1)}>重试</Button>} className="mb16"/>}
     <div className="wx-field-collection-toolbar"><strong>已保存表的字段情况</strong><Input.Search allowClear placeholder="搜索表名或说明" onSearch={value => { setKeyword(value.trim()); setPageNo(1); }} style={{ width: 260 }}/></div>
-    <Table<Row> rowKey="id" size="middle" loading={loading} dataSource={page.rows} scroll={{ x: 730 }} pagination={{ current: pageNo, pageSize, total: page.total, showSizeChanger: true, pageSizeOptions: [15, 30, 50], showTotal: count => `共 ${count} 张表`, onChange: (next, size) => { setPageNo(size !== pageSize ? 1 : next); setPageSize(size); } }} columns={[
-      { title: '表 / 视图', dataIndex: 'displayName', sorter: (a,b) => String(a.displayName || a.name || '').localeCompare(String(b.displayName || b.name || ''),'zh-CN',{numeric:true}), showSorterTooltip: { title: '仅对当前页排序' }, render: (_, row) => <span className="wx-cell-stack"><b>{row.displayName || row.name}</b><small>{row.name}</small></span> },
+    <Table<Row> rowKey="id" size="middle" loading={loading} dataSource={page.rows} onChange={(_p,_f,sorter,extra)=>{if(extra.action==='sort')tableOrder.change(sorter);}} scroll={{ x: 730 }} pagination={{ current: pageNo, pageSize, total: page.total, showSizeChanger: true, pageSizeOptions: [15, 30, 50], showTotal: count => `共 ${count} 张表`, onChange: (next, size) => { setPageNo(size !== pageSize ? 1 : next); setPageSize(size); } }} columns={[
+      { title: '表 / 视图', dataIndex: 'displayName', ...tableOrder.column('name'), showSorterTooltip:{title:'按全部符合条件的表排序'}, render: (_, row) => <span className="wx-cell-stack"><b>{row.displayName || row.name}</b><small>{row.name}</small></span> },
       { title: '类型', dataIndex: 'kind', width: 90, render: objectKindLabel },
-      { title: '已存字段', dataIndex: 'fieldCount', width: 95, align: 'right' },
+      { title: '已存字段', dataIndex: 'fieldCount', ...tableOrder.column('fieldCount'), width: 95, align: 'right' },
       { title: '本次结果', width: 205, render: (_, row) => { const result = results[row.id]; if (!result) return <span className="muted">待采集</span>; if (result.status === 'failed') return <Tag color="error">失败</Tag>; const diff = result.diff!; return diff.added.length || diff.removed.length || diff.modified.length ? <Space size={3}><Tag color="success">+{diff.added.length}</Tag><Tag color="warning">−{diff.removed.length}</Tag><Tag color="processing">变更 {diff.modified.length}</Tag></Space> : <Tag color="default">无变化</Tag>; } },
-      { title: '详情', width: 80, render: (_, row) => results[row.id] ? <Button type="link" onClick={() => setSelected(row)}>查看</Button> : '—' },
+      { title: '详情', width: 80, render: (_, row) => results[row.id] ? <Button type="link" onClick={() => {setFieldPage(1);setSelected(row);}}>查看</Button> : '—' },
     ]}/>
     <p className="wx-field-collection-note">字段名变化会显示为“旧字段不再存在 + 新字段”，无法仅凭名称判定为重命名。失败的表未计入字段差异；再次采集可重试。</p>
     <Drawer open={!!selected} width={620} title={(selected?.displayName || selected?.name || '') + ' · 字段变化'} onClose={() => setSelected(null)}>
@@ -132,7 +143,7 @@ export function SourceFieldCollectionDrawer({ source, onClose, onComplete }: { s
         <p>采集前 {selectedResult.diff.beforeCount} 个字段，采集后 {selectedResult.diff.afterCount} 个字段。</p>
         {([['新增字段', selectedResult.diff.added], ['不再存在', selectedResult.diff.removed], ['属性变化', selectedResult.diff.modified]] as const).map(([title, items]) => <section className="wx-field-diff-section" key={title}><h3>{title} · {items.length}</h3>{items.length ? items.map(item => <div key={item.name}><b>{item.name}</b>{item.changed?.length ? item.changed.map(change => <span key={change.label}>{change.label}：{change.before || '空'} → {change.after || '空'}</span>) : <small>{String(item.after?.column_type || item.after?.data_type || item.before?.column_type || item.before?.data_type || '—')}</small>}</div>) : <p className="muted">无</p>}</section>)}
       </>}
-      <section className="wx-field-current-section"><h3>当前保存的字段 · {currentFields.length}</h3>{fieldsError && <Alert type="error" showIcon title="读取当前字段失败" description={fieldsError}/>}<Table<Row> rowKey={row => String(row.tid || row.column_name)} size="small" loading={fieldsLoading} dataSource={currentFields} pagination={{ pageSize: 15, showSizeChanger: false }} columns={[{ title: '字段名', dataIndex: 'column_name', sorter: (a:Row,b:Row) => String(a.column_name||'').localeCompare(String(b.column_name||''),'zh-CN',{numeric:true}) }, { title: '类型', render: (_, row) => row.column_type || row.data_type || '—' }, { title: '可空', render: (_, row) => row.nullable == null ? '未知' : ['0', 0, false].includes(row.nullable) ? '否' : '是' }, { title: '说明', dataIndex: 'column_comment' }]}/></section>
+      <section className="wx-field-current-section"><h3>当前保存的字段 · {fieldTotal}</h3>{fieldsError && <Alert type="error" showIcon title="读取当前字段失败" description={fieldsError}/>}<Table<Row> rowKey={row => String(row.tid || row.column_name)} size="small" loading={fieldsLoading} dataSource={currentFields} onChange={(_p,_f,sorter,extra)=>{if(extra.action==='sort')fieldOrder.change(sorter);}} pagination={{current:fieldPage,pageSize:fieldSize,total:fieldTotal,showSizeChanger:true,pageSizeOptions:[20,50,100],onChange:(p,n)=>{setFieldPage(n===fieldSize?p:1);setFieldSize(n);}}} columns={[{ title: '字段名', dataIndex: 'column_name', ...fieldOrder.column('column_name') }, { title: '类型', render: (_, row) => row.column_type || row.data_type || '—' }, { title: '可空', render: (_, row) => row.nullable == null ? '未知' : ['0', 0, false].includes(row.nullable) ? '否' : '是' }, { title: '说明', dataIndex: 'column_comment' }]}/></section>
     </Drawer>
   </Drawer>;
 }

@@ -24,6 +24,7 @@
   "responseBodyDefinition": null
 }
 ================================
+
 // 接口：01.角色分页
 // 路由：POST /sym/role/page
 // 业务说明：角色分页查询（含关联用户数、权限数、用户ID列表）；使用请求参数 appId、pageNum、pageSize、name、codeNum、ids；涉及 rm_role_t、rm_user_role_rela_t、rm_user_t 等业务表。
@@ -55,8 +56,8 @@ try {
 
 // ==================== 从 body 获取查询参数 ====================
 var appId    = body?.appId || tenantAccounts.session().get("appId");
-var pageNum  = (body?.pageNum || 1).asInt();
-var pageSize = (body?.pageSize || 10).asInt();
+var pageNum  = Math.max(1,(body?.pageNum || 1).asInt());
+var pageSize = Math.min(100,Math.max(1,(body?.pageSize || 10).asInt()));
 var name     = body?.name;      // POST body 字段需通过 body?. 获取
 var codeNum  = body?.codeNum;
 var ids      = body?.ids;
@@ -84,100 +85,41 @@ if (name != null && name != "") {
     result = result.like("name", "%" + name + "%");
 }
 
-// ==================== 分页查询 ====================
-var roleList = result.orderBy("sort_num")
-                     .page(limit, offset);
+// Count aggregates participate in ORDER BY before the page is selected.
+import tableSort
+var tenantId = tenantRuntime.id()
+var sortColumn = tableSort.field(body, {
+    name:'r.name', createTime:'r.create_time', userCount:'coalesce(uc.total,0)',
+    permCount:'coalesce(pc.total,0)', sortNum:'r.sort_num'
+}, 'sortNum')
+var sortDirection = body?.sortField == null ? 'asc' : tableSort.direction(body)
+var filterSql = ' WHERE r.tenant_id=#{tenantId} AND r.deleted=0 AND r.app_id=#{appId}'
+if (ids != null && ids != '') { filterSql = filterSql + ' AND r.id IN (#{idList})' }
+if (name != null && name != '') { var roleNamePattern='%'+name+'%'; filterSql=filterSql+' AND r.name LIKE #{roleNamePattern}' }
+if (codeNum != null && codeNum != '') { var roleCodePattern='%'+codeNum+'%'; filterSql=filterSql+' AND r.code_num LIKE #{roleCodePattern}' }
+var roleList = db.page("""
+SELECT r.*,COALESCE(uc.total,0) AS userCount,COALESCE(pc.total,0) AS permCount
+FROM rm_role_t r
+LEFT JOIN (SELECT rel.role_id,COUNT(DISTINCT rel.user_id) total
+           FROM rm_user_role_rela_t rel JOIN rm_user_t u ON u.id=rel.user_id
+           AND u.tenant_id=#{tenantId} AND u.deleted=0
+           WHERE rel.tenant_id=#{tenantId} GROUP BY rel.role_id) uc ON uc.role_id=r.id
+LEFT JOIN (SELECT role_id,COUNT(DISTINCT app_resource_id) total FROM rm_role_menu_rela_t
+           WHERE tenant_id=#{tenantId} GROUP BY role_id) pc ON pc.role_id=r.id
+""" + filterSql + ' ORDER BY ' + sortColumn + ' ' + sortDirection + ',r.id ASC', Math.min(limit,100), offset)
 
-// ==================== 收集角色ID，初始化默认值 ====================
-var roleIds = [];
-var list = roleList.list;
-if (list != null) {
-    for (role in list) {
-        roleIds.push(role.id);
-        role.userCount = 0;
-        role.permCount = 0;
-        role.userIds = "";              // 关联用户ID，逗号分割
-    }
+// One tenant-scoped batch enriches user IDs; count metrics already come from the page SQL.
+var roleIds=roleList.list.map(role=>role.id)
+var userIdsByRole={}
+if(roleIds.size()>0) {
+    var records=db.lower().select("""
+        SELECT DISTINCT rel.role_id,rel.user_id FROM rm_user_role_rela_t rel
+        JOIN rm_user_t u ON u.id=rel.user_id AND u.tenant_id=rel.tenant_id AND u.deleted=0
+        WHERE rel.tenant_id=#{tenantId} AND rel.role_id IN (#{roleIds})
+    """)
+    for(row in records) {var id=row.role_id;if(userIdsByRole[id]==null){userIdsByRole[id]=[]};userIdsByRole[id].add(row.user_id)}
 }
-
-// ==================== 查询关联用户数、权限数、用户ID列表 ====================
-if (roleIds.size() > 0) {
-
-    // --- 查询角色关联用户记录 ---
-    // .lower() 确保返回字段名为 snake_case，与 bracket 访问保持一致
-    var userRecords = db.lower().table("rm_user_role_rela_t")
-        .where()
-        .in("role_id", roleIds)
-        .select();
-
-    if(tenantAccounts.isLocal(tenantRuntime.id())) {
-      var localTenantId=tenantRuntime.id();
-      userRecords=db.lower().select("""
-select rel.*
-from rm_user_role_rela_t rel
-join rm_user_t u on u.id=rel.user_id
-and u.tenant_id=#{localTenantId}
-where rel.tenant_id=#{localTenantId}
-    and rel.role_id in (#{roleIds})
-    and u.deleted=0
-""");
-      var seenLocalUsers={};userRecords=userRecords.filter(r=>{
-        var key=r['role_id']+':'+r['user_id'];if(seenLocalUsers[key]==true) {return false;} seenLocalUsers[key]=true;return true;
-      });
-    }
-    var userCountMap = {};
-    var userIdsMap = {};             // roleId → [userId1, userId2, ...]
-    for (ur in userRecords) {
-        var rid = ur["role_id"];
-        var uid = ur["user_id"];
-        if (rid != null && uid != null && uid != "") {
-            // 计数
-            if (userCountMap[rid] == null) {
-                userCountMap[rid] = 0;
-            }
-            userCountMap[rid] = userCountMap[rid] + 1;
-
-            // 收集用户ID
-            if (userIdsMap[rid] == null) {
-                userIdsMap[rid] = [];
-            }
-            userIdsMap[rid].push(uid);
-        }
-    }
-
-    // --- 查询角色关联权限数 ---
-    var permRecords = db.lower().table("rm_role_menu_rela_t")
-        .where()
-        .in("role_id", roleIds)
-        .select();
-
-    var permCountMap = {};
-    for (pr in permRecords) {
-        var rid = pr["role_id"];
-        if (rid != null) {
-            if (permCountMap[rid] == null) {
-                permCountMap[rid] = 0;
-            }
-            permCountMap[rid] = permCountMap[rid] + 1;
-        }
-    }
-
-    // --- 填充到角色列表 ---
-    for (role in roleList.list) {
-        // 用户数
-        if (userCountMap[role.id] != null) {
-            role.userCount = userCountMap[role.id];
-        }
-        // 权限数
-        if (permCountMap[role.id] != null) {
-            role.permCount = permCountMap[role.id];
-        }
-        // 关联用户ID列表（逗号分割）
-        if (userIdsMap[role.id] != null) {
-            role.userIds = userIdsMap[role.id].join(",");
-        }
-    }
-}
+for(role in roleList.list) {role.userIds=(userIdsByRole[role.id] || []).join(',')}
 
 // ==================== 返回结果 ====================
 if (roleList.list == null) {

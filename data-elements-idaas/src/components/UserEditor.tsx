@@ -172,7 +172,7 @@ export default function UserEditor({ open, user, initial, fields, domain, onClos
                     }
                     for (let round = 0; round < 100; round++) {
                         await provisionApi.execute(state.taskId);
-                        const task = (await provisionApi.tasks()).find(item => item.id === state!.taskId);
+                        const task = await provisionApi.task(state.taskId);
                         if (!task) throw new Error(`任务 ${state.taskId} 已创建，请在同步任务中查看结果。`);
                         if (task.status === 'success') { state.dispatchKey = dispatchKey; break; }
                         if (task.status !== 'pending') {

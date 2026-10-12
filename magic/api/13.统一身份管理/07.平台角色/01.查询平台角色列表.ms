@@ -31,6 +31,8 @@ import '@/idaas/directory-scope' as directoryScope;
 import cn.hutool.core.util.IdUtil;
 import java.time.Instant;
 import identityRuntime;
+import tableSort;
+import request;
 import '@/idaas/api-call' as apiCall;
 
 
@@ -48,20 +50,25 @@ return identityRuntime.control(()=>apiCall(()=>{
     // 先校验当前会话的功能权限、身份域和应用管理范围。
     var ctx=guard(operation=='list' || operation=='resources' || operation=='assignments'?'platform-roles:read':operation=='assign'?'operators:grant':'platform-roles:write',null,'workforce');
     if(operation=='list') {
-        return sql.select("""
-select *,tid as id
-from iam_role_t
-where app_id=#{internal}
-    and is_del=0
-order by code
-""").map(role=>{
-            role.resourceIds=sql.select("""
-select resource_id
-from iam_role_resource_rela_t
-where role_id=#{role.id}
-""").map(x=>x.resource_id);
-            return role;
-        });
+        var values=request.getValues('paged');var paged=values!=null&&values.size()>0&&values[0]=='true';
+        var query=(key,fallback)=>{var values=request.getValues(key);return values==null||values.size()==0?fallback:values[0];};
+        var page=Math.max(1,query('page','1')::int);var size=Math.min(100,Math.max(1,query('size','20')::int));
+        var offset=(page-1)*size;var limit=paged?size:1001;
+        var orderRequest={sortField:query('sortField',null),sortDir:query('sortDir',null)};
+        var from=" FROM iam_role_t WHERE app_id=#{internal} AND is_del=0";
+        var total=sql.selectOne('SELECT COUNT(*) total'+from).total;
+        var order=tableSort.field(orderRequest,{name:'name',code:'code',createdTime:'created_time',updatedTime:'updated_time'},'code');
+        var rows=sql.select('SELECT *,tid id'+from+' ORDER BY '+order+' '+tableSort.direction(orderRequest)+',tid ASC LIMIT #{limit} OFFSET '+(paged?offset:0));
+        if(!paged&&rows.size()>1000){exit 400,'角色数量过多，请使用分页查询';}
+        var roleIds=rows.map(x=>x.id);var edges=roleIds.size()==0?[]:sql.select("""
+SELECT edge.role_id,edge.resource_id FROM iam_role_resource_rela_t edge
+JOIN iam_role_t role ON role.tid=edge.role_id AND role.app_id=#{internal} AND role.is_del=0
+JOIN iam_resource_t resource ON resource.tid=edge.resource_id AND resource.app_id=#{internal} AND resource.is_del=0
+WHERE edge.role_id IN (#{roleIds})
+""");
+        var resourceMap={};for(edge in edges){if(resourceMap[edge.role_id]==null){resourceMap[edge.role_id]=[];}resourceMap[edge.role_id].add(edge.resource_id);}
+        for(role in rows){role.resourceIds=resourceMap[role.id]||[];}
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     // 写入通过共享的幂等事务处理，并记录审计；版本冲突直接返回。
     return mutate(ctx,'platform-roles:'+operation,p,()=>{

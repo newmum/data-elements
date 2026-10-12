@@ -44,9 +44,9 @@
           </el-input>
         </div>
         <section class="table-panel">
-          <el-table class="node-data-table" v-loading="serviceLoading" :data="serviceNodes" row-key="id" stripe>
+          <el-table class="node-data-table" v-loading="serviceLoading" :data="serviceNodes" @sort-change="sort => sortNodes('service',sort)" row-key="id" stripe>
             <el-table-column type="index" :label="text.serialNo" width="68" align="center" />
-            <el-table-column :label="text.nodeName" min-width="170">
+            <el-table-column prop="name" sortable="custom" :label="text.nodeName" min-width="170">
               <template #default="{ row }"><div class="node-name"><Icon icon="carbon:api" /><span>{{ row.name }}</span></div></template>
             </el-table-column>
             <el-table-column prop="code" :label="text.nodeCode" width="140" show-overflow-tooltip />
@@ -62,7 +62,7 @@
                 <div class="status-tags"><el-tag v-if="row.isDefault" size="small" type="primary">{{ text.default }}</el-tag><el-tag v-if="row.localNode" size="small" type="success">{{ text.local }}</el-tag></div>
               </template>
             </el-table-column>
-            <el-table-column prop="updatedTime" :label="text.updatedTime" width="170" show-overflow-tooltip />
+            <el-table-column prop="updatedTime" sortable="custom" :label="text.updatedTime" width="170" show-overflow-tooltip />
             <el-table-column :label="text.operation" width="210" align="center">
               <template #default="{ row }">
                 <div class="row-actions">
@@ -231,11 +231,13 @@ const loadNetworkOptions = async () => {
     expandedNetworkCodes.value = networkOptions.value.map((item) => item.value);
   } catch (error) { console.error(text.loadFailed, error); ElMessage.error(error?.message || text.loadFailed); }
 };
+const nodeSort=reactive({sync:{},service:{}});
+const sortNodes=(mode,{prop,order})=>{nodeSort[mode]=order?{sortField:prop,sortDir:order==='ascending'?'asc':'desc'}:{};loadNodes(mode)};
 const loadNodes = async (mode) => {
   const loading = mode === 'sync' ? syncLoading : serviceLoading;
   loading.value = true;
   try {
-    const response = await $common.post(mode === 'sync' ? '/ods/nifi-node/page' : '/ods/service-node/page', { keyword: keyword.value });
+    const response = await $common.post(mode === 'sync' ? '/ods/nifi-node/page' : '/ods/service-node/page', { keyword: keyword.value,...nodeSort[mode] });
     const payload = response?.data || response || {};
     const rows = Array.isArray(payload) ? payload : payload.list || [];
     if (mode === 'sync') syncNodes.value = rows.map((item) => toNode(item, mode));

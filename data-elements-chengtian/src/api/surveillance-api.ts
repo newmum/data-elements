@@ -100,6 +100,9 @@ export type SurveillanceControlItem = {
   snapshotVersion: number;
 };
 
+export const pageSurveillanceControlItems = async (params: Record<string,string|number|undefined>) =>
+  unwrap(await httpRequest.get<{list:SurveillanceControlItem[];total:number;summary:{total:number;activeCount:number;channelCount:number}}>("/api/v1/surveillance/control-items/page",{params}));
+
 export const listSurveillanceControlItems = async (params: Record<string, string | undefined> = {}) =>
   unwrap(
     await httpRequest.get<SurveillanceControlItem[]>("/api/v1/surveillance/control-items", {

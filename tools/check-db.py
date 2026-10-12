@@ -240,10 +240,15 @@ def compare(source, target, tenant, source_tenant):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',type=Path,default=Path.home()/'.codex/private/data-elements/resources.local.json')
+    parser.add_argument('--authority',default=AUTHORITY,
+                        help='Actual GA tenant schema in the selected environment (default: baseline_ga)')
     args=parser.parse_args()
     config=json.loads(args.config.read_text(encoding='utf-8-sig'))
     sources=[s for s in export.connections(config) if s[0]!='control']
-    source_cfg=next(s for s in sources if s[2]==AUTHORITY and s[1]=='mysql')
+    authorities=[s for s in sources if s[2]==args.authority and s[1]=='mysql']
+    if len(authorities)!=1:
+        raise ValueError('Authority must resolve to exactly one active MySQL tenant datasource')
+    source_cfg=authorities[0]
     source=mysql_metadata(source_cfg[2],source_cfg[3])
     def tenant_id(key):
         values=[str(t) for t,k in config['nacos_tenant_database']['tenant-bindings'].items() if k==key]
@@ -251,10 +256,10 @@ def main():
         return values[0]
     reports=[]
     for key,dialect,schema,options in sources:
-        target=source if schema==AUTHORITY else (mysql_metadata if dialect=='mysql' else dameng_metadata)(schema,options)
+        target=source if schema==args.authority else (mysql_metadata if dialect=='mysql' else dameng_metadata)(schema,options)
         differences=compare(source,target,tenant_id(key),tenant_id(source_cfg[0]))
         reports.append({'schema':schema,'dialect':dialect,'tables':len(target['tables']),'differences':differences})
-    print(json.dumps({'authority':AUTHORITY,'scope':'industry tables, columns, indexes and foreign-key columns','schemas':reports},ensure_ascii=False,indent=2))
+    print(json.dumps({'authority':args.authority,'scope':'industry tables, columns, indexes and foreign-key columns','schemas':reports},ensure_ascii=False,indent=2))
     return 1 if any(r['differences'] for r in reports) else 0
 
 

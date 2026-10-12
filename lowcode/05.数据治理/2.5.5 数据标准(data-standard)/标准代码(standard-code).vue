@@ -354,11 +354,12 @@ const handleAddValue = () => {
 // 表格数据请求
 const fetchTableData = async ({
   pageNo: pageNum,
-  pageSize,
+  pageSize, sortField, sortDir,
   newCodeId,
 }: {
   pageNo: number;
   pageSize: number;
+  sortField?: string; sortDir?: "asc" | "desc";
   newCodeId?: string;
 }) => {
   try {
@@ -366,7 +367,7 @@ const fetchTableData = async ({
       dictName: searchQuery.value || null,
       categoryPath: getSelectedCategoryPath(),
       pageNum,
-      pageSize,
+      pageSize, sortField, sortDir,
     });
     const data = response.data || response;
     const list = data.list || [];

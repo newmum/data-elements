@@ -129,10 +129,10 @@ const columns = [
   },
 ];
 
-const fetchData = async ({ pageNo: pageNum, pageSize }) => {
+const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
   const result = await $common.post("/sym/approval/config/list", {
     pageNum,
-    pageSize,
+    pageSize,sortField,sortDir,
     keyword: state.keyword,
     publishStatus: state.publishStatus,
   });

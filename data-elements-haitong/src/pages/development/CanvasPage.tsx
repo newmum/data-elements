@@ -7,6 +7,7 @@ import { useOceanTheme } from '../../design/theme';
 import { useCanvasSelectionRevision, useSessionRevision, useTokenReady } from '../../nifi/api/bridgeSession';
 import { setCanvasSelection } from '../../nifi/api/iframeBridge';
 import { useCanvasStore } from '../../nifi/stores/canvasStore';
+import { useTaskChainStore } from '../../nifi/stores/taskChainStore';
 import EditorPage from '../../nifi/pages/EditorPage';
 import { getNifiOverlayContainer } from '../../nifi/panels/overlayContainer';
 import { NifiSessionPrompt } from './NifiFlowsPage';
@@ -82,6 +83,7 @@ export default function CanvasPage() {
   if (unsupportedEngine || (taskId && !localTask) || hasMixedSelection) return;
   // Changing routes starts a fresh editor session, so the previous flow cannot leak into it.
   useCanvasStore.getState().clear();
+  useTaskChainStore.getState().clear();
   const pipelineId = explicitPipelineId || (!accessTaskId && !tid ? localTask?.nifiPipelineId : null) || null;
   // An unqualified embedded canvas keeps the parent INIT/URL selection.
   // A local task, including a new empty task, deliberately overrides it.
@@ -93,6 +95,7 @@ export default function CanvasPage() {
   return () => {
    setCanvasSelection({});
    useCanvasStore.getState().clear();
+   useTaskChainStore.getState().clear();
   };
  // The linked id is read when a route opens. Linking after first save must not remount the active deploy mutation.
  // eslint-disable-next-line react-hooks/exhaustive-deps

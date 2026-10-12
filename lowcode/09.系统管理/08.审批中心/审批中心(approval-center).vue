@@ -162,7 +162,7 @@ const summaryItems = [
 const viewOptions = summaryItems.map((item) => ({ label: item.label, value: item.value }));
 
 const columns = computed(() => [
-  { label: "审批事项", prop: "businessName", minWidth: 280 },
+  { label: "审批事项", prop: "businessName", sortable: "custom", minWidth: 280 },
   { label: "流程类型", prop: "flowName", minWidth: 170 },
   { label: "当前节点", prop: "nodeName", minWidth: 150 },
   { label: "发起人", prop: "createName", width: 120, props: { emptyText: "-" } },
@@ -191,10 +191,10 @@ const columns = computed(() => [
   },
 ]);
 
-const fetchData = async ({ pageNo: pageNum, pageSize }) => {
+const fetchData = async ({ pageNo: pageNum, pageSize, sortField, sortDir }) => {
   const result = await $common.post("/sym/approval/query/page", {
     pageNum,
-    pageSize,
+    pageSize,sortField,sortDir,
     flowSatusType: state.view,
     flowCode: state.flowCode,
     key: state.keyword,

@@ -22,269 +22,95 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.数据源分页查询
-// 路由：POST /dst/database/page
-// 业务说明：数据源分页查询（POST /dst/database/page）。Elasticsearch 负责关键字和组合筛选，控制库 db_datasource_t 是数据源资产存在性、租户边界与状态的事实来源；每次结果采用一次批量回查校验，过滤 ES 中残留的失效投影；使用请求参数 includeMetadataCounts、pageNum、pageSize、conditions、sortField、sortDir。
-import tenantEs
+// Authoritative, scoped and bounded data-source page. Aggregates are sorted before LIMIT.
 import tenantRuntime
-var tenantId = tenantRuntime.id()
-import '@/common/configData' as configData
-import log
 import dataScope
-
-/*
- * 数据源分页查询。
- * 数据读取：Elasticsearch dataassets 索引负责检索，db_datasource_t 负责资产准入校验。
- * 数据写入：无。
- * 核心逻辑：一次 ES 检索后批量回查当前租户的有效数据源，避免 ES 残留投影进入登记流程。
- */
-var text = (value) => value == null ? '' : value + ''
-var blank = (value) => value == null || text(value).trim() == ''
-
-
-/*
- * Optional governance summary: one grouped query over persisted snapshots for
- * the already-authorized page only. No external connection or per-source reads.
- */
-var withMetadataCounts = rows => {
-    if (body?.includeMetadataCounts != true || rows.size() == 0) { return rows }
-    var quotedIds = []
-    for (row in rows) { quotedIds.add("'" + text(row.tid).replace("'", "''") + "'") }
-    var counts = db.select("""
-        select t.datasource_id as sourceId,
-               count(distinct t.tid) as collectedTableCount,
-               count(c.tid) as collectedFieldCount
-          from db_table_t t
-          left join db_table_column_t c
-            on c.table_id = t.tid and c.tenant_id = #{tenantId} and ifnull(c.is_del, 0) = 0
-         where t.tenant_id = #{tenantId} and ifnull(t.is_del, 0) = 0
-           and t.datasource_id in (${quotedIds.join(',')})
-         group by t.datasource_id
-    """)
-    var bySource = {}
-    for (count in counts) { bySource[text(count.sourceid)] = count }
-    for (row in rows) {
-        var count = bySource[text(row.tid)]
-        row.collectedTableCount = count == null ? 0 : count.collectedtablecount
-        row.fieldCount = count == null ? 0 : count.collectedfieldcount
-    }
-    return rows
-}
-
-var addCondition = (must, mustNot, condition) => {
-    if (condition == null || blank(condition.value)) {
-        return
-    }
-    var field = condition.field
-    var value = condition.value
-    var type = blank(condition.type) ? 'match' : condition.type
-
-    // 登记状态在回表后以 db_datasource_t.asset_status 为准，避免索引延迟误判。
-    if (field == 'registrationState') {
-        return
-    } else if (field == 'keyword') {
-        must.add({
-            bool: {
-                should: [
-                    { wildcard: { dbName: '*' + value + '*' } },
-                    { wildcard: { appName: '*' + value + '*' } },
-                    { wildcard: { database: '*' + value + '*' } }
-                ],
-                minimum_should_match: 1
-            }
-        })
-    } else if (type == 'in') {
-        if (value == null || value.size() == 0) {
-            return
-        }
-        var terms = {}
-        terms[field] = value
-        must.add({ terms: terms })
-    } else if (type == 'like') {
-        var wildcard = {}
-        wildcard[field] = '*' + value + '*'
-        must.add({ wildcard: wildcard })
-    } else if (type == 'notPrefix') {
-        var excluded = {}
-        excluded[field] = value + '*'
-        mustNot.add({ wildcard: excluded })
-    } else {
-        var term = {}
-        term[field] = value
-        must.add({ term: term })
-    }
-}
-
-var pageNum = body?.pageNum == null ? 1 : body.pageNum::int
-var pageSize = body?.pageSize == null ? 20 : body.pageSize::int
-var requestConditions = body?.conditions == null ? [] : body.conditions
-var must = [ { term: { assetType: 'db' } } ]
-var mustNot = [
-    { wildcard: { dbName: 'codex_*' } },
-    { wildcard: { database: 'codex_*' } }
-]
-for (condition in requestConditions) {
-    addCondition(must, mustNot, condition)
-}
-
-var sortField = blank(body?.sortField) ? 'updatedTime' : body.sortField
-var sortDir = text(body?.sortDir).toLowerCase() == 'asc' ? 'asc' : 'desc'
-var sort = {}
-sort[sortField] = { order: sortDir, unmapped_type: 'keyword' }
-
-// 数据源数量通常远小于数据表数量。先取回匹配的索引候选，再一次性以控制库校验，
-// 这样既保留 ES 的检索能力，也不会让删除后的索引残留成为可操作数据源。
-var result = null
-var esAvailable = true
-try {
-    result = tenantEs.index(configData().es_dataassets).search({
-        from: 0,
-        size: 10000,
-        track_total_hits: true,
-        query: { bool: { must: must, must_not: mustNot } },
-        sort: [sort]
-    })
-} catch (e) {
-    // ES is a search projection. A temporary transport failure must not make
-    // the authoritative datasource list unavailable.
-    esAvailable = false
-    log.warn('数据源 ES 查询失败，改用 MySQL 兜底: {}', e?.message)
-}
-
-var hits = result?.hits?.hits == null ? [] : result.hits.hits
-if (!esAvailable) {
-    var fallbackRows = db.table('db_datasource_t').where()
-        .eq('is_del', 0).orderBy('updated_time', sortDir).select()
-    fallbackRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', fallbackRows)
-    var fallbackItems = []
-    for (source in fallbackRows) {
-        var item = {}
-        item.putAll(source)
-        item.dbName = blank(item.dbName) ? item.db_name : item.dbName
-        item.appName = blank(item.appName) ? item.app_name : item.appName
-        item.updatedTime = blank(item.updatedTime) ? item.updated_time : item.updatedTime
-        item.createdTime = blank(item.createdTime) ? item.created_time : item.createdTime
-        item.assetStatus = item.assetStatus == null ? item.asset_status : item.assetStatus
-        item.flowStatus = item.flowStatus == null ? item.flow_status : item.flowStatus
-        item.displayStatus = text(item.assetStatus) == '2' ? 2 : text(item.assetStatus) == '1' ? 1 : 0
-        item.display_status = item.displayStatus
-        item.asset_status = item.displayStatus
-        item.tableNum = item.tableNum == null ? 0 : item.tableNum
-        item.table_num = item.tableNum
-
-        var matched = true
-        for (condition in requestConditions) {
-            if (condition == null || blank(condition.value) || !matched) {
-                continue
-            }
-            var field = condition.field
-            var value = condition.value
-            if (field == 'assetType') {
-                matched = text(value) == 'db'
-            } else if (field == 'registrationState') {
-                matched = (text(item.assetStatus) == '2' ? 'completed' : text(item.assetStatus) == '1' ? 'incomplete' : 'pending') == text(value)
-            } else if (field == 'keyword') {
-                var keyword = text(value).toLowerCase()
-                matched = text(item.dbName).toLowerCase().indexOf(keyword) >= 0
-                    || text(item.appName).toLowerCase().indexOf(keyword) >= 0
-                    || text(item.database).toLowerCase().indexOf(keyword) >= 0
-            } else if (condition.type == 'in') {
-                matched = value.contains(item[field])
-            } else {
-                matched = text(item[field]) == text(value)
-            }
-        }
-        if (matched) {
-            fallbackItems.add(item)
-        }
-    }
-    var fallbackTotal = fallbackItems.size()
-    var fallbackStart = (pageNum - 1) * pageSize
-    if (fallbackStart < 0) {
-        fallbackStart = 0
-    }
-    var fallbackEnd = fallbackStart + pageSize
-    fallbackEnd = fallbackEnd > fallbackTotal ? fallbackTotal : fallbackEnd
-    var fallbackList = fallbackStart >= fallbackTotal ? [] : fallbackItems.subList(fallbackStart::int, fallbackEnd::int)
-    return { pageNum: pageNum, pageSize: pageSize, total: fallbackTotal, list: withMetadataCounts(fallbackList) }
-}
-
-var candidateIds = []
-for (hit in hits) {
-    var candidateId = hit?._source?.tid || hit?._id
-    if (!blank(candidateId)) {
-        candidateIds.add(candidateId + '')
-    }
-}
-
-var datasourceById = {}
-if (candidateIds.size() > 0) {
-    var datasourceRows = db.table('db_datasource_t').where()
-        .in('tid', candidateIds).eq('is_del', 0).select()
-    datasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', datasourceRows)
-    for (datasource in datasourceRows) {
-        var datasourceId = datasource?.tid
-        if (!blank(datasourceId)) {
-            datasourceById[datasourceId + ''] = datasource
-        }
-    }
-}
-
-var validItems = []
-for (hit in hits) {
-    if (hit?._source == null) {
+import tableSort
+import cn.hutool.json.JSONUtil
+import java.util.List
+var tenantId=tenantRuntime.id()
+if(tenantId==null || (tenantId+'').trim()=='') {exit 401,'请先登录';}
+var text=v=>v==null?'':(v+'').trim()
+var quote=v=>"'"+text(v).replace("'","''")+"'"
+var pageNum=Math.max(1,body?.pageNum==null?1:body.pageNum::int)
+var pageSize=Math.min(100,Math.max(1,body?.pageSize==null?20:body.pageSize::int))
+var fields={dbName:'d.db_name',appName:'a.app_name',dbType:'d.db_type',appId:'d.app_id',orgId:'d.org_id',
+    createdTime:'d.created_time',updatedTime:'d.updated_time',regTime:'d.reg_time',
+    tableNum:'coalesce(d.table_num,0)',name:'d.db_name',entityCount:'coalesce(stats.table_count,0)',lastCollectedAt:'jobs.finished_time',catalogNum:'coalesce(d.data_catalog_num,0)',
+    collectedTableCount:'coalesce(stats.table_count,0)',fieldCount:'coalesce(stats.field_count,0)',
+    collectedFieldCount:'coalesce(stats.field_count,0)',registerTableNum:'coalesce(stats.registered_count,0)',
+    assetStatus:'d.asset_status',flowStatus:'d.flow_status',tid:'d.tid',storageDomain:'d.storage_domain',isEnable:'d.is_enable',connectionStatus:'d.connection_status'}
+var whereSql=' WHERE d.tenant_id=#{tenantId} AND ifnull(d.is_del,0)=0 '
+var scope=dataScope.resource('MENU:2081000000000000002')
+var scopeOrgIds=scope.organizationIds
+var scopeUserId=scope.userId
+if(scope.scope=='OWNER') {whereSql=whereSql+' AND d.created_by=#{scopeUserId}';}
+else if(scope.scope=='ORG') {
+    if(scopeOrgIds.size()==0) {whereSql=whereSql+' AND 1=0';}
+    else {whereSql=whereSql+' AND d.org_id IN (#{scopeOrgIds})';}
+} else if(scope.scope!='ALL') {exit 403,'数据范围无效';}
+var authorizedWhere=whereSql;
+for(condition in (body?.conditions==null?[]:body.conditions)) {
+    if(condition==null || text(condition.value)=='') {continue;}
+    var field=text(condition.field)
+    var value=condition.value
+    var type=text(condition.type)
+    if(field=='assetType') {if(text(value)!='db') {whereSql=whereSql+' AND 1=0';} continue;}
+    if(field=='keyword') {
+        var pattern='%'+text(value).toLowerCase().replace('!','!!').replace('%','!%').replace('_','!_')+'%'
+        whereSql=whereSql+" AND (LOWER(d.db_name) LIKE "+quote(pattern)+" ESCAPE '!' OR LOWER(a.app_name) LIKE "+quote(pattern)+" ESCAPE '!')"
         continue
     }
-    var indexItem = hit._source
-    var tid = indexItem.tid || hit._id
-    var datasource = blank(tid) ? null : datasourceById[tid + '']
-    // The named-table tenant interceptor applies the current tenant condition here.
-    // An ES document without a matching active control-table row is stale and must not
-    // be shown as an editable data source.
-    if (datasource == null) {
+    if(field=='registrationState') {
+        var state=text(value)=='completed'?2:text(value)=='incomplete'?1:text(value)=='pending'?0:-1
+        whereSql=whereSql+' AND coalesce(d.asset_status,0)='+state
         continue
     }
-
-    var item = {}
-    item.putAll(indexItem)
-    item.putAll(datasource)
-
-    var assetStatus = datasource.asset_status == null ? datasource.assetStatus : datasource.asset_status
-    var flowStatus = item.flowStatus
-    var displayStatus = text(assetStatus) == '2' ? 2 : text(assetStatus) == '1' ? 1 : 0
-    item.tid = tid
-    item.assetStatus = assetStatus
-    item.asset_status = assetStatus
-    item.flowStatus = flowStatus
-    item.flow_status = flowStatus
-    item.displayStatus = displayStatus
-    item.display_status = displayStatus
-    item.tableNum = item.tableNum == null ? 0 : item.tableNum
-    item.table_num = item.tableNum
-    // 列表仅用于展示与定位，连接凭据必须留在服务端主表。
-    item.remove('password')
-    item.remove('username')
-    item.remove('jdbcUrl')
-    item.remove('jdbc_url')
-    item.remove('poolCfg')
-    item.remove('pool_cfg')
-    var requestedRegistrationState = null
-    for (condition in requestConditions) {
-        if (condition?.field == 'registrationState' && !blank(condition.value)) {
-            requestedRegistrationState = text(condition.value)
-        }
-    }
-    if (blank(requestedRegistrationState) || requestedRegistrationState == (displayStatus == 2 ? 'completed' : displayStatus == 1 ? 'incomplete' : 'pending')) {
-        validItems.add(item)
-    }
+    if(field=='collectionState') {whereSql=whereSql+(text(value)=='collected'?' AND coalesce(stats.table_count,0)>0':' AND coalesce(stats.table_count,0)=0');continue;}
+    var expression=fields[field]
+    if(expression==null) {exit 400,'不支持的数据源筛选字段：'+field;}
+    if(type=='in') {
+        if(!(value instanceof List) || value.size()>1000) {exit 400,'筛选数组最多 1000 项';}
+        whereSql=whereSql+(value.size()==0?' AND 1=0':' AND '+expression+' IN ('+value.map(quote).join(',')+')')
+    } else if(type=='notPrefix') {whereSql=whereSql+' AND '+expression+' NOT LIKE '+quote(text(value)+'%');}
+    else if(type=='like') {whereSql=whereSql+' AND '+expression+' LIKE '+quote('%'+text(value)+'%');}
+    else if(type=='' || type=='match' || type=='eq') {whereSql=whereSql+' AND '+expression+'='+quote(value);}
+    else {exit 400,'不支持的数据源筛选方式';}
 }
-
-var total = validItems.size()
-var start = (pageNum - 1) * pageSize
-if (start < 0) {
-    start = 0
+var baseFrom=' FROM db_datasource_t d LEFT JOIN sym_application_t a ON a.tid=d.app_id AND a.tenant_id=d.tenant_id AND ifnull(a.is_del,0)=0 '
+var fromSql=baseFrom+"""
+LEFT JOIN (
+    SELECT t.datasource_id,COUNT(DISTINCT t.tid) table_count,COUNT(DISTINCT c.tid) field_count,
+           COUNT(DISTINCT CASE WHEN t.asset_status>0 THEN t.tid END) registered_count
+    FROM db_table_t t LEFT JOIN db_table_column_t c ON c.table_id=t.tid
+         AND c.tenant_id=#{tenantId} AND ifnull(c.is_del,0)=0
+    WHERE t.tenant_id=#{tenantId} AND ifnull(t.is_del,0)=0 GROUP BY t.datasource_id
+) stats ON stats.datasource_id=d.tid
+LEFT JOIN (SELECT datasource_id,MAX(finished_time) finished_time FROM metadata_table_collection_job_t WHERE tenant_id=#{tenantId} AND is_del=0 AND status='SUCCEEDED' GROUP BY datasource_id) jobs ON CAST(jobs.datasource_id AS CHAR)=CAST(d.tid AS CHAR)
+"""
+var total=db.selectOne('SELECT COUNT(*) total'+fromSql+whereSql).total
+var summary=db.selectOne('SELECT COUNT(*) source_count,COALESCE(SUM(stats.table_count),0) table_count,COALESCE(SUM(stats.field_count),0) field_count,COUNT(CASE WHEN stats.table_count>0 THEN 1 END) collected_count,COUNT(CASE WHEN d.connection_status IN (\'failed\',\'error\') OR d.connection_status IS NULL THEN 1 END) attention_count'+fromSql+authorizedWhere);
+var distributions=db.select('SELECT d.db_type, d.storage_domain,COUNT(*) source_count'+baseFrom+authorizedWhere+' GROUP BY d.db_type,d.storage_domain');
+var sortColumn=tableSort.field(body,fields,'updatedTime')
+var sortDirection=tableSort.direction(body)
+var offset=(pageNum-1)*pageSize
+var list=db.select("""
+SELECT d.tid,d.db_name,d.db_type,d.app_id,d.org_id,d.asset_status,d.flow_status,
+       d.created_time,d.updated_time,d.reg_time,d.table_num,d.data_catalog_num,d.pool_cfg,
+       d.remark,d.is_enable,d.connection_status,d.database_type,d.storage_domain,d.node_id,d.db_version,
+       a.app_name,jobs.finished_time lastCollectedAt,coalesce(stats.table_count,0) collectedTableCount,
+       coalesce(stats.field_count,0) fieldCount,coalesce(stats.registered_count,0) registerTableNum
+"""+fromSql+whereSql+' ORDER BY CASE WHEN '+sortColumn+' IS NULL THEN 1 ELSE 0 END ASC,'+sortColumn+' '+sortDirection+',d.tid ASC LIMIT #{pageSize} OFFSET #{offset}')
+for(row in list) {
+    var pool={}
+    try {pool=JSONUtil.parseObj(row.poolCfg||'{}');} catch(ignored) {}
+    row.database=pool.database||pool.schema||''
+    row.catalogNum=row.dataCatalogNum||0
+    row.tableNum=row.tableNum||0
+    row.collectedFieldCount=row.fieldCount
+    row.displayStatus=row.assetStatus||0
+    row.id=row.tid
+    row.assetType='db'
+    row.remove('poolCfg');row.remove('pool_cfg')
 }
-var end = start + pageSize
-end = end > total ? total : end
-var list = start >= total ? [] : validItems.subList(start::int, end::int)
-return { pageNum: pageNum, pageSize: pageSize, total: total, list: withMetadataCounts(list) }
+return {pageNum:pageNum,pageSize:pageSize,total:total,list:list,summary:summary,distributions:distributions}

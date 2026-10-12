@@ -75,8 +75,8 @@ public class AssetCenterController {
     }
 
     @GetMapping("/catalogs/{catalogId}/versions/{versionId}")
-    public Map<String, Object> version(@PathVariable String catalogId, @PathVariable String versionId) {
-        return success(publication.version(catalogId, versionId));
+    public Map<String, Object> version(@PathVariable String catalogId, @PathVariable String versionId,@RequestParam Map<String,String> filters) {
+        return success(publication.version(catalogId, versionId,filters));
     }
 
     @PostMapping("/versions/{versionId}/precheck")
@@ -138,8 +138,8 @@ public class AssetCenterController {
     }
 
     @GetMapping("/subscriptions/{subscriptionId}/progress")
-    public Map<String, Object> progress(@PathVariable String subscriptionId) {
-        return success(workbench.progress(subscriptionId));
+    public Map<String, Object> progress(@PathVariable String subscriptionId,@RequestParam Map<String,String> query) {
+        return success(workbench.progress(subscriptionId,query));
     }
 
     @GetMapping("/subscriptions/{subscriptionId}/delivery")

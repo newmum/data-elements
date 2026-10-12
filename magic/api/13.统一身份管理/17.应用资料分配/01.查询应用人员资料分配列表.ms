@@ -24,6 +24,7 @@
 // 路由：GET /idaas/assignments/list
 // 业务说明：读取符合请求筛选条件的应用人员资料分配，应用权限及身份域过滤后返回可展示字段；不发生写入。管理中央人员资料与指定应用的分配关系；资料分配和访问授权分别维护。
 import db;
+import tableSort;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
 import '@/idaas/guard' as guard;
@@ -36,7 +37,7 @@ import '@/idaas/api-call' as apiCall;
 
 return identityRuntime.control(()=>apiCall(()=>{
     var payload={};
-    for(key in ['domain','page','size','q','appId','subjectId','category']) {
+    for(key in ['domain','page','size','q','appId','subjectId','category','kind','summary','sortField','sortDir']) {
         var input=request.getValues(key);
         if(input!=null && input.size()>0) {
             payload.put(key,input[0]);
@@ -69,21 +70,34 @@ where tid=#{appId}
         exit 400,'应用尚未支持该身份域';
     }
     if(operation=='list') {
-        return {
-            subjects:sql.select("""
-select sa.*,sa.tid as id,s.name,s.identity_domain
-from iam_subject_app_t sa
-join iam_subject_t s on s.tid=sa.subject_id
-where app_id=#{appId}
-    and s.identity_domain=#{domain}
-"""),orgs:sql.select("""
-select ao.*,ao.tid as id,o.name,o.identity_domain
-from iam_app_org_t ao
-join iam_org_t o on o.tid=ao.org_id
-where app_id=#{appId}
-    and o.identity_domain=#{domain}
-""")
-        };
+        var subjectFilter="""
+ FROM iam_subject_app_t a JOIN iam_subject_t t ON t.tid=a.subject_id
+ WHERE a.app_id=#{appId} AND t.identity_domain=#{domain} AND t.is_del=0
+""";
+        var orgFilter="""
+ FROM iam_app_org_t a JOIN iam_org_t t ON t.tid=a.org_id
+ WHERE a.app_id=#{appId} AND t.identity_domain=#{domain} AND t.is_del=0
+""";
+        if(p.summary=='true') {
+            return {subjects:sql.selectOne('SELECT COUNT(*) total'+subjectFilter+' AND a.directory_assigned=1').total,
+                orgs:sql.selectOne('SELECT COUNT(*) total'+orgFilter+" AND a.status='ACTIVE'").total};
+        }
+        if(p.kind!=null) {
+            if(!['subject','org'].contains(p.kind)) {exit 400,'分配对象类别不正确';}
+            var filter=p.kind=='subject'?subjectFilter:orgFilter;
+            var page=Math.max(1,p.page::int(1));
+            var size=Math.min(100,Math.max(1,p.size::int(20)));
+            var offset=(page-1)*size;
+            var field=tableSort.field(p,{name:'t.name'},'name');
+            var direction=tableSort.direction(p);
+            var total=sql.selectOne('SELECT COUNT(*) total'+filter).total;
+            var rows=sql.select('SELECT a.*,a.tid AS id,t.name,t.identity_domain'+filter+' ORDER BY '+field+' '+direction+',a.tid ASC LIMIT #{size} OFFSET #{offset}');
+            return {list:rows,total:total,page:page,size:size};
+        }
+        var subjects=sql.select('SELECT a.*,a.tid AS id,t.name,t.identity_domain'+subjectFilter+' ORDER BY t.name,a.tid LIMIT 1001');
+        var orgs=sql.select('SELECT a.*,a.tid AS id,t.name,t.identity_domain'+orgFilter+' ORDER BY t.name,a.tid LIMIT 1001');
+        if(subjects.size()>1000 || orgs.size()>1000) {exit 400,'分配超过 1000 项，请使用分页或统计查询';}
+        return {subjects:subjects,orgs:orgs};
     }
     // 写入通过共享的幂等事务处理，并记录审计；版本冲突直接返回。
     return mutate(ctx,'assignments:'+operation,p,()=>{

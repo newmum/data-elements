@@ -702,7 +702,7 @@ export default function ConfigDrawer() {
     const fields = (manifest?.fields ?? []).flatMap(expandIncrementalField);
     if (manifest?.category !== 'source' || !manifest.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch'))) return fields;
     return [
-      { key: 'syncMode', label: '同步方式', type: 'select', required: true, group: 'sync', options: syncModes.map(item => ({ value: item.value, label: item.label })), help: '修改后请保存并部署；启动使用已部署版本的同步方式。' },
+      { key: 'syncMode', label: '同步方式', type: 'select', required: true, group: 'sync', options: syncModes.map(item => ({ value: item.value, label: item.label })), help: '修改后请点击保存；启动使用已部署版本的同步方式。' },
       { key: 'fullSyncStrategy', label: '全量写入策略', type: 'select', default: 'UPSERT', group: 'sync', visibleWhen: { key: 'syncMode', equals: 'PERIODIC_FULL' }, options: [{ value: 'UPSERT', label: '有则更新、无则新增（需要业务主键/唯一键）' }, { value: 'TRUNCATE_RELOAD', label: '每轮清空重载（MySQL / 达梦）' }] },
       { key: 'deleteTargetData', label: '启动前删除目标表存量数据', type: 'switch', default: false, group: 'sync', visibleWhen: { key: 'syncMode', equals: 'FULL' }, help: '仅在明确启动时执行，保存或部署不会清理数据；启动前还须确认目标表。' },
       { key: 'fullOrderColumn', label: '全量分页排序字段', type: 'text', group: 'sync', help: '建议填写主键或稳定唯一字段；未指定且没有主键时，使用单条流式查询，避免无序分页漏数。', placeholder: '如 id，复合排序可用逗号分隔' },
@@ -1810,7 +1810,6 @@ export default function ConfigDrawer() {
             )}
             {/* 切换组件类型，仅当同类别有多个组件时显示。 */}
             {sameCategoryManifests.length > 1 && (
-              <Tooltip title="切换为其他同类组件，配置将重置">
                 <Select
                   value={node.manifestKey}
                   onChange={handleSwitchManifest}
@@ -1823,7 +1822,6 @@ export default function ConfigDrawer() {
                     label: m.label,
                   }))}
                 />
-              </Tooltip>
             )}
             {isCustomSqlDrawer && (
               <Button loading={sqlGenerating} disabled={canvasMode !== 'EDIT' || !bodyReady}

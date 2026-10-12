@@ -20,6 +20,7 @@
       </template>
     </u-title>
     <v-table
+      draft-sort
       ref="reqRef"
       :options="reqOptions"
       :editable="editStatus[0]"
@@ -48,6 +49,7 @@
       </template>
     </u-title>
     <v-table
+      draft-sort
       ref="resRef"
       :options="resOptions"
       :editable="editStatus[1]"
@@ -76,6 +78,7 @@
       </template>
     </u-title>
     <v-table
+      draft-sort
       ref="resCodeRef"
       :options="resCodeOptions"
       :editable="editStatus[2]"

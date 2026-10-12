@@ -1,3 +1,4 @@
+import { useServerSort } from '../../components/serverSort';
 import { Alert, App, Button, Checkbox, Form, Input, Select, Space, Tag } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -28,6 +29,7 @@ export default function BatchCreatePage() {
   const [executingJobId, setExecutingJobId] = useState('');
   const [loadingOptions, setLoadingOptions] = useState(true), [loadingTables, setLoadingTables] = useState(false), [loadingJobs, setLoadingJobs] = useState(true), [submitting, setSubmitting] = useState(false), [loadError, setLoadError] = useState('');
 
+  const sourceOrder=useServerSort(()=>setSourcePage(1)),itemOrder=useServerSort(()=>{});
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const refreshJobs = useCallback(async (id?: string) => {
     const rows = await batchJobService.list();
@@ -36,11 +38,11 @@ export default function BatchCreatePage() {
     const chosen = id || activeJobId || rows[0]?.jobId || '';
     setActiveJobId(chosen);
     if (chosen) {
-      const nextDetail = await batchJobService.detail(chosen);
+      const nextDetail = await batchJobService.detail(chosen,itemOrder.sort);
       if (mounted.current) setJobDetail(nextDetail);
     }
     else setJobDetail(undefined);
-  }, [activeJobId]);
+  }, [activeJobId,itemOrder.sort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,21 +71,21 @@ export default function BatchCreatePage() {
   useEffect(() => {
     if (!activeJobId) { setJobDetail(undefined); return; }
     let cancelled = false;
-    void batchJobService.detail(activeJobId).then(detail => { if (!cancelled) setJobDetail(detail); }).catch(error => { if (!cancelled) setLoadError(`读取作业详情失败：${errorText(error)}`); });
+    void batchJobService.detail(activeJobId,itemOrder.sort).then(detail => { if (!cancelled) setJobDetail(detail); }).catch(error => { if (!cancelled) setLoadError(`读取作业详情失败：${errorText(error)}`); });
     return () => { cancelled = true; };
-  }, [activeJobId]);
+  }, [activeJobId,itemOrder.sort]);
   useEffect(() => {
     if (!source) { setTables([]); setSourceTotal(0); return; }
     let cancelled = false;
     setLoadingTables(true); setTables([]);
-    void batchPlatformService.sourceTables(source, sourcePage).then(result => {
+    void batchPlatformService.sourceTables(source, sourcePage,20,sourceOrder.sort).then(result => {
       if (!cancelled) {
         setTables(result.list.filter(row => String(row.datasourceId ?? '') === source));
         setSourceTotal(result.total); setLoadingTables(false);
       }
     }).catch(error => { if (!cancelled) { setLoadError(errorText(error)); setLoadingTables(false); } });
     return () => { cancelled = true; };
-  }, [source, sourcePage]);
+  }, [source, sourcePage,sourceOrder.sort]);
   useEffect(() => { setSelectedMatches(new Map()); pendingSubmit.current = undefined; }, [source, target, prefix, remove, suffix]);
 
   const matches = useMemo<Match[]>(() => tables.map(row => {
@@ -128,7 +130,7 @@ export default function BatchCreatePage() {
       if (mounted.current) {
         await refreshJobs(id);
         try { if (source) {
-          const result = await batchPlatformService.sourceTables(source, sourcePage);
+          const result = await batchPlatformService.sourceTables(source, sourcePage,20,sourceOrder.sort);
           if (mounted.current) { setTables(result.list.filter(row => String(row.datasourceId ?? '') === source)); setSourceTotal(result.total); }
         } }
         catch (error) { setLoadError(`作业已保存，但刷新匹配预览失败：${errorText(error)}`); }
@@ -186,7 +188,7 @@ export default function BatchCreatePage() {
           for (const match of eligible) { if (event.target.checked) next.set(match.id, match); else next.delete(match.id); }
           return next;
         })}>选择本页匹配项</Checkbox><span className="toolbar-spacer" /><Button type="primary" loading={submitting} disabled={!selectedMatches.size || loadingTables || submitting} onClick={() => void submit([...selectedMatches.values()])}>保存 {selectedMatches.size} 项待创建队列</Button></div>
-        <DataTable<Match> rowKey="id" loading={loadingTables} dataSource={matches}
+        <DataTable<Match> serverSort={sourceOrder} rowKey="id" loading={loadingTables} dataSource={matches}
           pagination={{ current: sourcePage, pageSize: 20, total: sourceTotal, showSizeChanger: false,
             onChange: nextPage => setSourcePage(nextPage) }} columns={[
           { title: '选择', width: 60, render: (_, match) => <Checkbox checked={selectedMatches.has(match.id)} disabled={!match.eligible || submitting} onChange={event => setSelectedMatches(previous => {
@@ -194,7 +196,7 @@ export default function BatchCreatePage() {
             if (event.target.checked) next.set(match.id, match); else next.delete(match.id);
             return next;
           })} /> },
-          { title: '来源表', render: (_, match) => <div className="entity-name"><b>{sourceLabel(match.source)}</b><small>{sourceName(match.source)}</small></div> },
+          { title: '来源表',key:'tableName',sorter:true,render: (_, match) => <div className="entity-name"><b>{sourceLabel(match.source)}</b><small>{sourceName(match.source)}</small></div> },
           { title: '目标表', render: (_, match) => match.target ? <div className="entity-name"><b>{targetName(match.target)}</b><small>{String(match.target.targetDbName ?? '')}{match.reason ? ` · ${match.reason}` : ''}</small></div> : <Tag color="warning">{match.targetName} {match.reason || '未找到'}</Tag> },
           { title: '字段映射', render: (_, match) => match.eligible ? '由现有创建接口生成' : '—' },
         ]} />
@@ -202,8 +204,8 @@ export default function BatchCreatePage() {
       </Panel></div>
     <Panel title="批量作业与逐项结果" extra={<Space><Select value={activeJobId || undefined} loading={loadingJobs} placeholder="暂无作业" style={{ width: 300 }} onChange={setActiveJobId} options={jobs.map(row => ({ value: row.jobId, label: `${row.jobName} / ${formatTime(row.createdTime)}${row.status === 'RUNNING' && executingJobId !== row.jobId ? ' / 待逐项创建' : ''}` }))} />{jobState}{job?.status === 'RUNNING' && <><Button disabled={submitting} onClick={() => void runOne(job.jobId)}>创建下一项</Button><Button onClick={() => void stop()}>停止后续创建</Button></>}{job && job.status !== 'RUNNING' && items.some(item => item.status !== 'SUCCEEDED') && <Button disabled={submitting} onClick={() => void retry()}>重试未完成项</Button>}<Button onClick={() => void refreshJobs(activeJobId)}>刷新</Button></Space>}>
       {job ? <><div className="inline-stats"><span>成功 <b>{countOf(items, 'SUCCEEDED')}</b></span><span>失败 <b>{countOf(items, 'FAILED')}</b></span><span>已领取待回报 <b>{countOf(items, 'RUNNING')}</b></span><span>待创建 <b>{countOf(items, 'PENDING')}</b></span></div>
-        <DataTable<BatchJobItem> rowKey="itemId" dataSource={items} pagination={false} columns={[
-          { title: '来源表', render: (_, item) => item.sourceTableName },
+        <DataTable<BatchJobItem> serverSort={itemOrder} rowKey="itemId" dataSource={items} pagination={false} columns={[
+          { title: '来源表',key:'sourceTableName',sorter:true,render: (_, item) => item.sourceTableName },
           { title: '目标表', render: (_, item) => item.targetTableName },
           { title: '尝试次数', dataIndex: 'attemptCount', width: 90 },
           { title: '创建状态', render: (_, item) => item.status === 'RUNNING' && executingJobId !== job.jobId ? <Tag color="warning">等待单项结果或租约</Tag> : <StateTag state={item.status} /> },

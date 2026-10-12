@@ -622,6 +622,7 @@
   }
 }
 ================================
+
 // 接口：01.应用系统分页查询
 // 路由：POST /dst/application/page
 // 业务说明：按当前租户和页面筛选条件从应用系统检索索引读取分页数据，补充组织等展示字段后返回列表与总数。
@@ -661,8 +662,9 @@ var mustNot = [
 for (condition in (body?.conditions == null ? [] : body.conditions)) {
     addCondition(must, mustNot, condition)
 }
-var sortField = blank(body?.sortField) ? 'updatedTime' : body.sortField
-var sortDir = text(body?.sortDir).toLowerCase() == 'asc' ? 'asc' : 'desc'
+import tableSort
+var sortField = tableSort.field(body, { appName:'appName', createdTime:'createdTime', updatedTime:'updatedTime', regTime:'regTime', dbNum:'dbNum', tableNum:'tableNum', catalogNum:'catalogNum' }, 'updatedTime')
+var sortDir = tableSort.direction(body)
 var sort = {}
 sort[sortField] = { order: sortDir, unmapped_type: 'keyword' }
 // 执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致。
@@ -671,7 +673,7 @@ var result = tenantEs.index(configData().es_dataassets).search({
     size: pageSize,
     track_total_hits: true,
     query: { bool: { must: must, must_not: mustNot } },
-    sort: [sort]
+    sort: [sort, { tid: {order: 'asc', unmapped_type: 'keyword'} }]
 })
 var list = []
 for (hit in (result?.hits?.hits == null ? [] : result.hits.hits)) {

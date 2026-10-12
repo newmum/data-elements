@@ -129,7 +129,7 @@ interface BaseNodeProps {
 }
 
 export default function BaseNode({ node: cell }: BaseNodeProps) {
-  const data = cell.getData<{ node?: CanvasNode; runtime?: NodeRuntimeMetric; mode?: string } | undefined>();
+  const data = cell.getData<{ node?: CanvasNode; runtime?: NodeRuntimeMetric; mode?: string; readonly?: boolean; taskName?: string } | undefined>();
   const cn = data?.node;
   const runtime = data?.runtime;
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
@@ -139,7 +139,7 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
   const syncCompletion = useCanvasStore((s) => s.syncCompletion);
   const openErrorPanel = useErrorPanelStore((s) => s.open);
   const { data: manifests } = useComponentManifests();
-  const { data: flowErrors } = useFlowErrors(pipelineId);
+  const { data: flowErrors } = useFlowErrors(data?.readonly ? null : pipelineId);
   const manifest = useMemo(
     () => manifests?.find((m) => m.key === cn?.manifestKey),
     [manifests, cn?.manifestKey],
@@ -158,7 +158,7 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
   }
 
   const cat = cn.category;
-  const selected = selectedNodeId === cn.id;
+  const selected = !data?.readonly && selectedNodeId === cn.id;
   const flashing = focusNodeId === cn.id; // re-renders on focusNonce change
   void focusNonce;
   const status: NodeStatus | undefined = runtime
@@ -175,13 +175,14 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
   const fields = manifest?.fields ?? [];
   const previewFields = fields.slice(0, 3);
   const incrSummary = incrementalSummary(cn.config);
-  const showCompletion = cat === 'sink' && !hasErrorBadge && syncCompletion?.pipelineId === pipelineId;
+  const showCompletion = !data?.readonly && cat === 'sink' && !hasErrorBadge && syncCompletion?.pipelineId === pipelineId;
   const completionTime = syncCompletion ? new Date(syncCompletion.at).toLocaleString() : '';
 
   return (
     <div
       className={[
         'coze-node',
+        data?.readonly ? 'is-context' : '',
         `coze-node--${cat}`,
         selected ? 'is-selected' : '',
         isError ? 'is-error' : '',
@@ -287,7 +288,7 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
             )}
             {fields.length > 3 && (
               <div className="coze-node__empty-hint" style={{ fontSize: 11 }}>
-                +{fields.length - 3} 项配置 · 双击查看
+                +{fields.length - 3} 项配置 · {data?.readonly ? '单击切换任务' : '双击查看'}
               </div>
             )}
           </div>

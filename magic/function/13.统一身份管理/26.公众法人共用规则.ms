@@ -48,6 +48,7 @@
 // 函数输入：operation：本次执行的业务操作；payload：请求资料或筛选条件。
 // 返回与副作用：校验法人资料及成员关系、办理身份和状态，供法人管理及自主登记接口复用。
 import db;
+import tableSort;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
 import '@/idaas/guard' as guard;
@@ -63,42 +64,55 @@ var ctx=guard(operation=='list'?'public:read':'public:write',null,'public');
 var id=r.id||p.id;
 // 列表分支：先确定当前操作人可见的应用和身份域，再读取并映射业务记录。
 if(operation=='list') {
-    return sql.select("""
-select *,tid as id,date_format(created_time, '%Y-%m-%dT%H:%i:%sZ') created_utc,
-       date_format(updated_time, '%Y-%m-%dT%H:%i:%sZ') updated_utc
-from iam_legal_entity_t
-where is_del=0
-order by created_time desc
-limit 250
-""").map(e=>{
-        var members=sql.select("""
-select m.*,m.tid as id,s.name,s.phone
-from iam_legal_member_t m
-join iam_subject_t s on s.tid=m.subject_id
-and s.identity_domain='public'
-where m.entity_id=#{e.id}
-    and m.is_del=0
-    and m.status in ('PENDING','ACTIVE')
+    var mode=p.mode||'entities';
+    var page=Math.max(1,(p.page||1)::int);
+    var size=Math.min(100,Math.max(1,(p.size||20)::int));
+    var offset=(page-1)*size;
+    if(mode=='members' || mode=='logs') {
+        var entity=sql.selectOne("select tid as id from iam_legal_entity_t where tid=#{p.id} and is_del=0");
+        if(entity==null) {exit 404,'法人记录不存在';}
+        if(mode=='members') {
+            var from=" from iam_legal_member_t m join iam_subject_t s on s.tid=m.subject_id and s.identity_domain='public' and s.is_del=0 where m.entity_id=#{p.id} and m.is_del=0 and m.status in ('PENDING','ACTIVE')";
+            var field=tableSort.field(p,{name:'s.name',valid_from:'m.valid_from',valid_until:'m.valid_until'},'name');
+            var total=sql.selectOne('select count(*) total'+from).total;
+            var rows=sql.select('select m.*,m.tid as id,s.name,s.phone'+from+' order by '+field+' '+tableSort.direction(p)+',m.tid asc limit #{size} offset #{offset}');
+            return {list:rows,total:total,page:page,size:size};
+        }
+        var from=" from iam_audit_event_t a left join iam_auth_account_t c on c.tid=a.actor_id and a.actor_kind='AUTH_ACCOUNT' and c.identity_domain='public' left join iam_subject_t s on s.tid=c.subject_id and s.identity_domain='public' and s.is_del=0 where a.identity_domain='public' and a.event_type='AUTH' and exists(select 1 from iam_legal_member_t m where m.entity_id=#{p.id} and m.subject_id=c.subject_id and m.relation_type='SUBACCOUNT' and m.is_del=0 and m.status in ('PENDING','ACTIVE'))";
+        var field=tableSort.field(p,{actor:'c.username',createdAt:'a.event_time'},'createdAt');
+        var total=sql.selectOne('select count(*) total'+from).total;
+        var rows=sql.select("select a.tid as id,c.username actor,a.app_id target,date_format(a.event_time,'%Y-%m-%dT%H:%i:%sZ') createdAt,case when a.result='SUCCESS' then '成功' else '失败' end result"+from+' order by '+field+' '+tableSort.direction(p)+',a.tid asc limit #{size} offset #{offset}');
+        return {list:rows,total:total,page:page,size:size};
+    }
+    if(mode!='entities') {exit 400,'不支持的法人列表';}
+    var search=(p.q||'').trim();
+    if(search.length()>200) {exit 400,'搜索内容过长';}
+    var status=p.status=='enabled'?'ACTIVE':p.status=='disabled'?'DISABLED':null;
+    var from=" from iam_legal_entity_t e left join(select entity_id,count(*) sub_count from iam_legal_member_t where is_del=0 and status in ('PENDING','ACTIVE') and relation_type='SUBACCOUNT' group by entity_id) n on n.entity_id=e.tid where e.is_del=0 and (#{status} is null or e.status=#{status}) and (#{search}='' or locate(lower(#{search}),lower(concat_ws(' ',e.name,e.code,e.registration_code)))>0)";
+    var field=tableSort.field(p,{name:'e.name',createdAt:'e.created_time',updatedAt:'e.updated_time',subAccountCount:'coalesce(n.sub_count,0)'},'createdAt');
+    var total=sql.selectOne('select count(*) total'+from).total;
+    var paged=p.paged==true || p.paged=='true';
+    if(!paged && total>1000) {exit 400,'法人目录超过 1000 项，请使用分页查询';}
+    var take=paged?size:1000;
+    var skip=paged?offset:0;
+    var entities=sql.select("""
+select e.*,e.tid as id,coalesce(n.sub_count,0) sub_count,
+date_format(e.created_time,'%Y-%m-%dT%H:%i:%sZ') created_utc,date_format(e.updated_time,'%Y-%m-%dT%H:%i:%sZ') updated_utc,
+case when e.verification_status='VERIFIED' and exists(select 1 from iam_verification_t v where v.target_type='LEGAL_ENTITY' and v.target_id=e.tid and v.status='VERIFIED' and v.expires_at>utc_timestamp(6) and not exists(select 1 from iam_verification_t x where x.target_type='LEGAL_ENTITY' and x.target_id=e.tid and (x.requested_time>v.requested_time or (x.requested_time=v.requested_time and x.tid>v.tid)))) then 1 else 0 end verified_now
+"""+from+' order by '+field+' '+tableSort.direction(p)+',e.tid asc limit #{take} offset #{skip}');
+    var ids=entities.map(e=>e.id);
+    var members=ids.size()==0?[]:sql.select("""
+select m.*,m.tid as id,s.name,s.phone from iam_legal_member_t m join iam_subject_t s on s.tid=m.subject_id and s.identity_domain='public' and s.is_del=0
+where m.entity_id in (#{ids}) and m.is_del=0 and m.status in ('PENDING','ACTIVE') order by m.entity_id,m.tid limit 1001
 """);
-        var contact=members.filter(m=>m.relation_type=='AGENT');
-        return {
-            id:e.id,version:e.version,domain:'public',name:e.name,code:e.code,registrationCode:e.registration_code||'',status:e.status=='ACTIVE'?'enabled':'disabled',contactId:contact.size()==0?'':contact[0].subject_id,contact:contact.size()==0?'':contact[0].name,phone:contact.size()==0?'':contact[0].phone||'',verified:e.verification_status=='VERIFIED' && sql.selectOne("""
-select tid as id
-from iam_verification_t
-where target_type='LEGAL_ENTITY'
-    and target_id=#{e.id}
-    and status='VERIFIED'
-    and expires_at>utc_timestamp(6)
-    and tid=
-        (select x.tid as id
-         from iam_verification_t x
-         where x.target_type='LEGAL_ENTITY'
-             and x.target_id=#{e.id}
-         order by x.requested_time desc,x.tid desc
-         limit 1)
-""")!=null,verificationStatus:e.verification_status,subAccountIds:members.filter(m=>m.relation_type=='SUBACCOUNT').map(m=>m.subject_id),members:members,createdAt:e.created_utc,updatedAt:e.updated_utc
-        };
+    if(members.size()>1000) {exit 400,'关联成员过多，请缩小法人分页范围';}
+    var rows=entities.map(e=>{
+        var related=members.filter(m=>m.entity_id==e.id);
+        var contacts=related.filter(m=>m.relation_type=='AGENT');
+        var contact=contacts.size()==0?null:contacts[0];
+        return {id:e.id,version:e.version,domain:'public',name:e.name,code:e.code,registrationCode:e.registration_code||'',status:e.status=='ACTIVE'?'enabled':'disabled',contactId:contact==null?'':contact.subject_id,contact:contact==null?'':contact.name,phone:contact==null?'':contact.phone||'',verified:e.verified_now==1,verificationStatus:e.verification_status,subAccountCount:e.sub_count,subAccountIds:related.filter(m=>m.relation_type=='SUBACCOUNT').map(m=>m.subject_id),members:related,createdAt:e.created_utc,updatedAt:e.updated_utc};
     });
+    return paged?{list:rows,total:total,page:page,size:size}:rows;
 }
 // 写入通过共享的幂等事务处理，并记录审计；版本冲突直接返回。
 // 事务边界：通过共享幂等写入统一处理版本冲突、提交与审计。
@@ -178,17 +192,9 @@ where entity_id=#{id}
     if(persons.size()>200) {
         exit 400,'关联人数超限';
     }
-    for(person in persons) {
-        if(sql.selectOne("""
-select tid as id
-from iam_subject_t
-where tid=#{person}
-    and identity_domain='public'
-    and is_del=0
-""")==null) {
-            exit 400,'法人关系只能关联公众自然人';
-        }
-    }
+    persons=persons.distinct();
+    var validPersons=persons.size()==0?[]:sql.select("select tid as id from iam_subject_t where tid in (#{persons}) and identity_domain='public' and is_del=0").map(x=>x.id);
+    if(persons.filter(x=>!validPersons.contains(x)).size()>0) {exit 400,'法人关系只能关联公众自然人';}
     var credit=registration==''?null:registration;
     var status=r.status=='disabled'?'DISABLED':'ACTIVE';
     if(old==null) {

@@ -1,4 +1,5 @@
 import { platformApi } from './platformApi';
+import type { ServerSort } from '../components/serverSort';
 import { asPage, type PageResult } from './integrationPlatformService';
 
 export type ReconcilePolicy = Record<string, unknown> & { tid: string };
@@ -34,11 +35,11 @@ export const enabled = (row: Record<string, unknown>): boolean => {
 };
 
 export const reconciliationLive = {
-  async policies(page = 1, size = 200, keyword = ''): Promise<PageResult<ReconcilePolicy>> {
-    return asPage(await platformApi('/ods/reconciliation/policy/page', { page, size, keyword }));
+  async policies(page = 1, size = 20, keyword = '', sort:ServerSort={}): Promise<PageResult<ReconcilePolicy>> {
+    return asPage(await platformApi('/ods/reconciliation/policy/page', { page, size, keyword, ...sort }));
   },
-  async runs(page = 1, size = 200, status = '', keyword = ''): Promise<PageResult<ReconcileRun>> {
-    return asPage(await platformApi('/ods/reconciliation/run/page', { page, size, status, keyword }));
+  async runs(page = 1, size = 20, status = '', keyword = '', sort:ServerSort={}): Promise<PageResult<ReconcileRun>> {
+    return asPage(await platformApi('/ods/reconciliation/run/page', { page, size, status, keyword, ...sort }));
   },
   async diffs(runId: string, page = 1, size = 200): Promise<PageResult<ReconcileDiff>> {
     return asPage(await platformApi('/ods/reconciliation/run/diff/page', { runId, page, size }));

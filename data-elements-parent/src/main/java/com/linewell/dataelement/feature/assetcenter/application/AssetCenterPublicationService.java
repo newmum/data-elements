@@ -6,6 +6,7 @@ import com.linewell.dataelement.model.approval.ApprovalStartRequest;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
+import com.linewell.dataelement.platform.persistence.ServerTableOrder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,31 +99,47 @@ public class AssetCenterPublicationService {
         var catalog=db.owned("da_catalog_t",catalogId,false);db.require("da_catalog_publication_t");boolean manager=db.canManage(catalog);
         if(!manager&&!visiblePublished(catalog))throw error(404,"NOT_FOUND","目录版本不存在或无权访问");
         int pn=Math.max(1,number(q.get("pageNo"),1)),ps=Math.min(100,Math.max(1,number(q.get("pageSize"),15)));
-        long count;List<Map<String,Object>> rows;
-        if(manager){
-            count=db.jdbc.queryForObject("SELECT COUNT(*) FROM da_catalog_publication_t WHERE tenant_id=? AND catalog_id=?",Long.class,db.tenant(),catalogId);
-            rows=db.rows("SELECT * FROM da_catalog_publication_t WHERE tenant_id=? AND catalog_id=? ORDER BY version_no DESC LIMIT ? OFFSET ?",db.tenant(),catalogId,ps,(pn-1)*ps);
-        }else{
-            var visible=db.rows("SELECT * FROM da_catalog_publication_t WHERE tenant_id=? AND catalog_id=? AND status='PUBLISHED' ORDER BY version_no DESC",db.tenant(),catalogId).stream().filter(row->versionVisible(row,catalog)).toList();
-            count=visible.size();rows=visible.stream().skip((long)(pn-1)*ps).limit(ps).toList();
+        String field=q.getOrDefault("sortBy","versionNo"),direction=q.getOrDefault("sortOrder","desc");
+        String order=ServerTableOrder.sql(field,direction,Map.of("versionNo","version_no","createdAt","created_time","updatedAt","updated_time","publishedAt","published_at"),"versionNo","desc","tid");
+        List<Object> args=new ArrayList<>(List.of(db.tenant(),catalogId));
+        String from=" FROM da_catalog_publication_t WHERE tenant_id=? AND catalog_id=?";
+        if(!manager) {
+            List<String> organizations=db.organizations();if(organizations.size()>1000)throw error(400,"INVALID_ARGUMENT","组织范围过大");
+            String policy="CASE WHEN JSON_VALID(visibility_scope)=1 THEN visibility_scope ELSE '{}' END";
+            from+=" AND status='PUBLISHED' AND (JSON_UNQUOTE(JSON_EXTRACT("+policy+",'$.visibility'))='TENANT'";
+            if(organizations.contains(text(catalog,"org_id")))from+=" OR JSON_UNQUOTE(JSON_EXTRACT("+policy+",'$.visibility'))='DEPARTMENT'";
+            if(!organizations.isEmpty()){from+=" OR (JSON_UNQUOTE(JSON_EXTRACT("+policy+",'$.visibility'))='AUTHORIZED_ORGS' AND JSON_OVERLAPS(JSON_EXTRACT("+policy+",'$.allowedDepartmentIds'),CAST(? AS JSON)))";args.add(db.encode(organizations));}
+            from+=")";
         }
+        long count=db.jdbc.queryForObject("SELECT COUNT(*)"+from,Long.class,args.toArray());
+        List<Object> limitArgs=new ArrayList<>(args);limitArgs.add(ps);limitArgs.add((long)(pn-1)*ps);
+        List<Map<String,Object>> rows=db.rows("SELECT *"+from+" ORDER BY "+order+" LIMIT ? OFFSET ?",limitArgs.toArray());
         var head=db.one("SELECT * FROM da_catalog_publication_head_t WHERE tenant_id=? AND catalog_id=?",db.tenant(),catalogId);
         Set<String> requestIds=new LinkedHashSet<>();for(var row:rows)if(row.get("request_id")!=null)requestIds.add(text(row,"request_id"));
         Map<String,Map<String,Object>> requests=new HashMap<>();
         if(!requestIds.isEmpty()){
-            String marks=String.join(",",Collections.nCopies(requestIds.size(),"?"));List<Object> args=new ArrayList<>();args.add(db.tenant());args.addAll(requestIds);
-            for(var request:db.rows("SELECT tid,request_status FROM res_catalog_publish_request WHERE tenant_id=? AND tid IN ("+marks+")",args.toArray()))requests.put(text(request,"tid"),request);
+            String marks=String.join(",",Collections.nCopies(requestIds.size(),"?"));List<Object> requestArgs=new ArrayList<>();requestArgs.add(db.tenant());requestArgs.addAll(requestIds);
+            for(var request:db.rows("SELECT tid,request_status FROM res_catalog_publish_request WHERE tenant_id=? AND tid IN ("+marks+")",requestArgs.toArray()))requests.put(text(request,"tid"),request);
         }
-        return map("items",rows.stream().map(row->versionSummary(row,head,requests.get(text(row,"request_id")))).toList(),"page",query.page(pn,ps,count,"versionNo","desc"));
+        return map("items",rows.stream().map(row->versionSummary(row,head,requests.get(text(row,"request_id")))).toList(),"page",query.page(pn,ps,count,field,direction));
     }
-    public Map<String,Object> version(String catalogId,String versionId){
+    public Map<String,Object> version(String catalogId,String versionId){return version(catalogId,versionId,Map.of());}
+    public Map<String,Object> version(String catalogId,String versionId,Map<String,String> q){
         var catalog=db.owned("da_catalog_t",catalogId,false);var row=db.owned("da_catalog_publication_t",versionId,false);
         if(!catalogId.equals(text(row,"catalog_id")))throw error(404,"NOT_FOUND","版本不属于该目录");
         if(!db.canManage(catalog)){
             String requestId=text(row,"request_id");boolean reviewer=!requestId.isBlank()&&!workbench.tasks(requestId).isEmpty();
             if(!reviewer&&(!"PUBLISHED".equals(text(row,"status"))||!visiblePublished(catalog)||!versionVisible(row,catalog)))throw error(404,"NOT_FOUND","目录版本不存在或无权访问");
         }
-        var meta=db.object(row.get("metadata_snapshot"));return map("version",versionSummary(row),"catalogName",text(row,"title_snapshot"),"items",db.array(row.get("item_snapshot")),"attachments",versionAttachments(row),"sharingPolicy",meta.get("sharingPolicy"),"changes",changes(row,db.canManage(catalog)),"allowedActions",text(row,"status").equals("DRAFT")?List.of("PRECHECK"):text(row,"status").equals("VALIDATED")&&row.get("request_id")==null?List.of("PRECHECK","PUBLISH"):List.of("VIEW"));
+        var meta=db.object(row.get("metadata_snapshot"));return map("version",versionSummary(row),"catalogName",text(row,"title_snapshot"),"items",versionItems(row,q),"itemPage",query.page(Math.max(1,number(q.get("itemsPageNo"),1)),Math.min(100,Math.max(1,number(q.get("itemsPageSize"),20))),db.array(row.get("item_snapshot")).size(),q.getOrDefault("itemSortField","ordinal"),q.getOrDefault("itemSortDir","asc")),"attachments",versionAttachments(row),"sharingPolicy",meta.get("sharingPolicy"),"changes",changes(row,db.canManage(catalog)),"allowedActions",text(row,"status").equals("DRAFT")?List.of("PRECHECK"):text(row,"status").equals("VALIDATED")&&row.get("request_id")==null?List.of("PRECHECK","PUBLISH"):List.of("VIEW"));
+    }
+    private List<Map<String,Object>> versionItems(Map<String,Object> row,Map<String,String> q) {
+        var items=db.array(row.get("item_snapshot"));if(items.size()>5000)throw error(400,"INVALID_ARGUMENT","版本数据项超出发布契约的 5000 项上限");
+        if(!q.containsKey("itemsPageNo"))return items;
+        int pn=Math.max(1,number(q.get("itemsPageNo"),1)),ps=Math.min(100,Math.max(1,number(q.get("itemsPageSize"),20)));
+        String order=ServerTableOrder.sql(q.get("itemSortField"),q.get("itemSortDir"),Map.of("name","name","length","item_length","ordinal","position"),"ordinal","asc","position");
+        var positions=db.rows("SELECT position FROM JSON_TABLE(?,'$[*]' COLUMNS(position FOR ORDINALITY,name VARCHAR(500) PATH '$.name',item_length DECIMAL(20,4) PATH '$.length' NULL ON ERROR)) item ORDER BY "+order+" LIMIT ? OFFSET ?",db.encode(items),ps,(long)(pn-1)*ps);
+        List<Map<String,Object>> page=new ArrayList<>();for(var position:positions)page.add(items.get(number(position.get("position"),1)-1));return page;
     }
     private boolean visiblePublished(Map<String,Object> catalog){
         var head=db.one("SELECT current_publication_id,availability FROM da_catalog_publication_head_t WHERE tenant_id=? AND catalog_id=?",db.tenant(),catalog.get("tid"));

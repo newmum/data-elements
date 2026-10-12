@@ -23,10 +23,12 @@ test('tenant credential rotation clears NiFi and platform query data but retains
     react: { useSyncExternalStore: () => undefined },
   });
   let canvasClears = 0;
+  let taskChainClears = 0;
   const removed = [];
   const querySession = loadTypeScript('src/nifi/api/querySession.ts', {
     './bridgeSession': session,
     '@/stores/canvasStore': { useCanvasStore: { getState: () => ({ clear: () => { canvasClears += 1; } }) } },
+    '../stores/taskChainStore': { useTaskChainStore: { getState: () => ({ clear: () => { taskChainClears += 1; } }) } },
   });
   querySession.registerNifiQueryClient({
     cancelQueries: () => Promise.resolve(),
@@ -45,11 +47,13 @@ test('tenant credential rotation clears NiFi and platform query data but retains
   assert.equal(removed.length, 2);
   assert.equal(removed[1].predicate({ queryKey: ['pipeline', 'old-id', 1] }), true);
   assert.equal(removed[1].predicate({ queryKey: ['manifests', 1] }), true);
+  assert.equal(removed[1].predicate({ queryKey: ['task-chain', 'old-task', 1] }), true);
   assert.equal(removed[1].predicate({ queryKey: ['platform', 'access-tasks'] }), true);
   assert.equal(removed[1].predicate({ queryKey: ['workspace'] }), false);
   session.setBridgeToken(null);
   assert.equal(session.getSessionRevision(), 3);
   assert.equal(canvasClears, 3);
+  assert.equal(taskChainClears, 3);
 });
 
 test('explicit routes outrank parent INIT, and changing token drops the old parent job', () => {

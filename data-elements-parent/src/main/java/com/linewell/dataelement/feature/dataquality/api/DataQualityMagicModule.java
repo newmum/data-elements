@@ -28,6 +28,10 @@ public class DataQualityMagicModule {
         return service.taskPage(status, keyword, page, size, kind);
     }
 
+    public Map<String, Object> taskPage(String status, String keyword, int page, int size, String kind,String sortField,String sortDir) {
+        return service.taskPage(status, keyword, page, size, kind,sortField,sortDir);
+    }
+
     @Comment("读取任务及其规则")
     public Map<String, Object> taskDetail(String taskId) {
         return service.taskDetail(taskId);
@@ -68,7 +72,17 @@ public class DataQualityMagicModule {
         return service.runPage(status, keyword, page, size, kind);
     }
 
+    public Map<String, Object> runPage(String status, String keyword, int page, int size, String kind,String sortField,String sortDir) {
+        return service.runPage(status, keyword, page, size, kind,sortField,sortDir);
+    }
+
     @Comment("读取实例指标和分片")
+    public Map<String,Object> runDetail(String runId, Map<String,Object> order) {
+        return service.runDetail(runId,order);
+    }
+    public Map<String,Object> issuePage(String runId,String status,String severity,int page,int size,String sortField,String sortDir) {
+        return service.issuePage(runId,status,severity,page,size,sortField,sortDir);
+    }
     public Map<String, Object> runDetail(String runId) {
         return service.runDetail(runId);
     }

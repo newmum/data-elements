@@ -24,6 +24,7 @@
 // 路由：GET /idaas/self-entities/mine
 // 业务说明：按当前认证账号查询其申请或可办理的法人资料和审核状态，仅返回本人可见记录。
 import db;
+import tableSort;
 import identityTransport;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
@@ -37,7 +38,7 @@ import '@/idaas/api-call' as apiCall;
 
 return identityRuntime.control(()=>apiCall(()=>{
     var payload={};
-    for(key in ['id','appId','domain']) {
+    for(key in ['id','appId','domain','paged','page','size','sortField','sortDir']) {
         var value=request.getValues(key);
         if(value!=null && value.size()>0) {
             payload.put(key,value[0]);
@@ -54,7 +55,16 @@ return identityRuntime.control(()=>apiCall(()=>{
         exit 403,'请先登录并完成公众账号密码设置';
     }
     if(operation=='mine') {
-        return sql.select("""
+        var page=Math.max(1,(p.page||1)::int);
+        var size=Math.min(100,Math.max(1,(p.size||20)::int));
+        var offset=(page-1)*size;
+        var total=sql.selectOne("select count(*) total from iam_legal_entity_t e join iam_legal_member_t m on m.entity_id=e.tid and m.subject_id=#{ctx.account.subject_id} and m.is_del=0 where e.is_del=0").total;
+        var paged=p.paged=='true';
+        if(!paged && total>1000) {exit 400,'法人记录较多，请使用分页查询';}
+        var take=paged?size:1000;
+        var skip=paged?offset:0;
+        var field=tableSort.field(p,{name:'e.name'},'name');
+        var rows=sql.select("""
 select e.tid as id,e.name,e.registration_code registrationCode,
        case
            when e.verification_status='VERIFIED'
@@ -83,8 +93,8 @@ join iam_legal_member_t m on m.entity_id=e.tid
 and m.subject_id=#{ctx.account.subject_id}
 and m.is_del=0
 where e.is_del=0
-order by e.created_time desc
-""");
+"""+' order by '+field+' '+tableSort.direction(p)+',e.tid,m.tid limit #{take} offset #{skip}');
+        return paged?{list:rows,total:total,page:page,size:size}:rows;
     }
     if(operation!='register' || p.consent!=true || p.requestId==null || !p.requestId.matches('[A-Za-z0-9_-]{8,64}')) {
         exit 400,'请同意法人资料登记并提供申请号';
