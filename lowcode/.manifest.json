@@ -582,7 +582,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "03.数据接入/2.3.1 Hive元数据库(data-convergence-hive).vue",
-      "baseSha256": "d126078cae2c10304917ffde9fa0edf90d2fac7bf6e8a10c80f5a9f2efd5d2fb"
+      "baseSha256": "7c266135602feccf1bf741e725d28820839322f26c1a993503ce61cab3c478f2"
     },
     {
       "id": "2008730136700588032",
@@ -592,7 +592,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
-      "baseSha256": "efb1b7f41f3a978cad40fb8896897045cf21bdddefd2286ec862e6427c7d57c7"
+      "baseSha256": "6c5c1214e0885d7e4e6568e1c62668e69a121154969733512cc529cf684e1753"
     },
     {
       "id": "2066782132212649984",
@@ -622,7 +622,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
-      "baseSha256": "b99c959097dcd72163e51e242cacfabe7f4a96b74c3694c101ce824281a09523"
+      "baseSha256": "11100b3f85ff9e43c98ada5dcc91d8b308699aac708f9c88e90e83d4ba85c0c3"
     },
     {
       "id": "2046880498703695872",

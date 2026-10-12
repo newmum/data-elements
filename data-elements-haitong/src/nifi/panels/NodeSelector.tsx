@@ -14,6 +14,7 @@ import {
 import { useComponentManifests } from '@/api/manifests';
 import type { ComponentCategory, ComponentManifest } from '@/types/manifest';
 import { COMPONENT_ICONS } from './databaseIcons';
+import { getNifiOverlayContainer } from './overlayContainer';
 
 const CAT_ICON: Record<ComponentCategory, React.ReactNode> = {
   source: <DatabaseOutlined />,
@@ -50,12 +51,6 @@ const SOURCE_POPULARITY_ORDER: Record<string, number> = {
   'source.gbase8a': 180,
   'source.oscar': 190,
 };
-
-function getCanvasPopupContainer(trigger: HTMLElement) {
-  // The graph clips its descendants and creates a paint containing block.
-  // Keep the palette in the themed workspace, outside that clipping boundary.
-  return (trigger.closest('.nifi-workspace') as HTMLElement | null) ?? trigger.ownerDocument.body;
-}
 
 function manifestSort(a: ComponentManifest, b: ComponentManifest) {
   if (a.category === 'source' && b.category === 'source') {
@@ -206,7 +201,7 @@ export default function NodeSelector({
       autoAdjustOverflow
       arrow={false}
       align={{ offset: [0, 0], overflow: { adjustX: true, adjustY: true, shiftX: true, shiftY: true } }}
-      getPopupContainer={getCanvasPopupContainer}
+      getPopupContainer={getNifiOverlayContainer}
       classNames={{ root: 'node-selector-popover' }}
       destroyOnHidden
       styles={{ body: { padding: 0 } }}

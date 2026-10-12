@@ -96,7 +96,8 @@ class DataAggTaskEnsureBatchMagicTest {
         var mapping = cn.hutool.json.JSONUtil.parseObj(spec).getJSONArray("mappings").getJSONObject(1);
         assertEquals(type, mapping.getStr("sourceDataType"));
         String sql = new com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService().compileQuery(spec);
-        assertTrue(sql.contains(type.startsWith("NUMBER") ? "WHEN 0 THEN" : "WHEN '0' THEN"));
+        assertTrue(type.startsWith("NUMBER") ? sql.contains("WHEN 0 THEN")
+                : java.util.regex.Pattern.compile("WHEN (?:_UTF8)?'0' THEN").matcher(sql).find(), sql);
         assertEquals(type, fixture.jdbc.queryForObject("select source_data_type from data_access_field_mapping where target_field='person_id_cn'", String.class));
     }
 
@@ -457,6 +458,44 @@ class DataAggTaskEnsureBatchMagicTest {
     }
 
     @Test
+    void configuredOdsDomainOrderOverridesReverseSelectionsWithConstantBatchReads() throws Exception {
+        List<Integer> reads = new ArrayList<>();
+        for (int size : List.of(20, 100)) {
+            Fixture fixture = new Fixture(size); fixture.prepareCreation();
+            fixture.jdbc.update("insert into sym_dict_t values('root','police','0','dataSourceType',0,0),('ods','police','root','ods',0,0)");
+            List<String> reversed = new ArrayList<>();
+            for (int i = 0; i < size; i++) {
+                fixture.jdbc.update("insert into sym_dict_t values(?,'police','ods',?,0,?)", "domain-" + i, i == 0 ? "huiju" : i == 1 ? "yuanshi" : "extra-" + i, i);
+                fixture.jdbc.update("insert into dwm_center_layer_source_t values('police',?,'domain',?,0)", "domain-" + i, "target-db-" + i);
+                reversed.addFirst("target-" + i);
+            }
+            // Invalid bindings must not become an earlier hop, even if they refer to a permitted DB.
+            fixture.jdbc.update("insert into sym_dict_t values('foreign-domain','other','ods','yuanshi',0,-2),('deleted-domain','police','ods','yuanshi',1,-1)");
+            fixture.jdbc.update("insert into dwm_center_layer_source_t values('police','foreign-domain','domain','target-db-1',0),('police','deleted-domain','domain','target-db-1',0)");
+            Map<?, ?> result = assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "targetTableIds", reversed)));
+            reads.add(fixture.counter.queries);
+            assertEquals(size, result.get("createdCount"));
+            for (int i = 0; i < size; i++) {
+                assertEquals("target-" + i, ((List<?>) result.get("targetTableIds")).get(i));
+                assertEquals(i == 0 ? "source-1" : "target-" + (i - 1), fixture.jdbc.queryForObject(
+                        "select source_table_id from data_access_agg_task_t where target_table_id=?", String.class, "target-" + i));
+            }
+            assertEquals(3, fixture.counter.writes);
+            System.out.println("Configured ODS order: targets=" + size + ", SQL reads=" + fixture.counter.queries + ", batch writes=3; foreign/deleted domains excluded");
+        }
+        assertEquals(reads.getFirst(), reads.getLast());
+        Fixture changed = new Fixture(2); changed.prepareCreation();
+        changed.jdbc.update("insert into sym_dict_t values('root','police','0','dataSourceType',0,0),('ods','police','root','ods',0,0),('huiju','police','ods','huiju',0,2),('yuanshi','police','ods','yuanshi',0,1)");
+        changed.jdbc.update("insert into dwm_center_layer_source_t values('police','huiju','domain','target-db-0',0),('police','yuanshi','domain','target-db-1',0)");
+        Map<?, ?> moved = assertInstanceOf(Map.class, changed.run(Map.of("tableId", "source-1", "targetTableIds", List.of("target-0", "target-1"))));
+        assertEquals(List.of("target-1", "target-0"), moved.get("targetTableIds"));
+        assertEquals("target-1", changed.jdbc.queryForObject("select source_table_id from data_access_agg_task_t where target_table_id='target-0'", String.class));
+        Fixture denied = new Fixture(2); denied.prepareCreation(); denied.scope.deniedId = "target-db-1";
+        assertInstanceOf(ExitValue.class, denied.run(Map.of("tableId", "source-1", "targetTableIds", List.of("target-1", "target-0"))));
+        assertEquals(0, denied.counter.writes, "Sorting must never bypass per-ID role authorization");
+    }
+
+    @Test
     void explicitRepairSplitsLegacyAndFailedBatchRollsBackAllHops() throws Exception {
         Fixture fixture=new Fixture(2);
         Map<?,?> split=assertInstanceOf(Map.class,fixture.run(Map.of("tableId","source-1","forceRebuild",true)));
@@ -551,9 +590,7 @@ class DataAggTaskEnsureBatchMagicTest {
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("alter table db_table_t add business_type varchar(64)");
         f.jdbc.execute("alter table db_datasource_t add db_name varchar(100)");
-        f.jdbc.execute("create table sym_dict_t(tid varchar(64),tenant_id varchar(32),parent_id varchar(64),dict_code varchar(64),is_del int)");
-        f.jdbc.execute("create table dwm_center_layer_source_t(tenant_id varchar(32),target_id varchar(64),target_type varchar(32),datasource_id varchar(64),is_del int)");
-        f.jdbc.update("insert into sym_dict_t values('root','police','0','dataSourceType',0),('ods','police','root','ods',0),('domain','police','ods','business',0)");
+        f.jdbc.update("insert into sym_dict_t(tid,tenant_id,parent_id,dict_code,is_del) values('root','police','0','dataSourceType',0),('ods','police','root','ods',0),('domain','police','ods','business',0)");
         f.jdbc.update("insert into dwm_center_layer_source_t values('police','domain','domain','target-db-0',0)");
         f.jdbc.update("update db_table_t set business_type='业务表'");
         String script=CanonicalMagicSources.byId("1f475a245fda4ba4a885b3ac4f8e2d59")
@@ -573,7 +610,7 @@ class DataAggTaskEnsureBatchMagicTest {
         assertEquals(1,assertInstanceOf(List.class,task.get("targetTables")).size());
     }
 
-    private static final class Fixture {
+    static final class Fixture {
         final JdbcTemplate jdbc;
         final SQLModule db;
         final QueryCounter counter = new QueryCounter();
@@ -615,6 +652,8 @@ class DataAggTaskEnsureBatchMagicTest {
                     create table db_datasource_t(tid varchar(64),tenant_id varchar(32),db_type varchar(32),
                         pool_cfg clob,is_del int,asset_status int default 2)
                     """);
+            jdbc.execute("create table sym_dict_t(tid varchar(64),tenant_id varchar(32),parent_id varchar(64),dict_code varchar(64),is_del int,sort_no int)");
+            jdbc.execute("create table dwm_center_layer_source_t(tenant_id varchar(32),target_id varchar(64),target_type varchar(32),datasource_id varchar(64),is_del int)");
             jdbc.execute("""
                     create table db_table_column_t(tid varchar(64),tenant_id varchar(32),table_id varchar(64),
                         column_name varchar(100),code_table_id varchar(64),ordinal_position int,is_del int)
@@ -697,6 +736,10 @@ class DataAggTaskEnsureBatchMagicTest {
         }
 
         Object run() throws Exception { return run(Map.of("tableId", "source-1")); }
+
+        int readCount() { return counter.queries; }
+        int writeCount() { return counter.writes; }
+        void resetCounter() { counter.queries=0; counter.writes=0; }
 
         Object run(Map<String, Object> body) throws Exception {
             String script = CanonicalMagicSources.byId(SOURCE_ID)

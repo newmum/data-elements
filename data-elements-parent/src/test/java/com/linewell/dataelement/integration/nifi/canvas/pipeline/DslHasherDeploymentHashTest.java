@@ -59,6 +59,18 @@ class DslHasherDeploymentHashTest {
     }
 
     @Test
+    void utf8CompilerRevisionRebuildsPreviouslyDeployedFieldMappingsOnly() throws Exception {
+        String revision = DslHasher.CURRENT_COMPILER_REVISION;
+        for (String key : List.of("transform.field-mapping", "transform.field-enrichment")) {
+            var dsl = singleSink(key, Map.of());
+            String old = previousDeploymentHash(dsl, revision + "|field-mapping-lookup-dialect-v1");
+            assertThat(DslHasher.deploymentHash(dsl, revision)).isNotEqualTo(old);
+        }
+        var ordinary = singleSink("sink.jdbc", Map.of());
+        assertThat(DslHasher.deploymentHash(ordinary, revision)).isEqualTo(previousDeploymentHash(ordinary, revision));
+    }
+
+    @Test
     void fileDatasetParserRevisionRequiresRedeploymentOnlyForFtpSources() throws Exception {
         String revision=DslHasher.CURRENT_COMPILER_REVISION;
         for (String key:List.of("source.ftp","source.sftp")) {

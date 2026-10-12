@@ -79,7 +79,7 @@
       <u-title name="建表信息" />
       <div v-if="knownTargets.length" class="existing-target-panel">
         <strong>已有目标表</strong>
-        <span>以下目标表已与当前来源表关联，可保留并只创建流程。Hive 仅移除登记和流程，物理表及数据保留；重新物化需修改表名或由运维手动删表。</span>
+        <span>以下目标表已与当前来源表关联，可保留并创建流程。Hive 移除登记和流程后仍保留物理表及数据，后续可校验并复用已有表。</span>
         <div v-for="target in knownTargets" :key="target.targetTableId" class="existing-target-row">
           <span :title="target.targetTableName">{{ target.targetDbName || target.targetDbId }} / {{ target.targetTableName }}</span>
           <el-button link type="danger" :disabled="isSaveing || recoveryDeleting" @click="handleDeleteExistingTarget(target)">{{ isHiveTarget(target) ? "移除登记和流程" : "删除目标表" }}</el-button>
@@ -194,15 +194,15 @@
   >
     <p>{{ existingDecisionSummary }}</p>
     <p v-if="!existingDecision.canReuse" class="existing-target-warning">
-      当前选择的目标表缺少完整、有效的本来源表登记关系，不能直接复用建流程。请删除后重新物化，或取消并修改目标表名。
+      当前没有可复用的目标物理表。请重新物化，或取消并调整目标配置。
     </p>
     <p v-if="existingDecisionHasUnlinked" class="existing-target-warning">
-      其中有目标表已单独登记、但未关联当前来源表。删除前请核对其数据用途；确认删除后只清理所选目标表，不影响当前来源表的其他任务。
+      其中有目标表尚未关联当前来源表。继续后会校验真实字段并补齐关联登记；已有表及其数据会保留。
     </p>
     <template #footer>
       <el-button @click="resolveExistingDecision('cancel')">取消</el-button>
-      <el-button type="primary" :disabled="!existingDecision.canReuse" @click="resolveExistingDecision('flow')">只创建流程</el-button>
-      <el-button type="danger" @click="resolveExistingDecision('delete')">删除目标表并重新物化</el-button>
+      <el-button type="primary" :disabled="!existingDecision.canReuse" @click="resolveExistingDecision('flow')">继续建表并创建流程</el-button>
+      <el-button v-if="!existingDecisionHasHive" type="danger" @click="resolveExistingDecision('delete')">删除目标表并重新物化</el-button>
     </template>
   </el-dialog>
 
@@ -334,9 +334,11 @@ let existingDecisionResolve: ((choice: string) => void) | null = null;
 const existingDecisionHasUnlinked = computed(() =>
   existingDecision.value.targets.some((target: any) => target.probe?.targetUnlinked === true),
 );
+const existingDecisionHasHive = computed(() => existingDecision.value.targets.some((target: any) =>
+  isHiveTarget({ ...target, targetDatabaseType: target.probe?.targetDatabaseType })));
 const existingDecisionSummary = computed(() => {
   const rows = existingDecision.value.targets;
-  return `目标表已存在：${rows.map((row: any) => `${row.targetDbName || row.targetDbId} / ${row.targetTableName}`).join('、')}。请选择保留目标表只创建流程，或删除目标表后重新物化。`;
+  return `目标表已存在：${rows.map((row: any) => `${row.targetDbName || row.targetDbId} / ${row.targetTableName}`).join('、')}。选择继续后，已有表会直接复用并保留数据，其余尚不存在的目标表正常创建，然后生成任务流程。`;
 });
 const resolveExistingDecision = (choice: string) => {
   materializationAwaitingDecision.value = false;
@@ -816,21 +818,29 @@ const normalizeDatasourcePaths = (dbIds: any) =>
 
 const normalizeCode = (value: any) => String(value ?? "").trim().toLowerCase();
 
+// 接入目标按接口返回的 ODS 分域配置顺序排列，不采用复选框点击顺序。
+// 分发目标来自部门数据源树，保留其选择顺序。
+const orderTargetDatasourceIds = (value: any) => {
+  const ids = normalizeDbIds(value).map((id: any) => String(id));
+  if (props.taskCategory === "distribution") return ids;
+  const selected = new Set(ids);
+  const ordered = [...new Set(datasourceLeafIds.value.filter((id) => selected.has(id)))];
+  return [...ordered, ...ids.filter((id) => !ordered.includes(id))];
+};
+
 const getDefaultDatasourcePaths = () => {
   if (props.taskCategory === "distribution") return [];
   const paths: any[][] = [];
   const selectedIds = new Set<string>();
-  // 仅使用接口已校验权限的 ODS 叶节点；级联任务默认按汇聚→原始排列。
-  for (const domainCode of ["huiju", "yuanshi"]) {
-    for (const dbId of datasourceLeafIds.value) {
-      const datasource = datasourceMap.value[dbId] || {};
-      const path = datasourcePathMap.value[dbId];
-      if (normalizeCode(datasource.layerCode) !== "ods"
-        || normalizeCode(datasource.domainCode ?? datasource.domain_code) !== domainCode
-        || !path?.length || selectedIds.has(dbId)) continue;
-      selectedIds.add(dbId);
-      paths.push([...path]);
-    }
+  // 只勾选 huiju / yuanshi，排列遵循管理员保存的分域顺序。
+  for (const dbId of datasourceLeafIds.value) {
+    const datasource = datasourceMap.value[dbId] || {};
+    const path = datasourcePathMap.value[dbId];
+    if (normalizeCode(datasource.layerCode) !== "ods"
+      || !["huiju", "yuanshi"].includes(normalizeCode(datasource.domainCode ?? datasource.domain_code))
+      || !path?.length || selectedIds.has(dbId)) continue;
+    selectedIds.add(dbId);
+    paths.push([...path]);
   }
   return paths;
 };
@@ -1006,7 +1016,7 @@ const loadTemplateTableItems = async (items: any) => {
 };
 
 const syncDbTypeByDatasource = (value: any) => {
-  const dbId = normalizeDbIds(value)[0];
+  const dbId = orderTargetDatasourceIds(value)[0];
   const dbType = String(datasourceMap.value[dbId]?.dbType || "").trim();
   if (!dbType) return;
   const currentDbType = String(jsonFormRef.value?.getValue?.("dbType") || "").trim();
@@ -1057,7 +1067,7 @@ const targetTablePlanSummary = computed(() => {
 });
 
 const syncTargetDatasourceSelection = (value: any) => {
-  const nextIds = normalizeDbIds(value);
+  const nextIds = orderTargetDatasourceIds(value);
   if (!sameStringList(targetDatasourceIds.value, nextIds)) targetDatasourceIds.value = nextIds;
   syncDbTypeByDatasource(value);
   syncTargetTableNameInput(jsonFormRef.value?.getValue?.("tableName") || targetTableNameInput.value);
@@ -1076,7 +1086,7 @@ const syncTargetTableNameInput = (value: any) => {
 };
 
 const normalizeFormPayload = (data: any) => {
-  const targetDbIds = normalizeDbIds(data?.dbId);
+  const targetDbIds = orderTargetDatasourceIds(data?.dbId);
   const dbId = targetDbIds[0];
   const selected = datasourceMap.value[dbId];
   const selectedPath = Array.isArray(data?.nifiNodePath) ? data.nifiNodePath : [];
@@ -1355,6 +1365,7 @@ const handleSave = async () => {
   isSaveing.value = true;
   startMaterializationProgress();
   let lastTargetForm: any = null;
+  const reuseTargetDbIds = new Set<string>();
   try {
     if (sourceFileConfig.value) {
       // Revalidate the managed file selector and parser before creating any physical table.
@@ -1457,12 +1468,6 @@ const handleSave = async () => {
       );
       if (probe.targetPhysicalExists || probe.targetUnlinked || known) conflicts.push({ ...plan, known, probe });
     }
-    const existingHive = conflicts.filter((item: any) => item.probe.targetPhysicalExists === true
-      && isHiveTarget({ ...item, targetDatabaseType: item.probe.targetDatabaseType }));
-    if (existingHive.length) {
-      ElMessage.warning(`Hive 目标物理表已存在：${existingHive.map((item: any) => item.targetTableName).join('、')}。请修改目标表名，或联系运维手动删除原表后重新物化；系统不会自动删除 Hive 表。`);
-      return;
-    }
     if (conflicts.length) {
       const recoveryConflict = conflicts.find((item: any) => !item.known);
       if (recoveryConflict) {
@@ -1473,47 +1478,65 @@ const handleSave = async () => {
           targetTableName: recoveryConflict.targetTableName,
         };
       }
-      const canReuse = conflicts.length === plannedTargets.length
-        && conflicts.every((item: any) => item.known?.targetTableId
-          && item.probe.targetPhysicalExists === true && item.probe.targetMetadataMissing !== true);
+      const canReuse = conflicts.some((item: any) => item.probe.targetPhysicalExists === true);
       const choice = await askExistingDecision(conflicts, canReuse);
       if (choice === 'cancel') return;
       if (choice === 'flow') {
-        if (!canReuse) throw new Error('目标表未完整登记，不能直接创建流程');
-        const targetTables = conflicts.map((item: any) => item.known);
-        emit('save', { ...targetTables[0], targetTables, reusedExisting: true, sourceFileConfig: sourceFileConfig.value });
-        return;
-      }
-      await validateEditedDdl();
-      await confirmMaterialization(
-        `将删除 ${conflicts.length} 个同名目标物理表及其关联元数据，然后重新物化。删除不可恢复，确认继续吗？`,
-        '删除目标表并重新物化',
-        { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
-      );
-      materializationProgress.value.detail = "正在清理已确认重新物化的目标表";
-      for (const item of conflicts) {
-        const result = await $common.post('/ods/dataAggReset', {
-          sourceTableId: props.id,
-          targetTableId: item.probe?.targetTableId || item.known?.targetTableId || '',
-          targetDbId: item.targetDbId,
-          targetTableName: item.targetTableName,
-          deleteTargetTable: true,
-          confirmUnmanagedTarget: true,
-          confirmUnlinkedTarget: item.probe?.targetUnlinked === true,
-        }, { _hiddenErrorMsg: true }, 120 * 1000);
-        const outcome = result?.data || result || {};
-        if (outcome.targetCleanupPending || outcome.processGroupCleanupPendingCount > 0
-          || (item.probe.targetPhysicalExists && outcome.targetPhysicalDeleted !== true)) {
-          throw new Error(`目标物理表“${item.targetTableName}”未确认删除，已停止重新物化`);
+        if (!canReuse) throw new Error('没有可复用的目标物理表');
+        const reusable = conflicts.filter((item: any) => item.probe.targetPhysicalExists === true);
+        const targets = reusable.map((item: any) => {
+          const target = ddlInput.targets.find((plan: any) => String(plan.dbId) === String(item.targetDbId));
+          return { dbId:target.dbId, tableName:target.propList.tableName,
+            ddl:ddlSqlByTarget.value[target.key], tableItems:targetTableItems(ddlInput.tableItems,target.propList.dbType) };
+        });
+        const response = await $common.post('/dst/database/metadata/createTable', {
+          canvas:true, validateOnly:true, batchReuseValidation:true, targets,
+        }, { _hiddenErrorMsg:true }, 120 * 1000);
+        const validation = response?.data || response || {};
+        if (validation.batchReuseValidation !== true || validation.sideEffectsApplied !== false
+          || !Array.isArray(validation.results) || validation.results.length !== targets.length) {
+          throw new Error('已有目标表批量结构校验结果不完整');
         }
-        if (item.known) {
-          knownTargets.value = knownTargets.value.filter((target: any) => target.targetTableId !== item.known.targetTableId);
-          emit('target-deleted', item.known);
+        for (const [index, target] of targets.entries()) {
+          const result = validation.results[index];
+          if (String(result?.dbId) !== String(target.dbId) || result?.requestedTableName !== target.tableName
+            || result?.valid !== true || result?.physicalTableReused !== true || result?.sideEffectsApplied !== false) {
+            throw new Error('已有目标表结构校验与所选目标不一致');
+          }
+          reuseTargetDbIds.add(String(target.dbId));
         }
+      } else {
+        await validateEditedDdl();
+        await confirmMaterialization(
+          `将删除 ${conflicts.length} 个同名目标物理表及其关联元数据，然后重新物化。删除不可恢复，确认继续吗？`,
+          '删除目标表并重新物化',
+          { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
+        );
+        materializationProgress.value.detail = "正在清理已确认重新物化的目标表";
+        for (const item of conflicts) {
+          const result = await $common.post('/ods/dataAggReset', {
+            sourceTableId: props.id,
+            targetTableId: item.probe?.targetTableId || item.known?.targetTableId || '',
+            targetDbId: item.targetDbId,
+            targetTableName: item.targetTableName,
+            deleteTargetTable: true,
+            confirmUnmanagedTarget: true,
+            confirmUnlinkedTarget: item.probe?.targetUnlinked === true,
+          }, { _hiddenErrorMsg: true }, 120 * 1000);
+          const outcome = result?.data || result || {};
+          if (outcome.targetCleanupPending || outcome.processGroupCleanupPendingCount > 0
+            || (item.probe.targetPhysicalExists && outcome.targetPhysicalDeleted !== true)) {
+            throw new Error(`目标物理表“${item.targetTableName}”未确认删除，已停止重新物化`);
+          }
+          if (item.known) {
+            knownTargets.value = knownTargets.value.filter((target: any) => target.targetTableId !== item.known.targetTableId);
+            emit('target-deleted', item.known);
+          }
+        }
+        recoveryTarget.value = null;
       }
-      recoveryTarget.value = null;
     }
-    if (!conflicts.length) await validateEditedDdl();
+    if (!conflicts.length || reuseTargetDbIds.size) await validateEditedDdl();
     materializationProgress.value.phase = 2;
     const targetTables: any[] = [];
     for (const target of ddlInput.targets) {
@@ -1522,12 +1545,15 @@ const handleSave = async () => {
       // Reuse the exact target configuration used by DDL preview and preflight validation.
       const targetForm = { ...target.propList };
       lastTargetForm = targetForm;
-      materializationProgress.value.detail = `正在创建第 ${targetTables.length + 1} / ${ddlInput.targets.length} 张：${target.dbName} · ${targetForm.tableName}`;
+      const reuseExistingTable = reuseTargetDbIds.has(String(targetDbId));
+      materializationProgress.value.detail = `正在${reuseExistingTable ? '复用' : '创建'}第 ${targetTables.length + 1} / ${ddlInput.targets.length} 张：${target.dbName} · ${targetForm.tableName}`;
       const result = await $common.post("/ods/createTapleApply", {
         propList: targetForm,
         tableItems: targetTableItems(ddlInput.tableItems, targetForm.dbType),
         tid: props.id,
         ddl: ddlSourceFingerprint.value ? ddlSqlByTarget.value[targetDbId] : undefined,
+        reuseExistingTable,
+        recreateMissingTable: !reuseExistingTable,
       }, { _hiddenErrorMsg: true }, 120 * 1000);
       const payload = result?.data || result || {};
       const targetTableId = payload.targetTableId || payload.tid;
@@ -1544,7 +1570,7 @@ const handleSave = async () => {
         targetTableName: targetForm.tableName,
       });
     }
-    ElMessage.success(`已完成 ${targetTables.length} 个目标表物化，正在准备任务画布`);
+    ElMessage.success(`已处理 ${targetTables.length} 个目标表（复用 ${reuseTargetDbIds.size} 个），正在准备任务画布`);
     emit("save", {
       ...targetTables[0],
       targetTableId: targetTables[0]?.targetTableId || "",
@@ -1563,16 +1589,9 @@ const handleSave = async () => {
     if (error !== 'cancel' && error !== 'close' && !message.includes('目标物理表已存在') && !error?.handled) {
       ElMessage.error(error?.message || error || '物化建表失败');
     }
-    if (message.includes('目标物理表已存在') && isHiveTarget(recoveryTarget.value)) {
-      ElMessage.warning(message);
-    } else if (message.includes('目标物理表已存在') && recoveryTarget.value) {
-      const known = knownTargets.value.find((target: any) =>
-        String(target.targetDbId) === String(recoveryTarget.value.targetDbId)
-        && String(target.targetTableName).toUpperCase() === String(recoveryTarget.value.targetTableName).toUpperCase(),
-      );
-      const choice = await askExistingDecision([{ ...recoveryTarget.value, known }], Boolean(known));
-      if (choice === 'flow' && known) emit('save', { ...known, targetTables: [known], reusedExisting: true, sourceFileConfig: sourceFileConfig.value });
-      if (choice === 'delete') ElMessage.info('请使用“删除已有目标表”操作，删除后重新提交');
+    if (message.includes('目标物理表已存在')) {
+      // 检查与建表之间有其他请求创建了同名表；重新提交走完整预检及明确复用，不能绕过结构校验直接生成流程。
+      ElMessage.warning('目标库状态已变化，同名物理表已存在。请再次提交，在提示中确认复用已有表后继续创建流程。');
     }
   } finally {
     stopMaterializationProgress();
@@ -1580,8 +1599,8 @@ const handleSave = async () => {
   }
 };
 
-// A pre-existing physical target is never adopted implicitly. Operators can
-// remove it explicitly and then retry the same materialization request.
+// A pre-existing physical target is adopted only after explicit confirmation
+// and server-side validation of its real fields.
 // 页面只负责说明策略，删除类型与权限由服务端登记记录决定。
 const isHiveTarget = (target) => ['hive', 'mrshive', 'huaweihive', 'huaweimrshive'].includes(
   String(target?.targetDatabaseType || target?.targetDbType || target?.dbType || datasourceMap.value[target?.targetDbId]?.dbType || '')
@@ -1590,7 +1609,7 @@ const isHiveTarget = (target) => ['hive', 'mrshive', 'huaweihive', 'huaweimrshiv
 const targetCleanupConfirmText = (target, preview = {}) => {
   const name = target?.targetTableName || target?.tableName || '当前目标表';
   if (preview.targetHivePhysicalRetained === true || isHiveTarget(target)) {
-    return `将移除“${name}”的接入流程和目标登记，Hive 物理表及数据保留。重新物化需修改表名或联系运维手动删除原表。确认继续吗？`;
+    return `将移除“${name}”的接入流程和目标登记，Hive 物理表及数据保留。后续可在物化建表时确认复用已有表并重新创建流程。确认继续吗？`;
   }
   if (preview.targetCleanupPending === true) {
     return `目标库暂时无法检查，将取消可清理的接入流程，并保留“${name}”的目标登记供重试。确认继续吗？`;

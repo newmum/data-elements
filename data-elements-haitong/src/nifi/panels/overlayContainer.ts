@@ -1,4 +1,7 @@
-/** Keep NiFi overlays inside its workbench so local light/dark tokens inherit. */
-export function getNifiOverlayContainer(): HTMLElement {
-  return document.querySelector<HTMLElement>('.nifi-workspace') ?? document.body;
+/** Keep themed overlays outside the graph's overflow/paint clipping boundary. */
+export function getNifiOverlayContainer(trigger?: HTMLElement): HTMLElement {
+  const ownerDocument = trigger?.ownerDocument ?? document;
+  return trigger?.closest<HTMLElement>('.nifi-workspace')
+    ?? ownerDocument.querySelector<HTMLElement>('.nifi-workspace')
+    ?? ownerDocument.body;
 }

@@ -7,7 +7,8 @@ const AuthAPI = {
   /** 登录接口*/
   login(data: LoginFormData) {
     const formData = {
-      account: data.username,
+      // 表单/历史缓存的运行时类型不一定与 TS 类型一致，账号只按文本发送。
+      account: String(data.username ?? "").trim(),
       password: sm.sm3(data.password),
       appId: useSettingStore().appId,
       // The login page's hidden industry selector must determine the initial

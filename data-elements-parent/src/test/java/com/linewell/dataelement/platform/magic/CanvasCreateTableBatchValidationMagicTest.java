@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.metautil.ddl.CanvasTableDdl;
+import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
+import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -32,6 +34,8 @@ class CanvasCreateTableBatchValidationMagicTest {
     private SQLModule db;
     private QueryCounter counter;
     private Scope scope;
+    private JdbcTemplate jdbc;
+    private PhysicalMetadata physical;
 
     @BeforeEach
     void setUp() {
@@ -51,11 +55,101 @@ class CanvasCreateTableBatchValidationMagicTest {
         db.setNamedTableInterceptors(List.of());
         db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());
         db.setRowMapColumnMapper(value -> value);
-        var jdbc = new JdbcTemplate(source);
+        jdbc = new JdbcTemplate(source);
         jdbc.execute("create table db_datasource_t(tid varchar(64),tenant_id varchar(64),is_del int,db_type varchar(32),username varchar(64),pool_cfg varchar(512))");
         jdbc.update("insert into db_datasource_t values(?,?,?,?,?,?)", "target-db", "police", 0, "hive", null,
                 "{\"database\":\"warehouse\",\"metadataAccessMode\":\"server-managed-mrs\"}");
         scope = new Scope();
+        physical = new PhysicalMetadata();
+    }
+
+    @Test
+    void existingHiveWithTwentyAndHundredFieldsUsesOneReadAndNoDdl() throws Exception {
+        for (int size : List.of(20, 100)) {
+            counter.queries = 0; physical.calls = 0;
+            List<Map<String,Object>> fields = new ArrayList<>();
+            physical.columns = new ArrayList<>();
+            for (int i=0;i<size;i++) {
+                String name="field_"+i;
+                fields.add(Map.of("columnName",name,"dataType","varchar","length",32));
+                ColumnInfo column=new ColumnInfo(); column.setColumnName(name); column.setDataType("string");
+                column.setColumnType("string"); column.setNullable(true); physical.columns.add(column);
+            }
+            Map<?,?> result=assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,"batchReuseValidation",true,
+                    "targets",List.of(Map.of("dbId","target-db","tableName","ods_existing","ddl","CREATE TABLE ods_existing(id STRING)","tableItems",fields)))));
+            var item=(Map<?,?>)((List<?>)result.get("results")).getFirst();
+            assertEquals(true,result.get("batchReuseValidation")); assertEquals(false,result.get("sideEffectsApplied"));
+            assertEquals(size,((List<?>)item.get("tableItems")).size()); assertEquals(true,item.get("physicalTableReused"));
+            assertEquals(1,counter.queries); assertEquals(1,physical.calls); assertEquals(0,counter.writes);
+            System.out.println("Existing Hive fields="+size+", tenant SQL=1, DESCRIBE=1, DDL writes=0");
+        }
+    }
+
+    @Test
+    void hiveDescribeKeepsLengthAndDecimalCapacity() throws Exception {
+        ColumnInfo name=new ColumnInfo(); name.setColumnName("name"); name.setDataType("varchar(32)");
+        ColumnInfo amount=new ColumnInfo(); amount.setColumnName("amount"); amount.setDataType("decimal(10, 2)");
+        physical.columns=List.of(name,amount);
+        var fields=List.of(Map.of("columnName","name","dataType","varchar","length",32),
+            Map.of("columnName","amount","dataType","decimal","precisionLength",10,"scale",2));
+        Map<String,Object> request=new LinkedHashMap<>(Map.of("canvas",true,"reuseExistingOnly",true,"dbId","target-db",
+            "tableName","ods_existing","ddl","CREATE TABLE ods_existing(name STRING,amount DECIMAL(10,2))","tableItems",fields));
+        var result=assertInstanceOf(Map.class,run(request));
+        var actual=(List<?>)result.get("tableItems");
+        assertEquals("varchar",((Map<?,?>)actual.getFirst()).get("dataType"));
+        assertEquals(32L,((Map<?,?>)actual.getFirst()).get("length"));
+        assertEquals(10,((Map<?,?>)actual.get(1)).get("precisionLength"));
+        assertEquals(2,((Map<?,?>)actual.get(1)).get("scale"));
+        request.put("tableItems",List.of(Map.of("columnName","name","dataType","varchar","length",64),fields.get(1)));
+        assertInstanceOf(ExitValue.class,run(request));
+        request.put("tableItems",List.of(fields.getFirst(),Map.of("columnName","amount","dataType","decimal","precisionLength",12,"scale",3)));
+        assertInstanceOf(ExitValue.class,run(request));
+        assertEquals(0,counter.writes);
+    }
+
+    @Test
+    void ordinaryTargetsUseOneGroupedColumnReadAndKeepPhysicalOrder() throws Exception {
+        jdbc.update("update db_datasource_t set db_type='postgresql',username='fixture',pool_cfg=?",
+                "{\"host\":\"fixture.invalid\",\"database\":\"warehouse\"}");
+        ColumnInfo column=new ColumnInfo(); column.setColumnName("id"); column.setDataType("varchar");
+        column.setColumnType("varchar(64)"); column.setLength(64L); column.setNullable(true); physical.columns=List.of(column);
+        List<Map<String,Object>> targets=new ArrayList<>();
+        for (int i=0;i<20;i++) targets.add(Map.of("dbId","target-db","tableName","ods_existing_"+i,
+                "ddl","CREATE TABLE ods_existing_"+i+"(id VARCHAR(32))","tableItems",List.of(Map.of("columnName","id","dataType","varchar","length",32))));
+        Map<?,?> result=assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,"batchReuseValidation",true,"targets",targets)));
+        assertEquals(20,((List<?>)result.get("results")).size()); assertEquals(1,physical.calls); assertEquals(1,counter.queries);
+        var fields=(List<?>)((Map<?,?>)((List<?>)result.get("results")).getFirst()).get("tableItems");
+        assertEquals("varchar",((Map<?,?>)fields.getFirst()).get("dataType"));
+        assertEquals(64L,((Map<?,?>)fields.getFirst()).get("length")); assertEquals(0,counter.writes);
+    }
+
+    @Test
+    void missingOrIncompatibleFieldsAndMixedUnauthorizedIdsNeverWrite() throws Exception {
+        ColumnInfo column=new ColumnInfo(); column.setColumnName("id"); column.setDataType("int"); column.setNullable(true);
+        physical.columns=List.of(column);
+        for (String name:List.of("missing","id")) {
+            assertInstanceOf(ExitValue.class,run(Map.of("canvas",true,"validateOnly",true,"batchReuseValidation",true,
+                "targets",List.of(Map.of("dbId","target-db","tableName","ods_existing","ddl","CREATE TABLE ods_existing(id STRING)",
+                    "tableItems",List.of(Map.of("columnName",name,"dataType","varchar","length",32)))))));
+            assertEquals(0,counter.writes);
+        }
+        physical.calls=0;
+        var targets=List.of(Map.of("dbId","target-db","tableName","ods_existing","ddl","CREATE TABLE ods_existing(id STRING)"),
+                Map.of("dbId","foreign-db","tableName","ods_existing","ddl","CREATE TABLE ods_existing(id STRING)"));
+        assertInstanceOf(ExitValue.class,run(Map.of("canvas",true,"validateOnly",true,"batchReuseValidation",true,"targets",targets)));
+        assertEquals(0,physical.calls); assertEquals(0,counter.writes);
+    }
+
+    @Test
+    void explicitSingleReuseNeverExecutesCreationAndRespectsRoleScope() throws Exception {
+        ColumnInfo column=new ColumnInfo(); column.setColumnName("id"); column.setDataType("string"); column.setNullable(true);
+        physical.columns=List.of(column);
+        Map<String,Object> request=Map.of("canvas",true,"reuseExistingOnly",true,"dbId","target-db","tableName","ods_existing",
+            "ddl","CREATE TABLE ods_existing(id STRING)","tableItems",List.of(Map.of("columnName","id","dataType","varchar","length",32)));
+        Map<?,?> result=assertInstanceOf(Map.class,run(request));
+        assertEquals(false,result.get("created")); assertEquals(true,result.get("physicalTableReused")); assertEquals(0,counter.writes);
+        scope.deniedId="target-db"; physical.calls=0;
+        assertInstanceOf(ExitValue.class,run(request)); assertEquals(0,physical.calls);
     }
 
     @Test
@@ -129,7 +223,7 @@ class CanvasCreateTableBatchValidationMagicTest {
 
     private Object run(Map<String, Object> body) throws Exception {
         String script = CanonicalMagicSources.byId(SOURCE_ID)
-                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.model\\.|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
+                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.(?:model\\.|jdbc\\.JdbcDriverPropertyResolver)|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("body", body);
         inputs.put("db", db);
@@ -138,7 +232,24 @@ class CanvasCreateTableBatchValidationMagicTest {
         inputs.put("connectionProperties", scope);
         inputs.put("poolJsons", new JsonFixture());
         inputs.put("canvasTableDdl", new CanvasTableDdl());
+        inputs.put("hwhive",physical);
+        inputs.put("metadataExplorerService",physical);
         return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
+    }
+
+    public static class PhysicalMetadata {
+        List<ColumnInfo> columns=List.of();
+        int calls;
+        public Map<String,List<ColumnInfo>> getColumnsByTables(DataSourceConfig config,List<String> names) {
+            calls++; Map<String,List<ColumnInfo>> result=new LinkedHashMap<>();
+            for(String name:names) result.put(name,columns); return result;
+        }
+        public List<Map<String,Object>> queryTable(String sql) {
+            assertTrue(sql.startsWith("DESCRIBE `warehouse`.`ods_existing")); calls++;
+            return columns.stream().map(column->Map.<String,Object>of("col_name",column.getColumnName(),"data_type",column.getDataType())).toList();
+        }
+        public void createTable(DataSourceConfig config,String ddl) { fail("Reuse must never issue CREATE TABLE"); }
+        public void execDDLSqlInDatabase(String database,String ddl) { fail("Hive reuse must never issue DDL"); }
     }
 
     public static class Scope {

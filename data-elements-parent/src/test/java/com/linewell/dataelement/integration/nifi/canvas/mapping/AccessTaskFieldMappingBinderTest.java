@@ -43,7 +43,7 @@ class AccessTaskFieldMappingBinderTest {
         var bound = binder.bind(pipeline);
         var spec = mappingsSpec(bound);
         assertEquals("NUMBER(10,0)", mapping(spec, "/APPLY_FLAG_cn").path("sourceDataType").asText());
-        assertTrue(new FieldMappingService().compileQuery(spec).contains("WHEN 0 THEN _UTF-8'审核中'"));
+        assertTrue(new FieldMappingService().compileQuery(spec).contains("WHEN 0 THEN CAST(_UTF8'审核中' AS VARCHAR CHARACTER SET UTF8)"));
         assertSame(bound, binder.bind(bound), "An already typed enum must not be regenerated on every bind");
     }
 

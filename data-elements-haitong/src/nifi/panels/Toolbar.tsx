@@ -300,14 +300,11 @@ export default function Toolbar() {
         await new Promise<void>(resolve => window.requestAnimationFrame(() => window.setTimeout(resolve, 0)));
         if (!isCurrentSession()) return;
         const dsl = toDsl();
-        const unchanged = currentPipelineQuery.data?.name === currentPipelineName
-          && sameDesignDsl(dsl, currentPipelineQuery.data.dsl);
-        const saved = unchanged ? currentPipelineQuery.data!
-          : await save.mutateAsync({ id: currentPipelineId, name: currentPipelineName, dsl });
+        const saved = await save.mutateAsync({ id: currentPipelineId, name: currentPipelineName, dsl });
         if (!isCurrentSession()) return;
         if (useCanvasStore.getState().currentPipelineId === currentPipelineId) setCurrentPipeline(saved.id, saved.name);
         deploymentAttempted = true;
-        await deploySavedPipeline(saved.id, saved.name, dsl);
+        await deploySavedPipeline(saved.id, saved.name, saved.dsl);
       } catch (e: any) {
         reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
       } finally {
@@ -575,7 +572,7 @@ export default function Toolbar() {
           if (!isCurrentSession()) return;
           if (useCanvasStore.getState().currentPipelineId === currentPipelineId) setCurrentPipeline(saved.id, saved.name);
           deploymentAttempted = true;
-          await deploySavedPipeline(saved.id, saved.name, dsl);
+          await deploySavedPipeline(saved.id, saved.name, saved.dsl);
         })
         .catch((e) => {
           reportSaveOrDeployFailure(e, deploymentAttempted, '重命名');

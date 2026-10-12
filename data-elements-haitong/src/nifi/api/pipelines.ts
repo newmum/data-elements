@@ -9,6 +9,9 @@ import { isPlatformAuthenticationFailure } from '../../api/platformApi';
 import { redirectToPlatformLogin } from '../../services/platformSession';
 import { acceptDeploymentResult } from '../utils/deploymentCache';
 import type { TaskChain } from '../types/taskChain';
+import { useCanvasStore } from '../stores/canvasStore';
+import { sameDesignDsl, preservesIncrementalFields } from '../utils/pipelineVersion';
+import { incrementalConfigurationError } from '../utils/incrementalFields';
 
 /** One bounded, authorized read contains every related design; no per-task loading loop. */
 export async function fetchTaskChain(selection: { accessTaskId?: string; pipelineId?: string }): Promise<TaskChain> {
@@ -183,17 +186,33 @@ export function useSavePipeline() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: Partial<Pipeline> & { name: string; dsl: CanvasDsl; copy?: boolean }) => {
+      const revision = getSessionRevision();
+      const dsl = p.dsl;
+      const error = incrementalConfigurationError(dsl);
+      if (error) throw new Error(error);
       if (p.id) {
-        return (await api.post<Pipeline>(`/pipelines/${p.id}`, p)).data;
+        const stored = qc.getQueryData<Pipeline>(['pipeline', p.id, revision]);
+        if (stored && stored.name === p.name && sameDesignDsl(stored.dsl, dsl)) return stored;
+        const saved = (await api.post<Pipeline>(`/pipelines/${p.id}`, p, {
+          params: stored?.updatedAt ? { expectedUpdatedAt: stored.updatedAt } : undefined,
+        })).data;
+        if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开画布');
+        if (!preservesIncrementalFields(dsl, saved.dsl)) throw new Error('保存响应改变了主增量字段，画布配置已保留，请核对后端版本后重试');
+        return saved;
       }
-      return (await api.post<Pipeline>('/pipelines', p, {
+      const saved = (await api.post<Pipeline>('/pipelines', p, {
         params: p.copy ? undefined : { catalogTid: getTid() || undefined },
       })).data;
+      if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开画布');
+      if (!preservesIncrementalFields(dsl, saved.dsl)) throw new Error('保存响应改变了主增量字段，画布配置已保留，请核对后端版本后重试');
+      return saved;
     },
-    onSuccess: async (data) => {
+    onSuccess: async (data, submitted) => {
       const revision = getSessionRevision();
       await qc.cancelQueries({ queryKey: ['pipeline', data.id, revision] });
       if (revision !== getSessionRevision()) return;
+      const canvas = useCanvasStore.getState();
+      if (submitted.id && canvas.currentPipelineId === submitted.id) canvas.acceptDeployment(submitted.dsl, data.dsl);
       qc.setQueryData(['pipeline', data.id, revision], data);
       void qc.invalidateQueries({ queryKey: [...KEY, revision] });
     },

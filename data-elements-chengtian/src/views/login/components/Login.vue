@@ -25,7 +25,7 @@
       <el-tooltip :visible="isCapsLock" content="大写锁定已打开" placement="right">
         <el-form-item prop="password">
           <el-input
-            v-model.trim="loginFormData.password"
+            v-model="loginFormData.password"
             placeholder="密码"
             type="password"
             show-password
@@ -166,8 +166,8 @@ const loginFormData = ref<LoginFormData>({
 
 function restoreRememberedCredentials() {
   if (!loginFormData.value.rememberMe) return;
-  const username = Storage.get<string>(AUTH_KEYS.REMEMBERED_ACCOUNT, "");
-  const encryptedPassword = Storage.get<string>(AUTH_KEYS.REMEMBERED_PASSWORD, "");
+  const username = Storage.getString(AUTH_KEYS.REMEMBERED_ACCOUNT);
+  const encryptedPassword = Storage.getString(AUTH_KEYS.REMEMBERED_PASSWORD);
   loginFormData.value.username = username;
   if (!encryptedPassword) return;
   try {
@@ -307,9 +307,8 @@ async function handleLoginSubmit() {
       query: { ...resolvedRedirect.query, __loginRecovery: "1" },
       hash: resolvedRedirect.hash,
     });
-  } catch (error) {
-    // 4. 统一错误处理
-    console.error("登录失败:", error);
+  } catch {
+    // 表单与统一请求层已展示错误；不重复输出可能含登录凭据的请求异常。
   } finally {
     loading.value = false;
   }

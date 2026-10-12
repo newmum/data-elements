@@ -26,9 +26,17 @@ export function sameDesignDsl(left: unknown, right: unknown): boolean {
   return sameSavedContent(comparableDsl(left, true), comparableDsl(right, true));
 }
 
+/** Lifecycle responses cannot silently remove a configured primary incremental field. */
+export function preservesIncrementalFields(submitted: CanvasDsl, returned: CanvasDsl): boolean {
+  const nodes = new Map(normalizeCanvasDsl(returned).nodes.map(node => [node.id, node]));
+  return normalizeCanvasDsl(submitted).nodes.every(node => node.category !== 'source'
+    || !String(node.config.incrementalColumn ?? '').trim()
+    || String(nodes.get(node.id)?.config.incrementalColumn ?? '').trim() === String(node.config.incrementalColumn).trim());
+}
+
 /** Accept server-side field binding only while the submitted execution design is unchanged. */
 export function reconcileDeployedDsl(current: CanvasDsl, submitted: CanvasDsl, deployed: CanvasDsl): CanvasDsl | undefined {
-  if (!sameExecutableDsl(current, submitted)) return undefined;
+  if (!sameExecutableDsl(current, submitted) || !preservesIncrementalFields(submitted, deployed)) return undefined;
   const positions = new Map(current.nodes.map(node => [node.id, node]));
   const connectionKey = (edge: CanvasDsl['edges'][number]) => JSON.stringify([edge.source, edge.target, edge.outlet ?? null]);
   const connectionIds = new Map(current.edges.map(edge => [connectionKey(edge), edge.id]));

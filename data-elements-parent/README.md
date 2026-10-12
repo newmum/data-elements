@@ -83,6 +83,8 @@ mvn package
 
 从仓库根目录构建时使用 `mvn -f data-elements-parent/pom.xml install`。测试报告默认在根目录 `logs/backend/surefire/`。`logs/` 下的临时 POM 属于当次运行材料，不作为日常构建入口。
 
+如果测试编译提示 `org.apache.nifi.sql`、`org.apache.calcite.sql` 不存在，先核对实际使用的 POM。当前正式 POM 已声明测试依赖 `nifi-calcite-utils:2.9.0`，由它引入 Calcite 1.41.0；旧临时 POM 可能读取当前测试源码，却仍使用过期的依赖配置。默认测试输出目录是 `target/test-classes`，若日志显示 `build/test-classes`，应检查临时 POM 或输出目录覆盖参数。从仓库根目录执行 `mvn -f data-elements-parent/pom.xml clean install`；IDE 中重新加载正式 POM 的 Maven 配置。不要通过删除回归测试或跳过测试编译解决依赖缺失。
+
 源码架构测试使用 Maven 提供的 `backend.javaSourceDirectory`（取自实际 `project.build.sourceDirectory`），不依赖测试工作目录；直接在 IDE 运行时会按测试类所在工程定位源码。重定向编译输出目录不会改变架构检查范围，源码缺失会明确报错。数据源清单测试读取实际打包的 classpath 资源。
 
 ## magic-api 说明

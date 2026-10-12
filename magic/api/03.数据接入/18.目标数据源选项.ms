@@ -125,6 +125,7 @@ var domains = db.table('sym_dict_t').where()
     .eq('parent_id', ods.tid)
     .eq('is_del', 0)
     .orderBy('sort_no', 'asc')
+    .orderBy('tid', 'asc')
     .select()
 var domainMap = {}
 var domainIds = []
@@ -200,6 +201,7 @@ for (domain in (domains == null ? [] : domains)) {
         domainId: domainId,
         domainName: domain.dictName,
         domainCode: domain.dictCode,
+        domainOrder: domain.sortNo,
         layerCode: 'ODS',
         tablePrefix: 'ODS',
         parentValue: 'ODS',

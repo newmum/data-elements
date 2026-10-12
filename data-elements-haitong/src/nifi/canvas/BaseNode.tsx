@@ -16,6 +16,7 @@ import { Tooltip } from 'antd';
 import type { CanvasNode } from '@/types/dsl';
 import type { ComponentCategory, ComponentManifest, FieldSchema } from '@/types/manifest';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { getNifiOverlayContainer } from '../panels/overlayContainer';
 import { useComponentManifests } from '@/api/manifests';
 import { useFlowErrors, type FlowError } from '@/api/pipelines';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
@@ -43,10 +44,6 @@ interface NodeStatus {
 function pickIcon(manifest: ComponentManifest | undefined, cat: ComponentCategory, dbType?: unknown) {
   if (!manifest) return COMPONENT_ICONS[cat] ?? CATEGORY_ICON[cat] ?? <AppstoreOutlined />;
   return getComponentIcon(manifest.key, dbType) ?? COMPONENT_ICONS[cat] ?? MANIFEST_ICON[manifest.key] ?? CATEGORY_ICON[cat] ?? <AppstoreOutlined />;
-}
-
-function getCanvasPopupContainer(trigger: HTMLElement) {
-  return (trigger.closest('.canvas-shell') as HTMLElement | null) ?? document.body;
 }
 
 function summarizeValue(v: unknown, field: FieldSchema): string {
@@ -211,7 +208,7 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
         <Tooltip
           placement="leftTop"
           autoAdjustOverflow
-          getPopupContainer={getCanvasPopupContainer}
+          getPopupContainer={getNifiOverlayContainer}
           classNames={{ root: 'canvas-error-tooltip' }}
           title={
             <div style={{ maxWidth: 280 }}>

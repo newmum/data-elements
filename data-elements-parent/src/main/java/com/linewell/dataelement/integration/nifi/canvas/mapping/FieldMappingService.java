@@ -226,7 +226,7 @@ public class FieldMappingService {
 
     private String sourceSqlExpression(JsonNode mapping, String sourceAlias,
                                        Function<String, String> identifier) {
-        if (mapping.has("constant")) return literal(mapping.path("constant"));
+        if (mapping.has("constant")) return sqlLiteral(mapping.path("constant"), false);
         if (mapping.hasNonNull("expression")) {
             String expression = mapping.path("expression").asText();
             Matcher matcher = FIELD_REF.matcher(expression);
@@ -255,7 +255,7 @@ public class FieldMappingService {
                     ? mapping.path("transform").path("args").get(0).asText("") : "";
             List<String> parts = new ArrayList<>();
             for (int i = 0; i < fromList.size(); i++) {
-                if (i > 0 && !separator.isEmpty()) parts.add(literal(MAPPER.getNodeFactory().textNode(separator)));
+                if (i > 0 && !separator.isEmpty()) parts.add(sqlLiteral(MAPPER.getNodeFactory().textNode(separator), false));
                 String field = columnName(fromList.get(i).asText(), "源字段");
                 parts.add("COALESCE(" + sourceAlias + "." + identifier.apply(field) + ", '')");
             }
@@ -776,7 +776,7 @@ public class FieldMappingService {
         }
         String from = columnName(requiredText(mapping, "from", "映射必须配置 from、fromList、constant 或 expression 之一"), "源字段");
         String expr = quoteSqlIdentifier(from);
-        if (mapping.has("transform")) expr = transformSql(expr, mapping.path("transform"), false,
+        if (mapping.has("transform")) expr = transformSql(expr, mapping.path("transform"), true,
                 mapping.path("sourceDataType").asText(""));
         return expr;
     }
@@ -796,10 +796,10 @@ public class FieldMappingService {
         return String.join(" || ", parts);
     }
 
-    private String transformSql(String expr, JsonNode transform, boolean allowComplex, String sourceDataType) {
+    private String transformSql(String expr, JsonNode transform, boolean recordSql, String sourceDataType) {
         String fn = transform.path("fn").asText("");
         JsonNode args = transform.path("args");
-        if (!allowComplex && !SUPPORTED_SQL_TRANSFORMS.contains(fn)) {
+        if (!SUPPORTED_SQL_TRANSFORMS.contains(fn)) {
             throw new IllegalStateException("当前运行模式暂不支持 transform.fn=" + fn + "，请使用基础函数或等待脚本化字段映射执行器");
         }
         return switch (fn) {
@@ -813,8 +813,11 @@ public class FieldMappingService {
             case "toDouble" -> "CAST(" + expr + " AS DOUBLE)";
             case "toDecimal" -> "CAST(" + expr + " AS DECIMAL" + decimalSuffix(args) + ")";
             case "cast" -> "CAST(" + expr + " AS " + sqlType(args != null && args.size() > 0 ? args.get(0).asText("STRING") : "STRING") + ")";
-            case "coalesce", "nvl" -> "COALESCE(" + expr + ", " + literal(args != null && args.size() > 0 ? args.get(0) : MAPPER.getNodeFactory().nullNode()) + ")";
-            case "enumMap" -> enumMapSql(expr, args, sourceDataType);
+            case "coalesce", "nvl" -> {
+                JsonNode fallback = args != null && !args.isEmpty() ? args.get(0) : MAPPER.getNodeFactory().nullNode();
+                yield "COALESCE(" + expr + ", " + (recordSql ? literal(fallback) : sqlLiteral(fallback, false)) + ")";
+            }
+            case "enumMap" -> enumMapSql(expr, args, sourceDataType, recordSql);
             case "jsonValue" -> {
                 String path=args.path(0).asText("");
                 if(!path.matches("\\$(?:\\.[A-Za-z_][A-Za-z0-9_]*|\\[[0-9]{1,6}\\]){1,16}"))throw new IllegalStateException("JSON 路径须为有界的 $.字段 或 [序号] 路径");
@@ -829,20 +832,22 @@ public class FieldMappingService {
      * CASE expression.  This lets a source code keep its original value while
      * the generated {@code _cn} field stores the governed Chinese description.
      */
-    private String enumMapSql(String sourceExpression, JsonNode args, String sourceDataType) {
+    private String enumMapSql(String sourceExpression, JsonNode args, String sourceDataType, boolean recordSql) {
         if (args == null || !args.isArray() || args.isEmpty() || !args.get(0).isObject()) {
             throw new IllegalStateException("transform.fn=enumMap 必须提供代码到描述的映射对象");
         }
         JsonNode values = args.get(0);
         List<String> branches = new ArrayList<>();
-        values.fields().forEachRemaining(entry -> branches.add("WHEN " + enumCodeLiteral(entry.getKey(), sourceDataType)
-                + " THEN " + literal(entry.getValue())));
+        values.fields().forEachRemaining(entry -> branches.add("WHEN " + enumCodeLiteral(entry.getKey(), sourceDataType, recordSql)
+                + " THEN " + enumResultLiteral(entry.getValue(), recordSql)));
         if (branches.isEmpty()) {
             throw new IllegalStateException("transform.fn=enumMap 的映射对象不能为空");
         }
         JsonNode fallback = args.size() > 1 ? args.get(1) : MAPPER.getNodeFactory().nullNode();
-        return "CASE " + sourceExpression + " " + String.join(" ", branches)
-                + " ELSE " + literal(fallback) + " END";
+        String comparison = recordSql && !isNumericEnumSource(sourceDataType)
+                ? utf8RecordText(sourceExpression) : sourceExpression;
+        return "CASE " + comparison + " " + String.join(" ", branches)
+                + " ELSE " + enumResultLiteral(fallback, recordSql) + " END";
     }
 
     // JSON object keys are always strings. Their SQL type comes from the source
@@ -856,9 +861,9 @@ public class FieldMappingService {
         return NUMERIC_ENUM_TYPES.contains(type);
     }
 
-    private String enumCodeLiteral(String code, String sourceDataType) {
+    private String enumCodeLiteral(String code, String sourceDataType, boolean recordSql) {
         return isNumericEnumSource(sourceDataType) ? numericEnumCode(code).toPlainString()
-                : literal(MAPPER.getNodeFactory().textNode(code));
+                : sqlLiteral(MAPPER.getNodeFactory().textNode(code), recordSql);
     }
 
     private BigDecimal numericEnumCode(String code) {
@@ -1092,17 +1097,32 @@ public class FieldMappingService {
     }
 
     private String literal(JsonNode node) {
+        boolean nonAscii = node != null && node.isTextual() && node.asText().chars().anyMatch(ch -> ch > 0x7f);
+        return sqlLiteral(node, nonAscii);
+    }
+
+    private String sqlLiteral(JsonNode node, boolean recordSql) {
         if (node == null || node.isNull()) return "NULL";
         if (node.isNumber() || node.isBoolean()) return node.asText();
         String value = node.asText().replace("'", "''");
-        // QueryRecord uses Apache Calcite, whose default SQL literal charset is
-        // ISO-8859-1.  A normal literal therefore fails before execution when a
-        // mandatory-standard or enum mapping contains Chinese text.  Declare
-        // UTF-8 explicitly only when it is required, so ordinary ASCII SQL
-        // remains unchanged while governed descriptions are safe to compile.
-        return value.chars().allMatch(character -> character <= 0x7F)
-                ? "'" + value + "'"
-                : "_UTF-8'" + value + "'";
+        // Calcite compares charset metadata, including for ASCII keys. Mark all
+        // generated Record SQL strings alike; source JDBC SQL uses native literals.
+        return (recordSql ? "_UTF8" : "") + "'" + value + "'";
+    }
+
+    private String utf8RecordText(String expression) {
+        // CAST rejects different source/target charsets in Calcite. Explicit
+        // UTF8 -> UTF8 CONVERT preserves Java String content and declares the
+        // comparable charset without relying on the JVM default encoding.
+        return "CONVERT(" + expression + ", UTF8, UTF8)";
+    }
+
+    private String enumResultLiteral(JsonNode value, boolean recordSql) {
+        String sql = sqlLiteral(value, recordSql);
+        // VARCHAR avoids CASE padding shorter Chinese labels to the longest
+        // fixed-width CHAR label/fallback; omit precision to preserve long labels.
+        return recordSql && value != null && value.isTextual()
+                ? "CAST(" + sql + " AS VARCHAR CHARACTER SET UTF8)" : sql;
     }
 
     private Object jsonValue(Object value, JsonNode args) throws Exception {

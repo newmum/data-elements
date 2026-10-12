@@ -1,12 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sameExecutableDsl, sameDesignDsl, reconcileDeployedDsl } from '../utils/pipelineVersion.ts';
+import { sameExecutableDsl, sameDesignDsl, reconcileDeployedDsl, preservesIncrementalFields } from '../utils/pipelineVersion.ts';
 
 const design = () => ({ version: 1, nodes: [
   { id: 'source', manifestKey: 'source.mysql', label: '来源', category: 'source', x: 0, y: 120,
     config: { syncMode: 'FULL_THEN_INCR', incrementalColumn: 'updated_at', table: 'events' } },
   { id: 'sink', manifestKey: 'sink.dameng', label: '目标', category: 'sink', x: 500, y: 120, config: { table: 'ODS_events' } },
 ], edges: [{ id: 'link', source: 'source', target: 'sink' }] });
+
+test('a lifecycle response missing the saved incremental field cannot clear the editable design', () => {
+  const submitted = design(), response = structuredClone(submitted);
+  response.nodes[0].config.incrementalColumn = '';
+  assert.equal(preservesIncrementalFields(submitted, response), false);
+  assert.equal(reconcileDeployedDsl(submitted, submitted, response), undefined);
+  assert.equal(submitted.nodes[0].config.incrementalColumn, 'updated_at');
+  response.nodes[0].config.incrementalColumn = 'UPDATED_AT';
+  assert.equal(preservesIncrementalFields(submitted, response), false);
+  response.nodes[0].config.incrementalColumn = 'updated_at';
+  assert.equal(preservesIncrementalFields(submitted, response), true);
+});
 
 test('a Java round trip with null outlet is runnable without another save', () => {
   const local = design(), remote = structuredClone(local);

@@ -15,9 +15,10 @@ import '../../nifi/styles/globals.css';
 import '../../nifi/styles/haitong-integration.css';
 
 // Keep the original editor layout while following the workbench color mode.
-const nifiTheme = (dark: boolean) => ({
+const nifiTheme = (dark: boolean, motion: boolean) => ({
  algorithm: dark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
  token: {
+  motion,
   colorPrimary: dark ? '#177ddc' : '#1677ff', colorSuccess: '#52c41a', colorWarning: '#faad14',
   colorError: '#ff4d4f', colorInfo: '#1677ff', borderRadius: 8,
   colorBgBase: dark ? '#141414' : '#ffffff',
@@ -45,7 +46,7 @@ const nifiTheme = (dark: boolean) => ({
 
 /** The local task id is never sent to the NiFi backend as a pipeline id. */
 export default function CanvasPage() {
- const {dark} = useOceanTheme();
+ const {dark,motion,reducedMotion} = useOceanTheme();
  const {state, act} = useWorkbench();
  const {message} = App.useApp();
  const navigate = useNavigate();
@@ -127,7 +128,7 @@ export default function CanvasPage() {
  if (unsupportedEngine) return <Result status="warning" title="该专用画布未迁入海通" subTitle={`当前链接指定了 ${engine} 专用引擎。海通只接入指定 9 月 29 日基线的普通 NiFi 画布，不能把专用配置当作普通流程打开。`} extra={<Button onClick={back}>返回列表</Button>}/>;
 
  return <div className="haitong-nifi-canvas nifi-workspace" style={{position:'fixed', inset:0, zIndex:60, background:'var(--canvas-bg)'}}>
-  <ConfigProvider locale={zhCN} theme={nifiTheme(dark)} getPopupContainer={getNifiOverlayContainer}>
+  <ConfigProvider locale={zhCN} theme={nifiTheme(dark,motion&&!reducedMotion)} getPopupContainer={getNifiOverlayContainer}>
    <App style={{height:'100%'}}>
     {!tokenReady ? <div style={{padding:32, maxWidth:680, margin:'9vh auto'}}><NifiSessionPrompt redirectOnMissing/></div>
      : preparedKey===routeKey ? <EditorPage key={routeKey}/> : <div role="status" style={{padding:32}}>正在准备 NiFi 画布…</div>}

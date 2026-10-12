@@ -20,7 +20,7 @@ const names = [
   'isCurrentInit', 'trackLoad', 'init', 'collectSourceFields', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
   'isHiveTarget',
-  'normalizeCode', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
+  'normalizeCode', 'orderTargetDatasourceIds', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
   'materializationProgress', 'materializationElapsed', 'materializationAwaitingDecision',
   'materializationStartedAt', 'materializationTimer', 'startMaterializationProgress', 'stopMaterializationProgress', 'confirmMaterialization',
 ];
@@ -80,6 +80,10 @@ function fixture(size = 2) {
     ddlSourceFingerprint: ref(''), ddlWasEdited: ref(false), ddlMode: ref(false), isSaveing: ref(false),
     ElMessage: Object.fromEntries(['error', 'warning', 'success'].map(key => [key, message => notices.push({ key, message })])),
     ElMessageBox: { confirm: async () => {} }, emit: (...args) => emitted.push(plain(args)), console,
+    askExistingDecision: async (targets, canReuse) => {
+      calls.push({route:'user-confirm', targets:plain(targets),canReuse});
+      return context.existingChoice || 'flow';
+    },
     $common: { post: async (route, body) => {
       calls.push({ route, body: plain(body) });
       if (route === '/ods/targetDatasource/options') {
@@ -104,12 +108,18 @@ function fixture(size = 2) {
         assert.equal(body.dryRun, true, 'No deletion is allowed in this test');
         return { data: { batchDryRun: true, sideEffectsApplied: false,
           results: body.targets.map(target => ({ ...target, sideEffectsApplied: false,
-            targetPhysicalExists: context.existingPhysical === true,
+            targetPhysicalExists: context.existingPhysical === true || context.existingDbIds?.includes(target.targetDbId),
             targetDatabaseType: datasource[target.targetDbId].dbType })),
         } };
       }
       if (route.endsWith('/createTable')) {
         assert.equal(body.validateOnly, true, 'Only validation is allowed');
+        if (body.batchReuseValidation) {
+          if (context.incompatibleExisting) throw new Error('已有目标表结构不兼容：ODS_UUID（缺少字段）');
+          return {data:{batchReuseValidation:true,sideEffectsApplied:false,results:body.targets.map(target=>({
+            dbId:target.dbId, requestedTableName:target.tableName, valid:true, physicalTableReused:true,sideEffectsApplied:false,
+          }))}};
+        }
         return { data: { batchValidateOnly: true, sideEffectsApplied: false,
           results: body.targets.map(target => ({ dbId: target.dbId, requestedTableName: target.tableName,
             valid: true, sideEffectsApplied: false })),
@@ -144,12 +154,12 @@ assert.equal(view.form.tableName, 'ODS_SAVED_CUSTOM', 'Viewing an existing targe
 assert.deepEqual(view.form.dbId, [['ODS', 'db-0']], 'Viewing must not replace the saved target selection');
 
 const domainCases = [
-  { codes: ['other', 'yuanshi', 'huiju'], expected: ['db-2', 'db-1'] },
+  { codes: ['other', 'yuanshi', 'huiju'], expected: ['db-1', 'db-2'] },
   { codes: ['yuanshi'], expected: ['db-0'] },
   { codes: ['huiju'], expected: ['db-0'] },
   { codes: ['other'], expected: [] },
   { codes: [], expected: [] },
-  { codes: [' huiju ', 'YUANSHI', 'huiju', 'yuanshi'], expected: ['db-0', 'db-2', 'db-1', 'db-3'] },
+  { codes: [' huiju ', 'YUANSHI', 'huiju', 'yuanshi'], expected: ['db-0', 'db-1', 'db-2', 'db-3'] },
 ];
 for (const { codes, expected } of domainCases) {
   const f = fixture();
@@ -194,6 +204,10 @@ multi.actual.syncTargetTableNameInput(multi.form.tableName);
 for (const paths of [[['ODS', 'db-0'], ['ODS', 'db-1']], [['ODS', 'db-1']], [['ODS', 'db-1'], ['ODS', 'db-0']]]) {
   multi.form.dbId = paths;
   multi.actual.syncTargetDatasourceSelection(paths);
+  const expectedIds = paths.length === 1 ? ['db-1'] : ['db-0', 'db-1'];
+  assert.deepEqual(plain(multi.actual.targetDatasourceIds.value), expectedIds,
+    'Display and materialization follow the configured domain order, even after reversed clicks');
+  assert.deepEqual(plain(multi.actual.normalizeFormPayload(multi.form).targetDbIds), expectedIds);
   assert.equal(multi.form.tableName, paths.length === 1 ? 'ods_user_confirmed' : multi.actual.targetTableNameInput.value);
   for (const plan of multi.actual.targetTablePlans.value) {
     assert.equal(plan.tableName, multi.actual.normalizeTargetTableName(multi.form.tableName, multi.context.datasourceMap.value[plan.dbId].dbType));
@@ -208,6 +222,8 @@ const generated = multi.calls.find(c => c.route.endsWith('/getCreateTableDDL')).
 const validated = multi.calls.find(c => c.route.endsWith('/createTable')).body.targets;
 const saved = multi.calls.filter(c => c.route === '/ods/createTapleApply');
 assert.equal(saved.length, 2);
+assert.deepEqual(saved.map(c => c.body.propList.dbId), ['db-0', 'db-1'],
+  'Reversed clicks must still materialize huiju first and yuanshi second');
 for (let i = 0; i < saved.length; i++) {
   const expectedName = generated[i].propList.dbType === 'hive' ? 'ods_user_confirmed' : 'ODS_User_CONFIRMED';
   assert.equal(generated[i].propList.tableName, expectedName);
@@ -225,18 +241,51 @@ assert.equal(multi.emitted.at(-1)[0], 'save');
 assert.equal(multi.timers.size,0,'Successful materialization stops its local clock');
 assert.equal(multi.actual.materializationProgress.value.completed,2,'Completion comes from successful target responses');
 
-// An existing Hive table must block the entire mixed-target plan before any write.
+const changedOrder = fixture();
+await changedOrder.actual.init();
+changedOrder.context.datasourceLeafIds.value = ['db-1', 'db-0'];
+assert.deepEqual(plain(changedOrder.actual.getDefaultDatasourcePaths()), [['ODS','db-1'],['ODS','db-0']],
+  'Moving domains in the administration page changes the canonical order; codes are not hardcoded ranks');
+assert.deepEqual(plain(changedOrder.actual.normalizeFormPayload({dbId:[['ODS','db-0'],['ODS','db-1']]}).targetDbIds), ['db-1','db-0']);
+changedOrder.context.props.taskCategory = 'distribution';
+assert.deepEqual(plain(changedOrder.actual.normalizeFormPayload({dbId:[['ODS','db-0'],['ODS','db-1']]}).targetDbIds), ['db-0','db-1'],
+  'Department datasource selections keep their explicit distribution order');
+
+// Existing Hive/ordinary tables are reused only after an explicit choice and a batch schema check.
 const existingHive = fixture();
 await existingHive.actual.init();
 existingHive.form.dbId = [['ODS', 'db-0'], ['ODS', 'db-1']];
 existingHive.actual.syncTargetDatasourceSelection(existingHive.form.dbId);
 existingHive.context.existingPhysical = true;
 await existingHive.actual.handleSave();
-assert.equal(existingHive.calls.filter(c => c.route === '/ods/createTapleApply').length, 0);
+assert.equal(existingHive.calls.filter(c => c.route === '/ods/createTapleApply').length, 2);
+assert.ok(existingHive.calls.filter(c => c.route === '/ods/createTapleApply').every(c=>c.body.reuseExistingTable===true));
 assert.equal(existingHive.calls.filter(c => c.route === '/ods/dataAggReset' && !c.body.dryRun).length, 0);
-assert.ok(existingHive.notices.some(n => n.key === 'warning' && /Hive.*修改目标表名.*手动删除/.test(n.message)));
-assert.equal(existingHive.emitted.length, 0);
+assert.equal(existingHive.calls.filter(c=>c.route.endsWith('/createTable') && c.body.batchReuseValidation).length,1);
+assert.equal(existingHive.calls.find(c=>c.route==='user-confirm').canReuse,true,'Physical table without registration can be adopted');
+assert.equal(existingHive.emitted.length, 1);
 assert.equal(existingHive.timers.size,0,'Early exit also stops its local clock');
+
+for (const type of ['hive','mrshive','mysql','postgresql','kingbase8','oracle','dameng','sqlserver']) {
+  const mixed=fixture(); mixed.context.datasourceMap.value['db-1'].dbType=type;
+  await mixed.actual.init(); mixed.form.dbId=[['ODS','db-1'],['ODS','db-0']];
+  mixed.actual.syncTargetDatasourceSelection(mixed.form.dbId); mixed.context.existingDbIds=['db-1'];
+  await mixed.actual.handleSave();
+  const registrations=mixed.calls.filter(c=>c.route==='/ods/createTapleApply');
+  assert.deepEqual(registrations.map(c=>c.body.propList.dbId),['db-0','db-1']);
+  assert.deepEqual(registrations.map(c=>c.body.reuseExistingTable),[false,true]);
+  assert.equal(mixed.emitted.length,1);
+  assert.equal(mixed.calls.findIndex(c=>c.body?.batchReuseValidation)<mixed.calls.findIndex(c=>c.route==='/ods/createTapleApply'),true,
+    'All reused targets are checked before creating the missing target');
+}
+const incompatible=fixture(); await incompatible.actual.init();
+incompatible.form.dbId=[['ODS','db-0'],['ODS','db-1']]; incompatible.context.existingPhysical=true;
+incompatible.context.incompatibleExisting=true; await incompatible.actual.handleSave();
+assert.equal(incompatible.calls.filter(c=>c.route==='/ods/createTapleApply').length,0);
+assert.equal(incompatible.emitted.length,0);
+const cancelled=fixture(); await cancelled.actual.init(); cancelled.context.existingPhysical=true;
+cancelled.context.existingChoice='cancel'; await cancelled.actual.handleSave();
+assert.equal(cancelled.calls.filter(c=>c.route==='/ods/createTapleApply').length,0);
 
 const timed=fixture();
 timed.actual.startMaterializationProgress();

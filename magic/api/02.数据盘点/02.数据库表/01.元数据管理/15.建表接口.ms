@@ -17,7 +17,7 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只校验单表 DDL。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。",
+  "description": "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只校验单表 DDL。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。batchReuseValidation=true批量只读校验已有表结构，reuseExistingOnly=true明确复用且绝不建表。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -30,6 +30,7 @@ import jsons
 import cn.hutool.json.JSONUtil as poolJsons
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
+import com.linewell.dataelement.metautil.model.dto.ColumnInfo
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
 import java.util.Map
@@ -54,6 +55,18 @@ var rowValue = (row, keys) => {
     if (row == null) {
         // 返回当前业务分支的标准结果。
         return null
+    }
+    // JDBC 元数据返回 ColumnInfo；动态下标仅用于 Map，不能直接索引 Java 字段对象。
+    if (row instanceof ColumnInfo) {
+        row = {
+            columnName: row.getColumnName(), columnComment: row.getColumnComment(),
+            dataType: row.getDataType(), columnType: row.getColumnType(),
+            length: row.getLength(), precision: row.getPrecision(), scale: row.getScale(),
+            nullable: row.getNullable(), defaultValue: row.getDefaultValue(),
+            primaryKey: row.getPrimaryKey(), autoIncrement: row.getAutoIncrement(),
+            unique: row.getUnique(), indexed: row.getIndexed(), ordinalPosition: row.getOrdinalPosition(),
+            charset: row.getCharset(), collation: row.getCollation(), extra: row.getExtra()
+        }
     }
     for (key in keys) {
         var value = row instanceof Map ? row.get(key) : row[key]
@@ -167,7 +180,132 @@ var dataSourceOf = (asset) => {
 // Multi-target materialization validates all edited DDL in one request. This
 // branch has no physical write and resolves every datasource from one tenant
 // query before checking the role's scope for every requested ID.
-if (body?.batchValidateOnly == true) {
+// 只读结构校验，同时供批量预检及确认复用的单表执行边界使用。
+var normalizedType = value => blank(value) ? '' : textOf(value).trim().toLowerCase().replaceAll('\\(.*', '').trim()
+var typeFamily = value => {
+    var type = normalizedType(value)
+    if (['char','varchar','varchar2','nvarchar','nvarchar2','nchar','text','tinytext','mediumtext','longtext','clob','nclob','string','uuid','character varying','character'].contains(type)) { return 'string' }
+    if (['tinyint','smallint','mediumint','int','integer','bigint','int2','int4','int8','serial','bigserial','number','numeric','decimal','float','float4','float8','double','double precision','real','binary_float','binary_double','money'].contains(type)) { return 'number' }
+    if (type == 'date') { return 'date' }
+    if (type.startsWith('timestamp') || ['datetime','datetime2','smalldatetime','timestamptz'].contains(type)) { return 'datetime' }
+    if (['bool','boolean','bit'].contains(type)) { return 'boolean' }
+    if (['binary','varbinary','raw','long raw','blob','bytea','image','rowversion'].contains(type)) { return 'binary' }
+    return type
+}
+var reusedTableItems = (requested, physical, config, tableName) => {
+    if (!(requested instanceof List) || requested.size() == 0 || requested.size() > 2000) { exit 400, '复用已有表需要1至2000个目标字段' }
+    if (physical == null || physical.size() == 0) { exit 409, '已有目标表“' + tableName + '”未返回字段，请检查表名、Schema和元数据权限' }
+    var requestedByName = {}
+    for (item in requested) {
+        var name = textOf(item.columnName).trim().toLowerCase()
+        if (blank(name) || requestedByName[name] != null) { exit 400, '复用字段名称为空或重复' }
+        requestedByName[name] = item
+    }
+    var physicalByName = {}
+    var normalized = []
+    var errors = []
+    var nativeDateTime = ['oracle','oceanbaseoracle','oceanbase_oracle','dameng','dm'].contains(config.getDatabaseType().getCode().toLowerCase())
+    for (physicalColumn in physical) {
+        // JDBC返回ColumnInfo bean，Hive返回Map；Magic的动态[]只适用于Map。
+        var column = physicalColumn instanceof Map ? physicalColumn : {
+            columnName:physicalColumn.columnName, columnComment:physicalColumn.columnComment,
+            dataType:physicalColumn.dataType, columnType:physicalColumn.columnType,
+            length:physicalColumn.length, precision:physicalColumn.precision, scale:physicalColumn.scale,
+            nullable:physicalColumn.nullable, primaryKey:physicalColumn.primaryKey,
+            autoIncrement:physicalColumn.autoIncrement, defaultValue:physicalColumn.defaultValue,
+            unique:physicalColumn.unique, indexed:physicalColumn.indexed, charset:physicalColumn.charset,
+            collation:physicalColumn.collation, extra:physicalColumn.extra
+        }
+        var name = firstValue(column, ['columnName','column_name'])
+        if (blank(name)) { continue }
+        var key = textOf(name).trim().toLowerCase()
+        if (physicalByName[key] != null) { exit 409, '已有目标表包含大小写冲突的字段：' + name }
+        physicalByName[key] = column
+        var item = requestedByName[key]
+        var actualType = firstValue(column, ['dataType','data_type','columnType','column_type'])
+        var actualFamily = typeFamily(actualType)
+        if (config.getDatabaseType().getCode().toLowerCase() == 'sqlserver' && normalizedType(actualType) == 'timestamp') { actualFamily = 'binary' }
+        if (item != null) {
+            var expectedFamily = typeFamily(firstValue(item, ['dataType','columnType']))
+            var compatible = expectedFamily == actualFamily
+                || (expectedFamily == 'date' && actualFamily == 'datetime')
+                || (expectedFamily == 'datetime' && actualFamily == 'date' && nativeDateTime)
+                || (expectedFamily == 'boolean' && actualFamily == 'number')
+            if (!compatible) { errors.add(name + '（期望' + item.dataType + '，实际' + actualType + '）') }
+            var actualLength = rowValue(column, ['length'])
+            if (['string','binary'].contains(expectedFamily) && actualLength != null && actualLength::long > 0
+                && item.length != null && item.length::long > actualLength::long
+                && !['text','clob','nclob','string','uuid','blob','bytea','image','long raw'].contains(normalizedType(actualType))) {
+                errors.add(name + '（已有长度' + actualLength + '小于所需长度' + item.length + '）')
+            }
+            var actualPrecision = rowValue(column, ['precision','precisionLength','precision_length'])
+            var actualScale = rowValue(column, ['scale'])
+            if (expectedFamily == 'number' && actualPrecision != null && actualPrecision::int > 0
+                && item.precisionLength != null && item.precisionLength::int > actualPrecision::int) {
+                errors.add(name + '（已有数值精度不足）')
+            }
+            if (expectedFamily == 'number' && actualScale != null && item.scale != null && item.scale::int > actualScale::int) {
+                errors.add(name + '（已有小数位数不足）')
+            }
+        } else if (rowValue(column, ['nullable']) == false
+            && blank(rowValue(column, ['defaultValue','default_value']))
+            && rowValue(column, ['autoIncrement','auto_increment']) != true) {
+            errors.add(name + '（已有必填字段不在本次映射中）')
+        }
+        var field = {}
+        if (item != null) { field.putAll(item) }
+        field.columnName = textOf(name).trim()
+        field.columnComment = firstValue(column, ['columnComment','column_comment']) || (item == null ? '' : item.columnComment)
+        field.dataType = actualType
+        field.columnType = firstValue(column, ['columnType','column_type']) || actualType
+        field.length = rowValue(column, ['length']) == null ? 0 : rowValue(column, ['length'])
+        field.precisionLength = rowValue(column, ['precision','precisionLength','precision_length'])
+        field.scale = rowValue(column, ['scale'])
+        field.nullable = rowValue(column, ['nullable']) == false ? 0 : 1
+        field.primaryKey = rowValue(column, ['primaryKey','primary_key']) == true ? 1 : 0
+        field.autoIncrement = rowValue(column, ['autoIncrement','auto_increment']) == true ? 1 : 0
+        field.isUnique = rowValue(column, ['unique','isUnique','is_unique']) == true ? 1 : 0
+        field.indexed = rowValue(column, ['indexed']) == true ? 1 : 0
+        field.charset = rowValue(column, ['charset'])
+        field.collation = rowValue(column, ['collation'])
+        field.extra = rowValue(column, ['extra'])
+        field.defaultValue = rowValue(column, ['defaultValue','default_value'])
+        field.ordinalPosition = normalized.size()
+        normalized.add(field)
+    }
+    for (key in requestedByName.keySet()) { if (physicalByName[key] == null) { errors.add(requestedByName[key].columnName + '（缺少字段）') } }
+    if (errors.size() > 0) { exit 409, '已有目标表“' + tableName + '”结构不兼容：' + errors.join('；') + '。请调整目标表结构或使用新表名' }
+    return normalized
+}
+var hiveColumns = (config, name) => {
+    var database = config.getDatabase()
+    if (blank(database) || !textOf(database).matches('^[A-Za-z_][A-Za-z0-9_]*$')
+        || !textOf(name).matches('^[A-Za-z_][A-Za-z0-9_]*$')) { exit 400, 'Hive复用库名或表名不合法' }
+    var columns = []
+    for (row in hwhive.queryTable('DESCRIBE `' + database + '`.`' + name + '`')) {
+        var columnName = firstValue(row, ['col_name','COL_NAME','colName','column_name'])
+        if (blank(columnName)) { continue }
+        if (textOf(columnName).startsWith('#')) { break }
+        var type = firstValue(row, ['data_type','DATA_TYPE','dataType','type'])
+        var baseType = normalizedType(type)
+        var column = {columnName:columnName, dataType:baseType, columnType:type,
+            columnComment:firstValue(row,['comment','COMMENT']), nullable:true, ordinalPosition:columns.size()}
+        var compactType = textOf(type).replaceAll('\\s', '')
+        if (['char','varchar','decimal','numeric'].contains(baseType) && compactType.contains('(') && compactType.endsWith(')')) {
+            var dimensions = compactType.substring(compactType.indexOf('(')+1, compactType.length()-1).split(',')
+            if (dimensions[0].matches('^[0-9]+$')) {
+                if (['char','varchar'].contains(baseType)) { column.length = dimensions[0]::long }
+                else {
+                    column.precision = dimensions[0]::int
+                    column.scale = dimensions.size() > 1 && dimensions[1].matches('^[0-9]+$') ? dimensions[1]::int : 0
+                }
+            }
+        }
+        columns.add(column)
+    }
+    return columns
+}
+if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
     if (body?.canvas != true || body?.validateOnly != true) {
         exit 400, '批量建表语句校验只支持 canvas=true 且 validateOnly=true'
     }
@@ -191,7 +329,7 @@ if (body?.batchValidateOnly == true) {
         var duplicateKey = selectedId + '|' + selectedName.trim().toUpperCase()
         if (seenTargets.contains(duplicateKey)) { exit 400, '批量校验包含重复目标表' }
         seenTargets.add(duplicateKey)
-        checkedTargets.add({dbId: selectedId, tableName: selectedName, ddl: selectedDdl})
+        checkedTargets.add({dbId: selectedId, tableName: selectedName, ddl: selectedDdl, tableItems: item.tableItems})
         if (!targetIds.contains(selectedId)) { targetIds.add(selectedId) }
     }
     var registeredRows = db.table('db_datasource_t').where()
@@ -208,6 +346,7 @@ if (body?.batchValidateOnly == true) {
         }
     }
     var validated = []
+    var reuseGroups = {}
     for (target in checkedTargets) {
         var row = registeredById[target.dbId]
         var rawPool = rowValue(row, ['poolCfg', 'pool_cfg'])
@@ -220,7 +359,7 @@ if (body?.batchValidateOnly == true) {
         if (masterDbType != null) { registered.dbType = masterDbType }
         if (masterUser != null) { registered.username = masterUser }
         if (blank(registered.dbType)) { exit 400, '目标数据源未配置数据库类型' }
-        var managedHive = textOf(registered.dbType).toLowerCase() == 'hive'
+        var managedHive = databaseTypeOf(registered.dbType) == DatabaseType.HIVE
             && (registered.metadataAccessMode == 'server-managed-mrs'
                 || registered.hiveConnectionMode == 'huawei-mrs' || !blank(registered.hiveProfile))
         var config = null
@@ -243,6 +382,27 @@ if (body?.batchValidateOnly == true) {
         }
         validated.add({dbId: target.dbId, requestedTableName: target.tableName, tableName: parsed.tableName,
             targetScope: parsed.schemaName, ddl: parsed.ddl, valid: true, sideEffectsApplied: false})
+        if (body?.batchReuseValidation == true) {
+            config.setSchema(parsed.schemaName)
+            var groupKey = target.dbId + '|' + textOf(parsed.schemaName)
+            if (reuseGroups[groupKey] == null) { reuseGroups[groupKey] = {config:config, managedHive:managedHive, targets:[]} }
+            reuseGroups[groupKey].targets.add({target:target, parsed:parsed, result:validated[validated.size()-1]})
+        }
+    }
+    if (body?.batchReuseValidation == true) {
+        for (group in reuseGroups.values()) {
+            var names = []
+            for (entry in group.targets) { names.add(entry.parsed.lookupName) }
+            // 每个已授权数据源/Schema一次批量读取字段，不能逐目标查控制/行业库。
+            // 托管Hive无批量DESCRIBE接口，最多20表，沿用有查询超时的服务端网关。
+            var columnsByTable = group.managedHive ? {} : metadataExplorerService.getColumnsByTables(group.config, names)
+            for (entry in group.targets) {
+                var columns = group.managedHive ? hiveColumns(group.config, entry.parsed.lookupName) : columnsByTable[entry.parsed.lookupName]
+                entry.result.tableItems = reusedTableItems(entry.target.tableItems, columns, group.config, entry.target.tableName)
+                entry.result.physicalTableReused = true
+            }
+        }
+        return {batchReuseValidation:true, results:validated, sideEffectsApplied:false}
     }
     return {batchValidateOnly: true, results: validated, sideEffectsApplied: false}
 }
@@ -267,7 +427,7 @@ if (body.canvas == true) {
     var tenantId = tenantRuntime.id()
     var registered = connectionProperties.resolve(tenantId, textOf(dbId))
     if (registered == null || registered.isEmpty()) { exit 404, '当前租户中不存在所选目标数据源' }
-    var managedHive = textOf(registered.dbType).toLowerCase() == 'hive'
+    var managedHive = databaseTypeOf(registered.dbType) == DatabaseType.HIVE
         && (registered.metadataAccessMode == 'server-managed-mrs' || registered.hiveConnectionMode == 'huawei-mrs'
             || !blank(registered.hiveProfile))
     var config = null
@@ -292,6 +452,13 @@ if (body.canvas == true) {
         return { valid: true, tableName: parsed.tableName, targetScope: parsed.schemaName, ddl: parsed.ddl, sideEffectsApplied: false }
     }
     config.setSchema(parsed.schemaName)
+    if (body.reuseExistingOnly == true) {
+        var scoped = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', dbId).eq('is_del', 0).select()
+        if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', scoped).size() != 1) { exit 403, '已有目标表不在当前角色的数据范围内' }
+        var columns = managedHive ? hiveColumns(config, parsed.lookupName) : metadataExplorerService.getColumns(config, parsed.lookupName)
+        return {status:'exists', created:false, tableName:parsed.tableName, physicalTableReused:true,
+            tableItems:reusedTableItems(body.tableItems, columns, config, parsed.tableName)}
+    }
     if (managedHive) {
         for (candidate in hwhive.showTables(config.getDatabase())) {
             if (canvasTableDdl.matches(parsed, candidate, config.getDatabase())) {

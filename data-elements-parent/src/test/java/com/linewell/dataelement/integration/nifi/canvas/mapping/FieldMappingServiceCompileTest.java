@@ -33,8 +33,8 @@ class FieldMappingServiceCompileTest {
     void numericEnumCodesAreTypedInRecordAndSourceQueries(String type) {
         var spec = enumSpec(type, Map.of("0", "审核中", "1", "审核通过"));
         String query = service.compileQuery(spec);
-        assertTrue(query.contains("WHEN 0 THEN _UTF-8'审核中'"));
-        assertTrue(query.contains("WHEN 1 THEN _UTF-8'审核通过'"));
+        assertTrue(query.contains("WHEN 0 THEN CAST(_UTF8'审核中' AS VARCHAR CHARACTER SET UTF8)"));
+        assertTrue(query.contains("WHEN 1 THEN CAST(_UTF8'审核通过' AS VARCHAR CHARACTER SET UTF8)"));
         assertFalse(query.contains("WHEN '0'"));
         String sourceSql = service.compileSourceDbQuery(spec, "source_table", "src", name -> name);
         assertTrue(sourceSql.contains("CASE src.APPLY_FLAG"));
@@ -49,9 +49,9 @@ class FieldMappingServiceCompileTest {
     void numericComparisonKeepsDecimalPrecisionAndMatchesPreviewByValue() {
         var spec = enumSpec("NUMBER(30,4)", Map.of("9007199254740993", "large", "1.00", "decimal", "-2.5e1", "negative"));
         String sql = service.compileQuery(spec);
-        assertTrue(sql.contains("WHEN 9007199254740993 THEN 'large'"));
-        assertTrue(sql.contains("WHEN 1.00 THEN 'decimal'"));
-        assertTrue(sql.contains("WHEN -25 THEN 'negative'"));
+        assertTrue(sql.contains("WHEN 9007199254740993 THEN CAST(_UTF8'large' AS VARCHAR CHARACTER SET UTF8)"));
+        assertTrue(sql.contains("WHEN 1.00 THEN CAST(_UTF8'decimal' AS VARCHAR CHARACTER SET UTF8)"));
+        assertTrue(sql.contains("WHEN -25 THEN CAST(_UTF8'negative' AS VARCHAR CHARACTER SET UTF8)"));
         var preview = service.preview(spec, List.of(Map.of("APPLY_FLAG", new BigDecimal("1.0")), Map.of("APPLY_FLAG", 9007199254740993L), Map.of("APPLY_FLAG", -25)));
         assertEquals("decimal", preview.resultRows().get(0).get("APPLY_FLAG_cn"));
         assertEquals("large", preview.resultRows().get(1).get("APPLY_FLAG_cn"));
@@ -63,8 +63,8 @@ class FieldMappingServiceCompileTest {
         for (String type : List.of("varchar(2)", "CHAR", "", "not-a-number-type")) {
             var spec = enumSpec(type, Map.of("01", "first", "1", "second"));
             String sql = service.compileQuery(spec);
-            assertTrue(sql.contains("WHEN '01' THEN 'first'"));
-            assertTrue(sql.contains("WHEN '1' THEN 'second'"));
+            assertTrue(sql.contains("WHEN _UTF8'01' THEN CAST(_UTF8'first' AS VARCHAR CHARACTER SET UTF8)"));
+            assertTrue(sql.contains("WHEN _UTF8'1' THEN CAST(_UTF8'second' AS VARCHAR CHARACTER SET UTF8)"));
             var result = service.preview(spec, List.of(Map.of("APPLY_FLAG", "01"), Map.of("APPLY_FLAG", "1")));
             assertEquals("first", result.resultRows().get(0).get("APPLY_FLAG_cn"));
             assertEquals("second", result.resultRows().get(1).get("APPLY_FLAG_cn"));
@@ -78,13 +78,13 @@ class FieldMappingServiceCompileTest {
     }
 
     @Test
-    void generatedNumericCaseExecutesAgainstATypedRecordTable() throws Exception {
+    void generatedNumericCaseExecutesAgainstATypedSourceTable() throws Exception {
         var spec = enumSpec("number(10,0)", Map.of("0", "pending", "1", "passed", "2", "returned", "3", "invalid"));
         try (var connection = java.sql.DriverManager.getConnection("jdbc:h2:mem:enum_" + java.util.UUID.randomUUID());
              var statement = connection.createStatement()) {
             statement.execute("CREATE TABLE FLOWFILE (\"APPLY_FLAG\" NUMBER(10,0))");
             statement.execute("INSERT INTO FLOWFILE VALUES (0), (1), (2), (3), (9), (NULL)");
-            try (var results = statement.executeQuery(service.compileQuery(spec))) {
+            try (var results = statement.executeQuery(service.compileSourceDbQuery(spec, "FLOWFILE", "src", name -> "\"" + name + "\""))) {
                 for (String expected : Arrays.asList("pending", "passed", "returned", "invalid", null, null)) {
                     assertTrue(results.next());
                     assertEquals(expected, results.getString("APPLY_FLAG_cn"));
@@ -140,7 +140,7 @@ class FieldMappingServiceCompileTest {
 
         FieldMappingService.CompiledMapping plan = service.compilePlan(spec);
 
-        assertEquals("SELECT CASE \"case_category_code\" WHEN '01' THEN _UTF-8'刑事案件' WHEN '02' THEN _UTF-8'治安案件' ELSE NULL END AS \"case_category_code_cn\" FROM FLOWFILE",
+        assertEquals("SELECT CASE CONVERT(\"case_category_code\", UTF8, UTF8) WHEN _UTF8'01' THEN CAST(_UTF8'刑事案件' AS VARCHAR CHARACTER SET UTF8) WHEN _UTF8'02' THEN CAST(_UTF8'治安案件' AS VARCHAR CHARACTER SET UTF8) ELSE NULL END AS \"case_category_code_cn\" FROM FLOWFILE",
                 plan.baseQuery());
         assertEquals("SELECT \"case_category_code_cn\" AS \"case_category_code_cn\" FROM FLOWFILE", plan.finalQuery());
     }
@@ -181,7 +181,9 @@ class FieldMappingServiceCompileTest {
         String sql = service.compileSourceDbQuery(spec, "`demo_case`", "src", field -> "`" + field + "`");
 
         assertTrue(sql.startsWith("SELECT src.`id` AS `id`, CASE src.`gender_code`"));
-        assertTrue(sql.contains("WHEN 'M' THEN _UTF-8'男'"));
+        assertTrue(sql.contains("WHEN 'M' THEN '男'"));
+        assertFalse(sql.contains("_UTF"));
+        assertFalse(sql.contains("CHARACTER SET"));
         assertTrue(sql.contains("(SELECT case_type_name FROM dict_case_type WHERE case_type_code = src.`case_type_code`) AS `case_type_code_cn`"));
         assertTrue(sql.endsWith("FROM `demo_case` src"));
     }

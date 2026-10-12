@@ -35,7 +35,7 @@ httpRequest.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error("请求拦截器异常:", error);
+    console.error("请求拦截器异常:", { code: error?.code });
     return Promise.reject(error);
   }
 );
@@ -84,7 +84,7 @@ httpRequest.interceptors.response.use(
     return Promise.reject(apiError);
   },
   async (error) => {
-    console.error("响应拦截器异常:", error);
+    console.error("响应拦截器异常:", { code: error?.code, status: error?.response?.status });
 
     // API 调试场景：透传完整错误对象（含 response）
     if (responsePolicy(error.config) === "raw") {

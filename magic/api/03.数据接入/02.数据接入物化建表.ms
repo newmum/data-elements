@@ -17,14 +17,14 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"tid\": \"17fe19f8f69849f88a34352550039ee3\",\n  \"targetTableId\": \"17fe19f8f69849f88a34352550039ee3\",\n  \"catalogId\": \"faae1bc3ebaa4611aded5ed4a52d6a03\",\n  \"sourceTableId\": \"015c09572d174e89b9bea9c765ef72df\",\n  \"physicalTableReused\": false\n}",
-  "description": "数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，非 Hive 幂等创建或复用已登记目标物理表；Hive 已有物理表时拒绝重建并提示改名或运维手动删除，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。",
+  "description": "数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：02.数据接入物化建表
 // 路由：POST /ods/createTapleApply
-// 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，非 Hive 幂等创建或复用已登记目标物理表；Hive 已有物理表时拒绝重建并提示改名或运维手动删除，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
+// 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
 import tenantRuntime
 import dataScope
 import metadataAsset
@@ -58,6 +58,7 @@ var first = (row, keys) => {
 }
 var upsertCatalogProp = (catalogId, name, value, now) => {
     var old = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId)
         .eq('parent_id', catalogId)
         .eq('prop_name', name)
         .eq('is_del', 0)
@@ -65,6 +66,7 @@ var upsertCatalogProp = (catalogId, name, value, now) => {
     if (old == null) {
         db.table('da_prop_t').primary('tid').insert({
             tid: IdUtil.getSnowflakeNextIdStr(),
+            tenant_id: tenantId,
             parent_id: catalogId,
             prop_name: name,
             prop_value: value,
@@ -76,6 +78,7 @@ var upsertCatalogProp = (catalogId, name, value, now) => {
         })
     } else {
         db.table('da_prop_t').where()
+            .eq('tenant_id', tenantId)
             .eq('tid', old.tid)
         .update({ prop_value: value, updated_time: now })
     }
@@ -221,6 +224,59 @@ var governanceConfigFromProperties = (properties) => {
     }
     return fallback
 }
+var governancePropertiesByParent = {}
+var governanceCatalogIdsBySource = {}
+var governanceCatalogById = {}
+// This is called for three bounded groups: source, referenced dictionaries,
+// and materialized targets.  It never reads a row from inside a table loop.
+var loadGovernanceForTableIds = (tableIds) => {
+    var uniqueIds = []
+    for (tableId in (tableIds == null ? [] : tableIds)) {
+        var id = text(tableId).trim()
+        if (!blank(id) && !uniqueIds.contains(id)) { uniqueIds.add(id) }
+    }
+    if (uniqueIds.size() == 0) { return }
+    if (uniqueIds.size() > 200) { exit 400, '单次最多处理200个治理关联表' }
+    var directProperties = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId).in('parent_id', uniqueIds).eq('is_del', 0).select()
+    for (property in (directProperties == null ? [] : directProperties)) {
+        var parentId = text(first(property, ['parentId', 'parent_id']))
+        if (governancePropertiesByParent[parentId] == null) { governancePropertiesByParent[parentId] = [] }
+        governancePropertiesByParent[parentId].add(property)
+    }
+    var sourceLinkPage = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId).eq('prop_name', 'sourceTableId')
+        .in('prop_value', uniqueIds).eq('is_del', 0).page(201, 0)
+    if (sourceLinkPage != null && sourceLinkPage.total > 200) {
+        exit 400, '来源表关联目录过多，请先核对历史目录'
+    }
+    var sourceLinks = sourceLinkPage == null || sourceLinkPage.list == null ? [] : sourceLinkPage.list
+    var catalogIds = []
+    for (link in (sourceLinks == null ? [] : sourceLinks)) {
+        var linkedSourceId = text(first(link, ['propValue', 'prop_value']))
+        var catalogId = text(first(link, ['parentId', 'parent_id']))
+        if (blank(linkedSourceId) || blank(catalogId)) { continue }
+        if (governanceCatalogIdsBySource[linkedSourceId] == null) { governanceCatalogIdsBySource[linkedSourceId] = [] }
+        if (!governanceCatalogIdsBySource[linkedSourceId].contains(catalogId)) {
+            governanceCatalogIdsBySource[linkedSourceId].add(catalogId)
+        }
+        if (!catalogIds.contains(catalogId)) { catalogIds.add(catalogId) }
+    }
+    if (catalogIds.size() == 0) { return }
+    if (catalogIds.size() > 200) { exit 400, '来源表关联目录过多，请先核对历史目录' }
+    var catalogProperties = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId).in('parent_id', catalogIds).eq('is_del', 0).select()
+    for (property in (catalogProperties == null ? [] : catalogProperties)) {
+        var parentId = text(first(property, ['parentId', 'parent_id']))
+        if (governancePropertiesByParent[parentId] == null) { governancePropertiesByParent[parentId] = [] }
+        governancePropertiesByParent[parentId].add(property)
+    }
+    var catalogRows = db.table('da_catalog_t').where()
+        .eq('tenant_id', tenantId).in('tid', catalogIds).eq('is_del', 0).select()
+    for (catalogRow in (catalogRows == null ? [] : catalogRows)) {
+        governanceCatalogById[text(first(catalogRow, ['tid']))] = catalogRow
+    }
+}
 var governanceConfigOf = (table) => {
     var persisted = parseGovernanceConfig(first(table, [
         'fieldGovernanceConfig', 'field_governance_config', 'fieldGovernanceCfg'
@@ -228,16 +284,11 @@ var governanceConfigOf = (table) => {
     if (configHasFields(persisted)) { return persisted }
     var tableId = text(first(table, ['tid', 'id', 'tableId', 'table_id'])).trim()
     if (blank(tableId)) { return persisted }
-    var direct = governanceConfigFromProperties(db.table('da_prop_t').where()
-        .eq('parent_id', tableId).eq('is_del', 0).select())
+    var direct = governanceConfigFromProperties(governancePropertiesByParent[tableId])
     if (configHasFields(direct)) { return direct }
-    var sourceLinks = db.table('da_prop_t').where()
-        .eq('prop_name', 'sourceTableId').eq('prop_value', tableId).eq('is_del', 0).select()
-    for (link in sourceLinks) {
-        var catalogId = text(first(link, ['parentId', 'parent_id'])).trim()
+    for (catalogId in (governanceCatalogIdsBySource[tableId] == null ? [] : governanceCatalogIdsBySource[tableId])) {
         if (blank(catalogId)) { continue }
-        var catalogConfig = governanceConfigFromProperties(db.table('da_prop_t').where()
-            .eq('parent_id', catalogId).eq('is_del', 0).select())
+        var catalogConfig = governanceConfigFromProperties(governancePropertiesByParent[catalogId])
         if (configHasFields(catalogConfig)) { return catalogConfig }
     }
     return configHasFields(direct) ? direct : persisted
@@ -279,21 +330,42 @@ var mandatoryStandardMappings = (relation) => {
 // column. Resolve that durable registration into a relation before writing the
 // target's field-transform bindings; the target must not depend on optional
 // source relation JSON being complete.
+var metadataTableById = {}
+var metadataColumnsByTableId = {}
+// code_table_id 兼容列同时承载标准字典ID和数据库表ID，必须先按登记关联类型判别。
+var physicalDictionaryRelation = (relation) => {
+    if (relation == null) { return true }
+    if (['false','0','no'].contains(text(relation.enabled).trim().toLowerCase())) { return false }
+    var sourceType = text(relation.sourceType).trim().toLowerCase()
+    var mode = text(relation.mode).trim().toLowerCase()
+    var forced = text(relation.forceStandardEnabled).trim().toLowerCase()
+    return !(['standard','enum'].contains(sourceType) || ['standard','enum'].contains(mode)
+        || ['true','1','yes'].contains(forced))
+}
+var dictionaryRelationsByField = (table) => {
+    var result = {}
+    var config = governanceConfigOf(table)
+    for (field in (config.fields == null ? [] : config.fields)) {
+        var name = text(first(field, ['columnName','column_name','fieldName','field_name'])).trim().toLowerCase()
+        if (!blank(name)) { result[name] = first(field, ['dictionaryRelation','dictionary_relation','dictionaryConfig','dictionary_config']) }
+    }
+    return result
+}
 var registeredDictionaryRelations = (sourceTable) => {
     var result = []
     var sourceTableId = text(first(sourceTable, ['tid', 'id', 'tableId', 'table_id'])).trim()
     if (blank(sourceTableId)) { return result }
-    var sourceColumns = db.table('db_table_column_t').where()
-        .eq('table_id', sourceTableId).eq('is_del', 0).select()
+    var sourceColumns = metadataColumnsByTableId[sourceTableId]
+    var fieldRelations = dictionaryRelationsByField(sourceTable)
     for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
         var sourceName = text(first(sourceColumn, ['columnName', 'column_name'])).trim()
+        if (!physicalDictionaryRelation(fieldRelations[sourceName.toLowerCase()])) { continue }
         var enabled = text(first(sourceColumn, ['enableCodeTable', 'enable_code_table', 'isDict', 'is_dict'])).trim().toLowerCase()
         var dictionaryTableId = text(first(sourceColumn, ['codeTableId', 'code_table_id', 'dictId', 'dict_id'])).trim()
         if (blank(sourceName) || (enabled != '1' && enabled != 'true' && enabled != 'yes' && blank(dictionaryTableId))) {
             continue
         }
-        var dictionaryTable = blank(dictionaryTableId) ? null : db.table('db_table_t').where()
-            .eq('tid', dictionaryTableId).eq('is_del', 0).selectOne()
+        var dictionaryTable = metadataTableById[dictionaryTableId]
         if (dictionaryTable == null) { continue }
         var dictionaryConfig = governanceConfigOf(dictionaryTable)
         var profile = dictionaryConfig.dictionaryProfile
@@ -311,8 +383,7 @@ var registeredDictionaryRelations = (sourceTable) => {
             if (blank(keyField) && role == 'code') { keyField = fieldName }
             if (blank(labelField) && role == 'label') { labelField = fieldName }
         }
-        var dictionaryColumns = db.table('db_table_column_t').where()
-            .eq('table_id', dictionaryTableId).eq('is_del', 0).select()
+        var dictionaryColumns = metadataColumnsByTableId[dictionaryTableId]
         for (dictionaryColumn in (dictionaryColumns == null ? [] : dictionaryColumns)) {
             var columnName = text(first(dictionaryColumn, ['columnName', 'column_name'])).trim()
             var normalizedName = columnName.toLowerCase()
@@ -502,6 +573,7 @@ if (inputCatalog != null && text(inputCatalog.assetType) == 'catalog') {
 }
 if (blank(sourceTableId)) {
     var sourceProp = db.table('da_prop_t').where()
+        .eq('tenant_id', tenantId)
         .eq('parent_id', inputId)
         .eq('prop_name', 'sourceTableId')
         .eq('is_del', 0)
@@ -523,7 +595,6 @@ var sourceTable = db.table('db_table_t').where()
 if (sourceTable == null) {
     exit 404, '来源表不存在'
 }
-tableItems = appendDictionaryTranslationColumns(tableItems, sourceTable)
 
 var sourceDatasource = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId)
@@ -549,6 +620,58 @@ if (sourceDatasource == null || !visibleDatabaseIds.contains(text(sourceDatasour
     || !visibleDatabaseIds.contains(text(targetDatasource.tid))) {
     exit 403, '来源或目标数据源不在当前角色数据范围内'
 }
+if (!blank(catalogId)) {
+    var selectedCatalog = db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('tid', catalogId).eq('is_del', 0).selectOne()
+    if (selectedCatalog == null) { exit 403, '来源目录不存在或不属于当前租户' }
+}
+// 来源与关联字典一次批量预取；字段遍历及治理 helper 只读内存映射。
+var sourceColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId)
+    .eq('table_id', sourceTableId).eq('is_del', 0).select()
+metadataTableById[sourceTableId] = sourceTable
+metadataColumnsByTableId[sourceTableId] = sourceColumns
+// 先加载来源表/目录的治理快照，再解析兼容列中的字典引用类型。
+loadGovernanceForTableIds([sourceTableId])
+var sourceFieldRelations = dictionaryRelationsByField(sourceTable)
+var dictionaryIds = []
+var dictionaryFieldsById = {}
+for (column in sourceColumns) {
+    var fieldName = text(first(column, ['columnName','column_name'])).trim()
+    if (!physicalDictionaryRelation(sourceFieldRelations[fieldName.toLowerCase()])) { continue }
+    var dictionaryId = text(first(column, ['codeTableId','code_table_id','dictId','dict_id'])).trim()
+    if (!blank(dictionaryId)) {
+        if (!dictionaryIds.contains(dictionaryId)) { dictionaryIds.add(dictionaryId) }
+        if (dictionaryFieldsById[dictionaryId] == null) { dictionaryFieldsById[dictionaryId] = [] }
+        dictionaryFieldsById[dictionaryId].add(fieldName)
+    }
+}
+if (dictionaryIds.size() > 199) { exit 400, '单次最多处理199个关联字典表，请缩小字段范围' }
+if (dictionaryIds.size() > 0) {
+    var dictionaryRows = db.table('db_table_t').where().eq('tenant_id', tenantId).in('tid', dictionaryIds).eq('is_del', 0).select()
+    var dictionaryDbIds = []
+    for (dictionary in dictionaryRows) {
+        metadataTableById[text(dictionary.tid)] = dictionary
+        if (!dictionaryDbIds.contains(text(dictionary.datasourceId))) { dictionaryDbIds.add(text(dictionary.datasourceId)) }
+    }
+    var dictionaryDbRows = dictionaryDbIds.size() == 0 ? [] : db.table('db_datasource_t').where()
+        .eq('tenant_id', tenantId).in('tid', dictionaryDbIds).eq('is_del', 0).select()
+    var visibleDictionaryDbs = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', dictionaryDbRows)
+    var permittedDictionaryDbIds = []
+    for (dictionaryDb in visibleDictionaryDbs) { permittedDictionaryDbIds.add(text(dictionaryDb.tid)) }
+    for (dictionaryId in dictionaryIds) {
+        var dictionary = metadataTableById[dictionaryId]
+        var fieldNames = dictionaryFieldsById[dictionaryId].join('、')
+        if (dictionary == null) { exit 403, '字段“' + fieldNames + '”关联的数据库字典表不存在、已删除或不属于当前租户，请在登记第4步核对字典表关联' }
+        if (!permittedDictionaryDbIds.contains(text(dictionary.datasourceId))) { exit 403, '字段“' + fieldNames + '”关联的字典数据源不在当前角色的数据范围内' }
+    }
+    var dictionaryColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('table_id', dictionaryIds).eq('is_del', 0).select()
+    for (column in dictionaryColumns) {
+        var ownerId = text(column.tableId)
+        if (metadataColumnsByTableId[ownerId] == null) { metadataColumnsByTableId[ownerId] = [] }
+        metadataColumnsByTableId[ownerId].add(column)
+    }
+}
+loadGovernanceForTableIds(dictionaryIds)
+tableItems = appendDictionaryTranslationColumns(tableItems, sourceTable)
 if (targetDatasource.showConnect == 0) {
     exit 400, '目标数据源未提供连接信息'
 }
@@ -622,6 +745,7 @@ var duplicateRows = db.table('db_table_t').where()
     .select()
 var duplicate = null
 var reuseTargetTable = false
+var confirmReuseExisting = body?.reuseExistingTable == true
 var duplicateCheckTime = new Date()
 var candidateIds = []
 var matchingRows = []
@@ -633,9 +757,11 @@ for (candidate in (duplicateRows == null ? [] : duplicateRows)) {
 }
 if (candidateIds.size() > 100) { exit 409, '目标表同名登记异常，请先核对登记记录' }
 var referencedIds = []
+var protectedReferenceIds = []
+var candidateColumns = []
 if (candidateIds.size() > 0) {
     // 四次批量预取，候选 20/100 行时均不逐项查询。
-    var candidateColumns = db.table('db_table_column_t').where().in('table_id', candidateIds).eq('is_del', 0).select()
+    candidateColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('table_id', candidateIds).eq('is_del', 0).select()
     var candidateSourceTasks = db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId)
         .in('source_table_id', candidateIds).eq('is_del', 0).select()
     var candidateTargetTasks = db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId)
@@ -645,12 +771,29 @@ if (candidateIds.size() > 0) {
     for (row in candidateSourceTasks) { referencedIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
     for (row in candidateTargetTasks) { referencedIds.add(text(first(row, ['targetTableId', 'target_table_id']))) }
     for (row in candidateProps) { referencedIds.add(text(first(row, ['parentId', 'parent_id']))) }
+    for (row in candidateSourceTasks) { protectedReferenceIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
+    for (row in candidateTargetTasks) { protectedReferenceIds.add(text(first(row, ['targetTableId', 'target_table_id']))) }
+    for (row in candidateProps) { protectedReferenceIds.add(text(first(row, ['parentId', 'parent_id']))) }
+    if (confirmReuseExisting) {
+        var childRows = db.table('db_table_t').where().eq('tenant_id', tenantId).in('source_table_id', candidateIds).eq('is_del', 0).select()
+        var catalogReferences = db.table('da_prop_t').where().in('prop_value', candidateIds).eq('is_del', 0).select()
+        for (row in childRows) { protectedReferenceIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
+        for (row in catalogReferences) { protectedReferenceIds.add(text(first(row, ['propValue', 'prop_value']))) }
+    }
 }
 var stalePlaceholderIds = []
 for (candidate in matchingRows) {
     var candidateId = text(candidate.tid)
+    if (candidateId == sourceTableId) { exit 409, '不能将来源表自身复用为物化目标表' }
     var candidateSourceId = text(candidate.sourceTableId)
     if (candidateSourceId == sourceTableId) {
+        duplicate = candidate
+        reuseTargetTable = true
+        break
+    }
+    if (confirmReuseExisting && (blank(candidateSourceId) || candidateSourceId == candidateId)
+        && !protectedReferenceIds.contains(candidateId) && candidateId != sourceTableId) {
+        // 用户明确确认后采用无人引用的独立登记；不抢占其他来源或活动任务。
         duplicate = candidate
         reuseTargetTable = true
         break
@@ -683,11 +826,11 @@ for (index, item in tableItems) {
 // 本次重试直接复用同一目标表，避免重复建表/重复插主表。
 var originalBody = body
 var physicalTableReused = reuseTargetTable
-// Hive 物理表存在时不自动复用或覆盖；仅创建流程应走显式任务创建操作。
+// 用户明确确认复用后只读物理字段并补齐登记；不执行CREATE或覆盖已有数据。
 var materializationDbType = text(first(targetDatasource, ['dbType', 'db_type'])).toLowerCase().replace('_', '').replace('-', '')
 var hiveMaterialization = materializationDbType == 'hive' || materializationDbType == 'mrshive'
     || materializationDbType == 'huaweihive' || materializationDbType == 'huaweimrshive'
-if (!reuseTargetTable || hiveMaterialization) {
+if (!reuseTargetTable || hiveMaterialization || confirmReuseExisting || body?.recreateMissingTable == true || body?.dryRun == true) {
     var ddl = submittedDdl
     if (blank(ddl)) {
         var ddlRequestBody = {
@@ -708,20 +851,39 @@ if (!reuseTargetTable || hiveMaterialization) {
         ddl: ddl,
         dbId: propList.dbId,
         tableName: propList.tableName,
-        skipIfExists: true
+        skipIfExists: true,
+        validateOnly: originalBody?.dryRun == true,
+        reuseExistingOnly: confirmReuseExisting,
+        tableItems: tableItems
     }
     body = createTableRequestBody
     var createResult = createTable()
     body = originalBody
+    if (originalBody?.dryRun == true) {
+        if (createResult?.valid != true) { exit 400, '物化建表预检未完成' }
+        return {valid:true, dryRun:true, sideEffectsApplied:false, dictionaryValidationPassed:true,
+            physicalTableChecked:false, sourceTableId:sourceTableId, tableItems:tableItems}
+    }
     // A physical table that is not registered for this source must not be adopted silently.
     // Otherwise the next task creation can point at an incomplete target and open an empty canvas.
-    if (createResult != null && createResult.created == false) {
+    if (createResult != null && createResult.created == false && !confirmReuseExisting) {
         if (hiveMaterialization) {
             exit 409, 'Hive 目标物理表已存在，请修改目标表名，或联系运维手动删除原表后重新物化；系统不会自动删除 Hive 表'
         }
         exit 409, '目标物理表已存在，请先删除目标表或改用其他目标表名后再创建任务'
     }
+    if (confirmReuseExisting) {
+        if (createResult?.physicalTableReused != true || createResult?.tableItems == null || createResult.tableItems.size() == 0) {
+            exit 409, '已有目标表复用校验未完成，未保存目标登记'
+        }
+        // 保存真实字段顺序和类型，华为Hive CSV写入与已有物理表保持一致。
+        tableItems = createResult.tableItems
+    }
     physicalTableReused = createResult != null && createResult.created == false
+}
+if (body?.validateReuseOnly == true && confirmReuseExisting) {
+    return {valid:true, dryRun:true, sideEffectsApplied:false, physicalTableReused:physicalTableReused,
+        targetTableId:duplicate == null ? '' : text(duplicate.tid), sourceTableId:sourceTableId, tableItems:tableItems}
 }
 // Hive 重名或物理建表失败之前不得清理任何占位登记。
 if (stalePlaceholderIds.size() > 0) {
@@ -761,9 +923,13 @@ var targetTableValues = {
     flow_status: 2,
     updated_time: now
 }
+if (physicalTableReused && duplicate != null) {
+    // 复用保留已有统计，不能把有数据的目标表重新标成空表。
+    for (key in ['record_count','storage_size','total_size_bytes','total_size_formatted']) { targetTableValues.remove(key) }
+}
 if (reuseTargetTable) {
-    db.table('db_table_t').where().eq('tid', targetTableId).update(targetTableValues)
-    db.table('db_table_column_t').where().eq('table_id', targetTableId).update({ is_del: 1, updated_time: now })
+    db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).update(targetTableValues)
+    if (!confirmReuseExisting) { db.table('db_table_column_t').where().eq('table_id', targetTableId).update({ is_del: 1, updated_time: now }) }
 } else {
     targetTableValues.tid = targetTableId
     targetTableValues.reg_time = now
@@ -772,10 +938,13 @@ if (reuseTargetTable) {
 }
 
 var columns = []
-var sourceColumns = db.table('db_table_column_t').where()
-    .eq('table_id', sourceTableId)
-    .eq('is_del', 0)
-    .select()
+var existingColumnsByName = {}
+if (reuseTargetTable && confirmReuseExisting) {
+    for (column in candidateColumns) {
+        if (text(first(column, ['tableId','table_id'])) == targetTableId) { existingColumnsByName[text(column.columnName).toLowerCase()] = column }
+    }
+}
+// sourceColumns 已在授权后一次读取，字段保存不再次查询来源。
 var sourceColumnMap = {}
 for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
     sourceColumnMap[text(sourceColumn.columnName).toLowerCase()] = sourceColumn
@@ -786,7 +955,7 @@ for (index, item in tableItems) {
         sourceColumn = sourceColumnMap[text(item.dictionarySourceField).toLowerCase()]
     }
     columns.add({
-        tid: IdUtil.getSnowflakeNextIdStr(),
+        tid: existingColumnsByName[text(item.columnName).toLowerCase()]?.tid || IdUtil.getSnowflakeNextIdStr(),
         table_id: targetTableId,
         column_name: item.columnName,
         column_comment: item.columnComment,
@@ -808,16 +977,32 @@ for (index, item in tableItems) {
         source_table_column_id: sourceColumn == null ? null : sourceColumn.tid,
         tenant_id: tenantId,
         is_del: 0,
-        created_time: now,
+        created_time: existingColumnsByName[text(item.columnName).toLowerCase()]?.createdTime || now,
         updated_time: now
     })
 }
 // Java 通用持久化层依据当前数据库的标识符规则引用保留字列，兼容 MySQL、达梦等数据库。
+var columnsToInsert = []
+var actualColumnNames = []
+for (column in columns) { actualColumnNames.add(text(column.column_name).toLowerCase()) }
+var staleColumnIds = []
+for (column in existingColumnsByName.values()) {
+    if (!actualColumnNames.contains(text(column.columnName).toLowerCase())) { staleColumnIds.add(text(column.tid)) }
+}
+if (staleColumnIds.size() > 0) {
+    db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('tid', staleColumnIds).update({is_del:1,updated_time:now})
+}
+for (column in columns) {
+    if (existingColumnsByName[text(column.column_name).toLowerCase()] != null) {
+        // 保留原字段 ID，已有画布/治理绑定不会因补登记而失效。
+        db.table('db_table_column_t').where().eq('tenant_id', tenantId).eq('tid', column.tid).update(column)
+    } else { columnsToInsert.add(column) }
+}
 try {
-    metadataAsset.batchInsertTableColumns(columns)
+    metadataAsset.batchInsertTableColumns(columnsToInsert)
 } catch (e) {
     // 当前运行包存在 MySQL 驱动批处理兼容问题时，回退为 Magic 命名表逐行插入。
-    for (column in columns) {
+    for (column in columnsToInsert) {
         db.table('db_table_column_t').primary('tid').insert(column)
     }
 }
@@ -833,7 +1018,7 @@ var targetGovernanceConfig = {
     sourceTableName: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
     fieldTransformBindings: buildFieldTransformBindings(sourceTable, sourceColumns, targetTableId, tableItems, columns)
 }
-db.table('db_table_t').where().eq('tid', targetTableId).eq('is_del', 0)
+db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
     .update({ field_governance_config: jsons.toJSONStr(targetGovernanceConfig), updated_time: now })
 
 // 目标表同步到 ES，供列表和详情快速读取。
@@ -852,11 +1037,11 @@ var targetDoc = {
     businessType: businessType,
     sourceTableId: sourceTableId,
     sourceTableName: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
-    recordCount: 0,
+    recordCount: physicalTableReused && duplicate != null ? first(duplicate,['recordCount','record_count']) : 0,
     fieldCount: tableItems.size(),
-    storageSize: '0 KB',
-    totalSizeBytes: 0,
-    totalSizeFormatted: '0 KB',
+    storageSize: physicalTableReused && duplicate != null ? first(duplicate,['storageSize','storage_size']) : '0 KB',
+    totalSizeBytes: physicalTableReused && duplicate != null ? first(duplicate,['totalSizeBytes','total_size_bytes']) : 0,
+    totalSizeFormatted: physicalTableReused && duplicate != null ? first(duplicate,['totalSizeFormatted','total_size_formatted']) : '0 KB',
     assetStatus: 2,
     flowStatus: 2,
     regTime: date_format(now),
@@ -881,25 +1066,15 @@ try {
 
 // 如果来源表已有自动目录则复用，否则新建。目录代表目标表，但保留来源表属性形成完整链路。
 if (blank(catalogId)) {
-    var sourceCatalogProps = db.table('da_prop_t').where()
-        .eq('prop_name', 'sourceTableId')
-        .eq('prop_value', sourceTableId)
-        .eq('is_del', 0)
-        .select()
-    for (sourceCatalogProp in (sourceCatalogProps == null ? [] : sourceCatalogProps)) {
-        var sourceCatalogAsset = db.table('da_catalog_t').where()
-            .eq('tid', sourceCatalogProp.parentId)
-            .eq('is_del', 0)
-            .selectOne()
-        if (sourceCatalogAsset != null && blank(catalogId)) {
-            catalogId = text(sourceCatalogProp.parentId)
-        }
+    for (sourceCatalogId in (governanceCatalogIdsBySource[sourceTableId] == null ? [] : governanceCatalogIdsBySource[sourceTableId])) {
+        if (governanceCatalogById[sourceCatalogId] != null && blank(catalogId)) { catalogId = sourceCatalogId }
     }
 }
 if (blank(catalogId)) {
     catalogId = IdUtil.getSnowflakeNextIdStr()
     db.table('da_catalog_t').primary('tid').insert({
         tid: catalogId,
+        tenant_id: tenantId,
         is_del: 0,
         reg_time: now,
         asset_status: 2,
@@ -909,6 +1084,7 @@ if (blank(catalogId)) {
     })
 } else {
     db.table('da_catalog_t').where()
+        .eq('tenant_id', tenantId)
         .eq('tid', catalogId)
         .update({ updated_time: now, asset_status: 2, flow_status: 2, is_del: 0 })
 }
@@ -967,9 +1143,9 @@ try {
 }
 
 // 反写来源表与目标表的目录关联，后续列表和任务创建都能直接定位。
-db.table('db_table_t').where().eq('tid', sourceTableId).eq('is_del', 0)
+db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', sourceTableId).eq('is_del', 0)
     .update({ source_catalog_id: catalogId, catalog_name: catalogName, updated_time: now })
-db.table('db_table_t').where().eq('tid', targetTableId).eq('is_del', 0)
+db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
     .update({ source_catalog_id: catalogId, catalog_name: catalogName, updated_time: now })
 
 metadataAsset.refreshRegistrationStatus(propList.dbId, false)

@@ -84,9 +84,9 @@ class HuaweiHiveTargetDeletionMagicTest {
                 """);
         jdbc.execute("create table data_access_field_mapping(tid varchar(32),task_id varchar(32),is_del int,updated_time timestamp)");
         jdbc.execute("create table data_access_task_monitor_snap_t(tid varchar(32),task_id varchar(32),is_del int)");
-        jdbc.execute("create table db_table_column_t(tid varchar(32),table_id varchar(32),is_del int,updated_time timestamp)");
-        jdbc.execute("create table da_prop_t(parent_id varchar(32),prop_name varchar(100),prop_value varchar(100),is_del int,updated_time timestamp)");
-        jdbc.execute("create table da_catalog_t(tid varchar(32),is_del int,updated_time timestamp)");
+        jdbc.execute("create table db_table_column_t(tid varchar(32),table_id varchar(32),tenant_id varchar(32) default 'police',is_del int,updated_time timestamp)");
+        jdbc.execute("create table da_prop_t(parent_id varchar(32),tenant_id varchar(32) default 'police',prop_name varchar(100),prop_value varchar(100),is_del int,updated_time timestamp)");
+        jdbc.execute("create table da_catalog_t(tid varchar(32),tenant_id varchar(32) default 'police',is_del int,updated_time timestamp)");
         jdbc.execute("create table nifi_pipeline_t(id varchar(32),tenant_id varchar(32),nifi_process_group_id varchar(32),is_del int,updated_at bigint,dsl_json varchar(1000))");
         jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values('source-1','police','source-db','person',0)");
         jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) values('target-1','police','target-db','ods_person','source-1',0)");
@@ -489,6 +489,131 @@ class HuaweiHiveTargetDeletionMagicTest {
         assertInstanceOf(ExitValue.class,run(request()));
         assertLifecycleIntact();
         verifyNoInteractions(hive,explorer);
+    }
+
+    @Test
+    void cascadingTargetWithOriginalSourceMetadataCanBePreviewedAndCleaned() throws Exception {
+        prepareCascadeOrigin("police");
+        var previewBody=request();previewBody.put("dryRun",true);
+        Map<?,?> preview=assertInstanceOf(Map.class,run(previewBody));
+        assertEquals("cascade_original_source",preview.get("targetAssociationMode"));
+        assertEquals(0,queryCounter.writes);
+        Map<?,?> result=assertInstanceOf(Map.class,run(request()));
+        assertEquals("cascade_original_source",result.get("targetAssociationMode"));
+        assertEquals(true,result.get("targetHivePhysicalRetained"));
+        assertEquals(0,deleted("db_table_t","source-1"));
+        assertEquals(0,deleted("db_table_t","original-source"));
+        assertEquals(1,deleted("db_table_t","target-1"));
+        verifyNoInteractions(hive,explorer);
+    }
+
+    @Test
+    void registeredTargetSelfMarkerNeedsTaskAndMatchingTenantCatalogEvidence() throws Exception {
+        prepareSelfMarker(1);
+        var previewBody=request();previewBody.put("dryRun",true);
+        Map<?,?> preview=assertInstanceOf(Map.class,run(previewBody));
+        assertEquals("registered_target_self_marker",preview.get("targetAssociationMode"));
+        assertEquals(0,queryCounter.writes);
+        Map<?,?> result=assertInstanceOf(Map.class,run(request()));
+        assertEquals("registered_target_self_marker",result.get("targetAssociationMode"));
+        assertEquals(1,deleted("db_table_t","target-1"));
+        assertEquals(0,deleted("db_table_t","source-1"));
+        verifyNoInteractions(hive,explorer);
+    }
+
+    @Test
+    void selfMarkerDoesNotPermitMissingMismatchedOrForeignCatalogEvidence() throws Exception {
+        for(String variant:List.of("wrong-source","wrong-target","foreign-catalog","foreign-properties")){
+            setUp();prepareSelfMarker(1);
+            switch(variant){
+                case "wrong-source" -> jdbc.update("update da_prop_t set prop_value='other-source' where prop_name='sourceTableId'");
+                case "wrong-target" -> jdbc.update("update da_prop_t set prop_value='other-target' where prop_name='targetTableId'");
+                case "foreign-catalog" -> jdbc.update("update da_catalog_t set tenant_id='other-tenant'");
+                case "foreign-properties" -> jdbc.update("update da_prop_t set tenant_id='other-tenant'");
+            }
+            assertInstanceOf(ExitValue.class,run(request()),variant);
+            assertLifecycleIntact();
+            assertEquals(0,queryCounter.writes);
+            verifyNoInteractions(hive,explorer);
+        }
+    }
+
+    @Test
+    void cascadeOriginMustExistInCurrentTenantAndMatchSourceOrigin() throws Exception {
+        prepareCascadeOrigin("other-tenant");
+        assertInstanceOf(ExitValue.class,run(request()));
+        assertLifecycleIntact();assertEquals(0,queryCounter.writes);
+        setUp();prepareCascadeOrigin("police");
+        jdbc.update("update db_table_t set source_table_id='unrelated-source' where tid='target-1'");
+        assertInstanceOf(ExitValue.class,run(request()));
+        assertLifecycleIntact();assertEquals(0,queryCounter.writes);
+        verifyNoInteractions(hive,explorer);
+    }
+
+    @Test
+    void specialOriginCompatibilityDoesNotBypassMissingTaskRoleOrOtherSourceOwner() throws Exception {
+        prepareCascadeOrigin("police");
+        jdbc.update("update data_access_agg_task_t set target_table_id='different-target' where tid='task-1'");
+        assertInstanceOf(ExitValue.class,run(request()));
+        assertLifecycleIntact();assertEquals(0,queryCounter.writes);
+        setUp();prepareCascadeOrigin("police");fixture.deniedDatasourceId="target-db";
+        assertInstanceOf(ExitValue.class,run(request()));
+        assertLifecycleIntact();assertEquals(0,queryCounter.writes);
+        setUp();prepareCascadeOrigin("police");
+        jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) values('conflicting-task','police','other-source','target-1','target-db',0)");
+        assertInstanceOf(ExitValue.class,run(request()));
+        assertLifecycleIntact();assertEquals(0,queryCounter.writes);
+        verifyNoInteractions(hive,explorer);
+    }
+
+    @Test
+    void cascadingOriginBatchUsesConstantReadsForOneAndTwentyTargets() throws Exception {
+        int one=previewOriginBatch(1,false);
+        setUp();int twenty=previewOriginBatch(20,false);
+        assertEquals(one,twenty,"Cascade origin proof must not query per target");
+    }
+
+    @Test
+    void selfMarkerCatalogBatchUsesConstantReadsForOneAndTwentyTargets() throws Exception {
+        int one=previewOriginBatch(1,true);
+        setUp();int twenty=previewOriginBatch(20,true);
+        assertEquals(one,twenty,"Catalog proof must be prefetched once for the full batch");
+    }
+
+    private int previewOriginBatch(int count,boolean selfMarker) throws Exception {
+        if(selfMarker)prepareSelfMarker(count);else{
+            prepareCascadeOrigin("police");
+            for(int i=2;i<=count;i++){
+                jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) values(?,?,?,?,?,0)","target-"+i,"police","target-db","ods_person_"+i,"original-source");
+                jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) values(?,?,?,?,?,0)","task-"+i,"police","source-1","target-"+i,"target-db");
+            }
+        }
+        List<Map<String,Object>> targets=new ArrayList<>();
+        for(int i=1;i<=count;i++)targets.add(Map.of("targetTableId","target-"+i,"targetDbId","target-db","targetTableName",i==1?"ods_person":"ods_person_"+i));
+        var body=batchRequest(targets);body.put("checkPhysicalExistence",false);
+        var result=assertInstanceOf(Map.class,run(body));
+        var rows=(List<?>)result.get("results");assertEquals(count,rows.size());
+        for(Object row:rows)assertEquals(selfMarker?"registered_target_self_marker":"cascade_original_source",((Map<?,?>)row).get("targetAssociationMode"));
+        assertEquals(0,queryCounter.writes);verifyNoInteractions(hive,explorer);
+        return queryCounter.queries;
+    }
+
+    private void prepareCascadeOrigin(String rootTenant){
+        jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values('original-source',?,'source-db','original_person',0)",rootTenant);
+        jdbc.update("update db_table_t set source_table_id='original-source' where tid in ('source-1','target-1')");
+    }
+
+    private void prepareSelfMarker(int count){
+        for(int i=1;i<=count;i++){
+            String target="target-"+i,catalog="catalog-"+i;
+            if(i>1){
+                jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values(?,?,?,?,0)",target,"police","target-db","ods_person_"+i);
+                jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,is_del) values(?,?,?,?,?,0)","task-"+i,"police","source-1",target,"target-db");
+            }
+            jdbc.update("update db_table_t set source_table_id=?,source_catalog_id=? where tid=?",target,catalog,target);
+            jdbc.update("insert into da_catalog_t(tid,tenant_id,is_del) values(?,'police',0)",catalog);
+            jdbc.update("insert into da_prop_t(parent_id,tenant_id,prop_name,prop_value,is_del) values(?,'police','sourceTableId','source-1',0),(?,'police','targetTableId',?,0)",catalog,catalog,target);
+        }
     }
 
     private void prepareUnlinkedTargetWithAnotherActiveTask() {

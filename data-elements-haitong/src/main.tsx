@@ -11,6 +11,7 @@ import { startPlatformSessionSync } from './services/platformSession';
 import './styles/global.css';
 import './styles/task-table.css';
 import './styles/hero.css';
+import './styles/popup-compat.css';
 // Migrate legacy document-query iframe links before HashRouter mounts. The
 // bridge then strips token parameters while keeping this canvas selection.
 const canonicalUrl = canonicalizeLegacyCanvasUrl(window.location.href);

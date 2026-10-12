@@ -24,7 +24,7 @@
 ================================
 // 接口：13.按来源表补齐接入任务
 // 路由：POST /ods/dataAggTaskEnsure
-// 业务说明：一次预取来源、所选目标、连接及字典元数据，按所选目标顺序逐级生成独立任务。
+// 业务说明：一次预取来源、所选目标、连接及字典元数据，ODS 目标按分域配置顺序逐级生成独立任务。
 // 重复请求复用任务；仅显式重建替换画布，dryRun不写入。事务锁住来源登记，串行处理同一来源的创建请求。
 import cn.hutool.core.util.IdUtil
 import jsons
@@ -214,6 +214,25 @@ var metadataTableById = {}
 var metadataColumnsByTableId = {}
 var metadataDatasourceById = {}
 var metadataTablesByName = {}
+// code_table_id 兼容列同时承载标准字典ID和数据库表ID，必须先按登记关联类型判别。
+var physicalDictionaryRelation = (relation) => {
+    if (relation == null) { return true }
+    if (['false','0','no'].contains(text(relation.enabled).trim().toLowerCase())) { return false }
+    var sourceType = text(relation.sourceType).trim().toLowerCase()
+    var mode = text(relation.mode).trim().toLowerCase()
+    var forced = text(relation.forceStandardEnabled).trim().toLowerCase()
+    return !(['standard','enum'].contains(sourceType) || ['standard','enum'].contains(mode)
+        || ['true','1','yes'].contains(forced))
+}
+var dictionaryRelationsByField = (table) => {
+    var result = {}
+    var config = governanceConfigOf(table)
+    for (field in (config.fields == null ? [] : config.fields)) {
+        var name = text(first(field, ['columnName','column_name','fieldName','field_name'])).trim().toLowerCase()
+        if (!blank(name)) { result[name] = first(field, ['dictionaryRelation','dictionary_relation','dictionaryConfig','dictionary_config']) }
+    }
+    return result
+}
 // A field's checked dictionary association is persisted independently of the
 // detailed relation JSON.  Production registrations may only have these two
 // column values, so resolve the executable lookup from the registered
@@ -223,8 +242,10 @@ var registeredDictionaryRelations = (sourceTable) => {
     var sourceTableId = text(first(sourceTable, ['tid', 'id', 'tableId', 'table_id'])).trim()
     if (blank(sourceTableId)) { return result }
     var registeredSourceColumns = metadataColumnsByTableId[sourceTableId]
+    var fieldRelations = dictionaryRelationsByField(sourceTable)
     for (sourceColumn in (registeredSourceColumns == null ? [] : registeredSourceColumns)) {
         var sourceName = text(first(sourceColumn, ['columnName', 'column_name'])).trim()
+        if (!physicalDictionaryRelation(fieldRelations[sourceName.toLowerCase()])) { continue }
         var enabled = text(first(sourceColumn, ['enableCodeTable', 'enable_code_table', 'isDict', 'is_dict'])).trim().toLowerCase()
         var dictionaryTableId = text(first(sourceColumn, ['codeTableId', 'code_table_id', 'dictId', 'dict_id'])).trim()
         if (blank(sourceName) || (enabled != '1' && enabled != 'true' && enabled != 'yes' && blank(dictionaryTableId))) {
@@ -846,13 +867,16 @@ var sourceGovernanceConfig = governanceConfigOf(sourceTable)
 var sourceTemporalMappings = temporalMappingsOf(sourceColumns, sourceGovernanceConfig)
 var dictionaryTableIds = []
 var dictionaryTableNames = []
+var sourceFieldRelations = dictionaryRelationsByField(sourceTable)
 for (sourceColumn in metadataColumnsByTableId[sourceTableId]) {
+    var fieldName = text(first(sourceColumn, ['columnName','column_name'])).trim().toLowerCase()
+    if (!physicalDictionaryRelation(sourceFieldRelations[fieldName])) { continue }
     var dictionaryId = text(first(sourceColumn, ['codeTableId', 'code_table_id', 'dictId', 'dict_id'])).trim()
     if (!blank(dictionaryId) && !dictionaryTableIds.contains(dictionaryId)) { dictionaryTableIds.add(dictionaryId) }
 }
 for (field in (sourceGovernanceConfig.fields == null ? [] : sourceGovernanceConfig.fields)) {
     var relation = first(field, ['dictionaryRelation', 'dictionary_relation', 'dictionaryConfig', 'dictionary_config'])
-    if (relation == null) { continue }
+    if (relation == null || !physicalDictionaryRelation(relation)) { continue }
     var dictionaryId = text(first(relation, ['dictionaryTableId', 'dictionary_table_id'])).trim()
     if (!blank(dictionaryId) && !dictionaryTableIds.contains(dictionaryId)) { dictionaryTableIds.add(dictionaryId) }
     var dictionaryReference = dictionaryTableReference(first(relation, ['dictionaryTable', 'dictionary_table', 'dictTable', 'dict_table']))
@@ -1064,6 +1088,49 @@ for (candidateDbId in targetDatasourceIds) {
         exit 403, '物化目标数据源不在当前租户或角色数据范围内'
     }
 }
+// ODS 分域是接入链路顺序的权威配置。目标已逐 ID 校验租户、来源关联和角色权限；
+// 一次关联查询只给这些已授权目标排序，不能借请求顺序反转汇聚→原始链路。
+// 非 ODS 的分发目标没有分域绑定，保留其显式选择顺序。
+if (targetTables.size() > 1) {
+    var orderedDomainBindings = db.select("""
+        SELECT binding.datasource_id
+          FROM dwm_center_layer_source_t binding
+          JOIN sym_dict_t domain ON domain.tid=binding.target_id
+               AND domain.tenant_id=#{tenantId} AND domain.is_del=0
+          JOIN sym_dict_t ods ON ods.tid=domain.parent_id
+               AND ods.tenant_id=#{tenantId} AND ods.is_del=0 AND LOWER(ods.dict_code)='ods'
+          JOIN sym_dict_t root ON root.tid=ods.parent_id
+               AND root.tenant_id=#{tenantId} AND root.is_del=0
+               AND root.parent_id='0' AND root.dict_code='dataSourceType'
+         WHERE binding.tenant_id=#{tenantId} AND binding.is_del=0 AND binding.target_type='domain'
+           AND binding.datasource_id IN (#{targetDatasourceIds})
+         ORDER BY domain.sort_no ASC, domain.tid ASC
+    """)
+    var targetsByDatasource = {}
+    for (target in targetTables) {
+        var dbId = text(first(target, ['datasourceId', 'datasource_id']))
+        if (targetsByDatasource[dbId] == null) { targetsByDatasource[dbId] = [] }
+        targetsByDatasource[dbId].add(target)
+    }
+    var orderedTargets = []
+    var orderedTargetIds = []
+    for (binding in orderedDomainBindings) {
+        for (target in (targetsByDatasource[text(binding.datasourceId)] == null ? [] : targetsByDatasource[text(binding.datasourceId)])) {
+            if (!orderedTargetIds.contains(text(target.tid))) {
+                orderedTargets.add(target)
+                orderedTargetIds.add(text(target.tid))
+            }
+        }
+    }
+    for (target in targetTables) {
+        if (!orderedTargetIds.contains(text(target.tid))) {
+            orderedTargets.add(target)
+            orderedTargetIds.add(text(target.tid))
+        }
+    }
+    targetTables = orderedTargets
+    targetTableIds = orderedTargetIds
+}
 loadGovernanceForTableIds(targetTableIds)
 
 // 一次查询全部所选目标字段，独立任务分别使用自己的目标字段和映射。
@@ -1081,7 +1148,7 @@ for (candidateTargetId in targetTableIds) {
         exit 409, '物化目标表缺少当前租户的字段元数据，请重新物化建表'
     }
 }
-// 选择顺序即接入链路顺序：来源→目标1，目标1→目标2，依次递进。
+// 此处已按 ODS 分域配置排好顺序：来源→目标1，目标1→目标2，依次递进。
 var rootSourceTable = sourceTable
 var rootSourceDb = sourceDb
 var rootSourceColumns = sourceColumns

@@ -124,6 +124,81 @@ var dataSourceOf = (database, prefetchedConfig) => {
 var tenantId = text(tenantRuntime.id()).trim()
 if (blank(tenantId)) { exit 401, '登录状态已失效，请重新登录' }
 
+// 物化元数据保留初始业务来源；级联任务保存真实上一跳，两者不能机械比较。
+// 重新登记的目标可能使用自身 ID 作来源标记，须同时有有效任务及目录源/目标证据。
+// 所有证明记录一次批量预取，循环只做内存校验，不逐目标查库。
+var validatedTargetOrigins = (sourceRow, resolvedTargets, taskByTargetId) => {
+    var sourceId = text(first(sourceRow, ['tid']))
+    var rootId = text(first(sourceRow, ['sourceTableId', 'source_table_id']))
+    if (blank(rootId)) { rootId = sourceId }
+    var modes = {}
+    var mismatches = []
+    var selfCatalogIds = []
+    for (resolved in resolvedTargets) {
+        var target = resolved.table
+        if (target == null) { continue }
+        var targetId = text(first(target, ['tid']))
+        var declaredSource = text(first(target, ['sourceTableId', 'source_table_id']))
+        if (blank(declaredSource) || declaredSource == sourceId) {
+            modes[targetId] = 'direct_source'
+            continue
+        }
+        var linkedTask = taskByTargetId[targetId]
+        if (linkedTask == null
+            || text(first(linkedTask, ['sourceTableId', 'source_table_id'])) != sourceId
+            || text(first(linkedTask, ['targetTableId', 'target_table_id'])) != targetId) {
+            exit 409, '目标表元数据已关联其他来源表，已拒绝删除'
+        }
+        mismatches.add({table: target, targetId: targetId, declaredSource: declaredSource})
+        if (declaredSource == targetId) {
+            var catalogId = text(first(target, ['sourceCatalogId', 'source_catalog_id']))
+            if (!blank(catalogId) && !selfCatalogIds.contains(catalogId)) { selfCatalogIds.add(catalogId) }
+        }
+    }
+    if (mismatches.size() == 0) { return modes }
+    var rootExists = rootId == sourceId
+    if (!rootExists) {
+        var rootTable = db.table('db_table_t').columns('tid').where()
+            .eq('tid', rootId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
+        rootExists = rootTable != null
+    }
+    var activeCatalogIds = []
+    if (selfCatalogIds.size() > 0) {
+        var catalogs = db.table('da_catalog_t').columns('tid').where()
+            .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', selfCatalogIds).select()
+        for (catalog in catalogs) { activeCatalogIds.add(text(first(catalog, ['tid']))) }
+    }
+    var catalogProps = activeCatalogIds.size() == 0 ? [] : db.table('da_prop_t').columns('parent_id', 'prop_name', 'prop_value').where()
+        .eq('tenant_id', tenantId).eq('is_del', 0).in('parent_id', activeCatalogIds)
+        .in('prop_name', ['sourceTableId', 'targetTableId']).select()
+    var catalogSources = {}
+    var catalogTargets = {}
+    for (property in catalogProps) {
+        var catalogId = text(first(property, ['parentId', 'parent_id']))
+        var value = text(first(property, ['propValue', 'prop_value']))
+        var bucket = text(first(property, ['propName', 'prop_name'])) == 'sourceTableId' ? catalogSources : catalogTargets
+        if (bucket[catalogId] == null) { bucket[catalogId] = [] }
+        if (!bucket[catalogId].contains(value)) { bucket[catalogId].add(value) }
+    }
+    for (candidate in mismatches) {
+        if (rootExists && rootId != sourceId && candidate.declaredSource == rootId) {
+            modes[candidate.targetId] = 'cascade_original_source'
+            continue
+        }
+        var catalogId = text(first(candidate.table, ['sourceCatalogId', 'source_catalog_id']))
+        var sources = catalogSources[catalogId]
+        var targets = catalogTargets[catalogId]
+        if (rootExists && candidate.declaredSource == candidate.targetId && activeCatalogIds.contains(catalogId)
+            && sources != null && sources.size() == 1 && sources.contains(rootId)
+            && targets != null && targets.contains(candidate.targetId)) {
+            modes[candidate.targetId] = 'registered_target_self_marker'
+            continue
+        }
+        exit 409, '目标表元数据已关联其他来源表，已拒绝删除'
+    }
+    return modes
+}
+
 // The materialization dialog checks several proposed targets before it may
 // delete any existing table. Resolve tenant rows once, authorize every ID as
 // a group, and only then probe the bounded set of distinct physical databases.
@@ -259,6 +334,7 @@ if (body?.batchDryRun == true) {
     for (catalogReference in catalogReferences) {
         catalogReferencedIds.add(text(first(catalogReference, ['propValue', 'prop_value'])))
     }
+    var batchTargetAssociationModes = validatedTargetOrigins(batchSource, resolvedPlans, taskByTableId)
     var unlinkedByTargetId = {}
     var unlinkedTargetIds = []
     for (resolved in resolvedPlans) {
@@ -271,9 +347,6 @@ if (body?.batchDryRun == true) {
         } else {
             var linkedSourceId = text(first(selectedTable, ['sourceTableId', 'source_table_id']))
             var linkedTask = taskByTableId[resolved.targetTableId]
-            if (!blank(linkedSourceId) && linkedSourceId != batchSourceId) {
-                exit 409, '目标表元数据已关联其他来源表，不能删除或复用'
-            }
             var unlinkedTarget = blank(linkedSourceId) && linkedTask == null
             if (unlinkedTarget && catalogReferencedIds.contains(resolved.targetTableId)) {
                 exit 409, '目标表仍被数据目录引用，不能删除或复用'
@@ -380,6 +453,7 @@ if (body?.batchDryRun == true) {
         preflightResults.add({targetDbId: plan.targetDbId, targetTableName: plan.targetTableName,
             targetTableId: resolved.targetTableId, targetMetadataMissing: resolved.table == null,
             targetUnlinked: unlinkedByTargetId[resolved.targetTableId] == true,
+            targetAssociationMode: batchTargetAssociationModes[resolved.targetTableId],
             targetPhysicalExists: preflight.physicalExists == true,
             targetPhysicalState: preflight.targetHivePhysicalRetained == true ? 'retained'
                 : (preflight.targetCleanupPending == true ? 'unknown' : (preflight.physicalExists == true ? 'exists' : 'absent')),
@@ -444,6 +518,7 @@ if (!blank(requestedTaskId)) {
 var targetDbId = text(body?.targetDbId || body?.targetDatasourceId || body?.target_db_id).trim()
 var targetTableName = text(body?.targetTableName || body?.target_table_name).trim()
 var targetSelectionMode = ''
+var targetAssociationMode = ''
 var targetMetadataMissing = false
 var targetUnlinked = false
 var sourceDatasourceId = text(first(sourceTable, ['datasourceId', 'datasource_id']))
@@ -487,9 +562,6 @@ if (deleteTargetTable) {
         var linkedTask = taskForTargetId(targetTableId)
         targetChosenByTask = linkedTask != null
         var targetSourceTableId = text(first(targetTable, ['sourceTableId', 'source_table_id']))
-        if (!blank(targetSourceTableId) && targetSourceTableId != sourceTableId) {
-            exit 409, '目标表元数据已关联其他来源表，已拒绝删除'
-        }
         targetUnlinked = blank(targetSourceTableId) && !targetChosenByTask
         var taskTargetDbId = text(first(linkedTask, ['targetDbId', 'target_db_id']))
         if (!blank(taskTargetDbId) && taskTargetDbId != targetDbId) {
@@ -522,9 +594,6 @@ if (deleteTargetTable) {
             var matchedTargetSourceId = text(first(targetTable, ['sourceTableId', 'source_table_id']))
             var matchedTask = taskForTargetId(matchedTargetId)
             targetChosenByTask = matchedTask != null
-            if (!blank(matchedTargetSourceId) && matchedTargetSourceId != sourceTableId) {
-                exit 409, '匹配到的目标表元数据已关联其他来源表，已拒绝删除'
-            }
             targetUnlinked = blank(matchedTargetSourceId) && !targetChosenByTask
             var matchedTaskDbId = text(first(matchedTask, ['targetDbId', 'target_db_id']))
             if (!blank(matchedTaskDbId) && matchedTaskDbId != targetDbId) {
@@ -539,6 +608,10 @@ if (deleteTargetTable) {
         }
     }
     if (targetTable != null) {
+        var selectedTaskProof = {}
+        selectedTaskProof[targetTableId] = taskForTargetId(targetTableId)
+        var validatedModes = validatedTargetOrigins(sourceTable, [{table: targetTable}], selectedTaskProof)
+        targetAssociationMode = validatedModes[targetTableId]
         // 汇聚表正在作为下一跳来源时保留物理表，须先取消下游任务。
         var downstreamTasks = db.table('data_access_agg_task_t').where()
             .eq('tenant_id', tenantId).eq('source_table_id', targetTableId).eq('is_del', 0).select()
@@ -741,6 +814,7 @@ if (dryRun) {
         targetTableName: targetTableName,
         resolvedTargetTableName: targetTableName,
         targetSelectionMode: targetSelectionMode,
+        targetAssociationMode: targetAssociationMode,
         targetPhysicalExists: preflightPhysicalExists,
         targetScope: preflightScope,
         targetDatabaseType: preflightDatabaseType,
@@ -912,6 +986,7 @@ return {
     targetTableName: targetTableName,
     resolvedTargetTableName: targetTableName,
     targetSelectionMode: targetSelectionMode,
+    targetAssociationMode: targetAssociationMode,
     targetMetadataMissing: targetMetadataMissing,
     targetUnlinked: targetUnlinked,
     physicalTargetTableName: physicalTargetTableName,

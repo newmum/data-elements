@@ -463,6 +463,7 @@ public class PipelineController {
     @SerializedNifiMutation
     @Transactional
     public Pipeline create(@RequestBody Pipeline body, @RequestParam(required = false) String catalogTid) {
+        body = validateIncrementalFields(body);
         Pipeline existing = findCatalogPipeline(catalogTid);
         if (existing != null) return saveDesign(existing, body);
         // Force-create: clear any incoming id so save() generates one.
@@ -481,14 +482,31 @@ public class PipelineController {
                                            @RequestParam(required=false) Long expectedUpdatedAt) {
         Pipeline current = repo.findById(id).orElse(null);
         if (current == null) return ResponseEntity.notFound().build();
+        final Pipeline prepared = validateIncrementalFields(body);
         if (expectedUpdatedAt != null) {
             return ResponseEntity.ok(repo.update(id, cur -> {
                 if (!java.util.Objects.equals(cur.updatedAt(),expectedUpdatedAt))
                     throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"加工图已被其他入口修改，请重新加载后再保存");
-                return new Pipeline(cur.id(),body.name(),body.description(),cur.createdAt(),cur.updatedAt(),body.dsl(),cur.nifiProcessGroupId(),cur.status(),cur.lastDeployedHash(),cur.lastDeployedAt(),cur.lastStoppedAt(),cur.nodeMapping(),cur.lastBulletinId());
+                return new Pipeline(cur.id(),prepared.name(),prepared.description(),cur.createdAt(),cur.updatedAt(),prepared.dsl(),cur.nifiProcessGroupId(),cur.status(),cur.lastDeployedHash(),cur.lastDeployedAt(),cur.lastStoppedAt(),cur.nodeMapping(),cur.lastBulletinId());
             }));
         }
-        return ResponseEntity.ok(saveDesign(current, body));
+        return ResponseEntity.ok(saveDesign(current, prepared));
+    }
+
+    /** Template generation initializes extraction fields once; saved/manual choices are never re-read or replaced. */
+    static Pipeline validateIncrementalFields(Pipeline body) {
+        if (body.dsl() == null || body.dsl().nodes() == null) return body;
+        for (var node : body.dsl().nodes()) {
+            if (!"source".equals(node.category()) || node.config() == null
+                    || List.of("source.api", "source.ftp", "source.sftp", "source.kafka", "source.minio",
+                        "source.hdfs", "source.hbase", "source.elasticsearch", "source.iotdb").contains(node.manifestKey())) continue;
+            String mode = String.valueOf(node.config().getOrDefault("syncMode", "")).trim().toUpperCase(Locale.ROOT);
+            String column = String.valueOf(node.config().getOrDefault("incrementalColumn", "")).trim();
+            if (List.of("INCREMENTAL", "INCR", "FULL_THEN_INCR").contains(mode) && (column.isBlank() || "null".equals(column)))
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                        "来源节点缺少主增量字段，请手工填写后保存，或选择全量同步");
+        }
+        return body;
     }
 
     private Pipeline saveDesign(Pipeline current, Pipeline body) {

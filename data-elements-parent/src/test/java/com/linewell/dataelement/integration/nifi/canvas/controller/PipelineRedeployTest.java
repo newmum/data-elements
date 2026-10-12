@@ -21,6 +21,19 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class PipelineRedeployTest {
+    @Test
+    void stoppingRetainsRegisteredIncrementalFieldAndEntireSourceDesign() {
+        var before = stored.get();
+        var source = new Pipeline.Node("source", "source.oracle", "来源", "source", 0, 0,
+                Map.of("sourceTableId", "registered", "incrementalColumn", "UPDATE_TIME", "syncMode", "FULL_THEN_INCR"));
+        var dsl = new Pipeline.Dsl(1, List.of(source), List.of());
+        stored.set(new Pipeline(before.id(), before.name(), before.description(), before.createdAt(), before.updatedAt(),
+                dsl, "running-group", PipelineStatus.RUNNING, before.lastDeployedHash(), before.lastDeployedAt(), null, before.nodeMapping(), null));
+        assertThat(controller.stop(before.id()).getStatusCode().value()).isEqualTo(200);
+        assertThat(stored.get().dsl()).isEqualTo(dsl);
+        assertThat(stored.get().dsl().nodes().getFirst().config()).containsEntry("incrementalColumn", "UPDATE_TIME");
+        assertThat(stored.get().status()).isEqualTo(PipelineStatus.STOPPED);
+    }
     private final PipelineRepository repo = mock(PipelineRepository.class);
     private final DslCompiler compiler = mock(DslCompiler.class);
     private final NifiClient nifi = mock(NifiClient.class);

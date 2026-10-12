@@ -20,7 +20,7 @@ import { json } from '@codemirror/lang-json';
 import type { ComponentCategory, ComponentManifest, FieldSchema } from '@/types/manifest';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useComponentManifests } from '@/api/manifests';
-import { fetchNodeTemplate, probeColumns, probeTables, testConnection, type ColumnsProbeResult, type MetadataTable, type ProbedColumn } from '@/api/pipelines';
+import { probeColumns, probeTables, testConnection, type ColumnsProbeResult, type MetadataTable, type ProbedColumn } from '@/api/pipelines';
 import { getApiErrorMessage, hiveMetadataConfigError } from '@/api/response';
 import { fetchDatabases, fetchDatabaseDetail, type ApiPullItem, type DbDictItem } from '@/api/dataassets';
 import FieldMappingEditor from './FieldMappingEditor';
@@ -473,7 +473,7 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       group: 'incremental',
       visibleWhen: { key: 'syncMode', equals: 'INCREMENTAL' },
       placeholder: field.placeholder ?? '如 update_time / id / version',
-      help: '登记表已配置“抽取时间”时会自动回填；未配置时可手工选择。时间戳字段建议配合次级字段避免同秒多条漏数。',
+      help: '新建模板会填入登记的抽取时间；历史任务缺失时请手工填写。时间戳字段建议配合次级字段避免同秒多条漏数。',
     },
     {
       key: 'tieBreakerColumn',
@@ -709,38 +709,6 @@ export default function ConfigDrawer() {
       ...fields,
     ] as FieldSchema[];
   }, [manifest]);
-
-  // The fourth registration step owns the source table's extraction timestamp.
-  // Re-read it whenever a registered source node is opened so legacy canvases
-  // receive the same value as a newly generated template. If registration has
-  // no timestamp, keep any existing manual choice; new templates are blank and
-  // therefore require the user to select a field explicitly.
-  const registeredTimestampProbe = useRef('');
-  useEffect(() => {
-    if (!open || !node || node.category !== 'source' || !manifest?.fields?.some((field) => field.key === 'incrementalColumn')) {
-      if (!open) registeredTimestampProbe.current = '';
-      return;
-    }
-    const tableId = String(node.config.sourceTableId ?? '').trim();
-    if (!tableId) return;
-    const probeKey = `${node.id}:${node.manifestKey}:${tableId}`;
-    if (registeredTimestampProbe.current === probeKey) return;
-    registeredTimestampProbe.current = probeKey;
-    let cancelled = false;
-    void fetchNodeTemplate(node.manifestKey, tableId)
-      .then(({ config }) => {
-        if (cancelled) return;
-        const registered = String(config.incrementalColumn ?? '').trim();
-        const current = String(node.config.incrementalColumn ?? '').trim();
-        if (registered && registered !== current) updateConfig(node.id, { incrementalColumn: registered });
-      })
-      .catch(() => {
-        // Keep the editable local configuration if the registration metadata
-        // service is temporarily unavailable. Opening the drawer again retries.
-        if (!cancelled) registeredTimestampProbe.current = '';
-      });
-    return () => { cancelled = true; };
-  }, [manifest?.fields, node, open, updateConfig]);
 
   useEffect(() => {
     if (!node || !open || enhancedFields.length === 0) return;

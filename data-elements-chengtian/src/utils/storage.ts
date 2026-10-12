@@ -24,6 +24,11 @@ export class Storage {
     }
   }
 
+  /** 文本值保持原样，避免数字账号、长 ID 或密文被 JSON.parse 转成数字。 */
+  static getString(key: string, defaultValue = ""): string {
+    return localStorage.getItem(key) ?? defaultValue;
+  }
+
   static remove(key: string): void {
     localStorage.removeItem(key);
   }

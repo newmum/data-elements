@@ -28,8 +28,15 @@ import cn.hutool.core.util.IdUtil;
 import com.linewell.dataelement.utils.PwdRuleUtil;
 import '@/idaas/receiver-account-check' as sourceCheck;
 // 公安本地登录：仅校验显式绑定业务库的账号，不查询控制库用户或成员关系。
-var p=payload||{};var tenantId=(p.tenantId||'')+'';
-var account=(p.account||'').trim();var password=(p.password||'').trim().toUpperCase();
+var p=payload||{};
+if(!(p instanceof Map)
+    || p.account!=null && !(p.account instanceof String) && !(p.account instanceof Number)
+    || p.password!=null && !(p.password instanceof String)) {exit 400,'请输入有效的账号和密码';}
+var tenantId=(p.tenantId||'')+'';
+// 兼容旧登录页将纯数字账号从浏览器缓存解析为 Number；账号始终按文本匹配。
+var account=p.account==null?'':(p.account+'').trim();
+// 此处仅规范化前端传来的 SM3 摘要，不改变原始密码中的空格。
+var password=p.password==null?'':p.password.trim().toUpperCase();
 if(tenantId=='' || account=='' || account.length()>50 || !password.matches('[0-9A-F]{64}')) {exit 400,'请输入有效的账号和密码';}
 if(!tenantAccounts.isLocal(tenantId)) {exit 403,'当前租户未启用本地账号';}
 var sql=db.normal();

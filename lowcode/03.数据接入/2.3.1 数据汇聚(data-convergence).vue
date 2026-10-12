@@ -303,7 +303,7 @@
             <span>目标表 · {{ targetDrawerSections.reduce((total, section) => total + section.targets.length, 0) }} 张</span>
           </div>
           <el-alert v-if="targetDrawerSections.some(section => section.targets.some(isHiveTarget))" type="info" :closable="false" show-icon class="mb-4"
-            title="Hive 仅移除接入登记和流程，物理表及数据保留；重新物化需修改表名或由运维手动删表。" />
+            title="Hive 仅移除接入登记和流程，物理表及数据保留；后续可校验并复用已有表创建流程。" />
           <section v-for="(section, index) in targetDrawerSections" :key="section.key" class="target-task-section">
             <div class="target-task-heading">
               <span class="target-task-number">{{ index + 1 }}</span>
@@ -1025,7 +1025,7 @@ const isHiveTarget = (target) => ['hive', 'mrshive', 'huaweihive', 'huaweimrshiv
 const targetCleanupConfirmText = (target, preview = {}) => {
   const name = target?.targetTableName || target?.tableName || '当前目标表';
   if (preview.targetHivePhysicalRetained === true || isHiveTarget(target)) {
-    return `将移除“${name}”的接入流程和目标登记，Hive 物理表及数据保留。重新物化需修改表名或联系运维手动删除原表。确认继续吗？`;
+    return `将移除“${name}”的接入流程和目标登记，Hive 物理表及数据保留。后续可在物化建表时确认复用已有表并重新创建流程。确认继续吗？`;
   }
   if (preview.targetCleanupPending === true) {
     return `目标库暂时无法检查，将取消可清理的接入流程，并保留“${name}”的目标登记供重试。确认继续吗？`;
