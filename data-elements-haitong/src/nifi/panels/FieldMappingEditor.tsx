@@ -632,7 +632,9 @@ function FieldMappingEditorContent({ value, onChange, columnMeta, columnsLoading
     setCompiling(true);
     try {
       const data = await compileFieldMapping(spec);
-      Modal.info({ title: 'QueryRecord SQL', width: 760, content: <pre className="field-mapping-sql-preview">{data.query}</pre> });
+      modal.info({ title: 'QueryRecord SQL', width: 760, getContainer: getNifiOverlayContainer,
+        closable: true, keyboard: true, maskClosable: true,
+        content: <pre className="field-mapping-sql-preview">{data.query}</pre> });
     } catch (e: any) {
       message.error(e?.response?.data?.error ?? e?.message ?? '编译 SQL 失败');
     } finally {

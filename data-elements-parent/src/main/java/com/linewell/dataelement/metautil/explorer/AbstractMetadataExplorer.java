@@ -43,7 +43,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
 
     private static final int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 30;
     private static final String DEFAULT_MYSQL_PARAMS = "useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true";
-    private static final Pattern KINGBASE_LITERAL_CAST_DEFAULT = Pattern.compile(
+    private static final Pattern SOURCE_LITERAL_CAST_DEFAULT = Pattern.compile(
             "^('(?:''|[^'])*'|[+-]?\\d+(?:\\.\\d+)?|TRUE|FALSE|NULL)\\s*::\\s*"
                     + "[A-Za-z_][A-Za-z_0-9]*(?:\\s+[A-Za-z_][A-Za-z_0-9]*)*"
                     + "(?:\\s*\\(\\s*\\d+(?:\\s*,\\s*\\d+)?\\s*\\))?$",
@@ -314,7 +314,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         // 去掉 TEXT/LONGTEXT 等文本类型的长度参数，这些类型不支持或不应该有长度参数
         // LONGTEXT(4294967295)、MEDIUMTEXT(16777215)、TEXT(65535) 等应去除括号部分
         if (upper.matches("(LONGTEXT|MEDIUMTEXT|TINYTEXT|TEXT)\\s*\\(\\d+\\)")) {
-            return upper.replaceAll("\\s*\\(\\d+\\)", "");
+            upper = upper.replaceAll("\\s*\\(\\d+\\)", "");
+            t = upper;
         }
 
         String base = upper.replaceAll("\\s*\\(.*$", "");
@@ -527,24 +528,33 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
     }
 
     /**
-     * A source column default can contain a PostgreSQL-style cast. KingBase
-     * accepts some of these casts, but the canvas DDL parser does not parse
-     * them reliably. For a plain literal the cast is redundant because the
-     * destination column supplies the type. Do not silently rewrite complex
-     * expressions (for example nextval(...::regclass)).
+     * A source default can contain PostgreSQL's ::type syntax. Foreign target
+     * dialects do not accept it. String constants can lose a redundant character
+     * cast. Other foreign casts, including dates, numbers and nextval(...::regclass),
+     * need explicit target configuration rather than silently changing semantics.
      */
     private static String normalizeGeneratedDefaultValue(DatabaseType dbType, String columnName, String rawValue) {
         String value = normalize(rawValue);
-        if (dbType != DatabaseType.KINGBASE || value.isEmpty()) {
+        if (value.isEmpty()) {
             return value;
         }
-        var literalCast = KINGBASE_LITERAL_CAST_DEFAULT.matcher(value);
+        var literalCast = SOURCE_LITERAL_CAST_DEFAULT.matcher(value);
         if (literalCast.matches()) {
+            String castType = value.substring(value.lastIndexOf("::") + 2).trim()
+                    .replaceFirst("\\s*\\(.*$", "").toLowerCase(Locale.ROOT);
+            boolean nativeCastDialect = Set.of(DatabaseType.KINGBASE, DatabaseType.POSTGRESQL, DatabaseType.GAUSSDB,
+                    DatabaseType.HIGHGO, DatabaseType.VERTICA, DatabaseType.HETU).contains(dbType);
+            if (!nativeCastDialect && !"NULL".equalsIgnoreCase(literalCast.group(1))
+                    && !Set.of("varchar", "character varying", "text", "nvarchar").contains(castType)) {
+                throw new IllegalArgumentException("字段 " + columnName
+                        + " 的默认值类型转换不能自动跨库等价替换，请设置目标库默认值表达式或清空默认值");
+            }
             return literalCast.group(1);
         }
-        if (containsCastOutsideString(value)) {
+        if (containsCastOutsideString(value) && !Set.of(DatabaseType.POSTGRESQL, DatabaseType.GAUSSDB,
+                DatabaseType.HIGHGO, DatabaseType.VERTICA, DatabaseType.HETU).contains(dbType)) {
             throw new IllegalArgumentException("字段 " + columnName
-                    + " 的默认值包含暂不支持的类型转换，请改为目标库可用的默认值表达式: " + value);
+                    + " 的默认值包含来源库类型转换，请改为目标库可用的默认值表达式或清空默认值");
         }
         return value;
     }
@@ -934,6 +944,13 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             }
 
             type = normalizeGeneratedColumnType(dbType, col, type);
+
+            if (Set.of(DatabaseType.ORACLE, DatabaseType.OCEANBASE_ORACLE, DatabaseType.DAMENG).contains(dbType)
+                    && Set.of("CLOB", "NCLOB", "BLOB", "LONG").contains(type.toUpperCase(Locale.ROOT))
+                    && (Boolean.TRUE.equals(col.getPrimaryKey()) || Boolean.TRUE.equals(col.getUnique()))) {
+                throw new IllegalArgumentException("字段 " + name
+                        + " 的长文本/LOB类型不能作为目标库主键或唯一键；请明确改为足够长度的VARCHAR或取消该约束，不能自动截短长文本");
+            }
 
             ddl.append("  ").append(name).append(" ").append(type);
 

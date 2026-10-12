@@ -37,6 +37,75 @@ class BatchCreateTableDdlMagicTest {
     private static final String SOURCE_ID = "8a56e7d664934c1499102cfa508cd58a";
 
     @Test
+    void postgresLiteralDefaultIsNormalizedBeforeCallingTheJavaGenerator() throws Exception {
+        for (String dialect : List.of("oceanbaseoracle", "oracle", "mysql", "hive", "postgresql")) {
+            Fixture f = new Fixture(1);
+            f.jdbc.update("update db_datasource_t set db_type=?,username='ODS_OWNER' where tid='db-0'", dialect);
+            var target = new LinkedHashMap<>(f.targets.getFirst());
+            target.put("tableItems", List.of(Map.of("columnName", "enabled", "dataType", "varchar",
+                    "columnType", "varchar(1)", "length", 1, "defaultValue", "'Y'::character varying")));
+            f.targets.set(0, target);
+            var result = assertInstanceOf(Map.class, f.run());
+            assertEquals("'Y'", f.ddlGenerator.lastColumns.getFirst().getDefaultValue());
+            String ddl = ((Map<?, ?>) ((List<?>) result.get("results")).getFirst()).get("ddl").toString();
+            assertFalse(ddl.contains("::"));
+            if (dialect.equals("hive")) assertFalse(ddl.contains("DEFAULT"));
+            else assertTrue(ddl.contains("DEFAULT 'Y'"));
+            assertEquals(1, f.counter.reads); assertEquals(0, f.counter.writes);
+        }
+    }
+
+    @Test
+    void changingTextToVarcharAndEditingLengthUpdatesTheNativeDefinition() throws Exception {
+        Fixture f = new Fixture(1);
+        f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER' where tid='db-0'");
+        var target = new LinkedHashMap<>(f.targets.getFirst());
+        target.put("tableItems", List.of(Map.of("columnName", "UNID", "dataType", "varchar",
+                "columnType", "text", "length", 64, "primaryKey", 1)));
+        f.targets.set(0, target);
+        var result = assertInstanceOf(Map.class, f.run());
+        String ddl = ((Map<?, ?>) ((List<?>) result.get("results")).getFirst()).get("ddl").toString();
+        assertTrue(ddl.contains("VARCHAR2(64)") || ddl.contains("VARCHAR2 (64)"));
+        assertFalse(ddl.contains("CLOB"));
+        assertEquals("varchar(64)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
+        target.put("tableItems", List.of(Map.of("columnName", "UNID", "dataType", "varchar",
+                "columnType", "varchar(32)", "length", 128, "primaryKey", 1)));
+        f.run(); assertEquals("varchar(128)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
+    }
+
+    @Test
+    void lobKeyAndComplexForeignDefaultsAreRejectedBeforeAnyDdlGeneration() throws Exception {
+        for (boolean lobKey : List.of(true, false)) {
+            Fixture f = new Fixture(1);
+            f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER' where tid='db-0'");
+            var target = new LinkedHashMap<>(f.targets.getFirst());
+            target.put("tableItems", List.of(lobKey
+                    ? Map.of("columnName", "UNID", "dataType", "text", "columnType", "text", "length", 0, "primaryKey", 1)
+                    : Map.of("columnName", "created_at", "dataType", "timestamp", "defaultValue", "now()::timestamp")));
+            f.targets.set(0, target);
+            var result = assertInstanceOf(org.ssssssss.script.runtime.ExitValue.class, f.run());
+            assertEquals(400, result.getValues()[0]);
+            assertTrue(result.getValues()[1].toString().contains(lobKey ? "UNID" : "created_at"));
+            assertEquals(0, f.ddlGenerator.calls); assertEquals(0, f.counter.writes);
+        }
+    }
+
+    @Test
+    void temporalAndNumericDefaultCastsAreNotSilentlyDroppedAcrossDialects() throws Exception {
+        for (String value : List.of("'2026-10-12'::date", "1.4::integer", "TRUE::boolean")) {
+            Fixture f = new Fixture(1);
+            f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER' where tid='db-0'");
+            var target = new LinkedHashMap<>(f.targets.getFirst());
+            target.put("tableItems", List.of(Map.of("columnName", "source_default", "dataType", "varchar",
+                    "columnType", "varchar(64)", "length", 64, "defaultValue", value)));
+            f.targets.set(0, target);
+            var result = assertInstanceOf(org.ssssssss.script.runtime.ExitValue.class, f.run());
+            assertEquals(400, result.getValues()[0]);
+            assertEquals(0, f.ddlGenerator.calls); assertEquals(0, f.counter.writes);
+        }
+    }
+
+    @Test
     void temporalDdlUsesTheDeclaredNativeTypeAcrossDestinations() throws Exception {
         for (String dialect : List.of("mysql", "oceanbasemysql", "oracle", "oceanbaseoracle", "postgresql", "hive")) {
             String timeType = dialect.contains("oracle") ? "date"
@@ -275,9 +344,11 @@ class BatchCreateTableDdlMagicTest {
     public static final class DdlGenerator {
         int calls;
         boolean rename;
+        List<ColumnInfo> lastColumns;
         public String generateCreateTableDdl(DataSourceConfig config, String tableName,
                                              List<ColumnInfo> columns, String tableComment) {
             calls++;
+            lastColumns = List.copyOf(columns);
             assertEquals(1, columns.size());
             String name = rename ? "UNEXPECTED_TABLE" : tableName;
             return switch (config.getDatabaseType().getCode()) {

@@ -103,10 +103,14 @@ class ExistingTargetMaterializationMagicTest {
             for(String declaration:declarations.split(",")) jdbc.execute("alter table "+table+" add "+declaration);
         }
         Object run(boolean probe) throws Exception {
+            return run(probe,false);
+        }
+        Object run(boolean probe,boolean dryRun) throws Exception {
             List<Map<String,Object>> items=new ArrayList<>();
             for(int i=0;i<fields;i++) items.add(new LinkedHashMap<>(Map.of("columnName","field_"+i,"dataType","varchar","columnType","varchar(32)","length",32,"nullable",1)));
             Map<String,Object> body=new LinkedHashMap<>(Map.of("tid","source-1","propList",new LinkedHashMap<>(Map.of("dbId","retained-db","tableName","ods_retained","tableNameCn","保留物理表")),"tableItems",items,"ddl","CREATE TABLE ods_retained(id STRING)","reuseExistingTable",true));
             if(probe) body.put("validateReuseOnly",true);
+            if(dryRun) body.put("dryRun",true);
             String script=CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9").replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n","");
             script="var createTable=()=> fixture.physical(body)\nvar date_format=value=>value+''\n"+script;
             Map<String,Object> inputs=new LinkedHashMap<>();

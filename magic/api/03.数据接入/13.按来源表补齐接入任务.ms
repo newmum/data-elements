@@ -39,6 +39,8 @@ import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDataso
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
+// Magic 闭包定义时须已有租户变量，治理批量读取只使用当前认证上下文。
+var tenantId = text(tenantRuntime.id()).trim()
 var first = (row, keys) => {
     if (row == null) {
         return null
@@ -825,7 +827,6 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
 
 return db.transaction(() => {
 var sourceTableId = text(body?.tableId || body?.sourceTableId || body?.tid).trim()
-var tenantId = text(tenantRuntime.id()).trim()
 if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录' }
 // Rebuilding an existing task is opt-in. Normal requests preserve a saved
 // pipeline even when a newer generator can produce richer mappings.

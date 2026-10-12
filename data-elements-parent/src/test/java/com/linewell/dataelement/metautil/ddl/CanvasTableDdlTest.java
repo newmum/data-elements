@@ -8,6 +8,20 @@ import org.junit.jupiter.api.Test;
 
 class CanvasTableDdlTest {
     private final CanvasTableDdl parser = new CanvasTableDdl();
+
+    @Test void editedOracleLobKeysFailBeforePhysicalCreation() {
+        for (var type : java.util.List.of(DatabaseType.ORACLE, DatabaseType.OCEANBASE_ORACLE, DatabaseType.DAMENG)) {
+            for (String definition : java.util.List.of("UNID CLOB PRIMARY KEY", "UNID CLOB, PRIMARY KEY(UNID)",
+                    "UNID CLOB UNIQUE", "UNID CLOB, UNIQUE(UNID)", "\"Unid\" CLOB, PRIMARY KEY(\"Unid\")")) {
+                assertThatThrownBy(() -> parser.parse("CREATE TABLE events(" + definition + ")", config(type)))
+                        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("主键");
+            }
+            assertThat(parser.parse("CREATE TABLE events(UNID VARCHAR2(64) PRIMARY KEY, CONTENT CLOB)", config(type)))
+                    .containsEntry("tableName", "events");
+        }
+        assertThat(parser.parse("CREATE TABLE events(UNID TEXT PRIMARY KEY)", config(DatabaseType.POSTGRESQL)))
+                .containsEntry("tableName", "events");
+    }
     private DataSourceConfig config(DatabaseType type) {
         var config = new DataSourceConfig();
         config.setDatabaseType(type);

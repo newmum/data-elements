@@ -83,15 +83,18 @@ class AccessTaskChainServiceTest {
     }
 
     @Test
-    void graphOverTaskLimitFailsBeforeReadingPipelineBodies() throws Exception {
+    void graphOverTaskLimitOpensOnlyTheAuthorizedSelectedDesign() throws Exception {
         Fixture fixture = new Fixture();
         for (int i = 0; i < 101; i++) fixture.task("t" + i, "root", "out" + i, "source", "target");
         clearInvocations(fixture.jdbc);
         try (var tenant = TenantContext.use("ga")) {
-            assertThatThrownBy(() -> fixture.service.byTask("t0")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("100");
+            Map<String, Object> graph = fixture.service.byTask("t0");
+            assertThat(graph).containsEntry("readOnly", true);
+            assertThat(items(graph)).extracting(item -> item.get("taskId")).containsExactly("t0");
+            assertThat(graph.get("warnings").toString()).contains("100");
         }
-        verify(fixture.jdbc, times(2)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
-        verifyNoInteractions(fixture.scopes, fixture.nifi);
+        verify(fixture.jdbc, times(6)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
+        verifyNoInteractions(fixture.nifi);
     }
 
     @ParameterizedTest
@@ -134,13 +137,17 @@ class AccessTaskChainServiceTest {
     }
 
     @Test
-    void missingOrCyclicAncestryFailsRatherThanReturningAnIncompleteChain() throws Exception {
+    void missingOrCyclicAncestryOpensTheSavedTaskWithoutInventingChainLinks() throws Exception {
         Fixture fixture = new Fixture(); fixture.task("t", "root", "ods", "source", "target");
         fixture.jdbc.update("update db_table_t set source_table_id='missing' where tid='root'");
         try (var tenant = TenantContext.use("ga")) {
-            assertThatThrownBy(() -> fixture.service.byTask("t")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("关联不完整");
+            Map<String, Object> missing = fixture.service.byTask("t");
+            assertThat(missing).containsEntry("readOnly", true).containsEntry("links", List.of());
+            assertThat(missing.get("warnings").toString()).contains("关联不完整");
             fixture.jdbc.update("update db_table_t set source_table_id='ods' where tid='root'");
-            assertThatThrownBy(() -> fixture.service.byTask("t")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("循环");
+            Map<String, Object> cyclic = fixture.service.byTask("t");
+            assertThat(cyclic).containsEntry("readOnly", true).containsEntry("links", List.of());
+            assertThat(cyclic.get("warnings").toString()).contains("循环");
         }
     }
 
@@ -172,22 +179,90 @@ class AccessTaskChainServiceTest {
     }
 
     @Test
-    void authorizedButIncorrectDslSourceDoesNotCreateAFalseLink() throws Exception {
+    void authorizedButIncorrectDslSourceOpensReadOnlyWithoutCreatingAFalseLink() throws Exception {
         Fixture fixture = new Fixture(); fixture.task("a", "root", "ods", "source", "target");
         fixture.table("another", "source", null);
         fixture.jdbc.update("update nifi_pipeline_t set dsl_json=?", fixture.json.writeValueAsString(fixture.dsl("another", "ods", "source", "target")));
         try (var tenant = TenantContext.use("ga")) {
-            assertThatThrownBy(() -> fixture.service.byTask("a")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("不一致");
+            Map<String, Object> graph = fixture.service.byTask("a");
+            assertThat(graph).containsEntry("readOnly", true).containsEntry("links", List.of());
+            assertThat(graph.get("warnings").toString()).contains("不一致");
         }
     }
 
     @Test
-    void tooDeepChainFailsAtTheDeclaredBound() throws Exception {
+    void tooDeepChainStopsTraversalAndOpensOnlyTheSavedSelectedTask() throws Exception {
         Fixture fixture = new Fixture(); String previous = "root";
         for (int i = 0; i < 18; i++) { fixture.table("level" + i, "source", previous); previous = "level" + i; }
         fixture.task("deep", previous, "out", "source", "target");
         try (var tenant = TenantContext.use("ga")) {
-            assertThatThrownBy(() -> fixture.service.byTask("deep")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("16级");
+            Map<String, Object> graph = fixture.service.byTask("deep");
+            assertThat(graph).containsEntry("readOnly", true);
+            assertThat(items(graph)).hasSize(1);
+            assertThat(graph.get("warnings").toString()).contains("16级");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
+    void changingRegisteredSourceDatabaseDoesNotHideSavedCanvasOrGrowReadsWithTaskCount(int count) throws Exception {
+        Fixture fixture = new Fixture();
+        for (int i = 0; i < count; i++) fixture.task("t" + i, "root", "out" + i, "source", "target");
+        fixture.datasource("replacement");
+        fixture.jdbc.update("update db_table_t set datasource_id='replacement' where tid='root'");
+        String original = fixture.jdbc.queryForObject("select dsl_json from nifi_pipeline_t where id='p-t0'", String.class);
+        clearInvocations(fixture.jdbc);
+        try (var tenant = TenantContext.use("ga")) {
+            Map<String, Object> graph = fixture.service.byTask("t0");
+            assertThat(graph).containsEntry("readOnly", true).containsEntry("selectedPipelineId", "p-t0");
+            assertThat(items(graph)).hasSize(1);
+            Pipeline saved = (Pipeline) items(graph).getFirst().get("pipeline");
+            assertThat(fixture.json.writeValueAsString(saved.dsl())).isEqualTo(original);
+            assertThat(saved.dsl().nodes().getFirst().config()).containsEntry("registeredDatasourceId", "source");
+            assertThat(graph.get("warnings").toString()).contains("任务来源或目标关联不完整");
+        }
+        verify(fixture.jdbc, times(6)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
+        verify(fixture.scopes).visibleDataSources(eq("MENU:2081000000000000002"), any());
+        assertThat(org.mockito.Mockito.mockingDetails(fixture.jdbc).getInvocations())
+                .noneMatch(invocation -> Set.of("update", "execute", "batchUpdate").contains(invocation.getMethod().getName()));
+        verifyNoInteractions(fixture.nifi);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"source", "target", "replacement"})
+    void sourceDatabaseChangeStillRequiresEveryRecordedAndActualDatasourcePermission(String hidden) throws Exception {
+        Fixture fixture = new Fixture(); fixture.task("t", "root", "ods", "source", "target");
+        fixture.datasource("replacement");
+        fixture.jdbc.update("update db_table_t set datasource_id='replacement' where tid='root'");
+        fixture.deny(hidden);
+        try (var tenant = TenantContext.use("ga")) {
+            assertThatThrownBy(() -> fixture.service.byTask("t")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        }
+    }
+
+    @Test
+    void softDeletedSameTenantRegistrationAllowsOnlyAuthorizedHistoricalInspection() throws Exception {
+        Fixture fixture = new Fixture(); fixture.task("t", "root", "ods", "source", "target");
+        fixture.jdbc.update("update db_table_t set is_del=1 where tid='root'");
+        try (var tenant = TenantContext.use("ga")) {
+            Map<String, Object> graph = fixture.service.byTask("t");
+            assertThat(graph).containsEntry("readOnly", true);
+            assertThat(items(graph)).hasSize(1);
+            assertThat(items(graph).getFirst()).doesNotContainKeys("nativeUrl", "processGroupId");
+            fixture.deny("source");
+            assertThatThrownBy(() -> fixture.service.byTask("t")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        }
+    }
+
+    @Test
+    void unrelatedBrokenTaskDoesNotHideSelectedDesignAndMalformedSelectedDslStillFails() throws Exception {
+        Fixture fixture = new Fixture(); fixture.task("a", "root", "ods", "source", "target");
+        fixture.task("b", "root", "other", "source", "target");
+        fixture.jdbc.update("update data_access_agg_task_t set target_db_id='source' where tid='b'");
+        try (var tenant = TenantContext.use("ga")) {
+            assertThat(items(fixture.service.byTask("a"))).extracting(item -> item.get("taskId")).containsExactly("a");
+            fixture.jdbc.update("update nifi_pipeline_t set dsl_json='broken' where id='p-a'");
+            assertThatThrownBy(() -> fixture.service.byTask("a")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("无法读取");
         }
     }
 

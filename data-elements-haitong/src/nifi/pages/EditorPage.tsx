@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useRef } from 'react';
-import { Result, Button, App } from 'antd';
+import { Alert, Result, Button, App } from 'antd';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ApartmentOutlined,
@@ -46,8 +46,10 @@ export default function EditorPage() {
   const [canvasDataLoading, setCanvasDataLoading] = useState(() => Boolean(getPipelineId() || getAccessTaskId() || getTid()));
   const loadDsl = useCanvasStore((s) => s.loadDsl);
   const setCurrentPipeline = useCanvasStore((s) => s.setCurrentPipeline);
+  const currentPipelineId = useCanvasStore((s) => s.currentPipelineId);
   const setPendingAutoRecommend = useCanvasStore((s) => s.setPendingAutoRecommend);
   const setChain = useTaskChainStore((s) => s.setChain);
+  const chain = useTaskChainStore((s) => s.chain);
   const drawerNodeId = useCanvasStore((s) => s.drawerNodeId);
   const errorPanelVisible = useErrorPanelStore((s) => s.visible);
   const lineageNodeId = useLineageStore((s) => s.nodeId);
@@ -233,6 +235,8 @@ export default function EditorPage() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--canvas-bg)' }}>
       <Toolbar />
+      {chain?.readOnly && chain.selectedPipelineId === currentPipelineId && <Alert type="warning" showIcon message="已打开当前任务保存的画布（只读）"
+        description={`关联链路暂不可用：${chain.warnings?.join('；') || '任务关联需要核对'}。请修复任务与登记记录的关联后重新打开；当前不会自动改写流程配置。`} />}
       <div className="canvas-workarea">
         <div className="canvas-workarea__graph"><Canvas /></div>
         <Suspense fallback={null}>{drawerNodeId && <ConfigDrawer />}</Suspense>

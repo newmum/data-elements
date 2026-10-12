@@ -1,6 +1,6 @@
 import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from "./registeredDatasourceType";
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip, Modal, Segmented } from 'antd';
+import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip, Segmented } from 'antd';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import {
   DatabaseOutlined,
@@ -34,6 +34,7 @@ import FilterEditor from './FilterEditor';
 import BranchEditor, { type BranchRoute } from './BranchEditor';
 import type { BusinessCondition } from './ConditionBuilder';
 import { COMPONENT_ICONS, getComponentIcon } from './databaseIcons';
+import ProbeColumnsModal, { type ProbeColumnsSummary } from './ProbeColumnsModal';
 
 const CAT_ICON: Record<ComponentCategory, React.ReactNode> = {
   source: <DatabaseOutlined />,
@@ -41,56 +42,6 @@ const CAT_ICON: Record<ComponentCategory, React.ReactNode> = {
   branch: <BranchesOutlined />,
   sink: <CloudUploadOutlined />,
 };
-
-function showProbeColumnsSummary(title: string, results: ColumnsProbeResult[], fallbackTables: string[]) {
-  const rows = results.flatMap((result, resultIndex) => {
-    const table = result.table ?? fallbackTables[resultIndex] ?? '';
-    return (result.columns ?? []).map((column) => ({ table, column }));
-  });
-  const maxRows = 80;
-  Modal.info({
-    title,
-    width: 860,
-    content: (
-      <div className="probe-columns-summary">
-        <p style={{ margin: '0 0 10px', color: '#64748b' }}>
-          共探查 {results.length} 张表，{rows.length} 个字段{rows.length > maxRows ? '，下方仅展示部分字段' : ''}
-        </p>
-        <div style={{ maxHeight: 420, overflow: 'auto' }}>
-          <table className="probe-columns-table">
-            <thead>
-              <tr>
-                <th>表名</th>
-                <th>字段名</th>
-                <th>注释</th>
-                <th>类型</th>
-                <th>长度</th>
-                <th>小数位</th>
-                <th>主键</th>
-                <th>可空</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, maxRows).map(({ table, column }, index) => (
-                <tr key={`${table}-${column.columnName}-${index}`}>
-                  <td>{table}</td>
-                  <td>{column.columnName}</td>
-                  <td>{column.columnComment || '-'}</td>
-                  <td>{column.dataType || column.typeName || '-'}</td>
-                  <td>{column.columnSize ?? '-'}</td>
-                  <td>{column.decimalDigits ?? '-'}</td>
-                  <td>{column.primaryKey == null ? '-' : column.primaryKey ? '是' : '否'}</td>
-                  <td>{column.nullable == null ? '-' : column.nullable ? '是' : '否'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    ),
-    okText: '知道了',
-  });
-}
 
 interface FieldProps {
   field: FieldSchema;
@@ -579,6 +530,7 @@ export default function ConfigDrawer() {
   const sqlEditorRef = useRef<CustomSqlEditorHandle>(null);
   const [sqlGenerating, setSqlGenerating] = useState(false);
   const { message } = AntdApp.useApp();
+  const [probeSummary, setProbeSummary] = useState<ProbeColumnsSummary | null>(null);
   const drawerNodeId = useCanvasStore((s) => s.drawerNodeId);
   const node = useCanvasStore((s) => (drawerNodeId ? s.nodes[drawerNodeId] : null));
   const openDrawer = useCanvasStore((s) => s.openDrawer);
@@ -597,6 +549,7 @@ export default function ConfigDrawer() {
 
   const open = drawerNodeId !== null;
   useEffect(() => { setSqlGenerating(false); }, [drawerNodeId]);
+  useEffect(() => { setProbeSummary(null); }, [drawerNodeId]);
 
   // 先弹出 Drawer，再延迟渲染内容，避免首帧动画卡顿。
   const [bodyReady, setBodyReady] = useState(false);
@@ -1516,7 +1469,8 @@ export default function ConfigDrawer() {
         results.push(result);
       }
       hide();
-      if (selectionSequence !== databaseSelectionSequence.current) return;
+      if (selectionSequence !== databaseSelectionSequence.current
+        || useCanvasStore.getState().drawerNodeId !== node.id) return;
       if (manifest.category === 'source') {
         const sourceColumnsByTable = Object.fromEntries(
           results.map((r) => [r.table ?? tables[results.indexOf(r)], r.columns]),
@@ -1531,15 +1485,12 @@ export default function ConfigDrawer() {
           (reusedRegisteredSchema ? '已展示 FTP 已登记来源表 ' : '已探查 ')
             + results.length + ' 张来源表，共 ' + total + ' 个字段',
         );
-        showProbeColumnsSummary(
-          reusedRegisteredSchema ? 'FTP 已登记来源表字段' : '来源字段探查结果',
-          results,
-          tables,
-        );
+        setProbeSummary({ title: reusedRegisteredSchema ? 'FTP 已登记来源表字段' : '来源字段探查结果',
+          results, fallbackTables: tables });
       } else {
         updateConfig(node.id, buildTargetColumnsPatch(node.config, results[0]?.columns ?? []));
         message.success('已探查目标表 ' + (results[0]?.table ?? tables[0]) + '，共 ' + (results[0]?.columns?.length ?? 0) + ' 个字段');
-        showProbeColumnsSummary('目标字段探查结果', results, tables);
+        setProbeSummary({ title: '目标字段探查结果', results, fallbackTables: tables });
       }
     } catch (e: any) {
       hide();
@@ -1712,6 +1663,7 @@ export default function ConfigDrawer() {
   };
 
   return (
+    <>
     <Drawer
       open={open}
       getContainer={getNifiOverlayContainer}
@@ -1875,5 +1827,7 @@ export default function ConfigDrawer() {
           await applyTableSelection(table);
         }} />}
     </Drawer>
+    {probeSummary && <ProbeColumnsModal summary={probeSummary} onClose={() => setProbeSummary(null)} />}
+    </>
   );
 }

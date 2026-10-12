@@ -17,14 +17,14 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"tid\": \"17fe19f8f69849f88a34352550039ee3\",\n  \"targetTableId\": \"17fe19f8f69849f88a34352550039ee3\",\n  \"catalogId\": \"faae1bc3ebaa4611aded5ed4a52d6a03\",\n  \"sourceTableId\": \"015c09572d174e89b9bea9c765ef72df\",\n  \"physicalTableReused\": false\n}",
-  "description": "数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。",
+  "description": "数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，dryRun=true只读校验登记、字典类型和DDL，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：02.数据接入物化建表
 // 路由：POST /ods/createTapleApply
-// 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
+// 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，dryRun=true只读校验登记、字典类型和DDL，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
 import tenantRuntime
 import dataScope
 import metadataAsset
@@ -45,6 +45,8 @@ import '@post:/dst/database/metadata/createTable' as createTable
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
+// Magic 闭包定义时须已有租户变量，避免治理读取/目录属性写入捕获空上下文。
+var tenantId = tenantRuntime.id()
 var first = (row, keys) => {
     if (row == null) {
         return null
@@ -536,7 +538,6 @@ var inputId = text(body?.tid || body?.sourceTableId || body?.tableId || body?.so
 var propList = body?.propList
 var tableItems = body?.tableItems
 // 租户只来自当前认证请求的 TenantContext，不能从 principal、请求体或历史资产推断。
-var tenantId = tenantRuntime.id()
 if (blank(tenantId)) {
     exit 401, '当前登录租户无效，请重新登录后再提交物化建表'
 }

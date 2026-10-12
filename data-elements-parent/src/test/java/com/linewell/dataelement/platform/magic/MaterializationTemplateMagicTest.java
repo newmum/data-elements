@@ -36,6 +36,20 @@ class MaterializationTemplateMagicTest {
     private static final String SOURCE_ID = "f93a8e653ac6413e89660f5d77d45769";
 
     @Test
+    void unboundedSourceTextIsPreservedInsteadOfBeingGuessedAsVarchar() throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='postgresql' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set data_type='text',column_type='text',length=0 where tid='col-1'");
+        var result = assertInstanceOf(Map.class, fixture.run(false));
+        var item = (Map<?, ?>) ((List<?>) result.get("tableItems")).getFirst();
+        assertEquals("text", item.get("sourceColumnType"));
+        assertEquals("text", item.get("dataType"));
+        assertEquals(0, ((Number) item.get("length")).intValue());
+        assertEquals(1, item.get("primaryKey"));
+        assertEquals(0, fixture.explorer.calls);
+    }
+
+    @Test
     void ftpFieldCollectionReadsStayConstantAndUnauthorizedIdsNeverProbe() throws Exception {
         List<Integer> reads = new ArrayList<>();
         for (int count : List.of(20, 100)) {
@@ -71,7 +85,9 @@ class MaterializationTemplateMagicTest {
         assertEquals("OWNER.Mixed_TABLE", props.get("sourceTableName"));
         assertEquals("ods_mixed_table", props.get("tableName"));
         String canonical = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
-        String helpers = canonical.substring(canonical.indexOf("var text ="), canonical.indexOf("var upsertCatalogProp"));
+        // This isolated helper test does not execute the endpoint's runtime initialization.
+        String helpers = canonical.substring(canonical.indexOf("var text ="), canonical.indexOf("var upsertCatalogProp"))
+                .replace("var tenantId = tenantRuntime.id()", "");
         String boundary = canonical.substring(canonical.indexOf("// Hive 的物理表名"), canonical.indexOf("// The submitted rows"));
         for (String type : List.of("hive", "mrshive", "oracle", "postgresql", "mysql")) {
             Map<String, Object> submitted = new LinkedHashMap<>(Map.of("tableName", "ODS_Mixed_TABLE", "dbType", "mysql"));
@@ -147,6 +163,7 @@ class MaterializationTemplateMagicTest {
     void submissionNormalizesGovernedTypesBeforeDdlAndMetadataPersistence() throws Exception {
         String canonical = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
         String helpers = canonical.substring(canonical.indexOf("var text ="), canonical.indexOf("var upsertCatalogProp"))
+                .replace("var tenantId = tenantRuntime.id()", "")
                 + canonical.substring(canonical.indexOf("var materializationTimeType"), canonical.indexOf("var safeIdentifier"));
         for (String dialect : List.of("oracle", "hive", "oceanbasemysql")) {
             String expected = dialect.equals("oracle") ? "date" : dialect.equals("hive") ? "timestamp" : "datetime";

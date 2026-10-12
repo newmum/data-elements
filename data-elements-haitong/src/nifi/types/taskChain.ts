@@ -18,6 +18,8 @@ export interface TaskChainItem {
 }
 
 export interface TaskChain {
+  readOnly?: boolean;
+  warnings?: string[];
   rootSourceTableId: string;
   selectedPipelineId: string;
   selectedTaskId?: string;

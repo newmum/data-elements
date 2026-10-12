@@ -76,6 +76,64 @@ var firstValue = (row, keys) => {
     // 返回当前业务分支的标准结果。
     return null
 }
+// Editable target type/length are authoritative. A previous native columnType
+// must not keep a field as TEXT after the operator selects bounded VARCHAR.
+var resolvedColumnType = item => {
+    var selectedRaw = firstValue(item, ['dataType','type'])
+    var selected = blank(selectedRaw) ? '' : textOf(selectedRaw).trim()
+    var native = firstValue(item, ['columnType'])
+    var base = selected.toLowerCase().replaceAll('\\s*\\(.*$', '').trim()
+    if (['text','tinytext','mediumtext','longtext','clob','nclob'].contains(base)) { return base }
+    if (['varchar','varchar2','nvarchar','nvarchar2','char','nchar'].contains(base)
+        && rowValue(item, ['length']) != null && rowValue(item, ['length'])::long > 0) {
+        return selected.replaceAll('\\s*\\(.*$', '') + '(' + rowValue(item, ['length']) + ')'
+    }
+    if (!blank(selected) && !blank(native)) {
+        var original = textOf(native).toLowerCase().replaceAll('\\s*\\(.*$', '').trim()
+        if (original != base && ['varchar','char','text','blob','date','datetime','timestamp','int','bigint','decimal','float','double','tinyint'].contains(base)) {
+            if (['varchar','char'].contains(base) && ['text','clob','nclob','longtext'].contains(original)) {
+                exit 400, '字段“' + item.columnName + '”由长文本改为字符类型时，请明确填写足够的长度'
+            }
+            return selected
+        }
+    }
+    return blank(native) ? selected : native
+}
+var targetDefault = (item, databaseType) => {
+    var raw = rowValue(item, ['defaultValue'])
+    if (raw == null) { return null }
+    var value = textOf(raw).trim()
+    // String constants can lose a redundant source PostgreSQL character cast.
+    // Other foreign casts need explicit target semantics before being removed.
+    var literalCast = "^('(?:''|[^'])*'|[+-]?\\d+(?:\\.\\d+)?|TRUE|FALSE|NULL)\\s*::\\s*[A-Za-z_][A-Za-z_0-9]*(?:\\s+[A-Za-z_][A-Za-z_0-9]*)*(?:\\s*\\(\\s*\\d+(?:\\s*,\\s*\\d+)?\\s*\\))?$"
+    if (value.matches('(?i)' + literalCast)) {
+        var constant = value.replaceAll('(?i)' + literalCast, '$1')
+        var castType = value.substring(value.lastIndexOf('::') + 2).trim().toLowerCase().replaceAll('\\s*\\(.*$', '')
+        var code = textOf(databaseType.getCode()).toLowerCase()
+        if (!['kingbase','postgresql','gaussdb','highgo','vertica','hetu'].contains(code)
+            && constant.toUpperCase() != 'NULL' && !['varchar','character varying','text','nvarchar'].contains(castType)) {
+            exit 400, '字段“' + item.columnName + '”的默认值类型转换不能自动跨库等价替换，请设置目标库默认值表达式或清空默认值'
+        }
+        return constant
+    }
+    var unquoted = value.replaceAll("'(?:''|[^'])*'", "''")
+    var targetCode = textOf(databaseType.getCode()).toLowerCase()
+    if (unquoted.contains('::') && !['postgresql','gaussdb','highgo','vertica','hetu'].contains(targetCode)) {
+        exit 400, '字段“' + item.columnName + '”的默认值含来源库类型转换，请改为目标库支持的默认值表达式或清空默认值'
+    }
+    return raw
+}
+var validateTargetKey = (item, columnType, databaseType) => {
+    var key = rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true
+        || rowValue(item, ['isUnique','unique']) == 1 || rowValue(item, ['isUnique','unique']) == true
+    if (!key) { return }
+    var code = textOf(databaseType.getCode()).toLowerCase()
+    var type = blank(columnType) ? '' : textOf(columnType).toLowerCase().replaceAll('\\s*\\(.*$', '').trim()
+    if (['oracle','oceanbaseoracle','oceanbase_oracle','dameng','dm'].contains(code)
+        && ['text','tinytext','mediumtext','longtext','clob','nclob','blob','long'].contains(type)) {
+        exit 400, '字段“' + item.columnName + '”的长文本/LOB类型不能作为目标库主键或唯一键。请按来源值的长度约束改为VARCHAR并填写长度，或取消该字段的主键/唯一键；长文本数据不会被自动截短'
+    }
+}
 var tenantId = tenantRuntime.id()
 if (blank(tenantId)) {
     exit 401, '当前登录状态已失效，请重新登录后再生成建表脚本'
@@ -277,11 +335,12 @@ if (body?.batchGenerate == true) {
             var columnName = firstValue(item, ['columnName', 'name'])
             var normalizedColumnName = blank(columnName) ? '' : textOf(columnName).trim().toUpperCase()
             var dataType = firstValue(item, ['dataType', 'type'])
-            var columnType = firstValue(item, ['columnType'])
+            var columnType = resolvedColumnType(item)
             if (normalizedColumnName == 'ODS_RKSJ' || normalizedColumnName == 'ODS_GXSJ') {
                 dataType = batchTimeType(targetType)
                 columnType = dataType
             }
+            validateTargetKey(item, columnType, targetType)
             columnInfo.setColumnName(columnName)
             columnInfo.setColumnComment(firstValue(item, ['columnComment', 'comment']))
             columnInfo.setDataType(dataType)
@@ -292,7 +351,7 @@ if (body?.batchGenerate == true) {
             }
             if (rowValue(item, ['scale']) != null) { columnInfo.setScale(rowValue(item, ['scale'])::int) }
             columnInfo.setNullable(rowValue(item, ['nullable']) == 1 || rowValue(item, ['nullable']) == true)
-            columnInfo.setDefaultValue(rowValue(item, ['defaultValue']))
+            columnInfo.setDefaultValue(targetDefault(item, targetType))
             columnInfo.setPrimaryKey(rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true)
             columnInfo.setAutoIncrement(rowValue(item, ['autoIncrement']) == 1 || rowValue(item, ['autoIncrement']) == true)
             columnInfo.setUnique(rowValue(item, ['isUnique', 'unique']) == 1
@@ -402,11 +461,12 @@ for (item in tableItems) {
     var columnName = firstValue(item, ['columnName', 'name'])
     var normalizedColumnName = blank(columnName) ? '' : textOf(columnName).trim().toUpperCase()
     var dataType = firstValue(item, ['dataType', 'type'])
-    var columnType = firstValue(item, ['columnType'])
+    var columnType = resolvedColumnType(item)
     if (normalizedColumnName == 'ODS_RKSJ' || normalizedColumnName == 'ODS_GXSJ') {
         dataType = materializationTimeType(dsConfig.getDatabaseType())
         columnType = dataType
     }
+    validateTargetKey(item, columnType, dsConfig.getDatabaseType())
     columnInfo.setColumnName(columnName)
     columnInfo.setColumnComment(firstValue(item, ['columnComment', 'comment']))
     columnInfo.setDataType(dataType)
@@ -421,7 +481,7 @@ for (item in tableItems) {
         columnInfo.setScale(rowValue(item, ['scale'])::int)
     }
     columnInfo.setNullable(rowValue(item, ['nullable']) == 1 || rowValue(item, ['nullable']) == true)
-    columnInfo.setDefaultValue(rowValue(item, ['defaultValue']))
+    columnInfo.setDefaultValue(targetDefault(item, dsConfig.getDatabaseType()))
     columnInfo.setPrimaryKey(rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true)
     columnInfo.setAutoIncrement(rowValue(item, ['autoIncrement']) == 1 || rowValue(item, ['autoIncrement']) == true)
     columnInfo.setUnique(rowValue(item, ['isUnique', 'unique']) == 1 || rowValue(item, ['isUnique', 'unique']) == true)

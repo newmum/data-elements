@@ -1155,7 +1155,18 @@
 }
 
 .probe-columns-summary {
-  max-width: 760px;
+  min-width: 0;
+}
+
+.probe-columns-count {
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+
+.probe-columns-scroll {
+  max-height: min(420px, calc(100vh - 240px));
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .probe-columns-table {
@@ -1166,16 +1177,17 @@
 
 .probe-columns-table th,
 .probe-columns-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid #f0f2f6;
+  padding: 10px 12px;
+  border-bottom: 1px solid;
   text-align: left;
   white-space: nowrap;
 }
 
 .probe-columns-table th {
-  color: #475569;
-  background: #f8fafc;
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .probe-columns-table td:nth-child(2) {

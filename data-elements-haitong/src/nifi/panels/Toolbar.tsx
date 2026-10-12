@@ -157,6 +157,7 @@ export default function Toolbar() {
   const currentPipelineName = useCanvasStore((s) => s.currentPipelineName);
   const setCurrentPipeline = useCanvasStore((s) => s.setCurrentPipeline);
   const taskChain = useTaskChainStore((s) => s.chain);
+  const readOnlySnapshot = Boolean(taskChain?.readOnly && taskChain.selectedPipelineId === currentPipelineId);
   const hasTaskChain = Boolean(taskChain && taskChain.items.length > 1 && taskChain.items.some(item => item.pipeline.id === currentPipelineId));
   const hasSelectedChainTask = Boolean(taskChain?.items.some(item => item.taskId && item.pipeline.id === currentPipelineId));
   const [nativeChecking, setNativeChecking] = useState(false);
@@ -183,7 +184,7 @@ export default function Toolbar() {
   const isRunning = effectiveStatus === 'RUNNING' || effectiveStatus === 'RUN_ERROR';
   const isTransitioning = effectiveStatus === 'DEPLOYING' || effectiveStatus === 'STOPPING';
   const nativeStatus = statusQuery.data;
-  const canOpenNative = Boolean(currentPipelineId
+  const canOpenNative = Boolean(!readOnlySnapshot && currentPipelineId
     && nativeStatus?.id === currentPipelineId
     && nativeStatus.deployed
     && nativeStatus.processGroupId
@@ -193,9 +194,9 @@ export default function Toolbar() {
     && nativeStatus.status !== 'DEPLOY_FAILED');
 
   useEffect(() => {
-    const nextMode = isRunning ? 'MONITOR' : 'EDIT';
+    const nextMode = isRunning || readOnlySnapshot ? 'MONITOR' : 'EDIT';
     if (canvasMode !== nextMode) setCanvasMode(nextMode);
-  }, [canvasMode, isRunning, setCanvasMode]);
+  }, [canvasMode, isRunning, readOnlySnapshot, setCanvasMode]);
 
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
@@ -829,7 +830,7 @@ export default function Toolbar() {
             className="coze-toolbar__action canvas-save-action"
             aria-busy={activeAction === 'save' || save.isPending || deploy.isPending}
             icon={activeAction === 'save' || save.isPending || deploy.isPending ? <BusyIndicator /> : <SaveOutlined />}
-            disabled={!!activeAction || save.isPending || deploy.isPending || isTransitioning || isRunning}
+            disabled={readOnlySnapshot || !!activeAction || save.isPending || deploy.isPending || isTransitioning || isRunning}
             onClick={doSaveInPlace}
           >
             {activeAction === 'save' || save.isPending || deploy.isPending ? '保存中' : '保存'}
@@ -842,7 +843,7 @@ export default function Toolbar() {
             className="coze-toolbar__action"
             aria-busy={stop.isPending || (effectiveStatus as string) === 'STOPPING'}
             icon={stop.isPending || (effectiveStatus as string) === 'STOPPING' ? <BusyIndicator /> : <PauseCircleOutlined />}
-            disabled={stop.isPending || isTransitioning}
+            disabled={readOnlySnapshot || stop.isPending || isTransitioning}
             onClick={handleStop}
           >
             {stop.isPending || (effectiveStatus as string) === 'STOPPING' ? '停止中' : '停止'}
@@ -852,7 +853,7 @@ export default function Toolbar() {
             <Button type="primary" className="coze-toolbar__action canvas-start-actions__main"
               aria-busy={activeAction === 'start' || start.isPending}
               icon={activeAction === 'start' || start.isPending ? <BusyIndicator /> : <PlayCircleOutlined />}
-              disabled={isChengtianIntegration || !!activeAction || save.isPending || deploy.isPending || isTransitioning}
+              disabled={readOnlySnapshot || isChengtianIntegration || !!activeAction || save.isPending || deploy.isPending || isTransitioning}
               onClick={() => void handleStart()}>
               {isChengtianIntegration ? '等待授权' : activeAction === 'start' || start.isPending ? '启动中' : '启动'}
             </Button>

@@ -71,6 +71,34 @@ class NativeMaterializationDdlTest {
         return config;
     }
 
+    @Test
+    void genuineLongTextRemainsClobButCannotBeUsedAsAnOracleLikeKey() {
+        for (var type : List.of(DatabaseType.ORACLE, DatabaseType.OCEANBASE_ORACLE, DatabaseType.DAMENG)) {
+            var text = column("UNID", "text(65535)", 0);
+            var explorer = new MySqlMetadataExplorer();
+            assertThat(explorer.generateCreateTableDdl(config(type), "ODS_APAS", List.of(text), null)).contains("UNID CLOB");
+            text.setPrimaryKey(true);
+            assertThatThrownBy(() -> explorer.generateCreateTableDdl(config(type), "ODS_APAS", List.of(text), null))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("UNID").hasMessageContaining("主键");
+            text.setPrimaryKey(false); text.setUnique(true);
+            assertThatThrownBy(() -> explorer.generateCreateTableDdl(config(type), "ODS_APAS", List.of(text), null))
+                    .hasMessageContaining("唯一键");
+        }
+    }
+
+    @Test
+    void sourceLiteralCastsDoNotReachForeignDdlAndQuotedDoubleColonIsPreserved() {
+        for (var type : List.of(DatabaseType.ORACLE, DatabaseType.OCEANBASE_ORACLE, DatabaseType.DAMENG, DatabaseType.MYSQL, DatabaseType.HIVE)) {
+            var field = column("enabled", "varchar", 1);
+            field.setDefaultValue("'Y'::varchar");
+            assertThat(new MySqlMetadataExplorer().generateCreateTableDdl(config(type), "ODS_FLAGS", List.of(field), null))
+                    .contains("DEFAULT 'Y'").doesNotContain("::");
+            field.setDefaultValue("'system::record'");
+            assertThat(new MySqlMetadataExplorer().generateCreateTableDdl(config(type), "ODS_FLAGS", List.of(field), null))
+                    .contains("DEFAULT 'system::record'");
+        }
+    }
+
     private static ColumnInfo column(String name, String type, long length) {
         var column = new ColumnInfo();
         column.setColumnName(name);

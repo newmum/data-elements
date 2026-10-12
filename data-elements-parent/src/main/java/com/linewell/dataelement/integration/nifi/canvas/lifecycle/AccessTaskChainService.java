@@ -46,6 +46,85 @@ public class AccessTaskChainService {
     public Map<String, Object> byPipeline(String pipelineId) { return load(null, required(pipelineId)); }
 
     private Map<String, Object> load(String taskId, String pipelineId) {
+        try {
+            return loadChain(taskId, pipelineId);
+        } catch (ResponseStatusException conflict) {
+            // A broken related chain must not hide an authorized, independently saved design.
+            // Authentication/authorization and malformed or oversized selected DSL still fail closed.
+            if (conflict.getStatusCode() != HttpStatus.CONFLICT) throw conflict;
+            return savedTask(taskId, pipelineId, conflict.getReason());
+        }
+    }
+
+    private Map<String, Object> savedTask(String taskId, String pipelineId, String reason) {
+        String tenant = TenantContext.requireTenantId();
+        if (TenantContext.usesControlDatabase()) throw failure(HttpStatus.FORBIDDEN, "流程必须在当前租户数据库中读取");
+        List<Object> args = List.of(tenant, tenant, tenant, taskId == null ? pipelineId : taskId);
+        List<Map<String, Object>> rows = query("""
+                select a.tid as task_id, a.task_name, a.pipeline_id, a.source_db_id, a.target_db_id,
+                       a.source_table_id, a.target_table_id,
+                       s.table_name as source_table_name, s.datasource_id as actual_source_db_id,
+                       t.table_name as target_table_name, t.datasource_id as actual_target_db_id
+                  from data_access_agg_task_t a
+                  left join db_table_t s on s.tid=a.source_table_id and s.tenant_id=? and s.is_del=0
+                  left join db_table_t t on t.tid=a.target_table_id and t.tenant_id=? and t.is_del=0
+                 where a.tenant_id=? and a.is_del=0 and a.
+                """ + (taskId == null ? "pipeline_id" : "tid") + "=?", args, 2);
+        if (rows.size() != 1) throw failure(HttpStatus.NOT_FOUND, "接入任务不存在或关联不唯一");
+        Map<String, Object> task = rows.getFirst();
+        String id = required(text(task, "pipeline_id"));
+        Pipeline pipeline = pipelines(tenant, Set.of(id)).get(id);
+        Set<String> datasourceIds = new LinkedHashSet<>();
+        Set<String> tableIds = new LinkedHashSet<>();
+        for (String key : List.of("source_db_id", "target_db_id", "actual_source_db_id", "actual_target_db_id")) {
+            String value = text(task, key); if (!value.isBlank()) datasourceIds.add(value);
+        }
+        for (String key : List.of("source_table_id", "target_table_id")) {
+            String value = text(task, key); if (!value.isBlank()) tableIds.add(value);
+        }
+        if (pipeline.dsl() != null && pipeline.dsl().nodes() != null) for (Pipeline.Node node : pipeline.dsl().nodes()) {
+            if (node == null || node.config() == null) continue;
+            for (String key : List.of("registeredDatasourceId", "selectedDatabaseId", "sourceDbId", "targetDbId", "dbId", "datasourceId", "dataSourceId")) {
+                String value = text(node.config(), key); if (!value.isBlank()) datasourceIds.add(value);
+            }
+            for (String key : List.of("sourceTableId", "targetTableId", "registeredTableId")) {
+                String value = text(node.config(), key); if (!value.isBlank()) tableIds.add(value);
+            }
+        }
+        if (tableIds.size() > 200) throw failure(HttpStatus.CONFLICT, "任务引用表超过200张");
+        if (!tableIds.isEmpty()) {
+            List<Object> tableArgs = new ArrayList<>(tableIds); tableArgs.add(tenant);
+            // A same-tenant soft-deleted registration can authorize historical design inspection.
+            // Never resolve an unknown or foreign ID, and authorize every actual table's datasource.
+            List<Map<String, Object>> tables = query("select tid, datasource_id from db_table_t where tid in ("
+                    + placeholders(tableIds.size()) + ") and tenant_id=?", tableArgs, 201);
+            Set<String> resolved = new LinkedHashSet<>();
+            for (Map<String, Object> table : tables) {
+                resolved.add(text(table, "tid")); datasourceIds.add(text(table, "datasource_id"));
+            }
+            if (!resolved.equals(tableIds)) throw failure(HttpStatus.FORBIDDEN, "任务引用的数据表不存在或无访问权限");
+        }
+        if (datasourceIds.isEmpty()) throw failure(HttpStatus.FORBIDDEN, "无法确定当前任务的数据范围");
+        Map<String, Map<String, Object>> sources = authorizedSources(tenant, datasourceIds);
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("taskId", text(task, "task_id")); item.put("taskName", text(task, "task_name"));
+        item.put("sourceTableId", text(task, "source_table_id")); item.put("targetTableId", text(task, "target_table_id"));
+        item.put("sourceDbId", text(task, "source_db_id")); item.put("targetDbId", text(task, "target_db_id"));
+        item.put("sourceDbName", text(sources.get(text(task, "source_db_id")), "db_name"));
+        item.put("targetDbName", text(sources.get(text(task, "target_db_id")), "db_name"));
+        item.put("sourceTableName", text(task, "source_table_name")); item.put("targetTableName", text(task, "target_table_name"));
+        item.put("pipelineId", id); item.put("pipeline", pipeline);
+        item.put("unavailableReason", "任务关联需要核对，当前仅查看已保存画布");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rootSourceTableId", text(task, "source_table_id")); result.put("selectedTaskId", text(task, "task_id"));
+        result.put("selectedPipelineId", id); result.put("items", List.of(item)); result.put("links", List.of());
+        result.put("readOnly", true);
+        result.put("warnings", List.of(reason == null ? "关联链路暂不可用" : reason));
+        result.put("nativeCanvas", Map.of("mode", "NONE", "reason", "请先核对任务关联后重新打开"));
+        return result;
+    }
+
+    private Map<String, Object> loadChain(String taskId, String pipelineId) {
         String tenant = TenantContext.requireTenantId();
         if (TenantContext.usesControlDatabase()) throw failure(HttpStatus.FORBIDDEN, "流程必须在当前租户数据库中读取");
         List<Object> anchorArgs = new ArrayList<>();
@@ -128,7 +207,7 @@ public class AccessTaskChainService {
         for (Pipeline pipeline : pipelines.values()) {
             if (pipeline.dsl() == null || pipeline.dsl().nodes() == null) continue;
             for (Pipeline.Node node : pipeline.dsl().nodes()) {
-                if (node.config() == null) continue;
+                if (node == null || node.config() == null) continue;
                 for (String key : List.of("registeredDatasourceId", "selectedDatabaseId", "sourceDbId", "targetDbId", "dbId", "datasourceId", "dataSourceId")) {
                     String value = text(node.config(), key); if (!value.isBlank()) datasourceIds.add(value);
                 }

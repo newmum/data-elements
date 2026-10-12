@@ -338,6 +338,20 @@ console.log(JSON.stringify({ defaultCases: defaults.length, existingNamePreserve
   mismatchedPreviewRejected: true, requestCounts }));
 
 const ftpRequestCounts = [];
+{
+  const f = fixture(1);
+  const original = { columnName: 'UNID', dataType: 'varchar', columnType: 'text', length: 64,
+    primaryKey: 1, sourceDataType: 'text', sourceColumnType: 'text' };
+  const edited = plain(f.actual.targetTableItems([original], 'oceanbaseoracle'))[0];
+  assert.equal(edited.columnType, 'varchar(64)');
+  assert.equal(edited.sourceColumnType, 'text');
+  assert.equal(original.columnType, 'text');
+  const resized = plain(f.actual.targetTableItems([{ ...original, columnType: 'varchar(32)', length: 128 }], 'oceanbaseoracle'))[0];
+  assert.equal(resized.columnType, 'varchar(128)');
+  const unbounded = plain(f.actual.targetTableItems([{ ...original, dataType: 'text', length: 0 }], 'oceanbaseoracle'))[0];
+  assert.equal(unbounded.columnType, 'text');
+  console.log(JSON.stringify({ editedColumnTypeSynchronized: true, editedLengthSynchronized: true, sourceTypesPreserved: true }));
+}
 for (const fields of [20, 100]) {
   const f = fixture(1);
   f.context.ftpTemplate = { fileName: 'People.csv', remotePath: '/managed', format: 'csv',

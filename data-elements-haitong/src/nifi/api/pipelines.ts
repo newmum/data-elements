@@ -12,6 +12,15 @@ import type { TaskChain } from '../types/taskChain';
 import { useCanvasStore } from '../stores/canvasStore';
 import { sameDesignDsl, preservesIncrementalFields } from '../utils/pipelineVersion';
 import { incrementalConfigurationError } from '../utils/incrementalFields';
+import { useTaskChainStore } from '../stores/taskChainStore';
+
+function requireEditableTask(id?: string) {
+  const selectedId = id || useCanvasStore.getState().currentPipelineId;
+  const chain = useTaskChainStore.getState().chain;
+  if (chain?.readOnly && chain.selectedPipelineId === selectedId) {
+    throw new Error('当前任务仅可查看已保存画布，请先修复任务关联并重新打开');
+  }
+}
 
 /** One bounded, authorized read contains every related design; no per-task loading loop. */
 export async function fetchTaskChain(selection: { accessTaskId?: string; pipelineId?: string }): Promise<TaskChain> {
@@ -186,6 +195,7 @@ export function useSavePipeline() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (p: Partial<Pipeline> & { name: string; dsl: CanvasDsl; copy?: boolean }) => {
+      requireEditableTask(p.id);
       const revision = getSessionRevision();
       const dsl = p.dsl;
       const error = incrementalConfigurationError(dsl);
@@ -223,6 +233,7 @@ export function useDeletePipeline() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      requireEditableTask(id);
       await api.post(`/pipelines/delete/${id}`);
       return id;
     },
@@ -233,8 +244,10 @@ export function useDeletePipeline() {
 export function useDeployPipeline() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, catalogTid }: { id: string; catalogTid?: string | null }) =>
-      (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid })).data,
+    mutationFn: async ({ id, catalogTid }: { id: string; catalogTid?: string | null }) => {
+      requireEditableTask(id);
+      return (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid })).data;
+    },
     onSuccess: async (data, { id }) => {
       const revision = getSessionRevision();
       await acceptDeploymentResult(qc, data, id, revision, () => revision === getSessionRevision());
@@ -256,6 +269,7 @@ export interface ConnectionTestResult {
 }
 
 export async function getNifiUiLink(id: string) {
+  requireEditableTask(id);
   return (await api.get<{ url: string; processGroupId: string; reusesBrowserSession: boolean }>(`/pipelines/${id}/ui-link`)).data;
 }
 
@@ -338,7 +352,10 @@ export async function probeTables(
 
 export function useStopPipeline() {
   return useMutation({
-    mutationFn: async (id: string) => (await api.post(`/pipelines/${id}/stop`)).data,
+    mutationFn: async (id: string) => {
+      requireEditableTask(id);
+      return (await api.post(`/pipelines/${id}/stop`)).data;
+    },
   });
 }
 
@@ -351,8 +368,10 @@ export function fetchPipelineStatus(id: string) {
 export function useStartPipeline() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, force = false, confirmCleanup = false }: { id: string; force?: boolean; confirmCleanup?: boolean }) =>
-      (await api.post(`/pipelines/${id}/start`, undefined, { params: { force, confirmCleanup } })).data,
+    mutationFn: async ({ id, force = false, confirmCleanup = false }: { id: string; force?: boolean; confirmCleanup?: boolean }) => {
+      requireEditableTask(id);
+      return (await api.post(`/pipelines/${id}/start`, undefined, { params: { force, confirmCleanup } })).data;
+    },
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['pipeline-status', id] });
       qc.invalidateQueries({ queryKey: KEY });

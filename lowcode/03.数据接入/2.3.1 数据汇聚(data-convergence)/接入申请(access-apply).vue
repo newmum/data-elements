@@ -979,6 +979,20 @@ const materializationTimeType = (dbType: any) => {
 
 // 预览与提交共同使用每个目标库的类型，避免第二个目标沿用第一个库的 DATE。
 const targetTableItems = (items: any[], dbType: any) => items.map((row: any) => {
+  // The editor changes dataType/length; synchronize the hidden native definition
+  // for both DDL preview and metadata submission, retaining origin fields.
+  const selected = String(row?.dataType || '').trim();
+  const base = selected.toLowerCase().replace(/\s*\(.*$/, '').trim();
+  const original = String(row?.columnType || '').toLowerCase().replace(/\s*\(.*$/, '').trim();
+  const length = Number(row?.length);
+  if (['varchar', 'varchar2', 'nvarchar', 'nvarchar2', 'char', 'nchar'].includes(base) && length > 0) {
+    row = { ...row, columnType: `${selected.replace(/\s*\(.*$/, '')}(${length})` };
+  } else if (['text', 'tinytext', 'mediumtext', 'longtext', 'clob', 'nclob'].includes(base)) {
+    row = { ...row, columnType: base };
+  } else if (original && original !== base
+    && ['varchar', 'char', 'blob', 'date', 'datetime', 'timestamp', 'int', 'bigint', 'decimal', 'float', 'double', 'tinyint'].includes(base)) {
+    row = { ...row, columnType: selected };
+  }
   const name = String(row?.columnName || "").trim().toUpperCase();
   const format = String(row?.standardField || row?.dataStandardId || "").trim().toUpperCase();
   const targetType = format === "DATE" ? "date"

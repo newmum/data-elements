@@ -244,7 +244,9 @@ class HuaweiHiveTargetDeletionMagicTest {
     @Test
     void materializationDuplicateReferenceReadsStayAtFiveForTwentyAndHundredCandidates() throws Exception {
         String materialization = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
-        String helpers = materialization.substring(materialization.indexOf("var text ="), materialization.indexOf("var upsertCatalogProp"));
+        // The isolated duplicate-check fixture supplies its own tenantId below.
+        String helpers = materialization.substring(materialization.indexOf("var text ="), materialization.indexOf("var upsertCatalogProp"))
+                .replace("var tenantId = tenantRuntime.id()", "");
         String duplicateCheck = materialization.substring(materialization.indexOf("var duplicateRows ="), materialization.indexOf("// 表字段名称去重"));
         for (int size : List.of(20, 100)) {
             setUp();
@@ -267,7 +269,8 @@ class HuaweiHiveTargetDeletionMagicTest {
     @Test
     void materializingExistingHiveTableStopsBeforeAnyPlaceholderMetadataWrite() throws Exception {
         String materialization = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
-        String helpers = materialization.substring(materialization.indexOf("var text ="), materialization.indexOf("var upsertCatalogProp"));
+        String helpers = materialization.substring(materialization.indexOf("var text ="), materialization.indexOf("var upsertCatalogProp"))
+                .replace("var tenantId = tenantRuntime.id()", "");
         String boundary = materialization.substring(materialization.indexOf("var originalBody = body"),
                 materialization.indexOf("// Hive 重名或物理建表失败之前"));
         String prefix = "var createTable = () => {return {created:false}}; var getCreateTableDDL = () => 'CREATE TABLE ods_person (id string)';";

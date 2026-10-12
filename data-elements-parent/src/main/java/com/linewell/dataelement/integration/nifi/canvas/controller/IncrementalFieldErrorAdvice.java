@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
 /** Preserve actionable preflight failures without exposing SQL or connection settings. */
-@RestControllerAdvice(assignableTypes = PipelineController.class)
+@RestControllerAdvice(assignableTypes = {PipelineController.class, AccessTaskChainController.class})
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class IncrementalFieldErrorAdvice {
     @ExceptionHandler(ResponseStatusException.class)

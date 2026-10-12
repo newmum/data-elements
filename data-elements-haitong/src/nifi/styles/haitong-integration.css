@@ -245,8 +245,7 @@ body.haitong-nifi-active {
 :root[data-theme='dark'] .nifi-workspace .custom-sql-editor__table-block,
 :root[data-theme='dark'] .nifi-workspace .custom-sql-editor__field-type,
 :root[data-theme='dark'] .nifi-workspace .materialize-ddl-editor .cm-editor,
-:root[data-theme='dark'] .nifi-workspace .field-mapping-dsl-view .cm-editor,
-:root[data-theme='dark'] .nifi-workspace .probe-columns-table th {
+:root[data-theme='dark'] .nifi-workspace .field-mapping-dsl-view .cm-editor {
   background: #171717;
   color: var(--text-primary);
   border-color: var(--node-border);
