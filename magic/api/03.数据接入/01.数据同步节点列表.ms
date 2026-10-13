@@ -44,9 +44,12 @@ if (root != null) {
     }
 }
 
-var rows = db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('is_del', 0)
-    .orderBy('is_default', 'desc').orderBy('updated_time', 'desc').limit(1001).select()
-if(rows.size()>1000) {exit 422,'节点超过1000项，请使用节点分页查询';}
+// Where 在当前 Magic API 版本支持 page(size, offset)，不支持 limit(size)。
+// 查询及总数都在当前租户范围内，保持有界读取，避免截断后误显示为完整列表。
+var nodePage = db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('is_del', 0)
+    .orderBy('is_default', 'desc').orderBy('updated_time', 'desc').page(1001, 0)
+if (nodePage != null && nodePage.total > 1000) { exit 422, '节点超过1000项，请使用节点分页查询' }
+var rows = nodePage == null || nodePage.list == null ? [] : nodePage.list
 var list = []
 for (row in (rows == null ? [] : rows)) {
     var nodeName = row.nodeName == null ? row.node_name : row.nodeName
