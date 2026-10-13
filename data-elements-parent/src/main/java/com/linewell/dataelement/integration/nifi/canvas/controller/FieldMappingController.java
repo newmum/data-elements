@@ -1,6 +1,8 @@
 package com.linewell.dataelement.integration.nifi.canvas.controller;
 
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.UnifiedMappingService;
+import com.linewell.dataelement.mapping.core.MappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.linewell.dataelement.feature.dataaccess.infrastructure.jdbc.RegisteredJdbcDataSourceResolver;
 import com.linewell.dataelement.feature.dataquality.infrastructure.persistence.mapper.DataQualityMapper;
@@ -12,6 +14,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.http.ResponseEntity;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,11 +30,19 @@ public class FieldMappingController {
     private final FieldMappingService service;
     private final RegisteredJdbcDataSourceResolver sources;
     private final DataQualityMapper metadata;
+    private final UnifiedMappingService unified;
 
     public FieldMappingController(FieldMappingService service) {
         this(service,null,null);
     }
-    @Autowired public FieldMappingController(FieldMappingService service,RegisteredJdbcDataSourceResolver sources,DataQualityMapper metadata){this.service=service;this.sources=sources;this.metadata=metadata;}
+    public FieldMappingController(FieldMappingService service,RegisteredJdbcDataSourceResolver sources,DataQualityMapper metadata){this(service,sources,metadata,null);}
+    @Autowired public FieldMappingController(FieldMappingService service,RegisteredJdbcDataSourceResolver sources,DataQualityMapper metadata,UnifiedMappingService unified){this.service=service;this.sources=sources;this.metadata=metadata;this.unified=unified;}
+
+    @GetMapping("/capabilities")
+    public Map<String,Object> capabilities(){return Map.of("engineVersion",com.linewell.dataelement.mapping.core.MappingEngine.VERSION,"planVersion","1.0","functions",unified.capabilities(),"maxPreviewRows",100,"runtimeType","com.linewell.dataelement.nifi.HaitongTransformRecord");}
+
+    @ExceptionHandler(MappingException.class)
+    public ResponseEntity<Map<String,Object>> mappingError(MappingException exception){return ResponseEntity.unprocessableEntity().body(Map.of("error",exception.getMessage(),"code",exception.code()));}
 
     @PostMapping("/lookup-template")
     public Map<String,Object> lookupTemplate(@RequestBody Map<String,Object> request) {
@@ -55,12 +68,20 @@ public class FieldMappingController {
     @PostMapping("/validate")
     @Operation(summary = "校验映射(validate)")
     public FieldMappingService.ValidationResponse validate(@RequestBody ValidateRequest request) {
+        if(unified!=null){
+            com.linewell.dataelement.mapping.core.MappingEngine.Plan plan;
+            try{plan=unified.compile(request.spec()).plan();}
+            catch(MappingException exception){return new FieldMappingService.ValidationResponse(false,List.of(new FieldMappingService.MappingIssue("spec",null,exception.getMessage(),"ERROR",exception.code(),List.of())),List.of(),new FieldMappingService.SchemaCompare(request.sourceSchema()==null?List.of():request.sourceSchema(),request.targetSchema()==null?List.of():request.targetSchema()));}
+            // The engine owns conditional/target-reference validation. Keep schema diagnostics only.
+            return unified.validateSchemas(plan,request.sourceSchema(),request.targetSchema());
+        }
         return service.validate(request.spec(), request.sourceSchema(), request.targetSchema());
     }
 
     @PostMapping("/preview")
     @Operation(summary = "预览映射(preview)")
     public FieldMappingService.PreviewResponse preview(@RequestBody PreviewRequest request) {
+        if(unified!=null)return unified.preview(request.spec(),request.sampleRows());
         return service.preview(request.spec(), request.sourceConfig(), request.sampleRows());
     }
 
@@ -73,6 +94,7 @@ public class FieldMappingController {
     @PostMapping("/compile")
     @Operation(summary = "编译映射(compile)")
     public Map<String, Object> compile(@RequestBody CompileRequest request) {
+        if(unified!=null)return unified.compileResponse(request.spec());
         FieldMappingService.CompiledMapping plan = service.compilePlan(request.spec());
         boolean hasLookups = !plan.lookups().isEmpty();
         List<Map<String, Object>> lookups = publicLookups(plan.lookups());

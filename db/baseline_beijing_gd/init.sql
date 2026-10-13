@@ -6468,3 +6468,96 @@ CREATE OR REPLACE TRIGGER "baseline_beijing_gd"."ga_sec_watermark_policy_updated
 
 CREATE OR REPLACE TRIGGER "baseline_beijing_gd"."ga_sec_watermark_task_updated_time_2c746f16fde2" BEFORE UPDATE ON "baseline_beijing_gd"."sec_watermark_task" FOR EACH ROW BEGIN IF NOT UPDATING('updated_time') AND ((:OLD."tid" IS NULL AND :NEW."tid" IS NOT NULL) OR (:OLD."tid" IS NOT NULL AND :NEW."tid" IS NULL) OR (:OLD."tid" IS NOT NULL AND :NEW."tid" IS NOT NULL AND :OLD."tid"<>:NEW."tid") OR (:OLD."tenant_id" IS NULL AND :NEW."tenant_id" IS NOT NULL) OR (:OLD."tenant_id" IS NOT NULL AND :NEW."tenant_id" IS NULL) OR (:OLD."tenant_id" IS NOT NULL AND :NEW."tenant_id" IS NOT NULL AND :OLD."tenant_id"<>:NEW."tenant_id") OR (:OLD."task_code" IS NULL AND :NEW."task_code" IS NOT NULL) OR (:OLD."task_code" IS NOT NULL AND :NEW."task_code" IS NULL) OR (:OLD."task_code" IS NOT NULL AND :NEW."task_code" IS NOT NULL AND :OLD."task_code"<>:NEW."task_code") OR (:OLD."task_name" IS NULL AND :NEW."task_name" IS NOT NULL) OR (:OLD."task_name" IS NOT NULL AND :NEW."task_name" IS NULL) OR (:OLD."task_name" IS NOT NULL AND :NEW."task_name" IS NOT NULL AND :OLD."task_name"<>:NEW."task_name") OR (:OLD."watermark_policy_id" IS NULL AND :NEW."watermark_policy_id" IS NOT NULL) OR (:OLD."watermark_policy_id" IS NOT NULL AND :NEW."watermark_policy_id" IS NULL) OR (:OLD."watermark_policy_id" IS NOT NULL AND :NEW."watermark_policy_id" IS NOT NULL AND :OLD."watermark_policy_id"<>:NEW."watermark_policy_id") OR (:OLD."asset_type" IS NULL AND :NEW."asset_type" IS NOT NULL) OR (:OLD."asset_type" IS NOT NULL AND :NEW."asset_type" IS NULL) OR (:OLD."asset_type" IS NOT NULL AND :NEW."asset_type" IS NOT NULL AND :OLD."asset_type"<>:NEW."asset_type") OR (:OLD."asset_id" IS NULL AND :NEW."asset_id" IS NOT NULL) OR (:OLD."asset_id" IS NOT NULL AND :NEW."asset_id" IS NULL) OR (:OLD."asset_id" IS NOT NULL AND :NEW."asset_id" IS NOT NULL AND :OLD."asset_id"<>:NEW."asset_id") OR (:OLD."file_name" IS NULL AND :NEW."file_name" IS NOT NULL) OR (:OLD."file_name" IS NOT NULL AND :NEW."file_name" IS NULL) OR (:OLD."file_name" IS NOT NULL AND :NEW."file_name" IS NOT NULL AND :OLD."file_name"<>:NEW."file_name") OR (:OLD."trace_reference" IS NULL AND :NEW."trace_reference" IS NOT NULL) OR (:OLD."trace_reference" IS NOT NULL AND :NEW."trace_reference" IS NULL) OR (:OLD."trace_reference" IS NOT NULL AND :NEW."trace_reference" IS NOT NULL AND :OLD."trace_reference"<>:NEW."trace_reference") OR (:OLD."task_status" IS NULL AND :NEW."task_status" IS NOT NULL) OR (:OLD."task_status" IS NOT NULL AND :NEW."task_status" IS NULL) OR (:OLD."task_status" IS NOT NULL AND :NEW."task_status" IS NOT NULL AND :OLD."task_status"<>:NEW."task_status") OR (:OLD."request_summary" IS NULL AND :NEW."request_summary" IS NOT NULL) OR (:OLD."request_summary" IS NOT NULL AND :NEW."request_summary" IS NULL) OR (:OLD."request_summary" IS NOT NULL AND :NEW."request_summary" IS NOT NULL AND DBMS_LOB.COMPARE(:OLD."request_summary",:NEW."request_summary")<>0) OR (:OLD."created_by" IS NULL AND :NEW."created_by" IS NOT NULL) OR (:OLD."created_by" IS NOT NULL AND :NEW."created_by" IS NULL) OR (:OLD."created_by" IS NOT NULL AND :NEW."created_by" IS NOT NULL AND :OLD."created_by"<>:NEW."created_by") OR (:OLD."created_time" IS NULL AND :NEW."created_time" IS NOT NULL) OR (:OLD."created_time" IS NOT NULL AND :NEW."created_time" IS NULL) OR (:OLD."created_time" IS NOT NULL AND :NEW."created_time" IS NOT NULL AND :OLD."created_time"<>:NEW."created_time") OR (:OLD."updated_by" IS NULL AND :NEW."updated_by" IS NOT NULL) OR (:OLD."updated_by" IS NOT NULL AND :NEW."updated_by" IS NULL) OR (:OLD."updated_by" IS NOT NULL AND :NEW."updated_by" IS NOT NULL AND :OLD."updated_by"<>:NEW."updated_by") OR (:OLD."is_del" IS NULL AND :NEW."is_del" IS NOT NULL) OR (:OLD."is_del" IS NOT NULL AND :NEW."is_del" IS NULL) OR (:OLD."is_del" IS NOT NULL AND :NEW."is_del" IS NOT NULL AND :OLD."is_del"<>:NEW."is_del")) THEN :NEW."updated_time":=CURRENT_TIMESTAMP; END IF; END;
 /
+
+-- TABLE data_access_mapping_plan_t
+CREATE TABLE "data_access_mapping_plan_t" (
+  "tid" VARCHAR(32) NOT NULL,
+  "tenant_id" VARCHAR(32) NOT NULL,
+  "pipeline_id" VARCHAR(64) NOT NULL,
+  "node_id" VARCHAR(64) NOT NULL,
+  "plan_revision" BIGINT NOT NULL,
+  "draft_revision" BIGINT NOT NULL,
+  "plan_hash" VARCHAR(64) NOT NULL,
+  "plan_version" VARCHAR(16) NOT NULL,
+  "engine_version" VARCHAR(16) NOT NULL,
+  "function_version" VARCHAR(16) NOT NULL,
+  "source_schema_hash" VARCHAR(64) NOT NULL,
+  "target_schema_hash" VARCHAR(64) NOT NULL,
+  "plan_content" CLOB NOT NULL,
+  "resource_version_set" CLOB NOT NULL,
+  "created_by" VARCHAR(64) NOT NULL,
+  "created_time" TIMESTAMP(6) NOT NULL,
+  PRIMARY KEY ("tid"),
+  CONSTRAINT "uk_mapping_plan_revision" UNIQUE ("tenant_id","pipeline_id","node_id","plan_revision"),
+  CONSTRAINT "uk_mapping_plan_identity" UNIQUE ("tenant_id","pipeline_id","node_id","plan_hash","draft_revision"),
+  CONSTRAINT "uk_mapping_plan_tenant_id" UNIQUE ("tenant_id","tid")
+);
+COMMENT ON TABLE "data_access_mapping_plan_t" IS '数据接入-字段映射不可变执行计划';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."tid" IS '执行计划版本标识';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."tenant_id" IS '当前认证租户标识';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."pipeline_id" IS '所属画布流程标识';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."node_id" IS '所属字段映射节点标识';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."plan_revision" IS '节点计划递增版本号';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."draft_revision" IS '编译来源草稿更新时间版本';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."plan_hash" IS '规范执行计划SHA256摘要';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."plan_version" IS '执行计划协议版本';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."engine_version" IS 'Java转换内核版本';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."function_version" IS '函数库版本';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."source_schema_hash" IS '来源Schema规范摘要';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."target_schema_hash" IS '目标Schema规范摘要';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."plan_content" IS '不含连接凭据的完整不可变计划JSON';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."resource_version_set" IS '固定字典及资源版本引用JSON';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."created_by" IS '编译操作者认证标识或系统任务标识';
+COMMENT ON COLUMN "data_access_mapping_plan_t"."created_time" IS '计划创建时间，微秒';
+CREATE INDEX "idx_mapping_plan_history" ON "data_access_mapping_plan_t" ("tenant_id","pipeline_id","node_id","created_time");
+
+-- TABLE data_access_mapping_resource_t
+CREATE TABLE "data_access_mapping_resource_t" (
+  "tid" VARCHAR(32) NOT NULL,
+  "tenant_id" VARCHAR(32) NOT NULL,
+  "resource_kind" VARCHAR(32) NOT NULL,
+  "resource_key" VARCHAR(128) NOT NULL,
+  "version_no" BIGINT NOT NULL,
+  "resource_hash" VARCHAR(64) NOT NULL,
+  "definition_json" CLOB NOT NULL,
+  "resource_content" CLOB NOT NULL,
+  "created_by" VARCHAR(64) NOT NULL,
+  "created_time" TIMESTAMP(6) NOT NULL,
+  PRIMARY KEY ("tid"),
+  CONSTRAINT "uk_mapping_resource_version" UNIQUE ("tenant_id","resource_kind","resource_key","version_no")
+);
+COMMENT ON TABLE "data_access_mapping_resource_t" IS '数据接入-字段映射模板及字典快照版本';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."tid" IS '不可变资源版本标识';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."tenant_id" IS '当前认证租户标识';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."resource_kind" IS '资源类型：TEMPLATE模板，DICTIONARY_SNAPSHOT字典快照';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."resource_key" IS '同一租户内资源版本族名称';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."version_no" IS '资源族内递增版本号';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."resource_hash" IS '资源内容SHA256摘要';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."definition_json" IS '资源的授权定义和协议摘要JSON';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."resource_content" IS '模板规则或完整字典快照JSON';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."created_by" IS '资源创建操作者认证标识';
+COMMENT ON COLUMN "data_access_mapping_resource_t"."created_time" IS '资源版本创建时间，微秒';
+CREATE INDEX "idx_mapping_resource_list" ON "data_access_mapping_resource_t" ("tenant_id","resource_kind","created_time");
+
+-- TABLE data_access_mapping_publication_t
+CREATE TABLE "data_access_mapping_publication_t" (
+  "tid" VARCHAR(32) NOT NULL,
+  "tenant_id" VARCHAR(32) NOT NULL,
+  "pipeline_id" VARCHAR(64) NOT NULL,
+  "node_id" VARCHAR(64) NOT NULL,
+  "plan_id" VARCHAR(32) NOT NULL,
+  "process_group_id" VARCHAR(64) NOT NULL,
+  "published_time" TIMESTAMP(6) NOT NULL,
+  PRIMARY KEY ("tid"),
+  CONSTRAINT "uk_mapping_publication_node" UNIQUE ("tenant_id","pipeline_id","node_id"),
+  CONSTRAINT "fk_mapping_publication_plan" FOREIGN KEY ("tenant_id","plan_id") REFERENCES "data_access_mapping_plan_t" ("tenant_id","tid")
+);
+COMMENT ON TABLE "data_access_mapping_publication_t" IS '数据接入-字段映射当前发布计划引用';
+COMMENT ON COLUMN "data_access_mapping_publication_t"."tid" IS '发布引用标识';
+COMMENT ON COLUMN "data_access_mapping_publication_t"."tenant_id" IS '当前认证租户标识';
+COMMENT ON COLUMN "data_access_mapping_publication_t"."pipeline_id" IS '已发布画布流程标识';
+COMMENT ON COLUMN "data_access_mapping_publication_t"."node_id" IS '已发布字段映射节点标识';
+COMMENT ON COLUMN "data_access_mapping_publication_t"."plan_id" IS '当前启用的不可变执行计划标识';
+COMMENT ON COLUMN "data_access_mapping_publication_t"."process_group_id" IS '承载当前计划的NiFi流程组标识';
+COMMENT ON COLUMN "data_access_mapping_publication_t"."published_time" IS '当前计划启用时间，微秒';
+CREATE INDEX "idx_mapping_publication_plan" ON "data_access_mapping_publication_t" ("tenant_id","plan_id");

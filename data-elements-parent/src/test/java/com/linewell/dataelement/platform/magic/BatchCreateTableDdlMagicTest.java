@@ -37,6 +37,33 @@ class BatchCreateTableDdlMagicTest {
     private static final String SOURCE_ID = "8a56e7d664934c1499102cfa508cd58a";
 
     @Test
+    void sourceTextConversionNeedsNoTenantSessionOrDatabaseObjectsForTwentyAndHundredFields() throws Exception {
+        String script = CanonicalMagicSources.byId(SOURCE_ID);
+        script = script.substring(0,script.indexOf("var textOf ="))
+                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.model\\.|java\\.util\\.)[^\\n]*\\n", "");
+        for (int count : List.of(20,100)) {
+            String fields = java.util.stream.IntStream.range(0,count)
+                    .mapToObj(index -> "f"+index+" varchar(36) DEFAULT ('Y'::varchar)")
+                    .collect(java.util.stream.Collectors.joining(","));
+            Object result = MagicScript.create(script,null).execute(new MagicScriptContext(Map.of(
+                    "body",Map.of("convertSourceDdl",true,"sourceDdl","CREATE TABLE people("+fields+")",
+                            "sourceDatabaseType","postgresql","targetDatabaseType","oracle"),
+                    "portableDdl",new com.linewell.dataelement.metautil.ddl.PortableDdlConverter(),
+                    "metadataExplorerService",new PureGenerator())));
+            var converted = assertInstanceOf(Map.class,result);
+            assertEquals(count,((List<?>) converted.get("tableItems")).size());
+            assertTrue(converted.get("ddl").toString().contains("DEFAULT 'Y'"));
+            assertFalse(converted.get("ddl").toString().contains("::"));
+        }
+    }
+
+    public static class PureGenerator {
+        public String generateCreateTableDdl(DataSourceConfig config,String table,List<ColumnInfo> columns,String comment) {
+            return new OracleMetadataExplorer().generateCreateTableDdl(config,table,columns,comment);
+        }
+    }
+
+    @Test
     void postgresLiteralDefaultIsNormalizedBeforeCallingTheJavaGenerator() throws Exception {
         for (String dialect : List.of("oceanbaseoracle", "oracle", "mysql", "hive", "postgresql")) {
             Fixture f = new Fixture(1);
@@ -46,7 +73,7 @@ class BatchCreateTableDdlMagicTest {
                     "columnType", "varchar(1)", "length", 1, "defaultValue", "'Y'::character varying")));
             f.targets.set(0, target);
             var result = assertInstanceOf(Map.class, f.run());
-            assertEquals("'Y'", f.ddlGenerator.lastColumns.getFirst().getDefaultValue());
+            assertEquals(dialect.equals("hive") ? null : "'Y'", f.ddlGenerator.lastColumns.getFirst().getDefaultValue());
             String ddl = ((Map<?, ?>) ((List<?>) result.get("results")).getFirst()).get("ddl").toString();
             assertFalse(ddl.contains("::"));
             if (dialect.equals("hive")) assertFalse(ddl.contains("DEFAULT"));
@@ -67,14 +94,14 @@ class BatchCreateTableDdlMagicTest {
         String ddl = ((Map<?, ?>) ((List<?>) result.get("results")).getFirst()).get("ddl").toString();
         assertTrue(ddl.contains("VARCHAR2(64)") || ddl.contains("VARCHAR2 (64)"));
         assertFalse(ddl.contains("CLOB"));
-        assertEquals("varchar(64)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
+        assertEquals("VARCHAR2(64)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
         target.put("tableItems", List.of(Map.of("columnName", "UNID", "dataType", "varchar",
                 "columnType", "varchar(32)", "length", 128, "primaryKey", 1)));
-        f.run(); assertEquals("varchar(128)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
+        f.run(); assertEquals("VARCHAR2(128)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
     }
 
     @Test
-    void lobKeyAndComplexForeignDefaultsAreRejectedBeforeAnyDdlGeneration() throws Exception {
+    void previewShowsLobKeyWarningsAndConvertsCommonClockDefaultsWithoutBlockingEditing() throws Exception {
         for (boolean lobKey : List.of(true, false)) {
             Fixture f = new Fixture(1);
             f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER' where tid='db-0'");
@@ -82,26 +109,28 @@ class BatchCreateTableDdlMagicTest {
             target.put("tableItems", List.of(lobKey
                     ? Map.of("columnName", "UNID", "dataType", "text", "columnType", "text", "length", 0, "primaryKey", 1)
                     : Map.of("columnName", "created_at", "dataType", "timestamp", "defaultValue", "now()::timestamp")));
-            f.targets.set(0, target);
-            var result = assertInstanceOf(org.ssssssss.script.runtime.ExitValue.class, f.run());
-            assertEquals(400, result.getValues()[0]);
-            assertTrue(result.getValues()[1].toString().contains(lobKey ? "UNID" : "created_at"));
-            assertEquals(0, f.ddlGenerator.calls); assertEquals(0, f.counter.writes);
+            f.targets.set(0,target);
+            Map<?,?> result = assertInstanceOf(Map.class,f.run());
+            var row = (Map<?,?>) ((List<?>) result.get("results")).getFirst();
+            if (lobKey) assertFalse(((List<?>) row.get("warnings")).isEmpty());
+            else assertTrue(row.get("ddl").toString().contains("CURRENT_TIMESTAMP"));
+            assertEquals(1,f.ddlGenerator.calls); assertEquals(0,f.counter.writes);
         }
     }
 
     @Test
-    void temporalAndNumericDefaultCastsAreNotSilentlyDroppedAcrossDialects() throws Exception {
+    void castsAreConvertedOrRetainedWithWarningsInsteadOfRejectingTheCompletePreview() throws Exception {
         for (String value : List.of("'2026-10-12'::date", "1.4::integer", "TRUE::boolean")) {
-            Fixture f = new Fixture(1);
+            Fixture f=new Fixture(1);
             f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER' where tid='db-0'");
-            var target = new LinkedHashMap<>(f.targets.getFirst());
-            target.put("tableItems", List.of(Map.of("columnName", "source_default", "dataType", "varchar",
-                    "columnType", "varchar(64)", "length", 64, "defaultValue", value)));
-            f.targets.set(0, target);
-            var result = assertInstanceOf(org.ssssssss.script.runtime.ExitValue.class, f.run());
-            assertEquals(400, result.getValues()[0]);
-            assertEquals(0, f.ddlGenerator.calls); assertEquals(0, f.counter.writes);
+            var target=new LinkedHashMap<>(f.targets.getFirst());
+            target.put("tableItems",List.of(Map.of("columnName","source_default","dataType","varchar","columnType","varchar(64)","length",64,"defaultValue",value)));
+            f.targets.set(0,target);
+            Map<?,?> result=assertInstanceOf(Map.class,f.run());
+            var row=(Map<?,?>)((List<?>)result.get("results")).getFirst();
+            if (value.equals("1.4::integer")) assertFalse(((List<?>)row.get("warnings")).isEmpty());
+            else assertFalse(row.get("ddl").toString().contains("::"));
+            assertEquals(1,f.ddlGenerator.calls); assertEquals(0,f.counter.writes);
         }
     }
 
@@ -226,15 +255,15 @@ class BatchCreateTableDdlMagicTest {
     }
 
     @Test
-    void qualifiedInputOrUnexpectedGeneratorRenameFailsDuringPreview() throws Exception {
+    void previewRemainsEditableWhileExecutionOwnsTargetScopeValidation() throws Exception {
         Fixture qualified = new Fixture(1);
         qualified.targetNames("ODS_TC_RKXT.T_SJYCC_CKB");
-        assertInstanceOf(ExitValue.class, qualified.run());
+        assertInstanceOf(Map.class, qualified.run());
         assertEquals(0, qualified.counter.writes);
 
         Fixture renamed = new Fixture(1);
         renamed.ddlGenerator.rename = true;
-        assertInstanceOf(ExitValue.class, renamed.run());
+        assertInstanceOf(Map.class, renamed.run());
         assertEquals(0, renamed.counter.writes);
     }
 
@@ -312,6 +341,7 @@ class BatchCreateTableDdlMagicTest {
             inputs.put("dataScope", scope);
             inputs.put("metadataExplorerService", ddlGenerator);
             inputs.put("canvasTableDdl", ddlParser);
+            inputs.put("portableDdl", new com.linewell.dataelement.metautil.ddl.PortableDdlConverter());
             inputs.put("jsons", new JsonModule());
             counter.reads = 0;
             counter.writes = 0;

@@ -6,9 +6,9 @@ spring:
   # Nacos connection/bootstrap settings must remain local: they are required
   # before the application can load centralized runtime configuration.
   config:
-    import:
-      - optional:nacos:data-element.yml?group=DEFAULT_GROUP&refreshable=true
-      - optional:nacos:data-element-${DATA_ELEMENT_PROFILE:dev}.yml?group=DEFAULT_GROUP&refreshable=true
+    # A local/deployment override can select one complete Nacos configuration.
+    # Existing environments keep their base + profile configuration by default.
+    import: ${NACOS_CONFIG_IMPORTS:optional:nacos:data-element.yml?group=DEFAULT_GROUP&refreshable=true,optional:nacos:data-element-${DATA_ELEMENT_PROFILE:dev}.yml?group=DEFAULT_GROUP&refreshable=true}
   cloud:
     nacos:
       server-addr: ${NACOS_HOST:192.168.175.86}:${NACOS_PORT:8848}

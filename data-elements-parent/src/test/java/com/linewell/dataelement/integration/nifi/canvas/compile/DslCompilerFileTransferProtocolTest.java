@@ -127,6 +127,15 @@ class DslCompilerFileTransferProtocolTest {
 
     @Test
     void reportFileWithChineseHeadersUsesThoseHeadersInFieldMappingQuery() throws Exception {
+        verifyFileHeaderMapping(true);
+    }
+
+    @Test
+    void registeredCsvWithChineseCommentsKeepsItsPhysicalHeaderInMappingQuery() throws Exception {
+        verifyFileHeaderMapping(false);
+    }
+
+    private void verifyFileHeaderMapping(boolean reportTemplate) throws Exception {
         NifiClient nifi = mock(NifiClient.class);
         ManifestRegistry registry = mock(ManifestRegistry.class);
         ComponentManifest ftp = manifest("/manifests/sources/ftp.json");
@@ -149,7 +158,8 @@ class DslCompilerFileTransferProtocolTest {
                         new Pipeline.Node("source", "source.ftp", "FTP 文件来源", "source", 0, 0, Map.of(
                                 "protocol", "sftp", "hostname", "10.0.0.1", "port", "22",
                                 "username", "report-user", "password", "not-a-real-password",
-                                "remotePath", "/report", "fileHeaderMode", "registered-chinese",
+                                "remotePath", "/report", "fileHeaderMode", reportTemplate ? "registered-chinese" : "",
+                                "fileFormat", "csv",
                                 "sourceColumns", List.of(Map.of(
                                         "column_name", "vehicle_id", "column_comment", "车辆编号")))),
                         new Pipeline.Node("mapping", "transform.field-mapping", "字段映射", "transform", 320, 0,
@@ -165,8 +175,11 @@ class DslCompilerFileTransferProtocolTest {
 
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.QueryRecord"),
                 eq("字段映射/map"), anyDouble(), anyDouble(), argThat(properties ->
-                        String.valueOf(properties.get("success")).contains("车辆编号")
-                                && !String.valueOf(properties.get("success")).contains("\"vehicle_id\" AS \"vehicle_id\"")),
+                        reportTemplate
+                                ? String.valueOf(properties.get("success")).contains("车辆编号")
+                                    && !String.valueOf(properties.get("success")).contains("\"vehicle_id\" AS \"vehicle_id\"")
+                                : String.valueOf(properties.get("success")).contains("\"vehicle_id\" AS \"vehicle_id\"")
+                                    && !String.valueOf(properties.get("success")).contains("车辆编号")),
                 nullable(String.class), nullable(String.class));
     }
 

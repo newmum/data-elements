@@ -48,13 +48,19 @@ public class BulletinPoller {
     @EventListener(ApplicationReadyEvent.class)
     public void primeFromDisk() {
         for (String tenantId : tenantCatalog.activeTenantIds()) {
-            TenantContext.run(tenantId, () -> {
-                for (Pipeline p : repo.findAll()) {
-                    if (p.lastBulletinId() != null) {
-                        AFTER_IDS.put(bulletinKey(p), p.lastBulletinId());
+            try {
+                TenantContext.run(tenantId, () -> {
+                    for (Pipeline p : repo.findAll()) {
+                        if (p.lastBulletinId() != null) {
+                            AFTER_IDS.put(bulletinKey(p), p.lastBulletinId());
+                        }
                     }
-                }
-            });
+                });
+            } catch (RuntimeException error) {
+                // Cache priming must not close the entire application when one industry database is unavailable.
+                // The normal polling pass retries the same database within its existing execution scope.
+                log.warn("Bulletin cache initialization failed for tenant {}: {}",tenantId,error.getClass().getSimpleName());
+            }
         }
     }
 

@@ -158,6 +158,7 @@ var managedHive = sourceType == "hive" && (
     || !blank(firstValue(datasource, ["hiveProfile", "hive_profile"]))
 )
 var physicalColumns = []
+var registeredFile = null
 if (managedHive) {
     var hiveDatabase = firstValue(datasource, ["database", "dbName", "db_name"])
     if (blank(hiveDatabase) || !(hiveDatabase + "").matches("[A-Za-z_][A-Za-z0-9_]*")
@@ -174,7 +175,8 @@ if (managedHive) {
     }
 } else if (sourceType == "ftp" || sourceType == "sftp") {
     // The connection and file selector remain authoritative; only parser options are accepted.
-    physicalColumns = structuredSourceProbeService.resolveFtpFileSource(datasource, physicalName + "", body?.sourceFileConfig).columns
+    registeredFile = structuredSourceProbeService.resolveFtpFileSource(datasource, physicalName + "", body?.sourceFileConfig)
+    physicalColumns = registeredFile.columns
 } else if (structured) {
     physicalColumns = structuredSourceProbeService.getColumns(datasource, physicalName + "")
 } else {
@@ -247,6 +249,12 @@ for (previous in snapshot == null ? [] : snapshot) {
         .eq("tid", previous.tid).eq("table_id", requestedTableId).eq("is_del", 0)
         .update({ is_del: 1, updated_time: now })
 }
-db.table("db_table_t").where().eq("tid", requestedTableId).eq("is_del", 0)
-    .update({ field_count: rows.size(), updated_time: now })
-return db.table("db_table_column_t").where().eq("table_id", requestedTableId).eq("is_del", 0).select()
+var tableUpdate = { field_count: rows.size(), updated_time: now }
+if (registeredFile != null) {
+    // 登记只保存无凭据的文件定位/解析描述；字段仍只有 db_table_column_t 一份。
+    tableUpdate.field_governance_config = jsons.toJSONStr(structuredSourceProbeService.withFtpFileSnapshot(
+        firstValue(tableAsset, ['fieldGovernanceConfig', 'field_governance_config']), registeredFile))
+}
+db.table("db_table_t").where().eq("tenant_id", currentTenantId).eq("tid", requestedTableId).eq("is_del", 0)
+    .update(tableUpdate)
+return db.table("db_table_column_t").where().eq("tenant_id", currentTenantId).eq("table_id", requestedTableId).eq("is_del", 0).select()

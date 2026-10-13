@@ -147,41 +147,88 @@ class HuaweiHiveTargetDeletionMagicTest {
         configureNonHive();
         var table = new com.linewell.dataelement.metautil.model.dto.TableInfo();
         table.setTableName("ods_person");
-        when(explorer.getTables(any())).thenReturn(List.of(table), List.of(table), List.of());
+        when(explorer.getTableDirectory(any())).thenReturn(List.of(table), List.of(table), List.of());
         Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
         assertEquals(true, result.get("targetPhysicalDeleted"));
         assertEquals(false, result.get("targetHivePhysicalRetained"));
         assertEquals(1, deleted("db_table_t", "target-1"));
-        verify(explorer).createTable(any(), eq("DROP TABLE `ods_person`"));
+        verify(explorer).createTable(any(), eq("DROP TABLE `target_db`.`ods_person`"));
         verifyNoInteractions(hive);
     }
 
     @Test
-    void nonHivePreflightUnavailableCancelsTaskButRetainsRegistrationForRetry() throws Exception {
+    void nonHivePreflightUnavailablePreservesEverySavedLifecycleRecordForRetry() throws Exception {
         configureNonHive();
-        when(explorer.getTables(any())).thenThrow(new IllegalStateException("connection timed out"));
+        when(explorer.getTableDirectory(any())).thenThrow(new IllegalStateException("connection timed out"));
         Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
         assertEquals(true, result.get("targetCleanupPending"));
         assertEquals(true, result.get("targetMetadataRetained"));
         assertEquals("unknown", result.get("targetPhysicalState"));
         assertEquals(0, deleted("db_table_t", "target-1"));
         assertEquals(0, deleted("db_table_column_t", "target-column"));
-        assertEquals(1, deleted("data_access_agg_task_t", "task-1"));
+        assertEquals(0, deleted("data_access_agg_task_t", "task-1"));
         verify(explorer, never()).createTable(any(), any());
     }
 
     @Test
-    void nonHiveDropDeniedCancelsTaskButNeverClaimsTableWasDeleted() throws Exception {
+    void materializationDirectoryFailureReturnsAnUnknownStateWithNoWritesInsteadOfBusinessRejection() throws Exception {
+        configureNonHive();
+        when(explorer.getTableDirectory(any())).thenThrow(new IllegalStateException("metadata query unsupported"));
+        var result = assertInstanceOf(Map.class,run(batchRequest(List.of(Map.of("targetDbId","target-db",
+                "targetTableName","ods_person","targetTableId","target-1")))));
+        var row = (Map<?,?>) ((List<?>) result.get("results")).getFirst();
+        assertEquals("unknown",row.get("targetPhysicalState"));
+        assertFalse(row.get("physicalCheckWarning").toString().isBlank());
+        assertEquals(false,result.get("sideEffectsApplied"));
+        assertEquals(0,queryCounter.writes);
+        assertLifecycleIntact();
+    }
+
+    @Test
+    void nonHiveDropDeniedPreservesTaskAndNeverClaimsTableWasDeleted() throws Exception {
         configureNonHive();
         var table = new com.linewell.dataelement.metautil.model.dto.TableInfo();
         table.setTableName("ods_person");
-        when(explorer.getTables(any())).thenReturn(List.of(table));
+        when(explorer.getTableDirectory(any())).thenReturn(List.of(table));
         doThrow(new IllegalStateException("permission denied")).when(explorer).createTable(any(), any());
         Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
         assertEquals(true, result.get("targetCleanupPending"));
         assertEquals(false, result.get("targetPhysicalDeleted"));
         assertEquals(0, deleted("db_table_t", "target-1"));
-        assertEquals(1, deleted("data_access_agg_task_t", "task-1"));
+        assertEquals(0, deleted("data_access_agg_task_t", "task-1"));
+    }
+
+    @Test
+    void lifecycleCleanupRollsBackAsOneTransactionWhenALaterMetadataWriteFails() {
+        jdbc.execute("DROP TABLE data_access_task_monitor_snap_t");
+        assertThrows(RuntimeException.class,() -> run(request()));
+        assertEquals(0,deleted("data_access_field_mapping","mapping-1"));
+        assertEquals(0,deleted("data_access_agg_task_t","task-1"));
+        assertEquals(0,deleted("db_table_t","target-1"));
+        assertEquals(0,deleted("db_table_column_t","target-column"));
+    }
+
+    @Test
+    void oracleListenerServiceErrorIsPendingAndNeverTreatedAsADeletedDatabase() throws Exception {
+        configureNonHive();
+        when(explorer.getTableDirectory(any())).thenThrow(new IllegalStateException("ORA-12514: listener does not know service"));
+        var result = assertInstanceOf(Map.class,run(request()));
+        assertEquals(true,result.get("targetCleanupPending"));
+        assertEquals(false,result.get("targetTableDeleted"));
+        assertLifecycleIntact();
+    }
+
+    @Test
+    void missingObjectTextCannotHideADropPermissionErrorWhileTheTableStillExists() throws Exception {
+        configureNonHive();
+        var table = new com.linewell.dataelement.metautil.model.dto.TableInfo(); table.setTableName("ods_person");
+        when(explorer.getTableDirectory(any())).thenReturn(List.of(table));
+        doThrow(new IllegalStateException("ORA-00942: table or view does not exist"))
+                .when(explorer).createTable(any(),any());
+        var result = assertInstanceOf(Map.class,run(request()));
+        assertEquals(true,result.get("targetCleanupPending"));
+        assertEquals(false,result.get("targetTableDeleted"));
+        assertLifecycleIntact();
     }
 
     @Test
@@ -631,10 +678,11 @@ class HuaweiHiveTargetDeletionMagicTest {
         // cleanup statement from the actual released API using the project's Magic engine.
         String script = CanonicalMagicSources.byId(SOURCE_ID)
                 .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.model\\.|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
-        String prefix = "var datasourceConnectionConfig = (action, datasourceId, values, clearAll) => fixture.connectionConfig(datasourceId);\n"
+        String prefix = "import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver\nvar datasourceConnectionConfig = (action, datasourceId, values, clearAll) => fixture.connectionConfig(datasourceId);\n"
                 + "var huaweiHiveGateway = () => fixture.gateway(body);\n";
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("body", body);
+        inputs.put("portableDdl", new com.linewell.dataelement.metautil.ddl.PortableDdlConverter());
         inputs.put("db", db);
         inputs.put("fixture", fixture);
         inputs.put("tenantRuntime", fixture);

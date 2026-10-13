@@ -25,8 +25,97 @@ import static org.mockito.Mockito.doReturn;
 
 class StructuredSourceProbeServiceTest {
 
+    @Test
+    void savedFileLocatorUsesRegistrationWithoutListingOrSampling() {
+        var listing = new AtomicInteger();
+        var probe = new StructuredSourceProbeService(new ObjectMapper(), mock(HttpClient.class)) {
+            @Override List<RemoteFile> listFtpFileEntries(Map<String, Object> source) {
+                listing.incrementAndGet(); throw new AssertionError("Saved locator must not list remote files");
+            }
+            @Override StructuredProbeResult probeFtp(Map<String, Object> source) {
+                throw new AssertionError("Materialization must not sample fields");
+            }
+        };
+        var saved = Map.of("sourceFile", Map.of("fileName", "person-1.json", "remotePath", "/managed/data",
+                "format", "json", "jsonRecordPath", "$.data.people"));
+        var result = probe.resolveFtpFileLocator(Map.of("ftpPath", "/managed"), "person_1_people", saved, "人员");
+        assertThat(result).containsEntry("fileName", "person-1.json").containsEntry("jsonRecordPath", "$.data.people")
+                .containsEntry("fileFilterRegex", "^\\Qperson-1.json\\E$");
+        assertThat(result).doesNotContainKeys("columns", "username", "password");
+        assertThat(listing).hasValue(0);
+    }
+
+    @Test
+    void legacyFileLocatorListsOnceWithoutOpeningAnyFile() {
+        var listing = new AtomicInteger();
+        var probe = new StructuredSourceProbeService(new ObjectMapper(), mock(HttpClient.class)) {
+            @Override List<RemoteFile> listFtpFileEntries(Map<String, Object> source) {
+                listing.incrementAndGet();
+                return List.of(new RemoteFile("/managed/People-1.csv", "People-1.csv", 100),
+                        new RemoteFile("/managed/Other.json", "Other.json", 100));
+            }
+            @Override StructuredProbeResult probeFtp(Map<String, Object> source) {
+                throw new AssertionError("File headers and content must not be sampled");
+            }
+        };
+        var result = probe.resolveFtpFileLocator(Map.of("ftpPath", "/managed", "ftpCharset", "GB18030",
+                "ftpDelimiter", "\\t"), "people_1", null, "People-1.csv");
+        assertThat(result).containsEntry("fileName", "People-1.csv").containsEntry("delimiter", "\t")
+                .containsEntry("charset", "GB18030");
+        assertThat(result).doesNotContainKey("columns");
+        assertThat(listing).hasValue(1);
+    }
+
+    @Test
+    void registrationKeepsOneSafeLocatorAndGovernanceCannotReplaceIt() {
+        var resolved = new LinkedHashMap<String, Object>();
+        resolved.put("fileName", "people.csv"); resolved.put("remotePath", "/managed"); resolved.put("format", "csv");
+        resolved.put("columns", List.of(Map.of("columnName", "id")));
+        resolved.put("password", "test-only-secret");
+        var original = Map.of("fields", List.of(Map.of("columnName", "id", "primaryKey", true)));
+        var saved = StructuredSourceProbeService.withFtpFileSnapshot(original, resolved);
+        assertThat(saved).containsEntry("fields", original.get("fields"));
+        assertThat(((Map<?, ?>) saved.get("sourceFile")).containsKey("columns")).isFalse();
+        assertThat(((Map<?, ?>) saved.get("sourceFile")).containsKey("password")).isFalse();
+        var changed = Map.of("fields", List.of(Map.of("columnName", "name")),
+                "sourceFile", Map.of("fileName", "malicious.csv", "password", "untrusted"));
+        var preserved = (Map<?, ?>) StructuredSourceProbeService.preserveFtpFileSnapshot(saved, changed);
+        assertThat(preserved.get("sourceFile")).isEqualTo(saved.get("sourceFile"));
+        assertThat(preserved.get("fields")).isEqualTo(changed.get("fields"));
+        assertThat(((Map<?, ?>) StructuredSourceProbeService.preserveFtpFileSnapshot(null, changed)).containsKey("sourceFile")).isFalse();
+    }
+
+    @Test
+    void savedFileLocatorCannotEscapeManagedDirectory() {
+        var probe = new StructuredSourceProbeService(new ObjectMapper(), mock(HttpClient.class));
+        for (String path : List.of("/other", "/managed/../other", "/managed/../../")) {
+            var saved = Map.of("sourceFile", Map.of("fileName", "people.csv", "remotePath", path, "format", "csv"));
+            assertThrows(IllegalArgumentException.class,
+                    () -> probe.resolveFtpFileLocator(Map.of("ftpPath", "/managed"), "people", saved, ""));
+        }
+    }
+
+    @Test
+    void literalTabAndSpaceDelimitersArePreservedFromRegisteredSnapshots() {
+        var probe = new StructuredSourceProbeService(new ObjectMapper(), mock(HttpClient.class));
+        for (String delimiter : List.of("\t", " ", "\\t")) {
+            var saved = Map.of("sourceFile", Map.of("fileName", "people.csv", "remotePath", "/managed",
+                    "format", "csv", "delimiter", delimiter));
+            var locator = probe.resolveFtpFileLocator(Map.of("ftpPath", "/managed"), "people", saved, "");
+            assertThat(locator.get("delimiter")).isEqualTo("\\t".equals(delimiter) ? "\t" : delimiter);
+        }
+    }
+
     private StructuredSourceProbeService service;
     private AtomicInteger requestCount;
+
+    @Test
+    void sftpTypeKeepsSftpProtocolWhenOldRegistrationHasNoProtocolProperty() {
+        assertThat(service.ftpProtocol(Map.of("dbType", " S FTP "))).isEqualTo("sftp");
+        assertThat(service.ftpProtocol(Map.of("dbType", "ftp"))).isEqualTo("ftp");
+        assertThat(service.ftpProtocol(Map.of("dbType", "ftp", "ftpProtocol", "sftp"))).isEqualTo("sftp");
+        assertThat(service.ftpProtocol(Map.of("dbType", "ftp", "ftpProtocol", "ftps"))).isEqualTo("ftps");
+    }
 
     @BeforeEach
     void setUp() throws Exception {

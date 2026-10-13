@@ -19,7 +19,7 @@
   "headers" : [ ],
   "paths" : [ ],
   "responseBody" : null,
-  "description" : "取消或重建数据接入；仅清理当前租户所选来源表关联的目标和流程。未关联但没有任务、目录及衍生表引用的同名目标，预检返回 targetUnlinked；实际删除须指定预检确认的目标表 ID 并提交 confirmUnlinkedTarget=true，且不清理当前来源表任务。Hive（含 MRS 与普通 Hive）仅清理接入流程和目标登记，不连接或删除物理表；非 Hive 执行删表，连接或删除异常时取消可清理任务并保留目标登记供重试。NiFi 清理失败保留流程记录。dryRun=true 只读预检；batchDryRun=true 时需同时提交 dryRun=true、deleteTargetTable=true 与最多 20 个 targets，服务端批量预取并逐 ID 校验租户及角色范围，只读预检不写业务数据；checkPhysicalExistence=true 用于物化重名检查，否则 Hive 跳过物理探查。单目标删除仍须再次授权。涉及 db_table_t、data_access_agg_task_t、db_datasource_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t 等业务表。",
+  "description" : "取消或重建数据接入；仅清理当前租户所选来源表关联的目标和流程。未关联但没有任务、目录及衍生表引用的同名目标，预检返回 targetUnlinked；实际删除须指定预检确认的目标表 ID 并提交 confirmUnlinkedTarget=true，且不清理当前来源表任务。Hive（含 MRS 与普通 Hive）仅清理接入流程和目标登记，不连接或删除物理表；非 Hive 执行删表，连接或删除异常时保留画布、任务及目标登记供重试，确认物理清理后用事务批量更新关联记录。NiFi 清理失败保留流程记录。dryRun=true 只读预检；batchDryRun=true 时需同时提交 dryRun=true、deleteTargetTable=true 与最多 20 个 targets，服务端批量预取并逐 ID 校验租户及角色范围，只读预检不写业务数据；checkPhysicalExistence=true 用于物化重名检查，否则 Hive 跳过物理探查。单目标删除仍须再次授权。涉及 db_table_t、data_access_agg_task_t、db_datasource_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t 等业务表。",
   "requestBodyDefinition" : null,
   "responseBodyDefinition" : null
 }
@@ -46,6 +46,8 @@ import java.util.Map
 import java.util.List
 import log
 import tenantRuntime
+import portableDdl
+import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver
 import dataScope
 
 var text = (value) => value == null ? '' : value + ''
@@ -58,7 +60,7 @@ var first = (row, keys) => {
     }
     return null
 }
-var safeTableName = (value) => text(value).trim().matches('^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)?$')
+var safeTableName = (value) => portableDdl.validName(text(value))
 // 接入清理永不执行 Hive DROP，也不依赖 Hive 可连通；物理表由运维手动处理。
 var hiveTypeOf = (database) => {
     var type = text(first(database, ['dbType', 'db_type'])).trim().toLowerCase().replace('_', '').replace('-', '')
@@ -94,7 +96,7 @@ var dataSourceOf = (database, prefetchedConfig) => {
     var hiveProfile = text(first(config, ['hiveProfile', 'hive_profile'])).trim()
     var managedHive = type == DatabaseType.HIVE && accessMode != 'jdbc' && hiveMode != 'open-source'
         && (accessMode == 'server-managed-mrs' || hiveMode == 'huawei-mrs' || !blank(hiveProfile))
-    if (blank(databaseName) || (!managedHive && (blank(host) || blank(username)))) {
+    if (!managedHive && blank(jdbcUrl) && (blank(databaseName) || blank(host) || blank(username))) {
         throw new IllegalStateException('目标数据源连接信息不完整，无法删除目标物理表')
     }
     var result = new DataSourceConfig()
@@ -105,6 +107,14 @@ var dataSourceOf = (database, prefetchedConfig) => {
     result.setUsername(text(username))
     result.setPassword(text(first(config, ['password', 'dbMetaPassword']) || first(database, ['password', 'db_password'])))
     result.setJdbcUrl(jdbcUrl)
+    result.setJdbcProperties(JdbcDriverPropertyResolver.resolve(config))
+    result.setConnectorProperties(config)
+    result.setAuthMode(first(config, ['authMode','auth']))
+    result.setPrincipal(first(config, ['principal','hivePrincipal','servicePrincipal']))
+    result.setUserPrincipal(first(config, ['userPrincipal','clientPrincipal','kerberosUserPrincipal']))
+    result.setKeytabPath(first(config, ['keytabPath','keytab','userKeytab']))
+    result.setKrb5ConfPath(first(config, ['krb5ConfPath','krb5Conf','krb5']))
+    result.setJaasConfPath(first(config, ['jaasConfPath','jaasConfig']))
     if (managedHive) {
         result.setConnectorProperties({
             metadataAccessMode: 'server-managed-mrs',
@@ -422,14 +432,15 @@ if (body?.batchDryRun == true) {
             }
         } catch (error) {
             var reason = text(error.message || error)
-            if (body?.checkPhysicalExistence == true || reason.indexOf('不合法') >= 0
+            if (reason.indexOf('不合法') >= 0
                 || reason.indexOf('不一致') >= 0 || reason.indexOf('同名表') >= 0) {
-                exit 400, '目标物理表检查失败，未修改任何目标；请检查目标库连接及表名后重试'
+                log.warn('Target batch preflight failed; datasourceId={}', selectedDbId)
+                exit 400, '目标物理表检查失败，未修改任何目标；请检查连接、Schema和元数据权限。连接测试成功时还需核对后端驱动及发布版本'
             }
             groupResults = []
             for (name in names) {
                 groupResults.add({physicalExists: null, targetCleanupPending: true,
-                    physicalTargetTableName: name})
+                    physicalTargetTableName: name, physicalCheckWarning:'目标表目录暂不可读，建表可继续由数据库执行；删除须确认物理清理'})
             }
         }
         if (groupResults == null || groupResults.size() != names.size()) {
@@ -459,6 +470,7 @@ if (body?.batchDryRun == true) {
                 : (preflight.targetCleanupPending == true ? 'unknown' : (preflight.physicalExists == true ? 'exists' : 'absent')),
             targetHivePhysicalRetained: preflight.targetHivePhysicalRetained == true,
             targetCleanupPending: preflight.targetCleanupPending == true,
+            physicalCheckWarning: text(preflight.physicalCheckWarning),
             targetScope: text(preflight.targetScope), targetDatabaseType: text(preflight.databaseType),
             physicalTargetTableName: text(preflight.physicalTargetTableName),
             historicalScopeNormalized: preflight.historicalScopeNormalized == true,
@@ -693,7 +705,7 @@ for (selectedId in singleDatasourceIds) {
     }
 }
 
-// 预检只决定物理清理策略；连接异常允许取消任务，但保留目标登记用于恢复。
+// 预检只决定物理清理策略；连接异常保留流程和目标登记用于恢复。
 var preflightConfig = null
 var preflightPhysicalExists = false
 var preflightScope = ''
@@ -706,19 +718,10 @@ var targetPhysicalCleanupSkipped = false
 var targetCleanupSkipReason = ''
 var targetHivePhysicalRetained = false
 var targetCleanupPending = false
-var missingObjectMessage = (value) => {
-    var message = text(value).toLowerCase()
-    return message.indexOf('表不存在') >= 0 || message.indexOf('对象不存在') >= 0
-        || message.indexOf('无效的表或视图名') >= 0 || message.indexOf('ora-00942') >= 0
-        || message.indexOf('table or view does not exist') >= 0
-        || message.indexOf('object does not exist') >= 0
-}
 var missingDatasourceMessage = (value) => {
     var message = text(value).toLowerCase()
     return message.indexOf('unknown database') >= 0 || message.indexOf('database does not exist') >= 0
-        || message.indexOf('数据库不存在') >= 0 || message.indexOf('ora-12514') >= 0
-        || message.indexOf('ora-12505') >= 0 || message.indexOf('服务名不存在') >= 0
-        || message.indexOf('服务名无效') >= 0
+        || message.indexOf('数据库不存在') >= 0
 }
 if (deleteTargetTable) {
     // A missing table-asset row is not permission to guess from source_table_id.
@@ -762,7 +765,7 @@ if (deleteTargetTable) {
         } else if (preflightMessage.indexOf('不一致') < 0 || separator < 1) {
             if (preflightMessage.indexOf('不合法') >= 0 || preflightMessage.indexOf('同名表') >= 0
                 || preflightMessage.indexOf('不支持') >= 0 || preflightMessage.indexOf('不一致') >= 0) { exit 409, '无法安全定位目标表，未执行删除' }
-            // 连接/驱动/探查失败时允许取消接入流程；保留目标登记用于后续重试。
+            // 连接/驱动/探查失败时保留流程和登记用于后续重试。
             targetCleanupPending = true
             targetPhysicalCleanupSkipped = true
             targetCleanupSkipReason = 'target_preflight_unavailable'
@@ -831,7 +834,7 @@ if (dryRun) {
         targetCleanupPending: targetCleanupPending,
         targetMetadataRetained: targetCleanupPending,
         message: targetHivePhysicalRetained ? 'Hive 物理表将保留，仅清理接入流程和目标登记；重新物化需修改表名或手动删除原表'
-            : (targetCleanupPending ? '目标库暂时无法检查，将取消接入流程并保留目标表登记供重试' : ''),
+            : (targetCleanupPending ? '目标库暂时无法检查，流程和目标表登记将保留供重试' : ''),
         deleteTargetTableRequested: deleteTargetTable,
         targetTableDeleted: false,
         sideEffectsApplied: false
@@ -876,46 +879,51 @@ if (deleteTargetTable && processGroupCleanupPendingCount > 0) {
     targetPhysicalCleanupSkipped = true
     targetCleanupSkipReason = 'nifi_cleanup_pending'
 }
+
 var physicalDeleteResult = null
 if (deleteTargetTable && !targetPhysicalCleanupSkipped) {
     try {
         physicalDeleteResult = targetTableDeletionService.drop(preflightConfig, physicalTargetTableName)
     } catch (error) {
-        var deleteMessage = text(error.message || error)
-        if (missingObjectMessage(deleteMessage)) {
-            targetPhysicalCleanupSkipped = true
-            targetCleanupSkipReason = 'target_physical_missing'
-        } else {
-            targetCleanupPending = true
-            targetPhysicalCleanupSkipped = true
-            targetCleanupSkipReason = 'target_delete_pending'
-            log.warn('Target drop unavailable; retaining target metadata, targetId={}', targetTableId)
-        }
+        // 幂等的“已不存在”由 Java 服务确认。不能再次根据异常文字吞掉权限或校验错误。
+        targetCleanupPending = true
+        targetPhysicalCleanupSkipped = true
+        targetCleanupSkipReason = 'target_delete_pending'
+        log.warn('Target drop unavailable; retaining target metadata, targetId={}', targetTableId)
     }
 }
 
+if (deleteTargetTable && targetCleanupPending) {
+    return {sourceTableId:sourceTableId, targetDbId:targetDbId, targetTableName:targetTableName,
+        targetTableDeleted:false, targetPhysicalDeleted:false, targetCleanupPending:true,
+        targetMetadataRetained:true, sideEffectsApplied:cleanedProcessGroups.size() > pendingProcessGroups.size(), targetPhysicalState:'unknown',
+        processGroupCleanupPendingCount:processGroupCleanupPendingCount,
+        message:processGroupCleanupPendingCount > 0 ? '接入流程清理尚未完成，目标表及登记已保留，请重试' : '目标物理表尚未确认删除，画布和登记已保留，请修复连接或权限后重试'}
+}
+
 var now = new Date()
-var pipelineCount = 0
+var completedTaskIds = []
+var completedPipelineIds = []
+var pendingTaskIds = []
 for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
     var taskId = text(first(task, ['tid']))
     var pipelineId = text(first(task, ['pipelineId', 'pipeline_id']))
-    var processGroupId = processGroupOf(task)
-    if (pendingProcessGroups.contains(processGroupId)) {
-        db.table('data_access_agg_task_t').where().eq('tid', taskId).eq('tenant_id', tenantId).eq('is_del', 0)
-            .update({ task_status: 0, updated_time: now })
-        continue
-    }
-    db.table('data_access_field_mapping').where().eq('task_id', taskId).eq('is_del', 0)
-        .update({ is_del: 1, updated_time: now })
-    db.table('data_access_task_monitor_snap_t').where().eq('task_id', taskId).eq('is_del', 0)
-        .update({ is_del: 1 })
-    db.table('data_access_agg_task_t').where().eq('tid', taskId).eq('is_del', 0)
-        .update({ is_del: 1, task_status: 0, updated_time: now })
-    if (!blank(pipelineId)) {
-        db.table('nifi_pipeline_t').where().eq('tenant_id', tenantId).eq('id', pipelineId).eq('is_del', 0)
-            .update({ is_del: 1, updated_at: now.getTime() })
-        pipelineCount = pipelineCount + 1
-    }
+    if (pendingProcessGroups.contains(processGroupOf(task))) { pendingTaskIds.add(taskId); continue }
+    completedTaskIds.add(taskId)
+    if (!blank(pipelineId) && !completedPipelineIds.contains(pipelineId)) { completedPipelineIds.add(pipelineId) }
+}
+var pipelineCount = completedPipelineIds.size()
+db.transaction(() => {
+if (pendingTaskIds.size() > 0) {
+    db.table('data_access_agg_task_t').where().in('tid', pendingTaskIds).eq('is_del', 0).update({task_status:0, updated_time:now})
+}
+if (completedTaskIds.size() > 0) {
+    db.table('data_access_field_mapping').where().in('task_id', completedTaskIds).eq('is_del', 0).update({is_del:1, updated_time:now})
+    db.table('data_access_task_monitor_snap_t').where().in('task_id', completedTaskIds).eq('is_del', 0).update({is_del:1})
+    db.table('data_access_agg_task_t').where().in('tid', completedTaskIds).eq('is_del', 0).update({is_del:1, task_status:0, updated_time:now})
+}
+if (completedPipelineIds.size() > 0) {
+    db.table('nifi_pipeline_t').where().in('id', completedPipelineIds).eq('is_del', 0).update({is_del:1, updated_at:now.getTime()})
 }
 
 if (deleteTargetTable && !targetCleanupPending) {
@@ -970,6 +978,7 @@ if (deleteTargetTable && !targetCleanupPending) {
     }
     }
 }
+})
 
 return {
     sourceTableId: sourceTableId,

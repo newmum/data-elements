@@ -18,6 +18,9 @@ public class ColumnInfo {
      */
     private String columnName;
 
+    /** Preserve quoted names independently of the plain registered column name. */
+    private Boolean quotedIdentifier;
+
     /**
      * 字段中文名/注释
      */

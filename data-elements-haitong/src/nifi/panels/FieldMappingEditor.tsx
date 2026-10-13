@@ -57,6 +57,8 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { findUniqueCaseInsensitiveFieldMatches, identifierMatchKey } from '@/utils/fieldNameMatching';
 import { getNifiOverlayContainer } from './overlayContainer';
 import { isRecordLookup } from '../utils/recordLookup';
+import UnifiedFieldMappingEditor from './UnifiedFieldMappingEditor';
+import type { UnifiedMappingDraft } from '../api/fieldMapping';
 
 interface Props {
   value: unknown;
@@ -65,6 +67,7 @@ interface Props {
   columnsLoading?: boolean;
   columnsError?: string;
   onReloadColumns?: () => void;
+  assetContext?: {pipelineId?:string|null;nodeId?:string;sourceRef?:import("../api/fieldMapping").MappingTableRef;targetRef?:import("../api/fieldMapping").MappingTableRef};
 }
 
 type ViewMode = 'list' | 'visual' | 'dsl';
@@ -85,6 +88,8 @@ interface FieldInfo {
 interface ColumnMeta {
   sourceLabels: Record<string, string>;
   targetLabels: Record<string, string>;
+  sourceSchema?: import('../api/fieldMapping').FieldMeta[];
+  targetSchema?: import('../api/fieldMapping').FieldMeta[];
 }
 
 interface LocalRecommendation {
@@ -227,6 +232,9 @@ export default function FieldMappingEditor(props: Props) {
     return <FieldMappingEditorSkeleton />;
   }
 
+  let parsed: any = props.value;
+  try { if(typeof parsed === 'string') parsed = JSON.parse(parsed); } catch { /* The existing editor displays malformed legacy drafts. */ }
+  if(parsed?.schemaVersion === '2.0')return <UnifiedFieldMappingEditor value={parsed as UnifiedMappingDraft} onChange={props.onChange} sourceSchema={props.columnMeta?.sourceSchema} targetSchema={props.columnMeta?.targetSchema} assetContext={props.assetContext} />;
   return <FieldMappingEditorContent {...props} />;
 }
 
@@ -280,12 +288,12 @@ function FieldMappingEditorContent({ value, onChange, columnMeta, columnsLoading
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      validateFieldMapping(spec)
+      validateFieldMapping(spec, columnMeta?.sourceSchema, columnMeta?.targetSchema)
       .then((r) => setIssues({ errors: r.errors ?? [], warnings: r.warnings ?? [] }))
       .catch((e) => setIssues({ errors: [{ path: 'spec', message: e?.response?.data?.error ?? e.message, severity: 'ERROR', code: 'VALIDATE_FAILED' }], warnings: [] }));
     }, 250);
     return () => window.clearTimeout(id);
-  }, [spec]);
+  }, [spec, columnMeta]);
 
   // 从 columnMeta（sourceColumns / targetColumns）构建完整字段列表（主数据源）
   const metaSourceFields = useMemo(() => {
@@ -631,10 +639,11 @@ function FieldMappingEditorContent({ value, onChange, columnMeta, columnsLoading
   const showCompiledSql = async () => {
     setCompiling(true);
     try {
-      const data = await compileFieldMapping(spec);
-      modal.info({ title: 'QueryRecord SQL', width: 760, getContainer: getNifiOverlayContainer,
+      const data = await compileFieldMapping(spec, columnMeta?.sourceSchema, columnMeta?.targetSchema);
+      modal.info({ title: data.mode === 'ENGINE_PLAN' ? '统一执行计划' : 'QueryRecord SQL', width: 760, getContainer: getNifiOverlayContainer,
         closable: true, keyboard: true, maskClosable: true,
-        content: <pre className="field-mapping-sql-preview">{data.query}</pre> });
+        content: <><pre className="field-mapping-sql-preview">{data.mode === 'ENGINE_PLAN' ? JSON.stringify(data.plan, null, 2) : data.query}</pre>
+          {data.plan?.executionPlan && <Button type="primary" onClick={() => { onChange(JSON.stringify({ ...data.plan!.executionPlan, executionEngine: 'JAVA_RECORD' }, null, 2)); Modal.destroyAll(); }}>将当前草稿升级为统一字段规则</Button>}</> });
     } catch (e: any) {
       message.error(e?.response?.data?.error ?? e?.message ?? '编译 SQL 失败');
     } finally {

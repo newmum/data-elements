@@ -27,6 +27,7 @@ public class DataSourceConnectionPropertyResolver {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final DataScopeAuthorizationService scopes;
+    private final com.linewell.dataelement.platform.persistence.TenantIdentifierSql identifiers;
 
     public DataSourceConnectionPropertyResolver(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         this(jdbcTemplate, objectMapper, null);
@@ -38,6 +39,7 @@ public class DataSourceConnectionPropertyResolver {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.scopes = scopes;
+        this.identifiers = new com.linewell.dataelement.platform.persistence.TenantIdentifierSql(jdbcTemplate);
     }
 
     /** One tenant-scoped read, one role-scope decision and an explicit check of every ID. */
@@ -51,6 +53,7 @@ public class DataSourceConnectionPropertyResolver {
         parameters.add(tenantId);
         String sql = "SELECT * FROM db_datasource_t WHERE tid IN ("
                 + String.join(",", Collections.nCopies(ids.size(), "?")) + ") AND tenant_id = ? AND is_del = 0";
+        if (com.linewell.dataelement.platform.tenant.domain.TenantContext.getTenantId() != null) sql = identifiers.adapt(sql);
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, parameters.toArray());
         if (scopes == null) throw new IllegalStateException("字典数据源权限校验服务未配置");
         rows = scopes.visibleDataSources(resource, rows);

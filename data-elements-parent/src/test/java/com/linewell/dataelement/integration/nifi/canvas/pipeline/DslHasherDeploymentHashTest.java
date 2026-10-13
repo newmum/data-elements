@@ -81,6 +81,27 @@ class DslHasherDeploymentHashTest {
         assertThat(DslHasher.deploymentHash(jdbc,revision)).isEqualTo(previousDeploymentHash(jdbc,revision));
     }
 
+    @Test
+    void unifiedEngineUpgradeInvalidatesOnlyUnifiedMappingDeployments() throws Exception {
+        String revision = DslHasher.CURRENT_COMPILER_REVISION;
+        String engineRevision = "java-record-engine-"
+                + com.linewell.dataelement.mapping.core.MappingEngine.VERSION + "-functions-"
+                + com.linewell.dataelement.mapping.core.FunctionRegistry.VERSION;
+        for (Map<String, Object> spec : List.of(Map.<String, Object>of("schemaVersion", "2.0"),
+                Map.<String, Object>of("executionEngine", "JAVA_RECORD"))) {
+            var unified = singleSink("transform.field-mapping", Map.of("mappings", spec));
+            assertThat(DslHasher.deploymentHash(unified, revision)).isEqualTo(previousDeploymentHash(unified,
+                    revision + "|field-mapping-lookup-dialect-utf8-v2|" + engineRevision));
+            assertThat(DslHasher.deploymentHash(unified, revision)).isNotEqualTo(previousDeploymentHash(unified,
+                    revision + "|field-mapping-lookup-dialect-utf8-v2|java-record-engine-1.0.0-functions-1.0.0"));
+        }
+        var legacy = singleSink("transform.field-mapping", Map.of("mappings", Map.of("version", "1.0")));
+        assertThat(DslHasher.deploymentHash(legacy, revision)).isEqualTo(previousDeploymentHash(legacy,
+                revision + "|field-mapping-lookup-dialect-utf8-v2"));
+        var jdbc = singleSink("source.mysql", Map.of("table", "people"));
+        assertThat(DslHasher.deploymentHash(jdbc, revision)).isEqualTo(previousDeploymentHash(jdbc, revision));
+    }
+
     private static String previousDeploymentHash(Pipeline.Dsl dsl, String revision) throws Exception {
         byte[] digest = MessageDigest.getInstance("SHA-256")
                 .digest((DslHasher.hash(dsl) + "|" + revision).getBytes(StandardCharsets.UTF_8));

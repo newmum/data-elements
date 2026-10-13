@@ -5,6 +5,8 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
+import com.linewell.dataelement.metautil.model.dto.TableInfo;
+import com.linewell.dataelement.metautil.ddl.DdlDialect;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
 import com.linewell.dataelement.metautil.model.dto.SampleDataResult;
 import com.linewell.dataelement.metautil.model.dto.SampleRequest;
@@ -41,13 +43,41 @@ import java.util.regex.Pattern;
 @Slf4j
 public abstract class AbstractMetadataExplorer implements MetadataExplorer {
 
+    @Override
+    public List<TableInfo> getTableDirectory(DataSourceConfig config) {
+        String scope = DdlDialect.scope(config);
+        boolean catalogScope = switch (DdlDialect.family(config.getDatabaseType())) {
+            case MYSQL, HIVE, CLICKHOUSE -> true;
+            default -> false;
+        };
+        String catalog = catalogScope || config.getDatabaseType() == DatabaseType.SQLSERVER ? config.getDatabase() : null;
+        String schema = catalogScope ? null : scope;
+        try (Connection connection = getConnection(config)) {
+            var metadata = connection.getMetaData();
+            String escape = metadata.getSearchStringEscape();
+            String schemaPattern = schema;
+            if (schemaPattern != null && escape != null && !escape.isEmpty())
+                schemaPattern = schemaPattern.replace(escape,escape+escape).replace("_",escape+"_").replace("%",escape+"%");
+            List<TableInfo> result = new ArrayList<>();
+            // One JDBC metadata operation per datasource. Never enrich each returned table.
+            try (ResultSet rows = metadata.getTables(catalog,schemaPattern,"%",new String[]{"TABLE","BASE TABLE"})) {
+                while (rows.next()) {
+                    String actualScope = rows.getString(catalogScope ? "TABLE_CAT" : "TABLE_SCHEM");
+                    if (catalogScope && (actualScope == null || actualScope.isBlank())) actualScope = rows.getString("TABLE_SCHEM");
+                    if (actualScope != null && !actualScope.isBlank() && !actualScope.equalsIgnoreCase(scope)) continue;
+                    var table = new TableInfo(); table.setTableName(rows.getString("TABLE_NAME"));
+                    table.setSchemaName(actualScope == null || actualScope.isBlank() ? scope : actualScope); result.add(table);
+                }
+            }
+            return result;
+        } catch (Exception error) {
+            throw new IllegalStateException("目标表目录读取失败，请检查连接或元数据权限",error);
+        }
+    }
+
     private static final int DEFAULT_CONNECTION_TIMEOUT_SECONDS = 30;
     private static final String DEFAULT_MYSQL_PARAMS = "useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true";
-    private static final Pattern SOURCE_LITERAL_CAST_DEFAULT = Pattern.compile(
-            "^('(?:''|[^'])*'|[+-]?\\d+(?:\\.\\d+)?|TRUE|FALSE|NULL)\\s*::\\s*"
-                    + "[A-Za-z_][A-Za-z_0-9]*(?:\\s+[A-Za-z_][A-Za-z_0-9]*)*"
-                    + "(?:\\s*\\(\\s*\\d+(?:\\s*,\\s*\\d+)?\\s*\\))?$",
-            Pattern.CASE_INSENSITIVE);
+
     /**
      * 达梦内置模式不允许承载业务表。物化建表使用管理员账号时，如果没有明确
      * 配置业务 Schema，极易因默认模式落到这些系统模式而导致 DDL 失败。
@@ -265,23 +295,35 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
     }
 
     private static String normalizeColumnNameForDdl(DatabaseType dbType, String columnName) {
-        String name = stripOwnerPrefix(columnName);
-        if (name.isEmpty()) {
-            return name;
+        if (columnName == null || columnName.isBlank()) return "";
+        String name = columnName.trim();
+        if (name.startsWith("\"") || name.startsWith("`") || name.startsWith("[") || name.contains(".")) {
+            var identifier = com.linewell.dataelement.metautil.ddl.DdlDialect.names(name).getLast();
+            if (identifier.quoted()) return com.linewell.dataelement.metautil.ddl.DdlDialect.quote(dbType,identifier.value());
+            name = identifier.value();
         }
-        if (dbType == DatabaseType.DAMENG && name.startsWith("\"") && name.endsWith("\"")) {
-            return quoteIdent(normalizeIdentifierName(name));
-        }
-        return name;
+        if (!name.matches("[A-Za-z_][A-Za-z0-9_$#]*"))
+            return com.linewell.dataelement.metautil.ddl.DdlDialect.quote(dbType,name);
+        var lexer = com.alibaba.druid.sql.parser.SQLParserUtils.createLexer(name,
+                com.linewell.dataelement.metautil.ddl.DdlDialect.parser(dbType));
+        lexer.nextToken();
+        return lexer.token() == com.alibaba.druid.sql.parser.Token.IDENTIFIER ? name
+                : com.linewell.dataelement.metautil.ddl.DdlDialect.quote(dbType,name);
+    }
+
+    private static String normalizeTableNameForDdl(DatabaseType type, String tableName) {
+        var name = com.linewell.dataelement.metautil.ddl.DdlDialect.names(tableName).getLast();
+        return name.quoted() ? com.linewell.dataelement.metautil.ddl.DdlDialect.quote(type,name.value())
+                : normalizeColumnNameForDdl(type,name.value());
     }
 
     /**
      * 建表脚本应在当前连接的默认 schema 中执行，展示和执行的表名、字段名均不携带用户名/schema 前缀。
      */
     private static String stripOwnerPrefix(String identifier) {
-        String value = normalize(identifier);
-        int separator = value.lastIndexOf('.');
-        return separator < 0 ? value : value.substring(separator + 1).trim();
+        if (identifier == null || identifier.isBlank()) return "";
+        var name = com.linewell.dataelement.metautil.ddl.DdlDialect.names(identifier).getLast();
+        return name.quoted() ? "\"" + name.value().replace("\"", "\"\"") + "\"" : name.value();
     }
 
     private static String qualifyTable(DataSourceConfig cfg, String tableName) {
@@ -294,285 +336,11 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
      * 针对生成 DDL 的字段类型做规范化，避免出现诸如 DATE(0)、TIMESTAMP(0) 这类语义不正确的类型。
      */
     private static String normalizeGeneratedColumnType(DatabaseType dbType, ColumnInfo col, String type) {
-        if (type == null) {
-            return null;
-        }
-        String t = type.trim();
-        if (t.isEmpty()) {
-            return t;
-        }
-
-        // 统一用大写做匹配，返回时保持大写关键字
-        String upper = t.toUpperCase(Locale.ROOT);
-
-        // 去掉无意义的 (0) 显示宽度，适用于整数类型、日期时间类型等
-        // 这些类型的 (0) 是显示宽度或无效精度，生成 DDL 时应去除
-        if (upper.matches("(INT|TINYINT|SMALLINT|MEDIUMINT|BIGINT|DATE|TIME|TIMESTAMP|DATETIME|YEAR)\\s*\\(0\\)")) {
-            return upper.replaceAll("\\s*\\(0\\)", "");
-        }
-
-        // 去掉 TEXT/LONGTEXT 等文本类型的长度参数，这些类型不支持或不应该有长度参数
-        // LONGTEXT(4294967295)、MEDIUMTEXT(16777215)、TEXT(65535) 等应去除括号部分
-        if (upper.matches("(LONGTEXT|MEDIUMTEXT|TINYTEXT|TEXT)\\s*\\(\\d+\\)")) {
-            upper = upper.replaceAll("\\s*\\(\\d+\\)", "");
-            t = upper;
-        }
-
-        String base = upper.replaceAll("\\s*\\(.*$", "");
-        String args = "";
-        int leftParen = upper.indexOf('(');
-        int rightParen = upper.lastIndexOf(')');
-        if (leftParen >= 0 && rightParen > leftParen) {
-            args = upper.substring(leftParen + 1, rightParen).trim();
-        }
-
-        // Low-code keeps binary length separately. A shared BLOB/VARBINARY
-        // template must be rendered using the actual destination dialect.
-        if (base.equals("BLOB") || base.equals("BINARY") || base.equals("VARBINARY")) {
-            return normalizeBinaryColumnType(dbType, base, args, upper, col);
-        }
-
-        if (dbType == DatabaseType.ORACLE
-                || dbType == DatabaseType.DAMENG
-                || dbType == DatabaseType.OCEANBASE_ORACLE) {
-            return normalizeOracleLikeColumnType(base, args, upper, col);
-        }
-        if (dbType == DatabaseType.POSTGRESQL
-                || dbType == DatabaseType.KINGBASE
-                || dbType == DatabaseType.GAUSSDB
-                || dbType == DatabaseType.HIGHGO
-                || dbType == DatabaseType.VERTICA
-                || dbType == DatabaseType.HETU) {
-            return normalizePostgresLikeColumnType(base, args, upper, col);
-        }
-        if (dbType == DatabaseType.HIVE) {
-            return normalizeHiveColumnType(base, upper);
-        }
-        if (dbType == DatabaseType.MYSQL
-                || dbType == DatabaseType.MARIADB
-                || dbType == DatabaseType.GBASE8A
-                || dbType == DatabaseType.OCEANBASE_MYSQL
-                || dbType == DatabaseType.DORIS
-                || dbType == DatabaseType.STARROCKS) {
-            return normalizeMySqlLikeColumnType(base, args, upper, col);
-        }
-        if (dbType == DatabaseType.SQLSERVER) {
-            return switch (base) {
-                case "VARCHAR", "CHAR" -> base + "(" + normalizeLength(args, columnLength(col, "255")) + ")";
-                case "TEXT" -> "NVARCHAR(MAX)";
-                case "DOUBLE" -> "FLOAT(53)";
-                case "FLOAT" -> "REAL";
-                default -> upper;
-            };
-        }
-
-        return t;
+        return com.linewell.dataelement.metautil.ddl.PortableColumnType.render(dbType, col, type);
     }
 
-    private static String normalizeBinaryColumnType(
-            DatabaseType dbType, String base, String args, String originalUpper, ColumnInfo column) {
-        String length = normalizeLength(args, columnLength(column, "0"));
-        long size = Long.parseLong(length);
-        boolean bounded = !base.equals("BLOB") && size > 0;
-        return switch (dbType) {
-            case ORACLE, OCEANBASE_ORACLE, DAMENG -> {
-                if (bounded && size <= 2000) {
-                    yield "RAW(" + length + ")";
-                }
-                if (Boolean.TRUE.equals(column.getPrimaryKey())) {
-                    throw new IllegalArgumentException("字段 " + column.getColumnName()
-                            + " 的二进制主键长度超出 RAW(2000) 安全范围，请确认目标库类型和主键设计");
-                }
-                yield "BLOB";
-            }
-            case POSTGRESQL, KINGBASE, GAUSSDB, HIGHGO -> "BYTEA";
-            case MYSQL, MARIADB, OCEANBASE_MYSQL, GBASE8A -> bounded
-                    ? "VARBINARY(" + length + ")" : "LONGBLOB";
-            case SQLSERVER -> bounded && size <= 8000 ? "VARBINARY(" + length + ")" : "VARBINARY(MAX)";
-            case HIVE -> "BINARY";
-            case HETU -> "VARBINARY";
-            default -> bounded ? "VARBINARY(" + length + ")" : originalUpper;
-        };
-    }
-
-    private static String normalizeOracleLikeColumnType(
-            String base, String args, String originalUpper, ColumnInfo column) {
-        switch (base) {
-            case "VARCHAR":
-            case "VARCHAR2":
-                return "VARCHAR2(" + normalizeLength(args, columnLength(column, "255")) + ")";
-            case "CHAR":
-                return "CHAR(" + normalizeLength(args, columnLength(column, "1")) + ")";
-            case "TEXT":
-            case "TINYTEXT":
-            case "MEDIUMTEXT":
-            case "LONGTEXT":
-                return "CLOB";
-            case "DATETIME":
-                return "TIMESTAMP";
-            case "BOOL":
-            case "BOOLEAN":
-                return "NUMBER(1)";
-            case "TINYINT":
-            case "SMALLINT":
-            case "MEDIUMINT":
-            case "INT":
-            case "INTEGER":
-                return "NUMBER(10)";
-            case "BIGINT":
-                return "NUMBER(19)";
-            case "DOUBLE":
-                return "BINARY_DOUBLE";
-            case "FLOAT":
-                return "BINARY_FLOAT";
-            case "DECIMAL":
-            case "NUMERIC":
-                return args.isEmpty() ? "NUMBER" : "NUMBER(" + args + ")";
-            default:
-                return originalUpper;
-        }
-    }
-
-    private static String normalizePostgresLikeColumnType(
-            String base, String args, String originalUpper, ColumnInfo column) {
-        switch (base) {
-            case "VARCHAR":
-            case "CHAR":
-                return args.isEmpty() && (column == null || column.getLength() == null || column.getLength() <= 0)
-                        ? originalUpper : base + "(" + normalizeLength(args, columnLength(column, "255")) + ")";
-            case "VARCHAR2":
-            case "NVARCHAR2":
-                return "VARCHAR(" + normalizeLength(args, columnLength(column, "255")) + ")";
-            case "DATETIME":
-                return "TIMESTAMP";
-            case "TINYINT":
-                return "SMALLINT";
-            case "MEDIUMINT":
-                return "INTEGER";
-            case "DOUBLE":
-                return "DOUBLE PRECISION";
-            case "TEXT":
-            case "TINYTEXT":
-            case "MEDIUMTEXT":
-            case "LONGTEXT":
-                return "TEXT";
-            case "NUMBER":
-                return args.isEmpty() ? "NUMERIC" : "NUMERIC(" + args + ")";
-            default:
-                return originalUpper;
-        }
-    }
-
-    private static String normalizeHiveColumnType(String base, String originalUpper) {
-        switch (base) {
-            case "VARCHAR":
-            case "VARCHAR2":
-            case "CHAR":
-            case "TEXT":
-            case "TINYTEXT":
-            case "MEDIUMTEXT":
-            case "LONGTEXT":
-                return "STRING";
-            case "DATETIME":
-                return "TIMESTAMP";
-            default:
-                return originalUpper;
-        }
-    }
-
-    /**
-     * MySQL family requires a length for VARCHAR/CHAR.  Low-code field forms
-     * keep the type and length in separate properties (for example,
-     * {@code columnType = "varchar"} and {@code length = 32}); retaining the
-     * bare column type produces invalid SQL such as {@code VARCHAR NOT NULL}.
-     */
-    private static String normalizeMySqlLikeColumnType(
-            String base, String args, String originalUpper, ColumnInfo column) {
-        switch (base) {
-            case "VARCHAR":
-            case "VARCHAR2":
-                return "VARCHAR(" + normalizeLength(args, columnLength(column, "255")) + ")";
-            case "CHAR":
-                return "CHAR(" + normalizeLength(args, columnLength(column, "1")) + ")";
-            case "DECIMAL":
-            case "NUMERIC":
-                if (!args.isEmpty()) {
-                    return "DECIMAL(" + args + ")";
-                }
-                if (column != null && column.getPrecision() != null && column.getPrecision() > 0) {
-                    String precision = String.valueOf(column.getPrecision());
-                    if (column.getScale() != null && column.getScale() >= 0) {
-                        return "DECIMAL(" + precision + "," + column.getScale() + ")";
-                    }
-                    return "DECIMAL(" + precision + ")";
-                }
-                return "DECIMAL(18,0)";
-            default:
-                return originalUpper;
-        }
-    }
-
-    private static String columnLength(ColumnInfo column, String defaultLength) {
-        if (column != null && column.getLength() != null && column.getLength() > 0) {
-            return String.valueOf(column.getLength());
-        }
-        return defaultLength;
-    }
-
-    private static String normalizeLength(String args, String defaultLength) {
-        if (args == null || args.isBlank()) {
-            return defaultLength;
-        }
-        String first = args.split(",", 2)[0].trim();
-        return first.matches("\\d+") ? first : defaultLength;
-    }
-
-    /**
-     * A source default can contain PostgreSQL's ::type syntax. Foreign target
-     * dialects do not accept it. String constants can lose a redundant character
-     * cast. Other foreign casts, including dates, numbers and nextval(...::regclass),
-     * need explicit target configuration rather than silently changing semantics.
-     */
     private static String normalizeGeneratedDefaultValue(DatabaseType dbType, String columnName, String rawValue) {
-        String value = normalize(rawValue);
-        if (value.isEmpty()) {
-            return value;
-        }
-        var literalCast = SOURCE_LITERAL_CAST_DEFAULT.matcher(value);
-        if (literalCast.matches()) {
-            String castType = value.substring(value.lastIndexOf("::") + 2).trim()
-                    .replaceFirst("\\s*\\(.*$", "").toLowerCase(Locale.ROOT);
-            boolean nativeCastDialect = Set.of(DatabaseType.KINGBASE, DatabaseType.POSTGRESQL, DatabaseType.GAUSSDB,
-                    DatabaseType.HIGHGO, DatabaseType.VERTICA, DatabaseType.HETU).contains(dbType);
-            if (!nativeCastDialect && !"NULL".equalsIgnoreCase(literalCast.group(1))
-                    && !Set.of("varchar", "character varying", "text", "nvarchar").contains(castType)) {
-                throw new IllegalArgumentException("字段 " + columnName
-                        + " 的默认值类型转换不能自动跨库等价替换，请设置目标库默认值表达式或清空默认值");
-            }
-            return literalCast.group(1);
-        }
-        if (containsCastOutsideString(value) && !Set.of(DatabaseType.POSTGRESQL, DatabaseType.GAUSSDB,
-                DatabaseType.HIGHGO, DatabaseType.VERTICA, DatabaseType.HETU).contains(dbType)) {
-            throw new IllegalArgumentException("字段 " + columnName
-                    + " 的默认值包含来源库类型转换，请改为目标库可用的默认值表达式或清空默认值");
-        }
-        return value;
-    }
-
-    private static boolean containsCastOutsideString(String value) {
-        boolean quoted = false;
-        for (int i = 0; i < value.length() - 1; i++) {
-            if (value.charAt(i) == '\'') {
-                if (quoted && value.charAt(i + 1) == '\'') {
-                    i++;
-                } else {
-                    quoted = !quoted;
-                }
-            } else if (!quoted && value.charAt(i) == ':' && value.charAt(i + 1) == ':') {
-                return true;
-            }
-        }
-        return false;
+        return com.linewell.dataelement.metautil.ddl.PortableDefaultExpression.convert(rawValue, null, dbType).value();
     }
 
     /**
@@ -919,13 +687,12 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         if (dbType == null) {
             return generateCreateTableDdl(tableName, columns, tableComment);
         }
-        assertWritableDdlSchema(cfg);
 
         String tableCmt = normalize(tableComment);
 
         // 1) 生成 CREATE TABLE 主体
         StringBuilder ddl = new StringBuilder();
-        String createTableName = stripOwnerPrefix(tableName);
+        String createTableName = normalizeTableNameForDdl(dbType, tableName);
         ddl.append("CREATE TABLE ").append(createTableName).append(" (\n");
 
         List<String> pkColumns = new ArrayList<>();
@@ -934,7 +701,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             if (col == null || normalize(col.getColumnName()).isEmpty()) {
                 continue;
             }
-            String name = normalizeColumnNameForDdl(dbType, col.getColumnName());
+            String name = Boolean.TRUE.equals(col.getQuotedIdentifier()) ? DdlDialect.quote(dbType,col.getColumnName())
+                    : normalizeColumnNameForDdl(dbType, col.getColumnName());
             String type = normalize(col.getColumnType());
             if (type.isEmpty()) {
                 type = normalize(col.getDataType());
@@ -945,25 +713,27 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
 
             type = normalizeGeneratedColumnType(dbType, col, type);
 
-            if (Set.of(DatabaseType.ORACLE, DatabaseType.OCEANBASE_ORACLE, DatabaseType.DAMENG).contains(dbType)
-                    && Set.of("CLOB", "NCLOB", "BLOB", "LONG").contains(type.toUpperCase(Locale.ROOT))
-                    && (Boolean.TRUE.equals(col.getPrimaryKey()) || Boolean.TRUE.equals(col.getUnique()))) {
-                throw new IllegalArgumentException("字段 " + name
-                        + " 的长文本/LOB类型不能作为目标库主键或唯一键；请明确改为足够长度的VARCHAR或取消该约束，不能自动截短长文本");
-            }
-
             ddl.append("  ").append(name).append(" ").append(type);
 
+            if (Boolean.TRUE.equals(col.getAutoIncrement()) && dbType != null) {
+                switch (com.linewell.dataelement.metautil.ddl.DdlDialect.family(dbType)) {
+                    case SQLSERVER -> ddl.append(" IDENTITY(1,1)");
+                    case ORACLE, POSTGRES, DB2 -> ddl.append(" GENERATED BY DEFAULT AS IDENTITY");
+                    default -> { }
+                }
+            }
             if (Boolean.FALSE.equals(col.getNullable())) {
                 ddl.append(" NOT NULL");
             }
             String defaultValue = normalizeGeneratedDefaultValue(dbType, name, col.getDefaultValue());
-            if (!defaultValue.isEmpty()) {
+            if (defaultValue != null && !defaultValue.isEmpty()) {
                 ddl.append(" DEFAULT ").append(defaultValue);
             }
 
+            if (Boolean.TRUE.equals(col.getUnique()) && !Boolean.TRUE.equals(col.getPrimaryKey())) ddl.append(" UNIQUE");
+
             // MySQL 系支持 AUTO_INCREMENT
-            if ((dbType == DatabaseType.MYSQL || dbType == DatabaseType.OCEANBASE_MYSQL)
+            if (com.linewell.dataelement.metautil.ddl.DdlDialect.family(dbType) == com.linewell.dataelement.metautil.ddl.DdlDialect.Family.MYSQL
                     && Boolean.TRUE.equals(col.getAutoIncrement())) {
                 ddl.append(" AUTO_INCREMENT");
             }
@@ -973,6 +743,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             if (!colCmt.isEmpty()) {
                 switch (dbType) {
                     case MYSQL:
+                    case MARIADB:
+                    case GBASE8A:
                     case OCEANBASE_MYSQL:
                     case DORIS:
                     case STARROCKS:
@@ -1011,6 +783,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         // 表注释（MySQL/Hive 可内联）
         if (!tableCmt.isEmpty()) {
             if (dbType == DatabaseType.MYSQL
+                    || dbType == DatabaseType.MARIADB
+                    || dbType == DatabaseType.GBASE8A
                     || dbType == DatabaseType.OCEANBASE_MYSQL
                     || dbType == DatabaseType.DORIS
                     || dbType == DatabaseType.STARROCKS
@@ -1025,7 +799,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
 
         // 2) 追加 COMMENT ON（PG/KingBase/GaussDB/Oracle/达梦/OceanBase(Oracle)）
         boolean useCommentOn = switch (dbType) {
-            case POSTGRESQL, KINGBASE, GAUSSDB, ORACLE, DAMENG, OCEANBASE_ORACLE -> true;
+            case POSTGRESQL, KINGBASE, GAUSSDB, HIGHGO, VERTICA, DB2, ORACLE, DAMENG, OCEANBASE_ORACLE -> true;
             default -> false;
         };
 
@@ -1033,14 +807,15 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             // Reuse the exact identifier form from CREATE TABLE. Quoting an
             // unquoted lower-case Oracle name here would look up a different,
             // lower-case object and cause ORA-00942 after table creation.
-            String qualifiedTable = stripOwnerPrefix(tableName);
+            String qualifiedTable = normalizeTableNameForDdl(dbType, tableName);
             if (!tableCmt.isEmpty()) {
                 ddl.append("COMMENT ON TABLE ").append(qualifiedTable)
                         .append(" IS '").append(escapeSqlStringLiteral(tableCmt)).append("';\n");
             }
             for (ColumnInfo col : columns) {
                 if (col == null) continue;
-                String colName = normalizeColumnNameForDdl(dbType, col.getColumnName());
+                String colName = Boolean.TRUE.equals(col.getQuotedIdentifier()) ? DdlDialect.quote(dbType,col.getColumnName())
+                        : normalizeColumnNameForDdl(dbType, col.getColumnName());
                 String colCmt = normalize(col.getColumnComment());
                 if (colName.isEmpty() || colCmt.isEmpty()) continue;
                 ddl.append("COMMENT ON COLUMN ").append(qualifiedTable).append(".").append(colName)

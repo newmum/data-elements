@@ -16,7 +16,7 @@ async function handlers(file, names) {
   }).join('\n');
   return babel.Babel.transform(selected, {presets:['typescript'],filename:'handlers.ts',configFile:false,babelrc:false}).code + '\nglobalThis.actual={'+names.join(',')+'};';
 }
-const register=await handlers('lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue', ['refreshSavedDatasourceMetadata']);
+const register=await handlers('lowcode/01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue', ['refreshSavedDatasourceMetadata']);
 for (const failed of [false,true]) {
   const calls=[];
   const ctx=vm.createContext({sourceType:{value:'mysql'},relationalSourceTypes:['mysql'],

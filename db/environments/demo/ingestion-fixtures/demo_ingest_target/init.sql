@@ -5,6 +5,17 @@ CREATE DATABASE `demo_ingest_target` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLL
 USE `demo_ingest_target`;
 SET FOREIGN_KEY_CHECKS=0;
 
+-- TABLE ods_codex_snapshot_sftp_5bc63309f3d1
+CREATE TABLE `ods_codex_snapshot_sftp_5bc63309f3d1` (
+  `person_id` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '测试人员编号',
+  `person_name` varchar(3) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '测试人员名称',
+  `region` varchar(5) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '测试地区代码',
+  `ODS_UUID` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'ODS主键',
+  `ODS_RKSJ` datetime NOT NULL COMMENT 'ODS入库时间',
+  `ODS_GXSJ` datetime NOT NULL COMMENT 'ODS更新时间',
+  PRIMARY KEY (`person_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='集成验证-登记快照SFTP物化';
+
 -- TABLE ods_demo_customer
 CREATE TABLE `ods_demo_customer` (
   `customer_id` bigint NOT NULL COMMENT '演示客户编号',

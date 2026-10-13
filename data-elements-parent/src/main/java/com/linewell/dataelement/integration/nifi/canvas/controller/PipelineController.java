@@ -62,6 +62,8 @@ public class PipelineController {
     private final PipelineTaskLifecycleSynchronizer taskLifecycle;
     private final PipelineGroupOrganizer groups;
     private final AccessTaskFieldMappingBinder accessTaskFieldMappingBinder;
+    private com.linewell.dataelement.integration.nifi.canvas.mapping.MappingProjectionService mappingProjections;
+    @Autowired public void setMappingProjections(com.linewell.dataelement.integration.nifi.canvas.mapping.MappingProjectionService service){mappingProjections=service;}
 
     public PipelineController(PipelineRepository repo, NifiClient nifi, MagicAPIService magicApiService,
                               DataAssetRuntimeAdapter dataAssetRuntimeAdapter, JdbcTemplate jdbcTemplate,
@@ -478,6 +480,7 @@ public class PipelineController {
     @PostMapping("/{id}")
     @Operation(summary = "更新流程(update)")
     @SerializedNifiMutation
+    @Transactional
     public ResponseEntity<Pipeline> update(@PathVariable String id, @RequestBody Pipeline body,
                                            @RequestParam(required=false) Long expectedUpdatedAt) {
         Pipeline current = repo.findById(id).orElse(null);
@@ -487,7 +490,9 @@ public class PipelineController {
             return ResponseEntity.ok(repo.update(id, cur -> {
                 if (!java.util.Objects.equals(cur.updatedAt(),expectedUpdatedAt))
                     throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"加工图已被其他入口修改，请重新加载后再保存");
-                return new Pipeline(cur.id(),prepared.name(),prepared.description(),cur.createdAt(),cur.updatedAt(),prepared.dsl(),cur.nifiProcessGroupId(),cur.status(),cur.lastDeployedHash(),cur.lastDeployedAt(),cur.lastStoppedAt(),cur.nodeMapping(),cur.lastBulletinId());
+                Pipeline next = new Pipeline(cur.id(),prepared.name(),prepared.description(),cur.createdAt(),cur.updatedAt(),prepared.dsl(),cur.nifiProcessGroupId(),cur.status(),cur.lastDeployedHash(),cur.lastDeployedAt(),cur.lastStoppedAt(),cur.nodeMapping(),cur.lastBulletinId());
+                if(mappingProjections!=null)mappingProjections.persist(next);
+                return next;
             }));
         }
         return ResponseEntity.ok(saveDesign(current, prepared));
@@ -510,9 +515,13 @@ public class PipelineController {
     }
 
     private Pipeline saveDesign(Pipeline current, Pipeline body) {
-        return repo.update(current.id(), cur -> new Pipeline(cur.id(), body.name(), body.description(),
+        return repo.update(current.id(), cur -> {
+            Pipeline next = new Pipeline(cur.id(), body.name(), body.description(),
                 cur.createdAt(), cur.updatedAt(), body.dsl(), cur.nifiProcessGroupId(), cur.status(),
-                cur.lastDeployedHash(), cur.lastDeployedAt(), cur.lastStoppedAt(), cur.nodeMapping(), cur.lastBulletinId()));
+                cur.lastDeployedHash(), cur.lastDeployedAt(), cur.lastStoppedAt(), cur.nodeMapping(), cur.lastBulletinId());
+            if(mappingProjections!=null)mappingProjections.persist(next);
+            return next;
+        });
     }
 
     // Compatibility for existing in-process callers; HTTP clients may send an optimistic timestamp.

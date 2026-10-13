@@ -27,6 +27,9 @@ public final class DslHasher {
     public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v31";
     private static final String HIVE_HDFS_COMPILER_REVISION = "hive-hdfs-record-chain-v1";
     private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-utf8-v2";
+    private static final String JAVA_MAPPING_COMPILER_REVISION = "java-record-engine-"
+            + com.linewell.dataelement.mapping.core.MappingEngine.VERSION + "-functions-"
+            + com.linewell.dataelement.mapping.core.FunctionRegistry.VERSION;
     private static final String FILE_TRANSFER_COMPILER_REVISION = "ftp-file-dataset-parser-v2";
 
     private static final ObjectMapper SORTED = new ObjectMapper()
@@ -59,6 +62,7 @@ public final class DslHasher {
         String effectiveRevision = compilerRevision == null ? "" : compilerRevision;
         if (usesHiveHdfsSink(dsl)) effectiveRevision += "|" + HIVE_HDFS_COMPILER_REVISION;
         if (usesFieldMapping(dsl)) effectiveRevision += "|" + FIELD_MAPPING_COMPILER_REVISION;
+        if(usesJavaMapping(dsl))effectiveRevision+="|"+JAVA_MAPPING_COMPILER_REVISION;
         if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(node -> node != null
                 && ("source.ftp".equals(node.manifestKey()) || "source.sftp".equals(node.manifestKey())))) {
             effectiveRevision += "|" + FILE_TRANSFER_COMPILER_REVISION;
@@ -79,6 +83,14 @@ public final class DslHasher {
             String mode = configured == null ? "" : configured.toString().trim().toUpperCase(Locale.ROOT);
             if (mode.isEmpty() || "LINEWELL_HDFS".equals(mode) || "LINEWELL".equals(mode)
                     || "HDFS_BATCH".equals(mode) || "BATCH".equals(mode)) return true;
+        }
+        return false;
+    }
+
+    public static boolean usesJavaMapping(Pipeline.Dsl dsl){
+        if(dsl==null||dsl.nodes()==null)return false;
+        for(var node:dsl.nodes())if(node!=null&&node.config()!=null&&node.config().containsKey("mappings")){
+            try{Object raw=node.config().get("mappings");var spec=raw instanceof String text?SORTED.readTree(text):SORTED.valueToTree(raw);if(spec.path("schemaVersion").asText().equals("2.0")||spec.path("executionEngine").asText().equals("JAVA_RECORD"))return true;}catch(Exception ignored){}
         }
         return false;
     }

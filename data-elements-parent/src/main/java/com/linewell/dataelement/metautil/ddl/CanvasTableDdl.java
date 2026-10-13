@@ -7,9 +7,6 @@ import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.expr.SQLPropertyExpr;
 import com.alibaba.druid.sql.ast.statement.SQLCommentStatement;
 import com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement;
-import com.alibaba.druid.sql.ast.statement.SQLColumnUniqueKey;
-import com.alibaba.druid.sql.ast.statement.SQLColumnPrimaryKey;
-import com.alibaba.druid.sql.ast.statement.SQLUniqueConstraint;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import java.sql.SQLException;
@@ -17,8 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.HashSet;
-import java.util.Set;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
 
@@ -42,7 +37,6 @@ public class CanvasTableDdl {
             throw new IllegalArgumentException("DDL 中的数据库或 Schema 与所选目标库不一致：" + scope);
         }
         List<String> table = List.of(scope, unquote(name.getLast()));
-        validateLobKeys(create, config.getDatabaseType());
         for (int index = 1; index < statements.size(); index++) {
             if (!(statements.get(index) instanceof SQLCommentStatement comment)) {
                 throw new IllegalArgumentException("一次只能创建一张表，不能包含其他建表、修改、删除或数据写入语句");
@@ -79,27 +73,6 @@ public class CanvasTableDdl {
         return nameMatches && (schema == null || schema.isBlank() || schema.equalsIgnoreCase(parsed.get("schemaName").toString()));
     }
 
-    private static void validateLobKeys(SQLCreateTableStatement create, DatabaseType databaseType) {
-        if (!Set.of(DatabaseType.ORACLE, DatabaseType.OCEANBASE_ORACLE, DatabaseType.DAMENG).contains(databaseType)) return;
-        Set<String> keys = new HashSet<>();
-        create.getPrimaryKeyNames().forEach(name -> keys.add(SQLUtils.normalize(name).toLowerCase(Locale.ROOT)));
-        for (var element : create.getTableElementList()) {
-            if (element instanceof SQLUniqueConstraint constraint) {
-                constraint.getColumns().forEach(column -> keys.add(SQLUtils.normalize(column.getExpr().toString()).toLowerCase(Locale.ROOT)));
-            }
-        }
-        for (var column : create.getColumnDefinitions()) {
-            String name = SQLUtils.normalize(column.getName().toString());
-            String type = column.getDataType().getName().toUpperCase(Locale.ROOT);
-            boolean inlineKey = column.getConstraints().stream().anyMatch(constraint ->
-                    constraint instanceof SQLColumnUniqueKey || constraint instanceof SQLColumnPrimaryKey);
-            if (Set.of("CLOB", "NCLOB", "BLOB", "LONG", "TEXT", "STRING").contains(type)
-                    && (keys.contains(name.toLowerCase(Locale.ROOT)) || inlineKey)) {
-                throw new IllegalArgumentException("字段 " + name + " 的长文本/LOB类型不能作为目标库主键或唯一键；请明确设置有界字符类型和长度，或取消该约束");
-            }
-        }
-    }
-
     public boolean alreadyExists(Throwable failure) {
         for (Throwable e = failure; e != null; e = e.getCause()) {
             if (e instanceof SQLException sql && (sql.getErrorCode() == 955 || sql.getErrorCode() == 1050
@@ -122,20 +95,7 @@ public class CanvasTableDdl {
         throw new IllegalArgumentException("无法识别 DDL 表名");
     }
 
-    private static String scope(DataSourceConfig config) {
-        if (config.getSchema() != null && !config.getSchema().isBlank()) return unquote(config.getSchema());
-        return switch (config.getDatabaseType()) {
-            case ORACLE, OCEANBASE_ORACLE -> required(config.getUsername()).split("[@#]", 2)[0].toUpperCase(Locale.ROOT);
-            case POSTGRESQL, GAUSSDB, KINGBASE, HIGHGO, VERTICA -> "public";
-            case SQLSERVER -> "dbo";
-            default -> required(config.getDatabase());
-        };
-    }
-
-    private static String required(String value) {
-        if (value == null || value.isBlank()) throw new IllegalArgumentException("目标数据源缺少数据库或 Schema 配置");
-        return unquote(value);
-    }
+    private static String scope(DataSourceConfig config) { return DdlDialect.scope(config); }
 
     private static boolean isQuoted(String value) {
         return value.startsWith("\"") || value.startsWith("`") || value.startsWith("[");
@@ -147,15 +107,5 @@ public class CanvasTableDdl {
         return value.substring(1, value.length() - 1).replace("" + quote + quote, "" + quote);
     }
 
-    private static DbType dialect(DatabaseType type) {
-        return switch (type) {
-            case ORACLE, OCEANBASE_ORACLE, DAMENG -> DbType.oracle;
-            case POSTGRESQL, GAUSSDB, KINGBASE, HIGHGO, VERTICA -> DbType.postgresql;
-            case HIVE -> DbType.hive;
-            case SQLSERVER -> DbType.sqlserver;
-            case DB2 -> DbType.db2;
-            case CLICKHOUSE -> DbType.clickhouse;
-            default -> DbType.mysql;
-        };
-    }
+    private static DbType dialect(DatabaseType type) { return DdlDialect.parser(type); }
 }

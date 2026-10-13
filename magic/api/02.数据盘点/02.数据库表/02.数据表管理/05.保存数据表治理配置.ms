@@ -34,6 +34,7 @@ import log
 import cn.hutool.core.util.IdUtil
 import metadataAsset
 import tenantRuntime
+import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService
 var tenantId = tenantRuntime.id()
 
 /*
@@ -88,7 +89,7 @@ var saveColumns = (tableId, items) => {
         return 0
     }
     var existingRows = db.table('db_table_column_t').where()
-        .eq('table_id', tableId).eq('is_del', 0).select()
+        .eq('tenant_id', tenantId).eq('table_id', tableId).eq('is_del', 0).select()
     var existingByName = {}
     for (existing in (existingRows == null ? [] : existingRows)) {
         var existingName = textOf(rowValue(existing, ['columnName', 'column_name']))
@@ -143,6 +144,27 @@ var saveColumns = (tableId, items) => {
     }
     return newRows.size()
 }
+// 一次读取本表已保存字段；逐项按 ID/物理名称解析，不逐字段查询，也不接受其它表或租户的 ID。
+var registeredColumnItems = (tableId, items) => {
+    var rows = db.table('db_table_column_t').where()
+        .eq('tenant_id', tenantId).eq('table_id', tableId).eq('is_del', 0).select()
+    var byId = {}
+    var byName = {}
+    for (row in rows) {
+        byId[textOf(rowValue(row, ['tid']))] = row
+        var name = textOf(rowValue(row, ['columnName', 'column_name']))
+        if (!blank(name)) { byName[name.trim().toLowerCase()] = row }
+    }
+    var result = []
+    for (item in items == null ? [] : items) {
+        var id = textOf(itemValue(item, ['sourceTableColumnId', 'tableColumnId', 'tid', 'id']))
+        var column = blank(id) ? null : byId[id]
+        var name = textOf(itemValue(item, ['columnName', 'colEn']))
+        if (column == null && !blank(name)) { column = byName[name.trim().toLowerCase()] }
+        if (column != null) { result.add({ item: item, column: column }) }
+    }
+    return result
+}
 // 解析请求体并为可选参数设置默认值。
 var tableId = body == null ? null : (body.tableId == null ? body.tid : body.tableId)
 if (blank(tableId)) {
@@ -150,13 +172,16 @@ if (blank(tableId)) {
     exit 400, 'tableId 不能为空'
 }
 // 从 MySQL 业务表读取当前有效数据。
-var table = db.table('db_table_t').where().eq('tid', tableId).eq('is_del', 0).selectOne()
+var table = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', tableId).eq('is_del', 0).selectOne()
 if (table == null) {
     // 参数或业务状态不满足要求时立即终止请求。
     exit 404, '数据表不存在或已删除'
 }
 var props = body.propList == null ? {} : body.propList
 var governance = body.fieldGovernanceConfig == null ? props.fieldGovernanceConfig : body.fieldGovernanceConfig
+// 文件定位由登记采集保存；治理编辑保留它，不能由客户端更换文件或带入连接凭据。
+governance = StructuredSourceProbeService.preserveFtpFileSnapshot(
+    rowValue(table, ['fieldGovernanceConfig', 'field_governance_config']), governance)
 var dictionaryCategories = props.dictionaryCategories
 var dictionaryProfiles = props.dictionaryProfiles
 var dictionaryProfile = props.dictionaryProfile
@@ -209,25 +234,10 @@ if (items == null && governance instanceof Map) {
     items = governance.get('fields')
 }
 saveColumns(tableId, items)
-for (item in items == null ? [] : items) {
-    var columnId = itemValue(item, ['sourceTableColumnId', 'tableColumnId', 'tid', 'id'])
-    var column = null
-    if (!blank(columnId)) {
-        // 从 MySQL 业务表读取当前有效数据。
-        column = db.table('db_table_column_t').where()
-            .eq('tid', columnId).eq('table_id', tableId).eq('is_del', 0).selectOne()
-    }
-    if (column == null && !blank(itemValue(item, ['columnName', 'colEn']))) {
-        // 从 MySQL 业务表读取当前有效数据。
-        column = db.table('db_table_column_t').where()
-            .eq('table_id', tableId)
-            .eq('column_name', itemValue(item, ['columnName', 'colEn']))
-            .eq('is_del', 0)
-            .selectOne()
-    }
-    if (column == null) {
-        continue
-    }
+var registeredItems = registeredColumnItems(tableId, items)
+for (registeredItem in registeredItems) {
+    var item = registeredItem.item
+    var column = registeredItem.column
     // 将校验后的业务数据写入 MySQL 主表。
     db.table('db_table_column_t').primary('tid').update({
         tid: rowValue(column, ['tid']),

@@ -88,6 +88,9 @@
 	</dependencyManagement>
 
 	<dependencies>
+		<dependency>
+			<groupId>com.google.re2j</groupId><artifactId>re2j</artifactId><version>1.8</version>
+		</dependency>
 		<!-- IDAAS protocol infrastructure. Business configuration and account decisions remain in Magic API. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

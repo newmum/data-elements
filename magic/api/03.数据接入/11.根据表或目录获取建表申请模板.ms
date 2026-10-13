@@ -13,34 +13,32 @@
   "method": "POST",
   "parameters": [],
   "options": [],
-  "requestBody": "{\n  \"tid\": \"015c09572d174e89b9bea9c765ef72df\",\n  \"refreshPhysicalColumns\": false\n}",
+  "requestBody": "{\n  \"tid\": \"015c09572d174e89b9bea9c765ef72df\"\n}",
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"propList\": {\n    \"sourceTableId\": \"015c09572d174e89b9bea9c765ef72df\",\n    \"dbId\": \"648b94f1a6a745a3a36149a8788f36f3\",\n    \"nodeId\": \"数据中心节点ID\",\n    \"dbType\": \"mysql\",\n    \"tableNameCn\": \"公安重新探查新增线索表\",\n    \"tableName\": \"police_reexplore_new_case_clue\"\n  },\n  \"tableItems\": [\n    {\n      \"columnName\": \"clue_id\",\n      \"columnComment\": \"线索编号\",\n      \"dataType\": \"varchar\",\n      \"length\": 32,\n      \"primaryKey\": 1,\n      \"nullable\": 0\n    }\n  ]\n}",
-  "description": "根据当前租户可见的来源数据表或已登记目录读取物化建表模板（POST /ods/getTableTempalte）。普通读取只使用已登记字段快照，不连接来源物理库；快照缺失或不完整时明确返回错误，须重新采集来源表字段。仅受控调用显式传入 refreshPhysicalColumns=true 才探查来源物理字段。治理目录属性和 ODS 分域目标数据源按批量读取，并按角色数据范围选择默认目标库。用于数据接入-创建任务前的物化建表抽屉；tid 为来源表或目录 ID。",
+  "description": "根据当前租户可见的来源数据表或已登记目录读取物化建表模板（POST /ods/getTableTempalte）。普通读取只使用已登记字段快照，不连接来源物理库；缺失来源类型或不完整字段以中性类型及可编辑提示返回，不因来源不具备SQL方言而阻断模板。所有字段仅从 db_table_column_t 的登记快照读取，不探查来源库或文件。治理目录属性和 ODS 分域目标数据源按批量读取，并按角色数据范围选择默认目标库。用于数据接入-创建任务前的物化建表抽屉；tid 为来源表或目录 ID。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：11.根据表或目录获取建表申请模板
 // 路由：POST /ods/getTableTempalte
-// 业务说明：普通读取只使用当前租户已登记来源字段快照；快照缺失或不完整时明确报错。
-// 仅显式 refreshPhysicalColumns=true 且来源表、来源库通过租户及角色校验后才探查物理字段。
+// 业务说明：普通读取只使用当前租户已登记来源字段快照；来源方言和不完整字段以可编辑提示返回。
+// 字段只从 db_table_column_t 读取；兼容旧调用参数时也不探查来源库或文件。
 // 历史治理目录和 ODS 默认目标库批量读取，默认目标只选当前角色可见的数据源。
 /*
  * 物化建表模板读取接口。
  * - 入参 tid 可以是 db_table_t.tid，也可以是已登记目录 ID；
  * - 普通打开不连接来源物理库，字段以登记快照为准；
- * - 显式 refreshPhysicalColumns=true 为受控刷新，失败时明确返回错误；
+ * - 本接口不采集来源字段；字段变更统一在数据源登记流程确认；
  * - 目标数据源默认使用 dataSourceType 字典下贴源层 ODS 分域已关联的数据源。
  */
-import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import tenantRuntime
+import portableDdl
 import dataScope
-import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService as structuredFileProbe
-import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
-import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
+import com.linewell.dataelement.metautil.ddl.PortableColumnType
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -68,7 +66,6 @@ var isPrimaryKey = (value) => {
 }
 
 var inputId = text(body?.tid).trim()
-var refreshPhysicalColumns = body?.refreshPhysicalColumns == true
 if (blank(inputId)) {
     exit 400, 'tid不能为空'
 }
@@ -390,10 +387,9 @@ var appendDictionaryTranslationColumns = (items, columns, config) => {
 }
 
 var knownTypeCode = (value) => {
-    var code = lower(value).trim()
-    code = code.replaceAll('\\s+', ' ').replaceAll(' (unsigned|zerofill)$', '').trim()
-    var modifier = code.indexOf('(')
-    if (modifier > 0) { code = code.substring(0, modifier).trim() }
+    // Share native/legacy label normalization with the DDL model. The registered
+    // raw type remains on each item; clearly typed strings keep their real length.
+    var code = lower(PortableColumnType.base(text(value)))
     var generic = code.indexOf('<')
     if (generic > 0) { code = code.substring(0, generic).trim() }
     if (['char', 'nchar', 'varchar', 'varchar2', 'nvarchar', 'nvarchar2', 'character',
@@ -413,44 +409,7 @@ var knownTypeCode = (value) => {
     return ''
 }
 var mapDataType = (sourceType, columnType, lengthValue, sourceDbType) => {
-    var t = knownTypeCode(sourceType)
-    if (blank(t)) { t = knownTypeCode(columnType) }
-    if (['text', 'tinytext', 'mediumtext', 'longtext', 'clob', 'nclob', 'longvarchar', 'long nvarchar'].contains(t)
-        || (t == 'long' && ['oracle', 'oceanbaseoracle', 'dameng', 'dm'].contains(sourceDbType))) {
-        return 'text'
-    }
-    if (t.indexOf('char') >= 0 || ['bpchar', 'string', 'keyword', 'uuid', 'uniqueidentifier', 'rowid', 'urowid'].contains(t)) {
-        return 'varchar'
-    }
-    if (['number', 'numeric', 'decimal', 'dec', 'float'].contains(t)) {
-        return 'decimal'
-    }
-    if (['double', 'double precision', 'binary_double', 'float8'].contains(t)) { return 'double' }
-    if (['real', 'binary_float', 'float4'].contains(t)) { return 'float' }
-    if (['bigint', 'long', 'int8', 'bigserial'].contains(t)) {
-        return 'bigint'
-    }
-    if (['int', 'integer', 'mediumint', 'int4', 'serial', 'smallint', 'tinyint', 'int2', 'smallserial'].contains(t)) {
-        return 'int'
-    }
-    if (t == 'date') {
-        return 'date'
-    }
-    if (t == 'datetime' || t == 'timestamp' || t.indexOf('time') >= 0) {
-        return 'datetime'
-    }
-    if (t == 'boolean' || t == 'bool') {
-        return 'tinyint'
-    }
-    if (['binary', 'varbinary', 'raw'].contains(t) && toInt(lengthValue, 0) > 0) { return 'varbinary' }
-    if (t.indexOf('blob') >= 0 || ['binary', 'varbinary', 'raw', 'long raw', 'bytea', 'image', 'long varbinary'].contains(t)) {
-        return 'blob'
-    }
-    if (t == 'json' || t == 'jsonb' || t == 'object' || t == 'array') {
-        return 'json'
-    }
-    // A new native type must be reviewed, never silently reduced to varchar(255).
-    return ''
+    return portableDdl.logicalType(blank(columnType) ? sourceType : columnType, sourceDbType)
 }
 var typeArgument = (value, position) => {
     var code = text(value).trim()
@@ -458,69 +417,17 @@ var typeArgument = (value, position) => {
     var end = code.indexOf(')')
     if (start < 0 || end <= start) { return 0 }
     var args = code.substring(start + 1, end).split(',')
-    return args.size() > position ? toInt(text(args[position]).trim(), 0) : 0
+    if (args.size() <= position) { return 0 }
+    var argument = text(args[position]).trim()
+    // ENUM/SET literals, NUMBER(*, scale) and complex type arguments are not
+    // lengths. Keep their native type for editing instead of aborting the snapshot.
+    if (!argument.matches('[0-9]{1,10}')) { return 0 }
+    try { return toInt(argument, 0) } catch (invalidArgument) { return 0 }
 }
 var displayOnlyType = (value) => blank(value) || [
     '字符串', '字符', '文本', '长文本', '数字', '数值', '整数', '长整数', '小数', '浮点数',
     '日期', '时间', '日期时间', '布尔', '二进制', '对象', '数组', 'user-defined', 'user defined', 'other', 'unknown'
 ].contains(lower(value).trim())
-// Physical probing is reserved for an explicit refresh. Ordinary template
-// reads use only the registered snapshot, and reject incomplete old snapshots
-// rather than silently mapping display labels such as “字符串” to varchar(255).
-// Connection details are resolved from managed pool_cfg only after auth;
-// db_datasource_t 只保留 jdbc_url 等登记字段，不能假定 host/port 是直接列。
-var dataSourceConfigOf = (source, connection) => {
-    var config = new DataSourceConfig()
-    var typeCode = first(source, ['dbType', 'db_type', 'databaseType', 'database_type'])
-    try {
-        config.setDatabaseType(blank(typeCode) ? DatabaseType.MYSQL : DatabaseType.fromCode(lower(typeCode)))
-    } catch (e) {
-        config.setDatabaseType(DatabaseType.MYSQL)
-    }
-    var host = first(connection, ['host', 'dbMetaIp']) || first(source, ['host', 'dbIp', 'db_ip'])
-    var port = first(connection, ['port', 'dbMetaPort']) || first(source, ['port', 'dbPort', 'db_port'])
-    var databaseName = first(connection, ['database', 'dbName', 'dbMetaDbName']) || first(source, ['database', 'dbName', 'db_name', 'dbMetaDbName'])
-    var username = first(connection, ['username', 'dbMetaUser']) || first(source, ['username', 'dbUser', 'db_user', 'dbMetaUser'])
-    var password = first(connection, ['password', 'dbMetaPassword']) || first(source, ['password', 'dbPassword', 'db_password', 'dbMetaPassword'])
-    config.setHost(blank(host) ? '' : text(host))
-    config.setPort(blank(port) ? config.getDatabaseType().getDefaultPort() : toInt(port, config.getDatabaseType().getDefaultPort()))
-    config.setDatabase(text(databaseName))
-    config.setUsername(text(username))
-    config.setPassword(text(password))
-    // 复用测试连接时登记的 JDBC URL，兼容 Oracle Service Name、达梦 Schema 等连接形式。
-    config.setJdbcUrl(first(connection, ['jdbcURL', 'jdbcUrl']) || first(source, ['jdbcURL', 'jdbcUrl', 'jdbc_url']))
-    config.setSchema(first(connection, ['schema', 'defaultSchema', 'currentSchema']) || first(source, ['schema', 'defaultSchema', 'default_schema', 'currentSchema', 'schemaName', 'schema_name']))
-    return config
-}
-var sourcePhysicalColumns = (source, tableName) => {
-    var result = []
-    if (source == null || blank(tableName)) {
-        return result
-    }
-    // Only an explicitly requested refresh may contact the external source.
-    // Resolve managed credentials after the source's tenant and role checks.
-    var connection = datasourceConnectionConfig('read', first(source, ['tid']), null, false)
-    var physicalColumns = metadataExplorerService.getColumns(dataSourceConfigOf(source, connection), tableName)
-    for (physical in (physicalColumns == null ? [] : physicalColumns)) {
-        if (!blank(physical.columnName)) {
-            // MetadataExplorer returns Java ColumnInfo; convert it to the Map
-            // contract consumed by the registered-column merge below.
-            result.add({
-                columnName: physical.columnName,
-                columnComment: physical.columnComment,
-                dataType: physical.dataType,
-                columnType: physical.columnType,
-                length: physical.length,
-                precision: physical.precision,
-                scale: physical.scale,
-                nullable: physical.nullable,
-                primaryKey: physical.primaryKey,
-                ordinalPosition: physical.ordinalPosition
-            })
-        }
-    }
-    return result
-}
 var normalizeLength = (targetType, lengthValue, precisionValue) => {
     var lengthNum = toInt(lengthValue, 0)
     var precisionNum = toInt(precisionValue, 0)
@@ -660,14 +567,18 @@ for (registeredField in (registeredFields == null ? [] : registeredFields)) {
 }
 
 var sourceTableName = text(first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])).trim()
-var sourceFileConfig = null
-var sourceTypeCode = lower(first(sourceDatasource, ['dbType', 'db_type']))
-if (['ftp', 'sftp'].contains(sourceTypeCode) && body?.resolveSourceFile == true) {
-    try {
-        sourceFileConfig = structuredFileProbe.resolveFtpFileSource(sourcePoolCfg, sourceTableName, body?.sourceFileConfig)
-    } catch (fileError) {
-        exit 409, '来源文件解析未通过，请检查文件是否存在、文件编码及分隔符，必要时重新采集字段'
-    }
+var sourceTypeCode = lower(first(sourceDatasource, ['dbType', 'db_type', 'databaseType', 'database_type'])).trim()
+if (blank(sourceTypeCode)) {
+    sourceTypeCode = lower(first(sourcePoolCfg, ['dbType', 'db_type', 'databaseType', 'database_type', 'dataSourceType'])).trim()
+}
+// The source connector label is optional context for a registered field snapshot.
+// Resolve once outside the field loop, keeping protocol validation at real I/O.
+var sourceDialectCode = null
+try {
+    var sourceDialect = blank(sourceTypeCode) ? null : DatabaseType.fromCode(sourceTypeCode)
+    if (sourceDialect != null) { sourceDialectCode = sourceDialect.code }
+} catch (unknownSourceDialect) {
+    sourceDialectCode = null
 }
 var columns = db.table('db_table_column_t').where()
     .eq('tenant_id', tenantId)
@@ -675,51 +586,26 @@ var columns = db.table('db_table_column_t').where()
     .eq('is_del', 0)
     .orderBy('ordinal_position', 'asc')
     .select()
-if (!refreshPhysicalColumns && (columns == null || columns.size() == 0)) {
-    exit 409, '来源表缺少字段快照，请先重新采集来源表字段'
-}
-var physicalColumns = []
-if (refreshPhysicalColumns) {
-    try {
-        physicalColumns = sourceFileConfig == null ? sourcePhysicalColumns(sourceDatasource, sourceTableName) : sourceFileConfig.columns
-    } catch (e) {
-        // Do not expose JDBC URLs, credentials or vendor connection details.
-        exit 502, '读取来源物理字段失败，请检查数据源连接并重试'
-    }
-    if (physicalColumns == null || physicalColumns.size() == 0) {
-        exit 409, '来源物理表未返回字段，请核对登记的表名与数据源'
-    }
-}
-var physicalColumnsByName = {}
-for (physical in (physicalColumns == null ? [] : physicalColumns)) {
-    if (!blank(physical.columnName)) {
-        physicalColumnsByName[lower(physical.columnName)] = physical
-    }
-}
-
-// An explicit refresh can recover historical table-only registrations.
-if ((columns == null || columns.size() == 0) && physicalColumns != null && physicalColumns.size() > 0) {
-    columns = physicalColumns
-}
-
 var tableItems = []
 var snapshotIssues = []
+if (sourceDialectCode == null) {
+    snapshotIssues.add(blank(sourceTypeCode)
+        ? '来源类型尚未登记，已按中性字段模型返回快照；请确认日期、时间戳等来源特定语义'
+        : '来源连接不使用已识别的SQL方言，已按中性字段模型返回快照；请确认来源特定类型语义')
+}
+if (columns == null || columns.size() == 0) {
+    snapshotIssues.add('来源表缺少字段快照，请在数据源登记中保存字段后重试')
+}
 var snapshotIssueCount = 0
 var incompleteSnapshot = false
 for (col in (columns == null ? [] : columns)) {
     var columnName = first(col, ['columnName', 'column_name'])
-    var physicalColumn = physicalColumnsByName[lower(columnName)]
-    // 优先采用实际源库类型和长度；未探查到时保持历史登记快照的兼容行为。
-    var sourceType = physicalColumn == null || blank(physicalColumn.dataType)
-        ? first(col, ['dataType', 'data_type']) : physicalColumn.dataType
-    var columnType = physicalColumn == null || blank(physicalColumn.columnType)
-        ? first(col, ['columnType', 'column_type']) : physicalColumn.columnType
-    var sourceLength = physicalColumn == null || toInt(physicalColumn.length, 0) <= 0
-        ? first(col, ['length']) : physicalColumn.length
-    var sourcePrecision = physicalColumn == null || toInt(physicalColumn.precision, 0) <= 0
-        ? first(col, ['precisionLength', 'precision_length']) : physicalColumn.precision
-    var sourceScale = physicalColumn == null || toInt(physicalColumn.scale, 0) < 0
-        ? first(col, ['scale']) : physicalColumn.scale
+    // 物化仅转换登记快照；来源字段变化由登记流程重新确认，不在这里采集。
+    var sourceType = first(col, ['dataType', 'data_type'])
+    var columnType = first(col, ['columnType', 'column_type'])
+    var sourceLength = first(col, ['length'])
+    var sourcePrecision = first(col, ['precisionLength', 'precision_length'])
+    var sourceScale = first(col, ['scale'])
     var typeCode = knownTypeCode(sourceType)
     if (blank(typeCode)) { typeCode = knownTypeCode(columnType) }
     if (blank(columnName) || blank(typeCode)) {
@@ -732,7 +618,6 @@ for (col in (columns == null ? [] : columns)) {
                 + ', columnType=' + (blank(columnType) ? '空' : text(columnType)) + ']：'
                 + (missing ? '快照缺少字段名/原生类型或仅保存展示名称' : '原生类型暂未支持自动物化映射'))
         }
-        continue
     }
     // Snapshot lengths can be absent while columnType still carries valid arguments.
     if (toInt(sourceLength, 0) <= 0) { sourceLength = typeArgument(columnType, 0) }
@@ -748,7 +633,7 @@ for (col in (columns == null ? [] : columns)) {
             sourceScale = typeArgument(blank(columnType) ? sourceType : columnType, 1)
         }
     }
-    var targetType = mapDataType(sourceType, columnType, sourceLength, sourceTypeCode)
+    var targetType = mapDataType(sourceType, columnType, sourceLength, sourceDialectCode)
     var registeredField = registeredFormats[text(columnName).trim().toLowerCase()]
     var explicitlyCleared = registeredField != null && isPrimaryKey(registeredField.standardFieldExplicitlyCleared)
     var standardField = explicitlyCleared ? '' : text(first(col, ['dataStandardId', 'data_standard_id'])).trim().toUpperCase()
@@ -769,18 +654,15 @@ for (col in (columns == null ? [] : columns)) {
         scale: toInt(sourceScale, 0),
         primaryKey: isPrimaryKey(first(col, ['primaryKey', 'primary_key', 'isPrimaryKey', 'is_primary_key'])) || registeredPrimaryKeys[text(columnName).trim().toLowerCase()] == true ? 1 : 0,
         nullable: normalizeNullable(first(col, ['nullable'])),
-        defaultValue: first(col, ['defaultValue', 'default_value']),
+        defaultValue: null,
         ordinalPosition: toInt(first(col, ['ordinalPosition', 'ordinal_position']), 0),
         autoIncrement: toInt(first(col, ['autoIncrement', 'auto_increment']), 0),
         indexed: toInt(first(col, ['indexed']), 0),
         isUnique: toInt(first(col, ['isUnique', 'is_unique']), 0)
     })
 }
-if (snapshotIssueCount > 0) {
-    var summary = '来源字段检查未通过（共 ' + snapshotIssueCount + ' 项，最多列出 10 项）：' + snapshotIssues.join('；')
-    if (incompleteSnapshot) { exit 409, summary + '。快照缺失的字段请重新采集；暂未支持的原生类型需要补充映射，不会猜测为字符串。' }
-    exit 422, summary + '。请补充对应类型映射；重复采集不会改变原生类型。'
-}
+// 旧快照或新类型仍返回可编辑字段，不阻断抽屉；目标类型由统一转换器处理。
+var templateWarnings = snapshotIssues
 tableItems = appendDictionaryTranslationColumns(tableItems, columns, sourceGovernanceConfig)
 
 // 目标库以数据组织字典为源：dataSourceType -> ODS -> 分域（例如原始库）；
@@ -887,16 +769,13 @@ for (item in tableItems) {
 tableItems = appendOdsSystemColumns(tableItems, dbType)
 
 return {
+    warnings: templateWarnings,
     propList: {
         sourceTableId: sourceTableId,
         catalogId: catalogId,
         sourceDatasourceName: sourceDatasourceName,
         sourceDbType: sourceTypeCode,
-        sourceFileConfig: sourceFileConfig == null ? null : {
-            fileName: sourceFileConfig.fileName, remotePath: sourceFileConfig.remotePath,
-            format: sourceFileConfig.format, charset: sourceFileConfig.charset, delimiter: sourceFileConfig.delimiter,
-            excelSheetName: sourceFileConfig.excelSheetName, jsonRecordPath: sourceFileConfig.jsonRecordPath
-        },
+        sourceFileConfig: null,
         sourceAccessMode: sourceAccessMode,
         sourceAccessModeCode: sourceAccessModeCode,
         sourceNetworkCode: sourceNetworkCode,

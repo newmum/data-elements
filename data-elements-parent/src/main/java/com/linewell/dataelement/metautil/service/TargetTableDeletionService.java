@@ -1,6 +1,8 @@
 package com.linewell.dataelement.metautil.service;
 
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
+import com.linewell.dataelement.metautil.ddl.DdlDialect;
+import java.sql.SQLException;
 import com.linewell.dataelement.metautil.model.dto.TableInfo;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
@@ -30,7 +32,6 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class TargetTableDeletionService {
 
-    private static final String IDENTIFIER = "[A-Za-z_][A-Za-z0-9_$#]*";
     private static final String HIVE_IDENTIFIER = "[A-Za-z_][A-Za-z0-9_]*";
 
     private final MetadataExplorerService metadataExplorerService;
@@ -66,6 +67,8 @@ public class TargetTableDeletionService {
         List<Boolean> normalized = new ArrayList<>(requestedNames.size());
         for (String requestedName : requestedNames) {
             Name name = parseName(requestedName);
+            if (name.catalog() != null && (config.getDatabaseType() != DatabaseType.SQLSERVER
+                    || !name.catalog().equalsIgnoreCase(config.getDatabase()))) throw new IllegalArgumentException("目标表数据库与所选连接不一致");
             boolean historical = name.scope() != null && !name.scope().equalsIgnoreCase(scope);
             parsed.add(name);
             normalized.add(historical);
@@ -84,6 +87,7 @@ public class TargetTableDeletionService {
             Name name = parsed.get(index);
             List<TableInfo> matches = physicalByName.getOrDefault(
                     name.table().toUpperCase(Locale.ROOT), List.of());
+            if (name.quoted()) matches = matches.stream().filter(table -> table.getTableName().equals(name.table())).toList();
             if (matches.size() > 1) {
                 throw new IllegalStateException("目标数据源中存在同名表，无法确认唯一物理表：" + name.table());
             }
@@ -107,16 +111,17 @@ public class TargetTableDeletionService {
      * caller's task/pipeline metadata untouched.
      */
     public Map<String, Object> drop(DataSourceConfig source, String requestedTableName) {
-        ResolvedTarget before = resolve(source, requestedTableName);
-        if (!before.exists()) {
-            return result(before, false, false);
+        if (source != null && source.getDatabaseType() == DatabaseType.HIVE) {
+            Map<String,Object> retained = new LinkedHashMap<>();
+            retained.put("physicalExists", null); retained.put("physicalDeleted", false);
+            retained.put("physicalRetained", true); retained.put("databaseType", "hive");
+            retained.put("targetTableName", parseName(requestedTableName).table());
+            retained.put("targetScope", source.getDatabase());
+            return retained;
         }
-
+        ResolvedTarget before = resolve(source, requestedTableName);
         DatabaseType type = before.config().getDatabaseType();
-        String ddl = type == DatabaseType.HIVE
-                ? "DROP TABLE IF EXISTS " + quoteIdentifier(type, before.scope()) + "."
-                        + quoteIdentifier(type, before.tableName())
-                : "DROP TABLE " + quoteIdentifier(type, before.tableName());
+        String ddl = "DROP TABLE " + quoteIdentifier(type, before.scope()) + "." + quoteIdentifier(type, before.tableName());
         try {
             if (serverManagedHive(before.config())) {
                 huaweiMrsHive.execDDLSqlInDatabase(before.scope(), ddl);
@@ -127,7 +132,10 @@ public class TargetTableDeletionService {
             if (isMissingPhysicalObject(error)) {
                 log.info("Target table disappeared before deletion: type={}, scope={}, table={}",
                         before.config().getDatabaseType(), before.scope(), before.tableName());
-                return result(before, false, false);
+                // Some drivers use the same code for missing table and insufficient privileges.
+                // Confirm absence instead of treating the vendor error alone as success.
+                ResolvedTarget disappeared = resolve(before.config(), requestedTableName);
+                if (!disappeared.exists()) return result(before, false, false);
             }
             throw new IllegalStateException("删除目标物理表失败，已保留接入流程和元数据："
                     + safeMessage(error), error);
@@ -140,7 +148,7 @@ public class TargetTableDeletionService {
         }
         log.info("Target table dropped and verified: type={}, scope={}, table={}",
                 before.config().getDatabaseType(), before.scope(), before.tableName());
-        return result(before, true, true);
+        return result(before, before.exists(), true);
     }
 
     private Map<String, Object> result(ResolvedTarget target, boolean existed, boolean deleted) {
@@ -157,6 +165,10 @@ public class TargetTableDeletionService {
         DataSourceConfig config = scopedCopy(original);
         Name requested = parseName(requestedTableName);
         String scope = configuredScope(config);
+        if (requested.catalog() != null && (config.getDatabaseType() != DatabaseType.SQLSERVER
+                || !requested.catalog().equalsIgnoreCase(config.getDatabase()))) {
+            throw new IllegalArgumentException("目标表数据库与所选连接不一致");
+        }
         if (requested.scope() != null && !requested.scope().equalsIgnoreCase(scope)) {
             throw new IllegalArgumentException("目标表所属数据库或 Schema 与所选目标数据源不一致：" + scope);
         }
@@ -164,7 +176,7 @@ public class TargetTableDeletionService {
         List<TableInfo> matches = new ArrayList<>();
         for (TableInfo candidate : physicalTables(config)) {
             if (candidate == null || candidate.getTableName() == null
-                    || !candidate.getTableName().equalsIgnoreCase(requested.table())) {
+                    || (requested.quoted() ? !candidate.getTableName().equals(requested.table()) : !candidate.getTableName().equalsIgnoreCase(requested.table()))) {
                 continue;
             }
             if (candidate.getSchemaName() != null && !candidate.getSchemaName().isBlank()
@@ -177,6 +189,13 @@ public class TargetTableDeletionService {
             throw new IllegalStateException("目标数据源中存在同名表，无法确认唯一物理表：" + requested.table());
         }
         String physicalName = matches.isEmpty() ? requested.table() : matches.getFirst().getTableName();
+        if (matches.isEmpty() && !requested.quoted()) {
+            physicalName = switch (DdlDialect.family(config.getDatabaseType())) {
+                case ORACLE, DB2 -> physicalName.toUpperCase(Locale.ROOT);
+                case POSTGRES -> physicalName.toLowerCase(Locale.ROOT);
+                default -> physicalName;
+            };
+        }
         return new ResolvedTarget(config, scope, physicalName, !matches.isEmpty());
     }
 
@@ -185,18 +204,17 @@ public class TargetTableDeletionService {
             throw new IllegalArgumentException("目标数据源缺少数据库类型，无法删除目标表");
         }
         boolean managedHive = serverManagedHive(source);
-        if (blank(source.getDatabase())
-                || (!managedHive && (blank(source.getHost()) || blank(source.getUsername())))) {
+        if (!managedHive && blank(source.getJdbcUrl()) && (blank(source.getDatabase()) || blank(source.getHost()) || blank(source.getUsername()))) {
             throw new IllegalArgumentException("目标数据源连接信息不完整，无法删除目标表");
         }
         DataSourceConfig copy = new DataSourceConfig();
         BeanUtils.copyProperties(source, copy);
         copy.setHost(blank(source.getHost()) ? null : source.getHost().trim());
-        copy.setDatabase(source.getDatabase().trim());
+        copy.setDatabase(blank(source.getDatabase()) ? null : source.getDatabase().trim());
         copy.setSchema(blank(source.getSchema()) ? null : source.getSchema().trim());
         copy.setUsername(blank(source.getUsername()) ? null : source.getUsername().trim());
         if (copy.getDatabaseType() == DatabaseType.HIVE) {
-            if (!copy.getDatabase().matches(HIVE_IDENTIFIER)) {
+            if (blank(copy.getDatabase()) || !copy.getDatabase().matches(HIVE_IDENTIFIER)) {
                 throw new IllegalArgumentException("Hive 目标数据库名不合法");
             }
             // Hive's scope is its registered database, not a JDBC schema/metadata database.
@@ -213,14 +231,14 @@ public class TargetTableDeletionService {
         // no schema is supplied.  Destructive work must instead be confined to the
         // connection owner's schema, matching the create-target-table contract.
         if (oracleLike(copy.getDatabaseType()) && blank(copy.getSchema())) {
-            copy.setSchema(ownerFromUsername(copy.getUsername()));
+            copy.setSchema(DdlDialect.scope(copy));
         }
         return copy;
     }
 
     private List<TableInfo> physicalTables(DataSourceConfig config) {
         if (!serverManagedHive(config)) {
-            return metadataExplorerService.getTables(config);
+            return metadataExplorerService.getTableDirectory(config);
         }
         try {
             List<TableInfo> tables = new ArrayList<>();
@@ -262,63 +280,19 @@ public class TargetTableDeletionService {
         return null;
     }
 
-    private String configuredScope(DataSourceConfig config) {
-        if (!blank(config.getSchema())) {
-            return unquote(config.getSchema());
-        }
-        if (oracleLike(config.getDatabaseType())) {
-            return ownerFromUsername(config.getUsername());
-        }
-        return config.getDatabase().trim();
-    }
+    private String configuredScope(DataSourceConfig config) { return DdlDialect.scope(config); }
 
     private Name parseName(String value) {
-        String raw = value == null ? "" : value.trim();
-        String[] parts = raw.split("\\.", -1);
-        if (parts.length < 1 || parts.length > 2 || !parts[parts.length - 1].matches(IDENTIFIER)
-                || (parts.length == 2 && !parts[0].matches(IDENTIFIER))) {
-            throw new IllegalArgumentException("目标表名不合法，只允许 Schema.表名或表名：" + raw);
-        }
-        return new Name(parts.length == 2 ? parts[0] : null, parts[parts.length - 1]);
+        var parts = DdlDialect.names(value);
+        return new Name(parts.size() > 1 ? parts.get(parts.size() - 2).value() : null,
+                parts.getLast().value(), parts.getLast().quoted(), parts.size() == 3 ? parts.getFirst().value() : null);
     }
 
-    private String quoteIdentifier(DatabaseType type, String identifier) {
-        if (!identifier.matches(type == DatabaseType.HIVE ? HIVE_IDENTIFIER : IDENTIFIER)) {
-            throw new IllegalArgumentException("目标物理表名不合法：" + identifier);
-        }
-        if (type == DatabaseType.MYSQL || type == DatabaseType.OCEANBASE_MYSQL || type == DatabaseType.HIVE) {
-            return "`" + identifier + "`";
-        }
-        if (oracleLike(type) || type == DatabaseType.POSTGRESQL || type == DatabaseType.GAUSSDB
-                || type == DatabaseType.KINGBASE || type == DatabaseType.HIGHGO || type == DatabaseType.VERTICA) {
-            return "\"" + identifier + "\"";
-        }
-        return identifier;
-    }
+    private String quoteIdentifier(DatabaseType type, String identifier) { return DdlDialect.quote(type, identifier); }
 
     private boolean oracleLike(DatabaseType type) {
         return type == DatabaseType.ORACLE || type == DatabaseType.OCEANBASE_ORACLE
                 || type == DatabaseType.DAMENG;
-    }
-
-    private String ownerFromUsername(String username) {
-        String owner = username == null ? "" : username.trim().split("[@#]", 2)[0];
-        if (!owner.matches(IDENTIFIER)) {
-            throw new IllegalArgumentException("Oracle 兼容目标库缺少合法 Schema 或用户名");
-        }
-        return owner.toUpperCase(Locale.ROOT);
-    }
-
-    private String unquote(String value) {
-        String plain = value == null ? "" : value.trim();
-        if ((plain.startsWith("\"") && plain.endsWith("\""))
-                || (plain.startsWith("`") && plain.endsWith("`"))) {
-            plain = plain.substring(1, plain.length() - 1);
-        }
-        if (!plain.matches(IDENTIFIER)) {
-            throw new IllegalArgumentException("目标数据源 Schema 不合法：" + value);
-        }
-        return plain;
     }
 
     private boolean blank(String value) {
@@ -327,7 +301,9 @@ public class TargetTableDeletionService {
 
     private String safeMessage(Throwable error) {
         String message = error.getMessage();
-        return blank(message) ? error.getClass().getSimpleName() : message;
+        return blank(message) ? error.getClass().getSimpleName() : message
+                .replaceAll("(?i)(password|pwd|token|secret)\\s*[=:]\\s*[^;&,\\s]+", "$1=***")
+                .replaceAll("jdbc:[^\\s]+", "[JDBC连接]");
     }
 
     /**
@@ -338,6 +314,9 @@ public class TargetTableDeletionService {
     private boolean isMissingPhysicalObject(Throwable error) {
         Throwable current = error;
         while (current != null) {
+            if (current instanceof SQLException sql && ("42P01".equals(sql.getSQLState()) || "42S02".equals(sql.getSQLState())
+                    || "42704".equals(sql.getSQLState()) || sql.getErrorCode() == 942 || sql.getErrorCode() == 1051
+                    || sql.getErrorCode() == 1146 || sql.getErrorCode() == 3701 || sql.getErrorCode() == -204)) return true;
             String message = safeMessage(current).toLowerCase(Locale.ROOT);
             if (message.contains("ora-00942")
                     || message.contains("table or view does not exist")
@@ -347,12 +326,13 @@ public class TargetTableDeletionService {
                     || message.contains("无效的表或视图名")) {
                 return true;
             }
+            if (current.getCause() == current) break;
             current = current.getCause();
         }
         return false;
     }
 
-    private record Name(String scope, String table) { }
+    private record Name(String scope, String table, boolean quoted, String catalog) { }
 
     private record ResolvedTarget(DataSourceConfig config, String scope, String tableName, boolean exists) { }
 }

@@ -12,6 +12,9 @@ import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineReposit
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus;
 import com.linewell.dataelement.platform.tenant.application.TenantExecutionCatalog;
 import java.util.List;
+import java.util.ArrayList;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 class BulletinPollerTest {
@@ -21,6 +24,21 @@ class BulletinPollerTest {
     private final ErrorService errors = mock(ErrorService.class);
     private final TenantExecutionCatalog tenants = mock(TenantExecutionCatalog.class);
     private final BulletinPoller poller = new BulletinPoller(repository, nifi, errors, tenants);
+
+    @Test
+    void oneUnavailableIndustryDatabaseCannotAbortStartupOrLeakItsExecutionScope() {
+        when(tenants.activeTenantIds()).thenReturn(List.of("tenant-broken","tenant-healthy"));
+        var visited = new ArrayList<String>();
+        when(repository.findAll()).thenAnswer(call -> {
+            String id=TenantContext.requireTenantId(); visited.add(id);
+            if (id.equals("tenant-broken")) throw new IllegalStateException("column metadata unavailable");
+            return List.of();
+        });
+        assertDoesNotThrow(poller::primeFromDisk);
+        assertEquals(List.of("tenant-broken","tenant-healthy"),visited);
+        assertNull(TenantContext.getTenantId());
+        verifyNoInteractions(nifi,errors);
+    }
 
     @Test
     void stoppedPipelineDoesNotContactNifi() {

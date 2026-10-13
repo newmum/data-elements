@@ -56,6 +56,8 @@ import java.util.function.Consumer;
 @RequestMapping("/nifi/api/pipelines/{id}")
 @Api(tags = "PipelineRunController NiFi 流程运行")
 public class PipelineRunController {
+    private com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore mappingVersions;
+    @org.springframework.beans.factory.annotation.Autowired public void setMappingVersions(com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore store){mappingVersions=store;}
 
     private static final Logger log = LoggerFactory.getLogger(PipelineRunController.class);
     /**
@@ -564,6 +566,16 @@ public class PipelineRunController {
                 return ResponseEntity.ok(Map.of("pipeline", restored, "processGroupId", p.nifiProcessGroupId(),
                         "started", p.status() == PipelineStatus.RUNNING, "mode", "reuse"));
             }
+            if (DslHasher.usesJavaMapping(p.dsl())) {
+                // Reused graphs retain their existing bundle. Only a new unified
+                // deployment needs plan/bundle checks before touching the old graph.
+                try { compiler.preflightMapping(p); }
+                catch (RuntimeException ex) {
+                    repo.updateStatus(p.id(), p.status());
+                    return ResponseEntity.unprocessableEntity().body(Map.of("error", ex.getMessage(), "code", "MAPPING_PREFLIGHT_FAILED"));
+                }
+                return stagedMappingDeploy(p, currentHash, start, layout);
+            }
             List<String> previousParents = groups.parentIds(layout.previousIds());
             // Check every previous group before deleting any of them.
             for (String oldPg : layout.previousIds()) {
@@ -664,6 +676,86 @@ public class PipelineRunController {
             taskLifecycle.statusOnly(p.id(), 2);
             log.error("Run pipeline {} failed", p.id(), e);
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** A candidate graph never starts before validation; previous sources and queues remain recoverable. */
+    private ResponseEntity<?> stagedMappingDeploy(Pipeline pipeline, String hash, boolean start,
+                                                 PipelineGroupOrganizer.Layout layout) {
+        final String[] staged = {null};
+        boolean committed = false;
+        boolean previousStopped = false;
+        Set<String> stateIds = new LinkedHashSet<>();
+        try {
+            for (String group : layout.previousIds()) {
+                JsonNode snapshot=nifi.getProcessGroupStatus(group).path("processGroupStatus").path("aggregateSnapshot");
+                long queued=snapshot.path("queuedCount").asLong(snapshot.path("flowFilesQueued").asLong(-1));
+                if(queued!=0)throw new IllegalStateException(queued<0?"无法确认旧流程队列状态，已保留旧图":"旧流程还有排队记录，已保留旧图并阻止重建");
+            }
+            // NiFi's public state API supports read/clear, but no generic state import.
+            // Rebuilding an incremental source would lose its watermark even with an empty queue.
+            if (!layout.previousIds().isEmpty()) {
+                if (pipeline.nodeMapping() == null || pipeline.nodeMapping().processorIdToCanvasNode() == null) throw new IllegalStateException("旧流程缺少原生组件映射，不能证明来源状态可安全重建");
+                stateIds.addAll(pipeline.nodeMapping().processorIdToCanvasNode().keySet());
+                if (stateIds.size() > 128) throw new IllegalStateException("原生组件数量超过安全状态核验上限");
+                for (String source : stateIds) {
+                    JsonNode state = nifi.get("/processors/" + source + "/state", JsonNode.class).path("componentState");
+                    if (!state.path("localState").path("state").isEmpty()
+                            || !state.path("clusterState").path("state").isEmpty()) {
+                        repo.updateStatus(pipeline.id(), pipeline.status());
+                        return ResponseEntity.status(409).body(Map.of("error", "source-state-migration-required",
+                                "message", "来源组件已有增量水位或文件状态。本次保留旧流程，请先采用能够保留来源组件ID的迁移方式。", "sourceProcessorId", source));
+                    }
+                }
+            }
+            DslCompiler.CompileResult result = compiler.compile(pipeline, group -> staged[0] = group, layout);
+            if (result == null || isBlank(result.processGroupId())) throw new IllegalStateException("候选流程编译失败");
+            NifiNodeMapping mapping = buildMapping(pipeline, result);
+            for (String group : layout.previousIds()) {
+                nifi.setProcessGroupState(group, "STOPPED");
+                nifi.waitForAllProcessorsStopped(group, 30_000L);
+                nifi.requireEmptyQueuesForRedeploy(group);
+            }
+            // Recheck after stop: sources may have advanced while the dormant graph was compiling.
+            previousStopped = true;
+            for (String nativeId : stateIds) {
+                JsonNode state = nifi.get("/processors/" + nativeId + "/state",JsonNode.class).path("componentState");
+                if (!state.path("localState").path("state").isEmpty() || !state.path("clusterState").path("state").isEmpty()) throw new IllegalStateException("来源状态在候选编译期间发生变化，已保留旧流程与水位");
+            }
+            long now = System.currentTimeMillis();
+            Pipeline updated = repo.update(pipeline.id(), current -> new Pipeline(current.id(), current.name(), current.description(),
+                    current.createdAt(), current.updatedAt(), current.dsl(), result.processGroupId(), PipelineStatus.STOPPED,
+                    hash, now, current.lastStoppedAt(), mapping, 0L));
+            if(mappingVersions!=null)mappingVersions.activate(pipeline,result.planVersionIds(),result.processGroupId());
+            committed = true;
+            taskLifecycle.updateProcessGroup(pipeline.id(), result.processGroupId());
+            List<String> retained = new ArrayList<>();
+            for (String group : layout.previousIds()) {
+                try { nifi.cleanupProcessGroup(group); }
+                catch (RuntimeException ex) { retained.add(group); log.warn("已停止旧流程保留待清理，pipeline={}, group={}",pipeline.id(),group); }
+            }
+            if (start) {
+                if (TargetTableCleanupService.requested(pipeline)) targetCleanup.clear(pipeline);
+                startNativeFlow(pipeline, result.processGroupId(), mapping);
+                updated = repo.updateStatus(pipeline.id(), PipelineStatus.RUNNING);
+                taskLifecycle.started(pipeline.id());
+            } else taskLifecycle.statusOnly(pipeline.id(), 0);
+            if (lineageAnalysis != null) { try { lineageAnalysis.captureDeployment(updated); } catch (RuntimeException ex) { log.warn("流程已部署，血缘索引归档待恢复，pipeline={}",pipeline.id()); } }
+            Map<String,Object> response = new LinkedHashMap<>();response.put("pipeline",updated);response.put("processGroupId",result.processGroupId());response.put("started",start);response.put("mode","staged-unified-deploy");
+            if (!retained.isEmpty()) response.put("retainedStoppedGroups",retained);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException ex) {
+            if (!committed) {
+                if (!isBlank(staged[0])) {
+                    try { nifi.cleanupProcessGroup(staged[0]); }
+                    catch (RuntimeException cleanup) { log.warn("候选流程清理待恢复，pipeline={}, group={}",pipeline.id(),staged[0]); }
+                }
+                repo.update(pipeline.id(), current -> new Pipeline(current.id(),current.name(),current.description(),current.createdAt(),current.updatedAt(),current.dsl(),
+                        pipeline.nifiProcessGroupId(),pipeline.status(),pipeline.lastDeployedHash(),pipeline.lastDeployedAt(),pipeline.lastStoppedAt(),pipeline.nodeMapping(),pipeline.lastBulletinId()));
+                if (previousStopped) repo.updateStatus(pipeline.id(),PipelineStatus.STOPPED);
+            } else repo.updateStatus(pipeline.id(),PipelineStatus.STOPPED);
+            errors.add(pipeline.id(),runtimeErr(FlowError.ErrorPhase.DEPLOYMENT,"统一映射候选流程部署失败",ex.getMessage()));
+            return ResponseEntity.status(409).body(Map.of("error","mapping-deployment-failed","message",ex.getMessage(),"previousGraphRetained",!committed));
         }
     }
 

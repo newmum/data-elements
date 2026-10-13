@@ -34,6 +34,56 @@ import org.ssssssss.script.runtime.ExitValue;
 class DataAggTaskEnsureBatchMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
+    @ParameterizedTest
+    @ValueSource(strings = {"snapshot", "role", "table", "missing", "invalid"})
+    void newTaskWatermarkUsesOnlyTheRegisteredTimestampAndNeverThePrimaryKey(String mode) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.prepareCreation();
+        fixture.jdbc.execute("alter table db_table_column_t add primary_key int default 0");
+        fixture.jdbc.update("update db_table_column_t set primary_key=1 where tid='source-col'");
+        fixture.jdbc.update("insert into db_table_column_t(tid,tenant_id,table_id,column_name,ordinal_position,is_del) "
+                + "values('time-col','police','source-1','updated_time',2,0)");
+        String config = switch (mode) {
+            case "snapshot" -> "{\"timestampField\":\"UPDATED_TIME\"}";
+            case "role" -> "{\"fields\":[{\"columnName\":\"updated_time\",\"timeRoles\":[\"timestamp\"]}]}";
+            case "invalid" -> "{\"timestampField\":\"DELETED_COLUMN\"}";
+            default -> "{}";
+        };
+        fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'", config);
+        if (mode.equals("table")) {
+            fixture.jdbc.execute("alter table db_table_t add timestamp_field varchar(100)");
+            fixture.jdbc.update("update db_table_t set timestamp_field='updated_time' where tid='source-1'");
+        }
+        assertInstanceOf(Map.class, fixture.run());
+        var sourceConfig = cn.hutool.json.JSONUtil.parseObj(fixture.jdbc.queryForObject(
+                "select dsl_json from nifi_pipeline_t", String.class)).getJSONArray("nodes").getJSONObject(0)
+                .getJSONObject("config");
+        assertEquals(List.of("missing", "invalid").contains(mode) ? "" : "updated_time",
+                sourceConfig.getStr("incrementalColumn"));
+        assertEquals("FULL_THEN_INCR", sourceConfig.getStr("syncMode"));
+        assertEquals("START_AT_BEGINNING", sourceConfig.getStr("initialStrategy"));
+    }
+
+    @Test
+    void timestampInitializationForTwentyAndHundredTargetsAddsNoPerTargetReads() throws Exception {
+        List<Integer> counts = new ArrayList<>();
+        for (int size : List.of(20, 100)) {
+            Fixture fixture = new Fixture(size);
+            fixture.prepareCreation();
+            fixture.jdbc.update("update db_table_t set field_governance_config=? where is_del=0",
+                    "{\"timestampField\":\"person_id\"}");
+            assertInstanceOf(Map.class, fixture.run());
+            counts.add(fixture.counter.queries);
+            var designs = fixture.jdbc.queryForList("select dsl_json from nifi_pipeline_t");
+            assertEquals(size, designs.size());
+            for (var design : designs) assertEquals("person_id", cn.hutool.json.JSONUtil.parseObj(
+                    design.get("dsl_json")).getJSONArray("nodes").getJSONObject(0)
+                    .getJSONObject("config").getStr("incrementalColumn"));
+            System.out.println("Timestamp initialization targets=" + size + ", SQL reads=" + counts.getLast());
+        }
+        assertEquals(counts.getFirst(), counts.getLast());
+    }
+
     @ParameterizedTest @ValueSource(ints = {1, 2})
     void positiveRegistrationStatesAllowTaskPlanning(int status) throws Exception {
         Fixture fixture = new Fixture(2);
@@ -66,7 +116,8 @@ class DataAggTaskEnsureBatchMagicTest {
         var result = assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true,
                 "sourceFileConfig", Map.of("remotePath", "/unauthorized", "fileFilterRegex", ".*"))));
         assertEquals(20, result.get("plannedCreateCount"));
-        assertEquals(1, fixture.fileProbe.calls);
+        assertEquals(0, fixture.fileProbe.calls);
+        assertEquals(1, fixture.fileProbe.locatorCalls);
         assertEquals(0, fixture.counter.writes);
         assertInstanceOf(Map.class, fixture.run());
         String dsl = fixture.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'", String.class);

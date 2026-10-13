@@ -107,7 +107,7 @@ class CreateTableDdlIdentifierTest {
     }
 
     @Test
-    void kingbaseRejectsComplexSourceCastWithColumnName() {
+    void kingbaseAcceptsCompatibleCurrentTimeDefaults() {
         DataSourceConfig config = new DataSourceConfig();
         config.setDatabaseType(DatabaseType.KINGBASE);
         ColumnInfo column = new ColumnInfo();
@@ -115,11 +115,8 @@ class CreateTableDdlIdentifierTest {
         column.setColumnType("timestamp");
         column.setDefaultValue("now()::timestamp");
 
-        assertThatThrownBy(() -> new KingBaseMetadataExplorer().generateCreateTableDdl(
-                config, "ODS_TEST", List.of(column), null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("created_at")
-                .hasMessageContaining("默认值");
+        assertThat(new KingBaseMetadataExplorer().generateCreateTableDdl(config,"ODS_TEST",List.of(column),null))
+                .contains("DEFAULT CURRENT_TIMESTAMP");
     }
 
     @Test

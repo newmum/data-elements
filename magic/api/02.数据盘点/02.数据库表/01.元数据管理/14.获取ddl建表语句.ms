@@ -32,6 +32,7 @@ import cn.hutool.json.JSONUtil as poolJsons
 import tenantRuntime
 import dataScope
 import canvasTableDdl
+import portableDdl
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo
@@ -47,6 +48,22 @@ import java.util.List
  * 只读接口。根据 propList.tableName/tableNameCn 和 tableItems 字段定义生成目标库方言的 CREATE TABLE。
  * 传 dbId 时按目标数据库类型生成；不传 dbId 时使用默认 MySQL 配置，仅用于模板预览。
  */
+
+// 来源DDL转换只处理文本与字段模型，不查询业务资源或校验租户。
+if (body?.importSourceDdl == true || body?.convertSourceDdl == true) {
+    try {
+        var model = portableDdl.read(body.sourceDdl, body.sourceDatabaseType)
+        if (body?.convertSourceDdl != true) { return model }
+        var config = new DataSourceConfig()
+        config.setDatabaseType(DatabaseType.fromCode(body.targetDatabaseType))
+        var converted = portableDdl.prepare(model.columns, config.getDatabaseType())
+        var ddl = metadataExplorerService.generateCreateTableDdl(config,
+            body.tableName == null ? model.tableName : body.tableName, converted.columns, model.tableComment)
+        return {ddl:ddl, tableItems:converted.tableItems, warnings:converted.warnings, sourceWarnings:model.warnings}
+    } catch (error) {
+        exit 400, '来源DDL转换失败，请核对来源数据库类型和建表语法：' + error.message
+    }
+}
 
 var textOf = (value) => value == null ? null : value + ''
 var blank = (value) => value == null || textOf(value).trim() == ''
@@ -83,6 +100,9 @@ var resolvedColumnType = item => {
     var selected = blank(selectedRaw) ? '' : textOf(selectedRaw).trim()
     var native = firstValue(item, ['columnType'])
     var base = selected.toLowerCase().replaceAll('\\s*\\(.*$', '').trim()
+    var origin = portableDdl.originTypeForEditor(base, firstValue(item,['sourceColumnType','sourceDataType']),
+        firstValue(item,['sourceDatabaseType']))
+    if (!blank(origin)) { return origin }
     if (['text','tinytext','mediumtext','longtext','clob','nclob'].contains(base)) { return base }
     if (['varchar','varchar2','nvarchar','nvarchar2','char','nchar'].contains(base)
         && rowValue(item, ['length']) != null && rowValue(item, ['length'])::long > 0) {
@@ -92,52 +112,14 @@ var resolvedColumnType = item => {
         var original = textOf(native).toLowerCase().replaceAll('\\s*\\(.*$', '').trim()
         if (original != base && ['varchar','char','text','blob','date','datetime','timestamp','int','bigint','decimal','float','double','tinyint'].contains(base)) {
             if (['varchar','char'].contains(base) && ['text','clob','nclob','longtext'].contains(original)) {
-                exit 400, '字段“' + item.columnName + '”由长文本改为字符类型时，请明确填写足够的长度'
+                return selected
             }
             return selected
         }
     }
     return blank(native) ? selected : native
 }
-var targetDefault = (item, databaseType) => {
-    var raw = rowValue(item, ['defaultValue'])
-    if (raw == null) { return null }
-    var value = textOf(raw).trim()
-    // String constants can lose a redundant source PostgreSQL character cast.
-    // Other foreign casts need explicit target semantics before being removed.
-    var literalCast = "^('(?:''|[^'])*'|[+-]?\\d+(?:\\.\\d+)?|TRUE|FALSE|NULL)\\s*::\\s*[A-Za-z_][A-Za-z_0-9]*(?:\\s+[A-Za-z_][A-Za-z_0-9]*)*(?:\\s*\\(\\s*\\d+(?:\\s*,\\s*\\d+)?\\s*\\))?$"
-    if (value.matches('(?i)' + literalCast)) {
-        var constant = value.replaceAll('(?i)' + literalCast, '$1')
-        var castType = value.substring(value.lastIndexOf('::') + 2).trim().toLowerCase().replaceAll('\\s*\\(.*$', '')
-        var code = textOf(databaseType.getCode()).toLowerCase()
-        if (!['kingbase','postgresql','gaussdb','highgo','vertica','hetu'].contains(code)
-            && constant.toUpperCase() != 'NULL' && !['varchar','character varying','text','nvarchar'].contains(castType)) {
-            exit 400, '字段“' + item.columnName + '”的默认值类型转换不能自动跨库等价替换，请设置目标库默认值表达式或清空默认值'
-        }
-        return constant
-    }
-    var unquoted = value.replaceAll("'(?:''|[^'])*'", "''")
-    var targetCode = textOf(databaseType.getCode()).toLowerCase()
-    if (unquoted.contains('::') && !['postgresql','gaussdb','highgo','vertica','hetu'].contains(targetCode)) {
-        exit 400, '字段“' + item.columnName + '”的默认值含来源库类型转换，请改为目标库支持的默认值表达式或清空默认值'
-    }
-    return raw
-}
-var validateTargetKey = (item, columnType, databaseType) => {
-    var key = rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true
-        || rowValue(item, ['isUnique','unique']) == 1 || rowValue(item, ['isUnique','unique']) == true
-    if (!key) { return }
-    var code = textOf(databaseType.getCode()).toLowerCase()
-    var type = blank(columnType) ? '' : textOf(columnType).toLowerCase().replaceAll('\\s*\\(.*$', '').trim()
-    if (['oracle','oceanbaseoracle','oceanbase_oracle','dameng','dm'].contains(code)
-        && ['text','tinytext','mediumtext','longtext','clob','nclob','blob','long'].contains(type)) {
-        exit 400, '字段“' + item.columnName + '”的长文本/LOB类型不能作为目标库主键或唯一键。请按来源值的长度约束改为VARCHAR并填写长度，或取消该字段的主键/唯一键；长文本数据不会被自动截短'
-    }
-}
-var tenantId = tenantRuntime.id()
-if (blank(tenantId)) {
-    exit 401, '当前登录状态已失效，请重新登录后再生成建表脚本'
-}
+var tenantId = body?.canvas == true || body?.propList?.dbId != null ? tenantRuntime.id() : null
 
 var loadAsset = (assetId) => {
     if (blank(assetId)) {
@@ -266,7 +248,6 @@ var withHuaweiHiveStorage = (ddl, databaseType, connection, registeredType) => {
 if (body?.batchGenerate == true) {
     if (body?.canvas != true) { exit 400, '批量生成建表语句仅支持画布物化流程' }
     var tenantId = textOf(tenantRuntime.id())
-    if (blank(tenantId)) { exit 401, '登录状态已失效，请重新登录' }
     var submittedTargets = body?.targets
     if (!(submittedTargets instanceof List) || submittedTargets.size() < 1 || submittedTargets.size() > 20) {
         exit 400, '一次最多为20个目标库生成建表语句'
@@ -331,7 +312,7 @@ if (body?.batchGenerate == true) {
         var batchColumns = []
         for (item in submittedItems) {
             var columnInfo = new ColumnInfo()
-            columnInfo.setSourceDatabaseType(body?.sourceDatabaseType == null ? null : textOf(body.sourceDatabaseType))
+            columnInfo.setSourceDatabaseType(firstValue(item, ['sourceDatabaseType']) || (body?.sourceDatabaseType == null ? null : textOf(body.sourceDatabaseType)))
             var columnName = firstValue(item, ['columnName', 'name'])
             var normalizedColumnName = blank(columnName) ? '' : textOf(columnName).trim().toUpperCase()
             var dataType = firstValue(item, ['dataType', 'type'])
@@ -340,8 +321,8 @@ if (body?.batchGenerate == true) {
                 dataType = batchTimeType(targetType)
                 columnType = dataType
             }
-            validateTargetKey(item, columnType, targetType)
             columnInfo.setColumnName(columnName)
+            columnInfo.setQuotedIdentifier(rowValue(item, ['quotedIdentifier']) == true)
             columnInfo.setColumnComment(firstValue(item, ['columnComment', 'comment']))
             columnInfo.setDataType(dataType)
             columnInfo.setColumnType(columnType)
@@ -351,7 +332,7 @@ if (body?.batchGenerate == true) {
             }
             if (rowValue(item, ['scale']) != null) { columnInfo.setScale(rowValue(item, ['scale'])::int) }
             columnInfo.setNullable(rowValue(item, ['nullable']) == 1 || rowValue(item, ['nullable']) == true)
-            columnInfo.setDefaultValue(targetDefault(item, targetType))
+            columnInfo.setDefaultValue(rowValue(item, ['defaultValue']))
             columnInfo.setPrimaryKey(rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true)
             columnInfo.setAutoIncrement(rowValue(item, ['autoIncrement']) == 1 || rowValue(item, ['autoIncrement']) == true)
             columnInfo.setUnique(rowValue(item, ['isUnique', 'unique']) == 1
@@ -366,15 +347,13 @@ if (body?.batchGenerate == true) {
             batchColumns.add(columnInfo)
         }
         try {
+            var converted = portableDdl.prepare(batchColumns, targetType)
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
-                requestedTableName, batchColumns, submittedProps.tableNameCn)
+                requestedTableName, converted.columns, submittedProps.tableNameCn)
             ddl = withHuaweiHiveStorage(ddl, targetType, pool, targetTypeCode)
-            var parsed = canvasTableDdl.parse(ddl, batchConfig)
-            if (!canvasTableDdl.matches(parsed, requestedTableName, parsed.schemaName)) {
-                exit 400, '目标表“' + requestedTableName + '”与生成的建表语句表名不一致，请只填写目标表名'
-            }
+            // 预览保留未解决的表达式和完整DDL，供用户编辑；执行入口再解析单表SQL。
             generated.add({dbId: submittedDbId, requestedTableName: requestedTableName,
-                tableName: parsed.lookupName, ddl: parsed.ddl})
+                tableName: requestedTableName, ddl: ddl, warnings: converted.warnings, tableItems: converted.tableItems})
         } catch (e) {
             exit 400, '目标库“' + submittedDbId + '”生成建表语句失败：' + e.getMessage()
         }
@@ -434,7 +413,6 @@ if (body.canvas == true) {
     dsConfig.setPort(3306)
     dsConfig.setDatabase('test')
     dsConfig.setUsername('root')
-    dsConfig.setPassword('123456')
 }
 
 // Final DDL guard for the protected ODS ingestion timestamps.  Callers may send
@@ -457,7 +435,7 @@ var materializationTimeType = (databaseType) => {
 var columns = []
 for (item in tableItems) {
     var columnInfo = new ColumnInfo()
-    columnInfo.setSourceDatabaseType(body.sourceDatabaseType == null ? null : textOf(body.sourceDatabaseType))
+    columnInfo.setSourceDatabaseType(firstValue(item, ['sourceDatabaseType']) || (body.sourceDatabaseType == null ? null : textOf(body.sourceDatabaseType)))
     var columnName = firstValue(item, ['columnName', 'name'])
     var normalizedColumnName = blank(columnName) ? '' : textOf(columnName).trim().toUpperCase()
     var dataType = firstValue(item, ['dataType', 'type'])
@@ -466,8 +444,8 @@ for (item in tableItems) {
         dataType = materializationTimeType(dsConfig.getDatabaseType())
         columnType = dataType
     }
-    validateTargetKey(item, columnType, dsConfig.getDatabaseType())
     columnInfo.setColumnName(columnName)
+    columnInfo.setQuotedIdentifier(rowValue(item, ['quotedIdentifier']) == true)
     columnInfo.setColumnComment(firstValue(item, ['columnComment', 'comment']))
     columnInfo.setDataType(dataType)
     columnInfo.setColumnType(columnType)
@@ -481,7 +459,7 @@ for (item in tableItems) {
         columnInfo.setScale(rowValue(item, ['scale'])::int)
     }
     columnInfo.setNullable(rowValue(item, ['nullable']) == 1 || rowValue(item, ['nullable']) == true)
-    columnInfo.setDefaultValue(targetDefault(item, dsConfig.getDatabaseType()))
+    columnInfo.setDefaultValue(rowValue(item, ['defaultValue']))
     columnInfo.setPrimaryKey(rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true)
     columnInfo.setAutoIncrement(rowValue(item, ['autoIncrement']) == 1 || rowValue(item, ['autoIncrement']) == true)
     columnInfo.setUnique(rowValue(item, ['isUnique', 'unique']) == 1 || rowValue(item, ['isUnique', 'unique']) == true)
@@ -499,16 +477,9 @@ for (item in tableItems) {
 try {
     var targetTableName = textOf(propList.tableName).trim()
     if (dsConfig.getDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
-    var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, columns, propList.tableNameCn)
+    var converted = portableDdl.prepare(columns, dsConfig.getDatabaseType())
+    var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
     ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
-    if (body.canvas == true) {
-        // Use the same single-table and target-scope validation as physical creation.
-        var parsed = canvasTableDdl.parse(ddl, dsConfig)
-        if (!canvasTableDdl.matches(parsed, targetTableName, parsed.schemaName)) {
-            exit 400, '目标表“' + propList.tableName + '”与生成的建表语句表名不一致，请只填写目标表名'
-        }
-        return parsed.ddl
-    }
     return ddl
 } catch (e) {
     exit 400, '生成建表语句失败：' + e.getMessage()

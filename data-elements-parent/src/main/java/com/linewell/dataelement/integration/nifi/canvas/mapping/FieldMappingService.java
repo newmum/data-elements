@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
 
 @Service
 public class FieldMappingService {
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private static final ObjectMapper STRICT_MAPPER = new ObjectMapper(new JsonFactory()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION.mappedFeature()));
     private static final Pattern FIELD_REF = Pattern.compile("\\$\\{field:([^}]+)}");
@@ -60,6 +60,7 @@ public class FieldMappingService {
         if (node.isTextual()) {
             return parseTextSpec(node.asText());
         }
+        if(node.path("schemaVersion").asText().equals("2.0")&&node.isObject())return (ObjectNode)node.deepCopy();
         if (node.isObject() && node.has("mappings")) {
             return normalizeNewSpec((ObjectNode) node);
         }
@@ -637,6 +638,7 @@ public class FieldMappingService {
         }
         try {
             JsonNode parsed = MAPPER.readTree(trimmed);
+            if(parsed.isObject()&&parsed.path("schemaVersion").asText().equals("2.0"))return (ObjectNode)parsed;
             if (parsed.isObject() && parsed.has("mappings")) return normalizeNewSpec((ObjectNode) parsed);
             return migrateLegacy(parsed);
         } catch (Exception ex) {
@@ -1534,11 +1536,7 @@ public class FieldMappingService {
     }
 
     public Set<String> allTransformNames() {
-        return Set.of("upper", "lower", "trim", "ltrim", "rtrim", "substring", "replace", "replaceRegex", "concat", "split", "pad", "reverse",
-                "toInt", "toLong", "toDouble", "toDecimal", "round", "ceil", "floor", "abs", "multiply", "divide", "add", "subtract",
-                "parseDate", "formatDate", "toEpochMs", "fromEpochMs", "addDays", "addHours", "addMinutes", "addSeconds", "truncateDate",
-                "coalesce", "nvl", "nullIf", "toBoolean", "md5", "sha1", "sha256", "base64Encode", "base64Decode", "urlEncode", "urlDecode",
-                "jsonEncode", "jsonDecode", "jsonValue", "codeTableLookup", "enumMap", "cast", "expression");
+        return com.linewell.dataelement.mapping.core.FunctionRegistry.NAMES;
     }
 
     public record FieldMeta(String name, String path, String type, Boolean nullable, Boolean isPk, Boolean hasDefault, Boolean sensitive) {

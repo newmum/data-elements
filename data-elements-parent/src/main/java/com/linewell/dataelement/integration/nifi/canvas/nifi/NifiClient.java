@@ -58,6 +58,25 @@ public class NifiClient {
 
     public String clientId() { return clientId; }
 
+    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.1");}
+
+    public void requireMappingExtension(){
+        JsonNode processors=get("/flow/processor-types",JsonNode.class).path("processorTypes");
+        JsonNode services=get("/flow/controller-service-types",JsonNode.class).path("controllerServiceTypes");
+        for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
+            int count=0;for(JsonNode type:entry.getKey())if(type.path("type").asText().equals(entry.getValue())&&type.path("bundle").equals(mappingBundle()))count++;
+            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展1.1.1，请安装haitong-mapping-nar后部署");
+        }
+        JsonNode cluster=get("/flow/cluster/summary",JsonNode.class).path("clusterSummary");
+        if(cluster.path("clustered").asBoolean()&&cluster.path("connectedNodeCount").asInt()>1)throw new IllegalStateException("多节点集群须完成全部节点扩展版本核验后才能部署统一映射");
+    }
+
+    public NifiEntity createRetentionFunnel(String pgId,double x,double y){
+        ObjectNode component=mapper.createObjectNode();component.set("position",mapper.createObjectNode().put("x",x).put("y",y));
+        ObjectNode envelope=mapper.createObjectNode();envelope.set("revision",mapper.valueToTree(RevisionDto.initial(clientId)));envelope.set("component",component);
+        return post("/process-groups/"+pgId+"/funnels",envelope,NifiEntity.class);
+    }
+
     // ---------------------------------------------------------------------
     // Auth
     // ---------------------------------------------------------------------
@@ -329,6 +348,7 @@ public class NifiClient {
     public NifiEntity createProcessor(String pgId, String type, String name, double x, double y, Map<String, String> properties, String schedulingPeriod, String schedulingStrategy) {
         ObjectNode component = mapper.createObjectNode();
         component.put("type", type);
+        if(type.equals("com.linewell.dataelement.nifi.HaitongTransformRecord"))component.set("bundle",mappingBundle());
         component.put("name", name);
         ObjectNode pos = mapper.createObjectNode().put("x", x).put("y", y);
         component.set("position", pos);
@@ -394,6 +414,7 @@ public class NifiClient {
     public NifiEntity createControllerService(String pgId, String type, String name, Map<String, String> properties) {
         ObjectNode component = mapper.createObjectNode();
         component.put("type", type);
+        if(type.equals("com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))component.set("bundle",mappingBundle());
         component.put("name", name);
         if (properties != null && !properties.isEmpty()) {
             ObjectNode props = mapper.createObjectNode();
@@ -783,7 +804,7 @@ public class NifiClient {
         setProcessGroupState(pgId, "STOPPED");
         waitForAllProcessorsStopped(pgId, 30_000L);
         JsonNode snapshot = getProcessGroupStatus(pgId).path("processGroupStatus").path("aggregateSnapshot");
-        long queued = snapshot.path("queuedCount").asLong(-1);
+        long queued = snapshot.path("queuedCount").asLong(snapshot.path("flowFilesQueued").asLong(-1));
         if (queued != 0) {
             throw new IllegalStateException(queued < 0
                     ? "无法确认旧流程队列为空，已保留流程并中止重新部署"

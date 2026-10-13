@@ -70,11 +70,15 @@ class PipelineSaveIdentityTest {
 
     @Test
     void optimisticDesignSaveRejectsStaleTimestampWithoutDeploying() {
+        var projection=mock(com.linewell.dataelement.integration.nifi.canvas.mapping.MappingProjectionService.class);
+        controller.setMappingProjections(projection);
         Pipeline current=pipeline("p1","original-group",PipelineStatus.RUNNING);
         when(repo.findById("p1")).thenReturn(Optional.of(current));
         when(repo.update(eq("p1"),any())).thenAnswer(i->((UnaryOperator<Pipeline>)i.getArgument(1)).apply(current));
         org.assertj.core.api.Assertions.assertThatThrownBy(()->controller.update("p1",current,0L)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        verifyNoInteractions(projection);
         assertThat(controller.update("p1",current,1L).getBody().nifiProcessGroupId()).isEqualTo("original-group");
+        verify(projection,times(1)).persist(any());
         verifyNoInteractions(nifi);
     }
 

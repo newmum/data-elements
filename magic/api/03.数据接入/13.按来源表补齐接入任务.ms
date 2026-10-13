@@ -698,9 +698,34 @@ var stableBusinessKeys = (rows) => {
     }
     return keys
 }
-var firstPk = (rows) => {
-    var keys = stableBusinessKeys(rows)
-    return keys.size() == 0 ? '' : keys[0]
+// Only the explicitly registered extraction timestamp initializes a new JDBC
+// source watermark. Reuse the already authorized table/column snapshots;
+// never query within the target loop or guess from primary keys/column types.
+var registeredTimestampColumn = (table, rows) => {
+    var config = governanceConfigOf(table)
+    var selected = first(table, ['timestampField', 'timestamp_field'])
+    if (blank(selected)) { selected = first(config, ['timestampField', 'timestamp_field']) }
+    if (blank(selected)) {
+        var candidates = []
+        for (field in (config.fields == null ? [] : config.fields)) {
+            var flag = text(first(field, ['isTimestampField', 'is_timestamp_field', 'isTimestamp'])).trim().toLowerCase()
+            var marked = ['true','1','yes'].contains(flag)
+                || text(first(field, ['timeRole','time_role'])).trim().toLowerCase() == 'timestamp'
+            var roles = field.timeRoles
+            for (role in (roles instanceof List ? roles : (roles == null ? [] : [roles]))) {
+                if (text(role).trim().toLowerCase() == 'timestamp') { marked = true }
+            }
+            var name = text(first(field, ['columnName','column_name','fieldName','field_name'])).trim()
+            if (marked && !blank(name) && !candidates.contains(name)) { candidates.add(name) }
+        }
+        if (candidates.size() == 1) { selected = candidates[0] }
+    }
+    if (blank(selected)) { return '' }
+    for (column in (rows == null ? [] : rows)) {
+        var name = text(colName(column)).trim()
+        if (name.toLowerCase() == text(selected).trim().toLowerCase()) { return name }
+    }
+    return ''
 }
 // NiFi handles token order/duplicates and unknown codes in records, independently of SQL dialect.
 // Only the dictionary key/name rows use bounded, parameterized JDBC IN queries.
@@ -815,8 +840,23 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
             }
         }
     }
+    // 物理目标类型及约束进入统一规则，转换阶段先校验，不等数据库写入时报错。
+    var targetsByName = {}
+    for (targetColumn in (targetColumns == null ? [] : targetColumns)) {
+        targetsByName[text(colName(targetColumn)).toLowerCase()] = targetColumn
+    }
+    for (mapping in mappings) {
+        var targetColumn = targetsByName[text(mapping.to).replace('/', '').toLowerCase()]
+        if (targetColumn != null) {
+            var targetType = first(targetColumn, ['columnType', 'column_type', 'dataType', 'data_type'])
+            if (!blank(targetType)) { mapping.targetType = text(targetType) }
+            var nullableText = text(targetColumn.nullable).toLowerCase()
+            if (nullableText == 'false' || nullableText == '0') { mapping.targetNullable = false }
+        }
+    }
     return jsons.toJSONStr({
         version: '1.0',
+        executionEngine: 'JAVA_RECORD',
         passthroughUnmapped: false,
         passthroughCaseSensitive: true,
         onMissingSource: 'NULL',
@@ -1235,11 +1275,7 @@ for (existingTask in existingTasks) {
             && blank(fileNode.config?.sourceFileName) && blank(fileNode.config?.logicalSourceDatasourceId)) {
             taskReasons.add('文件来源仍使用旧表名匹配规则，需确认后重新生成精确文件采集配置')
         }
-        if (['source.ftp', 'source.sftp'].contains(text(fileNode.manifestKey)) && body?.sourceFileConfig != null
-            && ((body.sourceFileConfig.charset != null && text(body.sourceFileConfig.charset) != text(fileNode.config?.csvEncoding))
-                || (body.sourceFileConfig.delimiter != null && text(body.sourceFileConfig.delimiter) != text(fileNode.config?.csvDelimiter)))) {
-            taskReasons.add('文件解析参数已变化，请确认后重新生成采集配置')
-        }
+
     }
     if (wrongHopSource) { taskReasons.add('已有任务的来源与所选目标顺序不一致，需确认后按级联链路重建') }
     if (legacyMultiTarget) { taskReasons.add('历史任务包含多个目标库，需确认后拆分为独立任务') }
@@ -1323,7 +1359,7 @@ var sourceNodeConfig = {
     sourceTableName: sourceTableName,
     table: sourceTableName,
     sourceColumns: sourceColumnsForNifi,
-    incrementalColumn: firstPk(sourceColumns),
+    incrementalColumn: registeredTimestampColumn(sourceTable, sourceColumns),
     schedulingPeriod: '60 sec',
     syncMode: 'FULL_THEN_INCR',
     initialStrategy: 'START_AT_BEGINNING',
@@ -1354,20 +1390,15 @@ if (sourceManifestKey == 'source.oceanbase') {
 // 普通 FTP/SFTP 探查接入也必须使用登记的连接，而不是 JDBC 默认配置。
 // 一条任务只读取其来源数据集，不能把目录里的其它表一起送入同一个目标。
 if (pushFileSource == null && (sourceManifestKey == 'source.ftp' || sourceManifestKey == 'source.sftp')) {
-    // Resolve from the authenticated, tenant-owned registration. Client parser options
-    // cannot replace the connection, path, file filter, sheet or JSON dataset selector.
+    // 字段始终使用 db_table_column_t 的登记快照；文件定位也优先使用登记描述。
+    // 旧登记只列目录定位文件，不打开文件、不采样或比较字段。客户端不覆盖托管配置。
     var directFile = null
     try {
-        directFile = structuredFileProbe.resolveFtpFileSource(sourceCfg, text(sourceTableName), body?.sourceFileConfig)
+        directFile = structuredFileProbe.resolveFtpFileLocator(sourceCfg, text(sourceTableName),
+            first(sourceTable, ['fieldGovernanceConfig', 'field_governance_config']),
+            text(first(sourceTable, ['tableComment', 'table_comment'])))
     } catch (fileError) {
-        exit 409, '来源文件无法唯一定位或解析，请检查文件及登记字段后重新创建流程'
-    }
-    var fileColumnNames = []
-    for (fileColumn in directFile.columns) { fileColumnNames.add(text(fileColumn.columnName).toLowerCase()) }
-    for (registeredColumn in sourceColumnsForNifi) {
-        if (!fileColumnNames.contains(text(registeredColumn.columnName).toLowerCase())) {
-            exit 409, '来源文件字段与登记快照不一致，请重新采集来源字段后再创建流程'
-        }
+        exit 409, '来源文件定位信息不完整，请在数据源登记中确认文件位置、工作表或JSON路径'
     }
     var directProtocol = text(first(sourceCfg, ['ftpProtocol', 'ftp_protocol', 'protocol'])).trim().toLowerCase()
     if (blank(directProtocol)) { directProtocol = text(sourceDbType).trim().toLowerCase() == 'sftp' ? 'sftp' : 'ftp' }
@@ -1494,7 +1525,7 @@ if (!firstHop) {
         username: first(sourceCfg, ['username', 'dbMetaUser']), password: first(sourceCfg, ['password', 'dbMetaPassword']),
         sourceDbId: sourceDbId, sourceDbName: first(sourceDb, ['dbName', 'db_name']),
         sourceTableId: sourceTableId, sourceTableName: sourceTableName, table: sourceTableName,
-        sourceColumns: columnList(sourceColumns), incrementalColumn: firstPk(sourceColumns),
+        sourceColumns: columnList(sourceColumns), incrementalColumn: registeredTimestampColumn(sourceTable, sourceColumns),
         schedulingPeriod: '60 sec', syncMode: 'FULL_THEN_INCR', initialStrategy: 'START_AT_BEGINNING',
         lookbackSeconds: 5, safetyLagSeconds: 1, batchSize: 5000, maxRowsPerRun: 200000,
         softDeleteEnabled: false, deleteReconcileStrategy: 'NONE'
@@ -1511,8 +1542,10 @@ if (!firstHop) {
         sourceNodeConfig.compatibleMode = normalizeConfigType(sourceDbType, sourceCfg) == 'OCEANBASE_ORACLE' ? 'ORACLE' : 'MYSQL'
     }
     // 下游沿用汇聚库生成的ODS主键和时间，增量以更新时间游标读取。
-    for (column in sourceColumns) {
-        if (text(colName(column)).toUpperCase() == 'ODS_GXSJ') { sourceNodeConfig.incrementalColumn = colName(column) }
+    if (blank(sourceNodeConfig.incrementalColumn)) {
+        for (column in sourceColumns) {
+            if (text(colName(column)).toUpperCase() == 'ODS_GXSJ') { sourceNodeConfig.incrementalColumn = colName(column) }
+        }
     }
 }
 

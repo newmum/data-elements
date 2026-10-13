@@ -52,6 +52,9 @@ class Cursor:
     def fetchone(self):
         return copy.deepcopy(self.connection.locked)
 
+    def executemany(self, sql, values):
+        self.execute(sql, values)
+
 
 class Connection:
     db = b'baseline'
@@ -384,6 +387,73 @@ class CompilerTests(unittest.TestCase):
             self.assertEqual(bundle['sourceSha256'], sync.digest(source))
             escaped = subprocess.run(['node', str(root / 'tools/compile-lowcode.mjs'), '../outside.vue'], capture_output=True, text=True)
             self.assertNotEqual(escaped.returncode, 0)
+
+
+class CompiledRepairTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.base = Path(self.temp.name)
+        self.root = self.base / 'repo'
+        self.root.mkdir()
+        self.patches = [patch.object(sync, 'ROOT', self.root),
+                        patch.object(sync, 'PRIVATE_CONFIG', self.base / 'private/resources.json')]
+        for item in self.patches:
+            item.start()
+
+    def tearDown(self):
+        for item in reversed(self.patches):
+            item.stop()
+        self.temp.cleanup()
+
+    def scenario(self, count):
+        source = '<template><div>synthetic component</div></template>'
+        entries, bundles, rows = [], [], []
+        for index in range(count):
+            identity = str(index)
+            path = 'test-' + identity + '.vue'
+            target = self.root / 'lowcode' / path
+            target.parent.mkdir(exist_ok=True)
+            target.write_text(source, encoding='utf-8')
+            entries.append({'id':identity,'parentId':'0','name':'test-'+identity,'type':'1','path':path})
+            rows.append({'tid':identity,'pid':'0','name':'test-'+identity,'remark':'','type':'1',
+                         'tenant_id':'synthetic','source_code':source,'compile_js':'old','compile_css':''})
+            bundles.append({'componentId':identity,'sourceSha256':sync.digest(source),
+                            'compileJs':'var __sfc__ = {}; return __sfc__','compileCss':''})
+        sync.write_json(self.root / 'lowcode/.manifest.json', {'resources':entries})
+        connection = Connection()
+        connection.rows = rows
+        connection.update_count = count
+        runtime = [{'name':r['name'],'compileJs':b['compileJs'],'compileCss':b['compileCss']}
+                   for r,b in zip(rows,bundles)]
+        return connection,bundles,runtime
+
+    def test_20_and_100_components_use_two_batch_reads_and_one_update(self):
+        for count in (20,100):
+            connection,bundles,runtime = self.scenario(count)
+            with patch.object(sync,'runtime_call',return_value=runtime) as call:
+                result = sync.repair_compiled(connection,{},bundles)
+            self.assertEqual(result['repairedComponents'],count)
+            self.assertEqual(sum(sql.startswith('SELECT') for sql,_ in connection.statements),2)
+            self.assertEqual(sum(sql.startswith('UPDATE') for sql,_ in connection.statements),1)
+            self.assertEqual(call.call_count,3)
+            self.assertEqual(connection.commits,1)
+
+    def test_changed_source_prevents_any_write(self):
+        connection,bundles,runtime = self.scenario(1)
+        connection.rows[0]['source_code'] += '<!-- concurrent edit -->'
+        with patch.object(sync,'runtime_call',return_value=runtime):
+            with self.assertRaisesRegex(ValueError,'Merge runtime source'):
+                sync.repair_compiled(connection,{},bundles)
+        self.assertEqual(connection.commits,0)
+        self.assertFalse(any(sql.startswith(('INSERT','UPDATE')) for sql,_ in connection.statements))
+
+    def test_missing_runtime_permission_prevents_any_write(self):
+        connection,bundles,_ = self.scenario(1)
+        with patch.object(sync,'runtime_call',return_value=[]):
+            with self.assertRaisesRegex(ValueError,'Authenticated runtime'):
+                sync.repair_compiled(connection,{},bundles)
+        self.assertEqual(connection.commits,0)
+        self.assertFalse(any(sql.startswith(('INSERT','UPDATE')) for sql,_ in connection.statements))
 
 
 class ConfigurationTests(unittest.TestCase):

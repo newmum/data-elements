@@ -9,16 +9,16 @@
       "dialect": "mysql",
       "file": "baseline/init.sql",
       "objects": {
-        "tables": 53,
+        "tables": 50,
         "views": 2,
-        "indexes": 156,
+        "indexes": 149,
         "foreignKeys": 1,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "e867c2e7a58afe76742929429112ac4d5964dd27406ba1fa6d34937a517dcc2a",
+      "sha256": "eeca4c8916cd1c3a3a052040f7ef641ef70cbddfb888c6c63cc0d96b15a1d7e3",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -31,16 +31,16 @@
       "dialect": "mysql",
       "file": "baseline_demo_broadcasting/init.sql",
       "objects": {
-        "tables": 140,
+        "tables": 143,
         "views": 0,
-        "indexes": 507,
-        "foreignKeys": 1,
+        "indexes": 518,
+        "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "80605010e86bf152ba1da92b2adf5cadfa4afd85e4fcb0be4231bec676b5e4e3",
+      "sha256": "abf0cb8d55c9c934730d1e734615d84ed9db6208cbdfc3ae684743bb408451e7",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -53,16 +53,16 @@
       "dialect": "mysql",
       "file": "baseline_demo_chengtian/init.sql",
       "objects": {
-        "tables": 140,
+        "tables": 143,
         "views": 0,
-        "indexes": 507,
-        "foreignKeys": 1,
+        "indexes": 518,
+        "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "9fcd96f8d1b3a945682d23441f610b22d26f1d42f2da6e4b34ea3143d7ac30e4",
+      "sha256": "031143a9afd700d272aecb5bf2a6c6e617a8427f5ec84040150836997bc67482",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -75,16 +75,16 @@
       "dialect": "mysql",
       "file": "baseline_demo_ga/init.sql",
       "objects": {
-        "tables": 140,
+        "tables": 143,
         "views": 0,
-        "indexes": 507,
-        "foreignKeys": 1,
+        "indexes": 518,
+        "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "675f265ecde03298ee57cfbbf743b3b97c44e5c0b7b789332cb89881e1a509cb",
+      "sha256": "8869ee6dae86755822ad817c486d5dcfc5dbbc082fe0740561d5f3cff0b15f7b",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -97,16 +97,16 @@
       "dialect": "mysql",
       "file": "baseline_demo_sea_fishery/init.sql",
       "objects": {
-        "tables": 140,
+        "tables": 143,
         "views": 0,
-        "indexes": 507,
-        "foreignKeys": 1,
+        "indexes": 518,
+        "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "c1273dad5f7d93995f56f91b5078e88c198425a90c2f299f3cfad827bdeee002",
+      "sha256": "9001ef7d39c50dc917a2e3b0224f4485e95b019146f5e6ec0bad12aac4368921",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

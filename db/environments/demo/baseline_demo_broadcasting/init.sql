@@ -909,6 +909,63 @@ CREATE TABLE `data_access_field_mapping` (
   KEY `idx_data_access_field_mapping_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-数据接入字段映射';
 
+-- TABLE data_access_mapping_plan_t
+CREATE TABLE `data_access_mapping_plan_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '执行计划版本标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前认证租户标识',
+  `pipeline_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属画布流程标识',
+  `node_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属字段映射节点标识',
+  `plan_revision` bigint NOT NULL COMMENT '节点计划递增版本号',
+  `draft_revision` bigint NOT NULL COMMENT '编译来源草稿更新时间版本',
+  `plan_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '规范执行计划SHA256摘要',
+  `plan_version` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT '执行计划协议版本',
+  `engine_version` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Java转换内核版本',
+  `function_version` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT '函数库版本',
+  `source_schema_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '来源Schema规范摘要',
+  `target_schema_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '目标Schema规范摘要',
+  `plan_content` mediumtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '不含连接凭据的完整不可变计划JSON',
+  `resource_version_set` mediumtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '固定字典及资源版本引用JSON',
+  `created_by` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '编译操作者认证标识或系统任务标识',
+  `created_time` datetime(6) NOT NULL COMMENT '计划创建时间，微秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_mapping_plan_revision` (`tenant_id`,`pipeline_id`,`node_id`,`plan_revision`),
+  UNIQUE KEY `uk_mapping_plan_identity` (`tenant_id`,`pipeline_id`,`node_id`,`plan_hash`,`draft_revision`),
+  UNIQUE KEY `uk_mapping_plan_tenant_id` (`tenant_id`,`tid`),
+  KEY `idx_mapping_plan_history` (`tenant_id`,`pipeline_id`,`node_id`,`created_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射不可变执行计划';
+
+-- TABLE data_access_mapping_publication_t
+CREATE TABLE `data_access_mapping_publication_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '发布引用标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前认证租户标识',
+  `pipeline_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '已发布画布流程标识',
+  `node_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '已发布字段映射节点标识',
+  `plan_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前启用的不可变执行计划标识',
+  `process_group_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '承载当前计划的NiFi流程组标识',
+  `published_time` datetime(6) NOT NULL COMMENT '当前计划启用时间，微秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_mapping_publication_node` (`tenant_id`,`pipeline_id`,`node_id`),
+  KEY `idx_mapping_publication_plan` (`tenant_id`,`plan_id`),
+  CONSTRAINT `fk_mapping_publication_plan` FOREIGN KEY (`tenant_id`, `plan_id`) REFERENCES `data_access_mapping_plan_t` (`tenant_id`, `tid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射当前发布计划引用';
+
+-- TABLE data_access_mapping_resource_t
+CREATE TABLE `data_access_mapping_resource_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '不可变资源版本标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前认证租户标识',
+  `resource_kind` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '资源类型：TEMPLATE模板，DICTIONARY_SNAPSHOT字典快照',
+  `resource_key` varchar(128) COLLATE utf8mb4_general_ci NOT NULL COMMENT '同一租户内资源版本族名称',
+  `version_no` bigint NOT NULL COMMENT '资源族内递增版本号',
+  `resource_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '资源内容SHA256摘要',
+  `definition_json` mediumtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '资源的授权定义和协议摘要JSON',
+  `resource_content` mediumtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '模板规则或完整字典快照JSON',
+  `created_by` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '资源创建操作者认证标识',
+  `created_time` datetime(6) NOT NULL COMMENT '资源版本创建时间，微秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_mapping_resource_version` (`tenant_id`,`resource_kind`,`resource_key`,`version_no`),
+  KEY `idx_mapping_resource_list` (`tenant_id`,`resource_kind`,`created_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射模板及字典快照版本';
+
 -- TABLE data_access_multi_group_item_t
 CREATE TABLE `data_access_multi_group_item_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '编组成员标识',

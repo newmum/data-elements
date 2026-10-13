@@ -152,11 +152,16 @@ public class PipelineRepository {
         if (next == null) throw new IllegalStateException("Mutator returned null for pipeline " + id);
         Pipeline stamped = new Pipeline(
                 next.id(), next.name(), next.description(), next.createdAt(),
-                System.currentTimeMillis(), next.dsl(),
+                Math.max(System.currentTimeMillis(),cur.updatedAt()==null?0:cur.updatedAt()+1), next.dsl(),
                 next.nifiProcessGroupId(), next.status(),
                 next.lastDeployedHash(), next.lastDeployedAt(), next.lastStoppedAt(),
                 next.nodeMapping(), next.lastBulletinId());
-        upsert(stamped);
+        requireTenantDatabase();
+        try{
+            var condition=new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<NifiPipelineT>().eq("id",id).eq("tenant_id",TenantContext.requireTenantId()).eq("is_del",0);
+            if(cur.updatedAt()==null)condition.isNull("updated_at");else condition.eq("updated_at",cur.updatedAt());
+            if(nifiPipelineTMapper.update(toEntity(stamped),condition)!=1)throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"流程已被其他入口修改，请重新加载后重试");
+        }catch(IOException error){throw new IllegalStateException("流程更新内容无法序列化",error);}
         return stamped;
     }
 

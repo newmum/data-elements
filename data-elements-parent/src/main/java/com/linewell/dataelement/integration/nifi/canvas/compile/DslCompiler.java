@@ -13,6 +13,9 @@ import com.linewell.dataelement.platform.magic.module.HiveModule;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.linewell.dataelement.integration.nifi.canvas.mapping.UnifiedMappingService;
+import com.linewell.dataelement.mapping.core.MappingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,7 +50,7 @@ public class DslCompiler {
 
     private static final Logger log = LoggerFactory.getLogger(DslCompiler.class);
     private static final Pattern VAR = Pattern.compile("\\$\\{([^}]+)}");
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private static final Pattern FLOWFILE_REF = Pattern.compile("\\bFLOWFILE\\b", Pattern.CASE_INSENSITIVE);
     /*
      * Native NiFi cards are wider than their editor counterparts, but a
@@ -105,6 +108,20 @@ public class DslCompiler {
     private final NifiNodeRuntimeResolver nifiNodeRuntimeResolver;
     private final ManifestRegistry registry;
     private final FieldMappingService fieldMappingService;
+    private UnifiedMappingService unifiedMappingService;
+    @Autowired public void setUnifiedMappingService(UnifiedMappingService service){this.unifiedMappingService=service;}
+    private com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore mappingVersions;
+    @Autowired public void setMappingVersions(com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore store){mappingVersions=store;}
+
+    public void preflightMapping(Pipeline pipeline){
+        Map<String,JsonNode> specs=javaMappingSpecifications(pipeline);
+        if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();}
+    }
+    private static Map<String,JsonNode> javaMappingSpecifications(Pipeline pipeline){Map<String,JsonNode>specs=new LinkedHashMap<>();for(var node:pipeline.dsl().nodes())if(javaMappingRequested(node.config()==null?Map.of():node.config()))specs.put(node.id(),mappingJson(node.config().get("mappings")));return specs;}
+    public boolean usesJavaMapping(Pipeline pipeline){return pipeline.dsl()!=null&&pipeline.dsl().nodes()!=null&&pipeline.dsl().nodes().stream().anyMatch(n->javaMappingRequested(n.config()==null?Map.of():n.config()));}
+
+    private static JsonNode mappingJson(Object value){try{return value instanceof String s?MAPPER.readTree(s):MAPPER.valueToTree(value);}catch(Exception ex){throw new MappingException("INVALID_JSON","映射JSON无效");}}
+    private static boolean javaMappingRequested(Map<String,Object> cfg){JsonNode spec=mappingJson(cfg.get("mappings"));return spec!=null&&(spec.path("schemaVersion").asText().equals("2.0")||spec.path("executionEngine").asText().equals("JAVA_RECORD"));}
     private final HiveModule hiveModule;
     /**
      * The address of this platform as seen from the NiFi execution network.
@@ -162,6 +179,8 @@ public class DslCompiler {
         Objects.requireNonNull(pipeline.dsl(), "Pipeline DSL is required");
         Pipeline.Node periodicSource = SyncPolicy.periodicSource(pipeline);
         if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
+        Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
+        Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
         String pgName = pipeline.name() == null ? pipeline.id() : pipeline.name();
         var position = layout == null
@@ -193,7 +212,7 @@ public class DslCompiler {
         sharedCs.put("jsonReader", nifi.createControllerService(pgId, JSON_READER_TYPE,
                 "JsonReader", Map.of()).id());
         sharedCs.put("jsonWriter", nifi.createControllerService(pgId, JSON_WRITER_TYPE,
-                "JsonWriter", Map.of()).id());
+                "JsonWriter", usesJavaMapping(pipeline)?Map.of("Schema Write Strategy","full-schema-attribute"):Map.of()).id());
 
         // 节点编译上下文：记录每个节点在 NiFi 中创建出来的 CS/Processor 实体 ID。
         Map<String, NodeCompilation> compiled = new LinkedHashMap<>();
@@ -202,6 +221,7 @@ public class DslCompiler {
         Map<String, Map<String, Object>> cfgByNode = new LinkedHashMap<>();
         Map<String, NodeLayout> layoutByNode = assignNodeLayouts(pipeline.dsl());
         Map<String, FieldMappingService.CompiledMapping> fieldMappingPlans = new LinkedHashMap<>();
+        Map<String,UnifiedMappingService.Compiled> javaMappingPlans=new LinkedHashMap<>();
         Set<String> sourceConfigOnlyNodes = new LinkedHashSet<>();
 
         // ---- PHASE 1：创建所有 Controller Service（初始为 DISABLED）。----
@@ -288,6 +308,25 @@ public class DslCompiler {
                     if (usesRegisteredChineseHeaders(sourceCfg)) {
                         cfg.put("mappings", mapFileHeaderFieldsToRegisteredNames(cfg.get("mappings"), sourceCfg));
                     }
+                    if(javaMappingRequested(cfg)){
+                        if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");
+                        var javaPlan=preparedJavaPlans.get(n.id());javaMappingPlans.put(n.id(),javaPlan);
+                        var outputs=javaPlan.plan().outputFields();fieldMappingPlans.put(n.id(),new FieldMappingService.CompiledMapping("","",List.of(),outputs,outputs,outputs));
+                        NodeCompilation compilation=compiled.get(n.id());
+                        compilation.csIds.put("typed-json-reader",nifi.createControllerService(pgId,JSON_READER_TYPE,n.label()+"/来源类型化输入",Map.of("Schema Access Strategy","schema-text-property","Schema Text","${avro.schema}")).id());
+                        compilation.csIds.put("typed-json-writer",nifi.createControllerService(pgId,JSON_WRITER_TYPE,n.label()+"/类型化输出",Map.of("Schema Write Strategy","full-schema-attribute")).id());
+                        for(var connection:javaPlan.connections().entrySet()){
+                            NifiEntity service=nifi.createControllerService(pgId,"org.apache.nifi.dbcp.DBCPConnectionPool",n.label()+"/字典连接",buildSourceDbcpProperties(connection.getValue()));
+                            compilation.csIds.put("dict:"+connection.getKey(),service.id());
+                        }
+                        if(!javaPlan.plan().dictionaries().isEmpty()){
+                            Map<String,String> properties=new LinkedHashMap<>();javaPlan.connections().keySet().forEach(id->properties.put(id,compilation.csIds.get("dict:"+id)));
+                            properties.put("authorized-definitions",javaPlan.plan().document().path("dictionaryBindings").toString());
+                            properties.put("snapshot-payloads",javaPlan.snapshots().toString());
+                            NifiEntity service=nifi.createControllerService(pgId,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService",n.label()+"/批量字典服务",properties);compilation.csIds.put("dictionary-batch",service.id());
+                        }
+                        continue;
+                    }
                     FieldMappingService.CompiledMapping plan = withLookupDataSources(
                             fieldMappingService.compilePlan(cfg.get("mappings")), sourceCfg);
                     fieldMappingPlans.put(n.id(), plan);
@@ -322,6 +361,13 @@ public class DslCompiler {
                         n.label() + "/sql-dbcp", buildSourceDbcpProperties(sourceCfg));
                 compiled.get(n.id()).csIds.put("sql-dbcp", cs.id());
             }
+        }
+        Map<String,com.linewell.dataelement.mapping.core.MappingEngine.Plan> archivedPlans=new LinkedHashMap<>();javaMappingPlans.forEach((node,plan)->archivedPlans.put(node,plan.plan()));
+        Map<String,String> planVersionIds=mappingVersions==null?Map.of():mappingVersions.archive(pipeline,archivedPlans);
+        // Resolve once per deployment. Several Hive targets can share one
+        // Carry the explicit record schema into JDBC writers; JSON inference would lose dates/decimal precision.
+        if(pipeline.dsl().edges()!=null)for(var edge:pipeline.dsl().edges())if(javaMappingPlans.containsKey(edge.source())&&compiled.containsKey(edge.target())){
+            NodeCompilation target=compiled.get(edge.target());if(!target.csIds.containsKey("jsonReader"))target.csIds.put("jsonReader",nifi.createControllerService(pgId,JSON_READER_TYPE,"统一映射类型化输入",Map.of("Schema Access Strategy","schema-text-property","Schema Text","${avro.schema}")).id());
         }
         // Resolve once per deployment. Several Hive targets can share one
         // server-managed writer without a NiFi read per sink.
@@ -407,7 +453,8 @@ public class DslCompiler {
                         pipeline, n.id(), manifestByNode, cfgByNode, fieldMappingPlans);
                 normalizeJdbcSinkKeys(n, cfg, availableFields);
                 normalizeJdbcSinkTableName(cfg);
-                if (hasAvailableTemporalTargetColumns(cfg, availableFields)) {
+                boolean typedJavaInput=pipeline.dsl().edges()!=null&&pipeline.dsl().edges().stream().anyMatch(e->e.target().equals(n.id())&&javaMappingPlans.containsKey(e.source()));
+                if (hasAvailableTemporalTargetColumns(cfg, availableFields)&&!typedJavaInput) {
                     buildTemporalJdbcSink(pgId, n, m, spec, nc, nodeLayout, cfg, sharedCs, availableFields);
                     continue;
                 }
@@ -424,6 +471,7 @@ public class DslCompiler {
             }
 
             if (isFieldMappingTransform(m)) {
+                if(javaMappingPlans.containsKey(n.id())){buildJavaMapping(pgId,n,nc,javaMappingPlans.get(n.id()),sharedCs,planVersionIds.get(n.id()));continue;}
                 FieldMappingService.CompiledMapping plan = fieldMappingPlans.get(n.id());
                 if (plan != null && !plan.lookups().isEmpty()) {
                     buildFieldMappingLookupChain(pgId, pipeline, n, spec, nc, nodeLayout, plan,
@@ -574,7 +622,7 @@ public class DslCompiler {
         nifi.finalizeGeneratedProcessGroup(pgId);
         if (periodicSource != null) nifi.finalizeGeneratedProcessGroup(rootPgId);
 
-        return new CompileResult(rootPgId, sharedCs, compiled, edgeConnectionIds);
+        return new CompileResult(rootPgId, sharedCs, compiled, edgeConnectionIds,planVersionIds);
     }
 
     public boolean supportsSyncSettings(String manifestKey) {
@@ -1071,6 +1119,29 @@ public class DslCompiler {
     private boolean hasTemporalTargetColumns(Map<String, Object> cfg) {
         return targetColumnMetadata(cfg).stream().anyMatch(column -> isTemporalColumn(column.type()));
     }
+
+    private void buildJavaMapping(String pgId,Pipeline.Node node,NodeCompilation compiled,UnifiedMappingService.Compiled plan,Map<String,String>shared,String planId){
+        Map<String,String>properties=new LinkedHashMap<>();properties.put("record-reader",compiled.csIds.getOrDefault("jsonReader",shared.get("jsonReader")));properties.put("record-writer",compiled.csIds.get("typed-json-writer"));properties.put("execution-plan",plan.plan().document().toString());properties.put("plan-hash",plan.plan().hash());
+        if(compiled.csIds.containsKey("dictionary-batch"))properties.put("dictionary-service",compiled.csIds.get("dictionary-batch"));
+        properties.put("typed-record-reader",compiled.csIds.get("typed-json-reader"));
+        if(planId!=null)properties.put("plan-id",planId);
+        properties.put("context-node-id",node.id());
+        NifiEntity processor=nifi.createProcessor(pgId,"com.linewell.dataelement.nifi.HaitongTransformRecord",node.label(),node.x(),node.y(),properties,"0 sec","TIMER_DRIVEN");compiled.processorIds.put("map",processor.id());compiled.inletProcessorId=processor.id();compiled.outlets.put("default",new Outlet(processor.id(),"success"));
+        NifiEntity failure=nifi.createRetentionFunnel(pgId,node.x()+360,node.y()+100),invalid=nifi.createRetentionFunnel(pgId,node.x()+360,node.y()+180);
+        nifi.createConnection(pgId,processor.id(),"PROCESSOR",failure.id(),"FUNNEL",List.of("failure"));nifi.createConnection(pgId,processor.id(),"PROCESSOR",invalid.id(),"FUNNEL",List.of("invalid"));
+        nifi.createConnection(pgId,processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("retry"));compiled.usedOutgoing.put(processor.id(),new LinkedHashSet<>(List.of("failure","invalid","retry")));
+    }
+    public record MappingReplacement(NodeCompilation node,String planId) {}
+    /** Field-only upgrade: Reader/Writer and every source component remain in their existing scope. */
+    public MappingReplacement createMappingReplacement(Pipeline pipeline,Pipeline.Node node,String group,String reader,String typedReader,String writer,UnifiedMappingService.Compiled prepared){
+        NodeCompilation compiled=new NodeCompilation();compiled.csIds.put("typed-json-reader",typedReader==null?reader:typedReader);compiled.csIds.put("typed-json-writer",writer);compiled.csIds.put("jsonReader",reader);
+        Map<String,String> ids=mappingVersions.archive(pipeline,Map.of(node.id(),prepared.plan()));List<NifiEntity> created=new ArrayList<>();
+        for(var connection:prepared.connections().entrySet()){NifiEntity service=nifi.createControllerService(group,"org.apache.nifi.dbcp.DBCPConnectionPool",node.label()+"/升级字典连接",buildSourceDbcpProperties(connection.getValue()));compiled.csIds.put("dict:"+connection.getKey(),service.id());created.add(service);}
+        for(NifiEntity service:created)enableCreatedService(service);
+        if(!prepared.plan().dictionaries().isEmpty()){Map<String,String>properties=new LinkedHashMap<>();prepared.connections().keySet().forEach(id->properties.put(id,compiled.csIds.get("dict:"+id)));properties.put("authorized-definitions",prepared.plan().document().path("dictionaryBindings").toString());properties.put("snapshot-payloads",prepared.snapshots().toString());NifiEntity service=nifi.createControllerService(group,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService",node.label()+"/升级批量字典",properties);compiled.csIds.put("dictionary-batch",service.id());enableCreatedService(service);}
+        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",reader),ids.get(node.id()));return new MappingReplacement(compiled,ids.get(node.id()));
+    }
+    private void enableCreatedService(NifiEntity service){ObjectNode body=MAPPER.createObjectNode();body.set("revision",MAPPER.valueToTree(service.revision()));body.put("state","ENABLED").put("disconnectedNodeAcknowledged",false);nifi.put("/controller-services/"+service.id()+"/run-status",body,JsonNode.class);}
 
     private boolean hasAvailableTemporalTargetColumns(Map<String, Object> cfg, Set<String> availableFields) {
         if (availableFields == null || availableFields.isEmpty()) {
@@ -2894,21 +2965,10 @@ public class DslCompiler {
      * and must remain physical column names.
      */
     private boolean usesRegisteredChineseHeaders(Map<String, Object> sourceCfg) {
-        if (sourceCfg == null) return false;
-        String protocol = configText(sourceCfg, "protocol");
-        if (!"ftp".equalsIgnoreCase(protocol) && !"sftp".equalsIgnoreCase(protocol)) return false;
-        // Data-report uploads are generated from the registration template.  Its
-        // first row contains the registered Chinese display labels, while the
-        // mapping DSL necessarily uses physical column names.  Keep this an
-        // explicit source contract instead of guessing from a file name so the
-        // runtime can handle the same rule for CSV and workbook uploads.
-        if ("registered-chinese".equalsIgnoreCase(configText(sourceCfg, "fileHeaderMode"))) {
-            return true;
-        }
-        String fileFormat = configText(sourceCfg, "fileFormat");
-        return "csv".equalsIgnoreCase(fileFormat)
-                || "xls".equalsIgnoreCase(fileFormat)
-                || "xlsx".equalsIgnoreCase(fileFormat);
+        // Ordinary FTP registration reads real headers. Its Chinese comments can
+        // change independently and must never replace physical field identities.
+        // Report uploads explicitly opt into the registered-Chinese template.
+        return RegisteredFileHeaderPolicy.usesRegisteredChineseHeaders(sourceCfg);
     }
 
     private String mapFileHeaderFieldsToRegisteredNames(Object rawMappings, Map<String, Object> sourceCfg) {
@@ -3961,7 +4021,8 @@ public class DslCompiler {
 
     public record CompileResult(String processGroupId, Map<String, String> sharedControllerServiceIds,
                                 Map<String, NodeCompilation> nodes,
-                                Map<String, String> edgeConnectionIds) {
+                                Map<String, String> edgeConnectionIds,Map<String,String> planVersionIds) {
+        public CompileResult(String group,Map<String,String> services,Map<String,NodeCompilation> nodes,Map<String,String> edges){this(group,services,nodes,edges,Map.of());}
     }
 
     private record JdbcDriverSpec(String driverClass, String driverLocations, String dialectServiceType) {

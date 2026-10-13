@@ -22,7 +22,8 @@ class PipelineRepositoryDeploymentTest {
                   id varchar(64) primary key, name varchar(200), description varchar(1000), status varchar(32),
                   dsl_json clob, dsl_hash varchar(64), dsl_version bigint, nifi_process_group_id varchar(128),
                   last_deployed_hash varchar(64), last_deployed_at bigint, last_stopped_at bigint,
-                  node_mapping_json clob, last_bulletin_id bigint, created_at bigint, updated_at bigint, is_del int)
+                  node_mapping_json clob, last_bulletin_id bigint, created_at bigint, updated_at bigint, is_del int,
+                  tenant_id varchar(32) default 'test-tenant')
                 """);
         var config = new MybatisConfiguration();
         config.addMapper(NifiPipelineTMapper.class);
@@ -43,6 +44,8 @@ class PipelineRepositoryDeploymentTest {
             assertThat(reloaded.nodeMapping()).isNull();
             assertThat(jdbc.queryForMap("select nifi_process_group_id, last_deployed_hash, last_deployed_at, node_mapping_json, last_bulletin_id from nifi_pipeline_t"))
                     .allSatisfy((key, value) -> assertThat(value).isNull());
+            org.junit.jupiter.api.Assertions.assertThrows(org.springframework.web.server.ResponseStatusException.class,()->repo.update(saved.id(),old->{jdbc.update("UPDATE nifi_pipeline_t SET updated_at=updated_at+1000,nifi_process_group_id='concurrent-group' WHERE id='p1'");return old;}));
+            assertThat(jdbc.queryForObject("SELECT nifi_process_group_id FROM nifi_pipeline_t WHERE id='p1'",String.class)).isEqualTo("concurrent-group");
         }
     }
 }

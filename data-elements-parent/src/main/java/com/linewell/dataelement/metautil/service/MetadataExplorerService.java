@@ -76,6 +76,10 @@ public class MetadataExplorerService {
         return getExplorer(config).getTables(config);
     }
 
+    public List<TableInfo> getTableDirectory(DataSourceConfig config) {
+        return getExplorer(config).getTableDirectory(config);
+    }
+
     /**
      * 分页获取表/视图列表，供登记流程第二步“加载更多”使用。
      *

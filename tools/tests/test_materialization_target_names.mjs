@@ -17,7 +17,7 @@ const names = [
   'normalizeDbId', 'normalizeDbIds', 'syncDbTypeByDatasource', 'buildTargetTableName',
   'sameStringList', 'normalizeTargetTableName', 'targetDatasourceIds', 'targetTableNameInput', 'targetTablePlans',
   'syncTargetDatasourceSelection', 'syncTargetTableNameInput', 'normalizeFormPayload',
-  'isCurrentInit', 'trackLoad', 'init', 'collectSourceFields', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
+  'isCurrentInit', 'trackLoad', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
   'isHiveTarget',
   'normalizeCode', 'orderTargetDatasourceIds', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
@@ -58,7 +58,7 @@ function fixture(size = 2) {
     ref, computed: getter => ({ get value() { return getter(); } }),
     sourceTableName: ref('TC_RKXT.T_SJYCC_CKB'), datasourceMap: ref(datasource),
     sourceFileConfig: ref(null),
-    fieldCollecting: ref(false),
+    templateWarnings: ref([]),
     jsonFormRef: ref({
       validate: async () => {}, getValue: name => form[name],
       setValue: value => Object.assign(form, plain(value)), getFormData: async () => plain(form),
@@ -76,7 +76,8 @@ function fixture(size = 2) {
     normalizeDatasourcePaths: value => value, loadTemplateTableItems: async items => {
       context.templateTableItems.value = items;
     },
-    ddlGenerating: ref(false), ddlPlans: ref([]), ddlSqlByTarget: ref({}), activeDdlKey: ref(''),
+    ddlGenerating: ref(false), ddlPlans: ref([]), ddlSqlByTarget: ref({}),
+    ddlWarningsByTarget: ref({}), ddlTableItemsByTarget: ref({}), activeDdlKey: ref(''),
     ddlSourceFingerprint: ref(''), ddlWasEdited: ref(false), ddlMode: ref(false), isSaveing: ref(false),
     ElMessage: Object.fromEntries(['error', 'warning', 'success'].map(key => [key, message => notices.push({ key, message })])),
     ElMessageBox: { confirm: async () => {} }, emit: (...args) => emitted.push(plain(args)), console,
@@ -342,7 +343,8 @@ const ftpRequestCounts = [];
   const f = fixture(1);
   const original = { columnName: 'UNID', dataType: 'varchar', columnType: 'text', length: 64,
     primaryKey: 1, sourceDataType: 'text', sourceColumnType: 'text' };
-  const edited = plain(f.actual.targetTableItems([original], 'oceanbaseoracle'))[0];
+  const edited = plain(f.actual.targetTableItems([{ ...original, defaultValue: 'source_specific_function()' }], 'oceanbaseoracle'))[0];
+  assert.equal(edited.defaultValue, null);
   assert.equal(edited.columnType, 'varchar(64)');
   assert.equal(edited.sourceColumnType, 'text');
   assert.equal(original.columnType, 'text');
@@ -361,19 +363,13 @@ for (const fields of [20, 100]) {
     columnName: `field_${i}`, dataType: 'varchar', length: 100,
   })));
   assert.equal(f.calls.length, 3);
-  assert.equal(f.calls.find(c => c.route === '/ods/getTableTempalte').body.resolveSourceFile, true);
+  assert.deepEqual(plain(f.calls.find(c => c.route === '/ods/getTableTempalte').body), { tid: f.context.props.id });
   const before = f.calls.length;
   await f.actual.handleSave();
   assert.deepEqual(f.emitted.at(-1)[1].sourceFileConfig, f.context.ftpTemplate);
-  const checks = f.calls.filter(c => c.route === '/ods/getTableTempalte' && c.body.sourceFileConfig);
-  assert.equal(checks.length, 1);
-  assert.equal(checks[0].body.sourceFileConfig.delimiter, '\t');
+  assert.equal(f.calls.filter(c => c.route === '/ods/getTableTempalte').length, 1);
+  assert.equal(f.calls.filter(c => c.route === '/dst/database/metadata/collectColumns').length, 0);
   ftpRequestCounts.push({ fields, initialRequests: before, saveRequests: f.calls.length - before });
-  await f.actual.collectSourceFields();
-  const collection = f.calls.find(c => c.route === '/dst/database/metadata/collectColumns');
-  assert.equal(collection.body.sourceFileConfig.delimiter, '\t');
-  assert.equal(collection.body.sourceFileConfig.charset, 'GB18030');
-  assert.deepEqual(f.calls.filter(c => c.route === '/ods/getTableTempalte').at(-1).body.sourceFileConfig, f.context.ftpTemplate);
 }
 assert.equal(ftpRequestCounts[0].saveRequests, ftpRequestCounts[1].saveRequests);
 console.log(JSON.stringify({ ftpParserForwarded: true, literalTabPreserved: true, ftpRequestCounts }));

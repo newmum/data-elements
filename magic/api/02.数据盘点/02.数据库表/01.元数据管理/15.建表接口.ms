@@ -312,29 +312,6 @@ var hiveColumns = (config, name) => {
 }
 // Validate edited DDL as well as generated rows. Keep this boundary active on
 // older running backends until the shared Java parser is upgraded.
-var validateLobKeys = (ddl, config) => {
-    var code = config.getDatabaseType().getCode().toLowerCase()
-    if (!['oracle','oceanbaseoracle','oceanbase_oracle','dameng','dm'].contains(code)) { return }
-    var create = SQLUtils.parseStatements(ddl, DbType.oracle)[0]
-    var keys = {}
-    for (name in create.getPrimaryKeyNames()) { keys[SQLUtils.normalize(name).toLowerCase()] = true }
-    for (element in create.getTableElementList()) {
-        if (element instanceof SQLUniqueConstraint) {
-            for (column in element.getColumns()) { keys[SQLUtils.normalize(column.getExpr().toString()).toLowerCase()] = true }
-        }
-    }
-    for (column in create.getColumnDefinitions()) {
-        var name = SQLUtils.normalize(column.getName().toString())
-        var type = column.getDataType().getName().toUpperCase()
-        var inlineKey = false
-        for (constraint in column.getConstraints()) {
-            if (constraint instanceof SQLColumnUniqueKey || constraint instanceof SQLColumnPrimaryKey) { inlineKey = true }
-        }
-        if (['CLOB','NCLOB','BLOB','LONG','TEXT','STRING'].contains(type) && (keys[name.toLowerCase()] == true || inlineKey)) {
-            exit 400, '字段“' + name + '”的长文本/LOB类型不能作为目标库主键或唯一键。请明确改为足够长度的VARCHAR，或取消该约束'
-        }
-    }
-}
 if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
     if (body?.canvas != true || body?.validateOnly != true) {
         exit 400, '批量建表语句校验只支持 canvas=true 且 validateOnly=true'
@@ -403,7 +380,6 @@ if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
         var parsed = null
         try { parsed = canvasTableDdl.parse(target.ddl, config) }
         catch (e) { exit 400, '目标表“' + target.tableName + '”建表语句校验失败：' + e.getMessage() }
-        validateLobKeys(parsed.ddl, config)
         if (config.getDatabaseType() == DatabaseType.HIVE
             && textOf(parsed.lookupName) != textOf(parsed.lookupName).toLowerCase()) {
             exit 400, 'Hive目标表名必须使用小写，包括ods_前缀，请重新生成建表语句'
@@ -472,7 +448,6 @@ if (body.canvas == true) {
     var parsed = null
     try { parsed = canvasTableDdl.parse(textOf(ddl), config) }
     catch (e) { exit 400, '建表语句校验失败：' + e.getMessage() }
-    validateLobKeys(parsed.ddl, config)
     if (config.getDatabaseType() == DatabaseType.HIVE
         && textOf(parsed.lookupName) != textOf(parsed.lookupName).toLowerCase()) {
         exit 400, 'Hive目标表名必须使用小写，包括ods_前缀，请重新生成建表语句'
@@ -491,20 +466,7 @@ if (body.canvas == true) {
         return {status:'exists', created:false, tableName:parsed.tableName, physicalTableReused:true,
             tableItems:reusedTableItems(body.tableItems, columns, config, parsed.tableName)}
     }
-    if (managedHive) {
-        for (candidate in hwhive.showTables(config.getDatabase())) {
-            if (canvasTableDdl.matches(parsed, candidate, config.getDatabase())) {
-                return { status: 'exists', created: false, tableName: parsed.tableName, message: '目标表已存在，请直接选择已有表' }
-            }
-        }
-    } else {
-        var page = metadataExplorerService.getTablesPage(config, 1, 500, parsed.lookupName)
-        for (candidate in (page == null || page.rows == null ? [] : page.rows)) {
-            if (canvasTableDdl.matches(parsed, candidate.tableName, candidate.schemaName)) {
-                return { status: 'exists', created: false, tableName: parsed.tableName, message: '目标表已存在，请直接选择已有表' }
-            }
-        }
-    }
+    // 直接执行限定目标的CREATE。已有对象由数据库错误码处理，目录权限或旧驱动的探查失败不再阻断建表。
     try {
         if (managedHive) { hwhive.execDDLSqlInDatabase(config.getDatabase(), parsed.ddl) }
         else { metadataExplorerService.createTable(config, parsed.ddl) }

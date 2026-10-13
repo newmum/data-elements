@@ -1,6 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
+import com.linewell.dataelement.metautil.ddl.PortableDdlConverter;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import org.junit.jupiter.api.Test;
@@ -17,18 +18,15 @@ import static org.junit.jupiter.api.Assertions.*;
 /** The real reuse guard must retain schema differences without mutating existing Hive data. */
 class ExistingTargetSchemaCompatibilityMagicTest {
     @Test
-    void runtimeBoundaryAlsoRejectsEditedClobKeysOnAnOlderBackend() throws Exception {
-        String source = CanonicalMagicSources.byId("a0b5bba38fbf428c8e3646864d83d56b");
-        String helper = source.substring(source.indexOf("var validateLobKeys ="), source.indexOf("if (body?.batchValidateOnly"));
-        String imports = "import com.alibaba.druid.DbType\nimport com.alibaba.druid.sql.SQLUtils\n"
-                + "import com.alibaba.druid.sql.ast.statement.SQLUniqueConstraint\nimport com.alibaba.druid.sql.ast.statement.SQLColumnUniqueKey\n"
-                + "import com.alibaba.druid.sql.ast.statement.SQLColumnPrimaryKey\n";
-        var config = new DataSourceConfig(); config.setDatabaseType(DatabaseType.OCEANBASE_ORACLE);
+    @SuppressWarnings("unchecked")
+    void importedClobKeysRemainEditableWithOneConversionWarning() {
+        var converter = new PortableDdlConverter();
         for (String definition : List.of("UNID CLOB PRIMARY KEY", "UNID CLOB, PRIMARY KEY(UNID)", "UNID CLOB UNIQUE")) {
-            var result = assertInstanceOf(ExitValue.class, MagicScript.create(imports + helper + "validateLobKeys(ddl,config)\nreturn true", null)
-                    .execute(new MagicScriptContext(Map.of("ddl", "CREATE TABLE events(" + definition + ")", "config", config))));
-            assertEquals(400, result.getValues()[0]);
-            assertTrue(result.getValues()[1].toString().contains("UNID"));
+            var imported = converter.read("CREATE TABLE events(" + definition + ")", "oceanbase-oracle");
+            var result = converter.prepare((List<ColumnInfo>) imported.get("columns"), DatabaseType.OCEANBASE_ORACLE);
+            assertEquals(1, ((List<?>) result.get("warnings")).size());
+            assertTrue(result.get("warnings").toString().contains("UNID"));
+            assertEquals(1, ((List<?>) result.get("columns")).size());
         }
     }
     @Test

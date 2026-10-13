@@ -18,7 +18,7 @@ CREATE TABLE `api_backup_t` (
   `updated_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
   `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Magic API历史版本';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='低代码接口-接口资源历史版本（Magic API）';
 
 -- TABLE api_file_t
 CREATE TABLE `api_file_t` (
@@ -33,7 +33,7 @@ CREATE TABLE `api_file_t` (
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
   `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '租户标识',
   `file_path` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Magic资源路径'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Magic API资源文件';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='低代码接口-接口资源文件（Magic API）';
 
 -- TABLE api_job_t
 CREATE TABLE `api_job_t` (
@@ -45,23 +45,23 @@ CREATE TABLE `api_job_t` (
   `last_duration_ms` bigint DEFAULT NULL COMMENT '最近一次执行耗时（毫秒）',
   `last_status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'NEVER' COMMENT '最近一次执行状态；可选值：RUNNING/COMPLETED/DISABLED/FAILED',
   `last_error` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近一次错误信息',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_magic_system_job_status_code` (`job_code`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_magic_system_job_status_code` (`job_code`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='系统调度-API定时任务最近一次执行状态';
 
 -- TABLE data_push_relay_client_t
 CREATE TABLE `data_push_relay_client_t` (
-  `tid` varchar(32) NOT NULL COMMENT '主键标识',
-  `relay_client_id` varchar(128) NOT NULL COMMENT '中继客户端标识',
-  `tenant_id` varchar(32) NOT NULL COMMENT '租户标识',
-  `datasource_id` varchar(32) DEFAULT NULL COMMENT '数据源标识；为空时可访问该租户已发布的推送数据源',
+  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '主键标识',
+  `relay_client_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '中继客户端标识',
+  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '租户标识',
+  `datasource_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL COMMENT '数据源标识；为空时可访问该租户已发布的推送数据源',
   `is_enable` tinyint NOT NULL DEFAULT '1' COMMENT '启用标志',
   `created_time` datetime(6) NOT NULL COMMENT '创建时间',
   `updated_time` datetime(6) NOT NULL COMMENT '更新时间',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志，0未删除、1已删除',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_data_push_relay_client_scope` (`relay_client_id`,`tenant_id`,`datasource_id`),
-  KEY `idx_data_push_relay_client_lookup` (`relay_client_id`,`is_enable`,`is_del`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_data_push_relay_client_scope` (`relay_client_id`,`tenant_id`,`datasource_id`) USING BTREE,
+  KEY `idx_data_push_relay_client_lookup` (`relay_client_id`,`is_enable`,`is_del`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据推送-海通推送调用方租户与数据源范围绑定';
 
 -- TABLE iam_access_grant_t
@@ -85,12 +85,12 @@ CREATE TABLE `iam_access_grant_t` (
   `valid_until` datetime(6) DEFAULT NULL COMMENT '到期',
   `reason` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '授权理由',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  KEY `ix_21_1` (`app_id`,`status`),
-  KEY `ix_21_2` (`subject_id`,`app_id`),
-  KEY `ix_21_3` (`org_id`,`app_id`),
-  KEY `ix_21_4` (`group_id`,`app_id`),
-  KEY `ix_21_5` (`client_id`,`app_id`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  KEY `ix_21_1` (`app_id`,`status`) USING BTREE,
+  KEY `ix_21_2` (`subject_id`,`app_id`) USING BTREE,
+  KEY `ix_21_3` (`org_id`,`app_id`) USING BTREE,
+  KEY `ix_21_4` (`group_id`,`app_id`) USING BTREE,
+  KEY `ix_21_5` (`client_id`,`app_id`) USING BTREE,
   CONSTRAINT `ck_21_1` CHECK (((`valid_until` is null) or (`valid_until` > `valid_from`))),
   CONSTRAINT `ck_21_2` CHECK ((((`principal_type` = _utf8mb4'SUBJECT') and (`subject_id` is not null) and (`org_id` is null) and (`group_id` is null) and (`client_id` is null)) or ((`principal_type` = _utf8mb4'ORG') and (`subject_id` is null) and (`org_id` is not null) and (`group_id` is null) and (`client_id` is null)) or ((`principal_type` = _utf8mb4'GROUP') and (`subject_id` is null) and (`org_id` is null) and (`group_id` is not null) and (`client_id` is null)) or ((`principal_type` = _utf8mb4'CLIENT') and (`subject_id` is null) and (`org_id` is null) and (`group_id` is null) and (`client_id` is not null))))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-应用资格和角色授权来源';
@@ -109,8 +109,8 @@ CREATE TABLE `iam_account_security_t` (
   `locked_until` datetime(6) DEFAULT NULL COMMENT '锁定截止',
   `password_changed_time` datetime(6) DEFAULT NULL COMMENT '最近改密时间',
   `security_version` bigint unsigned NOT NULL DEFAULT '1' COMMENT '安全版本，改密等操作触发会话版本失效',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_10_1` (`principal_kind`,`principal_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_10_1` (`principal_kind`,`principal_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-认证主体锁定与安全状态';
 
 -- TABLE iam_app_org_t
@@ -125,8 +125,8 @@ CREATE TABLE `iam_app_org_t` (
   `org_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '中央机构ID',
   `include_children` tinyint NOT NULL DEFAULT '0' COMMENT '是否包含下级',
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/REVOKED',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_26_1` (`app_id`,`org_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_26_1` (`app_id`,`org_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-应用机构目录范围';
 
 -- TABLE iam_application_config_t
@@ -143,9 +143,9 @@ CREATE TABLE `iam_application_config_t` (
   `config_value` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '配置项原值；大尺寸应用标识也可存放',
   `value_type` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'STRING' COMMENT 'STRING或BOOLEAN，读取时还原类型',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_iam_application_config` (`app_id`,`config_group`,`config_code`),
-  KEY `ix_iam_application_config_group` (`config_group`,`is_del`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_iam_application_config` (`app_id`,`config_group`,`config_code`) USING BTREE,
+  KEY `ix_iam_application_config_group` (`config_group`,`is_del`) USING BTREE,
   CONSTRAINT `ck_iam_application_config_type` CHECK ((`value_type` in (_utf8mb4'STRING',_utf8mb4'BOOLEAN')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-应用配置项；业务应用的界面配置独立于应用扩展资料';
 
@@ -161,8 +161,8 @@ CREATE TABLE `iam_application_group_t` (
   `name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '分组名称',
   `sort_no` int NOT NULL DEFAULT '0' COMMENT '排序',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_1_1` (`code`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_1_1` (`code`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-应用分组';
 
 -- TABLE iam_application_runtime_t
@@ -180,9 +180,9 @@ CREATE TABLE `iam_application_runtime_t` (
   `local_permission_app_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '本地角色菜单原app_id，非IAM应用ID',
   `binding_status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'PENDING' COMMENT '绑定状态；可选值：PENDING/VERIFIED/DISABLED',
   `verified_time` datetime(6) DEFAULT NULL COMMENT '最近完成实际数据源核验的时间',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_3_1` (`app_id`),
-  UNIQUE KEY `uk_3_2` (`runtime_tenant_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_3_1` (`app_id`) USING BTREE,
+  UNIQUE KEY `uk_3_2` (`runtime_tenant_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-应用与原运行租户绑定';
 
 -- TABLE iam_application_t
@@ -206,9 +206,9 @@ CREATE TABLE `iam_application_t` (
   `auth_mode` varchar(24) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'LOCAL' COMMENT 'LOCAL或后续显式启用的FEDERATED',
   `provisioning_mode` varchar(24) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'OFF' COMMENT 'OFF/HTTP；下发与认证独立开关',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_2_1` (`code`),
-  KEY `ix_2_1` (`group_id`,`status`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_2_1` (`code`) USING BTREE,
+  KEY `ix_2_1` (`group_id`,`status`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-身份应用主表';
 
 -- TABLE iam_appointment_t
@@ -231,10 +231,10 @@ CREATE TABLE `iam_appointment_t` (
   `valid_until` datetime(6) DEFAULT NULL COMMENT '截止时间',
   `primary_subject_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin GENERATED ALWAYS AS ((case when ((`is_del` = 0) and (`status` = _utf8mb4'ACTIVE') and (`is_primary` = 1)) then `subject_id` else NULL end)) STORED COMMENT '每人最多一条标记活动主职',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_18_1` (`primary_subject_id`),
-  KEY `ix_18_1` (`subject_id`,`status`),
-  KEY `ix_18_2` (`org_id`,`status`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_18_1` (`primary_subject_id`) USING BTREE,
+  KEY `ix_18_1` (`subject_id`,`status`) USING BTREE,
+  KEY `ix_18_2` (`org_id`,`status`) USING BTREE,
   CONSTRAINT `ck_18_1` CHECK (((`valid_until` is null) or (`valid_until` > `valid_from`)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-人员机构与主兼任';
 
@@ -265,12 +265,12 @@ CREATE TABLE `iam_audit_event_t` (
   `duration_ms` bigint DEFAULT NULL COMMENT '耗时',
   `event_time` datetime(6) NOT NULL COMMENT '事件实际发生时间，历史迁移不改写',
   `snapshot_json` json DEFAULT NULL COMMENT '脱敏前后值和必要上下文，不含凭据或完整报文',
-  PRIMARY KEY (`tid`),
-  KEY `ix_13_1` (`event_type`,`event_time`),
-  KEY `ix_13_2` (`app_id`,`event_time`),
-  KEY `ix_13_3` (`actor_kind`,`actor_id`,`event_time`),
-  KEY `ix_13_4` (`trace_id`),
-  KEY `ix_13_5` (`account_fingerprint`,`event_time`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  KEY `ix_13_1` (`event_type`,`event_time`) USING BTREE,
+  KEY `ix_13_2` (`app_id`,`event_time`) USING BTREE,
+  KEY `ix_13_3` (`actor_kind`,`actor_id`,`event_time`) USING BTREE,
+  KEY `ix_13_4` (`trace_id`) USING BTREE,
+  KEY `ix_13_5` (`account_fingerprint`,`event_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-操作认证和API审计';
 
 -- TABLE iam_auth_account_t
@@ -289,9 +289,9 @@ CREATE TABLE `iam_auth_account_t` (
   `must_change_password` tinyint NOT NULL DEFAULT '0' COMMENT '下次强制改密',
   `active_username` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin GENERATED ALWAYS AS ((case when (`is_del` = 0) then lower(trim(`username`)) else NULL end)) STORED COMMENT '同域有效登录名',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_33_1` (`identity_domain`,`active_username`),
-  KEY `ix_33_1` (`subject_id`,`status`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_33_1` (`identity_domain`,`active_username`) USING BTREE,
+  KEY `ix_33_1` (`subject_id`,`status`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-可选的统一认证账号';
 
 -- TABLE iam_auth_client_t
@@ -315,9 +315,9 @@ CREATE TABLE `iam_auth_client_t` (
   `refresh_ttl_seconds` int NOT NULL DEFAULT '86400' COMMENT '刷新令牌最大有效期',
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'REGISTERED' COMMENT 'REGISTERED/ACTIVE/DISABLED；登记不代表协议已开通',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_34_1` (`client_key`),
-  KEY `ix_34_1` (`app_id`,`status`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_34_1` (`client_key`) USING BTREE,
+  KEY `ix_34_1` (`app_id`,`status`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-应用的终端与机器身份登记';
 
 -- TABLE iam_auth_redirect_t
@@ -332,8 +332,8 @@ CREATE TABLE `iam_auth_redirect_t` (
   `uri_type` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '地址类型；可选值：LOGIN/LOGOUT',
   `uri` varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '完整登记地址',
   `uri_hash` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '完整地址摘要便于唯一索引',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_35_1` (`client_id`,`uri_type`,`uri_hash`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_35_1` (`client_id`,`uri_type`,`uri_hash`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-认证精确回调地址';
 
 -- TABLE iam_auth_session_t
@@ -362,16 +362,16 @@ CREATE TABLE `iam_auth_session_t` (
   `refresh_fingerprint` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '当前刷新令牌摘要查找',
   `previous_refresh_fingerprint` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '已消费刷新令牌摘要，用于重放撤销整个族',
   `state_fingerprint` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '协议state摘要查找',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_36_1` (`session_fingerprint`),
-  UNIQUE KEY `uk_iam_auth_authorization` (`authorization_key`),
-  KEY `ix_36_1` (`principal_kind`,`principal_id`),
-  KEY `ix_36_2` (`family_id`),
-  KEY `ix_36_3` (`expires_at`),
-  KEY `ix_iam_auth_code` (`code_fingerprint`),
-  KEY `ix_iam_auth_access` (`access_fingerprint`),
-  KEY `ix_iam_auth_refresh` (`refresh_fingerprint`),
-  KEY `ix_iam_auth_previous_refresh` (`previous_refresh_fingerprint`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_36_1` (`session_fingerprint`) USING BTREE,
+  UNIQUE KEY `uk_iam_auth_authorization` (`authorization_key`) USING BTREE,
+  KEY `ix_36_1` (`principal_kind`,`principal_id`) USING BTREE,
+  KEY `ix_36_2` (`family_id`) USING BTREE,
+  KEY `ix_36_3` (`expires_at`) USING BTREE,
+  KEY `ix_iam_auth_code` (`code_fingerprint`) USING BTREE,
+  KEY `ix_iam_auth_access` (`access_fingerprint`) USING BTREE,
+  KEY `ix_iam_auth_refresh` (`refresh_fingerprint`) USING BTREE,
+  KEY `ix_iam_auth_previous_refresh` (`previous_refresh_fingerprint`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-认证会话元数据与撤销索引';
 
 -- TABLE iam_change_event_t
@@ -391,9 +391,9 @@ CREATE TABLE `iam_change_event_t` (
   `lease_until` datetime(6) DEFAULT NULL COMMENT '处理租约',
   `lease_token` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '工作者标识',
   `attempt_count` int NOT NULL DEFAULT '0' COMMENT '重算尝试次数',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_32_1` (`event_type`,`object_type`,`object_id`,`object_version`),
-  KEY `ix_32_1` (`status`,`lease_until`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_32_1` (`event_type`,`object_type`,`object_id`,`object_version`) USING BTREE,
+  KEY `ix_32_1` (`status`,`lease_until`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-控制库事务变更与待处理事件';
 
 -- TABLE iam_credential_t
@@ -418,9 +418,9 @@ CREATE TABLE `iam_credential_t` (
   `not_before` datetime(6) DEFAULT NULL COMMENT '可用起点',
   `expires_at` datetime(6) DEFAULT NULL COMMENT '失效时间',
   `active_slot` varchar(160) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin GENERATED ALWAYS AS ((case when (`status` = _utf8mb4'ACTIVE') then concat(`credential_type`,_utf8mb4':',`slot`) else NULL end)) STORED COMMENT '防止同凭据槽多个活动版本',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_11_1` (`owner_kind`,`owner_id`,`credential_type`,`slot`,`revision`),
-  UNIQUE KEY `uk_11_2` (`owner_kind`,`owner_id`,`active_slot`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_11_1` (`owner_kind`,`owner_id`,`credential_type`,`slot`,`revision`) USING BTREE,
+  UNIQUE KEY `uk_11_2` (`owner_kind`,`owner_id`,`active_slot`) USING BTREE,
   CONSTRAINT `ck_11_1` CHECK (((`credential_type` <> _utf8mb4'PASSWORD') or (`slot` = _utf8mb4'primary'))),
   CONSTRAINT `ck_11_2` CHECK (((`secret_hash` is null) or (`secret_cipher` is null)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-分用途凭据与密钥版本';
@@ -441,8 +441,8 @@ CREATE TABLE `iam_dict_item_t` (
   `sort_no` int NOT NULL DEFAULT '0' COMMENT '排序',
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/DISABLED',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_19_1` (`identity_domain`,`category`,`code`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_19_1` (`identity_domain`,`category`,`code`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-条线岗位职务等IAM字典';
 
 -- TABLE iam_external_link_t
@@ -462,9 +462,9 @@ CREATE TABLE `iam_external_link_t` (
   `ack_hash` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '确认资料摘要',
   `management_state` varchar(24) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'MANAGED' COMMENT '管理状态；可选值：MANAGED/DETACHED/CONFLICT',
   `last_ack_time` datetime(6) DEFAULT NULL COMMENT '最近确认时间',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_31_1` (`app_id`,`object_type`,`source_id`),
-  UNIQUE KEY `uk_31_2` (`app_id`,`receiver_instance_id`,`object_type`,`local_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_31_1` (`app_id`,`object_type`,`source_id`) USING BTREE,
+  UNIQUE KEY `uk_31_2` (`app_id`,`receiver_instance_id`,`object_type`,`local_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-中央对象与应用本地对象映射';
 
 -- TABLE iam_field_definition_t
@@ -485,8 +485,8 @@ CREATE TABLE `iam_field_definition_t` (
   `sensitive_flag` tinyint NOT NULL DEFAULT '0' COMMENT '是否敏感',
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/DISABLED',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_20_1` (`identity_domain`,`entity_type`,`field_key`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_20_1` (`identity_domain`,`entity_type`,`field_key`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-扩展属性定义';
 
 -- TABLE iam_grant_role_rela_t
@@ -500,8 +500,8 @@ CREATE TABLE `iam_grant_role_rela_t` (
   `grant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '授权来源ID',
   `role_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '应用角色ID',
   `app_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '同应用约束值',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_22_1` (`grant_id`,`role_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_22_1` (`grant_id`,`role_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-授权包含的应用角色';
 
 -- TABLE iam_group_member_t
@@ -517,9 +517,9 @@ CREATE TABLE `iam_group_member_t` (
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/REVOKED',
   `valid_from` datetime(6) NOT NULL COMMENT '生效时间',
   `valid_until` datetime(6) DEFAULT NULL COMMENT '截止时间',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_24_1` (`group_id`,`subject_id`),
-  KEY `ix_24_1` (`subject_id`,`status`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_24_1` (`group_id`,`subject_id`) USING BTREE,
+  KEY `ix_24_1` (`subject_id`,`status`) USING BTREE,
   CONSTRAINT `ck_24_1` CHECK (((`valid_until` is null) or (`valid_until` > `valid_from`)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-权限组人员成员';
 
@@ -539,9 +539,9 @@ CREATE TABLE `iam_legal_entity_t` (
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/DISABLED/ARCHIVED',
   `ext_json` json DEFAULT NULL COMMENT '法人扩展资料',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_38_1` (`code`),
-  UNIQUE KEY `uk_38_2` (`registration_code`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_38_1` (`code`) USING BTREE,
+  UNIQUE KEY `uk_38_2` (`registration_code`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-法人主体';
 
 -- TABLE iam_legal_member_t
@@ -561,10 +561,10 @@ CREATE TABLE `iam_legal_member_t` (
   `valid_until` datetime(6) DEFAULT NULL COMMENT '失效时间',
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'PENDING' COMMENT '状态；可选值：PENDING/ACTIVE/REVOKED',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  KEY `ix_39_1` (`entity_id`,`status`),
-  KEY `ix_39_2` (`subject_id`,`status`),
-  KEY `ix_39_3` (`auth_account_id`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  KEY `ix_39_1` (`entity_id`,`status`) USING BTREE,
+  KEY `ix_39_2` (`subject_id`,`status`) USING BTREE,
+  KEY `ix_39_3` (`auth_account_id`) USING BTREE,
   CONSTRAINT `ck_39_1` CHECK (((`valid_until` is null) or (`valid_until` > `valid_from`)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-法人自然人及子账号关系';
 
@@ -584,9 +584,9 @@ CREATE TABLE `iam_migration_map_t` (
   `target_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '新ID或保留ID',
   `source_hash` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '迁移快照摘要',
   `state` varchar(24) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '状态；可选值：COPIED/VERIFIED/ARCHIVED/ROLLED_BACK',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_15_1` (`batch_id`,`source_schema`,`source_table`,`source_id`,`target_type`),
-  KEY `ix_15_1` (`target_type`,`target_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_15_1` (`batch_id`,`source_schema`,`source_table`,`source_id`,`target_type`) USING BTREE,
+  KEY `ix_15_1` (`target_type`,`target_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-重构迁移批次与ID对照';
 
 -- TABLE iam_operator_role_rela_t
@@ -602,8 +602,8 @@ CREATE TABLE `iam_operator_role_rela_t` (
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/REVOKED',
   `valid_from` datetime(6) NOT NULL COMMENT '生效时间',
   `valid_until` datetime(6) DEFAULT NULL COMMENT '失效时间，空表示不设固定到期',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_5_1` (`operator_id`,`role_id`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_5_1` (`operator_id`,`role_id`) USING BTREE,
   CONSTRAINT `ck_5_1` CHECK (((`valid_until` is null) or (`valid_until` > `valid_from`)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-平台操作账号角色分配';
 
@@ -621,10 +621,10 @@ CREATE TABLE `iam_operator_scope_t` (
   `app_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '范围限定应用，可与ORG组合限定机构内指定应用',
   `org_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '范围限定机构',
   `include_children` tinyint NOT NULL DEFAULT '0' COMMENT '是否含下级机构',
-  PRIMARY KEY (`tid`),
-  KEY `ix_6_1` (`assignment_id`),
-  KEY `ix_6_2` (`app_id`),
-  KEY `ix_6_3` (`org_id`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  KEY `ix_6_1` (`assignment_id`) USING BTREE,
+  KEY `ix_6_2` (`app_id`) USING BTREE,
+  KEY `ix_6_3` (`org_id`) USING BTREE,
   CONSTRAINT `ck_6_1` CHECK ((((`scope_kind` = _utf8mb4'ALL') and (`app_id` is null) and (`org_id` is null)) or ((`scope_kind` = _utf8mb4'APPLICATION') and (`app_id` is not null) and (`org_id` is null)) or ((`scope_kind` = _utf8mb4'ORG') and (`org_id` is not null))))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-平台角色分配的管理范围';
 
@@ -646,10 +646,10 @@ CREATE TABLE `iam_operator_t` (
   `last_login_time` datetime(6) DEFAULT NULL COMMENT '最近平台登录时间',
   `active_username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin GENERATED ALWAYS AS ((case when (`is_del` = 0) then lower(trim(`username`)) else NULL end)) STORED COMMENT '有效账号规范名',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_4_1` (`active_username`),
-  UNIQUE KEY `uk_iam_operator_subject_id` (`subject_id`),
-  CONSTRAINT `fk_iam_operator_subject_id` FOREIGN KEY (`subject_id`) REFERENCES `iam_subject_t` (`tid`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_4_1` (`active_username`) USING BTREE,
+  UNIQUE KEY `uk_iam_operator_subject_id` (`subject_id`) USING BTREE,
+  CONSTRAINT `fk_iam_operator_subject_id` FOREIGN KEY (`subject_id`) REFERENCES `iam_subject_t` (`tid`) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT `ck_iam_operator_profile_source` CHECK ((((`subject_id` is null) and (`display_name` is not null)) or ((`subject_id` is not null) and (`display_name` is null) and (`phone` is null) and (`email` is null))))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-卓鉴平台操作账号';
 
@@ -673,10 +673,10 @@ CREATE TABLE `iam_org_t` (
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/DISABLED/ARCHIVED',
   `ext_json` json DEFAULT NULL COMMENT '机构扩展属性',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_17_1` (`identity_domain`,`code`),
-  KEY `ix_17_1` (`identity_domain`,`parent_id`),
-  KEY `ix_17_2` (`identity_domain`,`status`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_17_1` (`identity_domain`,`code`) USING BTREE,
+  KEY `ix_17_1` (`identity_domain`,`parent_id`) USING BTREE,
+  KEY `ix_17_2` (`identity_domain`,`status`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-中央机构树';
 
 -- TABLE iam_permission_group_t
@@ -693,8 +693,8 @@ CREATE TABLE `iam_permission_group_t` (
   `description` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '说明',
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/DISABLED',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_23_1` (`identity_domain`,`code`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_23_1` (`identity_domain`,`code`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-跨应用权限组合';
 
 -- TABLE iam_public_profile_t
@@ -713,9 +713,9 @@ CREATE TABLE `iam_public_profile_t` (
   `verified_time` datetime(6) DEFAULT NULL COMMENT '实名通过时间',
   `verification_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '当前有效核验记录ID',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_37_1` (`subject_id`),
-  KEY `ix_37_1` (`document_type`,`document_fingerprint`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_37_1` (`subject_id`) USING BTREE,
+  KEY `ix_37_1` (`document_type`,`document_fingerprint`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-公众自然人实名资料';
 
 -- TABLE iam_request_receipt_t
@@ -734,9 +734,9 @@ CREATE TABLE `iam_request_receipt_t` (
   `result_json` json DEFAULT NULL COMMENT '可安全回放结果，禁止令牌和秘密',
   `error_code` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '失败码',
   `expires_at` datetime(6) DEFAULT NULL COMMENT '非历史回执保留截止',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_14_1` (`operator_id`,`operation_code`,`request_id`),
-  KEY `ix_14_1` (`status`,`updated_time`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_14_1` (`operator_id`,`operation_code`,`request_id`) USING BTREE,
+  KEY `ix_14_1` (`status`,`updated_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-业务请求幂等回执';
 
 -- TABLE iam_resource_t
@@ -759,9 +759,9 @@ CREATE TABLE `iam_resource_t` (
   `ext_json` json DEFAULT NULL COMMENT '资源扩展资料',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
   `identity_domain` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'workforce' COMMENT '业务资源身份域；平台内部资源固定workforce',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_8_1` (`app_id`,`code`),
-  KEY `ix_8_1` (`app_id`,`parent_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_8_1` (`app_id`,`code`) USING BTREE,
+  KEY `ix_8_1` (`app_id`,`parent_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-应用菜单按钮和API资源';
 
 -- TABLE iam_role_resource_rela_t
@@ -775,9 +775,9 @@ CREATE TABLE `iam_role_resource_rela_t` (
   `role_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '角色ID',
   `resource_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '资源ID',
   `app_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '归属应用用于隔离校验',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_9_1` (`role_id`,`resource_id`),
-  KEY `ix_9_1` (`app_id`,`resource_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_9_1` (`role_id`,`resource_id`) USING BTREE,
+  KEY `ix_9_1` (`app_id`,`resource_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-角色资源关联';
 
 -- TABLE iam_role_t
@@ -795,9 +795,9 @@ CREATE TABLE `iam_role_t` (
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/DISABLED',
   `description` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '职责说明',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_7_1` (`app_id`,`code`),
-  KEY `ix_7_1` (`app_id`,`status`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_7_1` (`app_id`,`code`) USING BTREE,
+  KEY `ix_7_1` (`app_id`,`status`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-应用角色与平台内部角色';
 
 -- TABLE iam_setting_t
@@ -815,8 +815,8 @@ CREATE TABLE `iam_setting_t` (
   `value_json` json NOT NULL COMMENT '经过类型和范围校验的配置，不存秘密',
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/DISABLED',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_12_1` (`scope_kind`,`scope_key`,`category`,`config_key`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_12_1` (`scope_kind`,`scope_key`,`category`,`config_key`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-统一身份配置与策略';
 
 -- TABLE iam_subject_app_t
@@ -838,9 +838,9 @@ CREATE TABLE `iam_subject_app_t` (
   `ack_version` bigint unsigned NOT NULL DEFAULT '0' COMMENT '接收方已确认应用的版本',
   `sync_status` varchar(24) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'NOT_CONNECTED' COMMENT '同步状态；可选值：NOT_CONNECTED/PENDING/IN_SYNC/FAILED/CONFLICT',
   `projection_hash` char(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '访问资格、角色和资源排序集合摘要，用于期望版本变更判定',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_25_1` (`subject_id`,`app_id`),
-  KEY `ix_25_1` (`app_id`,`sync_status`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_25_1` (`subject_id`,`app_id`) USING BTREE,
+  KEY `ix_25_1` (`app_id`,`sync_status`) USING BTREE,
   CONSTRAINT `ck_25_1` CHECK ((`directory_assigned` in (0,1))),
   CONSTRAINT `ck_25_2` CHECK ((`desired_enabled` in (0,1)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-人员应用分配与下发投影';
@@ -865,10 +865,10 @@ CREATE TABLE `iam_subject_t` (
   `status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT 'ACTIVE' COMMENT '状态；可选值：ACTIVE/DISABLED/ARCHIVED',
   `ext_json` json DEFAULT NULL COMMENT '扩展属性；原record_json剩余资料须明确归属后迁移',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_16_1` (`identity_domain`,`subject_code`),
-  KEY `ix_16_1` (`identity_domain`,`status`),
-  KEY `ix_16_2` (`identity_domain`,`name`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_16_1` (`identity_domain`,`subject_code`) USING BTREE,
+  KEY `ix_16_1` (`identity_domain`,`status`) USING BTREE,
+  KEY `ix_16_2` (`identity_domain`,`name`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-中央人员主档';
 
 -- TABLE iam_sync_attempt_t
@@ -889,8 +889,8 @@ CREATE TABLE `iam_sync_attempt_t` (
   `result_code` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '业务回执码',
   `safe_message` varchar(2000) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '脱敏原因',
   `duration_ms` bigint DEFAULT NULL COMMENT '耗时',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_30_1` (`item_id`,`attempt_no`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_30_1` (`item_id`,`attempt_no`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-同步每次尝试记录';
 
 -- TABLE iam_sync_config_t
@@ -915,8 +915,8 @@ CREATE TABLE `iam_sync_config_t` (
   `last_test_result` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT 'SUCCESS/FAILED；不代表业务已同步',
   `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '软删除标志；不用于删除审计',
   `display_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '接收配置' COMMENT '接收配置展示名称',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_27_1` (`app_id`),
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_27_1` (`app_id`) USING BTREE,
   CONSTRAINT `ck_27_1` CHECK ((`timeout_seconds` between 1 and 60)),
   CONSTRAINT `ck_27_2` CHECK ((`batch_size` between 1 and 1000)),
   CONSTRAINT `ck_27_3` CHECK ((`max_attempts` between 1 and 20))
@@ -944,10 +944,10 @@ CREATE TABLE `iam_sync_item_t` (
   `attempt_count` int NOT NULL DEFAULT '0' COMMENT '已尝试次数',
   `next_retry_time` datetime(6) DEFAULT NULL COMMENT '下次重试',
   `result_json` json DEFAULT NULL COMMENT '校验并脱敏的接收回执',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_29_1` (`task_id`,`sequence_no`),
-  KEY `ix_29_1` (`app_id`,`object_type`,`object_id`,`source_version`),
-  KEY `ix_29_2` (`status`,`next_retry_time`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_29_1` (`task_id`,`sequence_no`) USING BTREE,
+  KEY `ix_29_1` (`app_id`,`object_type`,`object_id`,`source_version`) USING BTREE,
+  KEY `ix_29_2` (`status`,`next_retry_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-不可变下发事件与结果';
 
 -- TABLE iam_sync_task_t
@@ -970,10 +970,10 @@ CREATE TABLE `iam_sync_task_t` (
   `total_count` int NOT NULL DEFAULT '0' COMMENT '总项数',
   `success_count` int NOT NULL DEFAULT '0' COMMENT '成功项数',
   `failure_count` int NOT NULL DEFAULT '0' COMMENT '失败项数',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_28_1` (`app_id`,`request_id`),
-  KEY `ix_28_1` (`status`,`lease_until`),
-  KEY `ix_28_2` (`app_id`,`created_time`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_28_1` (`app_id`,`request_id`) USING BTREE,
+  KEY `ix_28_1` (`status`,`lease_until`) USING BTREE,
+  KEY `ix_28_2` (`app_id`,`created_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-同步与对账任务';
 
 -- TABLE iam_tenant_directory_link_t
@@ -985,10 +985,10 @@ CREATE TABLE `iam_tenant_directory_link_t` (
   `central_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '中心标识',
   `created_time` datetime(6) NOT NULL DEFAULT (utc_timestamp(6)) COMMENT '创建时间',
   `updated_time` datetime(6) NOT NULL DEFAULT (utc_timestamp(6)) COMMENT '更新时间',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_iam_tenant_directory_local` (`app_id`,`object_type`,`local_id`),
-  UNIQUE KEY `uk_iam_tenant_directory_central` (`app_id`,`object_type`,`central_id`),
-  KEY `ix_iam_tenant_directory_central` (`central_id`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_iam_tenant_directory_local` (`app_id`,`object_type`,`local_id`) USING BTREE,
+  UNIQUE KEY `uk_iam_tenant_directory_central` (`app_id`,`object_type`,`central_id`) USING BTREE,
+  KEY `ix_iam_tenant_directory_central` (`central_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-租户目录导入时的身份映射；不包含凭据或授权';
 
 -- TABLE iam_verification_t
@@ -1010,97 +1010,10 @@ CREATE TABLE `iam_verification_t` (
   `requested_time` datetime(6) NOT NULL COMMENT '申请时间',
   `completed_time` datetime(6) DEFAULT NULL COMMENT '完成时间',
   `expires_at` datetime(6) DEFAULT NULL COMMENT '结果到期',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_40_1` (`provider_code`,`provider_request_id`),
-  KEY `ix_40_1` (`target_type`,`target_id`,`requested_time`)
+  PRIMARY KEY (`tid`) USING BTREE,
+  UNIQUE KEY `uk_40_1` (`provider_code`,`provider_request_id`) USING BTREE,
+  KEY `ix_40_1` (`target_type`,`target_id`,`requested_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='统一身份-实名与法人核验过程';
-
--- TABLE log_user_login_t
-CREATE TABLE `log_user_login_t` (
-  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `is_success` tinyint DEFAULT NULL COMMENT '是否成功',
-  `account` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '账号',
-  `password` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '密码摘要，不存储明文',
-  `token` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '票据',
-  `ip` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'IP地址',
-  `browser` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '浏览器',
-  `os` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '操作系统',
-  `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '备注',
-  `created_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
-  `created_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
-  `updated_by` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
-  `updated_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
-  `is_del` tinyint DEFAULT '0' COMMENT '删除标志：0正常，1删除',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '租户标识',
-  PRIMARY KEY (`tid`) USING BTREE,
-  UNIQUE KEY `INDEX33565827` (`tid`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户登录审计日志';
-
--- TABLE rm_user_t
-CREATE TABLE `rm_user_t` (
-  `id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `real_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '真实名称',
-  `user_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户名称',
-  `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '密码摘要，不存储明文',
-  `phone` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '电话',
-  `id_card` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '标识卡片',
-  `gender` varchar(2) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '性别',
-  `date_birth` date DEFAULT NULL COMMENT '出生日期',
-  `nation` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '民族',
-  `native_place` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '籍贯地点',
-  `status` smallint DEFAULT NULL COMMENT '状态',
-  `user_code` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '用户编码',
-  `data_src` int DEFAULT NULL COMMENT '数据来源',
-  `sort_num` int DEFAULT NULL COMMENT '排序数量',
-  `rank_sort` int DEFAULT NULL COMMENT '职级排序',
-  `app_file_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '应用文件标识',
-  `charge_status` int DEFAULT NULL COMMENT '负责人状态',
-  `user_status` smallint DEFAULT NULL COMMENT '用户状态',
-  `origin_user_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户标识',
-  `pwd_status` smallint DEFAULT NULL COMMENT '密码状态',
-  `has_login` smallint DEFAULT NULL COMMENT '是否登录',
-  `change_pwd_time` datetime(6) DEFAULT NULL COMMENT '最近密码修改时间',
-  `office_address` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '办公地址',
-  `create_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
-  `update_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
-  `create_time` datetime(6) DEFAULT NULL COMMENT '创建时间',
-  `update_time` datetime(6) DEFAULT NULL COMMENT '更新时间',
-  `deleted` smallint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
-  `email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '邮箱',
-  `fax_phone` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '传真电话',
-  `fixed_phone` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '固定电话',
-  `job_number` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '任务编号',
-  `user_from` int DEFAULT NULL COMMENT '用户来源',
-  `user_type` smallint DEFAULT NULL COMMENT '用户类型',
-  `origin_user_types` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户类型集合（兼容字段）',
-  `origin_user_ids` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户标识集合（兼容字段）',
-  `origin_user_type` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '外部来源用户类型',
-  `origin_position` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源职务',
-  `origin_rank` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '来源职级',
-  `authorized_strength` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '授权强度',
-  `is_temporary` int DEFAULT NULL COMMENT '是否临时',
-  `expire_time` datetime(6) DEFAULT NULL COMMENT '过期时间',
-  `is_effective` smallint DEFAULT NULL COMMENT '是否有效',
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE KEY `INDEX33565828` (`id`) USING BTREE,
-  KEY `ix_rm_user_login` (`user_name`,`deleted`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='控制面登录用户账号';
-
--- TABLE rm_user_tenant_rela_t
-CREATE TABLE `rm_user_tenant_rela_t` (
-  `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
-  `user_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '用户标识',
-  `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',
-  `is_default` smallint NOT NULL COMMENT '是否默认',
-  `status` smallint NOT NULL COMMENT '状态',
-  `created_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '创建人标识',
-  `created_time` datetime(6) NOT NULL COMMENT '创建时间',
-  `updated_by` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人标识',
-  `updated_time` datetime(6) NOT NULL COMMENT '更新时间',
-  `is_del` smallint NOT NULL COMMENT '删除标志：0正常，1删除',
-  PRIMARY KEY (`tid`) USING BTREE,
-  UNIQUE KEY `INDEX33565609` (`tid`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='用户租户成员关系';
 
 -- TABLE sym_config_t
 CREATE TABLE `sym_config_t` (
@@ -1130,7 +1043,7 @@ CREATE TABLE `sym_config_t` (
   PRIMARY KEY (`TID`) USING BTREE,
   UNIQUE KEY `INDEX33565610` (`TID`) USING BTREE,
   KEY `idx_sym_config_lookup` (`TENANT_ID`,`CONFIG_GROUP`,`IS_USE`,`IS_DEL`,`SORT_NO`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='系统配置';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='系统管理-系统配置';
 
 -- TABLE sym_tenant_t
 CREATE TABLE `sym_tenant_t` (
@@ -1151,7 +1064,7 @@ CREATE TABLE `sym_tenant_t` (
   `isolation_mode` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '隔离模式',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565611` (`tid`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='租户定义';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='系统管理-租户定义';
 
 -- TABLE ui_component_history_t
 CREATE TABLE `ui_component_history_t` (
@@ -1166,7 +1079,7 @@ CREATE TABLE `ui_component_history_t` (
   `is_del` tinyint DEFAULT NULL COMMENT '删除标志：0正常，1删除',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565612` (`tid`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='低代码组件历史版本';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='低代码组件-低代码组件历史版本';
 
 -- TABLE ui_component_t
 CREATE TABLE `ui_component_t` (
@@ -1187,7 +1100,7 @@ CREATE TABLE `ui_component_t` (
   `sort_order` int DEFAULT NULL COMMENT '排序顺序',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565613` (`tid`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='低代码组件定义';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='低代码组件-低代码组件定义';
 
 -- VIEW iam_operator_profile_v
 CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `iam_operator_profile_v` AS select `o`.`tid` AS `tid`,`o`.`created_by` AS `created_by`,`o`.`created_time` AS `created_time`,`o`.`updated_by` AS `updated_by`,`o`.`updated_time` AS `updated_time`,`o`.`version` AS `version`,`o`.`username` AS `username`,(case when (`o`.`subject_id` is null) then `o`.`display_name` else `person`.`name` end) AS `display_name`,(case when (`o`.`subject_id` is null) then `o`.`phone` else `person`.`phone` end) AS `phone`,(case when (`o`.`subject_id` is null) then `o`.`email` else `person`.`email` end) AS `email`,`o`.`subject_id` AS `subject_id`,`person`.`version` AS `subject_version`,`o`.`status` AS `status`,`o`.`must_change_password` AS `must_change_password`,`o`.`last_login_time` AS `last_login_time`,`o`.`active_username` AS `active_username`,`o`.`is_del` AS `is_del` from (`iam_operator_t` `o` left join `iam_subject_t` `person` on((`person`.`tid` = `o`.`subject_id`)));

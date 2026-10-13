@@ -6,7 +6,28 @@
       "dialect": "mysql",
       "file": "demo_ingest_source/init.sql",
       "counts": {
-        "tables": 1,
+        "tables": 15,
+        "views": 0,
+        "indexes": 62,
+        "foreignKeys": 0,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "notes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      },
+      "sha256": "5027daa9a2feafa04dac2617e57c1b2611ff1e29f6b0362a2e6dc97f8b50ac4b"
+    },
+    {
+      "database": "demo_ingest_target",
+      "dialect": "mysql",
+      "file": "demo_ingest_target/init.sql",
+      "counts": {
+        "tables": 2,
         "views": 0,
         "indexes": 2,
         "foreignKeys": 0,
@@ -20,28 +41,7 @@
         "routineDefiners": "omitted",
         "autoIncrementCounters": "omitted"
       },
-      "sha256": "9ed47e4d8903308ac82f9c9b1206e6a30c5f715cc769c75b019e7d214d099811"
-    },
-    {
-      "database": "demo_ingest_target",
-      "dialect": "mysql",
-      "file": "demo_ingest_target/init.sql",
-      "counts": {
-        "tables": 1,
-        "views": 0,
-        "indexes": 1,
-        "foreignKeys": 0,
-        "triggers": 0,
-        "procedures": 0,
-        "functions": 0,
-        "events": 0
-      },
-      "notes": {
-        "definitions": "SHOW CREATE",
-        "routineDefiners": "omitted",
-        "autoIncrementCounters": "omitted"
-      },
-      "sha256": "f161cc2d1637f9c5e2a3c11f9191106e150a7550d8f3e544d570f24761a27028"
+      "sha256": "2ba664d0082b1122f1376303967cfff66ebb37573cc04158d78d46cf3738cab1"
     }
   ]
 }

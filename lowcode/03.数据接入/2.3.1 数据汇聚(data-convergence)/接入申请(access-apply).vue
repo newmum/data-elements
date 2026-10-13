@@ -4,7 +4,7 @@
     v-model="open"
     :title="drawerTitle"
     direction="rtl"
-    size="760px"
+    size="min(1040px, 100vw)"
     :body-class="ddlMode ? 'access-apply access-apply-ddl' : 'access-apply'"
     :close-on-click-modal="!isSaveing && !recoveryDeleting"
     :close-on-press-escape="!isSaveing && !recoveryDeleting"
@@ -73,10 +73,10 @@
       <div v-if="loadError && !templateLoading" class="template-load-error" role="alert">
         <el-alert :title="loadError" type="error" :closable="false" show-icon />
         <el-button type="primary" plain @click="init">重试加载</el-button>
-        <el-button v-if="editable && loadErrorCode !== 'MAGIC-BUSINESS-422'" type="primary" :loading="fieldCollecting" @click="collectSourceFields">采集来源字段并重新加载</el-button>
       </div>
       <div v-show="!ddlMode && !loadError" class="materialization-form-view">
       <u-title name="建表信息" />
+      <el-alert v-for="message in templateWarnings" :key="message" :title="message" type="warning" :closable="false" show-icon class="mb-2" />
       <div v-if="knownTargets.length" class="existing-target-panel">
         <strong>已有目标表</strong>
         <span>以下目标表已与当前来源表关联，可保留并创建流程。Hive 移除登记和流程后仍保留物理表及数据，后续可校验并复用已有表。</span>
@@ -93,23 +93,6 @@
         bordered
         class="mb-2"
       ></JsonForm>
-      <section v-if="sourceFileConfig" class="source-file-panel">
-        <div class="source-file-heading"><strong>来源文件解析</strong><el-button link type="primary" :loading="fieldCollecting" :disabled="!editable" @click="collectSourceFields">重新采集字段</el-button></div>
-        <el-form label-width="100px" :disabled="!editable">
-          <el-form-item label="来源文件"><el-input :model-value="`${sourceFileConfig.remotePath}/${sourceFileConfig.fileName}`" readonly /></el-form-item>
-          <div class="source-file-grid">
-            <el-form-item label="文件格式"><el-input :model-value="sourceFileConfig.format.toUpperCase()" readonly /></el-form-item>
-            <el-form-item v-if="sourceFileConfig.format === 'csv'" label="文件编码" required>
-              <el-select v-model="sourceFileConfig.charset"><el-option v-for="encoding in ['UTF-8', 'GB18030', 'GBK', 'UTF-16LE']" :key="encoding" :label="encoding" :value="encoding" /></el-select>
-            </el-form-item>
-            <el-form-item v-if="sourceFileConfig.format === 'csv'" label="分隔符" required>
-              <el-select v-model="sourceFileConfig.delimiter"><el-option label="逗号 ," value="," /><el-option label="制表符 Tab" :value="'\t'" /><el-option label="竖线 |" value="|" /><el-option label="分号 ;" value=";" /></el-select>
-            </el-form-item>
-            <el-form-item v-if="['xls', 'xlsx'].includes(sourceFileConfig.format)" label="工作表"><el-input v-model="sourceFileConfig.excelSheetName" readonly /></el-form-item>
-            <el-form-item v-if="sourceFileConfig.format === 'json'" label="数据路径"><el-input v-model="sourceFileConfig.jsonRecordPath" readonly /></el-form-item>
-          </div>
-        </el-form>
-      </section>
       <div class="materialization-field-toolbar">
         <el-button type="primary" :disabled="!editable || ddlMode" @click="handleAddField">＋ 新增数据项</el-button>
         <el-button type="primary" plain :disabled="!editable || ddlMode" @click="handleOpenDefaultFieldsDrawer">默认字段</el-button>
@@ -143,6 +126,8 @@
         <el-tabs v-if="ddlPlans.length > 1" v-model="activeDdlKey" class="ddl-target-tabs">
           <el-tab-pane v-for="plan in ddlPlans" :key="plan.key" :name="plan.key" :label="plan.dbName" />
         </el-tabs>
+        <el-alert v-for="issue in activeDdlWarnings" :key="`${issue.field}:${issue.message}`"
+          :title="`${issue.field}：${issue.message}`" type="warning" :closable="false" show-icon class="mb-2" />
         <div ref="ddlEditorHost" class="ddl-editor-host">
           <CodeEditor
             :key="activeDdlKey"
@@ -288,6 +273,9 @@ const stopDdlEditorSizing = () => {
 const ddlGenerating = ref(false);
 const ddlPlans = ref<any[]>([]);
 const ddlSqlByTarget = ref<Record<string, string>>({});
+const ddlWarningsByTarget = ref<Record<string, any[]>>({});
+const ddlTableItemsByTarget = ref<Record<string, any[]>>({});
+const activeDdlWarnings = computed(() => ddlWarningsByTarget.value[activeDdlKey.value] || []);
 const activeDdlKey = ref("");
 const ddlSourceFingerprint = ref("");
 const ddlWasEdited = ref(false);
@@ -366,6 +354,7 @@ const datasourceLeafIds = ref<string[]>([]);
 // 保留接口返回的字段模板。JsonForm 与 VxeGrid 都会在抽屉打开时完成一次
 // 异步初始化；只向尚未就绪的表格实例 setData 会被其初始化选项覆盖。
 const templateTableItems = ref<any[]>([]);
+const templateWarnings = ref<string[]>([]);
 const nifiNetworkOptions = ref<any[]>([]);
 const nifiNodeOptions = ref<any[]>([]);
 const nifiNodeTreeOptions = computed(() =>
@@ -381,24 +370,10 @@ const nifiNodeTreeOptions = computed(() =>
 );
 const sourceTableName = ref("");
 const sourceFileConfig = ref<any>(null);
-const fieldCollecting = ref(false);
-const collectSourceFields = async () => {
-  if (fieldCollecting.value || !props.id) return;
-  try {
-    await ElMessageBox.confirm("重新采集将更新来源字段快照，并重载当前建表字段；已有治理设置会保留。是否继续？", "采集来源字段", { type: "warning" });
-    fieldCollecting.value = true;
-    const parserOptions = sourceFileConfig.value ? { ...sourceFileConfig.value } : null;
-    await $common.post("/dst/database/metadata/collectColumns", { tableId: props.id, force: true, sourceFileConfig: parserOptions }, { _hiddenErrorMsg: true }, 120 * 1000);
-    const loaded = await init(parserOptions);
-    if (loaded) ElMessage.success("来源字段已更新，建表信息已重新加载");
-  } catch (error: any) {
-    if (error !== "cancel" && error !== "close") ElMessage.error(error?.message || "来源字段采集失败，请检查文件及连接配置");
-  } finally { fieldCollecting.value = false; }
-};
 const loadingText = computed(() => {
   const { datasource, node, source } = loadPending.value;
-  if (source && (datasource || node)) return "正在读取来源表结构和建表选项...";
-  if (source) return "正在读取来源表结构...";
+  if (source && (datasource || node)) return "正在读取登记字段快照和建表选项...";
+  if (source) return "正在读取登记字段快照...";
   if (datasource && node) return "正在读取目标数据源和接入节点...";
   if (datasource) return "正在读取目标数据源...";
   if (node) return "正在读取接入节点...";
@@ -673,6 +648,7 @@ const tableColumns = ref({
     {
       title: "字段名",
       field: "columnName",
+      minWidth: 176,
       editRender: {
         name: "VxeInput",
         props: {
@@ -682,8 +658,9 @@ const tableColumns = ref({
       showOverflow: "tooltip",
     },
     {
-      title: "表注释",
+      title: "字段说明",
       field: "columnComment",
+      minWidth: 176,
       editRender: {
         name: "VxeInput",
         props: {
@@ -695,6 +672,7 @@ const tableColumns = ref({
     {
       title: "数据类型",
       field: "dataType",
+      minWidth: 108,
       editRender: { name: "ElSelect", options: colTypeOptions },
     },
     {
@@ -714,7 +692,7 @@ const tableColumns = ref({
     {
       title: "长度",
       field: "length",
-      width: 100,
+      width: 80,
       editRender: {
         name: "VxeInput",
         props: {
@@ -981,6 +959,7 @@ const materializationTimeType = (dbType: any) => {
 const targetTableItems = (items: any[], dbType: any) => items.map((row: any) => {
   // The editor changes dataType/length; synchronize the hidden native definition
   // for both DDL preview and metadata submission, retaining origin fields.
+  row = { ...row, defaultValue: null };
   const selected = String(row?.dataType || '').trim();
   const base = selected.toLowerCase().replace(/\s*\(.*$/, '').trim();
   const original = String(row?.columnType || '').toLowerCase().replace(/\s*\(.*$/, '').trim();
@@ -1129,7 +1108,7 @@ const cancelPendingInit = () => {
   loadPending.value = { datasource: false, node: false, source: false };
 };
 
-const init = async (parserOptions: any = null) => {
+const init = async () => {
   const runId = ++initRun;
   loadError.value = "";
   loadErrorCode.value = "";
@@ -1157,8 +1136,6 @@ const init = async (parserOptions: any = null) => {
       trackLoad("node", $common.post("/ods/nifi-node/access-options", {}), runId),
       trackLoad("source", $common.post(props.type === "add" ? addUrl : viewUrl, {
         tid: sourceTableId,
-        resolveSourceFile: props.type === "add",
-        sourceFileConfig: parserOptions,
       }, { _hiddenErrorMsg: true }, 120 * 1000), runId),
     ]);
     if (!isCurrentInit(runId)) return false;
@@ -1241,6 +1218,7 @@ const init = async (parserOptions: any = null) => {
     // 设置表格数据(字段列表)。即使字段为空也明确清空上一张来源表的数据，
     // 避免复用抽屉时残留旧内容；非空时由 loadTemplateTableItems 等待 Grid
     // 就绪后再写入，避免首次打开偶发的空表竞态。
+    templateWarnings.value = Array.isArray(payload.warnings) ? payload.warnings : [];
     await loadTemplateTableItems(payload.tableItems);
     if (!isCurrentInit(runId)) return false;
     if (templateTableItems.value.length) {
@@ -1306,6 +1284,8 @@ const regenerateDdl = async (input: any) => {
   ddlGenerating.value = true;
   try {
     const statements: Record<string, string> = {};
+    const warnings: Record<string, any[]> = {};
+    const convertedItems: Record<string, any[]> = {};
     const targets = input.targets.map((target: any) => {
       return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType) };
     });
@@ -1331,9 +1311,17 @@ const regenerateDdl = async (input: any) => {
       const statement = String(result?.ddl || "").trim();
       if (!statement) throw new Error(`目标数据源“${target.dbName}”未生成建表语句`);
       statements[target.key] = statement;
+      warnings[target.key] = Array.isArray(result.warnings) ? result.warnings : [];
+      const original = targetTableItems(input.tableItems, target.propList.dbType);
+      const byName = new Map(original.map((row:any) => [String(row.columnName).toLowerCase(),row]));
+      convertedItems[target.key] = Array.isArray(result.tableItems) ? result.tableItems.map((row:any) => ({
+        ...(byName.get(String(row.columnName).toLowerCase()) || {}), ...row,
+      })) : original;
     }
     ddlPlans.value = input.targets;
     ddlSqlByTarget.value = statements;
+    ddlWarningsByTarget.value = warnings;
+    ddlTableItemsByTarget.value = convertedItems;
     activeDdlKey.value = input.targets[0]?.key || "";
     ddlSourceFingerprint.value = input.fingerprint;
     ddlWasEdited.value = false;
@@ -1381,13 +1369,6 @@ const handleSave = async () => {
   let lastTargetForm: any = null;
   const reuseTargetDbIds = new Set<string>();
   try {
-    if (sourceFileConfig.value) {
-      // Revalidate the managed file selector and parser before creating any physical table.
-      const check = await $common.post("/ods/getTableTempalte", { tid: props.id, resolveSourceFile: true, sourceFileConfig: sourceFileConfig.value }, { _hiddenErrorMsg: true }, 120 * 1000);
-      const checked = (check?.data || check)?.propList?.sourceFileConfig;
-      if (!checked) throw new Error("来源文件解析校验失败");
-      sourceFileConfig.value = { ...checked };
-    }
     const ddlInput = await currentDdlInput();
     materializationProgress.value.total = ddlInput.targets.length;
     if (!ddlSourceFingerprint.value) await regenerateDdl(ddlInput);
@@ -1469,6 +1450,9 @@ const handleSave = async () => {
       throw new Error('目标表批量预检结果不完整，请重试');
     }
     const conflicts: any[] = [];
+    if (preflight.results.some((probe:any) => probe.physicalCheckWarning)) {
+      ElMessage.warning("部分目标库暂不能读取表目录，将继续执行建表；数据库已有表时会提示处理");
+    }
     for (const [index, plan] of plannedTargets.entries()) {
       const probe = preflight.results[index];
       if (String(probe?.targetDbId) !== String(plan.targetDbId)
@@ -1563,7 +1547,7 @@ const handleSave = async () => {
       materializationProgress.value.detail = `正在${reuseExistingTable ? '复用' : '创建'}第 ${targetTables.length + 1} / ${ddlInput.targets.length} 张：${target.dbName} · ${targetForm.tableName}`;
       const result = await $common.post("/ods/createTapleApply", {
         propList: targetForm,
-        tableItems: targetTableItems(ddlInput.tableItems, targetForm.dbType),
+        tableItems: ddlTableItemsByTarget.value[target.key] || targetTableItems(ddlInput.tableItems, targetForm.dbType),
         tid: props.id,
         ddl: ddlSourceFingerprint.value ? ddlSqlByTarget.value[targetDbId] : undefined,
         reuseExistingTable,
@@ -1801,12 +1785,6 @@ onBeforeUnmount(stopDdlEditorSizing);
 </script>
 
 <style lang="scss" scoped>
-.source-file-panel { padding: 16px; margin: 16px 0; border: 1px solid #dce6f5; border-radius: 8px; background: #f8faff; }
-.source-file-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.source-file-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
-.source-file-panel :deep(.el-select) { width: 100%; }
-.source-file-panel :deep(.el-form-item) { margin-bottom: 14px; }
-@media (max-width: 640px) { .source-file-grid { grid-template-columns: 1fr; } }
 .existing-target-panel {
   display: flex;
   flex-direction: column;

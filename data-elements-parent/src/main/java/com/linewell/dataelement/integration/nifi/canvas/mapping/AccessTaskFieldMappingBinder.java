@@ -32,7 +32,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AccessTaskFieldMappingBinder {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private static final String ODS_UUID_EXPRESSION =
             "CAST(TIMESTAMPDIFF(SECOND, TIMESTAMP '1970-01-01 00:00:00', LOCALTIMESTAMP) AS VARCHAR) "
                     + "|| CAST(100000000 + RAND_INTEGER(900000000) AS VARCHAR)";
@@ -72,6 +72,7 @@ public class AccessTaskFieldMappingBinder {
                 new LambdaQueryWrapper<DataAccessFieldMapping>()
                         .eq(DataAccessFieldMapping::getTaskId, task.getTid())
                         .eq(DataAccessFieldMapping::getIsDel, 0)
+                        .and(q -> q.ne(DataAccessFieldMapping::getFuncCode,"UNIFIED_RULE_V2").or().isNull(DataAccessFieldMapping::getFuncCode))
                         .orderByAsc(DataAccessFieldMapping::getSortNo)
                         .orderByAsc(DataAccessFieldMapping::getCreatedTime));
         if (rules == null || rules.isEmpty()) {
@@ -94,6 +95,8 @@ public class AccessTaskFieldMappingBinder {
             }
             Object raw = node.config() == null ? null : node.config().get("mappings");
             ObjectNode existing = existingSpec(raw);
+            // Versioned canvas rules are authoritative; task-wide legacy projections cannot enter other nodes.
+            if(existing!=null&&(existing.path("schemaVersion").asText().equals("2.0")||existing.path("executionEngine").asText().equals("JAVA_RECORD"))){nodes.add(node);continue;}
             if (existing != null && !needsBinding(existing.path("mappings"), rules, sourceLookupDataSource)) {
                 nodes.add(node);
                 continue;

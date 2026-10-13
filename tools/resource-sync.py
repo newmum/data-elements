@@ -590,6 +590,89 @@ def publish(connection, config, file, compiled=None):
     return {'file': file, 'result': 'published-and-runtime-verified'}
 
 
+def repair_compiled(connection, config, bundles):
+    """Repair stale low-code factories in one guarded batch without changing source.
+
+    Bundles must be compiled from the exact current source. For a private
+    projection this deliberately verifies the unchanged private runtime source,
+    rather than publishing the redacted Git copy or altering credential values.
+    """
+    if not bundles or len(bundles) > 200:
+        raise ValueError('Compiled repair accepts 1 to 200 explicitly selected components')
+    manifest = load_manifest('lowcode')
+    entries = {e['id']: e for e in manifest['resources'] if e['type'] != '0'}
+    ids = [b.get('componentId') for b in bundles]
+    if len(ids) != len(set(ids)) or any(identity not in entries for identity in ids):
+        raise ValueError('Compiled repair requires distinct registered component IDs')
+    placeholders = ','.join(['%s'] * len(ids))
+    with connection.cursor() as query:
+        query.execute('SELECT tid,pid,name,remark,type,tenant_id,source_code,compile_js,compile_css '
+                      'FROM ui_component_t WHERE is_del=0 AND tid IN (' + placeholders + ')', ids)
+        rows = {row['tid']: row for row in query.fetchall()}
+    runtime = runtime_call(config, '/sym/component?action=list', {})
+    runtime_by_name = {}
+    for item in runtime:
+        runtime_by_name.setdefault(item['name'], []).append(item)
+    for bundle in bundles:
+        identity = bundle['componentId']
+        entry, row = entries[identity], rows.get(identity)
+        if not row or any(str(row[k] or '') != str(entry.get(v) or '')
+                          for k, v in [('pid', 'parentId'), ('name', 'name'), ('type', 'type')]):
+            raise ValueError('Compiled repair identity changed')
+        source = row['source_code'] or ''
+        projection, _ = public_projection('lowcode', row, source)
+        if digest(projection) != digest(read_source(safe_path(ROOT / 'lowcode', entry['path']))):
+            raise ValueError('Merge runtime source before compiled repair')
+        if (bundle.get('sourceSha256') != digest(source)
+                or not isinstance(bundle.get('compileJs'), str)
+                or not isinstance(bundle.get('compileCss'), str)
+                or 'return __sfc__' not in bundle['compileJs']):
+            raise ValueError('Compiled repair does not match unchanged runtime source')
+        visible = runtime_by_name.get(entry['name'], [])
+        if len(visible) != 1:
+            raise ValueError('Authenticated runtime does not expose a unique selected component')
+    # Keep credential-bearing recovery material outside the repository/logs.
+    private_root = PRIVATE_CONFIG.parent / 'compiled-repair-backups'
+    private_root.mkdir(parents=True, exist_ok=True)
+    import uuid
+    backup = private_root / (uuid.uuid4().hex + '.private.json')
+    write_json(backup, list(rows.values()))
+    connection.rollback()
+    try:
+        with connection.cursor() as query:
+            query.execute('SELECT tid,pid,name,remark,type,tenant_id,source_code,compile_js,compile_css '
+                          'FROM ui_component_t WHERE is_del=0 AND tid IN (' + placeholders + ') FOR UPDATE', ids)
+            locked = {row['tid']: row for row in query.fetchall()}
+            if locked != rows:
+                raise ValueError('Concurrent component change prevented compiled repair')
+            query.executemany('INSERT INTO ui_component_history_t '
+                              '(tid,tenant_id,component_id,source_code,created_time,updated_time,created_by,updated_by,is_del) '
+                              'VALUES (%s,%s,%s,%s,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,%s,%s,0)',
+                              [(uuid.uuid4().hex, rows[b['componentId']]['tenant_id'], b['componentId'],
+                                rows[b['componentId']]['source_code'], '1', '1') for b in bundles])
+            cases = ' '.join(['WHEN %s THEN %s'] * len(bundles))
+            query.execute('UPDATE ui_component_t SET compile_js=CASE tid ' + cases +
+                          ' ELSE compile_js END,compile_css=CASE tid ' + cases +
+                          ' ELSE compile_css END,updated_time=CURRENT_TIMESTAMP,updated_by=%s '
+                          'WHERE is_del=0 AND tid IN (' + placeholders + ')',
+                          [value for b in bundles for value in (b['componentId'], b['compileJs'])] +
+                          [value for b in bundles for value in (b['componentId'], b['compileCss'])] + ['1'] + ids)
+            if query.rowcount != len(bundles):
+                raise ValueError('Compiled repair did not update every selected component')
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    runtime_call(config, '/sym/component/cache/refresh', {})
+    loaded = runtime_call(config, '/sym/component?action=list', {})
+    by_name = {item['name']: item for item in loaded}
+    for bundle in bundles:
+        item = by_name.get(entries[bundle['componentId']]['name'], {})
+        if item.get('compileJs') != bundle['compileJs'] or item.get('compileCss') != bundle['compileCss']:
+            raise ValueError('Compiled repair saved; runtime verification incomplete')
+    return {'repairedComponents': len(bundles), 'sourceChanged': False, 'runtimeVerified': True}
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('command', choices=['pull', 'status', 'plan', 'publish'])

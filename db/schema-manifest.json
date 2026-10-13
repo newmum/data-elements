@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "scope": "structure-only",
-  "routingSource": "private current Nacos API/runtime snapshot",
+  "routingSource": "last verified local runtime export plus reviewed mapping 1.1.1 forward table definitions; current verified runtime is recorded separately in environments/demo/schema-manifest.json",
   "schemas": [
     {
       "dataSourceKey": "control",
@@ -31,6 +31,23 @@
       "dialect": "dameng",
       "file": "baseline_beijing_gd/init.sql",
       "objects": {
+        "tables": 143,
+        "views": 5,
+        "indexes": 578,
+        "explicitIndexes": 290,
+        "foreignKeys": 2,
+        "triggers": 20,
+        "procedures": 0,
+        "functions": 0,
+        "sequences": 0
+      },
+      "sha256": "6f1eab7c86b2243df7da8bac31fa890e6e3fc6333df7d043f3aa4a70f17e093a",
+      "exportNotes": {
+        "definitions": "DBMS_METADATA.GET_DDL",
+        "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
+        "implicitIndexes": "included in table DDL"
+      },
+      "lastVerifiedLiveObjects": {
         "tables": 140,
         "views": 5,
         "indexes": 567,
@@ -41,11 +58,10 @@
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "e84891daae8272560e1a52d80471820e97be37924e1e707e8ea3b3718db86109",
-      "exportNotes": {
-        "definitions": "DBMS_METADATA.GET_DDL",
-        "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
-        "implicitIndexes": "included in table DDL"
+      "definitionStatus": "reviewed-forward-definition",
+      "liveVerification": {
+        "status": "pending",
+        "reason": "Current authorized runtime binds the demo industry databases; historical local configuration including Dameng is not the deployment target and has not been applied or re-exported."
       }
     },
     {
@@ -54,6 +70,22 @@
       "dialect": "mysql",
       "file": "chengtian/init.sql",
       "objects": {
+        "tables": 143,
+        "views": 0,
+        "indexes": 518,
+        "foreignKeys": 2,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "8c1d8b566b13fc4146bab253e989db28afbea74df4548bec188ddca0626f1a8b",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      },
+      "lastVerifiedLiveObjects": {
         "tables": 140,
         "views": 0,
         "indexes": 507,
@@ -63,11 +95,10 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "783585af44e34d0da304a34428c0742a3458baee06e312fcb89b25e922831c1d",
-      "exportNotes": {
-        "definitions": "SHOW CREATE",
-        "routineDefiners": "omitted",
-        "autoIncrementCounters": "omitted"
+      "definitionStatus": "reviewed-forward-definition",
+      "liveVerification": {
+        "status": "pending",
+        "reason": "Current authorized runtime binds the demo industry databases; historical local configuration including Dameng is not the deployment target and has not been applied or re-exported."
       }
     },
     {
@@ -76,6 +107,22 @@
       "dialect": "mysql",
       "file": "baseline_ga/init.sql",
       "objects": {
+        "tables": 143,
+        "views": 5,
+        "indexes": 518,
+        "foreignKeys": 2,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "c2c825af314a49e69393c64116ad70969e5c964bb1f1c4dade535f1ceb6fa5f0",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      },
+      "lastVerifiedLiveObjects": {
         "tables": 140,
         "views": 5,
         "indexes": 507,
@@ -85,11 +132,10 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "92b5e0af8785c5353c3f3836d8b9957b6bf3d4377bf63878b444a731f5d62d8a",
-      "exportNotes": {
-        "definitions": "SHOW CREATE",
-        "routineDefiners": "omitted",
-        "autoIncrementCounters": "omitted"
+      "definitionStatus": "reviewed-forward-definition",
+      "liveVerification": {
+        "status": "pending",
+        "reason": "Current authorized runtime binds the demo industry databases; historical local configuration including Dameng is not the deployment target and has not been applied or re-exported."
       }
     },
     {
@@ -98,6 +144,22 @@
       "dialect": "mysql",
       "file": "baseline_sea_fishery/init.sql",
       "objects": {
+        "tables": 143,
+        "views": 5,
+        "indexes": 518,
+        "foreignKeys": 2,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "dad8ce1e18e64737bd17f893b15ffd4c8df55409ef5d303063b4fbeaa98fac68",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      },
+      "lastVerifiedLiveObjects": {
         "tables": 140,
         "views": 5,
         "indexes": 507,
@@ -107,11 +169,10 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "7b820aa8044ed824a61f62c74e79d709af438417653e0bbe37061a69d5550236",
-      "exportNotes": {
-        "definitions": "SHOW CREATE",
-        "routineDefiners": "omitted",
-        "autoIncrementCounters": "omitted"
+      "definitionStatus": "reviewed-forward-definition",
+      "liveVerification": {
+        "status": "pending",
+        "reason": "Current authorized runtime binds the demo industry databases; historical local configuration including Dameng is not the deployment target and has not been applied or re-exported."
       }
     }
   ]

@@ -323,7 +323,7 @@
         "8a56e7d664934c1499102cfa508cd58a"
       ],
       "kind": null,
-      "baseSha256": "53be63f367c63c9dab8d23c421f3a5a6fc7fb560ab787fe90b5fea0b0c0a69aa",
+      "baseSha256": "4347c44f932f47d305c488e7f83a2b07e1eaedbd6654db0e1b1c6e1b0a9ce6ea",
       "metadataId": "8a56e7d664934c1499102cfa508cd58a"
     },
     {
@@ -333,7 +333,7 @@
         "a0b5bba38fbf428c8e3646864d83d56b"
       ],
       "kind": null,
-      "baseSha256": "6e92b284c7dcce522f153f62cdaa187f926b8f45a13672de6c0be2a8df8f6af9",
+      "baseSha256": "d504375df37595b6ca931593cc501176aa4adfee6ded37a01835f9468ba23c8b",
       "metadataId": "a0b5bba38fbf428c8e3646864d83d56b"
     },
     {
@@ -413,7 +413,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "80c343e954e3279eb5c9a319928d8a6e8418060a2be0ad83bf13485228273bfe",
+      "baseSha256": "107d46673779d66f58ef61edbe28050ab3ca776611489ab6ba12a207b69477e6",
       "metadataId": "metadata_columns_collect_24"
     },
     {
@@ -492,7 +492,7 @@
         "datapd_db_table_govern_01"
       ],
       "kind": null,
-      "baseSha256": "0277b8a3b64828df12703d292c13d1740ed8a953a47757adc4b652b95a002405",
+      "baseSha256": "a0422aba6752f3bfc81f5ca352841138ffbe1314ceedaaad55975e5f8d454f6f",
       "metadataId": "datapd_db_table_govern_01"
     },
     {
@@ -1469,7 +1469,7 @@
         "f93a8e653ac6413e89660f5d77d45769"
       ],
       "kind": null,
-      "baseSha256": "416a932c58b0205f2b3903369c504e5c1bff05bc201edaf5c94c47bc4a82b057",
+      "baseSha256": "a419ee4a9b3b9640db20046bff0c54b6a1979145ad9228ff191ce1d4352b96ed",
       "metadataId": "f93a8e653ac6413e89660f5d77d45769"
     },
     {
@@ -1489,7 +1489,7 @@
         "ods_data_agg_task_ensure_01"
       ],
       "kind": "api",
-      "baseSha256": "389e4b3587008a818c57acb992c981d8d90a7da369b4493e83f5302f7dff0b08",
+      "baseSha256": "772df455b48b811553f94fdc1a448af1e736093cde256c5222a716a0c21b273d",
       "metadataId": "ods_data_agg_task_ensure_01"
     },
     {
@@ -1509,7 +1509,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "a5d1a4b0bf2129136a8e74330259473d4be38c428e14f2a7b6049292b9647ea8",
+      "baseSha256": "888cfd319363d70b76087b8680d1c3b7ae0fd5f290b3ab5fcfce24c46a5af93c",
       "metadataId": "ods_data_agg_reset_01"
     },
     {
@@ -6680,6 +6680,20 @@
       "kind": "task",
       "baseSha256": "f5b67f6730a2f5373eba921bcac8151d67f278ccf137bfcc43a7ea08a4ce27a4",
       "metadataId": "30fc31e9c7e057f4983f7342850f1811"
+    },
+    {
+      "path": "api/02.数据盘点/04.盘点统计/02.管理工作台统计.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/02.管理工作台统计.ms",
+      "rowIds": [
+        "69ed4e3d283845f08b908c7d81598252"
+      ],
+      "kind": null,
+      "metadataId": "46051d94b97c46b6947516d70d0c7906",
+      "groupId": "9ef163a809ec40b59d35eb27d2f584a5",
+      "name": "02.管理工作台统计",
+      "routePath": "/management-workbench",
+      "method": "POST",
+      "baseSha256": "6839bcb3b8971e187a80e53a585ca9f8b3226853ad51f2e605ff912116f08cbb"
     }
   ]
 }

@@ -112,6 +112,7 @@ public class StructuredSourceProbeService {
     private static final Set<String> FILE_EXTENSIONS = Set.of("csv", "xls", "xlsx", "json", "txt");
 
     private final ObjectMapper objectMapper;
+    private static final ObjectMapper FILE_SNAPSHOT_JSON = new ObjectMapper();
     private final HttpClient httpClient;
     private final Map<String, CachedProbe> cache = new ConcurrentHashMap<>();
 
@@ -182,6 +183,133 @@ public class StructuredSourceProbeService {
 
     public List<ColumnInfo> getColumns(Map<String, Object> source, String tableName) {
         return findTable(source, tableName).getColumns();
+    }
+
+    /** Registration owns the field snapshot and its file locator; neither is recollected at materialization. */
+    public static Object preserveFtpFileSnapshot(Object previous, Object submitted) {
+        Map<String, Object> old = snapshotObject(previous), next = snapshotObject(submitted);
+        if (!old.containsKey("sourceFile") && !next.containsKey("sourceFile")) return submitted;
+        next.remove("sourceFile");
+        if (old.get("sourceFile") instanceof Map<?, ?> locator) next.put("sourceFile", new LinkedHashMap<>(locator));
+        return next;
+    }
+
+    public static Map<String, Object> withFtpFileSnapshot(Object previous, Map<String, Object> resolved) {
+        Map<String, Object> result = snapshotObject(previous);
+        Map<String, Object> locator = new LinkedHashMap<>();
+        for (String key : List.of("fileName", "remotePath", "format", "charset", "delimiter", "excelSheetName", "jsonRecordPath")) {
+            if (resolved.get(key) != null) locator.put(key, resolved.get(key));
+        }
+        result.put("sourceFile", locator);
+        return result;
+    }
+
+    private static Map<String, Object> snapshotObject(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            map.forEach((key, item) -> result.put(String.valueOf(key), item));
+            return result;
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try { return FILE_SNAPSHOT_JSON.readValue(text, new TypeReference<LinkedHashMap<String, Object>>() { }); }
+            catch (Exception ignored) { /* An old non-JSON field configuration has no locator. */ }
+        }
+        return new LinkedHashMap<>();
+    }
+
+    /** Builds a file node from saved registration. Legacy fallback lists names, never opens or samples files. */
+    public Map<String, Object> resolveFtpFileLocator(Map<String, Object> source, String tableName,
+                                                   Object governance, String tableComment) {
+        Map<String, Object> saved = snapshotObject(snapshotObject(governance).get("sourceFile"));
+        if (!saved.isEmpty()) return normalizedFtpLocator(source, saved);
+        List<RemoteFile> candidates = listFtpFileEntries(source);
+        String filter = first(source, "fileFilterRegex");
+        Predicate<String> allowed = blank(filter) ? glob(defaultText(first(source, "ftpFilePattern"), "*")) : regex(filter);
+        List<RemoteFile> matched = candidates.stream().filter(file -> allowed.test(file.name))
+                .filter(file -> tableName.equalsIgnoreCase(safeName(fileStem(file.name)))
+                        || tableName.toLowerCase(Locale.ROOT).startsWith(safeName(fileStem(file.name)).toLowerCase(Locale.ROOT) + "_"))
+                .toList();
+        if (matched.size() != 1) throw new IllegalArgumentException("登记的来源文件无法唯一定位，请在数据源登记中确认文件信息");
+        RemoteFile file = matched.getFirst();
+        String format = extension(file.name);
+        if ("txt".equals(format)) format = defaultText(first(source, "ftpTextFormat", "fileFormat"), "csv");
+        String selector = "";
+        String comment = defaultText(tableComment, "");
+        if (comment.startsWith(file.name + " / ")) selector = comment.substring(file.name.length() + 3).trim();
+        if (Set.of("xls", "xlsx", "json").contains(format) && selector.isBlank()
+                && !tableName.equalsIgnoreCase(safeName(fileStem(file.name)))) {
+            throw new IllegalArgumentException("登记缺少工作表或JSON数据路径，请在数据源登记中确认文件信息");
+        }
+        Map<String, Object> locator = new LinkedHashMap<>();
+        locator.put("fileName", file.name);
+        locator.put("remotePath", file.path.substring(0, Math.max(1, file.path.lastIndexOf('/'))));
+        locator.put("format", format);
+        locator.put("excelSheetName", Set.of("xls", "xlsx").contains(format) ? selector : "");
+        locator.put("jsonRecordPath", "json".equals(format) && !selector.isBlank() ? selector : "$");
+        return normalizedFtpLocator(source, locator);
+    }
+
+    private Map<String, Object> normalizedFtpLocator(Map<String, Object> source, Map<String, Object> saved) {
+        String name = first(saved, "fileName");
+        String root = defaultText(first(source, "ftpPath", "remotePath", "path"), "/").replaceAll("/+$", "");
+        String directory = defaultText(first(saved, "remotePath"), root.isBlank() ? "/" : root).replaceAll("/+$", "");
+        if (blank(name) || name.contains("/") || name.contains("\\") || name.equals(".") || name.equals("..")
+                || directory.matches(".*(?:^|/)\\.\\.(?:/|$).*")
+                || (!root.isBlank() && !directory.equals(root) && !directory.startsWith(root + "/"))) {
+            throw new IllegalArgumentException("登记的来源文件位置不属于当前数据源目录");
+        }
+        String format = defaultText(first(saved, "format"), extension(name)).toLowerCase(Locale.ROOT);
+        if (!Set.of("csv", "json", "xls", "xlsx").contains(format)) throw new IllegalArgumentException("登记的文件解析格式尚未确定");
+        String charset = defaultText(first(saved, "charset"), defaultText(first(source, "ftpCharset"), "UTF-8"));
+        Charset.forName(charset);
+        // A literal tab or space is a delimiter, not an absent setting.
+        Object rawDelimiter = saved.get("delimiter") == null ? source.get("ftpDelimiter") : saved.get("delimiter");
+        String delimiter = rawDelimiter == null ? "," : String.valueOf(rawDelimiter);
+        if ("\\t".equals(delimiter)) delimiter = "\t";
+        if (delimiter.length() != 1) throw new IllegalArgumentException("登记的文件分隔符必须为单个字符");
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("fileName", name); result.put("remotePath", directory.isBlank() ? "/" : directory);
+        result.put("fileFilterRegex", "^" + Pattern.quote(name) + "$"); result.put("format", format);
+        result.put("charset", charset); result.put("delimiter", delimiter);
+        result.put("excelSheetName", defaultText(first(saved, "excelSheetName"), ""));
+        result.put("jsonRecordPath", defaultText(first(saved, "jsonRecordPath"), "$"));
+        return result;
+    }
+
+    List<RemoteFile> listFtpFileEntries(Map<String, Object> source) {
+        String protocol = ftpProtocol(source);
+        String host = required(source, "FTP host cannot be empty", "ftpHost", "hostname", "host");
+        int port = integer(first(source, "ftpPort", "port"), "sftp".equals(protocol) ? 22 : 21);
+        String path = defaultText(first(source, "ftpPath", "remotePath", "path"), "/");
+        List<RemoteFile> files = new ArrayList<>();
+        try {
+            if ("sftp".equals(protocol)) {
+                Session session = new JSch().getSession(required(source, "SFTP username cannot be empty", "ftpUsername", "username"), host, port);
+                ChannelSftp channel = null;
+                try {
+                    session.setPassword(defaultText(first(source, "ftpPassword", "password"), ""));
+                    session.setConfig("StrictHostKeyChecking", "no"); session.connect(10_000);
+                    channel = (ChannelSftp) session.openChannel("sftp"); channel.connect(10_000);
+                    collectSftpFiles(channel, path, bool(source, "ftpRecursive", false), files);
+                } finally {
+                    if (channel != null && channel.isConnected()) channel.disconnect();
+                    if (session.isConnected()) session.disconnect();
+                }
+            } else {
+                FTPClient client = "ftps".equals(protocol) ? new FTPSClient(port == 990) : new FTPClient();
+                try {
+                    client.setConnectTimeout(10_000); client.setDataTimeout(Duration.ofSeconds(20)); client.connect(host, port);
+                    if (!client.login(defaultText(first(source, "ftpUsername", "username"), "anonymous"),
+                            defaultText(first(source, "ftpPassword", "password"), "anonymous@"))) throw new IllegalStateException("FTP login failed");
+                    if (client instanceof FTPSClient ftps) { ftps.execPBSZ(0); ftps.execPROT("P"); }
+                    if (bool(source, "ftpPassiveMode", true)) client.enterLocalPassiveMode();
+                    collectFtpFiles(client, path, bool(source, "ftpRecursive", false), files);
+                } finally {
+                    if (client.isConnected()) { try { client.logout(); } finally { client.disconnect(); } }
+                }
+            }
+            return files;
+        } catch (Exception exception) { throw new IllegalStateException(ftpProbeFailureMessage(path, exception), exception); }
     }
 
     /** Resolves one registered dataset from managed credentials; never trusts a client file path. */
@@ -351,7 +479,7 @@ public class StructuredSourceProbeService {
     }
 
     StructuredProbeResult probeFtp(Map<String, Object> source) {
-        String protocol = defaultText(first(source, "ftpProtocol", "protocol"), "ftp").toLowerCase(Locale.ROOT);
+        String protocol = ftpProtocol(source);
         String host = required(source, "FTP host cannot be empty", "ftpHost", "hostname", "host");
         int port = integer(first(source, "ftpPort", "port"), "sftp".equals(protocol) ? 22 : 21);
         String path = defaultText(first(source, "ftpPath", "remotePath", "path"), "/");
@@ -395,6 +523,13 @@ public class StructuredSourceProbeService {
             return "无法建立文件服务器连接，请检查主机地址、端口和网络连通性后重试。";
         }
         return "文件服务器目录探查未通过，请检查根目录、文件匹配规则、递归扫描设置和账号读取权限后重试。";
+    }
+
+    String ftpProtocol(Map<String, Object> source) {
+        String configured = first(source, "ftpProtocol", "protocol");
+        if (!blank(configured)) return configured.trim().toLowerCase(Locale.ROOT);
+        String type = defaultText(first(source, "dbType", "db_type", "databaseType"), "ftp");
+        return "sftp".equalsIgnoreCase(type.replaceAll("[\\s_-]+", "")) ? "sftp" : "ftp";
     }
 
     /**

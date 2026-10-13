@@ -2,6 +2,7 @@ import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from "./register
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip, Segmented } from 'antd';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
+import { incrementalFieldVisible } from '../utils/incrementalFields';
 import {
   DatabaseOutlined,
   FunctionOutlined,
@@ -343,13 +344,10 @@ function buildTargetColumnsPatch(config: Record<string, unknown>, columns: Probe
 }
 
 function isVisible(field: FieldSchema, config: Record<string, unknown>): boolean {
+  if (field.group === 'incremental') return incrementalFieldVisible(field.key, config);
   if (!field.visibleWhen) return true;
   if (field.visibleWhen.key === 'tableMode') {
     return (config.tableMode ?? 'SINGLE') === field.visibleWhen.equals;
-  }
-  if (field.group === 'incremental' && field.visibleWhen.key === 'syncMode') {
-    const syncMode = syncSettings(config).syncMode;
-    return syncMode === 'INCREMENTAL' || syncMode === 'FULL_THEN_INCR';
   }
   if (field.key === 'deleteTargetData') return ['FULL', 'FULL_THEN_INCR'].includes(syncSettings(config).syncMode);
   return config[field.visibleWhen.key] === field.visibleWhen.equals;
@@ -423,8 +421,8 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       required: false,
       group: 'incremental',
       visibleWhen: { key: 'syncMode', equals: 'INCREMENTAL' },
-      placeholder: field.placeholder ?? '如 update_time / id / version',
-      help: '新建模板会填入登记的抽取时间；历史任务缺失时请手工填写。时间戳字段建议配合次级字段避免同秒多条漏数。',
+      placeholder: '登记的时间戳字段，如 updated_time',
+      help: '新建任务默认填入登记勾选的时间戳，可手工调整；历史任务缺失时请手工填写。全量同步时保留配置，切换增量后生效。时间戳建议配合次级字段避免同秒多条漏数。',
     },
     {
       key: 'tieBreakerColumn',
@@ -521,8 +519,7 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
 }
 
 function isIncrementalVisible(field: FieldSchema, config: Record<string, unknown>): boolean {
-  if (field.key === 'initialValue' && syncSettings(config).syncMode === 'FULL_THEN_INCR') return false;
-  if (field.group === 'incremental' && !['INCREMENTAL', 'FULL_THEN_INCR'].includes(syncSettings(config).syncMode)) return false;
+  if (field.group === 'incremental') return incrementalFieldVisible(field.key, config);
   return isVisible(field, config);
 }
 
@@ -538,6 +535,7 @@ export default function ConfigDrawer() {
   const switchNodeManifest = useCanvasStore((s) => s.switchNodeManifest);
   const setLabel = useCanvasStore((s) => s.setNodeLabel);
   const canvasMode = useCanvasStore((s) => s.canvasMode);
+  const mappingPipelineId = useCanvasStore((s) => s.currentPipelineId);
   const { data: manifests } = useComponentManifests();
   const allNodes = useCanvasStore((s) => s.nodes);
   const allEdges = useCanvasStore((s) => s.edges);
@@ -574,6 +572,8 @@ export default function ConfigDrawer() {
     return {
       sourceLabels: columnLabels(columnsForMapping(mappingContext.source, 'source')),
       targetLabels: columnLabels(columnsForMapping(mappingContext.target, 'target')),
+      sourceSchema: columnsForMapping(mappingContext.source, 'source').map((raw) => { const c = raw as any; return { name: String(c.columnName ?? ''), type: String(c.dataType ?? c.columnType ?? ''), nullable: c.nullable !== false, isPk: c.primaryKey === true }; }).filter(c => c.name),
+      targetSchema: columnsForMapping(mappingContext.target, 'target').map((raw) => { const c = raw as any; return { name: String(c.columnName ?? ''), type: String(c.dataType ?? c.columnType ?? ''), nullable: c.nullable !== false, isPk: c.primaryKey === true, hasDefault: c.columnDefault != null }; }).filter(c => c.name),
     };
   }, [mappingContext]);
 
@@ -1612,6 +1612,9 @@ export default function ConfigDrawer() {
                 <FieldMappingEditor
                   value={node.config[field.key] ?? FIELD_MAPPING_DEFAULT}
                   onChange={(v) => updateConfig(node.id, { [field.key]: v })}
+                  assetContext={{pipelineId:mappingPipelineId,nodeId:node.id,
+                    sourceRef:mappingContext?.source?.category==='source' && resolveDatasourceId(mappingContext.source.config, dbList) ? {datasourceId:String(resolveDatasourceId(mappingContext.source.config, dbList)),table:String(mappingContext.source.config.table??mappingContext.source.config.tableName??'')} : undefined,
+                    targetRef:mappingContext?.target?.category==='sink' && resolveDatasourceId(mappingContext.target.config, dbList) ? {datasourceId:String(resolveDatasourceId(mappingContext.target.config, dbList)),table:String(mappingContext.target.config.table??mappingContext.target.config.tableName??mappingContext.target.config.targetTable??'')} : undefined}}
                   columnMeta={columnMeta}
                   columnsLoading={mappingColumnsLoading}
                   columnsError={mappingProbeState.key === mappingProbeKey ? mappingProbeState.error : ''}

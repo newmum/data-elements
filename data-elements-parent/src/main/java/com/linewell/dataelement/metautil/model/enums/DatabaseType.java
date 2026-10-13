@@ -1,6 +1,7 @@
 package com.linewell.dataelement.metautil.model.enums;
 
 import lombok.Getter;
+import java.util.Locale;
 
 /**
  * Metadata datasource type registry.
@@ -64,11 +65,12 @@ public enum DatabaseType {
         if (code == null) {
             return null;
         }
-        String normalized = code.trim().toLowerCase();
-        normalized = normalized.replace("_", "").replace("-", "");
+        String normalized = code.trim().toLowerCase(Locale.ROOT).replaceAll("[\\s_-]+", "");
         normalized = switch (normalized) {
-            case "kingbase8" -> "kingbase";
-            case "postgres" -> "postgresql";
+            case "kingbase8", "kingbasees" -> "kingbase";
+            case "pg", "postgres" -> "postgresql";
+            case "oracle12", "oracle12+" -> "oracle";
+            case "mssql", "mssql2012+", "mssql2008" -> "sqlserver";
             // Hailiang / Vastbase and the two TDSQL editions reuse PostgreSQL
             // or MySQL protocol. Keep the actual compatible explorer rather
             // than treating them as unknown source types in source management.
@@ -81,7 +83,7 @@ public enum DatabaseType {
             case "oceanbasemysql", "oceanbasecompatiblemysql" -> "oceanbasemysql";
             case "oceanbaseoracle", "oceanbasecompatibleoracle" -> "oceanbaseoracle";
             case "sftp" -> "ftp";
-            case "es" -> "elasticsearch";
+            case "es", "elastic" -> "elasticsearch";
             case "ch" -> "clickhouse";
             case "trino", "presto", "hetuengine" -> "hetu";
             case "apacheiotdb" -> "iotdb";

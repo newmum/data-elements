@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
+import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.platform.magic.module.JsonModule;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -14,6 +15,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.ssssssss.magicapi.core.context.RequestEntity;
@@ -34,6 +38,200 @@ import org.ssssssss.script.runtime.ExitValue;
 /** The template must stay local-first, bounded and scoped to the current role. */
 class MaterializationTemplateMagicTest {
     private static final String SOURCE_ID = "f93a8e653ac6413e89660f5d77d45769";
+
+    @ParameterizedTest
+    @EnumSource(DatabaseType.class)
+    void everyRegisteredSourceTypeCanOpenItsSnapshotWithoutExternalProbing(DatabaseType sourceType) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'", sourceType.getCode());
+
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        Map<?, ?> props = assertInstanceOf(Map.class, response.get("propList"));
+        Map<?, ?> field = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
+        assertEquals(sourceType.getCode(), props.get("sourceDbType"));
+        assertEquals("source-1", props.get("sourceTableId"));
+        assertEquals("mysql", props.get("dbType"), "The target dialect must remain independent of the source connector");
+        assertEquals("col-1", field.get("sourceColumnId"));
+        assertEquals("person_id", field.get("columnName"));
+        assertEquals("varchar(32)", field.get("sourceColumnType"));
+        assertEquals("varchar", field.get("dataType"));
+        assertEquals(32, ((Number) field.get("length")).intValue());
+        assertEquals(1, field.get("primaryKey"));
+        assertEquals(0, fixture.explorer.calls);
+        assertEquals(0, fixture.fileProbe.calls);
+        assertEquals(0, fixture.connectionConfigCalls);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "pg", "mssql", "kingbasees", "elastic", "FILE_UPLOAD", "data_upload",
+            "report", "push", "json_file", "future_connector"})
+    void aliasesAndHistoricalSourceMarkersDoNotBlockRegisteredSnapshots(String sourceType) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'", sourceType);
+
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        Map<?, ?> field = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
+        assertEquals("person_id", field.get("columnName"));
+        assertEquals("varchar", field.get("sourceDataType"));
+        assertEquals("varchar(32)", field.get("sourceColumnType"));
+        assertEquals("varchar", field.get("dataType"));
+        assertEquals(32, ((Number) field.get("length")).intValue());
+        assertEquals(1, field.get("primaryKey"));
+        if (sourceType == null || sourceType.isBlank()) {
+            assertFalse(((List<?>) response.get("warnings")).isEmpty(), "A missing source dialect must remain visible and editable");
+        }
+        assertEquals(0, fixture.explorer.calls);
+        assertEquals(0, fixture.fileProbe.calls);
+        assertEquals(0, fixture.connectionConfigCalls);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"oracle,DATE,datetime", "oceanbaseoracle,DATE,datetime", "dameng,DATE,datetime",
+            "postgresql,DATE,date", "api,DATE,date", "FILE_UPLOAD,DATE,date",
+            "sqlserver,TIMESTAMP,blob", "mssql,TIMESTAMP,blob", "postgresql,TIMESTAMP,datetime",
+            "api,TIMESTAMP,datetime", "FILE_UPLOAD,TIMESTAMP,datetime"})
+    void optionalSourceDialectPreservesKnownTemporalAndBinarySemantics(String sourceType, String nativeType,
+            String logicalType) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'", sourceType);
+        fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=?,length=0 where tid='col-1'",
+                nativeType, nativeType);
+
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        Map<?, ?> field = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
+        assertEquals(nativeType, field.get("sourceDataType"));
+        assertEquals(nativeType, field.get("sourceColumnType"));
+        assertEquals(logicalType, field.get("dataType"));
+        assertEquals(logicalType, field.get("columnType"));
+        assertEquals(0, fixture.explorer.calls);
+        assertEquals(0, fixture.fileProbe.calls);
+        assertEquals(0, fixture.connectionConfigCalls);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "api", "ftp", "kafka", "minio", "FILE_UPLOAD"})
+    void connectorIndependentSnapshotsKeepConstantReadsForTwentyAndHundredFields(String sourceType) throws Exception {
+        List<Integer> reads = new ArrayList<>();
+        for (int count : List.of(20, 100)) {
+            Fixture fixture = new Fixture(1);
+            fixture.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'", sourceType);
+            for (int i = 1; i < count; i++) fixture.jdbc.update("insert into db_table_column_t "
+                    + "(tid,tenant_id,table_id,column_name,data_type,column_type,length,nullable,is_del) "
+                    + "values(?,'police','source-1',?,'varchar','varchar(32)',32,1,0)", "col-" + (i + 1), "f_" + i);
+
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+            assertEquals(count + 3, ((List<?>) response.get("tableItems")).size());
+            reads.add(fixture.counter.queries);
+            assertEquals(0, fixture.explorer.calls);
+            assertEquals(0, fixture.fileProbe.calls);
+            assertEquals(0, fixture.connectionConfigCalls);
+        }
+        assertEquals(reads.get(0), reads.get(1), "Snapshot reads must not grow with the field count for " + sourceType);
+        assertTrue(reads.get(0) <= 20);
+        System.out.println("Connector template " + sourceType + " 20/100 fields: SQL reads=" + reads);
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "字符串|字符串(64)|varchar|64|0|0", "字符|字符(8)|varchar|8|0|0",
+            "文本|文本|text|0|0|0", "长文本|长文本|text|0|0|0",
+            "整数|整数|int|10|0|0", "长整数|长整数|bigint|20|0|0",
+            "小数|小数(20,4)|decimal|20|20|4", "浮点数|浮点数|double|0|0|0",
+            "日期|日期|date|0|0|0", "时间|时间|datetime|0|0|0",
+            "日期时间|日期时间|datetime|0|0|0", "布尔|布尔|tinyint|0|0|0",
+            "二进制|二进制|blob|0|0|0", "对象|对象|json|0|0|0", "数组|数组|json|0|0|0"
+    })
+    void explicitChineseTypeAliasesKeepTheirMeaningForHistoricalSourceZero(String dataType, String columnType,
+            String logicalType, int length, int precision, int scale) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='0' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=?,length=null,precision_length=null,scale=null "
+                + "where tid='col-1'", dataType, columnType);
+
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        Map<?, ?> props = assertInstanceOf(Map.class, response.get("propList"));
+        Map<?, ?> field = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
+        assertEquals("0", props.get("sourceDbType"));
+        assertEquals("col-1", field.get("sourceColumnId"));
+        assertEquals(dataType, field.get("sourceDataType"));
+        assertEquals(columnType, field.get("sourceColumnType"));
+        assertEquals(logicalType, field.get("dataType"));
+        assertEquals(logicalType, field.get("columnType"));
+        assertEquals(length, ((Number) field.get("length")).intValue());
+        assertEquals(precision, ((Number) field.get("precisionLength")).intValue());
+        assertEquals(scale, ((Number) field.get("scale")).intValue());
+        assertEquals(1, ((List<?>) response.get("warnings")).size(), "Only the historical source context needs a warning");
+        assertEquals(0, fixture.explorer.calls);
+        assertEquals(0, fixture.fileProbe.calls);
+        assertEquals(0, fixture.connectionConfigCalls);
+    }
+
+    @Test
+    void historicalSourceZeroKeepsBoundedChineseStringPrimaryAndOrdinaryFields() throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='0' where tid='source-db'");
+        fixture.jdbc.update("update db_table_column_t set data_type='字符串(64)',column_type='字符串(64)',length=null "
+                + "where tid='col-1'");
+        fixture.jdbc.update("insert into db_table_column_t "
+                + "(tid,tenant_id,table_id,column_name,data_type,column_type,primary_key,nullable,ordinal_position,is_del) "
+                + "values('col-2','police','source-1','person_name','字符串(200)','字符串(200)',0,1,2,0)");
+
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        List<?> fields = (List<?>) response.get("tableItems");
+        Map<?, ?> primary = assertInstanceOf(Map.class, fields.get(0));
+        Map<?, ?> ordinary = assertInstanceOf(Map.class, fields.get(1));
+        assertEquals("col-1", primary.get("sourceColumnId"));
+        assertEquals("字符串(64)", primary.get("sourceDataType"));
+        assertEquals("字符串(64)", primary.get("sourceColumnType"));
+        assertEquals("varchar", primary.get("dataType"));
+        assertEquals(64, ((Number) primary.get("length")).intValue());
+        assertEquals(1, primary.get("primaryKey"));
+        assertEquals(0, primary.get("nullable"));
+        assertEquals("col-2", ordinary.get("sourceColumnId"));
+        assertEquals("字符串(200)", ordinary.get("sourceDataType"));
+        assertEquals("字符串(200)", ordinary.get("sourceColumnType"));
+        assertEquals("varchar", ordinary.get("dataType"));
+        assertEquals(200, ((Number) ordinary.get("length")).intValue());
+        assertEquals(0, ordinary.get("primaryKey"));
+        assertEquals(1, ordinary.get("nullable"));
+        assertEquals(1, ((List<?>) response.get("warnings")).size());
+        assertEquals(0, fixture.explorer.calls);
+        assertEquals(0, fixture.fileProbe.calls);
+        assertEquals(0, fixture.connectionConfigCalls);
+    }
+
+    @Test
+    void historicalSourceZeroChineseSnapshotsKeepOneWarningAndConstantReadsForTwentyAndHundredFields() throws Exception {
+        List<Integer> reads = new ArrayList<>();
+        for (int count : List.of(20, 100)) {
+            Fixture fixture = new Fixture(1);
+            fixture.jdbc.update("update db_datasource_t set db_type='0' where tid='source-db'");
+            fixture.jdbc.update("update db_table_column_t set data_type='字符串(64)',column_type='字符串(64)',length=null "
+                    + "where tid='col-1'");
+            for (int i = 1; i < count; i++) fixture.jdbc.update("insert into db_table_column_t "
+                    + "(tid,tenant_id,table_id,column_name,data_type,column_type,primary_key,nullable,is_del) "
+                    + "values(?,'police','source-1',?,'字符串(200)','字符串(200)',0,1,0)", "col-" + (i + 1), "f_" + i);
+
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+            List<?> fields = (List<?>) response.get("tableItems");
+            assertEquals(count + 3, fields.size());
+            for (int i = 0; i < count; i++) {
+                Map<?, ?> field = assertInstanceOf(Map.class, fields.get(i));
+                assertEquals("varchar", field.get("dataType"));
+                assertEquals(1 == ((Number) field.get("primaryKey")).intValue() ? 64 : 200,
+                        ((Number) field.get("length")).intValue());
+            }
+            assertEquals(1, ((List<?>) response.get("warnings")).size(), "An unknown source label must not add a warning for each known field");
+            reads.add(fixture.counter.queries);
+            assertEquals(0, fixture.explorer.calls);
+            assertEquals(0, fixture.fileProbe.calls);
+            assertEquals(0, fixture.connectionConfigCalls);
+        }
+        assertEquals(reads.get(0), reads.get(1));
+        assertTrue(reads.get(0) <= 20);
+        System.out.println("Source 0 Chinese snapshots 20/100 fields: SQL reads=" + reads);
+    }
 
     @Test
     void unboundedSourceTextIsPreservedInsteadOfBeingGuessedAsVarchar() throws Exception {
@@ -213,22 +411,28 @@ class MaterializationTemplateMagicTest {
     }
 
     @Test
-    void missingOrDisplayOnlySnapshotsFailInsteadOfGuessingVarcharLength() throws Exception {
+    void missingOrDisplayOnlySnapshotsAreEditableWithoutGuessingAVarcharBound() throws Exception {
         Fixture missing = new Fixture(2);
         missing.jdbc.update("delete from db_table_column_t where table_id='source-1'");
-        assertInstanceOf(ExitValue.class, missing.run(false));
+        Map<?, ?> missingResponse = assertInstanceOf(Map.class, missing.run(false));
+        assertFalse(((List<?>) missingResponse.get("warnings")).isEmpty());
         assertEquals(0, missing.explorer.calls);
 
         Fixture displayOnly = new Fixture(2);
-        displayOnly.jdbc.update("update db_table_column_t set data_type='字符串',column_type='字符串',length=0 where table_id='source-1'");
-        assertInstanceOf(ExitValue.class, displayOnly.run(false));
+        displayOnly.jdbc.update("update db_table_column_t set data_type='数字',column_type='数字',length=0 where table_id='source-1'");
+        Map<?, ?> displayResponse = assertInstanceOf(Map.class, displayOnly.run(false));
+        assertFalse(((List<?>) displayResponse.get("warnings")).isEmpty());
+        Map<?, ?> displayField = (Map<?, ?>) ((List<?>) displayResponse.get("tableItems")).getFirst();
+        assertEquals("数字", displayField.get("sourceColumnType"));
+        assertEquals("text", displayField.get("dataType"));
         assertEquals(0, displayOnly.explorer.calls);
 
         Fixture legalHiveString = new Fixture(2);
         legalHiveString.jdbc.update("update db_table_column_t set data_type='string',column_type='string',length=0 where table_id='source-1'");
         Map<?, ?> response = assertInstanceOf(Map.class, legalHiveString.run(false));
         Map<?, ?> firstField = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
-        assertEquals(255, ((Number) firstField.get("length")).intValue());
+        assertEquals(0, ((Number) firstField.get("length")).intValue());
+        assertEquals("text", firstField.get("dataType"));
         assertEquals(0, legalHiveString.explorer.calls);
     }
 
@@ -269,18 +473,55 @@ class MaterializationTemplateMagicTest {
         assertEquals(6, ((Number) item.get("scale")).intValue());
     }
 
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', quoteCharacter = '"', value = {
+            "mysql|enum|enum('Y','N')|text|0|0|0",
+            "mysql|set|set('A','B')|text|0|0|0",
+            "oracle|NUMBER|NUMBER(*,0)|decimal|18|0|0",
+            "oracle|NUMBER|NUMBER(2147483648,0)|decimal|18|0|0",
+            "mysql|varchar|varchar(2147483648)|varchar|255|0|0",
+            "mysql|decimal|decimal(999999999999999999999999999999999999,2)|decimal|18|0|0",
+            "mysql|DECIMAL|DECIMAL(20,999999999999999999999999999999999999)|decimal|20|20|0",
+            "mysql|varchar|varchar(32)|varchar|32|0|0",
+            "oracle|NUMBER|NUMBER(24,6)|decimal|24|24|6",
+            "oracle|RAW|RAW(16)|varbinary|16|0|0"
+    })
+    void nativeTypeArgumentsRemainEditableWithoutIntegerParsingFailures(String sourceType, String dataType,
+            String columnType, String logicalType, int length, int precision, int scale) throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'", sourceType);
+        fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=?,length=null,precision_length=null,scale=null "
+                + "where tid='col-1'", dataType, columnType);
+
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
+        Map<?, ?> field = assertInstanceOf(Map.class, ((List<?>) response.get("tableItems")).getFirst());
+        assertEquals(dataType, field.get("sourceDataType"));
+        assertEquals(columnType, field.get("sourceColumnType"));
+        assertEquals("col-1", field.get("sourceColumnId"));
+        assertEquals(logicalType, field.get("dataType"));
+        assertEquals(logicalType, field.get("columnType"));
+        assertEquals(length, ((Number) field.get("length")).intValue());
+        assertEquals(precision, ((Number) field.get("precisionLength")).intValue());
+        assertEquals(scale, ((Number) field.get("scale")).intValue());
+        assertEquals(1, field.get("primaryKey"));
+        if (dataType.equals("enum") || dataType.equals("set")) {
+            assertFalse(((List<?>) response.get("warnings")).isEmpty(), "Native enumerations must remain visible for manual review");
+        }
+        assertEquals(0, fixture.explorer.calls);
+        assertEquals(0, fixture.fileProbe.calls);
+        assertEquals(0, fixture.connectionConfigCalls);
+    }
+
     @Test
-    void missingSnapshotsAndUnsupportedNativeTypesHaveDifferentActionableErrors() throws Exception {
-        for (String type : List.of("", "字符串", "mystery_type", "业务自定义类型")) {
+    void missingSnapshotsAndUnsupportedNativeTypesReturnEditableFieldsWithActionableWarnings() throws Exception {
+        for (String type : List.of("", "数字", "数值", "mystery_type", "业务自定义类型")) {
             Fixture fixture = new Fixture(1);
             fixture.jdbc.update("update db_table_column_t set data_type=?,column_type=? where tid='col-1'", type, type);
-            ExitValue result = assertInstanceOf(ExitValue.class, fixture.run(false));
-            boolean missing = type.isEmpty() || type.equals("字符串");
-            assertEquals(missing ? 409 : 422, ((Number) result.getValues()[0]).intValue());
-            String message = String.valueOf(result.getValues()[1]);
-            assertTrue(message.contains("person_id"), message);
-            assertTrue(message.contains("dataType="), message);
-            assertTrue(message.contains(missing ? "快照缺少" : "重复采集不会"), message);
+            Map<?,?> result = assertInstanceOf(Map.class, fixture.run(false));
+            var warnings = (List<?>) result.get("warnings");
+            assertFalse(warnings.isEmpty());
+            assertTrue(warnings.toString().contains("person_id"));
+            assertTrue(warnings.toString().contains("dataType="));
             assertEquals(0, fixture.explorer.calls);
         }
     }
@@ -298,11 +539,9 @@ class MaterializationTemplateMagicTest {
             assertEquals(count + 3, ((List<?>) result.get("tableItems")).size());
             reads.add(fixture.counter.queries);
             fixture.jdbc.update("update db_table_column_t set data_type='mystery_type',column_type='mystery_type'");
-            ExitValue error = assertInstanceOf(ExitValue.class, fixture.run(false));
-            assertEquals(422, ((Number) error.getValues()[0]).intValue());
-            String message = String.valueOf(error.getValues()[1]);
-            assertTrue(message.contains("共 " + count + " 项"), message);
-            assertEquals(10, message.split("dataType=", -1).length - 1);
+            Map<?,?> warningResult = assertInstanceOf(Map.class, fixture.run(false));
+            assertEquals(10, ((List<?>) warningResult.get("warnings")).size());
+            assertEquals(count+3, ((List<?>) warningResult.get("tableItems")).size());
             assertEquals(0, fixture.explorer.calls);
         }
         assertEquals(reads.get(0), reads.get(1));
@@ -323,16 +562,18 @@ class MaterializationTemplateMagicTest {
     }
 
     @Test
-    void physicalRefreshIsExplicitAndItsFailureIsReported() throws Exception {
+    void retiredRefreshAndFtpResolveParametersNeverOverrideRegisteredSnapshots() throws Exception {
         Fixture fixture = new Fixture(2);
         fixture.explorer.fail = true;
-        assertInstanceOf(ExitValue.class, fixture.run(true));
-        assertEquals(1, fixture.explorer.calls);
-
-        fixture.explorer.fail = false;
-        Map<?, ?> refreshed = assertInstanceOf(Map.class, fixture.run(true));
-        assertEquals(2, fixture.explorer.calls);
-        assertEquals("source-1", ((Map<?, ?>) refreshed.get("propList")).get("sourceTableId"));
+        Map<?, ?> result = assertInstanceOf(Map.class, fixture.run(true));
+        assertEquals(0, fixture.explorer.calls);
+        assertEquals(4, ((List<?>) result.get("tableItems")).size());
+        assertEquals("col-1", ((Map<?, ?>) ((List<?>) result.get("tableItems")).getFirst()).get("sourceColumnId"));
+        fixture.jdbc.update("update db_datasource_t set db_type='ftp' where tid='source-db'");
+        result = assertInstanceOf(Map.class, fixture.run(true));
+        assertEquals(0, fixture.fileProbe.calls);
+        assertEquals(0, fixture.fileProbe.locatorCalls);
+        assertEquals("source-1", ((Map<?, ?>) result.get("propList")).get("sourceTableId"));
     }
 
     @Test
@@ -366,6 +607,7 @@ class MaterializationTemplateMagicTest {
         final Scope scope = new Scope();
         final Explorer explorer = new Explorer();
         final FtpSourceProbeStub fileProbe = new FtpSourceProbeStub();
+        int connectionConfigCalls;
 
         Fixture(int count) {
             var source = new DriverManagerDataSource("jdbc:h2:mem:material_template_" + UUID.randomUUID()
@@ -417,29 +659,31 @@ class MaterializationTemplateMagicTest {
         }
 
         public Map<String, Object> connectionConfig(String id) {
+            connectionConfigCalls++;
             return Map.of("jdbcURL", "jdbc:hive2://example.invalid:10000/default", "database", "default");
         }
 
         Object run(boolean refresh) throws Exception {
             String script = CanonicalMagicSources.byId(SOURCE_ID).replace("\r\n", "\n")
-                    .replaceAll("(?m)^import (?:'@/common/datasourceConnectionConfig' as datasourceConnectionConfig|tenantRuntime|dataScope|com\\.linewell\\.dataelement\\.metautil\\.service\\.MetadataExplorerService as metadataExplorerService|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\n", "");
+                    .replaceAll("(?m)^import (?:'@/common/datasourceConnectionConfig' as datasourceConnectionConfig|tenantRuntime|portableDdl|dataScope|com\\.linewell\\.dataelement\\.metautil\\.service\\.MetadataExplorerService as metadataExplorerService|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\n", "");
             String prelude = "var datasourceConnectionConfig = (action, id, values, clearAll) => fixture.connectionConfig(id);\n";
             Map<String, Object> inputs = new LinkedHashMap<>();
-            inputs.put("body", Map.of("tid", "source-1", "refreshPhysicalColumns", refresh));
+            inputs.put("body", Map.of("tid", "source-1", "refreshPhysicalColumns", refresh, "resolveSourceFile", true));
             inputs.put("db", db);
             inputs.put("tenantRuntime", scope);
             inputs.put("dataScope", scope);
             inputs.put("jsons", new JsonModule());
             inputs.put("metadataExplorerService", explorer);
             inputs.put("fixture", this);
-            inputs.put("structuredFileProbe", new FtpSourceProbeStub());
+            inputs.put("portableDdl", new com.linewell.dataelement.metautil.ddl.PortableDdlConverter());
+            inputs.put("structuredFileProbe", fileProbe);
             counter.reset();
             return MagicScript.create(prelude + script, null).execute(new MagicScriptContext(inputs));
         }
 
         Object runCollection() throws Exception {
             String script = CanonicalMagicSources.byId("metadata_columns_collect_24").replace("\r\n", "\n")
-                    .replaceAll("(?m)^import (?:'@/common/datasourceConnectionConfig' as datasourceConnectionConfig|tenantRuntime|dataScope|hwhive|metadataAsset|jsons|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredSourceProbeService|com\\.linewell\\.dataelement\\.metautil\\.service\\.MetadataExplorerService as metadataExplorerService)\\n", "");
+                    .replaceAll("(?m)^import (?:'@/common/datasourceConnectionConfig' as datasourceConnectionConfig|tenantRuntime|portableDdl|dataScope|hwhive|metadataAsset|jsons|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredSourceProbeService|com\\.linewell\\.dataelement\\.metautil\\.service\\.MetadataExplorerService as metadataExplorerService)\\n", "");
             String prelude = "var datasourceConnectionConfig = (action, id, values, clearAll) => fixture.connectionConfig(id);\n";
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("body", Map.of("tableId", "source-1", "force", true, "dryRun", true,
@@ -451,6 +695,7 @@ class MaterializationTemplateMagicTest {
             inputs.put("metadataExplorerService", explorer);
             inputs.put("structuredSourceProbeService", fileProbe);
             inputs.put("fixture", this);
+            inputs.put("portableDdl", new com.linewell.dataelement.metautil.ddl.PortableDdlConverter());
             counter.reset();
             return MagicScript.create(prelude + script, null).execute(new MagicScriptContext(inputs));
         }
