@@ -33,7 +33,7 @@ public class MappingAssetController {
     }
     @GetMapping("/templates") public Map<String,Object> templates(@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size,@RequestParam(defaultValue="created_time")String sortField,@RequestParam(defaultValue="desc")String sortDir){return store.templates(page,size,sortField,sortDir);}
     @PostMapping("/templates") public JsonNode saveTemplate(@RequestBody JsonNode body){
-        ObjectNode specification=(ObjectNode)engine.compile(body.path("spec")).plan().document();rejectSecrets(specification);specification.remove(List.of("planId","sampleRows","sourceConfig"));return store.saveResource("TEMPLATE",body.path("name").asText(),JSON.createObjectNode().put("schemaVersion","2.0").put("engineVersion",MappingEngine.VERSION),specification);
+        ObjectNode specification=(ObjectNode)engine.compile(body.path("spec")).plan().document();rejectSecrets(specification);specification.remove(List.of("planId","sampleRows","sourceConfig"));return store.saveResource("TEMPLATE",body.path("name").asText(),JSON.createObjectNode().put("schemaVersion","2.0").put("engineVersion",MappingEngine.engineVersion()),specification);
     }
     @GetMapping("/templates/{id}") public JsonNode template(@PathVariable String id){
         JsonNode content=store.resources(List.of(id),"TEMPLATE").get(id).path("content");

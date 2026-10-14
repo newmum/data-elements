@@ -39,7 +39,7 @@ public class FieldMappingController {
     @Autowired public FieldMappingController(FieldMappingService service,RegisteredJdbcDataSourceResolver sources,DataQualityMapper metadata,UnifiedMappingService unified){this.service=service;this.sources=sources;this.metadata=metadata;this.unified=unified;}
 
     @GetMapping("/capabilities")
-    public Map<String,Object> capabilities(){return Map.of("engineVersion",com.linewell.dataelement.mapping.core.MappingEngine.VERSION,"planVersion","1.0","functions",unified.capabilities(),"maxPreviewRows",100,"runtimeType","com.linewell.dataelement.nifi.HaitongTransformRecord");}
+    public Map<String,Object> capabilities(){return Map.of("engineVersion",com.linewell.dataelement.mapping.core.MappingEngine.engineVersion(),"planVersion","1.0","functions",unified.capabilities(),"maxPreviewRows",100,"runtimeType","com.linewell.dataelement.nifi.HaitongTransformRecord");}
 
     @ExceptionHandler(MappingException.class)
     public ResponseEntity<Map<String,Object>> mappingError(MappingException exception){return ResponseEntity.unprocessableEntity().body(Map.of("error",exception.getMessage(),"code",exception.code()));}
