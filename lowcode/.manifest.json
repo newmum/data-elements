@@ -28,30 +28,20 @@
       "id": "2027589459685986304",
       "parentId": "2106362027181645824",
       "name": "my-workbench",
-      "displayName": "01.部门工作台",
+      "displayName": "01.工作台",
       "type": "1",
       "sortOrder": 1,
-      "path": "01.系统门户/01.数据源管理/01.部门工作台(my-workbench).vue",
-      "baseSha256": "fadec15ebb0f7ec284ca25fe825cf7b57084680312640ea701dca494c466116d"
-    },
-    {
-      "id": "e1477bd6ce474a69a9a943300185dfe0",
-      "parentId": "2106362027181645824",
-      "name": "management-workbench",
-      "displayName": "02.管理工作台",
-      "type": "1",
-      "sortOrder": 2,
-      "path": "01.系统门户/01.数据源管理/02.管理工作台(management-workbench).vue",
-      "baseSha256": "535d7c6f897af245ffdcfb7d10b1e0cace60b5c4878628da79cdd1f950a5d525"
+      "path": "01.系统门户/01.数据源管理/01.工作台(my-workbench).vue",
+      "baseSha256": "c76337ec87c857fa86d852444089f28ab51e9f0abbfc4f7909f65b2912324a14"
     },
     {
       "id": "deptdatasourceui00000000000001",
       "parentId": "2106362027181645824",
       "name": "department-datasource",
-      "displayName": "03.数据源管理列表",
+      "displayName": "02.数据源管理列表",
       "type": "1",
-      "sortOrder": 3,
-      "path": "01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource).vue",
+      "sortOrder": 2,
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
       "baseSha256": "5b3785bc583b6b306a4040b0db4ca1061d8dfb9318fa349f5907aaff9705a5c5"
     },
     {
@@ -61,7 +51,7 @@
       "displayName": "01.登记数据源",
       "type": "1",
       "sortOrder": 1,
-      "path": "01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
       "baseSha256": "c9b9cd15d8744c2b8b3cb8e20ede7c3cf998b63ee2e3930159568988223f93ce"
     },
     {
@@ -71,7 +61,7 @@
       "displayName": "02.探查数据表",
       "type": "1",
       "sortOrder": 2,
-      "path": "01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource)/02.探查数据表(register-dbTable).vue",
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/02.探查数据表(register-dbTable).vue",
       "baseSha256": "a9ca9632b8cac55b43bf7d1c8240782333b367221b459cec0258d463636a41e0"
     },
     {
@@ -81,7 +71,7 @@
       "displayName": "03.登记数据表",
       "type": "1",
       "sortOrder": 3,
-      "path": "01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue",
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue",
       "baseSha256": "808d529b910731bca6d4113c0a3129dddcaaa05c44776e9c35c43fcd66f59be0"
     },
     {
@@ -91,7 +81,7 @@
       "displayName": "04.登记内容审查",
       "type": "1",
       "sortOrder": 4,
-      "path": "01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
       "baseSha256": "dbd8a5777605ab2a53573d864fbd2c41bcf4007434b303d93961f12b62de26c1"
     },
     {
@@ -101,7 +91,7 @@
       "displayName": "05.数据源详情库表信息",
       "type": "1",
       "sortOrder": 5,
-      "path": "01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource)/05.数据源详情库表信息(db-table).vue",
+      "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/05.数据源详情库表信息(db-table).vue",
       "baseSha256": "5d659e35b5ef6cd72a3d98cc3056be12b117852da29525e206d71559a2158b04"
     },
     {

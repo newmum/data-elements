@@ -6,7 +6,7 @@
           <span class="live-dot"></span>
           数据资产实时态势
         </div>
-        <h1>部门工作台</h1>
+        <h1>数据资产工作台</h1>
         <p>围绕数据源探查、表级标注、登记审查和变更复核，集中展示当前资产办理状态。</p>
       </div>
 
@@ -23,12 +23,18 @@
             {{ item.label }}
           </button>
         </div>
+        <button class="refresh-button export-button" type="button" :disabled="exporting" :aria-busy="exporting" @click="exportData">
+          <Icon :icon="exporting ? 'el-icon-Loading' : 'el-icon-Download'" :size="16" />
+          {{ exporting ? `导出中 ${exportProgress}` : "导出" }}
+        </button>
         <button class="refresh-button" type="button" :class="{ spinning: refreshing }" @click="refreshMock">
           <Icon icon="el-icon-Refresh" :size="16" />
           刷新
         </button>
       </div>
     </header>
+
+    <div v-if="exportError" class="export-error" role="alert">{{ exportError }}</div>
 
     <transition name="notice-fade">
       <div v-if="notice" class="action-notice">
@@ -387,6 +393,7 @@
 <script setup>
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
+import * as ExcelJS from "exceljs";
 
 defineOptions({ name: "MyWorkbench" });
 
@@ -684,9 +691,141 @@ const startIssue = (item) => {
   item.processing = true;
   notify(`“${item.title}”已进入处理队列（模拟）`);
 };
+// WORKBENCH_EXPORT_START: bounded pages from the authenticated statistics API.
+const reportPageSize = 100;
+const reportMaxSources = 5000;
+const exporting = ref(false);
+const exportError = ref("");
+const exportProgress = ref("");
+const reportHeaders = ["序号", "警种", "应用系统", "数据源", "类型", "联系人", "目录总数", "登记开始时间", "已标注目录数", "已登记字典表", "已登记业务表", "已登记日志表", "登记进展情况", "登记结束时间", "登记状态", "接入方式", "接入数据", "接入开始时间", "接入进展情况"];
+const reportTypeNames = { mysql: "MySQL", oracle: "Oracle", postgresql: "PostgreSQL", sqlserver: "SQL Server", hive: "Hive", gaussdb: "GaussDB", dameng: "达梦", dm: "达梦", kingbase: "人大金仓", kingbase8: "人大金仓", oceanbasemysql: "OceanBase MySQL", oceanbaseoracle: "OceanBase Oracle", ftp: "FTP/SFTP", sftp: "SFTP", api: "API", kafka: "Kafka", minio: "MinIO", clickhouse: "ClickHouse", gbase8a: "GBase 8a", gbase8s: "GBase 8s", elasticsearch: "Elasticsearch", mongodb: "MongoDB", mariadb: "MariaDB" };
+const reportLegacyTypes = { 1: "mysql", 2: "oracle", 3: "postgresql", 4: "sqlserver", 5: "hive", 6: "gaussdb", 7: "gbase8a", 8: "dameng", 9: "kingbase", 11: "oceanbasemysql", 12: "oceanbaseoracle", 15: "clickhouse", 16: "gbase8s", 21: "minio", 22: "ftp", 23: "api", 24: "kafka", 25: "elasticsearch" };
+function reportCount(value) {
+  const count = Number(value ?? 0);
+  if (!Number.isFinite(count) || count < 0) throw new Error("统计数据中存在无效计数，请刷新后重试");
+  return count;
+}
+function reportDate(value) {
+  if (!value) return null;
+  // Preserve the SQL timestamp's displayed wall time, independent of browser timezone.
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!match) return null;
+  const parts = match.slice(1).map(value => Number(value || 0));
+  const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], parts[3], parts[4], parts[5]));
+  return date.getUTCFullYear() === parts[0] && date.getUTCMonth() + 1 === parts[1] && date.getUTCDate() === parts[2] ? date : null;
+}
+function reportValues(row, index) {
+  const type = String(row.dbType || reportLegacyTypes[row.databaseType] || "").toLowerCase();
+  const state = { 0: "待登记", 1: "未登记完成", 2: "已完成" }[Number(row.sourceAssetStatus ?? 0)] || "状态不明";
+  const progress = `任务覆盖 ${reportCount(row.accessedTableCount)}/${reportCount(row.accessCandidateCount)} 张；运行 ${reportCount(row.runningTaskCount)}；异常 ${reportCount(row.errorTaskCount)}；未启用/停止 ${reportCount(row.idleTaskCount)}`;
+  const extra = Number(row.changingTaskCount || 0) || Number(row.missingPipelineCount || 0) ? `；处理中 ${reportCount(row.changingTaskCount)}；流程缺失/不明 ${reportCount(row.missingPipelineCount)}` : "";
+  return [index + 1, row.orgName || "", row.appName || "", row.dbName || "", reportTypeNames[type] || type,
+    row.contactName || "", reportCount(row.directoryCount), reportDate(row.registrationStartTime),
+    reportCount(row.annotatedCount), reportCount(row.dictionaryCount), reportCount(row.businessCount), reportCount(row.logCount),
+    Math.max(0, Math.min(100, reportCount(row.registrationRate))) / 100, reportDate(row.registrationEndTime), state,
+    row.accessMode || "", reportCount(row.accessedTableCount), reportDate(row.accessStartTime), progress + extra];
+}
+async function collectReportRows(requestPage, ownerOnly, progress = () => {}) {
+  const rows = [], ids = new Set();
+  let expectedTotal = null, expectedScope = null;
+  for (let page = 1; page <= Math.ceil(reportMaxSources / reportPageSize); page++) {
+    const result = await requestPage({ pageNum: page, pageSize: reportPageSize, sortField: "orgName", sortDir: "asc", ownerOnly });
+    if (!Array.isArray(result?.list) || !Number.isInteger(Number(result?.total)) || Number(result.total) < 0 || !["ALL", "ORG", "OWNER"].includes(result.scope)) {
+      throw new Error("统计接口返回异常，请刷新后重新导出");
+    }
+    const total = Number(result.total);
+    if (total > reportMaxSources) throw new Error(`当前范围超过 ${reportMaxSources} 个数据源，请选择“我负责的”缩小导出范围`);
+    if (expectedTotal === null) { expectedTotal = total; expectedScope = result.scope; }
+    if (total !== expectedTotal || result.scope !== expectedScope) throw new Error("导出期间数据源数量或权限范围发生变化，请重试");
+    const expectedRows = Math.min(reportPageSize, expectedTotal - rows.length);
+    if (result.list.length !== expectedRows) throw new Error("导出分页数据不完整，请重试");
+    for (const row of result.list) {
+      const id = String(row.datasourceId || "");
+      if (!id || ids.has(id)) throw new Error("导出分页出现缺失或重复的数据源，请重试");
+      ids.add(id); rows.push(row);
+    }
+    progress(rows.length, expectedTotal);
+    if (rows.length === expectedTotal) return rows;
+  }
+  throw new Error("导出数据超出本次读取上限，请缩小范围");
+}
+function createReportWorkbook(rows) {
+  const Workbook = ExcelJS.Workbook || ExcelJS.default?.Workbook;
+  if (!Workbook) throw new Error("Excel 导出组件未加载，请刷新页面后重试");
+  const book = new Workbook();
+  book.title = "数据源登记及接入情况";
+  book.created = new Date();
+  const sheet = book.addWorksheet("数据源登记及接入", {
+    views: [{ state: "frozen", xSplit: 4, ySplit: 2, showGridLines: false }],
+    pageSetup: { orientation: "landscape", paperSize: 8, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "1:2" },
+  });
+  sheet.columns = [7, 20, 30, 36, 18, 16, 13, 23, 15, 16, 16, 16, 18, 23, 16, 16, 15, 23, 65].map(width => ({ width }));
+  sheet.addRow(["数据源情况", "", "", "", "", "", "数据登记情况", "", "", "", "", "", "", "", "", "数据接入情况"]);
+  sheet.addRow(reportHeaders);
+  sheet.mergeCells("A1:F1"); sheet.mergeCells("G1:O1"); sheet.mergeCells("P1:S1");
+  sheet.getRow(1).height = 28; sheet.getRow(2).height = 36;
+  const border = { top: { style: "thin", color: { argb: "FFB8C0CC" } }, bottom: { style: "thin", color: { argb: "FFB8C0CC" } }, left: { style: "thin", color: { argb: "FFB8C0CC" } }, right: { style: "thin", color: { argb: "FFB8C0CC" } } };
+  for (let row = 1; row <= 2; row++) for (let col = 1; col <= 19; col++) {
+    const cell = sheet.getCell(row, col);
+    cell.font = { name: "微软雅黑", size: 11, bold: true, color: { argb: row === 2 ? "FFB64A3E" : "FF303744" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: col <= 6 ? "FFE8EDF4" : col <= 15 ? "FFFFEB66" : "FFFFE6C7" } };
+    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; cell.border = border;
+  }
+  sheet.getCell("F2").note = "联系人取数据源创建者姓名；未找到有效创建者时留空。";
+  sheet.getCell("G2").note = "已采集的有效表清单数，包含尚未标注或登记的表。";
+  sheet.getCell("M2").note = "已完成登记表数 / 有效表清单数。";
+  sheet.getCell("N2").note = "尚未记录登记结束时间的记录留空。";
+  sheet.getCell("Q2").note = "有有效第一跳接入任务的来源表去重数，单位为张；不重复计算下一跳。";
+  sheet.getCell("R2").note = "现存第一跳任务最近一次启动时间中的最早值。";
+  rows.forEach((row, index) => {
+    const excelRow = sheet.addRow(reportValues(row, index));
+    excelRow.height = Math.max(String(row.dbName || "").length, String(row.appName || "").length) > 40 ? 60 : 42;
+    for (let col = 1; col <= 19; col++) {
+      const cell = excelRow.getCell(col);
+      cell.font = { name: "微软雅黑", size: 10, color: { argb: "FF303744" } };
+      cell.alignment = { horizontal: [1, 5, 6, 15, 16].includes(col) ? "center" : [7, 9, 10, 11, 12, 13, 17].includes(col) ? "right" : "left", vertical: "middle", wrapText: true };
+      cell.border = border;
+      if (index % 2 === 1) cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F7FA" } };
+    }
+    for (const col of [8, 14, 18]) excelRow.getCell(col).numFmt = "yyyy-mm-dd hh:mm:ss";
+    for (const col of [7, 9, 10, 11, 12, 17]) excelRow.getCell(col).numFmt = "#,##0";
+    excelRow.getCell(13).numFmt = "0.0%";
+  });
+  sheet.autoFilter = { from: "A2", to: `S${Math.max(2, rows.length + 2)}` };
+  return book;
+}
+async function exportData() {
+  if (exporting.value) return;
+  exporting.value = true; exportError.value = ""; exportProgress.value = "";
+  const ownerOnly = activeScope.value === "mine";
+  let objectUrl = null, link = null;
+  try {
+    const rows = await collectReportRows(payload => $common.post("/dst/statistics/management-workbench", payload), ownerOnly,
+      (loaded, total) => { exportProgress.value = `${loaded}/${total}`; });
+    const workbook = createReportWorkbook(rows);
+    const buffer = await workbook.xlsx.writeBuffer();
+    objectUrl = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const now = new Date(), pad = value => String(value).padStart(2, "0");
+    const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+    link = document.createElement("a"); link.href = objectUrl;
+    link.download = `数据源登记及接入情况_${ownerOnly ? "我负责的" : "授权范围"}_${stamp}.xlsx`;
+    document.body.appendChild(link); link.click();
+    notify(`已导出 ${rows.length} 个数据源的真实登记及接入统计`);
+  } catch (error) {
+    exportError.value = error?.message || "导出失败，请稍后重试";
+  } finally {
+    link?.remove();
+    if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    exporting.value = false; exportProgress.value = "";
+  }
+}
+// WORKBENCH_EXPORT_END
+
 </script>
 
 <style scoped>
+.export-button:disabled { cursor: wait; opacity: .65; }
+.export-error { padding: 12px 16px; margin-bottom: 14px; border: 1px solid #ffd6d2; border-radius: 10px; background: #fff1f0; color: #bf4242; }
 .asset-workbench {
   min-height: calc(100vh - 88px);
   padding: 20px;

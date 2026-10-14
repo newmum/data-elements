@@ -675,7 +675,9 @@ function pickJdbcProperties(row: Record<string, any>): Record<string, string> | 
 }
 
 function filterByOrgPath(list: DbDictItem[]): DbDictItem[] {
-  if (isChengtianIntegration || !list.length || getIsAdmin()) return list;
+  // The page endpoint already enforces tenant and role scope. Some summaries
+  // omit orgPath; missing display metadata must not empty its authorized list.
+  if (isChengtianIntegration || !list.length || getIsAdmin() || !list.some(item => item.orgPath)) return list;
   const orgPath = getOrgPath();
   return orgPath ? list.filter((item) => String(item.orgPath || '').startsWith(orgPath)) : list;
 }

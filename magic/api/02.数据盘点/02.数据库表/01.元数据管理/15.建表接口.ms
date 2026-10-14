@@ -197,7 +197,7 @@ var typeFamily = value => {
     if (['binary','varbinary','raw','long raw','blob','bytea','image','rowversion'].contains(type)) { return 'binary' }
     return type
 }
-var reusedTableItems = (requested, physical, config, tableName) => {
+var reusedTableItems = (requested, physical, config, tableName, warnings) => {
     if (!(requested instanceof List) || requested.size() == 0 || requested.size() > 2000) { exit 400, '复用已有表需要1至2000个目标字段' }
     if (physical == null || physical.size() == 0) { exit 409, '已有目标表“' + tableName + '”未返回字段，请检查表名、Schema和元数据权限' }
     var requestedByName = {}
@@ -236,6 +236,15 @@ var reusedTableItems = (requested, physical, config, tableName) => {
                 || (expectedFamily == 'date' && actualFamily == 'datetime')
                 || (expectedFamily == 'datetime' && actualFamily == 'date' && nativeDateTime)
                 || (expectedFamily == 'boolean' && actualFamily == 'number')
+            // 明确复用旧Hive表时，STRING可以无损承接标量的文本表示。
+            // 保存真实STRING类型并提示差异；不扩大到有限VARCHAR或字符串转数值。
+            var hiveTextWidening = config.getDatabaseType() == DatabaseType.HIVE
+                && normalizedType(actualType) == 'string'
+                && ['number','date','datetime','boolean'].contains(expectedFamily)
+            if (hiveTextWidening) {
+                compatible = true
+                warnings.add(name + '：已有Hive STRING将按文本保存（模板类型' + item.dataType + '）')
+            }
             if (!compatible) { errors.add(name + '（期望' + item.dataType + '，实际' + actualType + '）') }
             var actualLength = rowValue(column, ['length'])
             if (['string','binary'].contains(expectedFamily) && actualLength != null && actualLength::long > 0
@@ -245,11 +254,11 @@ var reusedTableItems = (requested, physical, config, tableName) => {
             }
             var actualPrecision = rowValue(column, ['precision','precisionLength','precision_length'])
             var actualScale = rowValue(column, ['scale'])
-            if (expectedFamily == 'number' && actualPrecision != null && actualPrecision::int > 0
+            if (expectedFamily == 'number' && actualFamily == 'number' && actualPrecision != null && actualPrecision::int > 0
                 && item.precisionLength != null && item.precisionLength::int > actualPrecision::int) {
                 errors.add(name + '（已有数值精度不足）')
             }
-            if (expectedFamily == 'number' && actualScale != null && item.scale != null && item.scale::int > actualScale::int) {
+            if (expectedFamily == 'number' && actualFamily == 'number' && actualScale != null && item.scale != null && item.scale::int > actualScale::int) {
                 errors.add(name + '（已有小数位数不足）')
             }
         } else if (rowValue(column, ['nullable']) == false
@@ -282,19 +291,37 @@ var reusedTableItems = (requested, physical, config, tableName) => {
     if (errors.size() > 0) { exit 409, '已有目标表“' + tableName + '”结构不兼容：' + errors.join('；') + '。请调整目标表结构或使用新表名' }
     return normalized
 }
+var hiveValue = (row, aliases) => {
+    // Hive JDBC版本可能返回带表前缀、不同大小写或空白的列标签。
+    for (key in row.keySet()) {
+        var label = textOf(key).trim().toLowerCase().replace('`', '')
+        if (label.contains('.')) { label = label.substring(label.lastIndexOf('.') + 1) }
+        if (aliases.contains(label) && !blank(row.get(key))) { return textOf(row.get(key)).trim() }
+    }
+    return null
+}
 var hiveColumns = (config, name) => {
     var database = config.getDatabase()
     if (blank(database) || !textOf(database).matches('^[A-Za-z_][A-Za-z0-9_]*$')
         || !textOf(name).matches('^[A-Za-z_][A-Za-z0-9_]*$')) { exit 400, 'Hive复用库名或表名不合法' }
     var columns = []
+    var seen = {}
     for (row in hwhive.queryTable('DESCRIBE `' + database + '`.`' + name + '`')) {
-        var columnName = firstValue(row, ['col_name','COL_NAME','colName','column_name'])
+        var columnName = hiveValue(row, ['col_name','colname','column_name'])
         if (blank(columnName)) { continue }
-        if (textOf(columnName).startsWith('#')) { break }
-        var type = firstValue(row, ['data_type','DATA_TYPE','dataType','type'])
+        // DESCRIBE可含表头及重复分区段，不能在表头处终止后误报零字段。
+        if (columnName.startsWith('#') || columnName.startsWith('----')) { continue }
+        var type = hiveValue(row, ['data_type','datatype','type'])
+        if (blank(type)) { exit 409, '已有Hive目标字段“' + columnName + '”未返回类型，请检查元数据权限' }
+        var fieldKey = columnName.toLowerCase()
+        if (seen[fieldKey] != null) {
+            if (seen[fieldKey] == type.toLowerCase()) { continue }
+            exit 409, '已有Hive目标字段元数据类型冲突：' + columnName
+        }
+        seen[fieldKey] = type.toLowerCase()
         var baseType = normalizedType(type)
         var column = {columnName:columnName, dataType:baseType, columnType:type,
-            columnComment:firstValue(row,['comment','COMMENT']), nullable:true, ordinalPosition:columns.size()}
+            columnComment:hiveValue(row,['comment']), nullable:true, ordinalPosition:columns.size()}
         var compactType = textOf(type).replaceAll('\\s', '')
         if (['char','varchar','decimal','numeric'].contains(baseType) && compactType.contains('(') && compactType.endsWith(')')) {
             var dimensions = compactType.substring(compactType.indexOf('(')+1, compactType.length()-1).split(',')
@@ -404,8 +431,12 @@ if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
             // 托管Hive无批量DESCRIBE接口，最多20表，沿用有查询超时的服务端网关。
             var columnsByTable = group.managedHive ? {} : metadataExplorerService.getColumnsByTables(group.config, names)
             for (entry in group.targets) {
-                var columns = group.managedHive ? hiveColumns(group.config, entry.parsed.lookupName) : columnsByTable[entry.parsed.lookupName]
-                entry.result.tableItems = reusedTableItems(entry.target.tableItems, columns, group.config, entry.target.tableName)
+                // MetadataExplorer批量结果的约定键为小写；保留原名仅供字段/结果展示。
+                var columns = group.managedHive ? hiveColumns(group.config, entry.parsed.lookupName)
+                    : columnsByTable[textOf(entry.parsed.lookupName).toLowerCase()]
+                var warnings = []
+                entry.result.tableItems = reusedTableItems(entry.target.tableItems, columns, group.config, entry.target.tableName, warnings)
+                entry.result.compatibilityWarnings = warnings
                 entry.result.physicalTableReused = true
             }
         }
@@ -463,8 +494,10 @@ if (body.canvas == true) {
         var scoped = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', dbId).eq('is_del', 0).select()
         if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', scoped).size() != 1) { exit 403, '已有目标表不在当前角色的数据范围内' }
         var columns = managedHive ? hiveColumns(config, parsed.lookupName) : metadataExplorerService.getColumns(config, parsed.lookupName)
+        var warnings = []
+        var tableItems = reusedTableItems(body.tableItems, columns, config, parsed.tableName, warnings)
         return {status:'exists', created:false, tableName:parsed.tableName, physicalTableReused:true,
-            tableItems:reusedTableItems(body.tableItems, columns, config, parsed.tableName)}
+            tableItems:tableItems, compatibilityWarnings:warnings}
     }
     // 直接执行限定目标的CREATE。已有对象由数据库错误码处理，目录权限或旧驱动的探查失败不再阻断建表。
     try {

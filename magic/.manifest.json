@@ -6682,8 +6682,8 @@
       "metadataId": "30fc31e9c7e057f4983f7342850f1811"
     },
     {
-      "path": "api/02.数据盘点/04.盘点统计/02.管理工作台统计.ms",
-      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/02.管理工作台统计.ms",
+      "path": "api/02.数据盘点/04.盘点统计/02.工作台导出统计.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/04.盘点统计/02.工作台导出统计.ms",
       "rowIds": [
         "69ed4e3d283845f08b908c7d81598252"
       ],
@@ -6693,7 +6693,7 @@
       "name": "02.管理工作台统计",
       "routePath": "/management-workbench",
       "method": "POST",
-      "baseSha256": "6839bcb3b8971e187a80e53a585ca9f8b3226853ad51f2e605ff912116f08cbb"
+      "baseSha256": "086233f8a38d4731a78eea68e032cc10c8d4e6163da7fbb3ffc5b7771aa58ac7"
     }
   ]
 }

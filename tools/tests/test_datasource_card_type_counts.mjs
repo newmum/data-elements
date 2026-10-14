@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 
 const root = new URL('../../', import.meta.url);
-const source = await fs.readFile(new URL('lowcode/01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource).vue', root), 'utf8');
+const source = await fs.readFile(new URL('lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue', root), 'utf8');
 const script = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/)[1];
 const babel = {};
 vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/babel.min.js', root), 'utf8'), babel);

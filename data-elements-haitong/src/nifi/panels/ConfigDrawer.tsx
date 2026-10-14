@@ -1,4 +1,5 @@
 import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from "./registeredDatasourceType";
+import {usesUnifiedRecordRules} from './unifiedRuleModel';
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip, Segmented } from 'antd';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
@@ -367,12 +368,10 @@ const GROUP_LABELS: Record<string, string> = {
 };
 
 const FIELD_MAPPING_DEFAULT = JSON.stringify({
-  version: '1.0',
-  passthroughUnmapped: false,
-  passthroughCaseSensitive: true,
-  onMissingSource: 'NULL',
-  onTypeMismatch: 'CAST',
-  mappings: [],
+  schemaVersion: '2.0',
+  executionEngine: 'JAVA_RECORD',
+  policies: {recordErrorMode:'FAIL_FLOWFILE',onMissingSource:'NULL',allowUnmappedPassthrough:false,caseSensitive:true,zoneId:'Asia/Shanghai',locale:'zh-CN'},
+  rules: [],
 }, null, 2);
 
 function withVisibleWhen(field: FieldSchema, visibleWhen: FieldSchema['visibleWhen']): FieldSchema {
@@ -1616,6 +1615,7 @@ export default function ConfigDrawer() {
                     sourceRef:mappingContext?.source?.category==='source' && resolveDatasourceId(mappingContext.source.config, dbList) ? {datasourceId:String(resolveDatasourceId(mappingContext.source.config, dbList)),table:String(mappingContext.source.config.table??mappingContext.source.config.tableName??'')} : undefined,
                     targetRef:mappingContext?.target?.category==='sink' && resolveDatasourceId(mappingContext.target.config, dbList) ? {datasourceId:String(resolveDatasourceId(mappingContext.target.config, dbList)),table:String(mappingContext.target.config.table??mappingContext.target.config.tableName??mappingContext.target.config.targetTable??'')} : undefined}}
                   columnMeta={columnMeta}
+                  datasources={dbList.map(item=>({value:String(item.id??item.value),label:item.label}))}
                   columnsLoading={mappingColumnsLoading}
                   columnsError={mappingProbeState.key === mappingProbeKey ? mappingProbeState.error : ''}
                   onReloadColumns={() => setMappingProbeRetry((value) => value + 1)}
@@ -1671,7 +1671,7 @@ export default function ConfigDrawer() {
       open={open}
       getContainer={getNifiOverlayContainer}
       onClose={() => openDrawer(null)}
-      width={isFieldMappingDrawer || isCustomSqlDrawer || isFilterDrawer || isBranchDrawer ? 'min(1180px, calc(100vw - 32px))' : 460}
+      width={isFieldMappingDrawer ? 'min(980px, calc(100vw - 32px))' : isCustomSqlDrawer || isFilterDrawer || isBranchDrawer ? 'min(1180px, calc(100vw - 32px))' : 460}
       placement="right"
       mask={false}
       closable={false}
@@ -1716,7 +1716,7 @@ export default function ConfigDrawer() {
             {isFieldMappingDrawer && (
               <div className="field-mapping-header-execution-mode">
                 <span>执行方式</span>
-                <Segmented
+                {usesUnifiedRecordRules(node.config.mappings) ? <Tooltip title="统一规则在记录处理中执行，预览与发布使用同一规则；转换不会下推为来源数据库 SQL。"><span>统一规则 · 记录处理</span></Tooltip> : <><Segmented
                   size="small"
                   value={String(node.config.executionMode ?? 'AUTO')}
                   options={[
@@ -1728,7 +1728,7 @@ export default function ConfigDrawer() {
                 />
                 <Tooltip title="自动模式会在规则完全兼容来源数据库时合并为一条 SQL；含 NiFi 表达式、跨库字典或需要失败路由时自动使用记录处理。">
                   <span className="field-mapping-execution-tip">?</span>
-                </Tooltip>
+                </Tooltip></>}
               </div>
             )}
             {/* 切换组件类型，仅当同类别有多个组件时显示。 */}

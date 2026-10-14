@@ -35,6 +35,7 @@ import dataScope
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService as structuredFileProbe
 import java.util.Map
 import java.util.List
+import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingStorageGuard as mappingStorage
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType as sourceTypes
 
 var text = (value) => value == null ? '' : value + ''
@@ -1875,10 +1876,7 @@ for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) 
                 dict_code: dictionaryRelation.dictionaryKeyField + '->' + dictionaryRelation.dictionaryLabelField,
                 func_enable: 1,
                 func_code: 'LOOKUP',
-                // Some deployed metadata schemas keep func_value as VARCHAR.
-                // The complete executable contract belongs to the pipeline DSL
-                // above; persist a compact, backward-compatible summary here
-                // so the mapping batch cannot fail after the pipeline exists.
+                // 多值翻译保存完整执行契约；批量写入前统一校验当前租户实际容量。
                 func_value: dictionaryRelation.multiValue
                     ? jsons.toJSONStr({ ruleKind: 'DICTIONARY', table: dictionaryRelation.dictionaryTable,
                         keyField: dictionaryRelation.dictionaryKeyField,
@@ -1932,6 +1930,11 @@ for (targetIndex, targetColumn in (targetColumns == null ? [] : targetColumns)) 
 for (mapping in mappings) { mapping.tenant_id = tenantId; allMappings.add(mapping) }
 for (summary in targetSummaries) { allTargetSummaries.add(summary) }
 }
+// 完整规则不截断；一次检查当前租户真实列容量，dryRun同样执行且不写入。
+var capacityError = null
+try { capacityError = mappingStorage.validate(db, tenantId, allMappings) }
+catch (e) { exit 503, '暂时无法检查当前租户的字段映射存储结构，任务未保存，请稍后重试' }
+if (!blank(capacityError)) { exit 422, capacityError }
 if (!dryRun) {
     if (retireTaskIds.size() > 0) {
         db.table('data_access_field_mapping').where().eq('tenant_id', tenantId).in('task_id', retireTaskIds).eq('is_del', 0)

@@ -37,6 +37,65 @@ class CanvasCreateTableBatchValidationMagicTest {
     private JdbcTemplate jdbc;
     private PhysicalMetadata physical;
 
+    @Test
+    void uppercaseRequestedNameUsesCanonicalLowercaseBatchKey() throws Exception {
+        jdbc.update("update db_datasource_t set db_type='mysql',username='fixture',pool_cfg=?",
+                "{\"host\":\"fixture.invalid\",\"database\":\"warehouse\"}");
+        ColumnInfo column = new ColumnInfo(); column.setColumnName("ID"); column.setDataType("varchar");
+        column.setLength(64L); column.setNullable(true); physical.columns = List.of(column);
+        Map<?,?> result = assertInstanceOf(Map.class, run(Map.of("canvas",true,"validateOnly",true,"batchReuseValidation",true,
+                "targets",List.of(Map.of("dbId","target-db","tableName","ODS_VEHICLE_LOGOUT",
+                        "ddl","CREATE TABLE ODS_VEHICLE_LOGOUT(ID VARCHAR(32))",
+                        "tableItems",List.of(Map.of("columnName","ID","dataType","varchar","length",32)))))));
+        assertEquals(true, ((Map<?,?>)((List<?>)result.get("results")).getFirst()).get("physicalTableReused"));
+        assertEquals(1, physical.calls); assertEquals(1, counter.queries); assertEquals(0, counter.writes);
+    }
+
+    @Test
+    void hiveTextWideningKeepsActualTypesAndWarnsForTwentyAndHundredFields() throws Exception {
+        for (int count : List.of(20, 100)) {
+            List<Map<String,Object>> fields = new ArrayList<>(); physical.columns = new ArrayList<>();
+            for (int i=0;i<count;i++) {
+                String name="amount_"+i;
+                fields.add(Map.of("columnName",name,"dataType","decimal","precisionLength",20,"scale",6));
+                ColumnInfo column=new ColumnInfo(); column.setColumnName(name); column.setDataType("string");
+                physical.columns.add(column);
+            }
+            physical.calls=0; counter.queries=0;
+            var result=assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,"batchReuseValidation",true,
+                    "targets",List.of(Map.of("dbId","target-db","tableName","ods_existing",
+                            "ddl","CREATE TABLE ods_existing(amount_0 DECIMAL(20,6))","tableItems",fields)))));
+            var table=(Map<?,?>)((List<?>)result.get("results")).getFirst();
+            assertEquals(count,((List<?>)table.get("compatibilityWarnings")).size());
+            for(Object field:(List<?>)table.get("tableItems")) assertEquals("string",((Map<?,?>)field).get("dataType"));
+            assertEquals(1,physical.calls); assertEquals(1,counter.queries); assertEquals(0,counter.writes);
+        }
+    }
+
+    @Test
+    void hiveDriverLabelsHeadersAndRepeatedPartitionSectionAreNormalized() throws Exception {
+        physical.rawRows=List.of(Map.of(" result.COL_NAME ","# col_name","result.DATA_TYPE","data_type"),
+                Map.of(" result.COL_NAME "," id ","result.DATA_TYPE"," STRING "),
+                Map.of(" result.COL_NAME ","# Partition Information","result.DATA_TYPE",""),
+                Map.of(" result.COL_NAME "," id ","result.DATA_TYPE"," STRING "));
+        var result=assertInstanceOf(Map.class,run(Map.of("canvas",true,"reuseExistingOnly",true,"dbId","target-db",
+                "tableName","ods_existing","ddl","CREATE TABLE ods_existing(id STRING)",
+                "tableItems",List.of(Map.of("columnName","id","dataType","decimal")))));
+        assertEquals(1,((List<?>)result.get("tableItems")).size());
+        assertEquals(1,physical.calls); assertEquals(0,counter.writes);
+    }
+
+    @Test
+    void emptyMetadataAndFiniteVarcharAreStillRejected() throws Exception {
+        var body=Map.<String,Object>of("canvas",true,"reuseExistingOnly",true,"dbId","target-db",
+                "tableName","ods_existing","ddl","CREATE TABLE ods_existing(id STRING)",
+                "tableItems",List.of(Map.of("columnName","id","dataType","decimal")));
+        assertInstanceOf(ExitValue.class,run(body));
+        ColumnInfo column=new ColumnInfo(); column.setColumnName("id"); column.setDataType("varchar(4)");
+        physical.columns=List.of(column);
+        assertInstanceOf(ExitValue.class,run(body)); assertEquals(0,counter.writes);
+    }
+
     @BeforeEach
     void setUp() {
         var source = new DriverManagerDataSource("jdbc:h2:mem:ddl_validation_" + UUID.randomUUID()
@@ -239,13 +298,15 @@ class CanvasCreateTableBatchValidationMagicTest {
 
     public static class PhysicalMetadata {
         List<ColumnInfo> columns=List.of();
+        List<Map<String,Object>> rawRows;
         int calls;
         public Map<String,List<ColumnInfo>> getColumnsByTables(DataSourceConfig config,List<String> names) {
             calls++; Map<String,List<ColumnInfo>> result=new LinkedHashMap<>();
-            for(String name:names) result.put(name,columns); return result;
+            for(String name:names) result.put(name.toLowerCase(java.util.Locale.ROOT),columns); return result;
         }
         public List<Map<String,Object>> queryTable(String sql) {
             assertTrue(sql.startsWith("DESCRIBE `warehouse`.`ods_existing")); calls++;
+            if(rawRows!=null) return rawRows;
             return columns.stream().map(column->Map.<String,Object>of("col_name",column.getColumnName(),"data_type",column.getDataType())).toList();
         }
         public void createTable(DataSourceConfig config,String ddl) { fail("Reuse must never issue CREATE TABLE"); }

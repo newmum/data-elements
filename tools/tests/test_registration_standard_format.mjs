@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 
 const root = new URL('../../', import.meta.url);
-const component = new URL('lowcode/01.系统门户/01.数据源管理/03.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue', root);
+const component = new URL('lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue', root);
 const source = await fs.readFile(component, 'utf8');
 const script = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/)?.[1];
 assert.ok(script, 'The canonical registration component must have a script');

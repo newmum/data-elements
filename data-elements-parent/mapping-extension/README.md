@@ -110,6 +110,14 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 
 ## 组件契约
 
+### Hive 来源的日期时间 JSON Writer
+
+发布 Hive 来源时，后端为当前流程组创建一份名为 `PUBLIC-WRITER-JSON-TIME_FORMAT` 的 `JsonRecordSetWriter`，将 Hive `ExecuteSQLRecord` 的 `Record Writer` 绑定到其真实 NiFi ID。直接在 Hive 来源执行的 SOURCE_DB SQL 节点也使用此 Writer。判断依据为 `source.hive`、来源配置 `dbType=HIVE` 或 Hive JDBC URL；仅目标为 Hive 不改变普通数据库来源的 Writer。
+
+默认格式为 Date `yyyy-MM-dd`、Time `HH:mm:ss`、Timestamp `yyyy-MM-dd HH:mm:ss.SSSSSSSSS`，并写出完整 `avro.schema`。Hive 流程的 JSON Reader 和统一映射类型化 Reader 配置相同的解析格式，避免日期字符串与类型化 Schema 不匹配。名称相同的祖先共享服务不会被修改；此 Writer 的配置和生命周期属于本次发布的流程组，每个流程只创建一次。普通数据库 `ExecuteSQLRecord` 保持原有 JsonWriter 绑定。
+
+这些设置用于消除时间序列化/解析格式不一致。Hive JDBC 已返回的 NULL、SQL 本身的转换失败和目标类型不兼容，需要分别定位，不能靠 Writer 名称恢复。NiFi 2.11.0 已用合成 DATE/TIME/TIMESTAMP 与 NULL 做实际读写核对，覆盖本次格式和配套 Reader；没有据此宣称真实 Hive JDBC、所有时间精度或 Hive SerDe 矩阵已经验收。变更作用于后续发布；有增量水位的既有流程沿用组件 ID 保护，不能通过清空 state 或强制整图重建应用此默认值。
+
 - `HaitongTransformRecord`：Record Reader、可选的类型化 Reader、Record Writer、执行计划和 SHA-256 摘要；可设置 `plan-id` 和稳定的 `context-node-id`。需要外部字典时绑定批量字典服务。输入具有 avro.schema 时使用类型化 Reader；计划绑定来源 schemaContract 时检查实际 Reader Schema，输出保留 Writer 的 Schema 属性。
 - `JdbcHaitongDictionaryService`：发布时的已授权字典定义，以及 datasourceId 对应的 DBCP Controller Service。运行时再次比对表、schema、键、键类型、取值列、过滤条件和重复键策略，之后才执行读取、缓存或快照查找。连接凭据只进入敏感 DBCP 属性；完整固定快照仅进入敏感的 `snapshot-payloads` 属性。
 - relationships：success、invalid、failure、retry。failure 和 invalid 必须连接受控保留队列，不能自动终止；retry 使用有界退避和次数上限。
@@ -117,6 +125,18 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 - 一份输入的全部窗口在同一个 ProcessSession 中提交。FAIL_FLOWFILE 在任何窗口失败时删除全部候选输出、保留原输入；ROUTE_INVALID 在同一 Session 内提交成功记录及错误信封。
 - `ht.input.identity`、`ht.execution.clock` 固定重放身份与时钟。编译器将稳定画布 node.id 写入 `context-node-id`，计划摘要保存在 `ht.plan.hash.<context-node-id>`，生成器使用“输入身份 + 稳定节点身份”；更换原生 Processor UUID 后仍能保持该上下文。手工组件没有此属性时回退到处理器 ID，不能宣称跨替换确定性。同节点计划摘要冲突拒绝重放，多映射节点串联分别校验。
 - `ht.dictionary.sql.count` 为当前输入的字典读取 SQL 数，不含目标写入、授权预取或快照预先构建。输入身份、时钟稳定不等于 LIVE/TTL 字典值稳定，也不等于目标 exactly-once。
+
+## 画布规则配置入口
+
+画布复用原有字段映射组件，不显示旧草稿提示或提供另一套编辑器。表头合并映射与字段数量，“推荐”改为“自动映射”，顶部“预览”右侧为“映射规则”。自动映射只补充未配置的目标字段。
+
+表格“转换 / 配置”列与顶部“映射规则”共用一个弹框，分别编辑当前行和新增映射。基础区只显示源/目标字段与转换方式，按所选方式展开函数、日期、身份证、码表、条件、表达式等具体参数。空值/失败、输出约束、组合步骤和高级设置默认折叠；完整 JSON 为高级入口。后续转换、字段元数据及原有约束在简化编辑过程中保留。取消不应用，应用规则后须保存画布并发布到 NiFi 才改变运行版本。
+
+流程设置集中配置源字段缺失、整批失败或错误记录隔离、时区、语言地区、字段大小写及未映射字段直通。模板按钮打开模板/计划历史，更多提供校验、执行计划、Schema 锁定、仅升级字段节点与已发布版本启动。预览继续调用与 NiFi 相同的执行内核。新节点使用2.0协议；打开现有配置时服务端适配后供同一表单使用，不在打开时自动改写保存内容。
+
+码表选择先加载当前权限内的数据源，再按用户查询动作请求登记表的服务端分页（默认20、上限100），选表后一次读取字段。20/100项均为一次整组授权校验加 COUNT 和分页查询，禁止逐表补查；登记表、字段与后续执行计划按当前租户和角色范围再次校验。复合键按键列顺序配置来源，过滤只使用登记列和参数化类型值。重复键仅提供内核支持的 `ERROR` 与旧规则兼容的 `LEGACY_MAX_LABEL`，不提供依赖无排序结果的第一条/最后一条。
+
+Hive 来源流程的新发布及“仅升级运行字段节点”均将 `HaitongTransformRecord.record-writer` 绑定到名为 **PUBLIC-WRITER-JSON-TIME_FORMAT** 的时间格式 Writer，参数与前文 Hive Reader/Writer 配对策略一致；普通数据库保留普通 Writer。NiFi 属性实际保存 Controller Service UUID，不能把显示名称硬编码为 NAR 属性默认 ID。此次沿用扩展1.1.1，无须重新安装 NAR。仅升级时保留源/目标组件 ID 和水位；既有来源 Writer 的修改仍应走受控发布，不能通过整图重建重置水位。
 
 ## 字典新鲜度与资源版本
 

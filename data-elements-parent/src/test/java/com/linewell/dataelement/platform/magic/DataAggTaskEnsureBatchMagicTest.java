@@ -34,6 +34,36 @@ import org.ssssssss.script.runtime.ExitValue;
 class DataAggTaskEnsureBatchMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
+    @Test
+    void longEnumRulesAreLosslessOnTextAndLegacyVarcharFailsBeforeAnyWrite() throws Exception {
+        for (boolean legacy : List.of(true, false)) {
+            Fixture fixture = new Fixture(1); fixture.prepareCreation();
+            fixture.jdbc.execute("alter table data_access_field_mapping alter column func_value " + (legacy ? "varchar(255)" : "clob"));
+            fixture.jdbc.execute("alter table nifi_pipeline_t alter column dsl_json clob");
+            fixture.jdbc.update("insert into db_table_column_t values('translated','police','target-0','person_id_cn',null,2,0)");
+            var values=new ArrayList<Map<String,String>>();
+            for(int i=0;i<150;i++) values.add(Map.of("value",String.valueOf(i),"label","完整中文枚举说明-".repeat(3)+i));
+            fixture.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'",
+                    cn.hutool.json.JSONUtil.toJsonStr(Map.of("fields",List.of(Map.of("columnName","person_id",
+                            "dictionaryRelation",Map.of("enabled",true,"sourceType","enum","enumItems",values))))));
+            if(legacy) {
+                var failure=assertInstanceOf(ExitValue.class,fixture.run());
+                assertTrue(java.util.Arrays.toString(failure.getValues()).contains("func_value容量"));
+                assertEquals(0,fixture.counter.writes);
+                assertEquals(0,fixture.jdbc.queryForObject("select count(*) from nifi_pipeline_t",Integer.class));
+                assertEquals(0,fixture.jdbc.queryForObject("select count(*) from data_access_agg_task_t",Integer.class));
+                assertInstanceOf(ExitValue.class,fixture.run(Map.of("tableId","source-1","dryRun",true)));
+                assertEquals(0,fixture.counter.writes);
+            } else {
+                assertInstanceOf(Map.class,fixture.run());
+                String stored=fixture.jdbc.queryForObject("select func_value from data_access_field_mapping where target_field='person_id_cn'",String.class);
+                var saved=cn.hutool.json.JSONUtil.parseObj(stored).getJSONObject("values");
+                assertEquals(150,saved.size()); assertEquals("完整中文枚举说明-".repeat(3)+"149",saved.getStr("149"));
+                assertTrue(stored.length()>4000);
+            }
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"snapshot", "role", "table", "missing", "invalid"})
     void newTaskWatermarkUsesOnlyTheRegisteredTimestampAndNeverThePrimaryKey(String mode) throws Exception {

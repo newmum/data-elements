@@ -3,7 +3,7 @@
   "id": "46051d94b97c46b6947516d70d0c7906",
   "script": null,
   "groupId": "9ef163a809ec40b59d35eb27d2f584a5",
-  "name": "02.管理工作台统计",
+  "name": "02.工作台导出统计",
   "createTime": 1791879307961,
   "updateTime": 1791879307961,
   "lock": null,
@@ -16,12 +16,12 @@
   "headers": [],
   "paths": [],
   "requestBody": "{\"pageNum\":1,\"pageSize\":20,\"keyword\":\"\",\"registrationState\":\"\",\"sortField\":\"orgName\",\"sortDir\":\"asc\"}",
-  "description": "管理工作台分页统计。读取当前认证租户、当前角色数据范围内的数据源，批量关联创建者姓名、应用/部门、表登记数量和第一跳接入任务。最多100行，筛选、排序、总数和汇总采用相同授权范围，不逐行补查；不读取外部物理库或NiFi，不接收租户/角色覆盖参数。",
+  "description": "原工作台导出所用分页指标，保留已有统计路由与资源ID；严格按认证租户及角色数据范围查询，ownerOnly只能进一步缩小至当前创建者。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// POST /dst/statistics/management-workbench：按已授权数据源分页返回登记与接入统计。
+// 原工作台导出沿用 POST /dst/statistics/management-workbench；按已授权数据源分页返回真实统计。
 // 联系人为数据源创建者；表标注与登记完成独立统计；只显示持久化任务状态。
 // 固定3次业务查询（总数、分页、汇总），20/100行不逐项读；全部关联带当前租户。
 import tenantRuntime
@@ -38,6 +38,8 @@ var endRow=offset+pageSize
 var keyword=text(body?.keyword)
 if(keyword.length()>100) {exit 400,'搜索关键字最多100个字符';}
 var keywordLike='%'+keyword+'%'
+if(body?.ownerOnly!=null && body.ownerOnly!=true && body.ownerOnly!=false) {exit 400,'ownerOnly必须为布尔值';}
+var ownerOnly=body?.ownerOnly==true
 var state=text(body?.registrationState)
 if(state!='' && !['0','1','2'].contains(state)) {exit 400,'登记状态无效';}
 var registrationState=state==''?null:state::int
@@ -57,6 +59,7 @@ if(scope.scope=='OWNER') {whereSql=whereSql+' AND d.created_by=#{scopeUserId}';}
 else if(scope.scope=='ORG') {
     whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND d.org_id IN (#{scopeOrgIds})')
 } else if(scope.scope!='ALL') {exit 403,'数据范围无效';}
+if(ownerOnly && scope.scope!='OWNER') {whereSql=whereSql+' AND d.created_by=#{scopeUserId}';}
 if(keyword!='') {whereSql=whereSql+' AND (d.db_name LIKE #{keywordLike} OR a.app_name LIKE #{keywordLike} OR o.name LIKE #{keywordLike} OR o.short_name LIKE #{keywordLike} OR u.real_name LIKE #{keywordLike})';}
 if(state!='') {whereSql=whereSql+' AND coalesce(d.asset_status,0)=#{registrationState}';}
 var sourceCte="""

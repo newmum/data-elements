@@ -72,6 +72,23 @@ for(const size of [1,2]){
   assert.deepEqual(plain(f.opened),[['task-0','source']],'Distribution also opens the first canvas immediately');
   assert.equal(f.calls.filter(call=>call.route==='/ods/dataAggTaskEnsure').length,1);
 }
+for (const runtimeCode of [executable,hiveCode]) {
+  const failed=fixture(2,runtimeCode);
+  failed.context.$common.post=async(route,body,options)=>{
+    failed.calls.push({route,body:plain(body)});
+    if(route==='/ods/dataAggTaskEnsure') {
+      assert.equal(options?._hiddenErrorMsg,true);
+      throw new Error('字段映射存储容量不足');
+    }
+    throw new Error(`Unexpected route ${route}`);
+  };
+  failed.context.console={error:()=>{}};
+  await failed.context.actual.handleApplySave({targetTables:[{targetTableId:'target-0'},{targetTableId:'target-1'}]});
+  assert.equal(failed.opened.length,0);
+  assert.equal(failed.calls.filter(call=>call.route==='refresh').length,1);
+  assert.ok(failed.notices.some(notice=>notice.kind==='error'&&notice.text.includes('目标表已保留')&&notice.text.includes('无需重复物化或删表')));
+  assert.ok(!failed.notices.some(notice=>notice.kind==='success'));
+}
 const f=fixture(2), row={targetTables:[{targetTableId:'target-0'},{targetTableId:'target-1'}],targetTableId:'target-0'};
 assert.deepEqual(plain(f.context.actual.targetTablesOf(row,{targetTableId:'target-1',targetTables:[{targetTableId:'target-1'}]})).map(t=>t.targetTableId),['target-1']);
 assert.equal(f.context.actual.targetTablesOf(row).length,2);

@@ -119,6 +119,7 @@ function fixture(size = 2) {
           if (context.incompatibleExisting) throw new Error('已有目标表结构不兼容：ODS_UUID（缺少字段）');
           return {data:{batchReuseValidation:true,sideEffectsApplied:false,results:body.targets.map(target=>({
             dbId:target.dbId, requestedTableName:target.tableName, valid:true, physicalTableReused:true,sideEffectsApplied:false,
+            compatibilityWarnings: context.compatibilityWarnings || [],
           }))}};
         }
         return { data: { batchValidateOnly: true, sideEffectsApplied: false,
@@ -258,6 +259,7 @@ await existingHive.actual.init();
 existingHive.form.dbId = [['ODS', 'db-0'], ['ODS', 'db-1']];
 existingHive.actual.syncTargetDatasourceSelection(existingHive.form.dbId);
 existingHive.context.existingPhysical = true;
+existingHive.context.compatibilityWarnings = ['amount：已有Hive STRING将按文本保存（模板类型decimal）'];
 await existingHive.actual.handleSave();
 assert.equal(existingHive.calls.filter(c => c.route === '/ods/createTapleApply').length, 2);
 assert.ok(existingHive.calls.filter(c => c.route === '/ods/createTapleApply').every(c=>c.body.reuseExistingTable===true));
@@ -265,6 +267,7 @@ assert.equal(existingHive.calls.filter(c => c.route === '/ods/dataAggReset' && !
 assert.equal(existingHive.calls.filter(c=>c.route.endsWith('/createTable') && c.body.batchReuseValidation).length,1);
 assert.equal(existingHive.calls.find(c=>c.route==='user-confirm').canReuse,true,'Physical table without registration can be adopted');
 assert.equal(existingHive.emitted.length, 1);
+assert.ok(existingHive.notices.some(notice => JSON.stringify(notice).includes('按已有表真实类型复用')));
 assert.equal(existingHive.timers.size,0,'Early exit also stops its local clock');
 
 for (const type of ['hive','mrshive','mysql','postgresql','kingbase8','oracle','dameng','sqlserver']) {

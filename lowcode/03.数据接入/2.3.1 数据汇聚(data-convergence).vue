@@ -971,7 +971,7 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
     $message.warning("无法读取来源表标识，暂不能创建接入任务");
     return null;
   }
-  const result = await $common.post("/ods/dataAggTaskEnsure", payload);
+  const result = await $common.post("/ods/dataAggTaskEnsure", payload, { _hiddenErrorMsg: true });
   const response = result?.data || result;
   const tasks = Array.isArray(response?.tasks) ? response.tasks : [];
   const task = tasks[0] || response?.task || response;
@@ -1330,7 +1330,7 @@ const handleApplySave = async (materializedTarget = null) => {
     }
   } catch (error) {
     console.error("物化后创建接入任务失败", error);
-    $message.error(error?.message || error || "物化完成，但自动创建接入任务失败");
+    $message.error(`目标表已保留，接入任务创建未完成：${error?.message || error || '请稍后重试'}。处理后可在列表点击“创建任务”重试，无需重复物化或删表。`);
     tableRef.value?.refresh?.();
   }
 };

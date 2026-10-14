@@ -27,6 +27,31 @@ public class RegisteredMappingSchemaService {
     private final com.linewell.dataelement.platform.persistence.TenantIdentifierSql identifiers;
     public RegisteredMappingSchemaService(JdbcTemplate jdbc,DataSourceConnectionPropertyResolver sources,UnifiedMappingService engine){this.jdbc=jdbc;this.sources=sources;this.engine=engine;identifiers=new com.linewell.dataelement.platform.persistence.TenantIdentifierSql(jdbc);}
     public record Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections) {}
+    public Map<String,Object> dictionaryTables(String datasourceId,String search,int page,int size) {
+        String tenant=TenantContext.requireTenantId();
+        if(datasourceId==null||datasourceId.isBlank())throw new MappingException("RESOURCE_FORBIDDEN","请选择当前授权数据源");
+        var authorized=sources.resolveBatch(tenant,Set.of(datasourceId),"MENU:2081000000000000002");
+        if(!authorized.containsKey(datasourceId))throw new MappingException("RESOURCE_FORBIDDEN","数据源不存在或超出当前数据范围");
+        page=Math.max(1,page);size=Math.max(1,Math.min(100,size));
+        // table_name_cn is in the platform's portable identifier vocabulary (including DM).
+        String where=" WHERE datasource_id=? AND tenant_id=? AND is_del=0 AND asset_status>0";
+        List<Object> args=new ArrayList<>(List.of(datasourceId,tenant));
+        if(search!=null&&!search.isBlank()) {
+            if(search.length()>128)throw new MappingException("BUDGET_EXCEEDED","表搜索文字超过128字符");
+            String pattern="%"+search.trim().replace("!","!!").replace("%","!%").replace("_","!_")+"%";
+            where+=" AND (table_name LIKE ? ESCAPE '!' OR table_name_cn LIKE ? ESCAPE '!')";args.add(pattern);args.add(pattern);
+        }
+        Long total=jdbc.queryForObject(identifiers.adapt("SELECT COUNT(*) FROM db_table_t"+where),Long.class,args.toArray());
+        String query="SELECT tid,table_name,table_name_cn FROM (SELECT tid,table_name,table_name_cn,ROW_NUMBER() OVER (ORDER BY table_name ASC,tid ASC) AS row_no FROM db_table_t"+where+") mapping_tables WHERE row_no BETWEEN ? AND ? ORDER BY row_no";
+        args.add(((long)page-1)*size+1);args.add((long)page*size);
+        var rows=jdbc.queryForList(identifiers.adapt(query),args.toArray());
+        return Map.of("rows",rows,"total",total==null?0:total,"page",page,"size",size);
+    }
+    public JsonNode dictionaryColumns(String datasourceId,String tableId) {
+        ObjectNode ref=JSON.createObjectNode().put("datasourceId",datasourceId).put("tableId",tableId);
+        if(tableId==null||tableId.isBlank())throw new MappingException("RESOURCE_FORBIDDEN","请选择已登记码表");
+        return resolve(Map.of("dictionary",ref)).get("dictionary").fields();
+    }
     public Map<String,Resolved> resolve(Map<String,JsonNode> references){
         if(references.isEmpty())return Map.of();if(references.size()>MAX_REFERENCES)throw new MappingException("BUDGET_EXCEEDED","Schema引用超过100个");Set<String> sourceIds=new LinkedHashSet<>();references.values().forEach(ref->sourceIds.add(ref.path("datasourceId").asText()));if(sourceIds.contains("")||sourceIds.size()>MAX_DATASOURCES)throw new MappingException("RESOURCE_FORBIDDEN","Schema须使用最多8个已登记的数据源ID");
         String tenant=TenantContext.requireTenantId();var connections=sources.resolveBatch(tenant,sourceIds,"MENU:2081000000000000002");List<Object> args=new ArrayList<>();List<String> requested=new ArrayList<>();for(JsonNode reference:references.values()){String tableId=reference.path("tableId").asText();requested.add("(datasource_id=? AND "+(tableId.isBlank()?"table_name":"tid")+"=?)");args.add(reference.path("datasourceId").asText());args.add(tableId.isBlank()?reference.path("table").asText():tableId);}args.add(tenant);

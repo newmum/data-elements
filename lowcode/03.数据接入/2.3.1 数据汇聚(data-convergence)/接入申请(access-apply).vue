@@ -1503,6 +1503,11 @@ const handleSave = async () => {
           }
           reuseTargetDbIds.add(String(target.dbId));
         }
+        const compatibilityWarnings = validation.results.flatMap((result: any) =>
+          Array.isArray(result.compatibilityWarnings) ? result.compatibilityWarnings : []);
+        if (compatibilityWarnings.length) {
+          ElMessage.warning(`按已有表真实类型复用：${compatibilityWarnings.slice(0, 5).join('；')}${compatibilityWarnings.length > 5 ? `；共 ${compatibilityWarnings.length} 个字段` : ''}`);
+        }
       } else {
         await validateEditedDdl();
         await confirmMaterialization(
