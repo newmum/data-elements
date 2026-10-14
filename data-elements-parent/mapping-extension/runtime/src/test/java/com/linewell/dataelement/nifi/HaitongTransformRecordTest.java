@@ -32,6 +32,18 @@ class HaitongTransformRecordTest {
         var runner=runner("NULL","FAIL_FLOWFILE");runner.enqueue("[{\"x\":\"value\"}]",Map.of("ht.plan.hash","upstream-plan","ht.plan.node.id","upstream-node","ht.input.identity","stable-input","ht.execution.clock","0"));runner.run();
         runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);var output=runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst();assertEquals("stable-input",output.getAttribute("ht.input.identity"));assertEquals("0",output.getAttribute("ht.execution.clock"));assertNotNull(output.getAttribute("ht.plan.hash."+runner.getProcessor().getIdentifier()));
     }
+    @Test void splitChildrenWithSameParentIdentityHaveDifferentUuidsAndRetryIsStable() throws Exception {
+        TestRunner runner=runner("NULL","FAIL_FLOWFILE");
+        var spec=JSON.createObjectNode().put("version","1.0");spec.putArray("mappings").addObject().put("to","/ODS_UUID").put("expression","UUID()");
+        var plan=MappingEngine.compile(spec);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());runner.setProperty(HaitongTransformRecord.CONTEXT_NODE,"same-node");
+        for(int i=0;i<2;i++)runner.enqueue("[{\"x\":\"same\"}]",Map.of("ht.input.identity","one-parent","ht.execution.clock","0"));
+        runner.run(2);runner.assertTransferCount(HaitongTransformRecord.SUCCESS,2);
+        var outputs=runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS);
+        String a=JSON.readTree(outputs.get(0).toByteArray()).path(0).path("ODS_UUID").asText(),b=JSON.readTree(outputs.get(1).toByteArray()).path(0).path("ODS_UUID").asText();assertNotEquals(a,b);
+        String identity=outputs.get(0).getAttribute("ht.mapping.input.identity.same-node");assertNotNull(identity);
+        runner.clearTransferState();runner.enqueue("[{\"x\":\"same\"}]",Map.of("ht.input.identity","one-parent","ht.execution.clock","0","ht.mapping.input.identity.same-node",identity));runner.run();
+        assertEquals(a,JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray()).path(0).path("ODS_UUID").asText());
+    }
     private TestRunner runner(String missing,String mode)throws Exception{
         TestRunner runner=TestRunners.newTestRunner(HaitongTransformRecord.class);runner.addControllerService("reader",new Reader());runner.enableControllerService(runner.getControllerService("reader"));runner.addControllerService("writer",new Writer());runner.enableControllerService(runner.getControllerService("writer"));runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
         var spec=JSON.createObjectNode().put("version","1.0").put("onMissingSource",missing).put("recordErrorMode",mode);spec.putArray("mappings").addObject().put("from","/x").put("to","/y");var plan=MappingEngine.compile(spec);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());runner.assertValid();return runner;

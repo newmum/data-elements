@@ -86,7 +86,8 @@ class DslCompilerHiveTemporalWriterTest {
     @ParameterizedTest @ValueSource(strings={"hive","mysql"})
     void fieldOnlyUpgradeBindsCorrectWriterAndNeverRecreatesOrModifiesSources(String database) {
         compiler.createMappingReplacement(flow(List.of(source("source",database,Map.of()),mapping())),mapping(),"existing-group","reader","typed-reader","existing-writer",prepared());
-        String writer=database.equals("hive")?namedService(HiveTemporalJsonPolicy.WRITER_NAME).id():"existing-writer";
+        String writer=namedService(database.equals("hive")?HiveTemporalJsonPolicy.WRITER_NAME:"字段映射/类型化输出").id();
+        assertThat(namedService(database.equals("hive")?HiveTemporalJsonPolicy.WRITER_NAME:"字段映射/类型化输出").properties()).containsAllEntriesOf(HiveTemporalJsonPolicy.writerProperties());
         assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer",writer).containsEntry("typed-record-reader","typed-reader");
         assertThat(processors).hasSize(1);
         verify(nifi,never()).putWithRevision(contains("/processors/"),anyString(),any());
@@ -147,7 +148,7 @@ class DslCompilerHiveTemporalWriterTest {
     @Test void typedReaderParsesExactlyTheWriterFormatsAndKeepsSchemaAttribute() {
         assertThat(HiveTemporalJsonPolicy.typedReaderProperties(true)).containsAllEntriesOf(HiveTemporalJsonPolicy.formats())
                 .containsEntry("Schema Text", "${avro.schema}");
-        assertThat(HiveTemporalJsonPolicy.typedReaderProperties(false)).doesNotContainKeys("Date Format", "Time Format", "Timestamp Format");
+        assertThat(HiveTemporalJsonPolicy.typedReaderProperties(false)).containsAllEntriesOf(HiveTemporalJsonPolicy.formats());
     }
 
     @ParameterizedTest @ValueSource(strings = {"jdbc:hive2://host/default", " JDBC:HIVE://host/default "})
