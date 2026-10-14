@@ -81,6 +81,8 @@ class DslCompilerHiveTemporalWriterTest {
         if(database.equals("hive"))assertThat(processor.properties()).containsEntry("record-writer",namedService(HiveTemporalJsonPolicy.WRITER_NAME).id());
         else {assertThat(processor.properties()).containsEntry("record-writer",namedService("字段映射/类型化输出").id());assertThat(services).noneMatch(s->s.name().equals(HiveTemporalJsonPolicy.WRITER_NAME));}
         assertThat(processor.type()).isEqualTo("com.linewell.dataelement.nifi.HaitongTransformRecord");
+        assertThat(namedProcessor("source/execute").properties()).containsEntry("Use Avro Logical Types","true");
+        if(database.equals("mysql"))assertThat(namedService("JsonWriter").properties()).containsAllEntriesOf(HiveTemporalJsonPolicy.writerProperties());
     }
 
     @ParameterizedTest @ValueSource(strings={"hive","mysql"})

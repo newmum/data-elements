@@ -210,6 +210,7 @@ public class DslCompiler {
         // 创建全局共享 Controller Service，供多个节点处理器复用。
         Map<String, String> sharedCs = new HashMap<>();
         boolean hiveTemporalJson = usesHiveTemporalJson(pipeline);
+        if(usesJavaMapping(pipeline))sharedCs.put("typedJdbcRecords","true");
         sharedCs.put("jsonReader", nifi.createControllerService(pgId, JSON_READER_TYPE,
                 "JsonReader", hiveTemporalJson||usesJavaMapping(pipeline) ? HiveTemporalJsonPolicy.formats() : Map.of()).id());
         sharedCs.put("jsonWriter", nifi.createControllerService(pgId, JSON_WRITER_TYPE,
@@ -2500,6 +2501,7 @@ public class DslCompiler {
                         "SQL Query", lastResultQuery(stringConfig(cfg, "_runtimeSourceSql").isBlank()
                                 ? String.valueOf(cfg.get("sql")) : stringConfig(cfg, "_runtimeSourceSql")),
                         "Record Writer", sourceQueryRecordWriter(sharedCs, sourceCfg),
+                        "Use Avro Logical Types", Boolean.toString(HiveTemporalJsonPolicy.isHive(null,sourceCfg)||"true".equals(sharedCs.get("typedJdbcRecords"))),
                         "Output Empty FlowFile", "false"
                 ), schedulingPeriod, schedulingStrategy);
         nc.processorIds.put("query", proc.id());
@@ -3881,6 +3883,7 @@ public class DslCompiler {
         if (!"source".equals(manifest.category())) return;
         if (!"org.apache.nifi.processors.standard.ExecuteSQLRecord".equals(processorType)) return;
         resolved.put("Output Empty FlowFile", "false");
+        if(HiveTemporalJsonPolicy.isHive(manifest.key(),cfg)||"true".equals(sharedCs.get("typedJdbcRecords")))resolved.put("Use Avro Logical Types","true");
         if (HiveTemporalJsonPolicy.isHive(manifest.key(), cfg)) {
             resolved.put("Record Writer", requireHiveQueryRecordWriter(sharedCs));
         }

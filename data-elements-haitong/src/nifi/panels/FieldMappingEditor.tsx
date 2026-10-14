@@ -242,8 +242,9 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
       const existingTargets = new Set(items.map((item) => normalizePath(item.to).toLowerCase()));
       targetFields.forEach((field) => {
         const system = odsRecommendation(field);
-        if (system && !existingTargets.has(normalizePath(system.to).toLowerCase())) {
-          items.push(system);
+        if (system) {
+          const existingIndex=items.findIndex(item=>normalizePath(item.to).toLowerCase()===normalizePath(system.to).toLowerCase());
+          if(existingIndex<0)items.push(system);else items[existingIndex]=system;
           existingTargets.add(normalizePath(system.to).toLowerCase());
         }
       });
