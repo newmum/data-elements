@@ -45,12 +45,14 @@ public class UnifiedMappingService {
         });
         Map<String,ArrayNode> byNode=new HashMap<>();for(JsonNode rule:resolved.path("rules")){ObjectNode local=rule.deepCopy();String node=local.path("__mappingNode").asText();local.remove("__mappingNode");byNode.computeIfAbsent(node,ignored->JSON.createArrayNode()).add(local);}
         Map<String,Compiled> compiled=new LinkedHashMap<>();Map<String,JsonNode>contracts=new LinkedHashMap<>();
+        drafts.forEach((node,draft)->contracts.put(node,draft.path("schemaContract")));
+        if(schemas!=null)schemas.checkContracts(contracts);
         for(var entry:drafts.entrySet()){
             ObjectNode draft=entry.getValue();ArrayNode rules=byNode.getOrDefault(entry.getKey(),JSON.createArrayNode());draft.set("rules",rules);Set<String> used=new HashSet<>();dictionaryReferences(rules,used);ObjectNode bindings=JSON.createObjectNode();
             resolved.path("dictionaryBindings").fields().forEachRemaining(binding->{if(used.contains(binding.getKey())||specifications.size()==1&&rules.isEmpty())bindings.set(binding.getKey(),binding.getValue());});draft.set("dictionaryBindings",bindings);
             var plan=MappingEngine.compile(draft);Map<String,Map<String,Object>>localConnections=new LinkedHashMap<>();plan.dictionaries().values().forEach(dictionary->localConnections.put(dictionary.datasourceId(),connections.get(dictionary.datasourceId())));ObjectNode localSnapshots=JSON.createObjectNode();bindings.forEach(binding->{String id=binding.path("snapshotId").asText();if(snapshots.has(id))localSnapshots.set(id,snapshots.get(id));});compiled.put(entry.getKey(),new Compiled(plan,localConnections,localSnapshots));contracts.put(entry.getKey(),plan.document().path("schemaContract"));
         }
-        if(schemas!=null)schemas.checkContracts(contracts);return compiled;
+        return compiled;
     }
     private static void renameDictionaryReferences(JsonNode node,Map<String,String> aliases){if(node.isArray()){node.forEach(child->renameDictionaryReferences(child,aliases));return;}if(!node.isObject())return;ObjectNode object=(ObjectNode)node;String id=object.path("dictionaryId").asText();if(aliases.containsKey(id))object.put("dictionaryId",aliases.get(id));JsonNode reference=object.path("definitionRef");if(reference.isObject()&&aliases.containsKey(reference.path("id").asText()))((ObjectNode)reference).put("id",aliases.get(reference.path("id").asText()));object.fields().forEachRemaining(entry->{if(!entry.getKey().equals("dictionaryBindings"))renameDictionaryReferences(entry.getValue(),aliases);});}
     private static void dictionaryReferences(JsonNode node,Set<String> ids){if(node.isArray()){node.forEach(child->dictionaryReferences(child,ids));return;}if(!node.isObject())return;if(node.hasNonNull("dictionaryId"))ids.add(node.path("dictionaryId").asText());if(node.path("definitionRef").isObject())ids.add(node.path("definitionRef").path("id").asText());node.fields().forEachRemaining(entry->dictionaryReferences(entry.getValue(),ids));}

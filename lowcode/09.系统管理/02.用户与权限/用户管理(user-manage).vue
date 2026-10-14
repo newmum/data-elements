@@ -475,6 +475,7 @@ const handleAdd = () => {
   roleOptions.value = [];
   selectedRoleIds.value = [];
   passwordValue.value = "";
+  generatedAccount.value = "";
   uploadedAvatarId.value = "";
   uploadedDataUrl.value = "";
   drawerVisible.value = true;
@@ -533,6 +534,9 @@ const handleSave = async () => {
     if (!formData) return;
 
     const payload: Record<string, any> = { ...formData };
+    payload.realName = `${payload.realName ?? ""}`.trim();
+    payload.userName = `${payload.userName ?? ""}`.trim();
+    payload.phone = `${payload.phone ?? ""}`.trim();
 
     delete payload.confirmPassword;
 
@@ -553,6 +557,8 @@ const handleSave = async () => {
     refreshTableData();
   } catch (e: any) {
     console.error(e);
+    // 请求失败由统一请求层提示；表单校验失败发生在请求之前，需要单独提示。
+    if (typeof e === "string") ElMessage.warning("请检查必填项和输入格式");
   } finally {
     saveLoading.value = false;
   }
@@ -560,10 +566,12 @@ const handleSave = async () => {
 
 // 用于确认密码校验的响应式密码引用
 const passwordValue = ref("");
+const generatedAccount = ref("");
 
 // 正则表达式缓存
 const phoneRegex = /^1[3-9]\d{9}$/;
 const idCardRegex = /^\d{17}[\dXx]$/;
+const accountRegex = /^[A-Za-z][A-Za-z0-9_.-]{2,49}$/;
 
 // 姓名转拼音缓存
 const pinyinCache = new Map<string, string>();
@@ -577,8 +585,13 @@ const nameToPinyin = (name: string): string => {
   }
 
   try {
-    const result = pinyin.getCamelChars?.(name);
-    const pinyinResult = (result || "").toLowerCase();
+    // 两字姓名的首字母账号只有两位，无法满足保存接口的三位最小长度。
+    const result = pinyin.getFullChars?.(name.trim());
+    let pinyinResult = (result || "").toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+    if (pinyinResult && (!/^[a-z]/.test(pinyinResult) || pinyinResult.length < 3)) {
+      pinyinResult = `u_${pinyinResult}`;
+    }
+    pinyinResult = pinyinResult.slice(0, 50);
     pinyinCache.set(name, pinyinResult);
     return pinyinResult;
   } catch {
@@ -590,6 +603,7 @@ const formOptions = {
   form: {
     labelWidth: "100px",
     colon: true,
+    showMessage: true,
   },
 };
 
@@ -667,13 +681,16 @@ const formRules = FormUtils.fixJson([
     title: "用户姓名",
     type: "input",
     $required: true,
-    props: { placeholder: "请输入用户姓名" },
+    props: { placeholder: "请输入用户姓名", maxlength: 50 },
     inject: true,
     on: {
       change: (inject: any, val: string) => {
+        if (drawerType.value !== "add") return;
+        const currentAccount = `${inject.api.getValue("userName") ?? ""}`.trim();
         const account = nameToPinyin(val);
-        if (account) {
+        if (account && (!currentAccount || currentAccount === generatedAccount.value)) {
           inject.api.setValue("userName", account);
+          generatedAccount.value = account;
         }
       },
     },
@@ -697,7 +714,18 @@ const formRules = FormUtils.fixJson([
     title: "用户账号",
     type: "input",
     $required: true,
-    props: { placeholder: "请输入用户账号" },
+    props: { placeholder: "字母开头，3至50位", maxlength: 50 },
+    validate: [
+      {
+        validator: (_rule: any, value: any, callback: any) => {
+          if (!accountRegex.test(`${value ?? ""}`.trim())) {
+            return callback(new Error("账号须以字母开头，长度3至50位，可包含数字、下划线、点和短横线"));
+          }
+          callback();
+        },
+        trigger: "blur",
+      },
+    ],
     renderSlots: {
       append() {
         return h("div", {

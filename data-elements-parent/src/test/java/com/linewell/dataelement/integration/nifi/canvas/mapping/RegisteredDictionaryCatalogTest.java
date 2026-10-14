@@ -13,6 +13,19 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class RegisteredDictionaryCatalogTest {
+    @Test void oneHundredNinetyDistinctLookupsAuthorizeInTwoReadsAndCollapseRepeatedTablePredicates()throws Exception {
+        for(int count:List.of(20,100,190)){
+            var jdbc=mock(JdbcTemplate.class);var sources=mock(DataSourceConnectionPropertyResolver.class);var metadata=mock(DataQualityMapper.class);
+            when(sources.resolveBatch(eq("tenant"),anyCollection(),anyString())).thenReturn(Map.of("db",Map.of("jdbcURL","jdbc:mysql://test/dictionary")));
+            when(jdbc.queryForList(contains("FROM db_table_t"),any(Object[].class))).thenAnswer(call->{Object[]args=(Object[])call.getRawArguments()[1];assertEquals(3,args.length);assertEquals("tenant",args[2]);return List.of(Map.of("tid","t","datasource_id","db","table_name","dictionary"));});
+            List<Map<String,Object>> columns=new ArrayList<>();columns.add(Map.of("table_id","t","column_name","code","data_type","VARCHAR"));for(int i=0;i<count;i++)columns.add(Map.of("table_id","t","column_name","label"+i,"data_type","VARCHAR"));
+            when(jdbc.queryForList(contains("FROM db_table_column_t"),any(Object[].class))).thenReturn(columns);
+            var spec=new ObjectMapper().createObjectNode().put("schemaVersion","2.0");var rules=spec.putArray("rules");
+            for(int i=0;i<count;i++){var rule=rules.addObject().put("ruleId","r"+i);rule.putObject("input").put("kind","FIELD").put("name","code");rule.putObject("target").put("name","label"+i);var d=rule.putArray("steps").addObject().put("operator","LOOKUP").putObject("args").putObject("definition");d.put("datasourceId","db").put("tableId","t").put("valueColumn","label"+i);d.putArray("keyColumns").add("code");}
+            try(var ignored=TenantContext.use("tenant")){var bound=new RegisteredDictionaryCatalog(jdbc,sources,metadata).bind(spec);assertEquals(count,bound.specification().path("dictionaryBindings").size());assertEquals(count,com.linewell.dataelement.mapping.core.MappingEngine.compile(bound.specification()).outputFields().size());}
+            verify(jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(sources,times(1)).resolveBatch(anyString(),anyCollection(),anyString());
+        }
+    }
     @Test void twentyAndHundredFieldsReadAuthorizationTablesAndColumnsOnce()throws Exception{
         for(int count:List.of(20,100)){
             var jdbc=mock(JdbcTemplate.class);var sources=mock(DataSourceConnectionPropertyResolver.class);var metadata=mock(DataQualityMapper.class);

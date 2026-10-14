@@ -33,7 +33,7 @@ class DslCompilerHiveTemporalWriterTest {
     DslCompilerHiveTemporalWriterTest() throws Exception {
         ManifestRegistry registry = mock(ManifestRegistry.class);
         ObjectMapper json = new ObjectMapper();
-        for (String name : List.of("hive", "mysql")) {
+        for (String name : List.of("hive", "mysql", "oracle", "oceanbase")) {
             try (var stream = getClass().getResourceAsStream("/manifests/sources/" + name + ".json")) {
                 when(registry.get("source." + name)).thenReturn(json.readValue(stream, ComponentManifest.class));
             }
@@ -81,8 +81,18 @@ class DslCompilerHiveTemporalWriterTest {
         if(database.equals("hive"))assertThat(processor.properties()).containsEntry("record-writer",namedService(HiveTemporalJsonPolicy.WRITER_NAME).id());
         else {assertThat(processor.properties()).containsEntry("record-writer",namedService("字段映射/类型化输出").id());assertThat(services).noneMatch(s->s.name().equals(HiveTemporalJsonPolicy.WRITER_NAME));}
         assertThat(processor.type()).isEqualTo("com.linewell.dataelement.nifi.HaitongTransformRecord");
+        assertThat(processor.properties()).containsEntry("context-node-id","temporal-test:mapping");
+        verify(nifi,never()).waitForControllerServiceEnabled(eq("true"),anyLong());
         assertThat(namedProcessor("source/execute").properties()).containsEntry("Use Avro Logical Types","true");
         if(database.equals("mysql"))assertThat(namedService("JsonWriter").properties()).containsAllEntriesOf(HiveTemporalJsonPolicy.writerProperties());
+    }
+    @Test void oraclePublicationProjectsDateAsTimestampBeforeJdbcReadsIt() {
+        compiler.compile(flow(List.of(source("source","oracle",Map.of("dbType","ORACLE","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))))));
+        assertThat(namedProcessor("source/fetch").properties()).containsEntry("Columns to Return","CAST(\"EVENT_TIME\" AS TIMESTAMP) AS \"EVENT_TIME\"");
+    }
+    @Test void oracleCurrentMaximumSourceUsesSameSupportedProjectionProperty() {
+        compiler.compile(flow(List.of(source("source","oracle",Map.of("dbType","ORACLE","syncMode","INCREMENTAL","initialStrategy","START_AT_CURRENT_MAX","incrementalColumn","EVENT_TIME","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))))));
+        Created fetch=namedProcessor("source/fetch");assertThat(fetch.type()).endsWith(".QueryDatabaseTableRecord");assertThat(fetch.properties()).containsEntry("Columns to Return","CAST(\"EVENT_TIME\" AS TIMESTAMP) AS \"EVENT_TIME\"").doesNotContainKey("Column Names");
     }
 
     @ParameterizedTest @ValueSource(strings={"hive","mysql"})
@@ -91,6 +101,7 @@ class DslCompilerHiveTemporalWriterTest {
         String writer=namedService(database.equals("hive")?HiveTemporalJsonPolicy.WRITER_NAME:"字段映射/类型化输出").id();
         assertThat(namedService(database.equals("hive")?HiveTemporalJsonPolicy.WRITER_NAME:"字段映射/类型化输出").properties()).containsAllEntriesOf(HiveTemporalJsonPolicy.writerProperties());
         assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer",writer).containsEntry("typed-record-reader","typed-reader");
+        assertThat(namedProcessor("字段映射").properties()).containsEntry("context-node-id","temporal-test:mapping");
         assertThat(processors).hasSize(1);
         verify(nifi,never()).putWithRevision(contains("/processors/"),anyString(),any());
         if(database.equals("hive"))verify(nifi).waitForControllerServiceEnabled(writer,30_000L);

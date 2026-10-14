@@ -2,13 +2,14 @@ param(
     # The packaged application is compiled for Java 21.
     [string]$JavaExe = "",
     [string]$JarPath = "",
+    [string]$ConfigPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/local-runtime.private.json'),
     [switch]$Build,
     [int]$Port = 8088,
     [int]$StartupTimeoutSeconds = 300,
-    [string]$NacosHost = "192.168.175.86",
+    [string]$NacosHost = "",
     [int]$NacosPort = 8848,
     [string]$Profile = "dev",
-    [string]$KafkaBootstrapServers = "192.168.175.86:9092",
+    [string]$KafkaBootstrapServers = "",
     # The platform address reachable from the NiFi execution network.  API
     # registrations may legitimately use localhost during local testing, but
     # that loopback points at the NiFi node when it executes InvokeHTTP.
@@ -21,13 +22,42 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# The local development environment is defined by the control-environment
-# Nacos profile. Set these values explicitly so stale process or user-level
-# environment variables cannot silently reconnect the backend to the demo host.
+# The ordinary CMD entry uses the same private configuration as the maintained
+# local launcher. A different environment requires an explicit -NacosHost;
+# never silently fall back to a historical internal address.
+$privateRuntime = $null
+$usePrivateRuntime = -not $PSBoundParameters.ContainsKey('NacosHost')
+if ($usePrivateRuntime) {
+    $privatePath = [IO.Path]::GetFullPath($ConfigPath)
+    $repoPath = [IO.Path]::GetFullPath($PSScriptRoot)
+    if ($privatePath.StartsWith($repoPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Runtime credentials must stay outside the Git workspace.'
+    }
+    if (-not (Test-Path -LiteralPath $privatePath -PathType Leaf)) {
+        throw 'Private runtime configuration is missing. Supply -ConfigPath, or explicitly select another environment with -NacosHost.'
+    }
+    $privateRuntime = Get-Content -LiteralPath $privatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (-not $privateRuntime.environment.NACOS_HOST -or -not $privateRuntime.environment.NACOS_CONFIG_IMPORTS) {
+        throw 'Private runtime configuration must explicitly select the Nacos server and configuration imports.'
+    }
+    foreach ($property in $privateRuntime.environment.PSObject.Properties) {
+        if ($property.Name -notmatch '^(NACOS_|DATA_ELEMENT_|DATA_ELEMENTS_|SPRING_)[A-Z0-9_]+$') {
+            throw 'Unexpected runtime environment variable name.'
+        }
+        [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
+    }
+    $NacosHost = $env:NACOS_HOST
+    if (-not $PSBoundParameters.ContainsKey('NacosPort')) { $NacosPort = [int]$env:NACOS_PORT }
+    if (-not $PSBoundParameters.ContainsKey('Profile')) { $Profile = $env:DATA_ELEMENT_PROFILE }
+    if (-not $PSBoundParameters.ContainsKey('Port')) { $Port = [int]$privateRuntime.port }
+    if (-not $PSBoundParameters.ContainsKey('JavaExe')) { $JavaExe = $privateRuntime.executable }
+} elseif ([string]::IsNullOrWhiteSpace($NacosHost)) {
+    throw '-NacosHost must name the intended environment.'
+}
 $env:NACOS_HOST = $NacosHost
 $env:NACOS_PORT = $NacosPort.ToString()
 $env:DATA_ELEMENT_PROFILE = $Profile
-$env:KAFKA_BOOTSTRAP_SERVERS = $KafkaBootstrapServers
+if ($KafkaBootstrapServers) { $env:KAFKA_BOOTSTRAP_SERVERS = $KafkaBootstrapServers }
 
 # Provisioning encryption key stays outside the repository and persists across restarts.
 $idaasKeyPath = Join-Path $env:USERPROFILE ".codex\private\idaas-provision\transport-master.key"
@@ -114,7 +144,12 @@ if (-not $JavaExe -or -not (Test-Path -LiteralPath $JavaExe -PathType Leaf)) {
 }
 
 $usingDefaultJar = [string]::IsNullOrWhiteSpace($JarPath)
-if ($usingDefaultJar) { $JarPath = Join-Path $projectDir "target\data-element.jar" }
+if ($usingDefaultJar) {
+    $reviewedRuntime = Join-Path $PSScriptRoot '.runtime/data-element-runtime.jar'
+    $JarPath = if (-not $Build -and (Test-Path -LiteralPath $reviewedRuntime -PathType Leaf)) {
+        $reviewedRuntime
+    } else { Join-Path $projectDir 'target/data-element.jar' }
+}
 if (-not [System.IO.Path]::IsPathRooted($JarPath)) { $JarPath = Join-Path $PSScriptRoot $JarPath }
 $JarPath = [System.IO.Path]::GetFullPath($JarPath)
 if ($Build -and -not $usingDefaultJar) {
@@ -188,10 +223,16 @@ if (-not (Test-Path -LiteralPath $JarPath -PathType Leaf)) {
 $runtimeDir = Join-Path $PSScriptRoot ".runtime"
 $runtimeJar = Join-Path $runtimeDir "data-element-runtime.jar"
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-Copy-Item -LiteralPath $JarPath -Destination $runtimeJar -Force
+if ([IO.Path]::GetFullPath($JarPath) -ne [IO.Path]::GetFullPath($runtimeJar)) {
+    Copy-Item -LiteralPath $JarPath -Destination $runtimeJar -Force
+}
 $JarPath = $runtimeJar
 
 $localOverrides = @{}
+
+# Deployment-owned settings already come from the private environment/Nacos.
+# Keep the legacy explicit-environment options below out of the default path.
+if (-not $usePrivateRuntime) {
 
 # The relay signing key is deliberately supplied by the Windows user
 # environment, never hard-coded in this script or in a project config file.
@@ -258,6 +299,7 @@ if ($Profile -eq "dev") {
 }
 
 $env:SPRING_APPLICATION_JSON = $localOverrides | ConvertTo-Json -Depth 8 -Compress
+}
 Write-Status "Using Nacos runtime configuration: $NacosHost`:$NacosPort (profile=$Profile)"
 
 Write-Status "Starting backend in foreground."

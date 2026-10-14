@@ -34,9 +34,10 @@ public final class ValueTypes {
             case "NUMERIC", "NUMBER", "DEC" -> "DECIMAL";
             case "FLOAT", "REAL", "DOUBLE PRECISION" -> "DOUBLE";
             case "BOOL", "BIT" -> "BOOLEAN";
-            case "TIMESTAMP", "DATETIME2" -> "DATETIME";
-            case "TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ" -> "INSTANT";
+            case "TIMESTAMP", "DATETIME2", "SMALLDATETIME", "DATETIME64" -> "DATETIME";
+            case "TIMESTAMP WITH TIME ZONE", "TIMESTAMP WITH LOCAL TIME ZONE", "TIMESTAMPTZ", "DATETIMEOFFSET" -> "INSTANT";
             case "TIMESTAMP WITHOUT TIME ZONE" -> "DATETIME";
+            case "TIME WITHOUT TIME ZONE" -> "TIME";
             default -> value;
         };
     }
@@ -67,8 +68,19 @@ public final class ValueTypes {
                     case "false", "0" -> false;
                     default -> throw new IllegalArgumentException();
                 };
-                case "DATE" -> value instanceof Timestamp||value instanceof Instant||value instanceof OffsetDateTime?instant(value,zone).atZone(zone).toLocalDate():date(value);
+                case "DATE" -> {
+                    if(value instanceof Timestamp||value instanceof Instant||value instanceof OffsetDateTime)yield instant(value,zone).atZone(zone).toLocalDate();
+                    if(value instanceof CharSequence sequence){
+                        String text=sequence.toString().trim().replace(' ','T');
+                        if(text.length()>10){
+                            if(text.endsWith("Z")||text.matches(".*[+-]\\d{2}:\\d{2}$"))yield OffsetDateTime.parse(text).toInstant().atZone(zone).toLocalDate();
+                            yield dateTime(text,zone).toLocalDate();
+                        }
+                    }
+                    yield date(value);
+                }
                 case "DATETIME" -> dateTime(value,zone);
+                case "TIME" -> time(value);
                 case "INSTANT" -> instant(value, zone);
                 case "ARRAY" -> { if (!(value instanceof Collection<?>)) throw new IllegalArgumentException(); yield value; }
                 default -> throw new MappingException("UNSUPPORTED_TYPE", "不支持的逻辑目标类型: " + rawType);
@@ -91,9 +103,16 @@ public final class ValueTypes {
         if (v instanceof Instant d) return d.atZone(zone).toLocalDateTime();
         if (v instanceof OffsetDateTime d) return d.toInstant().atZone(zone).toLocalDateTime();
         if (v instanceof LocalDate d) return d.atStartOfDay();
+        if (v instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
         String text = v.toString().trim().replace(' ', 'T');
+        if(text.endsWith("Z")||text.matches(".*[+-]\\d{2}:\\d{2}$"))return OffsetDateTime.parse(text).atZoneSameInstant(zone).toLocalDateTime();
         if (text.length() == 10) return date(text).atStartOfDay();
         return LocalDateTime.parse(text, DateTimeFormatter.ISO_LOCAL_DATE_TIME.withResolverStyle(ResolverStyle.STRICT));
+    }
+    public static LocalTime time(Object value) {
+        if(value instanceof LocalTime time)return time;
+        if(value instanceof java.sql.Time time)return time.toLocalTime();
+        return LocalTime.parse(value.toString().trim(),DateTimeFormatter.ISO_LOCAL_TIME.withResolverStyle(ResolverStyle.STRICT));
     }
     public static Instant instant(Object v, ZoneId zone) {
         if (v instanceof Instant i) return i;

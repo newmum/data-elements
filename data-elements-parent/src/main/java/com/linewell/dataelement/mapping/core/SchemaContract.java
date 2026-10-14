@@ -53,6 +53,9 @@ public final class SchemaContract {
         List<Field> expected = read(contract.path("source")); Set<String> optional = new HashSet<>();
         for (JsonNode rule : plan.document().path("rules")) if (rule.path("sourceOptional").asBoolean() && rule.path("input").path("kind").asText().equals("FIELD")) optional.add(rule.path("input").path("name").asText());
         if (expected.isEmpty()) return;
+        Map<String,String> declaredTypes=new HashMap<>();expected.forEach(field->declaredTypes.put(field.name(),field.logicalType()));
+        actual=actual.stream().map(field->field.logicalType().equals("DATETIME")&&"INSTANT".equals(declaredTypes.get(field.name()))
+                ?new Field(field.name(),"INSTANT",field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         if(!contract.path("enforceReaderNullability").asBoolean(false)){
             Map<String,Boolean> nullable=new HashMap<>();expected.forEach(field->nullable.put(field.name(),field.nullable()));
             actual=actual.stream().map(field->new Field(field.name(),field.logicalType(),nullable.getOrDefault(field.name(),field.nullable()),field.length(),field.precision(),field.scale())).toList();
@@ -63,6 +66,8 @@ public final class SchemaContract {
     public static void prepare(ObjectNode specification){
         JsonNode contract=specification.path("schemaContract");List<Field> target=read(contract.path("target"));Map<String,Field> targets=new HashMap<>();target.forEach(field->targets.put(field.name(),field));
         for(JsonNode rule:specification.path("rules")){if(!(rule.path("target") instanceof ObjectNode output))continue;Field physical=targets.get(output.path("name").asText());if(physical==null)continue;
+            if(output.path("logicalType").asText().equals("DATE")&&physical.logicalType().equals("DATETIME"))
+                for(JsonNode declared:contract.path("target"))if(declared.path("name").asText().equals(physical.name())&&declared.path("dateContainsTime").asBoolean())output.put("logicalType","DATETIME");
             if(!output.has("logicalType")||output.path("logicalType").asText().equals("ANY"))output.put("logicalType",physical.logicalType());
             if(!output.has("nullable"))output.put("nullable",physical.nullable());
             if(physical.length()>0&&!output.has("length"))output.put("length",physical.length());

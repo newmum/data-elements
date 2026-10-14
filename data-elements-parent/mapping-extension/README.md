@@ -4,13 +4,13 @@
 
 ## 构建与产物检查
 
-当前运行基线为 Java 21、NiFi 2.11.0、扩展/共享内核/函数库 1.1.1。编辑协议为 schemaVersion=2.0，执行计划协议为 planVersion=1.0，不随包版本机械改号。1.0.4 的历史实施记录保留在 [详细设计第 21 章](../../docs/海通字段映射统一执行方案.md)，1.1.1 契约和当前验收边界见该文档第 22 章。其他 NiFi/Java 组合须单独验证，截图中的 NiFi 1.15 不属于此包的运行基线。
+当前运行基线为 Java 21、NiFi 2.11.0、扩展/共享内核/函数库 1.1.4。编辑协议为 schemaVersion=2.0，执行计划协议为 planVersion=1.0，不随包版本机械改号。1.0.4 的历史实施记录保留在 [详细设计第 21 章](../../docs/海通字段映射统一执行方案.md)，1.1.1 契约和当前验收边界见该文档第 22 章。其他 NiFi/Java 组合须单独验证，截图中的 NiFi 1.15 不属于此包的运行基线。
 
 ```powershell
 cd data-elements-parent/mapping-extension
 mvn clean package
 cd ../..
-python tools/check-mapping-nar.py logs/field-mapping-extension/haitong-mapping-nar/haitong-mapping-nar-1.1.1.nar
+python tools/check-mapping-nar.py logs/field-mapping-extension/haitong-mapping-nar/haitong-mapping-nar-1.1.4.nar
 ```
 
 必须清洁构建。NAR 插件会收集构建目录中的 bundled-dependencies；在同一目录仅执行 package 切换版本会混入旧内核，导致同名类被旧版本加载。检查工具必须确认只有一份 core、一份 runtime、无重复类且 Processor/Controller Service 均已注册。产物和测试报告在忽略的 logs 中。
@@ -22,11 +22,11 @@ python tools/check-mapping-nar.py logs/field-mapping-extension/haitong-mapping-n
 | 部署项 | 本地产物 / 定义 | 当前演示位置 |
 | --- | --- | --- |
 | Java 后端 | `data-elements-parent/target/data-element.jar`，或经审阅的所选类补丁 | `/opt/data-element.jar`，`data-element.service` |
-| NiFi 扩展 | `logs/field-mapping-extension/haitong-mapping-nar/haitong-mapping-nar-1.1.1.nar` | 容器 `data-element-nifi` 内 `/opt/nifi/nifi-current/nar_extensions/` |
+| NiFi 扩展 | `logs/field-mapping-extension/haitong-mapping-nar/haitong-mapping-nar-1.1.4.nar` | 容器 `data-element-nifi` 内 `/opt/nifi/nifi-current/nar_extensions/` |
 | 海通页面 | `data-elements-haitong/dist/` 的完整静态文件 | `/opt/nginx-1.26.2/html/haitong/`，入口 `/haitong/` |
 | 行业业务结构 | 当前环境各实际租户库完整 `init.sql` 中的映射相关定义 | 演示 `baseline_demo_ga`、`baseline_demo_chengtian`、`baseline_demo_sea_fishery`、`baseline_demo_broadcasting` |
 
-**1. 确认目标和备份。** 当前已验证运行组合是 Java 21、NiFi 2.11.0 单节点。后端共享内核、函数库和 NiFi 扩展均须为 1.1.1。保存后端 JAR、海通静态目录、当前节点配置和所触及数据库结构的受限备份，记录来源 Processor ID、来源 state / 增量水位及发布计划引用。核对磁盘余量和 JDBC 驱动；当前演示 MySQL 驱动为容器中的 `/opt/nifi/drivers/mysql-connector-j-8.0.33.jar`。其他驱动须部署到 NiFi 服务主机/容器能读取的位置，并填写已登记数据源对应的驱动类和连接配置。浏览器工作站上的驱动路径不能作为 NiFi 运行路径。
+**1. 确认目标和备份。** 当前已验证运行组合是 Java 21、NiFi 2.11.0 单节点。后端共享内核、函数库和 NiFi 扩展均须为 1.1.4。保存后端 JAR、海通静态目录、当前节点配置和所触及数据库结构的受限备份，记录来源 Processor ID、来源 state / 增量水位及发布计划引用。核对磁盘余量和 JDBC 驱动；当前演示 MySQL 驱动为容器中的 `/opt/nifi/drivers/mysql-connector-j-8.0.33.jar`。其他驱动须部署到 NiFi 服务主机/容器能读取的位置，并填写已登记数据源对应的驱动类和连接配置。浏览器工作站上的驱动路径不能作为 NiFi 运行路径。
 
 **2. 更新所有实际行业租户库。** 本功能新增 `data_access_mapping_plan_t`、`data_access_mapping_resource_t`、`data_access_mapping_publication_t` 三张表，分别保存不可变执行计划、模板/字典快照和当前发布引用。它们属于行业业务库。演示环境四行业库已完成，统一结构为 143 张表；控制库 `baseline` 继续保存共享资源和租户定义。
 
@@ -50,7 +50,7 @@ Set-Location D:\Sourcecode\data-elements\data-elements-parent\mapping-extension
 mvn clean package
 
 Set-Location D:\Sourcecode\data-elements
-python tools/check-mapping-nar.py logs/field-mapping-extension/haitong-mapping-nar/haitong-mapping-nar-1.1.1.nar
+python tools/check-mapping-nar.py logs/field-mapping-extension/haitong-mapping-nar/haitong-mapping-nar-1.1.4.nar
 
 Set-Location D:\Sourcecode\data-elements\data-elements-haitong
 pnpm install --frozen-lockfile
@@ -62,18 +62,18 @@ Java 构建使用 JDK 21。海通当前清单要求 Node.js 22.12+、pnpm 12.6.0
 **4. 安装扩展并核验 Bundle。** 当前演示 `nifi.nar.library.autoload.directory` 明确指向 `/opt/nifi/nifi-current/nar_extensions`。新环境先检查自身配置。把通过检查的 NAR 上传到服务主机的暂存目录，再放入已确认的自动加载目录；上传时先使用 `.part`，完整到达并设置 NiFi 用户可读权限后再改为 `.nar`，避免加载未完成的文件。以下 Linux 示例中的工作目录须已经包含经过校验的 NAR：
 
 ```bash
-docker cp haitong-mapping-nar-1.1.1.nar \
-  data-element-nifi:/opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.1.nar.part
+docker cp haitong-mapping-nar-1.1.4.nar \
+  data-element-nifi:/opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.4.nar.part
 docker exec -u root data-element-nifi chown nifi:nifi \
-  /opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.1.nar.part
+  /opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.4.nar.part
 docker exec -u root data-element-nifi chmod 644 \
-  /opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.1.nar.part
+  /opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.4.nar.part
 docker exec -u root data-element-nifi mv \
-  /opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.1.nar.part \
-  /opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.1.nar
+  /opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.4.nar.part \
+  /opt/nifi/nifi-current/nar_extensions/haitong-mapping-nar-1.1.4.nar
 ```
 
-此例仅适用于确认容器名、路径和 `nifi` 用户一致且尚未安装该版本的目标。演示已存在 1.1.1，直接使用即可。不能覆盖同版本已加载文件；内容改变应发布新版本并重新构建、核验。自动加载完成后，确认 `HaitongTransformRecord` 和 `JdbcHaitongDictionaryService` 的 Bundle 版本均为 1.1.1。旧版本仍被流程引用时保留。当前平台会阻止未经所有节点版本核验的多节点升级。
+此例仅适用于确认容器名、路径和 `nifi` 用户一致且尚未安装该版本的目标。演示已存在 1.1.4，直接使用即可。不能覆盖同版本已加载文件；内容改变应发布新版本并重新构建、核验。自动加载完成后，确认 `HaitongTransformRecord` 和 `JdbcHaitongDictionaryService` 的 Bundle 版本均为 1.1.4。旧版本仍被流程引用时保留。当前平台会阻止未经所有节点版本核验的多节点升级。
 
 **5. 更新后端和海通页面。** 先将已审阅 JAR 放入暂存路径，比较目标版本并保存备份，再原子替换实际运行 JAR。当前演示服务的检查命令是：
 
@@ -85,7 +85,7 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 
 最后一个命令必须返回 `status=UP`。海通将本次 `dist/` 整体暂存并发布到实际 `/haitong/` 站点，保留前一版已打开页面可能仍要加载的哈希资源。当前演示检查和刷新命令为 `/opt/nginx/sbin/nginx -t`、`/opt/nginx/sbin/nginx -s reload`。新环境以自身服务和 Nginx 路径为准。生产构建 API 基址为 `/prod-api/nifi/api`，网关须代理到后端 `/nifi/api`；本地开发使用 `http://localhost:8088` 代理。共享 Magic/低代码如有本次所选变更，另外完成 `baseline` 发布、刷新和回读。本次后续扩展交付没有额外 Magic/低代码改动。
 
-**6. 用真实会话验收。** 从数据中台正常登录并核对 `/sym/tenant/current`。后端 `/nifi/api/field-mapping/capabilities` 应返回内核 1.1.1 与 56 项能力；海通的“编译计划”返回 `ENGINE_PLAN`，转换 `query` 为 NULL。使用受控测试表验证字段转换、字典读取和目标写入，确认 failure/invalid 有受控保留队列、retry 有次数上限。其他数据库要分别验证实际驱动的 Schema、标识符、精度、日期及 INSERT/UPDATE/UPSERT/DELETE 能力；目标不支持的操作须明确拒绝。未获得其测试环境前不宣称全部数据库已认证。
+**6. 用真实会话验收。** 从数据中台正常登录并核对 `/sym/tenant/current`。后端 `/nifi/api/field-mapping/capabilities` 应返回内核 1.1.4 与 56 项能力；海通的“编译计划”返回 `ENGINE_PLAN`，转换 `query` 为 NULL。使用受控测试表验证字段转换、字典读取和目标写入，确认 failure/invalid 有受控保留队列、retry 有次数上限。其他数据库要分别验证实际驱动的 Schema、标识符、精度、日期及 INSERT/UPDATE/UPSERT/DELETE 能力；目标不支持的操作须明确拒绝。未获得其测试环境前不宣称全部数据库已认证。
 
 **7. 回退。** 后端或页面发布异常时恢复受限备份并重新验证健康和入口。字段规则从“模板 / 计划历史”选取旧版本，仅先恢复草稿，再校验、预览、保存及升级运行节点。出现 `MAPPING_UPGRADE_RECOVERY_REQUIRED` 时保持停止，核对原生边界、处理器和发布引用后处理；不清空来源 state 或业务队列。数据库回退先保持新增历史表和数据，不能通过删表丢弃计划与回退材料。
 
@@ -136,7 +136,7 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 
 码表选择先加载当前权限内的数据源，再按用户查询动作请求登记表的服务端分页（默认20、上限100），选表后一次读取字段。20/100项均为一次整组授权校验加 COUNT 和分页查询，禁止逐表补查；登记表、字段与后续执行计划按当前租户和角色范围再次校验。复合键按键列顺序配置来源，过滤只使用登记列和参数化类型值。重复键仅提供内核支持的 `ERROR` 与旧规则兼容的 `LEGACY_MAX_LABEL`，不提供依赖无排序结果的第一条/最后一条。
 
-Hive 来源流程的新发布及“仅升级运行字段节点”均将 `HaitongTransformRecord.record-writer` 绑定到名为 **PUBLIC-WRITER-JSON-TIME_FORMAT** 的时间格式 Writer，参数与前文 Hive Reader/Writer 配对策略一致；普通数据库保留普通 Writer。NiFi 属性实际保存 Controller Service UUID，不能把显示名称硬编码为 NAR 属性默认 ID。此次沿用扩展1.1.1，无须重新安装 NAR。仅升级时保留源/目标组件 ID 和水位；既有来源 Writer 的修改仍应走受控发布，不能通过整图重建重置水位。
+Hive 来源流程的新发布及“仅升级运行字段节点”均将 `HaitongTransformRecord.record-writer` 绑定到名为 **PUBLIC-WRITER-JSON-TIME_FORMAT** 的时间格式 Writer，参数与前文 Hive Reader/Writer 配对策略一致；普通数据库保留普通 Writer。NiFi 属性实际保存 Controller Service UUID，不能把显示名称硬编码为 NAR 属性默认 ID。此前默认绑定适配沿用1.1.1；本轮UUID与日期内核升级为1.1.4，需要安装新扩展。仅升级时保留源/目标组件 ID 和水位；既有来源 Writer 的修改仍应走受控发布，不能通过整图重建重置水位。
 
 ## 字典新鲜度与资源版本
 
@@ -180,7 +180,7 @@ restore-draft、upgrade-runtime、start-published 共用 SerializedNifiMutation 
 
 数据库兼容验证分两层：纯转换不依赖数据库方言；字典 JDBC 与目标数据库操作仍需验证对应驱动、标识符大小写、Schema、权限、参数绑定和数据库原生语义。不能用 H2 或 MySQL 的结果宣称所有实际数据库均已验收。
 
-## 当前已确认与待完成验证
+## 早期1.1.1已确认与待完成验证
 
 - 演示四行业库 143 张统一业务表已完成 check/export；所选后端 95 个运行类、海通前端及 NiFi NAR 1.1.1 已部署，服务 UP。本地 8088 已更新同 95 类并健康 UP，函数/内核版本一致。
 - 20/100 行正式预览的精确 38 位小数、敏感 alias，以及实际来源取样输入/输出双端全遮盖已通过；同模板两版本保存与导入已通过。
@@ -189,3 +189,24 @@ restore-draft、upgrade-runtime、start-published 共用 SerializedNifiMutation 
 - 真实原位升级及平台 `/stop → /field-mapping/start-published → /stop` 已通过，来源/目标 ID、水位和原停止状态保留，pending 草稿未误标为整图部署成功。真实 1.1.1 MySQL INSERT/UPDATE/UPSERT/DELETE 已通过，小数与日期时间无偏移。
 - 纯内核 10,000 行 × 100 字段的本机一次测量为 0.246 秒、约 40,655 行/秒，仅限内核。真实 NiFi 同规模为 1 输入 → 20 窗口 → 1 输出，21,920,001 字节全量核对通过；连同数据准备、API 等待及约 22 MB 下载的墙钟 164.937 秒不能作为 ETL 吞吐或 SLA，未经核定的 NiFi task 统计未纳入结论。
 - 用户确认暂时没有其他数据库测试环境；当前为单 NiFi 节点，不宣称多节点集群、全部真实驱动/复杂类型、完整历史迁移矩阵、端到端 exactly-once 或 SLA 压测已通过。
+
+
+## 1.1.4 当前升级与使用
+
+字段映射继续复用原组件。列表去掉映射类型、校验和全部通过标签，按当前页顺序显示连续序号；恢复原三栏连线可视化、候选勾选自动映射、三个快捷模板及自适应高级编辑器。表格“转换 / 配置”和顶部“映射规则”使用同一个配置弹框。
+
+ODS_UUID默认使用32位UUID，保留完整有效位并绑定流程、节点、输入与记录身份；分窗口继续累计下标，拆分子输入使用不同身份，同输入重试保持相同ID。已知旧ODS生成模板编译为UUID32，人工常量及其它自定义规则保留。当前目标VARCHAR(32)无需修改结构。
+
+登记“时间”对应DATETIME并保留时分秒，“日期”对应DATE。已选择时间目标时，日期解析默认使用日期时间；仅日期解析隐式补零点会被编译拒绝。DATE转换支持JDBC时间对象和JSON日期时间文本。来源逻辑类型、完整Schema、时间Writer和类型化Reader配套使用；Hive仍显示PUBLIC-WRITER-JSON-TIME_FORMAT。中间TIMESTAMP使用时间点语义，按计划时区还原，不能仅比较UTC中间字符串和本地数据库时间。
+
+构建使用：
+
+```powershell
+./tools/build-mapping-extension.ps1 -MavenCommand 'mvn' -PythonCommand 'python'
+```
+
+工具执行clean package并显式检查退出码及NAR重复类、服务注册。构建产物路径和SHA-256由工具返回；校验失败不得安装，也不能覆盖已加载的同版本文件。发布参数和最新规则见 [设计第24章](../../docs/海通字段映射统一执行方案.md)。
+
+在已部署环境重新打开字段映射，编辑、预览并保存；首次流程正常发布即可。已有运行流程通过“更多”的字段升级入口采用新内核，并核对旧来源的时间编解码配置，保留来源ID和水位。尚未更新的运行图仍引用其原NAR/计划，不能把安装新包当作所有任务都已自动切换。
+
+当前1.1.4已安装至演示NiFi 2.11.0并回读验证。本地与演示后端版本一致，海通静态页面和所选接入生成脚本已发布并刷新。最终包SHA-256为 `35281d08a15687af8fa92bce5bf949bb93e1abe9f2f73eab931229b6bdcd3a4b`，重复类0、服务注册通过。独立原生JDBC往返写入保留 `2026-10-14 14:27:49` 和32位ODS_UUID；两份各2,049条输入跨5个窗口得到4,098个不同ID，转换与ID生成不发SQL。正式平台停止状态发布、20/100项请求及权限拒绝也已通过，验收流程和样例已清理。前端92项验证通过；后端各测试集合及实际环境边界见 [设计验收记录](../../docs/海通字段映射统一执行方案.md#245-本轮实际验收与交付状态)。这些结果不是全部实际数据库、集群吞吐或端到端SLA认证。

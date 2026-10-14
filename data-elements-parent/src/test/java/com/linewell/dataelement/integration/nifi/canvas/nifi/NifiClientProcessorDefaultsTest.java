@@ -19,6 +19,20 @@ import org.mockito.ArgumentCaptor;
 class NifiClientProcessorDefaultsTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
+    @Test void linewellClockIntentsNeverReachNiFiAsDynamicPropertiesAndResolveUsingCreationResponse()throws Exception {
+        NifiClient client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));
+        JsonNode created=mapper.readTree("""
+          {"revision":{"version":0},"component":{"id":"p","config":{"descriptors":{"insert-key":{"displayName":"insert 追加value 值"},"update-key":{"displayName":"update 追加value 值"},"exclude-key":{"displayName":"merge 排除 update"}}}}}
+          """);
+        doReturn(created).when(client).post(eq("/process-groups/group/processors"),any(),eq(JsonNode.class));
+        doReturn(mock(NifiEntity.class)).when(client).put(eq("/processors/p"),any(),eq(NifiEntity.class));
+        client.createProcessor("group","com.linewell.nifi.LinewellPutDatabaseRecord","writer",0,0,LinewellAuditProperties.defaults(java.util.List.of("ODS_RKSJ","ODS_GXSJ"),Map.of("dbType","ORACLE")),null,null);
+        ArgumentCaptor<Object> initial=ArgumentCaptor.forClass(Object.class),update=ArgumentCaptor.forClass(Object.class);
+        verify(client).post(eq("/process-groups/group/processors"),initial.capture(),eq(JsonNode.class));verify(client).put(eq("/processors/p"),update.capture(),eq(NifiEntity.class));
+        assertThat(initial.getValue().toString()).doesNotContain(LinewellAuditProperties.PREFIX);
+        JsonNode props=((JsonNode)update.getValue()).at("/component/config/properties");assertThat(props.path("insert-key").asText()).isEqualTo("ODS_RKSJ=SYSDATE,ODS_GXSJ=SYSDATE");assertThat(props.path("update-key").asText()).isEqualTo("ODS_GXSJ=SYSDATE");assertThat(props.path("exclude-key").asText()).isEqualTo("ODS_RKSJ");
+        org.mockito.Mockito.verify(client,org.mockito.Mockito.never()).get(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any());
+    }
 
     @Test
     void enablesAvroLogicalTypesForEveryGeneratedExecuteSqlRecord() {

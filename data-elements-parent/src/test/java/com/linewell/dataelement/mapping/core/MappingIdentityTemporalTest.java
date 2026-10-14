@@ -52,6 +52,9 @@ class MappingIdentityTemporalTest {
         var plan=MappingEngine.compile(spec);var timestamp=LocalDateTime.parse("2026-10-14T14:27:49.123456");
         var output=MappingEngine.execute(plan,List.of(Map.of("time",java.sql.Timestamp.from(timestamp.atZone(context("x").zone()).toInstant()))),0,context("x"),null).rows().getFirst().output();
         assertEquals(timestamp,output.get("time"));assertEquals(timestamp.toLocalDate(),output.get("day"));
+        var textOutput=MappingEngine.execute(plan,List.of(Map.of("time","2026-10-14 14:27:49.123456")),0,context("x"),null).rows().getFirst();
+        assertTrue(textOutput.success());assertEquals(timestamp,textOutput.output().get("time"));assertEquals(timestamp.toLocalDate(),textOutput.output().get("day"));
+        assertEquals(LocalDate.of(2026,10,15),ValueTypes.cast("2026-10-14T23:30:00Z","DATE",38,10,java.math.RoundingMode.UNNECESSARY,ZoneId.of("Asia/Shanghai")));
         assertNull(MappingEngine.execute(plan,List.of(Collections.singletonMap("time",null)),0,context("x"),null).rows().getFirst().output().get("time"));
     }
     @Test void dateOnlyParserCannotSilentlyInventMidnightForTimeTarget() throws Exception {

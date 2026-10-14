@@ -45,7 +45,11 @@ export default function FieldMappingEditor(props:Props) {
   useEffect(()=>{
     if(!parsed.spec||parsed.spec.schemaVersion==='2.0'||props.columnsLoading)return;
     let active=true;setError('');
-    compileFieldMapping(parsed.spec,props.columnMeta?.sourceSchema??[],props.columnMeta?.targetSchema??[])
+    const context=props.assetContext;
+    const specification=context?.sourceRef||context?.targetRef
+      ?mappingVersions.schema(context.sourceRef,context.targetRef).then(schemaContract=>({...parsed.spec,schemaContract}))
+      :Promise.resolve(parsed.spec);
+    specification.then(spec=>compileFieldMapping(spec,props.columnMeta?.sourceSchema??[],props.columnMeta?.targetSchema??[]))
       .then(result=>{if(!result.plan)throw new Error('未能读取映射规则，请重试');if(active)setLoaded({source:props.value,schema:schemaSignature,draft:{...result.plan.executionPlan,executionEngine:'JAVA_RECORD'}});})
       .catch(cause=>{if(active)setError(cause?.response?.data?.error??cause.message??'读取映射规则失败');});
     return ()=>{active=false;};
@@ -60,7 +64,9 @@ export default function FieldMappingEditor(props:Props) {
 
 function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_DATASOURCES,columnsLoading,columnsError,onReloadColumns,assetContext}:Omit<Props,'value'>&{value:UnifiedMappingDraft}) {
   const {message,modal}=App.useApp();
-  const sourceSchema=columnMeta?.sourceSchema??EMPTY_SCHEMA,targetSchema=columnMeta?.targetSchema??EMPTY_SCHEMA;
+  const schemaFields=(fields:FieldMeta[],side:'source'|'target')=>{const contract=(value.schemaContract as any)?.[side];if(!Array.isArray(contract))return fields;const byName=new Map(contract.map((field:any)=>[field.name,field.logicalType]));return fields.map(field=>byName.has(field.name)?{...field,logicalType:String(byName.get(field.name))}:field);};
+  const sourceSchema=useMemo(()=>schemaFields(columnMeta?.sourceSchema??EMPTY_SCHEMA,'source'),[columnMeta?.sourceSchema,value.schemaContract]);
+  const targetSchema=useMemo(()=>schemaFields(columnMeta?.targetSchema??EMPTY_SCHEMA,'target'),[columnMeta?.targetSchema,value.schemaContract]);
   const sessionRevision=useSessionRevision();
   const [draft,setDraft]=useState(value),[selected,setSelected]=useState<React.Key[]>([]);
   const [editing,setEditing]=useState<UnifiedMappingRule|null>(null);

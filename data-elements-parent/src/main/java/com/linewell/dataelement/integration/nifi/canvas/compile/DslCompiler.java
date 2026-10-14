@@ -117,7 +117,13 @@ public class DslCompiler {
         Map<String,JsonNode> specs=javaMappingSpecifications(pipeline);
         if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();}
     }
-    private static Map<String,JsonNode> javaMappingSpecifications(Pipeline pipeline){Map<String,JsonNode>specs=new LinkedHashMap<>();for(var node:pipeline.dsl().nodes())if(javaMappingRequested(node.config()==null?Map.of():node.config()))specs.put(node.id(),mappingJson(node.config().get("mappings")));return specs;}
+    private static Map<String,JsonNode> javaMappingSpecifications(Pipeline pipeline){
+        Map<String,JsonNode>specs=new LinkedHashMap<>();Map<String,Pipeline.Node>nodes=new HashMap<>();pipeline.dsl().nodes().forEach(node->nodes.put(node.id(),node));
+        for(var node:pipeline.dsl().nodes())if(javaMappingRequested(node.config()==null?Map.of():node.config())){
+            JsonNode spec=mappingJson(node.config().get("mappings"));List<Pipeline.Node>targets=pipeline.dsl().edges()==null?List.of():pipeline.dsl().edges().stream().filter(edge->edge.source().equals(node.id())).map(edge->nodes.get(edge.target())).filter(Objects::nonNull).filter(target->target.manifestKey().equals("sink.jdbc")).toList();
+            if(targets.size()==1)spec=TemporalRuleRepair.targets(spec,targets.getFirst().config());specs.put(node.id(),spec);
+        }return specs;
+    }
     public boolean usesJavaMapping(Pipeline pipeline){return pipeline.dsl()!=null&&pipeline.dsl().nodes()!=null&&pipeline.dsl().nodes().stream().anyMatch(n->javaMappingRequested(n.config()==null?Map.of():n.config()));}
 
     private static JsonNode mappingJson(Object value){try{return value instanceof String s?MAPPER.readTree(s):MAPPER.valueToTree(value);}catch(Exception ex){throw new MappingException("INVALID_JSON","映射JSON无效");}}
@@ -210,7 +216,7 @@ public class DslCompiler {
         // 创建全局共享 Controller Service，供多个节点处理器复用。
         Map<String, String> sharedCs = new HashMap<>();
         boolean hiveTemporalJson = usesHiveTemporalJson(pipeline);
-        if(usesJavaMapping(pipeline))sharedCs.put("typedJdbcRecords","true");
+        boolean typedJdbcRecords=usesJavaMapping(pipeline);
         sharedCs.put("jsonReader", nifi.createControllerService(pgId, JSON_READER_TYPE,
                 "JsonReader", hiveTemporalJson||usesJavaMapping(pipeline) ? HiveTemporalJsonPolicy.formats() : Map.of()).id());
         sharedCs.put("jsonWriter", nifi.createControllerService(pgId, JSON_WRITER_TYPE,
@@ -478,7 +484,7 @@ public class DslCompiler {
             }
 
             if (isFieldMappingTransform(m)) {
-                if(javaMappingPlans.containsKey(n.id())){buildJavaMapping(pgId,n,nc,javaMappingPlans.get(n.id()),sharedCs,planVersionIds.get(n.id()));continue;}
+                if(javaMappingPlans.containsKey(n.id())){buildJavaMapping(pgId,n,nc,javaMappingPlans.get(n.id()),sharedCs,planVersionIds.get(n.id()),pipeline.id()+":"+n.id());continue;}
                 FieldMappingService.CompiledMapping plan = fieldMappingPlans.get(n.id());
                 if (plan != null && !plan.lookups().isEmpty()) {
                     buildFieldMappingLookupChain(pgId, pipeline, n, spec, nc, nodeLayout, plan,
@@ -515,7 +521,7 @@ public class DslCompiler {
                     }
                     applyIncrementalSourceOptions(m, pSpec.localId(), cfg, resolved);
                     applySourceFetchDatabaseType(m, pSpec.type(), cfg, resolved);
-                    applySourceRecordQueryOptions(m, pSpec.type(), cfg, resolved, sharedCs);
+                    applySourceRecordQueryOptions(m, pSpec.type(), cfg, resolved, sharedCs,typedJdbcRecords);
                     // Processors in one DSL component stay on the same row;
                     // NodeLayout has already separated topological columns and
                     // branch lanes so these cards cannot overlap another node.
@@ -716,6 +722,8 @@ public class DslCompiler {
         properties.put("Fetch Size", firstNonBlankStatic(configText(cfg, "defaultFetchSize"), "1000"));
         properties.put("Set Auto Commit", "false");
         properties.put("Use Avro Logical Types", "true");
+        String temporalProjection=OracleTemporalProjection.columns(cfg);
+        if(!temporalProjection.isBlank())properties.put("Columns to Return",temporalProjection);
         if (fetch.containsKey("Additional WHERE Clause")) properties.put("Additional WHERE Clause", fetch.get("Additional WHERE Clause"));
         NifiEntity processor = nifi.createProcessor(pgId, "org.apache.nifi.processors.standard.QueryDatabaseTableRecord",
                 node.label() + "/fetch", nodeOriginX(layout), nodeOriginY(layout), properties,
@@ -1127,12 +1135,12 @@ public class DslCompiler {
         return targetColumnMetadata(cfg).stream().anyMatch(column -> isTemporalColumn(column.type()));
     }
 
-    private void buildJavaMapping(String pgId,Pipeline.Node node,NodeCompilation compiled,UnifiedMappingService.Compiled plan,Map<String,String>shared,String planId){
+    private void buildJavaMapping(String pgId,Pipeline.Node node,NodeCompilation compiled,UnifiedMappingService.Compiled plan,Map<String,String>shared,String planId,String contextNodeId){
         Map<String,String>properties=new LinkedHashMap<>();properties.put("record-reader",compiled.csIds.getOrDefault("jsonReader",shared.get("jsonReader")));properties.put("record-writer",compiled.csIds.get("typed-json-writer"));properties.put("execution-plan",plan.plan().document().toString());properties.put("plan-hash",plan.plan().hash());
         if(compiled.csIds.containsKey("dictionary-batch"))properties.put("dictionary-service",compiled.csIds.get("dictionary-batch"));
         properties.put("typed-record-reader",compiled.csIds.get("typed-json-reader"));
         if(planId!=null)properties.put("plan-id",planId);
-        properties.put("context-node-id",node.id());
+        properties.put("context-node-id",contextNodeId);
         NifiEntity processor=nifi.createProcessor(pgId,"com.linewell.dataelement.nifi.HaitongTransformRecord",node.label(),node.x(),node.y(),properties,"0 sec","TIMER_DRIVEN");compiled.processorIds.put("map",processor.id());compiled.inletProcessorId=processor.id();compiled.outlets.put("default",new Outlet(processor.id(),"success"));
         NifiEntity failure=nifi.createRetentionFunnel(pgId,node.x()+360,node.y()+100),invalid=nifi.createRetentionFunnel(pgId,node.x()+360,node.y()+180);
         nifi.createConnection(pgId,processor.id(),"PROCESSOR",failure.id(),"FUNNEL",List.of("failure"));nifi.createConnection(pgId,processor.id(),"PROCESSOR",invalid.id(),"FUNNEL",List.of("invalid"));
@@ -1151,7 +1159,7 @@ public class DslCompiler {
         for(var connection:prepared.connections().entrySet()){NifiEntity service=nifi.createControllerService(group,"org.apache.nifi.dbcp.DBCPConnectionPool",node.label()+"/升级字典连接",buildSourceDbcpProperties(connection.getValue()));compiled.csIds.put("dict:"+connection.getKey(),service.id());created.add(service);}
         for(NifiEntity service:created){enableCreatedService(service);nifi.waitForControllerServiceEnabled(service.id(),30_000L);}
         if(!prepared.plan().dictionaries().isEmpty()){Map<String,String>properties=new LinkedHashMap<>();prepared.connections().keySet().forEach(id->properties.put(id,compiled.csIds.get("dict:"+id)));properties.put("authorized-definitions",prepared.plan().document().path("dictionaryBindings").toString());properties.put("snapshot-payloads",prepared.snapshots().toString());NifiEntity service=nifi.createControllerService(group,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService",node.label()+"/升级批量字典",properties);compiled.csIds.put("dictionary-batch",service.id());enableCreatedService(service);}
-        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",reader),ids.get(node.id()));return new MappingReplacement(compiled,ids.get(node.id()));
+        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",reader),ids.get(node.id()),pipeline.id()+":"+node.id());return new MappingReplacement(compiled,ids.get(node.id()));
     }
     private void enableCreatedService(NifiEntity service){ObjectNode body=MAPPER.createObjectNode();body.set("revision",MAPPER.valueToTree(service.revision()));body.put("state","ENABLED").put("disconnectedNodeAcknowledged",false);nifi.put("/controller-services/"+service.id()+"/run-status",body,JsonNode.class);}
     private static boolean usesHiveTemporalJson(Pipeline pipeline) {
@@ -2501,7 +2509,7 @@ public class DslCompiler {
                         "SQL Query", lastResultQuery(stringConfig(cfg, "_runtimeSourceSql").isBlank()
                                 ? String.valueOf(cfg.get("sql")) : stringConfig(cfg, "_runtimeSourceSql")),
                         "Record Writer", sourceQueryRecordWriter(sharedCs, sourceCfg),
-                        "Use Avro Logical Types", Boolean.toString(HiveTemporalJsonPolicy.isHive(null,sourceCfg)||"true".equals(sharedCs.get("typedJdbcRecords"))),
+                        "Use Avro Logical Types", Boolean.toString(HiveTemporalJsonPolicy.isHive(null,sourceCfg)||usesJavaMapping(pipeline)),
                         "Output Empty FlowFile", "false"
                 ), schedulingPeriod, schedulingStrategy);
         nc.processorIds.put("query", proc.id());
@@ -2651,6 +2659,8 @@ public class DslCompiler {
         if (updateKeys != null && !updateKeys.isBlank()) {
             properties.put("merge update keys", updateKeys);
         }
+        properties.putAll(com.linewell.dataelement.integration.nifi.canvas.nifi.LinewellAuditProperties.defaults(
+                targetColumnMetadata(cfg).stream().map(TargetColumnMetadata::name).toList(),cfg));
     }
 
     /** Native PutDatabaseRecord performs separate JDBC schema/table lookups. */
@@ -3872,6 +3882,8 @@ public class DslCompiler {
         if (databaseType != null) {
             resolved.put("Database Type", databaseType);
         }
+        String temporalProjection=OracleTemporalProjection.columns(cfg);
+        if(!temporalProjection.isBlank())resolved.put("Columns to Return",temporalProjection);
     }
 
     /**
@@ -3879,11 +3891,11 @@ public class DslCompiler {
      */
     private void applySourceRecordQueryOptions(ComponentManifest manifest, String processorType,
                                               Map<String, Object> cfg, Map<String, String> resolved,
-                                              Map<String, String> sharedCs) {
+                                              Map<String, String> sharedCs,boolean typedJdbcRecords) {
         if (!"source".equals(manifest.category())) return;
         if (!"org.apache.nifi.processors.standard.ExecuteSQLRecord".equals(processorType)) return;
         resolved.put("Output Empty FlowFile", "false");
-        if(HiveTemporalJsonPolicy.isHive(manifest.key(),cfg)||"true".equals(sharedCs.get("typedJdbcRecords")))resolved.put("Use Avro Logical Types","true");
+        if(HiveTemporalJsonPolicy.isHive(manifest.key(),cfg)||typedJdbcRecords)resolved.put("Use Avro Logical Types","true");
         if (HiveTemporalJsonPolicy.isHive(manifest.key(), cfg)) {
             resolved.put("Record Writer", requireHiveQueryRecordWriter(sharedCs));
         }

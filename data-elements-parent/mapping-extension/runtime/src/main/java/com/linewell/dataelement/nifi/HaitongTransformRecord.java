@@ -104,11 +104,11 @@ public class HaitongTransformRecord extends AbstractProcessor {
             }
         }
     }
-    private static Object writerValue(Object value,ZoneId zone){if(value instanceof LocalDate d)return java.sql.Date.valueOf(d);if(value instanceof LocalDateTime d)return java.sql.Timestamp.from(ValueTypes.instant(d,zone));if(value instanceof Instant i)return java.sql.Timestamp.from(i);return value;}
+    private static Object writerValue(Object value,ZoneId zone){if(value instanceof LocalDate d)return java.sql.Date.valueOf(d);if(value instanceof LocalTime time)return java.sql.Time.valueOf(time);if(value instanceof LocalDateTime d)return java.sql.Timestamp.from(ValueTypes.instant(d,zone));if(value instanceof Instant i)return java.sql.Timestamp.from(i);return value;}
     private static RecordSchema outputSchema(MappingEngine.Plan plan,RecordSchema input){
         LinkedHashMap<String,RecordField>fields=new LinkedHashMap<>();if(plan.passthrough())input.getFields().forEach(f->{if(!plan.excludes().contains(f.getFieldName()))fields.put(f.getFieldName(),f);});
         plan.outputContracts().forEach((name,contract)->{String type=contract.logicalType();
-            var old=input.getField(plan.outputOrigins().getOrDefault(name,name));org.apache.nifi.serialization.record.DataType value=switch(type){case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(contract.precision(),contract.scale());case "DATE"->RecordFieldType.DATE.getDataType();case "DATETIME","INSTANT"->RecordFieldType.TIMESTAMP.getDataType();case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());case "ANY"->old.map(RecordField::getDataType).orElse(RecordFieldType.STRING.getDataType());default->RecordFieldType.STRING.getDataType();};
+            var old=input.getField(plan.outputOrigins().getOrDefault(name,name));org.apache.nifi.serialization.record.DataType value=switch(type){case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(contract.precision(),contract.scale());case "DATE"->RecordFieldType.DATE.getDataType();case "TIME"->RecordFieldType.TIME.getDataType();case "DATETIME","INSTANT"->RecordFieldType.TIMESTAMP.getDataType();case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());case "ANY"->old.map(RecordField::getDataType).orElse(RecordFieldType.STRING.getDataType());default->RecordFieldType.STRING.getDataType();};
             fields.put(name,new RecordField(name,value));
         });return new SimpleRecordSchema(new ArrayList<>(fields.values()));
     }
@@ -116,7 +116,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
     private static List<SchemaContract.Field> inputContract(RecordSchema schema){
         List<SchemaContract.Field> result=new ArrayList<>();for(RecordField field:schema.getFields()){
             var type=field.getDataType();if(type instanceof org.apache.nifi.serialization.record.type.ChoiceDataType choice){if(choice.getPossibleSubTypes().size()!=1)throw new MappingException("SCHEMA_DRIFT","Reader字段包含无法确定的联合类型");type=choice.getPossibleSubTypes().getFirst();}
-            String logical=switch(type.getFieldType().name()){case "BYTE","SHORT","INT"->"INT";case "LONG","BIGINT"->"LONG";case "FLOAT","DOUBLE"->"DOUBLE";case "DECIMAL"->"DECIMAL";case "BOOLEAN"->"BOOLEAN";case "DATE"->"DATE";case "TIMESTAMP"->"DATETIME";case "ARRAY"->"ARRAY";case "STRING","CHAR"->"STRING";default->"ANY";};
+            String logical=switch(type.getFieldType().name()){case "BYTE","SHORT","INT"->"INT";case "LONG","BIGINT"->"LONG";case "FLOAT","DOUBLE"->"DOUBLE";case "DECIMAL"->"DECIMAL";case "BOOLEAN"->"BOOLEAN";case "DATE"->"DATE";case "TIME"->"TIME";case "TIMESTAMP"->"DATETIME";case "ARRAY"->"ARRAY";case "STRING","CHAR"->"STRING";default->"ANY";};
             int precision=0,scale=0;if(type instanceof org.apache.nifi.serialization.record.type.DecimalDataType decimal){precision=decimal.getPrecision();scale=decimal.getScale();}
             result.add(new SchemaContract.Field(field.getFieldName(),logical,field.isNullable(),0,precision,scale));
         }return result;

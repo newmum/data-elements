@@ -58,14 +58,14 @@ public class NifiClient {
 
     public String clientId() { return clientId; }
 
-    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.2");}
+    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.5");}
 
     public void requireMappingExtension(){
         JsonNode processors=get("/flow/processor-types",JsonNode.class).path("processorTypes");
         JsonNode services=get("/flow/controller-service-types",JsonNode.class).path("controllerServiceTypes");
         for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
             int count=0;for(JsonNode type:entry.getKey())if(type.path("type").asText().equals(entry.getValue())&&type.path("bundle").equals(mappingBundle()))count++;
-            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展1.1.2，请安装haitong-mapping-nar后部署");
+            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展1.1.5，请安装haitong-mapping-nar后部署");
         }
         JsonNode cluster=get("/flow/cluster/summary",JsonNode.class).path("clusterSummary");
         if(cluster.path("clustered").asBoolean()&&cluster.path("connectedNodeCount").asInt()>1)throw new IllegalStateException("多节点集群须完成全部节点扩展版本核验后才能部署统一映射");
@@ -356,8 +356,9 @@ public class NifiClient {
         if (schedulingPeriod != null) config.put("schedulingPeriod", schedulingPeriod);
         if (schedulingStrategy != null) config.put("schedulingStrategy", schedulingStrategy);
         ObjectNode props = mapper.createObjectNode();
+        Map<String,String> auditIntents=new java.util.LinkedHashMap<>();
         if (properties != null) {
-            properties.forEach(props::put);
+            properties.forEach((key,value)->{if(key.startsWith(LinewellAuditProperties.PREFIX))auditIntents.put(key,value);else props.put(key,value);});
         }
         // Every generated ExecuteSQLRecord must preserve JDBC date/time and decimal
         // types as logical record types instead of relying on NiFi's false default.
@@ -371,7 +372,16 @@ public class NifiClient {
         ObjectNode envelope = mapper.createObjectNode();
         envelope.set("revision", mapper.valueToTree(RevisionDto.initial(clientId)));
         envelope.set("component", component);
-        return post("/process-groups/" + pgId + "/processors", envelope, NifiEntity.class);
+        if(auditIntents.isEmpty())return post("/process-groups/" + pgId + "/processors", envelope, NifiEntity.class);
+        if(!type.endsWith(".LinewellPutDatabaseRecord"))throw new IllegalArgumentException("ODS数据库时间属性仅支持Linewell写入组件");
+        JsonNode created=post("/process-groups/"+pgId+"/processors",envelope,JsonNode.class);
+        String createdId=created.path("component").path("id").asText(created.path("id").asText());
+        if(createdId.isBlank())throw new IllegalStateException("NiFi未返回新建Linewell处理器ID");
+        Map<String,String> resolvedAudit=LinewellAuditProperties.resolve(auditIntents,created.path("component").path("config").path("descriptors"));
+        ObjectNode update=mapper.createObjectNode();update.set("revision",created.path("revision"));
+        ObjectNode updatedComponent=update.putObject("component").put("id",createdId);
+        ObjectNode updatedProperties=updatedComponent.putObject("config").putObject("properties");resolvedAudit.forEach(updatedProperties::put);
+        return put("/processors/"+createdId,update,NifiEntity.class);
     }
 
     /** A single trigger may expand to many records, but the next trigger must wait for all of them. */

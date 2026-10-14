@@ -560,7 +560,7 @@
                         :ref="dictionaryPreviewTableRef"
                         :data="dictionaryPreviewTableData"
                         :init-page-size="20"
-                        :page-sizes="[20, 50, 100, 200]"
+                        :page-sizes="isStructuredSource() ? [20, 50, 100, 200] : [20, 50, 100]"
                         height="100%"
                         class="preview-data-table"
                         :fit="false"
@@ -2068,19 +2068,21 @@ const dictionaryPreviewTableData = computed(() => {
     if (!tableId) return { list: [], total: 0 };
     try {
       const structured = isStructuredSource();
-      const safePageSize = Math.max(1, Number(pageSize) || 20);
-      const start = Math.max(0, (Math.max(1, Number(pageNo) || 1) - 1) * safePageSize);
-      // The 200-row sample has already been fetched before this table mounts.
-      // Reuse it for visible pages instead of issuing the same preview request again.
+      const safePageNo = Math.max(1, Math.floor(Number(pageNo) || 1));
+      const safePageSize = Math.min(structured ? 200 : 100, Math.max(1, Math.floor(Number(pageSize) || 20)));
+      const start = (safePageNo - 1) * safePageSize;
+      // 文件预览仅对有界样例分页；数据库预览只复用完全相同的服务端首屏。
       if (dictionaryPreview.loaded && dictionaryPreview.tableName === activeTableName.value) {
-        const cachedRows = structured && conditions.length
+        const cachedRows = conditions.length
           ? dictionaryPreview.rows.filter((item) =>
               String(previewRowValue(item, categoryField) ?? "") === String(row?.categoryValue ?? ""))
           : dictionaryPreview.rows;
-        const cachedTotal = structured ? cachedRows.length : dictionaryPreview.total;
-        if ((structured || !conditions.length) &&
-            (cachedRows.length >= start + safePageSize || cachedTotal <= cachedRows.length)) {
-          return { list: cachedRows.slice(start, start + safePageSize), total: cachedTotal };
+        if (structured) {
+          return { list: cachedRows.slice(start, start + safePageSize), total: cachedRows.length };
+        }
+        const initial = dictionaryPreview.initialPage;
+        if (!conditions.length && initial && initial.pageNo === safePageNo && initial.pageSize === safePageSize) {
+          return { list: initial.rows, total: initial.total };
         }
       }
       const result = await $common.postSilently(
@@ -2096,7 +2098,7 @@ const dictionaryPreviewTableData = computed(() => {
             }
           : {
               tableId,
-              pageNo,
+              pageNo: safePageNo,
               pageSize: safePageSize,
               conditions,
               silent: true,
@@ -2127,6 +2129,7 @@ const dictionaryPreview = reactive({
   columns: [],
   rows: [],
   total: 0,
+  initialPage: null,
   categoryGroups: [],
   categoryGroupField: "",
   message: "",
@@ -2169,7 +2172,7 @@ function reportConnectionFailure(table, error) {
   });
   Object.assign(dictionaryPreview, {
     loading: false, loaded: true, tableName: table.tableName,
-    columns: [], rows: [], total: 0, message,
+    columns: [], rows: [], total: 0, initialPage: null, message,
     categoryGroups: [], categoryGroupField: "",
   });
   return true;
@@ -2184,7 +2187,7 @@ function retryActiveTableRead() {
   dictionaryPreviewRequestVersion.value += 1;
   Object.assign(dictionaryPreview, {
     loading: false, loaded: false, tableName: table.tableName,
-    columns: [], rows: [], total: 0, message: "",
+    columns: [], rows: [], total: 0, initialPage: null, message: "",
     categoryGroups: [], categoryGroupField: "",
   });
   void loadFields(table, true);
@@ -6412,6 +6415,7 @@ async function loadDictionaryPreview() {
   const isCurrentRequest = () => requestVersion === dictionaryPreviewRequestVersion.value && activeTableName.value === table.tableName;
   dictionaryPreview.tableName = table.tableName;
   dictionaryPreview.loading = true;
+  dictionaryPreview.initialPage = null;
   dictionaryPreview.message = "";
   try {
     const structured = isStructuredSource();
@@ -6428,7 +6432,7 @@ async function loadDictionaryPreview() {
         : {
             tableId: table.tid,
             pageNo: 1,
-            pageSize: 200,
+            pageSize: 20,
             conditions: {},
             silent: true,
           },
@@ -6440,6 +6444,9 @@ async function loadDictionaryPreview() {
     dictionaryPreview.columns = preview.columns;
     dictionaryPreview.rows = preview.rows;
     dictionaryPreview.total = preview.total;
+    if (!structured) {
+      dictionaryPreview.initialPage = { pageNo: 1, pageSize: 20, rows: preview.rows, total: preview.total };
+    }
     dictionaryPreview.message = preview.rows.length ? "" : "暂无数据";
     delete connectionErrorMap[table.tableName];
     // 样例一返回即显示，不再等待分组查询、强制对标和枚举映射。

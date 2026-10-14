@@ -9,10 +9,12 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.2";
+    public static final String VERSION="1.1.5";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=8L*1024*1024;
+    public static final int MAX_DICTIONARIES=1000;
+    public static final int MAX_DICTIONARY_DATASOURCES=8;
     private static final ObjectMapper JSON=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     public record Issue(String code,String ruleId,String stepId,String message) {}
     public record Row(long index,boolean success,Map<String,Object> output,List<Issue> errors) {}
@@ -97,7 +99,8 @@ public final class MappingEngine {
         Map<String,DictionarySpec> dictionaries=new LinkedHashMap<>();
         spec.path("dictionaryBindings").fields().forEachRemaining(e->{JsonNode d=e.getValue();List<String> keys=new ArrayList<>(),types=new ArrayList<>();d.path("keyColumns").forEach(n->keys.add(ValueTypes.field(n.asText())));d.path("keyTypes").forEach(n->types.add(n.asText()));
             dictionaries.put(e.getKey(),new DictionarySpec(e.getKey(),d.path("datasourceId").asText(),d.path("tableId").asText(),d.path("schema").asText(),d.path("table").asText(),keys,types,d.path("valueColumn").asText(),d.get("filter"),d.path("duplicatePolicy").asText("ERROR")));});
-        if(dictionaries.size()>32||dictionaries.values().stream().map(DictionarySpec::datasourceId).distinct().count()>8)throw new MappingException("BUDGET_EXCEEDED","字典或数据源数量超限");
+        if(dictionaries.size()>MAX_DICTIONARIES)throw new MappingException("BUDGET_EXCEEDED","单节点字典定义超过"+MAX_DICTIONARIES+"个，当前"+dictionaries.size()+"个");
+        if(dictionaries.values().stream().map(DictionarySpec::datasourceId).distinct().count()>MAX_DICTIONARY_DATASOURCES)throw new MappingException("BUDGET_EXCEEDED","单节点字典数据源超过"+MAX_DICTIONARY_DATASOURCES+"个；字段数不占用数据源限额");
         List<Rule> compiled=new ArrayList<>();Set<String> ids=new HashSet<>(),targets=new HashSet<>();int count=0;
         for(JsonNode node:rules){
             if(!node.path("enabled").asBoolean(true))continue;

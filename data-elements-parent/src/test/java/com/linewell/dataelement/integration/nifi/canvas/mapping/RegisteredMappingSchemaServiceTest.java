@@ -21,6 +21,19 @@ import static org.mockito.Mockito.*;
 
 class RegisteredMappingSchemaServiceTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void oracleDateMetadataIsDatetimeAndOnlyKnownDateContractIsRepaired()throws Exception {
+        Fixture fixture=new Fixture(1);fixture.config=Map.of("db",Map.of("dbType","ORACLE","defaultSchema","registered"));
+        fixture.columns=List.of(Map.of("table_id","table-0","column_name","id","data_type","DATE","nullable",1));
+        Map<String,Object> row=new HashMap<>(jdbcColumn("catalog","registered","table_0","id"));row.put("TYPE_NAME","DATE");
+        when(fixture.metadata.getDatabaseProductName()).thenReturn("Oracle");when(fixture.metadata.getSearchStringEscape()).thenReturn("\\");when(fixture.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(List.of(row)));
+        var contract=JSON.createObjectNode();contract.set("sourceRef",fixture.references.get("ref-0"));contract.putArray("source").addObject().put("name","id").put("logicalType","DATE").put("nullable",true);
+        try(var ignored=TenantContext.use("tenant-A")){
+            var fields=fixture.service.resolve(fixture.references).get("ref-0").fields();assertEquals("DATETIME",fields.get(0).path("logicalType").asText());
+            fixture.service.checkContracts(Map.of("node",contract));assertEquals("DATETIME",contract.path("source").get(0).path("logicalType").asText());assertTrue(contract.path("source").get(0).path("dateContainsTime").asBoolean());
+            ((com.fasterxml.jackson.databind.node.ObjectNode)contract.path("source").get(0)).put("logicalType","STRING");
+            assertEquals("SCHEMA_DRIFT",assertThrows(MappingException.class,()->fixture.service.checkContracts(Map.of("node",contract))).code());
+        }
+    }
 
     @Test void dictionaryTablePagesTwentyAndHundredUseFixedCountAndPageReadsAndTenantArguments()throws Exception {
         for(int count:List.of(20,100)) {
@@ -73,6 +86,22 @@ class RegisteredMappingSchemaServiceTest {
         }
     }
 
+    @Test void mysqlCaseInsensitivePhysicalNamesRespectTheDriverAndStillUseOneBatch()throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture f=new Fixture(count);when(f.metadata.supportsMixedCaseIdentifiers()).thenReturn(false);
+            f.tables=new ArrayList<>();for(int i=0;i<count;i++)f.tables.add(table("table-"+i,"db","REGISTERED.TABLE_"+i));
+            f.physicalRows.add(mysqlColumn("foreign","table_0","secret"));
+            try(var ignored=TenantContext.use("tenant-A")) {
+                var actual=f.service.physicalBatch(f.service.resolve(f.references));
+                assertEquals(count,actual.size());assertFalse(actual.toString().contains("secret"));
+            }
+            verify(f.statement,times(1)).executeQuery();verify(f.engine,times(1)).openRegistered(eq("db"),anyMap());
+            verify(f.metadata,times(1)).supportsMixedCaseIdentifiers();
+        }
+        Fixture exact=new Fixture(1);when(exact.metadata.supportsMixedCaseIdentifiers()).thenReturn(true);
+        exact.tables=List.of(table("table-0","db","REGISTERED.TABLE_0"));
+        try(var ignored=TenantContext.use("tenant-A")){assertEquals("SCHEMA_UNAVAILABLE",assertThrows(MappingException.class,()->exact.service.physicalBatch(exact.service.resolve(exact.references))).code());}
+    }
     @Test void checkContractsBatchesAllNodesAndDeduplicatesRepeatedSourceTargetReferences()throws Exception {
         for (int count:List.of(20,100)) {
             Fixture fixture=new Fixture(count);

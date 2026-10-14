@@ -24,6 +24,16 @@
 
 ## 本地启动
 
+在本机日常启动时，优先从仓库根目录运行：
+
+```powershell
+.\start-data-elements.cmd
+```
+
+该入口默认读取工程外 `%USERPROFILE%/.codex/private/data-elements/local-runtime.private.json` 的环境变量和 Java 路径，优先运行 `.runtime/data-element-runtime.jar`，保留该配置中的 `NACOS_CONFIG_IMPORTS` 与 `SPRING_APPLICATION_JSON`。当前本机已选择演示 Nacos `14.103.233.56:8848`、命名空间 `data-element`、配置 `data-elements.yml`；地址与凭据仍以受限配置为准。入口不再自动切回旧内网 Nacos，也不会用 `target/` 中的旧包覆盖已验证运行包。配置缺失时会明确报错，可用 `-ConfigPath` 指定另一份工程外配置。
+
+`-Build` 明确要求重新打包并替换运行包；`-JarPath` 明确选择其他包。需要其他环境时可显式传入 `-NacosHost`，并在该进程中提供相应 Nacos 凭据、命名空间和配置导入。直接执行 `java -jar` 或以下 Maven 命令不会自动读取上述受限 JSON，需要先设置同一套环境变量；不要依赖 JAR 的历史环境默认值。
+
 ```bash
 cd data-elements-parent
 mvn spring-boot:run -DskipTests
@@ -40,11 +50,12 @@ mvn -f data-elements-parent/pom.xml spring-boot:run -DskipTests
 当前配置通过环境变量接收 Nacos 连接信息。实际凭据由运行环境或密钥管理提供，不写入仓库：
 
 ```env
-NACOS_HOST=192.168.175.86
+NACOS_HOST=<已确认的配置中心地址>
 NACOS_PORT=8848
 NACOS_USER=<从运行环境提供>
 NACOS_PASSWORD=<从密钥管理提供>
 NACOS_NAMESPACE=data-element
+NACOS_CONFIG_IMPORTS=nacos:data-elements.yml?group=DEFAULT_GROUP&refreshable=true
 ```
 
 如果需要本地不依赖 Nacos 运行，需要在 `src/main/resources/application.yml` 或本地 profile 中补充数据库、Redis、服务端口等配置，例如：

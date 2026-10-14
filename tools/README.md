@@ -9,6 +9,7 @@
 | `compile-lowcode.mjs` | 使用澄天现有编译器编译选定 Vue 组件，校验生成代码语法，结果写入 `logs/lowcode/compiled/` |
 | `export-db.py` | 只读导出实际五个数据库的完整结构，更新根 `db/`；不执行数据库变更 |
 | `check-db.py` | 只读校验所有行业租户与 `baseline_ga` 的表集合、列、主键、索引和外键列；按达梦原生语义识别类型、生成列和自动更新时间，差异返回失败 |
+| `start-local-backend.ps1` | 从工程外受限配置启动已验证运行包；根目录 `start-data-elements.cmd` 默认也读取同一份 `local-runtime.private.json`，提供前台日志及登录接口就绪检查 |
 | `audit-api.py` | 只读整理 Magic HTTP 接口的静态、有限模板及内部依赖引用；可加入受限的当前编译代码、菜单、表单、服务绑定和运行 Java 上下文，报告只写根 `logs/`，不自动删除 |
 | `tests/test_resource_sync.py` | 检查资源身份、路径、并发修改、凭据脱敏和发布保护 |
 | `tests/test_schema_gate.py` | 检查同数量不同表、额外唯一索引、主键变化、错误租户默认值与 Magic 断链/路径漂移的拦截 |
