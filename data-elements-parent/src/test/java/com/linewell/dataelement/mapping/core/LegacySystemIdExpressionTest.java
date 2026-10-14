@@ -17,10 +17,10 @@ class LegacySystemIdExpressionTest {
 
     private static String evaluate(String expression,long row){
         var spec=JSON.createObjectNode().put("version","1.0");
-        spec.putArray("mappings").addObject().put("expression",expression).put("to","/ODS_UUID");
+        spec.putArray("mappings").addObject().put("expression",expression).put("to","/historical_id");
         var result=MappingEngine.execute(MappingEngine.compile(spec),List.of(Map.<String,Object>of()),row,CONTEXT,null);
         assertTrue(result.rows().getFirst().success());
-        return (String)result.rows().getFirst().output().get("ODS_UUID");
+        return (String)result.rows().getFirst().output().get("historical_id");
     }
 
     @Test void oldMillisecondsTemplateKeepsTimestampAndSixDigitSuffix(){
@@ -53,7 +53,7 @@ class LegacySystemIdExpressionTest {
     @Test void alteredGeneratorsAndArbitrarySqlStillFailValidation(){
         for(String expression:List.of(MILLIS.replace("MILLISECOND","MINUTE"),MILLIS.replace("900000)","900001)"),MILLIS+"; SELECT 1",MILLIS.replace("LOCALTIMESTAMP","untrusted_field"))){
             var spec=JSON.createObjectNode().put("version","1.0");
-            spec.putArray("mappings").addObject().put("expression",expression).put("to","/ODS_UUID");
+            spec.putArray("mappings").addObject().put("expression",expression).put("to","/historical_id");
             assertThrows(MappingException.class,()->MappingEngine.compile(spec));
         }
     }

@@ -211,9 +211,9 @@ public class DslCompiler {
         Map<String, String> sharedCs = new HashMap<>();
         boolean hiveTemporalJson = usesHiveTemporalJson(pipeline);
         sharedCs.put("jsonReader", nifi.createControllerService(pgId, JSON_READER_TYPE,
-                "JsonReader", hiveTemporalJson ? HiveTemporalJsonPolicy.formats() : Map.of()).id());
+                "JsonReader", hiveTemporalJson||usesJavaMapping(pipeline) ? HiveTemporalJsonPolicy.formats() : Map.of()).id());
         sharedCs.put("jsonWriter", nifi.createControllerService(pgId, JSON_WRITER_TYPE,
-                "JsonWriter", usesJavaMapping(pipeline)?Map.of("Schema Write Strategy","full-schema-attribute"):Map.of()).id());
+                "JsonWriter", usesJavaMapping(pipeline)?HiveTemporalJsonPolicy.writerProperties():Map.of()).id());
         if (hiveTemporalJson) {
             sharedCs.put("hiveJsonWriter", nifi.createControllerService(pgId, JSON_WRITER_TYPE,
                     HiveTemporalJsonPolicy.WRITER_NAME, HiveTemporalJsonPolicy.writerProperties()).id());
@@ -320,7 +320,7 @@ public class DslCompiler {
                         NodeCompilation compilation=compiled.get(n.id());
                         compilation.csIds.put("typed-json-reader",nifi.createControllerService(pgId,JSON_READER_TYPE,n.label()+"/来源类型化输入",HiveTemporalJsonPolicy.typedReaderProperties(hiveTemporalJson)).id());
                         compilation.csIds.put("typed-json-writer",hiveTemporalJson ? sharedCs.get("hiveJsonWriter")
-                                : nifi.createControllerService(pgId,JSON_WRITER_TYPE,n.label()+"/类型化输出",Map.of("Schema Write Strategy","full-schema-attribute")).id());
+                                : nifi.createControllerService(pgId,JSON_WRITER_TYPE,n.label()+"/类型化输出",HiveTemporalJsonPolicy.writerProperties()).id());
                         for(var connection:javaPlan.connections().entrySet()){
                             NifiEntity service=nifi.createControllerService(pgId,"org.apache.nifi.dbcp.DBCPConnectionPool",n.label()+"/字典连接",buildSourceDbcpProperties(connection.getValue()));
                             compilation.csIds.put("dict:"+connection.getKey(),service.id());
@@ -1142,9 +1142,9 @@ public class DslCompiler {
     public MappingReplacement createMappingReplacement(Pipeline pipeline,Pipeline.Node node,String group,String reader,String typedReader,String writer,UnifiedMappingService.Compiled prepared){
         NodeCompilation compiled=new NodeCompilation();compiled.csIds.put("typed-json-reader",typedReader==null?reader:typedReader);compiled.csIds.put("typed-json-writer",writer);compiled.csIds.put("jsonReader",reader);
         Map<String,String> ids=mappingVersions.archive(pipeline,Map.of(node.id(),prepared.plan()));List<NifiEntity> created=new ArrayList<>();
-        if (usesHiveTemporalJson(pipeline)) {
+        {
             NifiEntity temporalWriter=nifi.createControllerService(group,JSON_WRITER_TYPE,
-                    HiveTemporalJsonPolicy.WRITER_NAME,HiveTemporalJsonPolicy.writerProperties());
+                    usesHiveTemporalJson(pipeline)?HiveTemporalJsonPolicy.WRITER_NAME:node.label()+"/类型化输出",HiveTemporalJsonPolicy.writerProperties());
             compiled.csIds.put("typed-json-writer",temporalWriter.id());created.add(temporalWriter);
         }
         for(var connection:prepared.connections().entrySet()){NifiEntity service=nifi.createControllerService(group,"org.apache.nifi.dbcp.DBCPConnectionPool",node.label()+"/升级字典连接",buildSourceDbcpProperties(connection.getValue()));compiled.csIds.put("dict:"+connection.getKey(),service.id());created.add(service);}

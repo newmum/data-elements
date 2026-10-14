@@ -654,7 +654,7 @@ var columnList = (rows) => {
     }
     return list
 }
-var odsUuidExpression = "CAST(TIMESTAMPDIFF(SECOND, TIMESTAMP '1970-01-01 00:00:00', LOCALTIMESTAMP) AS VARCHAR) || CAST(100000000 + RAND_INTEGER(900000000) AS VARCHAR)"
+var odsUuidExpression = "UUID()"
 var odsNowExpression = "LOCALTIMESTAMP"
 var isOdsSystemColumn = (name) => {
     var n = text(name).toUpperCase()
@@ -666,7 +666,7 @@ var odsSystemMapping = (name) => {
         return {
             expression: odsUuidExpression,
             to: '/ODS_UUID',
-            comment: 'NiFi生成正数ODS主键（秒级时间戳加随机尾数）'
+            comment: '逐记录生成32位UUID，重试保持相同行身份'
         }
     }
     if (n == 'ODS_RKSJ') {

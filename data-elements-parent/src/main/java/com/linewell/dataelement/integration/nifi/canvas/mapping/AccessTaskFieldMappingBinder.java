@@ -33,9 +33,7 @@ import org.springframework.stereotype.Service;
 public class AccessTaskFieldMappingBinder {
 
     private static final ObjectMapper JSON = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
-    private static final String ODS_UUID_EXPRESSION =
-            "CAST(TIMESTAMPDIFF(SECOND, TIMESTAMP '1970-01-01 00:00:00', LOCALTIMESTAMP) AS VARCHAR) "
-                    + "|| CAST(100000000 + RAND_INTEGER(900000000) AS VARCHAR)";
+    private static final String ODS_UUID_EXPRESSION = "UUID()";
     /**
      * Older registration drafts sometimes kept the dictionary selected in the
      * user-facing field title but lost {@code dict_enable/dict_value/dict_code}
@@ -142,6 +140,8 @@ public class AccessTaskFieldMappingBinder {
                 && !existing.path("lookup").path("dataSource").isObject()) return true;
         if (!requiresGeneratedRule(rule)) return false;
         if (existing == null) return true;
+        if("ODS_UUID".equalsIgnoreCase(trim(rule.getTargetField()))
+                &&com.linewell.dataelement.mapping.core.Expressions.isLegacyId(existing.path("expression").asText()))return true;
         if (isLookup(rule)) {
             LookupDefinition definition = lookupDefinition(rule);
             boolean hasRegisteredConnection = definition != null && definition.config() != null
@@ -218,6 +218,7 @@ public class AccessTaskFieldMappingBinder {
     private String buildSpec(ObjectNode existing, List<DataAccessFieldMapping> rules,
                              ObjectNode sourceLookupDataSource) {
         ObjectNode spec = existing == null ? JSON.createObjectNode() : existing.deepCopy();
+        spec.put("executionEngine", "JAVA_RECORD");
         if (existing == null) {
             spec.put("version", "1.0");
             spec.put("passthroughUnmapped", false);
@@ -536,6 +537,8 @@ public class AccessTaskFieldMappingBinder {
 
     private String requiredExpression(DataAccessFieldMapping rule) {
         String configured = trim(rule.getFuncValue());
+        if("ODS_UUID".equalsIgnoreCase(trim(rule.getTargetField()))
+                &&com.linewell.dataelement.mapping.core.Expressions.isLegacyId(configured))return ODS_UUID_EXPRESSION;
         if (!configured.isBlank()) {
             return configured;
         }

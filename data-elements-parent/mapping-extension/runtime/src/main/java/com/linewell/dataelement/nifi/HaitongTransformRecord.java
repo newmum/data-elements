@@ -53,8 +53,10 @@ public class HaitongTransformRecord extends AbstractProcessor {
             String next=original.getAttribute("ht.retry.nextAt");if(next!=null&&Long.parseLong(next)>System.currentTimeMillis()){session.transfer(session.penalize(original),RETRY);context.yield();return;}
             String identity=original.getAttribute("ht.input.identity"),clock=original.getAttribute("ht.execution.clock");
             if(identity==null)identity=original.getAttribute("uuid");if(clock==null)clock=Long.toString(original.getEntryDate());
-            original=session.putAllAttributes(original,Map.of("ht.input.identity",identity,"ht.execution.clock",clock,"ht.plan.node.id",nodeContext,hashKey,plan.hash()));
-            JsonNode policies=plan.document().path("policies");ExecutionContext execution=new ExecutionContext(Instant.ofEpochMilli(Long.parseLong(clock)),ZoneId.of(policies.path("zoneId").asText("Asia/Shanghai")),Locale.forLanguageTag(policies.path("locale").asText("zh-CN")),identity+":"+nodeContext);
+            String localIdentityKey="ht.mapping.input.identity."+nodeContext;
+            String localIdentity=original.getAttribute(localIdentityKey);if(localIdentity==null)localIdentity=original.getAttribute("uuid");
+            original=session.putAllAttributes(original,Map.of("ht.input.identity",identity,"ht.execution.clock",clock,"ht.plan.node.id",nodeContext,hashKey,plan.hash(),localIdentityKey,localIdentity));
+            JsonNode policies=plan.document().path("policies");ExecutionContext execution=new ExecutionContext(Instant.ofEpochMilli(Long.parseLong(clock)),ZoneId.of(policies.path("zoneId").asText("Asia/Shanghai")),Locale.forLanguageTag(policies.path("locale").asText("zh-CN")),identity+":"+nodeContext+":"+localIdentity);
             PropertyDescriptor readerProperty=original.getAttribute("avro.schema")!=null&&context.getProperty(TYPED_READER).isSet()?TYPED_READER:READER;
             RecordReaderFactory readers=context.getProperty(readerProperty).asControllerService(RecordReaderFactory.class);RecordSetWriterFactory writers=context.getProperty(WRITER).asControllerService(RecordSetWriterFactory.class);
             DictionarySpec.Provider dictionaries=context.getProperty(DICTIONARIES).isSet()?context.getProperty(DICTIONARIES).asControllerService(HaitongDictionaryService.class).provider():null;

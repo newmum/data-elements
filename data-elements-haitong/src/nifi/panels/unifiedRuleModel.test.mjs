@@ -3,6 +3,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRule,emptyUnifiedDraft,setConditional,setNullHandling,nullHandling,parseNumericConstant,validateRuleForm,usesUnifiedRecordRules,isEditableRule,assertExactJsonNumbers,primaryRuleMode,changePrimaryRuleMode,includeOdsSystemMappings,logicalFieldType} from './unifiedRuleModel.ts';
 
+test('time target defaults to a datetime parser and ODS system value fits varchar32',()=>{
+ const rule={...createRule('DIRECT','r'),input:{kind:'FIELD',name:'created_time'},target:{name:'created_time',logicalType:'DATETIME'}};
+ const result=changePrimaryRuleMode(rule,'DATE_PARSE','date');
+ assert.deepEqual(result.steps[0].args,{pattern:'uuuu-MM-dd HH:mm:ss',logicalType:'DATETIME'});
+ assert.deepEqual(changePrimaryRuleMode(rule,'SYSTEM','uuid').input,{kind:'SYSTEM',generator:'UUID32'});
+ assert.equal(changePrimaryRuleMode({...rule,target:{...rule.target,logicalType:'DATE'}},'DATE_PARSE','day').steps[0].args.logicalType,'DATE');
+});
+
 test('physical field types use the kernel type semantics in the configuration form',()=>{
  for(const [type,logical] of [['datetime','DATETIME'],['varchar2(128)','STRING'],['timestamp with time zone','INSTANT'],['NUMERIC(38,10)','DECIMAL'],['INT unsigned','LONG'],['BIGINT UNSIGNED','DECIMAL'],['bit','BOOLEAN']])assert.equal(logicalFieldType({name:'f',type}),logical);
  assert.equal(logicalFieldType({name:'f',type:'timestamp',logicalType:'INSTANT'}),'INSTANT');

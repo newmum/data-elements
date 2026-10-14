@@ -36,7 +36,8 @@ final class HiveTemporalJsonPolicy {
         Map<String, String> result = new LinkedHashMap<>();
         result.put("Schema Access Strategy", "schema-text-property");
         result.put("Schema Text", "${avro.schema}");
-        if (hive) result.putAll(formats());
+        // Every JAVA_RECORD flow uses the same temporal codec contract, including upgrades.
+        result.putAll(formats());
         return result;
     }
 }

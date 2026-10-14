@@ -26,8 +26,7 @@ interface Props {
   columnsLoading?:boolean; columnsError?:string; onReloadColumns?:()=>void;
   assetContext?:{pipelineId?:string|null;nodeId?:string;sourceRef?:MappingTableRef;targetRef?:MappingTableRef};
 }
-const ODS_UUID_EXPRESSION =
-  "CAST(TIMESTAMPDIFF(SECOND, TIMESTAMP '1970-01-01 00:00:00', LOCALTIMESTAMP) AS VARCHAR) || CAST(100000000 + RAND_INTEGER(900000000) AS VARCHAR)";
+const ODS_UUID_EXPRESSION = 'UUID()';
 const EMPTY_SCHEMA:FieldMeta[]=[];
 const EMPTY_DATASOURCES:DatasourceChoice[]=[];
 
@@ -298,7 +297,7 @@ function FieldMappingEditorContent({value,onChange,columnMeta,datasources=EMPTY_
   const fieldCell=(name:string,caption:string|undefined)=><div className="fm-field-label-cell"><Typography.Text ellipsis>{caption||name||'未配置'}</Typography.Text>{caption&&<Typography.Text type="secondary" className="fm-field-identifier">{name}</Typography.Text>}</div>;
   return <div className="field-mapping-editor field-mapping-editor-v11 fm-single-editor">
     <header className="fm-topbar">
-      <div className="fm-topbar-left"><Typography.Text strong>字段映射</Typography.Text><span className="fm-summary">{draft.rules.length} 条映射 · 源字段 {sourceSchema.length} 个 · 目标字段 {targetSchema.length} 个</span>{issues&&<Tag color={issues.errors.length?'error':issues.warnings.length?'warning':'success'}>{issues.errors.length?issues.errors.length+' 条问题':issues.warnings.length?issues.warnings.length+' 条提示':'全部通过'}</Tag>}</div>
+      <div className="fm-topbar-left"><Typography.Text strong>字段映射</Typography.Text><span className="fm-summary">{draft.rules.length} 条映射 · 源字段 {sourceSchema.length} 个 · 目标字段 {targetSchema.length} 个</span></div>
       <div className="fm-topbar-right">
         <Space.Compact size="small"><Button type={mode==='list'?'primary':'default'} icon={<UnorderedListOutlined/>} onClick={()=>setMode('list')}>列表</Button><Button type={mode==='visual'?'primary':'default'} icon={<SwapOutlined/>} onClick={()=>setMode('visual')}>可视化</Button><Button type={mode==='dsl'?'primary':'default'} icon={<CodeOutlined/>} onClick={()=>setMode('dsl')}>高级</Button></Space.Compact>
         <Button size="small" icon={<BulbOutlined/>} loading={busy} disabled={!sourceSchema.length||!targetSchema.length} onClick={automatic}>自动映射</Button>
@@ -348,7 +347,7 @@ function odsRecommendation(field: FieldInfo): LocalRecommendation | null {
       to: field.path,
       toLabel: field.label,
       expression: ODS_UUID_EXPRESSION,
-      comment: 'NiFi生成正数ODS主键（秒级时间戳加随机尾数）',
+      comment: '逐记录生成32位UUID，重试保持相同行身份',
       reason: 'ODS系统字段自动生成',
       confidence: 1,
     };

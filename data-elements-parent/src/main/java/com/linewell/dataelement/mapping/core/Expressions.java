@@ -30,6 +30,7 @@ public final class Expressions {
     public static Expr compile(String text,Set<String> targets,Set<String> fields) {
         if(text==null||text.length()>4000)throw new MappingException("EXPRESSION_UNSUPPORTED","表达式长度超限");
         String trimmed=text.trim();
+        if(trimmed.matches("(?i)UUID\\s*\\(\\s*\\)"))return s->s.context().compactGeneratedId(s.rowIndex(),s.ruleId());
         if(trimmed.equalsIgnoreCase("LOCALTIMESTAMP")||trimmed.equalsIgnoreCase("CURRENT_TIMESTAMP"))return s->LocalDateTime.ofInstant(s.context().clock(),s.context().zone());
         LegacyIdFormat legacyId=legacyIdFormat(trimmed);
         if(legacyId!=null)return s->{
@@ -52,7 +53,7 @@ public final class Expressions {
         catch(MappingException ex){throw ex;}catch(Exception ex){throw new MappingException("EXPRESSION_UNSUPPORTED","表达式无法解析为支持的规则AST");}
     }
     private record LegacyIdFormat(boolean milliseconds,int randomBase,int randomRange) {}
-    private static boolean isLegacyId(String expression){return legacyIdFormat(expression)!=null;}
+    public static boolean isLegacyId(String expression){return expression!=null&&legacyIdFormat(expression)!=null;}
     private static LegacyIdFormat legacyIdFormat(String expression){
         String value=expression.replaceAll("\\s+","").toUpperCase(Locale.ROOT);
         // These are the two known ODS templates. Do not permit arbitrary SQL or
@@ -105,7 +106,7 @@ public final class Expressions {
         if(kind.equals("TARGET")){String name=ValueTypes.field(node.path("name").asText(node.path("field").asText()));targets.add(name);return s->s.target(name);}
         if(kind.equals("STEP_INPUT"))return Scope::value;
         if(kind.equals("EXPRESSION"))return compile(node.path("expression").asText(),targets,fields);
-        if(kind.equals("SYSTEM")){String generator=node.path("generator").asText();return switch(generator){case "UUID"->s->s.context().generatedId(s.rowIndex(),s.ruleId());case "NOW"->s->LocalDateTime.ofInstant(s.context().clock(),s.context().zone());default->throw unsupported();};}
+        if(kind.equals("SYSTEM")){String generator=node.path("generator").asText();return switch(generator){case "UUID"->s->s.context().generatedId(s.rowIndex(),s.ruleId());case "UUID32"->s->s.context().compactGeneratedId(s.rowIndex(),s.ruleId());case "NOW"->s->LocalDateTime.ofInstant(s.context().clock(),s.context().zone());default->throw unsupported();};}
         if(kind.equals("LITERAL")){Object value=JSON.convertValue(node.get("value"),Object.class);return s->value;}
         throw unsupported();
     }
@@ -115,7 +116,7 @@ public final class Expressions {
     public static Object or(Object a,Object b){if(truth(a)||truth(b))return true;return a==null||b==null||a==ValueTypes.MISSING||b==ValueTypes.MISSING?null:false;}
     public static Object in(Object value,Collection<?> values){if(value==null||value==ValueTypes.MISSING)return null;boolean unknown=false;for(Object item:values){if(item==null||item==ValueTypes.MISSING){unknown=true;continue;}if(Objects.equals(ValueTypes.canonical(value),ValueTypes.canonical(item)))return true;}return unknown?null:false;}
     public static String outputType(String text){
-        if(text==null)return "ANY";if(isLegacyId(text))return "STRING";
+        if(text==null)return "ANY";if(isLegacyId(text)||text.trim().matches("(?i)UUID\\s*\\(\\s*\\)"))return "STRING";
         if(text.equalsIgnoreCase("LOCALTIMESTAMP")||text.equalsIgnoreCase("CURRENT_TIMESTAMP"))return "DATETIME";
         try{Expression expression=CCJSqlParserUtil.parseExpression(text.replaceAll("\\$\\{[^}]+}","__ref"));if(expression instanceof CastExpression cast)return ValueTypes.type(cast.getColDataType().getDataType());if(expression instanceof Concat||expression instanceof StringValue)return "STRING";if(expression instanceof LongValue)return "LONG";if(expression instanceof DoubleValue)return "DECIMAL";}catch(Exception ignored){}
         return "ANY";

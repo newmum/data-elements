@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.1";
+    public static final String VERSION="1.1.2";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=8L*1024*1024;
@@ -88,6 +88,7 @@ public final class MappingEngine {
         if(specification==null||!specification.isObject())throw new MappingException("INVALID_JSON","字段映射配置必须为对象");
         ObjectNode spec=specification.deepCopy();
         if(!spec.path("schemaVersion").asText("").equals("2.0"))spec=legacy(spec);
+        repairOdsGenerators(spec);
         if(spec.toString().getBytes(StandardCharsets.UTF_8).length>2_097_152)throw new MappingException("BUDGET_EXCEEDED","执行计划超过2MiB");
         SchemaContract.prepare(spec);
         spec.put("planVersion","1.0");spec.put("engineVersion",VERSION);spec.put("functionLibraryVersion",FunctionRegistry.VERSION);
@@ -104,6 +105,7 @@ public final class MappingEngine {
             if(!ids.add(id)||!targets.add(target))throw new MappingException("DUPLICATE_TARGET","规则标识或目标字段重复");
             Set<String> deps=new LinkedHashSet<>(),sources=new LinkedHashSet<>();Eval value=compileRule(node,deps,sources,dictionaries,0);
             JsonNode t=node.path("target");String type=ValueTypes.type(t.path("logicalType").asText(inferType(node)));
+            requireTemporalPrecision(node,type);
             int precision=t.path("precision").asInt(decimalArgument(node,0,38)),scale=t.path("scale").asInt(decimalArgument(node,1,10));
             if(type.equals("DECIMAL")&&(precision<1||precision>1000||scale<0||scale>precision))throw new MappingException("INVALID_ARGUMENT","目标小数精度或scale无效");
             String onError=node.path("onError").asText("ERROR");validateFallback(onError);
@@ -126,7 +128,7 @@ public final class MappingEngine {
             String operator=step.path("operator").asText(),stepId=step.path("stepId").asText("step-"+steps.size());JsonNode args=step.path("args");Eval eval;
             switch(operator){
                 case "DIRECT" -> eval=f->f.current;
-                case "SYSTEM_VALUE" -> {String generator=args.path("generator").asText();eval=generator.equals("UUID")?f->f.context.generatedId(f.index,f.rule):generator.equals("NOW")?f->java.time.LocalDateTime.ofInstant(f.context.clock(),f.context.zone()):null;if(eval==null)throw new MappingException("UNKNOWN_FUNCTION","系统生成器无效");}
+                case "SYSTEM_VALUE" -> {String generator=args.path("generator").asText();eval=generator.equals("UUID")?f->f.context.generatedId(f.index,f.rule):generator.equals("UUID32")?f->f.context.compactGeneratedId(f.index,f.rule):generator.equals("NOW")?f->java.time.LocalDateTime.ofInstant(f.context.clock(),f.context.zone()):null;if(eval==null)throw new MappingException("UNKNOWN_FUNCTION","系统生成器无效");}
                 case "CONCAT" -> {List<Expressions.Expr>inputs=new ArrayList<>();args.path("inputs").forEach(n->inputs.add(Expressions.ast(n,deps,fields,0)));ArrayNode options=JSON.createArrayNode().add(args.path("separator").asText("")).add(args.path("nullElementPolicy").asText("EMPTY"));var fn=FunctionRegistry.bind("concat",options);eval=f->{List<Object> values=new ArrayList<>();inputs.forEach(e->values.add(e.evaluate(f)));return fn.apply(values,f.context);};}
                 case "STRING_OP","NUMBER_OP","FUNCTION" -> {String name=args.path("function").asText();var fn=FunctionRegistry.bind(name,args.path("parameters").isArray()?args.path("parameters"):JSON.createArrayNode());eval=f->fn.apply(f.current,f.context);}
                 case "CAST" -> {String type=args.path("logicalType").asText("STRING");int p=args.path("precision").asInt(38),s=args.path("scale").asInt(10);RoundingMode rounding=RoundingMode.valueOf(args.path("roundingMode").asText("UNNECESSARY"));eval=f->ValueTypes.cast(f.current,type,p,s,rounding,f.context.zone());}
@@ -201,6 +203,38 @@ public final class MappingEngine {
         return new Result(List.copyOf(out),batches,stage);
     }
     private static String inferType(JsonNode rule){if(rule.hasNonNull("when")){String yes=inferType(rule.path("then")),no=rule.has("else")?inferType(rule.path("else")):yes;return yes.equals(no)?yes:"ANY";}JsonNode steps=rule.path("steps");if(steps.size()==0){JsonNode input=rule.path("input");if(input.path("kind").asText().equals("EXPRESSION"))return Expressions.outputType(input.path("expression").asText());if(input.path("kind").asText().equals("SYSTEM"))return input.path("generator").asText().equals("NOW")?"DATETIME":"STRING";JsonNode literal=input.get("value");if(literal!=null&&!literal.isNull())return literal.isBoolean()?"BOOLEAN":literal.isIntegralNumber()?"LONG":literal.isNumber()?"DECIMAL":literal.isTextual()?"STRING":"ANY";return input.path("type").asText("ANY");}JsonNode last=steps.get(steps.size()-1);String op=last.path("operator").asText();return switch(op){case "CAST"->last.path("args").path("logicalType").asText("STRING");case "DATE_PARSE"->last.path("args").path("logicalType").asText("DATE");case "SYSTEM_VALUE"->last.path("args").path("generator").asText().equals("NOW")?"DATETIME":"STRING";case "EXPRESSION"->Expressions.outputType(last.path("args").path("expression").asText());case "ID_CARD_VALIDATE"->"BOOLEAN";case "LOOKUP_MULTI"->last.path("args").path("outputMode").asText("STRING").equals("ARRAY")?"ARRAY":"STRING";case "CONCAT","ID_CARD_15_TO_18","DATE_FORMAT"->"STRING";case "FUNCTION","STRING_OP","NUMBER_OP"->{try{yield FunctionRegistry.bind(last.path("args").path("function").asText(),last.path("args").path("parameters")).outputType();}catch(Exception e){yield "ANY";}}default->"ANY";};}
+    /** Recognized generated ODS templates are upgraded on compilation, never arbitrary expressions. */
+    private static void repairOdsGenerators(ObjectNode spec) {
+        for(JsonNode rule:spec.path("rules")) {
+            if(!"ODS_UUID".equalsIgnoreCase(rule.path("target").path("name").asText()))continue;
+            repairOdsBody(rule);
+        }
+    }
+    private static void repairOdsBody(JsonNode body) {
+        if(body.hasNonNull("when")){repairOdsBody(body.path("then"));repairOdsBody(body.path("else"));return;}
+        JsonNode input=body.path("input");
+        if(input instanceof ObjectNode object&&"EXPRESSION".equals(input.path("kind").asText())
+                &&(Expressions.isLegacyId(input.path("expression").asText())||input.path("expression").asText().trim().matches("(?i)UUID\\s*\\(\\s*\\)"))){
+            object.remove("expression");object.put("kind","SYSTEM").put("generator","UUID32");
+        }
+    }
+    private static void requireTemporalPrecision(JsonNode rule,String targetType) {
+        if(!Set.of("DATETIME","INSTANT").contains(targetType))return;
+        if(rule.hasNonNull("when")){requireTemporalPrecision(rule.path("then"),targetType);requireTemporalPrecision(rule.path("else"),targetType);return;}
+        // A DATE parser produces only a calendar day. Casting it back to DATETIME silently invents midnight.
+        // An explicit later CAST remains available when that loss is intentional.
+        JsonNode steps=rule.path("steps");
+        for(int i=0;i<steps.size();i++) {
+            JsonNode step=steps.get(i);String op=step.path("operator").asText();
+            boolean dateParser=op.equals("DATE_PARSE")&&step.path("args").path("logicalType").asText("DATE").equals("DATE")
+                    ||op.equals("FUNCTION")&&step.path("args").path("function").asText().equals("parseDate")
+                    &&step.path("args").path("parameters").path(1).asText("DATE").equals("DATE");
+            if(dateParser) {
+                boolean explicit= false;for(int j=i+1;j<steps.size();j++)if(steps.get(j).path("operator").asText().equals("CAST"))explicit=true;
+                if(!explicit)throw new MappingException("TEMPORAL_PRECISION_LOSS","时间目标不能使用仅日期解析；请选择日期时间解析，保留时分秒");
+            }
+        }
+    }
     public static ObjectNode legacy(ObjectNode old){
         ObjectNode out=JSON.createObjectNode();out.put("schemaVersion","2.0");out.put("legacyVersion",old.path("version").asText("1.0"));ObjectNode policies=out.putObject("policies");
         policies.put("onMissingSource",old.path("onMissingSource").asText("NULL"));policies.put("recordErrorMode",old.path("recordErrorMode").asText(old.path("onMissingSource").asText().equals("SKIP_ROW")||old.path("onTypeMismatch").asText().equals("SKIP_ROW")?"ROUTE_INVALID":"FAIL_FLOWFILE"));

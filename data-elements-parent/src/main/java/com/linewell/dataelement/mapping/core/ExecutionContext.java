@@ -14,4 +14,10 @@ public record ExecutionContext(Instant clock, ZoneId zone, Locale locale, String
     public String generatedId(long row, String rule) {
         return UUID.nameUUIDFromBytes((inputIdentity + ":" + row + ":" + rule).getBytes(StandardCharsets.UTF_8)).toString();
     }
+    /** All UUID bits are retained; explicit lengths avoid ambiguous namespace concatenation. */
+    public String compactGeneratedId(long row, String rule) {
+        String seed = "haitong:uuid32:v1:" + inputIdentity.length() + ":" + inputIdentity
+                + ":" + row + ":" + rule.length() + ":" + rule;
+        return UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8)).toString().replace("-", "");
+    }
 }

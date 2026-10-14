@@ -90,9 +90,10 @@ export function changePrimaryRuleMode(rule:UnifiedMappingRule,mode:string,id:str
   if(mode===primaryRuleMode(rule))return rule;
   if(mode==='CONDITIONAL')return setConditional(rule,true);
   const next=setConditional(rule,false);
-  if(['CONSTANT','EXPRESSION','SYSTEM'].includes(mode))return {...next,input:mode==='CONSTANT'?{kind:'LITERAL',value:''}:mode==='SYSTEM'?{kind:'SYSTEM',generator:'UUID'}:{kind:'EXPRESSION',expression:''}};
+  if(['CONSTANT','EXPRESSION','SYSTEM'].includes(mode))return {...next,input:mode==='CONSTANT'?{kind:'LITERAL',value:''}:mode==='SYSTEM'?{kind:'SYSTEM',generator:'UUID32'}:{kind:'EXPRESSION',expression:''}};
   const steps=[...next.steps],index=steps.findIndex(s=>!s.uiRole);
   const step={stepId:index<0?id:steps[index].stepId??id,operator:mode,args:stepDefaults(mode)};
+  if(mode==='DATE_PARSE'&&['DATETIME','INSTANT'].includes(next.target.logicalType??''))step.args={pattern:'uuuu-MM-dd HH:mm:ss',logicalType:next.target.logicalType};
   if(index<0)steps.push(step);else steps[index]={...steps[index],...step};
   return {...next,input:next.input.kind==='FIELD'||next.input.kind==='TARGET'?next.input:{kind:'FIELD',name:''},steps};
 }

@@ -19,8 +19,7 @@ function buildLabelMap(columns: unknown): Record<string, string> {
   return map;
 }
 
-const ODS_UUID_EXPRESSION =
-  "CAST(TIMESTAMPDIFF(MILLISECOND, TIMESTAMP '1970-01-01 00:00:00', LOCALTIMESTAMP) AS VARCHAR) || CAST(100000 + RAND_INTEGER(900000) AS VARCHAR)";
+const ODS_UUID_EXPRESSION = 'UUID()';
 
 function buildOdsSystemMapping(toName: string, toLabel?: string): FieldMappingResult | null {
   const target = toName.toUpperCase();
@@ -30,7 +29,7 @@ function buildOdsSystemMapping(toName: string, toLabel?: string): FieldMappingRe
       to: '/ODS_UUID',
       toLabel,
       expression: ODS_UUID_EXPRESSION,
-      comment: 'NiFi生成纯数字ODS主键',
+      comment: '逐记录生成32位UUID，重试保持相同行身份',
     };
   }
   if (target === 'ODS_RKSJ') {
