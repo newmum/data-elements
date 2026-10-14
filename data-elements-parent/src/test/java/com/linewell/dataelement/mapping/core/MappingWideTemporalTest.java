@@ -43,6 +43,18 @@ class MappingWideTemporalTest {
         assertEquals(LocalDate.of(2026,10,14),ValueTypes.cast(input,"DATE",38,10,RoundingMode.UNNECESSARY,ZONE));
         assertNull(ValueTypes.cast(null,"DATETIME",38,10,RoundingMode.UNNECESSARY,ZONE));
     }
+    @Test void offsetInputIsIndependentOfJvmDefaultZoneAndSqlServerTimestampIsNotDatetime() {
+        var previous=java.util.TimeZone.getDefault();
+        try{
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"));
+            assertEquals(Instant.parse("2026-10-14T06:27:49Z"),ValueTypes.instant("2026-10-14 14:27:49 +08:00",ZONE));
+            assertEquals(LocalDateTime.of(2026,10,14,14,27,49),ValueTypes.dateTime("2026-10-14 14:27:49 +08:00",ZONE));
+            assertEquals("ANY",JdbcTemporalTypes.logicalType("timestamp",Map.of("dbType","SQLSERVER")));
+            assertEquals("ANY",JdbcTemporalTypes.logicalType("ROWVERSION",Map.of("jdbcURL","jdbc:sqlserver://host")));
+            assertEquals("DATETIME",JdbcTemporalTypes.logicalType("DATETIME2",Map.of("dbType","SQLSERVER")));
+            assertEquals("DATETIME",JdbcTemporalTypes.logicalType("TIMESTAMP",Map.of("dbType","POSTGRESQL")));
+        }finally{java.util.TimeZone.setDefault(previous);}
+    }
     @Test void authoritativeOracleDateRepairsOldInferredDateTargetWithoutTruncation() throws Exception {
         var spec=JSON.readTree("""
           {"schemaVersion":"2.0","schemaContract":{"target":[{"name":"dt","logicalType":"DATETIME","physicalType":"DATE","dateContainsTime":true}]},"rules":[{"ruleId":"time","target":{"name":"dt","logicalType":"DATE"},"input":{"kind":"FIELD","name":"dt"},"steps":[]}]}

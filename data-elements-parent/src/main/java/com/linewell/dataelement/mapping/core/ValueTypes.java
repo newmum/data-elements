@@ -71,7 +71,7 @@ public final class ValueTypes {
                 case "DATE" -> {
                     if(value instanceof Timestamp||value instanceof Instant||value instanceof OffsetDateTime)yield instant(value,zone).atZone(zone).toLocalDate();
                     if(value instanceof CharSequence sequence){
-                        String text=sequence.toString().trim().replace(' ','T');
+                        String text=sequence.toString().trim().replaceAll("\\s+(?=[+-]\\d{2}:\\d{2}$)","").replace(' ','T');
                         if(text.length()>10){
                             if(text.endsWith("Z")||text.matches(".*[+-]\\d{2}:\\d{2}$"))yield OffsetDateTime.parse(text).toInstant().atZone(zone).toLocalDate();
                             yield dateTime(text,zone).toLocalDate();
@@ -104,7 +104,7 @@ public final class ValueTypes {
         if (v instanceof OffsetDateTime d) return d.toInstant().atZone(zone).toLocalDateTime();
         if (v instanceof LocalDate d) return d.atStartOfDay();
         if (v instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
-        String text = v.toString().trim().replace(' ', 'T');
+        String text = v.toString().trim().replaceAll("\\s+(?=[+-]\\d{2}:\\d{2}$)","").replace(' ', 'T');
         if(text.endsWith("Z")||text.matches(".*[+-]\\d{2}:\\d{2}$"))return OffsetDateTime.parse(text).atZoneSameInstant(zone).toLocalDateTime();
         if (text.length() == 10) return date(text).atStartOfDay();
         return LocalDateTime.parse(text, DateTimeFormatter.ISO_LOCAL_DATE_TIME.withResolverStyle(ResolverStyle.STRICT));
@@ -119,8 +119,9 @@ public final class ValueTypes {
         if (v instanceof OffsetDateTime d) return d.toInstant();
         if (v instanceof java.sql.Date d) return instant(d.toLocalDate().atStartOfDay(),zone);
         if (v instanceof java.util.Date d) return d.toInstant();
-        if (v.toString().endsWith("Z")) return Instant.parse(v.toString());
-        LocalDateTime local = dateTime(v);
+        String text=v.toString().trim().replaceAll("\\s+(?=[+-]\\d{2}:\\d{2}$)","").replace(' ','T');
+        if(text.endsWith("Z")||text.matches(".*[+-]\\d{2}:\\d{2}$"))return OffsetDateTime.parse(text).toInstant();
+        LocalDateTime local = dateTime(v,zone);
         var offsets = zone.getRules().getValidOffsets(local);
         if (offsets.size() != 1) throw new MappingException("DATE_AMBIGUOUS", "本地时间处于夏令时重叠或缺口");
         return local.toInstant(offsets.getFirst());

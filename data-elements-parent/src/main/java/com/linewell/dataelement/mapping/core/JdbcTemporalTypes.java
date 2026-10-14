@@ -22,6 +22,11 @@ public final class JdbcTemporalTypes {
     }
     public static String logicalType(String physicalType,Map<String,?> config) {
         String type=ValueTypes.type(physicalType);
+        String database=text(config,"dbType","databaseType").toUpperCase(Locale.ROOT).replace(' ','_');
+        String url=text(config,"jdbcURL","jdbcUrl","url").toLowerCase(Locale.ROOT);
+        String raw=physicalType==null?"":physicalType.toUpperCase(Locale.ROOT).replaceAll("\\([^)]*\\)","").trim();
+        if((raw.equals("TIMESTAMP")||raw.equals("ROWVERSION"))
+                &&(database.equals("SQLSERVER")||database.equals("SQL_SERVER")||database.equals("MSSQL")||database.startsWith("MS_SQL")||url.startsWith("jdbc:sqlserver:")))return "ANY";
         return type.equals("DATE")&&oracleDateHasTime(config)?"DATETIME":type;
     }
 }
