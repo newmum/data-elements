@@ -25,7 +25,7 @@ public final class FunctionArgumentSchema {
             case "cast"->List.of(p("逻辑类型","STRING",true,"STRING","STRING","INT","LONG","DECIMAL","DOUBLE","BOOLEAN","DATE","TIME","DATETIME","INSTANT","ARRAY"),p("总精度","INTEGER",false,38),p("小数位数","INTEGER",false,10),p("舍入方式","STRING",false,"UNNECESSARY",rounding()));
             case "coalesce","nvl"->List.of(p("第一个候选默认值","JSON",false,null));
             case "nullIf"->List.of(p("相等时置NULL的值","JSON",true,null));
-            case "parseDate"->List.of(p("输入日期格式","STRING",true,"uuuu-MM-dd"),p("时间语义","STRING",false,"DATE","DATE","TIME","DATETIME","INSTANT"));
+            case "parseDate"->List.of(p("输入格式（AUTO自动识别或指定格式）","STRING",true,"AUTO"),p("时间语义","STRING",false,"DATE","DATE","TIME","DATETIME","INSTANT"),p("日期补全参数","OBJECT",false,Map.of()));
             case "formatDate"->List.of(p("输出日期格式","STRING",true,"uuuu-MM-dd"));
             case "addDays","addHours","addMinutes","addSeconds"->List.of(p("偏移量","INTEGER",false,0));
             case "truncateDate"->List.of(p("截断单位","STRING",true,"DAYS","DAYS","HOURS","MINUTES","SECONDS","MILLIS","MICROS"));

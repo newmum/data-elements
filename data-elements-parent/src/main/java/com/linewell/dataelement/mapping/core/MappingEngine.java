@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.6";
+    public static final String VERSION="1.1.10";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=8L*1024*1024;
@@ -135,7 +135,7 @@ public final class MappingEngine {
                 case "CONCAT" -> {List<Expressions.Expr>inputs=new ArrayList<>();args.path("inputs").forEach(n->inputs.add(Expressions.ast(n,deps,fields,0)));ArrayNode options=JSON.createArrayNode().add(args.path("separator").asText("")).add(args.path("nullElementPolicy").asText("EMPTY"));var fn=FunctionRegistry.bind("concat",options);eval=f->{List<Object> values=new ArrayList<>();inputs.forEach(e->values.add(e.evaluate(f)));return fn.apply(values,f.context);};}
                 case "STRING_OP","NUMBER_OP","FUNCTION" -> {String name=args.path("function").asText();var fn=FunctionRegistry.bind(name,args.path("parameters").isArray()?args.path("parameters"):JSON.createArrayNode());eval=f->fn.apply(f.current,f.context);}
                 case "CAST" -> {String type=args.path("logicalType").asText("STRING");int p=args.path("precision").asInt(38),s=args.path("scale").asInt(10);RoundingMode rounding=RoundingMode.valueOf(args.path("roundingMode").asText("UNNECESSARY"));eval=f->ValueTypes.cast(f.current,type,p,s,rounding,f.context.zone());}
-                case "DATE_PARSE","DATE_FORMAT" -> {ArrayNode params=JSON.createArrayNode().add(args.path("pattern").asText()).add(args.path("logicalType").asText("DATE"));var fn=FunctionRegistry.bind(operator.equals("DATE_PARSE")?"parseDate":"formatDate",params);eval=f->fn.apply(f.current,f.context);}
+                case "DATE_PARSE","DATE_FORMAT" -> {ArrayNode params=JSON.createArrayNode().add(args.path("pattern").asText()).add(args.path("logicalType").asText("DATE"));if(operator.equals("DATE_PARSE")){var options=JSON.createObjectNode();if(args.hasNonNull("defaultDate"))options.set("defaultDate",args.get("defaultDate"));params.add(options);}var fn=FunctionRegistry.bind(operator.equals("DATE_PARSE")?"parseDate":"formatDate",params);eval=f->fn.apply(f.current,f.context);}
                 case "ID_CARD_15_TO_18","ID_CARD_VALIDATE" -> {ArrayNode params=JSON.createArrayNode().add(args);var fn=FunctionRegistry.bind(operator.equals("ID_CARD_VALIDATE")?"idCardValidate":"idCard15To18",params);eval=f->fn.apply(f.current,f.context);}
                 case "EXPRESSION" -> {var expression=Expressions.compile(args.path("expression").asText(),deps,fields);eval=expression::evaluate;}
                 case "STATIC_MAP" -> {JsonNode values=args.path("values");if(!values.isObject())throw new MappingException("INVALID_ARGUMENT","枚举映射缺少值表");var fn=FunctionRegistry.bind("enumMap",JSON.createArrayNode().add(values).add(args.get("fallback")));eval=f->fn.apply(f.current,f.context);}

@@ -1,7 +1,6 @@
 import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from "./registeredDatasourceType";
-import {usesUnifiedRecordRules} from './unifiedRuleModel';
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip, Segmented } from 'antd';
+import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip } from 'antd';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import { incrementalFieldVisible } from '../utils/incrementalFields';
 import {
@@ -628,7 +627,7 @@ export default function ConfigDrawer() {
   // 获取同类别下的所有组件列表，用于切换数据源类型。
   const sameCategoryManifests = useMemo(() => {
     if (!manifests || !node) return [];
-    return manifests.filter((m) => m.category === node.category);
+    return manifests.filter((m) => m.category === node.category && m.key !== 'transform.field-mapping');
   }, [manifests, node?.category]);
 
   // 切换组件类型。
@@ -1713,26 +1712,8 @@ export default function ConfigDrawer() {
               </div>
               <div className="coze-drawer-header__key">{manifest.key}</div>
             </div>
-            {isFieldMappingDrawer && (
-              <div className="field-mapping-header-execution-mode">
-                <span>执行方式</span>
-                {usesUnifiedRecordRules(node.config.mappings) ? <Tooltip title="统一规则在记录处理中执行，预览与发布使用同一规则；转换不会下推为来源数据库 SQL。"><span>统一规则 · 记录处理</span></Tooltip> : <><Segmented
-                  size="small"
-                  value={String(node.config.executionMode ?? 'AUTO')}
-                  options={[
-                    { label: '自动优化', value: 'AUTO' },
-                    { label: '来源 SQL', value: 'SOURCE_DB' },
-                    { label: '记录处理', value: 'RECORD' },
-                  ]}
-                  onChange={(executionMode) => updateConfig(node.id, { executionMode })}
-                />
-                <Tooltip title="自动模式会在规则完全兼容来源数据库时合并为一条 SQL；含 NiFi 表达式、跨库字典或需要失败路由时自动使用记录处理。">
-                  <span className="field-mapping-execution-tip">?</span>
-                </Tooltip></>}
-              </div>
-            )}
             {/* 切换组件类型，仅当同类别有多个组件时显示。 */}
-            {sameCategoryManifests.length > 1 && (
+            {!isFieldMappingDrawer && sameCategoryManifests.length > 1 && (
                 <Select
                   value={node.manifestKey}
                   onChange={handleSwitchManifest}

@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /** Compile once, execute typed Java functions only. No SQL, JDBC, Spring or NiFi dependencies. */
 public final class FunctionRegistry {
-    public static final String VERSION = "1.1.6";
+    public static final String VERSION = "1.1.10";
     public static String libraryVersion(){return VERSION;}
     private static final ObjectMapper JSON = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     public static final Set<String> NAMES = Collections.unmodifiableSet(new LinkedHashSet<>(List.of(
@@ -83,8 +83,10 @@ public final class FunctionRegistry {
             case "cast" -> { if(s0.isBlank())throw bad(); yield call(ValueTypes.type(s0),(v,c)->ValueTypes.cast(v,s0,integer(a,1,38),integer(a,2,10),rounding(a,3,RoundingMode.UNNECESSARY),c.zone())); }
             case "coalesce","nvl" -> call("ANY",(v,c)->v!=null?v:a.stream().filter(Objects::nonNull).findFirst().orElse(null));
             case "nullIf" -> call("ANY",(v,c)->!a.isEmpty()&&Objects.equals(ValueTypes.canonical(v),ValueTypes.canonical(a.getFirst()))?null:v);
-            case "parseDate" -> { if(s0.isBlank())throw bad(); DateTimeFormatter f=DateTimeFormatter.ofPattern(s0.replace("yyyy","uuuu"),Locale.ROOT).withResolverStyle(ResolverStyle.STRICT);
-                String t=string(a,1,"DATE"); yield call(t,(v,c)->v==null?null:t.equalsIgnoreCase("DATE")?LocalDate.parse(v.toString(),f.withLocale(c.locale())):t.equalsIgnoreCase("TIME")?LocalTime.parse(v.toString(),f.withLocale(c.locale())):t.equalsIgnoreCase("INSTANT")?Instant.from(f.withLocale(c.locale()).parse(v.toString())):LocalDateTime.parse(v.toString(),f.withLocale(c.locale()))); }
+            case "parseDate" -> {
+                if(a.size()>3||a.size()>2&&a.get(2)!=null&&!(a.get(2) instanceof Map<?,?>))throw bad();
+                var parser=TemporalParser.bind(s0,string(a,1,"DATE"),a.size()>2?(Map<?,?>)a.get(2):Map.of());
+                yield call(parser.outputType(),(v,c)->parser.parse(v,c.zone(),c.locale())); }
             case "formatDate" -> { if(s0.isBlank())throw bad(); DateTimeFormatter f=DateTimeFormatter.ofPattern(s0.replace("yyyy","uuuu"),Locale.ROOT);
                 yield call("STRING",(v,c)->v==null?null:v instanceof LocalDate d?f.withLocale(c.locale()).format(d):v instanceof LocalTime time?f.withLocale(c.locale()).format(time):v instanceof java.sql.Time time?f.withLocale(c.locale()).format(time.toLocalTime()):v instanceof Instant i?f.withLocale(c.locale()).withZone(c.zone()).format(i):f.withLocale(c.locale()).format(ValueTypes.dateTime(v,c.zone()))); }
             case "toEpochMs" -> call("LONG",(v,c)->v==null?null:ValueTypes.instant(v,c.zone()).toEpochMilli());

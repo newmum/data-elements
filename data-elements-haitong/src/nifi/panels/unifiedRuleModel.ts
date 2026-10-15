@@ -34,7 +34,7 @@ export function stepDefaults(operator:string):Record<string,unknown> {
   switch(operator){
     case 'FUNCTION':return {function:'trim',parameters:[]};
     case 'CAST':return {logicalType:'STRING',precision:38,scale:10,roundingMode:'UNNECESSARY'};
-    case 'DATE_PARSE':return {pattern:'uuuu-MM-dd',logicalType:'DATE'};
+    case 'DATE_PARSE':return {pattern:'AUTO',logicalType:'DATE'};
     case 'DATE_FORMAT':return {pattern:'uuuuMMdd',logicalType:'DATE'};
     case 'ID_CARD_15_TO_18':return {centuryPolicy:'PREFIX_19',already18Policy:'VALIDATE_AND_KEEP'};
     case 'ID_CARD_VALIDATE':return {};
@@ -93,7 +93,7 @@ export function changePrimaryRuleMode(rule:UnifiedMappingRule,mode:string,id:str
   if(['CONSTANT','EXPRESSION','SYSTEM'].includes(mode))return {...next,input:mode==='CONSTANT'?{kind:'LITERAL',value:''}:mode==='SYSTEM'?{kind:'SYSTEM',generator:'UUID32'}:{kind:'EXPRESSION',expression:''}};
   const steps=[...next.steps],index=steps.findIndex(s=>!s.uiRole);
   const step={stepId:index<0?id:steps[index].stepId??id,operator:mode,args:stepDefaults(mode)};
-  if(mode==='DATE_PARSE'&&['DATETIME','INSTANT'].includes(next.target.logicalType??''))step.args={pattern:'uuuu-MM-dd HH:mm:ss',logicalType:next.target.logicalType};
+  if(mode==='DATE_PARSE'&&['TIME','DATETIME','INSTANT'].includes(next.target.logicalType??''))step.args={pattern:'AUTO',logicalType:next.target.logicalType};
   if(index<0)steps.push(step);else steps[index]={...steps[index],...step};
   return {...next,input:next.input.kind==='FIELD'||next.input.kind==='TARGET'?next.input:{kind:'FIELD',name:''},steps};
 }
@@ -123,7 +123,8 @@ export function validateRuleForm(rule:UnifiedMappingRule):string[] {
     if(value.when!=null){if(typeof value.when==='string'){if(!value.when.trim())errors.push(label+'请填写条件表达式');}else predicate(value.when as Predicate,label,0);if(!value.then)errors.push(label+'缺少成立分支');else body(value.then as RuleBody,label+'成立分支',depth+1);if(value.else)body(value.else as RuleBody,label+'不成立分支',depth+1);return;}
     input(value.input,label);
     for(const step of value.steps??[]){const args=step.args??{};
-      if(['DATE_PARSE','DATE_FORMAT'].includes(step.operator)&&!String(args.pattern??'').trim())errors.push(label+'请填写日期格式');
+      if(step.operator==='DATE_FORMAT'&&!String(args.pattern??'').trim())errors.push(label+'请填写日期格式');
+      if(step.operator==='DATE_PARSE'&&args.defaultDate&&!/^\d{4}-\d{2}-\d{2}$/.test(String(args.defaultDate)))errors.push(label+'补全日期请使用 YYYY-MM-DD');
       if(step.operator==='FUNCTION'&&!args.function)errors.push(label+'请选择函数');
       if(['LOOKUP','LOOKUP_MULTI'].includes(step.operator)&&!args.dictionaryId&&!args.definitionRef&&!args.values){const d=(args.definition??{}) as Record<string,unknown>;if(!d.datasourceId||!d.tableId||!Array.isArray(d.keyColumns)||!d.keyColumns.length||!d.valueColumn)errors.push(label+'请选择码表数据源、登记表、键列与取值列');}
     }

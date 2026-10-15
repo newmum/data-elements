@@ -96,7 +96,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
         var result=MappingEngine.execute(plan,rows,offset,context,dictionaries);
         counts[2]++;counts[3]+=result.dictionaryBatches();
         for(var row:result.rows()){
-            if(row.success()){Map<String,Object>converted=new LinkedHashMap<>();row.output().forEach((key,value)->converted.put(key,writerValue(value,context.zone())));writer.write(new MapRecord(schema,converted));counts[0]++;}
+            if(row.success()){Map<String,Object>converted=new LinkedHashMap<>();row.output().forEach((key,value)->converted.put(key,NifiTemporalValues.writerValue(value,context.zone())));writer.write(new MapRecord(schema,converted));counts[0]++;}
             else{if(plan.recordMode().equals("FAIL_FLOWFILE"))throw new MappingException("RECORD_INVALID","字段规则执行失败，整批输入保留");
                 Map<String,Object>envelope=new LinkedHashMap<>();envelope.put("planHash",plan.hash());envelope.put("inputRecordIndex",row.index());envelope.put("errors",row.errors());
                 // Original values stay in the controlled content queue, never attributes/logs.
@@ -104,7 +104,6 @@ public class HaitongTransformRecord extends AbstractProcessor {
             }
         }
     }
-    private static Object writerValue(Object value,ZoneId zone){if(value instanceof LocalDate d)return java.sql.Date.valueOf(d);if(value instanceof LocalTime time)return java.sql.Time.valueOf(time);if(value instanceof LocalDateTime d)return java.sql.Timestamp.from(ValueTypes.instant(d,zone));if(value instanceof Instant i)return java.sql.Timestamp.from(i);return value;}
     private static RecordSchema outputSchema(MappingEngine.Plan plan,RecordSchema input){
         LinkedHashMap<String,RecordField>fields=new LinkedHashMap<>();if(plan.passthrough())input.getFields().forEach(f->{if(!plan.excludes().contains(f.getFieldName()))fields.put(f.getFieldName(),f);});
         plan.outputContracts().forEach((name,contract)->{String type=contract.logicalType();

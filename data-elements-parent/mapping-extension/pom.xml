@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion><groupId>com.linewell.dataelement</groupId><artifactId>haitong-mapping-extension</artifactId><version>1.1.6</version><packaging>pom</packaging>
+  <modelVersion>4.0.0</modelVersion><groupId>com.linewell.dataelement</groupId><artifactId>haitong-mapping-extension</artifactId><version>1.1.10</version><packaging>pom</packaging>
   <properties><maven.compiler.release>21</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding><nifi.version>2.11.0</nifi.version><jackson.version>2.17.3</jackson.version><mapping.output.root>${maven.multiModuleProjectDirectory}/../../logs/field-mapping-extension</mapping.output.root></properties>
   <modules><module>core</module><module>runtime</module><module>nar</module></modules>
   <dependencyManagement><dependencies><dependency><groupId>org.junit</groupId><artifactId>junit-bom</artifactId><version>6.1.2</version><type>pom</type><scope>import</scope></dependency></dependencies></dependencyManagement>

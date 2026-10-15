@@ -2,10 +2,7 @@ package com.linewell.dataelement.mapping.core;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.sql.Timestamp;
 import java.time.*;
-import java.time.format.DateTimeFormatter;
-import java.time.format.ResolverStyle;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
@@ -68,64 +65,18 @@ public final class ValueTypes {
                     case "false", "0" -> false;
                     default -> throw new IllegalArgumentException();
                 };
-                case "DATE" -> {
-                    if(value instanceof Timestamp||value instanceof Instant||value instanceof OffsetDateTime)yield instant(value,zone).atZone(zone).toLocalDate();
-                    if(value instanceof CharSequence sequence){
-                        String text=sequence.toString().trim().replaceAll("\\s+(?=[+-]\\d{2}:\\d{2}$)","").replace(' ','T');
-                        if(text.length()>10){
-                            if(text.endsWith("Z")||text.matches(".*[+-]\\d{2}:\\d{2}$"))yield OffsetDateTime.parse(text).toInstant().atZone(zone).toLocalDate();
-                            yield dateTime(text,zone).toLocalDate();
-                        }
-                    }
-                    yield date(value);
-                }
-                case "DATETIME" -> dateTime(value,zone);
-                case "TIME" -> time(value);
-                case "INSTANT" -> instant(value, zone);
+                case "DATE", "DATETIME", "TIME", "INSTANT" -> TemporalParser.auto(value,type(rawType),zone);
                 case "ARRAY" -> { if (!(value instanceof Collection<?>)) throw new IllegalArgumentException(); yield value; }
                 default -> throw new MappingException("UNSUPPORTED_TYPE", "不支持的逻辑目标类型: " + rawType);
             };
         } catch (MappingException ex) { throw ex; }
         catch (RuntimeException ex) { throw new MappingException("TYPE_MISMATCH", "目标类型转换失败或超出精度/范围: " + type(rawType)); }
     }
-    public static LocalDate date(Object v) {
-        if (v instanceof LocalDate d) return d;
-        if (v instanceof java.sql.Date d) return d.toLocalDate();
-        if (v instanceof LocalDateTime d) return d.toLocalDate();
-        return LocalDate.parse(v.toString(), DateTimeFormatter.ISO_LOCAL_DATE.withResolverStyle(ResolverStyle.STRICT));
-    }
-    public static LocalDateTime dateTime(Object v) {
-        return dateTime(v,ZoneId.systemDefault());
-    }
-    public static LocalDateTime dateTime(Object v,ZoneId zone) {
-        if (v instanceof LocalDateTime d) return d;
-        if (v instanceof Timestamp d) return d.toInstant().atZone(zone).toLocalDateTime();
-        if (v instanceof Instant d) return d.atZone(zone).toLocalDateTime();
-        if (v instanceof OffsetDateTime d) return d.toInstant().atZone(zone).toLocalDateTime();
-        if (v instanceof LocalDate d) return d.atStartOfDay();
-        if (v instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
-        String text = v.toString().trim().replaceAll("\\s+(?=[+-]\\d{2}:\\d{2}$)","").replace(' ', 'T');
-        if(text.endsWith("Z")||text.matches(".*[+-]\\d{2}:\\d{2}$"))return OffsetDateTime.parse(text).atZoneSameInstant(zone).toLocalDateTime();
-        if (text.length() == 10) return date(text).atStartOfDay();
-        return LocalDateTime.parse(text, DateTimeFormatter.ISO_LOCAL_DATE_TIME.withResolverStyle(ResolverStyle.STRICT));
-    }
-    public static LocalTime time(Object value) {
-        if(value instanceof LocalTime time)return time;
-        if(value instanceof java.sql.Time time)return time.toLocalTime();
-        return LocalTime.parse(value.toString().trim(),DateTimeFormatter.ISO_LOCAL_TIME.withResolverStyle(ResolverStyle.STRICT));
-    }
-    public static Instant instant(Object v, ZoneId zone) {
-        if (v instanceof Instant i) return i;
-        if (v instanceof OffsetDateTime d) return d.toInstant();
-        if (v instanceof java.sql.Date d) return instant(d.toLocalDate().atStartOfDay(),zone);
-        if (v instanceof java.util.Date d) return d.toInstant();
-        String text=v.toString().trim().replaceAll("\\s+(?=[+-]\\d{2}:\\d{2}$)","").replace(' ','T');
-        if(text.endsWith("Z")||text.matches(".*[+-]\\d{2}:\\d{2}$"))return OffsetDateTime.parse(text).toInstant();
-        LocalDateTime local = dateTime(v,zone);
-        var offsets = zone.getRules().getValidOffsets(local);
-        if (offsets.size() != 1) throw new MappingException("DATE_AMBIGUOUS", "本地时间处于夏令时重叠或缺口");
-        return local.toInstant(offsets.getFirst());
-    }
+    public static LocalDate date(Object value) { return (LocalDate)TemporalParser.auto(value,"DATE",ZoneId.systemDefault()); }
+    public static LocalDateTime dateTime(Object value) { return dateTime(value,ZoneId.systemDefault()); }
+    public static LocalDateTime dateTime(Object value,ZoneId zone) { return (LocalDateTime)TemporalParser.auto(value,"DATETIME",zone); }
+    public static LocalTime time(Object value) { return (LocalTime)TemporalParser.auto(value,"TIME",ZoneId.systemDefault()); }
+    public static Instant instant(Object value,ZoneId zone) { return (Instant)TemporalParser.auto(value,"INSTANT",zone); }
     public static Object canonical(Object value) {
         return value instanceof Number ? decimal(value).stripTrailingZeros() : value;
     }

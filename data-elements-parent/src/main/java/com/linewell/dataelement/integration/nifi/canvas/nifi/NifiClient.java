@@ -58,14 +58,14 @@ public class NifiClient {
 
     public String clientId() { return clientId; }
 
-    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.6");}
+    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.10");}
 
     public void requireMappingExtension(){
         JsonNode processors=get("/flow/processor-types",JsonNode.class).path("processorTypes");
         JsonNode services=get("/flow/controller-service-types",JsonNode.class).path("controllerServiceTypes");
         for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
             int count=0;for(JsonNode type:entry.getKey())if(type.path("type").asText().equals(entry.getValue())&&type.path("bundle").equals(mappingBundle()))count++;
-            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展1.1.6，请安装haitong-mapping-nar后部署");
+            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展1.1.10，请安装haitong-mapping-nar后部署");
         }
         JsonNode cluster=get("/flow/cluster/summary",JsonNode.class).path("clusterSummary");
         if(cluster.path("clustered").asBoolean()&&cluster.path("connectedNodeCount").asInt()>1)throw new IllegalStateException("多节点集群须完成全部节点扩展版本核验后才能部署统一映射");

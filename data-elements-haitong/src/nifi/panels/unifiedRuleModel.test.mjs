@@ -6,7 +6,7 @@ import {createRule,emptyUnifiedDraft,setConditional,setNullHandling,nullHandling
 test('time target defaults to a datetime parser and ODS system value fits varchar32',()=>{
  const rule={...createRule('DIRECT','r'),input:{kind:'FIELD',name:'created_time'},target:{name:'created_time',logicalType:'DATETIME'}};
  const result=changePrimaryRuleMode(rule,'DATE_PARSE','date');
- assert.deepEqual(result.steps[0].args,{pattern:'uuuu-MM-dd HH:mm:ss',logicalType:'DATETIME'});
+ assert.deepEqual(result.steps[0].args,{pattern:'AUTO',logicalType:'DATETIME'});
  assert.deepEqual(changePrimaryRuleMode(rule,'SYSTEM','uuid').input,{kind:'SYSTEM',generator:'UUID32'});
  assert.equal(changePrimaryRuleMode({...rule,target:{...rule.target,logicalType:'DATE'}},'DATE_PARSE','day').steps[0].args.logicalType,'DATE');
 });
@@ -100,4 +100,15 @@ test('precision checks reject underflow and subnormal rounding; preview decoding
   for(const value of ['1e-400','4e-324'])assert.throws(()=>parseNumericConstant(value));
   assert.equal(parseNumericConstant('1.25e3'),1250);
   assert.deepEqual(parsePreciseJson('{"amount":12345678901234567890.123456789012345678,"id":9007199254740993,"count":100,"name":"12345678901234567890"}'),{amount:'12345678901234567890.123456789012345678',id:'9007199254740993',count:100,name:'12345678901234567890'});
+});
+
+
+test('date parsing auto detection preserves explicit formats and validates optional completion',()=>{
+ const rule=createRule('DATE_PARSE','auto');rule.input.name='d';rule.target.name='d';
+ assert.equal(rule.steps[0].args.pattern,'AUTO');assert.deepEqual(validateRuleForm(rule),[]);
+ rule.steps[0].args={pattern:'dd/MM/uuuu',logicalType:'DATE'};assert.deepEqual(validateRuleForm(rule),[]);
+ assert.equal(changePrimaryRuleMode(rule,'DATE_PARSE','same').steps[0].args.pattern,'dd/MM/uuuu');
+ rule.steps[0].args.defaultDate='2000/01/01';assert.ok(validateRuleForm(rule).some(x=>x.includes('补全日期')));
+ const time=changePrimaryRuleMode({...createRule('DIRECT','t'),target:{name:'t',logicalType:'TIME'}},'DATE_PARSE','time');
+ assert.deepEqual(time.steps[0].args,{pattern:'AUTO',logicalType:'TIME'});
 });

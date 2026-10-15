@@ -32,6 +32,19 @@ class HaitongTransformRecordTest {
         var runner=runner("NULL","FAIL_FLOWFILE");runner.enqueue("[{\"x\":\"value\"}]",Map.of("ht.plan.hash","upstream-plan","ht.plan.node.id","upstream-node","ht.input.identity","stable-input","ht.execution.clock","0"));runner.run();
         runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);var output=runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst();assertEquals("stable-input",output.getAttribute("ht.input.identity"));assertEquals("0",output.getAttribute("ht.execution.clock"));assertNotNull(output.getAttribute("ht.plan.hash."+runner.getProcessor().getIdentifier()));
     }
+    @Test void sameTextColumnUsesPerValueDateDetectionEvenWithSourceSchema()throws Exception{
+        var runner=runner("NULL","FAIL_FLOWFILE");
+        runner.setProperty(HaitongTransformRecord.TYPED_READER,"reader");
+        var spec=JSON.readTree("""
+          {"schemaVersion":"2.0","policies":{"zoneId":"Asia/Shanghai"},"rules":[{"ruleId":"time","target":{"name":"y","logicalType":"DATETIME"},"input":{"kind":"FIELD","name":"x"},"steps":[{"operator":"DATE_PARSE","args":{"pattern":"AUTO","logicalType":"DATETIME"}}]}]}
+          """);
+        var plan=MappingEngine.compile(spec);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
+        var values=List.of("2024/05/10 14:27:49","2024-05-10 14:27:49","20240510142749","2024-05-10T06:27:49Z","10-MAY-24 02.27.49 PM");
+        var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<100;i++)rows.add(Map.of("x",values.get(i%values.size())));
+        runner.enqueue(JSON.writeValueAsBytes(rows),Map.of("avro.schema","source-string-schema"));runner.run();runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);
+        var output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(100,output.size());
+        for(var row:output)assertEquals(java.time.Instant.parse("2024-05-10T06:27:49Z").toEpochMilli(),row.path("y").asLong());
+    }
     @Test void splitChildrenWithSameParentIdentityHaveDifferentUuidsAndRetryIsStable() throws Exception {
         TestRunner runner=runner("NULL","FAIL_FLOWFILE");
         var spec=JSON.createObjectNode().put("version","1.0");spec.putArray("mappings").addObject().put("to","/ODS_UUID").put("expression","UUID()");

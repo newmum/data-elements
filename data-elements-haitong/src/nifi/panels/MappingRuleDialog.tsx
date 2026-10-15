@@ -3,8 +3,9 @@ import { App, AutoComplete, Button, Checkbox, Collapse, Input, InputNumber, Moda
 import { nanoid } from 'nanoid';
 import type { FieldMeta, FunctionParameter, UnifiedMappingDraft, UnifiedMappingRule } from '../api/fieldMapping';
 import { getNifiOverlayContainer } from './overlayContainer';
-import { BranchBodyEditor, Choice, ConversionStepsEditor, FallbackEditor, JsonValueEditor, NullHandlingEditor, PredicateEditor, RuleFormErrors, RuleInputEditor, StepParameterForm, TypedValueEditor, type DatasourceChoice } from './UnifiedRuleForms';
-import { changePrimaryRuleMode, isEditableRule, logicalFieldType, PRESETS, primaryRuleMode, RULE_TYPES, stepSummary, TYPE_LABELS, validateRuleForm, type Predicate, type RuleBody } from './unifiedRuleModel';
+import { BranchBodyEditor, Choice, ConversionStepsEditor, ExpressionEditor, FallbackEditor, JsonValueEditor, NullHandlingEditor, PredicateEditor, RuleFormErrors, RuleInputEditor, StepParameterForm, TypedValueEditor, type DatasourceChoice } from './UnifiedRuleForms';
+import { isEditableRule, logicalFieldType, RULE_TYPES, stepSummary, TYPE_LABELS, validateRuleForm, type Predicate, type RuleBody } from './unifiedRuleModel';
+import { concreteRuleMode, RULE_CHOICE_GROUPS, ruleChoice, selectConcreteRule } from './mappingRulePresentation';
 
 interface Props {
   initial: UnifiedMappingRule;
@@ -20,8 +21,6 @@ interface Props {
   onApply: (rule: UnifiedMappingRule) => void;
   onClose: () => void;
 }
-const MODES = [...PRESETS.map(p=>({value:p.key,label:p.label.replace('字段','赋值').replace('映射','')})),
-  {value:'DATE_FORMAT',label:'日期格式化'},{value:'CONCAT',label:'多字段合并'},{value:'STATIC_MAP',label:'枚举对标'},{value:'SYSTEM',label:'系统值'}];
 
 /** Both the table configuration link and the toolbar add button use this form. */
 export default function MappingRuleDialog(props:Props) {
@@ -31,13 +30,14 @@ export default function MappingRuleDialog(props:Props) {
   const [expanded,setExpanded]=useState<string[]>([]);
   const formErrors=useRef(new Map<string,string>());
   const report=useCallback((id:string,error:string)=>{if(error)formErrors.current.set(id,error);else formErrors.current.delete(id);},[]);
-  const mode=primaryRuleMode(rule), conditional=rule.when!=null;
+  const mode=concreteRuleMode(rule), conditional=rule.when!=null;
+  const generated=['UUID32','UUID','CURRENT_TIME'].includes(mode);
   const stepIndex=rule.steps.findIndex(s=>!s.uiRole),step=rule.steps[stepIndex];
   const common={fields:props.fields,functionSchemas:props.functionSchemas,datasources:props.datasources,dictionaryBindings:props.draft.dictionaryBindings,loadDatasources:props.loadDatasources};
   const visibleSteps=rule.steps.filter(s=>!s.uiRole);
   function changeMode(next:string) {
-    const apply=()=>{setRule(current=>changePrimaryRuleMode(current,next,nanoid()));setErrors([]);};
-    if(conditional&&next!=='CONDITIONAL')modal.confirm({title:'切换转换方式',content:'切换后将使用普通字段转换，当前条件及分支会移除。',getContainer:getNifiOverlayContainer,onOk:apply});
+    const apply=()=>{setRule(current=>selectConcreteRule(current,next,nanoid()));setErrors([]);};
+    if(conditional&&next!=='CONDITIONAL')modal.confirm({title:'切换映射规则',content:'切换后将使用所选规则，当前判断条件及两个分支会移除。',getContainer:getNifiOverlayContainer,onOk:apply});
     else apply();
   }
   function apply() {
@@ -51,7 +51,7 @@ export default function MappingRuleDialog(props:Props) {
     ? <div className="unified-form-field"><Typography.Text>源字段</Typography.Text><AutoComplete aria-label="源字段" value={rule.input.name??''} placeholder="选择或填写源字段" options={fieldOptions(props.fields,props.sourceLabels)} filterOption={(text,option)=>String(option?.label??'').toLowerCase().includes(text.toLowerCase())} onChange={name=>setRule(current=>({...current,input:{...current.input,name}}))}/></div>
     : rule.input.kind==='LITERAL'
       ? <TypedValueEditor value={rule.input.value??null} onChange={value=>setRule({...rule,input:{...rule.input,value}})}/>
-      : <RuleInputEditor input={rule.input} fields={props.fields} onChange={input=>setRule({...rule,input})}/>;
+      : !generated&&rule.input.kind!=='EXPRESSION'&&<RuleInputEditor input={rule.input} fields={props.fields} onChange={input=>setRule({...rule,input})}/>;
   const conditionalForm=conditional&&<div className="fm-rule-condition">
     <div className="fm-rule-section-title">判断条件</div>
     {typeof rule.when==='string'
@@ -62,17 +62,24 @@ export default function MappingRuleDialog(props:Props) {
   return <Modal className="fm-rule-modal" width={760} open title={props.creating?'添加映射规则':'映射规则 · '+(rule.target.name||'字段配置')} getContainer={getNifiOverlayContainer} onCancel={props.onClose} footer={<div className="fm-rule-footer"><Typography.Text type="secondary">配置应用后，保存画布即可保留。</Typography.Text><Space><Button onClick={props.onClose}>取消</Button><Button type="primary" onClick={apply}>应用规则</Button></Space></div>}>
     <RuleFormErrors.Provider value={report}>
       <div className="fm-rule-main">
+        <section className="fm-rule-choice">
+          <div className="unified-form-field"><Typography.Text>映射规则</Typography.Text><Select aria-label="映射规则" showSearch optionFilterProp="label" value={mode} options={RULE_CHOICE_GROUPS} onChange={changeMode}/></div>
+          <Typography.Text type="secondary" className="fm-rule-description">{ruleChoice(mode).description}</Typography.Text>
+        </section>
+        <section className="fm-rule-fields">
+        <div className="fm-rule-section-title">字段对应</div>
         <div className="unified-form-grid">
           {!conditional&&sourceInput}
           <div className="unified-form-field"><Typography.Text>目标字段</Typography.Text><AutoComplete aria-label="目标字段" value={rule.target.name} placeholder="选择或填写目标字段" options={fieldOptions(props.targets,props.targetLabels)} filterOption={(text,option)=>String(option?.label??'').toLowerCase().includes(text.toLowerCase())} onChange={name=>setRule({...rule,target:{...rule.target,name}})} onSelect={name=>{
             const field=props.targets.find(f=>f.name===name);
             setRule({...rule,target:{...rule.target,name,...(field?{logicalType:logicalFieldType(field),nullable:field.nullable,length:field.length,precision:field.precision,scale:field.scale}:{})}});
           }}/><Typography.Text type="secondary" className="fm-rule-type-note">输出类型：{TYPE_LABELS[rule.target.logicalType??'ANY']??rule.target.logicalType}</Typography.Text></div>
-        </div>
-        <div className="fm-rule-conversion"><div className="unified-form-field"><Typography.Text>转换方式</Typography.Text><Select aria-label="转换方式" showSearch optionFilterProp="label" value={mode} options={MODES} onChange={changeMode}/></div>
+        </div></section>
+        <div className="fm-rule-conversion">
           {conditionalForm}
-          {!conditional&&step&&!['DIRECT','CONSTANT','EXPRESSION','SYSTEM'].includes(mode)&&<div className="fm-rule-parameters"><StepParameterForm {...common} steps={rule.steps} step={step} onChange={patchStep}/></div>}
-          {!conditional&&visibleSteps.some(s=>s.operator!=='DIRECT')&&(['CONSTANT','EXPRESSION','SYSTEM'].includes(mode)||visibleSteps.length>1)&&<div className="fm-rule-chain-note"><Typography.Text type="secondary">已配置转换：{visibleSteps.map(stepSummary).join(' → ')}</Typography.Text><Button type="link" size="small" onClick={()=>setExpanded(keys=>[...new Set([...keys,'steps'])])}>调整步骤</Button></div>}
+          {!conditional&&mode==='EXPRESSION'&&<ExpressionEditor expression={rule.input.expression??''} fields={props.fields} onChange={expression=>setRule({...rule,input:{...rule.input,expression}})}/>}
+          {!conditional&&step&&!generated&&!['DIRECT','CONSTANT','EXPRESSION','SYSTEM'].includes(mode)&&<section className="fm-rule-parameters"><div className="fm-rule-section-title">{ruleChoice(mode).label} · 规则参数</div><StepParameterForm {...common} steps={rule.steps} step={step} onChange={patchStep}/></section>}
+          {!conditional&&visibleSteps.some(s=>s.operator!=='DIRECT')&&(generated||['CONSTANT','EXPRESSION','SYSTEM'].includes(mode)||visibleSteps.length>1)&&<div className="fm-rule-chain-note"><Typography.Text type="secondary">后续处理：{visibleSteps.map(stepSummary).join(' → ')}</Typography.Text><Button type="link" size="small" onClick={()=>setExpanded(keys=>[...new Set([...keys,'steps'])])}>查看转换步骤</Button></div>}
         </div>
       </div>
       <Collapse className="fm-rule-options" activeKey={expanded} onChange={keys=>setExpanded(Array.isArray(keys)?keys:[keys])} items={[
@@ -88,7 +95,7 @@ export default function MappingRuleDialog(props:Props) {
           {rule.target.logicalType==='DECIMAL'&&<div className="unified-form-field"><Typography.Text>精度 / 小数位</Typography.Text><Space><InputNumber aria-label="目标精度" min={1} max={1000} value={rule.target.precision??38} onChange={precision=>setRule({...rule,target:{...rule.target,precision:precision??38}})}/><InputNumber aria-label="目标小数位" min={0} max={rule.target.precision??38} value={rule.target.scale??10} onChange={scale=>setRule({...rule,target:{...rule.target,scale:scale??0}})}/></Space></div>}
           <Typography.Text type="secondary">范围、格式及允许值可通过“输出校验”转换或附加转换步骤配置。</Typography.Text>
         </div>},
-        {key:'steps',label:'组合转换'+(visibleSteps.length>1?' · '+visibleSteps.length+' 个步骤':''),children:conditional?<Typography.Text type="secondary">请在各条件分支内配置转换步骤。</Typography.Text>:<ConversionStepsEditor {...common} steps={rule.steps} onChange={steps=>setRule({...rule,steps})}/>},
+        {key:'steps',label:'附加转换步骤'+(visibleSteps.length>1?' · '+visibleSteps.length+' 个步骤':''),children:conditional?<Typography.Text type="secondary">请在各条件分支内配置转换步骤。</Typography.Text>:<ConversionStepsEditor {...common} steps={rule.steps} onChange={steps=>setRule({...rule,steps})}/>},
         {key:'advanced',label:'高级设置',children:<div className="unified-rule-section">
           {!conditional&&<RuleInputEditor input={rule.input} fields={props.fields} onChange={input=>setRule({...rule,input})}/>}
           {conditional&&<Choice label="条件配置方式" value={typeof rule.when==='string'?'expression':'visual'} choices={{visual:'可视化条件',expression:'安全条件表达式'}} onChange={mode=>{

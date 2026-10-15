@@ -71,8 +71,17 @@ public class UnifiedMappingService {
             for(var row:result.rows()){if(row.success())rows.add(row.output());else invalid++;results.add(new FieldMappingService.RowResult((int)row.index(),row.success(),row.errors().stream().map(e->e.code()+" / "+e.ruleId()+" / "+e.message()).toList()));}
             Map<String,Object>stats=new LinkedHashMap<>();stats.put("inputRows",sample.size());stats.put("outputRows",rows.size());stats.put("successRows",rows.size());stats.put("invalidRows",invalid);stats.put("dictionarySqlCount",reader.queries());stats.put("stages",result.stages());stats.put("planHash",plan.hash());stats.put("engineVersion",MappingEngine.engineVersion());stats.put("sampleMode","PROVIDED_SAMPLE");
             Set<String> sensitive=plan.sensitiveOutputs(PreviewMasking.sensitiveNames(plan.document().path("schemaContract").path("source")));stats.put("sensitiveValuesMasked",true);
-            return new FieldMappingService.PreviewResponse(PreviewMasking.mask(rows,sensitive,!plan.dictionaries().isEmpty()),results,stats);
+            return new FieldMappingService.PreviewResponse(temporalPreviewRows(PreviewMasking.mask(rows,sensitive,!plan.dictionaries().isEmpty())),results,stats);
         }
+    }
+    /** Mapping precision must not be truncated by the application's global second-only JSON formatter. */
+    static List<Map<String,Object>> temporalPreviewRows(List<Map<String,Object>> rows){
+        var result=new ArrayList<Map<String,Object>>(rows.size());
+        for(var row:rows){var output=new LinkedHashMap<String,Object>();row.forEach((name,value)->output.put(name,
+                value instanceof LocalDateTime date?java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(date).replace('T',' '):
+                value instanceof LocalTime time?java.time.format.DateTimeFormatter.ISO_LOCAL_TIME.format(time):
+                value instanceof LocalDate||value instanceof Instant?value.toString():value));result.add(output);}
+        return result;
     }
     private DruidDataSource pool(String id,Map<String,Map<String,Object>>connections){
         Map<String,Object> cfg=connections.get(id);if(cfg==null)throw new MappingException("RESOURCE_FORBIDDEN","字典连接未授权");String url=text(cfg,"jdbcURL","jdbcUrl","url");String user=text(cfg,"username","dbUser"),password=text(cfg,"password","dbPassword");

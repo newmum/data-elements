@@ -1,26 +1,27 @@
 import {useEffect,useState} from 'react';
-import {Button,Empty,Modal,Progress,Space} from 'antd';
+import {Button,Empty,Modal,Progress,Space,Typography} from 'antd';
 import {DraftTable} from '../../components/DraftTable';
 import {getNifiOverlayContainer} from './overlayContainer';
 import {findUniqueCaseInsensitiveFieldMatches} from '../utils/fieldNameMatching';
 import {displayPath,normalizePath,type FieldInfo,type LocalRecommendation} from './fieldMappingPresentation';
 import type {MappingRule} from '../api/fieldMapping';
-export function RecommendModal({ open, recommendations, onCancel, onApply }: { open: boolean; recommendations: LocalRecommendation[]; onCancel: () => void; onApply: (rows: LocalRecommendation[]) => void }) {
+export function RecommendModal({ open, recommendations, onCancel, onApply, applying=false }: { open: boolean; recommendations: LocalRecommendation[]; onCancel: () => void; onApply: (rows: LocalRecommendation[]) => void; applying?:boolean }) {
   const [selected, setSelected] = useState<React.Key[]>([]);
   useEffect(() => {
     setSelected(recommendations.filter((r) => r.confidence >= 0.85).map((r) => r.id));
   }, [recommendations]);
   const picked = recommendations.filter((r) => selected.includes(r.id));
   return (
-    <Modal open={open} onCancel={onCancel} title="自动映射" width={760} onOk={() => onApply(picked)} okText={`应用 ${picked.length} 条已选映射`} getContainer={getNifiOverlayContainer}>
+    <Modal className="fm-rule-modal fm-recommend-modal" open={open} onCancel={onCancel} title="自动映射" width={760} onOk={() => onApply(picked)} confirmLoading={applying} okButtonProps={{disabled:!picked.length||applying}} okText={`应用 ${picked.length} 条已选映射`} getContainer={getNifiOverlayContainer}>
+      <Typography.Paragraph type="secondary">按字段名称、含义和类型推荐。勾选需要的映射；应用时会确认替换现有规则。</Typography.Paragraph>
       {recommendations.length === 0 ? <Empty description="暂无可推荐映射" /> : <DraftTable fields={{from:{kind:'text',value:row=>row.fromLabel||row.from},to:{kind:'text',value:row=>row.toLabel||row.to},confidence:{kind:'number',value:row=>row.confidence}}}
         size="small"
         rowKey="id"
         dataSource={recommendations}
-        scroll={{ y: 'min(500px, calc(100vh - 280px))' }}
+        scroll={{ y: 'min(400px, calc(100dvh - 380px))' }}
         rowSelection={{ selectedRowKeys: selected, onChange: setSelected, preserveSelectedRowKeys: true }}
         columns={[
-          { title: '源字段', key:'from', dataIndex: 'from', render: (_v: string, record: LocalRecommendation) => <FieldLabelCell path={record.from} label={record.fromLabel} /> },
+          { title: '来源字段 / 取值', key:'from', dataIndex: 'from', render: (_v: string, record: LocalRecommendation) => record.expression?<span>{record.expression==='UUID()'?'生成 UUID（32 位）':record.expression==='LOCALTIMESTAMP'?'写入当前时间':'按表达式计算'}</span>:<FieldLabelCell path={record.from} label={record.fromLabel} /> },
           { title: '', width: 30, render: () => '→' },
           { title: '目标字段', key:'to', dataIndex: 'to', render: (_v: string, record: LocalRecommendation) => <FieldLabelCell path={record.to} label={record.toLabel} /> },
           { title: '推荐依据', dataIndex: 'reason' },

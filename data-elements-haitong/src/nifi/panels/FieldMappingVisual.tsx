@@ -1,8 +1,9 @@
 import {useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {Button,Dropdown,Empty,Input,Select,Space,Tag,Tooltip} from 'antd';
-import {DeleteOutlined,PauseCircleOutlined,PlayCircleOutlined,PlusOutlined,SearchOutlined} from '@ant-design/icons';
+import {DeleteOutlined,DownOutlined,EditOutlined,MoreOutlined,PauseCircleOutlined,PlayCircleOutlined,PlusOutlined,SearchOutlined,UpOutlined} from '@ant-design/icons';
 import type {FieldMeta,FieldMappingSpec,MappingRule,UnifiedMappingDraft,UnifiedMappingRule} from '../api/fieldMapping';
-import {inputSummary,stepSummary} from './unifiedRuleModel';
+import { concreteInputLabel, concreteRuleLabel, concreteRuleMode } from './mappingRulePresentation';
+import { getNifiOverlayContainer } from './overlayContainer';
 import {displayPath,fieldKey,fieldName,fieldsForPresentation,mergeFields,normalizePath,patchVisualField,sourceNames,toFieldInfo,visualMapping,type FieldInfo,type FieldSide,type FieldType} from './fieldMappingPresentation';
 type RowKind='field'|'many'|'constant'|'expression'|'lookup'|'conditional';
 interface EdgePath {id:string;d:string;state:'idle'|'active'|'disabled'}
@@ -52,28 +53,36 @@ export default function FieldMappingVisual(props:Props){
   <FieldPanel side="source" title="源字段" subtitle={sourceFields.length+' 个字段'} fields={sourceFields} mappings={mappings} pendingSource={pendingSource} highlightedFieldKeys={highlighted} targetFields={targetFields} onFieldClick={setPendingSource} onFieldHover={setHoverField} onAddCustom={field=>setCustomSources(items=>mergeFields(items,[field]))} onQuickMap={create}/>
   <section className="fm-canvas"><EdgeLayer paths={edges}/><div className="fm-card-list">
    {!props.draft.rules.length&&<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="从左侧选择源字段，再点击右侧目标字段创建映射"/>}
-   {props.draft.rules.map((rule,index)=><MappingCard key={rule.ruleId} rule={rule} index={index} sourceFields={sourceFields} targetFields={targetFields} selected={selected===rule.ruleId} active={active.has(index)} onSelect={()=>setSelected(rule.ruleId)} onHover={value=>setHoverIndex(value?index:null)} onOpen={()=>props.onOpen(rule)} onUpdate={props.onChange} onField={(side,path)=>props.onChange(patchVisualField(rule,side,path,side==='source'?props.sourceMeta:props.targetMeta))} onDelete={()=>props.onDelete(rule.ruleId)} onMoveUp={()=>props.onMove(rule.ruleId,-1)} onMoveDown={()=>props.onMove(rule.ruleId,1)}/>)}
+   {props.draft.rules.map((rule,index)=><MappingCard key={rule.ruleId} rule={rule} index={index} last={index===props.draft.rules.length-1} sourceFields={sourceFields} targetFields={targetFields} selected={selected===rule.ruleId} active={active.has(index)} onSelect={()=>setSelected(rule.ruleId)} onHover={value=>setHoverIndex(value?index:null)} onOpen={()=>props.onOpen(rule)} onUpdate={props.onChange} onField={(side,path)=>props.onChange(patchVisualField(rule,side,path,side==='source'?props.sourceMeta:props.targetMeta))} onDelete={()=>props.onDelete(rule.ruleId)} onMoveUp={()=>props.onMove(rule.ruleId,-1)} onMoveDown={()=>props.onMove(rule.ruleId,1)}/>)}
    <Dropdown trigger={['click']} menu={{items:ADD_MENU_ITEMS,onClick:({key})=>props.onAdd(key)}}><Button className="fm-add-card" icon={<PlusOutlined/>}>添加映射规则</Button></Dropdown>
   </div></section>
   <FieldPanel side="target" title="目标字段" subtitle={targetFields.length+' 个字段'} fields={targetFields} mappings={mappings} pendingSource={pendingSource} highlightedFieldKeys={highlighted} onFieldClick={path=>{if(pendingSource)create(pendingSource,path);else{const rule=props.draft.rules.find(r=>normalizePath(r.target.name)===path);if(rule)props.onOpen(rule);}}} onFieldHover={setHoverField} onAddCustom={field=>setCustomTargets(items=>mergeFields(items,[field]))}/>
  </div>;
 }
-function MappingCard({rule,index,sourceFields,targetFields,selected,active,onSelect,onHover,onOpen,onUpdate,onField,onDelete,onMoveUp,onMoveDown}:{rule:UnifiedMappingRule;index:number;sourceFields:FieldInfo[];targetFields:FieldInfo[];selected:boolean;active:boolean;onSelect:()=>void;onHover:(active:boolean)=>void;onOpen:()=>void;onUpdate:(rule:UnifiedMappingRule)=>void;onField:(side:FieldSide,path:string)=>void;onDelete:()=>void;onMoveUp:()=>void;onMoveDown:()=>void}){
+function MappingCard({rule,index,last,sourceFields,targetFields,selected,active,onSelect,onHover,onOpen,onUpdate,onField,onDelete,onMoveUp,onMoveDown}:{rule:UnifiedMappingRule;index:number;last:boolean;sourceFields:FieldInfo[];targetFields:FieldInfo[];selected:boolean;active:boolean;onSelect:()=>void;onHover:(active:boolean)=>void;onOpen:()=>void;onUpdate:(rule:UnifiedMappingRule)=>void;onField:(side:FieldSide,path:string)=>void;onDelete:()=>void;onMoveUp:()=>void;onMoveDown:()=>void}){
  const step=rule.steps.find(s=>!s.uiRole),disabled=rule.enabled===false;
  const kind=rule.when!=null?'conditional':rule.input.kind==='LITERAL'?'constant':step?.operator.startsWith('LOOKUP')?'lookup':rule.input.kind==='EXPRESSION'||rule.input.kind==='SYSTEM'?'expression':step?.operator==='CONCAT'?'many':'field';
  const target=<FieldSelect side="target" value={normalizePath(rule.target.name)} fields={targetFields} onChange={path=>onField('target',path)}/>;
  const source=<FieldSelect side="source" value={normalizePath(rule.input.name??sourceNames(rule)[0]??'')} fields={sourceFields} onChange={path=>onField('source',path)}/>;
- const fx=<button className={step&&step.operator!=='DIRECT'?'fm-fx-badge':'fm-arrow'} title={rule.steps.length?rule.steps.map(stepSummary).join(' → '):'配置映射规则'} onClick={e=>{e.stopPropagation();onOpen();}}>{step&&step.operator!=='DIRECT'?<>fx<sup>{stepSummary(step)[0]?.toUpperCase()}</sup></>:'→'}</button>;
+ const fx=<button className={step&&step.operator!=='DIRECT'?'fm-fx-badge':'fm-arrow'} title={concreteRuleLabel(rule)} aria-label={'编辑规则 '+rule.target.name+'：'+concreteRuleLabel(rule)} onClick={e=>{e.stopPropagation();onOpen();}}>{step&&step.operator!=='DIRECT'?'fx':'→'}</button>;
  return <article className={'fm-mapping-card is-'+kind+(selected?' is-selected':'')+(active?' is-active':'')+(disabled?' is-disabled':'')} data-mapping-index={index} onClick={onSelect} onDoubleClick={onOpen} onMouseEnter={()=>onHover(true)} onMouseLeave={()=>onHover(false)}>
   {kind!=='constant'&&<span className="fm-card-port fm-card-port-in" data-port="card-in"/>}
   {kind==='conditional'?<div className="fm-conditional-body">{['if','then','else'].map(label=><div className="fm-cond-line" key={label}><Tag>{label}</Tag><Button size="small" type="text" onClick={onOpen}>{label==='if'?'条件判断':label==='then'?'条件成立时的字段值':'条件不成立时的字段值'}</Button></div>)}{target}</div>
    :kind==='constant'?<><button className="fm-constant-chip" onClick={onOpen}>{rule.input.value!==null&&typeof rule.input.value==='object'?'JSON 常量':String(rule.input.value??'NULL')}</button>{fx}{target}</>
-   :kind==='expression'?<><span className="fm-fx-large">fx</span>{rule.input.kind==='EXPRESSION'?<Input className="fm-expression-input" size="small" value={rule.input.expression??''} onChange={e=>onUpdate({...rule,input:{...rule.input,expression:e.target.value}})}/>:<Button type="text" size="small" onClick={onOpen}>{inputSummary(rule)}</Button>}{target}</>
+   :kind==='expression'?<>{rule.input.kind==='EXPRESSION'&&concreteRuleMode(rule)==='EXPRESSION'?<Input aria-label={'计算表达式 '+rule.target.name} className="fm-expression-input" size="small" value={rule.input.expression??''} onChange={e=>onUpdate({...rule,input:{...rule.input,expression:e.target.value}})}/>:<Button className="fm-generated-value" type="text" size="small" title={concreteInputLabel(rule)} onClick={onOpen}>{concreteInputLabel(rule)}</Button>}{target}</>
    :kind==='lookup'?<>{source}<button className="fm-lookup-badge" onClick={e=>{e.stopPropagation();onOpen();}}>{step?.operator==='LOOKUP_MULTI'?'多值翻译':'码表'}</button>{target}</>
    :kind==='many'?<><span className="fm-merge-icon">⊕</span><MultiFieldSelect value={sourceNames(rule).map(normalizePath)} fields={sourceFields} onChange={names=>{const steps=rule.steps.map(s=>s===step?{...s,args:{...s.args,inputs:names.map(path=>({kind:'FIELD',name:displayPath(path)}))}}:s);onUpdate({...rule,steps});}}/>{fx}{target}</>
    :<>{source}{fx}{target}</>}
   <span className="fm-card-port fm-card-port-out" data-port="card-out"/>
-  <div className="fm-card-actions"><Tooltip title={disabled?'启用此映射':'禁用此映射'}><Button size="small" type="text" icon={disabled?<PlayCircleOutlined/>:<PauseCircleOutlined/>} onClick={e=>{e.stopPropagation();onUpdate({...rule,enabled:disabled});}}/></Tooltip><Tooltip title="上移"><Button size="small" type="text" onClick={e=>{e.stopPropagation();onMoveUp();}}>↑</Button></Tooltip><Tooltip title="下移"><Button size="small" type="text" onClick={e=>{e.stopPropagation();onMoveDown();}}>↓</Button></Tooltip><Tooltip title="删除映射"><Button size="small" type="text" danger icon={<DeleteOutlined/>} onClick={e=>{e.stopPropagation();onDelete();}}/></Tooltip></div>
+  <div className="fm-card-actions"><Dropdown trigger={['hover','click']} getPopupContainer={getNifiOverlayContainer} menu={{items:[
+    {key:'edit',label:'编辑映射规则',icon:<EditOutlined/>},
+    {key:'toggle',label:disabled?'启用映射':'停用映射',icon:disabled?<PlayCircleOutlined/>:<PauseCircleOutlined/>},
+    {type:'divider'},
+    {key:'up',label:'上移',icon:<UpOutlined/>,disabled:index===0},
+    {key:'down',label:'下移',icon:<DownOutlined/>,disabled:last},
+    {type:'divider'},
+    {key:'delete',label:'删除映射',icon:<DeleteOutlined/>,danger:true},
+  ],onClick:({key,domEvent})=>{domEvent.stopPropagation();if(key==='edit')onOpen();if(key==='toggle')onUpdate({...rule,enabled:disabled});if(key==='up')onMoveUp();if(key==='down')onMoveDown();if(key==='delete')onDelete();}}}><Button size="small" type="text" aria-label={'映射操作 '+rule.target.name} icon={<MoreOutlined/>} onClick={e=>e.stopPropagation()}/></Dropdown></div>
  </article>;
 }
 const TYPE_META: Record<FieldType, { label: string; bg: string; color: string }> = {
