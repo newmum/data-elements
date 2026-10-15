@@ -3,7 +3,7 @@
   "category": "sink",
   "label": "华为 MRS Hive 写入",
   "icon": "database",
-  "description": "向华为 MRS Hive 目标表写入数据。默认保留来源原始字段，按 JSON 转换为 CSV、设置唯一文件名，最后由 Linewell PutHwHDFS 写入目标表的 HDFS 目录；也可选择原生 PutHDFS 或 HiveRecordPut。HDFS 模式要求目标表的文件格式与 CSV 输出一致。连接和认证配置由服务器管理，写入语义仅支持 INSERT。",
+  "description": "向华为 MRS Hive 目标表写入数据。默认保留来源原始字段，来源采集的 Columns to Return 保持未设置，复用 NiFi 根作用域已有的 PUBLIC-WRITER-JSON-TIME_FORMAT 和 PUBLIC-READER-JSON。按 JSON 转换为 CSV、设置唯一文件名，最后由 Linewell PutHwHDFS 写入目标表的 HDFS 目录；也可选择原生 PutHDFS 或 HiveRecordPut。HDFS 模式要求目标表的文件格式与 CSV 输出一致。连接和认证配置由服务器管理，写入语义仅支持 INSERT。",
   "fields": [
     { "key": "dbType", "label": "数据库类型", "type": "select", "default": "HIVE", "required": true, "options": [{ "label": "华为 MRS Hive", "value": "HIVE" }], "group": "connection" },
     { "key": "hiveProfile", "label": "MRS 配置集", "type": "select", "default": "default", "required": true, "options": [{ "label": "默认华为 MRS Hive 配置集", "value": "default" }], "group": "connection", "help": "选择服务端管理的连接与认证配置；配置集名称与 Hive 数据库名分别设置。" },

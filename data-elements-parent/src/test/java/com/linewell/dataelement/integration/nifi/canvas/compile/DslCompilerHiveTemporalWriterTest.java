@@ -52,10 +52,11 @@ class DslCompilerHiveTemporalWriterTest {
                 "jdbcUrl", "jdbc:hive2://hive.example:10000/default", "hiveConnectionMode", "JDBC",
                 "clientConfigDir","/opt/mrs/client","keytabPath","/opt/mrs/client/user.keytab","krb5ConfPath","/opt/mrs/client/krb5.conf","userPrincipal","service_user"));
         when(nifi.findProcessorType("PutHwHDFS")).thenReturn(java.util.Optional.of("com.linewell.microservice.processor.hadoop.PutHwHDFS"));
-        when(nifi.listControllerServices("root")).thenReturn(List.of(json.valueToTree(Map.of("component",Map.of(
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(json.valueToTree(Map.of("component",Map.of(
                 "id","csv-service-id","name","PUBLIC-WRITER-CSV-HDFS","type","org.apache.nifi.csv.CSVRecordSetWriter",
                 "properties",Map.of("Include Header Line","false","Value Separator","\\u0001"))))));
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        when(nifi.get("/flow/process-groups/root",com.fasterxml.jackson.databind.JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         AtomicInteger sequence = new AtomicInteger();
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenAnswer(call -> {
@@ -178,8 +179,13 @@ class DslCompilerHiveTemporalWriterTest {
                 List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("mh","mapping","sink","default"))));
         assertThat(processors).noneMatch(p->p.type().endsWith(".HaitongTransformRecord")||p.type().endsWith(".MergeRecord")||p.type().endsWith(".QueryRecord"));
         Created execute=namedProcessor("source/execute"),convert=namedProcessor("sink/convert");
-        assertThat(execute.properties()).containsEntry("Record Writer",namedService(HiveTemporalJsonPolicy.WRITER_NAME).id()).containsEntry("Use Avro Logical Types","true");
-        assertThat(convert.properties()).containsEntry("Record Reader",namedService(HiveTemporalJsonPolicy.READER_NAME).id()).containsEntry("Record Writer","csv-service-id");
+        assertThat(execute.properties()).containsEntry("Record Writer","global-json-writer").containsEntry("Use Avro Logical Types","true");
+        assertThat(convert.properties()).containsEntry("Record Reader","global-json-reader").containsEntry("Record Writer","csv-service-id");
+        assertThat(services).noneMatch(s->s.name().equals(HiveTemporalJsonPolicy.WRITER_NAME)||s.name().equals(HiveTemporalJsonPolicy.READER_NAME));
+        verify(nifi,never()).setControllerServiceRunStatus(eq("global-json-writer"),anyString());
+        verify(nifi,never()).setControllerServiceRunStatus(eq("global-json-reader"),anyString());
+        verify(nifi,never()).waitForControllerServiceEnabled(eq("global-json-writer"),anyLong());
+        verify(nifi,never()).waitForControllerServiceEnabled(eq("global-json-reader"),anyLong());
         verify(nifi).createConnection("pg",execute.id(),"PROCESSOR",convert.id(),"PROCESSOR",List.of("success"));
         verify(nifi,never()).requireMappingExtension();
     }
@@ -192,8 +198,8 @@ class DslCompilerHiveTemporalWriterTest {
             edges.add(new Pipeline.Edge("e"+i,"s"+i,"h"+i,"default"));
         }
         compiler.compile(hiveTargetFlow(nodes,edges));
-        assertThat(services.stream().filter(s->HiveTemporalJsonPolicy.WRITER_NAME.equals(s.name()))).hasSize(1);
-        assertThat(services.stream().filter(s->HiveTemporalJsonPolicy.READER_NAME.equals(s.name()))).hasSize(1);
+        assertThat(services.stream().filter(s->HiveTemporalJsonPolicy.WRITER_NAME.equals(s.name()))).isEmpty();
+        assertThat(services.stream().filter(s->HiveTemporalJsonPolicy.READER_NAME.equals(s.name()))).isEmpty();
         verify(nifi,times(1)).listControllerServices("root");
         verify(nifi,times(1)).findProcessorType("PutHwHDFS");
         assertThat(processors).noneMatch(p->p.type().endsWith(".MergeRecord"));
@@ -201,17 +207,38 @@ class DslCompilerHiveTemporalWriterTest {
 
     @Test void unrelatedMysqlSourceRetainsOrdinaryWriter() {
         compiler.compile(hiveTargetFlow(List.of(source("s","mysql",Map.of()),source("unrelated","mysql",Map.of()),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));
-        assertThat(namedProcessor("s/execute").properties()).containsEntry("Record Writer",namedService(HiveTemporalJsonPolicy.WRITER_NAME).id());
+        assertThat(namedProcessor("s/execute").properties()).containsEntry("Record Writer","global-json-writer");
         assertThat(namedProcessor("unrelated/execute").properties()).containsEntry("Record Writer",namedService("JsonWriter").id());
     }
     @Test void hiveTargetCurrentMaximumIncrementalSourceUsesSameWriter() {
-        compiler.compile(hiveTargetFlow(List.of(source("s","oracle",Map.of("dbType","ORACLE","syncMode","INCREMENTAL","initialStrategy","START_AT_CURRENT_MAX","incrementalColumn","EVENT_TIME")),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));
-        assertThat(namedProcessor("s/fetch").properties()).containsEntry("Record Writer",namedService(HiveTemporalJsonPolicy.WRITER_NAME).id());
+        compiler.compile(hiveTargetFlow(List.of(source("s","oracle",Map.of("dbType","ORACLE","syncMode","INCREMENTAL","initialStrategy","START_AT_CURRENT_MAX","incrementalColumn","EVENT_TIME","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));
+        assertThat(namedProcessor("s/fetch").properties()).containsEntry("Record Writer","global-json-writer").containsEntry("Columns to Return",null);
     }
     @Test void hiveTargetSourceDatabaseQueryUsesSameWriter() {
         var query=new Pipeline.Node("q","transform.sql","query","transform",300,0,Map.of("executionMode","SOURCE_DB","sql","SELECT event_time FROM EVENT_LOG"));
         compiler.compile(hiveTargetFlow(List.of(source("s","mysql",Map.of()),query,hiveSink("h")),List.of(new Pipeline.Edge("a","s","q","default"),new Pipeline.Edge("b","q","h","default"))));
-        assertThat(namedProcessor("query/query").properties()).containsEntry("Record Writer",namedService(HiveTemporalJsonPolicy.WRITER_NAME).id());
+        assertThat(namedProcessor("query/query").properties()).containsEntry("Record Writer","global-json-writer");
+    }
+    @ParameterizedTest @ValueSource(strings={"oracle","oceanbase","mysql"})
+    void hiveTargetClearsFetchColumnsIncludingOracleDateProjection(String database) {
+        var config=Map.<String,Object>of("dbType",database.equals("oceanbase")?"OCEANBASE_ORACLE":database.toUpperCase(),"sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")),"columns","EVENT_TIME");
+        compiler.compile(hiveTargetFlow(List.of(source("s",database,config),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));
+        assertThat(namedProcessor("s/fetch").properties()).containsEntry("Columns to Return",null);
+    }
+    @Test void missingGlobalCodecsFailsBeforeCreatingAnyTaskServicesOrProcessors() {
+        when(nifi.listControllerServices("root")).thenReturn(List.of());
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->compiler.compile(hiveTargetFlow(List.of(source("s","mysql",Map.of()),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default")))))
+                .hasMessageContaining("缺少全局服务");
+        assertThat(services).isEmpty();assertThat(processors).isEmpty();
+        verify(nifi,never()).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
+    }
+    @Test void sharedMappingUpgradeReusesItsResolvedWriterWithoutCreatingDuplicatePublicService() {
+        var jdbc=new Pipeline.Node("jdbc","sink.jdbc","jdbc","sink",0,0,Map.of());
+        var pipeline=hiveTargetFlow(List.of(source("source","mysql",Map.of()),mapping(),hiveSink("h"),jdbc),List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("mh","mapping","h","default"),new Pipeline.Edge("mj","mapping","jdbc","default")));
+        compiler.createMappingReplacement(pipeline,mapping(),"existing-group","reader","typed","global-json-writer",prepared());
+        assertThat(services).isEmpty();
+        assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer","global-json-writer");
+        verify(nifi,never()).listControllerServices(anyString());
     }
     private static Pipeline.Node hiveSink(String id){return new Pipeline.Node(id,"sink.hive",id,"sink",600,0,Map.of("table","EVENT_LOG","database","default"));}
     private static Pipeline hiveTargetFlow(List<Pipeline.Node> nodes,List<Pipeline.Edge> edges){return new Pipeline("target-hive","Hive target",null,null,null,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null);}

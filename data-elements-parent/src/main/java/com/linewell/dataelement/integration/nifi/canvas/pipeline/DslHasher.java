@@ -24,7 +24,7 @@ public final class DslHasher {
 
     /** Current NiFi compiler contract; shared by deployment and safe historical lineage recovery. */
     public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v31";
-    private static final String HIVE_TARGET_COMPILER_REVISION = "hive-raw-target-direct-codecs-v2";
+    private static final String HIVE_TARGET_COMPILER_REVISION = "hive-global-codecs-all-columns-v3";
     private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-utf8-v2";
     private static final String JAVA_MAPPING_COMPILER_REVISION = "java-record-engine-"
             + com.linewell.dataelement.mapping.core.MappingEngine.engineVersion() + "-functions-"

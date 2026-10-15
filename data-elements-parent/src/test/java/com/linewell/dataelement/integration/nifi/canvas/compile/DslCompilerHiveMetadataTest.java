@@ -37,6 +37,8 @@ class DslCompilerHiveMetadataTest {
         }
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
+        when(nifi.getRootProcessGroupId()).thenReturn("root");
+        when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
 
         AtomicInteger sequence = new AtomicInteger();
         List<com.fasterxml.jackson.databind.JsonNode> applicationServices = new ArrayList<>();
@@ -56,7 +58,7 @@ class DslCompilerHiveMetadataTest {
         when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
                 anyMap(), nullable(String.class), nullable(String.class))).thenAnswer(invocation -> entity("put-" + sequence.incrementAndGet()));
         when(nifi.findProcessorType("PutHwHDFS")).thenReturn(java.util.Optional.of("com.linewell.microservice.processor.hadoop.PutHwHDFS"));
-        when(nifi.listControllerServices("root")).thenReturn(List.of(publicCsvWriterService()));
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(publicCsvWriterService()));
 
         DslCompiler compiler = new DslCompiler(nifi, registry, mock(FieldMappingService.class), hive);
         PipelineGroupOrganizer.Layout layout = new PipelineGroupOrganizer.Layout("root", "application", "application",
@@ -83,6 +85,7 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble()))
                 .thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap()))
@@ -92,7 +95,7 @@ class DslCompilerHiveMetadataTest {
                 anyMap(), nullable(String.class), nullable(String.class)))
                 .thenAnswer(invocation -> entity("processor-" + processorSequence.incrementAndGet()));
         when(nifi.findProcessorType("PutHwHDFS")).thenReturn(java.util.Optional.of("com.linewell.microservice.processor.hadoop.PutHwHDFS"));
-        when(nifi.listControllerServices("root")).thenReturn(List.of(publicCsvWriterService()));
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(publicCsvWriterService()));
         Map<String, Object> config = Map.of("database", database, "table", "EVENT_LOG", "username", "service_user",
                 "hiveProfile", "", "clientConfigDir", "/untrusted/client", "keytabPath", "/untrusted/keytab");
         Pipeline pipeline = new Pipeline("test", "Hive sink", null, null, null,
@@ -117,7 +120,7 @@ class DslCompilerHiveMetadataTest {
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.ConvertRecord"),
                 eq("Hive/convert"), anyDouble(), anyDouble(), convertProperties.capture(),
                 nullable(String.class), nullable(String.class));
-        assertThat(convertProperties.getValue()).containsEntry("Record Reader", "cs")
+        assertThat(convertProperties.getValue()).containsEntry("Record Reader", "global-json-reader")
                 .containsEntry("Record Writer", "public-csv-writer")
                 .containsEntry("Include Zero Record FlowFiles", "false");
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.attributes.UpdateAttribute"),
@@ -157,6 +160,8 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.codecs());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
         when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
@@ -173,7 +178,7 @@ class DslCompilerHiveMetadataTest {
         verify(nifi).createProcessor(eq("pg"), eq("com.linewell.nifi.hive.HiveRecordPut"),
                 eq("Hive/put"), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
         verify(nifi, never()).findProcessorType(anyString());
-        verify(nifi, never()).listControllerServices(anyString());
+        verify(nifi).listControllerServices("root");
     }
 
     private NifiEntity entity(String id) {
@@ -200,12 +205,13 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
         when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
                 anyMap(), nullable(String.class), nullable(String.class))).thenReturn(entity("put"));
         when(nifi.findProcessorType("PutHwHDFS")).thenReturn(java.util.Optional.of("com.linewell.microservice.processor.hadoop.PutHwHDFS"));
-        when(nifi.listControllerServices("root")).thenReturn(List.of(publicCsvWriterService()));
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(publicCsvWriterService()));
 
         Pipeline pipeline = new Pipeline("test", "Hive sink", null, null, null,
                 new Pipeline.Dsl(1, List.of(new Pipeline.Node("sink", "sink.hive", "Hive", "sink", 0, 0,
@@ -233,11 +239,12 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
         when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
                 anyMap(), nullable(String.class), nullable(String.class))).thenReturn(entity("processor"));
-        when(nifi.listControllerServices("root")).thenReturn(List.of(publicCsvWriterService()));
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(publicCsvWriterService()));
         when(nifi.findProcessorType("PutHDFS")).thenReturn(java.util.Optional.of("org.apache.nifi.processors.hadoop.PutHDFS"));
         Pipeline pipeline = new Pipeline("native", "Native HDFS", null, null, null,
                 new Pipeline.Dsl(1, List.of(new Pipeline.Node("sink", "sink.hive", "Hive", "sink", 0, 0,
@@ -269,9 +276,10 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
-        when(nifi.listControllerServices("root")).thenReturn(List.of());
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.codecs());
         Pipeline pipeline = new Pipeline("missing-writer", "Hive sink", null, null, null,
                 new Pipeline.Dsl(1, List.of(new Pipeline.Node("sink", "sink.hive", "Hive", "sink", 0, 0,
                         Map.of("database", "analytics", "table", "EVENT_LOG"))), List.of()),
@@ -296,13 +304,14 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
         var sequence = new AtomicInteger();
         when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
                 anyMap(), nullable(String.class), nullable(String.class)))
                 .thenAnswer(invocation -> entity("processor-" + sequence.incrementAndGet()));
-        when(nifi.listControllerServices("root")).thenReturn(List.of(publicCsvWriterService()));
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(publicCsvWriterService()));
         when(nifi.findProcessorType("PutHwHDFS"))
                 .thenReturn(java.util.Optional.of("com.linewell.microservice.processor.hadoop.PutHwHDFS"));
         Pipeline pipeline = new Pipeline("two-targets", "Hive targets", null, null, null,

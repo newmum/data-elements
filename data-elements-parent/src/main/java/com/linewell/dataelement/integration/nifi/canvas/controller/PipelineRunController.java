@@ -553,6 +553,14 @@ public class PipelineRunController {
         try {
             taskLifecycle.ensureCatalogAccessTask(request == null ? null : request.catalogTid(), p);
             p = bindAccessTaskMappings(p);
+            if(p.dsl().nodes().stream().anyMatch(com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy::isHiveSink)) {
+                try { compiler.preflightHiveGlobalServices(p); }
+                catch (RuntimeException ex) {
+                    repo.updateStatus(p.id(),p.status());
+                    errors.add(p.id(),runtimeErr(FlowError.ErrorPhase.DEPLOYMENT,"Hive 全局服务核验失败",ex.getMessage()));
+                    return ResponseEntity.unprocessableEntity().body(Map.of("error",ex.getMessage(),"code","HIVE_GLOBAL_SERVICES_UNAVAILABLE"));
+                }
+            }
             currentHash = deploymentHash(p);
             final Pipeline deploymentPipeline = p;
             final String deploymentHash = currentHash;

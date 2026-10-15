@@ -92,6 +92,20 @@ class PipelineRedeployTest {
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("old-group");
         verifyNoInteractions(compiler);
     }
+    @Test
+    void missingHiveGlobalServicesPreserveExistingGroupBeforeAnyCleanup() {
+        var before=stored.get();
+        var dsl=new Pipeline.Dsl(1,List.of(new Pipeline.Node("hive","sink.hive","Hive","sink",0,0,Map.of())),List.of());
+        stored.set(new Pipeline(before.id(),before.name(),null,1L,1L,dsl,"old-group",PipelineStatus.STOPPED,"old-hash",1L,null,null,null));
+        doThrow(new IllegalStateException("NiFi 根作用域缺少全局服务")).when(compiler).preflightHiveGlobalServices(any());
+        var response=controller.deploy("p1",null);
+        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo("old-group");
+        assertThat(stored.get().status()).isEqualTo(PipelineStatus.STOPPED);
+        verify(nifi,never()).cleanupProcessGroup(anyString());
+        verify(compiler,never()).compile(any(),any(),any());
+        verify(groups,never()).prepare(any());
+    }
 
     @Test
     void queuedDataPreventsCleanupAndReplacement() {
