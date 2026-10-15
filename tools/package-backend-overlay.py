@@ -3,7 +3,7 @@
 
 Build with Maven first. Output and the optional patched JAR must be placed in ignored logs/.
 The overlay embeds hashes of touched base entries so its application refuses a changed baseline.
-No resources, configuration, credentials or unselected classes are collected.
+Only explicitly named manifests and classes are collected; configuration and credentials are excluded.
 """
 import argparse
 import copy
@@ -23,6 +23,17 @@ def file_digest(path):
         for block in iter(lambda: stream.read(1024 * 1024), b''):
             hasher.update(block)
     return hasher.hexdigest()
+
+
+def manifest_entry(classes, name):
+    relative = Path(name)
+    path = (classes / relative).resolve()
+    allowed = (classes / 'manifests').resolve()
+    if relative.is_absolute() or '..' in relative.parts or allowed not in path.parents or path.suffix != '.json':
+        raise ValueError('Expected an explicit JSON component manifest under manifests/')
+    content = path.read_bytes()
+    json.loads(content)
+    return 'BOOT-INF/classes/' + path.relative_to(classes.resolve()).as_posix(), content
 
 
 def apply(base, overlay, output):
@@ -80,6 +91,7 @@ def main():
     parser.add_argument('--base', type=Path, required=True)
     parser.add_argument('--classes', type=Path)
     parser.add_argument('--include', action='append', default=[], help='Package directory or class prefix relative to compiled classes')
+    parser.add_argument('--manifest', action='append', default=[], help='Explicit component JSON under compiled manifests/')
     parser.add_argument('--library', action='append', default=[], type=Path)
     parser.add_argument('--overlay', type=Path, required=True)
     parser.add_argument('--output', type=Path)
@@ -98,6 +110,9 @@ def main():
                 raise ValueError('No compiled classes found for ' + prefix)
             for file in found:
                 entries['BOOT-INF/classes/' + file.relative_to(args.classes).as_posix()] = file.read_bytes()
+        for name in args.manifest:
+            entry, content = manifest_entry(args.classes, name)
+            entries[entry] = content
         for file in args.library:
             if not file.is_file() or file.suffix != '.jar':
                 raise ValueError('Expected dependency JAR')

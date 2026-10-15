@@ -103,16 +103,14 @@ class DslCompilerHiveMetadataTest {
         verify(hive).resolveRuntimeProfile("default");
 
         ArgumentCaptor<String> processorTypes = ArgumentCaptor.forClass(String.class);
-        verify(nifi, times(4)).createProcessor(eq("pg"), processorTypes.capture(), anyString(),
+        verify(nifi, times(3)).createProcessor(eq("pg"), processorTypes.capture(), anyString(),
                 anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
         assertThat(processorTypes.getAllValues()).containsExactly(
-                "org.apache.nifi.processors.standard.MergeRecord",
                 "org.apache.nifi.processors.standard.ConvertRecord",
                 "org.apache.nifi.processors.attributes.UpdateAttribute",
                 "com.linewell.microservice.processor.hadoop.PutHwHDFS");
-        verify(nifi).createConnection("pg", "processor-1", "PROCESSOR", "processor-2", "PROCESSOR", List.of("merged"));
+        verify(nifi).createConnection("pg", "processor-1", "PROCESSOR", "processor-2", "PROCESSOR", List.of("success"));
         verify(nifi).createConnection("pg", "processor-2", "PROCESSOR", "processor-3", "PROCESSOR", List.of("success"));
-        verify(nifi).createConnection("pg", "processor-3", "PROCESSOR", "processor-4", "PROCESSOR", List.of("success"));
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> convertProperties = ArgumentCaptor.forClass(Map.class);
@@ -255,7 +253,7 @@ class DslCompilerHiveMetadataTest {
         assertThat(properties.getValue()).containsEntry("Conflict Resolution Strategy", "replace")
                 .containsEntry("Kerberos Relogin Period", "4 hours")
                 .doesNotContainKey("krb5 conf");
-        verify(nifi, times(4)).createProcessor(eq("pg"), anyString(), anyString(), anyDouble(), anyDouble(),
+        verify(nifi, times(3)).createProcessor(eq("pg"), anyString(), anyString(), anyDouble(), anyDouble(),
                 anyMap(), nullable(String.class), nullable(String.class));
     }
 
@@ -319,7 +317,7 @@ class DslCompilerHiveMetadataTest {
 
         verify(nifi, times(1)).listControllerServices("root");
         verify(nifi, times(1)).findProcessorType("PutHwHDFS");
-        verify(nifi, times(8)).createProcessor(eq("pg"), anyString(), anyString(), anyDouble(), anyDouble(),
+        verify(nifi, times(6)).createProcessor(eq("pg"), anyString(), anyString(), anyDouble(), anyDouble(),
                 anyMap(), nullable(String.class), nullable(String.class));
     }
 

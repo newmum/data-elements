@@ -62,6 +62,9 @@ public class AccessTaskFieldMappingBinder {
                 || pipeline.dsl().nodes() == null) {
             return pipeline;
         }
+        var activeMappings=com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forPublication(pipeline).dsl().nodes().stream()
+                .filter(this::isFieldMappingNode).map(Pipeline.Node::id).collect(java.util.stream.Collectors.toSet());
+        if(activeMappings.isEmpty())return pipeline;
         DataAccessAggTaskT task = taskService.findByPipelineId(pipeline.id());
         if (task == null || isBlank(task.getTid())) {
             return pipeline;
@@ -87,7 +90,7 @@ public class AccessTaskFieldMappingBinder {
         boolean changed = false;
         List<Pipeline.Node> nodes = new java.util.ArrayList<>();
         for (Pipeline.Node node : pipeline.dsl().nodes()) {
-            if (!isFieldMappingNode(node)) {
+            if (!isFieldMappingNode(node)||!activeMappings.contains(node.id())) {
                 nodes.add(node);
                 continue;
             }

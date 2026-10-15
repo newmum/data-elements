@@ -11,7 +11,6 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -25,7 +24,7 @@ public final class DslHasher {
 
     /** Current NiFi compiler contract; shared by deployment and safe historical lineage recovery. */
     public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v31";
-    private static final String HIVE_HDFS_COMPILER_REVISION = "hive-hdfs-record-chain-v1";
+    private static final String HIVE_TARGET_COMPILER_REVISION = "hive-raw-target-direct-codecs-v2";
     private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-utf8-v2";
     private static final String JAVA_MAPPING_COMPILER_REVISION = "java-record-engine-"
             + com.linewell.dataelement.mapping.core.MappingEngine.engineVersion() + "-functions-"
@@ -60,7 +59,7 @@ public final class DslHasher {
         String baseHash = hash(dsl);
         if (baseHash == null) return null;
         String effectiveRevision = compilerRevision == null ? "" : compilerRevision;
-        if (usesHiveHdfsSink(dsl)) effectiveRevision += "|" + HIVE_HDFS_COMPILER_REVISION;
+        if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(HiveSinkPublicationPolicy::isHiveSink)) effectiveRevision += "|" + HIVE_TARGET_COMPILER_REVISION;
         if (usesFieldMapping(dsl)) effectiveRevision += "|" + FIELD_MAPPING_COMPILER_REVISION;
         if(usesJavaMapping(dsl))effectiveRevision+="|"+JAVA_MAPPING_COMPILER_REVISION;
         if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(node -> node != null
@@ -75,21 +74,9 @@ public final class DslHasher {
         }
     }
 
-    private static boolean usesHiveHdfsSink(Pipeline.Dsl dsl) {
-        if (dsl.nodes() == null) return false;
-        for (Pipeline.Node node : dsl.nodes()) {
-            if (node == null || !"sink.hive".equals(node.manifestKey())) continue;
-            Object configured = node.config() == null ? null : node.config().get("hiveWriteMode");
-            String mode = configured == null ? "" : configured.toString().trim().toUpperCase(Locale.ROOT);
-            if (mode.isEmpty() || "LINEWELL_HDFS".equals(mode) || "LINEWELL".equals(mode)
-                    || "HDFS_BATCH".equals(mode) || "BATCH".equals(mode)) return true;
-        }
-        return false;
-    }
-
     public static boolean usesJavaMapping(Pipeline.Dsl dsl){
         if(dsl==null||dsl.nodes()==null)return false;
-        for(var node:dsl.nodes())if(node!=null&&node.config()!=null&&node.config().containsKey("mappings")){
+        for(var node:HiveSinkPublicationPolicy.forPublication(dsl).nodes())if(node!=null&&node.config()!=null&&node.config().containsKey("mappings")){
             try{Object raw=node.config().get("mappings");var spec=raw instanceof String text?SORTED.readTree(text):SORTED.valueToTree(raw);if(spec.path("schemaVersion").asText().equals("2.0")||spec.path("executionEngine").asText().equals("JAVA_RECORD"))return true;}catch(Exception ignored){}
         }
         return false;

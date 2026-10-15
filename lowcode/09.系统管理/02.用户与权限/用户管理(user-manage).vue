@@ -571,7 +571,6 @@ const generatedAccount = ref("");
 // 正则表达式缓存
 const phoneRegex = /^1[3-9]\d{9}$/;
 const idCardRegex = /^\d{17}[\dXx]$/;
-const accountRegex = /^[A-Za-z][A-Za-z0-9_.-]{2,49}$/;
 
 // 姓名转拼音缓存
 const pinyinCache = new Map<string, string>();
@@ -585,12 +584,9 @@ const nameToPinyin = (name: string): string => {
   }
 
   try {
-    // 两字姓名的首字母账号只有两位，无法满足保存接口的三位最小长度。
+    // 姓名生成的拼音仅作为账号建议，手动输入的账号不受字符格式限制。
     const result = pinyin.getFullChars?.(name.trim());
     let pinyinResult = (result || "").toLowerCase().replace(/[^a-z0-9_.-]/g, "");
-    if (pinyinResult && (!/^[a-z]/.test(pinyinResult) || pinyinResult.length < 3)) {
-      pinyinResult = `u_${pinyinResult}`;
-    }
     pinyinResult = pinyinResult.slice(0, 50);
     pinyinCache.set(name, pinyinResult);
     return pinyinResult;
@@ -714,18 +710,7 @@ const formRules = FormUtils.fixJson([
     title: "用户账号",
     type: "input",
     $required: true,
-    props: { placeholder: "字母开头，3至50位", maxlength: 50 },
-    validate: [
-      {
-        validator: (_rule: any, value: any, callback: any) => {
-          if (!accountRegex.test(`${value ?? ""}`.trim())) {
-            return callback(new Error("账号须以字母开头，长度3至50位，可包含数字、下划线、点和短横线"));
-          }
-          callback();
-        },
-        trigger: "blur",
-      },
-    ],
+    props: { placeholder: "请输入用户账号", maxlength: 50 },
     renderSlots: {
       append() {
         return h("div", {

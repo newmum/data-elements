@@ -6,6 +6,7 @@ import java.util.Map;
 
 /** Matching JSON codecs for JDBC temporal values read from Hive. */
 final class HiveTemporalJsonPolicy {
+    static final String READER_NAME = "PUBLIC-READER-JSON";
     static final String WRITER_NAME = "PUBLIC-WRITER-JSON-TIME_FORMAT";
 
     private HiveTemporalJsonPolicy() {}

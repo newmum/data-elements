@@ -26,6 +26,23 @@ class AccessTaskFieldMappingBinderTest {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints={20,100})
+    void rawHivePublicationDoesNotQueryRegistrationPerMapping(int count) {
+        var tasks=mock(IDataAccessAggTaskTService.class);var mappings=mock(IDataAccessFieldMappingService.class);
+        var nodes=new java.util.ArrayList<Pipeline.Node>();var edges=new java.util.ArrayList<Pipeline.Edge>();
+        nodes.add(new Pipeline.Node("source","source.mysql","source","source",0,0,Map.of()));
+        nodes.add(new Pipeline.Node("hive","sink.hive","hive","sink",0,0,Map.of()));
+        for(int i=0;i<count;i++) {
+            nodes.add(new Pipeline.Node("mapping"+i,"transform.field-enrichment","mapping","transform",0,0,Map.of()));
+            edges.add(new Pipeline.Edge("in"+i,i==0?"source":"mapping"+(i-1),"mapping"+i,"default"));
+        }
+        edges.add(new Pipeline.Edge("out","mapping"+(count-1),"hive","default"));
+        var pipeline=new Pipeline("pipeline-1","raw-hive",null,null,null,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null);
+        assertSame(pipeline,new AccessTaskFieldMappingBinder(tasks,mappings).bind(pipeline));
+        org.mockito.Mockito.verifyNoInteractions(tasks,mappings);
+    }
+
     @Test
     void repairsLegacyNumericEnumTypeBeforeCompilingAndRemainsIdempotent() throws Exception {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);

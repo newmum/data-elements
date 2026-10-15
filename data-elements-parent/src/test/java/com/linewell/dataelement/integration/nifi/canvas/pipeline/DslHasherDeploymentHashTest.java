@@ -23,7 +23,7 @@ class DslHasherDeploymentHashTest {
     }
 
     @Test
-    void hiveHdfsCompilerChangeLeavesOtherDeployedFlowsOnTheirOriginalHash() throws Exception {
+    void hiveTargetCompilerChangeRebuildsAllHiveModesAndLeavesJdbcOnOriginalHash() throws Exception {
         Pipeline.Dsl jdbc = singleSink("sink.jdbc", Map.of("table", "EVENT_LOG"));
         Pipeline.Dsl hiveRecordPut = singleSink("sink.hive", Map.of("hiveWriteMode", "HIVE_RECORD_PUT"));
         Pipeline.Dsl hiveHdfs = singleSink("sink.hive", Map.of("hiveWriteMode", "LINEWELL_HDFS"));
@@ -32,7 +32,7 @@ class DslHasherDeploymentHashTest {
 
         assertThat(DslHasher.deploymentHash(jdbc, revision)).isEqualTo(previousDeploymentHash(jdbc, revision));
         assertThat(DslHasher.deploymentHash(hiveRecordPut, revision))
-                .isEqualTo(previousDeploymentHash(hiveRecordPut, revision));
+                .isNotEqualTo(previousDeploymentHash(hiveRecordPut, revision));
         assertThat(DslHasher.deploymentHash(hiveHdfs, revision))
                 .isNotEqualTo(previousDeploymentHash(hiveHdfs, revision));
         assertThat(DslHasher.deploymentHash(nativeHdfs, revision))

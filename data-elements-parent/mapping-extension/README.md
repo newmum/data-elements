@@ -2,6 +2,8 @@
 
 此模块与 Java 后端编译同一份 `../src/main/java/com/linewell/dataelement/mapping/` 源码。字段函数和条件在 JVM 执行；外部码表只执行经登记授权后的参数化批量 SELECT。
 
+Hive 作为目标库时的原始写入发布规则见[详细设计第27章](../../docs/海通字段映射统一执行方案.md)：Hive 分支旁路字段对标，HDFS 写入不再生成 MergeRecord，上游查询采用 `PUBLIC-WRITER-JSON-TIME_FORMAT`，ConvertRecord 采用 `PUBLIC-READER-JSON`。该变化只需升级共享后端和 Hive 组件清单，不需要更换 1.1.10 NAR。已有原生流程须受控完整发布后才改变拓扑；HDFS CSV 时间文本还须验证来源/JVM/目标时区，不能按普通 JDBC 的恢复语义推断。
+
 ## 构建与产物检查
 
 当前运行基线为 Java 21、NiFi 2.11.0、扩展/共享内核/函数库 1.1.10。编辑协议为 schemaVersion=2.0，执行计划协议为 planVersion=1.0，不随包版本机械改号。1.0.4 的历史实施记录保留在 [详细设计第 21 章](../../docs/海通字段映射统一执行方案.md)，1.1.1 历史契约见该文档第 22 章，当前混合日期设计与验证边界见第 26 章。其他 NiFi/Java 组合须单独验证，截图中的 NiFi 1.15 不属于此包的运行基线。

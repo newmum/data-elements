@@ -11,6 +11,7 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.model.nifi.NifiEntity;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -114,7 +115,7 @@ public class DslCompiler {
     @Autowired public void setMappingVersions(com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore store){mappingVersions=store;}
 
     public void preflightMapping(Pipeline pipeline){
-        Map<String,JsonNode> specs=javaMappingSpecifications(pipeline);
+        Map<String,JsonNode> specs=javaMappingSpecifications(HiveSinkPublicationPolicy.forPublication(pipeline));
         if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();}
     }
     private static Map<String,JsonNode> javaMappingSpecifications(Pipeline pipeline){
@@ -124,7 +125,7 @@ public class DslCompiler {
             if(targets.size()==1)spec=TemporalRuleRepair.targets(spec,targets.getFirst().config());specs.put(node.id(),spec);
         }return specs;
     }
-    public boolean usesJavaMapping(Pipeline pipeline){return pipeline.dsl()!=null&&pipeline.dsl().nodes()!=null&&pipeline.dsl().nodes().stream().anyMatch(n->javaMappingRequested(n.config()==null?Map.of():n.config()));}
+    public boolean usesJavaMapping(Pipeline pipeline){var published=HiveSinkPublicationPolicy.forPublication(pipeline);return published.dsl()!=null&&published.dsl().nodes()!=null&&published.dsl().nodes().stream().anyMatch(n->javaMappingRequested(n.config()==null?Map.of():n.config()));}
 
     private static JsonNode mappingJson(Object value){try{return value instanceof String s?MAPPER.readTree(s):MAPPER.valueToTree(value);}catch(Exception ex){throw new MappingException("INVALID_JSON","映射JSON无效");}}
     private static boolean javaMappingRequested(Map<String,Object> cfg){JsonNode spec=mappingJson(cfg.get("mappings"));return spec!=null&&(spec.path("schemaVersion").asText().equals("2.0")||spec.path("executionEngine").asText().equals("JAVA_RECORD"));}
@@ -182,6 +183,11 @@ public class DslCompiler {
 
     public CompileResult compile(Pipeline pipeline, Consumer<String> processGroupCreatedCallback,
             com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer.Layout layout) {
+        return compilePublished(HiveSinkPublicationPolicy.forPublication(pipeline),processGroupCreatedCallback,layout);
+    }
+
+    private CompileResult compilePublished(Pipeline pipeline, Consumer<String> processGroupCreatedCallback,
+            com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer.Layout layout) {
         Objects.requireNonNull(pipeline.dsl(), "Pipeline DSL is required");
         Pipeline.Node periodicSource = SyncPolicy.periodicSource(pipeline);
         if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
@@ -217,6 +223,7 @@ public class DslCompiler {
         Map<String, String> sharedCs = new HashMap<>();
         boolean hiveTemporalJson = usesHiveTemporalJson(pipeline);
         boolean typedJdbcRecords=usesJavaMapping(pipeline);
+        Set<String> hiveInputNodes=HiveSinkPublicationPolicy.upstreamNodeIds(pipeline);
         sharedCs.put("jsonReader", nifi.createControllerService(pgId, JSON_READER_TYPE,
                 "JsonReader", hiveTemporalJson||usesJavaMapping(pipeline) ? HiveTemporalJsonPolicy.formats() : Map.of()).id());
         sharedCs.put("jsonWriter", nifi.createControllerService(pgId, JSON_WRITER_TYPE,
@@ -224,6 +231,11 @@ public class DslCompiler {
         if (hiveTemporalJson) {
             sharedCs.put("hiveJsonWriter", nifi.createControllerService(pgId, JSON_WRITER_TYPE,
                     HiveTemporalJsonPolicy.WRITER_NAME, HiveTemporalJsonPolicy.writerProperties()).id());
+        }
+
+        if (!hiveInputNodes.isEmpty()) {
+            sharedCs.put("hiveJsonReader", nifi.createControllerService(pgId, JSON_READER_TYPE,
+                    HiveTemporalJsonPolicy.READER_NAME, HiveTemporalJsonPolicy.formats()).id());
         }
 
         // 节点编译上下文：记录每个节点在 NiFi 中创建出来的 CS/Processor 实体 ID。
@@ -276,6 +288,8 @@ public class DslCompiler {
                 normalizeJdbcSourceConfig(cfg);
                 configureOracleCompatibleFetchSql(cfg);
             }
+            cfg.remove("_runtimeHiveTargetInput");
+            if(hiveInputNodes.contains(n.id()))cfg.put("_runtimeHiveTargetInput",true);
             cfgByNode.put(n.id(), cfg);
 
             // HDFS writers use the server-managed CSV writer and Kerberos files,
@@ -716,7 +730,7 @@ public class DslCompiler {
         properties.put("Table Name", configText(cfg, "table"));
         properties.put("Maximum-value Columns", fetch.get("Maximum-value Columns"));
         properties.put("Database Type", nifiDatabaseType(configText(cfg, "dbType")));
-        properties.put("Record Writer", sharedCs.get("jsonWriter"));
+        properties.put("Record Writer", sourceQueryRecordWriter(sharedCs,cfg));
         properties.put("Initial Load Strategy", "Start at Current Maximum Values");
         properties.put("Max Rows Per FlowFile", firstNonBlankStatic(configText(cfg, "batchSize"), "10000"));
         properties.put("Fetch Size", firstNonBlankStatic(configText(cfg, "defaultFetchSize"), "1000"));
@@ -1149,6 +1163,8 @@ public class DslCompiler {
     public record MappingReplacement(NodeCompilation node,String planId) {}
     /** Field-only upgrade: Reader/Writer and every source component remain in their existing scope. */
     public MappingReplacement createMappingReplacement(Pipeline pipeline,Pipeline.Node node,String group,String reader,String typedReader,String writer,UnifiedMappingService.Compiled prepared){
+        if(HiveSinkPublicationPolicy.forPublication(pipeline).dsl().nodes().stream().noneMatch(candidate->candidate.id().equals(node.id())))
+            throw new IllegalStateException("Hive目标原始写入不发布字段对标组件，请重新发布整个任务以更新连接关系");
         NodeCompilation compiled=new NodeCompilation();compiled.csIds.put("typed-json-reader",typedReader==null?reader:typedReader);compiled.csIds.put("typed-json-writer",writer);compiled.csIds.put("jsonReader",reader);
         Map<String,String> ids=mappingVersions.archive(pipeline,Map.of(node.id(),prepared.plan()));List<NifiEntity> created=new ArrayList<>();
         {
@@ -1163,7 +1179,7 @@ public class DslCompiler {
     }
     private void enableCreatedService(NifiEntity service){ObjectNode body=MAPPER.createObjectNode();body.set("revision",MAPPER.valueToTree(service.revision()));body.put("state","ENABLED").put("disconnectedNodeAcknowledged",false);nifi.put("/controller-services/"+service.id()+"/run-status",body,JsonNode.class);}
     private static boolean usesHiveTemporalJson(Pipeline pipeline) {
-        return pipeline.dsl().nodes().stream().anyMatch(node -> node.manifestKey().startsWith("source.")
+        return pipeline.dsl().nodes().stream().anyMatch(node -> HiveSinkPublicationPolicy.isHiveSink(node) || node.manifestKey().startsWith("source.")
                 && HiveTemporalJsonPolicy.isHive(node.manifestKey(),node.config()));
     }
 
@@ -2509,7 +2525,7 @@ public class DslCompiler {
                         "SQL Query", lastResultQuery(stringConfig(cfg, "_runtimeSourceSql").isBlank()
                                 ? String.valueOf(cfg.get("sql")) : stringConfig(cfg, "_runtimeSourceSql")),
                         "Record Writer", sourceQueryRecordWriter(sharedCs, sourceCfg),
-                        "Use Avro Logical Types", Boolean.toString(HiveTemporalJsonPolicy.isHive(null,sourceCfg)||usesJavaMapping(pipeline)),
+                        "Use Avro Logical Types", Boolean.toString(HiveTemporalJsonPolicy.isHive(null,sourceCfg)||usesJavaMapping(pipeline)||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput"))),
                         "Output Empty FlowFile", "false"
                 ), schedulingPeriod, schedulingStrategy);
         nc.processorIds.put("query", proc.id());
@@ -3457,27 +3473,22 @@ public class DslCompiler {
         double x = nodeOriginX(layout);
         double y = nodeOriginY(layout);
 
-        NifiEntity merge = nifi.createProcessor(pgId, MERGE_RECORD_TYPE, node.label() + "/merge",
-                x, y, jdbcBatchMergeProperties(sharedCs), null, null);
         NifiEntity convert = nifi.createProcessor(pgId, CONVERT_RECORD_TYPE, node.label() + "/convert",
-                x + PROCESSOR_COLUMN_GAP, y, Map.of(
-                        "Record Reader", sharedCs.get("jsonReader"),
+                x, y, Map.of(
+                        "Record Reader", sharedCs.get("hiveJsonReader"),
                         "Record Writer", csvWriterId,
                         "Include Zero Record FlowFiles", "false"), null, null);
         NifiEntity filename = nifi.createProcessor(pgId, UPDATE_ATTRIBUTE_TYPE, node.label() + "/filename",
-                x + 2 * PROCESSOR_COLUMN_GAP, y, Map.of("filename", "${uuid}"), null, null);
+                x + PROCESSOR_COLUMN_GAP, y, Map.of("filename", "${uuid}"), null, null);
         NifiEntity put = nifi.createProcessor(pgId, putType, node.label() + "/put",
-                x + 3 * PROCESSOR_COLUMN_GAP, y, buildHiveBatchPutHdfsProperties(cfg, linewell), null, null);
+                x + 2 * PROCESSOR_COLUMN_GAP, y, buildHiveBatchPutHdfsProperties(cfg, linewell), null, null);
 
-        nc.processorIds.put("merge", merge.id());
         nc.processorIds.put("convert", convert.id());
         nc.processorIds.put("filename", filename.id());
         nc.processorIds.put("put", put.id());
-        nc.inletProcessorId = merge.id();
-        nifi.createConnection(pgId, merge.id(), "PROCESSOR", convert.id(), "PROCESSOR", List.of("merged"));
+        nc.inletProcessorId = convert.id();
         nifi.createConnection(pgId, convert.id(), "PROCESSOR", filename.id(), "PROCESSOR", List.of("success"));
         nifi.createConnection(pgId, filename.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));
-        nc.usedOutgoing.computeIfAbsent(merge.id(), ignored -> new LinkedHashSet<>()).add("merged");
         nc.usedOutgoing.computeIfAbsent(convert.id(), ignored -> new LinkedHashSet<>()).add("success");
         nc.usedOutgoing.computeIfAbsent(filename.id(), ignored -> new LinkedHashSet<>()).add("success");
     }
@@ -3895,21 +3906,21 @@ public class DslCompiler {
         if (!"source".equals(manifest.category())) return;
         if (!"org.apache.nifi.processors.standard.ExecuteSQLRecord".equals(processorType)) return;
         resolved.put("Output Empty FlowFile", "false");
-        if(HiveTemporalJsonPolicy.isHive(manifest.key(),cfg)||typedJdbcRecords)resolved.put("Use Avro Logical Types","true");
-        if (HiveTemporalJsonPolicy.isHive(manifest.key(), cfg)) {
+        if(HiveTemporalJsonPolicy.isHive(manifest.key(),cfg)||typedJdbcRecords||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput")))resolved.put("Use Avro Logical Types","true");
+        if (HiveTemporalJsonPolicy.isHive(manifest.key(), cfg)||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput"))) {
             resolved.put("Record Writer", requireHiveQueryRecordWriter(sharedCs));
         }
     }
 
     private String sourceQueryRecordWriter(Map<String, String> sharedCs, Map<String, Object> sourceCfg) {
-        if (!HiveTemporalJsonPolicy.isHive(null, sourceCfg)) return sharedCs.get("jsonWriter");
+        if (!HiveTemporalJsonPolicy.isHive(null, sourceCfg)&&!Boolean.TRUE.equals(sourceCfg.get("_runtimeHiveTargetInput"))) return sharedCs.get("jsonWriter");
         return requireHiveQueryRecordWriter(sharedCs);
     }
 
     private String requireHiveQueryRecordWriter(Map<String, String> sharedCs) {
         String writer = sharedCs.get("hiveJsonWriter");
         if (writer == null || writer.isBlank()) {
-            throw new IllegalStateException("Hive 来源缺少日期时间 JSON Record Writer，请重新发布流程");
+            throw new IllegalStateException("Hive 读写链路缺少日期时间 JSON Record Writer，请重新发布流程");
         }
         return writer;
     }

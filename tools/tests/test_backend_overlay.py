@@ -12,6 +12,17 @@ spec.loader.exec_module(overlay)
 
 
 class BackendOverlayTest(unittest.TestCase):
+    def test_explicit_manifest_is_read_without_collecting_config(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'manifests/sinks').mkdir(parents=True)
+            (root/'manifests/sinks/hive.json').write_text('{"id":"hive"}')
+            name,content=overlay.manifest_entry(root,'manifests/sinks/hive.json')
+            self.assertEqual('BOOT-INF/classes/manifests/sinks/hive.json',name)
+            self.assertEqual({'id':'hive'},json.loads(content))
+            for forbidden in ['application.yml','../secrets.json','manifests/../config.json']:
+                with self.assertRaises(ValueError):overlay.manifest_entry(root,forbidden)
+
     def test_preserves_unselected_entries_and_refuses_concurrent_class_change(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
