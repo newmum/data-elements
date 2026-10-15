@@ -88,6 +88,13 @@ public final class TemporalParser {
         if (value instanceof java.sql.Date d) return new Parts(d.toLocalDate(), null, null, null, null);
         if (value instanceof java.sql.Time t) return new Parts(null, t.toLocalTime(), null, null, null);
         if (value instanceof java.util.Date d) return new Parts(null, null, null, null, d.toInstant());
+        if(value instanceof Number) {
+            String calendar;
+            try {calendar=ValueTypes.decimal(value).toBigIntegerExact().toString();}
+            catch(ArithmeticException ex){throw new MappingException("DATE_UNIT_REQUIRED","非整数时间数值须明确格式或时间戳单位");}
+            if(calendar.length()!=8&&calendar.length()!=14)throw new MappingException("DATE_UNIT_REQUIRED","数值仅自动识别8位日期或14位紧凑日期时间；时间戳须明确单位");
+            value=calendar;
+        }
         if (!(value instanceof CharSequence)) throw new MappingException("DATE_UNIT_REQUIRED", "数值时间戳须明确选择秒、毫秒、微秒或纳秒单位");
         String s = text(value);
         if (DIGITS.matcher(s).matches()) {
@@ -164,7 +171,7 @@ public final class TemporalParser {
             case "INSTANT" -> p.instant;
             case "DATE" -> p.instant.atZone(zone).toLocalDate();
             case "TIME" -> p.instant.atZone(zone).toLocalTime();
-            default -> checkedLocal(p.instant.atZone(zone).toLocalDateTime(),zone);
+            default -> p.instant.atZone(zone).toLocalDateTime();
         };
         LocalDate date = p.date != null ? p.date : defaultDate;
         if (type.equals("TIME")) {
@@ -182,13 +189,9 @@ public final class TemporalParser {
             if (type.equals("INSTANT")) return instant;
             local = instant.atZone(zone).toLocalDateTime();
         }
-        return type.equals("DATE") ? local.toLocalDate() : checkedLocal(local,zone);
-    }
-
-    private static LocalDateTime checkedLocal(LocalDateTime local,ZoneId zone) {
-        if(zone.getRules().getValidOffsets(local).size()!=1)
-            throw new MappingException("DATE_AMBIGUOUS", "日期时间处于流程时区的夏令时重叠或缺口，请使用带偏移的绝对时间语义");
-        return local;
+        // DATE/DATETIME are calendar values without an offset. Only INSTANT resolution
+        // above needs a unique zone offset; a birthday must not fail on historical DST.
+        return type.equals("DATE") ? local.toLocalDate() : local;
     }
 
     private static MappingException incomplete() { return new MappingException("DATE_INCOMPLETE", "日期信息不完整；年月、月日或纯时间转完整日期须配置补全日期"); }

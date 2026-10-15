@@ -38,8 +38,9 @@ public class ErrorController {
 
     @GetMapping({"/api/pipelines/{id}/errors", "/api/flows/{id}/errors"})
     @Operation(summary = "查询错误列表(list)")
-    public List<FlowError> list(@PathVariable String id) {
-        return errors.list(id);
+    public ResponseEntity<List<FlowError>> list(@PathVariable String id) {
+        if (pipelines.findById(id).isEmpty()) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(errors.list(id));
     }
 
     @GetMapping({"/api/pipelines/{id}/bulletins/live", "/api/flows/{id}/bulletins/live"})
@@ -78,7 +79,9 @@ public class ErrorController {
     @PostMapping({"/api/pipelines/delete/{id}/errors", "/api/flows/delete/{id}/errors"})
     @Operation(summary = "清空错误(clear)")
     public ResponseEntity<?> clear(@PathVariable String id) {
+        if (pipelines.findById(id).isEmpty()) return ResponseEntity.notFound().build();
         errors.clear(id);
         return ResponseEntity.noContent().build();
     }
+
 }

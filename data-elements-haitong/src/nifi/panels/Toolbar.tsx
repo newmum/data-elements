@@ -51,6 +51,7 @@ import {
 import { apiClient } from '@/api/client';
 import { resolveNifiNativeUiUrl } from '@/api/nifiNativeUrl';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
+import { flowActionFailure } from '../utils/flowActionFailure';
 import type { FlowStatusPayload } from '@/api/pipelines';
 import { appConfig, isChengtianIntegration } from '@/config/appConfig';
 import { getNifiOverlayContainer } from './overlayContainer';
@@ -279,12 +280,11 @@ export default function Toolbar() {
     message.success(isChengtianIntegration ? `设计已保存并发布：${name}。外部执行需另行授权。` : `已保存并部署:${name}`);
   };
 
-  const reportSaveOrDeployFailure = (error: any, deploymentAttempted: boolean, action: string) => {
-    if (deploymentAttempted) {
-      openErrorPanel();
-    } else {
-      message.error(`${action}失败: ${error?.response?.data?.error ?? error?.message ?? error}`);
-    }
+  const reportSaveOrDeployFailure = (error: any, deploymentAttempted: boolean, action: string, failedPipelineId = currentPipelineId) => {
+    if (!isCurrentSession() || useCanvasStore.getState().currentPipelineId !== failedPipelineId) return;
+    const diagnostic = flowActionFailure(error, deploymentAttempted ? 'deploy' : 'save');
+    message.error(`${deploymentAttempted ? '画布已保存，部署未完成' : `${action}失败`}：${diagnostic.message}`);
+    openErrorPanel();
   };
 
   // ---- Save + deploy in-place ----
@@ -910,12 +910,14 @@ export default function Toolbar() {
           setOperationBusy(true);
           setActiveAction('save');
           let deploymentAttempted = false;
+          let savedPipelineId = currentPipelineId;
           try {
             const isCopy = Boolean(currentPipelineId);
             const submitted = toDsl();
             const saved = await save.mutateAsync({ id: undefined, name, dsl: submitted, copy: isCopy });
             if (!isCurrentSession()) return;
             setCurrentPipeline(saved.id, saved.name);
+            savedPipelineId = saved.id;
             if (!isCopy) {
               window.dispatchEvent(new CustomEvent('haitong:nifi-pipeline-saved', {
                 detail: { pipelineId: saved.id },
@@ -926,7 +928,7 @@ export default function Toolbar() {
             await deploySavedPipeline(saved.id, saved.name, submitted, isCopy ? null : getTid());
           } catch (e: any) {
             message.destroy('start-flow');
-            reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
+            reportSaveOrDeployFailure(e, deploymentAttempted, '保存', savedPipelineId);
           } finally {
             actionLock.current = false;
             setOperationBusy(false);

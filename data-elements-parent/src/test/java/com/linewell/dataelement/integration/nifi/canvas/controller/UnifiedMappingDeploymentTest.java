@@ -3,6 +3,8 @@ package com.linewell.dataelement.integration.nifi.canvas.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
+import com.linewell.dataelement.integration.nifi.canvas.errors.FlowError;
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.*;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.*;
@@ -18,7 +20,8 @@ class UnifiedMappingDeploymentTest {
     private final NifiClient nifi=mock(NifiClient.class);
     private final PipelineGroupOrganizer groups=mock(PipelineGroupOrganizer.class);
     private final PipelineTaskLifecycleSynchronizer tasks=mock(PipelineTaskLifecycleSynchronizer.class);
-    private final PipelineRunController controller=new PipelineRunController(repo,compiler,nifi,mock(ErrorService.class),tasks,mock(PipelineRuntimeStatusResolver.class),groups,mock(TargetTableCleanupService.class));
+    private final ErrorService errors=mock(ErrorService.class);
+    private final PipelineRunController controller=new PipelineRunController(repo,compiler,nifi,errors,tasks,mock(PipelineRuntimeStatusResolver.class),groups,mock(TargetTableCleanupService.class));
     private Pipeline fixture(){
         var p=new Pipeline("p","flow","",1L,2L,new Pipeline.Dsl(1,List.of(
                 new Pipeline.Node("s","source.mysql","来源","source",0,0,Map.of()),
@@ -32,6 +35,8 @@ class UnifiedMappingDeploymentTest {
     @Test void sourceWatermarkPreventsAnyRebuildOrDeletion()throws Exception{
         fixture();when(nifi.get(eq("/processors/source/state"),eq(com.fasterxml.jackson.databind.JsonNode.class))).thenReturn(new ObjectMapper().readTree("{\"componentState\":{\"clusterState\":{\"state\":[{\"key\":\"maxvalue.id\",\"value\":\"100\"}]}}}"));
         var response=controller.deploy("p",null);assertEquals(409,response.getStatusCode().value());
+        verify(errors).add(eq("p"), argThat(error -> error.detail().contains("增量水位") && error.message().contains("来源状态")));
+        assertTrue(((Map<?,?>)response.getBody()).containsKey("flowError"));
         verify(compiler,never()).compile(any(),any(),any());verify(nifi,never()).cleanupProcessGroup(anyString());verify(nifi,never()).setProcessGroupState(anyString(),anyString());
     }
     @Test void candidateCompileFailureLeavesOldGraphIntact()throws Exception{
@@ -42,9 +47,26 @@ class UnifiedMappingDeploymentTest {
     @Test void unavailableBundleRestoresPreviousStatusBeforeAnyNativeMutation() {
         fixture();
         doThrow(new IllegalStateException("extension unavailable")).when(compiler).preflightMapping(any());
-        assertEquals(422,controller.deploy("p",null).getStatusCode().value());
+        var response=controller.deploy("p",null);
+        assertEquals(422,response.getStatusCode().value());
+        verify(errors).add(eq("p"), argThat(error -> error.detail().contains("extension unavailable") && error.phase()==FlowError.ErrorPhase.DEPLOYMENT));
+        assertTrue(((Map<?,?>)response.getBody()).containsKey("flowError"));
         verify(repo).updateStatus("p",PipelineStatus.STOPPED);
         verifyNoInteractions(nifi);
         verify(compiler,never()).compile(any(),any(),any());
+    }
+
+    @Test void nativePropertyErrorsReachTheResponseAndStoredHistory() throws Exception {
+        fixture();
+        when(nifi.get(eq("/processors/source/state"),eq(com.fasterxml.jackson.databind.JsonNode.class)))
+                .thenReturn(new ObjectMapper().readTree("{\"componentState\":{}}"));
+        when(compiler.compile(any(),any(),any())).thenThrow(new NifiException("POST /processors failed: 400",400,
+                "Record Writer must reference an enabled Controller Service; password=private-value"));
+        var response=controller.deploy("p",null);
+        assertEquals(409,response.getStatusCode().value());
+        verify(errors).add(eq("p"), argThat(error -> error.detail().contains("Record Writer must reference")
+                && error.detail().contains("HTTP 400") && !error.detail().contains("private-value")));
+        assertFalse(response.getBody().toString().contains("private-value"));
+        verify(nifi,never()).cleanupProcessGroup("old");
     }
 }

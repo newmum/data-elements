@@ -342,6 +342,18 @@ console.log(JSON.stringify({ defaultCases: defaults.length, existingNamePreserve
   mismatchedPreviewRejected: true, requestCounts }));
 
 const ftpRequestCounts = [];
+// Output precision belongs to the saved registration, regardless of business-looking names.
+for (const size of [20, 100]) for (const dbType of ['mysql', 'oracle', 'postgresql', 'hive', 'sqlserver', 'dameng']) {
+  const f = fixture(1);
+  const fields = Array.from({ length: size }, (_, i) => ({
+    columnName: i % 2 ? `updated_time_${i}` : `birth_date_${i}`, dataType: 'varchar',
+    standardField: i % 2 ? 'DATE' : 'DATETIME', length: 128,
+  }));
+  const outputs = plain(f.actual.targetTableItems(fields, dbType));
+  outputs.forEach((field, i) => assert.equal(field.dataType,
+    i % 2 ? 'date' : f.actual.materializationTimeType(dbType)));
+  assert.equal(f.calls.length, 0, '20/100 precision decisions use already-loaded registration data');
+}
 {
   const f = fixture(1);
   const original = { columnName: 'UNID', dataType: 'varchar', columnType: 'text', length: 64,

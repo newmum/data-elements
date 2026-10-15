@@ -21,6 +21,40 @@ import static org.mockito.Mockito.*;
 
 class RegisteredMappingSchemaServiceTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void registeredFormatSurvivesPhysicalOracleDateAndExplicitClearingWins()throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture fixture=new Fixture(count);fixture.config=Map.of("db",Map.of("dbType","ORACLE","defaultSchema","registered"));
+            when(fixture.metadata.getDatabaseProductName()).thenReturn("Oracle");when(fixture.metadata.getSearchStringEscape()).thenReturn("\\");
+            var physical=new ArrayList<Map<String,Object>>();
+            for(int i=0;i<count;i++) {
+                var table=new HashMap<>(fixture.tables.get(i));table.put("field_governance_config","{\"fields\":[{\"columnName\":\"id\",\"standardField\":\"DATE\",\"standardFieldExplicitlyCleared\":"+(i%2==1)+"}]}");fixture.tables.set(i,table);
+                var column=new HashMap<>(fixture.columns.get(i));column.put("data_type","DATE");column.put("data_standard_id","DATETIME");fixture.columns.set(i,column);
+                var row=new HashMap<>(jdbcColumn("catalog","registered","table_"+i,"id"));row.put("TYPE_NAME","DATE");physical.add(row);
+            }
+            when(fixture.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(physical));
+            try(var tenant=TenantContext.use("tenant-A")) {
+                var schemas=fixture.service.physicalBatch(fixture.service.resolve(fixture.references));
+                for(int i=0;i<count;i++){var field=schemas.get("ref-"+i).get(0);assertEquals("DATETIME",field.path("logicalType").asText());assertTrue(field.path("dateContainsTime").asBoolean());if(i%2==0)assertEquals("DATE",field.path("registeredFormat").asText());else assertFalse(field.has("registeredFormat"));}
+            }
+            verify(fixture.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(fixture.metadata,times(1)).getColumns(any(),any(),any(),any());
+        }
+    }
+    @Test void oldOracleDriverGetSchemaDoesNotBreakExplicitOrDefaultSchemaBatches()throws Exception {
+        for(int count:List.of(20,100))for(boolean explicit:List.of(true,false)) {
+            Fixture fixture=new Fixture(count);
+            fixture.config=Map.of("db",explicit?Map.of("dbType","ORACLE","defaultSchema","registered"):Map.of("dbType","ORACLE"));
+            when(fixture.metadata.getDatabaseProductName()).thenReturn("Oracle");
+            when(fixture.metadata.getUserName()).thenReturn("registered");
+            when(fixture.physical.getSchema()).thenThrow(new AbstractMethodError("Unimplemented method: getSchema()"));
+            when(fixture.metadata.getSearchStringEscape()).thenReturn("\\");
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)rows.add(jdbcColumn("catalog","registered","table_"+i,"id"));
+            when(fixture.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(rows));
+            try(var tenant=TenantContext.use("tenant-A")){assertEquals(count,fixture.service.physicalBatch(fixture.service.resolve(fixture.references)).size());}
+            verify(fixture.physical,times(explicit?0:1)).getSchema();
+            verify(fixture.metadata,times(1)).getColumns(any(),any(),any(),any());
+            verify(fixture.engine,times(1)).openRegistered(anyString(),anyMap());
+        }
+    }
     @Test void oracleDateMetadataIsDatetimeAndOnlyKnownDateContractIsRepaired()throws Exception {
         Fixture fixture=new Fixture(1);fixture.config=Map.of("db",Map.of("dbType","ORACLE","defaultSchema","registered"));
         fixture.columns=List.of(Map.of("table_id","table-0","column_name","id","data_type","DATE","nullable",1));

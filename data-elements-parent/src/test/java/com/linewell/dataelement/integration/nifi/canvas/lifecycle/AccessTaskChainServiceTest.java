@@ -89,7 +89,7 @@ class AccessTaskChainServiceTest {
         clearInvocations(fixture.jdbc);
         try (var tenant = TenantContext.use("ga")) {
             Map<String, Object> graph = fixture.service.byTask("t0");
-            assertThat(graph).containsEntry("readOnly", true);
+            assertThat(graph).containsEntry("readOnly", false).containsEntry("relationshipUnavailable", true);
             assertThat(items(graph)).extracting(item -> item.get("taskId")).containsExactly("t0");
             assertThat(graph.get("warnings").toString()).contains("100");
         }
@@ -142,11 +142,11 @@ class AccessTaskChainServiceTest {
         fixture.jdbc.update("update db_table_t set source_table_id='missing' where tid='root'");
         try (var tenant = TenantContext.use("ga")) {
             Map<String, Object> missing = fixture.service.byTask("t");
-            assertThat(missing).containsEntry("readOnly", true).containsEntry("links", List.of());
+            assertThat(missing).containsEntry("readOnly", false).containsEntry("relationshipUnavailable", true).containsEntry("links", List.of());
             assertThat(missing.get("warnings").toString()).contains("关联不完整");
             fixture.jdbc.update("update db_table_t set source_table_id='ods' where tid='root'");
             Map<String, Object> cyclic = fixture.service.byTask("t");
-            assertThat(cyclic).containsEntry("readOnly", true).containsEntry("links", List.of());
+            assertThat(cyclic).containsEntry("readOnly", false).containsEntry("relationshipUnavailable", true).containsEntry("links", List.of());
             assertThat(cyclic.get("warnings").toString()).contains("循环");
         }
     }
@@ -185,7 +185,7 @@ class AccessTaskChainServiceTest {
         fixture.jdbc.update("update nifi_pipeline_t set dsl_json=?", fixture.json.writeValueAsString(fixture.dsl("another", "ods", "source", "target")));
         try (var tenant = TenantContext.use("ga")) {
             Map<String, Object> graph = fixture.service.byTask("a");
-            assertThat(graph).containsEntry("readOnly", true).containsEntry("links", List.of());
+            assertThat(graph).containsEntry("readOnly", false).containsEntry("relationshipUnavailable", true).containsEntry("links", List.of());
             assertThat(graph.get("warnings").toString()).contains("不一致");
         }
     }
@@ -197,7 +197,7 @@ class AccessTaskChainServiceTest {
         fixture.task("deep", previous, "out", "source", "target");
         try (var tenant = TenantContext.use("ga")) {
             Map<String, Object> graph = fixture.service.byTask("deep");
-            assertThat(graph).containsEntry("readOnly", true);
+            assertThat(graph).containsEntry("readOnly", false).containsEntry("relationshipUnavailable", true);
             assertThat(items(graph)).hasSize(1);
             assertThat(graph.get("warnings").toString()).contains("16级");
         }
@@ -214,7 +214,7 @@ class AccessTaskChainServiceTest {
         clearInvocations(fixture.jdbc);
         try (var tenant = TenantContext.use("ga")) {
             Map<String, Object> graph = fixture.service.byTask("t0");
-            assertThat(graph).containsEntry("readOnly", true).containsEntry("selectedPipelineId", "p-t0");
+            assertThat(graph).containsEntry("readOnly", false).containsEntry("relationshipUnavailable", true).containsEntry("selectedPipelineId", "p-t0");
             assertThat(items(graph)).hasSize(1);
             Pipeline saved = (Pipeline) items(graph).getFirst().get("pipeline");
             assertThat(fixture.json.writeValueAsString(saved.dsl())).isEqualTo(original);
@@ -246,7 +246,7 @@ class AccessTaskChainServiceTest {
         fixture.jdbc.update("update db_table_t set is_del=1 where tid='root'");
         try (var tenant = TenantContext.use("ga")) {
             Map<String, Object> graph = fixture.service.byTask("t");
-            assertThat(graph).containsEntry("readOnly", true);
+            assertThat(graph).containsEntry("readOnly", false).containsEntry("relationshipUnavailable", true);
             assertThat(items(graph)).hasSize(1);
             assertThat(items(graph).getFirst()).doesNotContainKeys("nativeUrl", "processGroupId");
             fixture.deny("source");

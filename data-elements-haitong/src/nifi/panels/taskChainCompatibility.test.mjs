@@ -14,14 +14,18 @@ function harness(chain) {
   const exports = {};
   vm.runInNewContext(compiled, { exports, require(id) {
     if (id === '@tanstack/react-query') return {
-      useQueryClient: () => ({}), useMutation(options) { mutations.push(options); return options; },
+      useQueryClient: () => ({ getQueryData: () => undefined }), useMutation(options) { mutations.push(options); return options; },
     };
     if (id === './client') return { apiClient: {
       get: async path => { requests.push(path); return { data: chain }; },
-      post: async path => { requests.push(path); return { data: {} }; },
+      post: async (path, body) => { requests.push(path); return { data: body ?? {} }; },
     } };
     if (id === '../stores/taskChainStore') return { useTaskChainStore: { getState: () => ({ chain }) } };
     if (id === '../stores/canvasStore') return { useCanvasStore: { getState: () => ({ currentPipelineId: 'selected' }) } };
+    if (id === './bridgeSession') return { getSessionRevision: () => 1 };
+    if (id === '../stores/errorPanelStore') return { useErrorPanelStore: { getState: () => ({ clearFailures() {}, record() {} }) } };
+    if (id === '../utils/incrementalFields') return { incrementalConfigurationError: () => undefined };
+    if (id === '../utils/pipelineVersion') return { preservesIncrementalFields: (submitted, returned) => submitted === returned };
     return {};
   } });
   return { hooks: exports, mutations, requests };
@@ -56,13 +60,26 @@ test('compatibility state never disables an unrelated current pipeline operation
   assert.deepEqual(requests, ['/pipelines/other/stop']);
 });
 
+test('missing registration links allow saving the manually replaced source and other component properties', async () => {
+  const { hooks, requests } = harness({ selectedPipelineId: 'selected', readOnly: false, relationshipUnavailable: true });
+  const dsl = { version: '1.0', nodes: [
+    { id: 'source', category: 'source', manifestKey: 'source.ftp', config: { directory: '/synthetic/input' } },
+    { id: 'mapping', category: 'transform', manifestKey: 'transform.field-enrichment', config: { marker: 'manual-rule' } },
+  ], edges: [{ source: 'source', target: 'mapping' }] };
+  const saved = await hooks.useSavePipeline().mutationFn({ id: 'selected', name: 'manually edited', dsl });
+  assert.equal(saved.dsl, dsl);
+  await hooks.useStopPipeline().mutationFn('selected');
+  assert.deepEqual(requests, ['/pipelines/selected', '/pipelines/selected/stop']);
+});
+
 test('the actual editor renders the saved canvas with its warning only for the selected read-only task', () => {
   const ts = compiler(), localRequire = createRequire(import.meta.url);
   const source = fs.readFileSync(new URL('../pages/EditorPage.tsx', import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: {
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
-  const chain = { readOnly: true, selectedPipelineId: 'selected', warnings: ['来源库已更换，任务关联需核对'] };
+  for (const readOnly of [true, false]) {
+  const chain = { readOnly, relationshipUnavailable: !readOnly, selectedPipelineId: 'selected', warnings: ['来源库已更换，任务关联需核对'] };
   for (const currentPipelineId of ['selected', 'other']) {
     const exports = {};
     vm.runInNewContext(compiled, { exports, require(id) {
@@ -81,7 +98,9 @@ test('the actual editor renders the saved canvas with its warning only for the s
     } });
     const markup = renderToStaticMarkup(React.createElement(exports.default));
     assert.match(markup, /data-testid="saved-canvas"/);
-    assert.equal(markup.includes('已打开当前任务保存的画布（只读）'), currentPipelineId === 'selected');
-    assert.equal(markup.includes('来源库已更换，任务关联需核对'), currentPipelineId === 'selected');
+    assert.equal(markup.includes('已打开当前任务保存的画布（只读）'), readOnly && currentPipelineId === 'selected');
+    assert.equal(markup.includes('来源库已更换，任务关联需核对'), readOnly && currentPipelineId === 'selected');
+    assert.equal(markup.includes('已打开当前任务保存的画布，可继续编辑'), !readOnly && currentPipelineId === 'selected');
+  }
   }
 });

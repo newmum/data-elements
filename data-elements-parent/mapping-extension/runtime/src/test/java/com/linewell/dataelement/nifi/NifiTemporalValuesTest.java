@@ -10,6 +10,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NifiTemporalValuesTest {
+    @Test void historicalDatetimeUsesTheSameAtZoneResolutionAsDateFormatUtil() {
+        ZoneId zone=ZoneId.of("Asia/Shanghai");
+        for(LocalDateTime value:List.of(LocalDateTime.of(1947,4,15,0,0),LocalDateTime.of(1989,4,16,2,30),LocalDateTime.of(1991,9,15,1,30))) {
+            assertEquals(value.atZone(zone).toInstant(),((Timestamp)NifiTemporalValues.writerValue(value,zone)).toInstant());
+            assertEquals(value.toLocalDate(),((java.sql.Date)NifiTemporalValues.writerValue(value.toLocalDate(),zone)).toLocalDate());
+        }
+    }
     @Test void actualNiFiCodecPreservesTransportInstantAndChainedBusinessTimeAcrossJvmZones() {
         TimeZone previous=TimeZone.getDefault();var zone=ZoneId.of("Asia/Shanghai");
         try {

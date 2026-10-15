@@ -65,22 +65,42 @@ public final class SchemaContract {
     }
     public static void prepare(ObjectNode specification){
         JsonNode contract=specification.path("schemaContract");List<Field> target=read(contract.path("target"));Map<String,Field> targets=new HashMap<>();target.forEach(field->targets.put(field.name(),field));
-        for(JsonNode rule:specification.path("rules")){if(!(rule.path("target") instanceof ObjectNode output))continue;Field physical=targets.get(output.path("name").asText());if(physical==null)continue;
-            if(output.path("logicalType").asText().equals("DATE")&&physical.logicalType().equals("DATETIME"))
+        Map<String,String> sourceFormats=formats(contract.path("source")),targetFormats=formats(contract.path("target"));
+        for(JsonNode rule:specification.path("rules")){if(!(rule.path("target") instanceof ObjectNode output))continue;String targetName=output.path("name").asText();Field physical=targets.get(targetName);
+            String sourceFormat=rule.path("input").path("kind").asText().equals("FIELD")?sourceFormats.getOrDefault(rule.path("input").path("name").asText(),""):"";
+            String targetFormat=targetFormats.getOrDefault(targetName,"");
+            if(!sourceFormat.isBlank()&&!targetFormat.isBlank()&&!sourceFormat.equals(targetFormat))throw new MappingException("REGISTERED_FORMAT_CONFLICT","来源与目标登记的统一格式不一致："+targetName);
+            String registered=sourceFormat.isBlank()?targetFormat:sourceFormat;
+            output.remove("registeredFormat");
+            if(!registered.isBlank()) {
+                if(physical!=null&&!physical.logicalType().equals(registered)&&!(registered.equals("DATE")&&physical.logicalType().equals("DATETIME")))throw new MappingException("REGISTERED_FORMAT_TARGET_MISMATCH","目标物理列无法承载登记的统一格式："+targetName);
+                output.put("logicalType",registered).put("registeredFormat",registered);
+                // A cached parser's output precision must follow the saved registration too.
+                for(JsonNode step:rule.path("steps"))if(step.path("operator").asText().equals("DATE_PARSE")&&step.path("args") instanceof ObjectNode args)args.put("logicalType",registered);
+            } else if(physical!=null&&output.path("logicalType").asText().equals("DATE")&&physical.logicalType().equals("DATETIME"))
                 for(JsonNode declared:contract.path("target"))if(declared.path("name").asText().equals(physical.name())&&declared.path("dateContainsTime").asBoolean())output.put("logicalType","DATETIME");
+            if(physical==null)continue;
             if(!output.has("logicalType")||output.path("logicalType").asText().equals("ANY"))output.put("logicalType",physical.logicalType());
             if(!output.has("nullable"))output.put("nullable",physical.nullable());
             if(physical.length()>0&&!output.has("length"))output.put("length",physical.length());
             if(physical.precision()>0){if(!output.has("precision"))output.put("precision",physical.precision());if(!output.has("scale"))output.put("scale",physical.scale());}
         }
     }
+    private static Map<String,String> formats(JsonNode fields) {
+        Map<String,String> formats=new HashMap<>();
+        for(JsonNode field:fields){String value=field.path("registeredFormat").asText();if(Set.of("DATE","DATETIME").contains(value))formats.put(field.path("name").asText(),value);}
+        return formats;
+    }
     public static void validatePlan(MappingEngine.Plan plan){
         JsonNode document=plan.document(),contract=document.path("schemaContract");Set<String> source=new HashSet<>();read(contract.path("source")).forEach(field->source.add(field.name()));Set<String> optional=new HashSet<>();for(JsonNode rule:document.path("rules"))if(rule.path("sourceOptional").asBoolean()&&rule.path("input").path("logicalType").isTextual())optional.add(rule.path("input").path("name").asText());
         if(contract.path("source").isArray())for(String name:plan.sourceFields())if(!source.contains(name)&&!optional.contains(name))throw new MappingException("SCHEMA_FIELD_MISSING","规则引用的来源字段不属于Schema："+name);
         Map<String,Field> target=new HashMap<>();read(contract.path("target")).forEach(field->target.put(field.name(),field));
         if(!contract.path("target").isArray())return;
+        Set<String> registeredDates=new HashSet<>();for(JsonNode rule:document.path("rules"))if(rule.path("target").path("registeredFormat").asText().equals("DATE"))registeredDates.add(rule.path("target").path("name").asText());
         for(var output:plan.outputContracts().entrySet()){Field physical=target.get(output.getKey());if(physical==null)throw new MappingException("TARGET_NOT_FOUND","规则输出不属于目标Schema："+output.getKey());
-            if(!physical.logicalType().equals("ANY")&&!physical.logicalType().equals(output.getValue().logicalType()))throw new MappingException("TARGET_TYPE_MISMATCH","规则输出类型与物理目标不一致："+output.getKey());
+            boolean registeredDate=output.getValue().logicalType().equals("DATE")&&physical.logicalType().equals("DATETIME")
+                    &&registeredDates.contains(output.getKey());
+            if(!physical.logicalType().equals("ANY")&&!physical.logicalType().equals(output.getValue().logicalType())&&!registeredDate)throw new MappingException("TARGET_TYPE_MISMATCH","规则输出类型与物理目标不一致："+output.getKey());
             if(!physical.nullable()&&output.getValue().nullable())throw new MappingException("TARGET_NULLABILITY_MISMATCH","物理目标非空，规则须配置非空输出："+output.getKey());
             if(physical.precision()>0&&(physical.precision()!=output.getValue().precision()||physical.scale()!=output.getValue().scale()))throw new MappingException("TARGET_PRECISION_MISMATCH","规则小数精度与物理目标不一致："+output.getKey());
         }

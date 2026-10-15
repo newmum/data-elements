@@ -45,6 +45,22 @@ class HaitongTransformRecordTest {
         var output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(100,output.size());
         for(var row:output)assertEquals(java.time.Instant.parse("2024-05-10T06:27:49Z").toEpochMilli(),row.path("y").asLong());
     }
+    @Test void historicalAndNumericDatesAreDetectedPerValueAndBadCalendarDatesAreIsolated() throws Exception {
+        var spec=JSON.readTree("""
+          {"schemaVersion":"2.0","policies":{"zoneId":"Asia/Shanghai","recordErrorMode":"ROUTE_INVALID"},"rules":[{"ruleId":"date","target":{"name":"y","logicalType":"DATETIME"},"input":{"kind":"FIELD","name":"x"},"steps":[{"operator":"DATE_PARSE","args":{"pattern":"AUTO","logicalType":"DATETIME"}}]}]}
+          """);
+        var plan=MappingEngine.compile(spec);
+        var values=List.of("1947/04/15","20260701112021",20260701112021L,"20250219",20250219);
+        for(int count:List.of(20,100)) {
+            var runner=runner("NULL","ROUTE_INVALID");
+            runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)rows.add(Map.of("x",values.get(i%values.size())));
+            rows.add(Map.of("x","20010236"));runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.INVALID,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+            var output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(count,output.size());
+            var invalid=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());assertEquals("DATE_INVALID",invalid.path("errors").get(0).path("code").asText());
+        }
+    }
     @Test void splitChildrenWithSameParentIdentityHaveDifferentUuidsAndRetryIsStable() throws Exception {
         TestRunner runner=runner("NULL","FAIL_FLOWFILE");
         var spec=JSON.createObjectNode().put("version","1.0");spec.putArray("mappings").addObject().put("to","/ODS_UUID").put("expression","UUID()");

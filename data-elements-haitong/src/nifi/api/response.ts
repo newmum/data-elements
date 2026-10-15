@@ -46,7 +46,7 @@ export function unwrapSuccessfulEnvelope<T = unknown>(body: unknown): T {
   const payload = unwrapResponse(body);
   const object = asObject(payload);
   if (object && ('code' in object || 'status' in object) && isFailure(object)) {
-    throw new Error(getApiErrorMessage(object, '接口执行失败'));
+    throw Object.assign(new Error(getApiErrorMessage(object, '接口执行失败')), { payload: object });
   }
   return payload as T;
 }

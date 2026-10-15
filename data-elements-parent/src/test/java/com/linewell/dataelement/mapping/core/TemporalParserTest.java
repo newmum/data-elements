@@ -69,10 +69,24 @@ class TemporalParserTest {
             assertThrows(MappingException.class,()->auto(input,"DATETIME"),input);
         assertEquals("DATE_AMBIGUOUS",assertThrows(MappingException.class,()->auto("10/05/24","DATETIME")).code());
         assertEquals(LocalDate.of(2024,5,10),parse("dd/MM/yyyy","DATE","10/05/2024",Map.of()));
-        for(String type:List.of("DATETIME","INSTANT"))for(String input:List.of("2024-03-10 02:30:00","2024-11-03 01:30:00"))
-            assertEquals("DATE_AMBIGUOUS",assertThrows(MappingException.class,()->TemporalParser.auto(input,type,ZoneId.of("America/New_York"))).code());
+        for(String input:List.of("2024-03-10 02:30:00","2024-11-03 01:30:00")) {
+            assertEquals(LocalDateTime.parse(input.replace(' ','T')),TemporalParser.auto(input,"DATETIME",ZoneId.of("America/New_York")));
+            assertEquals("DATE_AMBIGUOUS",assertThrows(MappingException.class,()->TemporalParser.auto(input,"INSTANT",ZoneId.of("America/New_York"))).code());
+        }
         assertThrows(MappingException.class,()->TemporalParser.bind("bad pattern","DATE",Map.of()));
         assertThrows(MappingException.class,()->TemporalParser.bind("AUTO","DATE",Map.of("defaultDate","2024-02-30")));
+    }
+    @Test void historicalBirthdaysAndCompactCalendarNumbersAreNotEpochsOrDstErrors() {
+        for(Object input:List.of("1947/04/15","1947-04-15",19470415)) {
+            assertEquals(LocalDate.of(1947,4,15),auto(input,"DATE"));
+            assertEquals(LocalDateTime.of(1947,4,15,0,0),auto(input,"DATETIME"));
+        }
+        for(Object input:List.of("20260701112021",20260701112021L,new java.math.BigDecimal("20260701112021.0")))
+            assertEquals(LocalDateTime.of(2026,7,1,11,20,21),auto(input,"DATETIME"));
+        for(Object input:List.of("20250219",20250219,new java.math.BigDecimal("20250219.0")))
+            assertEquals(LocalDate.of(2025,2,19),auto(input,"DATE"));
+        for(Object input:List.of("20010236",20010236,"20250230",20250230))
+            assertEquals("DATE_INVALID",assertThrows(MappingException.class,()->auto(input,"DATE")).code());
     }
     @Test void numericEpochUnitsAreExplicitExactAndHandleNegativeValues() {
         var expected=Instant.parse("2024-05-10T06:27:49.123456789Z");

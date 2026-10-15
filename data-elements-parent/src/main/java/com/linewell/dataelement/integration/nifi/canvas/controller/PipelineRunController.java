@@ -4,6 +4,7 @@ import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
 import com.linewell.dataelement.integration.nifi.canvas.compile.SyncPolicy;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
 import com.linewell.dataelement.integration.nifi.canvas.errors.FlowError;
+import com.linewell.dataelement.integration.nifi.canvas.errors.FlowFailureDetails;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineRuntimeStatusResolver;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer;
@@ -209,7 +210,7 @@ public class PipelineRunController {
     public ResponseEntity<?> deploy(@ApiParam(value = "pipeline ID", required = true)
                                     @PathVariable String id,
                                     @RequestBody(required = false) DeployRequest request) {
-        Pipeline p = bindAccessTaskMappings(repo.findById(id).orElse(null));
+        Pipeline p = repo.findById(id).orElse(null);
         if (p == null) return ResponseEntity.notFound().build();
         return fullDeploy(p, deploymentHash(p), false, request, false);
     }
@@ -448,7 +449,7 @@ public class PipelineRunController {
         } catch (NifiException e) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
             taskLifecycle.statusOnly(p.id(), 2);
-            errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT, "快速启动失败", e.getMessage()));
+            errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT, "快速启动失败", FlowFailureDetails.describe(e)));
             return errorResponse(e);
         } catch (IllegalStateException e) {
             if (!oneShotSourceIds(p, p.nodeMapping()).isEmpty() && !TargetTableCleanupService.requested(p)) {
@@ -557,8 +558,8 @@ public class PipelineRunController {
                 try { compiler.preflightHiveGlobalServices(p); }
                 catch (RuntimeException ex) {
                     repo.updateStatus(p.id(),p.status());
-                    errors.add(p.id(),runtimeErr(FlowError.ErrorPhase.DEPLOYMENT,"Hive 全局服务核验失败",ex.getMessage()));
-                    return ResponseEntity.unprocessableEntity().body(Map.of("error",ex.getMessage(),"code","HIVE_GLOBAL_SERVICES_UNAVAILABLE"));
+                    return deploymentFailure(p.id(), 422, "HIVE_GLOBAL_SERVICES_UNAVAILABLE", "Hive 全局服务核验失败", ex,
+                            "请检查当前 NiFi 根作用域的公共 Reader/Writer 服务；旧流程已保留。", Map.of());
                 }
             }
             currentHash = deploymentHash(p);
@@ -580,7 +581,8 @@ public class PipelineRunController {
                 try { compiler.preflightMapping(p); }
                 catch (RuntimeException ex) {
                     repo.updateStatus(p.id(), p.status());
-                    return ResponseEntity.unprocessableEntity().body(Map.of("error", ex.getMessage(), "code", "MAPPING_PREFLIGHT_FAILED"));
+                    return deploymentFailure(p.id(), 422, "MAPPING_PREFLIGHT_FAILED", "字段映射发布前检查失败", ex,
+                            "请根据详情核对字段映射配置、扩展版本及依赖服务；旧流程已保留。", Map.of());
                 }
                 return stagedMappingDeploy(p, currentHash, start, layout);
             }
@@ -600,13 +602,13 @@ public class PipelineRunController {
                     taskLifecycle.statusOnly(p.id(), 2);
                     errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT,
                             "无法清理旧 Process Group",
-                            "旧 PG " + oldPg + " 清理失败：" + ce.getMessage()
+                            "旧 PG " + oldPg + " 清理失败：" + FlowFailureDetails.describe(ce)
                                     + "。已中止重新部署，避免在 NiFi 中产生孤儿 PG。"
                                     + "请在当前节点的 NiFi 原生画布中检查该组后重试。"));
                     return ResponseEntity.status(500).body(Map.of(
                             "error", "cleanup-failed",
                             "processGroupId", oldPg,
-                            "detail", ce.getMessage()));
+                            "detail", FlowFailureDetails.describe(ce)));
                 }
             }
             groups.pruneEmptyAncestors(previousParents, layout.parentId());
@@ -670,20 +672,21 @@ public class PipelineRunController {
             }
             errors.add(p.id(), new FlowError(null, FlowError.ErrorLevel.ERROR,
                     FlowError.ErrorPhase.VALIDATION, nodeId, nodeLabel, fieldKey,
-                    ise.getMessage(), null, "请检查节点配置/连线", Instant.now()));
+                    FlowFailureDetails.safe(ise.getMessage() == null ? ise.getClass().getSimpleName() : ise.getMessage()),
+                    FlowFailureDetails.describe(ise), "请检查节点配置/连线", Instant.now()));
             log.warn("Compile pipeline {} failed: {}", p.id(), ise.getMessage());
-            return ResponseEntity.status(400).body(Map.of("error", ise.getMessage()));
+            return ResponseEntity.status(400).body(Map.of("error", FlowFailureDetails.describe(ise)));
         } catch (NifiException e) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
-            errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT, "部署到 NiFi 失败", e.getMessage()));
             taskLifecycle.statusOnly(p.id(), 2);
-            return errorResponse(e);
+            return deploymentFailure(p.id(), e.status() > 0 ? e.status() : 502, "NIFI_DEPLOYMENT_FAILED", "部署到 NiFi 失败", e,
+                    "请根据 NiFi 响应检查处理器属性、Controller Service 和节点连接。", Map.of());
         } catch (Exception e) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
-            errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT, "部署异常", e.getMessage()));
             taskLifecycle.statusOnly(p.id(), 2);
             log.error("Run pipeline {} failed", p.id(), e);
-            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+            return deploymentFailure(p.id(), 500, "DEPLOYMENT_FAILED", "部署异常", e,
+                    "请根据错误详情检查部署配置。", Map.of());
         }
     }
 
@@ -711,8 +714,9 @@ public class PipelineRunController {
                     if (!state.path("localState").path("state").isEmpty()
                             || !state.path("clusterState").path("state").isEmpty()) {
                         repo.updateStatus(pipeline.id(), pipeline.status());
-                        return ResponseEntity.status(409).body(Map.of("error", "source-state-migration-required",
-                                "message", "来源组件已有增量水位或文件状态。本次保留旧流程，请先采用能够保留来源组件ID的迁移方式。", "sourceProcessorId", source));
+                        return deploymentFailure(pipeline.id(), 409, "source-state-migration-required", "来源状态需要保留，已阻止流程重建",
+                                new IllegalStateException("来源组件已有增量水位或文件状态。本次保留旧流程，请先采用能够保留来源组件ID的迁移方式。"),
+                                "请保留来源组件 ID 和已有增量水位，不要通过清空状态或队列重试。", Map.of("sourceProcessorId", source, "previousGraphRetained", true));
                     }
                 }
             }
@@ -762,8 +766,9 @@ public class PipelineRunController {
                         pipeline.nifiProcessGroupId(),pipeline.status(),pipeline.lastDeployedHash(),pipeline.lastDeployedAt(),pipeline.lastStoppedAt(),pipeline.nodeMapping(),pipeline.lastBulletinId()));
                 if (previousStopped) repo.updateStatus(pipeline.id(),PipelineStatus.STOPPED);
             } else repo.updateStatus(pipeline.id(),PipelineStatus.STOPPED);
-            errors.add(pipeline.id(),runtimeErr(FlowError.ErrorPhase.DEPLOYMENT,"统一映射候选流程部署失败",ex.getMessage()));
-            return ResponseEntity.status(409).body(Map.of("error","mapping-deployment-failed","message",ex.getMessage(),"previousGraphRetained",!committed));
+            return deploymentFailure(pipeline.id(), 409, "mapping-deployment-failed", "统一映射候选流程部署失败", ex,
+                    committed ? "请检查新流程状态及错误详情。" : "旧流程及其状态已保留，请根据详情修复后重新部署。",
+                    Map.of("previousGraphRetained", !committed));
         }
     }
 
@@ -810,15 +815,29 @@ public class PipelineRunController {
 
     private FlowError runtimeErr(FlowError.ErrorPhase phase, String message, String detail) {
         return new FlowError(null, FlowError.ErrorLevel.ERROR, phase,
-                null, null, null, message, detail, null, Instant.now());
+                null, null, null, FlowFailureDetails.safe(message), FlowFailureDetails.safe(detail), null, Instant.now());
+    }
+
+    private ResponseEntity<?> deploymentFailure(String id, int status, String code, String message,
+                                                Throwable cause, String suggestion, Map<String, Object> extra) {
+        FlowError failure = new FlowError(null, FlowError.ErrorLevel.ERROR, FlowError.ErrorPhase.DEPLOYMENT,
+                null, null, null, message, FlowFailureDetails.describe(cause), suggestion, Instant.now());
+        FlowError recorded = errors.add(id, failure);
+        Map<String, Object> body = new LinkedHashMap<>(extra);
+        body.put("error", code);
+        body.put("code", code);
+        body.put("message", message);
+        body.put("detail", failure.detail());
+        body.put("flowError", recorded == null ? failure : recorded);
+        return ResponseEntity.status(status).body(body);
     }
 
     private ResponseEntity<?> errorResponse(NifiException e) {
         int status = e.status() > 0 ? e.status() : 502;
         Map<String, Object> body = new HashMap<>();
-        body.put("error", e.getMessage());
+        body.put("error", FlowFailureDetails.describe(e));
         body.put("status", status);
-        body.put("body", e.body());
+        body.put("body", FlowFailureDetails.safe(e.body()));
         return ResponseEntity.status(status).body(body);
     }
 

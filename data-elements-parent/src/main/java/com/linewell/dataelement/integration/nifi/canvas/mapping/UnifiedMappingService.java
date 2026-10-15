@@ -50,9 +50,30 @@ public class UnifiedMappingService {
         for(var entry:drafts.entrySet()){
             ObjectNode draft=entry.getValue();ArrayNode rules=byNode.getOrDefault(entry.getKey(),JSON.createArrayNode());draft.set("rules",rules);Set<String> used=new HashSet<>();dictionaryReferences(rules,used);ObjectNode bindings=JSON.createObjectNode();
             resolved.path("dictionaryBindings").fields().forEachRemaining(binding->{if(used.contains(binding.getKey())||specifications.size()==1&&rules.isEmpty())bindings.set(binding.getKey(),binding.getValue());});draft.set("dictionaryBindings",bindings);
+            applyRegisteredTemporalInputs(draft);
             var plan=MappingEngine.compile(draft);Map<String,Map<String,Object>>localConnections=new LinkedHashMap<>();plan.dictionaries().values().forEach(dictionary->localConnections.put(dictionary.datasourceId(),connections.get(dictionary.datasourceId())));ObjectNode localSnapshots=JSON.createObjectNode();bindings.forEach(binding->{String id=binding.path("snapshotId").asText();if(snapshots.has(id))localSnapshots.set(id,snapshots.get(id));});compiled.put(entry.getKey(),new Compiled(plan,localConnections,localSnapshots));contracts.put(entry.getKey(),plan.document().path("schemaContract"));
         }
         return compiled;
+    }
+    private static final java.util.regex.Pattern REGISTERED_TEMPORAL_CAST=java.util.regex.Pattern.compile(
+            "CAST\\(NULLIF\\(TRIM\\(CAST\\(\\$\\{field:([^}]+)}ASVARCHAR\\)\\),''\\)AS(?:DATE|TIMESTAMP)\\)",java.util.regex.Pattern.CASE_INSENSITIVE);
+    /** Only the generator's exact legacy date wrapper is replaced; custom expressions stay intact. */
+    static void applyRegisteredTemporalInputs(ObjectNode draft) {
+        Map<String,String> formats=new HashMap<>();for(JsonNode field:draft.path("schemaContract").path("source")) {
+            String format=field.path("registeredFormat").asText();if(Set.of("DATE","DATETIME").contains(format))formats.put(field.path("name").asText(),format);
+        }
+        if(formats.isEmpty())return;
+        for(JsonNode rule:draft.path("rules")) {
+            JsonNode input=rule.path("input");if(!input.path("kind").asText().equals("EXPRESSION"))continue;
+            String expression=input.path("expression").asText();if(expression.length()>4000)continue;
+            var match=REGISTERED_TEMPORAL_CAST.matcher(expression.replaceAll("\\s+",""));if(!match.matches())continue;
+            String name=ValueTypes.field(match.group(1)),format=formats.get(name);if(format==null)continue;
+            ObjectNode object=(ObjectNode)rule;object.putObject("input").put("kind","FIELD").put("name",name);
+            ArrayNode steps=JSON.createArrayNode();String prefix=rule.path("ruleId").asText()+"-registered";
+            steps.addObject().put("stepId",prefix+"-empty").put("operator","FUNCTION").putObject("args").put("function","blankToNull").putArray("parameters");
+            steps.addObject().put("stepId",prefix+"-date").put("operator","DATE_PARSE").putObject("args").put("pattern","AUTO").put("logicalType",format);
+            rule.path("steps").forEach(steps::add);object.set("steps",steps);
+        }
     }
     private static void renameDictionaryReferences(JsonNode node,Map<String,String> aliases){if(node.isArray()){node.forEach(child->renameDictionaryReferences(child,aliases));return;}if(!node.isObject())return;ObjectNode object=(ObjectNode)node;String id=object.path("dictionaryId").asText();if(aliases.containsKey(id))object.put("dictionaryId",aliases.get(id));JsonNode reference=object.path("definitionRef");if(reference.isObject()&&aliases.containsKey(reference.path("id").asText()))((ObjectNode)reference).put("id",aliases.get(reference.path("id").asText()));object.fields().forEachRemaining(entry->{if(!entry.getKey().equals("dictionaryBindings"))renameDictionaryReferences(entry.getValue(),aliases);});}
     private static void dictionaryReferences(JsonNode node,Set<String> ids){if(node.isArray()){node.forEach(child->dictionaryReferences(child,ids));return;}if(!node.isObject())return;if(node.hasNonNull("dictionaryId"))ids.add(node.path("dictionaryId").asText());if(node.path("definitionRef").isObject())ids.add(node.path("definitionRef").path("id").asText());node.fields().forEachRemaining(entry->dictionaryReferences(entry.getValue(),ids));}

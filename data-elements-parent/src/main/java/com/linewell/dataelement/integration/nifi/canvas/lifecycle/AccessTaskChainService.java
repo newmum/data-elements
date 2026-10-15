@@ -79,9 +79,8 @@ public class AccessTaskChainService {
         for (String key : List.of("source_db_id", "target_db_id", "actual_source_db_id", "actual_target_db_id")) {
             String value = text(task, key); if (!value.isBlank()) datasourceIds.add(value);
         }
-        for (String key : List.of("source_table_id", "target_table_id")) {
-            String value = text(task, key); if (!value.isBlank()) tableIds.add(value);
-        }
+        // Historical registration links are not the saved design's resource references.
+        // Authorize their datasource scope, but only resolve table IDs actually used by the DSL.
         if (pipeline.dsl() != null && pipeline.dsl().nodes() != null) for (Pipeline.Node node : pipeline.dsl().nodes()) {
             if (node == null || node.config() == null) continue;
             for (String key : List.of("registeredDatasourceId", "selectedDatabaseId", "sourceDbId", "targetDbId", "dbId", "datasourceId", "dataSourceId")) {
@@ -114,11 +113,12 @@ public class AccessTaskChainService {
         item.put("targetDbName", text(sources.get(text(task, "target_db_id")), "db_name"));
         item.put("sourceTableName", text(task, "source_table_name")); item.put("targetTableName", text(task, "target_table_name"));
         item.put("pipelineId", id); item.put("pipeline", pipeline);
-        item.put("unavailableReason", "任务关联需要核对，当前仅查看已保存画布");
+        item.put("unavailableReason", "关联链路暂不可用，可继续编辑当前任务保存的画布");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rootSourceTableId", text(task, "source_table_id")); result.put("selectedTaskId", text(task, "task_id"));
         result.put("selectedPipelineId", id); result.put("items", List.of(item)); result.put("links", List.of());
-        result.put("readOnly", true);
+        result.put("readOnly", false);
+        result.put("relationshipUnavailable", true);
         result.put("warnings", List.of(reason == null ? "关联链路暂不可用" : reason));
         result.put("nativeCanvas", Map.of("mode", "NONE", "reason", "请先核对任务关联后重新打开"));
         return result;

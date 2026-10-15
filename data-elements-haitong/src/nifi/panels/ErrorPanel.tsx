@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Drawer, Segmented, Empty, Button, App as AntdApp, Tag, Tooltip, Alert } from 'antd';
 import { CopyOutlined, AimOutlined, ClearOutlined, ReloadOutlined, CloseOutlined } from '@ant-design/icons';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { getNifiOverlayContainer } from './overlayContainer';
+import { mergeFlowErrors } from '../utils/flowActionFailure';
 import {
   useFlowErrors,
   useClearFlowErrors,
@@ -40,6 +41,9 @@ function phaseLabel(p: ErrorPhase): string {
 export default function ErrorPanel() {
   const visible = useErrorPanelStore((s) => s.visible);
   const close = useErrorPanelStore((s) => s.close);
+  const failures = useErrorPanelStore((s) => s.failures);
+  const failureSequence = useErrorPanelStore((s) => s.failureSequence);
+  const clearFailures = useErrorPanelStore((s) => s.clearFailures);
   const pipelineId = useCanvasStore((s) => s.currentPipelineId);
   const focusNode = useCanvasStore((s) => s.focusNode);
   const openDrawer = useCanvasStore((s) => s.openDrawer);
@@ -50,7 +54,9 @@ export default function ErrorPanel() {
   const errorsQuery = useFlowErrors(pipelineId);
   const clearMut = useClearFlowErrors();
 
-  const list = errorsQuery.data ?? [];
+  const list = useMemo(() => mergeFlowErrors(errorsQuery.data ?? [],
+    failures.filter(row => row.pipelineId === pipelineId).map(row => row.error)), [errorsQuery.data, failures, pipelineId]);
+  useEffect(() => { if (visible) setFilter('ALL'); }, [visible, failureSequence, pipelineId]);
   const counts = useMemo(() => {
     const c: Record<FilterValue, number> = { ALL: list.length, VALIDATION: 0, DEPLOYMENT: 0, RUNTIME: 0 };
     for (const e of list) c[e.phase]++;
@@ -107,9 +113,9 @@ export default function ErrorPanel() {
   };
 
   const handleClear = async () => {
-    if (!pipelineId) return;
     try {
-      await clearMut.mutateAsync(pipelineId);
+      if (pipelineId) await clearMut.mutateAsync(pipelineId);
+      clearFailures(pipelineId);
       message.success('已清空错误记录');
     } catch (err: any) {
       message.error(`清空失败: ${err?.message ?? err}`);
@@ -137,7 +143,7 @@ export default function ErrorPanel() {
           <Tooltip title="刷新">
             <Button size="small" aria-label="刷新错误记录" icon={<ReloadOutlined />} onClick={() => errorsQuery.refetch()} />
           </Tooltip>
-          <Button size="small" icon={<ClearOutlined />} danger onClick={handleClear} disabled={!pipelineId || counts.ALL === 0}>
+          <Button size="small" icon={<ClearOutlined />} danger onClick={handleClear} disabled={clearMut.isPending || counts.ALL === 0}>
             清空
           </Button>
           <Tooltip title="关闭">
@@ -181,7 +187,7 @@ export default function ErrorPanel() {
           <Alert type="error" showIcon message="错误列表加载失败" description={errorsQuery.error.message} style={{ marginBottom: 12 }} />
         )}
         {filtered.length === 0 ? (
-          <Empty description={errorsQuery.isError ? '请重试加载' : '暂无错误'} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ marginTop: 32 }} />
+          <Empty description={errorsQuery.isError ? '请重试加载' : errorsQuery.isFetching ? '正在加载错误记录…' : '暂无错误'} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ marginTop: 32 }} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {filtered.map((e) => (
@@ -214,7 +220,7 @@ export default function ErrorPanel() {
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word' }}>{e.message}</div>
                   {e.detail && (
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, wordBreak: 'break-word' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
                       {e.detail}
                     </div>
                   )}

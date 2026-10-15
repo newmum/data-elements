@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
@@ -17,6 +18,31 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class ErrorControllerTest {
+    @Test
+    void listAndClearRejectAnUnavailablePipelineBeforeReadingOrDeletingHistory() {
+        PipelineRepository pipelines = mock(PipelineRepository.class);
+        ErrorService errors = mock(ErrorService.class);
+        var controller = new ErrorController(errors, pipelines, mock(NifiClient.class));
+        when(pipelines.findById("foreign")).thenReturn(Optional.empty());
+        assertThat(controller.list("foreign").getStatusCode().value()).isEqualTo(404);
+        assertThat(controller.clear("foreign").getStatusCode().value()).isEqualTo(404);
+        verifyNoInteractions(errors);
+    }
+
+    @Test
+    void twentyAndOneHundredErrorsUseOneAuthorizedPipelineRead() {
+        for (int size : List.of(20, 100)) {
+            PipelineRepository pipelines = mock(PipelineRepository.class);
+            ErrorService errors = mock(ErrorService.class);
+            when(pipelines.findById("p")).thenReturn(Optional.of(new Pipeline("p", "flow", null, null, null, null, null,
+                    PipelineStatus.SAVED, null, null, null, null, null)));
+            when(errors.list("p")).thenReturn(java.util.Collections.nCopies(size, null));
+            assertThat(new ErrorController(errors, pipelines, mock(NifiClient.class)).list("p").getBody()).hasSize(size);
+            verify(pipelines).findById("p");
+            verify(errors).list("p");
+        }
+    }
+
     @Test
     void liveBulletinsReadNiFiWithoutMutatingStoredErrorHistory() throws Exception {
         PipelineRepository pipelines = mock(PipelineRepository.class);

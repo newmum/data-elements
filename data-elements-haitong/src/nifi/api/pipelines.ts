@@ -13,6 +13,21 @@ import { useCanvasStore } from '../stores/canvasStore';
 import { sameDesignDsl, preservesIncrementalFields } from '../utils/pipelineVersion';
 import { incrementalConfigurationError } from '../utils/incrementalFields';
 import { useTaskChainStore } from '../stores/taskChainStore';
+import { useErrorPanelStore } from '../stores/errorPanelStore';
+import { flowActionFailure, type FlowAction } from '../utils/flowActionFailure';
+
+async function performFlowAction<T>(id: string | null, action: FlowAction, execute: () => Promise<T>): Promise<T> {
+  const revision = getSessionRevision();
+  try {
+    const result = await execute();
+    if (revision === getSessionRevision()) useErrorPanelStore.getState().clearFailures(id, action);
+    return result;
+  } catch (error) {
+    if (revision === getSessionRevision()) useErrorPanelStore.getState().record(id, action, flowActionFailure(error, action),
+      useCanvasStore.getState().currentPipelineId === id);
+    throw error;
+  }
+}
 
 function requireEditableTask(id?: string) {
   const selectedId = id || useCanvasStore.getState().currentPipelineId;
@@ -196,26 +211,28 @@ export function useSavePipeline() {
   return useMutation({
     mutationFn: async (p: Partial<Pipeline> & { name: string; dsl: CanvasDsl; copy?: boolean }) => {
       requireEditableTask(p.id);
-      const revision = getSessionRevision();
-      const dsl = p.dsl;
-      const error = incrementalConfigurationError(dsl);
-      if (error) throw new Error(error);
-      if (p.id) {
-        const stored = qc.getQueryData<Pipeline>(['pipeline', p.id, revision]);
-        if (stored && stored.name === p.name && sameDesignDsl(stored.dsl, dsl)) return stored;
-        const saved = (await api.post<Pipeline>(`/pipelines/${p.id}`, p, {
-          params: stored?.updatedAt ? { expectedUpdatedAt: stored.updatedAt } : undefined,
+      return performFlowAction(p.id ?? useCanvasStore.getState().currentPipelineId, 'save', async () => {
+        const revision = getSessionRevision();
+        const dsl = p.dsl;
+        const error = incrementalConfigurationError(dsl);
+        if (error) throw new Error(error);
+        if (p.id) {
+          const stored = qc.getQueryData<Pipeline>(['pipeline', p.id, revision]);
+          if (stored && stored.name === p.name && sameDesignDsl(stored.dsl, dsl)) return stored;
+          const saved = (await api.post<Pipeline>(`/pipelines/${p.id}`, p, {
+            params: stored?.updatedAt ? { expectedUpdatedAt: stored.updatedAt } : undefined,
+          })).data;
+          if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开画布');
+          if (!preservesIncrementalFields(dsl, saved.dsl)) throw new Error('保存响应改变了主增量字段，画布配置已保留，请核对后端版本后重试');
+          return saved;
+        }
+        const saved = (await api.post<Pipeline>('/pipelines', p, {
+          params: p.copy ? undefined : { catalogTid: getTid() || undefined },
         })).data;
         if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开画布');
         if (!preservesIncrementalFields(dsl, saved.dsl)) throw new Error('保存响应改变了主增量字段，画布配置已保留，请核对后端版本后重试');
         return saved;
-      }
-      const saved = (await api.post<Pipeline>('/pipelines', p, {
-        params: p.copy ? undefined : { catalogTid: getTid() || undefined },
-      })).data;
-      if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开画布');
-      if (!preservesIncrementalFields(dsl, saved.dsl)) throw new Error('保存响应改变了主增量字段，画布配置已保留，请核对后端版本后重试');
-      return saved;
+      });
     },
     onSuccess: async (data, submitted) => {
       const revision = getSessionRevision();
@@ -246,7 +263,13 @@ export function useDeployPipeline() {
   return useMutation({
     mutationFn: async ({ id, catalogTid }: { id: string; catalogTid?: string | null }) => {
       requireEditableTask(id);
-      return (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid })).data;
+      return performFlowAction(id, 'deploy', async () => {
+        const result = (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid })).data;
+        if (!result || result.pipeline?.id !== id) {
+          throw Object.assign(new Error('部署接口未返回有效的流程结果，请刷新状态确认执行结果'), { payload: result });
+        }
+        return result;
+      });
     },
     onSuccess: async (data, { id }) => {
       const revision = getSessionRevision();
@@ -354,7 +377,7 @@ export function useStopPipeline() {
   return useMutation({
     mutationFn: async (id: string) => {
       requireEditableTask(id);
-      return (await api.post(`/pipelines/${id}/stop`)).data;
+      return performFlowAction(id, 'stop', async () => (await api.post(`/pipelines/${id}/stop`)).data);
     },
   });
 }
@@ -370,7 +393,7 @@ export function useStartPipeline() {
   return useMutation({
     mutationFn: async ({ id, force = false, confirmCleanup = false }: { id: string; force?: boolean; confirmCleanup?: boolean }) => {
       requireEditableTask(id);
-      return (await api.post(`/pipelines/${id}/start`, undefined, { params: { force, confirmCleanup } })).data;
+      return performFlowAction(id, 'start', async () => (await api.post(`/pipelines/${id}/start`, undefined, { params: { force, confirmCleanup } })).data);
     },
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: ['pipeline-status', id] });

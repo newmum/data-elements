@@ -30,4 +30,5 @@ export async function acceptDeploymentResult(
   if (!sessionIsCurrent()) return;
   void client.invalidateQueries({ queryKey: ['pipelines', revision] });
   void client.invalidateQueries({ queryKey: statusKey });
+  void client.invalidateQueries({ queryKey: ['pipeline-errors', id, revision] });
 }

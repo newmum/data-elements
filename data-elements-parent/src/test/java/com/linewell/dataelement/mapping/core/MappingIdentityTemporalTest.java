@@ -10,6 +10,19 @@ import static org.junit.jupiter.api.Assertions.*;
 class MappingIdentityTemporalTest {
     private static final ObjectMapper JSON=new ObjectMapper();
     private static ExecutionContext context(String id){return new ExecutionContext(Instant.parse("2026-10-14T06:27:49.123456Z"),ZoneId.of("Asia/Shanghai"),Locale.CHINA,id);}
+    @Test void savedRegistrationControlsDatePrecisionRegardlessOfFieldNameOrOldParser()throws Exception {
+        for(String name:List.of("birth_date","updated_time","opaque"))for(String format:List.of("DATE","DATETIME")) {
+            var spec=JSON.createObjectNode().put("schemaVersion","2.0");var contract=spec.putObject("schemaContract");
+            contract.putArray("source").addObject().put("name",name).put("logicalType","STRING").put("registeredFormat",format);
+            contract.putArray("target").addObject().put("name",name).put("logicalType","DATETIME").put("dateContainsTime",true);
+            var rule=spec.putArray("rules").addObject().put("ruleId","r");rule.putObject("input").put("kind","FIELD").put("name",name);rule.putObject("target").put("name",name).put("logicalType",format.equals("DATE")?"DATETIME":"DATE");
+            rule.putArray("steps").addObject().put("operator","DATE_PARSE").putObject("args").put("pattern","AUTO").put("logicalType","DATE");
+            var plan=MappingEngine.compile(spec);assertEquals(format,plan.outputTypes().get(name));
+            var result=MappingEngine.execute(plan,List.of(Map.of(name,"20260701112021"),Map.of(name,"2026/07/01 11:20:21")),0,context("registered"),null);
+            for(var row:result.rows()){assertTrue(row.success());assertEquals(format.equals("DATE")?LocalDate.of(2026,7,1):LocalDateTime.of(2026,7,1,11,20,21),row.output().get(name));}
+            if(format.equals("DATETIME")) {((com.fasterxml.jackson.databind.node.ObjectNode)contract.path("target").get(0)).put("logicalType","DATE").put("dateContainsTime",false);assertEquals("REGISTERED_FORMAT_TARGET_MISMATCH",assertThrows(MappingException.class,()->MappingEngine.compile(spec)).code());}
+        }
+    }
     @Test void compactUuidRetainsFullBitsAcrossRowsWindowsInputsAndWorkers() throws Exception {
         Set<String> identifiers=ConcurrentHashMap.newKeySet();
         try(var executor=Executors.newFixedThreadPool(4)) {
