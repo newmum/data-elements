@@ -31,7 +31,8 @@ public class DataAccessFieldMapping implements Serializable {
 
     private String sourceFieldCn;
 
-    private Integer sourceFieldLength;
+    /** Declared column capacity; LOB metadata can exceed Integer.MAX_VALUE. */
+    private Long sourceFieldLength;
 
     private String sourceDataType;
 
@@ -39,7 +40,7 @@ public class DataAccessFieldMapping implements Serializable {
 
     private String targetFieldCn;
 
-    private Integer targetFieldLength;
+    private Long targetFieldLength;
 
     private String targetDataType;
 

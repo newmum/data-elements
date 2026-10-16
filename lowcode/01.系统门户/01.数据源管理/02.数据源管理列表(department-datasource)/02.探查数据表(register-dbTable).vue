@@ -2268,7 +2268,7 @@ const syncPreviewFields = async () => {
   if (!tableId || state.syncingFields) return;
   try {
     await ElMessageBox.confirm(
-      `确认从来源库重新同步“${state.currentTableName}”的字段吗？新增字段会加入，类型、长度和备注等结构信息会更新，来源已删除的字段会从配置中移出。`,
+      `确认从来源库重新同步“${state.currentTableName}”的全部字段吗？最新字段注释会同步为字段中文名（含清空），新增字段会加入，类型和长度会更新，来源已删除的字段会从配置中移出。`,
       "同步字段",
       { type: "warning", confirmButtonText: "确认同步", cancelButtonText: "取消" }
     );
@@ -2277,9 +2277,11 @@ const syncPreviewFields = async () => {
   try {
     const result = await $common.post("/dst/database/metadata/collectColumns", { tableId, force: true });
     const fields = normalizeFieldRows(result);
-    state.fieldRows = normalizePreviewFieldsForDisplay(fields);
-    state.previewColumns = state.fieldRows;
-    $message.success(`已同步 ${state.fieldRows.length} 个字段`);
+    if (state.currentPreviewTableId === tableId) {
+      state.fieldRows = normalizePreviewFieldsForDisplay(fields);
+      state.previewColumns = state.fieldRows;
+    }
+    $message.success(`已同步全部 ${fields.length} 个字段及最新字段注释`);
   } catch (error) {
     $message.warning(error?.message || "字段同步失败");
   } finally {

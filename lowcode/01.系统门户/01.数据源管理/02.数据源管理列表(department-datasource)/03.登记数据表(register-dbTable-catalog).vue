@@ -2839,11 +2839,12 @@ async function loadDictionaryTables() {
 }
 
 function normalizeFieldRows(rows, tableName, preserveIncomingRole = false, preferPhysicalStructure = false) {
-  const previous = new Map((fieldMap[tableName] || []).map((item) => [item.columnName, item]));
-  const saved = savedCatalogFieldMap(tableName);
+  const fieldKey = (name) => String(name || "").trim().toLowerCase();
+  const previous = new Map((fieldMap[tableName] || []).map((item) => [fieldKey(item.columnName), item]));
+  const saved = new Map(Array.from(savedCatalogFieldMap(tableName), ([name, field]) => [fieldKey(name), field]));
   return rows.map((row, index) => {
-    const old = previous.get(row.columnName);
-    const savedField = saved.get(row.columnName) || {};
+    const old = previous.get(fieldKey(row.columnName));
+    const savedField = saved.get(fieldKey(row.columnName)) || {};
     const suggestion = suggestField(row);
     const configuredStandardField =
       old?.standardField ??
@@ -4392,23 +4393,37 @@ async function syncActiveTableFields() {
   if (!table?.tid || syncingFields.value) return;
   try {
     await ElMessageBox.confirm(
-      `确认从来源库重新同步“${table.tableName}”的字段吗？新增字段会加入，类型、长度和备注等结构信息会更新，来源已删除的字段会从配置中移出；已有业务治理设置会保留。`,
+      `确认从来源库重新同步“${table.tableName}”的全部字段吗？最新字段注释会覆盖字段中文名（含清空），新增字段会加入，类型和长度会更新，来源已删除的字段会从配置中移出；已有字典翻译、统一格式等治理设置会保留。`,
       "同步字段",
       { type: "warning", confirmButtonText: "确认同步", cancelButtonText: "取消" }
     );
   } catch { return; }
   syncingFields.value = true;
   try {
+    const previous = new Map((fieldMap[table.tableName] || []).map((field) => [String(field.columnName).toLowerCase(), field]));
     const result = await $common.postSilently("/dst/database/metadata/collectColumns", {
       tableId: table.tid,
       force: true,
     });
     const rows = unwrapList(result);
+    const added = rows.filter((row) => !previous.has(String(row.columnName).toLowerCase())).length;
+    const commentsUpdated = rows.filter((row) => {
+      const old = previous.get(String(row.columnName).toLowerCase());
+      return old && String(old.columnComment ?? "") !== String(row.columnComment ?? "");
+    }).length;
     fieldMap[table.tableName] = normalizeFieldRows(rows, table.tableName, false, true);
     table.fieldCount = rows.length;
     delete fieldErrorMap[table.tableName];
     delete connectionErrorMap[table.tableName];
-    $message.success(`已同步 ${rows.length} 个字段`);
+    if (activeTable.value?.tid === table.tid) {
+      resetBusinessPreview();
+      dictionaryPreviewRequestVersion.value += 1;
+      dictionaryPreview.loaded = false;
+      dictionaryPreview.loading = false;
+      dictionaryPreview.initialPage = null;
+      dictionaryPreview.tableName = "";
+    }
+    $message.success(`已同步全部 ${rows.length} 个字段，新增 ${added} 个，更新中文名 ${commentsUpdated} 个`);
   } catch (error) {
     fieldErrorMap[table.tableName] = error?.message || "字段同步失败";
     if (!reportConnectionFailure(table, error)) {

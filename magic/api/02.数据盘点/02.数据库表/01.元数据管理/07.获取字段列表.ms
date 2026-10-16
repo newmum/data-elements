@@ -80,6 +80,10 @@
 // 业务说明：获取字段列表（GET /dst/database/metadata/columns）。登记第三、四步传 tid + snapshotOnly=true 仅读 db_table_column_t；其他探查场景保留实时来源库兼容。只读接口。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
+import tenantRuntime
+import dataScope
+var currentTenantId = tenantRuntime.id()
+if (currentTenantId == null || (currentTenantId+'').trim() == '') { exit 401, '当前登录租户无效，请重新登录' }
 import java.util.Map
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
@@ -119,8 +123,9 @@ var databaseTypeOf = (code) => {
 }
 var loadDatasource = (datasourceId) => {
     if (blank(datasourceId)) { return null }
-    var row = db.table('db_datasource_t').where().eq('tid', datasourceId).eq('is_del', 0).selectOne()
+    var row = db.table('db_datasource_t').where().eq('tenant_id', currentTenantId).eq('tid', datasourceId).eq('is_del', 0).selectOne()
     if (row == null) { return null }
+    if(dataScope.visibleDataSourcesFor('MENU:2081000000000000002',[row]).size()!=1){exit 403,'数据源不在当前租户或角色数据范围内';}
     var result = {
         tid: rowValue(row, ['tid']),
         dbName: rowValue(row, ['dbName', 'db_name']),
@@ -178,19 +183,24 @@ var dataSourceOf = (asset) => {
 }
 var excludes = ['tenantId', 'revision', 'createdBy', 'createdTime', 'updatedBy', 'updatedTime']
 if (!blank(tid)) {
-    if ((tid + '').contains(',')) {
-        var tids = (tid + '').split(',').filter(item => !blank(item))
-        var rows = db.table('db_table_column_t').excludes(excludes).where()
-            .in('table_id', tids).eq('is_del', 0).select()
-        return rows.group(item => item.tableId)
+    var tids = (tid + '').split(',').map(item => item.trim()).filter(item => !blank(item)).distinct()
+    // 限制单次表 ID 数，不限制任何一张表的字段数。整批预取并逐 ID 校验权限。
+    if(tids.size()==0 || tids.size()>100){exit 400,'一次最多读取100张表的字段，请分批请求';}
+    var tables = db.table('db_table_t').where().eq('tenant_id', currentTenantId).in('tid', tids).eq('is_del', 0).select()
+    if(tables.size()!=tids.size()){exit 404,'数据表不存在或无访问权限';}
+    var sourceIds=tables.map(row=>row.datasourceId).distinct()
+    var sources=db.table('db_datasource_t').where().eq('tenant_id',currentTenantId).in('tid',sourceIds).eq('is_del',0).select()
+    if(sources.size()!=sourceIds.size() || dataScope.visibleDataSourcesFor('MENU:2081000000000000002',sources).size()!=sourceIds.size()){
+        exit 403,'数据源不在当前租户或角色数据范围内'
     }
     var snapshot = db.table('db_table_column_t').excludes(excludes).where()
-        .eq('table_id', tid).eq('is_del', 0).select()
+        .eq('tenant_id', currentTenantId).in('table_id', tids).eq('is_del', 0).select()
+    if ((tid + '').contains(',')) { return snapshot.group(item => item.tableId) }
     if (snapshot != null && snapshot.size() > 0) { return snapshot }
     // 登记第三、四步只读 MySQL 字段快照；空快照也绝不回退物理探查。
     if (snapshotOnly == true || textOf(snapshotOnly) == '1' || textOf(snapshotOnly) == 'true') { return [] }
     // registered table asset fallback: old dirty snapshots may have no columns.
-    var tableAsset = db.table('db_table_t').where().eq('tid', tid).eq('is_del', 0).selectOne()
+    var tableAsset = tables[0]
     if (tableAsset != null) {
         dbId = firstValue(tableAsset, ['datasourceId', 'datasource_id'])
         tableName = firstValue(tableAsset, ['tableName', 'table_name'])
