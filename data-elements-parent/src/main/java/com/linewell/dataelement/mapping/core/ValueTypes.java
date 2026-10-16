@@ -6,8 +6,14 @@ import java.time.*;
 import java.util.Collection;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class ValueTypes {
+    private static final Set<String> LOGICAL_TYPES = Set.of("ANY", "STRING", "INT", "LONG", "DECIMAL", "DOUBLE", "BOOLEAN", "DATE", "DATETIME", "TIME", "INSTANT", "ARRAY");
+    private static final Pattern DIMENSIONS = Pattern.compile("\\([^)]*\\)");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final Pattern UNSIGNED = Pattern.compile("\\s+UNSIGNED$");
     public static final Object MISSING = new Object();
     private ValueTypes() {}
     public static BigDecimal decimal(Object value) {
@@ -20,13 +26,18 @@ public final class ValueTypes {
         catch (NumberFormatException ex) { throw new MappingException("TYPE_MISMATCH", "输入不是有效的精确数值"); }
     }
     public static String type(String raw) {
-        String value = raw == null ? "ANY" : raw.toUpperCase(Locale.ROOT).replaceAll("\\([^)]*\\)", "").trim();
+        if (raw == null) return "ANY";
+        if (LOGICAL_TYPES.contains(raw)) return raw;
+        String value = WHITESPACE.matcher(DIMENSIONS.matcher(raw.toUpperCase(Locale.ROOT)).replaceAll("").trim()).replaceAll(" ");
         if(value.equals("INT UNSIGNED")||value.equals("INTEGER UNSIGNED"))return "LONG";
         if(value.equals("BIGINT UNSIGNED"))return "DECIMAL";
-        value=value.replaceAll("\\s+UNSIGNED$","");
+        value=UNSIGNED.matcher(value).replaceAll("");
         return switch (value) {
-            case "VARCHAR", "VARCHAR2", "NVARCHAR", "NVARCHAR2", "CHAR", "NCHAR", "TEXT", "CLOB", "LONGVARCHAR" -> "STRING";
-            case "TINYINT", "SMALLINT", "INTEGER", "INT2", "INT4" -> "INT";
+            case "VARCHAR", "VARCHAR2", "NVARCHAR", "NVARCHAR2", "CHAR", "NCHAR", "TEXT", "CLOB", "LONGVARCHAR",
+                 "CHARACTER VARYING", "CHAR VARYING", "NCHAR VARYING", "NATIONAL CHARACTER VARYING", "NATIONAL CHAR VARYING",
+                 "CHARACTER", "NATIONAL CHARACTER", "NATIONAL CHAR", "LONGNVARCHAR", "NCLOB", "NTEXT", "BPCHAR",
+                 "TINYTEXT", "MEDIUMTEXT", "LONGTEXT", "VARCHAR_IGNORECASE", "VARCHAR_CASESENSITIVE" -> "STRING";
+            case "TINYINT", "SMALLINT", "MEDIUMINT", "INTEGER", "INT2", "INT4" -> "INT";
             case "BIGINT", "INT8" -> "LONG";
             case "NUMERIC", "NUMBER", "DEC" -> "DECIMAL";
             case "FLOAT", "REAL", "DOUBLE PRECISION" -> "DOUBLE";
@@ -37,6 +48,11 @@ public final class ValueTypes {
             case "TIME WITHOUT TIME ZONE" -> "TIME";
             default -> value;
         };
+    }
+    public static String requireType(String raw) {
+        String type = type(raw);
+        if (!LOGICAL_TYPES.contains(type)) throw new MappingException("UNSUPPORTED_TYPE", "不支持的逻辑目标类型: " + raw);
+        return type;
     }
     public static Object cast(Object value, String rawType, int precision, int scale, RoundingMode rounding) {
         return cast(value,rawType,precision,scale,rounding,ZoneId.systemDefault());

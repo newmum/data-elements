@@ -22,6 +22,7 @@ import { useFlowErrors, type FlowError } from '@/api/pipelines';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import type { NodeRuntimeMetric } from '@/runtime/runtimeMetrics';
 import { COMPONENT_ICONS, getComponentIcon } from '@/panels/databaseIcons';
+import { governanceNodeLabel } from '../utils/fieldGovernancePresentation';
 
 const CATEGORY_ICON: Record<ComponentCategory, React.ReactNode> = {
   source: <DatabaseOutlined />,
@@ -197,7 +198,7 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
       {/* Header */}
       <div className="coze-node__header">
         <div className="coze-node__icon">{pickIcon(manifest, cat, cn.config.dbType)}</div>
-        <div className="coze-node__title">{cn.label || manifest?.label || '未命名'}</div>
+        <div className="coze-node__title">{governanceNodeLabel(cn.manifestKey, cn.label, manifest?.label)}</div>
         <span
           className={`coze-node__status-dot is-${effectiveState}`}
           title={`状态:${effectiveState}`}

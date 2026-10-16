@@ -64,6 +64,7 @@ import { sameExecutableDsl, sameDesignDsl } from '../utils/pipelineVersion';
 import type { CanvasDsl } from '@/types/dsl';
 import { useTaskChainStore } from '../stores/taskChainStore';
 import { buildFlowRuntimeMetrics } from '../runtime/runtimeMetrics';
+import { nativeDetailsAccess } from '../utils/nativeDetailsAccess';
 
 function BusyIndicator() {
   return <span className="canvas-action-spinner" aria-hidden="true" />;
@@ -180,19 +181,18 @@ export default function Toolbar() {
   const errorCount = statusQuery.data?.errors?.length ?? 0;
   const [optimisticStatus, setOptimisticStatus] = useState<PipelineStatus | null>(null);
   const effectiveStatus: PipelineStatus = optimisticStatus ?? liveStatus ?? (currentPipelineId ? 'SAVED' : 'DRAFT');
-  const viz = useMemo(() => vizFor(effectiveStatus, errorCount), [effectiveStatus, errorCount]);
+  const viz = useMemo(() => {
+    const current = vizFor(effectiveStatus, errorCount);
+    if (!optimisticStatus && statusQuery.data?.runtimeLabel) return { ...current,
+      label: statusQuery.data.runtimeLabel,
+      color: ['UNKNOWN', 'MISSING'].includes(statusQuery.data.runtimeState || '') ? '#faad14' : current.color };
+    return current;
+  }, [effectiveStatus, errorCount, optimisticStatus, statusQuery.data?.runtimeLabel, statusQuery.data?.runtimeState]);
 
   const isRunning = effectiveStatus === 'RUNNING' || effectiveStatus === 'RUN_ERROR';
   const isTransitioning = effectiveStatus === 'DEPLOYING' || effectiveStatus === 'STOPPING';
-  const nativeStatus = statusQuery.data;
-  const canOpenNative = Boolean(!readOnlySnapshot && currentPipelineId
-    && nativeStatus?.id === currentPipelineId
-    && nativeStatus.deployed
-    && nativeStatus.processGroupId
-    && nativeStatus.lastDeployedHash
-    && nativeStatus.currentHash === nativeStatus.lastDeployedHash
-    && nativeStatus.status !== 'DEPLOYING'
-    && nativeStatus.status !== 'DEPLOY_FAILED');
+  const nativeDetails = nativeDetailsAccess(currentPipelineId, statusQuery.data, statusQuery);
+  const canOpenNative = nativeDetails.canOpen;
 
   useEffect(() => {
     const nextMode = isRunning || readOnlySnapshot ? 'MONITOR' : 'EDIT';
@@ -521,7 +521,7 @@ export default function Toolbar() {
   const handleOpenNifi = async () => {
     if (!isCurrentSession()) return;
     if (!currentPipelineId || !canOpenNative) {
-      message.warning('当前版本尚未成功部署到 NiFi，请先点击“保存”。');
+      message.warning(nativeDetails.tooltip);
       return;
     }
     // The native NiFi URL is resolved asynchronously. Open a blank tab while
@@ -822,7 +822,7 @@ export default function Toolbar() {
 
       <div style={{ display: 'inline-flex', gap: 8 }}>
         <CanvasThemeToggle />
-        <Tooltip title={isChengtianIntegration ? '外部运行端尚未配置到当前租户，画布只保存和发布设计版本' : statusQuery.isPending ? '正在确认 NiFi 部署状态' : statusQuery.isError ? '无法确认 NiFi 部署状态，请稍后重试' : canOpenNative ? '在 NiFi 原生页面中查看当前任务' : '当前任务尚未成功部署到 NiFi，请先点击“保存”'}>
+        <Tooltip title={isChengtianIntegration ? '外部运行端尚未配置到当前租户，画布只保存和发布设计版本' : nativeDetails.tooltip}>
           <span><Button className="coze-toolbar__action" icon={nativeChecking ? <BusyIndicator /> : <LinkOutlined />} disabled={isChengtianIntegration || nativeChecking || !canOpenNative} onClick={handleOpenNifi}>详情</Button></span>
         </Tooltip>
         <Tooltip title={`${hasTaskChain ? `当前操作任务：${currentPipelineName}；` : ''}${isChengtianIntegration ? '保存并发布设计版本 (Ctrl+S)' : '保存并部署 (Ctrl+S)'}`}>

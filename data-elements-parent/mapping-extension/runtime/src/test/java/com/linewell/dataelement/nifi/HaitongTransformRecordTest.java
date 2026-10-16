@@ -19,7 +19,9 @@ class HaitongTransformRecordTest {
     private static final ObjectMapper JSON=new ObjectMapper();
     @Test void allWindowsCommitOnceAndCarryWriterSchema()throws Exception{
         var runner=runner("NULL","FAIL_FLOWFILE");List<Map<String,Object>>rows=new ArrayList<>();for(int i=0;i<600;i++)rows.add(Map.of("x","v"+i));runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();
-        runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);var output=runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst();assertEquals("600",output.getAttribute("record.count"));assertEquals("test-schema",output.getAttribute("avro.schema"));assertEquals(600,JSON.readTree(output.toByteArray()).size());
+        runner.assertTransferCount(HaitongTransformRecord.SUCCESS,2);int total=0;
+        for(var output:runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS)){int count=JSON.readTree(output.toByteArray()).size();assertEquals(count,Integer.parseInt(output.getAttribute("record.count")));assertEquals("test-schema",output.getAttribute("avro.schema"));total+=count;}
+        assertEquals(600,total);
     }
     @Test void failureInLaterWindowPublishesNoEarlierSuccessAndKeepsOriginal()throws Exception{
         var runner=runner("FAIL","FAIL_FLOWFILE");List<Map<String,Object>>rows=new ArrayList<>();for(int i=0;i<513;i++)rows.add(Map.of("x","valid"));rows.add(Map.of());byte[]input=JSON.writeValueAsBytes(rows);runner.enqueue(input);runner.run();
@@ -60,6 +62,35 @@ class HaitongTransformRecordTest {
             var output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());assertEquals(count,output.size());
             var invalid=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());assertEquals("DATE_INVALID",invalid.path("errors").get(0).path("code").asText());
         }
+    }
+    @Test void invalidSelfLoopUnwrapsOriginalRowAndKeepsSparseIndexWithoutNesting() throws Exception {
+        var runner=runner("FAIL","ROUTE_INVALID");runner.enqueue("[{\"x\":\"valid\"},{}]");runner.run();
+        var invalid=runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst();
+        assertEquals("1",invalid.getAttribute(MappingErrorRecords.ENVELOPE));
+        assertEquals("1",invalid.getAttribute(MappingErrorRecords.ATTEMPT));
+        assertTrue(invalid.isPenalized());
+        var attributes=new HashMap<>(invalid.getAttributes());attributes.put(MappingErrorRecords.NEXT,"0");
+        runner.clearTransferState();runner.enqueue(invalid.toByteArray(),attributes);runner.run();
+        runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);runner.assertTransferCount(HaitongTransformRecord.INVALID,1);
+        var retried=runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst();
+        var envelope=JSON.readTree(retried.toByteArray());assertEquals(1,envelope.path("inputRecordIndex").asInt());
+        assertTrue(envelope.path("record").isObject());assertEquals(0,envelope.path("record").size());
+        assertFalse(envelope.path("record").has("record"));assertEquals("2",retried.getAttribute(MappingErrorRecords.ATTEMPT));
+    }
+    @Test void errorLoopDelayKeepsTheExactEnvelopeUntilRetryTime() throws Exception {
+        var runner=runner("FAIL","ROUTE_INVALID");runner.enqueue("[{}]");runner.run();
+        var invalid=runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst();
+        runner.clearTransferState();runner.enqueue(invalid.toByteArray(),invalid.getAttributes());runner.run();
+        runner.assertTransferCount(HaitongTransformRecord.INVALID,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+        assertArrayEquals(invalid.toByteArray(),runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());
+    }
+    @Test void legacyEnvelopeUsesOriginalPayloadInsteadOfItsErrorWrapper() throws Exception {
+        var runner=runner("FAIL","ROUTE_INVALID");var plan=MappingEngine.compile(JSON.readTree(runner.getProcessContext().getProperty(HaitongTransformRecord.PLAN).getValue()));
+        var envelope=JSON.createObjectNode().put("planHash",plan.hash()).put("inputRecordIndex",56);envelope.putArray("errors").addObject().put("code","UNSUPPORTED_TYPE");envelope.putObject("record").put("x","restored");
+        runner.enqueue(envelope.toString(),Map.of("ht.plan.hash",plan.hash(),"ht.plan.node.id",runner.getProcessor().getIdentifier(),"mime.type","application/x-ndjson"));runner.run();
+        runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+        var output=runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst();assertEquals("restored",JSON.readTree(output.toByteArray()).path(0).path("y").asText());
+        assertNull(output.getAttribute(MappingErrorRecords.ENVELOPE));assertNull(output.getAttribute(MappingErrorRecords.NEXT));
     }
     @Test void splitChildrenWithSameParentIdentityHaveDifferentUuidsAndRetryIsStable() throws Exception {
         TestRunner runner=runner("NULL","FAIL_FLOWFILE");

@@ -75,7 +75,7 @@ export function validateTask(task: Task | TaskDefinition, state: Workspace): Che
     if(!a||!b){error('来源或目标快照不存在',map.id);continue;}
     if(a.id===b.id)error('不能向同一来源表写入',map.id);
     if(targets.has(b.id))error('同一任务不允许多张来源写入同一目标',map.id); targets.add(b.id);
-    if(!map.fields.length)error('请配置字段映射',map.id);
+    if(!map.fields.length)error('请配置字段治理',map.id);
     if(new Set(map.fields.map(f=>f.targetField)).size!==map.fields.length) error('同一目标字段被重复映射',map.id);
     for(const m of map.fields){ const sf=a.fields.find(f=>f.name===m.sourceField),tf=b.fields.find(f=>f.name===m.targetField);
       if(!sf||!tf){error('映射字段不属于选中的表',map.id);continue;}

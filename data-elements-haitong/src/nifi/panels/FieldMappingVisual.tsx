@@ -7,7 +7,7 @@ import { getNifiOverlayContainer } from './overlayContainer';
 import {displayPath,fieldKey,fieldName,fieldsForPresentation,mergeFields,normalizePath,patchVisualField,sourceNames,toFieldInfo,visualMapping,type FieldInfo,type FieldSide,type FieldType} from './fieldMappingPresentation';
 type RowKind='field'|'many'|'constant'|'expression'|'lookup'|'conditional';
 interface EdgePath {id:string;d:string;state:'idle'|'active'|'disabled'}
-const ADD_MENU_ITEMS=[{key:'DIRECT',label:'字段映射'},{key:'CONCAT',label:'多字段合并'},{key:'CONSTANT',label:'常量赋值'},{key:'EXPRESSION',label:'表达式映射'},{key:'LOOKUP',label:'字典查询映射'},{key:'CONDITIONAL',label:'条件映射'}];
+const ADD_MENU_ITEMS=[{key:'DIRECT',label:'保持原值'},{key:'CONCAT',label:'多字段合并'},{key:'CONSTANT',label:'常量赋值'},{key:'EXPRESSION',label:'表达式计算'},{key:'LOOKUP',label:'字典翻译'},{key:'CONDITIONAL',label:'条件取值'}];
 interface Props {
  draft:UnifiedMappingDraft;sourceMeta:FieldMeta[];targetMeta:FieldMeta[];
  sourceLabels:Record<string,string>;targetLabels:Record<string,string>;
@@ -52,9 +52,9 @@ export default function FieldMappingVisual(props:Props){
  return <div className="fm-layout fm-restored-visual" ref={rootRef}>
   <FieldPanel side="source" title="源字段" subtitle={sourceFields.length+' 个字段'} fields={sourceFields} mappings={mappings} pendingSource={pendingSource} highlightedFieldKeys={highlighted} targetFields={targetFields} onFieldClick={setPendingSource} onFieldHover={setHoverField} onAddCustom={field=>setCustomSources(items=>mergeFields(items,[field]))} onQuickMap={create}/>
   <section className="fm-canvas"><EdgeLayer paths={edges}/><div className="fm-card-list">
-   {!props.draft.rules.length&&<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="从左侧选择源字段，再点击右侧目标字段创建映射"/>}
+   {!props.draft.rules.length&&<Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="从左侧选择源字段，再点击右侧目标字段创建治理规则"/>}
    {props.draft.rules.map((rule,index)=><MappingCard key={rule.ruleId} rule={rule} index={index} last={index===props.draft.rules.length-1} sourceFields={sourceFields} targetFields={targetFields} selected={selected===rule.ruleId} active={active.has(index)} onSelect={()=>setSelected(rule.ruleId)} onHover={value=>setHoverIndex(value?index:null)} onOpen={()=>props.onOpen(rule)} onUpdate={props.onChange} onField={(side,path)=>props.onChange(patchVisualField(rule,side,path,side==='source'?props.sourceMeta:props.targetMeta))} onDelete={()=>props.onDelete(rule.ruleId)} onMoveUp={()=>props.onMove(rule.ruleId,-1)} onMoveDown={()=>props.onMove(rule.ruleId,1)}/>)}
-   <Dropdown trigger={['click']} menu={{items:ADD_MENU_ITEMS,onClick:({key})=>props.onAdd(key)}}><Button className="fm-add-card" icon={<PlusOutlined/>}>添加映射规则</Button></Dropdown>
+   <Dropdown trigger={['click']} menu={{items:ADD_MENU_ITEMS,onClick:({key})=>props.onAdd(key)}}><Button className="fm-add-card" icon={<PlusOutlined/>}>添加治理规则</Button></Dropdown>
   </div></section>
   <FieldPanel side="target" title="目标字段" subtitle={targetFields.length+' 个字段'} fields={targetFields} mappings={mappings} pendingSource={pendingSource} highlightedFieldKeys={highlighted} onFieldClick={path=>{if(pendingSource)create(pendingSource,path);else{const rule=props.draft.rules.find(r=>normalizePath(r.target.name)===path);if(rule)props.onOpen(rule);}}} onFieldHover={setHoverField} onAddCustom={field=>setCustomTargets(items=>mergeFields(items,[field]))}/>
  </div>;
@@ -75,14 +75,14 @@ function MappingCard({rule,index,last,sourceFields,targetFields,selected,active,
    :<>{source}{fx}{target}</>}
   <span className="fm-card-port fm-card-port-out" data-port="card-out"/>
   <div className="fm-card-actions"><Dropdown trigger={['hover','click']} getPopupContainer={getNifiOverlayContainer} menu={{items:[
-    {key:'edit',label:'编辑映射规则',icon:<EditOutlined/>},
-    {key:'toggle',label:disabled?'启用映射':'停用映射',icon:disabled?<PlayCircleOutlined/>:<PauseCircleOutlined/>},
+    {key:'edit',label:'编辑治理规则',icon:<EditOutlined/>},
+    {key:'toggle',label:disabled?'启用规则':'停用规则',icon:disabled?<PlayCircleOutlined/>:<PauseCircleOutlined/>},
     {type:'divider'},
     {key:'up',label:'上移',icon:<UpOutlined/>,disabled:index===0},
     {key:'down',label:'下移',icon:<DownOutlined/>,disabled:last},
     {type:'divider'},
-    {key:'delete',label:'删除映射',icon:<DeleteOutlined/>,danger:true},
-  ],onClick:({key,domEvent})=>{domEvent.stopPropagation();if(key==='edit')onOpen();if(key==='toggle')onUpdate({...rule,enabled:disabled});if(key==='up')onMoveUp();if(key==='down')onMoveDown();if(key==='delete')onDelete();}}}><Button size="small" type="text" aria-label={'映射操作 '+rule.target.name} icon={<MoreOutlined/>} onClick={e=>e.stopPropagation()}/></Dropdown></div>
+    {key:'delete',label:'删除规则',icon:<DeleteOutlined/>,danger:true},
+  ],onClick:({key,domEvent})=>{domEvent.stopPropagation();if(key==='edit')onOpen();if(key==='toggle')onUpdate({...rule,enabled:disabled});if(key==='up')onMoveUp();if(key==='down')onMoveDown();if(key==='delete')onDelete();}}}><Button size="small" type="text" aria-label={'治理操作 '+rule.target.name} icon={<MoreOutlined/>} onClick={e=>e.stopPropagation()}/></Dropdown></div>
  </article>;
 }
 const TYPE_META: Record<FieldType, { label: string; bg: string; color: string }> = {

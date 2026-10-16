@@ -21,6 +21,9 @@ public class NifiMutationAspect {
     // sibling position allocation and survives requests reaching different JVMs.
     private static final String LOCK_NAME = "data-elements:nifi:canvas-mutation:v1";
     private final DataSource controlDataSource;
+    private com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService runtimeStatus;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRuntimeStatus(com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService service) { runtimeStatus = service; }
 
     public NifiMutationAspect(@Qualifier("controlDataSource") DataSource controlDataSource) {
         this.controlDataSource = controlDataSource;
@@ -36,6 +39,7 @@ public class NifiMutationAspect {
             try {
                 return invocation.proceed();
             } finally {
+                if (runtimeStatus != null) runtimeStatus.invalidateTenant();
                 lock(connection, "SELECT RELEASE_LOCK(?)");
             }
         }

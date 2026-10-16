@@ -58,14 +58,14 @@ public class NifiClient {
 
     public String clientId() { return clientId; }
 
-    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.12");}
+    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.16");}
 
     public void requireMappingExtension(){
         JsonNode processors=get("/flow/processor-types",JsonNode.class).path("processorTypes");
         JsonNode services=get("/flow/controller-service-types",JsonNode.class).path("controllerServiceTypes");
         for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
             int count=0;for(JsonNode type:entry.getKey())if(type.path("type").asText().equals(entry.getValue())&&type.path("bundle").equals(mappingBundle()))count++;
-            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展1.1.12，请安装haitong-mapping-nar后部署");
+            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展1.1.16，请安装haitong-mapping-nar后部署");
         }
         JsonNode cluster=get("/flow/cluster/summary",JsonNode.class).path("clusterSummary");
         if(cluster.path("clustered").asBoolean()&&cluster.path("connectedNodeCount").asInt()>1)throw new IllegalStateException("多节点集群须完成全部节点扩展版本核验后才能部署统一映射");
@@ -825,6 +825,42 @@ public class NifiClient {
     public JsonNode getProcessGroupStatus(String pgId) {
         // recursive=true gives status of nested processors as well.
         return get("/flow/process-groups/" + pgId + "/status?recursive=true", JsonNode.class);
+    }
+
+    /** One bounded read of the whole node, with one expired-token retry. */
+    public JsonNode getRuntimeRootStatus(RuntimeNode node) {
+        var client = RestClient.builder().baseUrl(node.baseUrl()).requestFactory(
+                com.linewell.dataelement.integration.nifi.canvas.config.NifiClientConfig.createRequestFactory(
+                        node.insecureTls(), Duration.ofSeconds(3), Duration.ofSeconds(5))).build();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            String token = runtimeToken(node, client);
+            try {
+                String root = node.rootProcessGroupId() == null || node.rootProcessGroupId().isBlank() ? "root" : node.rootProcessGroupId();
+                return client.get().uri(API_PREFIX + "/flow/process-groups/" + root + "/status?recursive=true")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange((request, response) -> {
+                            if (response.getStatusCode().isError()) throw new NifiException("NiFi 状态读取失败（HTTP " + response.getStatusCode().value() + "）", response.getStatusCode().value(), null);
+                            byte[] bytes = response.getBody().readNBytes(16 * 1024 * 1024 + 1);
+                            if (bytes.length > 16 * 1024 * 1024) throw new IllegalStateException("NiFi 状态响应超过 16 MB 上限");
+                            return mapper.readTree(bytes);
+                        });
+            } catch (NifiException e) {
+                if (e.status() != 401 || attempt != 0) throw e;
+                tokens.computeIfPresent(node.tokenCacheKey(), (key, cached) -> cached.token.equals(token) ? null : cached);
+            }
+        }
+        throw new IllegalStateException("无法读取 NiFi 状态");
+    }
+
+    private String runtimeToken(RuntimeNode node, RestClient client) {
+        // The runtime service already serializes reads per node. Do not take
+        // the legacy client's global token lock: another offline node may hold it.
+        TokenHolder cached = tokens.get(node.tokenCacheKey());
+        if (cached != null && cached.expiresAt.isAfter(Instant.now())) return cached.token;
+        var form = new LinkedMultiValueMap<String, String>(); form.add("username", node.username()); form.add("password", node.password());
+        String token = client.post().uri(API_PREFIX + "/access/token").contentType(MediaType.APPLICATION_FORM_URLENCODED).body(form).retrieve().body(String.class);
+        if (token == null || token.isBlank()) throw new IllegalStateException("NiFi 未返回认证信息");
+        tokens.put(node.tokenCacheKey(), new TokenHolder(token.trim(), Instant.now().plus(TOKEN_TTL)));
+        return token.trim();
     }
 
     public JsonNode getProcessor(String processorId) {

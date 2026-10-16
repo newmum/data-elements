@@ -21,6 +21,51 @@ import static org.mockito.Mockito.*;
 
 class RegisteredMappingSchemaServiceTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void kingbaseCanOmitTableCatalogWithoutLosingAuthorizedFieldsOrAddingQueries()throws Exception {
+        for(int count:List.of(20,100))for(String absent:Arrays.asList(null,"")) {
+            Fixture fixture=new Fixture(count);fixture.config=Map.of("db",Map.of("dbType","KINGBASE","defaultSchema","public"));
+            when(fixture.metadata.getDatabaseProductName()).thenReturn("KingbaseES");
+            when(fixture.metadata.supportsCatalogsInTableDefinitions()).thenReturn(false);
+            when(fixture.metadata.getSearchStringEscape()).thenReturn("\\");
+            List<Map<String,Object>> physical=new ArrayList<>();
+            for(int i=0;i<count;i++){var row=new HashMap<>(jdbcColumn("catalog","public","table_"+i,"id"));row.put("TABLE_CAT",absent);physical.add(row);}
+            physical.add(jdbcColumn("foreign-catalog","public","table_0","foreign_catalog_secret"));
+            var foreignSchema=new HashMap<>(jdbcColumn("catalog","foreign-schema","table_0","foreign_schema_secret"));foreignSchema.put("TABLE_CAT",absent);physical.add(foreignSchema);
+            when(fixture.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(physical));
+            try(var tenant=TenantContext.use("tenant-A")) {
+                var result=fixture.service.physicalBatch(fixture.service.resolve(fixture.references));
+                assertEquals(count,result.size());assertEquals(1,result.get("ref-0").size());assertFalse(result.toString().contains("secret"));
+            }
+            verify(fixture.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(fixture.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            verify(fixture.engine,times(1)).openRegistered(anyString(),anyMap());
+            verify(fixture.metadata,times(1)).getColumns(eq("catalog"),eq("public"),eq("%"),eq("%"));
+            verify(fixture.physical,never()).prepareStatement(anyString());
+        }
+    }
+    @Test void catalogAwareDriversCannotUseMissingCatalogToAcceptAnotherDatabase()throws Exception {
+        Fixture fixture=new Fixture(1);fixture.config=Map.of("db",Map.of("defaultSchema","registered"));
+        when(fixture.metadata.getDatabaseProductName()).thenReturn("Microsoft SQL Server");
+        when(fixture.metadata.supportsCatalogsInTableDefinitions()).thenReturn(true);
+        when(fixture.metadata.getSearchStringEscape()).thenReturn("\\");
+        var row=new HashMap<>(jdbcColumn("catalog","registered","table_0","id"));row.remove("TABLE_CAT");
+        when(fixture.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(List.of(row)));
+        try(var tenant=TenantContext.use("tenant-A")) {
+            var error=assertThrows(MappingException.class,()->fixture.service.physicalBatch(fixture.service.resolve(fixture.references)));
+            assertEquals("SCHEMA_UNAVAILABLE",error.code());assertTrue(error.getMessage().contains("registered.table_0"));assertTrue(error.getMessage().contains("数据源 db"));
+        }
+    }
+    @Test void optionalCatalogAccessorAndCapabilityDoNotBreakSchemaOnlyDrivers()throws Exception {
+        Fixture fixture=new Fixture(1);fixture.config=Map.of("db",Map.of("defaultSchema","registered"));
+        when(fixture.metadata.getDatabaseProductName()).thenReturn("Oracle");
+        when(fixture.physical.getCatalog()).thenThrow(new AbstractMethodError("getCatalog"));
+        when(fixture.metadata.supportsCatalogsInTableDefinitions()).thenThrow(new SQLFeatureNotSupportedException());
+        when(fixture.metadata.getSearchStringEscape()).thenReturn("\\");
+        var row=new HashMap<>(jdbcColumn("catalog","registered","table_0","id"));row.remove("TABLE_CAT");
+        when(fixture.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(List.of(row)));
+        try(var tenant=TenantContext.use("tenant-A")){assertEquals(1,fixture.service.physicalBatch(fixture.service.resolve(fixture.references)).get("ref-0").size());}
+        verify(fixture.metadata,times(1)).getColumns(isNull(),eq("registered"),eq("%"),eq("%"));
+    }
     @Test void registeredFormatSurvivesPhysicalOracleDateAndExplicitClearingWins()throws Exception {
         for(int count:List.of(20,100)) {
             Fixture fixture=new Fixture(count);fixture.config=Map.of("db",Map.of("dbType","ORACLE","defaultSchema","registered"));

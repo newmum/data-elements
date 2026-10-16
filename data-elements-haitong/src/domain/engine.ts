@@ -60,7 +60,7 @@ function tick(s:Workspace,now:number){
   if(run.status==='QUEUED'){const c=s.clusters.find(c=>c.id===run.task.clusterId); if(!c||c.state!=='HEALTHY'||!c.nodes.some(n=>n.state==='ONLINE'))continue;
    if(s.runs.filter(r=>r.task.clusterId===c.id&&r.status==='RUNNING').length>=c.concurrency)continue;
    run.status='RUNNING';run.stage=1;run.logs.push({at:iso,level:'INFO',message:'读取已冻结的本地记录快照'});
-  }else if(run.stage<3){run.stage++;run.logs.push({at:iso,level:'INFO',message:run.stage===2?'应用已确认的字段映射和白名单转换':'进入表级写入；等待持久化确认'});}
+  }else if(run.stage<3){run.stage++;run.logs.push({at:iso,level:'INFO',message:run.stage===2?'应用已确认的字段治理和白名单转换':'进入表级写入；等待持久化确认'});}
   else if(run.stage===3){const i=run.items.findIndex(i=>i.status==='PENDING');if(i>=0)finishItem(s,run,i,now);if(run.items.every(i=>i.status!=='PENDING'))run.stage=4;}
   else{run.status=run.items.some(i=>i.status==='FAILED')?'FAILED':'SUCCEEDED';run.finishedAt=iso;run.logs.push({at:iso,level:run.status==='FAILED'?'ERROR':'INFO',message:'运行结束；运行状态与对账结果分别记录'});}
   run.nextTick=now+700;

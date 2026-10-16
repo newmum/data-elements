@@ -3,6 +3,7 @@ import { apiClient } from './client';
 import { getApiErrorMessage } from './response';
 import type { ComponentManifest } from '@/types/manifest';
 import { useSessionRevision, useTokenReady } from './bridgeSession';
+import { governanceManifests } from '../utils/fieldGovernancePresentation';
 
 /**
  * Normalize the manifests response to always return an array.
@@ -27,7 +28,7 @@ function normalizeManifests(payload: unknown): ComponentManifest[] {
 
 export async function fetchComponentManifests(): Promise<ComponentManifest[]> {
   const { data } = await apiClient.get<unknown>('/manifests');
-  return normalizeManifests(data);
+  return governanceManifests(normalizeManifests(data));
 }
 
 export function useComponentManifests() {
@@ -37,6 +38,7 @@ export function useComponentManifests() {
     enabled: tokenReady,
     queryKey: ['manifests', sessionRevision],
     queryFn: fetchComponentManifests,
+    select: governanceManifests,
     staleTime: Infinity,
   });
 }

@@ -1,13 +1,13 @@
 {
   "key": "transform.field-mapping",
   "category": "transform",
-  "label": "字段映射",
+  "label": "字段治理",
   "icon": "swap",
   "description": "",
   "fields": [
     {
       "key": "mappings",
-      "label": "",
+      "label": "治理规则",
       "type": "field-mapping-dsl",
       "required": true,
       "default": "{\n  \"version\": \"1.0\",\n  \"passthroughUnmapped\": false,\n  \"passthroughCaseSensitive\": true,\n  \"onMissingSource\": \"NULL\",\n  \"onTypeMismatch\": \"CAST\",\n  \"mappings\": []\n}",

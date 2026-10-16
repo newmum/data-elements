@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion><parent><groupId>com.linewell.dataelement</groupId><artifactId>haitong-mapping-extension</artifactId><version>1.1.12</version></parent><artifactId>haitong-mapping-runtime</artifactId>
+  <modelVersion>4.0.0</modelVersion><parent><groupId>com.linewell.dataelement</groupId><artifactId>haitong-mapping-extension</artifactId><version>1.1.16</version></parent><artifactId>haitong-mapping-runtime</artifactId>
   <dependencies>
     <dependency><groupId>com.linewell.dataelement</groupId><artifactId>haitong-mapping-core</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>org.apache.nifi</groupId><artifactId>nifi-api</artifactId><version>${nifi.version}</version><scope>provided</scope></dependency>

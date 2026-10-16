@@ -27,6 +27,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
     public static final PropertyDescriptor PLAN_ID=new PropertyDescriptor.Builder().name("plan-id").required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor CONTEXT_NODE=new PropertyDescriptor.Builder().name("context-node-id").description("稳定的流程ID及画布节点ID，保持重放与原生组件替换后的确定性上下文").required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor ATTEMPTS=new PropertyDescriptor.Builder().name("max-retry-attempts").defaultValue("5").required(true).addValidator(StandardValidators.NON_NEGATIVE_INTEGER_VALIDATOR).build();
+    public static final PropertyDescriptor ERROR_LOOP_DELAY=new PropertyDescriptor.Builder().name("error-loop-delay").displayName("Failure / Invalid Retry Delay").description("异常自环最小退避时间，重复失败指数退避，上限5分钟；不丢弃错误输入").defaultValue("30 sec").required(true).addValidator(StandardValidators.TIME_PERIOD_VALIDATOR).build();
     public static final Relationship SUCCESS=new Relationship.Builder().name("success").description("成功转换记录").build();
     public static final Relationship INVALID=new Relationship.Builder().name("invalid").description("受控数据错误信封").build();
     public static final Relationship FAILURE=new Relationship.Builder().name("failure").description("原始输入及不可重试错误").build();
@@ -34,7 +35,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
     private static final ObjectMapper JSON=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private volatile MappingEngine.Plan plan;
     private final java.util.concurrent.Semaphore windows=new java.util.concurrent.Semaphore(2);
-    @Override public List<PropertyDescriptor> getSupportedPropertyDescriptors(){return List.of(READER,TYPED_READER,WRITER,DICTIONARIES,PLAN,HASH,PLAN_ID,CONTEXT_NODE,MappingCompatibility.REQUIRED_VERSION,ATTEMPTS);}
+    @Override public List<PropertyDescriptor> getSupportedPropertyDescriptors(){return List.of(READER,TYPED_READER,WRITER,DICTIONARIES,PLAN,HASH,PLAN_ID,CONTEXT_NODE,MappingCompatibility.REQUIRED_VERSION,ATTEMPTS,ERROR_LOOP_DELAY);}
     @Override public Set<Relationship>getRelationships(){return Set.of(SUCCESS,INVALID,FAILURE,RETRY);}
     @OnScheduled public void scheduled(ProcessContext context)throws Exception{
         MappingEngine.Plan compiled=MappingEngine.compile(JSON.readTree(context.getProperty(PLAN).getValue()));
@@ -47,6 +48,11 @@ public class HaitongTransformRecord extends AbstractProcessor {
         try {
         FlowFile original=session.get();if(original==null)return;List<FlowFile>derived=new ArrayList<>();
         try{
+            String loopNext=original.getAttribute(MappingErrorRecords.NEXT);
+            if(loopNext!=null&&Long.parseLong(loopNext)>System.currentTimeMillis()){
+                Relationship waiting="invalid".equals(original.getAttribute(MappingErrorRecords.RELATIONSHIP))?INVALID:FAILURE;
+                session.transfer(session.penalize(original),waiting);context.yield();return;
+            }
             String nodeContext=context.getProperty(CONTEXT_NODE).isSet()?context.getProperty(CONTEXT_NODE).getValue():getIdentifier();String hashKey="ht.plan.hash."+nodeContext;String previous=original.getAttribute(hashKey);
             if(previous==null&&original.getAttribute("ht.plan.node.id")==null)previous=original.getAttribute("ht.plan.hash");
             if(previous!=null&&!previous.equals(plan.hash()))throw new MappingException("PLAN_VERSION_CONFLICT","输入须由原执行计划重放");
@@ -60,26 +66,37 @@ public class HaitongTransformRecord extends AbstractProcessor {
             PropertyDescriptor readerProperty=original.getAttribute("avro.schema")!=null&&context.getProperty(TYPED_READER).isSet()?TYPED_READER:READER;
             RecordReaderFactory readers=context.getProperty(readerProperty).asControllerService(RecordReaderFactory.class);RecordSetWriterFactory writers=context.getProperty(WRITER).asControllerService(RecordSetWriterFactory.class);
             DictionarySpec.Provider dictionaries=context.getProperty(DICTIONARIES).isSet()?context.getProperty(DICTIONARIES).asControllerService(HaitongDictionaryService.class).provider():null;
-            FlowFile success=session.create(original),invalid=session.create(original);derived.add(success);derived.add(invalid);long[]counts={0,0,0,0};Map<String,String>writerAttributes=new HashMap<>();
-            try(InputStream in=session.read(original);RecordReader reader=readers.createRecordReader(original.getAttributes(),in,original.getSize(),getLogger());OutputStream out=session.write(success);OutputStream bad=session.write(invalid)){
+            FlowFile success=session.create(original),invalid=session.create(original);derived.add(success);derived.add(invalid);long[]counts={0,0,0,0};Map<String,String>writerAttributes=new HashMap<>(),invalidAttributes=new HashMap<>();
+            List<FlowFile>dynamicFiles=new ArrayList<>();
+            try(InputStream in=session.read(original);RecordReader reader=MappingErrorRecords.isEnvelope(original.getAttributes(),nodeContext)?new MappingErrorRecords(in,original.getAttributes(),plan):readers.createRecordReader(original.getAttributes(),in,original.getSize(),getLogger());OutputStream out=session.write(success);OutputStream bad=session.write(invalid)){
                 if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(reader.getSchema()));
+                invalidAttributes.put(MappingErrorRecords.SCHEMA,MappingErrorRecords.schemaText(reader.getSchema()));
                 RecordSchema schema=outputSchema(plan,reader.getSchema());
+                DynamicOutput dynamic=plan.outputTypes().values().stream().anyMatch(type->type.equals("ANY")||type.equals("ARRAY"))?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
                 try(RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes());BufferedWriter errors=new BufferedWriter(new OutputStreamWriter(bad,java.nio.charset.StandardCharsets.UTF_8))){
-                    writer.beginRecordSet();List<Map<String,Object>>window=new ArrayList<>();long bytes=0,offset=0;Record record;
+                    writer.beginRecordSet();List<Map<String,Object>>window=new ArrayList<>();List<Long>indices=new ArrayList<>();long bytes=0,offset=0;Record record;
                     while((record=reader.nextRecord())!=null){Map<String,Object>row=record.toMap();long size=ValueTypes.bytes(row,0);if(size>1_048_576)throw new MappingException("BUDGET_EXCEEDED","单记录超过1MiB");
-                        if(!window.isEmpty()&&(window.size()>=MappingEngine.WINDOW_RECORDS||bytes+size>MappingEngine.WINDOW_BYTES)){writeWindow(window,offset,execution,dictionaries,writer,errors,schema,counts);offset+=window.size();window.clear();bytes=0;}
-                        window.add(row);bytes+=size;
+                        if(!window.isEmpty()&&(window.size()>=MappingEngine.WINDOW_RECORDS||bytes+size>MappingEngine.WINDOW_BYTES)){writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);window.clear();indices.clear();bytes=0;}
+                        window.add(row);indices.add(reader instanceof MappingErrorRecords envelope?envelope.originalIndex():offset);offset++;bytes+=size;
                     }
-                    if(!window.isEmpty())writeWindow(window,offset,execution,dictionaries,writer,errors,schema,counts);
+                    if(!window.isEmpty())writeWindow(window,indices,execution,dictionaries,writer,errors,schema,counts,dynamic);
                     writerAttributes.putAll(writer.finishRecordSet().getAttributes());writerAttributes.put("mime.type",writer.getMimeType());writer.flush();errors.flush();
                 }
             }
             writerAttributes.putAll(Map.of("ht.plan.hash",plan.hash(),"ht.engine.version",MappingEngine.VERSION,"record.count",Long.toString(counts[0]),"ht.invalid.count",Long.toString(counts[1]),"ht.window.count",Long.toString(counts[2]),"ht.dictionary.batches",Long.toString(counts[3])));
             if(context.getProperty(PLAN_ID).isSet())writerAttributes.put("ht.plan.id",context.getProperty(PLAN_ID).getValue());
             if(dictionaries instanceof DictionarySpec.MeteredProvider metered)writerAttributes.put("ht.dictionary.sql.count",Integer.toString(metered.queryCount()));
+            success=session.removeAllAttributes(success,MappingErrorRecords.TRANSIENT_ATTRIBUTES);
             success=session.putAllAttributes(success,writerAttributes);derived.set(0,success);
-            invalid=session.putAllAttributes(invalid,Map.of("ht.plan.hash",plan.hash(),"record.count",Long.toString(counts[1]),"mime.type","application/x-ndjson"));derived.set(1,invalid);
-            if(counts[0]>0)session.transfer(success,SUCCESS);else session.remove(success);if(counts[1]>0)session.transfer(invalid,INVALID);else session.remove(invalid);session.remove(original);
+            invalidAttributes.putAll(Map.of("ht.plan.hash",plan.hash(),"record.count",Long.toString(counts[1]),"mime.type","application/x-ndjson",MappingErrorRecords.ENVELOPE,"1"));
+            invalid=session.putAllAttributes(invalid,invalidAttributes);derived.set(1,invalid);
+            if(!dynamicFiles.isEmpty()){
+                session.remove(success);
+                // Each bounded window carries its own complete schema. Commit still belongs to this one Session.
+                Map<String,String>common=new HashMap<>(writerAttributes);common.remove("record.count");common.remove("avro.schema");common.remove("mime.type");
+                for(FlowFile part:dynamicFiles){part=session.removeAllAttributes(part,MappingErrorRecords.TRANSIENT_ATTRIBUTES);part=session.putAllAttributes(part,common);session.transfer(part,SUCCESS);}
+            }else if(counts[0]>0)session.transfer(success,SUCCESS);else session.remove(success);
+            if(counts[1]>0){invalid=backoff(context,session,invalid,INVALID);session.transfer(session.penalize(invalid),INVALID);}else session.remove(invalid);session.remove(original);
         }catch(Exception ex){
             // No previous window was committed. All candidate outputs are removed first.
             for(FlowFile child:derived)session.remove(child);
@@ -87,22 +104,45 @@ public class HaitongTransformRecord extends AbstractProcessor {
             int attempt=integer(original.getAttribute("ht.retry.attempt"));boolean retry=error.code().equals("DICTIONARY_UNAVAILABLE")&&attempt<context.getProperty(ATTEMPTS).asInteger();
             Map<String,String>attributes=new HashMap<>();attributes.put("ht.plan.hash",plan.hash());attributes.put("ht.error.code",error.code());
             if(retry){attributes.put("ht.retry.attempt",Integer.toString(attempt+1));attributes.put("ht.retry.nextAt",Long.toString(System.currentTimeMillis()+Math.min(300000,1000L<<Math.min(attempt,18))));}
-            original=session.putAllAttributes(original,attributes);session.transfer(retry?session.penalize(original):original,retry?RETRY:FAILURE);
+            original=session.putAllAttributes(original,attributes);if(!retry)original=backoff(context,session,original,FAILURE);session.transfer(session.penalize(original),retry?RETRY:FAILURE);context.yield();
             getLogger().warn("字段映射输入转入{}，错误码{}，计划{}",retry?"retry":"failure",error.code(),plan.hash());
         }
         } finally { windows.release(); }
     }
-    private void writeWindow(List<Map<String,Object>>rows,long offset,ExecutionContext context,DictionarySpec.Provider dictionaries,RecordSetWriter writer,BufferedWriter errors,RecordSchema schema,long[]counts)throws Exception{
-        var result=MappingEngine.execute(plan,rows,offset,context,dictionaries);
+    private void writeWindow(List<Map<String,Object>>rows,List<Long>indices,ExecutionContext context,DictionarySpec.Provider dictionaries,RecordSetWriter writer,BufferedWriter errors,RecordSchema schema,long[]counts,DynamicOutput dynamic)throws Exception{
+        var result=MappingEngine.executeIndexed(plan,rows,indices,context,dictionaries);
         counts[2]++;counts[3]+=result.dictionaryBatches();
-        for(var row:result.rows()){
-            if(row.success()){Map<String,Object>converted=new LinkedHashMap<>();row.output().forEach((key,value)->converted.put(key,NifiTemporalValues.writerValue(value,context.zone())));writer.write(new MapRecord(schema,converted));counts[0]++;}
+        int rowPosition=0;for(var row:result.rows()){
+            if(row.success()){if(dynamic==null){Map<String,Object>converted=new LinkedHashMap<>();row.output().forEach((key,value)->converted.put(key,NifiTemporalValues.writerValue(value,context.zone())));writer.write(new MapRecord(schema,converted));}counts[0]++;}
             else{if(plan.recordMode().equals("FAIL_FLOWFILE"))throw new MappingException("RECORD_INVALID","字段规则执行失败，整批输入保留");
                 Map<String,Object>envelope=new LinkedHashMap<>();envelope.put("planHash",plan.hash());envelope.put("inputRecordIndex",row.index());envelope.put("errors",row.errors());
                 // Original values stay in the controlled content queue, never attributes/logs.
-                envelope.put("record",rows.get((int)(row.index()-offset)));errors.write(JSON.writeValueAsString(envelope));errors.newLine();counts[1]++;
+                MappingErrorRecords.snapshot(envelope,rows.get(rowPosition));errors.write(JSON.writeValueAsString(envelope));errors.newLine();counts[1]++;
             }
+            rowPosition++;
         }
+        if(dynamic!=null)dynamic.write(result.rows(),context);
+    }
+    private final class DynamicOutput {
+        private final ProcessSession session;private final FlowFile original;private final RecordSetWriterFactory writers;private final RecordSchema base;
+        private final List<FlowFile>derived,files;
+        DynamicOutput(ProcessSession session,FlowFile original,RecordSetWriterFactory writers,RecordSchema base,List<FlowFile>derived,List<FlowFile>files){this.session=session;this.original=original;this.writers=writers;this.base=base;this.derived=derived;this.files=files;}
+        void write(List<MappingEngine.Row>rows,ExecutionContext context)throws Exception {
+            List<Map<String,Object>>values=rows.stream().filter(MappingEngine.Row::success).map(MappingEngine.Row::output).toList();if(values.isEmpty())return;
+            RecordSchema schema=MappingOutputSchema.resolve(base,plan.outputTypes(),values);
+            FlowFile part=session.create(original);int index=derived.size();derived.add(part);Map<String,String>attributes=new HashMap<>();
+            try(OutputStream out=session.write(part);RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes())){
+                writer.beginRecordSet();for(var row:values){Map<String,Object>converted=new LinkedHashMap<>();row.forEach((key,value)->{Object carrier=NifiTemporalValues.writerValue(value,context.zone());converted.put(key,writer instanceof RawRecordWriter?carrier:NifiTemporalValues.unionSafeValue(carrier));});var record=new MapRecord(schema,converted);if(writer instanceof RawRecordWriter raw)raw.writeRawRecord(record);else writer.write(record);}
+                attributes.putAll(writer.finishRecordSet().getAttributes());attributes.put("mime.type",writer.getMimeType());writer.flush();
+            }
+            attributes.put("record.count",Integer.toString(values.size()));part=session.putAllAttributes(part,attributes);derived.set(index,part);files.add(part);
+        }
+    }
+    private static FlowFile backoff(ProcessContext context,ProcessSession session,FlowFile file,Relationship relationship){
+        int attempt=Math.min(30,integer(file.getAttribute(MappingErrorRecords.ATTEMPT))+1);
+        long minimum=Math.min(300000,Math.max(1000,context.getProperty(ERROR_LOOP_DELAY).asTimePeriod(java.util.concurrent.TimeUnit.MILLISECONDS)));
+        long delay=Math.min(300000,minimum*(1L<<Math.min(attempt-1,18)));
+        return session.putAllAttributes(file,Map.of(MappingErrorRecords.ATTEMPT,Integer.toString(attempt),MappingErrorRecords.NEXT,Long.toString(System.currentTimeMillis()+delay),MappingErrorRecords.RELATIONSHIP,relationship.getName()));
     }
     private static RecordSchema outputSchema(MappingEngine.Plan plan,RecordSchema input){
         LinkedHashMap<String,RecordField>fields=new LinkedHashMap<>();if(plan.passthrough())input.getFields().forEach(f->{if(!plan.excludes().contains(f.getFieldName()))fields.put(f.getFieldName(),f);});

@@ -18,7 +18,8 @@ function nativeDetailsHandler(overrides = {}) {
   assert.ok(handler);
   const events = [];
   const popup = { opener: {}, close() { events.push('closed'); }, location: { replace(url) { events.push(['navigate', url]); } } };
-  const scope = { currentPipelineId: 'p1', canOpenNative: true, isCurrentSession: () => true,
+  const scope = { currentPipelineId: 'p1', canOpenNative: true,
+    nativeDetails: { tooltip: '当前任务尚未部署到 NiFi' }, isCurrentSession: () => true,
     window: { open(url) { events.push(['open', url]); return popup; }, location: { origin: 'http://demo.example' } },
     getNifiUiLink: async id => { events.push(['request', id]); return { url: '/nifi-ui/?processGroupId=' + id }; },
     resolveNifiNativeUiUrl,

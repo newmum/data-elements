@@ -1,19 +1,36 @@
-import type { FieldMappingSpec, FieldMeta, UnifiedMappingDraft, UnifiedMappingRule } from '../api/fieldMapping';
+import type { FieldMappingSpec, FieldMeta, FunctionParameter, FunctionParameterSchema, UnifiedMappingDraft, UnifiedMappingRule } from '../api/fieldMapping';
+
+export function functionParameterSlots(schema:FunctionParameterSchema,parameters:unknown[]):FunctionParameter[] {
+  if(!schema.additionalParametersAllowed)return schema;
+  return [...schema,...Array.from({length:Math.max(0,parameters.length-schema.length)},(_,offset)=>({index:schema.length+offset,name:'候选默认值 '+(schema.length+offset+1),type:'JSON',required:true,defaultValue:null,choices:[]}))];
+}
 
 export const RULE_TYPES = ['ANY','STRING','INT','LONG','DECIMAL','DOUBLE','BOOLEAN','DATE','TIME','DATETIME','INSTANT','ARRAY'];
 export const TYPE_LABELS:Record<string,string> = {ANY:'保留类型',STRING:'文本',INT:'整数',LONG:'长整数',DECIMAL:'精确小数',DOUBLE:'浮点数',BOOLEAN:'布尔值',DATE:'日期',TIME:'时分秒',DATETIME:'日期时间',INSTANT:'绝对时间',ARRAY:'数组'};
 export function logicalFieldType(field:FieldMeta):string {
-  let type=(field.logicalType??field.type??'ANY').toUpperCase().replace(/\([^)]*\)/g,'').trim();
+  let type=(field.logicalType??field.type??'ANY').toUpperCase().replace(/\([^)]*\)/g,'').trim().replace(/\s+/g,' ');
   if(['INT UNSIGNED','INTEGER UNSIGNED'].includes(type))return 'LONG';
   if(type==='BIGINT UNSIGNED')return 'DECIMAL';
   type=type.replace(/\s+UNSIGNED$/,'');
   const aliases:Record<string,string>={VARCHAR:'STRING',VARCHAR2:'STRING',NVARCHAR:'STRING',NVARCHAR2:'STRING',CHAR:'STRING',NCHAR:'STRING',TEXT:'STRING',CLOB:'STRING',LONGVARCHAR:'STRING',TINYINT:'INT',SMALLINT:'INT',INTEGER:'INT',INT2:'INT',INT4:'INT',BIGINT:'LONG',INT8:'LONG',NUMERIC:'DECIMAL',NUMBER:'DECIMAL',DEC:'DECIMAL',FLOAT:'DOUBLE',REAL:'DOUBLE','DOUBLE PRECISION':'DOUBLE',BOOL:'BOOLEAN',BIT:'BOOLEAN',TIMESTAMP:'DATETIME',DATETIME2:'DATETIME',SMALLDATETIME:'DATETIME',DATETIME64:'DATETIME',DATETIMEOFFSET:'INSTANT','TIMESTAMP WITH TIME ZONE':'INSTANT',TIMESTAMPTZ:'INSTANT','TIMESTAMP WITHOUT TIME ZONE':'DATETIME','TIMESTAMP WITH LOCAL TIME ZONE':'INSTANT','TIME WITHOUT TIME ZONE':'TIME'};
+  if(['CHARACTER VARYING','CHAR VARYING','NCHAR VARYING','NATIONAL CHARACTER VARYING','NATIONAL CHAR VARYING','CHARACTER','NATIONAL CHARACTER','NATIONAL CHAR','LONGNVARCHAR','NCLOB','NTEXT','BPCHAR','TINYTEXT','MEDIUMTEXT','LONGTEXT','VARCHAR_IGNORECASE','VARCHAR_CASESENSITIVE'].includes(type))return 'STRING';
+  if(type==='MEDIUMINT')return 'INT';
   return aliases[type]??type;
 }
 export const INPUT_LABELS:Record<string,string> = {FIELD:'源字段',LITERAL:'常量',EXPRESSION:'安全表达式',SYSTEM:'系统值'};
 export const OPERATOR_LABELS:Record<string,string> = {DIRECT:'原值',CAST:'类型转换',FUNCTION:'函数',LOOKUP:'单值码表',LOOKUP_MULTI:'拆分码表',STATIC_MAP:'枚举对标',DATE_PARSE:'日期解析',DATE_FORMAT:'日期格式化',ID_CARD_15_TO_18:'身份证15转18位',ID_CARD_VALIDATE:'身份证校验',CONCAT:'多字段合并',EXPRESSION:'安全表达式',VALIDATE:'输出校验',SYSTEM_VALUE:'系统值'};
 export const PRESETS = [{key:'DIRECT',label:'原值映射'},{key:'CONSTANT',label:'常量字段'},{key:'CAST',label:'类型转换'},{key:'FUNCTION',label:'函数处理'},{key:'DATE_PARSE',label:'日期处理'},{key:'ID_CARD_15_TO_18',label:'身份证转换'},{key:'ID_CARD_VALIDATE',label:'身份证校验'},{key:'LOOKUP',label:'单值码表'},{key:'LOOKUP_MULTI',label:'拆分码表'},{key:'CONDITIONAL',label:'条件分支'},{key:'EXPRESSION',label:'安全表达式'},{key:'VALIDATE',label:'输出校验'}];
 export type RuleStep = UnifiedMappingRule['steps'][number];
+export function setRuleSteps(rule:UnifiedMappingRule,steps:RuleStep[],registeredTarget:boolean):UnifiedMappingRule {
+  const next={...rule,steps};if(registeredTarget)return next;
+  const last=[...steps].reverse().find(step=>!step.uiRole&&!['DIRECT','VALIDATE'].includes(step.operator));
+  const previous=rule.steps.find(step=>step.stepId===last?.stepId);
+  if(!last||!previous)return next;
+  const outputOf=(step:RuleStep)=>['CAST','DATE_PARSE'].includes(step.operator)?String(step.args?.logicalType??'STRING'):step.operator==='LOOKUP_MULTI'?(step.args?.outputMode==='ARRAY'?'ARRAY':'STRING'):null;
+  const output=outputOf(last);
+  if(output&&output!==outputOf(previous))next.target={...rule.target,logicalType:output};
+  return next;
+}
 export type RuleBody = {input:UnifiedMappingRule['input'];steps:RuleStep[];when?:unknown;then?:unknown;else?:unknown;[key:string]:unknown};
 export interface Predicate {op:string;left?:UnifiedMappingRule['input'];right?:UnifiedMappingRule['input'];values?:UnifiedMappingRule['input'][];children?:Predicate[];child?:Predicate;[key:string]:unknown}
 export const FALLBACK_LABELS:Record<string,string> = {ERROR:'交给记录错误策略',NULL:'置为 NULL',KEEP_SOURCE:'保留字段原输入',KEEP_INPUT:'保留当前步骤输入',KEEP_ORIGINAL:'保留字段原输入',DEFAULT_VALUE:'使用指定默认值'};
@@ -93,6 +110,7 @@ export function changePrimaryRuleMode(rule:UnifiedMappingRule,mode:string,id:str
   if(['CONSTANT','EXPRESSION','SYSTEM'].includes(mode))return {...next,input:mode==='CONSTANT'?{kind:'LITERAL',value:''}:mode==='SYSTEM'?{kind:'SYSTEM',generator:'UUID32'}:{kind:'EXPRESSION',expression:''}};
   const steps=[...next.steps],index=steps.findIndex(s=>!s.uiRole);
   const step={stepId:index<0?id:steps[index].stepId??id,operator:mode,args:stepDefaults(mode)};
+  if(index>=0&&['LOOKUP','LOOKUP_MULTI'].includes(mode)&&['LOOKUP','LOOKUP_MULTI'].includes(steps[index].operator))step.args={...step.args,...steps[index].args};
   if(mode==='DATE_PARSE'&&['TIME','DATETIME','INSTANT'].includes(next.target.logicalType??''))step.args={pattern:'AUTO',logicalType:next.target.logicalType};
   if(index<0)steps.push(step);else steps[index]={...steps[index],...step};
   return {...next,input:next.input.kind==='FIELD'||next.input.kind==='TARGET'?next.input:{kind:'FIELD',name:''},steps};
@@ -108,6 +126,8 @@ export function validateRuleForm(rule:UnifiedMappingRule):string[] {
   function input(value:UnifiedMappingRule['input']|undefined,label:string){
     if(!value){errors.push(label+'缺少输入');return;}
     if(value.kind==='FIELD'&&!value.name?.trim())errors.push(label+'请选择源字段');
+    if(value.kind==='TARGET'&&!value.name?.trim())errors.push(label+'请选择已生成目标字段');
+    if(value.kind==='STEP_INPUT')errors.push(label+'规则输入没有上一步结果，请选择源字段或已生成目标字段');
     if(value.kind==='EXPRESSION'&&!value.expression?.trim())errors.push(label+'请填写表达式');
   }
   function predicate(value:Predicate,label:string,depth:number){

@@ -99,6 +99,12 @@ class DslCompilerHiveTemporalWriterTest {
         compiler.compile(flow(List.of(source("source","oracle",Map.of("dbType","ORACLE","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))))));
         assertThat(namedProcessor("source/fetch").properties()).containsEntry("Columns to Return","CAST(\"EVENT_TIME\" AS TIMESTAMP) AS \"EVENT_TIME\"");
     }
+    @Test void allMappingErrorRelationshipsShareOneSelfLoopAndDoNotCreateFunnels() {
+        compiler.compile(flow(List.of(source("source","mysql",Map.of()),mapping())));
+        Created processor=namedProcessor("字段映射");
+        verify(nifi).createConnection("pg",processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("failure","invalid","retry"));
+        verify(nifi,never()).createRetentionFunnel(anyString(),anyDouble(),anyDouble());
+    }
     @Test void oracleCurrentMaximumSourceUsesSameSupportedProjectionProperty() {
         compiler.compile(flow(List.of(source("source","oracle",Map.of("dbType","ORACLE","syncMode","INCREMENTAL","initialStrategy","START_AT_CURRENT_MAX","incrementalColumn","EVENT_TIME","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))))));
         Created fetch=namedProcessor("source/fetch");assertThat(fetch.type()).endsWith(".QueryDatabaseTableRecord");assertThat(fetch.properties()).containsEntry("Columns to Return","CAST(\"EVENT_TIME\" AS TIMESTAMP) AS \"EVENT_TIME\"").doesNotContainKey("Column Names");

@@ -12,7 +12,9 @@ test('actual status/error query functions mark background reads quiet and retain
   const api = { get: async (path, config) => { calls.push({ path, config }); throw backendError; } };
   const exported = {};
   const require = id => {
-    if (id === '@tanstack/react-query') return { useQuery: options => { queries.push(options); return {}; } };
+    if (id === '@tanstack/react-query') return { useQuery: options => { queries.push(options); return {}; }, useQueryClient: () => ({}) };
+    if (id === 'react') return { useEffect: effect => effect() };
+    if (id === './runtimeStatusStream') return { subscribeRuntimeStatus: () => () => {} };
     if (id === './client') return { apiClient: api, BACKGROUND_REQUEST_OPTIONS: { nifiSilentGlobalErrors: true } };
     if (id === './bridgeSession') return { useTokenReady: () => true, useSessionRevision: () => 7 };
     if (id === './response') return { requireListResponse: payload => payload };

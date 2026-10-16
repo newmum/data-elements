@@ -465,7 +465,7 @@ public class PipelineController {
     @SerializedNifiMutation
     @Transactional
     public Pipeline create(@RequestBody Pipeline body, @RequestParam(required = false) String catalogTid) {
-        body = validateIncrementalFields(body);
+        body = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(validateIncrementalFields(body));
         Pipeline existing = findCatalogPipeline(catalogTid);
         if (existing != null) return saveDesign(existing, body);
         // Force-create: clear any incoming id so save() generates one.
@@ -485,7 +485,7 @@ public class PipelineController {
                                            @RequestParam(required=false) Long expectedUpdatedAt) {
         Pipeline current = repo.findById(id).orElse(null);
         if (current == null) return ResponseEntity.notFound().build();
-        final Pipeline prepared = validateIncrementalFields(body);
+        final Pipeline prepared = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(validateIncrementalFields(body));
         if (expectedUpdatedAt != null) {
             return ResponseEntity.ok(repo.update(id, cur -> {
                 if (!java.util.Objects.equals(cur.updatedAt(),expectedUpdatedAt))

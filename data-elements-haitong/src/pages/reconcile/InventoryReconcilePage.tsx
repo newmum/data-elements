@@ -97,8 +97,8 @@ export default function InventoryReconcilePage(){
    </div>
    {edit.triggerMode==='CRON'&&<Form.Item label="Cron 表达式" required><Input value={edit.cronExpression} onChange={event=>setEdit({...edit,cronExpression:event.target.value})} placeholder="例如 0 0 2 * * ?"/></Form.Item>}
    <Form.Item label="对账方式"><Radio.Group value={edit.compareMode} onChange={event=>setEdit({...edit,compareMode:event.target.value as CompareMode})} options={[{value:'SUMMARY',label:'数量比较'},{value:'KEY',label:'主键比对'},{value:'CONTENT',label:'内容校验'}]}/></Form.Item>
-   <Form.Item label="内容比较字段"><Select mode="multiple" value={edit.rules.filter(rule=>rule.compareEnabled).map(rule=>rule.sourceField)} disabled={edit.compareMode!=='CONTENT'||!edit.rules.length} placeholder={edit.rules.length?'选择参与内容比对的字段':'保存后自动带入接入任务的字段映射'} options={edit.rules.map(rule=>({value:rule.sourceField,label:`${rule.sourceField} → ${rule.targetField}`}))} onChange={(names:string[])=>setEdit({...edit,rules:edit.rules.map(rule=>({...rule,compareEnabled:names.includes(rule.sourceField)}))})}/></Form.Item>
-   <Alert type="info" showIcon message="策略使用当前接入任务的来源表、目标表及字段映射。" description="新策略保存时自动带入字段规则；修改已有策略会重新要求预检。内容校验使用后端规范化规则。"/>
+   <Form.Item label="内容比较字段"><Select mode="multiple" value={edit.rules.filter(rule=>rule.compareEnabled).map(rule=>rule.sourceField)} disabled={edit.compareMode!=='CONTENT'||!edit.rules.length} placeholder={edit.rules.length?'选择参与内容比对的字段':'保存后自动带入接入任务的字段治理'} options={edit.rules.map(rule=>({value:rule.sourceField,label:`${rule.sourceField} → ${rule.targetField}`}))} onChange={(names:string[])=>setEdit({...edit,rules:edit.rules.map(rule=>({...rule,compareEnabled:names.includes(rule.sourceField)}))})}/></Form.Item>
+   <Alert type="info" showIcon message="策略使用当前接入任务的来源表、目标表及字段治理。" description="新策略保存时自动带入字段规则；修改已有策略会重新要求预检。内容校验使用后端规范化规则。"/>
    </Form>
   </Modal>}
  </div>;

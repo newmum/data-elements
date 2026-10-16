@@ -46,6 +46,16 @@ class PipelineRepositoryDeploymentTest {
                     .allSatisfy((key, value) -> assertThat(value).isNull());
             org.junit.jupiter.api.Assertions.assertThrows(org.springframework.web.server.ResponseStatusException.class,()->repo.update(saved.id(),old->{jdbc.update("UPDATE nifi_pipeline_t SET updated_at=updated_at+1000,nifi_process_group_id='concurrent-group' WHERE id='p1'");return old;}));
             assertThat(jdbc.queryForObject("SELECT nifi_process_group_id FROM nifi_pipeline_t WHERE id='p1'",String.class)).isEqualTo("concurrent-group");
+            var source=new Pipeline.Node("s","source.mysql","source","source",0,0,java.util.Map.of());
+            var mapping=new Pipeline.Node("m","transform.field-enrichment","mapping","transform",300,0,java.util.Map.of());
+            var hive=new Pipeline.Node("h","sink.hive","Hive target","sink",600,0,java.util.Map.of());
+            repo.save(new Pipeline("hive-pipeline","Hive projection",null,null,null,
+                    new Pipeline.Dsl(1,List.of(source,mapping,hive),List.of(new Pipeline.Edge("sm","s","m","default"),new Pipeline.Edge("mh","m","h","default"))),
+                    null,null,null,null,null,null,null));
+            session.clearCache();
+            var hiveSaved=repo.findById("hive-pipeline").orElseThrow().dsl();
+            assertThat(hiveSaved.nodes()).containsExactly(source,hive);
+            assertThat(hiveSaved.edges()).singleElement().satisfies(e->{assertThat(e.source()).isEqualTo("s");assertThat(e.target()).isEqualTo("h");});
         }
     }
 }

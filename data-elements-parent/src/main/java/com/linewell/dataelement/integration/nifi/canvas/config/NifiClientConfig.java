@@ -18,13 +18,17 @@ import java.time.Duration;
 public class NifiClientConfig {
 
     public static ClientHttpRequestFactory createRequestFactory(boolean insecureTls) {
+        return createRequestFactory(insecureTls, Duration.ofSeconds(10), Duration.ofSeconds(60));
+    }
+
+    public static ClientHttpRequestFactory createRequestFactory(boolean insecureTls, Duration connect, Duration read) {
         if (insecureTls) {
             configureInsecureTls();
         }
 
         var requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout((int) Duration.ofSeconds(10).toMillis());
-        requestFactory.setReadTimeout((int) Duration.ofSeconds(60).toMillis());
+        requestFactory.setConnectTimeout((int) connect.toMillis());
+        requestFactory.setReadTimeout((int) read.toMillis());
         return requestFactory;
     }
 

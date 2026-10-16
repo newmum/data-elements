@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import { concreteRuleLabel, concreteRuleMode, concreteInputLabel, selectConcreteRule } from './mappingRulePresentation.ts';
 
 const base = {ruleId:'r',input:{kind:'FIELD',name:'id'},target:{name:'out',logicalType:'STRING'},steps:[]};
+test('new rules adopt their natural output type while configured targets retain their contract',()=>{
+ for(const [mode,type] of [['CURRENT_TIME','DATETIME'],['DATE_PARSE','DATE'],['ID_CARD_VALIDATE','BOOLEAN']]){
+  assert.equal(selectConcreteRule({...base,target:{name:'',logicalType:'STRING'}},mode,'s').target.logicalType,type);
+  assert.equal(selectConcreteRule(base,mode,'s').target.logicalType,'STRING');
+ }
+});
 test('generated legacy inputs display business meaning without rewriting saved expressions',()=>{
   for(const [input,mode,label] of [
     [{kind:'SYSTEM',generator:'UUID32'},'UUID32','生成 UUID（32 位）'],

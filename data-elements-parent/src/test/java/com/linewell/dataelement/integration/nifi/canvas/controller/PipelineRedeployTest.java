@@ -61,18 +61,31 @@ class PipelineRedeployTest {
     }
 
     @Test
-    void nativeUiLinkRequiresCurrentVersionToBeDeployed() {
-        assertThat(controller.uiLink("p1").getStatusCode().value()).isEqualTo(400);
-
+    void nativeUiLinkInspectsExistingGroupWithoutRequiringCurrentRevision() {
+        assertThat(controller.uiLink("p1").getStatusCode().value()).isEqualTo(200);
         Pipeline p = stored.get();
         stored.set(pipeline("old-group", deployedHash(p.dsl()), PipelineStatus.STOPPED));
         assertThat(controller.uiLink("p1").getStatusCode().value()).isEqualTo(200);
-
         stored.set(pipeline("old-group", deployedHash(p.dsl()), PipelineStatus.DEPLOY_FAILED));
-        assertThat(controller.uiLink("p1").getStatusCode().value()).isEqualTo(400);
+        assertThat(controller.uiLink("p1").getStatusCode().value()).isEqualTo(200);
+        stored.set(pipeline("old-group", null, PipelineStatus.RUNNING));
+        assertThat(controller.uiLink("p1").getStatusCode().value()).isEqualTo(200);
+        stored.set(pipeline("old-group", "previous-compiler-hash", PipelineStatus.DEPLOYING));
+        var link = controller.uiLink("p1");
+        assertThat(link.getStatusCode().value()).isEqualTo(200);
+        assertThat(((Map<?, ?>) link.getBody()).get("processGroupId")).isEqualTo("old-group");
+        verifyNoInteractions(compiler, nifi, groups, tasks);
+    }
 
+    @Test
+    void nativeUiLinkRequiresSelectedPipelinesOwnGroup() {
+        Pipeline p = stored.get();
         stored.set(pipeline(null, deployedHash(p.dsl()), PipelineStatus.SAVED));
         assertThat(controller.uiLink("p1").getStatusCode().value()).isEqualTo(400);
+        stored.set(pipeline(" ", deployedHash(p.dsl()), PipelineStatus.SAVED));
+        assertThat(controller.uiLink("p1").getStatusCode().value()).isEqualTo(400);
+        assertThat(controller.uiLink("not-visible").getStatusCode().value()).isEqualTo(404);
+        verifyNoInteractions(compiler, nifi, groups, tasks);
     }
 
     @Test

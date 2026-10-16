@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /** Compile once, execute typed Java functions only. No SQL, JDBC, Spring or NiFi dependencies. */
 public final class FunctionRegistry {
-    public static final String VERSION = "1.1.12";
+    public static final String VERSION = "1.1.16";
     public static String libraryVersion(){return VERSION;}
     private static final ObjectMapper JSON = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     public static final Set<String> NAMES = Collections.unmodifiableSet(new LinkedHashSet<>(List.of(
@@ -80,7 +80,7 @@ public final class FunctionRegistry {
             case "toInt","toLong","toDouble","toBoolean" -> { String type=switch(name){case "toInt"->"INT";case "toLong"->"LONG";case "toDouble"->"DOUBLE";default->"BOOLEAN";};
                 yield call(type,(v,c)->ValueTypes.cast(v,type,38,10,RoundingMode.UNNECESSARY)); }
             case "toDecimal" -> {int precision=integer(a,0,38),scale=integer(a,1,10);RoundingMode rounding=rounding(a,2,RoundingMode.HALF_UP);if(precision<1||precision>1000||scale<0||scale>precision)throw bad();yield call("DECIMAL",(v,c)->ValueTypes.cast(v,"DECIMAL",precision,scale,rounding));}
-            case "cast" -> { if(s0.isBlank())throw bad(); yield call(ValueTypes.type(s0),(v,c)->ValueTypes.cast(v,s0,integer(a,1,38),integer(a,2,10),rounding(a,3,RoundingMode.UNNECESSARY),c.zone())); }
+            case "cast" -> { if(s0.isBlank())throw bad(); String type=ValueTypes.requireType(s0); yield call(type,(v,c)->ValueTypes.cast(v,type,integer(a,1,38),integer(a,2,10),rounding(a,3,RoundingMode.UNNECESSARY),c.zone())); }
             case "coalesce","nvl" -> call("ANY",(v,c)->v!=null?v:a.stream().filter(Objects::nonNull).findFirst().orElse(null));
             case "nullIf" -> call("ANY",(v,c)->!a.isEmpty()&&Objects.equals(ValueTypes.canonical(v),ValueTypes.canonical(a.getFirst()))?null:v);
             case "parseDate" -> {

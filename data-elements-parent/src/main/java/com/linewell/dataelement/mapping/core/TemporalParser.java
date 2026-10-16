@@ -20,6 +20,7 @@ public final class TemporalParser {
     private static final Pattern PARTIAL_YEAR_MONTH = Pattern.compile("[0-9]{4}[-/][0-9]{1,2}");
     private static final Pattern PARTIAL_MONTH_DAY = Pattern.compile("[0-9]{1,2}-[0-9]{1,2}");
     private static final Pattern TIME_TEXT = Pattern.compile("[0-9]{1,2}:[0-9]{1,2}(?::[0-9]{1,2}(?:\\.[0-9]{1,9})?)?");
+    private static final Pattern CHINESE_TIME = Pattern.compile("(?:([0-9]{4}年[0-9]{1,2}月[0-9]{1,2}日)\\s*)?([0-9]{1,2})时([0-9]{1,2})分(?:([0-9]{1,2})(\\.[0-9]{1,9})?秒)?");
     private static final Pattern ISO_SEPARATOR = Pattern.compile("(?<=[0-9])T(?=[0-9])");
     private static final DateTimeFormatter TIME = strict(new DateTimeFormatterBuilder().appendPattern("H:m")
             .optionalStart().appendLiteral(':').appendValue(ChronoField.SECOND_OF_MINUTE, 1, 2, SignStyle.NOT_NEGATIVE)
@@ -97,6 +98,9 @@ public final class TemporalParser {
         }
         if (!(value instanceof CharSequence)) throw new MappingException("DATE_UNIT_REQUIRED", "数值时间戳须明确选择秒、毫秒、微秒或纳秒单位");
         String s = text(value);
+        var chineseTime=CHINESE_TIME.matcher(s);
+        if(chineseTime.matches())s=(chineseTime.group(1)==null?"":chineseTime.group(1)+" ")+chineseTime.group(2)+":"+chineseTime.group(3)
+                +(chineseTime.group(4)==null?"":":"+chineseTime.group(4)+(chineseTime.group(5)==null?"":chineseTime.group(5)));
         if (DIGITS.matcher(s).matches()) {
             if (s.length() == 8) return parts(DateTimeFormatter.BASIC_ISO_DATE.parse(s), defaultDate);
             if (s.length() >= 14 && s.length() <= 23) {

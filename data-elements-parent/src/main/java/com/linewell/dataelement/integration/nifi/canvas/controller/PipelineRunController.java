@@ -57,6 +57,8 @@ import java.util.function.Consumer;
 @RequestMapping("/nifi/api/pipelines/{id}")
 @Api(tags = "PipelineRunController NiFi 流程运行")
 public class PipelineRunController {
+    private com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService runtimeStatuses;
+    @Autowired public void setRuntimeStatuses(com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService service) { runtimeStatuses = service; }
     private com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore mappingVersions;
     @org.springframework.beans.factory.annotation.Autowired public void setMappingVersions(com.linewell.dataelement.integration.nifi.canvas.mapping.MappingVersionStore store){mappingVersions=store;}
 
@@ -117,12 +119,11 @@ public class PipelineRunController {
     public ResponseEntity<?> uiLink(@PathVariable String id) {
         Pipeline pipeline = repo.findById(id).orElse(null);
         if (pipeline == null) return ResponseEntity.notFound().build();
-        if (pipeline.nifiProcessGroupId() == null || pipeline.nifiProcessGroupId().isBlank()
-                || pipeline.lastDeployedHash() == null
-                || !pipeline.lastDeployedHash().equals(deploymentHash(pipeline))
-                || pipeline.status() == PipelineStatus.DEPLOYING
-                || pipeline.status() == PipelineStatus.DEPLOY_FAILED) {
-            return ResponseEntity.badRequest().body(Map.of("error", "当前版本尚未成功部署到 NiFi，请先保存并部署"));
+        // Viewing the existing native group does not execute the saved design.
+        // A newer draft/compiler or failed replacement must not hide a running group.
+        // Revision checks remain mandatory for start/deploy, not this read-only link.
+        if (pipeline.nifiProcessGroupId() == null || pipeline.nifiProcessGroupId().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "当前任务尚未部署到 NiFi，请先保存并部署"));
         }
         return ResponseEntity.ok(Map.of(
                 "url", "/nifi-ui/#/process-groups/" + pipeline.nifiProcessGroupId(),
@@ -326,60 +327,31 @@ public class PipelineRunController {
         body.put("errors", errors.list(id));
         body.put("nodeMapping", p.nodeMapping());
 
-        PipelineStatus runtimeStatus = p.status();
-
-        if (p.nifiProcessGroupId() != null) {
-            try {
-                JsonNode raw = nifi.getProcessGroupStatus(p.nifiProcessGroupId());
-                body.put("nifiStatus", raw);
-                runtimeStatus = statusResolver.resolve(p.status(), raw, p.nifiProcessGroupId());
-                body.put("status", runtimeStatus);
-            } catch (NifiException e) {
-                if (e.status() == 404) {
-                    // A redeploy deliberately removes its previous PG before the newly compiled
-                    // PG is persisted. A concurrent status request must never erase that new
-                    // deployment's reference just because the PG it observed has disappeared.
-                    String missingProcessGroupId = p.nifiProcessGroupId();
-                    AtomicBoolean staleReferenceCleared = new AtomicBoolean(false);
-                    Pipeline reconciled = repo.update(id, current -> {
-                        boolean stillObservesTheMissingGroup = Objects.equals(
-                                missingProcessGroupId, current.nifiProcessGroupId());
-                        if (current.status() == PipelineStatus.DEPLOYING || !stillObservesTheMissingGroup) {
-                            return current;
-                        }
-                        staleReferenceCleared.set(true);
-                        return new Pipeline(current.id(), current.name(), current.description(),
-                                current.createdAt(), current.updatedAt(), current.dsl(),
-                                null, PipelineStatus.SAVED,
-                                null, null, current.lastStoppedAt(),
-                                null, null);
-                    });
-                    if (staleReferenceCleared.get()) {
-                        // Stale PG id (was deleted out-of-band). Self-heal so subsequent polls
-                        // don't keep hitting NiFi 404.
-                        log.info("PG {} for pipeline {} no longer exists in NiFi, clearing stale reference",
-                                missingProcessGroupId, id);
-                        body.put("deployed", false);
-                        body.put("processGroupId", null);
-                        body.put("status", PipelineStatus.SAVED);
-                        runtimeStatus = PipelineStatus.SAVED;
-                    } else {
-                        // The lifecycle advanced since this status call started (normally a
-                        // full redeploy). Keep the newer state intact and report that state.
-                        log.debug("PG {} disappeared while pipeline {} was redeploying; retaining newer pipeline state",
-                                missingProcessGroupId, id);
-                        body.put("deployed", reconciled.nifiProcessGroupId() != null);
-                        body.put("processGroupId", reconciled.nifiProcessGroupId());
-                        body.put("status", reconciled.status());
-                        runtimeStatus = reconciled.status();
-                    }
-                } else {
-                    log.debug("Fetch NiFi PG status for {} failed: {}", id, e.getMessage());
-                    body.put("nifiStatusError", e.getMessage());
-                }
-            }
+        if (runtimeStatuses != null) {
+            Map<String,Object> snapshot = runtimeStatuses.snapshot();
+            Map<String,Object> runtime = runtimeStatuses.describe(snapshot, p.nifiProcessGroupId(), p.status().name());
+            body.putAll(runtime);
+            body.put("runtimeRevision", snapshot.get("revision"));
+            String state = String.valueOf(runtime.get("runtimeState"));
+            PipelineStatus effective = switch (state) {
+                case "RUNNING" -> PipelineStatus.RUNNING;
+                case "STOPPING" -> PipelineStatus.STOPPING;
+                case "STOPPED", "EMPTY" -> PipelineStatus.STOPPED;
+                case "INVALID", "RUN_ERROR" -> PipelineStatus.RUN_ERROR;
+                case "UNDEPLOYED" -> p.status() == PipelineStatus.DRAFT ? PipelineStatus.DRAFT : PipelineStatus.SAVED;
+                default -> p.status();
+            };
+            body.put("status", effective);
+            var index = (com.linewell.dataelement.integration.nifi.canvas.runtime.RuntimeStatusIndex) snapshot.get("index");
+            if (index != null && p.nifiProcessGroupId() != null) body.put("nifiStatus", index.rawStatus(p.nifiProcessGroupId()));
+            if (!Boolean.TRUE.equals(runtime.get("runtimeFresh")) || state.equals("MISSING"))
+                body.put("nifiStatusError", state.equals("MISSING") ? "NiFi 中未找到已关联的流程" : snapshot.get("message"));
+        } else if (p.nifiProcessGroupId() != null) {
+            // Compatibility for standalone callers; status reads never rewrite lifecycle state.
+            JsonNode raw = nifi.getProcessGroupStatus(p.nifiProcessGroupId());
+            body.put("nifiStatus", raw);
+            body.put("status", statusResolver.resolve(p.status(), raw, p.nifiProcessGroupId()));
         }
-        taskLifecycle.statusChanged(p.id(), runtimeStatus);
         return ResponseEntity.ok(body);
     }
 

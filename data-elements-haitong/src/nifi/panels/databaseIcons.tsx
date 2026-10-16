@@ -112,8 +112,8 @@ export const DATA_SOURCE_ICONS: Record<string, ReactNode> = {
 export const COMPONENT_ICONS: Record<string, ReactNode> = {
   ...DATA_SOURCE_ICONS,
   'transform.filter': <ProcessSvgIcon bg="#14b8a6" kind="filter" label="FILTER" />,
-  'transform.field-mapping': <ProcessSvgIcon bg="#6366f1" kind="mapping" label="MAP" />,
-  'transform.field-enrichment': <ProcessSvgIcon bg="#6366f1" kind="mapping" label="MAP" />,
+  'transform.field-mapping': <ProcessSvgIcon bg="#6366f1" kind="mapping" label="GOV" />,
+  'transform.field-enrichment': <ProcessSvgIcon bg="#6366f1" kind="mapping" label="GOV" />,
   'transform.sql': <ProcessSvgIcon bg="#7c3aed" kind="sql" label="SQL" />,
   'sink.hive': <DatabaseBrandIcon src={hive} name="Apache Hive" />,
   'sink.jdbc': <ProcessSvgIcon bg="#16a34a" kind="sink" label="JDBC" />,

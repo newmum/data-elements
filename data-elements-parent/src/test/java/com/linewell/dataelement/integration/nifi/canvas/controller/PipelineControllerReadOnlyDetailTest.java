@@ -26,6 +26,25 @@ import org.ssssssss.magicapi.core.service.MagicAPIService;
 
 class PipelineControllerReadOnlyDetailTest {
     @Test
+    void bothSaveEndpointsUseTheHiveProjectionWithoutAnyMetadataOrNifiReads() {
+        for(Long revision : java.util.Arrays.asList(null,20L)) {
+            var repository=mock(PipelineRepository.class);
+            var source=new Pipeline.Node("s","source.mysql","source","source",0,0,Map.of());
+            var mapping=new Pipeline.Node("m","transform.field-enrichment","mapping","transform",300,0,Map.of());
+            var hive=new Pipeline.Node("h","sink.hive","hive","sink",600,0,Map.of());
+            var saved=new Pipeline("p","saved",null,10L,20L,new Pipeline.Dsl(1,List.of(source,hive),List.of()),null,null,null,null,null,null,null);
+            var edited=new Pipeline("p","edited",null,null,null,new Pipeline.Dsl(1,List.of(source,mapping,hive),List.of(new Pipeline.Edge("sm","s","m","default"),new Pipeline.Edge("mh","m","h","default"))),null,null,null,null,null,null,null);
+            when(repository.findById("p")).thenReturn(Optional.of(saved));
+            when(repository.update(org.mockito.ArgumentMatchers.eq("p"),org.mockito.ArgumentMatchers.any())).thenAnswer(call->{
+                java.util.function.UnaryOperator<Pipeline> mutate=call.getArgument(1);return mutate.apply(saved);
+            });
+            var controller=new PipelineController(repository,null,null,null,null,null,null,null,null);
+            var result=controller.update("p",edited,revision).getBody();
+            assertThat(result.dsl().nodes()).containsExactly(source,hive);
+            assertThat(result.dsl().edges()).singleElement().satisfies(e->{assertThat(e.source()).isEqualTo("s");assertThat(e.target()).isEqualTo("h");});
+        }
+    }
+    @Test
     void readingSecondHopKeepsItsActualSourceAndSavedTimestampWithoutRepairWrites() {
         var repository = mock(PipelineRepository.class);
         var nifi = mock(NifiClient.class);

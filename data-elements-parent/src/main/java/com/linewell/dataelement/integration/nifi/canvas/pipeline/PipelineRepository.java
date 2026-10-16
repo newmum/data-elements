@@ -99,6 +99,7 @@ public class PipelineRepository {
     }
 
     public synchronized Pipeline save(Pipeline p) {
+        p = HiveSinkPublicationPolicy.forCanvas(p);
         long now = System.currentTimeMillis();
         String id = (p.id() == null || p.id().isBlank()) ? NumericId.nextId() : p.id();
         Optional<Pipeline> existing = findById(id);

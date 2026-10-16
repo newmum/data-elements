@@ -3,6 +3,7 @@ import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from "./register
 import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip } from 'antd';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import { incrementalFieldVisible } from '../utils/incrementalFields';
+import { governanceNodeLabel } from '../utils/fieldGovernancePresentation';
 import {
   DatabaseOutlined,
   FunctionOutlined,
@@ -522,6 +523,7 @@ function isIncrementalVisible(field: FieldSchema, config: Record<string, unknown
 }
 
 export default function ConfigDrawer() {
+  const [mappingView,setMappingView]=useState<'list'|'visual'|'dsl'>('list');
   const sqlEditorRef = useRef<CustomSqlEditorHandle>(null);
   const [sqlGenerating, setSqlGenerating] = useState(false);
   const { message } = AntdApp.useApp();
@@ -728,9 +730,9 @@ export default function ConfigDrawer() {
   const isTopActionDrawer = isFieldMappingDrawer || isCustomSqlDrawer || isFilterDrawer || isBranchDrawer;
 
   // 本地状态用于节点名称输入。
-  const [nodeName, setNodeName] = useState(node?.label ?? '');
+  const [nodeName, setNodeName] = useState(node ? governanceNodeLabel(node.manifestKey, node.label) : '');
   useEffect(() => {
-    setNodeName(node?.label ?? '');
+    setNodeName(node ? governanceNodeLabel(node.manifestKey, node.label) : '');
   }, [node?.label]);
 
   // Repair persisted canvases created before OceanBase compatibility modes
@@ -1616,6 +1618,7 @@ export default function ConfigDrawer() {
                   columnMeta={columnMeta}
                   datasources={dbList.map(item=>({value:String(item.id??item.value),label:item.label}))}
                   columnsLoading={mappingColumnsLoading}
+                  onViewModeChange={setMappingView}
                   columnsError={mappingProbeState.key === mappingProbeKey ? mappingProbeState.error : ''}
                   onReloadColumns={() => setMappingProbeRetry((value) => value + 1)}
                 />
@@ -1674,7 +1677,7 @@ export default function ConfigDrawer() {
       placement="right"
       mask={false}
       closable={false}
-      rootClassName={isFieldMappingDrawer ? 'field-mapping-config-drawer' : isCustomSqlDrawer ? 'custom-sql-config-drawer' : isFilterDrawer ? 'filter-config-drawer' : isBranchDrawer ? 'branch-config-drawer' : undefined}
+      rootClassName={isFieldMappingDrawer ? 'field-mapping-config-drawer'+(mappingView==='list'?' fm-full-list-drawer':'') : isCustomSqlDrawer ? 'custom-sql-config-drawer' : isFilterDrawer ? 'filter-config-drawer' : isBranchDrawer ? 'branch-config-drawer' : undefined}
       styles={{
         body: { padding: 0, display: 'flex', flexDirection: 'column' },
         wrapper: { boxShadow: '-8px 0 24px -8px rgba(0,0,0,0.08)' },

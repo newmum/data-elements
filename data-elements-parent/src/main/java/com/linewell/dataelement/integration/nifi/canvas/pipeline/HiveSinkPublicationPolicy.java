@@ -2,9 +2,14 @@ package com.linewell.dataelement.integration.nifi.canvas.pipeline;
 
 import java.util.*;
 
-/** Hive raw ingestion bypasses governance on that branch, without changing the saved canvas. */
+/** Hive raw ingestion uses the same branch projection in the editor and at publication. */
 public final class HiveSinkPublicationPolicy {
     private HiveSinkPublicationPolicy() {}
+    /** Incomplete drafts remain editable; strict graph checks still run before publication. */
+    public static Pipeline forCanvas(Pipeline pipeline) {
+        try { return forPublication(pipeline); }
+        catch (IllegalStateException incomplete) { return pipeline; }
+    }
     public static boolean isHiveSink(Pipeline.Node node) {
         if(node==null)return false;
         if("sink.hive".equals(node.manifestKey()))return true;

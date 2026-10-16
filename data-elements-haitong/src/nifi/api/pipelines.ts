@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { useEffect } from 'react';
+import { subscribeRuntimeStatus } from './runtimeStatusStream';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient as api, BACKGROUND_REQUEST_OPTIONS } from './client';
 import { hiveMetadataConfigError, normalizeProbeResponse, requireListResponse } from './response';
@@ -75,6 +77,12 @@ export interface FlowError {
 }
 
 export interface FlowStatusPayload {
+  runtimeRevision?: string;
+  runtimeLabel?: string;
+  runtimeFresh?: boolean;
+  runtimeState?: string;
+  runtimeObservedAt?: number;
+  runtimeMessage?: string;
   id: string;
   name: string;
   status: PipelineStatus;
@@ -405,15 +413,27 @@ export function useStartPipeline() {
 export function useFlowStatus(id: string | null, intervalMs = 3000) {
   const tokenReady = useTokenReady();
   const sessionRevision = useSessionRevision();
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!tokenReady || !id) return;
+    let metricsAt = 0;
+    return subscribeRuntimeStatus(event => {
+      const current = qc.getQueryData<FlowStatusPayload>(['pipeline-status', id, sessionRevision]);
+      if (event.transportAvailable === false) {
+        if (current) qc.setQueryData<FlowStatusPayload>(['pipeline-status', id, sessionRevision], { ...current,
+          runtimeFresh: false, runtimeState: 'UNKNOWN', runtimeLabel: '状态待确认', runtimeMessage: event.message });
+        return;
+      }
+      if (!current || (current.runtimeFresh !== false && current.runtimeRevision === event.revision && event.observedAt - metricsAt < intervalMs)) return;
+      metricsAt = event.observedAt;
+      void qc.invalidateQueries({ queryKey: ['pipeline-status', id, sessionRevision] }, { cancelRefetch: false });
+    });
+  }, [id, tokenReady, sessionRevision, qc, intervalMs]);
   return useQuery<FlowStatusPayload>({
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-status', id, sessionRevision],
     queryFn: async ({ signal }) => (await api.get<FlowStatusPayload>(`/pipelines/${id}/status`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return intervalMs;
-      return ['RUNNING', 'DEPLOYING', 'STOPPING'].includes(data.status) ? intervalMs : 30000;
-    },
+    refetchInterval: false,
   });
 }
 

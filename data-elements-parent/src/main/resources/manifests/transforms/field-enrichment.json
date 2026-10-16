@@ -1,9 +1,9 @@
 {
   "key": "transform.field-enrichment",
   "category": "transform",
-  "label": "字段映射",
+  "label": "字段治理",
   "icon": "swap",
-  "description": "统一执行字段映射、字典翻译与统一格式；同源数据库时自动下推为一条批量 SQL。",
+  "description": "统一执行字段治理、字典翻译与统一格式；同源数据库时自动下推为一条批量 SQL。",
   "fields": [
     {
       "key": "executionMode",
@@ -20,11 +20,11 @@
     },
     {
       "key": "mappings",
-      "label": "字段映射规则",
+      "label": "治理规则",
       "type": "field-mapping-dsl",
       "required": true,
       "default": "{\n  \"version\": \"1.0\",\n  \"passthroughUnmapped\": false,\n  \"passthroughCaseSensitive\": true,\n  \"onMissingSource\": \"NULL\",\n  \"onTypeMismatch\": \"CAST\",\n  \"mappings\": []\n}",
-      "help": "复用字段映射规则；固定枚举使用 CASE，字典查询在同库时下推到来源 SQL。"
+      "help": "复用治理规则；固定枚举使用 CASE，字典查询在同库时下推到来源 SQL。"
     }
   ],
   "compile": {

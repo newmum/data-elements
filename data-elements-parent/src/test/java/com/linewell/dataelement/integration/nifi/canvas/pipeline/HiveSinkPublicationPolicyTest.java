@@ -39,6 +39,12 @@ class HiveSinkPublicationPolicyTest {
         var saved=new Pipeline.Dsl(1,List.of(a,hive),List.of(edge("a","hive")));
         assertThatThrownBy(()->HiveSinkPublicationPolicy.forPublication(saved)).hasMessageContaining("缺少来源");
     }
+    @Test void incompleteCanvasDraftRemainsEditableButValidDraftUsesPublicationProjection() {
+        var broken=new Pipeline("draft","draft",null,null,null,new Pipeline.Dsl(1,List.of(a,hive),List.of(edge("a","hive"))),null,null,null,null,null,null,null);
+        assertThat(HiveSinkPublicationPolicy.forCanvas(broken)).isSameAs(broken);
+        var valid=new Pipeline("valid","valid",null,null,null,new Pipeline.Dsl(1,List.of(source,a,hive),List.of(edge("source","a"),edge("a","hive"))),null,null,null,null,null,null,null);
+        assertThat(HiveSinkPublicationPolicy.forCanvas(valid).dsl()).isEqualTo(HiveSinkPublicationPolicy.forPublication(valid).dsl());
+    }
     @Test void hiveSourceToJdbcKeepsGovernance() {
         var saved=new Pipeline.Dsl(1,List.of(node("source","source.hive"),a,jdbc),List.of(edge("source","a"),edge("a","jdbc")));
         assertThat(HiveSinkPublicationPolicy.forPublication(saved)).isSameAs(saved);

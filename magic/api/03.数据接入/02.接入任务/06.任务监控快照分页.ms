@@ -69,6 +69,6 @@ var result=db.page("""
  LEFT JOIN data_access_agg_task_t a ON a.tid=s.task_id AND a.tenant_id=s.tenant_id AND a.is_del=0
  LEFT JOIN db_datasource_t d ON d.tid=a.source_db_id AND d.tenant_id=a.tenant_id AND d.is_del=0
  WHERE s.tenant_id=#{tenantId} AND s.is_del=0 AND (${sourceScope})
- """+filter+' ORDER BY s.'+sortColumn+' '+sortDirection+',s.tid ASC',pageSize,(pageNum-1)*pageSize);
+ """+filter+' ORDER BY CASE WHEN s.'+sortColumn+' IS NULL THEN 1 ELSE 0 END ASC,s.'+sortColumn+' '+sortDirection+',s.tid ASC',pageSize,(pageNum-1)*pageSize);
 result.list=result.list||[];
 return result;

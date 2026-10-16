@@ -63,7 +63,7 @@ export default function OceanArt({kind='overview'}:{kind?:ArtKind}){
   </>,
   tasks:<>
     {orbit(230,134,176,64,6)}{route('M52 178C100 140 152 132 188 149C220 164 250 191 392 149',true)}
-    {floatingCard(26,76,108,86,'模板场景')} {cube(176,62,1.05,true)} {plate(136,168,140,58,.9)} {floatingCard(302,78,102,86,'字段映射')} {dot(150,72,4,'#17A4C1')} {dot(300,140,5)}
+    {floatingCard(26,76,108,86,'模板场景')} {cube(176,62,1.05,true)} {plate(136,168,140,58,.9)} {floatingCard(302,78,102,86,'字段治理')} {dot(150,72,4,'#17A4C1')} {dot(300,140,5)}
   </>,
   nifi:<>
     {orbit(230,134,176,64,6)}{route('M52 178C100 140 152 132 188 149C220 164 250 191 392 149',true)}

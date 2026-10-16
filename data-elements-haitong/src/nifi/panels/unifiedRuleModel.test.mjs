@@ -1,7 +1,7 @@
 import {parsePreciseJson} from '../utils/preciseJson.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createRule,emptyUnifiedDraft,setConditional,setNullHandling,nullHandling,parseNumericConstant,validateRuleForm,usesUnifiedRecordRules,isEditableRule,assertExactJsonNumbers,primaryRuleMode,changePrimaryRuleMode,includeOdsSystemMappings,logicalFieldType} from './unifiedRuleModel.ts';
+import {createRule,emptyUnifiedDraft,setConditional,setNullHandling,nullHandling,parseNumericConstant,validateRuleForm,usesUnifiedRecordRules,isEditableRule,assertExactJsonNumbers,primaryRuleMode,changePrimaryRuleMode,includeOdsSystemMappings,logicalFieldType,functionParameterSlots,setRuleSteps} from './unifiedRuleModel.ts';
 
 test('time target defaults to a datetime parser and ODS system value fits varchar32',()=>{
  const rule={...createRule('DIRECT','r'),input:{kind:'FIELD',name:'created_time'},target:{name:'created_time',logicalType:'DATETIME'}};
@@ -14,6 +14,22 @@ test('time target defaults to a datetime parser and ODS system value fits varcha
 test('physical field types use the kernel type semantics in the configuration form',()=>{
  for(const [type,logical] of [['datetime','DATETIME'],['varchar2(128)','STRING'],['timestamp with time zone','INSTANT'],['NUMERIC(38,10)','DECIMAL'],['INT unsigned','LONG'],['BIGINT UNSIGNED','DECIMAL'],['bit','BOOLEAN']])assert.equal(logicalFieldType({name:'f',type}),logical);
  assert.equal(logicalFieldType({name:'f',type:'timestamp',logicalType:'INSTANT'}),'INSTANT');
+ for(const type of ['CHARACTER VARYING(200)','national   character varying(20)','LONGNVARCHAR','NCLOB','NTEXT','BPCHAR','TINYTEXT','MEDIUMTEXT','LONGTEXT'])assert.equal(logicalFieldType({name:'f',type}),'STRING');
+ assert.equal(logicalFieldType({name:'f',type:'MEDIUMINT UNSIGNED'}),'INT');
+});
+
+test('variadic function parameters remain individually editable after saving and reopening',()=>{
+ const schema=Object.assign([{index:0,name:'第一个候选默认值',type:'JSON',required:false,defaultValue:null,choices:[]}],{additionalParametersAllowed:true});
+ const slots=functionParameterSlots(schema,[null,false,0,'fallback']);
+ assert.deepEqual(slots.map(item=>item.index),[0,1,2,3]);assert.equal(slots[3].name,'候选默认值 4');
+ assert.equal(functionParameterSlots([],['preserved']).length,0);
+});
+
+test('switching single and multi dictionary rules preserves the selected resource and filter',()=>{
+ const original={...createRule('LOOKUP','r'),target:{name:'label'},steps:[{stepId:'lookup',operator:'LOOKUP',args:{definition:{datasourceId:'db',tableId:'t',keyColumns:['code'],valueColumn:'label',filter:{op:'=',column:'enabled',value:1}},missPolicy:'KEEP_SOURCE'}}]};
+ const multi=changePrimaryRuleMode(original,'LOOKUP_MULTI','unused');
+ assert.deepEqual(multi.steps[0].args.definition,original.steps[0].args.definition);assert.equal(multi.steps[0].args.missPolicy,'KEEP_SOURCE');assert.equal(multi.steps[0].args.separator,',');
+ assert.deepEqual(changePrimaryRuleMode(multi,'LOOKUP','unused').steps[0].args.definition,original.steps[0].args.definition);
 });
 
 test('automatic mapping retains ODS generators without duplicating or overwriting selected fields',()=>{
@@ -111,4 +127,12 @@ test('date parsing auto detection preserves explicit formats and validates optio
  rule.steps[0].args.defaultDate='2000/01/01';assert.ok(validateRuleForm(rule).some(x=>x.includes('补全日期')));
  const time=changePrimaryRuleMode({...createRule('DIRECT','t'),target:{name:'t',logicalType:'TIME'}},'DATE_PARSE','time');
  assert.deepEqual(time.steps[0].args,{pattern:'AUTO',logicalType:'TIME'});
+});
+
+test('manual date, cast and array outputs follow the chosen conversion without truncating time',()=>{
+ for(const [operator,before,after,output] of [['DATE_PARSE',{logicalType:'DATE'},{logicalType:'DATETIME'},'DATETIME'],['CAST',{logicalType:'STRING'},{logicalType:'INT'},'INT'],['LOOKUP_MULTI',{outputMode:'STRING'},{outputMode:'ARRAY'},'ARRAY']]){
+  const rule={...createRule('DIRECT','r'),target:{name:'custom',logicalType:'STRING'},steps:[{stepId:'s',operator,args:before}]};const steps=[{...rule.steps[0],args:after}];
+  assert.equal(setRuleSteps(rule,steps,false).target.logicalType,output);assert.equal(setRuleSteps(rule,steps,true).target.logicalType,'STRING');
+  const trailing={stepId:'format',operator:'DATE_FORMAT',args:{pattern:'uuuu-MM-dd'}};assert.equal(setRuleSteps({...rule,steps:[...rule.steps,trailing]},[...steps,trailing],false).target.logicalType,'STRING');
+ }
 });

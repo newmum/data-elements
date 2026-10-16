@@ -158,12 +158,8 @@ public class ProvenanceExecutionSyncJob {
         if (endRunning != null && !endRunning.isBlank()) {
             updateWrapper.set(DataAccessAggTaskT::getEndRunning, endRunning);
         }
-        // A DROP/EXPIRE means a FlowFile did not reach its downstream terminal
-        // processor.  Do not leave the access task displayed as normal merely
-        // because the start request itself was accepted by NiFi.
-        if (hasErrorLikeEvent) {
-            updateWrapper.set(DataAccessAggTaskT::getTaskStatus, 2);
-        }
+        // Historical FlowFile events describe execution outcomes, not whether
+        // processors are currently scheduled. Runtime state comes from NiFi.
         taskService.update(updateWrapper);
 
         // 4）写入一条监控快照，便于时间线追踪与审计。

@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {Button,Empty,Modal,Progress,Space,Typography} from 'antd';
-import {DraftTable} from '../../components/DraftTable';
+import MappingDraftTable from './MappingDraftTable';
 import {getNifiOverlayContainer} from './overlayContainer';
 import {findUniqueCaseInsensitiveFieldMatches} from '../utils/fieldNameMatching';
 import {displayPath,normalizePath,type FieldInfo,type LocalRecommendation} from './fieldMappingPresentation';
@@ -12,13 +12,12 @@ export function RecommendModal({ open, recommendations, onCancel, onApply, apply
   }, [recommendations]);
   const picked = recommendations.filter((r) => selected.includes(r.id));
   return (
-    <Modal className="fm-rule-modal fm-recommend-modal" open={open} onCancel={onCancel} title="自动映射" width={760} onOk={() => onApply(picked)} confirmLoading={applying} okButtonProps={{disabled:!picked.length||applying}} okText={`应用 ${picked.length} 条已选映射`} getContainer={getNifiOverlayContainer}>
-      <Typography.Paragraph type="secondary">按字段名称、含义和类型推荐。勾选需要的映射；应用时会确认替换现有规则。</Typography.Paragraph>
-      {recommendations.length === 0 ? <Empty description="暂无可推荐映射" /> : <DraftTable fields={{from:{kind:'text',value:row=>row.fromLabel||row.from},to:{kind:'text',value:row=>row.toLabel||row.to},confidence:{kind:'number',value:row=>row.confidence}}}
+    <Modal className="fm-rule-modal fm-recommend-modal" open={open} onCancel={onCancel} title="自动匹配" width={760} onOk={() => onApply(picked)} confirmLoading={applying} okButtonProps={{disabled:!picked.length||applying}} okText={`应用 ${picked.length} 条已选规则`} getContainer={getNifiOverlayContainer}>
+      <Typography.Paragraph type="secondary">按字段名称、含义和类型推荐。勾选需要的规则；应用时会确认替换现有规则。</Typography.Paragraph>
+      {recommendations.length === 0 ? <Empty description="暂无可推荐规则" /> : <MappingDraftTable fields={{from:{kind:'text',value:row=>row.fromLabel||row.from},to:{kind:'text',value:row=>row.toLabel||row.to},confidence:{kind:'number',value:row=>row.confidence}}}
         size="small"
-        rowKey="id"
+        rowKey={row=>row.id}
         dataSource={recommendations}
-        scroll={{ y: 'min(400px, calc(100dvh - 380px))' }}
         rowSelection={{ selectedRowKeys: selected, onChange: setSelected, preserveSelectedRowKeys: true }}
         columns={[
           { title: '来源字段 / 取值', key:'from', dataIndex: 'from', render: (_v: string, record: LocalRecommendation) => record.expression?<span>{record.expression==='UUID()'?'生成 UUID（32 位）':record.expression==='LOCALTIMESTAMP'?'写入当前时间':'按表达式计算'}</span>:<FieldLabelCell path={record.from} label={record.fromLabel} /> },
@@ -41,9 +40,9 @@ export function TemplateModal({ open, sourceFields, targetFields, onCancel, onAp
   const sameNameRules = findUniqueCaseInsensitiveFieldMatches(sourceFields, targetFields)
     .map(({ source, target }) => ({ from: source.path, to: target.path }));
   return (
-    <Modal open={open} title="映射模板" width={620} onCancel={onCancel} footer={null} getContainer={getNifiOverlayContainer}>
+    <Modal className="fm-rule-modal" open={open} title="治理规则模板" width={620} onCancel={onCancel} footer={null} getContainer={getNifiOverlayContainer}>
       <Space direction="vertical" style={{ width: '100%' }}>
-        <Button block disabled={sameNameRules.length === 0} onClick={() => onApply(sameNameRules)}>同名字段自动映射（{sameNameRules.length} 条）</Button>
+        <Button block disabled={sameNameRules.length === 0} onClick={() => onApply(sameNameRules)}>同名字段自动匹配（{sameNameRules.length} 条）</Button>
         <Button block onClick={() => onApply([{ constant: 'haitong', to: normalizePath('source_system') }])}>添加 source_system 常量模板</Button>
         <Button block onClick={() => onApply([{ fromList: [normalizePath('first_name'), normalizePath('last_name')], to: normalizePath('full_name'), transform: { fn: 'concat', args: [' '] } }])}>添加姓名合并模板</Button>
       </Space>

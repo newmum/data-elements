@@ -42,6 +42,7 @@ var sortDirection = tableSort.direction(body)
 import java.util.ArrayList
 import jsons
 import tenantRuntime
+import taskRuntime
 
 var text = value => {
     if (value == null) {
@@ -92,6 +93,26 @@ var matchesRuntimeNode = (blank(selectedNetworkCode) || selectedNetworkCode == r
 if (!matchesRuntimeNode) {
     return { pageNum: pageNum, pageSize: pageSize, total: 0, list: [] }
 }
+var live = taskRuntime.snapshot()
+var runtimePg = 'CASE WHEN p.id IS NOT NULL THEN p.nifi_process_group_id ELSE a.process_group_id END'
+var hasPg = '('+runtimePg+" IS NOT NULL AND "+runtimePg+"<>'')"
+var groupSql = groupStatus => {
+    var parts=[]
+    var batches=live.get('groups'+groupStatus)||[]
+    var index=0
+    for(batch in batches) {
+        parts.add(runtimePg+' IN <foreach collection="live.groups'+groupStatus+'['+index+']" item="pg" open="(" close=")" separator=",">#{pg}</foreach>')
+        index=index+1
+    }
+    return parts.size()==0?'1=0':'('+parts.join(' OR ')+')'
+}
+var stoppedSql=groupSql(0)
+var runningSql=groupSql(1)
+var invalidSql=groupSql(2)
+var unknownSql=groupSql(3)
+var knownSql='('+stoppedSql+' OR '+runningSql+' OR '+invalidSql+')'
+var undeployedSql='(NOT '+hasPg+' AND COALESCE(p.status,\'\')<>\'RUNNING\' AND COALESCE(p.status,\'\')<>\'DEPLOY_FAILED\')'
+var failedSql='(NOT '+hasPg+' AND p.status=\'DEPLOY_FAILED\')'
 
 // 运行状态归一：0 未启用，1 运行中，2 运行异常。
 var statusOf = value => {
@@ -209,15 +230,18 @@ var sourceScope=scopeMode=='ALL'?'1=1':scopeMode=='OWNER'?'d.created_by=#{scopeU
 var keywordPattern='%'+text(body?.taskName)+'%';
 var statusSql='';
 if(!blank(status)&&status!='all') {
- var statusValue=status::int;
- statusSql=statusValue==2?" AND a.task_status=1 AND LOWER(a.monitor_status)='error'":statusValue==1?" AND a.task_status=1 AND LOWER(a.monitor_status)<>'error'":" AND a.task_status=#{statusValue}";
+ if(!['0','1','2','3'].contains(status)) {exit 400,'不支持的任务状态';}
+ var condition=status=='0'?'('+stoppedSql+' OR '+undeployedSql+')':status=='1'?runningSql:status=='2'?'('+invalidSql+' OR '+failedSql+')':'(('+hasPg+' AND NOT '+knownSql+') OR (NOT '+hasPg+' AND p.status=\'RUNNING\'))';
+ statusSql=' AND ('+condition+')';
 }
 var result=db.page("""
- SELECT a.* FROM data_access_agg_task_t a
+ SELECT a.*,p.status lifecycle_status,CASE WHEN p.id IS NOT NULL THEN p.nifi_process_group_id ELSE a.process_group_id END runtime_process_group_id
+ FROM data_access_agg_task_t a
  LEFT JOIN db_datasource_t d ON d.tid=a.source_db_id AND d.tenant_id=a.tenant_id AND d.is_del=0
+ LEFT JOIN nifi_pipeline_t p ON p.id=a.pipeline_id AND p.tenant_id=a.tenant_id AND p.is_del=0
  WHERE a.tenant_id=#{tenantId} AND a.is_del=0 AND (${sourceScope})
  AND (#{keyword}='' OR a.task_name LIKE #{keywordPattern})
- """+statusSql+" ORDER BY a."+sortColumn+" "+sortDirection+",a.tid ASC",pageSize,offset);
+ """+statusSql+" ORDER BY CASE WHEN a."+sortColumn+" IS NULL THEN 1 ELSE 0 END ASC,a."+sortColumn+" "+sortDirection+",a.tid ASC",pageSize,offset);
 var taskFields={task_name:'taskName',task_desc:'taskDesc',source_db_id:'sourceDbId',target_db_id:'targetDbId',source_table_id:'sourceTableId',target_table_id:'targetTableId',source_table_primary_key:'sourceTablePrimaryKey',source_table_increment_key:'sourceTableIncrementKey',schedule_strategy:'scheduleStrategy',schedule_cycle:'scheduleCycle',schedule_running:'scheduleRunning',last_running:'lastRunning',end_running:'endRunning',created_time:'createdTime',updated_time:'updatedTime',pipeline_id:'pipelineId',process_group_id:'processGroupId',task_status:'taskStatus',monitor_status:'monitorStatus',monitor_msg:'monitorMsg',flow_files_in:'flowFilesIn',flow_files_out:'flowFilesOut',queued_count:'queuedCount',bytes_in:'bytesIn',bytes_out:'bytesOut',active_thread_count:'activeThreadCount',monitor_time:'monitorTime'};
 for(row in result.list||[]) {for(field in taskFields.keySet()) {var camel=taskFields.get(field);row[camel]=row[camel]==null?row[field]:row[camel];}}
 result.list = result.list == null ? [] : result.list
@@ -243,13 +267,15 @@ for (row in result.list) {
     decorated.add(item)
 }
 result.list = decorated
+taskRuntime.decorate(result.list,live)
+var liveResult={pageNum:pageNum,pageSize:pageSize,total:result.total,list:result.list,runtimeRevision:live.revision,runtimeFresh:live.fresh,runtimeObservedAt:live.observedAt,runtimeMessage:live.message}
 
 // 如果业务任务表为空，兼容展示 data-elements-yunti 迁移过来的 NiFi 流水线。
 var existingTask = db.table('data_access_agg_task_t').columns('tid').where()
     .eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
 var taskTotal = existingTask == null ? 0 : 1
 if (taskTotal > 0) {
-    return result
+    return liveResult
 }
 
 var parseDatabaseFromJdbcUrl = jdbcUrl => {
@@ -313,7 +339,7 @@ var filtered = new ArrayList()
 var pipelineSortColumn=tableSort.field(body,{taskName:'name',lastRunning:'last_deployed_at',endRunning:'last_stopped_at',createdTime:'created_at',updatedTime:'updated_at',flowFilesIn:'NULLIF(id,id)',flowFilesOut:'NULLIF(id,id)',queuedCount:'NULLIF(id,id)',bytesIn:'NULLIF(id,id)',bytesOut:'NULLIF(id,id)',activeThreadCount:'NULLIF(id,id)'},'updatedTime');
 var pipelineStatusSql='';
 if(!blank(status)&&status!='all') {
- pipelineStatusSql=status::int==1?" AND status='RUNNING'":status::int==2?" AND status in ('RUN_ERROR','DEPLOY_FAILED')":" AND status not in ('RUNNING','RUN_ERROR','DEPLOY_FAILED')";
+ pipelineStatusSql=statusSql.replace(runtimePg,'nifi_process_group_id').replace('p.status','status');
 }
 // Unbound legacy pipelines are visible only to the all-data role. They have no source ownership relation.
 var pipelineScopeSql=scopeMode=='ALL'?'1=1':'1=0';
@@ -324,15 +350,14 @@ var pipelineFields={dsl_json:'dslJson',nifi_process_group_id:'nifiProcessGroupId
 for (pipeline in pipelines) {
     for(field in pipelineFields.keySet()) {var camel=pipelineFields.get(field);pipeline[camel]=pipeline[camel]==null?pipeline[field]:pipeline[camel];}
     var taskStatus = statusOf(pipeline.status)
-    if (!blank(status) && status != 'all' && taskStatus != status::int) {
-        continue
-    }
     var dslInfo = extractDslInfo(pipeline)
     var item = {
         tid: pipeline.id,
         id: pipeline.id,
         pipelineId: pipeline.id,
         processGroupId: pipeline.nifiProcessGroupId,
+        runtimeProcessGroupId: pipeline.nifiProcessGroupId,
+        lifecycleStatus: pipeline.status,
         recordSource: 'pipeline',
         taskName: pipeline.name,
         taskDesc: pipeline.description,
@@ -367,4 +392,5 @@ for (pipeline in pipelines) {
     filtered.add(item)
 }
 
-return {pageNum:pageNum,pageSize:pageSize,total:pipelinePage.total,list:filtered};
+taskRuntime.decorate(filtered,live)
+return {pageNum:pageNum,pageSize:pageSize,total:pipelinePage.total,list:filtered,runtimeRevision:live.revision,runtimeFresh:live.fresh,runtimeObservedAt:live.observedAt,runtimeMessage:live.message};

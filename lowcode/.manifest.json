@@ -702,7 +702,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "03.数据接入/2.3.2 接入监控(access-monitoring).vue",
-      "baseSha256": "6f12d5daf6f7b63d4c2067e147979653b39d2d87f318f66d3104e703cc51b545"
+      "baseSha256": "f71a1a63805482af30ad5e7d8d075fc0d9ee3f2572189bb06859bf0db12775e0"
     },
     {
       "id": "2059545106555981824",
@@ -712,7 +712,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "03.数据接入/2.3.2 接入监控(access-monitoring)/延时监控(delay-monitor).vue",
-      "baseSha256": "9939f05e35081a9cc8f2620ebc95ded0f724bfb30ec9612e0e87344893b008ba"
+      "baseSha256": "becc103b038b742e850d1818ef70fb42a99c25f85dfbc68dfb8b50b5a381f7c5"
     },
     {
       "id": "2060165467882496000",
@@ -722,7 +722,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "03.数据接入/2.3.2 接入监控(access-monitoring)/异常日志(error-log-panel).vue",
-      "baseSha256": "4403716cdb8ba7599427bbe6aca64b344a2fa49b6247a45702795b8e618d0fa6"
+      "baseSha256": "627715101343761c486148aef2ff5daaeee55db6170f306575a93b3f158bbf21"
     },
     {
       "id": "2005563673546395648",

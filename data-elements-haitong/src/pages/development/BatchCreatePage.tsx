@@ -118,7 +118,7 @@ export default function BatchCreatePage() {
         let result: { success: boolean; taskId?: string; existing?: boolean; error?: string };
         try {
           const ensured = await batchPlatformService.ensureTask(claim.item.sourceTableId, claim.item.sourceCatalogId ?? '');
-          if (ensured.repairRequired) throw new Error(`已有任务需要修复：${(ensured.repairReasons ?? []).join('；') || '请在任务管理中检查画布与字段映射'}`);
+          if (ensured.repairRequired) throw new Error(`已有任务需要修复：${(ensured.repairReasons ?? []).join('；') || '请在任务管理中检查画布与字段治理'}`);
           const taskId = String(ensured.taskId ?? (ensured.task as Record<string, unknown> | undefined)?.tid ?? '');
           if (!taskId) throw new Error('创建接口未返回接入任务 ID，请到任务管理核实后重试');
           result = { success: true, taskId, existing: ensured.created === false };
@@ -198,7 +198,7 @@ export default function BatchCreatePage() {
           })} /> },
           { title: '来源表',key:'tableName',sorter:true,render: (_, match) => <div className="entity-name"><b>{sourceLabel(match.source)}</b><small>{sourceName(match.source)}</small></div> },
           { title: '目标表', render: (_, match) => match.target ? <div className="entity-name"><b>{targetName(match.target)}</b><small>{String(match.target.targetDbName ?? '')}{match.reason ? ` · ${match.reason}` : ''}</small></div> : <Tag color="warning">{match.targetName} {match.reason || '未找到'}</Tag> },
-          { title: '字段映射', render: (_, match) => match.eligible ? '由现有创建接口生成' : '—' },
+          { title: '字段治理', render: (_, match) => match.eligible ? '由现有创建接口生成' : '—' },
         ]} />
         <Alert type="info" message="仅提交已物化、唯一关联且表名匹配的目标表。" description="保存队列时服务端按当前租户和角色数据范围批量复核。现有单表创建接口尚无真正批量契约，因此不会自动连续创建；请逐项点击创建，后续批量执行能力待接口改造。失联单项的租约满 10 分钟后可重试。" style={{ marginTop: 16 }} />
       </Panel></div>

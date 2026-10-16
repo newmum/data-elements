@@ -79,6 +79,7 @@ export async function fieldMappingCapabilities() {
   return (await apiClient.get<{ engineVersion: string; functions: { name: string; previewSupported: boolean; runtimeSupported: boolean; parameterSchema: FunctionParameter[]; additionalParametersAllowed: boolean }[] }>('/field-mapping/capabilities')).data;
 }
 export interface FunctionParameter { index: number; name: string; type: string; required: boolean; defaultValue: unknown; choices: string[] }
+export type FunctionParameterSchema = FunctionParameter[] & { additionalParametersAllowed?: boolean };
 export interface MappingTableRef { datasourceId: string; tableId?: string; table?: string }
 export interface MappingVersionRow { tid: string; node_id?: string; plan_revision?: number; draft_revision?: number; plan_hash?: string; resource_key?: string; version_no?: number; created_time: string }
 export const mappingVersions = {

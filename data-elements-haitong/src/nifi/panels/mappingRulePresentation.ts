@@ -52,9 +52,11 @@ export function selectConcreteRule(rule: UnifiedMappingRule, mode: string, id: s
   if (mode === concreteRuleMode(rule)) return rule;
   if (['UUID32', 'UUID', 'CURRENT_TIME'].includes(mode)) {
     const next = changePrimaryRuleMode(rule, 'SYSTEM', id);
-    return { ...next, input: { kind: 'SYSTEM', generator: mode === 'CURRENT_TIME' ? 'NOW' : mode } };
+    return { ...next, ...(!rule.target.name?{target:{...next.target,logicalType:mode==='CURRENT_TIME'?'DATETIME':'STRING'}}:{}),input: { kind: 'SYSTEM', generator: mode === 'CURRENT_TIME' ? 'NOW' : mode } };
   }
-  return changePrimaryRuleMode(rule, mode, id);
+  const next=changePrimaryRuleMode(rule, mode, id);
+  if(!rule.target.name&&['DATE_PARSE','ID_CARD_VALIDATE'].includes(mode))return {...next,target:{...next.target,logicalType:mode==='DATE_PARSE'?'DATE':'BOOLEAN'}};
+  return next;
 }
 export function concreteStepLabel(step: RuleStep): string {
   const args = step.args ?? {};

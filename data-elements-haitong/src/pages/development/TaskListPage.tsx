@@ -41,7 +41,7 @@ export default function TaskListPage({multi=false}:{multi?:boolean}){
   setCreatingId(id);
   try{
    const result=await integrationPlatformService.ensureTask(source);
-   if(result.repairRequired)throw new Error(`已有任务需要修复：${(result.repairReasons??[]).join('；')||'请在任务管理中检查画布与字段映射'}`);
+   if(result.repairRequired)throw new Error(`已有任务需要修复：${(result.repairReasons??[]).join('；')||'请在任务管理中检查画布与字段治理'}`);
    const rawTask=result.task||result as AccessTask;
    const taskId=text(rawTask.tid||result.taskId),pipelineId=text(rawTask.pipelineId||result.pipelineId);
    if(!taskId&&!pipelineId)throw new Error('任务接口没有返回任务或流程标识');

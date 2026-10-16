@@ -3,6 +3,7 @@
 // connected by "edges" (one per X6 line), each carrying a chosen outlet.
 
 import type { ComponentCategory } from './manifest';
+import { hiveSinkCanvas } from '../utils/hiveSinkPolicy.ts';
 
 export interface CanvasNode {
   /** Stable client-side id (nanoid). Used as X6 node id. */
@@ -84,11 +85,11 @@ export function normalizeCanvasDsl(value: unknown): CanvasDsl {
   }
   if (!isRecord(candidate)) return { ...EMPTY_CANVAS_DSL, nodes: [], edges: [] };
 
-  return {
+  return hiveSinkCanvas({
     version: 1,
     nodes: Array.isArray(candidate.nodes) ? candidate.nodes as CanvasNode[] : [],
     edges: Array.isArray(candidate.edges) ? candidate.edges as CanvasEdge[] : [],
-  };
+  });
 }
 
 /**

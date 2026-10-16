@@ -244,7 +244,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   /** Reset everything including the current-pipeline pointer. */
 
-  toDsl: () => ({
+  toDsl: () => normalizeCanvasDsl({
     version: 1,
     nodes: Object.values(get().nodes),
     edges: Object.values(get().edges),

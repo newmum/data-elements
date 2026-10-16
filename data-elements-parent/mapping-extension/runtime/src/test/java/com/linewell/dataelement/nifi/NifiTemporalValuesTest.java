@@ -10,6 +10,14 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NifiTemporalValuesTest {
+    @Test void nestedJsonArraysUseTheNativeRecordArrayCarrierWithoutLosingScalarTypes() {
+        var converted=(Map<?,?>)NifiTemporalValues.writerValue(Map.of("values",Arrays.asList("12",12,true,null)),ZoneId.of("Asia/Shanghai"));
+        assertArrayEquals(new Object[]{"12",12,true,null},(Object[])converted.get("values"));
+    }
+    @Test void numericLookingTextIsNotEligibleForNiFisNumericUnionCoercion() {
+        Object carrier=NifiTemporalValues.unionSafeValue("12");assertInstanceOf(CharSequence.class,carrier);assertFalse(carrier instanceof String);assertEquals("12",carrier.toString());
+        assertThrows(RuntimeException.class,()->DataTypeUtils.toInteger(carrier,"fixture"));
+    }
     @Test void historicalDatetimeUsesTheSameAtZoneResolutionAsDateFormatUtil() {
         ZoneId zone=ZoneId.of("Asia/Shanghai");
         for(LocalDateTime value:List.of(LocalDateTime.of(1947,4,15,0,0),LocalDateTime.of(1989,4,16,2,30),LocalDateTime.of(1991,9,15,1,30))) {

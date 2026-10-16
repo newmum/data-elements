@@ -132,7 +132,7 @@ public class RegisteredMappingSchemaService {
                 boolean mysql=product.contains("mysql") || product.contains("mariadb");
                 // MySQL modes 1/2 compare physical table identifiers without case; mode 0 must stay exact.
                 boolean mysqlIgnoreCase=mysql&&!metadata.supportsMixedCaseIdentifiers();
-                String catalog=connection.getCatalog();
+                String catalog=connectionCatalog(connection);
                 boolean needsDefault=group.getValue().values().stream().anyMatch(table->table.schema()==null||table.schema().isBlank());
                 String fallbackSchema=mysql?catalog:needsDefault?connectionSchema(connection):null;
                 if(needsDefault&&!mysql&&(fallbackSchema==null||fallbackSchema.isBlank())
@@ -153,7 +153,8 @@ public class RegisteredMappingSchemaService {
                 else readJdbcColumns(metadata,catalog,byTable,totalFields,temporalConfig);
                 // Do not expose a partial batch when any requested physical table disappeared.
                 for (var identity:byTable.keySet()) {
-                    if (byTable.get(identity).isEmpty()) throw new MappingException("SCHEMA_UNAVAILABLE","物理表不存在或驱动未返回可核验Schema");
+                    if (byTable.get(identity).isEmpty()) throw new MappingException("SCHEMA_UNAVAILABLE",
+                            "无法核验表 "+identity.schema()+"."+identity.table()+" 的字段（数据源 "+group.getKey()+"）：未获取到匹配的JDBC元数据，请核对当前数据库、Schema、表名及驱动；不代表物理表一定不存在");
                 }
                 for (var alias:aliases.entrySet()) {
                     ArrayNode fields=byTable.get(alias.getValue());
@@ -179,6 +180,11 @@ public class RegisteredMappingSchemaService {
 
     private static String connectionSchema(Connection connection)throws SQLException {
         try { return connection.getSchema(); }
+        catch (SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) { return null; }
+    }
+
+    private static String connectionCatalog(Connection connection)throws SQLException {
+        try { return connection.getCatalog(); }
         catch (SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) { return null; }
     }
 
@@ -216,12 +222,22 @@ public class RegisteredMappingSchemaService {
         byTable.keySet().forEach(table->schemas.add(table.schema()));
         if (schemas.size()!=1) throw new MappingException("UNSUPPORTED_SCHEMA_BATCH","当前JDBC驱动批量Schema读取仅支持同一catalog中的一个schema；跨schema须实现专用批量适配");
         String schema=schemas.iterator().next();
+        boolean catalogQualified;
+        try { catalogQualified=metadata.supportsCatalogsInTableDefinitions(); }
+        catch (SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) { catalogQualified=false; }
         try (ResultSet columns=metadata.getColumns(catalog,escape(metadata,schema),"%","%")) {
             int scanned=0;
             while (columns.next()) {
                 if (++scanned>MAX_METADATA_SCAN_ROWS) throw new MappingException("BUDGET_EXCEEDED","JDBC schema扫描超过20000列，请使用专用有界批量适配");
                 // Never match only the table name: identical names in another namespace are unrelated.
-                if (!Objects.equals(catalog,columns.getString("TABLE_CAT")) || !schema.equals(columns.getString("TABLE_SCHEM"))) continue;
+                // Kingbase (and other single-database drivers) can return a connection catalog
+                // but omit TABLE_CAT. That is absent metadata, not a different database.
+                // A concrete foreign catalog must still be rejected, as must any other schema.
+                String rowCatalog=columns.getString("TABLE_CAT");
+                boolean absentCatalog=rowCatalog==null||rowCatalog.isBlank();
+                boolean sameCatalog=Objects.equals(catalog,rowCatalog)
+                        || (absentCatalog&&(catalog==null||catalog.isBlank()||!catalogQualified));
+                if (!sameCatalog || !schema.equals(columns.getString("TABLE_SCHEM"))) continue;
                 ArrayNode fields=byTable.get(new TableIdentity(schema,columns.getString("TABLE_NAME")));
                 if (fields==null) continue;
                 appendPhysicalField(fields,columns,columns.getInt("NULLABLE")!=DatabaseMetaData.columnNoNulls,

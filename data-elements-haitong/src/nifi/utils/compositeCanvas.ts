@@ -1,5 +1,6 @@
 import type { CanvasDsl, CanvasNode, CanvasEdge } from '../types/dsl';
 import type { TaskChain, TaskChainItem } from '../types/taskChain';
+import { hiveSinkCanvas } from './hiveSinkPolicy.ts';
 
 export function taskChainPaths(chain: TaskChain): TaskChainItem[][] {
   const byId = new Map(chain.items.map(item => [item.taskId, item]));
@@ -43,6 +44,7 @@ export function buildCompositeCanvas(chain: TaskChain | null, currentId: string 
   currentDsl: CanvasDsl, drafts: Record<string, CanvasDsl> = {}) {
   const nodes: Record<string, DisplayNode> = {};
   const edges: Record<string, DisplayEdge> = {};
+  currentDsl = hiveSinkCanvas(currentDsl);
   if (!chain || chain.items.length < 2 || !chain.items.some(item => item.pipeline.id === currentId)) {
     currentDsl.nodes.forEach(node => { nodes[node.id] = { node, pipelineId: currentId ?? '', taskName: '', readonly: false, originalNodeId: node.id, offsetX: 0, offsetY: 0 }; });
     currentDsl.edges.forEach(edge => { edges[edge.id] = { ...edge, readonly: false }; });
@@ -52,7 +54,7 @@ export function buildCompositeCanvas(chain: TaskChain | null, currentId: string 
   let nextY = 120;
   for (const item of chain.items) {
     const readonly = item.pipeline.id !== currentId;
-    const dsl = readonly ? drafts[item.pipeline.id] ?? item.pipeline.dsl : currentDsl;
+    const dsl = hiveSinkCanvas(readonly ? drafts[item.pipeline.id] ?? item.pipeline.dsl : currentDsl);
     if (!dsl?.nodes?.length) continue;
     // Keep the lane origin stable while the user drags editable nodes.
     const layoutBasis = item.pipeline.dsl?.nodes?.length ? item.pipeline.dsl.nodes : dsl.nodes;
