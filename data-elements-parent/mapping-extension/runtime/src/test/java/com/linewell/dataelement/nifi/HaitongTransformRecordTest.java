@@ -108,6 +108,21 @@ class HaitongTransformRecordTest {
         TestRunner runner=TestRunners.newTestRunner(HaitongTransformRecord.class);runner.addControllerService("reader",new Reader());runner.enableControllerService(runner.getControllerService("reader"));runner.addControllerService("writer",new Writer());runner.enableControllerService(runner.getControllerService("writer"));runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
         var spec=JSON.createObjectNode().put("version","1.0").put("onMissingSource",missing).put("recordErrorMode",mode);spec.putArray("mappings").addObject().put("from","/x").put("to","/y");var plan=MappingEngine.compile(spec);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());runner.assertValid();return runner;
     }
+    @Test void decimalCoordinatesAndMixedScalesSurviveEveryWindowWithoutImplicitRounding()throws Exception {
+        var values=List.of("119.379023855114","25.7223849760167","-119.379023855114","0.000000000000000000123456789");
+        var exact=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+        var plan=MappingEngine.compile(JSON.readTree("""
+          {"version":"1.0","recordErrorMode":"ROUTE_INVALID","mappings":[{"from":"x","to":"y","targetType":"DECIMAL"}]}
+          """));
+        for(int count:List.of(20,100,600)) {
+            var runner=runner("NULL","ROUTE_INVALID");runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
+            List<Map<String,Object>>rows=new ArrayList<>();for(int i=0;i<count;i++)rows.add(Map.of("x",values.get(i%values.size())));
+            runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();runner.assertTransferCount(HaitongTransformRecord.INVALID,0);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+            int index=0;for(var output:runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS))for(var row:exact.readTree(output.toByteArray())) {
+                assertEquals(0,new java.math.BigDecimal(values.get(index++%values.size())).compareTo(row.path("y").decimalValue()));
+            }assertEquals(count,index);
+        }
+    }
     public static class Reader extends AbstractControllerService implements RecordReaderFactory {
         public RecordReader createRecordReader(Map<String,String>a,InputStream in,long length,ComponentLog log)throws IOException,MalformedRecordException{
             List<Map<String,Object>>rows=JSON.readValue(in,List.class);var schema=new SimpleRecordSchema(List.of(new RecordField("x",RecordFieldType.STRING.getDataType())));int[]index={0};RecordReader reader=mock(RecordReader.class);when(reader.getSchema()).thenReturn(schema);when(reader.nextRecord()).thenAnswer(i->index[0]<rows.size()?new MapRecord(schema,rows.get(index[0]++)):null);return reader;

@@ -72,7 +72,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
                 if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(reader.getSchema()));
                 invalidAttributes.put(MappingErrorRecords.SCHEMA,MappingErrorRecords.schemaText(reader.getSchema()));
                 RecordSchema schema=outputSchema(plan,reader.getSchema());
-                DynamicOutput dynamic=plan.outputTypes().values().stream().anyMatch(type->type.equals("ANY")||type.equals("ARRAY"))?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
+                DynamicOutput dynamic=plan.outputContracts().values().stream().anyMatch(type->type.logicalType().equals("ANY")||type.logicalType().equals("ARRAY")||type.logicalType().equals("DECIMAL")&&type.precision()==0)?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
                 try(RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes());BufferedWriter errors=new BufferedWriter(new OutputStreamWriter(bad,java.nio.charset.StandardCharsets.UTF_8))){
                     writer.beginRecordSet();List<Map<String,Object>>window=new ArrayList<>();List<Long>indices=new ArrayList<>();long bytes=0,offset=0;Record record;
                     while((record=reader.nextRecord())!=null){Map<String,Object>row=record.toMap();long size=ValueTypes.bytes(row,0);if(size>1_048_576)throw new MappingException("BUDGET_EXCEEDED","单记录超过1MiB");
@@ -130,7 +130,8 @@ public class HaitongTransformRecord extends AbstractProcessor {
         DynamicOutput(ProcessSession session,FlowFile original,RecordSetWriterFactory writers,RecordSchema base,List<FlowFile>derived,List<FlowFile>files){this.session=session;this.original=original;this.writers=writers;this.base=base;this.derived=derived;this.files=files;}
         void write(List<MappingEngine.Row>rows,ExecutionContext context)throws Exception {
             List<Map<String,Object>>values=rows.stream().filter(MappingEngine.Row::success).map(MappingEngine.Row::output).toList();if(values.isEmpty())return;
-            RecordSchema schema=MappingOutputSchema.resolve(base,plan.outputTypes(),values);
+            Map<String,String>types=new HashMap<>(plan.outputTypes());plan.outputContracts().forEach((name,contract)->{if(contract.logicalType().equals("DECIMAL")&&contract.precision()==0)types.put(name,"DECIMAL_AUTO");});
+            RecordSchema schema=MappingOutputSchema.resolve(base,types,values);
             FlowFile part=session.create(original);int index=derived.size();derived.add(part);Map<String,String>attributes=new HashMap<>();
             try(OutputStream out=session.write(part);RecordSetWriter writer=writers.createWriter(getLogger(),schema,out,original.getAttributes())){
                 writer.beginRecordSet();for(var row:values){Map<String,Object>converted=new LinkedHashMap<>();row.forEach((key,value)->{Object carrier=NifiTemporalValues.writerValue(value,context.zone());converted.put(key,writer instanceof RawRecordWriter?carrier:NifiTemporalValues.unionSafeValue(carrier));});var record=new MapRecord(schema,converted);if(writer instanceof RawRecordWriter raw)raw.writeRawRecord(record);else writer.write(record);}
@@ -148,7 +149,10 @@ public class HaitongTransformRecord extends AbstractProcessor {
     private static RecordSchema outputSchema(MappingEngine.Plan plan,RecordSchema input){
         LinkedHashMap<String,RecordField>fields=new LinkedHashMap<>();if(plan.passthrough())input.getFields().forEach(f->{if(!plan.excludes().contains(f.getFieldName()))fields.put(f.getFieldName(),f);});
         plan.outputContracts().forEach((name,contract)->{String type=contract.logicalType();
-            var old=input.getField(plan.outputOrigins().getOrDefault(name,name));org.apache.nifi.serialization.record.DataType value=switch(type){case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(contract.precision(),contract.scale());case "DATE"->RecordFieldType.DATE.getDataType();case "TIME"->RecordFieldType.TIME.getDataType();case "DATETIME","INSTANT"->RecordFieldType.TIMESTAMP.getDataType();case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());case "ANY"->old.map(RecordField::getDataType).orElse(RecordFieldType.STRING.getDataType());default->RecordFieldType.STRING.getDataType();};
+            var old=input.getField(plan.outputOrigins().getOrDefault(name,name));org.apache.nifi.serialization.record.DataType value=switch(type){case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(Math.max(1,Math.max(contract.scale(),contract.precision()-Math.min(0,contract.scale()))),Math.max(0,contract.scale()));case "DATE"->RecordFieldType.DATE.getDataType();case "TIME"->RecordFieldType.TIME.getDataType();case "DATETIME","INSTANT"->RecordFieldType.TIMESTAMP.getDataType();case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());case "ANY"->old.map(RecordField::getDataType).orElse(RecordFieldType.STRING.getDataType());default->RecordFieldType.STRING.getDataType();};
+            // Avro/NiFi require a nonnegative scale <= precision, while SQL
+            // NUMBER(p,s) can have negative s or s > p. The engine validates
+            // the SQL contract; this carrier only holds the validated value.
             fields.put(name,new RecordField(name,value));
         });return new SimpleRecordSchema(new ArrayList<>(fields.values()));
     }

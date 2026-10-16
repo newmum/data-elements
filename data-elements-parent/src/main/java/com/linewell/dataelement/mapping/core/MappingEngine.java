@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.17";
+    public static final String VERSION="1.1.19";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=8L*1024*1024;
@@ -109,8 +109,9 @@ public final class MappingEngine {
             Set<String> deps=new LinkedHashSet<>(),sources=new LinkedHashSet<>();Eval value=compileRule(node,deps,sources,dictionaries,0);
             JsonNode t=node.path("target");String type=ValueTypes.type(t.path("logicalType").asText(inferType(node)));
             requireTemporalPrecision(node,type);
-            int precision=t.path("precision").asInt(decimalArgument(node,0,38)),scale=t.path("scale").asInt(decimalArgument(node,1,10));
-            if(type.equals("DECIMAL")&&(precision<1||precision>1000||scale<0||scale>precision))throw new MappingException("INVALID_ARGUMENT","目标小数精度或scale无效");
+            boolean declaredDimensions=t.hasNonNull("precision")||t.hasNonNull("scale");
+            int precision=t.path("precision").asInt(decimalArgument(node,0,declaredDimensions?38:0)),scale=t.path("scale").asInt(decimalArgument(node,1,precision==0?0:10));
+            if(type.equals("DECIMAL"))ValueTypes.requireDecimalDimensions(precision,scale);
             String onError=node.path("onError").asText("ERROR");validateFallback(onError);
             compiled.add(new Rule(id,target,value,Set.copyOf(deps),Set.copyOf(sources),type,t.hasNonNull("logicalType"),t.path("nullable").asBoolean(true),t.path("length").asInt(0),precision,scale,onError,JSON.convertValue(node.get("defaultValue"),Object.class)));
         }
@@ -185,7 +186,7 @@ public final class MappingEngine {
     }
     private static Object miss(String policy,Object raw,Object source,JsonNode defaultValue){return switch(policy){case "NULL"->null;case "EMPTY_STRING"->"";case "KEEP_SOURCE"->source;case "KEEP_INPUT"->raw;case "DEFAULT_VALUE"->JSON.convertValue(defaultValue,Object.class);case "FAIL","ERROR"->throw new MappingException("DICT_MISSING","字典编码未匹配");default->throw new MappingException("INVALID_POLICY","字典未命中策略无效");};}
     private static void validateFallback(String value){if(!Set.of("ERROR","NULL","KEEP_SOURCE","KEEP_ORIGINAL","KEEP_INPUT","DEFAULT_VALUE").contains(value))throw new MappingException("INVALID_POLICY","字段或步骤错误策略无效");}
-    private static int decimalArgument(JsonNode rule,int index,int fallback){JsonNode steps=rule.path("steps");if(steps.isEmpty())return fallback;JsonNode last=steps.get(steps.size()-1);if(last.path("operator").asText().equals("CAST"))return last.path("args").path(index==0?"precision":"scale").asInt(fallback);if(last.path("args").path("function").asText().equals("toDecimal"))return last.path("args").path("parameters").path(index).asInt(fallback);return fallback;}
+    private static int decimalArgument(JsonNode rule,int index,int fallback){JsonNode steps=rule.path("steps");if(steps.isEmpty())return fallback;JsonNode last=steps.get(steps.size()-1);int explicitDefault=index==0?38:10;if(last.path("operator").asText().equals("CAST"))return last.path("args").path(index==0?"precision":"scale").asInt(explicitDefault);if(last.path("args").path("function").asText().equals("toDecimal"))return last.path("args").path("parameters").path(index).asInt(explicitDefault);return fallback;}
     public static Result execute(Plan plan,List<Map<String,Object>> input,long offset,ExecutionContext context,DictionarySpec.Provider provider){
         if(input.size()>WINDOW_RECORDS)throw new MappingException("BUDGET_EXCEEDED","记录窗口超过512条");
         return executeIndexed(plan,input,java.util.stream.LongStream.range(offset,Math.addExact(offset,input.size())).boxed().toList(),context,provider);

@@ -38,6 +38,8 @@ import java.util.Map
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
+var currentTenantId = tenantRuntime.id()
+if (currentTenantId == null || (currentTenantId+'').trim() == '') { exit 401, "当前登录租户无效，请重新登录" }
 
 /*
  * 元数据管理 24：登记第三、四步按当前表采集或同步字段。
@@ -71,9 +73,8 @@ var databaseTypeOf = (code) => {
         return DatabaseType.MYSQL
     }
 }
-var loadDatasource = (datasourceId) => {
+var loadDatasource = (datasourceId, row) => {
     if (blank(datasourceId)) { return null }
-    var row = db.table('db_datasource_t').where().eq('tid', datasourceId).eq('is_del', 0).selectOne()
     if (row == null) { return null }
     var result = {
         tid: rowValue(row, ['tid']),
@@ -134,8 +135,6 @@ var dataSourceOf = (asset) => {
 /* 登记第三、四步按表按需采集字段。已有 db_table_column_t 快照时不接触来源库；预览数据另走实时接口。 */
 var requestedTableId = body == null ? null : body.tableId
 if (blank(requestedTableId)) { exit 400, "tableId 不能为空" }
-var currentTenantId = tenantRuntime.id()
-if (blank(currentTenantId)) { exit 401, "当前登录租户无效，请重新登录" }
 var tableAsset = db.table("db_table_t").where().eq("tenant_id", currentTenantId).eq("tid", requestedTableId).eq("is_del", 0).selectOne()
 if (tableAsset == null) { exit 404, "数据表不存在或无访问权限" }
 var datasourceId = firstValue(tableAsset, ["datasourceId", "datasource_id"])
@@ -149,7 +148,7 @@ var dryRun = body != null && (body.dryRun == true || textOf(body.dryRun) == 'tru
 if (!force && !dryRun && snapshot != null && snapshot.size() > 0) { return snapshot }
 var physicalName = firstValue(tableAsset, ["tableName", "table_name"])
 if (blank(datasourceId) || blank(physicalName)) { exit 400, "数据表缺少来源数据源或物理表名" }
-var datasource = loadDatasource(datasourceId)
+var datasource = loadDatasource(datasourceId, sourceRow)
 if (datasource == null) { exit 404, "数据源不存在或无访问权限" }
 var sourceType = textOf(firstValue(datasource, ["dbType", "db_type"])).toLowerCase()
 var structured = sourceType == "ftp" || sourceType == "sftp" || sourceType == "api" || sourceType == "kafka"
@@ -185,11 +184,17 @@ if (managedHive) {
 if (physicalColumns == null || physicalColumns.isEmpty()) { exit 422, "来源表未返回字段，请检查表名和访问权限" }
 var now = new Date()
 var rows = []
+var incomingNames = {}
 for (index, column in physicalColumns) {
     if (blank(column.columnName)) { continue }
+    var columnName = textOf(column.columnName).trim()
+    var columnKey = columnName.toLowerCase()
+    // Hive DESCRIBE 可能再次列出分区字段；按真实字段名去重，不能生成重复快照。
+    if (incomingNames[columnKey] == true) { continue }
+    incomingNames[columnKey] = true
     rows.add({
-        tid: IdUtil.getSnowflakeNextIdStr(), table_id: requestedTableId, tenant_id: tenantRuntime.id(),
-        column_name: column.columnName, column_comment: column.columnComment,
+        tid: IdUtil.getSnowflakeNextIdStr(), table_id: requestedTableId, tenant_id: currentTenantId,
+        column_name: columnName, column_comment: column.columnComment == null ? '' : column.columnComment,
         data_type: column.dataType, column_type: column.columnType,
         length: column.length, precision_length: column.precision, scale: column.scale,
         nullable: column.nullable, default_value: column.defaultValue,
@@ -231,7 +236,7 @@ for (row in rows) {
     }
     retained[key] = true
     db.table("db_table_column_t").where()
-        .eq("tid", previous.tid).eq("table_id", requestedTableId).eq("is_del", 0)
+        .eq("tenant_id", currentTenantId).eq("tid", previous.tid).eq("table_id", requestedTableId).eq("is_del", 0)
         .update({
             column_comment: row.column_comment, data_type: row.data_type, column_type: row.column_type,
             length: row.length, precision_length: row.precision_length, scale: row.scale,
@@ -239,14 +244,14 @@ for (row in rows) {
             auto_increment: row.auto_increment, is_unique: row.is_unique, indexed: row.indexed,
             ordinal_position: row.ordinal_position, charset: row.charset,
             collation: row.collation, extra: row.extra, updated_time: now
-        })
+        }, true)
 }
 if (!additions.isEmpty()) { metadataAsset.batchInsertTableColumns(additions) }
 // Remove stale fields only after every current field has been updated or inserted.
 for (previous in snapshot == null ? [] : snapshot) {
     if (blank(previous.columnName) || retained[textOf(previous.columnName).toLowerCase()] == true) { continue }
     db.table("db_table_column_t").where()
-        .eq("tid", previous.tid).eq("table_id", requestedTableId).eq("is_del", 0)
+        .eq("tenant_id", currentTenantId).eq("tid", previous.tid).eq("table_id", requestedTableId).eq("is_del", 0)
         .update({ is_del: 1, updated_time: now })
 }
 var tableUpdate = { field_count: rows.size(), updated_time: now }

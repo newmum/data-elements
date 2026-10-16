@@ -4,7 +4,15 @@
 
 Hive 作为目标库时的原始写入发布规则见[详细设计第27章](../../docs/海通字段映射统一执行方案.md)：Hive 分支旁路字段对标，HDFS 写入不再生成 MergeRecord，上游查询复用根作用域已有的 `PUBLIC-WRITER-JSON-TIME_FORMAT`，ConvertRecord 复用根作用域已有的 `PUBLIC-READER-JSON`，不生成任务级同名服务。Hive 上游 GenerateTableFetch / QueryDatabaseTableRecord 的 Columns to Return 显式清空。缺少全局 JSON 服务时在清理旧流程前拒绝发布。第27章的 Hive 发布规则本身只涉及共享后端和 Hive 组件清单；字段引擎升级仍须使用下文与目标NiFi匹配的 NAR。已有原生流程须受控完整发布后才改变拓扑；HDFS CSV 时间文本还须验证来源/JVM/目标时区，不能按普通 JDBC 的恢复语义推断。
 
-## 当前版本（1.1.17）
+## 当前版本（1.1.19）
+
+共享内核、函数库、NiFi 处理器和字典服务使用 **1.1.19**。未声明精度的 `DECIMAL` / `NUMERIC` / `NUMBER` 不再隐式转换为 `DECIMAL(38,10)`；以 `BigDecimal` 保留每条记录自己的小数位数，NiFi 在每个有界窗口生成足够的 Decimal Schema，支持 JSON 和 Avro 输出。规则输出的 `precision=0, scale=0` 表示自动保留精度；如目标物理列有明确精度，仍继承并校验物理容量，不能通过设为 0 绕过容量限制。显式 CAST / toDecimal 的精度和舍入设置继续有效。
+
+Oracle 无参数 `NUMBER` 的元数据不使用存储字节数充当十进制精度，JDBC 的 scale=-127 哨兵归一化为自动精度。显式 `NUMBER(p,s)` 支持负 scale 和 scale 大于 precision，输出端使用能准确承载结果的 NiFi/Avro Decimal 定义。真正超限时给出目标 `DECIMAL(p,s)`、所需精度或小数位数及调整建议，不静默截断数值。
+
+匹配 SDK 的干净构建包为 `logs/field-mapping-extension/clean-final-1.1.19-nifi-2.9.0/` 和 `logs/field-mapping-extension/clean-final-1.1.19-nifi-2.11.0/` 下的 `haitong-mapping-nar/haitong-mapping-nar-1.1.19.nar`。先安装匹配目标 NiFi 的 NAR，再更新共享后端与海通静态资源；已部署流程使用原有 Bundle，须通过受控发布或字段节点升级选用新版本。
+
+## 上一版（1.1.17）
 
 共享转换内核、函数库、NiFi 处理器与字典服务同步升级为 **1.1.17**，编辑和执行协议版本不变。此版修复数据库比较规则与 Java 严格键比较不一致导致的 `DICTIONARY_RESULT_MISMATCH` 误报：批量参数关系附带请求序号，结果按该序号回填，保留数据库自身的大小写、补空格及类型比较语义。重复键、无结果、参数绑定和批次边界检查仍然生效。
 

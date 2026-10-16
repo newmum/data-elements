@@ -13,7 +13,9 @@ final class MappingOutputSchema {
         List<RecordField>fields=new ArrayList<>();
         for(RecordField field:base.getFields()){
             String type=types.get(field.getFieldName());
-            DataType dataType="ANY".equals(type)||"ARRAY".equals(type)?infer(rows.stream().map(row->row.get(field.getFieldName())).toList(),0):field.getDataType();
+            List<Object>values=rows.stream().map(row->row.get(field.getFieldName())).toList();
+            DataType dataType="ANY".equals(type)||"ARRAY".equals(type)||"DECIMAL_AUTO".equals(type)?infer(values,0):field.getDataType();
+            if("DECIMAL_AUTO".equals(type)&&values.stream().allMatch(Objects::isNull))dataType=RecordFieldType.DECIMAL.getDecimalDataType(1,0);
             fields.add(new RecordField(field.getFieldName(),dataType));
         }
         return MappingAvroSchema.attach(new SimpleRecordSchema(fields));

@@ -6,7 +6,7 @@ import org.apache.nifi.components.*;
 /** Method calls deliberately avoid inlining a version constant from a mixed NAR. */
 final class MappingCompatibility {
     private MappingCompatibility() {}
-    static final PropertyDescriptor REQUIRED_VERSION=new PropertyDescriptor.Builder().name("required-engine-version").defaultValue("1.1.17").required(true).addValidator((subject,input,context)->{
+    static final PropertyDescriptor REQUIRED_VERSION=new PropertyDescriptor.Builder().name("required-engine-version").defaultValue("1.1.19").required(true).addValidator((subject,input,context)->{
         boolean valid=false;
         try{valid=input.equals(MappingEngine.engineVersion())&&input.equals(FunctionRegistry.libraryVersion())&&FunctionRegistry.NAMES.size()==56;}
         catch(LinkageError ignored){/* incompatible core is rejected before service enablement */}
