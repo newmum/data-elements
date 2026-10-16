@@ -48,6 +48,12 @@ function fixture({ structured = false, count = 240, fail = false } = {}) {
   return { context, actual: context.actual, reads };
 }
 const db = fixture();
+for (const width of [20, 100, 200, 240]) {
+  const columns = Array.from({ length: width }, (_, index) => 'field_' + index);
+  const preview = db.actual.normalizePreviewResult({ columns, rows: [Object.fromEntries(columns.map(name => [name, name]))] });
+  assert.equal(preview.columns.length, width, 'Column discovery must retain the complete schema');
+  assert.equal(preview.columns.at(-1), columns.at(-1));
+}
 await db.actual.loadDictionaryPreview();
 assert.equal(db.reads[0].payload.pageSize, 20);
 assert.equal(db.context.dictionaryPreview.message, '');

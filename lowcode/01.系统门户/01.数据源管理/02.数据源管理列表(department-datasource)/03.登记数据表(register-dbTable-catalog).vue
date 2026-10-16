@@ -4332,7 +4332,7 @@ async function loadDictionaryPreviewTranslations() {
           {},
           30 * 1000
         );
-        return normalizePreviewResult(result, batch.length);
+        return normalizePreviewResult(result);
       }));
       const previews = batchResults
         .filter((result) => result.status === "fulfilled")
@@ -4488,7 +4488,7 @@ async function loadBusinessPreview(force = false) {
       30 * 1000
     );
     if (!isCurrentRequest()) return;
-    const preview = normalizePreviewResult(result, 100);
+    const preview = normalizePreviewResult(result);
     const fieldsByName = new Map(
       activeFields.value.map((field) => [String(field.columnName || "").toLowerCase(), field])
     );
@@ -6302,7 +6302,7 @@ function unwrapList(result) {
   return [];
 }
 
-function normalizePreviewResult(result, maxColumns = 8) {
+function normalizePreviewResult(result) {
   const data = result?.data || result || {};
   const rawColumns = Array.isArray(data.columns)
     ? data.columns
@@ -6345,7 +6345,7 @@ function normalizePreviewResult(result, maxColumns = 8) {
         }, new Set())
       );
   return {
-    columns: resolvedColumns.slice(0, Math.max(1, maxColumns)),
+    columns: resolvedColumns,
     rows,
     total: Number(data.total ?? data.totalCount ?? data.actualSize ?? rows.length ?? 0),
   };

@@ -6,6 +6,7 @@ import com.linewell.dataelement.mapping.core.*;
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver;
 import com.linewell.dataelement.feature.dataquality.infrastructure.persistence.mapper.DataQualityMapper;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import com.linewell.dataelement.metautil.ddl.DdlDialect;
 import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.conditional.*;
 import net.sf.jsqlparser.expression.operators.relational.*;
@@ -48,26 +49,36 @@ public class RegisteredDictionaryCatalog {
         Map<String,Map<String,Object>> connections=sources.resolveBatch(tenant,datasourceIds,"MENU:2081000000000000002");
         List<Object>parameters=new ArrayList<>();List<String> tablePredicates=new ArrayList<>();
         Set<List<String>> tableReferences=new LinkedHashSet<>();
-        for(ObjectNode definition:requested){String tableId=definition.path("tableId").asText(),table=definition.path("table").asText(),schema=definition.path("schema").asText(),datasource=definition.path("datasourceId").asText();if(!tableReferences.add(List.of(datasource,tableId,tableId.isBlank()?schema:"",tableId.isBlank()?table:"")))continue;parameters.add(datasource);if(!tableId.isBlank()){tablePredicates.add("(datasource_id=? AND tid=?)");parameters.add(tableId);}else{tablePredicates.add("(datasource_id=? AND (table_name=? OR table_name=?))");parameters.add(table);parameters.add(schema.isBlank()?table:schema+"."+table);}}parameters.add(tenant);
+        for(ObjectNode definition:requested){String tableId=definition.path("tableId").asText(),table=definition.path("table").asText(),schema=definition.path("schema").asText(),datasource=definition.path("datasourceId").asText();if(!tableReferences.add(List.of(datasource,tableId,tableId.isBlank()?schema:"",tableId.isBlank()?table:"")))continue;parameters.add(datasource);if(!tableId.isBlank()){tablePredicates.add("(datasource_id=? AND tid=?)");parameters.add(tableId);}else{
+            // Legacy SQL uses unquoted identifiers while registrations may store qualified or quoted names.
+            // Prefetch candidates once; exact identity and ambiguity checks remain below.
+            String normalized="LOWER(REPLACE(REPLACE(REPLACE(REPLACE(table_name,'\"',''),'`',''),'[',''),']',''))";
+            tablePredicates.add("(datasource_id=? AND ("+normalized+"=? OR "+normalized+"=? OR "+normalized+" LIKE ? ESCAPE '!'))");
+            String name=unquote(table).toLowerCase(Locale.ROOT);parameters.add(name);parameters.add(schema.isBlank()?name:unquote(schema).toLowerCase(Locale.ROOT)+"."+name);parameters.add("%."+name.replace("!","!!").replace("%","!%").replace("_","!_"));
+        }}parameters.add(tenant);
         List<Map<String,Object>>tables=jdbc.queryForList(identifiers.adapt("SELECT tid,datasource_id,table_name,table_name_cn FROM db_table_t WHERE ("+String.join(" OR ",tablePredicates)+") AND tenant_id=? AND is_del=0 AND asset_status>0"),parameters.toArray());
         Map<String,Map<String,Object>>boundTables=new LinkedHashMap<>();
         for(ObjectNode d:requested){String tableId=d.path("tableId").asText();String desiredName=d.path("table").asText();String desiredSchema=d.path("schema").asText();List<Map<String,Object>>matches=tables.stream().filter(t->Objects.equals(String.valueOf(t.get("datasource_id")),d.path("datasourceId").asText())).filter(t->!tableId.isBlank()?Objects.equals(String.valueOf(t.get("tid")),tableId):sameTable(String.valueOf(t.get("table_name")),desiredSchema,desiredName)).toList();
-            if(matches.size()!=1)throw new MappingException("RESOURCE_FORBIDDEN","字典表不存在、登记失效、跨租户或表名不唯一，请使用已登记表ID");var table=matches.getFirst();String actual=String.valueOf(table.get("table_name"));String[]names=actual.split("\\.");
-            if(names.length>2)throw invalid();if(!desiredName.isBlank()&&!sameTable(actual,desiredSchema,desiredName))throw new MappingException("RESOURCE_FORBIDDEN","字典表ID与查询标识不一致");
-            d.put("tableId",String.valueOf(table.get("tid")));d.put("table",ValueTypes.field(unquote(names[names.length-1])));
-            String schema=names.length==2?ValueTypes.field(unquote(names[0])):"";
+            if(matches.size()!=1)throw new MappingException("RESOURCE_FORBIDDEN","字典 "+d.path("id").asText()+"（数据源 "+d.path("datasourceId").asText()+"，"+(tableId.isBlank()?"表 "+(desiredSchema.isBlank()?"":desiredSchema+".")+desiredName:"登记表ID "+tableId)+"）"+(matches.isEmpty()?"未匹配到当前租户及权限范围内的有效登记；请检查关联ID、登记状态，或重新选择已登记码表":"匹配到多条有效登记，请选择唯一的登记表ID"));
+            var table=matches.getFirst();String actual=String.valueOf(table.get("table_name"));var names=DdlDialect.names(actual);
+            if(names.size()>2)throw invalid();if(!desiredName.isBlank()&&!sameTable(actual,desiredSchema,desiredName))throw new MappingException("RESOURCE_FORBIDDEN","字典 "+d.path("id").asText()+" 的登记表ID与查询标识不一致，请重新选择码表");
+            d.put("tableId",String.valueOf(table.get("tid")));d.put("table",ValueTypes.field(names.getLast().value()));
+            String schema=names.size()==2?ValueTypes.field(names.getFirst().value()):"";
             Object configured=connections.get(d.path("datasourceId").asText()).get("defaultSchema");if(schema.isBlank()&&configured!=null&&!configured.toString().isBlank())schema=configured.toString();
             if(schema.isBlank()){
                 Map<String,Object> cfg=connections.get(d.path("datasourceId").asText());for(String key:List.of("schema","schemaName","dbMetaSchema")){Object value=cfg.get(key);if(value!=null&&!value.toString().isBlank()){schema=value.toString();break;}}
                 String url=String.valueOf(cfg.getOrDefault("jdbcURL",cfg.getOrDefault("jdbcUrl","")));Matcher database=Pattern.compile("^jdbc:(?:mysql|mariadb)://[^/]+/([^?;]+)").matcher(url);if(schema.isBlank()&&database.find())schema=database.group(1);
             }
-            if(!desiredSchema.isBlank()&&!desiredSchema.equals(schema))throw new MappingException("RESOURCE_FORBIDDEN","字典schema未被登记表标识或服务端连接定义确认，请完善登记关联");
+            if(!desiredSchema.isBlank()&&!sameIdentifier(desiredSchema,schema))throw new MappingException("RESOURCE_FORBIDDEN","字典 "+d.path("id").asText()+" 的Schema "+desiredSchema+" 未被登记表标识或服务端默认Schema确认，请在数据源配置中完善Schema后重新选择码表");
             d.put("schema",schema);boundTables.put(String.valueOf(table.get("tid")),table);
         }
         List<Object> columnArgs=new ArrayList<>();columnArgs.add(tenant);columnArgs.addAll(boundTables.keySet());
         List<Map<String,Object>> columns=jdbc.queryForList(identifiers.adapt("SELECT c.table_id,c.column_name,c.data_type FROM db_table_column_t c JOIN db_table_t t ON t.tid=c.table_id AND t.tenant_id=c.tenant_id AND t.is_del=0 WHERE c.tenant_id=? AND c.is_del=0 AND c.table_id IN ("+String.join(",",Collections.nCopies(boundTables.size(),"?"))+")"),columnArgs.toArray());
         Map<String,Map<String,String>>types=new HashMap<>();for(var column:columns){String tableId=String.valueOf(column.get("table_id"));String datasource=String.valueOf(boundTables.get(tableId).get("datasource_id"));types.computeIfAbsent(tableId,k->new HashMap<>()).put(String.valueOf(column.get("column_name")),JdbcTemporalTypes.logicalType(String.valueOf(column.get("data_type")),connections.get(datasource)));}
-        for(ObjectNode d:requested){Map<String,String>tableTypes=types.getOrDefault(d.path("tableId").asText(),Map.of());Set<String>required=new LinkedHashSet<>();d.path("keyColumns").forEach(n->required.add(n.asText()));required.add(d.path("valueColumn").asText());filterColumns(d.get("filter"),required);
+        for(ObjectNode d:requested){Map<String,String>tableTypes=types.getOrDefault(d.path("tableId").asText(),Map.of());
+            if(d.path("keyColumns") instanceof ArrayNode keys)for(int i=0;i<keys.size();i++)keys.set(i,JSON.getNodeFactory().textNode(registeredColumn(keys.get(i).asText(),tableTypes)));
+            d.put("valueColumn",registeredColumn(d.path("valueColumn").asText(),tableTypes));bindFilterColumns(d.get("filter"),tableTypes);
+            Set<String>required=new LinkedHashSet<>();d.path("keyColumns").forEach(n->required.add(n.asText()));required.add(d.path("valueColumn").asText());filterColumns(d.get("filter"),required);
             if(!tableTypes.keySet().containsAll(required))throw new MappingException("RESOURCE_FORBIDDEN","字典键、取值列或过滤列不属于已登记表");ArrayNode keyTypes=d.putArray("keyTypes");d.path("keyColumns").forEach(n->keyTypes.add(tableTypes.get(n.asText())));d.put("duplicatePolicy",d.path("duplicatePolicy").asText("ERROR"));}
         // Recompute shared identity after authoritative types/table identities are attached.
         ObjectNode deduplicated=JSON.createObjectNode();Map<String,String>replacement=new HashMap<>();definitions.fields().forEachRemaining(e->{ObjectNode d=e.getValue().deepCopy();d.remove(List.of("id","definitionHash","snapshotHash"));String id="dict-"+MappingEngine.hash(d).substring(0,24);deduplicated.set(id,d);replacement.put(e.getKey(),id);});
@@ -111,7 +122,11 @@ public class RegisteredDictionaryCatalog {
     }
     private static JsonNode literal(Expression e){if(e instanceof StringValue s)return JSON.getNodeFactory().textNode(s.getValue());if(e instanceof LongValue n)return JSON.getNodeFactory().numberNode(n.getValue());if(e instanceof DoubleValue n)return JSON.getNodeFactory().numberNode(new java.math.BigDecimal(n.toString()));if(e instanceof NullValue)return NullNode.instance;if(e instanceof SignedExpression signed&&signed.getSign()=='-'){JsonNode n=literal(signed.getExpression());if(n.isNumber())return JSON.getNodeFactory().numberNode(n.decimalValue().negate());}throw invalid();}
     private static void filterColumns(JsonNode node,Set<String>columns){if(node==null)return;if(node.has("column"))columns.add(node.path("column").asText());node.path("children").forEach(n->filterColumns(n,columns));}
+    private static String registeredColumn(String name,Map<String,String> columns){if(columns.containsKey(name))return name;var matches=columns.keySet().stream().filter(actual->actual.equalsIgnoreCase(name)).toList();if(matches.size()!=1)throw new MappingException("RESOURCE_FORBIDDEN","字典字段 "+name+" 未唯一匹配到已登记字段，请重新选择键、取值列或过滤列");return matches.getFirst();}
+    private static void bindFilterColumns(JsonNode node,Map<String,String> columns){if(node==null)return;if(node instanceof ObjectNode object&&node.has("column"))object.put("column",registeredColumn(node.path("column").asText(),columns));node.path("children").forEach(child->bindFilterColumns(child,columns));}
     private static String unquote(String n){return n==null?"":n.replaceAll("^[`\\\"\\[]|[`\\\"\\]]$","");}
-    private static boolean sameTable(String actual,String schema,String table){String[]names=actual.split("\\.");return unquote(names[names.length-1]).equals(table)&&(schema.isBlank()||names.length==1||unquote(names[0]).equals(schema));}
+    private static boolean sameTable(String actual,String schema,String table){var names=DdlDialect.names(actual);return sameIdentifier(table,names.getLast())&&(schema.isBlank()||names.size()==1||sameIdentifier(schema,names.getFirst()));}
+    private static boolean sameIdentifier(String desired,String actual){return !actual.isBlank()&&sameIdentifier(desired,DdlDialect.names(actual).getLast());}
+    private static boolean sameIdentifier(String desired,DdlDialect.Identifier actual){var wanted=DdlDialect.names(desired).getLast();return actual.quoted()||wanted.quoted()?actual.value().equals(wanted.value()):actual.value().equalsIgnoreCase(wanted.value());}
     private static MappingException invalid(){return new MappingException("INVALID_DICTIONARY","字典定义含未支持、缺失或不能保留语义的结构");}
 }

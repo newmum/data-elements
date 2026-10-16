@@ -17,9 +17,8 @@ export default function ProbeColumnsModal({ summary, onClose }: {
   const rows = summary.results.flatMap((result, index) => (result.columns ?? []).map((column) => ({
     table: result.table ?? summary.fallbackTables[index] ?? '', column,
   })));
-  const maxRows = 80;
   const cellStyle = { borderColor: token.colorBorderSecondary, color: token.colorText };
-  const headerStyle = { ...cellStyle, background: token.colorFillAlter };
+  const headerStyle = { ...cellStyle, background: token.colorBgContainer };
 
   return <Modal
     open title={summary.title} width={960} style={{ top: 32, maxWidth: 'calc(100vw - 32px)' }}
@@ -32,13 +31,13 @@ export default function ProbeColumnsModal({ summary, onClose }: {
   >
     <div className="probe-columns-summary" style={{ color: token.colorText }}>
       <p className="probe-columns-count" style={{ color: token.colorTextSecondary }}>
-        共探查 {summary.results.length} 张表，{rows.length} 个字段{rows.length > maxRows ? `，下方展示前 ${maxRows} 个字段` : ''}
+        共探查 {summary.results.length} 张表，{rows.length} 个字段
       </p>
       <div className="probe-columns-scroll" tabIndex={0} role="region" aria-label="字段探查结果">
         <table className="probe-columns-table">
           <thead><tr>{['表名', '字段名', '注释', '类型', '长度', '小数位', '主键', '可空'].map((name) =>
             <th key={name} scope="col" style={headerStyle}>{name}</th>)}</tr></thead>
-          <tbody>{rows.slice(0, maxRows).map(({ table, column }, index) =>
+          <tbody>{rows.map(({ table, column }, index) =>
             <tr key={`${table}-${column.columnName}-${index}`}>
               {[table, column.columnName, column.columnComment || '-', column.dataType || column.typeName || '-',
                 column.columnSize ?? '-', column.decimalDigits ?? '-',

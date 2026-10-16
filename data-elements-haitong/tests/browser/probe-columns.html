@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="UTF-8"><title>字段探查完整列回归</title></head>
+  <body>
+    <!-- Development-only component fixture. Synthetic metadata; no backend or credential access. -->
+    <div id="root"></div>
+    <script type="module">
+      import React from 'react';
+      import { createRoot } from 'react-dom/client';
+      import { ConfigProvider } from 'antd';
+      import ProbeColumnsModal from '/src/nifi/panels/ProbeColumnsModal.tsx';
+      import '/src/nifi/styles/globals.css';
+      const requested = Number(new URLSearchParams(location.search).get('fields') || 240);
+      const count = [20, 100, 200, 240].includes(requested) ? requested : 240;
+      const columns = Array.from({ length: count }, (_, index) => ({
+        columnName: `FIELD_${String(index + 1).padStart(3, '0')}`,
+        columnComment: `合成字段 ${index + 1}`, dataType: 'VARCHAR2', columnSize: 50, nullable: true,
+      }));
+      createRoot(document.getElementById('root')).render(React.createElement(ConfigProvider, null,
+        React.createElement(ProbeColumnsModal, {
+          summary: { title: '字段探查完整列回归', results: [{ success: true, table: 'CODEX_WIDE', columns }], fallbackTables: [] },
+          onClose: () => {},
+        })));
+    </script>
+  </body>
+</html>

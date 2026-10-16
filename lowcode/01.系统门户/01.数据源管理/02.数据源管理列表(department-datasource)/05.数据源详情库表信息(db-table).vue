@@ -772,7 +772,7 @@ const openFields = async (row, mode = "rows") => {
     const fields = await loadFieldsWithDiff(row);
     state.fieldRows = fields;
     const previewFields = fields.filter((field) => field._diffStatus !== "删除");
-    state.previewColumns = previewFields.length ? previewFields.slice(0, 24) : fields.slice(0, 24);
+    state.previewColumns = previewFields.length ? previewFields : fields;
     await loadPreviewRows(row, previewFields);
   } catch (error) {
     console.error("查询字段列表失败:", error);
@@ -881,7 +881,6 @@ const normalizePreviewResult = (result, fields = []) => {
   const fieldMapByName = new Map((fields || []).map((field) => [field.columnName, field]));
   const resolvedColumns = (rowColumns.length ? rowColumns : (fields || []).map((field) => field.columnName))
     .filter(Boolean)
-    .slice(0, 24)
     .map((column) => {
       const field = fieldMapByName.get(column);
       if (field) return field;

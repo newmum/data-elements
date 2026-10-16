@@ -2,9 +2,24 @@
 
 此模块与 Java 后端编译同一份 `../src/main/java/com/linewell/dataelement/mapping/` 源码。字段函数和条件在 JVM 执行；外部码表只执行经登记授权后的参数化批量 SELECT。
 
-Hive 作为目标库时的原始写入发布规则见[详细设计第27章](../../docs/海通字段映射统一执行方案.md)：Hive 分支旁路字段对标，HDFS 写入不再生成 MergeRecord，上游查询复用根作用域已有的 `PUBLIC-WRITER-JSON-TIME_FORMAT`，ConvertRecord 复用根作用域已有的 `PUBLIC-READER-JSON`，不生成任务级同名服务。Hive 上游 GenerateTableFetch / QueryDatabaseTableRecord 的 Columns to Return 显式清空。缺少全局 JSON 服务时在清理旧流程前拒绝发布。第27章的 Hive 发布规则本身只涉及共享后端和 Hive 组件清单；当前1.1.13日期兼容升级仍须按第28章更换 NAR。已有原生流程须受控完整发布后才改变拓扑；HDFS CSV 时间文本还须验证来源/JVM/目标时区，不能按普通 JDBC 的恢复语义推断。
+Hive 作为目标库时的原始写入发布规则见[详细设计第27章](../../docs/海通字段映射统一执行方案.md)：Hive 分支旁路字段对标，HDFS 写入不再生成 MergeRecord，上游查询复用根作用域已有的 `PUBLIC-WRITER-JSON-TIME_FORMAT`，ConvertRecord 复用根作用域已有的 `PUBLIC-READER-JSON`，不生成任务级同名服务。Hive 上游 GenerateTableFetch / QueryDatabaseTableRecord 的 Columns to Return 显式清空。缺少全局 JSON 服务时在清理旧流程前拒绝发布。第27章的 Hive 发布规则本身只涉及共享后端和 Hive 组件清单；字段引擎升级仍须使用下文与目标NiFi匹配的 NAR。已有原生流程须受控完整发布后才改变拓扑；HDFS CSV 时间文本还须验证来源/JVM/目标时区，不能按普通 JDBC 的恢复语义推断。
 
-## 当前版本与全功能验收（1.1.16）
+## 当前版本（1.1.17）
+
+共享转换内核、函数库、NiFi 处理器与字典服务同步升级为 **1.1.17**，编辑和执行协议版本不变。此版修复数据库比较规则与 Java 严格键比较不一致导致的 `DICTIONARY_RESULT_MISMATCH` 误报：批量参数关系附带请求序号，结果按该序号回填，保留数据库自身的大小写、补空格及类型比较语义。重复键、无结果、参数绑定和批次边界检查仍然生效。
+
+平台发布字段治理节点时，`retry` 单独自环；`failure` 与 `invalid` 各连接独立保留 Funnel，便于查看异常，不自动重新执行不可重试输入。failure 的属性和日志增加受控说明及异常类型；成功恢复时清理这些错误属性。
+
+匹配 SDK 的干净构建包如下，不能跨 NiFi 版本互换：
+
+- NiFi 2.9.0：`logs/field-mapping-extension/clean-1.1.17-nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.17.nar`。
+- NiFi 2.11.0：`logs/field-mapping-extension/clean-1.1.17-nifi-2.11.0/haitong-mapping-nar/haitong-mapping-nar-1.1.17.nar`。
+
+两个包均通过组件测试及重复类 / SPI 注册检查。开发 NiFi 2.9.0 已通过 NAR Manager 安装 1.1.17，使用合成输入实际执行 79 条规则，20 / 100 行均通过。没有替换已有业务流程的 Bundle、队列、水位和计划。生产未部署。
+
+后端同步修复只读字段探查的完整展示、宽表 Schema 校验及旧字典引用绑定，见[详细设计第33章](../../docs/海通字段映射统一执行方案.md)。发布顺序为：先安装与目标 NiFi 匹配的新 NAR，再更新后端和前端 / 选定低代码组件。已有原生流程的连接不会因替换 NAR 自动改变，需在保留队列和来源状态的前提下受控发布或调整拓扑。
+
+## 上一版全功能验收（1.1.16）
 
 当前共享内核、函数库、处理器及字典服务均为 **1.1.16**，执行协议仍为 `schemaVersion=2.0` / `planVersion=1.0`。本地后端使用开发数据库 `192.168.175.86`；开发 NiFi 为 `https://10.231.176.56:8443`（NiFi 2.9.0、Java 21）。该节点已通过 NAR Manager 安装本版，并以隔离合成流程验证；未替换已有业务任务的处理器 Bundle、队列、水位或执行计划。
 

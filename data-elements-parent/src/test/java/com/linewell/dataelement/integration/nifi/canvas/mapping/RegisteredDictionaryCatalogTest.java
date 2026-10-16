@@ -13,6 +13,27 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class RegisteredDictionaryCatalogTest {
+    @Test void legacyUnqualifiedAndCaseFoldedNamesBindToOneAuthoritativeQualifiedRegistration()throws Exception {
+        var json=new ObjectMapper();
+        for(String query:List.of("SELECT label FROM dict WHERE code = ?","SELECT label FROM app.dict WHERE code = ?")) {
+            var jdbc=mock(JdbcTemplate.class);var sources=mock(DataSourceConnectionPropertyResolver.class);
+            when(sources.resolveBatch(eq("tenant"),anyCollection(),anyString())).thenReturn(Map.of("db",Map.of("defaultSchema","APP")));
+            when(jdbc.queryForList(contains("FROM db_table_t"),any(Object[].class))).thenReturn(List.of(Map.of("tid","t","datasource_id","db","table_name","APP.DICT")));
+            when(jdbc.queryForList(contains("FROM db_table_column_t"),any(Object[].class))).thenReturn(List.of(Map.of("table_id","t","column_name","CODE","data_type","VARCHAR"),Map.of("table_id","t","column_name","LABEL","data_type","VARCHAR")));
+            var spec=json.createObjectNode();var lookup=spec.putArray("mappings").addObject().put("from","code").put("to","label").putObject("lookup").put("sql",query).put("resultColumn","label");lookup.putObject("dataSource").put("datasourceId","db");
+            try(var tenant=TenantContext.use("tenant")){var bound=new RegisteredDictionaryCatalog(jdbc,sources,mock(DataQualityMapper.class)).bind(spec);var definition=bound.specification().path("dictionaryBindings").elements().next();assertEquals("t",definition.path("tableId").asText());assertEquals("APP",definition.path("schema").asText());assertEquals("DICT",definition.path("table").asText());assertEquals("CODE",definition.path("keyColumns").get(0).asText());assertEquals("LABEL",definition.path("valueColumn").asText());}
+            verify(jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+        }
+    }
+    @Test void unresolvedOrAmbiguousRegistrationReportsTheReferenceWithoutReadingOtherTenants()throws Exception {
+        for(int matches:List.of(0,2)) {
+            var jdbc=mock(JdbcTemplate.class);var sources=mock(DataSourceConnectionPropertyResolver.class);when(sources.resolveBatch(eq("tenant"),anyCollection(),anyString())).thenReturn(Map.of("db",Map.of("defaultSchema","APP")));
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<matches;i++)rows.add(Map.of("tid","t"+i,"datasource_id","db","table_name","APP.DICT"));when(jdbc.queryForList(contains("FROM db_table_t"),any(Object[].class))).thenAnswer(call->{Object[] args=(Object[])call.getRawArguments()[1];assertEquals("tenant",args[args.length-1]);assertTrue(call.getArgument(0,String.class).contains("tenant_id=?"));return rows;});
+            var spec=(com.fasterxml.jackson.databind.node.ObjectNode)new ObjectMapper().readTree("{\"dictionaryBindings\":{\"d\":{\"datasourceId\":\"db\",\"table\":\"DICT\",\"keyColumns\":[\"CODE\"],\"valueColumn\":\"LABEL\"}}}");
+            try(var tenant=TenantContext.use("tenant")){var error=assertThrows(MappingException.class,()->new RegisteredDictionaryCatalog(jdbc,sources,mock(DataQualityMapper.class)).bind(spec));assertEquals("RESOURCE_FORBIDDEN",error.code());assertTrue(error.getMessage().contains("DICT"));assertTrue(error.getMessage().contains("db"));}
+            verify(jdbc,times(1)).queryForList(anyString(),any(Object[].class));
+        }
+    }
     @Test void oneHundredNinetyDistinctLookupsAuthorizeInTwoReadsAndCollapseRepeatedTablePredicates()throws Exception {
         for(int count:List.of(20,100,190)){
             var jdbc=mock(JdbcTemplate.class);var sources=mock(DataSourceConnectionPropertyResolver.class);var metadata=mock(DataQualityMapper.class);

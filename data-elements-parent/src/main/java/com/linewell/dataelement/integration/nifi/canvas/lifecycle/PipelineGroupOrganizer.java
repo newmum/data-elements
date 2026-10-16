@@ -18,6 +18,13 @@ import org.springframework.stereotype.Component;
 public class PipelineGroupOrganizer {
     private static final String SURVEILLANCE_FLOW_PREFIX = "结构化数据布控引擎流组";
     private static final String SURVEILLANCE_GROUP_NAME = "布控引擎组";
+    private static final int GROUPS_PER_ROW = 5;
+    private static final double COLUMN_PITCH = 520;
+    private static final double ROW_PITCH = 300;
+    // Reserve a full native Process Group card plus space around it, including
+    // cards that an operator has dragged between two grid cells.
+    private static final double MIN_HORIZONTAL_SEPARATION = 480;
+    private static final double MIN_VERTICAL_SEPARATION = 260;
     private final NifiClient nifi;
     private final JdbcTemplate jdbc;
 
@@ -206,12 +213,33 @@ public class PipelineGroupOrganizer {
     }
 
     public static Position nextPosition(List<JsonNode> siblings) {
-        double right = -520;
+        Set<Position> occupied = new LinkedHashSet<>();
         for (JsonNode group : siblings) {
             JsonNode pos = group.path("component").path("position");
-            right = Math.max(right, pos.path("x").asDouble(0));
+            double x = pos.path("x").asDouble(0);
+            double y = pos.path("y").asDouble(0);
+            if (!Double.isFinite(x) || !Double.isFinite(y)) continue;
+            double nearestRow = Math.floor(y / ROW_PITCH);
+            // A card can obstruct only the nearby rows. Index these cells once
+            // from the parent's existing inventory; no per-group remote reads.
+            for (int offset = -1; offset <= 1; offset++) {
+                double candidateY = (nearestRow + offset) * ROW_PITCH;
+                if (candidateY < 0 || Math.abs(candidateY - y) >= MIN_VERTICAL_SEPARATION) continue;
+                for (int column = 0; column < GROUPS_PER_ROW; column++) {
+                    double candidateX = column * COLUMN_PITCH;
+                    if (Math.abs(candidateX - x) < MIN_HORIZONTAL_SEPARATION) {
+                        occupied.add(new Position(candidateX, candidateY));
+                    }
+                }
+            }
         }
-        return new Position(right + 520, 0);
+        // Fill the first free cell, left to right and then top to bottom. This
+        // also reuses holes after deletion without moving any surviving group.
+        for (long slot = 0; ; slot++) {
+            Position candidate = new Position((slot % GROUPS_PER_ROW) * COLUMN_PITCH,
+                    (slot / GROUPS_PER_ROW) * ROW_PITCH);
+            if (!occupied.contains(candidate)) return candidate;
+        }
     }
 
     static String sourceDatasourceId(Pipeline pipeline) {

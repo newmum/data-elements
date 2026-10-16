@@ -103,9 +103,10 @@ public class HaitongTransformRecord extends AbstractProcessor {
             MappingException error=ex instanceof MappingException e?e:new MappingException("RECORD_IO_ERROR","Record读取或写出失败");
             int attempt=integer(original.getAttribute("ht.retry.attempt"));boolean retry=error.code().equals("DICTIONARY_UNAVAILABLE")&&attempt<context.getProperty(ATTEMPTS).asInteger();
             Map<String,String>attributes=new HashMap<>();attributes.put("ht.plan.hash",plan.hash());attributes.put("ht.error.code",error.code());
+            attributes.put("ht.error.message",error.getMessage());attributes.put("ht.error.cause.type",ex.getClass().getName());
             if(retry){attributes.put("ht.retry.attempt",Integer.toString(attempt+1));attributes.put("ht.retry.nextAt",Long.toString(System.currentTimeMillis()+Math.min(300000,1000L<<Math.min(attempt,18))));}
             original=session.putAllAttributes(original,attributes);if(!retry)original=backoff(context,session,original,FAILURE);session.transfer(session.penalize(original),retry?RETRY:FAILURE);context.yield();
-            getLogger().warn("字段映射输入转入{}，错误码{}，计划{}",retry?"retry":"failure",error.code(),plan.hash());
+            getLogger().warn("字段映射输入转入{}，错误码{}，计划{}，说明{}，异常类型{}",retry?"retry":"failure",error.code(),plan.hash(),error.getMessage(),ex.getClass().getName());
         }
         } finally { windows.release(); }
     }

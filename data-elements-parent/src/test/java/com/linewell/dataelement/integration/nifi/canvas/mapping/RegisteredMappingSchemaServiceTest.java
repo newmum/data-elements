@@ -111,7 +111,7 @@ class RegisteredMappingSchemaServiceTest {
         var row=new HashMap<>(jdbcColumn("catalog","registered","table_0","id"));row.remove("TABLE_CAT");
         when(fixture.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(List.of(row)));
         try(var tenant=TenantContext.use("tenant-A")){assertEquals(1,fixture.service.physicalBatch(fixture.service.resolve(fixture.references)).get("ref-0").size());}
-        verify(fixture.metadata,times(1)).getColumns(isNull(),eq("registered"),eq("%"),eq("%"));
+        verify(fixture.metadata,times(1)).getColumns(isNull(),eq("registered"),eq("table\\_0"),eq("%"));
     }
     @Test void registeredFormatSurvivesPhysicalOracleDateAndExplicitClearingWins()throws Exception {
         for(int count:List.of(20,100)) {
@@ -392,6 +392,29 @@ class RegisteredMappingSchemaServiceTest {
         verify(fixture.metadata,times(1)).getColumns(any(),any(),any(),any());
     }
 
+    @Test void wideOracleAndPostgresTablesReadOnlyTheBoundNamesAndNeverScanTheSchema()throws Exception {
+        for(String url:List.of("jdbc:oracle:thin:@test","jdbc:postgresql://test/catalog","jdbc:dm://test:5236","jdbc:sqlserver://test","jdbc:db2://test/catalog"))for(int width:List.of(200,240)) {
+            Fixture f=new Fixture(1);f.config=Map.of("db",Map.of("defaultSchema","registered"));
+            when(f.metadata.getDatabaseProductName()).thenReturn(url.contains("oracle")?"Oracle":"Other");when(f.metadata.getURL()).thenReturn(url);
+            f.physicalRows.clear();for(int i=0;i<width;i++)f.physicalRows.add(jdbcColumn("catalog","registered","table_0","f"+i));
+            try(var tenant=TenantContext.use("tenant-A")){assertEquals(width,f.service.physicalBatch(f.service.resolve(f.references)).get("ref-0").size());}
+            verify(f.metadata,never()).getColumns(any(),any(),any(),any());verify(f.statement,times(1)).executeQuery();
+            verify(f.statement).setString(1,"registered");verify(f.statement).setString(2,"table_0");
+            verify(f.physical).prepareStatement(argThat(sql->sql.contains("=?")&&!sql.contains("table_0")&&!sql.contains("TABLE_SCHEM LIKE")));
+        }
+    }
+
+    @Test void catalogTwentyAndHundredTablesUseOneReadAndRejectOutOfScopeMetadata()throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("defaultSchema","registered"));when(f.metadata.getDatabaseProductName()).thenReturn("Oracle");when(f.metadata.getURL()).thenReturn("jdbc:oracle:thin:@test");
+            f.physicalRows.clear();for(int i=0;i<count;i++)f.physicalRows.add(jdbcColumn("catalog","registered","table_"+i,"id"));
+            try(var tenant=TenantContext.use("tenant-A")){assertEquals(count,f.service.physicalBatch(f.service.resolve(f.references)).size());}
+            verify(f.statement,times(1)).executeQuery();verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.sources,times(1)).resolveBatch(anyString(),anyCollection(),anyString());
+        }
+        Fixture f=new Fixture(1);f.config=Map.of("db",Map.of("defaultSchema","registered"));when(f.metadata.getDatabaseProductName()).thenReturn("Oracle");when(f.metadata.getURL()).thenReturn("jdbc:oracle:thin:@test");f.physicalRows=List.of(jdbcColumn("catalog","foreign_schema","table_0","secret"));
+        try(var tenant=TenantContext.use("tenant-A")){assertEquals("SCHEMA_RESULT_MISMATCH",assertThrows(MappingException.class,()->f.service.physicalBatch(f.service.resolve(f.references))).code());}
+    }
+
     private static ArrayNode schema() {
         var schema=JSON.createArrayNode();schema.addObject().put("name","id").put("logicalType","STRING").put("nullable",true).put("length",64);return schema;
     }
@@ -429,6 +452,7 @@ class RegisteredMappingSchemaServiceTest {
             when(jdbc.queryForList(contains("db_table_column_t"),any(Object[].class))).thenAnswer(ignored->columns);
             when(engine.openRegistered(anyString(),anyMap())).thenReturn(physical);
             when(physical.getMetaData()).thenReturn(metadata);when(physical.getCatalog()).thenReturn("catalog");when(metadata.getDatabaseProductName()).thenReturn("MySQL");
+            when(metadata.getSearchStringEscape()).thenReturn("\\");
             when(physical.prepareStatement(anyString())).thenReturn(statement);when(statement.executeQuery()).thenAnswer(ignored->rows(physicalRows));
             for(int index=0;index<count;index++){
                 references.put("ref-"+index,JSON.createObjectNode().put("datasourceId","db").put("tableId","table-"+index));

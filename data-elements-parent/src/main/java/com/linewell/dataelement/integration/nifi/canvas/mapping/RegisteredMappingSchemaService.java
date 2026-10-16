@@ -150,7 +150,14 @@ public class RegisteredMappingSchemaService {
                 Map<String,Object> temporalConfig=new HashMap<>(first.connections().get(group.getKey()));
                 if(product.contains("oracle"))temporalConfig.put("dbType","ORACLE");
                 if (mysql) readMysqlColumns(connection,byTable,totalFields,mysqlIgnoreCase,temporalConfig);
-                else readJdbcColumns(metadata,catalog,byTable,totalFields,temporalConfig);
+                else {
+                    String registeredType=Objects.toString(temporalConfig.getOrDefault("dbType",temporalConfig.get("databaseType")),"").toLowerCase(Locale.ROOT).replaceAll("[\\s_-]","");
+                    String mode=Objects.toString(temporalConfig.getOrDefault("compatibleMode",temporalConfig.get("mode")),"");
+                    String dialectProduct=product.contains("oceanbase")&&(registeredType.contains("oracle")||mode.equalsIgnoreCase("oracle"))?"oracle":product;
+                    String sql=com.linewell.dataelement.metautil.jdbc.JdbcColumnBatchQuery.sql(metadata.getURL(),dialectProduct,byTable.size());
+                    if(sql!=null)readCatalogColumns(connection,sql,byTable,totalFields,temporalConfig);
+                    else readJdbcColumns(metadata,catalog,byTable,totalFields,temporalConfig);
+                }
                 // Do not expose a partial batch when any requested physical table disappeared.
                 for (var identity:byTable.keySet()) {
                     if (byTable.get(identity).isEmpty()) throw new MappingException("SCHEMA_UNAVAILABLE",
@@ -215,10 +222,11 @@ public class RegisteredMappingSchemaService {
         boolean catalogQualified;
         try { catalogQualified=metadata.supportsCatalogsInTableDefinitions(); }
         catch (SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) { catalogQualified=false; }
-        try (ResultSet columns=metadata.getColumns(catalog,escape(metadata,schema),"%","%")) {
+        String tablePattern=byTable.size()==1?escape(metadata,byTable.keySet().iterator().next().table()):"%";
+        try (ResultSet columns=metadata.getColumns(catalog,escape(metadata,schema),tablePattern,"%")) {
             int scanned=0;
             while (columns.next()) {
-                if (++scanned>MAX_METADATA_SCAN_ROWS) throw new MappingException("BUDGET_EXCEEDED","JDBC schema扫描超过20000列，请使用专用有界批量适配");
+                if (++scanned>MAX_METADATA_SCAN_ROWS) throw new MappingException("BUDGET_EXCEEDED","驱动元数据扫描包含过多非请求表字段，已停止扫描；这不是当前表的字段数，请检查驱动批量适配");
                 // Never match only the table name: identical names in another namespace are unrelated.
                 // Kingbase (and other single-database drivers) can return a connection catalog
                 // but omit TABLE_CAT. That is absent metadata, not a different database.
@@ -232,6 +240,21 @@ public class RegisteredMappingSchemaService {
                 if (fields==null) continue;
                 appendPhysicalField(fields,columns,columns.getInt("NULLABLE")!=DatabaseMetaData.columnNoNulls,
                         columns.getString("COLUMN_DEF")!=null || "YES".equalsIgnoreCase(columns.getString("IS_AUTOINCREMENT")),totalFields,temporalConfig);
+            }
+        }
+    }
+
+    private static void readCatalogColumns(Connection connection,String sql,Map<TableIdentity,ArrayNode> byTable,int[] totalFields,Map<String,Object> config)throws SQLException {
+        try(PreparedStatement statement=connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(METADATA_TIMEOUT_SECONDS);statement.setFetchSize(256);statement.setMaxRows(MAX_TOTAL_FIELDS+1);
+            int parameter=1;for(TableIdentity table:byTable.keySet()){statement.setString(parameter++,table.schema());statement.setString(parameter++,table.table());}
+            try(ResultSet columns=statement.executeQuery()) {
+                while(columns.next()) {
+                    ArrayNode fields=byTable.get(new TableIdentity(columns.getString("TABLE_SCHEM"),columns.getString("TABLE_NAME")));
+                    if(fields==null)throw new MappingException("SCHEMA_RESULT_MISMATCH","字段元数据返回了本次请求范围外的表，已停止校验");
+                    appendPhysicalField(fields,columns,columns.getInt("NULLABLE")!=DatabaseMetaData.columnNoNulls,
+                            columns.getString("COLUMN_DEF")!=null||"YES".equalsIgnoreCase(columns.getString("IS_AUTOINCREMENT")),totalFields,config);
+                }
             }
         }
     }

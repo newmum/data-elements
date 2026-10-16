@@ -20,7 +20,7 @@ final class MappingErrorRecords implements RecordReader {
     static final String NEXT = "ht.error.loop.nextAt";
     static final String RELATIONSHIP = "ht.error.loop.relationship";
     static final Set<String> TRANSIENT_ATTRIBUTES = Set.of(ENVELOPE, SCHEMA, ATTEMPT, NEXT, RELATIONSHIP,
-            "ht.error.code", "ht.retry.attempt", "ht.retry.nextAt", "ht.invalid.count");
+            "ht.error.code", "ht.error.message", "ht.error.cause.type", "ht.retry.attempt", "ht.retry.nextAt", "ht.invalid.count");
     private static final ObjectMapper JSON = new ObjectMapper().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private final MappingIterator<JsonNode> iterator;
     private final String hash;

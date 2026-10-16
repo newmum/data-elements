@@ -1162,7 +1162,12 @@ public class DslCompiler {
         if(planId!=null)properties.put("plan-id",planId);
         properties.put("context-node-id",contextNodeId);
         NifiEntity processor=nifi.createProcessor(pgId,"com.linewell.dataelement.nifi.HaitongTransformRecord",node.label(),node.x(),node.y(),properties,"0 sec","TIMER_DRIVEN");compiled.processorIds.put("map",processor.id());compiled.inletProcessorId=processor.id();compiled.outlets.put("default",new Outlet(processor.id(),"success"));
-        nifi.createConnection(pgId,processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("failure","invalid","retry"));compiled.usedOutgoing.put(processor.id(),new LinkedHashSet<>(List.of("failure","invalid","retry")));
+        nifi.createConnection(pgId,processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("retry"));
+        for(String relationship:List.of("failure","invalid")) {
+            NifiEntity retained=nifi.createRetentionFunnel(pgId,node.x()+360,node.y()+(relationship.equals("failure")?-100:30));
+            nifi.createConnection(pgId,processor.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of(relationship));
+        }
+        compiled.usedOutgoing.put(processor.id(),new LinkedHashSet<>(List.of("failure","invalid","retry")));
     }
     public record MappingReplacement(NodeCompilation node,String planId) {}
     /** Field-only upgrade: Reader/Writer and every source component remain in their existing scope. */

@@ -346,7 +346,7 @@ const CustomSqlEditor = forwardRef<CustomSqlEditorHandle, CustomSqlEditorProps>(
               <div key={item.key} className="custom-sql-editor__table-block">
                 <Tag icon={<TableOutlined />} color="default">{item.table}</Tag>
                 <div className="custom-sql-editor__chips">
-                  {item.columns.slice(0, 40).map((col) => (
+                  {item.columns.map((col) => (
                     <Tooltip key={`${item.table}.${col.name}`} title={[col.comment, col.dataType].filter(Boolean).join(' / ') || col.name}>
                       <Tag onMouseDown={(event) => event.preventDefault()} onClick={() => {
                         insertAtCursor(col.name, item.recordInput ? 'calcite' : sourceType(item.node));

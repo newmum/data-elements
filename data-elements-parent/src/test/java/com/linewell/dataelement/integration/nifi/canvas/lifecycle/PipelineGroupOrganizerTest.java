@@ -91,7 +91,7 @@ class PipelineGroupOrganizerTest {
     }
 
     @Test
-    void discoversPreviousLeafWhenDepartmentChangesAndAllocatesToTheRight() {
+    void discoversPreviousLeafWhenDepartmentChangesAndPreservesItsManualPosition() {
         try (var scope = TenantContext.use("tenant1")) {
             PipelineGroupOrganizer organizer = organizer();
             var first = organizer.prepare(pipeline());
@@ -107,9 +107,70 @@ class PipelineGroupOrganizerTest {
     }
 
     @Test
-    void newPositionIsAfterManuallyMovedSiblings() {
-        JsonNode moved = mapper.valueToTree(Map.of("component", Map.of("position", Map.of("x", 2100, "y", 170))));
-        assertThat(PipelineGroupOrganizer.nextPosition(List.of(moved))).isEqualTo(new PipelineGroupOrganizer.Position(2620, 0));
+    void wrapsAfterFiveGroupsAndKeepsUniformSpacingForOneHundredGroups() {
+        List<JsonNode> siblings = new ArrayList<>();
+        for (int index = 0; index < 100; index++) {
+            var position = PipelineGroupOrganizer.nextPosition(siblings);
+            assertThat(position).isEqualTo(new PipelineGroupOrganizer.Position((index % 5) * 520, (index / 5) * 300));
+            siblings.add(at(position.x(), position.y()));
+        }
+        assertThat(PipelineGroupOrganizer.nextPosition(siblings)).isEqualTo(new PipelineGroupOrganizer.Position(0, 6000));
+    }
+
+    @Test
+    void fillsDeletedSlotsRegardlessOfSiblingOrder() {
+        List<JsonNode> siblings = new ArrayList<>();
+        for (int index : List.of(8, 1, 6, 4, 0, 7, 3, 9, 5)) siblings.add(at((index % 5) * 520, (index / 5) * 300));
+        assertThat(PipelineGroupOrganizer.nextPosition(siblings)).isEqualTo(new PipelineGroupOrganizer.Position(1040, 0));
+    }
+
+    @Test
+    void skipsAllCellsObstructedByManuallyMovedCards() {
+        // The dragged card overlaps the first two columns and two rows.
+        List<JsonNode> siblings = new ArrayList<>(List.of(at(250, 150), at(1040, 0), at(1560, 0), at(2080, 0)));
+        assertThat(PipelineGroupOrganizer.nextPosition(siblings)).isEqualTo(new PipelineGroupOrganizer.Position(1040, 300));
+        assertThat(siblings.getFirst().path("component").path("position").path("x").asDouble()).isEqualTo(250);
+        assertThat(siblings.getFirst().path("component").path("position").path("y").asDouble()).isEqualTo(150);
+    }
+
+    @Test
+    void legacyLongRowsDoNotPushNewGroupsOutsideTheFiveColumnGrid() {
+        List<JsonNode> siblings = new ArrayList<>();
+        for (int index = 0; index < 20; index++) siblings.add(at(index * 520, 0));
+        assertThat(PipelineGroupOrganizer.nextPosition(siblings)).isEqualTo(new PipelineGroupOrganizer.Position(0, 300));
+    }
+
+    @Test
+    void negativeAndDistantManualCoordinatesDoNotBreakGridPlacement() {
+        assertThat(PipelineGroupOrganizer.nextPosition(List.of(at(-200, -100))))
+                .isEqualTo(new PipelineGroupOrganizer.Position(520, 0));
+        assertThat(PipelineGroupOrganizer.nextPosition(List.of(at(100000, 90000))))
+                .isEqualTo(new PipelineGroupOrganizer.Position(0, 0));
+    }
+
+    @Test
+    void twentyAndOneHundredSiblingsUseTheSameRequestAndSqlCounts() {
+        try (var scope = TenantContext.use("tenant1")) {
+            var organizer = organizer();
+            var first = organizer.prepare(pipeline());
+            for (int count : List.of(20, 100)) {
+                List<JsonNode> siblings = new ArrayList<>();
+                for (int index = 0; index < count; index++) siblings.add(at((index % 5) * 520, (index / 5) * 300));
+                tree.put(first.parentId(), siblings);
+                clearInvocations(nifi, jdbc);
+                var layout = organizer.prepare(pipeline());
+                assertThat(layout.position()).isEqualTo(new PipelineGroupOrganizer.Position(0, (count / 5) * 300));
+                verify(nifi, times(6)).listProcessGroups(anyString());
+                verify(nifi, never()).getProcessGroup(anyString());
+                verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble(), anyString());
+                verify(jdbc, times(5)).queryForList(anyString(), eq("tenant1"), anyString());
+                verifyNoMoreInteractions(jdbc);
+            }
+        }
+    }
+
+    private JsonNode at(double x, double y) {
+        return mapper.valueToTree(Map.of("component", Map.of("position", Map.of("x", x, "y", y))));
     }
 
     @Test
