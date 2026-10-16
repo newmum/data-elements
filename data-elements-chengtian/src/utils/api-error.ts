@@ -1,4 +1,5 @@
 import { h } from "vue";
+import { DiagnosticErrorAction } from "./diagnostics";
 import { ElButton, ElMessage, ElMessageBox } from "element-plus";
 
 export interface ApiErrorInfo {
@@ -6,6 +7,7 @@ export interface ApiErrorInfo {
   message: string;
   detail: string;
   traceId?: string;
+  diagnosticRef?: string;
   type?: string;
   method?: string;
   path?: string;
@@ -63,7 +65,7 @@ function installDuplicateMessageGuard(): void {
       if (text && activeErrorMessages.has(text)) {
         // Keep the Element Plus return contract for callers that save the
         // handler and later invoke it to close a message.
-        return (() => undefined) as MessageHandler;
+        return { close: () => undefined };
       }
       return original(payload);
     };
@@ -133,6 +135,7 @@ export function createApiRequestError(payload: any, fallback: ApiErrorFallback):
     detail:
       serverError.detail || fallback.detail || (payload == null ? message : readableJson(payload)),
     traceId: serverError.traceId,
+    diagnosticRef: serverError.diagnosticRef,
     type: serverError.type,
     method: serverError.method || fallback.method,
     path: serverError.path || fallback.path,
@@ -171,6 +174,7 @@ function openErrorDetail(info: ApiErrorInfo) {
   void ElMessageBox.alert(
     h("div", { style: "text-align:left;" }, [
       ...rows,
+      h(DiagnosticErrorAction, { info }),
       h(
         "div",
         {
@@ -251,6 +255,7 @@ export function showApiError(error: ApiRequestError): void {
           },
           () => "查看详情"
         ),
+        h(DiagnosticErrorAction, { info: error.info }),
       ]
     ),
   });

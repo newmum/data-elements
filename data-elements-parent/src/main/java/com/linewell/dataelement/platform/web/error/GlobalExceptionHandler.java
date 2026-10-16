@@ -37,7 +37,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BizException.class)
     public CommonResponse handleBizException(BizException e) {
         logger.error("业务异常: {}", e.getMessage(), e);
-        return CommonResponse.fail(e.getCode(), e.getMsg(), e.getDesc());
+        return diagnostic(CommonResponse.fail(e.getCode(), e.getMsg(), e.getDesc()), e);
     }
 
     @ExceptionHandler(TenantAccessException.class)
@@ -149,6 +149,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public CommonResponse handleException(Exception e) {
         logger.error("系统异常: {}", e.getMessage(), e);
-        return CommonResponse.fail(StatusCodeEnum.ERROR, e.getMessage());
+        return diagnostic(CommonResponse.fail(StatusCodeEnum.ERROR, e.getMessage()), e);
+    }
+    private CommonResponse diagnostic(CommonResponse response, Throwable failure) {
+        if (java.util.Set.of(401, 403, 100120).contains(response.getCode())) return response;
+        var error = com.linewell.dataelement.shared.error.ApiErrorResolver.resolve(failure).toMap("", "");
+        error.put("detail", com.linewell.dataelement.feature.diagnostics.DiagnosticSanitizer.errorText(String.valueOf(error.get("detail"))));
+        response.setError(error);
+        return response;
     }
 }

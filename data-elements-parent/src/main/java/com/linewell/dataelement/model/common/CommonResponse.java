@@ -16,6 +16,8 @@ public class CommonResponse<T> {
     //private String desc;
     private Boolean success;
     private T data;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private java.util.Map<String, Object> error;
     public CommonResponse() {}
     public CommonResponse(StatusCodeEnum statusCodeEnum) {
         this.code = statusCodeEnum.getCode();
