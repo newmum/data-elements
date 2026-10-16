@@ -62,7 +62,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/02.探查数据表(register-dbTable).vue",
-      "baseSha256": "a9ca9632b8cac55b43bf7d1c8240782333b367221b459cec0258d463636a41e0"
+      "baseSha256": "31742d5105cc00e7d4448f3ec918858c93420808bd816af46964bc75b6859945"
     },
     {
       "id": "2074806944084328448",
@@ -72,7 +72,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue",
-      "baseSha256": "c861dc5a4fd0d759d9320a1d81fe2889631e9705fe82c2969e2b770e0273b5a7"
+      "baseSha256": "6a6f6298cdb0a1344fb77d7256850b0bb9ac861a80eee329f22fee3da9b4a61b"
     },
     {
       "id": "2075055310869430272",

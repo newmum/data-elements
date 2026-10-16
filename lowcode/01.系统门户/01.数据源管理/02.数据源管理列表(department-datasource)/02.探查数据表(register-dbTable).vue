@@ -2268,7 +2268,7 @@ const syncPreviewFields = async () => {
   if (!tableId || state.syncingFields) return;
   try {
     await ElMessageBox.confirm(
-      `确认从来源库重新同步“${state.currentTableName}”的全部字段吗？最新字段注释会同步为字段中文名（含清空），新增字段会加入，类型和长度会更新，来源已删除的字段会从配置中移出。`,
+      `确认从来源库重新同步“${state.currentTableName}”的全部字段吗？最新字段注释会同步为字段中文名，来源无注释时保留已填写中文名；新增字段会加入，类型和长度会更新，来源已删除的字段会从配置中移出。`,
       "同步字段",
       { type: "warning", confirmButtonText: "确认同步", cancelButtonText: "取消" }
     );

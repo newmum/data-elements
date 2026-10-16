@@ -70,7 +70,7 @@ class RegistrationFieldSyncTest {
             var f=new Fixture(width);var extra=new ColumnInfo();extra.setColumnName("new_field");extra.setColumnComment("新增字段");extra.setDataType("int");f.physical.columns.add(extra);
             f.counter.reads=0;var rows=(List<Map<String,Object>>)f.sync(false);assertEquals(4,f.counter.reads);assertEquals(1,f.physical.calls);assertEquals(width+1,rows.size());
             var first=rows.stream().filter(r->"field_0".equals(r.get("columnName"))).findFirst().orElseThrow();assertEquals("column-0",first.get("tid"));assertEquals("最新注释0",first.get("columnComment"));assertEquals("governance-kept",first.get("dataStandardId"));
-            assertEquals("",rows.stream().filter(r->"field_1".equals(r.get("columnName"))).findFirst().orElseThrow().get("columnComment"));
+            assertEquals("旧注释",rows.stream().filter(r->"field_1".equals(r.get("columnName"))).findFirst().orElseThrow().get("columnComment"));
             assertEquals(width+1,f.jdbc.queryForObject("SELECT field_count FROM db_table_t WHERE tid='table'",Integer.class));assertEquals("秘密",f.jdbc.queryForObject("SELECT column_comment FROM db_table_column_t WHERE tid='decoy'",String.class));
             assertEquals(width+1,((List<?>)f.fields("table")).size());
         }

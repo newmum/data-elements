@@ -238,7 +238,8 @@ for (row in rows) {
     db.table("db_table_column_t").where()
         .eq("tenant_id", currentTenantId).eq("tid", previous.tid).eq("table_id", requestedTableId).eq("is_del", 0)
         .update({
-            column_comment: row.column_comment, data_type: row.data_type, column_type: row.column_type,
+            column_comment: blank(row.column_comment) ? previous.columnComment : row.column_comment,
+            data_type: row.data_type, column_type: row.column_type,
             length: row.length, precision_length: row.precision_length, scale: row.scale,
             nullable: row.nullable, default_value: row.default_value,
             auto_increment: row.auto_increment, is_unique: row.is_unique, indexed: row.indexed,

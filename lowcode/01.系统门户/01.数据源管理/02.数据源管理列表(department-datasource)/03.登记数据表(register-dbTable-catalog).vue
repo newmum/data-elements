@@ -2895,7 +2895,7 @@ function normalizeFieldRows(rows, tableName, preserveIncomingRole = false, prefe
       _rowKey: `${tableName}:${row.columnName}`,
       columnName: row.columnName,
       columnComment: preferPhysicalStructure
-        ? (row.columnComment ?? "")
+        ? (String(row.columnComment ?? "").trim() ? row.columnComment : (old?.columnComment ?? savedField.columnComment ?? ""))
         : (old?.columnComment ?? row.columnComment ?? savedField.columnComment ?? suggestion.comment ?? ""),
       columnType: row.columnType || buildColumnType(row),
       primaryKey: normalizePrimaryKey(
@@ -4393,7 +4393,7 @@ async function syncActiveTableFields() {
   if (!table?.tid || syncingFields.value) return;
   try {
     await ElMessageBox.confirm(
-      `确认从来源库重新同步“${table.tableName}”的全部字段吗？最新字段注释会覆盖字段中文名（含清空），新增字段会加入，类型和长度会更新，来源已删除的字段会从配置中移出；已有字典翻译、统一格式等治理设置会保留。`,
+      `确认从来源库重新同步“${table.tableName}”的全部字段吗？最新字段注释会更新字段中文名，来源无注释时保留已填写中文名；新增字段会加入，类型和长度会更新，来源已删除的字段会从配置中移出；已有字典翻译、统一格式等治理设置会保留。`,
       "同步字段",
       { type: "warning", confirmButtonText: "确认同步", cancelButtonText: "取消" }
     );
@@ -4407,11 +4407,12 @@ async function syncActiveTableFields() {
     });
     const rows = unwrapList(result);
     const added = rows.filter((row) => !previous.has(String(row.columnName).toLowerCase())).length;
-    const commentsUpdated = rows.filter((row) => {
+    const normalizedRows = normalizeFieldRows(rows, table.tableName, false, true);
+    const commentsUpdated = normalizedRows.filter((row) => {
       const old = previous.get(String(row.columnName).toLowerCase());
       return old && String(old.columnComment ?? "") !== String(row.columnComment ?? "");
     }).length;
-    fieldMap[table.tableName] = normalizeFieldRows(rows, table.tableName, false, true);
+    fieldMap[table.tableName] = normalizedRows;
     table.fieldCount = rows.length;
     delete fieldErrorMap[table.tableName];
     delete connectionErrorMap[table.tableName];
