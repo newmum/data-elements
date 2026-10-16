@@ -66,9 +66,17 @@ public final class ValueTypes {
                 case "INT" -> value instanceof Boolean b?(b?1:0):decimal(value).intValueExact();
                 case "LONG" -> value instanceof Boolean b?(b?1L:0L):decimal(value).longValueExact();
                 case "DECIMAL" -> {
-                    if (precision < 1 || precision > 1000 || scale < 0 || scale > precision) throw new IllegalArgumentException();
-                    BigDecimal n = decimal(value).setScale(scale, rounding);
-                    if (n.precision() > precision) throw new ArithmeticException();
+                    requireDecimalDimensions(precision, scale);
+                    BigDecimal original = decimal(value);
+                    if (precision == 0) yield original;
+                    BigDecimal n;
+                    try { n = original.setScale(scale, rounding); }
+                    catch (ArithmeticException ex) {
+                        throw new MappingException("TYPE_MISMATCH", "小数位数" + Math.max(0, original.stripTrailingZeros().scale())
+                                + "超出目标DECIMAL(" + precision + "," + scale + ")可精确表示的范围；请扩大目标小数位数或显式配置舍入规则");
+                    }
+                    if (n.precision() > precision) throw new MappingException("TYPE_MISMATCH",
+                            "数值需要" + n.precision() + "位有效精度，超出目标DECIMAL(" + precision + "," + scale + ")；请扩大目标精度");
                     yield n;
                 }
                 case "DOUBLE" -> {
@@ -87,6 +95,13 @@ public final class ValueTypes {
             };
         } catch (MappingException ex) { throw ex; }
         catch (RuntimeException ex) { throw new MappingException("TYPE_MISMATCH", "目标类型转换失败或超出精度/范围: " + type(rawType)); }
+    }
+    /** (0,0) means an unconstrained SQL NUMERIC/NUMBER; it never implies an integer. */
+    public static void requireDecimalDimensions(int precision, int scale) {
+        if (precision == 0 && scale == 0) return;
+        // Oracle also permits negative scale and scale greater than precision.
+        if (precision < 1 || precision > 1000 || scale < -1000 || scale > 1000)
+            throw new MappingException("INVALID_ARGUMENT", "目标小数精度须为1至1000（0表示保留精度），scale须在-1000至1000之间");
     }
     public static LocalDate date(Object value) { return (LocalDate)TemporalParser.auto(value,"DATE",ZoneId.systemDefault()); }
     public static LocalDateTime dateTime(Object value) { return dateTime(value,ZoneId.systemDefault()); }

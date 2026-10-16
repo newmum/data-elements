@@ -34,4 +34,12 @@ class MappingOutputSchemaTest {
         var map=text.path("fields").get(0).path("type").get(1);assertEquals("map",map.path("type").asText());
         var array=map.path("values").get(1);assertEquals("array",array.path("type").asText());assertEquals("null",array.path("items").get(0).asText());
     }
+    @Test void unconstrainedDecimalsShareOneExactSchemaAcrossDifferentScalesAndAllNullWindows() {
+        var schema=MappingOutputSchema.resolve(BASE,Map.of("value","DECIMAL_AUTO"),List.of(
+                Map.of("value",new java.math.BigDecimal("119.379023855114")),Map.of("value",new java.math.BigDecimal("25.7223849760167")),
+                Map.of("value",new java.math.BigDecimal("0.000000000000000000123456789"))));
+        var decimal=(DecimalDataType)schema.getField("value").orElseThrow().getDataType();assertEquals(30,decimal.getPrecision());assertEquals(27,decimal.getScale());
+        var empty=MappingOutputSchema.resolve(BASE,Map.of("value","DECIMAL_AUTO"),List.of(Collections.singletonMap("value",null)));
+        assertEquals(RecordFieldType.DECIMAL,empty.getField("value").orElseThrow().getDataType().getFieldType());
+    }
 }

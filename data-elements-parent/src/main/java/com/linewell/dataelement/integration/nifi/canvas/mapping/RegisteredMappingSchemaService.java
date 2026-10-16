@@ -265,7 +265,11 @@ public class RegisteredMappingSchemaService {
         String physicalType=columns.getString("TYPE_NAME"),type=JdbcTemporalTypes.logicalType(physicalType,temporalConfig);
         var field=fields.addObject().put("name",columns.getString("COLUMN_NAME")).put("logicalType",type).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&type.equals("DATETIME")).put("nullable",nullable).put("hasDefault",hasDefault);
         if (type.equals("STRING")) field.put("length",columns.getInt("COLUMN_SIZE"));
-        if (type.equals("DECIMAL")) field.put("precision",columns.getInt("COLUMN_SIZE")).put("scale",columns.getInt("DECIMAL_DIGITS"));
+        if (type.equals("DECIMAL")) {
+            int precision=columns.getInt("COLUMN_SIZE"),scale=columns.getInt("DECIMAL_DIGITS");
+            if(precision==0||scale==-127){precision=0;scale=0;}
+            field.put("precision",precision).put("scale",scale);
+        }
     }
     public void checkContract(JsonNode contract){
         checkContracts(Map.of("node",contract));

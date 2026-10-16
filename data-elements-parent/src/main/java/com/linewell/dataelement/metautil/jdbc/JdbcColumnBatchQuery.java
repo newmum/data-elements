@@ -14,7 +14,7 @@ public final class JdbcColumnBatchQuery {
                 || url.startsWith("jdbc:oceanbaseoracle:") || name.contains("oracle")
                 || url.startsWith("jdbc:dm:")) {
             select = "SELECT c.OWNER AS TABLE_SCHEM,c.TABLE_NAME,c.COLUMN_NAME,c.DATA_TYPE AS TYPE_NAME,"
-                    + "CASE WHEN c.DATA_TYPE IN ('CLOB','NCLOB','LONG') THEN 0 WHEN c.DATA_TYPE IN ('CHAR','VARCHAR2','NCHAR','NVARCHAR2') THEN c.CHAR_LENGTH ELSE COALESCE(c.DATA_PRECISION,c.DATA_LENGTH) END AS COLUMN_SIZE,"
+                    + "CASE WHEN c.DATA_TYPE IN ('CLOB','NCLOB','LONG') THEN 0 WHEN c.DATA_TYPE IN ('CHAR','VARCHAR2','NCHAR','NVARCHAR2') THEN c.CHAR_LENGTH WHEN c.DATA_TYPE IN ('NUMBER','NUMERIC','DECIMAL','DEC') THEN COALESCE(c.DATA_PRECISION,0) ELSE COALESCE(c.DATA_PRECISION,c.DATA_LENGTH) END AS COLUMN_SIZE,"
                     + "c.DATA_SCALE AS DECIMAL_DIGITS,CASE WHEN c.NULLABLE='N' THEN 0 ELSE 1 END AS NULLABLE,"
                     + (url.startsWith("jdbc:dm:")?"c.DATA_DEFAULT":"CASE WHEN c.DEFAULT_LENGTH>0 THEN 'DEFAULT' ELSE NULL END")
                     + " AS COLUMN_DEF,'NO' AS IS_AUTOINCREMENT FROM ALL_TAB_COLUMNS c";

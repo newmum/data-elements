@@ -75,7 +75,7 @@ public final class Expressions {
             throw new MappingException("EXPRESSION_UNSUPPORTED","表达式字段须使用显式field/target引用");}
         if(e instanceof ParenthesedExpressionList<?> list&&list.size()==1)return compileAst((Expression)list.getFirst(),refs,depth+1);
         if(e instanceof CastExpression c){Expr child=compileAst(c.getLeftExpression(),refs,depth+1);String type=c.getColDataType().getDataType();var args=c.getColDataType().getArgumentsStringList();
-            int precision=args!=null&&!args.isEmpty()?Integer.parseInt(args.getFirst()):38;int scale=args!=null&&args.size()>1?Integer.parseInt(args.get(1)):10;
+            int precision=args!=null&&!args.isEmpty()?Integer.parseInt(args.getFirst()):0;int scale=args!=null&&args.size()>1?Integer.parseInt(args.get(1)):0;
             return s->ValueTypes.cast(child.evaluate(s),type,precision,scale,RoundingMode.UNNECESSARY,s.context().zone());}
         if(e instanceof TrimFunction trim){if(trim.getFromExpression()!=null||trim.isUsingFromKeyword())throw unsupported();Expr child=compileAst(trim.getExpression(),refs,depth+1);return s->{Object value=child.evaluate(s);return value==null?null:value.toString().strip();};}
         if(e instanceof Function f){List<Expr> params=new ArrayList<>();if(f.getParameters()!=null)for(Object item:f.getParameters())params.add(compileAst((Expression)item,refs,depth+1));

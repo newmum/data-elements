@@ -21,7 +21,11 @@ public final class SchemaContract {
             String name = ValueTypes.field(node.path("name").asText());
             if (!names.add(name)) throw new MappingException("SCHEMA_DUPLICATE_FIELD", "Schema包含重复字段：" + name);
             String type = ValueTypes.type(node.path("logicalType").asText(node.path("type").asText("ANY")));
-            fields.add(new Field(name, type, node.path("nullable").asBoolean(true), node.path("length").asInt(0), node.path("precision").asInt(0), node.path("scale").asInt(0)));
+            int precision=node.path("precision").asInt(0),scale=node.path("scale").asInt(0);
+            // Oracle JDBC reports scale -127 for an unqualified NUMBER. It is
+            // floating decimal metadata, not a request to round to 10^127.
+            if(type.equals("DECIMAL")&&(precision==0||scale==-127)){precision=0;scale=0;}
+            fields.add(new Field(name, type, node.path("nullable").asBoolean(true), node.path("length").asInt(0), precision, scale));
         }
         return List.copyOf(fields);
     }
@@ -80,10 +84,11 @@ public final class SchemaContract {
             } else if(physical!=null&&output.path("logicalType").asText().equals("DATE")&&physical.logicalType().equals("DATETIME"))
                 for(JsonNode declared:contract.path("target"))if(declared.path("name").asText().equals(physical.name())&&declared.path("dateContainsTime").asBoolean())output.put("logicalType","DATETIME");
             if(physical==null)continue;
+            if(physical.logicalType().equals("DECIMAL")&&physical.precision()==0&&output.path("scale").asInt()==-127)output.put("precision",0).put("scale",0);
             if(!output.has("logicalType")||output.path("logicalType").asText().equals("ANY"))output.put("logicalType",physical.logicalType());
             if(!output.has("nullable"))output.put("nullable",physical.nullable());
             if(physical.length()>0&&!output.has("length"))output.put("length",physical.length());
-            if(physical.precision()>0){if(!output.has("precision"))output.put("precision",physical.precision());if(!output.has("scale"))output.put("scale",physical.scale());}
+            if(physical.precision()>0){if(output.has("precision")&&output.path("precision").asInt()==0)output.put("precision",physical.precision()).put("scale",physical.scale());else{if(!output.has("precision"))output.put("precision",physical.precision());if(!output.has("scale"))output.put("scale",physical.scale());}}
         }
     }
     private static Map<String,String> formats(JsonNode fields) {
