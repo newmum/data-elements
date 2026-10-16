@@ -1,6 +1,7 @@
 <template>
-  <div class="card-container h-auto px-5 pt-5 pb-2 flex-1 flex flex-col">
+  <div class="table-preview card-container h-auto px-5 pt-5 pb-2 flex-1 flex flex-col">
     <data-table
+      :key="props.tableId"
       ref="tableRef"
       :columns="state.previewCols"
       :loading="state.loading"
@@ -14,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, onMounted, ref } from "vue";
+import { reactive, ref, watch } from "vue";
 import { isString } from "lodash-es";
 
 const props = defineProps<{
@@ -27,37 +28,35 @@ const state = reactive({
   loading: false,
   errMsg: "",
   previewCols: [] as any[],
-  previewData: [],
 });
 
-onMounted(() => {
-  init();
+watch(() => props.tableId, () => {
+  state.previewCols = [];
+  state.errMsg = "";
 });
 
-const init = async () => {
-  const tableId = props.tableId;
-  if (!tableId) return;
-
-  state.loading = true;
-  try {
-    await $common.get("/dst/database/metadata/columns", { tid: tableId }).then((cols) => {
-      // 设置预览表格列配置
-      state.previewCols = cols?.map((el) => ({ label: el.columnName, prop: el.columnName,sortable:"custom" }));
-      if (!state.previewCols.length) {
-        state.errMsg = "无表字段数据";
-      }
-    });
-  } finally {
-    state.loading = false;
-  }
+// 使用结果集的原始字段作为 prop，中文展示名不参与排序或数据取值。
+const previewColumns = (columns: string[] = [], labels: Record<string, string> = {}) => {
+  const names = new Map(Object.entries(labels).map(([key, value]) => [key.toLowerCase(), value]));
+  return columns.map((field) => {
+    const english = field.split(".").pop() || field;
+    const chinese = String(names.get(field.toLowerCase()) || names.get(english.toLowerCase()) || "").trim();
+    return {
+      label: chinese && chinese.toLowerCase() !== english.toLowerCase() ? `${chinese}\n${english}` : english,
+      prop: field,
+      sortable: "custom",
+      minWidth: 160,
+      showOverflowTooltip: true,
+    };
+  });
 };
 
 const fetchData = async ({ pageNo, pageSize,sortField,sortDir }) => {
+  const tableId = props.tableId;
   try {
-    const tableId = props.tableId;
     if (!tableId) {
       state.errMsg = "表id不能为空";
-      return;
+      return { list: [], total: 0 };
     }
 
     const res = await $common.post(
@@ -69,24 +68,20 @@ const fetchData = async ({ pageNo, pageSize,sortField,sortDir }) => {
       },
       { _hiddenErrorMsg: true }
     );
+    if (tableId !== props.tableId) return { list: [], total: 0 };
     if (isString(res)) {
       state.errMsg = res;
-      return;
+      return { list: [], total: 0 };
     }
     state.errMsg = "";
-    const { rows: list, columns, total } = res as any;
-    if (!state.previewCols.length) {
-      state.previewCols = columns?.map((el) => ({
-        label: el,
-        prop: el,sortable:"custom",
-      }));
-    }
+    const { rows: list, columns, total, columnLabels } = res as any;
+    state.previewCols = previewColumns(columns, columnLabels);
     return {
       list,
       total,
     };
   } catch (error) {
-    state.errMsg = error?.message || error;
+    if (tableId === props.tableId) state.errMsg = error?.message || String(error);
     return {
       list: [],
       total: 0,
@@ -95,4 +90,19 @@ const fetchData = async ({ pageNo, pageSize,sortField,sortDir }) => {
 };
 </script>
 
-<style scoped lang="scss"></style>
+<style scoped lang="scss">
+.table-preview :deep(.el-table__header-wrapper .el-table__header .el-table__cell .cell > span.title) {
+  display: inline-block;
+  white-space: pre-line;
+  line-height: 1.5;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--el-text-color-secondary);
+
+  &::first-line {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+  }
+}
+</style>

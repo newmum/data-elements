@@ -728,7 +728,7 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
     public List<ColumnInfo> getColumns(DataSourceConfig config, String tableName) {
         List<ColumnInfo> columns = new ArrayList<>();
         String sql = "SELECT c.COLUMN_NAME, cc.COMMENTS AS COLUMN_COMMENT, c.DATA_TYPE, "
-                + "c.DATA_LENGTH, c.DATA_PRECISION, c.DATA_SCALE, c.NULLABLE, "
+                + "c.DATA_LENGTH, c.CHAR_LENGTH, c.CHAR_USED, c.DATA_PRECISION, c.DATA_SCALE, c.NULLABLE, "
                 + "c.DATA_DEFAULT, c.COLUMN_ID "
                 + "FROM all_tab_columns c "
                 + "LEFT JOIN all_col_comments cc ON c.TABLE_NAME = cc.TABLE_NAME "
@@ -749,6 +749,11 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
                         column.setColumnComment(rs.getString("COLUMN_COMMENT"));
                         column.setDataType(rs.getString("DATA_TYPE"));
                         column.setLength(rs.getLong("DATA_LENGTH"));
+                        column.setSourceDatabaseType(config.getDatabaseType().getCode());
+                        column.setByteLength(rs.getLong("DATA_LENGTH"));
+                        column.setCharacterLength(rs.getLong("CHAR_LENGTH"));
+                        column.setLengthSemantics("C".equals(rs.getString("CHAR_USED"))?"CHAR":"BYTE");
+                        if("CHAR".equals(column.getLengthSemantics())||Set.of("NCHAR","NVARCHAR2").contains(column.getDataType()))column.setLength(column.getCharacterLength());
                         column.setPrecision(rs.getInt("DATA_PRECISION"));
                         column.setScale(rs.getInt("DATA_SCALE"));
                         column.setNullable("Y".equals(rs.getString("NULLABLE")));
@@ -764,8 +769,9 @@ public class OracleMetadataExplorer extends AbstractMetadataExplorer {
                                 column.setColumnType(dataType + "(" + column.getPrecision() + ")");
                             }
                         } else if (column.getLength() != null && column.getLength() > 0
-                                && ("VARCHAR2".equals(dataType) || "CHAR".equals(dataType) || "NVARCHAR2".equals(dataType))) {
-                            column.setColumnType(dataType + "(" + column.getLength() + ")");
+                                && ("VARCHAR2".equals(dataType) || "VARCHAR".equals(dataType) || "CHAR".equals(dataType) || "NCHAR".equals(dataType) || "NVARCHAR2".equals(dataType))) {
+                            boolean national=Set.of("NCHAR","NVARCHAR2").contains(dataType);
+                            column.setColumnType(dataType + "(" + column.getLength() + (national?"":" "+column.getLengthSemantics()) + ")");
                         } else {
                             column.setColumnType(dataType);
                         }

@@ -36,6 +36,19 @@ import org.ssssssss.script.runtime.ExitValue;
 class BatchCreateTableDdlMagicTest {
     private static final String SOURCE_ID = "8a56e7d664934c1499102cfa508cd58a";
 
+    @Test void twentyOracleTargetsWithTwentyOrHundredUnicodeFieldsStillUseOneAuthorizedRead()throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture f=new Fixture(20);f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER'");
+            f.ddlGenerator.expectedColumns=count;
+            var fields=new ArrayList<Map<String,Object>>();
+            for(int i=0;i<count;i++)fields.add(Map.of("columnName","f"+i,"dataType","varchar","sourceDatabaseType","postgresql","sourceColumnType","VARCHAR(50)","length",50));
+            for(int i=0;i<f.targets.size();i++){var target=new LinkedHashMap<>(f.targets.get(i));target.put("tableItems",fields);f.targets.set(i,target);}
+            var result=(Map<?,?>)f.run();
+            for(var item:(List<Map<String,Object>>)result.get("results"))assertEquals(count,item.get("ddl").toString().split("50 CHAR",-1).length-1);
+            assertEquals(1,f.counter.reads);assertEquals(0,f.counter.writes);assertEquals(20,f.ddlGenerator.calls);
+        }
+    }
+
     @Test
     void sourceTextConversionNeedsNoTenantSessionOrDatabaseObjectsForTwentyAndHundredFields() throws Exception {
         String script = CanonicalMagicSources.byId(SOURCE_ID);
@@ -92,12 +105,12 @@ class BatchCreateTableDdlMagicTest {
         f.targets.set(0, target);
         var result = assertInstanceOf(Map.class, f.run());
         String ddl = ((Map<?, ?>) ((List<?>) result.get("results")).getFirst()).get("ddl").toString();
-        assertTrue(ddl.contains("VARCHAR2(64)") || ddl.contains("VARCHAR2 (64)"));
+        assertTrue(ddl.contains("VARCHAR2(64 CHAR)") || ddl.contains("VARCHAR2 (64 CHAR)"));
         assertFalse(ddl.contains("CLOB"));
-        assertEquals("VARCHAR2(64)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
+        assertEquals("VARCHAR2(64 CHAR)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
         target.put("tableItems", List.of(Map.of("columnName", "UNID", "dataType", "varchar",
                 "columnType", "varchar(32)", "length", 128, "primaryKey", 1)));
-        f.run(); assertEquals("VARCHAR2(128)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
+        f.run(); assertEquals("VARCHAR2(128 CHAR)", f.ddlGenerator.lastColumns.getFirst().getColumnType());
     }
 
     @Test
@@ -373,13 +386,14 @@ class BatchCreateTableDdlMagicTest {
 
     public static final class DdlGenerator {
         int calls;
+        int expectedColumns=1;
         boolean rename;
         List<ColumnInfo> lastColumns;
         public String generateCreateTableDdl(DataSourceConfig config, String tableName,
                                              List<ColumnInfo> columns, String tableComment) {
             calls++;
             lastColumns = List.copyOf(columns);
-            assertEquals(1, columns.size());
+            assertEquals(expectedColumns, columns.size());
             String name = rename ? "UNEXPECTED_TABLE" : tableName;
             return switch (config.getDatabaseType().getCode()) {
                 case "oracle" -> new OracleMetadataExplorer().generateCreateTableDdl(config, name, columns, tableComment);

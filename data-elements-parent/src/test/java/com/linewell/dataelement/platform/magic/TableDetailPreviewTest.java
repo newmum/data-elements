@@ -1,0 +1,153 @@
+package com.linewell.dataelement.platform.magic;
+
+import static org.junit.jupiter.api.Assertions.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.ssssssss.magicapi.core.context.RequestEntity;
+import org.ssssssss.magicapi.core.interceptor.DefaultResultProvider;
+import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
+import org.ssssssss.magicapi.modules.db.*;
+import org.ssssssss.magicapi.modules.db.dialect.*;
+import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
+import org.ssssssss.magicapi.modules.db.provider.*;
+import org.ssssssss.script.*;
+import org.ssssssss.script.runtime.ExitValue;
+
+/** Executes the canonical detail-preview script, SQL scope checks and the Hive query boundary. */
+public class TableDetailPreviewTest {
+    private static class PreviewRejected extends RuntimeException {
+        final int code;
+        PreviewRejected(ExitValue exit){super(String.valueOf(exit.getValues()[1]));code=((Number)exit.getValues()[0]).intValue();}
+    }
+    public static class Tenant { public String id(){return "tenant-a";} }
+    public static class Scope {
+        boolean denied;
+        public List<?> visibleDataSourcesFor(String permission, List<Map<String,Object>> sources) {
+            assertEquals("MENU:2081000000000000002",permission);
+            assertEquals("tenant-a",sources.getFirst().get("tenantId"));
+            return denied ? List.of() : sources;
+        }
+    }
+    public static class Connections {
+        public Map<String,Object> read(String id) {
+            return id.equals("source") ? Map.of("metadataAccessMode","server-managed-mrs","database","preview") : Map.of();
+        }
+    }
+    public static String hiveText(String hex) {return new String(HexFormat.of().parseHex(hex),StandardCharsets.UTF_8);}
+    public static class Hive {
+        final List<String> queries=new ArrayList<>();final JdbcTemplate db;String failure;
+        Hive(JdbcTemplate db){this.db=db;}
+        public List<Map<String,Object>> queryTable(String sql) {
+            queries.add(sql);
+            if(failure!=null)throw new IllegalStateException(failure);
+            if(sql.startsWith("DESCRIBE "))return List.of(
+                Map.of("col_name","id","data_type","int","comment","物理编号"),
+                Map.of("col_name","gender_code","data_type","string","comment","性别代码"),
+                Map.of("col_name","# Partition Information","data_type","","comment",""),
+                Map.of("col_name","id","data_type","int","comment","重复分区列"));
+            // H2 executes SELECT/COUNT/order/limit. Adapt Hive's UTF-8 decoder and
+            // STRING cast to their equivalent H2 expressions; no live Hive is implied.
+            String executable=sql.replaceAll("decode\\(unhex\\('([a-f0-9]*)'\\),'UTF-8'\\)","HIVE_TEXT('$1')").replace(" AS STRING)"," AS VARCHAR)");
+            return db.queryForList(executable).stream().map(row->{
+                Map<String,Object> result=new LinkedHashMap<>();row.forEach((key,value)->result.put("preview.demo."+key,value));return result;
+            }).toList();
+        }
+    }
+    private static class Counter implements SQLInterceptor {
+        int count; public void preHandle(BoundSql sql,RequestEntity request){count++;}
+    }
+    private static class Fixture {
+        final JdbcTemplate db;final SQLModule module;final Counter counter=new Counter();
+        final Scope scope=new Scope();final Hive hive;final String script;
+        Fixture() throws Exception {
+            var ds=new DriverManagerDataSource("jdbc:h2:mem:detail_preview_"+UUID.randomUUID()+";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
+            var sources=new MagicDynamicDataSource();sources.setDefault(ds);module=new SQLModule(sources);module.setDataSourceNode(sources.getDataSource());
+            var dialects=new DialectAdapter();dialects.add(new MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});
+            module.setDialectAdapter(dialects);module.setResultProvider(new DefaultResultProvider("detail-preview-test"));
+            var mapper=new ColumnMapperAdapter();mapper.add(new DefaultColumnMapperProvider());mapper.add(new CamelColumnMapperProvider());mapper.setDefault("camel");
+            module.setColumnMapperProvider(mapper);module.setSqlInterceptors(List.of(counter));module.setNamedTableInterceptors(List.of());module.setColumnMapRowMapper(mapper.getDefaultColumnMapRowMapper());module.setRowMapColumnMapper(v->v);
+            db=new JdbcTemplate(ds);hive=new Hive(db);
+            db.execute("CREATE TABLE db_datasource_t(tid VARCHAR,tenant_id VARCHAR,db_type VARCHAR,db_name VARCHAR,created_by VARCHAR,org_id VARCHAR,is_del INT)");
+            db.execute("CREATE TABLE db_table_t(tid VARCHAR,tenant_id VARCHAR,datasource_id VARCHAR,table_name VARCHAR,is_del INT)");
+            db.execute("CREATE TABLE db_table_column_t(tid VARCHAR,tenant_id VARCHAR,table_id VARCHAR,column_name VARCHAR,column_comment VARCHAR,primary_key INT,is_del INT)");
+            db.update("INSERT INTO db_datasource_t VALUES('source','tenant-a','hive','展示名称','owner','org',0),('foreign-source','tenant-b','hive','other','owner','org',0)");
+            db.update("INSERT INTO db_table_t VALUES('table','tenant-a','source','preview.demo',0),('foreign-table','tenant-b','foreign-source','other.secret',0)");
+            db.update("INSERT INTO db_table_column_t VALUES('a','tenant-a','table','id','编号',1,0),('foreign','tenant-b','table','gender_code','其他租户注释',0,0)");
+            db.execute("CREATE SCHEMA preview");db.execute("CREATE TABLE preview.demo(id INT,gender_code VARCHAR)");
+            db.execute("CREATE ALIAS HIVE_TEXT FOR 'com.linewell.dataelement.platform.magic.TableDetailPreviewTest.hiveText'");
+            for(int i=1;i<=240;i++)db.update("INSERT INTO preview.demo VALUES(?,?)",i,i%2==0?"F":"M");
+            script=CanonicalMagicSources.byId("bc30a3edb1f04bceaeee373ed5952d4a")
+                .replaceAll("(?m)^import ('@/common/datasourceConnectionConfig'|jsons|tenantRuntime|dataScope|tableSort|hwhive|com.linewell.dataelement.elasticsearch.EsCommonService|com.linewell.dataelement.metautil.service.MetadataDataQueryService)[^\\r\\n]*\\r?\\n","");
+        }
+        Map<String,Object> run(Map<String,Object> body) {
+            var context=new HashMap<String,Object>();context.put("db",module);context.put("tenantRuntime",new Tenant());context.put("dataScope",scope);context.put("hwhive",hive);context.put("connections",new Connections());context.put("tableSort",new TableSortMagicModule());context.put("body",body);
+            var result=MagicScript.create("var datasourceConnectionConfig=(a,b,c,d)=>connections.read(b)\n"+script,null).execute(new MagicScriptContext(context));
+            if(result instanceof ExitValue exit)throw new PreviewRejected(exit);
+            return (Map<String,Object>)result;
+        }
+    }
+    @Test void twentyAndOneHundredRowsUseFixedQueriesAndPreserveChineseLabels() throws Exception {
+        var f=new Fixture();
+        for(int size:List.of(20,100)) {
+            f.counter.count=0;f.hive.queries.clear();
+            var result=f.run(Map.of("tableId","table","pageNo",2,"pageSize",size,"sortField","id","sortDir","desc"));
+            assertEquals(5,f.counter.count);assertEquals(3,f.hive.queries.size());
+            var rows=(List<Map<String,Object>>)result.get("rows");
+            assertEquals(size,rows.size());assertEquals(240-size,rows.getFirst().get("id"));
+            assertEquals(240L,((Number)result.get("total")).longValue());
+            assertEquals(Map.of("id","编号","gender_code","性别代码"),result.get("columnLabels"));
+            assertTrue(f.hive.queries.getLast().endsWith("LIMIT "+size+", "+size));
+            assertEquals(List.of("id","gender_code"),result.get("columns"));
+        }
+        f.db.update("DELETE FROM preview.demo");assertEquals(List.of(),f.run(Map.of("tableId","table")).get("rows"));
+    }
+    @Test void filtersAreWhitelistedAndValuesCannotChangeSqlStructure() throws Exception {
+        var f=new Fixture();
+        var result=f.run(Map.of("tableId","table","columns",List.of("ID"),"conditions",List.of(Map.of("field","gender_code","op","eq","value","F"))));
+        assertEquals(120L,((Number)result.get("total")).longValue());assertEquals(List.of("id"),result.get("columns"));
+        result=f.run(Map.of("tableId","table","conditions",Map.of("gender_code","F")));
+        assertEquals(120L,((Number)result.get("total")).longValue());
+        String injection="中文'\\ OR 1=1 --\n";
+        result=f.run(Map.of("tableId","table","conditions",List.of(Map.of("field","gender_code","op","eq","value",injection))));
+        assertEquals(0L,((Number)result.get("total")).longValue());
+        assertFalse(f.hive.queries.getLast().contains(injection));
+        assertTrue(f.hive.queries.getLast().contains(HexFormat.of().formatHex(injection.getBytes(StandardCharsets.UTF_8))));
+        for(var body:List.of(
+            Map.<String,Object>of("tableId","table","sortField","id; DROP TABLE demo","sortDir","asc"),
+            Map.<String,Object>of("tableId","table","columns",List.of("other.secret")),
+            Map.<String,Object>of("tableId","table","conditions",List.of(Map.of("field","id","op","raw","value","1"))),
+            Map.<String,Object>of("tableId","table","pageSize",101)))assertEquals(400,assertThrows(PreviewRejected.class,()->f.run(body)).code);
+    }
+    @Test void scopeAndTenantRejectBeforeHiveAndCrossDatabaseNamesCannotEscape() throws Exception {
+        var f=new Fixture();
+        assertEquals(500,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","foreign-table"))).code);assertEquals(0,f.hive.queries.size());
+        f.scope.denied=true;assertEquals(403,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table"))).code);assertEquals(0,f.hive.queries.size());
+        f.scope.denied=false;
+        f.db.update("UPDATE db_table_t SET table_name='other.demo' WHERE tid='table'");
+        assertEquals(400,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table"))).code);assertEquals(0,f.hive.queries.size());
+    }
+    @Test void groupedDictionaryReadsKeepTheExistingValueNameCountContract() throws Exception {
+        var f=new Fixture();
+        var result=f.run(Map.of("tableId","table","groupByColumn","gender_code"));
+        var values=(List<Map<String,Object>>)result.get("groupedValues");
+        assertEquals(2,values.size());assertEquals("F",values.getFirst().get("value"));assertNull(values.getFirst().get("name"));assertEquals(120L,((Number)values.getFirst().get("count")).longValue());
+        assertEquals(2,f.hive.queries.size());
+    }
+    @Test void equalAndNullSortValuesHaveStableCrossPageOrder() throws Exception {
+        var f=new Fixture();f.db.update("UPDATE preview.demo SET gender_code=NULL WHERE id=1");
+        var small=f.run(Map.of("tableId","table","pageSize",20,"sortField","gender_code","sortDir","asc"));
+        var large=f.run(Map.of("tableId","table","pageSize",100,"sortField","gender_code","sortDir","asc"));
+        var rows=(List<Map<String,Object>>)large.get("rows");assertEquals(small.get("rows"),rows.subList(0,20));assertEquals(2,rows.getFirst().get("id"));
+        var next=f.run(Map.of("tableId","table","pageNo",2,"pageSize",20,"sortField","gender_code","sortDir","asc"));assertEquals(rows.subList(20,40),next.get("rows"));
+        var end=f.run(Map.of("tableId","table","pageNo",3,"pageSize",100,"sortField","gender_code","sortDir","asc"));
+        assertEquals(1,((List<Map<String,Object>>)end.get("rows")).getLast().get("id"));
+    }
+    @Test void missingServerProfileHasAnActionableErrorWithoutLeakingItsPath() throws Exception {
+        var f=new Fixture();f.hive.failure="Hive conf file not found: hiveclient.properties (dir=/private/hive)";
+        var failure=assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table")));assertEquals(503,failure.code);
+        assertTrue(failure.getMessage().contains("hiveclient.properties"),failure.getMessage());assertFalse(failure.getMessage().contains("/private/hive"));
+    }
+}

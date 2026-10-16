@@ -21,6 +21,53 @@ import static org.mockito.Mockito.*;
 
 class RegisteredMappingSchemaServiceTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void probeSchemaAliasesAndEmptyValuesCannotBlockMapping()throws Exception {
+        for(String key:List.of("schema","currentSchema"))for(Object empty:Arrays.asList(null,"","  ")) {
+            Fixture f=new Fixture(1);var config=new HashMap<String,Object>();config.put("defaultSchema",empty);config.put(key,"\"Business\"");
+            f.config=Map.of("db",config);when(f.metadata.getDatabaseProductName()).thenReturn("Oracle");
+            when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(List.of(jdbcColumn("catalog","Business","table_0","id"))));
+            try(var tenant=TenantContext.use("tenant-A")) {
+                var registered=f.service.resolve(f.references);assertEquals("Business",registered.get("ref-0").schema());
+                assertEquals(1,f.service.physicalBatch(registered).get("ref-0").size());
+            }
+            verify(f.physical,never()).getSchema();verify(f.physical,never()).prepareStatement(anyString());
+        }
+    }
+    @Test void oceanbaseOracleUsesRegisteredModeAndOwnerOnceForTwentyAndHundredTables()throws Exception {
+        for(int count:List.of(20,100))for(var config:List.of(
+                Map.<String,Object>of("dbType","oceanbaseoracle","username","app@tenant#cluster"),
+                Map.<String,Object>of("dbType","oceanbase","compatibleMode","ORACLE","username","app@tenant#cluster"),
+                Map.<String,Object>of("jdbcURL","jdbc:oceanbase:oracle://test/service","dbUser","app@tenant#cluster"))) {
+            Fixture f=new Fixture(count);f.config=Map.of("db",config);when(f.metadata.getDatabaseProductName()).thenReturn("OceanBase");
+            when(f.physical.getSchema()).thenThrow(new AbstractMethodError("getSchema"));
+            when(f.physical.prepareStatement(anyString())).thenThrow(new SQLFeatureNotSupportedException());
+            var fields=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)fields.add(jdbcColumn("catalog","APP","table_"+i,"id"));
+            fields.add(jdbcColumn("catalog","FOREIGN","table_0","secret"));
+            when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(fields));
+            try(var tenant=TenantContext.use("tenant-A")) {
+                var actual=f.service.physicalBatch(f.service.resolve(f.references));assertEquals(count,actual.size());assertFalse(actual.toString().contains("secret"));
+            }
+            verify(f.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.engine,times(1)).openRegistered(anyString(),anyMap());
+            verify(f.physical,times(1)).getSchema();verify(f.metadata,times(1)).getColumns(eq("catalog"),eq("APP"),eq("%"),eq("%"));
+            verify(f.physical,times(1)).prepareStatement(anyString());
+        }
+    }
+    @Test void oldOracleDriverResolvesTheActualSessionSchemaBeforeTheLoginOwner()throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","ORACLE","username","LOGIN_USER"));
+            when(f.metadata.getDatabaseProductName()).thenReturn("Oracle");when(f.metadata.getUserName()).thenReturn("LOGIN_USER");
+            when(f.physical.getSchema()).thenThrow(new SQLFeatureNotSupportedException());
+            var context=mock(PreparedStatement.class);var current=mock(ResultSet.class);
+            when(f.physical.prepareStatement("SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA') FROM DUAL")).thenReturn(context);
+            when(context.executeQuery()).thenReturn(current);when(current.next()).thenReturn(true,false);when(current.getString(1)).thenReturn("BUSINESS");
+            var fields=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)fields.add(jdbcColumn("catalog","BUSINESS","table_"+i,"id"));
+            when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(fields));
+            try(var tenant=TenantContext.use("tenant-A")){assertEquals(count,f.service.physicalBatch(f.service.resolve(f.references)).size());}
+            verify(context,times(1)).executeQuery();verify(context).setMaxRows(1);verify(context).setQueryTimeout(10);verify(context).close();verify(current).close();
+            verify(f.metadata,times(1)).getColumns(eq("catalog"),eq("BUSINESS"),eq("%"),eq("%"));verify(f.metadata,never()).getUserName();
+        }
+    }
     @Test void kingbaseCanOmitTableCatalogWithoutLosingAuthorizedFieldsOrAddingQueries()throws Exception {
         for(int count:List.of(20,100))for(String absent:Arrays.asList(null,"")) {
             Fixture fixture=new Fixture(count);fixture.config=Map.of("db",Map.of("dbType","KINGBASE","defaultSchema","public"));

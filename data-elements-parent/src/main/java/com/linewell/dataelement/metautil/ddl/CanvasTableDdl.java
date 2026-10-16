@@ -21,10 +21,29 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 @Component
 @MagicModule("canvasTableDdl")
 public class CanvasTableDdl {
+    /** Preview stays editable; execution must not send a newly promoted LOB key to Oracle. */
+    public static void validateStringKeys(String ddl,DataSourceConfig config) {
+        if(DdlDialect.family(config.getDatabaseType())!=DdlDialect.Family.ORACLE)return;
+        if(!ddl.matches("(?is)^\\s*CREATE\\s+TABLE\\b.*"))return;
+        for(var statement:SQLUtils.parseStatements(ddl,DdlDialect.parser(config.getDatabaseType()))) {
+            if(!(statement instanceof SQLCreateTableStatement create))continue;
+            var keys=new java.util.HashSet<String>();
+            create.getPrimaryKeyNames().forEach(name->keys.add(SQLUtils.normalize(name).toLowerCase(Locale.ROOT)));
+            for(var element:create.getTableElementList())if(element instanceof com.alibaba.druid.sql.ast.statement.SQLUniqueConstraint unique)
+                unique.getColumns().forEach(key->keys.add(SQLUtils.normalize(key.getExpr().toString()).toLowerCase(Locale.ROOT)));
+            for(var column:create.getColumnDefinitions()) {
+                boolean key=column.isPrimaryKey()||keys.contains(SQLUtils.normalize(column.getColumnName()).toLowerCase(Locale.ROOT))
+                        ||column.getConstraints().stream().anyMatch(com.alibaba.druid.sql.ast.statement.SQLColumnUniqueKey.class::isInstance);
+                if(key&&java.util.Set.of("CLOB","NCLOB","BLOB","LONG").contains(column.getDataType().getName().toUpperCase(Locale.ROOT)))
+                    throw new IllegalArgumentException("字段 "+column.getColumnName()+" 的容量需要大字段类型，但Oracle兼容库不允许其作为主键或唯一键；请调整键设计或显式确认可用的字段容量，不会自动截断或删除键约束");
+            }
+        }
+    }
+
     public Map<String, Object> parse(String ddl, DataSourceConfig config) {
         if (ddl == null || ddl.isBlank()) throw new IllegalArgumentException("请输入 CREATE TABLE 建表语句");
         DbType dialect = dialect(config.getDatabaseType());
-        var statements = SQLUtils.parseStatements(ddl, dialect);
+        var statements = PortableSqlParser.parse(ddl, config.getDatabaseType());
         if (statements.isEmpty() || !(statements.getFirst() instanceof SQLCreateTableStatement create)
                 || create.isReplace() || create.getType() != null || create.getSelect() != null
                 || create.getColumnDefinitions().isEmpty()) {
@@ -52,6 +71,8 @@ public class CanvasTableDdl {
                 throw new IllegalArgumentException("COMMENT ON 必须指向本次新建的表");
             }
         }
+        // The validate-only path and actual CREATE share the same key/type checks.
+        validateStringKeys(ddl,config);
         // Strict CREATE makes a concurrent duplicate observable even if the user supplied IF NOT EXISTS.
         create.setIfNotExiists(false);
         if (config.getDatabaseType() == DatabaseType.HIVE) {

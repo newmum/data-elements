@@ -41,6 +41,17 @@ public class ColumnInfo {
      */
     private Long length;
 
+    /** Native length unit: CHAR, BYTE or UTF16; absent in legacy registration snapshots. */
+    private String lengthSemantics;
+
+    /** Native character and byte capacities, when the driver exposes them. */
+    private Long characterLength;
+    private Long byteLength;
+
+    /** Server-side guard against rendering an already prepared target type twice. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String ddlTargetDatabaseType;
+
     /**
      * 数值精度
      */

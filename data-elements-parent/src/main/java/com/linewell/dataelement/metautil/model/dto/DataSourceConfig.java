@@ -43,6 +43,10 @@ public class DataSourceConfig {
      */
     private String schema;
 
+    /** Registered database character sets; DDL conversion performs no per-column connection reads. */
+    private String charset;
+    private String nationalCharset;
+
     @NotBlank(message = "用户名不能为空")
     /**
      * 用户名

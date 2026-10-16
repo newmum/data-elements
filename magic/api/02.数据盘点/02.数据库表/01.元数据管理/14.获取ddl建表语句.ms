@@ -56,7 +56,9 @@ if (body?.importSourceDdl == true || body?.convertSourceDdl == true) {
         if (body?.convertSourceDdl != true) { return model }
         var config = new DataSourceConfig()
         config.setDatabaseType(DatabaseType.fromCode(body.targetDatabaseType))
-        var converted = portableDdl.prepare(model.columns, config.getDatabaseType())
+        config.setCharset(body?.targetCharset)
+        config.setNationalCharset(body?.targetNationalCharset)
+        var converted = portableDdl.prepare(model.columns, config)
         var ddl = metadataExplorerService.generateCreateTableDdl(config,
             body.tableName == null ? model.tableName : body.tableName, converted.columns, model.tableComment)
         return {ddl:ddl, tableItems:converted.tableItems, warnings:converted.warnings, sourceWarnings:model.warnings}
@@ -209,6 +211,8 @@ var dataSourceOf = (asset) => {
     // Oracle SID and Service Name use different URL formats; reuse the tested JDBC URL.
     dsConfig.setJdbcUrl(firstValue(asset, ['jdbcURL', 'jdbcUrl', 'jdbc_url']))
     dsConfig.setSchema(schema)
+    dsConfig.setCharset(firstValue(asset, ['charset', 'characterSet', 'character_set', 'encoding']))
+    dsConfig.setNationalCharset(firstValue(asset, ['nationalCharset', 'nationalCharacterSet', 'ncharCharset']))
     dsConfig.setAuthMode(firstValue(asset, ['authMode', 'auth']))
     dsConfig.setPrincipal(firstValue(asset, ['principal', 'hivePrincipal', 'servicePrincipal']))
     dsConfig.setUserPrincipal(firstValue(asset, ['userPrincipal', 'clientPrincipal', 'kerberosUserPrincipal']))
@@ -307,6 +311,8 @@ if (body?.batchGenerate == true) {
             || firstValue(registered, ['dbName', 'db_name']))
         batchConfig.setUsername(firstValue(registered, ['username']) || firstValue(pool, ['username', 'user']))
         batchConfig.setSchema(firstValue(pool, ['schema', 'defaultSchema', 'currentSchema', 'schemaName']))
+        batchConfig.setCharset(firstValue(pool, ['charset', 'characterSet', 'character_set', 'encoding']))
+        batchConfig.setNationalCharset(firstValue(pool, ['nationalCharset', 'nationalCharacterSet', 'ncharCharset']))
         var requestedTableName = textOf(submittedProps.tableName).trim()
         if (targetType == DatabaseType.HIVE) { requestedTableName = requestedTableName.toLowerCase() }
         var batchColumns = []
@@ -342,12 +348,15 @@ if (body?.batchGenerate == true) {
                 columnInfo.setOrdinalPosition(rowValue(item, ['ordinalPosition'])::int)
             }
             columnInfo.setCharset(rowValue(item, ['charset']))
+            columnInfo.setLengthSemantics(rowValue(item, ['lengthSemantics']))
+            if (rowValue(item, ['characterLength']) != null) { columnInfo.setCharacterLength(rowValue(item, ['characterLength'])::long) }
+            if (rowValue(item, ['byteLength']) != null) { columnInfo.setByteLength(rowValue(item, ['byteLength'])::long) }
             columnInfo.setCollation(rowValue(item, ['collation']))
             columnInfo.setExtra(rowValue(item, ['extra']))
             batchColumns.add(columnInfo)
         }
         try {
-            var converted = portableDdl.prepare(batchColumns, targetType)
+            var converted = portableDdl.prepare(batchColumns, batchConfig)
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 requestedTableName, converted.columns, submittedProps.tableNameCn)
             ddl = withHuaweiHiveStorage(ddl, targetType, pool, targetTypeCode)
@@ -468,6 +477,9 @@ for (item in tableItems) {
         columnInfo.setOrdinalPosition(rowValue(item, ['ordinalPosition'])::int)
     }
     columnInfo.setCharset(rowValue(item, ['charset']))
+    columnInfo.setLengthSemantics(rowValue(item, ['lengthSemantics']))
+    if (rowValue(item, ['characterLength']) != null) { columnInfo.setCharacterLength(rowValue(item, ['characterLength'])::long) }
+    if (rowValue(item, ['byteLength']) != null) { columnInfo.setByteLength(rowValue(item, ['byteLength'])::long) }
     columnInfo.setCollation(rowValue(item, ['collation']))
     columnInfo.setExtra(rowValue(item, ['extra']))
     columns.add(columnInfo)
@@ -477,7 +489,7 @@ for (item in tableItems) {
 try {
     var targetTableName = textOf(propList.tableName).trim()
     if (dsConfig.getDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
-    var converted = portableDdl.prepare(columns, dsConfig.getDatabaseType())
+    var converted = portableDdl.prepare(columns, dsConfig)
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
     ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
     return ddl

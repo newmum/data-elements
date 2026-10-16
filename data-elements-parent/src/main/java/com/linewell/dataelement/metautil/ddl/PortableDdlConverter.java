@@ -5,6 +5,7 @@ import com.alibaba.druid.sql.ast.expr.SQLCharExpr;
 import com.alibaba.druid.sql.ast.expr.SQLIntegerExpr;
 import com.alibaba.druid.sql.ast.statement.*;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
+import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import java.util.*;
 import org.springframework.beans.BeanUtils;
@@ -17,7 +18,7 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 public class PortableDdlConverter {
     public Map<String,Object> read(String ddl, String sourceCode) {
         DatabaseType source = DatabaseType.fromCode(sourceCode);
-        var statements = SQLUtils.parseStatements(ddl, DdlDialect.parser(source));
+        var statements = PortableSqlParser.parse(ddl, source);
         if (statements.isEmpty() || !(statements.getFirst() instanceof SQLCreateTableStatement create)
                 || create.getColumnDefinitions().isEmpty() || create.getSelect() != null)
             throw new IllegalArgumentException("请输入一张来源表的CREATE TABLE字段定义");
@@ -70,16 +71,39 @@ public class PortableDdlConverter {
     }
 
     public Map<String,Object> prepare(List<ColumnInfo> original, DatabaseType target) {
+        var config=new DataSourceConfig();config.setDatabaseType(target);return prepare(original,config);
+    }
+
+    public Map<String,Object> prepare(List<ColumnInfo> original, DataSourceConfig config) {
+        DatabaseType target=config.getDatabaseType();
         List<ColumnInfo> columns = new ArrayList<>();
         List<Map<String,Object>> warnings = new ArrayList<>();
         for (ColumnInfo source : original) {
             ColumnInfo column = new ColumnInfo(); BeanUtils.copyProperties(source, column);
             String raw = source.getColumnType() == null || source.getColumnType().isBlank() ? source.getDataType() : source.getColumnType();
-            String rendered = PortableColumnType.render(target, source, raw);
+            String rendered = PortableColumnType.render(config, source, raw);
             column.setColumnType(rendered); column.setDataType(rendered.replaceAll("\\(.*$", ""));
+            var kind=PortableColumnType.kind(raw);
+            if(kind==PortableColumnType.Kind.UUID&&PortableColumnType.kind(rendered)==PortableColumnType.Kind.VARCHAR){column.setLength(36L);column.setLengthSemantics("CHAR");}
+            if((kind==PortableColumnType.Kind.CHAR||kind==PortableColumnType.Kind.VARCHAR)
+                    && !target.getCode().equals(source.getDdlTargetDatabaseType())) {
+                var capacity=PortableStringCapacity.render(config,source,raw,kind);
+                column.setLength(capacity.length());column.setLengthSemantics(capacity.unit());
+                column.setCharacterLength(capacity.unit().equals("CHAR")?capacity.length():null);
+                column.setByteLength(capacity.unit().equals("BYTE")?capacity.length():null);
+                if(capacity.reason()!=null)warnings.add(Map.of("field",source.getColumnName(),"message",capacity.reason()+"，目标类型为 "+rendered,"requiresEdit",false));
+            }
+            if(Set.of(PortableColumnType.Kind.CHAR,PortableColumnType.Kind.VARCHAR,PortableColumnType.Kind.TEXT,PortableColumnType.Kind.JSON).contains(kind)
+                    &&config.getCharset()!=null&&!config.getCharset().isBlank()
+                    &&!Set.of("AL32UTF8","UTF8","UTF8MB4","UTF16","UTF16LE","AL16UTF16").contains(PortableStringCapacity.charset(config.getCharset()))
+                    &&(source.getCharset()==null||!PortableStringCapacity.charset(source.getCharset()).equals(PortableStringCapacity.charset(config.getCharset()))))
+                warnings.add(Map.of("field",source.getColumnName(),"message","目标字符集 "+config.getCharset()+" 不能保证表示来源的全部字符；扩展长度不能解决字符集不兼容，请确认目标字符集","requiresEdit",true));
             var value = PortableDefaultExpression.convert(source.getDefaultValue(), source.getSourceDatabaseType(), target);
             column.setDefaultValue(value.value());
             if (value.warning() != null) warnings.add(Map.of("field", source.getColumnName(), "message", value.warning(), "requiresEdit", value.unresolved()));
+            if(target==DatabaseType.MYSQL&&PortableColumnType.kind(rendered)==PortableColumnType.Kind.TEXT
+                    &&value.value()!=null&&!value.value().isBlank())
+                warnings.add(Map.of("field",source.getColumnName(),"message","目标已使用大文本类型，默认值语法受MySQL版本限制，请确认默认值表达式后再建表","requiresEdit",true));
             if (PortableColumnType.kind(raw) == PortableColumnType.Kind.UNKNOWN && !rendered.equalsIgnoreCase(raw))
                 warnings.add(Map.of("field", source.getColumnName(), "message", "来源原生类型已转为目标库长文本，请确认写入表示", "requiresEdit", false));
             if (DdlDialect.family(target) == DdlDialect.Family.ORACLE && Set.of("CLOB", "NCLOB", "BLOB", "LONG").contains(rendered)
@@ -87,9 +111,31 @@ public class PortableDdlConverter {
                 warnings.add(Map.of("field", source.getColumnName(), "message", "目标库不支持长文本或二进制大字段作为键，请编辑类型或取消键约束", "requiresEdit", true));
             // Already rendered for the target. Do not reinterpret target DATE as an origin Oracle DATE.
             column.setSourceDatabaseType(null);
+            column.setDdlTargetDatabaseType(target.getCode());
             columns.add(column);
         }
+        fitMysqlRow(config,columns,warnings);
         return Map.of("columns", columns, "tableItems", items(columns), "warnings", warnings);
+    }
+
+    /** MySQL's row byte budget is shared by columns, not a per-column 65535-character allowance. */
+    private static void fitMysqlRow(DataSourceConfig config,List<ColumnInfo> columns,List<Map<String,Object>> warnings) {
+        if(!Set.of(DatabaseType.MYSQL,DatabaseType.MARIADB,DatabaseType.OCEANBASE_MYSQL).contains(config.getDatabaseType()))return;
+        long rowBytes=columns.size()*32L;
+        var candidates=new ArrayList<ColumnInfo>();
+        for(var column:columns)if(Set.of(PortableColumnType.Kind.CHAR,PortableColumnType.Kind.VARCHAR).contains(PortableColumnType.kind(column.getColumnType()))) {
+            long n=column.getLength()==null?0:column.getLength();rowBytes+=Math.min(n,65535)*4+2;
+            if(!Boolean.TRUE.equals(column.getPrimaryKey())&&!Boolean.TRUE.equals(column.getUnique())&&!Boolean.TRUE.equals(column.getIndexed())
+                    &&(column.getDefaultValue()==null||column.getDefaultValue().isBlank()))candidates.add(column);
+        }
+        candidates.sort(Comparator.comparingLong((ColumnInfo c)->c.getLength()==null?0:c.getLength()).reversed());
+        for(var column:candidates) {
+            if(rowBytes<=60000)break;
+            rowBytes-=Math.min(column.getLength(),65535)*4+2;
+            column.setColumnType("LONGTEXT");column.setDataType("LONGTEXT");column.setLength(0L);column.setCharacterLength(null);column.setByteLength(null);
+            warnings.add(Map.of("field",column.getColumnName(),"message","目标行的多字节字符串容量超过MySQL行字节预算，已将此非键字段转为LONGTEXT","requiresEdit",false));
+        }
+        if(rowBytes>60000)warnings.add(Map.of("field","","message","目标行的键/索引字段超过MySQL保守行字节预算，请调整字段及索引设计","requiresEdit",true));
     }
 
     public String logicalType(String raw, String sourceCode) {
@@ -158,6 +204,7 @@ public class PortableDdlConverter {
             item.put("quotedIdentifier",Boolean.TRUE.equals(column.getQuotedIdentifier()));
             item.put("dataType", column.getDataType()); item.put("columnType", column.getColumnType());
             item.put("length", column.getLength() == null ? 0 : column.getLength()); item.put("precisionLength", column.getPrecision()); item.put("scale", column.getScale());
+            item.put("lengthSemantics",column.getLengthSemantics());item.put("characterLength",column.getCharacterLength());item.put("byteLength",column.getByteLength());
             item.put("defaultValue", column.getDefaultValue()); item.put("primaryKey", Boolean.TRUE.equals(column.getPrimaryKey()) ? 1 : 0);
             item.put("isUnique", Boolean.TRUE.equals(column.getUnique()) ? 1 : 0); item.put("autoIncrement", Boolean.TRUE.equals(column.getAutoIncrement()) ? 1 : 0);
             item.put("nullable", Boolean.FALSE.equals(column.getNullable()) ? 0 : 1); item.put("sourceDatabaseType", column.getSourceDatabaseType());

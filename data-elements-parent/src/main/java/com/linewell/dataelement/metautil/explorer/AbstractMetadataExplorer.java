@@ -196,6 +196,8 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         c.setHost(normalize(config.getHost()));
         c.setPort(config.getPort());
         c.setDatabase(normalize(config.getDatabase()));
+        c.setCharset(config.getCharset());
+        c.setNationalCharset(config.getNationalCharset());
         c.setUsername(normalize(config.getUsername()));
         c.setPassword(config.getPassword());
         c.setJdbcUrl(normalize(config.getJdbcUrl()));
@@ -688,6 +690,12 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             return generateCreateTableDdl(tableName, columns, tableComment);
         }
 
+        // Direct generation and Magic materialization share the same capacity conversion.
+        // Prepared target columns are marked server-side, so byte/UTF-16 expansion is idempotent.
+        @SuppressWarnings("unchecked")
+        List<ColumnInfo> prepared=(List<ColumnInfo>)new com.linewell.dataelement.metautil.ddl.PortableDdlConverter().prepare(columns,cfg).get("columns");
+        columns=prepared;
+
         String tableCmt = normalize(tableComment);
 
         // 1) 生成 CREATE TABLE 主体
@@ -795,6 +803,12 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
                 ddl.append(" COMMENT '").append(escapeSqlStringLiteral(tableCmt)).append("'");
             }
         }
+        if (java.util.Set.of(DatabaseType.MYSQL,DatabaseType.MARIADB,DatabaseType.OCEANBASE_MYSQL).contains(dbType)) {
+            String charset=cfg.getCharset()==null||cfg.getCharset().isBlank()?"utf8mb4":cfg.getCharset().trim();
+            if(java.util.Set.of("UTF-8","UTF_8","AL32UTF8").contains(charset.toUpperCase(Locale.ROOT)))charset="utf8mb4";
+            if(!charset.matches("[A-Za-z0-9_]+"))throw new IllegalArgumentException("目标字符集名称无效");
+            ddl.append(" DEFAULT CHARACTER SET ").append(charset);
+        }
         ddl.append(";\n");
 
         // 2) 追加 COMMENT ON（PG/KingBase/GaussDB/Oracle/达梦/OceanBase(Oracle)）
@@ -900,6 +914,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
         DataSourceConfig effectiveConfig = effectiveConfig(config);
         assertWritableDdlSchema(effectiveConfig);
+        com.linewell.dataelement.metautil.ddl.CanvasTableDdl.validateStringKeys(ddl,effectiveConfig);
         try (Connection conn = getConnection(effectiveConfig);
              Statement stmt = conn.createStatement()) {
             // 在执行 DDL 之前，根据不同数据库类型应用 schema / search_path / current_schema 等设置

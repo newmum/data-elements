@@ -479,7 +479,7 @@ class MaterializationTemplateMagicTest {
             "mysql|set|set('A','B')|text|0|0|0",
             "oracle|NUMBER|NUMBER(*,0)|decimal|18|0|0",
             "oracle|NUMBER|NUMBER(2147483648,0)|decimal|18|0|0",
-            "mysql|varchar|varchar(2147483648)|varchar|255|0|0",
+            "mysql|varchar|varchar(2147483648)|varchar|0|0|0",
             "mysql|decimal|decimal(999999999999999999999999999999999999,2)|decimal|18|0|0",
             "mysql|DECIMAL|DECIMAL(20,999999999999999999999999999999999999)|decimal|20|20|0",
             "mysql|varchar|varchar(32)|varchar|32|0|0",

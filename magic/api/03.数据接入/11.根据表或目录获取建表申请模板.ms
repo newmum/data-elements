@@ -418,7 +418,7 @@ var typeArgument = (value, position) => {
     if (start < 0 || end <= start) { return 0 }
     var args = code.substring(start + 1, end).split(',')
     if (args.size() <= position) { return 0 }
-    var argument = text(args[position]).trim()
+    var argument = text(args[position]).trim().replaceAll('(?i)\\s+(CHAR|BYTE|OCTETS|CODEUNITS16|CODEUNITS32)$', '')
     // ENUM/SET literals, NUMBER(*, scale) and complex type arguments are not
     // lengths. Keep their native type for editing instead of aborting the snapshot.
     if (!argument.matches('[0-9]{1,10}')) { return 0 }
@@ -432,7 +432,8 @@ var normalizeLength = (targetType, lengthValue, precisionValue) => {
     var lengthNum = toInt(lengthValue, 0)
     var precisionNum = toInt(precisionValue, 0)
     if (targetType == 'varchar') {
-        return lengthNum > 0 ? lengthNum : 255
+        // An absent source bound is not a 255-character contract (PG VARCHAR/TEXT, SQLite affinities).
+        return lengthNum > 0 ? lengthNum : 0
     }
     if (targetType == 'decimal') {
         return precisionNum > 0 ? precisionNum : (lengthNum > 0 ? lengthNum : 18)
@@ -646,6 +647,11 @@ for (col in (columns == null ? [] : columns)) {
         columnComment: first(col, ['columnComment', 'column_comment']) || columnName,
         sourceDataType: sourceType,
         sourceColumnType: columnType,
+        sourceDatabaseType: sourceDialectCode == null ? sourceTypeCode : sourceDialectCode,
+        lengthSemantics: first(col, ['lengthSemantics', 'length_semantics']),
+        characterLength: first(col, ['characterLength', 'character_length']),
+        byteLength: first(col, ['byteLength', 'byte_length']),
+        charset: first(col, ['charset', 'characterSet', 'character_set']),
         standardField: standardField,
         dataType: targetType,
         columnType: targetType,

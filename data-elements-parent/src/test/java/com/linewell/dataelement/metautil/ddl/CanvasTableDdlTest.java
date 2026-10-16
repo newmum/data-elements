@@ -9,10 +9,10 @@ import org.junit.jupiter.api.Test;
 class CanvasTableDdlTest {
     private final CanvasTableDdl parser = new CanvasTableDdl();
 
-    @Test void parserPreservesEditableLobKeysAndLeavesSemanticExecutionToTheDatabase() {
+    @Test void executionValidationRejectsLobKeysWithAnActionableMessage() {
         for (var type : new DatabaseType[]{DatabaseType.ORACLE,DatabaseType.DAMENG,DatabaseType.OCEANBASE_ORACLE}) {
-            var parsed=parser.parse("CREATE TABLE events(UNID CLOB PRIMARY KEY)",config(type));
-            assertThat(parsed.get("ddl").toString()).contains("CLOB", "PRIMARY KEY");
+            assertThatThrownBy(()->parser.parse("CREATE TABLE events(UNID CLOB PRIMARY KEY)",config(type)))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("主键或唯一键");
         }
     }
     private DataSourceConfig config(DatabaseType type) {

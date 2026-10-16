@@ -8,6 +8,7 @@ import com.jcraft.jsch.Session;
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
+import com.linewell.dataelement.metautil.jdbc.JdbcMetadataScope;
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import org.apache.kafka.clients.admin.AdminClient;
@@ -1205,27 +1206,8 @@ public class ConnectionTestController {
                 ? "OCEANBASE_ORACLE" : "OCEANBASE_MYSQL";
     }
 
-    static String metadataSchema(Connection connection, Map<String, Object> config, String manifestKey) {
-        String schema = firstNonBlank(str(config.get("schema")), str(config.get("defaultSchema")),
-                str(config.get("currentSchema")));
-        if (schema != null) return unquoteIdentifier(schema);
-        if ("source.hive".equals(manifestKey) || "sink.hive".equals(manifestKey)
-                || "HIVE".equalsIgnoreCase(str(config.get("dbType")))) {
-            // Do not call a driver's optional JDBC 4.1 method when the Hive
-            // database is already part of the saved canvas configuration.
-            String database = firstNonBlank(str(config.get("database")), str(config.get("dbName")));
-            return database != null ? database : safeSchema(connection);
-        }
-        schema = safeSchema(connection);
-        if (schema != null && !schema.isBlank()) return schema;
-        if (("source.oceanbase".equals(manifestKey)
-                || String.valueOf(config.get("dbType")).toUpperCase(Locale.ROOT).startsWith("OCEANBASE"))
-                && "OCEANBASE_ORACLE".equals(oceanBaseType(config))) {
-            // OceanBase usernames may include @tenant#cluster; those suffixes are not an Oracle owner.
-            String user = firstNonBlank(str(config.get("username")));
-            return user == null ? null : user.split("[@#]", 2)[0].toUpperCase(Locale.ROOT);
-        }
-        return null;
+    static String metadataSchema(Connection connection, Map<String, Object> config, String manifestKey)throws SQLException {
+        return JdbcMetadataScope.schema(connection,config,manifestKey);
     }
 
     private static String normalizeSinkJdbcUrl(String url, String dbType) {
@@ -1461,19 +1443,6 @@ public class ConnectionTestController {
         return list;
     }
 
-    private static String safeSchema(Connection conn) {
-        try {
-            return conn.getSchema();
-        } catch (java.sql.SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) {
-            // Some OceanBase Oracle and Hive JDBC drivers do not implement the
-            // JDBC 4.1 getSchema contract. Schema resolution has a configured
-            // database/owner fallback, so this capability must stay optional.
-            return null;
-        } catch (SQLException ignored) {
-            return null;
-        }
-    }
-
     private static void queryTables(DatabaseMetaData meta, String catalog, String schema, String pattern,
                                     LinkedHashMap<String, Map<String, Object>> map, int limit) throws SQLException {
         try (ResultSet rs = meta.getTables(catalog, schema, pattern, new String[]{"TABLE", "VIEW"})) {
@@ -1493,16 +1462,8 @@ public class ConnectionTestController {
         }
     }
 
-    private static String safeCatalog(Connection conn) {
-        try {
-            return conn.getCatalog();
-        } catch (java.sql.SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) {
-            // Keep metadata probing available for drivers that only implement
-            // the metadata methods and not the JDBC catalog accessor.
-            return null;
-        } catch (SQLException ignored) {
-            return null;
-        }
+    private static String safeCatalog(Connection conn)throws SQLException {
+        return JdbcMetadataScope.catalog(conn);
     }
 
     private static Set<String> readPrimaryKeys(DatabaseMetaData meta, String catalog, ProbeTableName name) throws SQLException {

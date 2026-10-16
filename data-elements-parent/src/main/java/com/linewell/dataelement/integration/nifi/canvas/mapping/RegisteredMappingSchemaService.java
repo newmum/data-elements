@@ -6,6 +6,7 @@ import com.linewell.dataelement.mapping.core.*;
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.linewell.dataelement.metautil.ddl.DdlDialect;
+import com.linewell.dataelement.metautil.jdbc.JdbcMetadataScope;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import java.sql.*;
@@ -65,7 +66,7 @@ public class RegisteredMappingSchemaService {
         Map<String,String> tableSources=new HashMap<>();matched.values().forEach(row->tableSources.put(String.valueOf(row.get("tid")),String.valueOf(row.get("datasource_id"))));
         for(var column:columns){String tableId=String.valueOf(column.get("table_id"));var tableFields=fields.computeIfAbsent(tableId,ignored->JSON.createArrayNode());if(tableFields.size()>=MAX_FIELDS_PER_TABLE)throw new MappingException("BUDGET_EXCEEDED","登记Schema单表字段超过2000个");String physicalType=String.valueOf(column.get("data_type"));String logical=JdbcTemporalTypes.logicalType(physicalType,connections.get(tableSources.get(tableId)));var field=tableFields.addObject();field.put("name",String.valueOf(column.get("column_name"))).put("logicalType",logical).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&logical.equals("DATETIME")).put("nullable",number(column.get("nullable"))!=0).put("length",number(column.get("length"))).put("precision",number(column.get("precision_length"))).put("scale",number(column.get("scale"))).put("sensitive",number(column.get("is_masking"))!=0);}
         applyRegisteredFormats(matched.values(),columns,fields);
-        Map<String,Resolved> result=new LinkedHashMap<>();matched.forEach((key,row)->{String source=String.valueOf(row.get("datasource_id")),tableId=String.valueOf(row.get("tid"));var names=DdlDialect.names(String.valueOf(row.get("table_name")));if(names.size()>2)throw new MappingException("INVALID_SCHEMA","登记表须明确schema和表名");String schema=names.size()==2?names.getFirst().value():"";String table=names.getLast().value();if(schema.isBlank()){Map<String,Object> cfg=connections.get(source);schema=String.valueOf(cfg.getOrDefault("defaultSchema",cfg.getOrDefault("schema","")));}
+        Map<String,Resolved> result=new LinkedHashMap<>();matched.forEach((key,row)->{String source=String.valueOf(row.get("datasource_id")),tableId=String.valueOf(row.get("tid"));var names=DdlDialect.names(String.valueOf(row.get("table_name")));if(names.size()>2)throw new MappingException("INVALID_SCHEMA","登记表须明确schema和表名");String schema=names.size()==2?names.getFirst().value():"";String table=names.getLast().value();if(schema.isBlank()){schema=Objects.toString(JdbcMetadataScope.configuredSchema(connections.get(source)),"");}
             if(schema.isBlank()){String url=String.valueOf(connections.get(source).getOrDefault("jdbcURL",connections.get(source).getOrDefault("jdbcUrl","")));var database=java.util.regex.Pattern.compile("^jdbc:(?:mysql|mariadb)://[^/]+/([^?;]+)").matcher(url);if(database.find())schema=database.group(1);}
             JsonNode declared=fields.getOrDefault(tableId,JSON.createArrayNode());if(declared.isEmpty())throw new MappingException("INVALID_SCHEMA","登记字段缺失");result.put(key,new Resolved(source,tableId,schema,table,declared,connections));});if(result.values().stream().mapToInt(value->value.fields().size()).sum()>MAX_TOTAL_FIELDS)throw new MappingException("BUDGET_EXCEEDED","登记Schema响应字段总数超过20000个");return result;
     }
@@ -132,17 +133,16 @@ public class RegisteredMappingSchemaService {
                 boolean mysql=product.contains("mysql") || product.contains("mariadb");
                 // MySQL modes 1/2 compare physical table identifiers without case; mode 0 must stay exact.
                 boolean mysqlIgnoreCase=mysql&&!metadata.supportsMixedCaseIdentifiers();
-                String catalog=connectionCatalog(connection);
+                String catalog=JdbcMetadataScope.catalog(connection);
                 boolean needsDefault=group.getValue().values().stream().anyMatch(table->table.schema()==null||table.schema().isBlank());
-                String fallbackSchema=mysql?catalog:needsDefault?connectionSchema(connection):null;
-                if(needsDefault&&!mysql&&(fallbackSchema==null||fallbackSchema.isBlank())
-                        &&(product.contains("oracle")||product.contains("dameng")||product.equals("dm")))fallbackSchema=metadata.getUserName();
+                String fallbackSchema=mysql?catalog:needsDefault?JdbcMetadataScope.schema(connection,first.connections().get(group.getKey()),null):null;
                 Map<TableIdentity,ArrayNode> byTable=new LinkedHashMap<>();
                 Map<String,TableIdentity> aliases=new LinkedHashMap<>();
                 for (var entry:group.getValue().entrySet()) {
                     Resolved table=entry.getValue();
                     String schema=table.schema()==null || table.schema().isBlank()?fallbackSchema:table.schema();
-                    if (schema==null || schema.isBlank()) throw new MappingException("SCHEMA_SCOPE_REQUIRED","批量Schema读取须明确登记schema或连接默认schema");
+                    if (schema==null || schema.isBlank()) throw new MappingException("SCHEMA_SCOPE_REQUIRED",
+                            "无法确定"+entry.getKey()+"表 "+table.table()+" 的Schema（数据源 "+group.getKey()+"）：登记配置和当前连接均未返回有效Schema，请核对数据源的schema/defaultSchema/currentSchema或连接用户");
                     TableIdentity identity=tableIdentity(schema,table.table(),mysqlIgnoreCase);
                     byTable.computeIfAbsent(identity,ignored->JSON.createArrayNode());
                     aliases.put(entry.getKey(),identity);
@@ -167,7 +167,7 @@ public class RegisteredMappingSchemaService {
             } catch (MappingException error) {
                 throw error;
             } catch (SQLException error) {
-                throw new MappingException("SCHEMA_UNAVAILABLE","物理Schema批量读取失败，请检查驱动与权限");
+                throw new MappingException("SCHEMA_UNAVAILABLE","数据源 "+group.getKey()+" 的物理Schema批量读取失败，请检查连接、驱动与权限");
             }
         }
         return result;
@@ -176,16 +176,6 @@ public class RegisteredMappingSchemaService {
     private record TableIdentity(String schema,String table) {}
     private static TableIdentity tableIdentity(String schema,String table,boolean ignoreCase){
         return new TableIdentity(ignoreCase?schema.toLowerCase(Locale.ROOT):schema,ignoreCase?table.toLowerCase(Locale.ROOT):table);
-    }
-
-    private static String connectionSchema(Connection connection)throws SQLException {
-        try { return connection.getSchema(); }
-        catch (SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) { return null; }
-    }
-
-    private static String connectionCatalog(Connection connection)throws SQLException {
-        try { return connection.getCatalog(); }
-        catch (SQLFeatureNotSupportedException | AbstractMethodError | UnsupportedOperationException ignored) { return null; }
     }
 
     private static void readMysqlColumns(Connection connection,Map<TableIdentity,ArrayNode> byTable,int[] totalFields,boolean ignoreCase,Map<String,Object> temporalConfig)throws SQLException {

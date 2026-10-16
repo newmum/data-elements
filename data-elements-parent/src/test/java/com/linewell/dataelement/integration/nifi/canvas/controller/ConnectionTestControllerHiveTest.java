@@ -180,6 +180,7 @@ class ConnectionTestControllerHiveTest {
         assertThat(ConnectionTestController.oceanBaseType(Map.of("jdbcUrl", "jdbc:oceanbase:oracle://host/db"))).isEqualTo("OCEANBASE_ORACLE");
         var connection = mock(java.sql.Connection.class);
         when(connection.getSchema()).thenThrow(new java.sql.SQLFeatureNotSupportedException());
+        when(connection.prepareStatement(anyString())).thenThrow(new java.sql.SQLFeatureNotSupportedException());
         assertThat(ConnectionTestController.metadataSchema(connection,
                 Map.of("compatibleMode", "ORACLE", "username", "APP@tenant#cluster"), "source.oceanbase")).isEqualTo("APP");
         assertThat(ConnectionTestController.metadataSchema(connection,
@@ -189,6 +190,7 @@ class ConnectionTestControllerHiveTest {
     @Test void fallsBackWhenLegacyOceanBaseOrHiveDriverThrowsAbstractMethodErrorForSchema() throws Exception {
         var connection = mock(java.sql.Connection.class);
         when(connection.getSchema()).thenThrow(new AbstractMethodError("Unimplemented method: getSchema()"));
+        when(connection.prepareStatement(anyString())).thenThrow(new java.sql.SQLFeatureNotSupportedException());
 
         assertThat(ConnectionTestController.metadataSchema(connection,
                 Map.of("compatibleMode", "ORACLE", "username", "APP@tenant#cluster"), "source.oceanbase"))
@@ -197,6 +199,21 @@ class ConnectionTestControllerHiveTest {
                 Map.of("database", "analytics"), "source.hive"))
                 .isEqualTo("analytics");
         verify(connection, times(1)).getSchema();
+    }
+
+    @Test void oracleProbeAndMappingShareSessionSchemaAndRegistrationAliasPrecedence()throws Exception {
+        var connection=mock(java.sql.Connection.class);var statement=mock(java.sql.PreparedStatement.class);var result=mock(java.sql.ResultSet.class);
+        when(connection.getSchema()).thenThrow(new AbstractMethodError("getSchema"));
+        when(connection.prepareStatement(anyString())).thenReturn(statement);when(statement.executeQuery()).thenReturn(result);
+        when(result.next()).thenReturn(true);when(result.getString(1)).thenReturn("BUSINESS");
+        var config=Map.<String,Object>of("dbType","oceanbaseoracle","username","LOGIN@tenant#cluster");
+        assertThat(ConnectionTestController.metadataSchema(connection,config,"sink.jdbc")).isEqualTo("BUSINESS");
+        assertThat(com.linewell.dataelement.metautil.jdbc.JdbcMetadataScope.schema(connection,config,null)).isEqualTo("BUSINESS");
+        verify(connection,times(2)).prepareStatement("SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA') FROM DUAL");
+        var explicit=new HashMap<String,Object>();explicit.put("schema"," ");explicit.put("defaultSchema",null);explicit.put("currentSchema","\"MixedCase\"");
+        assertThat(ConnectionTestController.metadataSchema(connection,explicit,"source.oracle")).isEqualTo("MixedCase");
+        assertThat(com.linewell.dataelement.metautil.jdbc.JdbcMetadataScope.configuredSchema(explicit)).isEqualTo("MixedCase");
+        verify(connection,times(2)).getSchema();
     }
 
     @Test void takesRegisteredHiveConnectionModeFromTheActiveTenant() {

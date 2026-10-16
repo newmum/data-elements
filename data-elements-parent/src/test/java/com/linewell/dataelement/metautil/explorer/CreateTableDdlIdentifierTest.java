@@ -57,7 +57,7 @@ class CreateTableDdlIdentifierTest {
             "案件上报信息"
         );
 
-        assertThat(ddl).contains("ODS_UUID VARCHAR2(32) NOT NULL");
+        assertThat(ddl).contains("ODS_UUID VARCHAR2(32 CHAR) NOT NULL");
         assertThat(ddl).contains("COMMENT ON COLUMN ODS_CASE_REPORT.ODS_UUID IS 'ODS主键'");
         assertThat(ddl).doesNotContain("ODS_UUID varchar NOT NULL");
     }
@@ -80,7 +80,7 @@ class CreateTableDdlIdentifierTest {
         );
 
         assertThat(ddl).contains("CREATE TABLE CASE_INFO");
-        assertThat(ddl).contains("CASE_ID VARCHAR2(32)");
+        assertThat(ddl).contains("CASE_ID VARCHAR2(32 CHAR)");
         assertThat(ddl).contains("COMMENT ON TABLE CASE_INFO");
         assertThat(ddl).contains("COMMENT ON COLUMN CASE_INFO.CASE_ID");
         assertThat(ddl).doesNotContain("APP_USER.CASE_INFO");

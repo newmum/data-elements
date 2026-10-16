@@ -41,7 +41,7 @@ class PortableDdlConverterTest {
         var prepared = new PortableDdlConverter().prepare(List.of(column), DatabaseType.ORACLE);
         var ready = ((List<ColumnInfo>) prepared.get("columns")).getFirst();
         String argument = raw.substring(raw.indexOf('('));
-        assertEquals("VARCHAR2" + argument, ready.getColumnType());
+        assertEquals("VARCHAR2" + argument.replace(")"," CHAR)"), ready.getColumnType());
         assertTrue(ready.getPrimaryKey()); assertTrue(((List<?>) prepared.get("warnings")).isEmpty());
         assertEquals(raw, column.getColumnType()); assertEquals("", column.getSourceDatabaseType());
     }

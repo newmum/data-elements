@@ -1,6 +1,7 @@
 package com.linewell.dataelement.metautil.ddl;
 
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
+import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import java.util.Locale;
 import java.util.Set;
@@ -22,7 +23,7 @@ public final class PortableColumnType {
         return switch (type) {
             case "CHAR", "NCHAR", "CHARACTER", "BPCHAR" -> Kind.CHAR;
             case "VARCHAR", "VARCHAR2", "NVARCHAR", "NVARCHAR2", "CHARACTER VARYING", "NATIONAL CHARACTER VARYING", "KEYWORD", "ROWID", "UROWID" -> Kind.VARCHAR;
-            case "TEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT", "CLOB", "NCLOB", "LONG", "LONGVARCHAR", "LONG NVARCHAR", "STRING" -> Kind.TEXT;
+            case "TEXT", "NTEXT", "TINYTEXT", "MEDIUMTEXT", "LONGTEXT", "CLOB", "NCLOB", "LONG", "LONGVARCHAR", "LONGNVARCHAR", "LONG NVARCHAR", "STRING" -> Kind.TEXT;
             case "TINYINT", "SMALLINT", "INT2", "SMALLSERIAL" -> Kind.SMALLINT;
             case "INT", "INTEGER", "INT4", "MEDIUMINT", "SERIAL" -> Kind.INTEGER;
             case "BIGINT", "INT8", "BIGSERIAL" -> Kind.BIGINT;
@@ -76,7 +77,13 @@ public final class PortableColumnType {
     }
 
     public static String render(DatabaseType target, ColumnInfo column, String raw) {
+        var config=new DataSourceConfig();config.setDatabaseType(target);return render(config,column,raw);
+    }
+
+    public static String render(DataSourceConfig config, ColumnInfo column, String raw) {
+        DatabaseType target=config.getDatabaseType();
         if (raw == null || raw.isBlank()) throw new IllegalArgumentException("字段类型不能为空");
+        if(column!=null&&target.getCode().equals(column.getDdlTargetDatabaseType())&&raw.equals(column.getColumnType()))return raw;
         DdlDialect.Family family = DdlDialect.family(target);
         Kind kind = kind(raw);
         var args = ARGS.matcher(raw);
@@ -104,19 +111,10 @@ public final class PortableColumnType {
                 ? "(" + precision + (scale == null ? "" : "," + scale) + ")" : "";
         return switch (kind) {
             case CHAR, VARCHAR -> {
-                boolean national = Set.of("NCHAR","NVARCHAR","NVARCHAR2","NATIONAL CHARACTER VARYING").contains(base(raw));
-                long limit = family == DdlDialect.Family.ORACLE ? national ? 2000 : 4000 : family == DdlDialect.Family.SQLSERVER ? national ? 4000 : 8000 : 65535;
-                if (national && size > limit && family == DdlDialect.Family.ORACLE) yield "NCLOB";
-                if (size > limit) yield textType(family);
-                if (family == DdlDialect.Family.HIVE) yield "STRING";
-                if (size <= 0 && family == DdlDialect.Family.POSTGRES) yield kind == Kind.CHAR ? "CHAR" : "VARCHAR";
-                long bounded = size > 0 ? size : kind == Kind.CHAR ? 1 : 255;
-                String name = kind == Kind.CHAR ? "CHAR" : family == DdlDialect.Family.ORACLE ? "VARCHAR2" : "VARCHAR";
-                if (national && family == DdlDialect.Family.SQLSERVER) name = kind == Kind.CHAR ? "NCHAR" : "NVARCHAR";
-                if (national && family == DdlDialect.Family.ORACLE) name = kind == Kind.CHAR ? "NCHAR" : "NVARCHAR2";
-                yield name + "(" + bounded + ")";
+                yield PortableStringCapacity.render(config,column,raw,kind).sql();
             }
-            case TEXT -> target == DatabaseType.HETU ? "VARCHAR" : textType(family);
+            case TEXT -> target == DatabaseType.HETU ? "VARCHAR" : family==DdlDialect.Family.ORACLE
+                    &&Set.of("NTEXT","NCLOB","NVARCHAR","NVARCHAR2","LONGNVARCHAR","LONG NVARCHAR").contains(base(raw))?"NCLOB":textType(family);
             case SMALLINT -> family == DdlDialect.Family.ORACLE ? "NUMBER(5)" : "SMALLINT";
             case INTEGER -> family == DdlDialect.Family.ORACLE ? "NUMBER(10)" : "INTEGER";
             case BIGINT -> family == DdlDialect.Family.ORACLE ? "NUMBER(19)" : "BIGINT";
@@ -142,7 +140,7 @@ public final class PortableColumnType {
                 default -> "BLOB";
             };
             case JSON -> family == DdlDialect.Family.POSTGRES ? "JSONB" : family == DdlDialect.Family.MYSQL ? "JSON" : textType(family);
-            case UUID -> family == DdlDialect.Family.POSTGRES ? "UUID" : family == DdlDialect.Family.SQLSERVER ? "UNIQUEIDENTIFIER" : family == DdlDialect.Family.HIVE ? "STRING" : family == DdlDialect.Family.ORACLE ? "VARCHAR2(36)" : "VARCHAR(36)";
+            case UUID -> family == DdlDialect.Family.POSTGRES ? "UUID" : family == DdlDialect.Family.SQLSERVER ? "UNIQUEIDENTIFIER" : family == DdlDialect.Family.HIVE ? "STRING" : family == DdlDialect.Family.ORACLE ? "VARCHAR2(36 CHAR)" : "VARCHAR(36)";
             // Preserve a native extension if it belongs to the destination family. Otherwise use unbounded text.
             case UNKNOWN -> source.isBlank() || sameFamily(source, target) ? raw.trim() : textType(family);
         };

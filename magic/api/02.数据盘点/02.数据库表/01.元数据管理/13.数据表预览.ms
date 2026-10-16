@@ -30,6 +30,11 @@ import jsons
 import tenantRuntime
 import dataScope
 import tableSort
+import hwhive
+import java.util.HexFormat
+import java.util.List
+import java.lang.Number
+import java.lang.Boolean
 var tenantId=tenantRuntime.id()
 if(tenantId==null){exit 401,"当前租户无效";}
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
@@ -234,7 +239,7 @@ if (blank(tableId)) {
 }
 
 var table = loadAsset(tableId)
-if (table == null) {
+if (table == null || table.assetType != 'table') {
     // 参数或业务状态不满足要求时立即终止请求。
     exit 500, 'tableId不正确'
 }
@@ -245,21 +250,170 @@ if (dbAsset == null) {
 }
 
 if(dataScope.visibleDataSourcesFor('MENU:2081000000000000002',[dbAsset]).size()!=1){exit 403,'表所属数据源不在当前角色数据范围内';}
+// 一次批量读取当前租户的字段快照，同时用于中文表头、排序白名单和主键补序。
+var fieldRows=db.table('db_table_column_t').where().eq('tenant_id',tenantId).eq('table_id',tableId).eq('is_del',0).page(1001,0)
+if(fieldRows.total>1000){exit 413,'字段超过1000项，不能使用此数据预览';}
+var columnLabels={}
+for(row in fieldRows.list){
+    var name=firstValue(row,['columnName','column_name'])
+    var label=firstValue(row,['columnNameCn','column_name_cn','columnComment','column_comment'])
+    if(!blank(name)&&!blank(label)){columnLabels[textOf(name).toLowerCase()]=textOf(label)}
+}
 var request = new PageQueryRequest()
-request.setDataSource(dataSourceOf(dbAsset))
 request.setTableName(firstValue(table, ['tableName', 'tableNameEn']))
 request.setPageNo(body == null || body.pageNo == null ? 1 : body.pageNo::int)
 request.setPageSize(body == null || body.pageSize == null ? 20 : body.pageSize::int)
 if (body != null && body.columns != null) {
+    if(!(body.columns instanceof List)||body.columns.size()>1000){exit 400,'预览字段必须是最多1000项的数组';}
     request.setColumns(body.columns)
 }
 request.setConditions(toConditionList(body == null ? null : body.conditions))
+if(request.getConditions().size()>50){exit 400,'最多选择50个预览过滤条件';}
 var requestedSorts=body?.sorts==null?[]:body.sorts
 if(!blank(body?.sortField)){requestedSorts=[{field:body.sortField,direction:tableSort.direction(body)}]}
+if(!(requestedSorts instanceof List)){exit 400,'排序字段必须是数组';}
 if(requestedSorts.size()>10){exit 400,'最多选择10个排序字段';}
+if(request.getPageNo()<1||request.getPageNo()>100000||request.getPageSize()<1||request.getPageSize()>100){exit 400,'数据预览分页参数无效';}
+
+var sourceType=textOf(firstValue(dbAsset,['dbType','databaseType','dataSourceType'])).toLowerCase()
+// hwhive 对应 platform.magic.module.HiveModule，只用于已登记为服务端托管的 MRS 连接。
+// 直接 JDBC Hive 保持自己的连接，不能误查服务端连接池所指向的另一套集群。
+var managedHive=sourceType=='hive' && (
+    textOf(firstValue(dbAsset,['metadataAccessMode','metadata_access_mode']))=='server-managed-mrs'
+    || !blank(firstValue(dbAsset,['hiveProfile','hive_profile']))
+)
+if(managedHive){
+    var queryHive=(sql)=>{
+        try{return hwhive.queryTable(sql)}catch(e){
+            var message=e.getMessage()==null?'':e.getMessage()
+            if(message.contains('hiveclient.properties')&&message.contains('not found')){
+                exit 503,'Hive 服务端缺少 hiveclient.properties 客户端配置，请配置 MRS Hive 连接后重试'
+            }
+            exit 502,'Hive 数据预览查询失败，请检查服务端连接状态、查询权限和错误日志'
+        }
+    }
+    var hiveDatabase=firstValue(dbAsset,['database','schema','dbMetaDbName','dbName'])
+    var hiveTable=textOf(request.getTableName())
+    var parts=hiveTable.split('\\.')
+    if(parts.size()==2){
+        if(blank(hiveDatabase)||!parts[0].equalsIgnoreCase(textOf(hiveDatabase))){exit 400,'Hive 表不属于登记的数据源库';}
+        hiveTable=parts[1]
+    }else if(parts.size()!=1){exit 400,'Hive 表名格式不正确';}
+    if(blank(hiveDatabase)||!textOf(hiveDatabase).matches('[A-Za-z_][A-Za-z0-9_]*')||!hiveTable.matches('[A-Za-z_][A-Za-z0-9_]*')){exit 400,'Hive 库名或表名格式不正确';}
+    var qualified='`'+hiveDatabase+'`.`'+hiveTable+'`'
+    var hiveValue=(row,name)=>{
+        for(key in row.keySet()){
+            var shortName=textOf(key).substring(textOf(key).lastIndexOf('.')+1)
+            if(shortName.equalsIgnoreCase(name)){return row[key]}
+        }
+        return null
+    }
+    var physicalColumns=[]
+    var physicalTypes={}
+    var allowed={}
+    // DESCRIBE 一次得到实际字段；分区列的重复段去重，不按每列发起查询。
+    var described=queryHive('DESCRIBE '+qualified)
+    for(row in described){
+        var name=textOf(hiveValue(row,'col_name'))
+        if(blank(name)||name.trim().startsWith('#')){continue}
+        name=name.trim()
+        if(allowed.containsKey(name.toLowerCase())){continue}
+        if(name.length()>256||name.contains('\u0000')||name.contains('\n')||name.contains('\r')){exit 400,'Hive 字段名格式不正确';}
+        physicalColumns.add(name)
+        allowed[name.toLowerCase()]=name
+        physicalTypes[name.toLowerCase()]=hiveValue(row,'data_type')
+        var comment=hiveValue(row,'comment')
+        if(blank(columnLabels[name.toLowerCase()])&&!blank(comment)){columnLabels[name.toLowerCase()]=textOf(comment)}
+    }
+    if(physicalColumns.size()==0||physicalColumns.size()>1000){exit 400,'Hive 表字段为空或超过1000项';}
+    var checkedField=(value)=>{
+        var name=blank(value)?null:allowed[textOf(value).toLowerCase()]
+        if(name==null){exit 400,'预览字段不存在或不允许访问';}
+        return name
+    }
+    var quote=(value)=>'`'+checkedField(value).replace('`','``')+'`'
+    // queryTable 接受 SQL 文本：把字符串转为 UTF-8 十六进制，避免引号/反斜杠改变 SQL 结构。
+    var stringLiteral=(value)=>{
+        var text=textOf(value)
+        if(text.length()>4000){exit 400,'过滤值超过4000字符';}
+        return "decode(unhex('"+HexFormat.of().formatHex(text.getBytes('UTF-8'))+"'),'UTF-8')"
+    }
+    var clauses=[]
+    for(condition in request.getConditions()){
+        var field=quote(condition.getField())
+        var value=condition.getValue()
+        var op=textOf(condition.getOp()).toLowerCase()
+        if(op=='eq'){
+            if(value==null){clauses.add(field+' IS NULL')}
+            else if(value instanceof Number){
+                if(!textOf(value).matches('[-+]?[0-9]+(\\.[0-9]+)?([eE][-+]?[0-9]+)?')){exit 400,'数字过滤值无效';}
+                clauses.add(field+' = '+value)
+            }else if(value instanceof Boolean){clauses.add(field+' = '+(value?'TRUE':'FALSE'))}
+            else{clauses.add(field+' = '+stringLiteral(value))}
+        }else if(op=='like'){
+            if(value!=null){clauses.add('CAST('+field+' AS STRING) LIKE '+stringLiteral('%'+value+'%'))}
+        }else{exit 400,'仅支持 eq 和 like 过滤条件';}
+    }
+    var where=clauses.size()==0?'':' WHERE '+clauses.join(' AND ')
+    if(!blank(body?.groupByColumn)){
+        var group=quote(body.groupByColumn)
+        var groupName=blank(body.groupNameColumn)?group:quote(body.groupNameColumn)
+        var groups=queryHive('SELECT '+group+' AS category_value, MIN('+groupName+') AS category_name, COUNT(*) AS record_count FROM '+qualified+where+' GROUP BY '+group+' ORDER BY '+group+' LIMIT 10001')
+        if(groups.size()>10000){exit 413,'分组超过10000项，请缩小登记范围';}
+        var values=[]
+        for(row in groups){
+            var value=hiveValue(row,'category_value')
+            if(!blank(value)){values.add({value:value,name:blank(body.groupNameColumn)?null:hiveValue(row,'category_name'),count:hiveValue(row,'record_count')})}
+        }
+        return {groupedValues:values}
+    }
+    var selected=[]
+    for(name in body?.columns==null||body.columns.size()==0?physicalColumns:body.columns){
+        var checked=checkedField(name)
+        if(!selected.contains(checked)){selected.add(checked)}
+    }
+    var orders=[]
+    var orderFields=[]
+    for(item in requestedSorts){
+        var name=checkedField(firstValue(item,['field','column','name']))
+        var direction=firstValue(item,['direction','order'])
+        orders.add(quote(name)+' '+tableSort.direction({sortDir:direction==null?'asc':direction})+' NULLS LAST')
+        orderFields.add(name)
+    }
+    for(row in fieldRows.list){
+        var primary=rowValue(row,['primaryKey','primary_key'])
+        var name=firstValue(row,['columnName','column_name'])
+        var actual=blank(name)?null:allowed[textOf(name).toLowerCase()]
+        if((''+primary=='1'||primary==true)&&actual!=null&&!orderFields.contains(actual)){
+            orders.add(quote(actual)+' ASC NULLS LAST');orderFields.add(actual)
+        }
+    }
+    // 无主键时使用可排序的标量字段，确保翻页和同值排序稳定；复杂类型不参与 ORDER BY。
+    for(name in physicalColumns){
+        var type=textOf(physicalTypes[name.toLowerCase()])
+        if(type!=null&&!type.toLowerCase().matches('(array|map|struct|uniontype).*')&&!orderFields.contains(name)){
+            orders.add(quote(name)+' ASC NULLS LAST');orderFields.add(name)
+        }
+    }
+    var projection=[]
+    var types=[]
+    for(name in selected){projection.add(quote(name));types.add(physicalTypes[name.toLowerCase()])}
+    var countRows=queryHive('SELECT COUNT(*) AS __preview_total FROM '+qualified+where)
+    if(countRows==null||countRows.size()!=1||hiveValue(countRows[0],'__preview_total')==null){exit 500,'Hive 预览总数查询结果无效';}
+    var offset=(request.getPageNo()-1)*request.getPageSize()
+    var orderSql=orders.size()==0?'':' ORDER BY '+orders.join(', ')
+    var dataRows=queryHive('SELECT '+projection.join(', ')+' FROM '+qualified+where+orderSql+' LIMIT '+offset+', '+request.getPageSize())
+    var rows=[]
+    for(row in dataRows){
+        var normalized={}
+        for(name in selected){normalized[name]=hiveValue(row,name)}
+        rows.add(normalized)
+    }
+    return {rows:rows,columns:selected,columnTypes:types,columnLabels:columnLabels,total:hiveValue(countRows[0],'__preview_total'),pageNo:request.getPageNo(),pageSize:request.getPageSize()}
+}
+
+request.setDataSource(dataSourceOf(dbAsset))
 if(requestedSorts.size()>0){
-    var fieldRows=db.table('db_table_column_t').where().eq('tenant_id',tenantId).eq('table_id',tableId).eq('is_del',0).page(1001,0)
-    if(fieldRows.total>1000){exit 413,'字段超过1000项，不能使用此预览排序';}
     var allowedFields={}
     for(row in fieldRows.list){var fieldName=rowValue(row,['columnName','column_name']);if(!blank(fieldName)){allowedFields[fieldName]=fieldName}}
     var sorts=[]
@@ -278,7 +432,6 @@ if(requestedSorts.size()>0){
     }
     requestedSorts=sorts
 }
-if(request.getPageNo()<1||request.getPageNo()>100000||request.getPageSize()<1||request.getPageSize()>100){exit 400,'数据预览分页参数无效';}
 request.setSorts(toSortList(requestedSorts))
 
 if (body != null && !blank(body.groupByColumn)) {
@@ -287,4 +440,5 @@ if (body != null && !blank(body.groupByColumn)) {
 }
 
 // 返回当前业务分支的标准结果。
-return metadataDataQueryService.queryPage(request)
+var result=metadataDataQueryService.queryPage(request)
+return {rows:result.getRows(),columns:result.getColumns(),columnTypes:result.getColumnTypes(),columnLabels:columnLabels,total:result.getTotal(),pageNo:result.getPageNo(),pageSize:result.getPageSize()}

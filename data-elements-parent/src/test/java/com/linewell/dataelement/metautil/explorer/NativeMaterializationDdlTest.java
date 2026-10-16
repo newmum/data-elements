@@ -47,7 +47,7 @@ class NativeMaterializationDdlTest {
             String dual = type == DatabaseType.ORACLE ? "BINARY_DOUBLE" : type == DatabaseType.POSTGRESQL ? "DOUBLE PRECISION"
                     : type == DatabaseType.SQLSERVER ? "FLOAT(53)" : "DOUBLE";
             assertThat(ddl).contains("measure " + single, "reading " + dual,
-                    "uuid " + (type == DatabaseType.ORACLE ? "VARCHAR2" : "VARCHAR") + "(36)");
+                    "uuid " + (type == DatabaseType.ORACLE ? "VARCHAR2(36 CHAR)" : type==DatabaseType.SQLSERVER?"NVARCHAR(72)":"VARCHAR(36)"));
         }
     }
 
