@@ -2,14 +2,18 @@ param(
     # The packaged application is compiled for Java 21.
     [string]$JavaExe = "",
     [string]$JarPath = "",
-    [string]$ConfigPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/local-runtime.private.json'),
     [switch]$Build,
+    # Restart only a backend whose runtime JAR belongs to this checkout.
+    [switch]$Restart,
     [int]$Port = 8088,
     [int]$StartupTimeoutSeconds = 300,
-    [string]$NacosHost = "",
+    [string]$NacosHost = "192.168.175.86",
     [int]$NacosPort = 8848,
+    [string]$NacosNamespace = "data-element",
     [string]$Profile = "dev",
+    # Empty means use the selected Nacos configuration, not a second broker default.
     [string]$KafkaBootstrapServers = "",
+    [string]$NacosConfigImports = "",
     # The platform address reachable from the NiFi execution network.  API
     # registrations may legitimately use localhost during local testing, but
     # that loopback points at the NiFi node when it executes InvokeHTTP.
@@ -22,42 +26,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# The ordinary CMD entry uses the same private configuration as the maintained
-# local launcher. A different environment requires an explicit -NacosHost;
-# never silently fall back to a historical internal address.
-$privateRuntime = $null
-$usePrivateRuntime = -not $PSBoundParameters.ContainsKey('NacosHost')
-if ($usePrivateRuntime) {
-    $privatePath = [IO.Path]::GetFullPath($ConfigPath)
-    $repoPath = [IO.Path]::GetFullPath($PSScriptRoot)
-    if ($privatePath.StartsWith($repoPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Runtime credentials must stay outside the Git workspace.'
-    }
-    if (-not (Test-Path -LiteralPath $privatePath -PathType Leaf)) {
-        throw 'Private runtime configuration is missing. Supply -ConfigPath, or explicitly select another environment with -NacosHost.'
-    }
-    $privateRuntime = Get-Content -LiteralPath $privatePath -Raw -Encoding UTF8 | ConvertFrom-Json
-    if (-not $privateRuntime.environment.NACOS_HOST -or -not $privateRuntime.environment.NACOS_CONFIG_IMPORTS) {
-        throw 'Private runtime configuration must explicitly select the Nacos server and configuration imports.'
-    }
-    foreach ($property in $privateRuntime.environment.PSObject.Properties) {
-        if ($property.Name -notmatch '^(NACOS_|DATA_ELEMENT_|DATA_ELEMENTS_|SPRING_)[A-Z0-9_]+$') {
-            throw 'Unexpected runtime environment variable name.'
-        }
-        [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value, 'Process')
-    }
-    $NacosHost = $env:NACOS_HOST
-    if (-not $PSBoundParameters.ContainsKey('NacosPort')) { $NacosPort = [int]$env:NACOS_PORT }
-    if (-not $PSBoundParameters.ContainsKey('Profile')) { $Profile = $env:DATA_ELEMENT_PROFILE }
-    if (-not $PSBoundParameters.ContainsKey('Port')) { $Port = [int]$privateRuntime.port }
-    if (-not $PSBoundParameters.ContainsKey('JavaExe')) { $JavaExe = $privateRuntime.executable }
-} elseif ([string]::IsNullOrWhiteSpace($NacosHost)) {
-    throw '-NacosHost must name the intended environment.'
-}
+# The local development environment is defined by the control-environment
+# Nacos profile. Set these values explicitly so stale process or user-level
+# environment variables cannot silently reconnect the backend to the demo host.
 $env:NACOS_HOST = $NacosHost
 $env:NACOS_PORT = $NacosPort.ToString()
+$env:NACOS_NAMESPACE = $NacosNamespace
 $env:DATA_ELEMENT_PROFILE = $Profile
-if ($KafkaBootstrapServers) { $env:KAFKA_BOOTSTRAP_SERVERS = $KafkaBootstrapServers }
+if ([string]::IsNullOrWhiteSpace($NacosConfigImports)) {
+    $NacosConfigImports = "optional:nacos:data-element.yml?group=DEFAULT_GROUP&refreshable=true,optional:nacos:data-element-$Profile.yml?group=DEFAULT_GROUP&refreshable=true"
+}
+$env:NACOS_CONFIG_IMPORTS = $NacosConfigImports
+if ([string]::IsNullOrWhiteSpace($KafkaBootstrapServers)) {
+    Remove-Item Env:KAFKA_BOOTSTRAP_SERVERS -ErrorAction SilentlyContinue
+} else {
+    $env:KAFKA_BOOTSTRAP_SERVERS = $KafkaBootstrapServers
+}
 
 # Provisioning encryption key stays outside the repository and persists across restarts.
 $idaasKeyPath = Join-Path $env:USERPROFILE ".codex\private\idaas-provision\transport-master.key"
@@ -144,12 +128,7 @@ if (-not $JavaExe -or -not (Test-Path -LiteralPath $JavaExe -PathType Leaf)) {
 }
 
 $usingDefaultJar = [string]::IsNullOrWhiteSpace($JarPath)
-if ($usingDefaultJar) {
-    $reviewedRuntime = Join-Path $PSScriptRoot '.runtime/data-element-runtime.jar'
-    $JarPath = if (-not $Build -and (Test-Path -LiteralPath $reviewedRuntime -PathType Leaf)) {
-        $reviewedRuntime
-    } else { Join-Path $projectDir 'target/data-element.jar' }
-}
+if ($usingDefaultJar) { $JarPath = Join-Path $projectDir "target\data-element.jar" }
 if (-not [System.IO.Path]::IsPathRooted($JarPath)) { $JarPath = Join-Path $PSScriptRoot $JarPath }
 $JarPath = [System.IO.Path]::GetFullPath($JarPath)
 if ($Build -and -not $usingDefaultJar) {
@@ -168,14 +147,41 @@ New-Item -ItemType Directory -Force -Path $unixDomainTempDir | Out-Null
 
 # Do not enumerate Win32_Process here.  On some Windows hosts that WMI query
 # blocks indefinitely, leaving the user with no console output, no log file,
-# and no backend process.  A concrete port check is both sufficient and safer:
-# a process using 8088 must be stopped deliberately rather than guessing which
-# unrelated Java process is safe to terminate.
+# and no backend process. Query only the concrete port owner, with a bounded
+# timeout, and compare its exact JAR path before reusing or restarting it.
+$existingBackendProcess = $null
 $portOwnerPid = Get-PortOwnerPid -PortNumber $Port
 if ($portOwnerPid) {
     $ownerProcess = Get-Process -Id $portOwnerPid -ErrorAction SilentlyContinue
     $ownerName = if ($ownerProcess) { $ownerProcess.ProcessName } else { 'unknown' }
-    throw "Port $Port is already in use by PID=$portOwnerPid ($ownerName). Stop that process deliberately or choose a different port."
+    $isProjectBackend = $false
+    if ($ownerName -eq 'java') {
+        try {
+            $ownerDetails = Get-CimInstance Win32_Process -Filter "ProcessId = $portOwnerPid" -OperationTimeoutSec 3 -ErrorAction Stop
+            $jarArgument = [regex]::Match($ownerDetails.CommandLine, '(?:^|\s)-jar\s+(?:"([^"]+)"|(\S+))')
+            if ($jarArgument.Success) {
+                $ownerJar = if ($jarArgument.Groups[1].Success) { $jarArgument.Groups[1].Value } else { $jarArgument.Groups[2].Value }
+                $expectedRuntimeJar = Join-Path $PSScriptRoot '.runtime/data-element-runtime.jar'
+                $isProjectBackend = [System.IO.Path]::IsPathRooted($ownerJar) -and
+                    [System.IO.Path]::GetFullPath($ownerJar).Equals([System.IO.Path]::GetFullPath($expectedRuntimeJar), [StringComparison]::OrdinalIgnoreCase)
+            }
+        } catch {
+            # Unknown ownership must never permit reuse or termination.
+        }
+    }
+    if (-not $isProjectBackend) {
+        throw "Port $Port is already in use by PID=$portOwnerPid ($ownerName). Stop that process deliberately or choose a different port."
+    }
+    if ($Restart) {
+        $existingBackendProcess = $ownerProcess
+    } elseif ($Build) {
+        throw "This project's backend is already running (PID=$portOwnerPid). Use -Build -Restart to replace it with a new build."
+    } elseif (Test-MagicLoginReadiness -PortNumber $Port) {
+        Write-Status "Backend already running and ready at http://localhost:$Port (PID=$portOwnerPid). Use -Restart to apply a new JAR or startup configuration."
+        exit 0
+    } else {
+        throw "This project's backend is running but not ready (PID=$portOwnerPid). Check logs/backend or use -Restart to restart it."
+    }
 }
 
 if ($NacosHost -eq "192.168.175.86") {
@@ -216,6 +222,23 @@ if (-not (Test-Path -LiteralPath $JarPath -PathType Leaf)) {
     throw "Jar not found: $JarPath"
 }
 
+if ($existingBackendProcess) {
+    # Validate inputs and finish packaging before stopping the working backend.
+    $currentOwner = Get-Process -Id $existingBackendProcess.Id -ErrorAction SilentlyContinue
+    if (-not $currentOwner -or $currentOwner.StartTime -ne $existingBackendProcess.StartTime -or
+        (Get-PortOwnerPid -PortNumber $Port) -ne $existingBackendProcess.Id) {
+        throw 'Port ownership changed before restart. Run the launcher again.'
+    }
+    Write-Status "Restarting this project's backend (PID=$($existingBackendProcess.Id))."
+    Stop-Process -Id $existingBackendProcess.Id -ErrorAction Stop
+    if (-not $existingBackendProcess.WaitForExit(10000)) {
+        throw 'The previous backend did not exit within 10 seconds.'
+    }
+    if (Get-PortOwnerPid -PortNumber $Port) {
+        throw "Port $Port is still occupied after stopping the previous backend."
+    }
+}
+
 # Maven replaces target\data-element.jar in place while packaging.  A running
 # Spring Boot executable can still read nested entries from that file while
 # serving requests, so a concurrent package can surface as EOF/ZIP errors on
@@ -223,16 +246,10 @@ if (-not (Test-Path -LiteralPath $JarPath -PathType Leaf)) {
 $runtimeDir = Join-Path $PSScriptRoot ".runtime"
 $runtimeJar = Join-Path $runtimeDir "data-element-runtime.jar"
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-if ([IO.Path]::GetFullPath($JarPath) -ne [IO.Path]::GetFullPath($runtimeJar)) {
-    Copy-Item -LiteralPath $JarPath -Destination $runtimeJar -Force
-}
+Copy-Item -LiteralPath $JarPath -Destination $runtimeJar -Force
 $JarPath = $runtimeJar
 
 $localOverrides = @{}
-
-# Deployment-owned settings already come from the private environment/Nacos.
-# Keep the legacy explicit-environment options below out of the default path.
-if (-not $usePrivateRuntime) {
 
 # The relay signing key is deliberately supplied by the Windows user
 # environment, never hard-coded in this script or in a project config file.
@@ -299,8 +316,10 @@ if ($Profile -eq "dev") {
 }
 
 $env:SPRING_APPLICATION_JSON = $localOverrides | ConvertTo-Json -Depth 8 -Compress
+Write-Status "Using Nacos runtime configuration: $NacosHost`:$NacosPort (namespace=$NacosNamespace, profile=$Profile)"
+if ([string]::IsNullOrWhiteSpace($KafkaBootstrapServers)) {
+    Write-Status "Kafka bootstrap servers are supplied by Nacos; saved task connections remain independent."
 }
-Write-Status "Using Nacos runtime configuration: $NacosHost`:$NacosPort (profile=$Profile)"
 
 Write-Status "Starting backend in foreground."
 Write-Status "Live logs will appear in this terminal and are retained in: $stdoutLog"

@@ -23,6 +23,11 @@ public class CustomJsonValueProvider implements ResultProvider {
      */
     private final MagicApiResultProvider resultDelegate = new MagicApiResultProvider();
 
+    @org.springframework.beans.factory.annotation.Autowired
+    public void configureDiagnostics(com.linewell.dataelement.feature.diagnostics.DiagnosticEvents diagnostics) {
+        resultDelegate.setDiagnostics(diagnostics);
+    }
+
     /**
      * 定义返回结果，默认返回JsonBean
      */

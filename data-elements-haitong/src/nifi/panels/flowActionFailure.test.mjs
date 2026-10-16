@@ -112,6 +112,8 @@ test('the actual error panel renders the failed response even when the server er
     if (id === '@/stores/errorPanelStore') return { useErrorPanelStore: select => select({ visible: true, failures: [{ pipelineId: 'p', error: row }], failureSequence: 1 }) };
     if (id === '@/stores/canvasStore') return { useCanvasStore: select => select({ currentPipelineId: 'p' }) };
     if (id === '@/api/pipelines') return { useFlowErrors: () => ({ data: [], isError: true, error: new Error('poll failed') }), useClearFlowErrors: () => ({}) };
+    if (id === '../api/bridgeSession') return { useSessionRevision: () => 1, useTokenReady: () => false };
+    if (id === './DiagnosticDrawer') return { default: () => null };
     if (id === '../utils/flowActionFailure') return { mergeFlowErrors };
     return {};
   } });

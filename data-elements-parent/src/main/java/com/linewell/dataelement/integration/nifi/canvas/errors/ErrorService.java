@@ -1,6 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.errors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -16,11 +17,11 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * In-memory + file-backed store of {@link FlowError}s, keyed by pipeline id.
+ * In-memory + file-backed store of {@link FlowError}s, keyed by tenant and pipeline id.
  *
  * <p>Each pipeline keeps at most {@link #MAX_PER_FLOW} most recent errors.
  * On each mutation the list is also persisted beneath the backend log directory
- * to {@code errors/{flowId}.json}
+ * to {@code errors/{tenantId}/{flowId}.json}
  * so the UI can reload error context after a backend restart.
  */
 @Service
@@ -44,7 +45,7 @@ public class ErrorService {
         log.info("ErrorService persistence dir: {}", baseDir);
     }
 
-    public List<FlowError> list(String flowId) {
+    public synchronized List<FlowError> list(String flowId) {
         return new ArrayList<>(load(flowId));
     }
 
@@ -89,7 +90,7 @@ public class ErrorService {
     }
 
     public synchronized void clear(String flowId) {
-        store.remove(flowId);
+        store.remove(tenantKey(flowId));
         try {
             Files.deleteIfExists(pathOf(flowId));
         } catch (IOException ex) {
@@ -98,7 +99,7 @@ public class ErrorService {
     }
 
     private List<FlowError> load(String flowId) {
-        return store.computeIfAbsent(flowId, this::loadFromDisk);
+        return store.computeIfAbsent(tenantKey(flowId), ignored -> loadFromDisk(flowId));
     }
 
     private List<FlowError> loadFromDisk(String flowId) {
@@ -115,16 +116,23 @@ public class ErrorService {
 
     private void persist(String flowId, List<FlowError> list) {
         try {
-            mapper.writerWithDefaultPrettyPrinter().writeValue(pathOf(flowId).toFile(), list);
+            Path target = pathOf(flowId);
+            Files.createDirectories(target.getParent());
+            mapper.writerWithDefaultPrettyPrinter().writeValue(target.toFile(), list);
         } catch (IOException ex) {
             log.warn("Persist errors for {} failed: {}", flowId, ex.getMessage());
         }
+    }
+
+    private String tenantKey(String flowId) {
+        pathOf(flowId); // validate before forming a cache key; never read legacy unscoped files
+        return TenantContext.requireTenantId() + ":" + flowId;
     }
 
     private Path pathOf(String flowId) {
         if (flowId == null || flowId.isBlank() || flowId.contains("/") || flowId.contains("\\") || flowId.contains("..")) {
             throw new IllegalArgumentException("Invalid flow id: " + flowId);
         }
-        return baseDir.resolve(flowId + ".json");
+        return baseDir.resolve(TenantContext.requireTenantId()).resolve(flowId + ".json");
     }
 }
