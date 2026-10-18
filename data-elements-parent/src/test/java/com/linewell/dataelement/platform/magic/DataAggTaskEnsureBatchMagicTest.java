@@ -34,6 +34,66 @@ import org.ssssssss.script.runtime.ExitValue;
 class DataAggTaskEnsureBatchMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
+    @ParameterizedTest @ValueSource(strings={"mysql","postgresql","oracle","kingbase8","ftp"})
+    void timePartitionTaskKeepsSourceConnectorAndBatchesTwentyAndHundredTargets(String type) throws Exception {
+        var reads=new ArrayList<Integer>();
+        for(int size:List.of(20,100)) {
+            var f=new Fixture(size); f.prepareCreation();
+            f.jdbc.update("update db_datasource_t set db_type=? where tid='source-db'",type);
+            f.jdbc.execute("alter table db_table_column_t add data_type varchar(64)");
+            f.jdbc.update("update db_table_column_t set data_type='varchar'");
+            f.jdbc.update("insert into db_table_column_t(tid,tenant_id,table_id,column_name,ordinal_position,is_del,data_type) values('source-time','police','source-1','updated_at',2,0,'timestamp')");
+            var plan=Map.of("enabled",true,"strategy","RANGE","field","updated_at","kind","TIME","partitions",List.of(Map.of("name","p_future","upper","MAXVALUE","bucket","future")));
+            for(int i=0;i<size;i++) {
+                f.jdbc.update("insert into db_table_column_t(tid,tenant_id,table_id,column_name,ordinal_position,is_del,data_type) values(?,'police',?,'updated_at',2,0,'timestamp')","time-"+i,"target-"+i);
+                f.jdbc.update("update db_table_t set field_governance_config=? where tid=?",cn.hutool.json.JSONUtil.toJsonStr(Map.of("partitionPlan",plan)),"target-"+i);
+            }
+            assertInstanceOf(Map.class,f.run()); reads.add(f.counter.queries);
+            assertEquals(type.equals("ftp")?1:0,f.fileProbe.locatorCalls);
+            assertEquals(0,f.fileProbe.calls);
+            var designs=f.jdbc.queryForList("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'");
+            var nodes=cn.hutool.json.JSONUtil.parseObj(designs.getFirst().get("dsl_json")).getJSONArray("nodes");
+            assertEquals(type.equals("kingbase8")?"source.kingbase":"source."+type,nodes.getJSONObject(0).getStr("manifestKey"));
+            var sink=nodes.getJSONObject(nodes.size()-1).getJSONObject("config");
+            assertEquals("updated_at",sink.getJSONObject("partitionPlan").getStr("field"));
+            assertTrue(sink.getJSONObject("partitionPlan").getBool("enabled"));
+            System.out.println("Partition task source="+type+", targets="+size+", SQL reads="+reads.getLast()+", file locator="+f.fileProbe.locatorCalls);
+        }
+        assertEquals(reads.getFirst(),reads.getLast());
+    }
+
+    @Test
+    void sourcePreflightNeedsNoTargetAndEnforcesSourceTenantRoleAndReadOnlyMode() throws Exception {
+        var f=new Fixture(0); f.prepareCreation();
+        f.fileProbe.locatorFailure=new IllegalStateException("JDBC source must never request a file");
+        var body=Map.<String,Object>of("tableId","source-1","validateSourceOnly",true,"dryRun",true);
+        var result=assertInstanceOf(Map.class,f.run(body));
+        assertEquals("source.mysql",result.get("sourceManifestKey"));
+        assertEquals(false,result.get("fileLocatorRequired")); assertEquals(false,result.get("sideEffectsApplied"));
+        assertEquals(0,f.fileProbe.locatorCalls); assertEquals(0,f.counter.writes);
+        f.scope.deniedId="source-db"; assertInstanceOf(ExitValue.class,f.run(body));
+        assertEquals(0,f.fileProbe.locatorCalls); assertEquals(0,f.counter.writes);
+        f.scope.deniedId=null; f.jdbc.update("update db_table_t set tenant_id='other' where tid='source-1'");
+        assertInstanceOf(ExitValue.class,f.run(body)); assertEquals(0,f.counter.writes);
+        assertInstanceOf(ExitValue.class,f.run(Map.of("tableId","source-1","validateSourceOnly",true)));
+        assertEquals(0,f.counter.queries); assertEquals(0,f.counter.writes);
+    }
+
+    @ParameterizedTest @CsvSource({"文件服务器连接超时,连接超时","文件服务器认证未通过,认证未通过","登记的来源文件无法唯一定位,无法唯一定位","登记缺少工作表或JSON数据路径,工作表"})
+    void fileFailuresKeepActionableCategoryAndNeverLeakUnderlyingDetails(String reason,String expected) throws Exception {
+        var f=new Fixture(2); f.prepareCreation();
+        f.jdbc.update("update db_datasource_t set db_type='ftp' where tid='source-db'");
+        f.fileProbe.locatorFailure=new IllegalStateException(reason+" password=test-only-private-secret");
+        for(boolean preflight:List.of(true,false)) {
+            var body=new LinkedHashMap<String,Object>(Map.of("tableId","source-1","dryRun",true));
+            if(preflight)body.put("validateSourceOnly",true);
+            var failure=assertInstanceOf(ExitValue.class,f.run(body));
+            String text=java.util.Arrays.toString(failure.getValues());
+            assertTrue(text.contains(expected),text); assertFalse(text.contains("test-only-private-secret"));
+            assertEquals(0,f.counter.writes);
+        }
+    }
+
     @Test
     void longEnumRulesAreLosslessOnTextAndLegacyVarcharFailsBeforeAnyWrite() throws Exception {
         for (boolean legacy : List.of(true, false)) {

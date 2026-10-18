@@ -34,7 +34,68 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Runs the canonical DDL API's batch branch with a real tenant metadata query. */
 class BatchCreateTableDdlMagicTest {
+    @Test
+    void partitionErrorsExplainMissingValuesAndUseTheRegisteredDatasourceName() throws Exception {
+        Fixture f=new Fixture(1);
+        f.jdbc.update("update db_datasource_t set db_name='汇聚库' where tid='db-0'");
+        var target=new LinkedHashMap<>(f.targets.getFirst());
+        target.put("partitionPlan",Map.of("enabled",true,"strategy","LIST","field","person_id","partitions",List.of()));
+        f.targets.set(0,target);
+        var failure=assertInstanceOf(ExitValue.class,f.run());
+        String message=java.util.Arrays.toString(failure.getValues());
+        assertTrue(message.contains("目标数据源“汇聚库”"),message);
+        assertTrue(message.contains("请填写至少一个区域编码或枚举值"),message);
+        assertFalse(message.contains("db-0")); assertFalse(message.contains("请配置1至"));
+        assertEquals(1,f.counter.reads); assertEquals(0,f.counter.writes);
+    }
+
+    @Test
+    void validRegionValuesGeneratePartitionsAndInvalidValuesHaveActionableMessages() throws Exception {
+        Fixture f=new Fixture(1);
+        f.jdbc.update("update db_datasource_t set db_type='oracle',db_name='汇聚库' where tid='db-0'");
+        var target=new LinkedHashMap<>(f.targets.getFirst());
+        target.put("tableItems",List.of(Map.of("columnName","region_code","columnComment","区域编码","dataType","int","columnType","int","primaryKey",1)));
+        target.put("partitionPlan",Map.of("enabled",true,"strategy","LIST","field","region_code","partitions",
+                List.of(Map.of("name","p_fz","values",List.of("350100")),Map.of("name","p_xm","values",List.of("350200")))));
+        f.targets.set(0,target);
+        var success=assertInstanceOf(Map.class,f.run());
+        String ddl=((Map<?,?>)((List<?>)success.get("results")).getFirst()).get("ddl").toString();
+        assertTrue(ddl.contains("PARTITION BY LIST"),ddl); assertFalse(ddl.contains("'350100'"),ddl);
+        target.put("partitionPlan",Map.of("enabled",true,"strategy","LIST","field","region_code","partitions",
+                List.of(Map.of("name","p_fz","values",List.of("福州")))));
+        String numeric=java.util.Arrays.toString(assertInstanceOf(ExitValue.class,f.run()).getValues());
+        assertTrue(numeric.contains("数字类型，请填写数字枚举值"),numeric);
+        target.put("partitionPlan",Map.of("enabled",true,"strategy","LIST","field","region_code","partitions",
+                List.of(Map.of("name","p_fz","values",List.of("350100","350100")))));
+        String duplicate=java.util.Arrays.toString(assertInstanceOf(ExitValue.class,f.run()).getValues());
+        assertTrue(duplicate.contains("区域编码或枚举值有重复"),duplicate);
+        assertEquals(1,f.counter.reads); assertEquals(0,f.counter.writes);
+    }
     private static final String SOURCE_ID = "8a56e7d664934c1499102cfa508cd58a";
+
+    @Test void partitionProbeReadsOneSourceAndOneAuthorizedDatasourceBatchAndRejectsEveryHiddenId() throws Exception {
+        Fixture f=new Fixture(20);
+        f.jdbc.execute("create table db_table_t(tid varchar(64), tenant_id varchar(32), datasource_id varchar(64), table_name varchar(100), is_del int)");
+        f.jdbc.update("insert into db_table_t values('source','police','db-0','source_t',0)");
+        var ids=java.util.stream.IntStream.range(0,20).mapToObj(i->"db-"+i).toList();
+        var body=Map.<String,Object>of("partitionProbe",true,"canvas",true,"sourceTableId","source","targetDbIds",ids);
+        var response=assertInstanceOf(Map.class,f.run(body));
+        assertEquals(20,((Map<?,?>)response.get("targetSupport")).size());
+        assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
+        f.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg='{}' where tid='db-1'");
+        var ordinaryHive=assertInstanceOf(Map.class,f.run(body));
+        assertEquals(false,((Map<?,?>)ordinaryHive.get("targetSupport")).get("db-1"));
+        f.jdbc.update("update db_datasource_t set pool_cfg='{\"usePlatformHiveConfig\":true}' where tid='db-1'");
+        var managedHive=assertInstanceOf(Map.class,f.run(body));
+        assertEquals(true,((Map<?,?>)managedHive.get("targetSupport")).get("db-1"));
+        assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
+        f.scope.deniedId="db-19";
+        assertInstanceOf(ExitValue.class,f.run(body));assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
+        f.scope.deniedId=null;f.jdbc.update("update db_datasource_t set tenant_id='other' where tid='db-19'");
+        assertInstanceOf(ExitValue.class,f.run(body));assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
+        f.jdbc.update("update db_table_t set tenant_id='other' where tid='source'");
+        assertInstanceOf(ExitValue.class,f.run(body));assertEquals(1,f.counter.reads);assertEquals(0,f.counter.writes);
+    }
 
     @Test void twentyOracleTargetsWithTwentyOrHundredUnicodeFieldsStillUseOneAuthorizedRead()throws Exception {
         for(int count:List.of(20,100)) {
@@ -345,16 +406,20 @@ class BatchCreateTableDdlMagicTest {
         }
 
         Object run() throws Exception {
+            return run(Map.of("batchGenerate", true, "canvas", true, "targets", targets));
+        }
+        Object run(Map<String,Object> body) throws Exception {
             String script = CanonicalMagicSources.byId(SOURCE_ID)
                     .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.model\\.|cn\\.hutool\\.json\\.JSONUtil|java\\.util\\.Map|java\\.util\\.List)[^\\r\\n]*\\r?\\n", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
-            inputs.put("body", Map.of("batchGenerate", true, "canvas", true, "targets", targets));
+            inputs.put("body", body);
             inputs.put("db", db);
             inputs.put("tenantRuntime", scope);
             inputs.put("dataScope", scope);
             inputs.put("metadataExplorerService", ddlGenerator);
             inputs.put("canvasTableDdl", ddlParser);
             inputs.put("portableDdl", new com.linewell.dataelement.metautil.ddl.PortableDdlConverter());
+            inputs.put("tablePartitions", new com.linewell.dataelement.metautil.ddl.TablePartitions());
             inputs.put("jsons", new JsonModule());
             counter.reads = 0;
             counter.writes = 0;

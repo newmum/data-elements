@@ -22,6 +22,9 @@ import com.linewell.dataelement.metautil.model.dto.TablePageResult;
  * @author MetaUtil
  */
 public interface MetadataExplorer {
+    default java.util.Map<String,Object> getPartitionInfo(DataSourceConfig config,String tableName) {
+        return java.util.Map.of("status","unsupported","message","当前来源不支持自动探查分区，可手工配置");
+    }
 
     /**
      * 测试连接

@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -187,8 +188,66 @@ public class HiveModule {
         try (Connection connection = getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("USE " + hiveIdentifier(database));
-            execDDL(connection, sql);
+            var statements=com.alibaba.druid.sql.SQLUtils.parseStatements(sql,com.alibaba.druid.DbType.hive);
+            if(statements.size()>4001)throw new IllegalArgumentException("单次Hive分区DDL语句过多");
+            statement.setQueryTimeout(readQueryTimeoutSeconds());
+            for(var ddl:statements)statement.execute(ddl.toString());
         }
+    }
+
+    /** One bounded metadata operation; does not sample table data or read credentials into the result. */
+    public Map<String,Object> partitionLayout(String database,String table) throws Exception {
+        String qualified=hiveIdentifier(database)+"."+hiveIdentifier(table);
+        try(var connection=getConnection();var statement=connection.createStatement()) {
+            statement.setQueryTimeout(readQueryTimeoutSeconds());statement.setMaxRows(2001);
+            StringBuilder create=new StringBuilder();
+            try(var rs=statement.executeQuery("SHOW CREATE TABLE "+qualified)){while(rs.next())create.append(rs.getString(1)).append('\n');}
+            var ast=(com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement)com.alibaba.druid.sql.SQLUtils.parseStatements(create.toString(),com.alibaba.druid.DbType.hive).getFirst();
+            var keys=ast.getPartitionColumns();
+            if(keys.size()!=1||!com.alibaba.druid.sql.SQLUtils.normalize(keys.getFirst().getColumnName()).equalsIgnoreCase("ods_partition")
+                    ||!keys.getFirst().getDataType().getName().equalsIgnoreCase("STRING"))throw new IllegalArgumentException("Hive目标必须使用单列ods_partition STRING分区");
+            String location="",serde="",input="",delimiter=null;
+            try(var rs=statement.executeQuery("DESCRIBE FORMATTED "+qualified)) {
+                while(rs.next()){String key=Objects.toString(rs.getString(1),"").trim();String value=Objects.toString(rs.getString(2),"").trim();
+                    if(key.equalsIgnoreCase("Location:"))location=value;if(key.equalsIgnoreCase("SerDe Library:"))serde=value;if(key.equalsIgnoreCase("InputFormat:"))input=value;
+                    if(value.equalsIgnoreCase("field.delim"))delimiter=rs.getString(3);
+                    if(key.equalsIgnoreCase("field.delim"))delimiter=rs.getString(2);}
+            }
+            if(location.isBlank()||!serde.endsWith("LazySimpleSerDe")||!input.endsWith("TextInputFormat"))throw new IllegalArgumentException("当前分区入湖要求Ctrl-A文本表和真实HDFS Location");
+            if(delimiter!=null&&!java.util.Set.of("\u0001","1","\\001","\\u0001").contains(delimiter))throw new IllegalArgumentException("Hive目标字段分隔符必须为Ctrl-A，与分区Writer一致");
+            List<String> values=new ArrayList<>();
+            try(var rs=statement.executeQuery("SHOW PARTITIONS "+qualified)){while(rs.next()){if(values.size()==2000)throw new IllegalArgumentException("Hive分区超过2000个，不能截断核验");values.add(rs.getString(1));}}
+            return Map.of("location",location,"partitions",values);
+        }
+    }
+
+    /** One metastore batch preserves custom partition Locations; never guesses warehouse paths. */
+    public Map<String,String> partitionLocations(String database,String table,List<String> buckets) throws Exception {
+        hiveIdentifier(database);hiveIdentifier(table);
+        if(buckets==null||buckets.isEmpty()||buckets.size()>2000)throw new IllegalArgumentException("Hive分区位置查询需要1至2000个分区");
+        List<String> names=new ArrayList<>();
+        for(String bucket:buckets){if(!bucket.matches("[A-Za-z0-9_-]{1,64}"))throw new IllegalArgumentException("Hive分区值无效");names.add("ods_partition="+bucket);}
+        var conf=new org.apache.hadoop.hive.conf.HiveConf();
+        conf.addResource(new org.apache.hadoop.fs.Path(resolveConfFile("hive-site.xml")));
+        if(StringUtils.isBlank(conf.get("hive.metastore.uris")))throw new IllegalArgumentException("分区入湖需要MRS客户端hive-site.xml中的hive.metastore.uris，以批量读取真实分区位置");
+        conf.set("hive.metastore.client.socket.timeout","15s");conf.set("hive.metastore.connect.retries","1");
+        if("KERBEROS".equalsIgnoreCase(auth)&&!hiveBasicAuthEnable) {
+            conf.addResource(new org.apache.hadoop.fs.Path(resolveConfFile("core-site.xml")));
+            LoginUtil.login(userName,userKeytabFile,krb5File,conf);
+        }
+        var client=new org.apache.hadoop.hive.metastore.HiveMetaStoreClient(conf);
+        try {
+            var partitions=client.getPartitionsByNames(database,table,names);
+            Map<String,String> locations=new java.util.LinkedHashMap<>();
+            for(var partition:partitions) {
+                if(partition.getValues().size()!=1||partition.getSd()==null||StringUtils.isBlank(partition.getSd().getLocation()))throw new IllegalArgumentException("Hive分区位置不完整");
+                String bucket=partition.getValues().getFirst();
+                if(!buckets.contains(bucket))throw new IllegalArgumentException("Metastore返回非本次目标分区");
+                locations.put(bucket,partition.getSd().getLocation());
+            }
+            if(locations.size()!=new java.util.HashSet<>(buckets).size())throw new IllegalArgumentException("Hive目标部分分区不存在或无权读取，不能猜测目录");
+            return locations;
+        } finally {client.close();}
     }
 
     public void execDMLSql(String sql) throws SQLException, IOException, ClassNotFoundException {

@@ -6,8 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-final class HiveServiceFixtures {
-    static void stubGlobals(com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient nifi) {
+/** 编译器部署测试共用的 NiFi 根作用域与已启用 JSON 服务夹具。 */
+public final class HiveServiceFixtures {
+    public static void stubGlobals(com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient nifi) {
         org.mockito.Mockito.when(nifi.get("/flow/process-groups/root", JsonNode.class)).thenReturn(rootFlow());
         org.mockito.Mockito.when(nifi.listControllerServices("root")).thenReturn(codecs());
     }

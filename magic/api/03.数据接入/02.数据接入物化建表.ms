@@ -730,11 +730,13 @@ if (!targetRegistered && !targetOdsDomainBound) {
 // A manually edited statement is validated against the selected tenant-owned
 // datasource and exact target table before any placeholder metadata is changed.
 var submittedDdl = text(body?.ddl).trim()
+var submittedPartitionPlan = body?.partitionPlan
 if (!blank(submittedDdl)) {
     var validationBody = body
     body = { canvas: true, validateOnly: true, ddl: submittedDdl,
-        dbId: propList.dbId, tableName: propList.tableName }
-    createTable()
+        dbId: propList.dbId, tableName: propList.tableName, partitionPlan:submittedPartitionPlan, tableItems:tableItems }
+    var partitionValidation = createTable()
+    if (partitionValidation?.partitionPlan != null) { submittedPartitionPlan = partitionValidation.partitionPlan }
     body = validationBody
 }
 // 表名由用户在物化抽屉中最终确认。按当前目标数据源枚举后做 trim + 不区分大小写
@@ -839,7 +841,8 @@ if (!reuseTargetTable || hiveMaterialization || confirmReuseExisting || body?.re
             // explicitly submit an edited statement.
             canvas: true,
             propList: propList,
-            tableItems: tableItems
+            tableItems: tableItems,
+            partitionPlan:submittedPartitionPlan
         }
         body = ddlRequestBody
         ddl = getCreateTableDDL()
@@ -855,7 +858,8 @@ if (!reuseTargetTable || hiveMaterialization || confirmReuseExisting || body?.re
         skipIfExists: true,
         validateOnly: originalBody?.dryRun == true,
         reuseExistingOnly: confirmReuseExisting,
-        tableItems: tableItems
+        tableItems: tableItems,
+        partitionPlan:submittedPartitionPlan
     }
     body = createTableRequestBody
     var createResult = createTable()
@@ -1017,6 +1021,7 @@ var targetGovernanceConfig = {
     registrationSavedPhase: 'materialized',
     sourceTableId: sourceTableId,
     sourceTableName: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
+    partitionPlan: submittedPartitionPlan,
     fieldTransformBindings: buildFieldTransformBindings(sourceTable, sourceColumns, targetTableId, tableItems, columns)
 }
 db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)

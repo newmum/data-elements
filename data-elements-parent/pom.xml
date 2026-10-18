@@ -18,6 +18,8 @@
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<!-- 可用 -Dbackend.build.directory=... 隔离 Maven 产物，避免与编辑器增量编译共享缓存。 -->
+		<backend.build.directory>${project.basedir}/target</backend.build.directory>
 		<java.version>21</java.version>
 		<magic-api.version>2.2.2</magic-api.version>
 		<druid.version>1.2.20</druid.version>
@@ -643,6 +645,7 @@
 	</dependencies>
 
 	<build>
+		<directory>${backend.build.directory}</directory>
 		<finalName>data-element</finalName>
 		<plugins>
 			<plugin>
@@ -652,6 +655,8 @@
 					<reportsDirectory>${project.basedir}/../logs/backend/surefire</reportsDirectory>
 					<systemPropertyVariables>
 						<backend.javaSourceDirectory>${project.build.sourceDirectory}</backend.javaSourceDirectory>
+						<!-- 测试回环 socket 使用报告目录，避免 Windows 系统 TEMP 路径的 AF_UNIX 兼容问题。 -->
+						<jdk.net.unixdomain.tmpdir>${project.basedir}/../logs/backend/surefire</jdk.net.unixdomain.tmpdir>
 					</systemPropertyVariables>
 				</configuration>
 			</plugin>

@@ -629,6 +629,51 @@ var normalizeConfigType = (dbType, cfg) => {
     try { return sourceTypes.configType(text(dbType), cfg) }
     catch (e) { exit 400, '数据源类型配置不完整：' + e.getMessage() }
 }
+// 仅返回固定的诊断文案，不把底层异常中的账号、密码或连接串发回客户端。
+var fileLocatorFailure = (failure) => {
+    var detail = ''
+    var cause = failure
+    for (depth in [0,1,2,3,4,5]) {
+        if (cause == null) { break }
+        detail = detail + ' ' + text(cause.getMessage()).toLowerCase()
+        var nextCause = cause.getCause()
+        if (nextCause == cause) { break }
+        cause = nextCause
+    }
+    if (detail.contains('超时') || detail.contains('timed out') || detail.contains('timeout')) {
+        return '来源FTP/SFTP文件服务器连接超时，未能校验来源文件。请检查该数据源的主机、端口、网络和防火墙后重试'
+    }
+    if (detail.contains('认证') || detail.contains('authentication') || detail.contains('auth fail') || detail.contains('login failed')) {
+        return '来源FTP/SFTP文件服务器认证未通过，请检查登记的账号、密码或密钥配置'
+    }
+    if (detail.contains('权限') || detail.contains('permission denied') || detail.contains('access denied')) {
+        return '来源FTP/SFTP账号没有读取文件目录的权限，请检查目录读取权限'
+    }
+    if (detail.contains('不存在') || detail.contains('无法进入') || detail.contains('no such file')) {
+        return '来源FTP/SFTP目录不存在或无法进入，请检查登记的文件目录'
+    }
+    if (detail.contains('唯一定位')) {
+        return '来源FTP/SFTP文件无法唯一定位，请在数据源登记中确认文件名、目录和匹配规则'
+    }
+    if (detail.contains('工作表') || detail.contains('json数据路径')) {
+        return '来源文件缺少工作表或JSON数据路径，请在数据源登记中确认数据集定位信息'
+    }
+    if (detail.contains('不属于') || detail.contains('解析格式') || detail.contains('分隔符') || detail.contains('charset')) {
+        return '来源文件登记的位置或解析配置无效，请确认文件目录、格式、编码和分隔符'
+    }
+    if (detail.contains('连接') || detail.contains('connection')) {
+        return '无法连接来源FTP/SFTP文件服务器，请检查登记的主机、端口和网络连通性'
+    }
+    return '来源FTP/SFTP文件预检失败，请检查登记的文件位置、解析配置及文件服务器状态'
+}
+var directFileLocator = (cfg, table) => {
+    try {
+        return structuredFileProbe.resolveFtpFileLocator(cfg,
+            text(first(table, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])),
+            first(table, ['fieldGovernanceConfig', 'field_governance_config']),
+            text(first(table, ['tableComment', 'table_comment'])))
+    } catch (fileError) { exit 409, fileLocatorFailure(fileError) }
+}
 // Huawei MRS Hive is a server-managed target.  Its registered datasource
 // intentionally has no browser-side jdbc_url, so the generated DSL must use
 // the dedicated Hive sink rather than falling into the generic JDBC sink.
@@ -875,6 +920,7 @@ var forceRebuild = text(body?.repair || body?.forceRebuild || body?.rebuild).tri
 forceRebuild = forceRebuild == 'true' || forceRebuild == '1' || forceRebuild == 'yes'
 var now = new Date()
 var dryRun = body?.dryRun == true
+if (body?.validateSourceOnly == true && !dryRun) { exit 400, '来源预检只支持dryRun=true，不执行物化或任务写入' }
 if (blank(sourceTableId)) {
     exit 400, 'tableId不能为空'
 }
@@ -906,6 +952,20 @@ var sourceColumns = db.table('db_table_column_t').where()
 metadataColumnsByTableId[sourceTableId] = sourceColumns == null ? [] : sourceColumns
 loadGovernanceForTableIds([sourceTableId])
 var sourceGovernanceConfig = governanceConfigOf(sourceTable)
+// 抽屉提交前的一次来源预检。无需已有目标表，不创建表、目录、任务或NiFi流程。
+// JDBC来源按真实登记类型直接返回，不进入FTP文件定位分支。
+if (body?.validateSourceOnly == true) {
+    var preflightCfg = readCfg(sourceDb)
+    var preflightType = first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
+    var preflightManifest = normalizeSourceKey(preflightType, preflightCfg)
+    var preflightMode = pushAccessMode(sourceDb, preflightCfg)
+    var needsFileLocator = ['source.ftp', 'source.sftp'].contains(preflightManifest)
+        && !['receive', 'upload', 'push'].contains(preflightMode)
+    if (needsFileLocator) { directFileLocator(preflightCfg, sourceTable) }
+    return {valid:true, sourcePreflight:true, sourceTableId:sourceTableId,
+        sourceManifestKey:preflightManifest, fileLocatorRequired:needsFileLocator,
+        dryRun:true, sideEffectsApplied:false}
+}
 var sourceTemporalMappings = temporalMappingsOf(sourceColumns, sourceGovernanceConfig)
 var dictionaryTableIds = []
 var dictionaryTableNames = []
@@ -1393,14 +1453,7 @@ if (sourceManifestKey == 'source.oceanbase') {
 if (pushFileSource == null && (sourceManifestKey == 'source.ftp' || sourceManifestKey == 'source.sftp')) {
     // 字段始终使用 db_table_column_t 的登记快照；文件定位也优先使用登记描述。
     // 旧登记只列目录定位文件，不打开文件、不采样或比较字段。客户端不覆盖托管配置。
-    var directFile = null
-    try {
-        directFile = structuredFileProbe.resolveFtpFileLocator(sourceCfg, text(sourceTableName),
-            first(sourceTable, ['fieldGovernanceConfig', 'field_governance_config']),
-            text(first(sourceTable, ['tableComment', 'table_comment'])))
-    } catch (fileError) {
-        exit 409, '来源文件定位信息不完整，请在数据源登记中确认文件位置、工作表或JSON路径'
-    }
+    var directFile = directFileLocator(sourceCfg, sourceTable)
     var directProtocol = text(first(sourceCfg, ['ftpProtocol', 'ftp_protocol', 'protocol'])).trim().toLowerCase()
     if (blank(directProtocol)) { directProtocol = text(sourceDbType).trim().toLowerCase() == 'sftp' ? 'sftp' : 'ftp' }
     var directPort = first(sourceCfg, ['ftpPort', 'ftp_port', 'port'])
@@ -1723,6 +1776,18 @@ for (targetIndex, targetCandidate in [targetTable]) {
             targetColumns: columnList(candidateTargetColumns),
             statementType: candidateTargetPrimaryKeys == '' ? 'INSERT' : 'UPSERT',
             updateKeys: candidateTargetPrimaryKeys
+        }
+    }
+    var partitionGovernance = governanceConfigOf(targetCandidate)
+    if (partitionGovernance?.partitionPlan?.enabled == true) {
+        candidateSinkConfig.partitionPlan = partitionGovernance.partitionPlan
+        if (candidateIsHuaweiMrsHive) {
+            candidateSinkConfig.partitionInputField = partitionGovernance.partitionPlan.field
+            for (partitionTargetColumn in (candidateTargetColumns == null ? [] : candidateTargetColumns)) {
+                if (text(colName(partitionTargetColumn)).toLowerCase() != text(partitionGovernance.partitionPlan.field).toLowerCase()) { continue }
+                var matchedPartitionSource = sourceColumnMap[text(colName(partitionTargetColumn)).toLowerCase()]
+                if (matchedPartitionSource != null) { candidateSinkConfig.partitionInputField = colName(matchedPartitionSource) }
+            }
         }
     }
     dslNodes.add({

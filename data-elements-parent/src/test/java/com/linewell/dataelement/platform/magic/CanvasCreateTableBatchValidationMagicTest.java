@@ -38,6 +38,27 @@ class CanvasCreateTableBatchValidationMagicTest {
     private PhysicalMetadata physical;
 
     @Test
+    void partitionedSingleAndBatchValidationPreserveFullDdlWithoutMutatingParserResult() throws Exception {
+        var partitions = new com.linewell.dataelement.metautil.ddl.TablePartitions();
+        var config = new DataSourceConfig();
+        config.setDatabaseType(com.linewell.dataelement.metautil.model.enums.DatabaseType.HIVE);
+        config.setDatabase("warehouse");
+        var column = new ColumnInfo(); column.setColumnName("occurred_at"); column.setColumnType("timestamp");
+        var plan = partitions.normalize(new LinkedHashMap<>(Map.of("enabled",true,"strategy","MONTH",
+                "field","occurred_at","startMonth","2026-10","months",2)),List.of(column),config.getDatabaseType());
+        String ddl = partitions.apply("CREATE TABLE ods_partition_probe(occurred_at TIMESTAMP)",plan,config);
+        var target = new LinkedHashMap<String,Object>(Map.of("dbId","target-db","tableName","ods_partition_probe",
+                "ddl",ddl,"partitionPlan",plan,"tableItems",List.of(Map.of("columnName","occurred_at","dataType","timestamp"))));
+        var batch = assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,"batchValidateOnly",true,"targets",List.of(target))));
+        assertEquals(ddl,((Map<?,?>)((List<?>)batch.get("results")).getFirst()).get("ddl"));
+        assertEquals(false,batch.get("sideEffectsApplied"));
+        var singleRequest = new LinkedHashMap<>(target); singleRequest.put("canvas",true); singleRequest.put("validateOnly",true);
+        var single = assertInstanceOf(Map.class,run(singleRequest));
+        assertEquals(ddl,single.get("ddl")); assertEquals(false,single.get("sideEffectsApplied"));
+        assertEquals(0,counter.writes); assertEquals(0,physical.calls);
+    }
+
+    @Test
     void uppercaseRequestedNameUsesCanonicalLowercaseBatchKey() throws Exception {
         jdbc.update("update db_datasource_t set db_type='mysql',username='fixture',pool_cfg=?",
                 "{\"host\":\"fixture.invalid\",\"database\":\"warehouse\"}");
@@ -291,6 +312,7 @@ class CanvasCreateTableBatchValidationMagicTest {
         inputs.put("connectionProperties", scope);
         inputs.put("poolJsons", new JsonFixture());
         inputs.put("canvasTableDdl", new CanvasTableDdl());
+        inputs.put("tablePartitions", new com.linewell.dataelement.metautil.ddl.TablePartitions());
         inputs.put("hwhive",physical);
         inputs.put("metadataExplorerService",physical);
         return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));

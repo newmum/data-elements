@@ -74,6 +74,8 @@
         <el-alert :title="loadError" type="error" :closable="false" show-icon />
         <el-button type="primary" plain @click="init">重试加载</el-button>
       </div>
+      <el-alert v-if="sourcePreflightError" class="source-preflight-error" :title="sourcePreflightError"
+        type="error" :closable="false" show-icon />
       <div v-show="!ddlMode && !loadError" class="materialization-form-view">
       <u-title name="建表信息" />
       <el-alert v-for="message in templateWarnings" :key="message" :title="message" type="warning" :closable="false" show-icon class="mb-2" />
@@ -123,9 +125,38 @@
       </v-table>
       </div>
       <div v-if="ddlMode && !loadError" class="ddl-inline-panel">
-        <el-tabs v-if="ddlPlans.length > 1" v-model="activeDdlKey" class="ddl-target-tabs">
-          <el-tab-pane v-for="plan in ddlPlans" :key="plan.key" :name="plan.key" :label="plan.dbName" />
-        </el-tabs>
+        <div class="ddl-target-toolbar">
+          <el-tabs v-model="activeDdlKey" class="ddl-target-tabs">
+            <el-tab-pane v-for="plan in ddlPlans" :key="plan.key" :name="plan.key" :label="plan.dbName" />
+          </el-tabs>
+          <el-checkbox v-if="activePartitionSupported" :model-value="activePartition.enabled === true"
+            :disabled="!editable || ddlGenerating || isSaveing" @change="togglePartition">创建分区</el-checkbox>
+        </div>
+        <div v-if="activePartitionSupported && activePartition.enabled" class="partition-settings">
+          <span>{{ partitionProbeMessage }}</span>
+          <div class="partition-settings-fields">
+            <el-select v-model="activePartition.field" placeholder="分区字段" :disabled="!editable" @change="updatePartitionDdl">
+              <el-option v-for="field in templateTableItems" :key="field.columnName" :value="field.columnName"
+                :label="`${field.columnComment || field.columnName}（${field.columnName}）`" />
+            </el-select>
+            <el-select v-model="activePartition.strategy" :disabled="!editable" @change="changePartitionStrategy">
+              <el-option v-if="activePartition.partitions?.length" label="继承／配置范围分区" value="RANGE" />
+              <el-option label="按月分区" value="MONTH" />
+              <el-option label="区域／枚举分区" value="LIST" />
+            </el-select>
+            <template v-if="activePartition.strategy === 'MONTH'">
+              <el-date-picker v-model="activePartition.startMonth" type="month" value-format="YYYY-MM" placeholder="起始月份" @change="updatePartitionDdl" />
+              <el-input-number v-model="activePartition.months" :min="1" :max="240" controls-position="right" @change="updatePartitionDdl" />
+              <span>个月；包含历史与未来兜底分区</span>
+            </template>
+            <el-input v-if="activePartition.strategy === 'MONTH' || activePartition.kind === 'TIME'"
+              v-model="activePartition.timezone" placeholder="分区时区，默认Asia/Shanghai" @change="updatePartitionDdl" />
+            <el-input v-if="activePartition.strategy === 'LIST'" v-model="activePartition.enumText"
+              class="partition-values-input" placeholder="区域编码或枚举值，用逗号分隔，如350100,350200"
+              @input="invalidateDdl" @change="updatePartitionDdl" @keyup.enter="updatePartitionDdl" />
+          </div>
+          <el-alert v-if="partitionError" :title="partitionError" :type="partitionErrorType" :closable="false" show-icon />
+        </div>
         <el-alert v-for="issue in activeDdlWarnings" :key="`${issue.field}:${issue.message}`"
           :title="`${issue.field}：${issue.message}`" type="warning" :closable="false" show-icon class="mb-2" />
         <div ref="ddlEditorHost" class="ddl-editor-host">
@@ -277,6 +308,120 @@ const ddlWarningsByTarget = ref<Record<string, any[]>>({});
 const ddlTableItemsByTarget = ref<Record<string, any[]>>({});
 const activeDdlWarnings = computed(() => ddlWarningsByTarget.value[activeDdlKey.value] || []);
 const activeDdlKey = ref("");
+const partitionPlans = ref<Record<string, any>>({});
+const ddlPartitionPlans = ref<Record<string, any>>({});
+const partitionSupport = ref<Record<string, boolean>>({});
+const partitionProbeMessage = ref("");
+const partitionError = ref("");
+const partitionErrorType = ref<"warning" | "error">("error");
+let ddlGenerationVersion = 0;
+let partitionProbeIdentity = "";
+const activePartitionSupported = computed(() => partitionSupport.value[activeDdlKey.value] === true);
+const activePartition = computed(() => partitionPlans.value[activeDdlKey.value] || {});
+const invalidateDdl = () => {
+  ddlGenerationVersion += 1;
+  ddlGenerating.value = false;
+  ddlSqlByTarget.value = {};
+  ddlPartitionPlans.value = {};
+  ddlWarningsByTarget.value = {};
+  ddlTableItemsByTarget.value = {};
+  ddlSourceFingerprint.value = "";
+  ddlWasEdited.value = false;
+};
+const partitionInputError = (key: string, message: string): never => {
+  const targetName = ddlPlans.value.find((target: any) => target.key === key)?.dbName
+    || datasourceMap.value[key]?.dbName || "所选目标数据源";
+  throw Object.assign(new Error(`目标数据源“${targetName}”：${message}`), {
+    partitionValidation: true, partitionTargetKey: key, handled: true,
+  });
+};
+const partitionPayload = (key: string) => {
+  const plan = partitionPlans.value[key] || { enabled: false };
+  if (!plan.enabled) return { enabled: false };
+  const fields = tableRef.value?.getData() || templateTableItems.value;
+  const field = fields.find((row: any) => row.columnName === plan.field);
+  const fieldLabel = field ? `${field.columnComment || field.columnName}（${field.columnName}）` : "分区字段";
+  const fieldType = String(field?.columnType || field?.dataType || "").toLowerCase();
+  if (!field) partitionInputError(key, "请先选择用于分区的字段。");
+  if (plan.strategy === "MONTH" && !/date|time/.test(fieldType)) {
+    partitionInputError(key, `“${fieldLabel}”不是日期或时间字段。按月分区请选择日期或时间字段；按区域编码分区请选择“区域／枚举分区”。`);
+  }
+  if (plan.strategy === "LIST" && plan.enumText !== undefined) {
+    const values = String(plan.enumText).split(/[,，\n]/).map((value: string) => value.trim()).filter(Boolean);
+    if (!values.length) {
+      partitionInputError(key, /date|time/.test(fieldType)
+        ? `请先填写区域编码或枚举值。当前选择的“${fieldLabel}”是时间字段，按区域分区请改选区域编码字段；按时间分区请选择“按月分区”。`
+        : "请填写至少一个区域编码或枚举值，用逗号分隔，例如350100,350200；每个值会生成一个分区。");
+    }
+    if (values.length > 2000) partitionInputError(key, "填写的区域编码或枚举值超过2000项，请减少分区数量。");
+    if (new Set(values).size !== values.length) partitionInputError(key, "区域编码或枚举值有重复，请删除重复项后再生成建表语句。");
+    if (/date|time/.test(fieldType) && values.some((value: string) => !/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2})?$/.test(value))) {
+      partitionInputError(key, `“${fieldLabel}”是时间字段，不能填写区域编码。请选择区域编码字段，或填写YYYY-MM-DD格式的日期；按月划分请选择“按月分区”。`);
+    }
+    if (/^(number|numeric|decimal|int|bigint|smallint|tinyint|float|double|real)/.test(fieldType)
+      && values.some((value: string) => !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value))) {
+      partitionInputError(key, `“${fieldLabel}”是数字字段，请填写数字枚举值，不要填写中文名称或引号。`);
+    }
+    return { ...plan, partitions: values.map((value: string, index: number) => ({
+      name: `p_${index + 1}`, bucket: `p_${index + 1}`, values: [value],
+    })) };
+  }
+  if (plan.strategy === "LIST" && !plan.partitions?.length) {
+    partitionInputError(key, "请填写至少一个区域编码或枚举值，用逗号分隔，例如350100,350200。");
+  }
+  return plan;
+};
+const probePartitions = async (targets: any[]) => {
+  const identity = JSON.stringify([String(props.id), targets.map((target: any) => target.dbId)]);
+  if (partitionProbeIdentity === identity) return;
+  const response = await $common.post("/dst/database/metadata/getCreateTableDDL", {
+    canvas: true, partitionProbe: true, sourceTableId: formData.value.sourceTableId || props.id,
+    targetDbIds: targets.map((target: any) => target.dbId),
+  }, { _hiddenErrorMsg: true });
+  const result = response?.data || response || {};
+  partitionSupport.value = result.targetSupport || {};
+  partitionProbeMessage.value = String(result.source?.message || "未识别到来源分区，可手动配置");
+  for (const target of targets) {
+    if (partitionPlans.value[target.key]) continue;
+    partitionPlans.value[target.key] = partitionSupport.value[target.key] && result.source?.status === "detected"
+      ? JSON.parse(JSON.stringify(result.source.plan)) : { enabled: false };
+  }
+  partitionProbeIdentity = identity;
+};
+const updatePartitionDdl = async () => {
+  partitionError.value = "";
+  partitionErrorType.value = "error";
+  try { await regenerateDdl(await currentDdlInput()); }
+  catch (error: any) {
+    invalidateDdl();
+    if (error?.partitionTargetKey) activeDdlKey.value = error.partitionTargetKey;
+    partitionErrorType.value = error?.partitionValidation ? "warning" : "error";
+    partitionError.value = String(error?.message || "无法生成建表语句，请检查分区字段和分区值后重试。");
+  }
+};
+const changePartitionStrategy = async () => {
+  const plan = partitionPlans.value[activeDdlKey.value];
+  if (plan?.strategy === "LIST" && plan.enumText === undefined) {
+    plan.enumText = Array.isArray(plan.partitions) && plan.partitions.every((row: any) => Array.isArray(row.values))
+      ? plan.partitions.flatMap((row: any) => row.values).join(",") : "";
+  }
+  await updatePartitionDdl();
+};
+const togglePartition = async (enabled: any) => {
+  const key = activeDdlKey.value;
+  if (ddlWasEdited.value) {
+    try { await ElMessageBox.confirm("更改分区配置会重新生成建表语句并覆盖手工 SQL，是否继续？", "更新分区", { type: "warning" }); }
+    catch { return; }
+  }
+  const plan = partitionPlans.value[key] || {};
+  if (enabled && !plan.field) {
+    const fields = tableRef.value?.getData() || templateTableItems.value;
+    const temporal = fields.find((field: any) => /date|time/i.test(String(field.columnType || field.dataType))) || fields[0];
+    Object.assign(plan, { field: temporal?.columnName || "", strategy: "MONTH", startMonth: new Date().toISOString().slice(0, 7), months: 24 });
+  }
+  partitionPlans.value[key] = { ...plan, enabled: !!enabled };
+  await updatePartitionDdl();
+};
 const ddlSourceFingerprint = ref("");
 const ddlWasEdited = ref(false);
 const defaultFieldsVisible = ref(false);
@@ -344,6 +489,7 @@ const askExistingDecision = (targets: any[], canReuse: boolean): Promise<string>
 const recoveryDeleting = ref(false);
 const templateLoading = ref(false);
 const loadError = ref("");
+const sourcePreflightError = ref("");
 const loadErrorCode = ref("");
 const loadPending = ref({ datasource: false, node: false, source: false });
 let initRun = 0;
@@ -1110,7 +1256,13 @@ const cancelPendingInit = () => {
 
 const init = async () => {
   const runId = ++initRun;
+  partitionPlans.value = {};
+  ddlPartitionPlans.value = {};
+  partitionSupport.value = {};
+  partitionProbeIdentity = "";
+  partitionError.value = "";
   loadError.value = "";
+  sourcePreflightError.value = "";
   loadErrorCode.value = "";
   sourceFileConfig.value = null;
   knownTargets.value = (Array.isArray(props.existingTargets) ? props.existingTargets : [])
@@ -1270,24 +1422,29 @@ const currentDdlInput = async () => {
   const tableItems = tableRef.value?.getData() || [];
   if (!tableItems.length) throw new Error("请至少添加一个字段");
   const targets = buildDdlTargets(data);
+  await probePartitions(targets);
   if (targets.some((target: any) => !target.propList.tableName)) throw new Error("请填写目标表名");
   if (data.tableName.includes(".")) throw new Error("目标表名只填写表名，不能包含用户名或 Schema 前缀");
   syncTargetTableNameInput(data.tableName);
   const fingerprint = JSON.stringify({
-    targets: targets.map((target: any) => ({ dbId: target.dbId, dbType: target.propList.dbType, tableName: target.propList.tableName, tableNameCn: target.propList.tableNameCn })),
+    targets: targets.map((target: any) => ({ dbId: target.dbId, dbType: target.propList.dbType, tableName: target.propList.tableName, tableNameCn: target.propList.tableNameCn, partitionPlan: partitionPayload(target.key) })),
     tableItems,
   });
   return { targets, tableItems, fingerprint };
 };
 
 const regenerateDdl = async (input: any) => {
+  const generationVersion = ++ddlGenerationVersion;
   ddlGenerating.value = true;
+  ddlPlans.value = input.targets;
+  if (!input.targets.some((target: any) => target.key === activeDdlKey.value)) activeDdlKey.value = input.targets[0]?.key || "";
   try {
     const statements: Record<string, string> = {};
     const warnings: Record<string, any[]> = {};
     const convertedItems: Record<string, any[]> = {};
+    const normalizedPlans: Record<string, any> = {};
     const targets = input.targets.map((target: any) => {
-      return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType) };
+      return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType), partitionPlan: partitionPayload(target.key) };
     });
     const response = await $common.post("/dst/database/metadata/getCreateTableDDL", {
       batchGenerate: true,
@@ -1295,12 +1452,14 @@ const regenerateDdl = async (input: any) => {
       targets,
     }, { _hiddenErrorMsg: true });
     const generated = response?.data || response || {};
+    if (generationVersion !== ddlGenerationVersion) return;
     if (generated.batchGenerate !== true || !Array.isArray(generated.results)
       || generated.results.length !== input.targets.length) {
       throw new Error("目标表批量建表语句生成结果不完整，请重试");
     }
     for (const [index, target] of input.targets.entries()) {
       const result = generated.results[index];
+      normalizedPlans[target.key] = result.partitionPlan || { enabled: false };
       if (String(result?.dbId) !== String(target.dbId)) {
         throw new Error("目标表批量建表语句生成结果与所选数据源不一致，请重试");
       }
@@ -1319,14 +1478,20 @@ const regenerateDdl = async (input: any) => {
       })) : original;
     }
     ddlPlans.value = input.targets;
+    ddlPartitionPlans.value = normalizedPlans;
     ddlSqlByTarget.value = statements;
     ddlWarningsByTarget.value = warnings;
     ddlTableItemsByTarget.value = convertedItems;
-    activeDdlKey.value = input.targets[0]?.key || "";
+    if (!input.targets.some((target: any) => target.key === activeDdlKey.value)) activeDdlKey.value = input.targets[0]?.key || "";
     ddlSourceFingerprint.value = input.fingerprint;
     ddlWasEdited.value = false;
+  } catch (error: any) {
+    if (generationVersion !== ddlGenerationVersion) return;
+    invalidateDdl();
+    if (error && typeof error === "object") error.ddlGeneration = true;
+    throw error;
   } finally {
-    ddlGenerating.value = false;
+    if (generationVersion === ddlGenerationVersion) ddlGenerating.value = false;
   }
 };
 
@@ -1351,6 +1516,12 @@ const showDdlView = async () => {
     ddlMode.value = true;
   } catch (error: any) {
     if (error === "cancel" || error === "close") return;
+    if (partitionPlans.value[activeDdlKey.value]?.enabled) {
+      ddlMode.value = true;
+      invalidateDdl();
+      partitionErrorType.value = error?.partitionValidation ? "warning" : "error";
+      partitionError.value = String(error?.message || "分区配置无效，请调整字段或取消创建分区");
+    }
     if (!error?.handled) ElMessage.error(error?.message || error || "生成建表语句失败");
   }
 };
@@ -1368,8 +1539,23 @@ const handleSave = async () => {
   startMaterializationProgress();
   let lastTargetForm: any = null;
   const reuseTargetDbIds = new Set<string>();
+  sourcePreflightError.value = '';
   try {
     const ddlInput = await currentDdlInput();
+    materializationProgress.value.detail = '正在预检来源类型及文件定位信息';
+    try {
+      const sourcePreflightResponse = await $common.post('/ods/dataAggTaskEnsure', {
+        tableId: props.id, dryRun: true, validateSourceOnly: true,
+      }, { _hiddenErrorMsg: true }, 60 * 1000);
+      const sourcePreflight = sourcePreflightResponse?.data || sourcePreflightResponse || {};
+      if (sourcePreflight.sourcePreflight !== true || sourcePreflight.valid !== true
+        || sourcePreflight.sideEffectsApplied !== false || String(sourcePreflight.sourceTableId) !== String(props.id)) {
+        throw new Error('来源预检结果不完整，请重试');
+      }
+    } catch (error: any) {
+      sourcePreflightError.value = String(error?.message || '来源预检失败，请检查数据源登记配置后重试');
+      throw error;
+    }
     materializationProgress.value.total = ddlInput.targets.length;
     if (!ddlSourceFingerprint.value) await regenerateDdl(ddlInput);
     if (ddlSourceFingerprint.value && ddlSourceFingerprint.value !== ddlInput.fingerprint) {
@@ -1395,6 +1581,8 @@ const handleSave = async () => {
           dbId: target.dbId,
           tableName: target.propList.tableName,
           ddl,
+          partitionPlan: ddlPartitionPlans.value[target.key],
+          tableItems: ddlTableItemsByTarget.value[target.key],
         };
       });
       const response = await $common.post("/dst/database/metadata/createTable", {
@@ -1485,7 +1673,7 @@ const handleSave = async () => {
         const targets = reusable.map((item: any) => {
           const target = ddlInput.targets.find((plan: any) => String(plan.dbId) === String(item.targetDbId));
           return { dbId:target.dbId, tableName:target.propList.tableName,
-            ddl:ddlSqlByTarget.value[target.key], tableItems:targetTableItems(ddlInput.tableItems,target.propList.dbType) };
+            ddl:ddlSqlByTarget.value[target.key], partitionPlan:ddlPartitionPlans.value[target.key], tableItems:targetTableItems(ddlInput.tableItems,target.propList.dbType) };
         });
         const response = await $common.post('/dst/database/metadata/createTable', {
           canvas:true, validateOnly:true, batchReuseValidation:true, targets,
@@ -1552,6 +1740,7 @@ const handleSave = async () => {
       materializationProgress.value.detail = `正在${reuseExistingTable ? '复用' : '创建'}第 ${targetTables.length + 1} / ${ddlInput.targets.length} 张：${target.dbName} · ${targetForm.tableName}`;
       const result = await $common.post("/ods/createTapleApply", {
         propList: targetForm,
+        partitionPlan: ddlPartitionPlans.value[target.key],
         tableItems: ddlTableItemsByTarget.value[target.key] || targetTableItems(ddlInput.tableItems, targetForm.dbType),
         tid: props.id,
         ddl: ddlSourceFingerprint.value ? ddlSqlByTarget.value[targetDbId] : undefined,
@@ -1582,6 +1771,13 @@ const handleSave = async () => {
     });
   } catch (error: any) {
     const message = String(error?.message || error || "");
+    if (error?.partitionValidation || error?.ddlGeneration) {
+      invalidateDdl();
+      if (error?.partitionTargetKey) activeDdlKey.value = error.partitionTargetKey;
+      ddlMode.value = true;
+      partitionErrorType.value = error?.partitionValidation ? "warning" : "error";
+      partitionError.value = message;
+    }
     if (message.includes("目标物理表已存在")) {
       recoveryTarget.value = {
         sourceTableId: props.id,
@@ -1901,6 +2097,7 @@ onBeforeUnmount(stopDdlEditorSizing);
   padding: 16px 0;
 }
 .template-load-error .el-alert { width: 100%; }
+.source-preflight-error { flex: 0 0 auto; margin-bottom: 12px; }
 // 内容在弹框可见高度内滚动，遮罩始终覆盖这个可见区域，不跟随字段总高度。
 .access-apply-content { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
 .materialization-form-view { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
@@ -1955,7 +2152,13 @@ onBeforeUnmount(stopDdlEditorSizing);
   border-radius: 6px;
   background: #fff;
 }
-.ddl-target-tabs { padding: 0 12px; flex: 0 0 auto; }
+.ddl-target-toolbar { display: flex; align-items: center; gap: 20px; padding-right: 16px; flex: 0 0 auto; }
+.ddl-target-tabs { padding: 0 12px; flex: 1; min-width: 0; }
+.ddl-target-toolbar > .el-checkbox { flex: 0 0 auto; margin-right: 0; }
+.partition-settings { padding: 8px 12px; background: var(--el-fill-color-light); flex: 0 0 auto; max-height: 180px; overflow: auto; }
+.partition-settings-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.partition-settings-fields :deep(.el-select), .partition-settings-fields :deep(.el-input) { width: 200px; }
+.partition-settings-fields :deep(.partition-values-input.el-input) { width: min(100%, 420px); flex: 1 1 280px; }
 .ddl-editor-host {
   flex: 1 1 0;
   min-height: 0;

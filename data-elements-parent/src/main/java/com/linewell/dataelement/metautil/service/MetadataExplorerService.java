@@ -18,6 +18,9 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class MetadataExplorerService {
+    public Map<String,Object> getPartitionInfo(DataSourceConfig config,String tableName) {
+        return getExplorer(config).getPartitionInfo(config,tableName);
+    }
 
     private final MetadataExplorerFactory explorerFactory;
 

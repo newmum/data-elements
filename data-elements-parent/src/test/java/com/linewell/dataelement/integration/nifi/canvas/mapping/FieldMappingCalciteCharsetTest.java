@@ -16,6 +16,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver;
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
+import com.linewell.dataelement.integration.nifi.canvas.compile.HiveServiceFixtures;
 import com.linewell.dataelement.integration.nifi.canvas.manifest.ComponentManifest;
 import com.linewell.dataelement.integration.nifi.canvas.manifest.ManifestRegistry;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
@@ -172,6 +173,7 @@ class FieldMappingCalciteCharsetTest {
         var nifi = mock(NifiClient.class);
         var sequence = new AtomicInteger();
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listProcessGroups("root")).thenReturn(List.of());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenAnswer(call -> entity("cs-" + sequence.incrementAndGet()));
@@ -198,6 +200,10 @@ class FieldMappingCalciteCharsetTest {
         ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.QueryRecord"),
                 eq("字段映射/base-query"), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
+        assertEquals("global-json-reader", properties.getValue().get("Record Reader"));
+        assertEquals("global-json-writer", properties.getValue().get("Record Writer"));
+        verify(nifi).get("/flow/process-groups/root", com.fasterxml.jackson.databind.JsonNode.class);
+        verify(nifi).listControllerServices("root");
         String sql = properties.getValue().get("success");
         assertTrue(sql.contains("CONVERT(\"SDPBS\", UTF8, UTF8)"));
         assertEquals(List.of("否", "是"), query(sql,

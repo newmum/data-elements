@@ -8,6 +8,7 @@ import java.util.Map;
 public class FtpSourceProbeStub {
     public int calls;
     public int locatorCalls;
+    public RuntimeException locatorFailure;
     public List<Map<String, Object>> columns = List.of(Map.of("columnName", "person_id", "dataType", "varchar"));
     public Map<String, Object> resolveFtpFileSource(Map<String, Object> managed, String table,
                                                   Map<String, Object> options) {
@@ -28,6 +29,7 @@ public class FtpSourceProbeStub {
     public Map<String, Object> resolveFtpFileLocator(Map<String, Object> managed, String table,
                                                     Object governance, String tableComment) {
         locatorCalls++;
+        if (locatorFailure != null) throw locatorFailure;
         var result = new LinkedHashMap<String, Object>();
         result.put("fileName", "person-1.json"); result.put("remotePath", "/managed/data");
         result.put("fileFilterRegex", "^\\Qperson-1.json\\E$"); result.put("format", "json");

@@ -30,6 +30,7 @@ import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
 import cn.hutool.json.JSONUtil as poolJsons
 import tenantRuntime
+import tablePartitions
 import dataScope
 import canvasTableDdl
 import portableDdl
@@ -69,6 +70,23 @@ if (body?.importSourceDdl == true || body?.convertSourceDdl == true) {
 
 var textOf = (value) => value == null ? null : value + ''
 var blank = (value) => value == null || textOf(value).trim() == ''
+var ddlFailureTip = (failure) => {
+    var reason = failure == null ? '' : textOf(failure.getMessage())
+    if (blank(reason)) { return '请检查字段类型、长度和分区配置后重试' }
+    if (reason.contains('请配置1至') || reason.contains('LIST分区必须填写枚举值')) {
+        return '请填写至少一个区域编码或枚举值，用逗号分隔，例如350100,350200；每个值会生成一个分区，最多2000项'
+    }
+    if (reason.contains('LIST分区值重复')) { return '区域编码或枚举值有重复，请删除重复项；数字字段中的01与1也表示同一个值' }
+    if (reason.contains('不是有效数字')) { return '所选分区字段是数字类型，请填写数字枚举值，不要填写中文名称或引号' }
+    if (reason.contains('分区时间边界必须')) { return '所选分区字段是日期或时间类型。按区域分区请改选区域编码字段；按时间分区可选择按月分区，或填写YYYY-MM-DD格式的日期值' }
+    if (reason.contains('分区字段不在目标字段中') || reason.contains('分区字段或名称无效')) { return '请选择目标表中实际存在的分区字段，然后重新生成建表语句' }
+    if (reason.contains('RANGE分区上界必须严格递增')) { return '范围分区的结束值必须从小到大排列，不能重复或倒序' }
+    if (reason.contains('DEFAULT/MAXVALUE必须位于最后')) { return '用于接收其他值或未来数据的兜底分区必须放在最后' }
+    if (reason.contains('分区名称或Hive分桶值重复')) { return '分区名称或分区目录有重复，请为每个分区设置不同的名称' }
+    if (reason.contains('该MySQL目标不支持LIST DEFAULT')) { return '当前目标库不支持区域分区的默认兜底分区，请明确列出区域编码或调整分区规则' }
+    if (reason.contains('按月分区请选择目标')) { return '按月分区需要日期或时间字段，请更换分区字段；按区域编码划分请选择区域／枚举分区' }
+    return reason
+}
 var rowValue = (row, keys) => {
     if (row == null) {
         // 返回当前业务分支的标准结果。
@@ -246,6 +264,51 @@ var withHuaweiHiveStorage = (ddl, databaseType, connection, registeredType) => {
     return statement + "\nROW FORMAT DELIMITED\nFIELDS TERMINATED BY '\\001'\nSTORED AS TEXTFILE;\n"
 }
 
+// 显式打开DDL时只探查当前来源；全部目标一次预取并逐ID鉴权，不逐目标补查。
+if (body?.partitionProbe == true) {
+    var probeTenant = textOf(tenantRuntime.id())
+    if (blank(probeTenant)) { exit 401, '当前登录租户无效' }
+    var source = db.table('db_table_t').where().eq('tenant_id', probeTenant)
+        .eq('tid', body.sourceTableId).eq('is_del', 0).selectOne()
+    if (source == null) { exit 403, '来源表不存在或不在当前租户范围内' }
+    var sourceDbId = textOf(firstValue(source, ['datasourceId', 'datasource_id']))
+    var targetIds = body.targetDbIds
+    if (!(targetIds instanceof List) || targetIds.size() < 1 || targetIds.size() > 20) { exit 400, '分区探查一次最多20个目标库' }
+    var ids = [sourceDbId]
+    for (id in targetIds) { if (!ids.contains(textOf(id))) { ids.add(textOf(id)) } }
+    var rows = db.table('db_datasource_t').where().eq('tenant_id', probeTenant).eq('is_del', 0).in('tid', ids).select()
+    var visible = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', rows == null ? [] : rows)
+    var byId = {}
+    for (row in visible) { byId[textOf(rowValue(row, ['tid']))] = row }
+    for (id in ids) { if (byId[id] == null) { exit 403, '来源或目标库不在当前租户及角色范围内' } }
+    var support = {}
+    for (id in targetIds) {
+        var targetType = DatabaseType.fromCode(textOf(firstValue(byId[textOf(id)], ['dbType','db_type'])))
+        var allowed = targetType != null && tablePartitions.supported(targetType)
+        if (targetType == DatabaseType.HIVE) {
+            var targetPoolRaw = rowValue(byId[textOf(id)], ['poolCfg','pool_cfg'])
+            var targetPool = blank(targetPoolRaw) ? {} : (targetPoolRaw instanceof Map ? targetPoolRaw : poolJsons.parse(textOf(targetPoolRaw)))
+            allowed = !blank(firstValue(targetPool,['hiveProfile','hive_profile']))
+                || textOf(firstValue(targetPool,['hiveConnectionMode','hive_connection_mode']) || '').toLowerCase() == 'huawei-mrs'
+                || ['true','1'].contains(textOf(firstValue(targetPool,['usePlatformHiveConfig','use_platform_hive_config']) || '').toLowerCase())
+                || textOf(firstValue(byId[textOf(id)],['dbType','db_type'])).toLowerCase() == 'mrshive'
+        }
+        support[textOf(id)] = allowed
+    }
+    var sourceRow = byId[sourceDbId]
+    var sourceCode = textOf(firstValue(sourceRow, ['dbType','db_type'])).toLowerCase()
+    var detected = {status:'unsupported', message:'当前来源不自动探查分区，可手工配置目标分区'}
+    if (['oracle','oceanbaseoracle','oceanbase_oracle','dameng'].contains(sourceCode)) {
+        var rawPool = rowValue(sourceRow, ['poolCfg','pool_cfg'])
+        var pool = blank(rawPool) ? {} : (rawPool instanceof Map ? rawPool : poolJsons.parse(textOf(rawPool)))
+        var connection = connectionProperties.resolve(probeTenant, sourceDbId)
+        connection.dbType = sourceCode
+        try { detected = metadataExplorerService.getPartitionInfo(dataSourceOf(connection), firstValue(source,['tableName','table_name'])) }
+        catch (e) { detected = {status:'unknown', message:'来源分区探查未完成，请检查连接和目录权限；可手工配置'} }
+    }
+    return {source:detected, targetSupport:support, sideEffectsApplied:false}
+}
+
 // The materialization dialog generates DDL for several selected target
 // databases in one request. Read and authorize the whole bounded set first;
 // the dialect conversion below is CPU-only and does not query each datasource.
@@ -296,6 +359,7 @@ if (body?.batchGenerate == true) {
         var submittedItems = submittedTarget.tableItems
         var submittedDbId = textOf(submittedProps.dbId)
         var registered = registeredById[submittedDbId]
+        var targetDisplayName = firstValue(registered, ['dbName', 'db_name', 'name']) || '所选目标数据源'
         var poolRaw = rowValue(registered, ['poolCfg', 'pool_cfg'])
         var pool = blank(poolRaw) ? {} : (poolRaw instanceof Map ? poolRaw : poolJsons.parse(textOf(poolRaw)))
         if (!(pool instanceof Map)) { exit 500, '目标库 pool_cfg 不是有效 JSON 对象' }
@@ -360,11 +424,14 @@ if (body?.batchGenerate == true) {
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 requestedTableName, converted.columns, submittedProps.tableNameCn)
             ddl = withHuaweiHiveStorage(ddl, targetType, pool, targetTypeCode)
+            var partitionPlan = tablePartitions.normalize(submittedTarget.partitionPlan, converted.columns, targetType)
+            ddl = tablePartitions.apply(ddl, partitionPlan, batchConfig)
             // 预览保留未解决的表达式和完整DDL，供用户编辑；执行入口再解析单表SQL。
             generated.add({dbId: submittedDbId, requestedTableName: requestedTableName,
-                tableName: requestedTableName, ddl: ddl, warnings: converted.warnings, tableItems: converted.tableItems})
+                tableName: requestedTableName, ddl: ddl, warnings: converted.warnings, tableItems: converted.tableItems,
+                partitionPlan:partitionPlan, partitionSupported:tablePartitions.supported(targetType)})
         } catch (e) {
-            exit 400, '目标库“' + submittedDbId + '”生成建表语句失败：' + e.getMessage()
+            exit 400, '目标数据源“' + targetDisplayName + '”未能生成建表语句：' + ddlFailureTip(e)
         }
     }
     return {batchGenerate: true, results: generated}
@@ -492,7 +559,8 @@ try {
     var converted = portableDdl.prepare(columns, dsConfig)
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
     ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
-    return ddl
+    var partitionPlan = tablePartitions.normalize(body?.partitionPlan, converted.columns, dsConfig.getDatabaseType())
+    return tablePartitions.apply(ddl, partitionPlan, dsConfig)
 } catch (e) {
-    exit 400, '生成建表语句失败：' + e.getMessage()
+    exit 400, '未能生成建表语句：' + ddlFailureTip(e)
 }

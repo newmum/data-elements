@@ -661,6 +661,14 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
     /**
      * 从连接池获取数据库连接；调用方须在 try-with-resources 中关闭 connection，连接将归还池内。
      */
+    public Map<String,Object> getPartitionInfo(DataSourceConfig config,String tableName) {
+        try(Connection connection=getConnection(config)) {
+            return com.linewell.dataelement.metautil.ddl.PartitionMetadataReader.read(connection,config,tableName);
+        } catch(Exception failure) {
+            return Map.of("status","unknown","message","来源分区探查未完成，请核对连接及分区目录权限；可手工配置或取消分区");
+        }
+    }
+
     protected Connection getConnection(DataSourceConfig config) throws Exception {
         if (config.getDatabaseType() == null || !JDBC_TYPES.contains(config.getDatabaseType())) {
             throw new IllegalArgumentException("不支持的数据库类型或非 JDBC 类型: " + config.getDatabaseType());
