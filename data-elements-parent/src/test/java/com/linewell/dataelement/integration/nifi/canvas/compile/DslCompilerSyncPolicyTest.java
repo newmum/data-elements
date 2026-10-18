@@ -32,6 +32,7 @@ class DslCompilerSyncPolicyTest {
             }
         }
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createSerialBatchGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("batch"));
         when(nifi.createInputPort(anyString(), anyString())).thenReturn(entity("input"));

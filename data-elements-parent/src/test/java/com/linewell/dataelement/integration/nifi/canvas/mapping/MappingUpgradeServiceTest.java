@@ -50,7 +50,13 @@ class MappingUpgradeServiceTest {
     @Test void nonemptyQueueAndUnsavedPlanRejectBeforeStoppingOrReplacement()throws Exception{
         fixture("RUNNING");when(nifi.getProcessGroupStatus("group")).thenReturn(json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":1}}}"));
         try(var tenant=TenantContext.use("tenant")){assertEquals("MIGRATION_QUEUE_NOT_EMPTY",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,plan.hash(),true)).code());assertEquals("DRAFT_NOT_SAVED",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,"other",true)).code());}
-        verify(nifi,never()).setProcessGroupState(anyString(),anyString());verifyNoInteractions(compiler);
+        verify(nifi,never()).setProcessGroupState(anyString(),anyString());verifyPreflightOnly();
+    }
+    void verifyPreflightOnly(){verify(compiler).preflightGlobalRecordServices(pipeline);verifyNoMoreInteractions(compiler);}
+    @Test void missingPublicCodecsRejectUpgradeBeforeStoppingTheRunningFlow()throws Exception{
+        fixture("RUNNING");doThrow(new IllegalStateException("缺少全局服务")).when(compiler).preflightGlobalRecordServices(pipeline);
+        try(var tenant=TenantContext.use("tenant")){assertThrows(IllegalStateException.class,()->service().upgrade("p","m",2L,plan.hash(),true));}
+        verify(nifi,never()).setProcessGroupState(anyString(),anyString());verifyPreflightOnly();verifyNoInteractions(pipelines);
     }
     @Test void invalidCandidateRetainsOldConnectionsAndStopsWithoutClearingState()throws Exception{
         fixture("RUNNING");when(nifi.get("/processors/new-map",JsonNode.class)).thenReturn(json.readTree("{\"component\":{\"validationErrors\":[\"invalid\"]}}"));
@@ -65,26 +71,26 @@ class MappingUpgradeServiceTest {
             json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":1}}}"));
         try(var tenant=TenantContext.use("tenant")){assertEquals("MAPPING_UPGRADE_FAILED",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,plan.hash(),true)).code());}
         assertEquals(PipelineStatus.STOPPED,persisted.status());assertEquals(pipeline.nodeMapping(),persisted.nodeMapping());
-        verifyNoInteractions(compiler);verify(nifi,never()).delete(anyString());verify(nifi,never()).setProcessorRunStatus(anyString(),anyString());
+        verifyPreflightOnly();verify(nifi,never()).delete(anyString());verify(nifi,never()).setProcessorRunStatus(anyString(),anyString());
         verify(nifi,times(2)).setProcessGroupState("group","STOPPED");
     }
     @Test void firstStopWaitFailureIsHandledAndConfirmedStoppedBeforePersistence()throws Exception{
         fixture("RUNNING");doThrow(new IllegalStateException("stop wait unavailable")).doNothing().when(nifi).waitForAllProcessorsStopped("group",30000);
         try(var tenant=TenantContext.use("tenant")){assertEquals("MAPPING_UPGRADE_FAILED",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,plan.hash(),true)).code());}
         assertEquals(PipelineStatus.STOPPED,persisted.status());assertEquals(pipeline.nodeMapping(),persisted.nodeMapping());
-        verifyNoInteractions(compiler);verify(nifi,never()).delete(anyString());
+        verifyPreflightOnly();verify(nifi,never()).delete(anyString());
     }
     @Test void postStopTreeReadFailureDoesNotNeedAnotherTreeReadToPreserveOriginalGraph()throws Exception{
         fixture("RUNNING");JsonNode flow=nifi.get("/flow/process-groups/group",JsonNode.class);clearInvocations(nifi);
         when(nifi.get("/flow/process-groups/group",JsonNode.class)).thenReturn(flow).thenThrow(new IllegalStateException("tree read unavailable"));
         try(var tenant=TenantContext.use("tenant")){assertEquals("MAPPING_UPGRADE_FAILED",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,plan.hash(),true)).code());}
         assertEquals(PipelineStatus.STOPPED,persisted.status());assertEquals(pipeline.nodeMapping(),persisted.nodeMapping());
-        verify(nifi,times(2)).get("/flow/process-groups/group",JsonNode.class);verifyNoInteractions(compiler);verify(nifi,never()).delete(anyString());
+        verify(nifi,times(2)).get("/flow/process-groups/group",JsonNode.class);verifyPreflightOnly();verify(nifi,never()).delete(anyString());
     }
     @Test void unconfirmedStopRequiresRecoveryAndNeverClaimsStoppedPersistence()throws Exception{
         fixture("RUNNING");doThrow(new IllegalStateException("stop cannot be confirmed")).when(nifi).waitForAllProcessorsStopped("group",30000);
         try(var tenant=TenantContext.use("tenant")){assertEquals("MAPPING_UPGRADE_RECOVERY_REQUIRED",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,plan.hash(),true)).code());}
-        assertNull(persisted);verifyNoInteractions(compiler);verifyNoInteractions(pipelines);verify(nifi,never()).delete(anyString());
+        assertNull(persisted);verifyPreflightOnly();verifyNoInteractions(pipelines);verify(nifi,never()).delete(anyString());
     }
     @Test void recoveryNeverOverwritesConcurrentRuntimeIdentity()throws Exception{
         fixture("RUNNING");
@@ -94,7 +100,7 @@ class MappingUpgradeServiceTest {
         Pipeline newer=new Pipeline(pipeline.id(),pipeline.name(),pipeline.description(),pipeline.createdAt(),3L,pipeline.dsl(),pipeline.nifiProcessGroupId(),pipeline.status(),pipeline.lastDeployedHash(),pipeline.lastDeployedAt(),pipeline.lastStoppedAt(),pipeline.nodeMapping(),pipeline.lastBulletinId());
         when(pipelines.update(eq("p"),any())).thenAnswer(call->((java.util.function.UnaryOperator<Pipeline>)call.getArgument(1)).apply(newer));
         try(var tenant=TenantContext.use("tenant")){assertEquals("MAPPING_UPGRADE_RECOVERY_REQUIRED",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,plan.hash(),true)).code());}
-        assertNull(persisted);verifyNoInteractions(compiler);verify(nifi,never()).delete(anyString());
+        assertNull(persisted);verifyPreflightOnly();verify(nifi,never()).delete(anyString());
     }
     @Test void partiallyFailedDisableStillAttemptsToRestoreOldMappingState()throws Exception{
         fixture("RUNNING");

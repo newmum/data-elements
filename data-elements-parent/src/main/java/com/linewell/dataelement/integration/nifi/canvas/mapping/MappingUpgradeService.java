@@ -41,7 +41,7 @@ public class MappingUpgradeService {
         Map<String,JsonNode> connections=index(flow.path("connections"));Map<String,JsonNode> selected=new LinkedHashMap<>();String last=primary;
         for(var edge:edges){var endpoint=pipeline.nodeMapping().edgeProcessorEndpoints().get(edge.id());if(endpoint==null||!connections.containsKey(endpoint.connectionId()))throw new MappingException("MIGRATION_UNAVAILABLE","旧图连接发生变化，请重新核对");JsonNode connection=connections.get(endpoint.connectionId());selected.put(edge.id(),connection);if(edge.source().equals(nodeId))last=endpoint.sourceProcessorId();}
         String writer=serviceReference(processors.get(last).path("component").path("config").path("properties"),serviceMap,false);
-        var prepared=engine.compile(parse(node.config().get("mappings")));if(expectedPlanHash==null||!expectedPlanHash.equals(prepared.plan().hash()))throw new MappingException("DRAFT_NOT_SAVED","当前规则与已保存草稿不一致，请先保存画布再升级");nifi.requireMappingExtension();requireEmpty(pipeline.nifiProcessGroupId());
+        var prepared=engine.compile(parse(node.config().get("mappings")));if(expectedPlanHash==null||!expectedPlanHash.equals(prepared.plan().hash()))throw new MappingException("DRAFT_NOT_SAVED","当前规则与已保存草稿不一致，请先保存画布再升级");compiler.preflightGlobalRecordServices(pipeline);nifi.requireMappingExtension();requireEmpty(pipeline.nifiProcessGroupId());
         DslCompiler.MappingReplacement replacement=null;Map<String,String> newConnections=new LinkedHashMap<>();Set<String> deleted=new LinkedHashSet<>();Set<String> disabled=new LinkedHashSet<>();boolean committed=false;
         try{
             // Stopping can already change the runtime, even when its response or a later read fails.

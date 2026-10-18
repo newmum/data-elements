@@ -35,6 +35,7 @@ class DslCompilerApiSourceTest {
         }
         when(registry.get("source.api")).thenReturn(manifest);
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listProcessGroups("root")).thenReturn(List.of());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble()))
                 .thenReturn(entity("pg"));
@@ -76,6 +77,7 @@ class DslCompilerApiSourceTest {
         }
         when(registry.get("source.api")).thenReturn(manifest);
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listProcessGroups("root")).thenReturn(List.of());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap()))

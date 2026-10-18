@@ -1,10 +1,9 @@
 package com.linewell.dataelement.integration.nifi.canvas.compile;
 
-import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
-/** Matching JSON codecs for JDBC temporal values read from Hive. */
+/** Public JSON service names and Hive connection recognition. Codec settings belong to NiFi. */
 final class HiveTemporalJsonPolicy {
     static final String READER_NAME = "PUBLIC-READER-JSON";
     static final String WRITER_NAME = "PUBLIC-WRITER-JSON-TIME_FORMAT";
@@ -22,23 +21,4 @@ final class HiveTemporalJsonPolicy {
         return normalized.startsWith("jdbc:hive2:") || normalized.startsWith("jdbc:hive:");
     }
 
-    static Map<String, String> formats() {
-        return Map.of("Date Format", "yyyy-MM-dd", "Time Format", "HH:mm:ss",
-                "Timestamp Format", "yyyy-MM-dd HH:mm:ss.SSSSSSSSS");
-    }
-
-    static Map<String, String> writerProperties() {
-        Map<String, String> result = new LinkedHashMap<>(formats());
-        result.put("Schema Write Strategy", "full-schema-attribute");
-        return result;
-    }
-
-    static Map<String, String> typedReaderProperties(boolean hive) {
-        Map<String, String> result = new LinkedHashMap<>();
-        result.put("Schema Access Strategy", "schema-text-property");
-        result.put("Schema Text", "${avro.schema}");
-        // Every JAVA_RECORD flow uses the same temporal codec contract, including upgrades.
-        result.putAll(formats());
-        return result;
-    }
 }

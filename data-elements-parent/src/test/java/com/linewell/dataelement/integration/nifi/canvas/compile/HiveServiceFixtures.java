@@ -7,6 +7,10 @@ import java.util.List;
 import java.util.Map;
 
 final class HiveServiceFixtures {
+    static void stubGlobals(com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient nifi) {
+        org.mockito.Mockito.when(nifi.get("/flow/process-groups/root", JsonNode.class)).thenReturn(rootFlow());
+        org.mockito.Mockito.when(nifi.listControllerServices("root")).thenReturn(codecs());
+    }
     static JsonNode rootFlow(){return new ObjectMapper().valueToTree(Map.of("processGroupFlow",Map.of("id","root")));}
     static JsonNode codec(String id,String name,String type,String scope,String state) {
         return new ObjectMapper().valueToTree(Map.of("component",Map.of("id",id,"name",name,"type",type,"parentGroupId",scope,"state",state)));

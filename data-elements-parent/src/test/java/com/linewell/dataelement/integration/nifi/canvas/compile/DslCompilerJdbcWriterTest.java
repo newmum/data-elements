@@ -56,6 +56,7 @@ class DslCompilerJdbcWriterTest {
         NifiClient nifi = mock(NifiClient.class);
         AtomicInteger sequence = new AtomicInteger();
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap()))
                 .thenAnswer(invocation -> entity("cs-" + sequence.incrementAndGet()));
@@ -209,6 +210,7 @@ class DslCompilerJdbcWriterTest {
     private static NifiClient mockNifi() {
         NifiClient nifi = mock(NifiClient.class);
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
         when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),

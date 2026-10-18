@@ -527,7 +527,7 @@ public class PipelineRunController {
             taskLifecycle.ensureCatalogAccessTask(request == null ? null : request.catalogTid(), p);
             p = bindAccessTaskMappings(p);
             if(p.dsl().nodes().stream().anyMatch(com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy::isHiveSink)) {
-                try { compiler.preflightHiveGlobalServices(p); }
+                try { compiler.preflightGlobalRecordServices(p); }
                 catch (RuntimeException ex) {
                     repo.updateStatus(p.id(),p.status());
                     return deploymentFailure(p.id(), 422, "HIVE_GLOBAL_SERVICES_UNAVAILABLE", "Hive 全局服务核验失败", ex,

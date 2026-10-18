@@ -92,6 +92,7 @@ class DslCompilerLookupDeploymentTest {
         NifiClient nifi = mock(NifiClient.class);
         AtomicInteger ids = new AtomicInteger();
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listProcessGroups("root")).thenReturn(List.of());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap()))

@@ -39,7 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>当前实现布局：
  * <ul>
  *   <li>每条 pipeline 对应一个根 PG。</li>
- *   <li>根 PG 下固定创建两个共享 Controller Service：JsonTreeReader / JsonRecordSetWriter。</li>
+ *   <li>JSON 编解码统一引用 NiFi Flow 根作用域已配置的公共 Reader / Writer。</li>
  *   <li>每个画布节点按 manifest 生成处理器；完全一致的 DBCP/Kerberos 服务可提升到应用层复用。</li>
  *   <li>边连接通过“源节点 outlet 处理器”直连“目标节点 inlet 处理器”。</li>
  * </ul>
@@ -69,11 +69,6 @@ public class DslCompiler {
     private static final double NODE_ROW_HEIGHT = 340;
     private static final double PROCESSOR_COLUMN_GAP = 520;
     private static final double PROCESSOR_ROW_GAP = 260;
-    /**
-     * 每条 pipeline 固定创建的任务级标准 Controller Service。
-     */
-    private static final String JSON_READER_TYPE = "org.apache.nifi.json.JsonTreeReader";
-    private static final String JSON_WRITER_TYPE = "org.apache.nifi.json.JsonRecordSetWriter";
     private static final String CSV_READER_TYPE = "org.apache.nifi.csv.CSVReader";
     private static final String CSV_WRITER_TYPE = "org.apache.nifi.csv.CSVRecordSetWriter";
     private static final String EXCEL_READER_TYPE = "org.apache.nifi.excel.ExcelReader";
@@ -118,8 +113,8 @@ public class DslCompiler {
         Map<String,JsonNode> specs=javaMappingSpecifications(HiveSinkPublicationPolicy.forPublication(pipeline));
         if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();}
     }
-    public void preflightHiveGlobalServices(Pipeline pipeline) {
-        if(pipeline.dsl().nodes().stream().anyMatch(HiveSinkPublicationPolicy::isHiveSink))HiveGlobalRecordServices.resolve(nifi);
+    public void preflightGlobalRecordServices(Pipeline pipeline) {
+        GlobalJsonRecordServices.resolve(nifi);
     }
     private static Map<String,JsonNode> javaMappingSpecifications(Pipeline pipeline){
         Map<String,JsonNode>specs=new LinkedHashMap<>();Map<String,Pipeline.Node>nodes=new HashMap<>();pipeline.dsl().nodes().forEach(node->nodes.put(node.id(),node));
@@ -196,8 +191,7 @@ public class DslCompiler {
         if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
-        boolean hiveTarget=pipeline.dsl().nodes().stream().anyMatch(HiveSinkPublicationPolicy::isHiveSink);
-        HiveGlobalRecordServices hiveGlobals=hiveTarget?HiveGlobalRecordServices.resolve(nifi):null;
+        GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi);
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
         String pgName = pipeline.name() == null ? pipeline.id() : pipeline.name();
         var position = layout == null
@@ -224,23 +218,14 @@ public class DslCompiler {
         String controllerServiceScopeId = layout == null ? "" : layout.controllerServiceScopeId();
         log.info("Created NiFi PG {} for pipeline {}", pgId, pipeline.id());
 
-        // 创建全局共享 Controller Service，供多个节点处理器复用。
+        // Reuse the selected node's public JSON codecs without changing their properties or state.
         Map<String, String> sharedCs = new HashMap<>();
-        boolean hiveTemporalJson = usesHiveTemporalJson(pipeline);
         boolean typedJdbcRecords=usesJavaMapping(pipeline);
         Set<String> hiveInputNodes=HiveSinkPublicationPolicy.upstreamNodeIds(pipeline);
-        sharedCs.put("jsonReader", nifi.createControllerService(pgId, JSON_READER_TYPE,
-                "JsonReader", hiveTemporalJson||usesJavaMapping(pipeline) ? HiveTemporalJsonPolicy.formats() : Map.of()).id());
-        sharedCs.put("jsonWriter", nifi.createControllerService(pgId, JSON_WRITER_TYPE,
-                "JsonWriter", usesJavaMapping(pipeline)?HiveTemporalJsonPolicy.writerProperties():Map.of()).id());
-        if (hiveTemporalJson) {
-            sharedCs.put("hiveJsonWriter", hiveGlobals!=null?hiveGlobals.writerId():nifi.createControllerService(pgId, JSON_WRITER_TYPE,
-                    HiveTemporalJsonPolicy.WRITER_NAME, HiveTemporalJsonPolicy.writerProperties()).id());
-        }
-
-        if (!hiveInputNodes.isEmpty()) {
-            sharedCs.put("hiveJsonReader", hiveGlobals.readerId());
-        }
+        sharedCs.put("jsonReader", globalJson.readerId());
+        sharedCs.put("jsonWriter", globalJson.writerId());
+        sharedCs.put("hiveJsonWriter", globalJson.writerId());
+        sharedCs.put("hiveJsonReader", globalJson.readerId());
 
         // 节点编译上下文：记录每个节点在 NiFi 中创建出来的 CS/Processor 实体 ID。
         Map<String, NodeCompilation> compiled = new LinkedHashMap<>();
@@ -343,9 +328,8 @@ public class DslCompiler {
                         var javaPlan=preparedJavaPlans.get(n.id());javaMappingPlans.put(n.id(),javaPlan);
                         var outputs=javaPlan.plan().outputFields();fieldMappingPlans.put(n.id(),new FieldMappingService.CompiledMapping("","",List.of(),outputs,outputs,outputs));
                         NodeCompilation compilation=compiled.get(n.id());
-                        compilation.csIds.put("typed-json-reader",nifi.createControllerService(pgId,JSON_READER_TYPE,n.label()+"/来源类型化输入",HiveTemporalJsonPolicy.typedReaderProperties(hiveTemporalJson)).id());
-                        compilation.csIds.put("typed-json-writer",hiveTemporalJson ? sharedCs.get("hiveJsonWriter")
-                                : nifi.createControllerService(pgId,JSON_WRITER_TYPE,n.label()+"/类型化输出",HiveTemporalJsonPolicy.writerProperties()).id());
+                        compilation.csIds.put("typed-json-reader", globalJson.readerId());
+                        compilation.csIds.put("typed-json-writer", globalJson.writerId());
                         for(var connection:javaPlan.connections().entrySet()){
                             NifiEntity service=nifi.createControllerService(pgId,"org.apache.nifi.dbcp.DBCPConnectionPool",n.label()+"/字典连接",buildSourceDbcpProperties(connection.getValue()));
                             compilation.csIds.put("dict:"+connection.getKey(),service.id());
@@ -395,10 +379,9 @@ public class DslCompiler {
         }
         Map<String,com.linewell.dataelement.mapping.core.MappingEngine.Plan> archivedPlans=new LinkedHashMap<>();javaMappingPlans.forEach((node,plan)->archivedPlans.put(node,plan.plan()));
         Map<String,String> planVersionIds=mappingVersions==null?Map.of():mappingVersions.archive(pipeline,archivedPlans);
-        // Resolve once per deployment. Several Hive targets can share one
-        // Carry the explicit record schema into JDBC writers; JSON inference would lose dates/decimal precision.
+        // Mapping consumers use the same public Reader, including chained mappings and JDBC sinks.
         if(pipeline.dsl().edges()!=null)for(var edge:pipeline.dsl().edges())if(javaMappingPlans.containsKey(edge.source())&&compiled.containsKey(edge.target())){
-            NodeCompilation target=compiled.get(edge.target());if(!target.csIds.containsKey("jsonReader"))target.csIds.put("jsonReader",nifi.createControllerService(pgId,JSON_READER_TYPE,"统一映射类型化输入",HiveTemporalJsonPolicy.typedReaderProperties(hiveTemporalJson)).id());
+            compiled.get(edge.target()).csIds.put("jsonReader", globalJson.readerId());
         }
         // Resolve once per deployment. Several Hive targets can share one
         // server-managed writer without a NiFi read per sink.
@@ -406,7 +389,7 @@ public class DslCompiler {
         Map<String, String> hiveHdfsWriterTypes = new LinkedHashMap<>();
         if (pipeline.dsl().nodes().stream().anyMatch(node ->
                 isHiveBatchPutHdfs(manifestByNode.get(node.id()), "put", cfgByNode.get(node.id())))) {
-            hiveCsvWriterId = resolveHiveCsvWriterServiceId(controllerServiceScopeId,hiveGlobals);
+            hiveCsvWriterId = resolveHiveCsvWriterServiceId(controllerServiceScopeId,globalJson);
             for (Pipeline.Node node : pipeline.dsl().nodes()) {
                 ComponentManifest manifest = manifestByNode.get(node.id());
                 Map<String, Object> cfg = cfgByNode.get(node.id());
@@ -424,7 +407,7 @@ public class DslCompiler {
         // 顺序很关键：若 CS 仍在 ENABLING，NiFi 会拒绝启动依赖它的处理器。
         Set<String> allCs = new LinkedHashSet<>(sharedCs.values());
         compiled.values().forEach(nc -> allCs.addAll(nc.csIds.values()));
-        if(hiveGlobals!=null)allCs.removeAll(hiveGlobals.ids());
+        allCs.removeAll(globalJson.ids());
         for (String csId : allCs) {
             try {
                 nifi.setControllerServiceRunStatus(csId, "ENABLED");
@@ -1170,28 +1153,19 @@ public class DslCompiler {
         compiled.usedOutgoing.put(processor.id(),new LinkedHashSet<>(List.of("failure","invalid","retry")));
     }
     public record MappingReplacement(NodeCompilation node,String planId) {}
-    /** Field-only upgrade: Reader/Writer and every source component remain in their existing scope. */
+    /** Field-only upgrade: resolve public JSON codecs; keep source processors and their state. */
     public MappingReplacement createMappingReplacement(Pipeline pipeline,Pipeline.Node node,String group,String reader,String typedReader,String writer,UnifiedMappingService.Compiled prepared){
         if(HiveSinkPublicationPolicy.forPublication(pipeline).dsl().nodes().stream().noneMatch(candidate->candidate.id().equals(node.id())))
             throw new IllegalStateException("Hive目标原始写入不发布字段对标组件，请重新发布整个任务以更新连接关系");
-        NodeCompilation compiled=new NodeCompilation();compiled.csIds.put("typed-json-reader",typedReader==null?reader:typedReader);compiled.csIds.put("typed-json-writer",writer);compiled.csIds.put("jsonReader",reader);
+        GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi);
+        NodeCompilation compiled=new NodeCompilation();compiled.csIds.put("typed-json-reader",globalJson.readerId());compiled.csIds.put("typed-json-writer",globalJson.writerId());compiled.csIds.put("jsonReader",globalJson.readerId());
         Map<String,String> ids=mappingVersions.archive(pipeline,Map.of(node.id(),prepared.plan()));List<NifiEntity> created=new ArrayList<>();
-        if(!pipeline.dsl().nodes().stream().anyMatch(HiveSinkPublicationPolicy::isHiveSink)) {
-            NifiEntity temporalWriter=nifi.createControllerService(group,JSON_WRITER_TYPE,
-                    usesHiveTemporalJson(pipeline)?HiveTemporalJsonPolicy.WRITER_NAME:node.label()+"/类型化输出",HiveTemporalJsonPolicy.writerProperties());
-            compiled.csIds.put("typed-json-writer",temporalWriter.id());created.add(temporalWriter);
-        }
         for(var connection:prepared.connections().entrySet()){NifiEntity service=nifi.createControllerService(group,"org.apache.nifi.dbcp.DBCPConnectionPool",node.label()+"/升级字典连接",buildSourceDbcpProperties(connection.getValue()));compiled.csIds.put("dict:"+connection.getKey(),service.id());created.add(service);}
         for(NifiEntity service:created){enableCreatedService(service);nifi.waitForControllerServiceEnabled(service.id(),30_000L);}
         if(!prepared.plan().dictionaries().isEmpty()){Map<String,String>properties=new LinkedHashMap<>();prepared.connections().keySet().forEach(id->properties.put(id,compiled.csIds.get("dict:"+id)));properties.put("authorized-definitions",prepared.plan().document().path("dictionaryBindings").toString());properties.put("snapshot-payloads",prepared.snapshots().toString());NifiEntity service=nifi.createControllerService(group,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService",node.label()+"/升级批量字典",properties);compiled.csIds.put("dictionary-batch",service.id());enableCreatedService(service);}
-        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",reader),ids.get(node.id()),pipeline.id()+":"+node.id());return new MappingReplacement(compiled,ids.get(node.id()));
+        buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",globalJson.readerId()),ids.get(node.id()),pipeline.id()+":"+node.id());return new MappingReplacement(compiled,ids.get(node.id()));
     }
     private void enableCreatedService(NifiEntity service){ObjectNode body=MAPPER.createObjectNode();body.set("revision",MAPPER.valueToTree(service.revision()));body.put("state","ENABLED").put("disconnectedNodeAcknowledged",false);nifi.put("/controller-services/"+service.id()+"/run-status",body,JsonNode.class);}
-    private static boolean usesHiveTemporalJson(Pipeline pipeline) {
-        return pipeline.dsl().nodes().stream().anyMatch(node -> HiveSinkPublicationPolicy.isHiveSink(node) || node.manifestKey().startsWith("source.")
-                && HiveTemporalJsonPolicy.isHive(node.manifestKey(),node.config()));
-    }
-
     private boolean hasAvailableTemporalTargetColumns(Map<String, Object> cfg, Set<String> availableFields) {
         if (availableFields == null || availableFields.isEmpty()) {
             return false;
@@ -2789,18 +2763,6 @@ public class DslCompiler {
         String queryInputProcessorId;
         boolean mergeInputs = mergeInputCount > 1;
         String recordReader = sharedCs.get("jsonReader");
-        String mergeSchemaText = stringConfig(cfg, "mergeSchemaText");
-        if (!mergeSchemaText.isBlank()) {
-            NifiEntity reader = nifi.createControllerService(pgId, JSON_READER_TYPE,
-                    node.label() + "/merge-json-reader", Map.of(
-                            "Schema Access Strategy", "schema-text-property",
-                            "Schema Text", mergeSchemaText
-                    ));
-            recordReader = reader.id();
-            nifi.setControllerServiceRunStatus(reader.id(), "ENABLED");
-            nifi.waitForControllerServiceEnabled(reader.id(), 30_000L);
-            nc.csIds.put("merge-json-reader", reader.id());
-        }
         if (mergeInputs) {
             String minRecords = stringConfig(cfg, "mergeMinimumRecords");
             if (minRecords.isBlank()) {
@@ -3277,7 +3239,7 @@ public class DslCompiler {
      * to verify that this writer's delimiter, null and escaping rules match the
      * selected target table. Only an ancestor service is visible to the task PG.
      */
-    private String resolveHiveCsvWriterServiceId(String applicationScopeId,HiveGlobalRecordServices hiveGlobals) {
+    private String resolveHiveCsvWriterServiceId(String applicationScopeId,GlobalJsonRecordServices hiveGlobals) {
         String name = System.getProperty(HIVE_HDFS_CSV_WRITER_NAME_PROPERTY,
                 HIVE_HDFS_CSV_WRITER_DEFAULT_NAME).trim();
         if (name.isEmpty()) {

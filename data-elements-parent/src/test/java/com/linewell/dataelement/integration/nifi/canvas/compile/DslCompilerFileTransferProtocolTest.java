@@ -45,6 +45,7 @@ class DslCompilerFileTransferProtocolTest {
         }
         when(registry.get("source.ftp")).thenReturn(manifest);
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listProcessGroups("root")).thenReturn(List.of());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble()))
                 .thenReturn(entity("pg"));
@@ -98,6 +99,7 @@ class DslCompilerFileTransferProtocolTest {
         }
         when(registry.get("source.ftp")).thenReturn(manifest);
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listProcessGroups("root")).thenReturn(List.of());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble()))
                 .thenReturn(entity("pg"));
@@ -143,6 +145,7 @@ class DslCompilerFileTransferProtocolTest {
         when(registry.get("source.ftp")).thenReturn(ftp);
         when(registry.get("transform.field-mapping")).thenReturn(mapping);
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.listProcessGroups("root")).thenReturn(List.of());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble()))
                 .thenReturn(entity("pg"));

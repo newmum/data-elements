@@ -38,6 +38,7 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
 
         AtomicInteger sequence = new AtomicInteger();
@@ -85,6 +86,7 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble()))
                 .thenReturn(entity("pg"));
@@ -160,6 +162,7 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.codecs());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
@@ -205,6 +208,7 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
@@ -239,6 +243,7 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
@@ -276,6 +281,7 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
@@ -304,6 +310,7 @@ class DslCompilerHiveMetadataTest {
         when(registry.get("sink.hive")).thenReturn(manifest);
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
+        HiveServiceFixtures.stubGlobals(nifi);
         when(nifi.get("/flow/process-groups/root",JsonNode.class)).thenReturn(HiveServiceFixtures.rootFlow());
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));

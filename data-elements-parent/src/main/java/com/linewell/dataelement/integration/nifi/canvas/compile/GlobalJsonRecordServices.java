@@ -7,18 +7,18 @@ import java.util.List;
 import java.util.Set;
 
 /** Read the selected NiFi node's root scope once; never create or alter public codecs. */
-record HiveGlobalRecordServices(String rootId, List<JsonNode> services, String writerId, String readerId) {
-    static HiveGlobalRecordServices resolve(NifiClient nifi) {
+record GlobalJsonRecordServices(String rootId, List<JsonNode> services, String writerId, String readerId) {
+    static GlobalJsonRecordServices resolve(NifiClient nifi) {
         // The configured canvas root may be a tenant/application subgroup.
         // Public services belong to the actual NiFi Flow root instead.
         JsonNode root = nifi.get("/flow/process-groups/root",JsonNode.class);
         String rootId = root==null?null:root.path("processGroupFlow").path("id").asText();
-        if (rootId == null || rootId.isBlank()) throw new IllegalStateException("无法确认 NiFi 根作用域，未创建 Hive 流程");
+        if (rootId == null || rootId.isBlank()) throw new IllegalStateException("无法确认 NiFi 根作用域，未创建任务流程");
         List<JsonNode> services = nifi.listControllerServices(rootId);
         services = services == null ? List.of() : List.copyOf(services);
         String writer = require(services, rootId, HiveTemporalJsonPolicy.WRITER_NAME, "org.apache.nifi.json.JsonRecordSetWriter");
         String reader = require(services, rootId, HiveTemporalJsonPolicy.READER_NAME, "org.apache.nifi.json.JsonTreeReader");
-        return new HiveGlobalRecordServices(rootId, services, writer, reader);
+        return new GlobalJsonRecordServices(rootId, services, writer, reader);
     }
 
     static String require(List<JsonNode> services, String rootId, String name, String type) {

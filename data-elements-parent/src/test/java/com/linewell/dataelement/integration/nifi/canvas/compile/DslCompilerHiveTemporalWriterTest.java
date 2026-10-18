@@ -75,7 +75,11 @@ class DslCompilerHiveTemporalWriterTest {
         when(nifi.createRetentionFunnel(anyString(),anyDouble(),anyDouble())).thenAnswer(call->entity("funnel-"+sequence.incrementAndGet()));
         compiler = new DslCompiler(nifi, registry, mock(FieldMappingService.class), hive);
         var unified=mock(UnifiedMappingService.class);
-        when(unified.compileBatch(anyMap())).thenReturn(Map.of("mapping",prepared()));
+        when(unified.compileBatch(anyMap())).thenAnswer(call -> {
+            Map<String, UnifiedMappingService.Compiled> plans = new LinkedHashMap<>();
+            ((Map<String, ?>)call.getArgument(0)).keySet().forEach(id -> plans.put(id, prepared()));
+            return plans;
+        });
         compiler.setUnifiedMappingService(unified);
         var versions=mock(MappingVersionStore.class);
         when(versions.archive(any(),anyMap())).thenReturn(Map.of("mapping","plan-version"));
@@ -83,17 +87,17 @@ class DslCompilerHiveTemporalWriterTest {
     }
 
     @ParameterizedTest @ValueSource(strings={"hive","mysql"})
-    void customMappingWriterUsesHiveProfileOnFullPublicationAndOrdinaryWriterOtherwise(String database) {
+    void allMappingInputsAndOutputsUsePublicCodecs(String database) {
         Pipeline.Node mapping=mapping();
         compiler.compile(flow(List.of(source("source",database,Map.of()),mapping)));
         Created processor=namedProcessor("字段映射");
-        if(database.equals("hive"))assertThat(processor.properties()).containsEntry("record-writer",namedService(HiveTemporalJsonPolicy.WRITER_NAME).id());
-        else {assertThat(processor.properties()).containsEntry("record-writer",namedService("字段映射/类型化输出").id());assertThat(services).noneMatch(s->s.name().equals(HiveTemporalJsonPolicy.WRITER_NAME));}
+        assertThat(processor.properties()).containsEntry("record-writer","global-json-writer")
+                .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader");
         assertThat(processor.type()).isEqualTo("com.linewell.dataelement.nifi.HaitongTransformRecord");
         assertThat(processor.properties()).containsEntry("context-node-id","temporal-test:mapping");
         verify(nifi,never()).waitForControllerServiceEnabled(eq("true"),anyLong());
         assertThat(namedProcessor("source/execute").properties()).containsEntry("Use Avro Logical Types","true");
-        if(database.equals("mysql"))assertThat(namedService("JsonWriter").properties()).containsAllEntriesOf(HiveTemporalJsonPolicy.writerProperties());
+        assertNoTaskJsonServices();
     }
     @Test void oraclePublicationProjectsDateAsTimestampBeforeJdbcReadsIt() {
         compiler.compile(flow(List.of(source("source","oracle",Map.of("dbType","ORACLE","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))))));
@@ -114,13 +118,12 @@ class DslCompilerHiveTemporalWriterTest {
     @ParameterizedTest @ValueSource(strings={"hive","mysql"})
     void fieldOnlyUpgradeBindsCorrectWriterAndNeverRecreatesOrModifiesSources(String database) {
         compiler.createMappingReplacement(flow(List.of(source("source",database,Map.of()),mapping())),mapping(),"existing-group","reader","typed-reader","existing-writer",prepared());
-        String writer=namedService(database.equals("hive")?HiveTemporalJsonPolicy.WRITER_NAME:"字段映射/类型化输出").id();
-        assertThat(namedService(database.equals("hive")?HiveTemporalJsonPolicy.WRITER_NAME:"字段映射/类型化输出").properties()).containsAllEntriesOf(HiveTemporalJsonPolicy.writerProperties());
-        assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer",writer).containsEntry("typed-record-reader","typed-reader");
+        assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer","global-json-writer")
+                .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader");
         assertThat(namedProcessor("字段映射").properties()).containsEntry("context-node-id","temporal-test:mapping");
         assertThat(processors).hasSize(1);
         verify(nifi,never()).putWithRevision(contains("/processors/"),anyString(),any());
-        if(database.equals("hive"))verify(nifi).waitForControllerServiceEnabled(writer,30_000L);
+        assertNoTaskJsonServices();
     }
 
     private static Pipeline.Node mapping(){return new Pipeline.Node("mapping","transform.field-mapping","字段映射","transform",300,0,Map.of("executionEngine","JAVA_RECORD","mappings","{\"schemaVersion\":\"2.0\",\"rules\":[]}"));}
@@ -128,26 +131,21 @@ class DslCompilerHiveTemporalWriterTest {
 
     @Test void hiveSourceUsesNamedTemporalWriterAndMatchingReader() {
         compiler.compile(flow(List.of(source("h", "hive", Map.of()))));
-        Created writer = namedService(HiveTemporalJsonPolicy.WRITER_NAME);
-        assertThat(writer.type()).isEqualTo("org.apache.nifi.json.JsonRecordSetWriter");
-        assertThat(writer.properties()).containsAllEntriesOf(HiveTemporalJsonPolicy.formats())
-                .containsEntry("Schema Write Strategy", "full-schema-attribute");
-        assertThat(namedProcessor("h/execute").properties()).containsEntry("Record Writer", writer.id());
-        assertThat(namedService("JsonReader").properties()).containsAllEntriesOf(HiveTemporalJsonPolicy.formats());
-        verify(nifi).waitForControllerServiceEnabled(writer.id(), 30_000L);
+        assertThat(namedProcessor("h/execute").properties()).containsEntry("Record Writer", "global-json-writer");
+        assertNoTaskJsonServices();
     }
 
-    @Test void mysqlKeepsOrdinaryWriterAndReader() {
+    @Test void mysqlUsesSameGlobalWriterAndReader() {
         compiler.compile(flow(List.of(source("m", "mysql", Map.of("dbType", "MYSQL")))));
-        assertThat(services).noneMatch(service -> HiveTemporalJsonPolicy.WRITER_NAME.equals(service.name()));
-        assertThat(namedProcessor("m/execute").properties()).containsEntry("Record Writer", namedService("JsonWriter").id());
-        assertThat(namedService("JsonReader").properties()).isEmpty();
+        assertThat(namedProcessor("m/execute").properties()).containsEntry("Record Writer", "global-json-writer");
+        assertNoTaskJsonServices();
     }
 
-    @Test void mixedSourcesOnlyReplaceHiveExecuteSqlWriter() {
+    @Test void mixedSourcesShareTheSameGlobalWriter() {
         compiler.compile(flow(List.of(source("h", "hive", Map.of()), source("m", "mysql", Map.of("dbType", "MYSQL")))));
-        assertThat(namedProcessor("h/execute").properties()).containsEntry("Record Writer", namedService(HiveTemporalJsonPolicy.WRITER_NAME).id());
-        assertThat(namedProcessor("m/execute").properties()).containsEntry("Record Writer", namedService("JsonWriter").id());
+        assertThat(namedProcessor("h/execute").properties()).containsEntry("Record Writer", "global-json-writer");
+        assertThat(namedProcessor("m/execute").properties()).containsEntry("Record Writer", "global-json-writer");
+        assertNoTaskJsonServices();
     }
 
     @Test void queryExecutedDirectlyInHiveUsesTheSameTemporalWriter() {
@@ -159,7 +157,7 @@ class DslCompilerHiveTemporalWriterTest {
                 new Pipeline.Dsl(1, base.dsl().nodes(), List.of(new Pipeline.Edge("edge", "h", "q", "default"))),
                 null, null, null, null, null, null, null);
         compiler.compile(pipeline);
-        assertThat(namedProcessor("query/query").properties()).containsEntry("Record Writer", namedService(HiveTemporalJsonPolicy.WRITER_NAME).id());
+        assertThat(namedProcessor("query/query").properties()).containsEntry("Record Writer", "global-json-writer");
     }
 
     @ParameterizedTest @ValueSource(ints = {20, 100})
@@ -167,17 +165,37 @@ class DslCompilerHiveTemporalWriterTest {
         List<Pipeline.Node> nodes = new ArrayList<>();
         for (int i = 0; i < count; i++) nodes.add(source("h" + i, "hive", Map.of()));
         compiler.compile(flow(nodes));
-        assertThat(services.stream().filter(service -> HiveTemporalJsonPolicy.WRITER_NAME.equals(service.name()))).hasSize(1);
-        String id = namedService(HiveTemporalJsonPolicy.WRITER_NAME).id();
         assertThat(processors.stream().filter(processor -> processor.type().endsWith(".ExecuteSQLRecord")))
-                .hasSize(count).allMatch(processor -> id.equals(processor.properties().get("Record Writer")));
-        verify(nifi, never()).listControllerServices(anyString());
+                .hasSize(count).allMatch(processor -> "global-json-writer".equals(processor.properties().get("Record Writer")));
+        verify(nifi, times(1)).listControllerServices("root");
+        assertNoTaskJsonServices();
     }
 
-    @Test void typedReaderParsesExactlyTheWriterFormatsAndKeepsSchemaAttribute() {
-        assertThat(HiveTemporalJsonPolicy.typedReaderProperties(true)).containsAllEntriesOf(HiveTemporalJsonPolicy.formats())
-                .containsEntry("Schema Text", "${avro.schema}");
-        assertThat(HiveTemporalJsonPolicy.typedReaderProperties(false)).containsAllEntriesOf(HiveTemporalJsonPolicy.formats());
+    @ParameterizedTest @ValueSource(ints = {20, 100})
+    void mappingChainsReadGlobalServicesOnceAndNeverCreatePerNodeJsonCodecs(int count) {
+        List<Pipeline.Node> nodes=new ArrayList<>();List<Pipeline.Edge> edges=new ArrayList<>();
+        nodes.add(source("source","mysql",Map.of()));
+        for(int index=0;index<count;index++) {
+            String id="mapping"+index;
+            nodes.add(new Pipeline.Node(id,"transform.field-mapping",id,"transform",0,0,mapping().config()));
+            edges.add(new Pipeline.Edge("e"+index,index==0?"source":"mapping"+(index-1),id,"default"));
+        }
+        compiler.compile(new Pipeline("chain","mapping chain",null,null,null,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null));
+        assertThat(processors.stream().filter(processor -> processor.type().endsWith(".HaitongTransformRecord")))
+                .hasSize(count).allSatisfy(processor -> assertThat(processor.properties())
+                        .containsEntry("record-reader","global-json-reader")
+                        .containsEntry("typed-record-reader","global-json-reader")
+                        .containsEntry("record-writer","global-json-writer"));
+        verify(nifi,times(1)).listControllerServices("root");
+        assertNoTaskJsonServices();
+    }
+
+    @Test void ordinaryTaskAlsoRejectsMissingGlobalsBeforeCreatingAProcessGroup() {
+        when(nifi.listControllerServices("root")).thenReturn(List.of());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> compiler.compile(flow(List.of(source("s","mysql",Map.of())))))
+                .hasMessageContaining("缺少全局服务");
+        verify(nifi,never()).createProcessGroup(anyString(),anyString(),anyDouble(),anyDouble());
+        assertThat(services).isEmpty();assertThat(processors).isEmpty();
     }
 
     @ParameterizedTest @ValueSource(strings={"mysql","oracle","oceanbase"})
@@ -212,10 +230,10 @@ class DslCompilerHiveTemporalWriterTest {
         assertThat(processors).noneMatch(p->p.type().endsWith(".MergeRecord"));
     }
 
-    @Test void unrelatedMysqlSourceRetainsOrdinaryWriter() {
+    @Test void unrelatedMysqlSourceAlsoUsesThePublicWriter() {
         compiler.compile(hiveTargetFlow(List.of(source("s","mysql",Map.of()),source("unrelated","mysql",Map.of()),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));
         assertThat(namedProcessor("s/execute").properties()).containsEntry("Record Writer","global-json-writer");
-        assertThat(namedProcessor("unrelated/execute").properties()).containsEntry("Record Writer",namedService("JsonWriter").id());
+        assertThat(namedProcessor("unrelated/execute").properties()).containsEntry("Record Writer","global-json-writer");
     }
     @Test void hiveTargetCurrentMaximumIncrementalSourceUsesSameWriter() {
         compiler.compile(hiveTargetFlow(List.of(source("s","oracle",Map.of("dbType","ORACLE","syncMode","INCREMENTAL","initialStrategy","START_AT_CURRENT_MAX","incrementalColumn","EVENT_TIME","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));
@@ -245,7 +263,7 @@ class DslCompilerHiveTemporalWriterTest {
         compiler.createMappingReplacement(pipeline,mapping(),"existing-group","reader","typed","global-json-writer",prepared());
         assertThat(services).isEmpty();
         assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer","global-json-writer");
-        verify(nifi,never()).listControllerServices(anyString());
+        verify(nifi,times(1)).listControllerServices("root");
     }
     private static Pipeline.Node hiveSink(String id){return new Pipeline.Node(id,"sink.hive",id,"sink",600,0,Map.of("table","EVENT_LOG","database","default"));}
     private static Pipeline hiveTargetFlow(List<Pipeline.Node> nodes,List<Pipeline.Edge> edges){return new Pipeline("target-hive","Hive target",null,null,null,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null);}
@@ -257,6 +275,15 @@ class DslCompilerHiveTemporalWriterTest {
     }
 
     private Created namedService(String name) { return services.stream().filter(value -> name.equals(value.name())).findFirst().orElseThrow(); }
+    private void assertNoTaskJsonServices() {
+        assertThat(services).noneMatch(service -> service.type().equals("org.apache.nifi.json.JsonTreeReader")
+                || service.type().equals("org.apache.nifi.json.JsonRecordSetWriter"));
+        for(String id:List.of("global-json-reader","global-json-writer")) {
+            verify(nifi,never()).setControllerServiceRunStatus(eq(id),anyString());
+            verify(nifi,never()).waitForControllerServiceEnabled(eq(id),anyLong());
+            verify(nifi,never()).putWithRevision(contains("/controller-services/"+id),anyString(),any());
+        }
+    }
     private Created namedProcessor(String name) { return processors.stream().filter(value -> name.equals(value.name())).findFirst().orElseThrow(); }
     private static Pipeline.Node source(String id, String type, Map<String, Object> extras) {
         Map<String, Object> config = new LinkedHashMap<>(extras); config.put("table", "EVENT_LOG");
