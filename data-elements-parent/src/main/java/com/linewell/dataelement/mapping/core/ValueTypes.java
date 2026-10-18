@@ -63,8 +63,8 @@ public final class ValueTypes {
             return switch (type(rawType)) {
                 case "ANY" -> value;
                 case "STRING" -> value.toString();
-                case "INT" -> value instanceof Boolean b?(b?1:0):decimal(value).intValueExact();
-                case "LONG" -> value instanceof Boolean b?(b?1L:0L):decimal(value).longValueExact();
+                case "INT" -> value instanceof Boolean b?(b?1:0):integer(value,"INT",Integer.MIN_VALUE,Integer.MAX_VALUE).intValueExact();
+                case "LONG" -> value instanceof Boolean b?(b?1L:0L):integer(value,"LONG",Long.MIN_VALUE,Long.MAX_VALUE).longValueExact();
                 case "DECIMAL" -> {
                     requireDecimalDimensions(precision, scale);
                     BigDecimal original = decimal(value);
@@ -87,7 +87,7 @@ public final class ValueTypes {
                 case "BOOLEAN" -> switch (value.toString().trim().toLowerCase(Locale.ROOT)) {
                     case "true", "1" -> true;
                     case "false", "0" -> false;
-                    default -> throw new IllegalArgumentException();
+                    default -> throw new MappingException("TYPE_MISMATCH","BOOLEAN仅接受true、false、1或0");
                 };
                 case "DATE", "DATETIME", "TIME", "INSTANT" -> TemporalParser.auto(value,type(rawType),zone);
                 case "ARRAY" -> { if (!(value instanceof Collection<?>)) throw new IllegalArgumentException(); yield value; }
@@ -95,6 +95,13 @@ public final class ValueTypes {
             };
         } catch (MappingException ex) { throw ex; }
         catch (RuntimeException ex) { throw new MappingException("TYPE_MISMATCH", "目标类型转换失败或超出精度/范围: " + type(rawType)); }
+    }
+    private static BigDecimal integer(Object value,String type,long minimum,long maximum) {
+        BigDecimal number=decimal(value);
+        if(number.stripTrailingZeros().scale()>0)throw new MappingException("TYPE_MISMATCH",type+"要求整数，当前值包含非零小数位；请调整目标类型或显式配置舍入规则");
+        if(number.compareTo(BigDecimal.valueOf(minimum))<0||number.compareTo(BigDecimal.valueOf(maximum))>0)
+            throw new MappingException("TYPE_MISMATCH",type+"允许范围为["+minimum+","+maximum+"]，当前值超出范围");
+        return number;
     }
     /** (0,0) means an unconstrained SQL NUMERIC/NUMBER; it never implies an integer. */
     public static void requireDecimalDimensions(int precision, int scale) {

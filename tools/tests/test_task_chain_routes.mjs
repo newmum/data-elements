@@ -19,7 +19,7 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue', '2.3.1 Hive元�
     assert.ok(node, name); return script.slice(node.start, node.end);
   }).join('\n') + '\nglobalThis.routes=taskLinkRoutes;globalThis.status=taskLinkStatus;globalThis.sections=targetTaskSectionsOf;globalThis.plan=targetCleanupPlan;globalThis.rowMenu=handleRowTaskMenu;globalThis.actions={deleteCurrentFlow,deleteSingleTarget,deleteAllTargets};';
   const menuCalls = [], recoveryCalls = [], resetCalls = [], notices = [], confirmations = [];
-  const ctx = vm.createContext({ console:{...console,warn:()=>{}}, targetDrawerContext:{value:null},targetDrawerSections:{value:[]},
+  const ctx = vm.createContext({ runtimeConnection:{value:'live'}, console:{...console,warn:()=>{}}, targetDrawerContext:{value:null},targetDrawerSections:{value:[]},
     deletingAllTargets:{value:false},deleteAllTargetCount:{value:0},deleteAllTargetProgress:{value:0},
     targetDrawerVisible:{value:true},accessTaskId:{value:''},tableRef:{value:{refresh:async()=>{}}},
     ElMessageBox:{confirm:async(text,title)=>confirmations.push({text,title})},$message:{success:text=>notices.push({type:'success',text}),warning:text=>notices.push({type:'warning',text}),error:assert.fail},
@@ -48,18 +48,22 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue', '2.3.1 Hive元�
   assert.equal(menuCalls.length,0, 'Unknown IDs cannot invoke task actions');
   ctx.rowMenu({action:'tables',taskId:'second'},row);
   assert.equal(menuCalls[0].task.sourceTableId,'ods', 'Task actions use the actual downstream source');
-  row.tasks[0].currentStatus = 'RUNNING';
-  row.tasks[1].currentStatus = 'EXECUTION_ERROR';
+  Object.assign(row.tasks[0],{runtimeState:'RUNNING',runtimeLabel:'运行中',runtimeFresh:true});
+  Object.assign(row.tasks[1],{runtimeState:'RUN_ERROR',runtimeLabel:'运行异常',runtimeFresh:true});
   let routes = plain(ctx.routes(row));
-  assert.deepEqual(routes[0].links, [{text:'运行中',tone:'success'},{text:'执行异常',tone:'danger'}]);
-  assert.deepEqual(plain(ctx.status({currentStatus:'STOPPED',taskStatus:'1'})), {text:'未启动',tone:'idle'}, 'Stopped runtime state overrides legacy enabled flag');
-  assert.deepEqual(plain(ctx.status({taskStatusText:'执行成功'})), {text:'未启动',tone:'idle'}, 'Historical success is not active running');
-  assert.deepEqual(plain(ctx.status({currentStatus:'RUNNING',monitorStatus:'SUCCESS',taskStatusText:'执行成功'})), {text:'运行中',tone:'success'}, 'A successful batch does not stop the running task');
-  assert.deepEqual(plain(ctx.status({taskStatus:1,monitorStatus:'SUCCESS',taskStatusText:'执行成功'})), {text:'运行中',tone:'success'}, 'Legacy start flag remains active after a successful batch');
-  assert.deepEqual(plain(ctx.status({currentStatus:'STOPPED',monitorStatus:'SUCCESS',taskStatus:1})), {text:'未启动',tone:'idle'}, 'Current stop overrides both a successful batch and a stale start flag');
-  assert.deepEqual(plain(ctx.status({currentStatus:'DEPLOY_FAILED',monitorStatus:'SUCCESS',taskStatus:1})), {text:'执行异常',tone:'danger'}, 'A deployment failure cannot be hidden by historical success');
-  assert.deepEqual(plain(ctx.status({taskStatus:2})), {text:'执行异常',tone:'danger'});
-  assert.deepEqual(plain(ctx.status({})), {text:'未启动',tone:'idle'});
+  assert.deepEqual(routes[0].links, [{text:'运行中',tone:'success'},{text:'运行异常',tone:'danger'}]);
+  const stopped={runtimeState:'STOPPED',runtimeLabel:'已停止',runtimeFresh:true,taskStatus:'1'};
+  assert.deepEqual(plain(ctx.status(stopped)), {text:'已停止',tone:'idle'}, 'Current NiFi stop overrides legacy enabled flag');
+  const running={runtimeState:'RUNNING',runtimeLabel:'运行中',runtimeFresh:true,currentStatus:'RUN_ERROR',monitorStatus:'ERROR',taskStatus:2,taskStatusText:'执行异常'};
+  assert.deepEqual(plain(ctx.status(running)), {text:'运行中',tone:'success'}, 'Historical failure cannot override live running');
+  assert.deepEqual(plain(ctx.status({...running,runtimeFresh:false})), {text:'状态待确认',tone:'warning'});
+  assert.deepEqual(plain(ctx.status({taskStatus:2,currentStatus:'RUN_ERROR'})), {text:'状态待确认',tone:'warning'}, 'Persisted flags cannot invent live state');
+  ctx.runtimeConnection.value='unavailable';
+  assert.deepEqual(plain(ctx.status(running)), {text:'状态待确认',tone:'warning'}, 'Transport loss invalidates both chain segments');
+  ctx.runtimeConnection.value='live';
+  Object.assign(row.tasks[1],running);
+  assert.ok(plain(ctx.routes(row))[0].links.every(link=>link.text==='运行中'),'Downstream task updates independently of the first task');
+  assert.deepEqual(plain(ctx.status({})), {text:'状态待确认',tone:'warning'});
   assert.equal(routes.length, 1);
   assert.deepEqual(routes[0].stages.map(stage => stage.map(item => item.id)), [['business'], ['ods'], ['raw']]);
   assert.deepEqual(routes[0].tasks.map(item => item.tid), ['first', 'second']);
@@ -89,7 +93,7 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue', '2.3.1 Hive元�
       const [route] = ctx.routes(item);
       const sections = ctx.sections(item);
       return sections.length === 2 && sections[1].targets[0].targetTableId === 'raw'
-        && route.stages.length === 3 && route.links[0].text === '运行中' && route.links[1].text === '执行异常';
+        && route.stages.length === 3 && route.links[0].text === '运行中' && route.links[1].text === '运行中';
     }));
     const manyTasks={tid:'business',tasks:Array.from({length:count},(_,i)=>task(`batch-${i}`,'business','业务库',[target(`target-${i}`,'目标库')]))};
     assert.equal(ctx.sections(manyTasks).length,count,'All authorized tasks remain visible');

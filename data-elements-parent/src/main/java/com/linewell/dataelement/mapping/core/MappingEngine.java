@@ -9,14 +9,17 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.19";
+    public static final String VERSION="1.1.21";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=8L*1024*1024;
     public static final int MAX_DICTIONARIES=1000;
     public static final int MAX_DICTIONARY_DATASOURCES=8;
     private static final ObjectMapper JSON=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
-    public record Issue(String code,String ruleId,String stepId,String message) {}
+    public record Issue(String code,String ruleId,String stepId,String message,
+                        List<MappingDiagnostics.FieldValue> sourceFields,String targetField,String targetComment,
+                        String operator,Object inputValue,Object problemValue,boolean valueTruncated,
+                        String expected,String reason,String effect,long recordIndex) {}
     public record Row(long index,boolean success,Map<String,Object> output,List<Issue> errors) {}
     public record Result(List<Row> rows,int dictionaryBatches,int stages) {}
     public record OutputType(String logicalType,int precision,int scale,boolean nullable) {}
@@ -25,13 +28,14 @@ public final class MappingEngine {
                         String type,boolean enforceType,boolean nullable,int length,int precision,int scale,String onError,Object defaultValue) {}
     public static final class Plan {
         private final ObjectNode document;
+        private final MappingDiagnostics.Catalog diagnostics;
         private final List<Rule> rules;
         private final Map<String,DictionarySpec> dictionaries;
         private final String hash,recordMode,missingPolicy;
         private final boolean passthrough,caseSensitive;
         private final Set<String> excludes;
         private Plan(ObjectNode doc,List<Rule> rules,Map<String,DictionarySpec> dicts){
-            this.document=doc.deepCopy();this.rules=List.copyOf(rules);this.dictionaries=Collections.unmodifiableMap(new LinkedHashMap<>(dicts));
+            this.document=doc.deepCopy();this.diagnostics=new MappingDiagnostics.Catalog(this.document);this.rules=List.copyOf(rules);this.dictionaries=Collections.unmodifiableMap(new LinkedHashMap<>(dicts));
             hash=MappingEngine.hash(doc);recordMode=doc.path("policies").path("recordErrorMode").asText("FAIL_FLOWFILE");
             missingPolicy=doc.path("policies").path("onMissingSource").asText("NULL");
             passthrough=doc.path("policies").path("allowUnmappedPassthrough").asBoolean(false);
@@ -60,19 +64,23 @@ public final class MappingEngine {
     private static final class Frame implements Expressions.Scope {
         final Plan plan;final Map<String,Object> original;final Map<String,Object> output=new LinkedHashMap<>();
         final ExecutionContext context;final long index;final Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>> values;
-        final Set<String> done=new HashSet<>();final List<Issue> errors=new ArrayList<>();String rule="",step="";Object current,ruleInput;
+        final Set<String> done=new HashSet<>();final List<Issue> errors=new ArrayList<>();String rule="",step="";Object current,ruleInput;JsonNode diagnosticStep;final Map<String,Object> usedSources=new LinkedHashMap<>();
         Frame(Plan p,Map<String,Object> row,long index,ExecutionContext context,Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values){
             this.plan=p;this.original=row;this.index=index;this.context=context;this.values=values;
             if(p.passthrough)row.forEach((k,v)->{if(!p.excludes.contains(k))output.put(k,v);});
         }
         public Object source(String name){
-            if(original.containsKey(name))return original.get(name);
-            if(!plan.caseSensitive){Object result=ValueTypes.MISSING;for(var e:original.entrySet())if(e.getKey().equalsIgnoreCase(name)){if(result!=ValueTypes.MISSING)throw new MappingException("AMBIGUOUS_FIELD","大小写不敏感字段引用存在重名");result=e.getValue();}if(result!=ValueTypes.MISSING)return result;}
+            Object value=sourceRaw(name);usedSources.put(name,value);
+            if(value!=ValueTypes.MISSING)return value;
             if(plan.missingPolicy.equals("NULL"))return null;
             throw new MappingException("MISSING_SOURCE","来源记录缺少已引用字段");
         }
         public Object target(String name){if(!done.contains(name))throw new TargetWait();return output.get(name);}
-        public Object sourceRaw(String name){return original.containsKey(name)?original.get(name):ValueTypes.MISSING;}
+        public Object sourceRaw(String name){
+            if(original.containsKey(name))return original.get(name);
+            if(!plan.caseSensitive){Object result=ValueTypes.MISSING;for(var e:original.entrySet())if(e.getKey().equalsIgnoreCase(name)){if(result!=ValueTypes.MISSING)throw new MappingException("AMBIGUOUS_FIELD","大小写不敏感字段引用存在重名");result=e.getValue();}return result;}
+            return ValueTypes.MISSING;
+        }
         public Object value(){return current;}
         public long rowIndex(){return index;}
         public String ruleId(){return rule;}
@@ -105,6 +113,7 @@ public final class MappingEngine {
         for(JsonNode node:rules){
             if(!node.path("enabled").asBoolean(true))continue;
             String id=node.path("ruleId").asText("rule-"+(count++));String target=ValueTypes.field(node.path("target").path("name").asText());
+            ((ObjectNode)node).put("ruleId",id);
             if(!ids.add(id)||!targets.add(target))throw new MappingException("DUPLICATE_TARGET","规则标识或目标字段重复");
             Set<String> deps=new LinkedHashSet<>(),sources=new LinkedHashSet<>();Eval value=compileRule(node,deps,sources,dictionaries,0);
             JsonNode t=node.path("target");String type=ValueTypes.type(t.path("logicalType").asText(inferType(node)));
@@ -125,7 +134,7 @@ public final class MappingEngine {
         if(depth>16)throw new MappingException("BUDGET_EXCEEDED","条件分支嵌套过深");
         if(node.hasNonNull("when")){Expressions.Expr condition=node.path("when").isTextual()?Expressions.compile(node.path("when").asText(),deps,fields):compilePredicate(node.path("when"),deps,fields,0);
             Eval yes=compileRule(node.path("then"),deps,fields,dicts,depth+1),no=node.has("else")?compileRule(node.path("else"),deps,fields,dicts,depth+1):f->null;
-            return f->Expressions.truth(condition.evaluate(f))?yes.eval(f):no.eval(f);}
+            return f->{f.step="condition";f.diagnosticStep=null;return Expressions.truth(condition.evaluate(f))?yes.eval(f):no.eval(f);};}
         if(node.path("input").path("kind").asText().equals("STEP_INPUT"))throw new MappingException("INPUT_UNAVAILABLE","规则输入没有上一步结果，请选择源字段或明确引用已生成目标字段");
         Expressions.Expr input=Expressions.ast(node.path("input"),deps,fields,0);List<Eval> steps=new ArrayList<>();
         if(node.path("steps").size()>32)throw new MappingException("BUDGET_EXCEEDED","单规则步骤超过32");
@@ -151,9 +160,9 @@ public final class MappingEngine {
                 default -> throw new MappingException("UNKNOWN_FUNCTION","未支持的规则算子: "+operator);
             }
             Eval actual=eval;String fallback=step.path("onError").asText("ERROR");validateFallback(fallback);Object defaultValue=JSON.convertValue(step.get("defaultValue"),Object.class);
-            steps.add(f->{f.step=stepId;Object before=f.current;try{Object value;try{value=actual.eval(f);}catch(ArithmeticException | java.time.DateTimeException ex){throw new MappingException("TYPE_MISMATCH","表达式数值或时间计算失败");}if(ValueTypes.bytes(value,0)>262144)throw new MappingException("BUDGET_EXCEEDED","字段结果超过256KiB");return value;}catch(MappingException ex){if(ex.code().equals("BUDGET_EXCEEDED"))throw ex;return switch(fallback){case "NULL"->null;case "KEEP_SOURCE","KEEP_ORIGINAL"->f.ruleInput;case "KEEP_INPUT"->before;case "DEFAULT_VALUE"->defaultValue;default->throw ex;};}});
+            steps.add(f->{f.step=stepId;f.diagnosticStep=step;Object before=f.current;try{Object value;try{value=actual.eval(f);}catch(ArithmeticException | java.time.DateTimeException ex){throw new MappingException("TYPE_MISMATCH","表达式数值或时间计算失败");}if(ValueTypes.bytes(value,0)>262144)throw new MappingException("BUDGET_EXCEEDED","字段结果超过256KiB");return value;}catch(MappingException ex){if(ex.code().equals("BUDGET_EXCEEDED"))throw ex;return switch(fallback){case "NULL"->null;case "KEEP_SOURCE","KEEP_ORIGINAL"->f.ruleInput;case "KEEP_INPUT"->before;case "DEFAULT_VALUE"->defaultValue;default->throw ex;};}});
         }
-        return f->{f.current=input.evaluate(f);f.ruleInput=f.current;for(Eval step:steps)f.current=step.eval(f);return f.current;};
+        return f->{f.step="input";f.diagnosticStep=null;f.current=ValueTypes.MISSING;f.current=input.evaluate(f);f.ruleInput=f.current;for(Eval step:steps)f.current=step.eval(f);return f.current;};
     }
     private static Expressions.Expr compilePredicate(JsonNode p,Set<String>deps,Set<String>fields,int depth){
         if(depth>32)throw new MappingException("BUDGET_EXCEEDED","条件深度超限");String op=p.path("op").asText();
@@ -197,13 +206,15 @@ public final class MappingEngine {
         if(input.size()>WINDOW_RECORDS)throw new MappingException("BUDGET_EXCEEDED","记录窗口超过512条");long bytes=0;for(var row:input){long size=ValueTypes.bytes(row,0);if(size>1_048_576)throw new MappingException("BUDGET_EXCEEDED","单记录超过1MiB");bytes+=size;}if(bytes>WINDOW_BYTES)throw new MappingException("BUDGET_EXCEEDED","窗口超过8MiB");
         Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values=new HashMap<>();List<Frame>frames=new ArrayList<>();for(int i=0;i<input.size();i++)frames.add(new Frame(plan,input.get(i),indices.get(i),context,values));int batches=0,stage=0;long resultBytes=0,outputBytes=0;
         while(true){Map<String,Set<DictionarySpec.Key>>pending=new LinkedHashMap<>();boolean unfinished=false;
-            for(Frame frame:frames){if(!frame.errors.isEmpty())continue;for(Rule rule:plan.rules){if(frame.done.contains(rule.target))continue;frame.rule=rule.id;frame.step="input";frame.ruleInput=ValueTypes.MISSING;frame.current=null;
-                try{Object value=rule.value.eval(frame);if(rule.enforceType)value=ValueTypes.cast(value,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());if(!rule.nullable&&value==null)throw new MappingException("REQUIRED_FIELD","目标字段不允许NULL");if(rule.length>0&&value!=null&&value.toString().codePointCount(0,value.toString().length())>rule.length)throw new MappingException("LENGTH_EXCEEDED","目标字段长度超限");outputBytes+=ValueTypes.bytes(value,0);if(outputBytes>WINDOW_BYTES)throw new MappingException("BUDGET_EXCEEDED","窗口输出累计超过8MiB，请减小窗口/规则输出");frame.output.put(rule.target,value);frame.done.add(rule.target);}
+            for(Frame frame:frames){if(!frame.errors.isEmpty())continue;for(Rule rule:plan.rules){if(frame.done.contains(rule.target))continue;frame.rule=rule.id;frame.step="input";frame.diagnosticStep=null;frame.ruleInput=ValueTypes.MISSING;frame.current=ValueTypes.MISSING;frame.usedSources.clear();
+                try{Object value=rule.value.eval(frame);frame.step="target";frame.diagnosticStep=null;frame.current=value;if(rule.enforceType)value=ValueTypes.cast(value,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());frame.current=value;if(!rule.nullable&&value==null)throw new MappingException("REQUIRED_FIELD","目标字段不允许NULL");if(rule.length>0&&value!=null&&value.toString().codePointCount(0,value.toString().length())>rule.length)throw new MappingException("LENGTH_EXCEEDED","目标字段长度"+value.toString().codePointCount(0,value.toString().length())+"字符，超过允许的"+rule.length+"字符");outputBytes+=ValueTypes.bytes(value,0);if(outputBytes>WINDOW_BYTES)throw new MappingException("BUDGET_EXCEEDED","窗口输出累计超过8MiB，请减小窗口/规则输出");frame.output.put(rule.target,value);frame.done.add(rule.target);}
                 catch(Wait w){pending.computeIfAbsent(w.dictionary,k->new LinkedHashSet<>()).addAll(w.keys);unfinished=true;}
                 catch(TargetWait w){unfinished=true;}
                 catch(MappingException ex){if(ex.code().equals("BUDGET_EXCEEDED"))throw ex;Object fallback=null;boolean recover=switch(rule.onError){case "NULL"->true;case "KEEP_SOURCE","KEEP_ORIGINAL"->{fallback=frame.ruleInput==ValueTypes.MISSING?null:frame.ruleInput;yield true;}case "DEFAULT_VALUE"->{fallback=rule.defaultValue;yield true;}default->false;};
                     if(recover){try{if(rule.enforceType)fallback=ValueTypes.cast(fallback,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());if(!rule.nullable&&fallback==null)throw ex;if(rule.length>0&&fallback!=null&&fallback.toString().codePointCount(0,fallback.toString().length())>rule.length)throw ex;outputBytes+=ValueTypes.bytes(fallback,0);if(outputBytes>WINDOW_BYTES)throw new MappingException("BUDGET_EXCEEDED","窗口回退输出累计超过8MiB");frame.output.put(rule.target,fallback);frame.done.add(rule.target);continue;}catch(MappingException recoveryError){if(recoveryError.code().equals("BUDGET_EXCEEDED"))throw recoveryError;}}
-                    frame.errors.add(new Issue(ex.code(),rule.id,frame.step,ex.getMessage()));break;}
+                    Object problem=frame.current;
+                    if(problem==ValueTypes.MISSING&&frame.usedSources.size()==1)problem=frame.usedSources.values().iterator().next();
+                    frame.errors.add(MappingDiagnostics.issue(plan.diagnostics,plan.recordMode,frame.index,rule.id,frame.step,frame.diagnosticStep,rule.target,rule.type,rule.length,rule.precision,rule.scale,rule.nullable,frame.usedSources,frame.ruleInput,problem,ex));break;}
             }}
             if(!unfinished)break;if(++stage>16||pending.isEmpty())throw new MappingException("BUDGET_EXCEEDED","字典依赖深度超限或无法完成");
             long keys=pending.values().stream().mapToLong(Set::size).sum();if(keys>20000)throw new MappingException("BUDGET_EXCEEDED","窗口编码总量超过20000");
@@ -250,15 +261,15 @@ public final class MappingEngine {
         ObjectNode out=JSON.createObjectNode();out.put("schemaVersion","2.0");out.put("legacyVersion",old.path("version").asText("1.0"));ObjectNode policies=out.putObject("policies");
         policies.put("onMissingSource",old.path("onMissingSource").asText("NULL"));policies.put("recordErrorMode",old.path("recordErrorMode").asText(old.path("onMissingSource").asText().equals("SKIP_ROW")||old.path("onTypeMismatch").asText().equals("SKIP_ROW")?"ROUTE_INVALID":"FAIL_FLOWFILE"));
         policies.put("allowUnmappedPassthrough",old.path("passthroughUnmapped").asBoolean());policies.put("caseSensitive",old.path("passthroughCaseSensitive").asBoolean(true));policies.put("locale",old.path("defaultLocale").asText("zh-CN"));policies.put("zoneId",old.path("zoneId").asText("Asia/Shanghai"));
-        if(old.has("exclude"))out.set("exclude",old.get("exclude"));if(old.has("dictionaryBindings"))out.set("dictionaryBindings",old.get("dictionaryBindings"));ArrayNode rules=out.putArray("rules");int i=0;
-        for(JsonNode mapping:old.path("mappings")){ObjectNode rule=legacyRule(mapping);rule.put("ruleId",mapping.path("ruleId").asText("legacy-"+(i++)));rule.put("enabled",mapping.path("enabled").asBoolean(true));ObjectNode target=rule.putObject("target");target.put("name",ValueTypes.field(mapping.path("to").asText()));if(mapping.hasNonNull("targetType")){target.put("logicalType",ValueTypes.type(mapping.path("targetType").asText()));var dimensions=java.util.regex.Pattern.compile("\\((\\d+)(?:\\s*,\\s*(\\d+))?\\)").matcher(mapping.path("targetType").asText());if(dimensions.find()){if(target.path("logicalType").asText().equals("DECIMAL")){target.put("precision",Integer.parseInt(dimensions.group(1)));target.put("scale",dimensions.group(2)==null?0:Integer.parseInt(dimensions.group(2)));}else if(target.path("logicalType").asText().equals("STRING"))target.put("length",Integer.parseInt(dimensions.group(1)));}}for(String key:List.of("length","precision","scale","nullable")){String legacyKey="target"+Character.toUpperCase(key.charAt(0))+key.substring(1);if(mapping.hasNonNull(legacyKey))target.set(key,mapping.get(legacyKey));}rules.add(rule);}
+        if(old.has("schemaContract"))out.set("schemaContract",old.get("schemaContract"));if(old.has("exclude"))out.set("exclude",old.get("exclude"));if(old.has("dictionaryBindings"))out.set("dictionaryBindings",old.get("dictionaryBindings"));ArrayNode rules=out.putArray("rules");int i=0;
+        for(JsonNode mapping:old.path("mappings")){ObjectNode rule=legacyRule(mapping);rule.put("ruleId",mapping.path("ruleId").asText("legacy-"+(i++)));rule.put("enabled",mapping.path("enabled").asBoolean(true));ObjectNode target=rule.putObject("target");if(mapping.hasNonNull("toLabel"))target.set("comment",mapping.get("toLabel"));target.put("name",ValueTypes.field(mapping.path("to").asText()));if(mapping.hasNonNull("targetType")){target.put("logicalType",ValueTypes.type(mapping.path("targetType").asText()));var dimensions=java.util.regex.Pattern.compile("\\((\\d+)(?:\\s*,\\s*(\\d+))?\\)").matcher(mapping.path("targetType").asText());if(dimensions.find()){if(target.path("logicalType").asText().equals("DECIMAL")){target.put("precision",Integer.parseInt(dimensions.group(1)));target.put("scale",dimensions.group(2)==null?0:Integer.parseInt(dimensions.group(2)));}else if(target.path("logicalType").asText().equals("STRING"))target.put("length",Integer.parseInt(dimensions.group(1)));}}for(String key:List.of("length","precision","scale","nullable")){String legacyKey="target"+Character.toUpperCase(key.charAt(0))+key.substring(1);if(mapping.hasNonNull(legacyKey))target.set(key,mapping.get(legacyKey));}rules.add(rule);}
         return out;
     }
     private static ObjectNode legacyRule(JsonNode mapping){
         ObjectNode rule=JSON.createObjectNode();if(mapping.has("when")){rule.set("when",mapping.get("when"));rule.set("then",legacyRule(mapping.path("then")));if(mapping.has("else"))rule.set("else",legacyRule(mapping.path("else")));return rule;}
         ObjectNode input=rule.putObject("input");if(mapping.has("constant")){input.put("kind","LITERAL");input.set("value",mapping.get("constant"));}
         else if(mapping.hasNonNull("expression")){input.put("kind","EXPRESSION");input.put("expression",mapping.path("expression").asText());}
-        else if(mapping.hasNonNull("from")){input.put("kind","FIELD");input.put("name",ValueTypes.field(mapping.path("from").asText()));}
+        else if(mapping.hasNonNull("from")){input.put("kind","FIELD");input.put("name",ValueTypes.field(mapping.path("from").asText()));if(mapping.hasNonNull("fromLabel"))input.set("comment",mapping.get("fromLabel"));}
         else {input.put("kind","LITERAL");input.putNull("value");}
         ArrayNode steps=rule.putArray("steps");JsonNode transform=mapping.path("transform");
         if(mapping.path("fromList").isArray()){ObjectNode step=steps.addObject();step.put("operator","CONCAT");ObjectNode args=step.putObject("args");ArrayNode inputs=args.putArray("inputs");mapping.path("fromList").forEach(n->inputs.addObject().put("kind","FIELD").put("name",ValueTypes.field(n.asText())));args.put("separator",transform.path("args").path(0).asText(""));args.put("nullElementPolicy","EMPTY");}

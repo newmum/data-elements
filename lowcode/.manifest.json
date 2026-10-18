@@ -72,7 +72,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue",
-      "baseSha256": "6a6f6298cdb0a1344fb77d7256850b0bb9ac861a80eee329f22fee3da9b4a61b"
+      "baseSha256": "ad8c1cfbc21c29bc99c5cd62eaa1f3a75eef10e0177b732a093b894a5fe5add6"
     },
     {
       "id": "2075055310869430272",
@@ -452,7 +452,7 @@
       "type": "1",
       "sortOrder": 12,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表4-数据预览(table-preview).vue",
-      "baseSha256": "2c0b60d2bfcc7815d201af14b40a8e575511c9f19c69e49d6798dcea78fcb36c"
+      "baseSha256": "fdcbdbe1bc7668925ffd5a91a64165b8991172bf2abb5c19c9f5e4c3e19bcfd8"
     },
     {
       "id": "2008427924812271616",
@@ -582,7 +582,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "03.数据接入/2.3.1 Hive元数据库(data-convergence-hive).vue",
-      "baseSha256": "7c266135602feccf1bf741e725d28820839322f26c1a993503ce61cab3c478f2"
+      "baseSha256": "80982c215f060d858857fa65f17c795076ea5fb50d7841f6ef9b38047bf9bd81"
     },
     {
       "id": "2008730136700588032",
@@ -592,7 +592,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
-      "baseSha256": "6c5c1214e0885d7e4e6568e1c62668e69a121154969733512cc529cf684e1753"
+      "baseSha256": "41e0c6d4e6526b20e64807e108565b8d4194f7c07957c1a51c5b717037b57861"
     },
     {
       "id": "2066782132212649984",
@@ -622,7 +622,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
-      "baseSha256": "1f57111410df8aa4182cc2c5d0fafa2c5af3711eef77c93a749c800a10b33e7a"
+      "baseSha256": "01cdf97ab2feaa3439f1dd01b15bc187bd63ab027888440c52e5f89f3f6e640e"
     },
     {
       "id": "2046880498703695872",

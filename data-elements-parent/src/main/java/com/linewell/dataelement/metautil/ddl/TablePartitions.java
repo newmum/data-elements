@@ -56,17 +56,21 @@ public class TablePartitions {
         String kind=raw.toUpperCase(Locale.ROOT).matches(".*(DATE|TIME).*" )?"TIME":raw.toUpperCase(Locale.ROOT).matches("^(NUMBER|NUMERIC|DECIMAL|INT|BIGINT|SMALLINT|TINYINT|FLOAT|DOUBLE|REAL).*" )?"NUMBER":"STRING";
         String strategy=text(request.get("strategy")).toUpperCase(Locale.ROOT);
         List<Map<String,Object>> parts=new ArrayList<>();
-        if(strategy.equals("MONTH")) {
-            if(!kind.equals("TIME"))throw new IllegalArgumentException("按月分区请选择目标 DATE/TIMESTAMP/DATETIME 字段");
+        String displayStrategy=text(request.get("displayStrategy"));
+        if(strategy.equals("MONTH")||strategy.equals("YEAR")) {
+            boolean yearly=strategy.equals("YEAR");
+            displayStrategy=strategy;
+            if(!kind.equals("TIME"))throw new IllegalArgumentException((yearly?"按年":"按月")+"分区请选择目标 DATE/TIMESTAMP/DATETIME 字段");
             YearMonth start;
             int months;
-            try {start=YearMonth.parse(text(request.get("startMonth")));months=Integer.parseInt(text(request.get("months")));}
-            catch(RuntimeException bad){throw new IllegalArgumentException("请填写起始月份和分区月数");}
-            if(months<1||months>240)throw new IllegalArgumentException("一次按月创建范围为1至240个月");
+            try {start=yearly?YearMonth.of(Integer.parseInt(text(request.get("startYear"))),1):YearMonth.parse(text(request.get("startMonth")));months=Integer.parseInt(text(request.get(yearly?"years":"months")));}
+            catch(RuntimeException bad){throw new IllegalArgumentException(yearly?"请填写起始年份和分区年数":"请填写起始月份和分区月数");}
+            if(months<1||months>240)throw new IllegalArgumentException(yearly?"一次按年创建范围为1至240年":"一次按月创建范围为1至240个月");
             parts.add(part("p_before",start.atDay(1)+" 00:00:00","before"));
             for(int i=0;i<months;i++) {
-                YearMonth month=start.plusMonths(i);
-                parts.add(part("p_"+month.toString().replace("-",""),month.plusMonths(1).atDay(1)+" 00:00:00",month.toString().replace("-","")));
+                YearMonth month=yearly?start.plusYears(i):start.plusMonths(i);
+                String bucket=yearly?Integer.toString(month.getYear()):month.toString().replace("-","");
+                parts.add(part("p_"+bucket,(yearly?month.plusYears(1):month.plusMonths(1)).atDay(1)+" 00:00:00",bucket));
             }
             parts.add(part("p_future","MAXVALUE","future"));
             strategy="RANGE";
@@ -111,10 +115,12 @@ public class TablePartitions {
         // Physical key/index restrictions depend on the server version and user-edited DDL.
         // Render the partition clause without changing keys; the database decides whether it can execute it.
         Map<String,Object> plan=new LinkedHashMap<>();plan.put("version",1);plan.put("enabled",true);plan.put("field",key.getColumnName());plan.put("kind",kind);plan.put("strategy",strategy);plan.put("partitions",parts);plan.put("hiveColumn","ods_partition");
+        if(!displayStrategy.isEmpty())plan.put("displayStrategy",displayStrategy);
+        if(yes(request.get("sourceBoundaries")))plan.put("sourceBoundaries",true);
         String timezone=text(request.get("timezone"));if(timezone.isEmpty())timezone="Asia/Shanghai";
         ZoneId.of(timezone);plan.put("timezone",timezone);
         plan.put("dateOnly",raw.equalsIgnoreCase("DATE")&&type==DatabaseType.HIVE);
-        if(!text(request.get("strategy")).equalsIgnoreCase("MONTH")&&request.get("sourceInterval") instanceof Map<?,?> interval) {
+        if(!Set.of("MONTH","YEAR").contains(text(request.get("strategy")).toUpperCase(Locale.ROOT))&&request.get("sourceInterval") instanceof Map<?,?> interval) {
             String unit=text(interval.get("unit")).toUpperCase(Locale.ROOT);int step=Integer.parseInt(text(interval.get("step")));
             if(!kind.equals("TIME")||!strategy.equals("RANGE")||!Set.of("MONTH","YEAR","DAY").contains(unit)||step<1||step>120)throw new IllegalArgumentException("来源自动分区间隔不受支持，请手工配置");
             plan.put("sourceInterval",Map.of("unit",unit,"step",step));
@@ -139,6 +145,13 @@ public class TablePartitions {
         return plan;
     }
     private static Map<String,Object> part(String name,String upper,String bucket){Map<String,Object> p=new LinkedHashMap<>();p.put("name",name);p.put("upper",upper);p.put("bucket",bucket);return p;}
+
+    public String constraints(String ddl,List<Map<String,Object>> sourceConstraints,DataSourceConfig config) {
+        return GeneratedTableConstraints.render(ddl,sourceConstraints,config).get("ddl").toString();
+    }
+    public Map<String,Object> enrichConstraints(String ddl,List<Map<String,Object>> sourceConstraints,DataSourceConfig config) {
+        return GeneratedTableConstraints.render(ddl,sourceConstraints,config);
+    }
 
     @SuppressWarnings("unchecked")
     public String apply(String ddl,Map<String,Object> plan,DataSourceConfig config) {

@@ -133,6 +133,7 @@
           <el-checkbox v-if="activePartitionSupported" :model-value="activePartition.enabled === true"
             :disabled="!editable || ddlGenerating || isSaveing" @change="togglePartition">创建分区</el-checkbox>
         </div>
+        <el-alert v-if="sourceDefinitionMessage" :title="sourceDefinitionMessage" type="info" :closable="false" show-icon />
         <div v-if="activePartitionSupported && activePartition.enabled" class="partition-settings">
           <span>{{ partitionProbeMessage }}</span>
           <div class="partition-settings-fields">
@@ -140,17 +141,27 @@
               <el-option v-for="field in templateTableItems" :key="field.columnName" :value="field.columnName"
                 :label="`${field.columnComment || field.columnName}（${field.columnName}）`" />
             </el-select>
-            <el-select v-model="activePartition.strategy" :disabled="!editable" @change="changePartitionStrategy">
-              <el-option v-if="activePartition.partitions?.length" label="继承／配置范围分区" value="RANGE" />
+            <el-select v-model="activePartitionChoice" :disabled="!editable" @change="changePartitionStrategy">
+              <el-option label="按年分区" value="YEAR" />
               <el-option label="按月分区" value="MONTH" />
               <el-option label="区域／枚举分区" value="LIST" />
+              <el-option v-if="activePartitionChoice === 'TIME'" label="时间分区（来源实际边界）" value="TIME" />
+              <el-option v-if="activePartitionChoice === 'RANGE'" label="数值范围分区" value="RANGE" />
             </el-select>
+            <template v-if="activePartition.strategy === 'YEAR'">
+              <el-date-picker v-model="activePartition.startYear" type="year" value-format="YYYY" placeholder="起始年份" @change="updatePartitionDdl" />
+              <el-input-number v-model="activePartition.years" :min="1" :max="240" controls-position="right" @change="updatePartitionDdl" />
+              <span>年；包含历史与未来兜底分区</span>
+            </template>
             <template v-if="activePartition.strategy === 'MONTH'">
               <el-date-picker v-model="activePartition.startMonth" type="month" value-format="YYYY-MM" placeholder="起始月份" @change="updatePartitionDdl" />
               <el-input-number v-model="activePartition.months" :min="1" :max="240" controls-position="right" @change="updatePartitionDdl" />
               <span>个月；包含历史与未来兜底分区</span>
             </template>
-            <el-input v-if="activePartition.strategy === 'MONTH' || activePartition.kind === 'TIME'"
+            <span v-if="activePartition.sourceBoundaries">已保留来源 {{ activePartition.partitions?.length || 0 }} 个实际边界</span>
+            <el-button v-if="activePartition.sourceBoundaries && ['YEAR', 'MONTH'].includes(activePartitionChoice)"
+              :disabled="!editable" @click="repartitionSource">重新划分</el-button>
+            <el-input v-if="['YEAR', 'MONTH'].includes(activePartition.strategy) || activePartition.kind === 'TIME'"
               v-model="activePartition.timezone" placeholder="分区时区，默认Asia/Shanghai" @change="updatePartitionDdl" />
             <el-input v-if="activePartition.strategy === 'LIST'" v-model="activePartition.enumText"
               class="partition-values-input" placeholder="区域编码或枚举值，用逗号分隔，如350100,350200"
@@ -313,12 +324,32 @@ const partitionPlans = ref<Record<string, any>>({});
 const ddlPartitionPlans = ref<Record<string, any>>({});
 const partitionSupport = ref<Record<string, boolean>>({});
 const partitionProbeMessage = ref("");
+const sourceDefinitionMessage = ref("");
+const sourceConstraints = ref<any[]>([]);
 const partitionError = ref("");
 const partitionErrorType = ref<"warning" | "error">("error");
 let ddlGenerationVersion = 0;
 let partitionProbeIdentity = "";
 const activePartitionSupported = computed(() => partitionSupport.value[activeDdlKey.value] === true);
 const activePartition = computed(() => partitionPlans.value[activeDdlKey.value] || {});
+const activePartitionChoice = computed({
+  get: () => activePartition.value.strategy === 'RANGE'
+    ? activePartition.value.displayStrategy || (activePartition.value.kind === 'TIME' ? 'TIME' : 'RANGE')
+    : activePartition.value.strategy || 'MONTH',
+  set: (value: string) => {
+    const plan = activePartition.value;
+    plan.strategy = value;
+    delete plan.sourceBoundaries;
+    delete plan.sourceInterval;
+    delete plan.displayStrategy;
+    if (value === 'YEAR') Object.assign(plan, { startYear: String(new Date().getFullYear()), years: 5 });
+    if (value === 'MONTH') Object.assign(plan, { startMonth: new Date().toISOString().slice(0, 7), months: 24 });
+  },
+});
+const repartitionSource = async () => {
+  activePartitionChoice.value = activePartitionChoice.value;
+  await updatePartitionDdl();
+};
 const invalidateDdl = () => {
   ddlGenerationVersion += 1;
   ddlGenerating.value = false;
@@ -344,8 +375,8 @@ const partitionPayload = (key: string) => {
   const fieldLabel = field ? `${field.columnComment || field.columnName}（${field.columnName}）` : "分区字段";
   const fieldType = String(field?.columnType || field?.dataType || "").toLowerCase();
   if (!field) partitionInputError(key, "请先选择用于分区的字段。");
-  if (plan.strategy === "MONTH" && !/date|time/.test(fieldType)) {
-    partitionInputError(key, `“${fieldLabel}”不是日期或时间字段。按月分区请选择日期或时间字段；按区域编码分区请选择“区域／枚举分区”。`);
+  if (["MONTH", "YEAR"].includes(plan.strategy) && !/date|time/.test(fieldType)) {
+    partitionInputError(key, `“${fieldLabel}”不是日期或时间字段。按年或按月分区请选择日期或时间字段；按区域编码分区请选择“区域／枚举分区”。`);
   }
   if (plan.strategy === "LIST" && plan.enumText !== undefined) {
     const values = String(plan.enumText).split(/[,，\n]/).map((value: string) => value.trim()).filter(Boolean);
@@ -381,6 +412,9 @@ const probePartitions = async (targets: any[]) => {
   }, { _hiddenErrorMsg: true });
   const result = response?.data || response || {};
   partitionSupport.value = result.targetSupport || {};
+  sourceConstraints.value = Array.isArray(result.source?.constraints) ? result.source.constraints : [];
+  sourceDefinitionMessage.value = result.source?.ddlReadStatus && result.source.ddlReadStatus !== 'unsupported'
+    ? String(result.source.ddlReadMessage || '') : '';
   partitionProbeMessage.value = String(result.source?.message || "未识别到来源分区，可手动配置");
   for (const target of targets) {
     if (partitionPlans.value[target.key]) continue;
@@ -1263,6 +1297,8 @@ const init = async () => {
   ddlPartitionPlans.value = {};
   partitionSupport.value = {};
   partitionProbeIdentity = "";
+  sourceConstraints.value = [];
+  sourceDefinitionMessage.value = "";
   partitionError.value = "";
   loadError.value = "";
   sourcePreflightError.value = "";
@@ -1433,6 +1469,7 @@ const currentDdlInput = async () => {
   const fingerprint = JSON.stringify({
     targets: targets.map((target: any) => ({ dbId: target.dbId, dbType: target.propList.dbType, tableName: target.propList.tableName, tableNameCn: target.propList.tableNameCn, partitionPlan: partitionPlans.value[target.key] || { enabled: false } })),
     tableItems,
+    sourceConstraints: sourceConstraints.value,
   });
   return { targets, tableItems, fingerprint };
 };
@@ -1448,7 +1485,7 @@ const regenerateDdl = async (input: any) => {
     const convertedItems: Record<string, any[]> = {};
     const normalizedPlans: Record<string, any> = {};
     const targets = input.targets.map((target: any) => {
-      return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType), partitionPlan: partitionPayload(target.key) };
+      return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType), partitionPlan: partitionPayload(target.key), sourceConstraints: sourceConstraints.value };
     });
     const response = await $common.post("/dst/database/metadata/getCreateTableDDL", {
       batchGenerate: true,

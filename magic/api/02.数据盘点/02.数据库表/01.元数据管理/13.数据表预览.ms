@@ -31,6 +31,7 @@ import tenantRuntime
 import dataScope
 import tableSort
 import hwhive
+import log
 import java.util.HexFormat
 import java.util.List
 import java.lang.Number
@@ -253,8 +254,10 @@ if(dataScope.visibleDataSourcesFor('MENU:2081000000000000002',[dbAsset]).size()!
 // 一次批量读取当前租户的字段快照，同时用于中文表头、排序白名单和主键补序。
 var fieldRows=db.table('db_table_column_t').where().eq('tenant_id',tenantId).eq('table_id',tableId).eq('is_del',0).page(1001,0)
 if(fieldRows.total>1000){exit 413,'字段超过1000项，不能使用此数据预览';}
+// 空登记快照的分页结果可能不含 list，Hive 仍可由一次 DESCRIBE 得到物理字段。
+var registeredFields=fieldRows.list==null?[]:fieldRows.list
 var columnLabels={}
-for(row in fieldRows.list){
+for(row in registeredFields){
     var name=firstValue(row,['columnName','column_name'])
     var label=firstValue(row,['columnNameCn','column_name_cn','columnComment','column_comment'])
     if(!blank(name)&&!blank(label)){columnLabels[textOf(name).toLowerCase()]=textOf(label)}
@@ -283,13 +286,15 @@ var managedHive=sourceType=='hive' && (
     || !blank(firstValue(dbAsset,['hiveProfile','hive_profile']))
 )
 if(managedHive){
-    var queryHive=(sql)=>{
+    var queryHive=(sql,stage)=>{
         try{return hwhive.queryTable(sql)}catch(e){
             var message=e.getMessage()==null?'':e.getMessage()
             if(message.contains('hiveclient.properties')&&message.contains('not found')){
                 exit 503,'Hive 服务端缺少 hiveclient.properties 客户端配置，请配置 MRS Hive 连接后重试'
             }
-            exit 502,'Hive 数据预览查询失败，请检查服务端连接状态、查询权限和错误日志'
+            // 只记录表标识、执行阶段和异常类型，不把连接参数、过滤值或 SQL 写入日志。
+            log.warn('Hive 数据预览失败，tableId: {}, stage: {}, exception: {}',tableId,stage,e.getClass().getSimpleName())
+            exit 502,'Hive '+stage+'失败，请检查服务端连接状态、查询权限和错误日志'
         }
     }
     var hiveDatabase=firstValue(dbAsset,['database','schema','dbMetaDbName','dbName'])
@@ -312,7 +317,7 @@ if(managedHive){
     var physicalTypes={}
     var allowed={}
     // DESCRIBE 一次得到实际字段；分区列的重复段去重，不按每列发起查询。
-    var described=queryHive('DESCRIBE '+qualified)
+    var described=queryHive('DESCRIBE '+qualified,'字段读取')
     for(row in described){
         var name=textOf(hiveValue(row,'col_name'))
         if(blank(name)||name.trim().startsWith('#')){continue}
@@ -358,7 +363,7 @@ if(managedHive){
     if(!blank(body?.groupByColumn)){
         var group=quote(body.groupByColumn)
         var groupName=blank(body.groupNameColumn)?group:quote(body.groupNameColumn)
-        var groups=queryHive('SELECT '+group+' AS category_value, MIN('+groupName+') AS category_name, COUNT(*) AS record_count FROM '+qualified+where+' GROUP BY '+group+' ORDER BY '+group+' LIMIT 10001')
+        var groups=queryHive('SELECT '+group+' AS category_value, MIN('+groupName+') AS category_name, COUNT(*) AS record_count FROM '+qualified+where+' GROUP BY '+group+' ORDER BY '+group+' LIMIT 10001','字典分组')
         if(groups.size()>10000){exit 413,'分组超过10000项，请缩小登记范围';}
         var values=[]
         for(row in groups){
@@ -374,35 +379,48 @@ if(managedHive){
     }
     var orders=[]
     var orderFields=[]
+    // NULLS LAST 仅在 Hive 2.1+ 可用；CASE 排空值同样保持升降序与稳定补序。
+    var orderByField=(name,direction)=>'CASE WHEN '+quote(name)+' IS NULL THEN 1 ELSE 0 END ASC, '+quote(name)+' '+direction
     for(item in requestedSorts){
         var name=checkedField(firstValue(item,['field','column','name']))
         var direction=firstValue(item,['direction','order'])
-        orders.add(quote(name)+' '+tableSort.direction({sortDir:direction==null?'asc':direction})+' NULLS LAST')
+        orders.add(orderByField(name,tableSort.direction({sortDir:direction==null?'asc':direction})))
         orderFields.add(name)
     }
-    for(row in fieldRows.list){
+    for(row in registeredFields){
         var primary=rowValue(row,['primaryKey','primary_key'])
         var name=firstValue(row,['columnName','column_name'])
         var actual=blank(name)?null:allowed[textOf(name).toLowerCase()]
         if((''+primary=='1'||primary==true)&&actual!=null&&!orderFields.contains(actual)){
-            orders.add(quote(actual)+' ASC NULLS LAST');orderFields.add(actual)
+            orders.add(orderByField(actual,'ASC'));orderFields.add(actual)
         }
     }
     // 无主键时使用可排序的标量字段，确保翻页和同值排序稳定；复杂类型不参与 ORDER BY。
     for(name in physicalColumns){
         var type=textOf(physicalTypes[name.toLowerCase()])
         if(type!=null&&!type.toLowerCase().matches('(array|map|struct|uniontype).*')&&!orderFields.contains(name)){
-            orders.add(quote(name)+' ASC NULLS LAST');orderFields.add(name)
+            orders.add(orderByField(name,'ASC'));orderFields.add(name)
         }
     }
     var projection=[]
     var types=[]
     for(name in selected){projection.add(quote(name));types.add(physicalTypes[name.toLowerCase()])}
-    var countRows=queryHive('SELECT COUNT(*) AS __preview_total FROM '+qualified+where)
+    var countRows=queryHive('SELECT COUNT(*) AS __preview_total FROM '+qualified+where,'总数统计')
     if(countRows==null||countRows.size()!=1||hiveValue(countRows[0],'__preview_total')==null){exit 500,'Hive 预览总数查询结果无效';}
     var offset=(request.getPageNo()-1)*request.getPageSize()
     var orderSql=orders.size()==0?'':' ORDER BY '+orders.join(', ')
-    var dataRows=queryHive('SELECT '+projection.join(', ')+' FROM '+qualified+where+orderSql+' LIMIT '+offset+', '+request.getPageSize())
+    var pageSql='SELECT '+projection.join(', ')+' FROM '+qualified+where+orderSql+' LIMIT '+request.getPageSize()
+    if(offset>0){
+        // Hive 1.x 不支持 LIMIT offset, rows；用服务端行号分页，始终只返回当前页。
+        // 行号别名避开实际字段，不让辅助列覆盖真实数据或出现在返回字段中。
+        var rowNumber='__preview_row_number'
+        while(allowed.containsKey(rowNumber.toLowerCase())){rowNumber=rowNumber+'_'}
+        // 此别名由服务端生成，不通过只允许真实物理字段的 quote/checkedField。
+        var rowNumberSql='`'+rowNumber+'`'
+        var numbered='SELECT '+projection.join(', ')+', ROW_NUMBER() OVER ('+orderSql.trim()+') AS '+rowNumberSql+' FROM '+qualified+where
+        pageSql='SELECT '+projection.join(', ')+' FROM ('+numbered+') preview_page WHERE '+rowNumberSql+' > '+offset+' AND '+rowNumberSql+' <= '+(offset+request.getPageSize())+' ORDER BY '+rowNumberSql+' LIMIT '+request.getPageSize()
+    }
+    var dataRows=queryHive(pageSql,'分页查询')
     var rows=[]
     for(row in dataRows){
         var normalized={}
@@ -415,7 +433,7 @@ if(managedHive){
 request.setDataSource(dataSourceOf(dbAsset))
 if(requestedSorts.size()>0){
     var allowedFields={}
-    for(row in fieldRows.list){var fieldName=rowValue(row,['columnName','column_name']);if(!blank(fieldName)){allowedFields[fieldName]=fieldName}}
+    for(row in registeredFields){var fieldName=rowValue(row,['columnName','column_name']);if(!blank(fieldName)){allowedFields[fieldName]=fieldName}}
     var sorts=[]
     var selectedFields=[]
     for(item in requestedSorts){
@@ -425,7 +443,7 @@ if(requestedSorts.size()>0){
         sorts.add({field:chosen,direction:tableSort.direction({sortDir:direction==null?'asc':direction})})
         selectedFields.add(chosen)
     }
-    for(row in fieldRows.list){
+    for(row in registeredFields){
         var primary=rowValue(row,['primaryKey','primary_key'])
         var fieldName=rowValue(row,['columnName','column_name'])
         if((''+primary=='1'||primary==true)&&!selectedFields.contains(fieldName)){sorts.add({field:fieldName,direction:'asc'})}

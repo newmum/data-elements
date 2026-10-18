@@ -16,6 +16,13 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class HivePartitionRoutingTest {
+    @Test void yearlyRoutingUsesTheSameYearBoundariesAsTheGeneratedHivePartitions() throws Exception {
+        var field=new ColumnInfo();field.setColumnName("created_at");field.setColumnType("TIMESTAMP");
+        var plan=new TablePartitions().normalize(new LinkedHashMap<>(Map.of("enabled",true,"strategy","YEAR","field","created_at","startYear","2025","years",2)),List.of(field),DatabaseType.HIVE);
+        List<String> payloads=new ArrayList<>(),buckets=new ArrayList<>();
+        execute(plan,"[{\"id\":1,\"created_at\":\"2025-12-31 23:59:59\"},{\"id\":2,\"created_at\":\"2026-01-01 00:00:00\"},{\"id\":3,\"created_at\":\"2027-01-01 00:00:00\"}]",payloads,buckets);
+        assertEquals(List.of("2025","2026","future"),buckets);assertEquals(3,payloads.size());
+    }
     @Test void actualGroovySeparatesMonthsAndRetainsTargetColumnOrderWithoutWritingPartitionInPayload() throws Exception {
         var field=new ColumnInfo();field.setColumnName("created_at");field.setColumnType("TIMESTAMP");
         var plan=new TablePartitions().normalize(new LinkedHashMap<>(Map.of("enabled",true,"strategy","MONTH","field","created_at","startMonth","2026-01","months",2)),List.of(field),DatabaseType.HIVE);

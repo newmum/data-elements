@@ -260,11 +260,21 @@ if (tableAsset != null) {
                     if (!parts[0].equalsIgnoreCase(sourceConfig.getDatabase())) { exit 403, '表名中的库名不匹配当前数据源' }
                 } else { sourceConfig.setSchema(parts[0]) }
             }
+            // OceanBase 的 @租户#集群 是登录后缀；逻辑用户名本身允许包含 #，不能一并截断。
+            // 为单表探查显式指定所有者，不能把登录后缀当成 schema 或匹配其他所有者的同名表。
+            if (sourceConfig.getDatabaseType() == DatabaseType.OCEANBASE_ORACLE && blank(sourceConfig.getSchema())) {
+                sourceConfig.setSchema(sourceConfig.getUsername().split('@')[0].trim())
+            }
+            var expectedSchema = sourceConfig.getSchema()
             var page = metadataExplorerService.getTablesPage(sourceConfig, 1, 100, probeName)
             for (candidate in page.rows) {
                 var candidateName = textOf(candidate.tableName)
                 if (candidateName.equalsIgnoreCase(probeName)
-                    || candidateName.equalsIgnoreCase(parts.join('.'))) { info = candidate; break }
+                    || candidateName.equalsIgnoreCase(parts.join('.'))
+                    || (!blank(expectedSchema) && candidateName.equalsIgnoreCase(expectedSchema + '.' + probeName))) {
+                    info = candidate
+                    break
+                }
             }
             if (info == null) { exit 422, '未读取到当前表概览，请检查来源表和模式配置' }
             info.rowCount = metadataExplorerService.getTableRowCount(sourceConfig, probeName)

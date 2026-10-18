@@ -73,6 +73,29 @@ class BatchCreateTableDdlMagicTest {
     }
     private static final String SOURCE_ID = "8a56e7d664934c1499102cfa508cd58a";
 
+    @Test void yearlyPlansAndSourceUniqueConstraintsUseOneReadForTwentyAndHundredFields() throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture f=new Fixture(20);f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER'");
+            f.ddlGenerator.expectedColumns=count;
+            var fields=new ArrayList<Map<String,Object>>();
+            fields.add(Map.of("columnName","occurred_at","dataType","timestamp"));
+            for(int i=1;i<count;i++)fields.add(Map.of("columnName","f"+i,"dataType","varchar","length",32));
+            for(int i=0;i<f.targets.size();i++) {
+                var target=new LinkedHashMap<>(f.targets.get(i));target.put("tableItems",fields);
+                target.put("sourceConstraints",List.of(Map.of("name","PK_named_but_unique","type","U","columns",List.of("f1","f2"))));
+                target.put("partitionPlan",Map.of("enabled",true,"strategy","YEAR","field","occurred_at","startYear","2025","years",2));
+                f.targets.set(i,target);
+            }
+            var result=(Map<?,?>)f.run();
+            for(Object row:(List<?>)result.get("results")) {
+                String ddl=((Map<?,?>)row).get("ddl").toString();
+                assertTrue(ddl.contains("PARTITION BY RANGE"));assertTrue(ddl.contains("2027-01-01"));
+                assertTrue(ddl.contains("CONSTRAINT UK_"));assertTrue(ddl.contains("UNIQUE (f1, f2)"));assertFalse(ddl.contains("PRIMARY KEY"));
+            }
+            assertEquals(1,f.counter.reads);assertEquals(0,f.counter.writes);
+        }
+    }
+
     @Test void partitionProbeReadsOneSourceAndOneAuthorizedDatasourceBatchAndRejectsEveryHiddenId() throws Exception {
         Fixture f=new Fixture(20);
         f.jdbc.execute("create table db_table_t(tid varchar(64), tenant_id varchar(32), datasource_id varchar(64), table_name varchar(100), is_del int)");

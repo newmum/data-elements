@@ -104,6 +104,33 @@ class HaitongTransformRecordTest {
         runner.clearTransferState();runner.enqueue("[{\"x\":\"same\"}]",Map.of("ht.input.identity","one-parent","ht.execution.clock","0","ht.mapping.input.identity.same-node",identity));runner.run();
         assertEquals(a,JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray()).path(0).path("ODS_UUID").asText());
     }
+    @Test void invalidContentCarriesFieldCommentsAndActualValuesButAttributesDoNot() throws Exception {
+        var runner=runner("NULL","ROUTE_INVALID");
+        var spec=JSON.readTree("""
+          {"version":"1.0","recordErrorMode":"ROUTE_INVALID","mappings":[{"from":"x","fromLabel":"来源经度","to":"longitude","toLabel":"经度","targetType":"DECIMAL(8,2)"}]}
+          """);
+        var plan=MappingEngine.compile(spec);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
+        runner.enqueue("[{\"x\":119.379023855114},{\"x\":25.72}]");runner.run();
+        runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.INVALID,1);
+        var file=runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst();
+        var envelope=JSON.readTree(file.toByteArray());var error=envelope.path("errors").get(0);
+        assertEquals("longitude",error.path("targetField").asText());assertEquals("经度",error.path("targetComment").asText());
+        assertEquals("来源经度",error.path("sourceFields").get(0).path("comment").asText());
+        assertTrue(error.path("message").asText().contains("119.379023855114"));assertTrue(error.path("effect").asText().contains("invalid"));
+        assertFalse(file.getAttributes().toString().contains("119.379023855114"));
+    }
+    @Test void wholeBatchFailureGivesFieldLocationWithoutCopyingValuesIntoAttributes() throws Exception {
+        var runner=runner("NULL","FAIL_FLOWFILE");
+        var plan=MappingEngine.compile(JSON.readTree("""
+          {"version":"1.0","mappings":[{"from":"x","fromLabel":"业务编码","to":"y","targetType":"INT"}]}
+          """));
+        runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
+        runner.enqueue("[{\"x\":\"synthetic-private-invalid\"}]");runner.run();runner.assertTransferCount(HaitongTransformRecord.FAILURE,1);
+        var file=runner.getFlowFilesForRelationship(HaitongTransformRecord.FAILURE).getFirst();String message=file.getAttribute("ht.error.message");
+        assertTrue(message.contains("业务编码"));assertTrue(message.contains("y（"));assertTrue(message.contains("第1条记录"));
+        assertFalse(file.getAttributes().toString().contains("synthetic-private-invalid"));
+        assertTrue(new String(file.toByteArray(),StandardCharsets.UTF_8).contains("synthetic-private-invalid"));
+    }
     private TestRunner runner(String missing,String mode)throws Exception{
         TestRunner runner=TestRunners.newTestRunner(HaitongTransformRecord.class);runner.addControllerService("reader",new Reader());runner.enableControllerService(runner.getControllerService("reader"));runner.addControllerService("writer",new Writer());runner.enableControllerService(runner.getControllerService("writer"));runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
         var spec=JSON.createObjectNode().put("version","1.0").put("onMissingSource",missing).put("recordErrorMode",mode);spec.putArray("mappings").addObject().put("from","/x").put("to","/y");var plan=MappingEngine.compile(spec);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());runner.assertValid();return runner;

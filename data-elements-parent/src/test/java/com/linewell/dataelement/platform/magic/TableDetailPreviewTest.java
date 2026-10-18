@@ -39,10 +39,13 @@ public class TableDetailPreviewTest {
     public static String hiveText(String hex) {return new String(HexFormat.of().parseHex(hex),StandardCharsets.UTF_8);}
     public static class Hive {
         final List<String> queries=new ArrayList<>();final JdbcTemplate db;String failure;
+        boolean legacySyntaxOnly;
         Hive(JdbcTemplate db){this.db=db;}
         public List<Map<String,Object>> queryTable(String sql) {
             queries.add(sql);
             if(failure!=null)throw new IllegalStateException(failure);
+            if(legacySyntaxOnly && (sql.contains("NULLS LAST") || sql.matches("(?s).*LIMIT \\d+,.*")))
+                throw new IllegalArgumentException("Hive 1.x does not support NULLS LAST or LIMIT offset, rows");
             if(sql.startsWith("DESCRIBE "))return List.of(
                 Map.of("col_name","id","data_type","int","comment","物理编号"),
                 Map.of("col_name","gender_code","data_type","string","comment","性别代码"),
@@ -80,10 +83,11 @@ public class TableDetailPreviewTest {
             db.execute("CREATE ALIAS HIVE_TEXT FOR 'com.linewell.dataelement.platform.magic.TableDetailPreviewTest.hiveText'");
             for(int i=1;i<=240;i++)db.update("INSERT INTO preview.demo VALUES(?,?)",i,i%2==0?"F":"M");
             script=CanonicalMagicSources.byId("bc30a3edb1f04bceaeee373ed5952d4a")
-                .replaceAll("(?m)^import ('@/common/datasourceConnectionConfig'|jsons|tenantRuntime|dataScope|tableSort|hwhive|com.linewell.dataelement.elasticsearch.EsCommonService|com.linewell.dataelement.metautil.service.MetadataDataQueryService)[^\\r\\n]*\\r?\\n","");
+                .replaceAll("(?m)^import ('@/common/datasourceConnectionConfig'|jsons|tenantRuntime|dataScope|tableSort|hwhive|log|com.linewell.dataelement.elasticsearch.EsCommonService|com.linewell.dataelement.metautil.service.MetadataDataQueryService)[^\\r\\n]*\\r?\\n","");
         }
         Map<String,Object> run(Map<String,Object> body) {
             var context=new HashMap<String,Object>();context.put("db",module);context.put("tenantRuntime",new Tenant());context.put("dataScope",scope);context.put("hwhive",hive);context.put("connections",new Connections());context.put("tableSort",new TableSortMagicModule());context.put("body",body);
+            context.put("log",org.slf4j.LoggerFactory.getLogger(TableDetailPreviewTest.class));
             var result=MagicScript.create("var datasourceConnectionConfig=(a,b,c,d)=>connections.read(b)\n"+script,null).execute(new MagicScriptContext(context));
             if(result instanceof ExitValue exit)throw new PreviewRejected(exit);
             return (Map<String,Object>)result;
@@ -99,7 +103,7 @@ public class TableDetailPreviewTest {
             assertEquals(size,rows.size());assertEquals(240-size,rows.getFirst().get("id"));
             assertEquals(240L,((Number)result.get("total")).longValue());
             assertEquals(Map.of("id","编号","gender_code","性别代码"),result.get("columnLabels"));
-            assertTrue(f.hive.queries.getLast().endsWith("LIMIT "+size+", "+size));
+            assertTrue(f.hive.queries.getLast().endsWith("LIMIT "+size));
             assertEquals(List.of("id","gender_code"),result.get("columns"));
         }
         f.db.update("DELETE FROM preview.demo");assertEquals(List.of(),f.run(Map.of("tableId","table")).get("rows"));
@@ -120,6 +124,22 @@ public class TableDetailPreviewTest {
             Map.<String,Object>of("tableId","table","columns",List.of("other.secret")),
             Map.<String,Object>of("tableId","table","conditions",List.of(Map.of("field","id","op","raw","value","1"))),
             Map.<String,Object>of("tableId","table","pageSize",101)))assertEquals(400,assertThrows(PreviewRejected.class,()->f.run(body)).code);
+    }
+    @Test void legacyHiveSupportsFirstPageAndOffsetPagesWithoutVersionSpecificSyntax() throws Exception {
+        var f = new Fixture(); f.hive.legacySyntaxOnly = true;
+        var first = f.run(Map.of("tableId","table","pageSize",20));
+        assertEquals(20, ((List<?>)first.get("rows")).size());
+        var next = f.run(Map.of("tableId","table","pageNo",2,"pageSize",100));
+        assertEquals(101, ((List<Map<String,Object>>)next.get("rows")).getFirst().get("id"));
+        assertEquals(240L, ((Number)next.get("total")).longValue());
+        assertTrue(f.hive.queries.getLast().contains("ROW_NUMBER() OVER"));
+    }
+    @Test void missingRegisteredFieldsStillUsesOnePhysicalDescribe() throws Exception {
+        var f = new Fixture(); f.db.update("DELETE FROM db_table_column_t");
+        var result = f.run(Map.of("tableId","table","pageSize",20));
+        assertEquals(20, ((List<?>)result.get("rows")).size());
+        assertEquals(Map.of("id","物理编号","gender_code","性别代码"), result.get("columnLabels"));
+        assertEquals(3, f.hive.queries.size());
     }
     @Test void scopeAndTenantRejectBeforeHiveAndCrossDatabaseNamesCannotEscape() throws Exception {
         var f=new Fixture();
@@ -149,5 +169,12 @@ public class TableDetailPreviewTest {
         var f=new Fixture();f.hive.failure="Hive conf file not found: hiveclient.properties (dir=/private/hive)";
         var failure=assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table")));assertEquals(503,failure.code);
         assertTrue(failure.getMessage().contains("hiveclient.properties"),failure.getMessage());assertFalse(failure.getMessage().contains("/private/hive"));
+    }
+    @Test void hiveFailureReportsTheStageWithoutReturningVendorDetails() throws Exception {
+        var f = new Fixture(); f.hive.failure = "private vendor connection detail";
+        var failure = assertThrows(PreviewRejected.class, () -> f.run(Map.of("tableId","table")));
+        assertEquals(502, failure.code);
+        assertTrue(failure.getMessage().contains("字段读取"));
+        assertFalse(failure.getMessage().contains("private vendor"));
     }
 }

@@ -423,12 +423,17 @@ if (body?.batchGenerate == true) {
             var converted = portableDdl.prepare(batchColumns, batchConfig)
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 requestedTableName, converted.columns, submittedProps.tableNameCn)
+            var constraintPreview = tablePartitions.enrichConstraints(ddl, submittedTarget.sourceConstraints, batchConfig)
+            ddl = constraintPreview.ddl
+            var previewWarnings = []
+            previewWarnings.addAll(converted.warnings)
+            previewWarnings.addAll(constraintPreview.warnings)
             ddl = withHuaweiHiveStorage(ddl, targetType, pool, targetTypeCode)
             var partitionPlan = tablePartitions.normalize(submittedTarget.partitionPlan, converted.columns, targetType)
             ddl = tablePartitions.apply(ddl, partitionPlan, batchConfig)
-            // 预览保留未解决的表达式和完整DDL，供用户编辑；执行入口再解析单表SQL。
+            // 仅处理自动生成的DDL；手工提交语句不进入这些生成规则。
             generated.add({dbId: submittedDbId, requestedTableName: requestedTableName,
-                tableName: requestedTableName, ddl: ddl, warnings: converted.warnings, tableItems: converted.tableItems,
+                tableName: requestedTableName, ddl: ddl, warnings: previewWarnings, tableItems: converted.tableItems,
                 partitionPlan:partitionPlan, partitionSupported:tablePartitions.supported(targetType)})
         } catch (e) {
             exit 400, '目标数据源“' + targetDisplayName + '”未能生成建表语句：' + ddlFailureTip(e)
@@ -558,6 +563,7 @@ try {
     if (dsConfig.getDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
     var converted = portableDdl.prepare(columns, dsConfig)
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
+    ddl = tablePartitions.constraints(ddl, body?.sourceConstraints, dsConfig)
     ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
     var partitionPlan = tablePartitions.normalize(body?.partitionPlan, converted.columns, dsConfig.getDatabaseType())
     return tablePartitions.apply(ddl, partitionPlan, dsConfig)

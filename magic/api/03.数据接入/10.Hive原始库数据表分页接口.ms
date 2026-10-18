@@ -24,6 +24,7 @@ import tenantEs
 import '@/common/configData' as configData
 import tenantRuntime
 import dataScope
+import taskRuntime
 
 /*
  * 数据汇聚分页
@@ -592,10 +593,12 @@ if (viewLevel == 'table') {
     var pipelineTargetIds = {}
     var pipelineChainOrder = {}
     var pipelineStatuses = {}
-    var taskPipelines = taskPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').columns('id', 'dsl_json', 'status').where()
+    var pipelineGroups = {}
+    var taskPipelines = taskPipelineIds.size() == 0 ? [] : db.table('nifi_pipeline_t').columns('id', 'dsl_json', 'status', 'nifi_process_group_id').where()
         .eq('tenant_id', tenantId).in('id', taskPipelineIds).eq('is_del', 0).select()
     for (pipeline in taskPipelines) {
         pipelineStatuses[text(pipeline.id)] = text(pipeline.status).trim().toUpperCase()
+        pipelineGroups[text(pipeline.id)] = text(first(pipeline, ['nifiProcessGroupId', 'nifi_process_group_id']))
         var ids = []
         var dsl = {}
         try { dsl = JSONUtil.parseObj(text(first(pipeline, ['dslJson', 'dsl_json']))) } catch (ignored) {}
@@ -665,19 +668,9 @@ if (viewLevel == 'table') {
             if (taskTarget == null || materializedDatasourceMap[text(first(taskTarget, ['datasourceId', 'datasource_id']))] == null) { continue }
             var taskPipelineId = text(first(rawTask, ['pipelineId', 'pipeline_id']))
             var taskStatus = text(first(rawTask, ['taskStatus', 'task_status']))
-            // monitor_status 是最近一次执行结果（如 SUCCESS），不能覆盖当前画布运行态。
-            // 复用本页一次批量读取的流程状态；未绑定有效流程的历史任务才回退启停标志。
-            var currentStatus = text(pipelineStatuses[taskPipelineId]).trim().toUpperCase()
-            if (blank(currentStatus)) { currentStatus = text(first(rawTask, ['currentStatus', 'current_status'])).trim().toUpperCase() }
-            if (blank(currentStatus)) { currentStatus = taskStatus == '1' ? 'RUNNING' : taskStatus == '2' ? 'RUN_ERROR' : 'NOT_STARTED' }
-            var taskStatusText = '未启用'
-            if (currentStatus.contains('FAIL') || currentStatus.contains('ERROR')) {
-                taskStatusText = '运行异常'
-            } else if (currentStatus == 'RUNNING') {
-                taskStatusText = '运行中'
-            } else if (currentStatus == 'STOPPED') {
-                taskStatusText = '已停止'
-            }
+            // 与任务监控一致：已绑定流程以流程主表 PG 为准，旧记录才使用任务 PG。
+            var runtimeGroup = pipelineGroups.containsKey(taskPipelineId) ? pipelineGroups[taskPipelineId]
+                : text(first(rawTask, ['processGroupId', 'process_group_id']))
             var taskTargets = []
             var ownTargetIds = pipelineTargetIds[taskPipelineId]
             if (ownTargetIds == null || ownTargetIds.size() == 0) { ownTargetIds = [taskTargetId] }
@@ -713,14 +706,15 @@ if (viewLevel == 'table') {
                 scheduleCycleText: formatCycle(first(rawTask, ['scheduleCycle', 'schedule_cycle'])),
                 lastRunning: first(rawTask, ['lastRunning', 'last_running', 'updatedTime', 'updated_time']),
                 endRunning: first(rawTask, ['endRunning', 'end_running']),
-                currentStatus: currentStatus,
+                runtimeProcessGroupId: runtimeGroup,
+                lifecycleStatus: pipelineStatuses[taskPipelineId] || '',
                 taskStatus: first(rawTask, ['taskStatus', 'task_status']),
                 scheduleStrategy: first(rawTask, ['scheduleStrategy', 'schedule_strategy']),
                 delayLevel: first(rawTask, ['delayLevel', 'delay_level']),
                 isTimeout: first(rawTask, ['isTimeout', 'is_timeout']),
                 monitorStatus: first(rawTask, ['monitorStatus', 'monitor_status']),
                 monitorMessage: first(rawTask, ['monitorMsg', 'monitor_msg']),
-                taskStatusText: taskStatusText,
+                taskStatusText: '',
                 targetDbId: taskTargets.size() == 0 ? '' : taskTargets[0].targetDbId,
                 targetDbName: taskTargets.size() == 0 ? '' : taskTargets[0].targetDbName,
                 targetDbType: taskTargets.size() == 0 ? '' : taskTargets[0].targetDbType,
@@ -831,7 +825,17 @@ if (viewLevel == 'table') {
     for (pageTable in tablePage) {
         pageTable.orgName = pageOrgNameMap[text(pageTable.orgId)] || ''
     }
+    // 只装饰当前已授权、可达任务；一次节点快照供全部链路复用，不逐任务查 NiFi。
+    var live = taskRuntime.snapshot()
+    var runtimeRows = []
+    for (pageTable in tablePage) { for (task in pageTable.tasks) { runtimeRows.add(task) } }
+    taskRuntime.decorate(runtimeRows, live)
+    for (task in runtimeRows) { task.currentStatus = task.runtimeState; task.taskStatusText = task.runtimeLabel }
     return {
+        runtimeRevision: live.revision,
+        runtimeFresh: live.fresh,
+        runtimeObservedAt: live.observedAt,
+        runtimeMessage: live.message,
         viewLevel: 'table',
         scopeType: text(body?.scopeType),
         scopeId: text(body?.scopeId),

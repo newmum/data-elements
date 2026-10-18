@@ -5,17 +5,20 @@
 | 用途 | 全局服务名称 | 类型 |
 | --- | --- | --- |
 | JSON 读取 | `PUBLIC-READER-JSON` | `org.apache.nifi.json.JsonTreeReader` |
-| JSON 写出 | `PUBLIC-WRITER-JSON-TIME_FORMAT` | `org.apache.nifi.json.JsonRecordSetWriter` |
+| 非 Hive 库 JSON 写出 | `PUBLIC-WRITER-JSON` | `org.apache.nifi.json.JsonRecordSetWriter` |
+| Hive 读写链路 JSON 写出 | `PUBLIC-WRITER-JSON-TIME_FORMAT` | `org.apache.nifi.json.JsonRecordSetWriter` |
 
 ## 发布约束
 
-- 完整发布、字段映射单节点升级、字段映射级联、JDBC 来源与目标、JSON 转换和 SQL Record 链路采用同一引用规则。
+- 完整发布、字段映射单节点升级、字段映射级联、JDBC 来源与目标、JSON 转换和 SQL Record 链路采用同一引用规则。Hive 来源读取、无其他库写入目标的 Hive 转换链、Hive 目标的上游原始采集链使用时间格式 Writer；其他数据库分支使用普通 JSON Writer。映射写入 Oracle 等其他目标时，即使来源是 Hive，映射及目标合并等处理也使用普通 Writer。
+- 混合画布按发布后的实际连接关系分类，不能因为画布存在 Hive 就把其他库分支切换为时间格式 Writer。写入 Hive 的原始分支绕过映射后，共享映射仍供 Oracle 等目标消费时，该映射使用普通 Writer。
+- 仅校验当前流程实际需要的 Writer；非 Hive 流程不依赖时间格式 Writer，也不能在普通 Writer 缺失时以时间格式 Writer 替代。
 - 编译器读取实际 Flow 根组及其直接 Controller Services，不把配置的租户／应用子组视为全局根，不按同名任务级服务替代。
 - 同一编译过程只做一次全局服务列表读取，在内存中分配给全部节点；20／100 个来源或映射节点不增加全局服务读取次数。
 - 全局名称必须唯一、类型正确、处于 `ENABLED` 且无校验错误。缺失、重名、未启用或类型错误时，在清理旧流程、停止升级对象或创建新流程前给出明确错误。
 - 不自动创建 `JsonReader`、`JsonWriter`、来源类型化输入、类型化输出、统一映射类型化输入或独立合并 JSON Reader 等任务级替代服务。
 - `typed-record-reader` 兼容属性也引用同一个全局 Reader；遗留 `mergeSchemaText` 不再创建专用 JSON Reader，实际读取策略由全局服务配置决定。
-- 日期、时间、Schema、输出分组等属性以这两个全局服务当前配置为准。平台不覆盖这些属性，不启停全局服务，也不额外创建 Schema 服务。
+- 日期、时间、Schema、输出分组等属性以选中的全局服务当前配置为准。平台不覆盖这些属性，不启停全局服务，也不额外创建 Schema 服务。
 - CSV、Excel、Avro、数据库连接池及字典服务仍按自身类型与用途配置；JSON 统一引用不改变它们的服务类型。
 
 ## 历史流程调整约束

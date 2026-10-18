@@ -17,7 +17,8 @@ public final class HiveServiceFixtures {
         return new ObjectMapper().valueToTree(Map.of("component",Map.of("id",id,"name",name,"type",type,"parentGroupId",scope,"state",state)));
     }
     static List<JsonNode> codecs() {
-        return List.of(codec("global-json-writer",HiveTemporalJsonPolicy.WRITER_NAME,"org.apache.nifi.json.JsonRecordSetWriter","root","ENABLED"),
+        return List.of(codec("global-json-writer",HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME,"org.apache.nifi.json.JsonRecordSetWriter","root","ENABLED"),
+                codec("global-hive-json-writer",HiveTemporalJsonPolicy.WRITER_NAME,"org.apache.nifi.json.JsonRecordSetWriter","root","ENABLED"),
                 codec("global-json-reader",HiveTemporalJsonPolicy.READER_NAME,"org.apache.nifi.json.JsonTreeReader","root","ENABLED"));
     }
     static List<JsonNode> withCsv(JsonNode csv) {var result=new ArrayList<>(codecs());result.add(csv);return result;}

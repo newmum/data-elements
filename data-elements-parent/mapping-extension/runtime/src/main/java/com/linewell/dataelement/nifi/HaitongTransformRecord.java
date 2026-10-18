@@ -115,7 +115,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
         counts[2]++;counts[3]+=result.dictionaryBatches();
         int rowPosition=0;for(var row:result.rows()){
             if(row.success()){if(dynamic==null){Map<String,Object>converted=new LinkedHashMap<>();row.output().forEach((key,value)->converted.put(key,NifiTemporalValues.writerValue(value,context.zone())));writer.write(new MapRecord(schema,converted));}counts[0]++;}
-            else{if(plan.recordMode().equals("FAIL_FLOWFILE"))throw new MappingException("RECORD_INVALID","字段规则执行失败，整批输入保留");
+            else{if(plan.recordMode().equals("FAIL_FLOWFILE"))throw new MappingException("RECORD_INVALID",MappingDiagnostics.summary(row.errors().getFirst()));
                 Map<String,Object>envelope=new LinkedHashMap<>();envelope.put("planHash",plan.hash());envelope.put("inputRecordIndex",row.index());envelope.put("errors",row.errors());
                 // Original values stay in the controlled content queue, never attributes/logs.
                 MappingErrorRecords.snapshot(envelope,rows.get(rowPosition));errors.write(JSON.writeValueAsString(envelope));errors.newLine();counts[1]++;

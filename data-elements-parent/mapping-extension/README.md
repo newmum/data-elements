@@ -4,7 +4,13 @@
 
 Hive 作为目标库时的原始写入发布规则见[详细设计第27章](../../docs/海通字段映射统一执行方案.md)：Hive 分支旁路字段对标，HDFS 写入不再生成 MergeRecord，上游查询复用根作用域已有的 `PUBLIC-WRITER-JSON-TIME_FORMAT`，ConvertRecord 复用根作用域已有的 `PUBLIC-READER-JSON`，不生成任务级同名服务。Hive 上游 GenerateTableFetch / QueryDatabaseTableRecord 的 Columns to Return 显式清空。缺少全局 JSON 服务时在清理旧流程前拒绝发布。第27章的 Hive 发布规则本身只涉及共享后端和 Hive 组件清单；字段引擎升级仍须使用下文与目标NiFi匹配的 NAR。已有原生流程须受控完整发布后才改变拓扑；HDFS CSV 时间文本还须验证来源/JVM/目标时区，不能按普通 JDBC 的恢复语义推断。
 
-## 当前版本（1.1.19）
+## 当前版本（1.1.21）
+
+共享内核、函数库、处理器和字典服务升级为 **1.1.21**。运行错误保留原错误码及规则/步骤 ID，同时增加来源与目标字段、中文注释、原始输入、失败中间值、目标约束、原因与实际路由。字段注释由登记 Schema 批量进入计划，运行时不补查数据库。规则预览与原生执行采用同一定位内核；完整值仅进入受控错误正文，日志与属性使用不含值的定位说明。详见[字段治理错误定位说明](../../docs/字段治理错误定位说明.md)。
+
+匹配 SDK 的包位于 `logs/mapping-error-context/final-nifi-2.9.0/` 和 `logs/mapping-error-context/final-nifi-2.11.0/` 下的 `haitong-mapping-nar/haitong-mapping-nar-1.1.21.nar`。先装对应 NiFi 版本的 NAR，再更新后端。已有处理器仍绑定旧 Bundle，须受控升级/发布才会使用新诊断；旧错误内容不会被重写。
+
+## 上一版（1.1.19）
 
 共享内核、函数库、NiFi 处理器和字典服务使用 **1.1.19**。未声明精度的 `DECIMAL` / `NUMERIC` / `NUMBER` 不再隐式转换为 `DECIMAL(38,10)`；以 `BigDecimal` 保留每条记录自己的小数位数，NiFi 在每个有界窗口生成足够的 Decimal Schema，支持 JSON 和 Avro 输出。规则输出的 `precision=0, scale=0` 表示自动保留精度；如目标物理列有明确精度，仍继承并校验物理容量，不能通过设为 0 绕过容量限制。显式 CAST / toDecimal 的精度和舍入设置继续有效。
 

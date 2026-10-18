@@ -89,18 +89,22 @@ class TablePartitionsTest {
         assertFalse(ddl.contains("INTERVAL"));assertTrue(ddl.contains("MAXVALUE"));
         assertDoesNotThrow(()->service.validate(ddl,new LinkedHashMap<>(ob),config(DatabaseType.OCEANBASE_ORACLE)));
     }
-    @Test void explicitSourceProbeUsesThreeCatalogQueriesForTwentyOrHundredPartitions() throws Exception {
+    @Test void explicitSourceProbeUsesFiveFixedReadsForTwentyOrHundredPartitions() throws Exception {
         for(int count:List.of(20,100)) {
             Connection c=mock(Connection.class);
             var header=statement(new String[]{"PARTITIONING_TYPE","SUBPARTITIONING_TYPE"},new String[][]{{"RANGE","NONE"}});
             var key=statement(new String[]{"COLUMN_NAME","DATA_TYPE"},new String[][]{{"CREATED_AT","DATE"}});
             String[][] partitions=new String[count][2];for(int i=0;i<count;i++)partitions[i]=new String[]{"SYS_P"+i,"TO_DATE(' "+java.time.LocalDate.of(2000,1,1).plusMonths(i)+" 00:00:00','SYYYY-MM-DD HH24:MI:SS','NLS_CALENDAR=GREGORIAN')"};
             var rows=statement(new String[]{"PARTITION_NAME","HIGH_VALUE"},partitions);
-            when(c.prepareStatement(anyString())).thenReturn(header,key,rows);
+            var nativeDdl=statement(new String[]{"TABLE_DDL"},new String[][]{});
+            var constraints=statement(new String[]{"CONSTRAINT_NAME","CONSTRAINT_TYPE","COLUMN_NAME"},new String[][]{});
+            when(c.prepareStatement(anyString())).thenReturn(nativeDdl,header,key,rows,constraints);
             var result=PartitionMetadataReader.read(c,config(DatabaseType.ORACLE),"APP.T");
             assertEquals("detected",result.get("status"));
             assertEquals(count,((List<?>)((Map<?,?>)result.get("plan")).get("partitions")).size());
-            verify(c,times(3)).prepareStatement(anyString());
+            verify(c,times(5)).prepareStatement(anyString());
+            assertEquals("MONTH",((Map<?,?>)result.get("plan")).get("displayStrategy"));
+            assertEquals("unavailable",result.get("ddlReadStatus"));
             verify(header).setString(1,"APP");verify(header).setString(2,"T");
         }
     }

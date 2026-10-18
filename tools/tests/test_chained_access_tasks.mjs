@@ -106,7 +106,7 @@ for (const count of [20, 100]) {
     tableName:`source_${i}`,tasks:[{tid:`task-${i}`,sourceTableId:`source-${i}`,sourceTableName:`source_${i}`,
     sourceSchemaName:'public',targetTables:[{targetTableId:`target-${i}`,targetDbName:'汇聚库',targetTableName:`ods_${i}`}]}]}));
   const ref = value => ({value});
-  const ctx = vm.createContext({console,state:{accessStatus:'all'},treeData:ref([{children:[]}]),expandedRows:ref([]),
+  const ctx = vm.createContext({console,taskFetchSequence:0,state:{accessStatus:'all'},treeData:ref([{children:[]}]),expandedRows:ref([]),
     getSourceTableId:row=>row.tid,$message:{error:assert.fail},$common:{post:async(route,body)=>{
       calls.push({route,body:plain(body)});return {list:rows,total:count};
     }}});

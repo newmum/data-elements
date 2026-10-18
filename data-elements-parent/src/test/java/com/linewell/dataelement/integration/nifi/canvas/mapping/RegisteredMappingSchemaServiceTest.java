@@ -418,6 +418,24 @@ class RegisteredMappingSchemaServiceTest {
     private static ArrayNode schema() {
         var schema=JSON.createArrayNode();schema.addObject().put("name","id").put("logicalType","STRING").put("nullable",true).put("length",64);return schema;
     }
+    @Test void authoritativeCommentsTravelWithTwentyAndHundredContractsWithoutExtraQueries() throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture fixture=new Fixture(count);
+            fixture.columns.replaceAll(column->{var value=new HashMap<>(column);value.put("column_comment","登记业务标识");return value;});
+            Map<String,JsonNode> contracts=new LinkedHashMap<>();
+            fixture.references.forEach((key,reference)->{
+                var contract=JSON.createObjectNode();contract.set("sourceRef",reference);contract.set("targetRef",reference);
+                var source=schema();((com.fasterxml.jackson.databind.node.ObjectNode)source.get(0)).put("comment","过期注释");
+                contract.set("source",source);contract.set("target",schema());contracts.put(key,contract);
+            });
+            try(var tenant=TenantContext.use("tenant-A")) {fixture.service.checkContracts(contracts);}
+            contracts.values().forEach(contract->{assertEquals("登记业务标识",contract.path("source").get(0).path("comment").asText());assertEquals("登记业务标识",contract.path("target").get(0).path("comment").asText());});
+            verify(fixture.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            verify(fixture.jdbc).queryForList(argThat(sql->sql.contains("column_comment")&&sql.contains("tenant_id")),any(Object[].class));
+            verify(fixture.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(fixture.statement,times(1)).executeQuery();
+        }
+    }
     private static Map<String,Object> table(String id,String datasource,String name){return Map.of("tid",id,"datasource_id",datasource,"table_name",name);}
     private static Map<String,Object> column(String table,String name){return Map.of("table_id",table,"column_name",name,"data_type","VARCHAR","length",64,"nullable",1);}
     private static Map<String,Object> mysqlColumn(String schema,String table,String name){return Map.of("TABLE_SCHEMA",schema,"TABLE_NAME",table,"COLUMN_NAME",name,"TYPE_NAME","varchar","COLUMN_SIZE",64,"IS_NULLABLE","YES","EXTRA","");}

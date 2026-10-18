@@ -18,6 +18,7 @@ const functions = [
   'normalizeFieldRows', 'normalizePrimaryKey', 'normalizeTimeRoles', 'isTimestampEnabled',
   'normalizeFieldBase', 'normalizeIdentifier', 'buildColumnType', 'catalogForTable', 'savedCatalogFieldMap',
   'setStandardField', 'clearStandardField', 'applyAutoStandardFields',
+  'buildGovernanceConfig', 'timeRolesFor', 'isTimeRoleCandidate', 'isTemporalField', 'isDictionaryRequired',
 ];
 const selected = functions.map(name => {
   const node = ast.program.body.find(n => n.type === 'FunctionDeclaration' && n.id?.name === name);
@@ -91,6 +92,21 @@ context.setStandardField(restored[0], 'DATE');
 assert.equal(restored[0].standardField, 'DATE');
 context.clearStandardField(restored[0]);
 assert.equal(restored[0].standardFieldExplicitlyCleared, true);
+
+// 下拉“不设置”和清除图标均须把显式清空带入保存快照，JSON 回读后不重新推断格式。
+for (const format of ['DATE', 'DATETIME', 'LXDH', 'SFZH']) {
+  const tableName = `cleared_${format}`;
+  const field = { ...row('event_time', 'datetime', '发生时间'), standardField: format };
+  context.setStandardField(field, '');
+  const config = context.buildGovernanceConfig({ tableName, businessType: '业务表' }, [field]);
+  catalogMap[tableName] = { fieldGovernanceConfig: JSON.parse(JSON.stringify(config)) };
+  fieldMap[tableName] = context.normalizeFieldRows([
+    { ...field, standardField: format, dataStandardId: format, standardFieldExplicitlyCleared: undefined },
+  ], tableName);
+  context.applyAutoStandardFields();
+  assert.equal(fieldMap[tableName][0].standardField, '', `${format}: saved clearing overrides legacy column format and inference`);
+  assert.equal(fieldMap[tableName][0].standardFieldExplicitlyCleared, true);
+}
 
 const batchChecks = [];
 for (const size of [20, 100]) {

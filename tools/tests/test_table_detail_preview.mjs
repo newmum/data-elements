@@ -20,6 +20,8 @@ let response = {columns: ['ID', 'demo.gender_code', 'updated_at'], columnLabels:
 let fail = false;
 let release;
 const context = vm.createContext({props: {tableId: 'table-a'}, state: {previewCols: [], errMsg: ''}, isString: v => typeof v === 'string',
+  h: (tag, props, children) => ({tag, props, children}),
+  resolveComponent: name => name,
   $common: {post: async (route, payload) => {
     reads.push({route, payload});
     if (release) await new Promise(resolve => { release = resolve; });
@@ -38,11 +40,23 @@ for (const size of [20, 100]) {
   assert.equal(context.state.previewCols[0].label, '编号\nID');
   assert.equal(context.state.previewCols[1].label, '性别代码\ngender_code');
   assert.equal(context.state.previewCols[1].prop, 'demo.gender_code');
+  const tooltip = context.state.previewCols[1].renderHeader();
+  assert.equal(tooltip.props.content, '性别代码\ngender_code');
+  const header = tooltip.children.default();
+  assert.equal(header.children.length, 2);
+  assert.equal(header.children[0].children, '性别代码');
+  assert.equal(header.children[1].children, 'gender_code');
   assert.equal(context.state.previewCols[2].label, 'updated_at');
 }
 response = {...response, columns: ['id'], columnLabels: {id: '  '}, total: 0};
 await context.actual.fetchData({pageNo: 1, pageSize: 20});
 assert.equal(context.state.previewCols[0].label, 'id');
+assert.equal(context.state.previewCols[0].renderHeader().children.default().children[0].children, '—');
+response = {...response, columns: ['extremely_long_registered_field_name'], columnLabels: {extremely_long_registered_field_name: '很长的中文字段名称\n换行也不能增加表头行数'}};
+await context.actual.fetchData({pageNo: 1, pageSize: 20});
+const longHeader = context.state.previewCols[0].renderHeader();
+assert.equal(longHeader.children.default().children.length, 2);
+assert.ok(longHeader.props.content.includes('extremely_long_registered_field_name'));
 fail = true;
 assert.equal((await context.actual.fetchData({pageNo: 1, pageSize: 20})).total, 0);
 assert.equal(context.state.errMsg, 'read failed');

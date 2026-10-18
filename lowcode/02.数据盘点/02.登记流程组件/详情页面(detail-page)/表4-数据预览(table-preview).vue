@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { h, reactive, ref, resolveComponent, watch } from "vue";
 import { isString } from "lodash-es";
 
 const props = defineProps<{
@@ -41,8 +41,22 @@ const previewColumns = (columns: string[] = [], labels: Record<string, string> =
   return columns.map((field) => {
     const english = field.split(".").pop() || field;
     const chinese = String(names.get(field.toLowerCase()) || names.get(english.toLowerCase()) || "").trim();
+    const chineseLabel = chinese && chinese.toLowerCase() !== english.toLowerCase() ? chinese : "";
+    const label = chineseLabel ? `${chineseLabel}\n${english}` : english;
     return {
-      label: chinese && chinese.toLowerCase() !== english.toLowerCase() ? `${chinese}\n${english}` : english,
+      label,
+      // 中英文各占一行，分别省略；完整名称由同一表头的悬停提示展示。
+      renderHeader: () => h(resolveComponent("el-tooltip"), {
+        content: label,
+        placement: "top",
+        showAfter: 200,
+        popperStyle: { whiteSpace: "pre-line", maxWidth: "480px", overflowWrap: "anywhere" },
+      }, {
+        default: () => h("span", { class: "preview-column-title", "aria-label": label }, [
+          h("span", { class: "preview-column-chinese" }, chineseLabel || "—"),
+          h("span", { class: "preview-column-english" }, english),
+        ]),
+      }),
       prop: field,
       sortable: "custom",
       minWidth: 160,
@@ -91,15 +105,26 @@ const fetchData = async ({ pageNo, pageSize,sortField,sortDir }) => {
 </script>
 
 <style scoped lang="scss">
-.table-preview :deep(.el-table__header-wrapper .el-table__header .el-table__cell .cell > span.title) {
-  display: inline-block;
-  white-space: pre-line;
-  line-height: 1.5;
+.table-preview :deep(.preview-column-title) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 20px;
   font-size: 12px;
   font-weight: 400;
   color: var(--el-text-color-secondary);
 
-  &::first-line {
+  > span {
+    display: block;
+    height: 20px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .preview-column-chinese {
     font-size: 14px;
     font-weight: 600;
     color: var(--el-text-color-primary);

@@ -687,8 +687,25 @@ class DataAggTaskEnsureBatchMagicTest {
                                     "accessChain",Map.of("targetTableIds",List.of(root+"-target-0",root+"-target-1")))));
                 }
             }
-            String canonical = CanonicalMagicSources.byId("76fd211790f54164947f276824d19c1d");
+            f.jdbc.update("update data_access_agg_task_t set task_status=2");
+            f.jdbc.update("update nifi_pipeline_t set status='STOPPED',nifi_process_group_id=concat(id,'-pg')");
+            // Another tenant's pipeline cannot replace the authorized group's runtime identity.
+            f.jdbc.update("insert into nifi_pipeline_t(id,tenant_id,nifi_process_group_id,is_del) values(?,'foreign','foreign-pg',0)",ids.getFirst()+"-target-1-pipeline");
+            var resolver=org.mockito.Mockito.mock(com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver.class);
+            var nifi=org.mockito.Mockito.mock(com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient.class);
+            var runtimeNode=new com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver.RuntimeNode("police","node","node","https://example.invalid","u","p",false,"root");
+            org.mockito.Mockito.when(resolver.resolve()).thenReturn(runtimeNode);
+            var json=new com.fasterxml.jackson.databind.ObjectMapper();var response=json.createObjectNode();
+            var root=response.putObject("processGroupStatus").putObject("aggregateSnapshot").put("id","root");
+            var groups=root.putArray("processGroupStatusSnapshots");
+            for(String id:ids)for(int hop=0;hop<2;hop++)groups.addObject().putObject("processGroupStatusSnapshot").put("id",id+"-target-"+hop+"-pipeline-pg").putArray("processorStatusSnapshots").addObject().putObject("processorStatusSnapshot").put("runStatus","Running");
+            org.mockito.Mockito.when(nifi.getRuntimeRootStatus(runtimeNode)).thenReturn(response);
+            var service=new com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService(resolver,nifi);
+            try(var tenant=com.linewell.dataelement.platform.tenant.domain.TenantContext.use("police")) {
+            String canonical = CanonicalMagicSources.byId("76fd211790f54164947f276824d19c1d").replace("\r\n", "\n");
             String aggregation = canonical.substring(canonical.indexOf("    // 表级工作流状态"),canonical.indexOf("    // ES 检索、接入任务补齐"));
+            String runtime=canonical.substring(canonical.indexOf("    // 只装饰当前已授权、可达任务"),canonical.indexOf("    return {\n        runtimeRevision:"));
+            aggregation+="\nvar tablePage=tableItems;\n"+runtime;
             String helpers = """
                     import cn.hutool.json.JSONUtil
                     var text = value => value == null ? '' : '' + value
@@ -697,6 +714,7 @@ class DataAggTaskEnsureBatchMagicTest {
                     var formatCycle = value => ''
                     """;
             Map<String,Object> inputs = new LinkedHashMap<>();
+            inputs.put("taskRuntime",new com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeMagicModule(service));
             inputs.put("db",f.db); inputs.put("tenantId","police"); inputs.put("dataScope",f.scope);
             inputs.put("candidateIds",ids); inputs.put("tableCandidates",rows);
             inputs.put("requestedAccessStatus","all"); inputs.put("selectedDatasourceNameMap",Map.of("source-db","来源库"));
@@ -706,6 +724,7 @@ class DataAggTaskEnsureBatchMagicTest {
             Map<?,?> debug = assertInstanceOf(Map.class,MagicScript.create(helpers+aggregation+"\nreturn {items:tableItems, groups:taskGroups, roots:chainRootBySource}",null).execute(new MagicScriptContext(inputs)));
             List<?> actual = assertInstanceOf(List.class,debug.get("items"));
             readCounts.add(f.counter.queries);
+            org.mockito.Mockito.verify(nifi,org.mockito.Mockito.times(1)).getRuntimeRootStatus(runtimeNode);
             assertEquals(size,actual.size());
             for (Object value : actual) {
                 Map<?,?> row=assertInstanceOf(Map.class,value);
@@ -714,12 +733,15 @@ class DataAggTaskEnsureBatchMagicTest {
                 Map<?,?> second=assertInstanceOf(Map.class,tasks.get(1));
                 assertEquals(row.get("tid")+"-target-0",second.get("sourceTableId"));
                 assertEquals(1,assertInstanceOf(List.class,second.get("targetTables")).size());
+                for(Object task:tasks){var runtimeTask=assertInstanceOf(Map.class,task);assertEquals("RUNNING",runtimeTask.get("currentStatus"));assertEquals("运行中",runtimeTask.get("taskStatusText"));assertEquals(1,runtimeTask.get("taskStatus"));assertEquals(2,runtimeTask.get("storedTaskStatus"));assertEquals(true,runtimeTask.get("runtimeFresh"));}
+                assertEquals(row.get("tid")+"-target-1-pipeline-pg",second.get("runtimeProcessGroupId"));
             }
             f.scope.deniedId="target-db-1";
             actual=assertInstanceOf(List.class,MagicScript.create(helpers+aggregation+"\nreturn tableItems",null).execute(new MagicScriptContext(inputs)));
             for(Object value:actual) assertEquals(1,assertInstanceOf(Map.class,value).get("taskCount"));
             assertEquals(0,f.counter.writes);
-            System.out.println("List rows="+size+", aggregate metadata SQL="+readCounts.getLast());
+            System.out.println("List rows="+size+", aggregate metadata SQL="+readCounts.getLast()+", NiFi root reads=1");
+            } finally { service.close(); }
         }
         assertEquals(readCounts.get(0),readCounts.get(1));
     }
@@ -810,7 +832,7 @@ class DataAggTaskEnsureBatchMagicTest {
                         data_catalog_id varchar(64),task_name varchar(200),task_type_name varchar(100),
                         task_type_id varchar(100),task_desc varchar(300),source_db_id varchar(64),
                         source_table_primary_key varchar(200),target_db_id varchar(64),
-                        target_table_primary_key varchar(200),schedule_strategy int,schedule_cycle int,
+                        target_table_primary_key varchar(200),process_group_id varchar(64),schedule_strategy int,schedule_cycle int,
                         task_status int,created_time timestamp,
                         is_del int,updated_time timestamp)
                     """);
@@ -824,7 +846,7 @@ class DataAggTaskEnsureBatchMagicTest {
                     """);
             jdbc.execute("""
                     create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),name varchar(200),
-                        description varchar(300),status varchar(30),dsl_json varchar(32000),dsl_version int,
+                        description varchar(300),status varchar(30),nifi_process_group_id varchar(64),dsl_json varchar(32000),dsl_version int,
                         created_at bigint,updated_at bigint,is_del int)
                     """);
             jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) "

@@ -39,6 +39,22 @@ class MetadataSummaryRefreshMagicTest {
         assertThat(f.probe.pages).isZero();
         assertThat(f.probe.counts).isZero();
     }
+    @Test void oceanBaseLoginSuffixIsNotAnOracleOwnerAndQualifiedResultsStillMatch() throws Exception {
+        Fixture f = new Fixture(20);
+        f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='DATA_USER@tenant#cluster' where tid='db'");
+        f.jdbc.update("update db_table_t set table_name='sample' where tid='table'");
+        f.probe.returnedTableName = "DATA_USER.sample";
+        assertThat(f.read("ga", "db", "table")).isInstanceOf(Map.class);
+        assertThat(f.probe.schema).isEqualTo("DATA_USER");
+        assertThat(f.probe.counts).isEqualTo(1);
+        f.probe.returnedTableName = "OTHER.sample";
+        assertThat(f.read("ga", "db", "table")).isInstanceOf(ExitValue.class);
+        assertThat(f.probe.counts).isEqualTo(1);
+        f.jdbc.update("update db_datasource_t set username='DATA#USER@tenant#cluster' where tid='db'");
+        f.probe.returnedTableName = "DATA#USER.sample";
+        assertThat(f.read("ga", "db", "table")).isInstanceOf(Map.class);
+        assertThat(f.probe.schema).isEqualTo("DATA#USER");
+    }
     @Test void refreshPersistsSummaryOnlyAndDryRunNeverWrites() throws Exception {
         Fixture f = new Fixture(20);
         f.refresh(true);
@@ -104,10 +120,10 @@ class MetadataSummaryRefreshMagicTest {
     }
     public static class Connection { public Map<String,Object> read() { return Map.of("host","localhost","database","fixture","username","user"); } }
     public static class Probe {
-        int pages,counts; String schema;
+        int pages,counts; String schema; String returnedTableName = "sample";
         public TablePageResult getTablesPage(DataSourceConfig cfg,Integer page,Integer size,String name) {
             pages++; schema=cfg.getSchema(); assertThat(name).isEqualTo("sample"); assertThat(size).isEqualTo(100);
-            var info = new TableInfo(); info.setTableName("sample"); info.setColumnCount(2); info.setTotalSizeBytes(0L); info.setTotalSizeFormatted("0 B");
+            var info = new TableInfo(); info.setTableName(returnedTableName); info.setColumnCount(2); info.setTotalSizeBytes(0L); info.setTotalSizeFormatted("0 B");
             var result=new TablePageResult(); result.setRows(List.of(info)); return result;
         }
         public Long getTableRowCount(DataSourceConfig cfg,String name) { counts++; assertThat(name).isEqualTo("sample"); return 0L; }

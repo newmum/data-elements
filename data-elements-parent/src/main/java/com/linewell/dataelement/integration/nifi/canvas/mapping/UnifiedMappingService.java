@@ -89,9 +89,10 @@ public class UnifiedMappingService {
         try(var reader=new BatchDictionaryReader(id->pool(id,compiled.connections()).getConnection())){
             var provider=new DictionaryPolicyProvider(reader,plan.document().path("dictionaryBindings"),compiled.snapshots(),cache,com.linewell.dataelement.platform.tenant.domain.TenantContext.requireTenantId());
             var result=MappingEngine.execute(plan,sample,0,context,provider);List<Map<String,Object>> rows=new ArrayList<>();List<FieldMappingService.RowResult>results=new ArrayList<>();int invalid=0;
-            for(var row:result.rows()){if(row.success())rows.add(row.output());else invalid++;results.add(new FieldMappingService.RowResult((int)row.index(),row.success(),row.errors().stream().map(e->e.code()+" / "+e.ruleId()+" / "+e.message()).toList()));}
+            Set<String> sensitive=plan.sensitiveOutputs(PreviewMasking.sensitiveNames(plan.document().path("schemaContract").path("source")));
+            for(var row:result.rows()){if(row.success())rows.add(row.output());else invalid++;results.add(new FieldMappingService.RowResult((int)row.index(),row.success(),row.errors().stream().map(e->e.code()+" / "+e.ruleId()+" / "+MappingDiagnostics.previewMessage(e,sensitive,!plan.dictionaries().isEmpty())).toList()));}
             Map<String,Object>stats=new LinkedHashMap<>();stats.put("inputRows",sample.size());stats.put("outputRows",rows.size());stats.put("successRows",rows.size());stats.put("invalidRows",invalid);stats.put("dictionarySqlCount",reader.queries());stats.put("stages",result.stages());stats.put("planHash",plan.hash());stats.put("engineVersion",MappingEngine.engineVersion());stats.put("sampleMode","PROVIDED_SAMPLE");
-            Set<String> sensitive=plan.sensitiveOutputs(PreviewMasking.sensitiveNames(plan.document().path("schemaContract").path("source")));stats.put("sensitiveValuesMasked",true);
+            stats.put("sensitiveValuesMasked",true);
             return new FieldMappingService.PreviewResponse(temporalPreviewRows(PreviewMasking.mask(rows,sensitive,!plan.dictionaries().isEmpty())),results,stats);
         }
     }

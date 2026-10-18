@@ -70,6 +70,7 @@
           <div class="list-toolbar">
             <div class="list-toolbar__primary">
               <el-segmented v-model="state.accessStatus" :options="tabs" @change="handleSearch" />
+              <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
             </div>
             <div class="list-filters">
               <el-input
@@ -350,13 +351,82 @@
 
 <script setup>
 import { ElMessageBox } from "element-plus";
-import { computed, nextTick, onActivated, onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { get } from "lodash-es";
 
 const router = useRouter();
 const treeRef = ref();
 const tableRef = ref();
+const runtimeConnection = ref('connecting');
+const runtimeReadAt = ref(0);
+const runtimeWarning = ref('');
+const runtimeHint = computed(() => runtimeWarning.value || (runtimeReadAt.value ? `NiFi 最近确认：${new Date(runtimeReadAt.value).toLocaleTimeString()}` : '正在读取 NiFi 当前运行状态'));
+let runtimeRevision = '', taskFetchSequence = 0;
+let runtimeActive = true, runtimeAbort = null, reconnectTimer = null, statusRefreshTimer = null, reconnectDelay = 1000;
+const refreshRuntimePage = () => {
+  if (statusRefreshTimer) return;
+  statusRefreshTimer = setTimeout(() => { statusRefreshTimer = null; if (runtimeActive && !document.hidden) tableRef.value?.refresh?.(false); }, 150);
+};
+const acceptRuntimeEvent = (payload) => {
+  runtimeConnection.value = payload.fresh ? 'live' : 'unavailable';
+  runtimeWarning.value = payload.message || '';
+  runtimeReadAt.value = Number(payload.observedAt || 0);
+  if (runtimeRevision && runtimeRevision !== payload.revision) refreshRuntimePage();
+  runtimeRevision = payload.revision;
+};
+const startRuntimeStream = async () => {
+  if (!runtimeActive || document.hidden || runtimeAbort) return;
+  const controller = new AbortController(); runtimeAbort = controller;
+  let stalled = false, watchdog;
+  const armWatchdog = () => { clearTimeout(watchdog); watchdog = setTimeout(() => { stalled = true; controller.abort(); }, 20000); };
+  armWatchdog();
+  try {
+    // The existing Axios interceptor supplies the current token to this adapter.
+    // Fetch keeps the stream open without putting credentials in the URL.
+    await $request.get('/nifi/api/task-runtime/events', {
+      signal: controller.signal, timeout: 0, responsePolicy: 'raw', errorPolicy: 'silent',
+      headers: { Accept: 'text/event-stream' },
+      adapter: async (config) => {
+        const headers = Object.fromEntries(Object.entries(config.headers.toJSON()).filter(([, value]) => value != null).map(([key, value]) => [key, String(value)]));
+        const response = await fetch($request.getUri(config), { headers, signal: controller.signal, cache: 'no-store' });
+        if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream') || !response.body) throw new Error('实时状态连接不可用');
+        reconnectDelay = 1000;
+        const reader = response.body.getReader(), decoder = new TextDecoder();
+        let buffer = '';
+        try {
+          while (true) {
+            const { value, done } = await reader.read(); if (done) break;
+            armWatchdog();
+            buffer += decoder.decode(value, { stream: true }).replace(/\r/g, '');
+            if (buffer.length > 65536) throw new Error('实时状态消息过大');
+            let end;
+            while ((end = buffer.indexOf('\n\n')) >= 0) {
+              const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+              const data = event.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+              if (data && !controller.signal.aborted) acceptRuntimeEvent(JSON.parse(data));
+            }
+          }
+        } finally { reader.releaseLock(); }
+        return { data: null, status: response.status, statusText: 'OK', headers: {}, config };
+      },
+    });
+  } catch (error) {
+    if (!controller.signal.aborted || stalled) { runtimeConnection.value = 'unavailable'; runtimeWarning.value = '实时连接中断，正在自动重连；当前显示最近确认结果'; }
+  } finally {
+    clearTimeout(watchdog);
+    const cancelled = controller.signal.aborted && !stalled;
+    controller.abort();
+    if (runtimeAbort === controller) runtimeAbort = null;
+    if (runtimeActive && !document.hidden && !cancelled) {
+      reconnectTimer = setTimeout(startRuntimeStream, reconnectDelay + Math.random() * 300);
+      reconnectDelay = Math.min(30000, reconnectDelay * 2);
+    }
+  }
+};
+const stopRuntimeStream = () => { runtimeAbort?.abort(); runtimeAbort = null; clearTimeout(reconnectTimer); clearTimeout(statusRefreshTimer); reconnectTimer = null; statusRefreshTimer = null; };
+const runtimeVisibility = () => { if (document.hidden) stopRuntimeStream(); else { refreshRuntimePage(); startRuntimeStream(); } };
+
 const sourcePanelRef = ref();
 const taskLinksWidth = ref(0);
 let taskLinksObserver;
@@ -528,22 +598,16 @@ const taskLinkTargets = (task) => Array.isArray(task?.targetTables) && task.targ
 
 // 每段连接线对应本段任务，不把上一跳或整行状态套到所有连接线上。
 const taskLinkStatus = (task) => {
-  // 当前运行态与最近执行结果分开；SUCCESS 不意味着任务已经停止。
-  const current = String(task?.currentStatus || '').trim().toUpperCase();
-  const label = String(task?.taskStatusText || '').trim();
-  if (current.includes('FAIL') || current.includes('ERROR')) {
-    return { text: '执行异常', tone: 'danger' };
+  // 与任务监控共用 NiFi 快照；历史启停标志和执行结果不代表当前运行态。
+  const current = String(task?.runtimeState || '').trim().toUpperCase();
+  if (!current || task?.runtimeFresh !== true || runtimeConnection.value === 'unavailable') {
+    return { text: '状态待确认', tone: 'warning' };
   }
-  if (current === 'RUNNING') return { text: '运行中', tone: 'success' };
-  if (['STOPPED', 'STOPPING', 'DISABLED', 'NOT_STARTED', 'READY', 'DRAFT', 'SAVED'].includes(current)) {
-    return { text: '未启动', tone: 'idle' };
-  }
-  if (!current && String(task?.taskStatus) === '2') return { text: '执行异常', tone: 'danger' };
-  if (!current && String(task?.taskStatus) === '1') return { text: '运行中', tone: 'success' };
-  if (['执行失败', '运行异常', '执行异常'].includes(label)) return { text: '执行异常', tone: 'danger' };
-  if (['执行中', '运行中'].includes(label)) return { text: '运行中', tone: 'success' };
-  // 执行成功只代表历史执行结果；没有运行态时不能画成正在运行。
-  return { text: '未启动', tone: 'idle' };
+  const text = String(task.runtimeLabel || '状态待确认');
+  if (current === 'RUNNING') return { text, tone: 'success' };
+  if (['RUN_ERROR', 'INVALID'].includes(current)) return { text, tone: 'danger' };
+  if (['STOPPING', 'UNKNOWN', 'MISSING'].includes(current)) return { text, tone: 'warning' };
+  return { text, tone: 'idle' };
 };
 
 // 只使用当前分页已授权的批量元数据。表 ID 决定链路，名称相同不能当作关联。
@@ -787,6 +851,7 @@ const collectDatasourceIds = (node) => {
 };
 
 const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
+  const sequence = ++taskFetchSequence;
   const selectedNode = state.leftSelectNode || treeData.value[0];
   const datasourceIds = [...new Set(collectDatasourceIds(selectedNode))];
   state.loading = true;
@@ -806,6 +871,14 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
       conditions: buildConditions(),
     });
     const page = result?.list ? result : result?.data || {};
+    if (sequence === taskFetchSequence && page.runtimeRevision) {
+      if (runtimeReadAt.value > Number(page.runtimeObservedAt || 0) && runtimeRevision !== page.runtimeRevision) {
+        refreshRuntimePage();
+      } else {
+        runtimeRevision = page.runtimeRevision; runtimeReadAt.value = Number(page.runtimeObservedAt || 0);
+        runtimeConnection.value = page.runtimeFresh ? 'live' : 'unavailable'; runtimeWarning.value = page.runtimeMessage || '';
+      }
+    }
     const list = (page.list || []).map((item) => ({
       ...item,
       tasks: item.tasks || [],
@@ -915,12 +988,7 @@ const tableTypeIcon = (row) => {
   return type.includes("view") || type === "视图" ? "view" : "table";
 };
 
-const taskStatusType = (task) => {
-  if (["执行失败", "运行异常"].includes(task?.taskStatusText)) return "danger";
-  if (["执行中", "运行中", "执行成功"].includes(task?.taskStatusText)) return "success";
-  if (["停止", "已停止", "未启用"].includes(task?.taskStatusText)) return "info";
-  return "warning";
-};
+const taskStatusType = (task) => { const status = taskLinkStatus(task); return status.tone === 'idle' ? 'info' : status.tone; };
 
 // Opening an existing task must be a read-only action.  Do not call the
 // task-ensure endpoint here: it is allowed to create/rebuild a task and would
@@ -1368,6 +1436,8 @@ const handleMessage = (event) => {
 };
 
 onMounted(() => {
+  document.addEventListener('visibilitychange', runtimeVisibility);
+  startRuntimeStream();
   // 展开单元格随主表横向滚动而变宽；链路按可见面板宽度排布。
   taskLinksObserver = new ResizeObserver(([entry]) => {
     taskLinksWidth.value = Math.max(0, entry.contentRect.width - 28);
@@ -1380,6 +1450,7 @@ onMounted(() => {
 });
 
 onActivated(() => {
+  runtimeActive = true; startRuntimeStream();
   if (skipFirstActivation.value) {
     skipFirstActivation.value = false;
     return;
@@ -1387,7 +1458,10 @@ onActivated(() => {
   tableRef.value?.refresh?.();
 });
 
+onDeactivated(() => { runtimeActive = false; stopRuntimeStream(); });
+
 onUnmounted(() => {
+  runtimeActive = false; stopRuntimeStream(); document.removeEventListener('visibilitychange', runtimeVisibility);
   taskLinksObserver?.disconnect();
   window.removeEventListener("message", handleMessage);
 });

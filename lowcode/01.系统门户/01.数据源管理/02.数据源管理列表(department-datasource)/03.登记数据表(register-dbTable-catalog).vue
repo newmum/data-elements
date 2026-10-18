@@ -771,7 +771,7 @@
                           </div>
                         </template>
                       </el-table-column>
-                      <el-table-column label="统一格式" min-width="144">
+                      <el-table-column label="统一格式" min-width="144" fixed="right">
                         <template #default="{ row }">
                           <div class="standard-format-cell">
                             <el-select
@@ -780,10 +780,11 @@
                               clearable
                               size="small"
                               placeholder="请选择格式"
-                              title="可选择常用格式，系统会根据字段名称、中文名和类型自动匹配"
+                              title="可选择常用格式；选择不设置可取消格式，保存后保持清空"
                               @clear="clearStandardField(row)"
                               @update:model-value="(value) => setStandardField(row, value)"
                             >
+                              <el-option label="不设置" value="" />
                               <el-option
                                 v-for="item in standardFieldOptions"
                                 :key="item.value"
@@ -1016,7 +1017,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column v-if="!isActiveDictionaryTable" label="统一格式" width="150">
+            <el-table-column v-if="!isActiveDictionaryTable" label="统一格式" width="150" fixed="right">
               <template #default="{ row }">
                 <div class="standard-format-cell">
                   <el-select
@@ -1025,10 +1026,11 @@
                     clearable
                     size="small"
                     placeholder="请选择格式"
-                    title="可选择常用格式，系统会根据字段名称、中文名和类型自动匹配"
+                    title="可选择常用格式；选择不设置可取消格式，保存后保持清空"
                     @clear="clearStandardField(row)"
                     @update:model-value="(value) => setStandardField(row, value)"
                   >
+                    <el-option label="不设置" value="" />
                     <el-option
                       v-for="item in standardFieldOptions"
                       :key="item.value"
@@ -9722,6 +9724,9 @@ button.preview-count-pill:hover {
   justify-content: flex-start;
   width: 100%;
   min-width: 0;
+  // 最右列与浮动竖向滚动条留出间距，避免清空图标被滚动条截获点击。
+  box-sizing: border-box;
+  padding-right: 12px;
 }
 
 .standard-tag-select {

@@ -114,13 +114,14 @@ public class DslCompiler {
         if(!specs.isEmpty()){if(unifiedMappingService==null)throw new IllegalStateException("统一字段规则服务未配置");unifiedMappingService.compileBatch(specs);nifi.requireMappingExtension();}
     }
     public void preflightGlobalRecordServices(Pipeline pipeline) {
-        GlobalJsonRecordServices.resolve(nifi);
+        GlobalJsonRecordServices.resolve(nifi,pipeline);
     }
     private static Map<String,JsonNode> javaMappingSpecifications(Pipeline pipeline){
         Map<String,JsonNode>specs=new LinkedHashMap<>();Map<String,Pipeline.Node>nodes=new HashMap<>();pipeline.dsl().nodes().forEach(node->nodes.put(node.id(),node));
+        MappingFieldLabels labels=new MappingFieldLabels(pipeline);
         for(var node:pipeline.dsl().nodes())if(javaMappingRequested(node.config()==null?Map.of():node.config())){
             JsonNode spec=mappingJson(node.config().get("mappings"));List<Pipeline.Node>targets=pipeline.dsl().edges()==null?List.of():pipeline.dsl().edges().stream().filter(edge->edge.source().equals(node.id())).map(edge->nodes.get(edge.target())).filter(Objects::nonNull).filter(target->target.manifestKey().equals("sink.jdbc")).toList();
-            if(targets.size()==1)spec=TemporalRuleRepair.targets(spec,targets.getFirst().config());specs.put(node.id(),spec);
+            if(targets.size()==1)spec=TemporalRuleRepair.targets(spec,targets.getFirst().config());specs.put(node.id(),labels.enrich(node.id(),spec));
         }return specs;
     }
     public boolean usesJavaMapping(Pipeline pipeline){var published=HiveSinkPublicationPolicy.forPublication(pipeline);return published.dsl()!=null&&published.dsl().nodes()!=null&&published.dsl().nodes().stream().anyMatch(n->javaMappingRequested(n.config()==null?Map.of():n.config()));}
@@ -191,7 +192,7 @@ public class DslCompiler {
         if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
-        GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi);
+        GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi,pipeline);
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
         String pgName = pipeline.name() == null ? pipeline.id() : pipeline.name();
         var position = layout == null
@@ -219,13 +220,14 @@ public class DslCompiler {
         log.info("Created NiFi PG {} for pipeline {}", pgId, pipeline.id());
 
         // Reuse the selected node's public JSON codecs without changing their properties or state.
-        Map<String, String> sharedCs = new HashMap<>();
+        Map<String, String> sharedGlobalCs = new HashMap<>();
         boolean typedJdbcRecords=usesJavaMapping(pipeline);
         Set<String> hiveInputNodes=HiveSinkPublicationPolicy.upstreamNodeIds(pipeline);
-        sharedCs.put("jsonReader", globalJson.readerId());
-        sharedCs.put("jsonWriter", globalJson.writerId());
-        sharedCs.put("hiveJsonWriter", globalJson.writerId());
-        sharedCs.put("hiveJsonReader", globalJson.readerId());
+        sharedGlobalCs.put("jsonReader", globalJson.readerId());
+        sharedGlobalCs.put("jsonWriter", globalJson.writerId());
+        if(globalJson.writerIds().containsKey(HiveTemporalJsonPolicy.WRITER_NAME))
+            sharedGlobalCs.put("hiveJsonWriter", globalJson.writerIds().get(HiveTemporalJsonPolicy.WRITER_NAME));
+        sharedGlobalCs.put("hiveJsonReader", globalJson.readerId());
 
         // 节点编译上下文：记录每个节点在 NiFi 中创建出来的 CS/Processor 实体 ID。
         Map<String, NodeCompilation> compiled = new LinkedHashMap<>();
@@ -239,6 +241,7 @@ public class DslCompiler {
 
         // ---- PHASE 1：创建所有 Controller Service（初始为 DISABLED）。----
         for (Pipeline.Node n : pipeline.dsl().nodes()) {
+            Map<String,String> sharedCs = sharedJsonForNode(sharedGlobalCs,globalJson,n.id());
             ComponentManifest m = registry.get(n.manifestKey());
             if (m == null) {
                 throw new IllegalStateException("Unknown manifest: " + n.manifestKey());
@@ -329,7 +332,7 @@ public class DslCompiler {
                         var outputs=javaPlan.plan().outputFields();fieldMappingPlans.put(n.id(),new FieldMappingService.CompiledMapping("","",List.of(),outputs,outputs,outputs));
                         NodeCompilation compilation=compiled.get(n.id());
                         compilation.csIds.put("typed-json-reader", globalJson.readerId());
-                        compilation.csIds.put("typed-json-writer", globalJson.writerId());
+                        compilation.csIds.put("typed-json-writer", globalJson.writerForNode(n.id()));
                         for(var connection:javaPlan.connections().entrySet()){
                             NifiEntity service=nifi.createControllerService(pgId,"org.apache.nifi.dbcp.DBCPConnectionPool",n.label()+"/字典连接",buildSourceDbcpProperties(connection.getValue()));
                             compilation.csIds.put("dict:"+connection.getKey(),service.id());
@@ -406,7 +409,7 @@ public class DslCompiler {
 
         // ---- PHASE 2：批量启用 CS，并等待全部进入 ENABLED。----
         // 顺序很关键：若 CS 仍在 ENABLING，NiFi 会拒绝启动依赖它的处理器。
-        Set<String> allCs = new LinkedHashSet<>(sharedCs.values());
+        Set<String> allCs = new LinkedHashSet<>(sharedGlobalCs.values());
         compiled.values().forEach(nc -> allCs.addAll(nc.csIds.values()));
         allCs.removeAll(globalJson.ids());
         for (String csId : allCs) {
@@ -426,6 +429,7 @@ public class DslCompiler {
 
         // ---- PHASE 3：创建处理器，并建立节点内部连线。----
         for (Pipeline.Node n : pipeline.dsl().nodes()) {
+            Map<String,String> sharedCs = sharedJsonForNode(sharedGlobalCs,globalJson,n.id());
             ComponentManifest m = manifestByNode.get(n.id());
             CompileSpec spec = m.compile();
             NodeCompilation nc = compiled.get(n.id());
@@ -638,7 +642,7 @@ public class DslCompiler {
         nifi.finalizeGeneratedProcessGroup(pgId);
         if (periodicSource != null) nifi.finalizeGeneratedProcessGroup(rootPgId);
 
-        return new CompileResult(rootPgId, sharedCs, compiled, edgeConnectionIds,planVersionIds);
+        return new CompileResult(rootPgId, sharedGlobalCs, compiled, edgeConnectionIds,planVersionIds);
     }
 
     public boolean supportsSyncSettings(String manifestKey) {
@@ -1158,8 +1162,8 @@ public class DslCompiler {
     public MappingReplacement createMappingReplacement(Pipeline pipeline,Pipeline.Node node,String group,String reader,String typedReader,String writer,UnifiedMappingService.Compiled prepared){
         if(HiveSinkPublicationPolicy.forPublication(pipeline).dsl().nodes().stream().noneMatch(candidate->candidate.id().equals(node.id())))
             throw new IllegalStateException("Hive目标原始写入不发布字段对标组件，请重新发布整个任务以更新连接关系");
-        GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi);
-        NodeCompilation compiled=new NodeCompilation();compiled.csIds.put("typed-json-reader",globalJson.readerId());compiled.csIds.put("typed-json-writer",globalJson.writerId());compiled.csIds.put("jsonReader",globalJson.readerId());
+        GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi,pipeline);
+        NodeCompilation compiled=new NodeCompilation();compiled.csIds.put("typed-json-reader",globalJson.readerId());compiled.csIds.put("typed-json-writer",globalJson.writerForNode(node.id()));compiled.csIds.put("jsonReader",globalJson.readerId());
         Map<String,String> ids=mappingVersions.archive(pipeline,Map.of(node.id(),prepared.plan()));List<NifiEntity> created=new ArrayList<>();
         for(var connection:prepared.connections().entrySet()){NifiEntity service=nifi.createControllerService(group,"org.apache.nifi.dbcp.DBCPConnectionPool",node.label()+"/升级字典连接",buildSourceDbcpProperties(connection.getValue()));compiled.csIds.put("dict:"+connection.getKey(),service.id());created.add(service);}
         for(NifiEntity service:created){enableCreatedService(service);nifi.waitForControllerServiceEnabled(service.id(),30_000L);}
@@ -1167,6 +1171,9 @@ public class DslCompiler {
         buildJavaMapping(group,node,compiled,prepared,Map.of("jsonReader",globalJson.readerId()),ids.get(node.id()),pipeline.id()+":"+node.id());return new MappingReplacement(compiled,ids.get(node.id()));
     }
     private void enableCreatedService(NifiEntity service){ObjectNode body=MAPPER.createObjectNode();body.set("revision",MAPPER.valueToTree(service.revision()));body.put("state","ENABLED").put("disconnectedNodeAcknowledged",false);nifi.put("/controller-services/"+service.id()+"/run-status",body,JsonNode.class);}
+    private static Map<String,String> sharedJsonForNode(Map<String,String> globals,GlobalJsonRecordServices services,String nodeId) {
+        Map<String,String> result=new HashMap<>(globals);result.put("jsonWriter",services.writerForNode(nodeId));return result;
+    }
     private boolean hasAvailableTemporalTargetColumns(Map<String, Object> cfg, Set<String> availableFields) {
         if (availableFields == null || availableFields.isEmpty()) {
             return false;
