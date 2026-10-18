@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.metautil.ddl.CanvasTableDdl;
+import com.linewell.dataelement.metautil.ddl.TablePartitions;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import java.util.ArrayList;
@@ -36,6 +37,87 @@ class CanvasCreateTableBatchValidationMagicTest {
     private Scope scope;
     private JdbcTemplate jdbc;
     private PhysicalMetadata physical;
+    private CountingPartitions partitions;
+
+    @Test
+    void nativeDatabaseFailureIsReturnedWithItsReasonAndSensitiveValuesRemoved() throws Exception {
+        physical.allowCreate=true;
+        physical.createFailure=new java.sql.SQLException("Hive ParseException: unexpected token; password='private-fixture-value'", "42000",40000);
+        var result=assertInstanceOf(ExitValue.class,run(Map.of("canvas",true,"dbId","target-db",
+                "tableName","ods_plain","ddl","CREATE TABLE ???")));
+        assertEquals(500,result.getValues()[0]);
+        String message=result.getValues()[1].toString();
+        assertTrue(message.contains("Hive ParseException: unexpected token"));
+        assertFalse(message.contains("private-fixture-value"));
+        assertEquals(0,partitions.calls); assertEquals(0,counter.writes);
+    }
+
+    @Test
+    void uncheckedHiveSingleAndBatchValidationIgnoreAbsentAndStalePartitionSettings() throws Exception {
+        for (Map<String,Object> plan : List.of(Map.<String,Object>of(),
+                Map.<String,Object>of("enabled",false,"strategy","LIST","field","removed_field"))) {
+            var target = new LinkedHashMap<String,Object>(Map.of("dbId","target-db","tableName","ods_plain",
+                    "ddl","CREATE TABLE ods_plain(id STRING)","partitionPlan",plan));
+            var batch = assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,
+                    "batchValidateOnly",true,"targets",List.of(target))));
+            assertEquals(false,batch.get("sideEffectsApplied"));
+            target.put("canvas",true); target.put("validateOnly",true);
+            assertEquals(true,assertInstanceOf(Map.class,run(target)).get("valid"));
+        }
+        assertEquals(0,partitions.calls); assertEquals(0,physical.calls); assertEquals(0,counter.writes);
+    }
+
+    @Test
+    void uncheckedHiveCreatesAnOrdinaryTableWithoutPartitionCatalogAccess() throws Exception {
+        physical.allowCreate = true;
+        var result = assertInstanceOf(Map.class,run(Map.of("canvas",true,"dbId","target-db",
+                "tableName","ods_plain","ddl","CREATE TABLE ods_plain(id STRING)",
+                "partitionPlan",Map.of("enabled",false,"strategy","LIST","field","missing"))));
+        assertEquals(true,result.get("created"));
+        assertEquals(1,physical.createdDdls.size());
+        assertTrue(physical.createdDdls.getFirst().contains("ods_plain"));
+        assertFalse(physical.createdDdls.getFirst().toUpperCase().contains("PARTITION"));
+        assertEquals(0,partitions.calls); assertEquals(0,physical.calls); assertEquals(0,counter.writes);
+    }
+
+    @Test
+    void nativePartitionDdlAndManualSqlRemainVerbatimWithoutLocalSyntaxValidation() throws Exception {
+        scope.registered = Map.of("dbType","oracle","database","fixture","host","fixture.invalid","username","APP");
+        jdbc.update("update db_datasource_t set db_type='oracle',username='APP',pool_cfg=?",
+                "{\"host\":\"fixture.invalid\",\"database\":\"fixture\"}");
+        String ddl = "CREATE TABLE ods_native(region_code VARCHAR2(6)) PARTITION BY LIST(region_code) "
+                + "(PARTITION p_fz VALUES ('350100')); COMMENT ON TABLE ods_native IS '区域表'";
+        var target = new LinkedHashMap<String,Object>(Map.of("dbId","target-db","tableName","ods_native",
+                "ddl",ddl,"partitionPlan",Map.of("enabled",false)));
+        var batch = assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,
+                "batchValidateOnly",true,"targets",List.of(target))));
+        assertTrue(((Map<?,?>)((List<?>)batch.get("results")).getFirst()).get("ddl").toString().contains("PARTITION BY LIST"));
+        target.put("canvas",true); target.put("validateOnly",true);
+        assertTrue(assertInstanceOf(Map.class,run(target)).get("ddl").toString().contains("350100"));
+        for (String edited : List.of(ddl + "; CREATE INDEX native_idx ON ods_native(region_code) GLOBAL",
+                "CREATE TABLE ods_native(id NUMBER) vendor_storage_option", "CREATE TABLE ods_native AS SELECT 1 FROM dual",
+                "CREATE TABLE ods_native(id CLOB PRIMARY KEY)","invalid SQL for the database to diagnose")) {
+            target.put("ddl",edited);
+            var single = assertInstanceOf(Map.class,run(target));
+            assertEquals(edited,single.get("ddl")); assertEquals(false,single.get("syntaxChecked"));
+            var batchTarget = new LinkedHashMap<>(target); batchTarget.remove("canvas"); batchTarget.remove("validateOnly");
+            var response=assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,
+                    "batchValidateOnly",true,"targets",List.of(batchTarget))));
+            assertEquals(edited,((Map<?,?>)((List<?>)response.get("results")).getFirst()).get("ddl"));
+        }
+        assertEquals(0,partitions.calls); assertEquals(0,physical.calls); assertEquals(0,counter.writes);
+    }
+
+    @Test
+    void submittedSqlDoesNotRequireMatchingPartitionOrKeyConfiguration() throws Exception {
+        var target = Map.<String,Object>of("dbId","target-db","tableName","ods_plain",
+                "ddl","CREATE TABLE ods_plain(id STRING)","partitionPlan",Map.of("enabled",true));
+        var single = new LinkedHashMap<>(target); single.put("canvas",true); single.put("validateOnly",true);
+        assertEquals(false,assertInstanceOf(Map.class,run(single)).get("syntaxChecked"));
+        assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,
+                "batchValidateOnly",true,"targets",List.of(target))));
+        assertEquals(0,partitions.calls); assertEquals(0,physical.calls); assertEquals(0,counter.writes);
+    }
 
     @Test
     void partitionedSingleAndBatchValidationPreserveFullDdlWithoutMutatingParserResult() throws Exception {
@@ -85,11 +167,13 @@ class CanvasCreateTableBatchValidationMagicTest {
             physical.calls=0; counter.queries=0;
             var result=assertInstanceOf(Map.class,run(Map.of("canvas",true,"validateOnly",true,"batchReuseValidation",true,
                     "targets",List.of(Map.of("dbId","target-db","tableName","ods_existing",
-                            "ddl","CREATE TABLE ods_existing(amount_0 DECIMAL(20,6))","tableItems",fields)))));
+                            "ddl","CREATE TABLE ods_existing(amount_0 DECIMAL(20,6))","tableItems",fields,
+                            "partitionPlan",Map.of("enabled",false,"strategy","LIST","field","missing"))))));
             var table=(Map<?,?>)((List<?>)result.get("results")).getFirst();
             assertEquals(count,((List<?>)table.get("compatibilityWarnings")).size());
             for(Object field:(List<?>)table.get("tableItems")) assertEquals("string",((Map<?,?>)field).get("dataType"));
             assertEquals(1,physical.calls); assertEquals(1,counter.queries); assertEquals(0,counter.writes);
+            assertEquals(0,partitions.calls);
         }
     }
 
@@ -141,6 +225,7 @@ class CanvasCreateTableBatchValidationMagicTest {
                 "{\"database\":\"warehouse\",\"metadataAccessMode\":\"server-managed-mrs\"}");
         scope = new Scope();
         physical = new PhysicalMetadata();
+        partitions = new CountingPartitions();
     }
 
     @Test
@@ -250,12 +335,15 @@ class CanvasCreateTableBatchValidationMagicTest {
     }
 
     @Test
-    void hiveRejectsUppercaseEditedTableNamesWithoutChangingFieldsOrComments() throws Exception {
+    void hiveKeepsManuallyEditedSqlAndUsesCanonicalMetadataName() throws Exception {
         for (String name : List.of("ODS_person", "ods_Person")) {
             Object response = run(Map.of("canvas", true, "validateOnly", true, "batchValidateOnly", true,
                     "targets", List.of(Map.of("dbId", "target-db", "tableName", name,
                             "ddl", "CREATE TABLE `" + name + "` (`Mixed_FIELD` STRING COMMENT 'Keep_UPPER_ODS')"))));
-            assertInstanceOf(ExitValue.class, response);
+            var result=assertInstanceOf(Map.class,response);
+            var target=(Map<?,?>)((List<?>)result.get("results")).getFirst();
+            assertEquals(name.toLowerCase(java.util.Locale.ROOT),target.get("tableName"));
+            assertTrue(target.get("ddl").toString().contains("`"+name+"`"));
             assertEquals(0, counter.writes);
         }
         Map<?, ?> lower = assertInstanceOf(Map.class, run(Map.of("canvas", true, "validateOnly", true, "batchValidateOnly", true,
@@ -277,14 +365,14 @@ class CanvasCreateTableBatchValidationMagicTest {
     }
 
     @Test
-    void singleHiveValidationEnforcesTheSameLowercaseRule() throws Exception {
+    void singleHivePreflightLeavesSqlCaseToDatabaseAndCanonicalizesMetadata() throws Exception {
         for (String name : List.of("ODS_person", "ods_person")) {
             Object response = run(Map.of("canvas", true, "validateOnly", true, "dbId", "target-db", "tableName", name,
                     "ddl", "CREATE TABLE `" + name + "` (id STRING COMMENT 'Keep_UPPER')"));
-            if (name.startsWith("ODS_")) assertInstanceOf(ExitValue.class, response);
-            else {
+            {
                 Map<?, ?> lower = assertInstanceOf(Map.class, response);
                 assertEquals(true, lower.get("valid"));
+                assertEquals(name.toLowerCase(java.util.Locale.ROOT),lower.get("tableName"));
                 assertTrue(lower.get("ddl").toString().contains("Keep_UPPER"));
             }
             assertEquals(0, counter.writes);
@@ -303,7 +391,7 @@ class CanvasCreateTableBatchValidationMagicTest {
 
     private Object run(Map<String, Object> body) throws Exception {
         String script = CanonicalMagicSources.byId(SOURCE_ID)
-                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.(?:model\\.|jdbc\\.JdbcDriverPropertyResolver)|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
+                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.(?:metautil\\.(?:model\\.|jdbc\\.JdbcDriverPropertyResolver)|feature\\.diagnostics\\.DiagnosticSanitizer)|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("body", body);
         inputs.put("db", db);
@@ -312,7 +400,7 @@ class CanvasCreateTableBatchValidationMagicTest {
         inputs.put("connectionProperties", scope);
         inputs.put("poolJsons", new JsonFixture());
         inputs.put("canvasTableDdl", new CanvasTableDdl());
-        inputs.put("tablePartitions", new com.linewell.dataelement.metautil.ddl.TablePartitions());
+        inputs.put("tablePartitions", partitions);
         inputs.put("hwhive",physical);
         inputs.put("metadataExplorerService",physical);
         return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
@@ -322,6 +410,9 @@ class CanvasCreateTableBatchValidationMagicTest {
         List<ColumnInfo> columns=List.of();
         List<Map<String,Object>> rawRows;
         int calls;
+        boolean allowCreate;
+        java.sql.SQLException createFailure;
+        List<String> createdDdls = new ArrayList<>();
         public Map<String,List<ColumnInfo>> getColumnsByTables(DataSourceConfig config,List<String> names) {
             calls++; Map<String,List<ColumnInfo>> result=new LinkedHashMap<>();
             for(String name:names) result.put(name.toLowerCase(java.util.Locale.ROOT),columns); return result;
@@ -332,16 +423,28 @@ class CanvasCreateTableBatchValidationMagicTest {
             return columns.stream().map(column->Map.<String,Object>of("col_name",column.getColumnName(),"data_type",column.getDataType())).toList();
         }
         public void createTable(DataSourceConfig config,String ddl) { fail("Reuse must never issue CREATE TABLE"); }
-        public void execDDLSqlInDatabase(String database,String ddl) { fail("Hive reuse must never issue DDL"); }
+        public void execDDLSqlInDatabase(String database,String ddl) throws java.sql.SQLException {
+            if (!allowCreate) fail("Hive reuse must never issue DDL");
+            if (createFailure != null) throw createFailure;
+            assertEquals("warehouse",database); createdDdls.add(ddl);
+        }
+    }
+
+    public static class CountingPartitions extends TablePartitions {
+        int calls;
+        @Override public String validate(String ddl,Map<String,Object> plan,DataSourceConfig config) {
+            calls++; return super.validate(ddl,plan,config);
+        }
     }
 
     public static class Scope {
         String deniedId;
+        Map<String,Object> registered = Map.of("dbType", "hive", "database", "warehouse", "metadataAccessMode", "server-managed-mrs");
         public String id() { return "police"; }
         public Map<String, Object> resolve(String tenantId, String datasourceId) {
             assertEquals("police", tenantId);
             assertEquals("target-db", datasourceId);
-            return Map.of("dbType", "hive", "database", "warehouse", "metadataAccessMode", "server-managed-mrs");
+            return registered;
         }
         public List<Map<String, Object>> visibleDataSourcesFor(String resource, Collection<Map<String, Object>> rows) {
             assertEquals("MENU:2081000000000000002", resource);

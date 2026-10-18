@@ -107,12 +107,9 @@ public class TablePartitions {
         }
         if(type==DatabaseType.MYSQL||type==DatabaseType.MARIADB||type==DatabaseType.OCEANBASE_MYSQL) {
             if(strategy.equals("LIST")&&parts.stream().anyMatch(p->yes(p.get("default")))&&(type==DatabaseType.MYSQL||type==DatabaseType.MARIADB))throw new IllegalArgumentException("该MySQL目标不支持LIST DEFAULT分区，请调整枚举或异常处理");
-            Set<String> primary=new HashSet<>();columns.stream().filter(c->Boolean.TRUE.equals(c.getPrimaryKey())).forEach(c->primary.add(c.getColumnName().toLowerCase(Locale.ROOT)));
-            if(!primary.isEmpty()&&!primary.contains(field.toLowerCase(Locale.ROOT)))throw new IllegalArgumentException("当前目标库的分区表主键必须包含分区字段；请显式调整键设计");
-            if(columns.stream().anyMatch(c->Boolean.TRUE.equals(c.getUnique())&&!c.getColumnName().equalsIgnoreCase(field)))throw new IllegalArgumentException("当前目标库的唯一键必须包含分区字段；不能自动改变唯一性");
         }
-        if(type==DatabaseType.OCEANBASE_ORACLE&&columns.stream().anyMatch(c->Boolean.TRUE.equals(c.getPrimaryKey()))
-                &&columns.stream().noneMatch(c->Boolean.TRUE.equals(c.getPrimaryKey())&&c.getColumnName().equalsIgnoreCase(field)))throw new IllegalArgumentException("OceanBase分区表的物理主键必须包含分区字段，请显式调整；唯一约束可使用全局索引");
+        // Physical key/index restrictions depend on the server version and user-edited DDL.
+        // Render the partition clause without changing keys; the database decides whether it can execute it.
         Map<String,Object> plan=new LinkedHashMap<>();plan.put("version",1);plan.put("enabled",true);plan.put("field",key.getColumnName());plan.put("kind",kind);plan.put("strategy",strategy);plan.put("partitions",parts);plan.put("hiveColumn","ods_partition");
         String timezone=text(request.get("timezone"));if(timezone.isEmpty())timezone="Asia/Shanghai";
         ZoneId.of(timezone);plan.put("timezone",timezone);

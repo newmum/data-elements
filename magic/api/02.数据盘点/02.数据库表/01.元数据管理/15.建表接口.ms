@@ -17,7 +17,7 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只校验单表 DDL。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。batchReuseValidation=true批量只读校验已有表结构，reuseExistingOnly=true明确复用且绝不建表。",
+  "description": "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只预检目标授权和请求完整性，不解析或改写DDL，语法及约束交给数据库执行判断。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。batchReuseValidation=true批量只读校验已有表结构，reuseExistingOnly=true明确复用且绝不建表。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -35,10 +35,10 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
 import java.util.Map
 import java.util.List
+import com.linewell.dataelement.feature.diagnostics.DiagnosticSanitizer
 import tenantRuntime
 import dataScope
 import canvasTableDdl
-import tablePartitions
 import hwhive
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver
@@ -96,15 +96,13 @@ var firstValue = (row, keys) => {
     return null
 }
 var verifyPartitionReuse = (config, managedHive, table, plan) => {
-    if (plan?.enabled != true) { return }
+    if (plan?.enabled != true || config.getDatabaseType() != DatabaseType.HIVE) { return }
     if (config.getDatabaseType() == DatabaseType.HIVE) {
         if (!managedHive) { exit 400, '当前普通Hive写入方式尚不支持分区复用，请使用受管MRS入湖方式' }
         var layout = hwhive.partitionLayout(config.getDatabase(), table)
         for (partition in plan.partitions) {
             if (!layout.partitions.contains('ods_partition=' + partition.bucket)) { exit 409, '已有Hive表缺少本次配置的分区：' + partition.bucket }
         }
-    } else {
-        tablePartitions.compatible(plan, metadataExplorerService.getPartitionInfo(config, table))
     }
 }
 var loadAsset = (assetId) => {
@@ -256,7 +254,7 @@ var reusedTableItems = (requested, physical, config, tableName, warnings) => {
                 && ['number','date','datetime','boolean'].contains(expectedFamily)
             if (hiveTextWidening) {
                 compatible = true
-                warnings.add(name + '：已有Hive STRING将按文本保存（模板类型' + item.dataType + '）')
+                warnings.add(name + '：沿用已有Hive表的文本类型，原配置类型为' + item.dataType)
             }
             if (!compatible) { errors.add(name + '（期望' + item.dataType + '，实际' + actualType + '）') }
             var actualLength = rowValue(column, ['length'])
@@ -417,27 +415,10 @@ if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
         } else {
             config = dataSourceOf(registered)
         }
-        var parsed = null
-        if (target?.partitionPlan?.enabled == true && config.getDatabaseType() == DatabaseType.HIVE && !managedHive) {
-            exit 400, '当前Hive写入方式未适配分区，请使用受管MRS入湖方式'
-        }
-        try {
-            var baseDdl = tablePartitions.validate(target.ddl, target.partitionPlan, config)
-            if (target?.partitionPlan?.enabled == true && config.getDatabaseType() != DatabaseType.HIVE) { tablePartitions.validatePrimaryKeys(baseDdl, target.tableItems, config) }
-            parsed = {}
-            parsed.putAll(canvasTableDdl.parse(baseDdl, config))
-            if (target?.partitionPlan?.enabled == true) { parsed.ddl = target.ddl }
-        }
-        catch (e) { exit 400, '目标表“' + target.tableName + '”建表语句校验失败：' + e.getMessage() }
-        if (config.getDatabaseType() == DatabaseType.HIVE
-            && textOf(parsed.lookupName) != textOf(parsed.lookupName).toLowerCase()) {
-            exit 400, 'Hive目标表名必须使用小写，包括ods_前缀，请重新生成建表语句'
-        }
-        if (!canvasTableDdl.matches(parsed, target.tableName.trim(), parsed.schemaName)) {
-            exit 400, '目标表“' + target.tableName + '”与建表语句中的表名不一致'
-        }
+        // 仅预检已授权目标及请求完整性，手工SQL原样交由数据库执行，不作本地语法/分区/主键校验。
+        var parsed = canvasTableDdl.submitted(target.ddl, target.tableName, config)
         validated.add({dbId: target.dbId, requestedTableName: target.tableName, tableName: parsed.tableName,
-            targetScope: parsed.schemaName, ddl: parsed.ddl, valid: true, sideEffectsApplied: false})
+            targetScope: parsed.schemaName, ddl: parsed.ddl, valid: true, sideEffectsApplied: false, syntaxChecked:false})
         if (body?.batchReuseValidation == true) {
             config.setSchema(parsed.schemaName)
             var groupKey = target.dbId + '|' + textOf(parsed.schemaName)
@@ -503,27 +484,9 @@ if (body.canvas == true) {
     } else {
         config = dataSourceOf(registered)
     }
-    var parsed = null
-    if (body?.partitionPlan?.enabled == true && config.getDatabaseType() == DatabaseType.HIVE && !managedHive) {
-        exit 400, '当前Hive写入方式未适配分区，请使用受管MRS入湖方式'
-    }
-    try {
-        var baseDdl = tablePartitions.validate(textOf(ddl), body?.partitionPlan, config)
-        if (body?.partitionPlan?.enabled == true && config.getDatabaseType() != DatabaseType.HIVE) { tablePartitions.validatePrimaryKeys(baseDdl, body?.tableItems, config) }
-        parsed = {}
-        parsed.putAll(canvasTableDdl.parse(baseDdl, config))
-        if (body?.partitionPlan?.enabled == true) { parsed.ddl = textOf(ddl) }
-    }
-    catch (e) { exit 400, '建表语句校验失败：' + e.getMessage() }
-    if (config.getDatabaseType() == DatabaseType.HIVE
-        && textOf(parsed.lookupName) != textOf(parsed.lookupName).toLowerCase()) {
-        exit 400, 'Hive目标表名必须使用小写，包括ods_前缀，请重新生成建表语句'
-    }
-    if (!blank(tableName) && !canvasTableDdl.matches(parsed, textOf(tableName).trim(), parsed.schemaName)) {
-        exit 400, '建表语句中的目标表名与当前填写的目标表名不一致'
-    }
+    var parsed = canvasTableDdl.submitted(textOf(ddl), textOf(tableName), config)
     if (body.validateOnly == true) {
-        return { valid: true, tableName: parsed.tableName, targetScope: parsed.schemaName, ddl: parsed.ddl, partitionPlan:body?.partitionPlan, sideEffectsApplied: false }
+        return { valid: true, tableName: parsed.tableName, targetScope: parsed.schemaName, ddl: parsed.ddl, partitionPlan:body?.partitionPlan, syntaxChecked:false, sideEffectsApplied: false }
     }
     config.setSchema(parsed.schemaName)
     if (body.reuseExistingOnly == true) {
@@ -544,7 +507,13 @@ if (body.canvas == true) {
         if (canvasTableDdl.alreadyExists(e)) {
             return { status: 'exists', created: false, tableName: parsed.tableName, message: '目标表已存在，请直接选择已有表' }
         }
-        throw e
+        var databaseFailure = e
+        var causeDepth = 0
+        while (databaseFailure.getCause() != null && databaseFailure.getCause() != databaseFailure && causeDepth < 16) {
+            databaseFailure = databaseFailure.getCause()
+            causeDepth = causeDepth + 1
+        }
+        exit 500, '目标数据库执行建表语句失败：' + DiagnosticSanitizer.errorText(databaseFailure.getMessage())
     }
     return { status: 'created', created: true, tableName: parsed.tableName, partitionPlan:body?.partitionPlan, message: '物化建表成功' }
 }

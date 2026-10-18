@@ -64,10 +64,14 @@ class TablePartitionsTest {
         raw.put("partitions",List.of(Map.of("name","p_one","bucket","../bad","values",List.of("350100"))));
         assertThrows(IllegalArgumentException.class,()->service.normalize(raw,List.of(column("region_code","VARCHAR2(6)")),DatabaseType.HIVE));
     }
-    @Test void partitioningNeverWeakensMysqlOrOceanbasePrimaryKeys() {
+    @Test void partitionPreviewLeavesKeyDesignAndServerCompatibilityToDatabase() {
         var id=column("id","BIGINT");id.setPrimaryKey(true);
-        assertThrows(IllegalArgumentException.class,()->service.normalize(month(),List.of(id,column("created_at","DATE")),DatabaseType.MYSQL));
-        assertThrows(IllegalArgumentException.class,()->service.normalize(month(),List.of(id,column("created_at","DATE")),DatabaseType.OCEANBASE_ORACLE));
+        for (var type : List.of(DatabaseType.MYSQL,DatabaseType.MARIADB,DatabaseType.OCEANBASE_MYSQL,DatabaseType.OCEANBASE_ORACLE)) {
+            var plan=assertDoesNotThrow(()->service.normalize(month(),List.of(id,column("created_at","DATE")),type));
+            String ddl=service.apply("CREATE TABLE ods_t(id BIGINT PRIMARY KEY,created_at DATE)",plan,config(type));
+            assertTrue(ddl.contains("PRIMARY KEY")); assertTrue(ddl.contains("PARTITION BY RANGE"));
+            assertEquals(true,id.getPrimaryKey());
+        }
         var time=column("created_at","DATE");time.setPrimaryKey(true);
         assertDoesNotThrow(()->service.normalize(month(),List.of(id,time),DatabaseType.OCEANBASE_ORACLE));
     }

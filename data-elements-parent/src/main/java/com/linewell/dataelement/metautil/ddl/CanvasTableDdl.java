@@ -21,6 +21,16 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 @Component
 @MagicModule("canvasTableDdl")
 public class CanvasTableDdl {
+    /** Materialization executes the user's SQL verbatim; only the selected connection supplies metadata scope. */
+    public Map<String, Object> submitted(String ddl, String tableName, DataSourceConfig config) {
+        if (ddl == null || ddl.isBlank()) throw new IllegalArgumentException("请填写建表语句");
+        if (tableName == null || tableName.isBlank()) throw new IllegalArgumentException("请填写目标表名");
+        String name = tableName.trim();
+        if (config.getDatabaseType() == DatabaseType.HIVE) name = name.toLowerCase(Locale.ROOT);
+        return Map.of("ddl",ddl,"tableName",name,"lookupName",unquote(name),
+                "schemaName",scope(config),"quoted",isQuoted(name),"syntaxChecked",false);
+    }
+
     /** Preview stays editable; execution must not send a newly promoted LOB key to Oracle. */
     public static void validateStringKeys(String ddl,DataSourceConfig config) {
         if(DdlDialect.family(config.getDatabaseType())!=DdlDialect.Family.ORACLE)return;

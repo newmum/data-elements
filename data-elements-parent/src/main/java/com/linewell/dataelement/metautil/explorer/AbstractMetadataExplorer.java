@@ -922,12 +922,11 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
         DataSourceConfig effectiveConfig = effectiveConfig(config);
         assertWritableDdlSchema(effectiveConfig);
-        com.linewell.dataelement.metautil.ddl.CanvasTableDdl.validateStringKeys(ddl,effectiveConfig);
         try (Connection conn = getConnection(effectiveConfig);
              Statement stmt = conn.createStatement()) {
             // 在执行 DDL 之前，根据不同数据库类型应用 schema / search_path / current_schema 等设置
             applySchemaForDdl(conn, effectiveConfig);
-            List<String> statements = splitSqlStatements(ddl);
+            List<String> statements = com.linewell.dataelement.metautil.ddl.NativeDdlStatements.split(ddl);
             if (statements.isEmpty()) {
                 throw new IllegalArgumentException("DDL 璇彞涓嶈兘涓虹┖");
             }
@@ -938,65 +937,6 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             log.error("执行建表DDL失败: {}", e.getMessage(), e);
             throw new RuntimeException("执行建表DDL失败: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * 按语句终止符拆分 SQL，仅在不在单双引号内时按 ';' 分割。
-     */
-    private static List<String> splitSqlStatements(String sql) {
-        List<String> statements = new ArrayList<>();
-        if (sql == null || sql.trim().isEmpty()) {
-            return statements;
-        }
-
-        StringBuilder current = new StringBuilder();
-        boolean inSingleQuote = false;
-        boolean inDoubleQuote = false;
-
-        for (int i = 0; i < sql.length(); i++) {
-            char ch = sql.charAt(i);
-
-            if (ch == '\'' && !inDoubleQuote) {
-                // SQL 字符串转义使用两个连续单引号
-                if (inSingleQuote && i + 1 < sql.length() && sql.charAt(i + 1) == '\'') {
-                    current.append(ch).append(sql.charAt(i + 1));
-                    i++;
-                    continue;
-                }
-                inSingleQuote = !inSingleQuote;
-                current.append(ch);
-                continue;
-            }
-
-            if (ch == '"' && !inSingleQuote) {
-                // 标识符转义使用两个连续双引号
-                if (inDoubleQuote && i + 1 < sql.length() && sql.charAt(i + 1) == '"') {
-                    current.append(ch).append(sql.charAt(i + 1));
-                    i++;
-                    continue;
-                }
-                inDoubleQuote = !inDoubleQuote;
-                current.append(ch);
-                continue;
-            }
-
-            if (ch == ';' && !inSingleQuote && !inDoubleQuote) {
-                String stmt = current.toString().trim();
-                if (!stmt.isEmpty()) {
-                    statements.add(stmt);
-                }
-                current.setLength(0);
-                continue;
-            }
-
-            current.append(ch);
-        }
-
-        String tail = current.toString().trim();
-        if (!tail.isEmpty()) {
-            statements.add(tail);
-        }
-        return statements;
     }
 
     /**

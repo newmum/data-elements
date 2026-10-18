@@ -101,12 +101,20 @@ class PortableStringCapacityTest {
             assertEquals(count,executed.replaceAll("\\s+","").split(java.util.regex.Pattern.quote(fragment),-1).length-1,target.toString());
         }
     }
-    @Test void physicalCreationRejectsAnImpossibleLobKeyBeforeOpeningAConnection() {
+    @Test void physicalCreationLetsDatabaseReportLobKeyConstraints() throws Exception {
         for(var target:List.of(DatabaseType.ORACLE,DatabaseType.OCEANBASE_ORACLE,DatabaseType.DAMENG)) {
-            var explorer=new MySqlMetadataExplorer(){@Override protected java.sql.Connection getConnection(DataSourceConfig ignored){throw new AssertionError("No connection may be opened for an invalid LOB key");}};
             for(String constraint:List.of("id CLOB PRIMARY KEY","id CLOB UNIQUE","id CLOB, PRIMARY KEY(id)","id NCLOB, UNIQUE(id)")) {
-                var error=assertThrows(IllegalArgumentException.class,()->explorer.createTable(config(target),"CREATE TABLE invalid_capacity("+constraint+")"));
-                assertTrue(error.getMessage().contains("主键或唯一键"));
+                var connection=org.mockito.Mockito.mock(java.sql.Connection.class);
+                var statement=org.mockito.Mockito.mock(java.sql.Statement.class);
+                org.mockito.Mockito.when(connection.createStatement()).thenReturn(statement);
+                String ddl="CREATE TABLE invalid_capacity("+constraint+")";
+                var databaseError=new java.sql.SQLException("ORA-02329: datatype cannot be unique or a primary key", "99999",2329);
+                org.mockito.Mockito.when(statement.execute(ddl)).thenThrow(databaseError);
+                var explorer=new MySqlMetadataExplorer(){@Override protected java.sql.Connection getConnection(DataSourceConfig ignored){return connection;}};
+                var error=assertThrows(RuntimeException.class,()->explorer.createTable(config(target),ddl));
+                assertSame(databaseError,error.getCause());
+                assertTrue(error.getMessage().contains("ORA-02329"));
+                org.mockito.Mockito.verify(statement).execute(ddl);
             }
         }
     }

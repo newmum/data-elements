@@ -76,6 +76,7 @@
       </div>
       <el-alert v-if="sourcePreflightError" class="source-preflight-error" :title="sourcePreflightError"
         type="error" :closable="false" show-icon />
+      <el-alert v-if="reuseTypeNotice" :title="reuseTypeNotice" type="info" :closable="false" show-icon />
       <div v-show="!ddlMode && !loadError" class="materialization-form-view">
       <u-title name="建表信息" />
       <el-alert v-for="message in templateWarnings" :key="message" :title="message" type="warning" :closable="false" show-icon class="mb-2" />
@@ -430,6 +431,7 @@ const activeDdlSql = computed({
   set: (value: string) => {
     ddlSqlByTarget.value = { ...ddlSqlByTarget.value, [activeDdlKey.value]: value };
     ddlWasEdited.value = true;
+    partitionError.value = "";
   },
 });
 const isSaveing = ref(false);
@@ -490,6 +492,7 @@ const recoveryDeleting = ref(false);
 const templateLoading = ref(false);
 const loadError = ref("");
 const sourcePreflightError = ref("");
+const reuseTypeNotice = ref("");
 const loadErrorCode = ref("");
 const loadPending = ref({ datasource: false, node: false, source: false });
 let initRun = 0;
@@ -1263,6 +1266,7 @@ const init = async () => {
   partitionError.value = "";
   loadError.value = "";
   sourcePreflightError.value = "";
+  reuseTypeNotice.value = "";
   loadErrorCode.value = "";
   sourceFileConfig.value = null;
   knownTargets.value = (Array.isArray(props.existingTargets) ? props.existingTargets : [])
@@ -1427,7 +1431,7 @@ const currentDdlInput = async () => {
   if (data.tableName.includes(".")) throw new Error("目标表名只填写表名，不能包含用户名或 Schema 前缀");
   syncTargetTableNameInput(data.tableName);
   const fingerprint = JSON.stringify({
-    targets: targets.map((target: any) => ({ dbId: target.dbId, dbType: target.propList.dbType, tableName: target.propList.tableName, tableNameCn: target.propList.tableNameCn, partitionPlan: partitionPayload(target.key) })),
+    targets: targets.map((target: any) => ({ dbId: target.dbId, dbType: target.propList.dbType, tableName: target.propList.tableName, tableNameCn: target.propList.tableNameCn, partitionPlan: partitionPlans.value[target.key] || { enabled: false } })),
     tableItems,
   });
   return { targets, tableItems, fingerprint };
@@ -1540,6 +1544,7 @@ const handleSave = async () => {
   let lastTargetForm: any = null;
   const reuseTargetDbIds = new Set<string>();
   sourcePreflightError.value = '';
+  reuseTypeNotice.value = '';
   try {
     const ddlInput = await currentDdlInput();
     materializationProgress.value.detail = '正在预检来源类型及文件定位信息';
@@ -1557,6 +1562,16 @@ const handleSave = async () => {
       throw error;
     }
     materializationProgress.value.total = ddlInput.targets.length;
+    if (ddlWasEdited.value) {
+      // Manual SQL is authoritative; do not rerun the generator or its partition/key rules before execution.
+      for (const target of ddlInput.targets) {
+        if (!String(ddlSqlByTarget.value[target.key] || "").trim()) throw new Error(`请填写“${target.dbName}”的建表语句`);
+        ddlPartitionPlans.value[target.key] = partitionPlans.value[target.key]?.enabled
+          ? (ddlPartitionPlans.value[target.key]?.enabled ? ddlPartitionPlans.value[target.key] : partitionPlans.value[target.key])
+          : { enabled: false };
+      }
+      ddlSourceFingerprint.value = ddlInput.fingerprint;
+    }
     if (!ddlSourceFingerprint.value) await regenerateDdl(ddlInput);
     if (ddlSourceFingerprint.value && ddlSourceFingerprint.value !== ddlInput.fingerprint) {
       if (ddlWasEdited.value) {
@@ -1573,7 +1588,7 @@ const handleSave = async () => {
     }
     const validateEditedDdl = async () => {
       if (!ddlSourceFingerprint.value) return;
-      // Validate every edited statement before any existing target can be removed.
+      // Batch-check selected target authorization; SQL syntax and constraints are decided by the database.
       const targets = ddlInput.targets.map((target: any) => {
         const ddl = String(ddlSqlByTarget.value[target.key] || "").trim();
         if (!ddl) throw new Error(`请填写“${target.dbName}”的建表语句`);
@@ -1594,14 +1609,14 @@ const handleSave = async () => {
       const validation = response?.data || response || {};
       if (validation.batchValidateOnly !== true || validation.sideEffectsApplied !== false
         || !Array.isArray(validation.results) || validation.results.length !== targets.length) {
-        throw new Error("批量建表语句校验结果不完整，请重试");
+        throw new Error("目标数据源预检结果不完整，请重试");
       }
       for (const [index, target] of targets.entries()) {
         const result = validation.results[index];
         if (String(result?.dbId) !== String(target.dbId)
           || String(result?.requestedTableName).trim().toUpperCase() !== target.tableName.toUpperCase()
           || result?.valid !== true || result?.sideEffectsApplied !== false) {
-          throw new Error("批量建表语句校验结果与所选目标不一致，请重试");
+          throw new Error("目标数据源预检结果与所选目标不一致，请重试");
         }
       }
     };
@@ -1694,7 +1709,8 @@ const handleSave = async () => {
         const compatibilityWarnings = validation.results.flatMap((result: any) =>
           Array.isArray(result.compatibilityWarnings) ? result.compatibilityWarnings : []);
         if (compatibilityWarnings.length) {
-          ElMessage.warning(`按已有表真实类型复用：${compatibilityWarnings.slice(0, 5).join('；')}${compatibilityWarnings.length > 5 ? `；共 ${compatibilityWarnings.length} 个字段` : ''}`);
+          reuseTypeNotice.value = `已有表可复用：${compatibilityWarnings.length}项字段沿用现有文本类型，不修改已有表结构，可继续创建任务。`;
+          ElMessage.info(reuseTypeNotice.value);
         }
       } else {
         await validateEditedDdl();

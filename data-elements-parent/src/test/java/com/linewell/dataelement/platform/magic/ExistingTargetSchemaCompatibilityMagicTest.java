@@ -45,7 +45,7 @@ class ExistingTargetSchemaCompatibilityMagicTest {
         assertFalse(message.contains("ZJBGSJ"));
         assertEquals(2, warnings.size());
         for (String field : List.of("CSRQ", "ZJBGSJ")) {
-            assertTrue(warnings.stream().anyMatch(warning -> warning.contains(field) && warning.contains("按文本保存")));
+            assertTrue(warnings.stream().anyMatch(warning -> warning.contains(field) && warning.contains("沿用已有Hive表的文本类型")));
         }
         assertEquals("string", physical.getFirst().getDataType());
         assertEquals(2, physical.size());

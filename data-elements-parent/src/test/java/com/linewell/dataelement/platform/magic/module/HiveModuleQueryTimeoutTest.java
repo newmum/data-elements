@@ -17,6 +17,26 @@ import org.mockito.InOrder;
 @ResourceLock("hive.query.table.timeout.seconds")
 class HiveModuleQueryTimeoutTest {
 
+    @Test
+    void materializationExecutesEditedHiveSqlVerbatimAndPropagatesDatabaseErrors() throws Exception {
+        var connection=mock(Connection.class);
+        var statement=mock(java.sql.Statement.class);
+        when(connection.createStatement()).thenReturn(statement);
+        HiveModule module=spy(new HiveModule()); doReturn(connection).when(module).getConnection();
+        String create="CREATE TABLE ods_native(id STRING COMMENT 'a;b') STORED AS vendor_storage";
+        String partition="ALTER TABLE ods_native ADD IF NOT EXISTS PARTITION (region='350100')";
+        module.execDDLSqlInDatabase("warehouse",create+";\n"+partition+";");
+        var order=inOrder(statement);
+        order.verify(statement).execute("USE `warehouse`");
+        order.verify(statement).execute(create); order.verify(statement).execute(partition);
+        String invalid="CREATE TABLE ods_native(bad vendor syntax)";
+        var databaseError=new java.sql.SQLException("Hive ParseException: unexpected token vendor","42000",40000);
+        when(statement.execute(invalid)).thenThrow(databaseError);
+        var actual=org.junit.jupiter.api.Assertions.assertThrows(java.sql.SQLException.class,
+                ()->module.execDDLSqlInDatabase("warehouse",invalid));
+        org.junit.jupiter.api.Assertions.assertSame(databaseError,actual);
+    }
+
     private static final String PROPERTY = "hive.query.table.timeout.seconds";
     private final String previousValue = System.getProperty(PROPERTY);
 

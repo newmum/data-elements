@@ -188,10 +188,9 @@ public class HiveModule {
         try (Connection connection = getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("USE " + hiveIdentifier(database));
-            var statements=com.alibaba.druid.sql.SQLUtils.parseStatements(sql,com.alibaba.druid.DbType.hive);
-            if(statements.size()>4001)throw new IllegalArgumentException("单次Hive分区DDL语句过多");
+            var statements=com.linewell.dataelement.metautil.ddl.NativeDdlStatements.split(sql);
             statement.setQueryTimeout(readQueryTimeoutSeconds());
-            for(var ddl:statements)statement.execute(ddl.toString());
+            for(var ddl:statements)statement.execute(ddl);
         }
     }
 
