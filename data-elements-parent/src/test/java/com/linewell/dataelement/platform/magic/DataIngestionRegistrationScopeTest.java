@@ -87,7 +87,7 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.execute("alter table db_table_t add source_table_id varchar(64)");
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp)");
-        f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32))");
+        f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64))");
         f.jdbc.update("update db_datasource_t set asset_status=1,db_name='来源库'");
         f.jdbc.update("update db_table_t set asset_status=1,business_type='业务表',table_name=tid,schema_name='public',updated_time=current_timestamp");
         f.jdbc.update("insert into db_datasource_t(tid,tenant_id,asset_status,is_del,db_name) values('target-db','ga',2,0,'汇聚库'),('hive-db','ga',2,0,'Hive库'),('denied','ga',2,0,'无权库')");
@@ -152,7 +152,10 @@ class DataIngestionRegistrationScopeTest {
         Map<String,Object> bindings=new LinkedHashMap<>();bindings.put("body",body);bindings.put("db",f.db);
         bindings.put("tenantRuntime",scope);bindings.put("dataScope",scope);
         bindings.put("tableSort",new TableSortMagicModule());
-        return (Map<?,?>)MagicScript.create(script,null).execute(new MagicScriptContext(bindings));
+        try (var runtime = new TaskRuntimeMagicFixture(scope.id())) {
+            bindings.put("taskRuntime", runtime.module);
+            return (Map<?,?>)MagicScript.create(script,null).execute(new MagicScriptContext(bindings));
+        }
     }
     public static class VisibleScope {
         int calls;

@@ -762,7 +762,12 @@ class DataAggTaskEnsureBatchMagicTest {
         inputs.put("db",f.db); inputs.put("tenantRuntime",f.scope); inputs.put("dataScope",f.scope);
         inputs.put("body",Map.of("pageNum",1,"pageSize",20));
         inputs.put("tableSort",new TableSortMagicModule());
-        Map<?,?> result=assertInstanceOf(Map.class,MagicScript.create(script,null).execute(new MagicScriptContext(inputs)));
+        Map<?,?> result;
+        try (var runtime = new TaskRuntimeMagicFixture(f.scope.id())) {
+            inputs.put("taskRuntime", runtime.module);
+            result = assertInstanceOf(Map.class,MagicScript.create(script,null).execute(new MagicScriptContext(inputs)));
+            runtime.verifySingleRootRead();
+        }
         List<?> list=assertInstanceOf(List.class,result.get("list"));
         Map<?,?> first=list.stream().map(value->(Map<?,?>)value).filter(row->"target-0".equals(row.get("tid"))).findFirst().orElseThrow();
         assertEquals(1,first.get("taskCount"));

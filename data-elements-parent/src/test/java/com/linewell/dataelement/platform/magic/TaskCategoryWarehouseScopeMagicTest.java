@@ -22,12 +22,17 @@ class TaskCategoryWarehouseScopeMagicTest {
     private static final String DISTRIBUTE_TREE = "2b8dd89d130a4738a8aa1d0c8584e401";
 
     @ParameterizedTest @ValueSource(ints = {20, 100})
-    void currentPipelineStateOverridesSuccessfulBatchAndStaleStartFlagWithConstantQueries(int count) throws Exception {
+    void liveRuntimeStateOverridesLifecycleSuccessfulBatchAndStaleStartFlagWithConstantQueries(int count) throws Exception {
         var f = fixture(count);
         f.jdbc.execute("alter table data_access_agg_task_t add task_status int");
         f.jdbc.execute("alter table data_access_agg_task_t add monitor_status varchar(32)");
         f.jdbc.update("update db_table_t set source_table_id=concat('table-',substring(tid,locate('-',tid)+1)) where datasource_id in ('warehouse','raw')");
-        var expected = List.of("RUNNING", "STOPPED", "DEPLOY_FAILED", "RUN_ERROR", "RUNNING", "RUNNING", "RUNNING", "RUNNING");
+        var lifecycle = List.of("STOPPED", "RUNNING", "DEPLOY_FAILED", "RUN_ERROR", "RUNNING", "RUNNING", "RUNNING", "RUNNING");
+        var expected = List.of("RUNNING", "STOPPED", "INVALID", "RUN_ERROR", "RUNNING", "UNKNOWN", "UNDEPLOYED", "UNDEPLOYED");
+        var labels = List.of("运行中", "已停止", "运行异常", "运行异常", "运行中", "状态待确认", "未部署", "未部署");
+        var response = (com.fasterxml.jackson.databind.node.ObjectNode) TaskRuntimeMagicFixture.emptyRootStatus();
+        var groups = ((com.fasterxml.jackson.databind.node.ObjectNode) response.at("/processGroupStatus/aggregateSnapshot"))
+                .putArray("processGroupStatusSnapshots");
         for (int i = 0; i < count; i++) {
             for (String prefix : List.of("first-", "second-")) {
                 String id = prefix + i;
@@ -35,16 +40,25 @@ class TaskCategoryWarehouseScopeMagicTest {
                         (prefix.equals("first-") ? "warehouse-" : "raw-") + i,
                         List.of((prefix.equals("first-") ? "warehouse-" : "raw-") + i));
                 f.jdbc.update("update data_access_agg_task_t set task_status=?,monitor_status='SUCCESS' where tid=?", i % 8 == 4 ? 0 : 1, id);
-                if (i % 8 != 5) f.jdbc.update("update nifi_pipeline_t set status=? where id=?", expected.get(i % 8), "pipe-" + id);
+                f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id=? where id=?", "pipe-" + id + "-pg", "pipe-" + id);
+                if (i % 8 != 5) f.jdbc.update("update nifi_pipeline_t set status=? where id=?", lifecycle.get(i % 8), "pipe-" + id);
                 if (i % 8 == 6) f.jdbc.update("update nifi_pipeline_t set tenant_id='other',status='DEPLOY_FAILED' where id=?", "pipe-" + id);
                 if (i % 8 == 7) f.jdbc.update("update nifi_pipeline_t set is_del=1,status='DEPLOY_FAILED' where id=?", "pipe-" + id);
+                // 数据库生命周期故意与 NiFi 快照不同；其他租户及已删除流程即使出现在快照中也不能关联。
+                var wrapper = groups.addObject();
+                if (i % 8 == 5) wrapper.put("canRead", false);
+                var group = wrapper.putObject("processGroupStatusSnapshot").put("id", "pipe-" + id + "-pg");
+                var processors = group.putArray("processorStatusSnapshots");
+                String state = switch (i % 8) { case 0, 3, 4 -> "Running"; case 1 -> "Stopped"; default -> "Invalid"; };
+                processors.addObject().putObject("processorStatusSnapshot").put("runStatus", state);
+                if (i % 8 == 3) processors.addObject().putObject("processorStatusSnapshot").put("runStatus", "Invalid");
             }
         }
         var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
         for (String resource : List.of(INGEST_PAGE, DISTRIBUTE_PAGE)) {
             counter.reads = 0;
             var result = run(f, resource, Map.of("viewLevel", "table", "pageSize", count,
-                    "datasourceIds", List.of(resource.equals(INGEST_PAGE) ? "db" : "warehouse")));
+                    "datasourceIds", List.of(resource.equals(INGEST_PAGE) ? "db" : "warehouse")), response);
             assertThat((List<?>) result.get("list")).hasSize(count);
             assertThat(counter.reads).isEqualTo(resource.equals(INGEST_PAGE) ? 13 : 12);
             for (Object raw : (List<?>) result.get("list")) {
@@ -55,7 +69,9 @@ class TaskCategoryWarehouseScopeMagicTest {
                     String state = expected.get(index % 8);
                     assertThat(task.get("currentStatus")).isEqualTo(state);
                     assertThat(task.get("monitorStatus")).isEqualTo("SUCCESS");
-                    assertThat(task.get("taskStatusText")).isEqualTo(state.equals("RUNNING") ? "运行中" : state.equals("STOPPED") ? "已停止" : "运行异常");
+                    assertThat(task.get("storedTaskStatus")).isEqualTo(index % 8 == 4 ? 0 : 1);
+                    assertThat(task.get("runtimeFresh")).isEqualTo(true);
+                    assertThat(task.get("taskStatusText")).isEqualTo(labels.get(index % 8));
                 }
             }
         }
@@ -272,7 +288,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("create index idx_test_table_lookup on db_table_t(tenant_id,tid,is_del)");
         f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp)");
-        f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32))");
+        f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64))");
         f.jdbc.execute("create table rm_org_t(tenant_id varchar(32),id varchar(64),name varchar(100),deleted int)");
         f.jdbc.update("insert into rm_org_t values('ga','org','当前租户部门',0),('other','org','其他租户部门',0)");
         f.jdbc.update("update db_datasource_t set asset_status=1,db_name='名称相同',db_type='mysql',org_id='org',app_id='app'");
@@ -303,13 +319,26 @@ class TaskCategoryWarehouseScopeMagicTest {
     private static Map<?, ?> run(DatasourceCompletionMagicTest.Fixture f, String id, Map<String, Object> body) throws Exception {
         return (Map<?, ?>) runValue(f, id, body);
     }
+    private static Map<?, ?> run(DatasourceCompletionMagicTest.Fixture f, String id, Map<String, Object> body,
+            com.fasterxml.jackson.databind.JsonNode response) throws Exception {
+        return (Map<?, ?>) runValue(f, id, body, response);
+    }
     private static Object runValue(DatasourceCompletionMagicTest.Fixture f, String id, Map<String, Object> body) throws Exception {
+        return runValue(f, id, body, TaskRuntimeMagicFixture.emptyRootStatus());
+    }
+    private static Object runValue(DatasourceCompletionMagicTest.Fixture f, String id, Map<String, Object> body,
+            com.fasterxml.jackson.databind.JsonNode response) throws Exception {
         String script = CanonicalMagicSources.byId(id).replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n", "");
         var scope = new DataIngestionRegistrationScopeTest.VisibleScope();
         var inputs = new LinkedHashMap<String, Object>(); inputs.put("db", f.db); inputs.put("body", body);
         inputs.put("tenantRuntime", scope); inputs.put("dataScope", scope);
         inputs.put("tableSort", new TableSortMagicModule());
-        return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
+        try (var runtime = new TaskRuntimeMagicFixture(scope.id(), response)) {
+            inputs.put("taskRuntime", runtime.module);
+            Object result = MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
+            if (result instanceof Map<?, ?> page && page.containsKey("runtimeRevision")) runtime.verifySingleRootRead();
+            return result;
+        }
     }
     static class Counter implements SQLInterceptor {
         int reads;
