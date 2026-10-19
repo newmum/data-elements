@@ -52,19 +52,73 @@ class DslCompilerSyncPolicyTest {
     }
 
     @Test
-    void fullAndPeriodicIgnoreOldIncrementalWatermarkAndUseStablePaging() {
-        for (String mode : List.of("FULL", "PERIODIC_FULL")) {
-            processors.clear();
-            compiler.compile(flow(Map.of("syncMode", mode, "incrementalColumn", "id", "batchSize", 200), target()));
-            assertThat(processor("来源/fetch").props()).doesNotContainKey("Maximum-value Columns")
-                    .containsEntry("Custom ORDER BY Column", "id").containsEntry("Partition Size", "200");
+    void dateFetchUsesRegisteredTimestampForBothPropertiesAndOverridesOldPartitionDefaults() {
+        var options = Map.<String, Object>of("syncMode", "FULL_THEN_INCR", "incrementalColumn", "UPDATE_TIME", "batchSize", 5000);
+        compiler.compile(flow(options, target()));
+        Processor fetch = processor("来源/fetch");
+        assertThat(fetch.type()).isEqualTo(DateTableFetchPolicy.TYPE);
+        assertThat(fetch.props()).containsEntry("Maximum-value Columns", "UPDATE_TIME")
+                .containsEntry(DateTableFetchPolicy.PARTITION_COLUMN, "UPDATE_TIME")
+                .containsEntry(DateTableFetchPolicy.PARTITION_SIZE, "10000")
+                .containsEntry("fetch-partition-type", "2").containsEntry("fetch-partition-type-count", "1")
+                .containsEntry("Max Wait Time", "0 seconds").containsEntry("min-date", null).containsEntry("max-date", null)
+                .doesNotContainKeys("Partition Size", "Database Type", "Initial Load Strategy");
+        verify(nifi).executeOnPrimaryNode(fetch.id());
+        assertThat(options).containsEntry("batchSize", 5000);
+    }
+
+    @Test
+    void twentyAndOneHundredSourcesCheckExtensionsOnceWithoutReadingPerTable() {
+
+        for (int count : List.of(20, 100)) {
+            clearInvocations(nifi);
+            var template = flow(Map.of("syncMode", "FULL_THEN_INCR"), target()).dsl().nodes().getFirst();
+            List<Pipeline.Node> nodes = new ArrayList<>();
+            for (int index = 0; index < count; index++) nodes.add(new Pipeline.Node("s"+index,
+                    template.manifestKey(), "source"+index, "source", 0, 0, template.config()));
+            var pipeline = new Pipeline("p", "batch", null, null, null, new Pipeline.Dsl(1, nodes, List.of()), null, null, null, null, null, null, null);
+            compiler.preflightSources(pipeline);
+            verify(nifi, times(1)).requireDateFetchExtension();
+            verifyNoMoreInteractions(nifi);
         }
     }
 
     @Test
-    void fullWithoutStableSortStreamsOneQueryRatherThanUnorderedPages() {
-        compiler.compile(flow(Map.of("syncMode", "FULL"), target()));
-        assertThat(processor("来源/fetch").props()).containsEntry("Partition Size", "0");
+    void missingExtensionAndSecondaryWatermarkFailBeforeNativeMutation() {
+        doThrow(new IllegalStateException("GenerateDateTableFetch unavailable")).when(nifi).requireDateFetchExtension();
+        assertThatThrownBy(() -> compiler.preflightSources(flow(Map.of("syncMode", "FULL_THEN_INCR"), target())))
+                .hasMessageContaining("GenerateDateTableFetch");
+        verify(nifi).requireDateFetchExtension();
+        verifyNoMoreInteractions(nifi);
+        clearInvocations(nifi);
+        assertThatThrownBy(() -> compiler.preflightSources(flow(Map.of("tieBreakerColumn", "id"), target())))
+                .hasMessageContaining("次级");
+        verifyNoInteractions(nifi);
+    }
+
+    @Test
+    void fullAndPeriodicIgnoreOldIncrementalWatermarkAndUseStablePaging() {
+        for (String mode : List.of("FULL", "PERIODIC_FULL")) {
+            processors.clear();
+            clearInvocations(nifi);
+            compiler.compile(flow(Map.of("syncMode", mode, "incrementalColumn", "id", "batchSize", 200), target()));
+            assertThat(processor("来源/fetch").props()).doesNotContainKey("Maximum-value Columns")
+                    .containsEntry("gen-table-custom-orderby-column", "id").containsEntry(DateTableFetchPolicy.PARTITION_SIZE, "10000")
+                    .containsEntry(DateTableFetchPolicy.PARTITION_COLUMN, "id");
+            if ("PERIODIC_FULL".equals(mode)) {
+                verify(nifi, never()).executeOnPrimaryNode(processor("来源/fetch").id());
+                verify(nifi).executeOnPrimaryNode(processor("定时全量触发").id());
+            } else {
+                verify(nifi).executeOnPrimaryNode(processor("来源/fetch").id());
+            }
+        }
+    }
+
+    @Test
+    void dateFetchWithoutTimestampFailsBeforeCreatingAnyNativeGroup() {
+        assertThatThrownBy(() -> compiler.compile(flow(Map.of("syncMode", "FULL", "incrementalColumn", ""), target())))
+                .hasMessageContaining("登记时间戳");
+        verifyNoInteractions(nifi);
     }
 
     @Test
@@ -119,16 +173,17 @@ class DslCompilerSyncPolicyTest {
     }
 
     @Test
-    void incrementalCurrentMaxUsesNativeInitialLoadAndClusterWatermark() {
+    void incrementalCurrentMaxPreservesNativeInitializationWithoutInventingAPropertyOnDateFetch29() {
         compiler.compile(flow(Map.of("syncMode", "INCREMENTAL", "incrementalColumn", "id", "initialStrategy", "START_AT_CURRENT_MAX",
                 "customWherePredicate", "enabled = 1"), target()));
         Processor fetch = processor("来源/fetch");
         assertThat(fetch.type()).endsWith(".QueryDatabaseTableRecord");
         assertThat(fetch.props()).containsEntry("Initial Load Strategy", "Start at Current Maximum Values")
-                .containsEntry("Maximum-value Columns", "id").containsEntry("Use Avro Logical Types", "true")
-                .containsEntry("Additional WHERE Clause", "enabled = 1");
+                .containsEntry("Maximum-value Columns", "id").containsEntry("Max Rows Per FlowFile", "10000")
+                .containsEntry("Additional WHERE Clause", "enabled = 1")
+                .doesNotContainKey(DateTableFetchPolicy.PARTITION_COLUMN);
         verify(nifi).executeOnPrimaryNode(fetch.id());
-        assertThat(processors).noneMatch(p -> p.name().equals("来源/execute"));
+        assertThat(processors).noneMatch(p -> p.type().equals(DateTableFetchPolicy.TYPE));
     }
 
     @Test
@@ -155,7 +210,7 @@ class DslCompilerSyncPolicyTest {
                 "writerType", "NIFI_PUT_DATABASE_RECORD", "targetColumns", List.of(Map.of("columnName", "id", "dataType", "BIGINT", "primaryKey", true))));
     }
     private Pipeline flow(Map<String, Object> options, Map<String, Object> target) {
-        var source = new LinkedHashMap<String, Object>(Map.of("table", "source_table", "host", "test", "database", "source"));
+        var source = new LinkedHashMap<String, Object>(Map.of("table", "source_table", "host", "test", "database", "source", "incrementalColumn", "UPDATED_AT"));
         source.putAll(options);
         return new Pipeline("test", "同步验证", null, null, null, new Pipeline.Dsl(1, List.of(
                 new Pipeline.Node("source", "source.mysql", "来源", "source", 0, 0, source),

@@ -96,7 +96,8 @@ class TemporalParserTest {
             assertEquals(Instant.ofEpochSecond(expected.getEpochSecond(),expected.getNano()/(1_000_000_000/factor)*(1_000_000_000/factor)),parse(mode,"INSTANT",Long.toString(value),Map.of()));
         }
         assertEquals(Instant.ofEpochMilli(-1),parse("EPOCH_MILLIS","INSTANT","-1",Map.of()));
-        assertEquals("DATE_UNIT_REQUIRED",assertThrows(MappingException.class,()->auto(1715322469L,"INSTANT")).code());
+        assertEquals(Instant.ofEpochSecond(1715322469L),auto(1715322469L,"INSTANT"));
+        assertEquals("DATE_UNIT_REQUIRED",assertThrows(MappingException.class,()->auto(171532246912L,"INSTANT")).code());
         assertThrows(MappingException.class,()->parse("EPOCH_MILLIS","INSTANT","1.5",Map.of()));
         assertEquals("BUDGET_EXCEEDED",assertThrows(MappingException.class,()->parse("EPOCH_MILLIS","INSTANT","1e1000000000",Map.of())).code());
     }

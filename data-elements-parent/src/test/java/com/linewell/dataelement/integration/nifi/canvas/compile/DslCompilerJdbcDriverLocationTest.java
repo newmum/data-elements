@@ -94,7 +94,7 @@ class DslCompilerJdbcDriverLocationTest {
         when(nodeResolver.resolve()).thenReturn(runtimeNode(nodeLocation));
         Map<String, Object> config = new java.util.LinkedHashMap<>(Map.of(
                 "dbType", "ORACLE", "jdbcUrl", "jdbc:oracle:thin:@//example.test:1521/prod",
-                "username", "test-user", "password", "test-password", "table", "TEST_TABLE",
+                "username", "test-user", "password", "test-password", "table", "TEST_TABLE", "incrementalColumn", "UPDATED_AT",
                 "writerType", "NIFI_PUT_DATABASE_RECORD"));
         config.putAll(overrides);
         Pipeline pipeline = new Pipeline("task", "Oracle", null, null, null,
@@ -186,7 +186,7 @@ class DslCompilerJdbcDriverLocationTest {
                                 "database", "prod",
                                 "username", "test-user",
                                 "password", "test-password",
-                                "table", "TEST_TABLE"))), List.of()),
+                                "table", "TEST_TABLE", "incrementalColumn", "UPDATED_AT"))), List.of()),
                 null, null, null, null, null, null, null);
     }
 

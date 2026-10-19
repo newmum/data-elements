@@ -423,13 +423,13 @@ if (body?.batchGenerate == true) {
             var converted = portableDdl.prepare(batchColumns, batchConfig)
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 requestedTableName, converted.columns, submittedProps.tableNameCn)
-            var constraintPreview = tablePartitions.enrichConstraints(ddl, submittedTarget.sourceConstraints, batchConfig)
+            var partitionPlan = tablePartitions.normalize(submittedTarget.partitionPlan, converted.columns, targetType)
+            var constraintPreview = tablePartitions.enrichConstraints(ddl, submittedTarget.sourceConstraints, batchConfig, partitionPlan)
             ddl = constraintPreview.ddl
             var previewWarnings = []
             previewWarnings.addAll(converted.warnings)
             previewWarnings.addAll(constraintPreview.warnings)
             ddl = withHuaweiHiveStorage(ddl, targetType, pool, targetTypeCode)
-            var partitionPlan = tablePartitions.normalize(submittedTarget.partitionPlan, converted.columns, targetType)
             ddl = tablePartitions.apply(ddl, partitionPlan, batchConfig)
             // 仅处理自动生成的DDL；手工提交语句不进入这些生成规则。
             generated.add({dbId: submittedDbId, requestedTableName: requestedTableName,
@@ -563,9 +563,9 @@ try {
     if (dsConfig.getDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
     var converted = portableDdl.prepare(columns, dsConfig)
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
-    ddl = tablePartitions.constraints(ddl, body?.sourceConstraints, dsConfig)
-    ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
     var partitionPlan = tablePartitions.normalize(body?.partitionPlan, converted.columns, dsConfig.getDatabaseType())
+    ddl = tablePartitions.enrichConstraints(ddl, body?.sourceConstraints, dsConfig, partitionPlan).ddl
+    ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
     return tablePartitions.apply(ddl, partitionPlan, dsConfig)
 } catch (e) {
     exit 400, '未能生成建表语句：' + ddlFailureTip(e)

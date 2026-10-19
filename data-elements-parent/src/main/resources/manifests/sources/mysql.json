@@ -14,7 +14,7 @@
     { "key": "serverTimezone", "label": "时区", "type": "text", "default": "Asia/Shanghai", "group": "advanced" },
     { "key": "defaultFetchSize", "label": "抓取批大小", "type": "number", "default": 1000, "group": "advanced" },
     { "key": "table", "label": "表名", "type": "table-picker", "required": true },
-    { "key": "incrementalColumn", "label": "增量字段", "type": "text", "help": "留空则全量抽取" },
+    { "key": "incrementalColumn", "label": "增量字段", "type": "text", "help": "使用数据源登记时选择的时间戳字段，同时用于水位与按月分片；全量模式保留该字段用于分片" },
     { "key": "schedulingPeriod", "label": "调度周期", "type": "duration", "default": "60 sec", "group": "schedule" }
   ],
   "compile": {
@@ -34,14 +34,18 @@
     "processors": [
       {
         "localId": "fetch",
-        "type": "org.apache.nifi.processors.standard.GenerateTableFetch",
+        "type": "com.linewell.microservice.processors.database.GenerateDateTableFetch",
         "schedulingPeriod": "${config.schedulingPeriod}",
         "schedulingStrategy": "TIMER_DRIVEN",
         "properties": {
           "Database Connection Pooling Service": "${cs.dbcp}",
           "Table Name": "${config.table}",
           "Maximum-value Columns": "${config.incrementalColumn}",
-          "Partition Size": "10000"
+          "gen-table-fetch-partition-size": "10000",
+          "gen-table-column-for-val-partitioning": "${config.incrementalColumn}",
+          "fetch-partition-type": "2",
+          "fetch-partition-type-count": "1",
+          "Max Wait Time": "0 seconds"
         }
       },
       {

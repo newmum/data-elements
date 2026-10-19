@@ -405,8 +405,10 @@ if(managedHive){
     var projection=[]
     var types=[]
     for(name in selected){projection.add(quote(name));types.add(physicalTypes[name.toLowerCase()])}
-    var countRows=queryHive('SELECT COUNT(*) AS __preview_total FROM '+qualified+where,'总数统计')
-    if(countRows==null||countRows.size()!=1||hiveValue(countRows[0],'__preview_total')==null){exit 500,'Hive 预览总数查询结果无效';}
+    // Hive 会把未引用且以下划线开头的名称解析为字符集名，AS 后必须使用合法字段别名。
+    // 使用字母开头的内部别名，避免 H2/MySQL 可执行而 Hive 在总数统计阶段解析失败。
+    var countRows=queryHive('SELECT COUNT(*) AS preview_total FROM '+qualified+where,'总数统计')
+    if(countRows==null||countRows.size()!=1||hiveValue(countRows[0],'preview_total')==null){exit 500,'Hive 预览总数查询结果无效';}
     var offset=(request.getPageNo()-1)*request.getPageSize()
     var orderSql=orders.size()==0?'':' ORDER BY '+orders.join(', ')
     var pageSql='SELECT '+projection.join(', ')+' FROM '+qualified+where+orderSql+' LIMIT '+request.getPageSize()
@@ -427,7 +429,7 @@ if(managedHive){
         for(name in selected){normalized[name]=hiveValue(row,name)}
         rows.add(normalized)
     }
-    return {rows:rows,columns:selected,columnTypes:types,columnLabels:columnLabels,total:hiveValue(countRows[0],'__preview_total'),pageNo:request.getPageNo(),pageSize:request.getPageSize()}
+    return {rows:rows,columns:selected,columnTypes:types,columnLabels:columnLabels,total:hiveValue(countRows[0],'preview_total'),pageNo:request.getPageNo(),pageSize:request.getPageSize()}
 }
 
 request.setDataSource(dataSourceOf(dbAsset))

@@ -71,7 +71,7 @@ class DslCompilerJdbcWriterTest {
         when(registry.get("sink.jdbc")).thenReturn(manifest("/manifests/sinks/jdbc-sink.json"));
         Map<String, Object> sourceConfig = new LinkedHashMap<>(Map.of(
                 "host", "db", "port", "1521", "sid", "ORCL", "username", "reader", "password", "secret",
-                "table", "SOURCE_TABLE", "sourceColumns", List.of(
+                "table", "SOURCE_TABLE", "incrementalColumn", "EVENT_TIME", "sourceColumns", List.of(
                         Map.of("columnName", "ID", "dataType", "NUMBER"),
                         Map.of("columnName", "EVENT_TIME", "dataType", "DATE"))));
         Map<String, Object> targetConfig = new LinkedHashMap<>(Map.of(

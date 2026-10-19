@@ -73,6 +73,30 @@ class BatchCreateTableDdlMagicTest {
     }
     private static final String SOURCE_ID = "8a56e7d664934c1499102cfa508cd58a";
 
+    @Test void regionPartitionOceanbaseLogicalPrimaryAndOtherSourceUniqueUseOneReadAtTwentyAndHundredFields() throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture f=new Fixture(20);f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER'");
+            f.ddlGenerator.expectedColumns=count;
+            var fields=new ArrayList<Map<String,Object>>();
+            fields.add(Map.of("columnName","DSBM","dataType","varchar","length",6));
+            fields.add(Map.of("columnName","META_ADDR_ID","dataType","varchar","length",32,"primaryKey",1));
+            fields.add(Map.of("columnName","RECORDNO","dataType","bigint"));
+            for(int i=3;i<count;i++)fields.add(Map.of("columnName","f"+i,"dataType","varchar","length",32));
+            for(int i=0;i<f.targets.size();i++) {
+                var target=new LinkedHashMap<>(f.targets.get(i));target.put("tableItems",fields);
+                target.put("sourceConstraints",List.of(Map.of("name","UN_RECORDNO","type","U","columns",List.of("RECORDNO"))));
+                target.put("partitionPlan",Map.of("enabled",true,"strategy","REGION","field","DSBM"));f.targets.set(i,target);
+            }
+            var result=(Map<?,?>)f.run();
+            for(Object item:(List<?>)result.get("results")) {
+                String ddl=((Map<?,?>)item).get("ddl").toString();
+                assertFalse(ddl.contains("PRIMARY KEY"),ddl);assertTrue(ddl.contains("UNIQUE (META_ADDR_ID)"),ddl);
+                assertTrue(ddl.contains("UNIQUE (RECORDNO)"),ddl);assertTrue(ddl.contains("'351000'"),ddl);
+            }
+            assertEquals(1,f.counter.reads);assertEquals(0,f.counter.writes);
+        }
+    }
+
     @Test void yearlyPlansAndSourceUniqueConstraintsUseOneReadForTwentyAndHundredFields() throws Exception {
         for(int count:List.of(20,100)) {
             Fixture f=new Fixture(20);f.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle',username='ODS_OWNER'");

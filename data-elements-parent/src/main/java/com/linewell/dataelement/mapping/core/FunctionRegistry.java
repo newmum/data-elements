@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 
 /** Compile once, execute typed Java functions only. No SQL, JDBC, Spring or NiFi dependencies. */
 public final class FunctionRegistry {
-    public static final String VERSION = "1.1.21";
+    public static final String VERSION = "1.1.22";
     public static String libraryVersion(){return VERSION;}
     private static final ObjectMapper JSON = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     public static final Set<String> NAMES = Collections.unmodifiableSet(new LinkedHashSet<>(List.of(

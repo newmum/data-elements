@@ -187,7 +187,9 @@ class FieldMappingCalciteCharsetTest {
         mappings.add(Map.of("from", "/SBXT", "to", "/SBXT_cn", "lookup", Map.of(
                 "sql", "SELECT label FROM dictionary WHERE code = ?", "resultColumn", "label", "onMissing", "NULL")));
         mappings.add(Map.of("expression", "LOCALTIMESTAMP", "to", "/ODS_RKSJ"));
-        var sourceConfig = Map.<String, Object>of("dbType", "POSTGRESQL", "jdbcUrl", "jdbc:postgresql://example.test/database", "table", "source_table");
+        // 来源配置遵循当前时间分片契约；本用例继续验证后续 QueryRecord 的字符集及 lookup 参数。
+        var sourceConfig = Map.<String, Object>of("dbType", "POSTGRESQL", "jdbcUrl", "jdbc:postgresql://example.test/database",
+                "table", "source_table", "incrementalColumn", "UPDATED_AT");
         var pipeline = new Pipeline("test", "Charset regression", null, null, null,
                 new Pipeline.Dsl(1, List.of(
                         new Pipeline.Node("source", "source.test", "来源", "source", 0, 0, sourceConfig),

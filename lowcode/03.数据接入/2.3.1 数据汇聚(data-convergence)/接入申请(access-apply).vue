@@ -144,7 +144,8 @@
             <el-select v-model="activePartitionChoice" :disabled="!editable" @change="changePartitionStrategy">
               <el-option label="按年分区" value="YEAR" />
               <el-option label="按月分区" value="MONTH" />
-              <el-option label="区域／枚举分区" value="LIST" />
+              <el-option label="区域分区" value="REGION" />
+              <el-option label="枚举分区" value="LIST" />
               <el-option v-if="activePartitionChoice === 'TIME'" label="时间分区（来源实际边界）" value="TIME" />
               <el-option v-if="activePartitionChoice === 'RANGE'" label="数值范围分区" value="RANGE" />
             </el-select>
@@ -163,8 +164,8 @@
               :disabled="!editable" @click="repartitionSource">重新划分</el-button>
             <el-input v-if="['YEAR', 'MONTH'].includes(activePartition.strategy) || activePartition.kind === 'TIME'"
               v-model="activePartition.timezone" placeholder="分区时区，默认Asia/Shanghai" @change="updatePartitionDdl" />
-            <el-input v-if="activePartition.strategy === 'LIST'" v-model="activePartition.enumText"
-              class="partition-values-input" placeholder="区域编码或枚举值，用逗号分隔，如350100,350200"
+            <el-input v-if="activePartition.strategy === 'LIST'" v-model="activeListPartitionText"
+              class="partition-values-input" :placeholder="activePartitionChoice === 'REGION' ? '区域编码，用逗号分隔，如350100,350200' : '枚举值，用逗号分隔，如0,1,2'"
               @input="invalidateDdl" @change="updatePartitionDdl" @keyup.enter="updatePartitionDdl" />
           </div>
           <el-alert v-if="partitionError" :title="partitionError" :type="partitionErrorType" :closable="false" show-icon />
@@ -332,16 +333,27 @@ let ddlGenerationVersion = 0;
 let partitionProbeIdentity = "";
 const activePartitionSupported = computed(() => partitionSupport.value[activeDdlKey.value] === true);
 const activePartition = computed(() => partitionPlans.value[activeDdlKey.value] || {});
+const defaultRegionCodes = ['350100', '350200', '350300', '350400', '350500', '350600', '350700', '350800', '350900', '351000'];
+const activeListPartitionText = computed({
+  get: () => activePartition.value.enumText ?? (activePartition.value.partitions || []).flatMap((row: any) => row.values || []).join(','),
+  set: (value: string) => { activePartition.value.enumText = value; },
+});
 const activePartitionChoice = computed({
   get: () => activePartition.value.strategy === 'RANGE'
     ? activePartition.value.displayStrategy || (activePartition.value.kind === 'TIME' ? 'TIME' : 'RANGE')
-    : activePartition.value.strategy || 'MONTH',
+    : activePartition.value.strategy === 'LIST' && activePartition.value.displayStrategy === 'REGION'
+      ? 'REGION' : activePartition.value.strategy || 'MONTH',
   set: (value: string) => {
     const plan = activePartition.value;
-    plan.strategy = value;
+    if (plan.strategy === 'LIST' && plan.enumText !== undefined) {
+      plan[plan.displayStrategy === 'REGION' ? 'regionText' : 'enumerationText'] = plan.enumText;
+    }
+    plan.strategy = value === 'REGION' ? 'LIST' : value;
     delete plan.sourceBoundaries;
     delete plan.sourceInterval;
     delete plan.displayStrategy;
+    if (value === 'REGION') Object.assign(plan, { displayStrategy: 'REGION', enumText: plan.regionText ?? defaultRegionCodes.join(',') });
+    if (value === 'LIST') plan.enumText = plan.enumerationText ?? '';
     if (value === 'YEAR') Object.assign(plan, { startYear: String(new Date().getFullYear()), years: 5 });
     if (value === 'MONTH') Object.assign(plan, { startMonth: new Date().toISOString().slice(0, 7), months: 24 });
   },
@@ -376,17 +388,19 @@ const partitionPayload = (key: string) => {
   const fieldType = String(field?.columnType || field?.dataType || "").toLowerCase();
   if (!field) partitionInputError(key, "请先选择用于分区的字段。");
   if (["MONTH", "YEAR"].includes(plan.strategy) && !/date|time/.test(fieldType)) {
-    partitionInputError(key, `“${fieldLabel}”不是日期或时间字段。按年或按月分区请选择日期或时间字段；按区域编码分区请选择“区域／枚举分区”。`);
+    partitionInputError(key, `“${fieldLabel}”不是日期或时间字段。按年或按月分区请选择日期或时间字段；按区域编码分区请选择“区域分区”。`);
   }
   if (plan.strategy === "LIST" && plan.enumText !== undefined) {
+    const valueLabel = plan.displayStrategy === 'REGION' ? '区域编码' : '枚举值';
+    const example = plan.displayStrategy === 'REGION' ? '350100,350200' : '0,1,2';
     const values = String(plan.enumText).split(/[,，\n]/).map((value: string) => value.trim()).filter(Boolean);
     if (!values.length) {
       partitionInputError(key, /date|time/.test(fieldType)
         ? `请先填写区域编码或枚举值。当前选择的“${fieldLabel}”是时间字段，按区域分区请改选区域编码字段；按时间分区请选择“按月分区”。`
-        : "请填写至少一个区域编码或枚举值，用逗号分隔，例如350100,350200；每个值会生成一个分区。");
+        : `请填写至少一个${valueLabel}，用逗号分隔，例如${example}；每个值会生成一个分区。`);
     }
-    if (values.length > 2000) partitionInputError(key, "填写的区域编码或枚举值超过2000项，请减少分区数量。");
-    if (new Set(values).size !== values.length) partitionInputError(key, "区域编码或枚举值有重复，请删除重复项后再生成建表语句。");
+    if (values.length > 2000) partitionInputError(key, `填写的${valueLabel}超过2000项，请减少分区数量。`);
+    if (new Set(values).size !== values.length) partitionInputError(key, `${valueLabel}有重复，请删除重复项后再生成建表语句。`);
     if (/date|time/.test(fieldType) && values.some((value: string) => !/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2})?$/.test(value))) {
       partitionInputError(key, `“${fieldLabel}”是时间字段，不能填写区域编码。请选择区域编码字段，或填写YYYY-MM-DD格式的日期；按月划分请选择“按月分区”。`);
     }
@@ -395,7 +409,8 @@ const partitionPayload = (key: string) => {
       partitionInputError(key, `“${fieldLabel}”是数字字段，请填写数字枚举值，不要填写中文名称或引号。`);
     }
     return { ...plan, partitions: values.map((value: string, index: number) => ({
-      name: `p_${index + 1}`, bucket: `p_${index + 1}`, values: [value],
+      name: plan.displayStrategy === 'REGION' && /^\d{6}$/.test(value) ? `p_${value}` : `p_${index + 1}`,
+      bucket: plan.displayStrategy === 'REGION' && /^\d{6}$/.test(value) ? value : `p_${index + 1}`, values: [value],
     })) };
   }
   if (plan.strategy === "LIST" && !plan.partitions?.length) {

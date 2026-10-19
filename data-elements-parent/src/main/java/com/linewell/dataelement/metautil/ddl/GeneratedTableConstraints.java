@@ -4,6 +4,7 @@ import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.expr.SQLIdentifierExpr;
 import com.alibaba.druid.sql.ast.statement.*;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
+import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
@@ -13,13 +14,16 @@ final class GeneratedTableConstraints {
     private GeneratedTableConstraints() {}
 
     static Map<String,Object> render(String ddl,List<Map<String,Object>> source,DataSourceConfig config) {
-        try {return Map.of("ddl",apply(ddl,source,config),"warnings",List.of());}
+        return render(ddl,source,config,null);
+    }
+    static Map<String,Object> render(String ddl,List<Map<String,Object>> source,DataSourceConfig config,Map<String,Object> partitionPlan) {
+        try {return Map.of("ddl",apply(ddl,source,config,partitionPlan),"warnings",List.of());}
         catch(RuntimeException unsupported) {
             return Map.of("ddl",ddl,"warnings",List.of(Map.of("field","","message","当前原生表达式未自动转换约束名称，请在DDL中确认主键及唯一约束；已保留可编辑SQL。")));
         }
     }
 
-    static String apply(String ddl,List<Map<String,Object>> source,DataSourceConfig config) {
+    static String apply(String ddl,List<Map<String,Object>> source,DataSourceConfig config,Map<String,Object> partitionPlan) {
         boolean named=DdlDialect.family(config.getDatabaseType())==DdlDialect.Family.ORACLE;
         if(DdlDialect.family(config.getDatabaseType())==DdlDialect.Family.HIVE)return ddl;
         if(!named&&(source==null||source.isEmpty()))return ddl;
@@ -27,18 +31,38 @@ final class GeneratedTableConstraints {
         if(statements.isEmpty()||!(statements.getFirst() instanceof SQLCreateTableStatement create))return ddl;
         Map<String,String> fields=new LinkedHashMap<>();
         for(var column:create.getColumnDefinitions())fields.put(SQLUtils.normalize(column.getColumnName()).toLowerCase(Locale.ROOT),column.getColumnName());
+        Set<String> sourceUnique=new HashSet<>(),sourcePrimary=new HashSet<>();
+        if(source!=null)for(var fact:source)if(fact.get("columns") instanceof List<?> columns&&!columns.isEmpty()) {
+            String key=signature(columns.stream().map(c->SQLUtils.normalize(c.toString()).toLowerCase(Locale.ROOT)).toList());
+            if("U".equalsIgnoreCase(Objects.toString(fact.get("type"))))sourceUnique.add(key);
+            if("P".equalsIgnoreCase(Objects.toString(fact.get("type"))))sourcePrimary.add(key);
+        }
+        // The materialization key is a logical row identifier. OB Oracle partition targets use
+        // UNIQUE without widening it to include the partition column, even if source probing failed.
+        boolean partitionUnique=config.getDatabaseType()==DatabaseType.OCEANBASE_ORACLE
+                &&partitionPlan!=null&&Boolean.TRUE.equals(partitionPlan.get("enabled"));
         Set<String> existing=new HashSet<>();
         List<SQLUniqueConstraint> constraints=new ArrayList<>();
         for(var element:create.getTableElementList())if(element instanceof SQLUniqueConstraint key)constraints.add(key);
         for(var column:create.getColumnDefinitions()) {
+            if(column.getConstraints().removeIf(SQLColumnPrimaryKey.class::isInstance)) {
+                var key=new SQLPrimaryKeyImpl();key.addColumn(new SQLIdentifierExpr(column.getColumnName()));
+                create.getTableElementList().add(key);constraints.add(key);
+            }
             if(column.getConstraints().removeIf(SQLColumnUniqueKey.class::isInstance)) {
                 var key=new SQLUnique();key.addColumn(new SQLIdentifierExpr(column.getColumnName()));
                 create.getTableElementList().add(key);constraints.add(key);
             }
         }
+        constraints.sort(Comparator.comparing(key->!(key instanceof SQLPrimaryKey)));
         for(var key:constraints) {
             var columns=key.getColumns().stream().map(c->SQLUtils.normalize(c.getExpr().toString()).toLowerCase(Locale.ROOT)).toList();
-            existing.add(signature(columns));
+            String signature=signature(columns);
+            if(key instanceof SQLPrimaryKey&&(partitionUnique||(sourceUnique.contains(signature)&&!sourcePrimary.contains(signature)))) {
+                var unique=new SQLUnique();key.getColumns().forEach(c->unique.addColumn(c.clone()));
+                create.getTableElementList().set(create.getTableElementList().indexOf(key),unique);key=unique;
+            }
+            if(!existing.add(signature)) {create.getTableElementList().remove(key);continue;}
             if(named)key.setName(new SQLIdentifierExpr(name(key instanceof SQLPrimaryKey?"PK":"UK",create.getName().toString(),columns)));
         }
         if(source!=null)for(var fact:source) {

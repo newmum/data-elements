@@ -51,10 +51,25 @@ class SourcePartitionDefinitionTest {
         assertEquals("TIME",irregular.get("displayStrategy"));assertEquals(3,((List<?>)irregular.get("partitions")).size());
         var catalog=List.<Map<String,Object>>of(Map.of("PARTITION_NAME","p_fz","HIGH_VALUE","'350100','350200'"));
         var list=PartitionMetadataReader.analyze("LIST","NONE","DSBM","VARCHAR2",catalog,"");
-        assertEquals("LIST",((Map<?,?>)list.get("plan")).get("displayStrategy"));
+        assertEquals("REGION",((Map<?,?>)list.get("plan")).get("displayStrategy"));
+        var enums=PartitionMetadataReader.analyze("LIST","NONE","STATUS","NUMBER",List.of(Map.of("PARTITION_NAME","p0","HIGH_VALUE","0,1")),"");
+        assertEquals("LIST",((Map<?,?>)enums.get("plan")).get("displayStrategy"));
         assertEquals(2,((List<?>)((Map<?,?>)((List<?>)((Map<?,?>)list.get("plan")).get("partitions")).getFirst()).get("values")).size());
         assertTrue(PartitionMetadataReader.sameBoundaries(plan(List.of("2023-01-01","2024-01-01")),plan(List.of("2023-01-01","2024-01-01"))));
         assertFalse(PartitionMetadataReader.sameBoundaries(plan(List.of("2023-01-01","2024-01-01")),plan(List.of("2023-01-01","2025-01-01"))));
+    }
+    @Test void regionPresetHasExactlyTheTenProvidedCodesAndNumericColumnsStayNumeric() {
+        var service=new TablePartitions();var region=new ColumnInfo();region.setColumnName("DSBM");region.setColumnType("VARCHAR2(6)");
+        var codes=List.of("350100","350200","350300","350400","350500","350600","350700","350800","350900","351000");
+        var request=new LinkedHashMap<String,Object>(Map.of("enabled",true,"strategy","REGION","field","DSBM"));
+        var plan=service.normalize(request,List.of(region),DatabaseType.OCEANBASE_ORACLE);
+        assertEquals("LIST",plan.get("strategy"));assertEquals("REGION",plan.get("displayStrategy"));
+        assertEquals(codes,((List<?>)plan.get("partitions")).stream().map(p->((List<?>)((Map<?,?>)p).get("values")).getFirst()).toList());
+        String ddl=service.apply("CREATE TABLE ods_t(DSBM VARCHAR2(6))",plan,config(DatabaseType.OCEANBASE_ORACLE));
+        assertTrue(ddl.contains("'351000'"));assertFalse(ddl.contains("DEFAULT"));
+        region.setColumnType("NUMBER");plan=service.normalize(request,List.of(region),DatabaseType.OCEANBASE_ORACLE);
+        ddl=service.apply("CREATE TABLE ods_t(DSBM NUMBER)",plan,config(DatabaseType.OCEANBASE_ORACLE));
+        assertTrue(ddl.contains("VALUES (351000)"),ddl);assertFalse(ddl.contains("'351000'"));
     }
     @Test void yearlyGenerationUsesYearBucketsAcrossAllVisibleDialectsAndKeepsSourceBounds() {
         var service=new TablePartitions();var date=new ColumnInfo();date.setColumnName("occurred_at");date.setColumnType("DATE");

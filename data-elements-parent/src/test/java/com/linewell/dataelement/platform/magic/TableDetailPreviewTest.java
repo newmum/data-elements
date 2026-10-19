@@ -38,12 +38,16 @@ public class TableDetailPreviewTest {
     }
     public static String hiveText(String hex) {return new String(HexFormat.of().parseHex(hex),StandardCharsets.UTF_8);}
     public static class Hive {
-        final List<String> queries=new ArrayList<>();final JdbcTemplate db;String failure;
+        final List<String> queries=new ArrayList<>();final JdbcTemplate db;String failure;String failureSqlPrefix;
         boolean legacySyntaxOnly;
         Hive(JdbcTemplate db){this.db=db;}
         public List<Map<String,Object>> queryTable(String sql) {
             queries.add(sql);
-            if(failure!=null)throw new IllegalStateException(failure);
+            if(failure!=null && (failureSqlPrefix==null || sql.startsWith(failureSqlPrefix)))throw new IllegalStateException(failure);
+            // HiveLexer.g 的 Identifier 不允许下划线开头；H2 接受该写法，须在 Hive 边界补充检查。
+            // https://github.com/apache/hive/blob/rel/release-3.1.3/ql/src/java/org/apache/hadoop/hive/ql/parse/HiveLexer.g
+            if(sql.matches("(?is).*\\bAS\\s+_[A-Za-z0-9_]+\\b.*"))
+                throw new IllegalArgumentException("Hive ParseException: unquoted alias cannot start with underscore");
             if(legacySyntaxOnly && (sql.contains("NULLS LAST") || sql.matches("(?s).*LIMIT \\d+,.*")))
                 throw new IllegalArgumentException("Hive 1.x does not support NULLS LAST or LIMIT offset, rows");
             if(sql.startsWith("DESCRIBE "))return List.of(
@@ -125,6 +129,19 @@ public class TableDetailPreviewTest {
             Map.<String,Object>of("tableId","table","conditions",List.of(Map.of("field","id","op","raw","value","1"))),
             Map.<String,Object>of("tableId","table","pageSize",101)))assertEquals(400,assertThrows(PreviewRejected.class,()->f.run(body)).code);
     }
+    @Test void countUsesHiveCompatibleAliasInsteadOfH2OnlyUnderscoreAlias() throws Exception {
+        var f = new Fixture();
+        // 复现旧查询在 Hive 的词法错误，不能只用 H2 成功执行作为 Hive 语法验证。
+        assertThrows(IllegalArgumentException.class,
+                () -> f.hive.queryTable("SELECT COUNT(*) AS __preview_total FROM `preview`.`demo`"));
+        for (int size : List.of(20, 100)) {
+            f.hive.queries.clear(); f.counter.count = 0;
+            var result = f.run(Map.of("tableId", "table", "pageSize", size));
+            assertEquals(240L, ((Number) result.get("total")).longValue());
+            assertEquals(size, ((List<?>) result.get("rows")).size());
+            assertEquals(3, f.hive.queries.size()); assertEquals(5, f.counter.count);
+        }
+    }
     @Test void legacyHiveSupportsFirstPageAndOffsetPagesWithoutVersionSpecificSyntax() throws Exception {
         var f = new Fixture(); f.hive.legacySyntaxOnly = true;
         var first = f.run(Map.of("tableId","table","pageSize",20));
@@ -176,5 +193,11 @@ public class TableDetailPreviewTest {
         assertEquals(502, failure.code);
         assertTrue(failure.getMessage().contains("字段读取"));
         assertFalse(failure.getMessage().contains("private vendor"));
+    }
+    @Test void countFailureIsReportedWithoutInventingAZeroTotalOrExecutingDataQuery() throws Exception {
+        var f = new Fixture(); f.hive.failure = "private count query failure"; f.hive.failureSqlPrefix = "SELECT COUNT(*)";
+        var failure = assertThrows(PreviewRejected.class, () -> f.run(Map.of("tableId", "table")));
+        assertEquals(502, failure.code); assertTrue(failure.getMessage().contains("总数统计"));
+        assertFalse(failure.getMessage().contains("private count")); assertEquals(2, f.hive.queries.size());
     }
 }

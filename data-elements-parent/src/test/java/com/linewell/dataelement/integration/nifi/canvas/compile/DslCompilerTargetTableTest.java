@@ -141,7 +141,7 @@ class DslCompilerTargetTableTest {
     void keepsOceanBaseMySqlModeOnItsExistingDialect() {
         assertThat(DslCompiler.sourceFetchDatabaseType(new LinkedHashMap<>(Map.of(
                 "dbType", "OceanBase",
-                "compatibleMode", "MYSQL")))).isNull();
+                "compatibleMode", "MYSQL")))).isEqualTo("MySQL");
     }
 
     @Test

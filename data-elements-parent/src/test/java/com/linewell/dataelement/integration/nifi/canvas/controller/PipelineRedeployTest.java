@@ -103,7 +103,19 @@ class PipelineRedeployTest {
         doThrow(new IllegalStateException("still running")).when(nifi).cleanupProcessGroup("old-group");
         assertThat(controller.deploy("p1", null).getStatusCode().value()).isEqualTo(500);
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("old-group");
-        verifyNoInteractions(compiler);
+        verify(compiler).preflightSources(any());
+        verify(compiler, never()).compile(any(), any(), any());
+    }
+    @Test
+    void missingDateFetchExtensionPreservesOldGroupAndQueuedData() {
+        doThrow(new IllegalStateException("GenerateDateTableFetch unavailable")).when(compiler).preflightSources(any());
+        var before = stored.get();
+        var response = controller.deploy("p1", null);
+        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo("old-group");
+        assertThat(stored.get().status()).isEqualTo(before.status());
+        verify(nifi, never()).cleanupProcessGroup(anyString());
+        verify(compiler, never()).compile(any(), any(), any());
     }
     @Test
     void missingHiveGlobalServicesPreserveExistingGroupBeforeAnyCleanup() {
@@ -127,7 +139,8 @@ class PipelineRedeployTest {
         assertThat(controller.deploy("p1", null).getStatusCode().value()).isEqualTo(400);
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("old-group");
         verify(nifi, never()).cleanupProcessGroup(anyString());
-        verifyNoInteractions(compiler);
+        verify(compiler).preflightSources(any());
+        verify(compiler, never()).compile(any(), any(), any());
     }
 
     @Test
@@ -208,7 +221,9 @@ class PipelineRedeployTest {
         setFullLoad("FULL", true);
         doThrow(new IllegalStateException("still running")).when(nifi).cleanupProcessGroup("old-group");
         assertThat(controller.start("p1", true, true).getStatusCode().value()).isEqualTo(500);
-        verifyNoInteractions(cleanup, compiler);
+        verifyNoInteractions(cleanup);
+        verify(compiler).preflightSources(any());
+        verify(compiler, never()).compile(any(), any(), any());
         verify(nifi, never()).setProcessGroupState(anyString(), eq("RUNNING"));
     }
 

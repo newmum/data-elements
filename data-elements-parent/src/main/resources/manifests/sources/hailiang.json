@@ -32,7 +32,11 @@
       }}
     ],
     "processors": [
-      { "localId": "fetch", "type": "org.apache.nifi.processors.standard.GenerateTableFetch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Table Name": "${config.table}", "Maximum-value Columns": "${config.incrementalColumn}", "Partition Size": "10000" } },
+      { "localId": "fetch", "type": "com.linewell.microservice.processors.database.GenerateDateTableFetch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Table Name": "${config.table}", "Maximum-value Columns": "${config.incrementalColumn}", "gen-table-fetch-partition-size": "10000",
+          "gen-table-column-for-val-partitioning": "${config.incrementalColumn}",
+          "fetch-partition-type": "2",
+          "fetch-partition-type-count": "1",
+          "Max Wait Time": "0 seconds" } },
       { "localId": "execute", "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Record Writer": "${cs.jsonWriter}" } }
     ],
     "internalConnections": [{ "from": "fetch", "to": "execute", "relationship": "success" }],

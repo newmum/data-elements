@@ -15,6 +15,7 @@ public final class TemporalParser {
     private static final Pattern SHORT_OFFSET = Pattern.compile("([+-][0-9]{2})([0-9]{2})(?=\\[|$)");
     private static final Pattern HOUR_OFFSET = Pattern.compile("([T ][0-9].*)([+-][0-9]{2})(?=\\[|$)");
     private static final Pattern DIGITS = Pattern.compile("[0-9]+");
+    private static final Pattern AUTO_EPOCH = Pattern.compile("[+-]?[1-9](?:[0-9]{9}|[0-9]{12})");
     private static final Pattern ENGLISH_DATE = Pattern.compile("[A-Za-z]{3} [A-Za-z]{3} [0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2} ([^ ]+) [0-9]{4}");
     private static final Pattern ORACLE_DATE = Pattern.compile("[0-9]{1,2}-[A-Za-z]{3}-[0-9]{2,4} .+");
     private static final Pattern PARTIAL_YEAR_MONTH = Pattern.compile("[0-9]{4}[-/][0-9]{1,2}");
@@ -37,7 +38,7 @@ public final class TemporalParser {
     private static final DateTimeFormatter MONTH_DAY = pattern("M-d");
     private static final DateTimeFormatter RFC = DateTimeFormatter.RFC_1123_DATE_TIME.withResolverStyle(ResolverStyle.STRICT);
 
-    /** A compiled parser is safe to share across processor tasks. Numeric epoch units are always explicit. */
+    /** Immutable parser; AUTO accepts conventional 10-digit seconds and 13-digit milliseconds. */
     public record Parser(String mode, DateTimeFormatter formatter, String outputType, LocalDate defaultDate) {
         public Object parse(Object value, ZoneId zone, Locale locale) {
             if (value == null || value == ValueTypes.MISSING) return null;
@@ -93,11 +94,16 @@ public final class TemporalParser {
             String calendar;
             try {calendar=ValueTypes.decimal(value).toBigIntegerExact().toString();}
             catch(ArithmeticException ex){throw new MappingException("DATE_UNIT_REQUIRED","非整数时间数值须明确格式或时间戳单位");}
-            if(calendar.length()!=8&&calendar.length()!=14)throw new MappingException("DATE_UNIT_REQUIRED","数值仅自动识别8位日期或14位紧凑日期时间；时间戳须明确单位");
+            if(calendar.length()!=8&&calendar.length()!=14&&!AUTO_EPOCH.matcher(calendar).matches())
+                throw new MappingException("DATE_UNIT_REQUIRED","数值自动识别8位日期、14位紧凑日期时间及10位秒/13位毫秒时间戳；其他时间戳须明确单位");
             value=calendar;
         }
         if (!(value instanceof CharSequence)) throw new MappingException("DATE_UNIT_REQUIRED", "数值时间戳须明确选择秒、毫秒、微秒或纳秒单位");
         String s = text(value);
+        if (AUTO_EPOCH.matcher(s).matches()) {
+            int digits = s.length() - (s.charAt(0) == '-' || s.charAt(0) == '+' ? 1 : 0);
+            return new Parts(null, null, null, null, epoch(s, digits == 10 ? "EPOCH_SECONDS" : "EPOCH_MILLIS"));
+        }
         var chineseTime=CHINESE_TIME.matcher(s);
         if(chineseTime.matches())s=(chineseTime.group(1)==null?"":chineseTime.group(1)+" ")+chineseTime.group(2)+":"+chineseTime.group(3)
                 +(chineseTime.group(4)==null?"":":"+chineseTime.group(4)+(chineseTime.group(5)==null?"":chineseTime.group(5)));
@@ -108,7 +114,7 @@ public final class TemporalParser {
                 if(s.length()>14)d=d.withNano(Integer.parseInt(s.substring(14)+"0".repeat(23-s.length())));
                 return new Parts(d.toLocalDate(),d.toLocalTime(),null,null,null);
             }
-            throw new MappingException("DATE_UNIT_REQUIRED", "纯数字仅自动识别8位日期或14至23位紧凑日期时间；时间戳须明确单位");
+            throw new MappingException("DATE_UNIT_REQUIRED", "纯数字自动识别8位日期、14至23位紧凑日期时间及10位秒/13位毫秒时间戳；其他时间戳须明确单位");
         }
         var numeric = NUMERIC_DATE.matcher(s);
         if (numeric.matches()) {

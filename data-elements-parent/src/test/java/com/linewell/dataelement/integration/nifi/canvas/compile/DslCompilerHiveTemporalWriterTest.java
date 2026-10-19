@@ -247,7 +247,8 @@ class DslCompilerHiveTemporalWriterTest {
     }
     @Test void hiveTargetCurrentMaximumIncrementalSourceUsesSameWriter() {
         compiler.compile(hiveTargetFlow(List.of(source("s","oracle",Map.of("dbType","ORACLE","syncMode","INCREMENTAL","initialStrategy","START_AT_CURRENT_MAX","incrementalColumn","EVENT_TIME","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));
-        assertThat(namedProcessor("s/fetch").properties()).containsEntry("Record Writer","global-hive-json-writer").containsEntry("Columns to Return",null);
+        assertThat(namedProcessor("s/fetch").properties()).containsEntry("Record Writer","global-hive-json-writer");
+        assertThat(namedProcessor("s/fetch").properties()).containsEntry("Columns to Return",null);
     }
     @Test void hiveTargetSourceDatabaseQueryUsesSameWriter() {
         var query=new Pipeline.Node("q","transform.sql","query","transform",300,0,Map.of("executionMode","SOURCE_DB","sql","SELECT event_time FROM EVENT_LOG"));
@@ -296,7 +297,7 @@ class DslCompilerHiveTemporalWriterTest {
     }
     private Created namedProcessor(String name) { return processors.stream().filter(value -> name.equals(value.name())).findFirst().orElseThrow(); }
     private static Pipeline.Node source(String id, String type, Map<String, Object> extras) {
-        Map<String, Object> config = new LinkedHashMap<>(extras); config.put("table", "EVENT_LOG");
+        Map<String, Object> config = new LinkedHashMap<>(extras); config.put("table", "EVENT_LOG"); config.putIfAbsent("incrementalColumn", "EVENT_TIME");
         return new Pipeline.Node(id, "source." + type, id, "source", 0, 0, config);
     }
     private static Pipeline flow(List<Pipeline.Node> nodes) {

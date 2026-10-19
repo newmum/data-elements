@@ -12,6 +12,23 @@ import org.junit.jupiter.api.Test;
 class DslHasherDeploymentHashTest {
 
     @Test
+    void dateFetchUpgradeRequiresRepublishingDatabaseSourcesAndPreservesOtherSourceDeployments() throws Exception {
+        String revision = DslHasher.CURRENT_COMPILER_REVISION;
+        for (String key : List.of("source.mysql", "source.oracle", "source.postgresql", "source.oceanbase", "source.hive")) {
+            var dsl = new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", key, "Source", "source", 0, 0,
+                    Map.of("table", "EVENT_LOG", "incrementalColumn", "UPDATED_AT"))), List.of());
+            String current = DslHasher.deploymentHash(dsl, revision);
+            assertThat(current).isNotEqualTo(previousDeploymentHash(dsl, revision));
+            assertThat(DslHasher.deploymentHash(dsl, revision)).isEqualTo(current);
+        }
+        for (String key : List.of("source.api", "source.kafka")) {
+            var dsl = new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", key, "Source", "source", 0, 0,
+                    Map.of())), List.of());
+            assertThat(DslHasher.deploymentHash(dsl, revision)).isEqualTo(previousDeploymentHash(dsl, revision));
+        }
+    }
+
+    @Test
     void deploymentHashIsStableFixedWidthAndChangesWithCompilerRevision() {
         Pipeline.Dsl dsl = new Pipeline.Dsl(1, List.of(), List.of());
 

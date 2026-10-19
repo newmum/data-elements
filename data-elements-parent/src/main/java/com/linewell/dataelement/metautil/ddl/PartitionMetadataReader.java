@@ -105,11 +105,15 @@ public final class PartitionMetadataReader {
             }
         }
         String display=displayStrategy(plan);plan.put("displayStrategy",display);plan.put("sourceBoundaries",true);
-        String label=switch(display){case "YEAR"->"按年时间";case "MONTH"->"按月时间";case "TIME"->"时间（不规则边界）";case "LIST"->"区域／枚举";default->"数值／其他范围";};
+        String label=switch(display){case "YEAR"->"按年时间";case "MONTH"->"按月时间";case "TIME"->"时间（不规则边界）";case "REGION"->"区域";case "LIST"->"枚举";default->"数值／其他范围";};
         return Map.of("status","detected","partitioned",true,"message","已识别来源"+label+"分区，共"+partitions.size()+"个；保留真实历史边界"+(interval.isEmpty()?"":"；自动间隔在不支持原生INTERVAL的目标预建未来24个月并保留future兜底"),"plan",plan);
     }
     private static String displayStrategy(Map<String,Object> plan) {
-        if("LIST".equals(plan.get("strategy")))return "LIST";
+        if("LIST".equals(plan.get("strategy"))) {
+            var values=((List<?>)plan.get("partitions")).stream().map(p->((Map<?,?>)p).get("values"))
+                    .filter(List.class::isInstance).map(List.class::cast).flatMap(List::stream).map(value->Objects.toString(value,"<NULL>")).toList();
+            return !values.isEmpty()&&values.stream().allMatch(TablePartitions.REGION_CODES::contains)?"REGION":"LIST";
+        }
         if(!"TIME".equals(plan.get("kind")))return "RANGE";
         if(plan.get("sourceInterval") instanceof Map<?,?> interval) {
             int step=Integer.parseInt(interval.get("step").toString());String unit=interval.get("unit").toString();

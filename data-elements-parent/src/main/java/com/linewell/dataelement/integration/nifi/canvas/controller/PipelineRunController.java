@@ -547,6 +547,12 @@ public class PipelineRunController {
                 return ResponseEntity.ok(Map.of("pipeline", restored, "processGroupId", p.nifiProcessGroupId(),
                         "started", p.status() == PipelineStatus.RUNNING, "mode", "reuse"));
             }
+            try { compiler.preflightSources(p); }
+            catch (RuntimeException ex) {
+                repo.updateStatus(p.id(), p.status());
+                return deploymentFailure(p.id(), 422, "SOURCE_FETCH_PREFLIGHT_FAILED", "来源时间分片发布前检查失败", ex,
+                        "请核对登记时间戳字段与 GenerateDateTableFetch 扩展；旧流程已保留。", Map.of());
+            }
             if (DslHasher.usesJavaMapping(p.dsl())) {
                 // Reused graphs retain their existing bundle. Only a new unified
                 // deployment needs plan/bundle checks before touching the old graph.

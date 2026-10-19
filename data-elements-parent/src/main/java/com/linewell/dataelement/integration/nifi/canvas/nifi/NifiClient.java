@@ -58,14 +58,48 @@ public class NifiClient {
 
     public String clientId() { return clientId; }
 
-    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.21");}
+    private ObjectNode mappingBundle(){return mapper.createObjectNode().put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version",com.linewell.dataelement.mapping.core.MappingEngine.engineVersion());}
+
+    private ObjectNode dateFetchBundle() {
+        return mapper.createObjectNode().put("group", "com.linewell.microservice").put("artifact", "datadevs-database-nar")
+                .put("version", com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.BUNDLE_VERSION);
+    }
+
+    public void requireDateFetchExtension() {
+        String processorType = com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.TYPE;
+        ObjectNode required = dateFetchBundle();
+        java.util.SortedSet<String> available = new java.util.TreeSet<>();
+        JsonNode types = get("/flow/processor-types", JsonNode.class).path("processorTypes");
+        for (JsonNode type : types) {
+            if (!processorType.equals(type.path("type").asText())) continue;
+            JsonNode bundle = type.path("bundle");
+            available.add(bundleCoordinates(bundle));
+            // Bundle identity has three fields. Additional response metadata must
+            // not make an otherwise identical installed extension appear missing.
+            if (required.path("group").equals(bundle.path("group"))
+                    && required.path("artifact").equals(bundle.path("artifact"))
+                    && required.path("version").equals(bundle.path("version"))) return;
+        }
+        String reason = available.isEmpty()
+                ? "当前 NiFi 未注册 GenerateDateTableFetch 处理器（" + processorType + "）"
+                : "当前 NiFi 已注册 GenerateDateTableFetch，但扩展版本或坐标不匹配";
+        throw new IllegalStateException(reason + "；平台要求：" + bundleCoordinates(required)
+                + "；当前 NiFi 已注册：" + (available.isEmpty() ? "无" : String.join("、", available))
+                + "；请在平台连接的 NiFi 安装 datadevs-database-nar-" + required.path("version").asText()
+                + ".nar，并确认扩展列表显示该版本；旧流程已保留");
+    }
+
+    private static String bundleCoordinates(JsonNode bundle) {
+        return bundle.path("group").asText("未知") + ":" + bundle.path("artifact").asText("未知")
+                + ":" + bundle.path("version").asText("未知");
+    }
 
     public void requireMappingExtension(){
         JsonNode processors=get("/flow/processor-types",JsonNode.class).path("processorTypes");
         JsonNode services=get("/flow/controller-service-types",JsonNode.class).path("controllerServiceTypes");
         for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
             int count=0;for(JsonNode type:entry.getKey())if(type.path("type").asText().equals(entry.getValue())&&type.path("bundle").equals(mappingBundle()))count++;
-            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展1.1.21，请安装haitong-mapping-nar后部署");
+            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展"+com.linewell.dataelement.mapping.core.MappingEngine.engineVersion()+"，请安装haitong-mapping-nar后部署");
         }
         JsonNode cluster=get("/flow/cluster/summary",JsonNode.class).path("clusterSummary");
         if(cluster.path("clustered").asBoolean()&&cluster.path("connectedNodeCount").asInt()>1)throw new IllegalStateException("多节点集群须完成全部节点扩展版本核验后才能部署统一映射");
@@ -349,6 +383,7 @@ public class NifiClient {
         ObjectNode component = mapper.createObjectNode();
         component.put("type", type);
         if(type.equals("com.linewell.dataelement.nifi.HaitongTransformRecord"))component.set("bundle",mappingBundle());
+        if(type.equals(com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.TYPE))component.set("bundle",dateFetchBundle());
         component.put("name", name);
         ObjectNode pos = mapper.createObjectNode().put("x", x).put("y", y);
         component.set("position", pos);
@@ -750,8 +785,8 @@ public class NifiClient {
             var used = new java.util.LinkedHashSet<String>();
             links.stream().filter(l -> id.equals(l.source())).forEach(l -> used.addAll(l.relationships()));
             var retained = new java.util.ArrayList<String>();
-            boolean triggeredFetch = type.endsWith(".GenerateTableFetch") && links.stream().anyMatch(link -> id.equals(link.target()));
-            if ((!type.endsWith(".GenerateTableFetch") || triggeredFetch) && !type.endsWith(".RouteOnAttribute")) {
+            boolean triggeredFetch = com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.isTableFetch(type) && links.stream().anyMatch(link -> id.equals(link.target()));
+            if ((!com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.isTableFetch(type) || triggeredFetch) && !type.endsWith(".RouteOnAttribute")) {
                 for (JsonNode relationship : processor.path("relationships")) {
                     String name = relationship.path("name").asText();
                     boolean missingFileDataset = "unmatched".equals(name) && type.endsWith(".EvaluateJsonPath")

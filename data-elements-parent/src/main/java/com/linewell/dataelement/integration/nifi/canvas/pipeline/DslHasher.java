@@ -24,6 +24,8 @@ public final class DslHasher {
 
     /** Current NiFi compiler contract; shared by deployment and safe historical lineage recovery. */
     public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v31";
+    private static final String DATE_FETCH_COMPILER_REVISION = "registered-timestamp-monthly-date-fetch-10000-existing-bundle-v2-"
+            + com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.BUNDLE_VERSION;
     private static final String HIVE_TARGET_COMPILER_REVISION = "hive-global-codecs-all-columns-v3";
     private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-utf8-v2";
     private static final String JAVA_MAPPING_COMPILER_REVISION = "java-record-engine-"
@@ -60,6 +62,11 @@ public final class DslHasher {
         String baseHash = hash(dsl);
         if (baseHash == null) return null;
         String effectiveRevision = compilerRevision == null ? "" : compilerRevision;
+        if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(node -> node != null && "source".equals(node.category())
+                && !List.of("source.api", "source.ftp", "source.sftp", "source.kafka", "source.minio", "source.hdfs",
+                    "source.hbase", "source.elasticsearch", "source.iotdb").contains(node.manifestKey()))) {
+            effectiveRevision += "|" + DATE_FETCH_COMPILER_REVISION;
+        }
         if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(HiveSinkPublicationPolicy::isHiveSink)) effectiveRevision += "|" + HIVE_TARGET_COMPILER_REVISION;
         if (usesFieldMapping(dsl)) effectiveRevision += "|" + FIELD_MAPPING_COMPILER_REVISION;
         if(usesJavaMapping(dsl))effectiveRevision+="|"+JAVA_MAPPING_COMPILER_REVISION;

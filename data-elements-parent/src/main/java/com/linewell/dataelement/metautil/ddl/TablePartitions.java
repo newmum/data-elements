@@ -15,6 +15,8 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 @MagicModule("tablePartitions")
 public class TablePartitions {
     public static final int MAX_PARTITIONS = 2000;
+    public static final List<String> REGION_CODES=List.of("350100","350200","350300","350400","350500",
+            "350600","350700","350800","350900","351000");
     public boolean supported(DatabaseType type) {
         return Set.of("oracle","oceanbaseoracle","dameng","hive","mysql","mariadb","oceanbasemysql").contains(type.getCode().toLowerCase(Locale.ROOT));
     }
@@ -57,6 +59,7 @@ public class TablePartitions {
         String strategy=text(request.get("strategy")).toUpperCase(Locale.ROOT);
         List<Map<String,Object>> parts=new ArrayList<>();
         String displayStrategy=text(request.get("displayStrategy"));
+        if(strategy.equals("REGION")){strategy="LIST";displayStrategy="REGION";}
         if(strategy.equals("MONTH")||strategy.equals("YEAR")) {
             boolean yearly=strategy.equals("YEAR");
             displayStrategy=strategy;
@@ -76,6 +79,8 @@ public class TablePartitions {
             strategy="RANGE";
         } else {
             Object rows=request.get("partitions");
+            if("REGION".equals(displayStrategy)&&(rows==null||rows instanceof List<?> list&&list.isEmpty()))
+                rows=REGION_CODES.stream().map(code->Map.<String,Object>of("name","p_"+code,"bucket",code,"values",List.of(code))).toList();
             if(!(rows instanceof List<?> list)||list.isEmpty()||list.size()>MAX_PARTITIONS)throw new IllegalArgumentException("请配置1至"+MAX_PARTITIONS+"个分区");
             for(Object row:list) {
                 if(!(row instanceof Map<?,?> map))throw new IllegalArgumentException("分区定义无效");
@@ -151,6 +156,9 @@ public class TablePartitions {
     }
     public Map<String,Object> enrichConstraints(String ddl,List<Map<String,Object>> sourceConstraints,DataSourceConfig config) {
         return GeneratedTableConstraints.render(ddl,sourceConstraints,config);
+    }
+    public Map<String,Object> enrichConstraints(String ddl,List<Map<String,Object>> sourceConstraints,DataSourceConfig config,Map<String,Object> partitionPlan) {
+        return GeneratedTableConstraints.render(ddl,sourceConstraints,config,partitionPlan);
     }
 
     @SuppressWarnings("unchecked")

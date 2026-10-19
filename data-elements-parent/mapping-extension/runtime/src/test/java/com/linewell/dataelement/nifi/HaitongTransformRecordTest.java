@@ -63,6 +63,23 @@ class HaitongTransformRecordTest {
             var invalid=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());assertEquals("DATE_INVALID",invalid.path("errors").get(0).path("code").asText());
         }
     }
+    @Test void numericEpochMillisAndSecondsPassTargetValidationAndPreserveDateTime() throws Exception {
+        var plan=MappingEngine.compile(JSON.readTree("""
+          {"version":"1.0","recordErrorMode":"ROUTE_INVALID","mappings":[{"from":"x","to":"y","targetType":"DATETIME"}]}
+          """));
+        for(int count:List.of(20,100)) {
+            var runner=runner("NULL","ROUTE_INVALID");
+            runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
+            var rows=new ArrayList<Map<String,Object>>();
+            for(int i=0;i<count;i++)rows.add(Map.of("x",i%2==0?1496742868000L:"1496742868"));
+            rows.add(Map.of("x","20250230"));runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.INVALID,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+            var out=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());
+            assertEquals(count,out.size());for(var row:out)assertEquals(1496742868000L,row.path("y").asLong());
+            var invalid=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());
+            assertEquals(count,invalid.path("inputRecordIndex").asInt());assertEquals("DATE_INVALID",invalid.path("errors").get(0).path("code").asText());
+        }
+    }
     @Test void invalidSelfLoopUnwrapsOriginalRowAndKeepsSparseIndexWithoutNesting() throws Exception {
         var runner=runner("FAIL","ROUTE_INVALID");runner.enqueue("[{\"x\":\"valid\"},{}]");runner.run();
         var invalid=runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst();

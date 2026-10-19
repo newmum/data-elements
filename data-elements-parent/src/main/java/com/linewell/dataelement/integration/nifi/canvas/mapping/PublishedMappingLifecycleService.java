@@ -55,5 +55,5 @@ public class PublishedMappingLifecycleService {
         }
     }
     private JsonNode flow(String group){return nifi.get("/flow/process-groups/"+group,JsonNode.class).path("processGroupFlow").path("flow");}
-    private static boolean oneShot(JsonNode entity){JsonNode component=entity.path("component");String type=component.path("type").asText();return type.endsWith(".GenerateTableFetch")||type.endsWith(".GenerateFlowFile")||(type.endsWith(".QueryDatabaseTable")||type.endsWith(".QueryDatabaseTableRecord"))&&component.path("config").path("properties").path("Maximum-value Columns").asText().isBlank();}
+    private static boolean oneShot(JsonNode entity){JsonNode component=entity.path("component");String type=component.path("type").asText();return com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.isTableFetch(type)||type.endsWith(".GenerateFlowFile")||(type.endsWith(".QueryDatabaseTable")||type.endsWith(".QueryDatabaseTableRecord"))&&component.path("config").path("properties").path("Maximum-value Columns").asText().isBlank();}
 }

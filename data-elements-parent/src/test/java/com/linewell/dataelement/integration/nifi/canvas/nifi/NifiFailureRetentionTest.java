@@ -16,8 +16,9 @@ import static org.mockito.Mockito.*;
 class NifiFailureRetentionTest {
     private final ObjectMapper json = new ObjectMapper();
 
-    @Test
-    void retainsSupportedFailureAndRetryWithoutDuplicatingExistingFailureRoutes() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"GenerateTableFetch","GenerateDateTableFetch"})
+    void retainsSupportedFailureAndRetryWithoutDuplicatingExistingFailureRoutes(String fetchType) throws Exception {
         var client = spy(new NifiClient(null, json));
         JsonNode flow = json.readTree("""
                 {"processGroupFlow":{"flow":{"processors":[
@@ -28,7 +29,7 @@ class NifiFailureRetentionTest {
                 ],"connections":[
                   {"id":"existing","component":{"source":{"id":"execute"},"destination":{"id":"route"},"selectedRelationships":["failure"]}}
                 ]}}}
-                """);
+                """.replace("x.GenerateTableFetch", "x."+fetchType));
         doReturn(flow).when(client).get("/flow/process-groups/pg", JsonNode.class);
         doReturn(new NifiEntity(null, Map.of("id", "loop"), null, null)).when(client)
                 .createConnection(anyString(), anyString(), anyString(), anyString(), anyString(), anyList());

@@ -7,6 +7,31 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DictionarySqlEqualityTest {
+    @Test void duplicateKeyIsRealAmbiguityAndCategoryOrCompositeKeyResolvesIt() throws Exception {
+        String url="jdbc:h2:mem:dict_scopes_"+UUID.randomUUID()+";DB_CLOSE_DELAY=-1";
+        try(var connection=DriverManager.getConnection(url);var statement=connection.createStatement()) {
+            statement.execute("CREATE TABLE \"dict\"(\"category\" VARCHAR(20),\"code\" VARCHAR(20),\"label\" VARCHAR(40))");
+            statement.execute("INSERT INTO \"dict\" VALUES ('gender','1','male'),('status','1','active')");
+        }
+        var key=new DictionarySpec.Key(List.of("1"));
+        var ambiguous=new DictionarySpec("d","db","t","","dict",List.of("code"),List.of("STRING"),"label",null,"ERROR");
+        try(var reader=new BatchDictionaryReader(id->DriverManager.getConnection(url))) {
+            assertEquals("DICT_DUPLICATE_KEY",assertThrows(MappingException.class,()->reader.fetch(ambiguous,Set.of(key))).code());
+            assertEquals(1,reader.queries());
+        }
+        var filter=new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode().put("op","=").put("column","category").put("value","gender");
+        var scoped=new DictionarySpec("d","db","t","","dict",List.of("code"),List.of("STRING"),"label",filter,"ERROR");
+        try(var reader=new BatchDictionaryReader(id->DriverManager.getConnection(url))) {
+            assertEquals("male",reader.fetch(scoped,Set.of(key)).get(key).value()); assertEquals(1,reader.queries());
+        }
+        var composite=new DictionarySpec("d","db","t","","dict",List.of("category","code"),List.of("STRING","STRING"),"label",null,"ERROR");
+        var gender=new DictionarySpec.Key(List.of("gender","1")); var status=new DictionarySpec.Key(List.of("status","1"));
+        try(var reader=new BatchDictionaryReader(id->DriverManager.getConnection(url))) {
+            var result=reader.fetch(composite,Set.of(gender,status)); assertEquals("male",result.get(gender).value());
+            assertEquals("active",result.get(status).value()); assertEquals(1,reader.queries());
+        }
+    }
+
     @Test void databaseEqualityMapsPaddingAndCaseToEveryOriginalRequestInOneQuery()throws Exception {
         for(int count:List.of(20,100)) {
             String url="jdbc:h2:mem:dict_equality_"+UUID.randomUUID()+";DB_CLOSE_DELAY=-1";

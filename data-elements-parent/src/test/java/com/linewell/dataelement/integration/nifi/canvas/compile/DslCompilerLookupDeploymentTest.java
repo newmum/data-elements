@@ -123,6 +123,7 @@ class DslCompilerLookupDeploymentTest {
                 List.of("ODS_UUID"), List.of("ODS_UUID"), List.of()));
         Map<String, Object> sourceConfig = new LinkedHashMap<>(connection(sourceType, "source-db"));
         sourceConfig.put("table", "source_table");
+        sourceConfig.put("incrementalColumn", "UPDATED_AT");
         Pipeline pipeline = new Pipeline("task", "Lookup dialect regression", null, null, null,
                 new Pipeline.Dsl(1, List.of(
                         new Pipeline.Node("source", "source.test", "来源", "source", 0, 0, sourceConfig),

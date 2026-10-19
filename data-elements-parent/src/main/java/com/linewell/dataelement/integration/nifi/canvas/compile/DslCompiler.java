@@ -116,6 +116,29 @@ public class DslCompiler {
     public void preflightGlobalRecordServices(Pipeline pipeline) {
         GlobalJsonRecordServices.resolve(nifi,pipeline);
     }
+
+    /** Validate all source configurations in memory, then query installed extensions once per publication. */
+    public void preflightSources(Pipeline pipeline) {
+        if (validateDateFetchConfigurations(pipeline)) nifi.requireDateFetchExtension();
+    }
+
+    private boolean validateDateFetchConfigurations(Pipeline pipeline) {
+        boolean dateFetchRequired = false;
+        for (Pipeline.Node node : pipeline.dsl().nodes()) {
+            if (!supportsSyncSettings(node.manifestKey())) continue;
+            try { DateTableFetchPolicy.apply(node.config(), new LinkedHashMap<>()); }
+            catch (IllegalStateException ex) {
+                throw new NodeConfigException(node.id(), node.label(), "incrementalColumn", ex.getMessage(), ex);
+            }
+            dateFetchRequired |= !currentMaximumSource(node.config());
+        }
+        return dateFetchRequired;
+    }
+    private static boolean currentMaximumSource(Map<String, Object> config) {
+        return "INCREMENTAL".equals(SyncPolicy.mode(config))
+                && "START_AT_CURRENT_MAX".equals(SyncPolicy.text(config, "initialStrategy"));
+    }
+
     private static Map<String,JsonNode> javaMappingSpecifications(Pipeline pipeline){
         Map<String,JsonNode>specs=new LinkedHashMap<>();Map<String,Pipeline.Node>nodes=new HashMap<>();pipeline.dsl().nodes().forEach(node->nodes.put(node.id(),node));
         MappingFieldLabels labels=new MappingFieldLabels(pipeline);
@@ -190,6 +213,7 @@ public class DslCompiler {
         Objects.requireNonNull(pipeline.dsl(), "Pipeline DSL is required");
         Pipeline.Node periodicSource = SyncPolicy.periodicSource(pipeline);
         if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
+        validateDateFetchConfigurations(pipeline);
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi,pipeline);
@@ -461,9 +485,11 @@ public class DslCompiler {
                 continue;
             }
 
-            if ("source".equals(m.category()) && "INCREMENTAL".equals(SyncPolicy.mode(cfg))
-                    && "START_AT_CURRENT_MAX".equals(configText(cfg, "initialStrategy"))
-                    && spec.processors() != null && spec.processors().stream().anyMatch(p -> p.type().endsWith(".GenerateTableFetch"))) {
+            if ("source".equals(m.category()) && currentMaximumSource(cfg)
+                    && spec.processors() != null && spec.processors().stream()
+                        .anyMatch(p -> DateTableFetchPolicy.isTableFetch(p.type()))) {
+                // Existing 2.9.0 has no Initial Load Strategy. Retain the proven
+                // NiFi-native initialization path for this saved synchronization mode.
                 buildCurrentMaxSource(pgId, n, m, nc, nodeLayout, cfg, sharedCs);
                 continue;
             }
@@ -528,6 +554,7 @@ public class DslCompiler {
                     }
                     applyIncrementalSourceOptions(m, pSpec.localId(), cfg, resolved);
                     applySourceFetchDatabaseType(m, pSpec.type(), cfg, resolved);
+                    if (DateTableFetchPolicy.isTableFetch(pSpec.type())) DateTableFetchPolicy.apply(cfg, resolved);
                     applySourceRecordQueryOptions(m, pSpec.type(), cfg, resolved, sharedCs,typedJdbcRecords);
                     // Processors in one DSL component stay on the same row;
                     // NodeLayout has already separated topological columns and
@@ -557,7 +584,11 @@ public class DslCompiler {
                             n.label() + "/" + pSpec.localId(),
                             x, y, resolved, period, strategy);
                     nc.processorIds.put(pSpec.localId(), proc.id());
-                    if (pSpec.type().endsWith(".GenerateTableFetch")) nifi.executeOnPrimaryNode(proc.id());
+                    // A periodic batch feeds the fetcher through its input port. NiFi
+                    // rejects PRIMARY execution for processors with incoming connections.
+                    if (periodicSource == null && DateTableFetchPolicy.isTableFetch(pSpec.type())) {
+                        nifi.executeOnPrimaryNode(proc.id());
+                    }
                     row++;
                 }
             }
@@ -648,7 +679,7 @@ public class DslCompiler {
     public boolean supportsSyncSettings(String manifestKey) {
         ComponentManifest manifest = registry.get(manifestKey);
         return manifest != null && manifest.compile() != null && manifest.compile().processors() != null
-                && manifest.compile().processors().stream().anyMatch(p -> p.type().endsWith(".GenerateTableFetch"));
+                && manifest.compile().processors().stream().anyMatch(p -> DateTableFetchPolicy.isTableFetch(p.type()));
     }
 
     private void validatePeriodicPolicy(Pipeline pipeline, Pipeline.Node source) {
@@ -725,7 +756,7 @@ public class DslCompiler {
         properties.put("Database Type", nifiDatabaseType(configText(cfg, "dbType")));
         properties.put("Record Writer", sourceQueryRecordWriter(sharedCs,cfg));
         properties.put("Initial Load Strategy", "Start at Current Maximum Values");
-        properties.put("Max Rows Per FlowFile", firstNonBlankStatic(configText(cfg, "batchSize"), "10000"));
+        properties.put("Max Rows Per FlowFile", "10000");
         properties.put("Fetch Size", firstNonBlankStatic(configText(cfg, "defaultFetchSize"), "1000"));
         properties.put("Set Auto Commit", "false");
         properties.put("Use Avro Logical Types", "true");
@@ -1519,7 +1550,13 @@ public class DslCompiler {
                 || isOceanBaseOracleMode(cfg)) {
             return "Oracle";
         }
-        return null;
+        return switch (databaseType) {
+            case "MYSQL", "MARIADB", "TDSQL_MYSQL", "OCEANBASE", "OCEANBASE_MYSQL" -> "MySQL";
+            case "SQLSERVER", "MSSQL" -> "MS SQL 2012+";
+            case "DM", "DAMENG" -> "Dameng";
+            case "GAUSSDB" -> "GaussDB";
+            default -> "Generic";
+        };
     }
 
     private static boolean isOceanBaseOracleMode(Map<String, Object> cfg) {
@@ -3378,7 +3415,7 @@ public class DslCompiler {
     private String resolveProcessorType(ComponentManifest manifest, String localId, String declaredType,
                                         Map<String, Object> cfg) {
         if (manifest == null || !"put".equals(localId)) {
-            return declaredType;
+            return DateTableFetchPolicy.isTableFetch(declaredType) ? DateTableFetchPolicy.TYPE : declaredType;
         }
         if ("sink.jdbc".equals(manifest.key())) {
             String writerType = effectiveJdbcWriterType(cfg);
@@ -3786,7 +3823,7 @@ public class DslCompiler {
                                                Map<String, Object> cfg, Map<String, String> resolved) {
         if (!"source".equals(manifest.category()) || !"fetch".equals(localProcessorId)) return;
         if (manifest.compile() == null || manifest.compile().processors() == null
-                || manifest.compile().processors().stream().noneMatch(p -> localProcessorId.equals(p.localId()) && p.type().endsWith(".GenerateTableFetch"))) return;
+                || manifest.compile().processors().stream().noneMatch(p -> localProcessorId.equals(p.localId()) && DateTableFetchPolicy.isTableFetch(p.type()))) return;
 
         String syncMode = SyncPolicy.mode(cfg);
         if ("FULL".equals(syncMode) || "PERIODIC_FULL".equals(syncMode)) {
@@ -3898,7 +3935,7 @@ public class DslCompiler {
     private void applySourceFetchDatabaseType(ComponentManifest manifest, String processorType,
                                               Map<String, Object> cfg, Map<String, String> resolved) {
         if (!"source".equals(manifest.category())) return;
-        if (!"org.apache.nifi.processors.standard.GenerateTableFetch".equals(processorType)) return;
+        if (!DateTableFetchPolicy.isTableFetch(processorType)) return;
         String databaseType = sourceFetchDatabaseType(cfg);
         if (databaseType != null) {
             resolved.put("Database Type", databaseType);
@@ -3917,6 +3954,9 @@ public class DslCompiler {
         if (!"source".equals(manifest.category())) return;
         if (!"org.apache.nifi.processors.standard.ExecuteSQLRecord".equals(processorType)) return;
         resolved.put("Output Empty FlowFile", "false");
+        // Date partitions can contain many rows. Bound each downstream record window
+        // independently of the number of rows in the selected month.
+        resolved.put("Max Rows Per FlowFile", "10000");
         if(HiveTemporalJsonPolicy.isHive(manifest.key(),cfg)||typedJdbcRecords||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput")))resolved.put("Use Avro Logical Types","true");
         if (HiveTemporalJsonPolicy.isHive(manifest.key(), cfg)||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput"))) {
             resolved.put("Record Writer", requireHiveQueryRecordWriter(sharedCs));

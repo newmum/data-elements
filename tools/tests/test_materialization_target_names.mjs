@@ -20,6 +20,8 @@ const names = [
   'isCurrentInit', 'trackLoad', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
   'isHiveTarget',
+  'partitionPlans', 'ddlPartitionPlans', 'partitionSupport', 'partitionProbeMessage', 'sourceDefinitionMessage',
+  'sourceConstraints', 'partitionError', 'partitionProbeIdentity', 'ddlGenerationVersion', 'invalidateDdl', 'partitionInputError', 'partitionPayload', 'probePartitions',
   'normalizeCode', 'orderTargetDatasourceIds', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
   'materializationProgress', 'materializationElapsed', 'materializationAwaitingDecision',
   'materializationStartedAt', 'materializationTimer', 'startMaterializationProgress', 'stopMaterializationProgress', 'confirmMaterialization',
@@ -69,6 +71,7 @@ function fixture(size = 2) {
     nifiNodeOptions: ref([]), resolveNifiNodeId: () => 'node-1',
     props: { type: 'add', id: 'source-table', existingTargets: [] }, initRun: 0, open: ref(true),
     loadError: ref(''), loadErrorCode: ref(''), knownTargets: ref([]), recoveryTarget: ref(null), templateLoading: ref(false),
+    sourcePreflightError: ref(''), reuseTypeNotice: ref(''),
     loadPending: ref({}), formRules: ref([]), formData: ref({}), templateTableItems: ref([]),
     datasourceOptions: ref([]), datasourcePathMap: ref({}), datasourceLeafIds: ref([]), nifiNodeTreeOptions: ref([]),
     loadManagedNifiNodeOptions: () => {}, createFormRules: () => [],
@@ -79,7 +82,7 @@ function fixture(size = 2) {
     ddlGenerating: ref(false), ddlPlans: ref([]), ddlSqlByTarget: ref({}),
     ddlWarningsByTarget: ref({}), ddlTableItemsByTarget: ref({}), activeDdlKey: ref(''),
     ddlSourceFingerprint: ref(''), ddlWasEdited: ref(false), ddlMode: ref(false), isSaveing: ref(false),
-    ElMessage: Object.fromEntries(['error', 'warning', 'success'].map(key => [key, message => notices.push({ key, message })])),
+    ElMessage: Object.fromEntries(['error', 'warning', 'success', 'info'].map(key => [key, message => notices.push({ key, message })])),
     ElMessageBox: { confirm: async () => {} }, emit: (...args) => emitted.push(plain(args)), console,
     askExistingDecision: async (targets, canReuse) => {
       calls.push({route:'user-confirm', targets:plain(targets),canReuse});
@@ -93,6 +96,8 @@ function fixture(size = 2) {
       }
       if (route === '/ods/nifi-node/access-options') return {};
       if (route === '/dst/database/metadata/collectColumns') return { data: columns };
+      if (route === '/ods/dataAggTaskEnsure') return {data:{sourcePreflight:true,valid:true,sideEffectsApplied:false,sourceTableId:body.tableId}};
+      if (route.endsWith('/getCreateTableDDL') && body.partitionProbe) return {data:{source:{status:'unsupported'},targetSupport:{}}};
       if (route === '/ods/getTableTempalte' || route === '/ods/queryTargetTableInfo') return { data: {
         propList: { sourceTableName: context.sourceTableName.value, tableName: 'ODS_SAVED_CUSTOM', dbId: [['ODS', 'db-0']],
           sourceFileConfig: context.ftpTemplate || null },
@@ -219,8 +224,8 @@ for (const paths of [[['ODS', 'db-0'], ['ODS', 'db-1']], [['ODS', 'db-1']], [['O
 multi.form.tableName = 'ODS_User_CONFIRMED';
 multi.actual.syncTargetTableNameInput(multi.form.tableName);
 await multi.actual.handleSave();
-assert.equal(multi.notices.filter(n => n.key === 'error').length, 0);
-const generated = multi.calls.find(c => c.route.endsWith('/getCreateTableDDL')).body.targets;
+assert.equal(multi.notices.filter(n => n.key === 'error').length, 0, JSON.stringify(multi.notices));
+const generated = multi.calls.find(c => c.route.endsWith('/getCreateTableDDL') && c.body.batchGenerate).body.targets;
 const validated = multi.calls.find(c => c.route.endsWith('/createTable')).body.targets;
 const saved = multi.calls.filter(c => c.route === '/ods/createTapleApply');
 assert.equal(saved.length, 2);
@@ -267,7 +272,7 @@ assert.equal(existingHive.calls.filter(c => c.route === '/ods/dataAggReset' && !
 assert.equal(existingHive.calls.filter(c=>c.route.endsWith('/createTable') && c.body.batchReuseValidation).length,1);
 assert.equal(existingHive.calls.find(c=>c.route==='user-confirm').canReuse,true,'Physical table without registration can be adopted');
 assert.equal(existingHive.emitted.length, 1);
-assert.ok(existingHive.notices.some(notice => JSON.stringify(notice).includes('按已有表真实类型复用')));
+assert.ok(existingHive.notices.some(notice => notice.key === 'info' && notice.message.includes('沿用现有文本类型')));
 assert.equal(existingHive.timers.size,0,'Early exit also stops its local clock');
 
 for (const type of ['hive','mrshive','mysql','postgresql','kingbase8','oracle','dameng','sqlserver']) {
@@ -334,7 +339,7 @@ for (const size of [20, 100]) {
   assert.equal(before, 3, '20/100 option initialization must use the same three reads');
   if (size === 20) await f.actual.regenerateDdl(await f.actual.currentDdlInput());
   else await assert.rejects(f.actual.currentDdlInput(), /最多选择 20/);
-  assert.equal(f.calls.length - before, size === 20 ? 1 : 0);
+  assert.equal(f.calls.length - before, size === 20 ? 2 : 0, 'One source probe and one batch generation, independent of target count');
   requestCounts.push({ targets: size, initialRequests: before, ddlRequests: f.calls.length - before, rejected: size > 20 });
 }
 console.log(JSON.stringify({ defaultCases: defaults.length, existingNamePreserved: true,
