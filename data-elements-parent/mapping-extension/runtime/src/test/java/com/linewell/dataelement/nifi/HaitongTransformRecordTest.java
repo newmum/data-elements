@@ -71,7 +71,8 @@ class HaitongTransformRecordTest {
             var runner=runner("NULL","ROUTE_INVALID");
             runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
             var rows=new ArrayList<Map<String,Object>>();
-            for(int i=0;i<count;i++)rows.add(Map.of("x",i%2==0?1496742868000L:"1496742868"));
+            var carriers=List.of(1496742868000L,"1496742868000","\"1496742868000\"","1496742868","\"1496742868\"");
+            for(int i=0;i<count;i++)rows.add(Map.of("x",carriers.get(i%carriers.size())));
             rows.add(Map.of("x","20250230"));runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();
             runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.INVALID,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
             var out=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());

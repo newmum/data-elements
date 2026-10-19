@@ -9,7 +9,9 @@
 - `min-date`、`max-date` 默认不设置，不自动填入当前时间或数据库最大值。
 - 普通增量及首次全量后增量的 `Maximum-value Columns` 使用相同时间戳；单次和定时全量不启用增量水位。
 - 不向该自定义组件写入未声明的 `Initial Load Strategy`。既有“从当前最大值开始”模式保留原生 `QueryDatabaseTableRecord` 初始化路径，初始聚合和后续水位由 NiFi 管理；这一路径不逐表读取来源数据到后端，也不使用 Max Date 模拟跳过历史。
-- 来源 Record Writer 继续使用全局服务；ExecuteSQLRecord 每个 FlowFile 最多 10000 行。
+- 来源 Record Writer 继续使用全局服务。采集首节点直接连接 `ExecuteSQLRecord`，Oracle/OceanBase 不再自动插入 SQL 时间转换 `ReplaceText`。
+- `ExecuteSQLRecord` 的 `Max Rows Per FlowFile` 使用来源配置 `batchSize`（单批最大条数，默认 5000），`Fetch Size` 使用 `maxRowsPerRun`（单次最大行数，默认 20000），`Output Batch Size=1`。这些输出与抓取设置独立于首节点固定 10000 的分片大小。
+- `Fetch Size` 是 JDBC 每次抓取的建议值，不限制查询总行数；0 表示使用驱动默认值。保留历史已配置值，仅新建配置或缺省值使用新默认。
 
 普通采集首节点仅在主节点执行。定时全量保留父组定时触发器与串行批次子组；有批次输入的采集节点使用所有节点执行策略，避免“有输入连线且仅主节点执行”的 NiFi 校验错误。
 

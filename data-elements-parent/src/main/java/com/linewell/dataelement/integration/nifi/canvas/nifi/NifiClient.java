@@ -76,9 +76,7 @@ public class NifiClient {
             available.add(bundleCoordinates(bundle));
             // Bundle identity has three fields. Additional response metadata must
             // not make an otherwise identical installed extension appear missing.
-            if (required.path("group").equals(bundle.path("group"))
-                    && required.path("artifact").equals(bundle.path("artifact"))
-                    && required.path("version").equals(bundle.path("version"))) return;
+            if (matchesBundle(required, bundle)) return;
         }
         String reason = available.isEmpty()
                 ? "当前 NiFi 未注册 GenerateDateTableFetch 处理器（" + processorType + "）"
@@ -94,13 +92,31 @@ public class NifiClient {
                 + ":" + bundle.path("version").asText("未知");
     }
 
+    private static boolean matchesBundle(JsonNode required, JsonNode actual) {
+        return required.path("group").equals(actual.path("group"))
+                && required.path("artifact").equals(actual.path("artifact"))
+                && required.path("version").equals(actual.path("version"));
+    }
+
     public void requireMappingExtension(){
         JsonNode processors=get("/flow/processor-types",JsonNode.class).path("processorTypes");
         JsonNode services=get("/flow/controller-service-types",JsonNode.class).path("controllerServiceTypes");
+        ObjectNode required=mappingBundle();
+        java.util.List<String> mismatches=new java.util.ArrayList<>();
         for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
-            int count=0;for(JsonNode type:entry.getKey())if(type.path("type").asText().equals(entry.getValue())&&type.path("bundle").equals(mappingBundle()))count++;
-            if(count!=1)throw new IllegalStateException("当前NiFi节点缺少兼容的统一字段映射扩展"+com.linewell.dataelement.mapping.core.MappingEngine.engineVersion()+"，请安装haitong-mapping-nar后部署");
+            int count=0;
+            java.util.SortedSet<String> available=new java.util.TreeSet<>();
+            for(JsonNode type:entry.getKey())if(type.path("type").asText().equals(entry.getValue())){
+                available.add(bundleCoordinates(type.path("bundle")));
+                if(matchesBundle(required,type.path("bundle")))count++;
+            }
+            if(count!=1)mismatches.add(entry.getValue().substring(entry.getValue().lastIndexOf('.')+1)
+                    +" 当前已注册："+(available.isEmpty()?"无":String.join("、",available))+"，要求版本匹配数："+count);
         }
+        if(!mismatches.isEmpty())throw new IllegalStateException("字段治理扩展与后端版本不一致；后端字段治理内核版本："
+                +com.linewell.dataelement.mapping.core.MappingEngine.engineVersion()+"；要求扩展："+bundleCoordinates(required)
+                +"；"+String.join("；",mismatches)+"；请安装匹配目标 NiFi SDK 的 haitong-mapping-nar-"
+                +required.path("version").asText()+".nar，并确认处理器与字典服务均已注册同版扩展；旧流程已保留");
         JsonNode cluster=get("/flow/cluster/summary",JsonNode.class).path("clusterSummary");
         if(cluster.path("clustered").asBoolean()&&cluster.path("connectedNodeCount").asInt()>1)throw new IllegalStateException("多节点集群须完成全部节点扩展版本核验后才能部署统一映射");
     }

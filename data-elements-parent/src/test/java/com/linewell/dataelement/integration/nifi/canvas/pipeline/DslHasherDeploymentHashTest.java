@@ -122,6 +122,18 @@ class DslHasherDeploymentHashTest {
         assertThat(DslHasher.deploymentHash(jdbc, revision)).isEqualTo(previousDeploymentHash(jdbc, revision));
     }
 
+    @Test
+    void directFetchAndConfiguredRecordWindowsRequireExplicitRedeploymentOfDatabaseSources() throws Exception {
+        for (String key : List.of("source.mysql", "source.oracle", "source.oceanbase")) {
+            var config = Map.<String, Object>of("table", "events", "batchSize", 5000, "maxRowsPerRun", 20000);
+            var dsl = new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", key, "来源", "source", 0, 0, config)), List.of());
+            String old = previousDeploymentHash(dsl, DslHasher.CURRENT_COMPILER_REVISION
+                    + "|registered-timestamp-monthly-date-fetch-10000-existing-bundle-v2-2.9.0");
+            assertThat(DslHasher.deploymentHash(dsl, DslHasher.CURRENT_COMPILER_REVISION)).isNotEqualTo(old);
+            assertThat(dsl.nodes().getFirst().config()).isEqualTo(config);
+        }
+    }
+
     private static String previousDeploymentHash(Pipeline.Dsl dsl, String revision) throws Exception {
         byte[] digest = MessageDigest.getInstance("SHA-256")
                 .digest((DslHasher.hash(dsl) + "|" + revision).getBytes(StandardCharsets.UTF_8));

@@ -1371,8 +1371,8 @@ public class PipelineController {
         sourceConfig.put("initialStrategy", "START_AT_BEGINNING");
         sourceConfig.put("lookbackSeconds", 5);
         sourceConfig.put("safetyLagSeconds", 1);
-        sourceConfig.put("batchSize", 10000);
-        sourceConfig.put("maxRowsPerRun", 200000);
+        sourceConfig.put("batchSize", 5000);
+        sourceConfig.put("maxRowsPerRun", 20000);
         sourceConfig.put("softDeleteEnabled", false);
         sourceConfig.put("deleteReconcileStrategy", "NONE");
         return sourceConfig;

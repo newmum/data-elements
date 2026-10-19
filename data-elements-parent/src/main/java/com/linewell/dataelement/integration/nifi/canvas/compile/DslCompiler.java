@@ -126,6 +126,12 @@ public class DslCompiler {
         boolean dateFetchRequired = false;
         for (Pipeline.Node node : pipeline.dsl().nodes()) {
             if (!supportsSyncSettings(node.manifestKey())) continue;
+            for (String key : List.of("batchSize", "maxRowsPerRun")) {
+                try { sourceRowCount(node.config(), key); }
+                catch (IllegalStateException ex) {
+                    throw new NodeConfigException(node.id(), node.label(), key, ex.getMessage(), ex);
+                }
+            }
             try { DateTableFetchPolicy.apply(node.config(), new LinkedHashMap<>()); }
             catch (IllegalStateException ex) {
                 throw new NodeConfigException(node.id(), node.label(), "incrementalColumn", ex.getMessage(), ex);
@@ -302,7 +308,6 @@ public class DslCompiler {
                 inferDbTypeFromSourceManifest(n.manifestKey(), m.key()).ifPresent(dbType ->
                         cfg.putIfAbsent("dbType", dbType));
                 normalizeJdbcSourceConfig(cfg);
-                configureOracleCompatibleFetchSql(cfg);
             }
             cfg.remove("_runtimeHiveTargetInput");
             if(hiveInputNodes.contains(n.id()))cfg.put("_runtimeHiveTargetInput",true);
@@ -756,8 +761,7 @@ public class DslCompiler {
         properties.put("Database Type", nifiDatabaseType(configText(cfg, "dbType")));
         properties.put("Record Writer", sourceQueryRecordWriter(sharedCs,cfg));
         properties.put("Initial Load Strategy", "Start at Current Maximum Values");
-        properties.put("Max Rows Per FlowFile", "10000");
-        properties.put("Fetch Size", firstNonBlankStatic(configText(cfg, "defaultFetchSize"), "1000"));
+        configureSourceRecordWindow(cfg, properties);
         properties.put("Set Auto Commit", "false");
         properties.put("Use Avro Logical Types", "true");
         String temporalProjection=OracleTemporalProjection.columns(cfg);
@@ -1596,64 +1600,6 @@ public class DslCompiler {
     private static String configText(Map<String, Object> cfg, String key) {
         Object value = cfg.get(key);
         return value == null ? "" : String.valueOf(value).trim();
-    }
-
-    /**
-     * GenerateTableFetch serializes temporal watermarks using ANSI
-     * {@code timestamp '...'} literals. Although newer Oracle versions accept
-     * that literal, older Oracle and a number of OceanBase Oracle deployments
-     * do not handle it consistently with DATE columns and session NLS settings.
-     *
-     * <p>The source manifests place a ReplaceText processor immediately after
-     * GenerateTableFetch. These values tell it how to make the generated SQL
-     * explicit and version-independent. DATE values deliberately discard the
-     * generated fractional suffix (Oracle DATE has second precision); TIMESTAMP
-     * values retain it through {@code FF}.</p>
-     */
-    static void configureOracleCompatibleFetchSql(Map<String, Object> cfg) {
-        if (cfg == null) return;
-        String databaseType = configText(cfg, "dbType").toUpperCase(Locale.ROOT);
-        boolean oracleCompatible = "ORACLE".equals(databaseType)
-                || Set.of("OCEANBASE_ORACLE", "OCEANBASEORACLE").contains(databaseType)
-                || isOceanBaseOracleMode(cfg);
-        if (!oracleCompatible) {
-            // The OceanBase manifest is shared by MySQL and Oracle modes. A
-            // guaranteed no-match pattern keeps the normal MySQL SQL untouched.
-            cfg.put("oracleWatermarkSearch", "(?!)");
-            cfg.put("oracleWatermarkReplacement", "");
-            return;
-        }
-
-        String incrementalType = sourceColumnType(cfg, configText(cfg, "incrementalColumn"));
-        boolean timestamp = incrementalType.toUpperCase(Locale.ROOT).contains("TIMESTAMP");
-        if (timestamp) {
-            cfg.put("oracleWatermarkSearch", "(?i)timestamp\\s+'([^']+)'");
-            cfg.put("oracleWatermarkReplacement",
-                    "TO_TIMESTAMP('$1', 'YYYY-MM-DD HH24:MI:SS.FF')");
-        } else {
-            cfg.put("oracleWatermarkSearch",
-                    "(?i)timestamp\\s+'(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})(?:\\.\\d+)?'");
-            cfg.put("oracleWatermarkReplacement",
-                    "TO_DATE('$1', 'YYYY-MM-DD HH24:MI:SS')");
-        }
-    }
-
-    private static String sourceColumnType(Map<String, Object> cfg, String incrementalColumn) {
-        if (incrementalColumn == null || incrementalColumn.isBlank()) return "";
-        String column = incrementalColumn.split(",", 2)[0].trim();
-        Object rawColumns = cfg.get("sourceColumns");
-        if (!(rawColumns instanceof List<?> columns)) return "";
-        for (Object rawColumn : columns) {
-            if (!(rawColumn instanceof Map<?, ?> values)) continue;
-            Object rawName = values.get("columnName");
-            if (rawName == null) rawName = values.get("name");
-            if (rawName == null || !column.equalsIgnoreCase(String.valueOf(rawName).trim())) continue;
-            for (String key : List.of("dataType", "columnType", "typeName", "type")) {
-                Object value = values.get(key);
-                if (value != null && !String.valueOf(value).isBlank()) return String.valueOf(value).trim();
-            }
-        }
-        return "";
     }
 
     private static String firstNonBlankStatic(String... values) {
@@ -3854,11 +3800,6 @@ public class DslCompiler {
             }
         }
 
-        String batchSize = stringConfig(cfg, "batchSize");
-        if (!batchSize.isBlank()) {
-            resolved.put("Partition Size", String.valueOf(Math.max(1, (int) Math.round(Double.parseDouble(batchSize)))));
-        }
-
         if ("FULL".equals(syncMode) || "PERIODIC_FULL".equals(syncMode)) {
             String order = firstNonBlankStatic(configText(cfg, "fullOrderColumn"), configText(cfg, "incrementalColumn"));
             if (order.isBlank() && cfg.get("sourceColumns") instanceof List<?> columns) {
@@ -3954,12 +3895,31 @@ public class DslCompiler {
         if (!"source".equals(manifest.category())) return;
         if (!"org.apache.nifi.processors.standard.ExecuteSQLRecord".equals(processorType)) return;
         resolved.put("Output Empty FlowFile", "false");
-        // Date partitions can contain many rows. Bound each downstream record window
-        // independently of the number of rows in the selected month.
-        resolved.put("Max Rows Per FlowFile", "10000");
+        configureSourceRecordWindow(cfg, resolved);
         if(HiveTemporalJsonPolicy.isHive(manifest.key(),cfg)||typedJdbcRecords||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput")))resolved.put("Use Avro Logical Types","true");
         if (HiveTemporalJsonPolicy.isHive(manifest.key(), cfg)||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput"))) {
             resolved.put("Record Writer", requireHiveQueryRecordWriter(sharedCs));
+        }
+    }
+
+    /** Record windows and JDBC fetch hints are independent of the date partition size. */
+    private static void configureSourceRecordWindow(Map<String, Object> cfg, Map<String, String> properties) {
+        properties.put("Max Rows Per FlowFile", sourceRowCount(cfg, "batchSize"));
+        properties.put("Fetch Size", sourceRowCount(cfg, "maxRowsPerRun"));
+        properties.put("Output Batch Size", "1");
+    }
+
+    private static String sourceRowCount(Map<String, Object> cfg, String key) {
+        boolean batch = "batchSize".equals(key);
+        String text = cfg == null ? "" : configText(cfg, key);
+        if (text.isBlank()) return batch ? "5000" : "20000";
+        try {
+            int count = new java.math.BigDecimal(text).intValueExact();
+            if (count < (batch ? 1 : 0)) throw new ArithmeticException();
+            return Integer.toString(count);
+        } catch (NumberFormatException | ArithmeticException ex) {
+            throw new IllegalStateException((batch ? "单批最大条数" : "单次最大行数")
+                    + "必须为" + (batch ? "1" : "0") + "～2147483647 的整数", ex);
         }
     }
 

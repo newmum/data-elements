@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 class DslCompilerTargetTableTest {
@@ -95,46 +94,6 @@ class DslCompilerTargetTableTest {
         assertThat(config.get("table")).isEqualTo("ORDERS");
         assertThat(config.get("jdbcUrl")).isEqualTo("jdbc:oceanbase:oracle://10.130.46.2:2881/APPDB");
         assertThat(DslCompiler.sourceFetchDatabaseType(config)).isEqualTo("Oracle");
-    }
-
-    @Test
-    void rewritesOracleDateWatermarksUsingExplicitToDate() {
-        Map<String, Object> config = new LinkedHashMap<>();
-        config.put("dbType", "Oracle");
-        config.put("incrementalColumn", "YJSJ");
-        config.put("sourceColumns", java.util.List.of(Map.of("columnName", "YJSJ", "dataType", "DATE")));
-
-        DslCompiler.configureOracleCompatibleFetchSql(config);
-
-        assertThat(config.get("oracleWatermarkSearch")).isEqualTo(
-                "(?i)timestamp\\s+'(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})(?:\\.\\d+)?'");
-        assertThat(config.get("oracleWatermarkReplacement")).isEqualTo(
-                "TO_DATE('$1', 'YYYY-MM-DD HH24:MI:SS')");
-        String generatedSql = "SELECT * FROM TC_SZPT.T_JYZ_YJXX_NEW "
-                + "WHERE YJSJ > timestamp '2026-08-18 18:02:21.0' "
-                + "AND YJSJ <= timestamp '2026-08-18 18:07:23.0' "
-                + "ORDER BY YJSJ";
-        String normalizedSql = Pattern.compile(String.valueOf(config.get("oracleWatermarkSearch")))
-                .matcher(generatedSql)
-                .replaceAll(String.valueOf(config.get("oracleWatermarkReplacement")));
-        assertThat(normalizedSql).isEqualTo("SELECT * FROM TC_SZPT.T_JYZ_YJXX_NEW "
-                + "WHERE YJSJ > TO_DATE('2026-08-18 18:02:21', 'YYYY-MM-DD HH24:MI:SS') "
-                + "AND YJSJ <= TO_DATE('2026-08-18 18:07:23', 'YYYY-MM-DD HH24:MI:SS') "
-                + "ORDER BY YJSJ");
-    }
-
-    @Test
-    void preservesFractionalSecondsForOracleTimestampWatermarks() {
-        Map<String, Object> config = new LinkedHashMap<>();
-        config.put("dbType", "OCEANBASE_ORACLE");
-        config.put("incrementalColumn", "UPDATE_TIME");
-        config.put("sourceColumns", java.util.List.of(Map.of(
-                "columnName", "UPDATE_TIME", "dataType", "TIMESTAMP(6)")));
-
-        DslCompiler.configureOracleCompatibleFetchSql(config);
-
-        assertThat(config.get("oracleWatermarkReplacement")).isEqualTo(
-                "TO_TIMESTAMP('$1', 'YYYY-MM-DD HH24:MI:SS.FF')");
     }
 
     @Test

@@ -57,22 +57,10 @@
           "Database Connection Pooling Service": "${cs.dbcp}",
           "Record Writer": "${cs.jsonWriter}"
         }
-      },
-      {
-        "localId": "normalize-oracle-sql",
-        "type": "org.apache.nifi.processors.standard.ReplaceText",
-        "properties": {
-          "Replacement Strategy": "Regex Replace",
-          "Search Value": "${config.oracleWatermarkSearch}",
-          "Replacement Value": "${config.oracleWatermarkReplacement}",
-          "Evaluation Mode": "Entire text",
-          "Character Set": "UTF-8"
-        }
       }
     ],
     "internalConnections": [
-      { "from": "fetch", "to": "normalize-oracle-sql", "relationship": "success" },
-      { "from": "normalize-oracle-sql", "to": "execute", "relationship": "success" }
+      { "from": "fetch", "to": "execute", "relationship": "success" }
     ],
     "outlets": [
       { "name": "default", "processorRef": "execute", "relationship": "success" }

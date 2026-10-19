@@ -475,15 +475,15 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       type: 'number',
       default: 5000,
       group: 'incremental',
-      help: '编译到 NiFi GenerateTableFetch 的 Partition Size。',
+      help: '对应 ExecuteSQLRecord 的 Max Rows Per FlowFile，控制每个输出 FlowFile 的记录数；首节点 Partition Size 固定为 10000。',
     },
     {
       key: 'maxRowsPerRun',
       label: '单次最大行数',
       type: 'number',
-      default: 200000,
+      default: 20000,
       group: 'incremental',
-      help: '用于后续任务编排限流，0 表示不限制。',
+      help: '对应 ExecuteSQLRecord 的 Fetch Size（JDBC 每次抓取的建议行数），不限制本次查询总行数；0 使用驱动默认值。',
     },
     {
       key: 'customWherePredicate',

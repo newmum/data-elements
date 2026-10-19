@@ -10,6 +10,7 @@ import com.linewell.dataelement.integration.nifi.canvas.manifest.ManifestRegistr
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingService;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
+import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler.NodeConfigException;
 import com.linewell.dataelement.model.nifi.NifiEntity;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import java.util.*;
@@ -26,6 +27,8 @@ class DslCompilerSyncPolicyTest {
         ManifestRegistry registry = mock(ManifestRegistry.class);
         ObjectMapper mapper = new ObjectMapper();
         for (String[] item : List.of(new String[]{"source.mysql", "/manifests/sources/mysql.json"},
+                new String[]{"source.oracle", "/manifests/sources/oracle.json"},
+                new String[]{"source.oceanbase", "/manifests/sources/oceanbase.json"},
                 new String[]{"sink.jdbc", "/manifests/sinks/jdbc-sink.json"})) {
             try (var input = getClass().getResourceAsStream(item[1])) {
                 when(registry.get(item[0])).thenReturn(mapper.readValue(input, ComponentManifest.class));
@@ -49,6 +52,49 @@ class DslCompilerSyncPolicyTest {
         when(nifi.createConnection(anyString(), anyString(), anyString(), anyString(), anyString(), anyList()))
                 .thenAnswer(i -> entity("connection-" + sequence.incrementAndGet()));
         compiler = new DslCompiler(nifi, registry, mock(FieldMappingService.class), mock(HiveModule.class));
+    }
+
+    @Test
+    void databaseSourcesConnectFetchDirectlyToExecuteAndUseCanvasRecordWindows() {
+        for (String sourceKey : List.of("source.mysql", "source.oracle", "source.oceanbase")) {
+            for (Map<String, Object> options : List.of(Map.<String, Object>of(),
+                    Map.<String, Object>of("batchSize", 1234, "maxRowsPerRun", 87654),
+                    Map.<String, Object>of("batchSize", "5000", "maxRowsPerRun", "0"))) {
+                processors.clear();
+                clearInvocations(nifi);
+                Pipeline base = flow(options, target());
+                Pipeline.Node original = base.dsl().nodes().getFirst();
+                Map<String, Object> config = new LinkedHashMap<>(original.config());
+                config.put("compatibleMode", "ORACLE");
+                config.put("sid", "test");
+                var source = new Pipeline.Node(original.id(), sourceKey, original.label(), original.category(), 0, 0, config);
+                var pipeline = new Pipeline("p", "record windows", null, null, null,
+                        new Pipeline.Dsl(1, List.of(source, base.dsl().nodes().getLast()), base.dsl().edges()),
+                        null, null, null, null, null, null, null);
+                Map<String, Object> before = new LinkedHashMap<>(config);
+                compiler.compile(pipeline);
+                Processor fetch = processor("来源/fetch");
+                Processor execute = processor("来源/execute");
+                assertThat(processors).noneMatch(p -> p.type().endsWith(".ReplaceText"));
+                verify(nifi).createConnection("pg", fetch.id(), "PROCESSOR", execute.id(), "PROCESSOR", List.of("success"));
+                assertThat(execute.props()).containsEntry("Max Rows Per FlowFile", options.getOrDefault("batchSize", 5000).toString())
+                        .containsEntry("Fetch Size", options.getOrDefault("maxRowsPerRun", 20000).toString())
+                        .containsEntry("Output Batch Size", "1").containsEntry("Output Empty FlowFile", "false");
+                assertThat(fetch.props()).containsEntry(DateTableFetchPolicy.PARTITION_SIZE, "10000");
+                assertThat(config).isEqualTo(before);
+            }
+        }
+    }
+
+    @Test
+    void invalidRowCountsFailBeforeNativeMutationAndDoNotTruncateDecimalsOrOverflow() {
+        for (Map<String, Object> options : List.of(Map.<String, Object>of("batchSize", 0),
+                Map.<String, Object>of("batchSize", 1.5), Map.<String, Object>of("maxRowsPerRun", -1),
+                Map.<String, Object>of("maxRowsPerRun", "4294967295"))) {
+            assertThatThrownBy(() -> compiler.compile(flow(options, target())))
+                    .isInstanceOf(NodeConfigException.class).hasMessageContaining("整数");
+            verifyNoInteractions(nifi);
+        }
     }
 
     @Test
@@ -179,7 +225,8 @@ class DslCompilerSyncPolicyTest {
         Processor fetch = processor("来源/fetch");
         assertThat(fetch.type()).endsWith(".QueryDatabaseTableRecord");
         assertThat(fetch.props()).containsEntry("Initial Load Strategy", "Start at Current Maximum Values")
-                .containsEntry("Maximum-value Columns", "id").containsEntry("Max Rows Per FlowFile", "10000")
+                .containsEntry("Maximum-value Columns", "id").containsEntry("Max Rows Per FlowFile", "5000")
+                .containsEntry("Fetch Size", "20000").containsEntry("Output Batch Size", "1")
                 .containsEntry("Additional WHERE Clause", "enabled = 1")
                 .doesNotContainKey(DateTableFetchPolicy.PARTITION_COLUMN);
         verify(nifi).executeOnPrimaryNode(fetch.id());

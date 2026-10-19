@@ -26,6 +26,32 @@ class EpochAutoMappingTest {
         }
     }
 
+    @Test void quotedIntegerTextWorksInAutoAndExplicitEpochModes() {
+        for (String value:List.of("1496742868000", "\"1496742868000\"", "  \"1496742868000\"  ",
+                "\" 1496742868000 \"", "\"+1496742868000\"")) {
+            assertEquals(INSTANT,TemporalParser.auto(value,"INSTANT",ZONE),value);
+            assertEquals(LOCAL,ValueTypes.cast(value,"DATETIME",0,0,RoundingMode.UNNECESSARY,ZONE),value);
+            assertEquals(INSTANT,TemporalParser.bind("EPOCH_MILLIS","INSTANT",Map.of()).parse(value,ZONE,Locale.ROOT),value);
+        }
+        assertEquals(INSTANT,TemporalParser.auto("\"1496742868\"","INSTANT",ZONE));
+        assertEquals(Instant.ofEpochMilli(-1496742868000L),TemporalParser.auto("\"-1496742868000\"","INSTANT",ZONE));
+        assertEquals(LOCAL.withNano(123_000_000),TemporalParser.auto("\"1496742868123\"","DATETIME",ZONE));
+        assertEquals(INSTANT,TemporalParser.bind("EPOCH_SECONDS","INSTANT",Map.of()).parse("\"1496742868\"",ZONE,Locale.ROOT));
+        assertEquals(INSTANT,TemporalParser.bind("EPOCH_MICROS","INSTANT",Map.of()).parse("\"1496742868000000\"",ZONE,Locale.ROOT));
+        assertEquals(INSTANT,TemporalParser.bind("EPOCH_NANOS","INSTANT",Map.of()).parse("\"1496742868000000000\"",ZONE,Locale.ROOT));
+        for (String value:List.of("\"1496742868000", "1496742868000\"", "\"\"1496742868000\"\"",
+                "\"1496742868.5\"", "\"1.496742868E12\"", "\"not a timestamp\"", "\"20250230\""))
+            assertThrows(MappingException.class,()->TemporalParser.auto(value,"DATETIME",ZONE),value);
+        assertEquals(assertThrows(MappingException.class,()->TemporalParser.auto("1496742868000000","DATETIME",ZONE)).code(),
+                assertThrows(MappingException.class,()->TemporalParser.auto("\"1496742868000000\"","DATETIME",ZONE)).code());
+        // JSON string delimiters are removed by the JSON reader; literal embedded
+        // delimiters are a separate carrier, and both reach the same date contract.
+        try {
+            assertEquals(LOCAL,TemporalParser.auto(JSON.readTree("\"1496742868000\"").asText(),"DATETIME",ZONE));
+            assertEquals(LOCAL,TemporalParser.auto(JSON.readTree("\"\\\"1496742868000\\\"\"").asText(),"DATETIME",ZONE));
+        } catch(Exception error) { throw new AssertionError(error); }
+    }
+
     @Test void millisPreserveFractionAndSignedEpochsUseTheConfiguredZone() {
         for(Object value:List.of(1496742868123L,"1496742868123"))
             assertEquals(LOCAL.withNano(123_000_000),TemporalParser.auto(value,"DATETIME",ZONE));
@@ -68,7 +94,8 @@ class EpochAutoMappingTest {
           """));
         for(int count:List.of(20,100)) {
             var rows=new ArrayList<Map<String,Object>>();
-            for(int i=0;i<count;i++)rows.add(Map.of("LW_RKSJ",i%2==0?1496742868000L:"1496742868"));
+            var carriers=List.of(1496742868000L,"1496742868000","\"1496742868000\"","1496742868","\"1496742868\"");
+            for(int i=0;i<count;i++)rows.add(Map.of("LW_RKSJ",carriers.get(i%carriers.size())));
             rows.add(Map.of("LW_RKSJ","20250230"));
             var result=MappingEngine.execute(plan,rows,0,CONTEXT,(dictionary,keys)->{fail("Date conversion must not query dictionaries");return Map.of();});
             assertEquals(0,result.dictionaryBatches());

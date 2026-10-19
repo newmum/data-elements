@@ -19,6 +19,36 @@ import org.mockito.ArgumentCaptor;
 class NifiClientProcessorDefaultsTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test void mappingPreflightListsActualVersionsAndRequiresBothMatchingRegistrations() {
+        var client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));
+        String version=com.linewell.dataelement.mapping.core.MappingEngine.engineVersion();
+        var processors=mapper.createObjectNode();var processorTypes=processors.putArray("processorTypes");
+        var services=mapper.createObjectNode();var serviceTypes=services.putArray("controllerServiceTypes");
+        processorTypes.addObject().put("type","com.linewell.dataelement.nifi.HaitongTransformRecord")
+                .putObject("bundle").put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.21");
+        serviceTypes.addObject().put("type","com.linewell.dataelement.nifi.JdbcHaitongDictionaryService")
+                .putObject("bundle").put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version","1.1.21");
+        doReturn(processors).when(client).get(eq("/flow/processor-types"),eq(JsonNode.class));
+        doReturn(services).when(client).get(eq("/flow/controller-service-types"),eq(JsonNode.class));
+        var cluster=mapper.createObjectNode();cluster.putObject("clusterSummary").put("clustered",false);
+        doReturn(cluster).when(client).get(eq("/flow/cluster/summary"),eq(JsonNode.class));
+        org.assertj.core.api.Assertions.assertThatThrownBy(client::requireMappingExtension)
+                .hasMessageContaining("后端字段治理内核版本："+version)
+                .hasMessageContaining("HaitongTransformRecord 当前已注册：com.linewell.dataelement:haitong-mapping-nar:1.1.21")
+                .hasMessageContaining("JdbcHaitongDictionaryService 当前已注册：com.linewell.dataelement:haitong-mapping-nar:1.1.21")
+                .hasMessageContaining("haitong-mapping-nar-"+version+".nar");
+        verify(client).get(eq("/flow/processor-types"),eq(JsonNode.class));
+        verify(client).get(eq("/flow/controller-service-types"),eq(JsonNode.class));
+        processorTypes.addObject().put("type","com.linewell.dataelement.nifi.HaitongTransformRecord")
+                .putObject("bundle").put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version",version);
+        org.assertj.core.api.Assertions.assertThatThrownBy(client::requireMappingExtension)
+                .hasMessageContaining("JdbcHaitongDictionaryService 当前已注册：com.linewell.dataelement:haitong-mapping-nar:1.1.21");
+        serviceTypes.addObject().put("type","com.linewell.dataelement.nifi.JdbcHaitongDictionaryService")
+                .putObject("bundle").put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version",version)
+                .put("extraMetadata","ignored");
+        client.requireMappingExtension();
+    }
     @Test void dateFetchAcceptsTheExisting29BundleAndPinsItWhenOtherVersionsExist() {
         var client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));
         String type=com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.TYPE;

@@ -1426,8 +1426,8 @@ var sourceNodeConfig = {
     initialStrategy: 'START_AT_BEGINNING',
     lookbackSeconds: 5,
     safetyLagSeconds: 1,
-    batchSize: 10000,
-    maxRowsPerRun: 200000,
+    batchSize: 5000,
+    maxRowsPerRun: 20000,
     softDeleteEnabled: false,
     deleteReconcileStrategy: 'NONE'
 }
@@ -1581,7 +1581,7 @@ if (!firstHop) {
         sourceTableId: sourceTableId, sourceTableName: sourceTableName, table: sourceTableName,
         sourceColumns: columnList(sourceColumns), incrementalColumn: registeredTimestampColumn(sourceTable, sourceColumns),
         schedulingPeriod: '60 sec', syncMode: 'FULL_THEN_INCR', initialStrategy: 'START_AT_BEGINNING',
-        lookbackSeconds: 5, safetyLagSeconds: 1, batchSize: 10000, maxRowsPerRun: 200000,
+        lookbackSeconds: 5, safetyLagSeconds: 1, batchSize: 5000, maxRowsPerRun: 20000,
         softDeleteEnabled: false, deleteReconcileStrategy: 'NONE'
     }
     if (isServerManagedHuaweiMrsHive(sourceDbType, sourceCfg)) {

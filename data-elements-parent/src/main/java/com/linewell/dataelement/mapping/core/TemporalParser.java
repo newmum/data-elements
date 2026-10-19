@@ -16,6 +16,7 @@ public final class TemporalParser {
     private static final Pattern HOUR_OFFSET = Pattern.compile("([T ][0-9].*)([+-][0-9]{2})(?=\\[|$)");
     private static final Pattern DIGITS = Pattern.compile("[0-9]+");
     private static final Pattern AUTO_EPOCH = Pattern.compile("[+-]?[1-9](?:[0-9]{9}|[0-9]{12})");
+    private static final Pattern SIGNED_INTEGER = Pattern.compile("[+-]?[0-9]+");
     private static final Pattern ENGLISH_DATE = Pattern.compile("[A-Za-z]{3} [A-Za-z]{3} [0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2} ([^ ]+) [0-9]{4}");
     private static final Pattern ORACLE_DATE = Pattern.compile("[0-9]{1,2}-[A-Za-z]{3}-[0-9]{2,4} .+");
     private static final Pattern PARTIAL_YEAR_MONTH = Pattern.compile("[0-9]{4}[-/][0-9]{1,2}");
@@ -99,7 +100,7 @@ public final class TemporalParser {
             value=calendar;
         }
         if (!(value instanceof CharSequence)) throw new MappingException("DATE_UNIT_REQUIRED", "数值时间戳须明确选择秒、毫秒、微秒或纳秒单位");
-        String s = text(value);
+        String s = numericTemporalText(value);
         if (AUTO_EPOCH.matcher(s).matches()) {
             int digits = s.length() - (s.charAt(0) == '-' || s.charAt(0) == '+' ? 1 : 0);
             return new Parts(null, null, null, null, epoch(s, digits == 10 ? "EPOCH_SECONDS" : "EPOCH_MILLIS"));
@@ -158,6 +159,16 @@ public final class TemporalParser {
         return s;
     }
 
+    /** Accept one literal quote pair left by a source export around an integer. */
+    private static String numericTemporalText(Object value) {
+        String s = text(value);
+        if (s.length() >= 2 && s.charAt(0) == '"' && s.charAt(s.length() - 1) == '"') {
+            String unquoted = s.substring(1, s.length() - 1).strip();
+            if (SIGNED_INTEGER.matcher(unquoted).matches()) return unquoted;
+        }
+        return s;
+    }
+
     private static String normalizeOffset(String s) {
         s = OFFSET_SPACE.matcher(s).replaceAll("");
         s = SHORT_OFFSET.matcher(s).replaceAll("$1:$2");
@@ -207,7 +218,7 @@ public final class TemporalParser {
     private static MappingException incomplete() { return new MappingException("DATE_INCOMPLETE", "日期信息不完整；年月、月日或纯时间转完整日期须配置补全日期"); }
 
     private static Instant epoch(Object value, String mode) {
-        BigInteger number = ValueTypes.decimal(text(value)).toBigIntegerExact();
+        BigInteger number = ValueTypes.decimal(numericTemporalText(value)).toBigIntegerExact();
         long factor = switch (mode) { case "EPOCH_SECONDS" -> 1; case "EPOCH_MILLIS" -> 1000; case "EPOCH_MICROS" -> 1_000_000; default -> 1_000_000_000; };
         BigInteger[] split = number.divideAndRemainder(BigInteger.valueOf(factor));
         return Instant.ofEpochSecond(split[0].longValueExact(), split[1].longValueExact() * (1_000_000_000 / factor));
