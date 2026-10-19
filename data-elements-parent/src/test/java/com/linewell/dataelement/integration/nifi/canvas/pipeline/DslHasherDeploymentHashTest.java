@@ -91,6 +91,9 @@ class DslHasherDeploymentHashTest {
                 Map.<String, Object>of("executionEngine", "JAVA_RECORD"))) {
             var unified = singleSink("transform.field-mapping", Map.of("mappings", spec));
             assertThat(DslHasher.deploymentHash(unified, revision)).isEqualTo(previousDeploymentHash(unified,
+                    revision + "|field-mapping-lookup-dialect-utf8-v2|" + engineRevision
+                            + "-failure-retry-self-loop-invalid-retained-v2"));
+            assertThat(DslHasher.deploymentHash(unified, revision)).isNotEqualTo(previousDeploymentHash(unified,
                     revision + "|field-mapping-lookup-dialect-utf8-v2|" + engineRevision));
             assertThat(DslHasher.deploymentHash(unified, revision)).isNotEqualTo(previousDeploymentHash(unified,
                     revision + "|field-mapping-lookup-dialect-utf8-v2|java-record-engine-1.0.0-functions-1.0.0"));

@@ -28,7 +28,8 @@ public final class DslHasher {
     private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-utf8-v2";
     private static final String JAVA_MAPPING_COMPILER_REVISION = "java-record-engine-"
             + com.linewell.dataelement.mapping.core.MappingEngine.engineVersion() + "-functions-"
-            + com.linewell.dataelement.mapping.core.FunctionRegistry.libraryVersion();
+            + com.linewell.dataelement.mapping.core.FunctionRegistry.libraryVersion()
+            + "-failure-retry-self-loop-invalid-retained-v2";
     private static final String FILE_TRANSFER_COMPILER_REVISION = "ftp-file-dataset-parser-v2";
 
     private static final ObjectMapper SORTED = new ObjectMapper()

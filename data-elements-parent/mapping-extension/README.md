@@ -22,7 +22,7 @@ Oracle 无参数 `NUMBER` 的元数据不使用存储字节数充当十进制精
 
 共享转换内核、函数库、NiFi 处理器与字典服务同步升级为 **1.1.17**，编辑和执行协议版本不变。此版修复数据库比较规则与 Java 严格键比较不一致导致的 `DICTIONARY_RESULT_MISMATCH` 误报：批量参数关系附带请求序号，结果按该序号回填，保留数据库自身的大小写、补空格及类型比较语义。重复键、无结果、参数绑定和批次边界检查仍然生效。
 
-平台发布字段治理节点时，`retry` 单独自环；`failure` 与 `invalid` 各连接独立保留 Funnel，便于查看异常，不自动重新执行不可重试输入。failure 的属性和日志增加受控说明及异常类型；成功恢复时清理这些错误属性。
+平台新发布字段治理节点或仅升级字段节点时，`failure`、`retry` 合并为返回本组件的自环，只有 `invalid` 单独连接保留 Funnel。failure 保留原始输入并按默认30秒、最高5分钟指数退避，瞬时字典错误先走有次数上限的 retry；达到上限后进入 failure 自环。invalid 保存错误信封供定位和修复，不自动回灌。failure 的属性和日志提供受控说明及异常类型；成功恢复时清理这些错误属性。该连线由后端编译器生成，不改变1.1.21内核或已运行图；部署指纹已更新，后续明确部署使用新连线，不能为应用此默认值清空已有队列或来源水位。
 
 匹配 SDK 的干净构建包如下，不能跨 NiFi 版本互换：
 
@@ -145,7 +145,7 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 
 最后一个命令必须返回 `status=UP`。海通将本次 `dist/` 整体暂存并发布到实际 `/haitong/` 站点，保留前一版已打开页面可能仍要加载的哈希资源。当前演示检查和刷新命令为 `/opt/nginx/sbin/nginx -t`、`/opt/nginx/sbin/nginx -s reload`。新环境以自身服务和 Nginx 路径为准。生产构建 API 基址为 `/prod-api/nifi/api`，网关须代理到后端 `/nifi/api`；本地开发使用 `http://localhost:8088` 代理。共享 Magic/低代码如有本次所选变更，另外完成 `baseline` 发布、刷新和回读。本次后续扩展交付没有额外 Magic/低代码改动。
 
-**6. 用真实会话验收。** 从数据中台正常登录并核对 `/sym/tenant/current`。后端 `/nifi/api/field-mapping/capabilities` 应返回内核 1.1.13 与 56 项能力；海通的“编译计划”返回 `ENGINE_PLAN`，转换 `query` 为 NULL。使用受控测试表验证字段转换、字典读取和目标写入，确认 failure/invalid 有受控保留队列、retry 有次数上限。其他数据库要分别验证实际驱动的 Schema、标识符、精度、日期及 INSERT/UPDATE/UPSERT/DELETE 能力；目标不支持的操作须明确拒绝。未获得其测试环境前不宣称全部数据库已认证。
+**6. 用真实会话验收。** 从数据中台正常登录并核对 `/sym/tenant/current`。后端 `/nifi/api/field-mapping/capabilities` 应返回与目标已安装扩展相同的内核版本及56项能力；海通的“编译计划”返回 `ENGINE_PLAN`，转换 `query` 为 NULL。使用受控测试表验证字段转换、字典读取和目标写入，确认 failure/retry 返回本组件、invalid 单独保留，retry 有次数上限。其他数据库要分别验证实际驱动的 Schema、标识符、精度、日期及 INSERT/UPDATE/UPSERT/DELETE 能力；目标不支持的操作须明确拒绝。未获得其测试环境前不宣称全部数据库已认证。
 
 **7. 回退。** 后端或页面发布异常时恢复受限备份并重新验证健康和入口。字段规则从“模板 / 计划历史”选取旧版本，仅先恢复草稿，再校验、预览、保存及升级运行节点。出现 `MAPPING_UPGRADE_RECOVERY_REQUIRED` 时保持停止，核对原生边界、处理器和发布引用后处理；不清空来源 state 或业务队列。数据库回退先保持新增历史表和数据，不能通过删表丢弃计划与回退材料。
 
@@ -166,7 +166,7 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 
 **停止后再次启动。** 若字段节点已单独升级，而画布还保存其他未发布修改，使用统一映射面板的“启动已发布运行版本”。这个动作运行当前 NiFi 图，一次性来源只执行一次；其他修改继续保留为草稿。普通“启动”的完整草稿发布校验仍生效。要让其他修改生效，另行完成它们的正常部署。
 
-**复用与异常处理。** “模板 / 计划历史”可以保存租户模板、导入并重绑字段、查看已发布节点的计划历史；导入后继续校验、预览和发布。运行结果 success 去目标，failure、invalid、retry 合并到本组件的一条自环；异常内容保留在队列中，失败/无效记录按30秒起步、最高5分钟的指数退避重试。invalid 再次进入时恢复原始记录、类型和行号，避免重复包装。使用运行日志和队列统计定位错误，不把错误出口自动终止当作正常成功。固定快照用于字典结果稳定的场景，LIVE/TTL 的历史重放可能读到新字典值；来源身份和时钟稳定不能代替目标写入幂等设计。
+**复用与异常处理。** “模板 / 计划历史”可以保存租户模板、导入并重绑字段、查看已发布节点的计划历史；导入后继续校验、预览和发布。运行结果 success 去目标，failure、retry 合并为本组件的一条自环；只有 invalid 输出到独立保留队列。failure 按30秒起步、最高5分钟指数退避重试，invalid 不自动重新处理。兼容历史自环的 invalid 重放仍可恢复原始记录、类型和行号，避免重复包装。使用运行日志和队列统计定位错误，不把错误出口自动终止当作正常成功。固定快照用于字典结果稳定的场景，LIVE/TTL 的历史重放可能读到新字典值；来源身份和时钟稳定不能代替目标写入幂等设计。
 
 ## 组件契约
 
@@ -180,7 +180,7 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 
 - `HaitongTransformRecord`：Record Reader、可选的类型化 Reader、Record Writer、执行计划和 SHA-256 摘要；可设置 `plan-id` 和稳定的 `context-node-id`。需要外部字典时绑定批量字典服务。输入具有 avro.schema 时使用类型化 Reader；计划绑定来源 schemaContract 时检查实际 Reader Schema，输出保留 Writer 的 Schema 属性。
 - `JdbcHaitongDictionaryService`：发布时的已授权字典定义，以及 datasourceId 对应的 DBCP Controller Service。运行时再次比对表、schema、键、键类型、取值列、过滤条件和重复键策略，之后才执行读取、缓存或快照查找。连接凭据只进入敏感 DBCP 属性；完整固定快照仅进入敏感的 `snapshot-payloads` 属性。
-- relationships：success、invalid、failure、retry。failure、invalid、retry 在平台发布时合并为本组件的一条自环，不能自动终止。error-loop-delay 默认30秒，重复异常指数退避至最多5分钟；瞬时字典故障的 retry 次数上限仍为5，之后进入保留内容的 failure 回环。永久脏数据仍需处理原因，自环本身不会修复数据。
+- relationships：success、invalid、failure、retry。平台将 failure、retry 合并为本组件的一条自环，invalid 单独连接保留 Funnel；三个异常出口均不自动终止。error-loop-delay 默认30秒，failure 重复异常指数退避至最多5分钟；瞬时字典故障的 retry 次数上限为5，之后进入保留原文的 failure 回环。永久脏数据仍需处理原因，自环本身不会修复数据。
 - 每个窗口最多 512 行、约 8 MiB；单行 1 MiB、单字段结果 256 KiB；最多 32 个字典、8 个数据源、16 个依赖阶段、20,000 个查询键。两个窗口许可限制单处理器内并发。不同 FlowFile 分别拥有执行上下文。
 - 一份输入的全部窗口在同一个 ProcessSession 中提交。FAIL_FLOWFILE 在任何窗口失败时删除全部候选输出、保留原输入；ROUTE_INVALID 在同一 Session 内提交成功记录及错误信封。
 - `ht.input.identity`、`ht.execution.clock` 固定重放身份与时钟。编译器将稳定画布 node.id 写入 `context-node-id`，计划摘要保存在 `ht.plan.hash.<context-node-id>`，生成器使用“输入身份 + 稳定节点身份”；更换原生 Processor UUID 后仍能保持该上下文。手工组件没有此属性时回退到处理器 ID，不能宣称跨替换确定性。同节点计划摘要冲突拒绝重放，多映射节点串联分别校验。

@@ -103,12 +103,17 @@ class DslCompilerHiveTemporalWriterTest {
         compiler.compile(flow(List.of(source("source","oracle",Map.of("dbType","ORACLE","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))))));
         assertThat(namedProcessor("source/fetch").properties()).containsEntry("Columns to Return","CAST(\"EVENT_TIME\" AS TIMESTAMP) AS \"EVENT_TIME\"");
     }
-    @Test void failureAndInvalidHaveSeparateRetainedQueuesWhileRetryLoops() {
+    @Test void failureAndRetryShareSelfLoopWhileOnlyInvalidHasRetainedQueue() {
         compiler.compile(flow(List.of(source("source","mysql",Map.of()),mapping())));
         Created processor=namedProcessor("字段映射");
-        verify(nifi).createConnection("pg",processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("retry"));
-        verify(nifi,times(2)).createRetentionFunnel(eq("pg"),anyDouble(),anyDouble());
-        for(String relationship:List.of("failure","invalid"))verify(nifi).createConnection(eq("pg"),eq(processor.id()),eq("PROCESSOR"),anyString(),eq("FUNNEL"),eq(List.of(relationship)));
+        assertErrorRoutes(processor);
+    }
+
+    private void assertErrorRoutes(Created processor) {
+        verify(nifi).createConnection("pg",processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("failure","retry"));
+        verify(nifi,times(1)).createRetentionFunnel(eq("pg"),anyDouble(),anyDouble());
+        verify(nifi).createConnection(eq("pg"),eq(processor.id()),eq("PROCESSOR"),anyString(),eq("FUNNEL"),eq(List.of("invalid")));
+        verify(nifi,never()).createConnection(eq("pg"),eq(processor.id()),eq("PROCESSOR"),anyString(),eq("FUNNEL"),argThat(relationships->relationships.contains("failure")||relationships.contains("retry")));
     }
     @Test void oracleCurrentMaximumSourceUsesSameSupportedProjectionProperty() {
         compiler.compile(flow(List.of(source("source","oracle",Map.of("dbType","ORACLE","syncMode","INCREMENTAL","initialStrategy","START_AT_CURRENT_MAX","incrementalColumn","EVENT_TIME","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))))));
@@ -122,6 +127,11 @@ class DslCompilerHiveTemporalWriterTest {
                 .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader");
         assertThat(namedProcessor("字段映射").properties()).containsEntry("context-node-id","temporal-test:mapping");
         assertThat(processors).hasSize(1);
+        // The same policy applies to field-only replacement, without touching source IDs/state.
+        Created processor=namedProcessor("字段映射");
+        verify(nifi).createConnection("existing-group",processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("failure","retry"));
+        verify(nifi,times(1)).createRetentionFunnel(eq("existing-group"),anyDouble(),anyDouble());
+        verify(nifi).createConnection(eq("existing-group"),eq(processor.id()),eq("PROCESSOR"),anyString(),eq("FUNNEL"),eq(List.of("invalid")));
         verify(nifi,never()).putWithRevision(contains("/processors/"),anyString(),any());
         assertNoTaskJsonServices();
     }
