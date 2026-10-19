@@ -204,20 +204,57 @@ public class HiveModule {
             var ast=(com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement)com.alibaba.druid.sql.SQLUtils.parseStatements(create.toString(),com.alibaba.druid.DbType.hive).getFirst();
             var keys=ast.getPartitionColumns();
             if(keys.size()!=1||!com.alibaba.druid.sql.SQLUtils.normalize(keys.getFirst().getColumnName()).equalsIgnoreCase("ods_partition")
-                    ||!keys.getFirst().getDataType().getName().equalsIgnoreCase("STRING"))throw new IllegalArgumentException("Hive目标必须使用单列ods_partition STRING分区");
-            String location="",serde="",input="",delimiter=null;
+                    ||!keys.getFirst().getDataType().getName().equalsIgnoreCase("STRING"))throw new PartitionLayoutException("Hive目标表"+qualified+"必须使用单列ods_partition STRING分区，请核对目标表分区结构");
+            String location="",serde="",input="",delimiter=null,serializationFormat=null;
             try(var rs=statement.executeQuery("DESCRIBE FORMATTED "+qualified)) {
                 while(rs.next()){String key=Objects.toString(rs.getString(1),"").trim();String value=Objects.toString(rs.getString(2),"").trim();
                     if(key.equalsIgnoreCase("Location:"))location=value;if(key.equalsIgnoreCase("SerDe Library:"))serde=value;if(key.equalsIgnoreCase("InputFormat:"))input=value;
                     if(value.equalsIgnoreCase("field.delim"))delimiter=rs.getString(3);
-                    if(key.equalsIgnoreCase("field.delim"))delimiter=rs.getString(2);}
+                    if(key.equalsIgnoreCase("field.delim"))delimiter=rs.getString(2);
+                    if(value.equalsIgnoreCase("serialization.format"))serializationFormat=rs.getString(3);
+                    if(key.equalsIgnoreCase("serialization.format"))serializationFormat=rs.getString(2);}
             }
-            if(location.isBlank()||!serde.endsWith("LazySimpleSerDe")||!input.endsWith("TextInputFormat"))throw new IllegalArgumentException("当前分区入湖要求Ctrl-A文本表和真实HDFS Location");
-            if(delimiter!=null&&!java.util.Set.of("\u0001","1","\\001","\\u0001").contains(delimiter))throw new IllegalArgumentException("Hive目标字段分隔符必须为Ctrl-A，与分区Writer一致");
+            if(location.isBlank()||!serde.endsWith("LazySimpleSerDe")||!input.endsWith("TextInputFormat"))throw new PartitionLayoutException(
+                    "Hive目标表"+qualified+"的存储格式不匹配：要求LazySimpleSerDe、TextInputFormat及真实HDFS Location；实际SerDe="
+                            +describeMetadataValue(serde)+"，InputFormat="+describeMetadataValue(input)+"，Location"+(location.isBlank()?"缺失":"已设置"));
+            // LazySimpleSerDe prefers field.delim, then serialization.format, then Ctrl-A.
+            // DESCRIBE FORMATTED escapes control bytes and may pad values. String.trim()
+            // would also remove the actual U+0001 byte, so only strip display whitespace.
+            String delimiterProperty=delimiter==null?"serialization.format":"field.delim";
+            String effectiveDelimiter=delimiter==null?serializationFormat:delimiter;
+            if(!isCtrlADescribeValue(effectiveDelimiter))throw new PartitionLayoutException("Hive目标表"+qualified
+                    +"的字段分隔符不匹配：实际 "+delimiterProperty+"="+describeMetadataValue(effectiveDelimiter)
+                    +"；分区Writer要求Ctrl-A（U+0001）。请核对目标表SerDe配置与写入格式，不能直接改写已有数据的分隔符");
             List<String> values=new ArrayList<>();
             try(var rs=statement.executeQuery("SHOW PARTITIONS "+qualified)){while(rs.next()){if(values.size()==2000)throw new IllegalArgumentException("Hive分区超过2000个，不能截断核验");values.add(rs.getString(1));}}
             return Map.of("location",location,"partitions",values);
         }
+    }
+
+    /** A verified storage mismatch, distinct from connection/authentication failures. */
+    public static class PartitionLayoutException extends IllegalArgumentException {
+        public PartitionLayoutException(String message) { super(message); }
+    }
+
+    private static boolean isCtrlADescribeValue(String raw) {
+        if (raw == null || raw.isEmpty()) return true;
+        String value = raw.strip();
+        if (java.util.Set.of("\u0001", "\\001", "\\u0001").contains(value)) return true;
+        try { return Byte.parseByte(value) == 1; }
+        catch (NumberFormatException ignored) { return false; }
+    }
+
+    private static String describeMetadataValue(String raw) {
+        if (raw == null) return "<未设置>";
+        StringBuilder result = new StringBuilder("\"");
+        for (int i = 0; i < Math.min(raw.length(), 80); i++) {
+            char character = raw.charAt(i);
+            if (Character.isISOControl(character)) result.append(String.format("\\u%04X", (int) character));
+            else if (character == '"' || character == '\\') result.append('\\').append(character);
+            else result.append(character);
+        }
+        if (raw.length() > 80) result.append("…");
+        return result.append("\"（原始长度=").append(raw.length()).append("）").toString();
     }
 
     /** One metastore batch preserves custom partition Locations; never guesses warehouse paths. */

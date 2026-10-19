@@ -154,6 +154,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - Prefer a concise standard setup: `keytab` path, `krb5.conf` path, MRS client configuration directory or `hiveclient.properties` path, and Hive database (default allowed). Read endpoint/service-discovery values from the MRS client configuration; expose advanced manual overrides only when necessary.
 - Validate Kerberos/Hive on the host that will run the service or NiFi process, because local desktop paths and credentials are not portable to a server.
 - Hive 分区入湖除已有 HiveServer2/HDFS 配置外，服务端 MRS 客户端目录须提供含 `hive.metastore.uris` 的 `hive-site.xml`，Kerberos 模式沿用已登记服务端 principal/keytab 及 `core-site.xml`。部署按本次计划一次调用 Metastore `getPartitionsByNames` 批量读取真实分区 Location（最多2000个），保留自定义分区目录；不能按分区逐条 DESCRIBE，也不能猜测或覆盖目录。目标表和 NiFi CSV Writer 均须使用 Ctrl-A 文本格式；缺少实际分区、权限或配置时拒绝部署，不将数据写入未核验路径。
+- Hive 分隔符核验按 `field.delim`、`serialization.format`、默认 Ctrl-A 的优先级解析，兼容 `DESCRIBE FORMATTED` 的控制字符转义、数字字节值及格式化空白；去除空白时不能吞掉真实的 U+0001。真实格式冲突须显示目标库表、属性、实际值及要求值，与连接/认证失败分别报告；不能自动修改已有表或全局 Writer 来绕过冲突。
 
 ## Magic API Organization
 

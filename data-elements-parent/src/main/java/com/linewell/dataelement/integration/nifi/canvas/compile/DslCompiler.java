@@ -3446,6 +3446,7 @@ public class DslCompiler {
             partitionPlan.put("inputField",firstNonBlank(stringConfig(cfg,"partitionInputField"),String.valueOf(partitionPlan.get("field"))));
             Map<String,Object> partitionLayout;
             try {partitionLayout=hiveModule.partitionLayout(configText(cfg,"database"),configText(cfg,"table"));}
+            catch(HiveModule.PartitionLayoutException mismatch){throw new IllegalStateException(mismatch.getMessage(),mismatch);}
             catch(Exception failure){throw new IllegalStateException("无法核验Hive分区结构、文本格式和实际目录，请检查目标元数据访问",failure);}
             var present=(List<?>)partitionLayout.get("partitions");
             for(Object item:(List<?>)partitionPlan.get("partitions"))if(!present.contains("ods_partition="+((Map<?,?>)item).get("bucket")))throw new IllegalStateException("Hive目标缺少已配置分区，请先完成物化建表或分区注册");
