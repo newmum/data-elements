@@ -70,7 +70,8 @@ class EpochAutoMappingTest {
         assertEquals(LocalDateTime.of(2026,7,1,11,20,21,120_000_000),TemporalParser.auto("2026070111202112","DATETIME",ZONE));
         for(Object value:List.of(20250230,"20250230",20250230000000L,"20250230000000"))
             assertEquals("DATE_INVALID",assertThrows(MappingException.class,()->TemporalParser.auto(value,"DATETIME",ZONE)).code());
-        for(Object value:List.of(0,123456789012L,1496742868000000L,1496742868000000000L,new BigDecimal("1496742868.5")))
+        assertEquals(Instant.ofEpochMilli(123456789012L),TemporalParser.auto(123456789012L,"INSTANT",ZONE));
+        for(Object value:List.of(0,123456789L,1496742868000000L,1496742868000000000L,new BigDecimal("1496742868.5")))
             assertEquals("DATE_UNIT_REQUIRED",assertThrows(MappingException.class,()->TemporalParser.auto(value,"DATETIME",ZONE)).code());
         // Micro/nanoseconds and nonstandard-width values still have unambiguous explicit modes.
         assertEquals(INSTANT,TemporalParser.bind("EPOCH_MICROS","INSTANT",Map.of()).parse(1496742868000000L,ZONE,Locale.ROOT));

@@ -146,8 +146,40 @@ public class TablePartitions {
                 parts.add(part("p_future","MAXVALUE","future"));
             }
         }
+        if(type==DatabaseType.HIVE&&kind.equals("TIME")&&strategy.equals("RANGE"))calendarBuckets(parts,displayStrategy);
         if(type==DatabaseType.HIVE&&columns.stream().anyMatch(c->c.getColumnName().equalsIgnoreCase("ods_partition")))throw new IllegalArgumentException("ods_partition已被业务字段占用，请先调整分区列命名");
         return plan;
+    }
+    /** Label new inherited/expanded Hive buckets from their real bounds, never an exclusive upper year. */
+    private static void calendarBuckets(List<Map<String,Object>> parts,String displayStrategy) {
+        LocalDateTime lower=null;
+        for(var p:parts) {
+            String value=text(p.get("upper"));
+            LocalDateTime upper=value.equals("MAXVALUE")?null:LocalDateTime.parse(value.replace(' ','T'));
+            // Only replace sequential placeholders; keep calendar/custom values stable on repeated normalization.
+            if(text(p.get("bucket")).matches("p_(?:\\d+|auto_\\d+)")) {
+                String bucket;
+                if(upper==null)bucket="future";
+                else if(lower==null)bucket="before_"+calendarLabel(upper,displayStrategy.equals("YEAR"));
+                else if(lower.getMonthValue()==1&&isMonthStart(lower)&&lower.plusYears(1).equals(upper))
+                    bucket=String.format(Locale.ROOT,"%04d",lower.getYear());
+                else if(isMonthStart(lower)&&lower.plusMonths(1).equals(upper))
+                    bucket=lower.format(java.time.format.DateTimeFormatter.ofPattern("uuuuMM"));
+                else bucket="from_"+calendarLabel(lower,false)+"_to_"+calendarLabel(upper,false);
+                p.put("bucket",bucket);
+            }
+            lower=upper;
+        }
+        Set<String> buckets=new HashSet<>();
+        for(var p:parts)if(!buckets.add(text(p.get("bucket"))))throw new IllegalArgumentException("分区时间范围生成的Hive分区值重复，请确认时间范围或手工配置分区值");
+    }
+    private static boolean isMonthStart(LocalDateTime value) {
+        return value.getDayOfMonth()==1&&value.toLocalTime().equals(LocalTime.MIDNIGHT);
+    }
+    private static String calendarLabel(LocalDateTime value,boolean yearly) {
+        String pattern=yearly&&value.getMonthValue()==1&&isMonthStart(value)?"uuuu":isMonthStart(value)?"uuuuMM":
+                value.toLocalTime().equals(LocalTime.MIDNIGHT)?"uuuuMMdd":"uuuuMMddHHmmss";
+        return value.format(java.time.format.DateTimeFormatter.ofPattern(pattern));
     }
     private static Map<String,Object> part(String name,String upper,String bucket){Map<String,Object> p=new LinkedHashMap<>();p.put("name",name);p.put("upper",upper);p.put("bucket",bucket);return p;}
 

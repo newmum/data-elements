@@ -28,30 +28,27 @@
     <section class="overview-grid">
       <article
         class="overview-card is-blue"
-        :class="{ 'is-active': state.metricFilter === 'sourceIssues' }"
+        :class="{ 'is-active': isMetricSelected('sourceIssues') }"
         role="button"
         tabindex="0"
-        @click="applyMetricFilter('sourceIssues')"
-        @keyup.enter="applyMetricFilter('sourceIssues')"
+        @click="applyIncompleteFilter"
+        @keyup.enter="applyIncompleteFilter"
       >
         <span class="card-icon"><Icon icon="el-icon-Monitor" /></span>
         <div class="card-main">
-          <small>数据源</small>
-          <strong>
-            {{ stats.datasourceTotal }}
-            <em>个</em>
-          </strong>
-        </div>
-        <div class="card-breakdown">
-          <span :class="{ 'attention-danger': stats.unreachableDatasourceTotal > 0 }">无法连通 {{ stats.unreachableDatasourceTotal }} 个</span>
-          <span :class="{ 'attention-warning': stats.pendingDatasourceTotal > 0 }">
-            待登记 {{ stats.draftDatasourceTotal }} 个 / 未登记完成 {{ stats.incompleteDatasourceTotal }} 个
-          </span>
+          <div class="card-header">
+            <small>数据源</small>
+            <span class="card-note" :class="{ 'attention-warning': stats.incompleteDatasourceTotal > 0 }">未完成登记 {{ stats.incompleteDatasourceTotal }} 个</span>
+          </div>
+          <div class="card-value">
+            <strong>{{ stats.datasourceTotal }}<em>个</em></strong>
+            <span class="card-note" :class="{ 'attention-danger': stats.unreachableDatasourceTotal > 0 }">无法连通 {{ stats.unreachableDatasourceTotal }} 个</span>
+          </div>
         </div>
       </article>
       <article
         class="overview-card is-green"
-        :class="{ 'is-active': state.metricFilter === 'unannotated' }"
+        :class="{ 'is-active': isMetricSelected('unannotated') }"
         role="button"
         tabindex="0"
         @click="applyMetricFilter('unannotated')"
@@ -59,21 +56,19 @@
       >
         <span class="card-icon"><Icon icon="complete" /></span>
         <div class="card-main">
-          <small>表标注</small>
+          <div class="card-header">
+            <small>表标注</small>
+            <span class="card-note" :class="{ 'attention-warning': stats.unannotatedTotal > 0 }">未完成标注 {{ stats.unannotatedTotal }}</span>
+          </div>
           <strong>
             {{ stats.annotatedTableTotal }}
             <em>/ {{ stats.tableTotal }} 张</em>
           </strong>
         </div>
-        <div class="card-breakdown">
-          <span :class="{ 'attention-warning': stats.unannotatedTotal > 0 }">
-            未完成标注 {{ stats.unannotatedTotal }}
-          </span>
-        </div>
       </article>
       <article
         class="overview-card is-purple"
-        :class="{ 'is-active': state.metricFilter === 'tableIssues' }"
+        :class="{ 'is-active': isMetricSelected('tableIssues') }"
         role="button"
         tabindex="0"
         @click="applyMetricFilter('tableIssues')"
@@ -81,18 +76,16 @@
       >
         <span class="card-icon"><Icon icon="table" /></span>
         <div class="card-main">
-          <small>表登记</small>
+          <div class="card-header">
+            <small>表登记</small>
+            <span class="card-note" :class="{ 'attention-warning': stats.problemTableTotal > 0 }">未完成登记 {{ stats.problemTableTotal }}</span>
+          </div>
           <strong>{{ stats.registeredTableTotal }}<em>/ {{ stats.tableTotal }} 张</em></strong>
-        </div>
-        <div class="card-breakdown">
-          <span :class="{ 'attention-warning': stats.problemTableTotal > 0 }">
-            未完成登记 {{ stats.problemTableTotal }}
-          </span>
         </div>
       </article>
       <article
         class="overview-card is-orange"
-        :class="{ 'is-active': state.metricFilter === 'changed' }"
+        :class="{ 'is-active': isMetricSelected('changed') }"
         role="button"
         tabindex="0"
         @click="applyMetricFilter('changed')"
@@ -421,10 +414,9 @@ const state = reactive({
 
 const filterOptions = [
   { label: "全部", value: "all" },
-  { label: "待登记", value: "pending" },
-  { label: "未登记完成", value: "incomplete" },
-  { label: "已完成", value: "completed" },
   { label: "待标注", value: "unannotated" },
+  { label: "未完成", value: "incomplete" },
+  { label: "已完成", value: "completed" },
   { label: "有变更", value: "changed" },
 ];
 
@@ -775,26 +767,15 @@ const clearKeyword = () => {
 };
 
 const matchedFilter = (item) => {
-  if (state.filter === "pending") {
-    return normalizeNumber(item.assetStatus ?? item.asset_status) === 0;
-  }
-  if (state.filter === "incomplete") return normalizeNumber(item.assetStatus ?? item.asset_status) === 1;
+  if (state.filter === "incomplete") return hasIncompleteRegistrationStatus(item);
   if (state.filter === "completed") return isRegistrationComplete(item);
   if (state.filter === "unannotated") return normalizeNumber(item.unannotatedTableNum) > 0;
   if (state.filter === "changed") return normalizeNumber(item.changedTableNum) > 0;
   return true;
 };
 
-const matchedMetricFilter = (item) => {
-  if (state.metricFilter === "sourceIssues") return sourceHasPrimaryIssue(item);
-  if (state.metricFilter === "unannotated") return normalizeNumber(item.unannotatedTableNum) > 0;
-  if (state.metricFilter === "tableIssues") return normalizeNumber(item.problemTableNum) > 0;
-  if (state.metricFilter === "changed") return normalizeNumber(item.changedTableNum) > 0;
-  return true;
-};
-
 const filteredBeforeOrganization = computed(() =>
-  state.list.filter((item) => matchedKeyword(item) && matchedFilter(item) && matchedMetricFilter(item))
+  state.list.filter((item) => matchedKeyword(item) && matchedFilter(item))
 );
 
 const getTreeNodeCount = (node) => {
@@ -911,7 +892,7 @@ const stats = computed(() => {
         acc.completedTotal += 1;
       } else {
         acc.pendingDatasourceTotal += 1;
-        if (normalizeNumber(item.assetStatus ?? item.asset_status) === 1) acc.incompleteDatasourceTotal += 1;
+        if (hasIncompleteRegistrationStatus(item)) acc.incompleteDatasourceTotal += 1;
         else acc.draftDatasourceTotal += 1;
       }
       return acc;
@@ -1001,17 +982,19 @@ const appSystemKey = (item) =>
 
 const hasAppSystem = (item) => appSystemKey(item).length > 0;
 
-// 状态由服务端聚合有效表完成情况；0 待登记，1 未登记完成，2 已完成。
+// 0 尚未结束登记，1 已结束流程但仍未完成全部表登记，2 全部完成；状态口径保持不变。
 const hasCompletedRegistrationStatus = (item) =>
   normalizeNumber(item.assetStatus ?? item.asset_status) === 2;
+
+// 顶部未完成登记数量与列表“未完成”筛选共用状态 1，不混入待登记或仅连接失败的数据源。
+const hasIncompleteRegistrationStatus = (item) =>
+  normalizeNumber(item.assetStatus ?? item.asset_status) === 1;
 
 const isRegistrationComplete = (item) => hasCompletedRegistrationStatus(item);
 
 const isConnectionUnavailable = (item) => connectionStatusOf(item) !== "success";
 
-const sourceHasPrimaryIssue = (item) => isConnectionUnavailable(item) || !isRegistrationComplete(item);
-
-const statusText = (item) => ["待登记", "未登记完成", "已完成"][normalizeNumber(item.assetStatus ?? item.asset_status)] || "待登记";
+const statusText = (item) => ["待登记", "未完成", "已完成"][normalizeNumber(item.assetStatus ?? item.asset_status)] || "待登记";
 
 const statusTagType = (item) => {
   return isRegistrationComplete(item) ? "success" : "warning";
@@ -1180,10 +1163,25 @@ const sourceCreatorText = (item) => firstText(
   "未留痕"
 );
 
-const applyMetricFilter = (filter) => {
-  state.metricFilter = state.metricFilter === filter ? "" : filter;
-  state.filter = "all";
+// 两张登记卡片共用“未完成”条件；卡片标识只区分点击来源，列表统一使用下方筛选规则。
+const isMetricSelected = (filter) => {
+  if (filter === "sourceIssues") return state.filter === "incomplete" && state.metricFilter !== "tableIssues";
+  if (filter === "tableIssues") return state.filter === "incomplete" && state.metricFilter === "tableIssues";
+  return state.filter === filter;
 };
+
+const applyMetricFilter = (filter) => {
+  const selected = isMetricSelected(filter);
+  state.filter = selected ? "all" : {
+    sourceIssues: "incomplete",
+    tableIssues: "incomplete",
+    unannotated: "unannotated",
+    changed: "changed",
+  }[filter];
+  state.metricFilter = selected ? "" : filter;
+};
+
+const applyIncompleteFilter = () => applyMetricFilter("sourceIssues");
 
 const clearMetricFilter = () => {
   state.metricFilter = "";
@@ -1633,7 +1631,32 @@ onMounted(loadData);
 }
 
 .card-main {
-  flex: 0 0 auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-header,
+.card-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-note {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: #667085;
+  font-size: 12px;
+  white-space: nowrap;
+
+  &.attention-danger {
+    color: #d92d20;
+  }
+
+  &.attention-warning {
+    color: #f79009;
+  }
 }
 
 .card-breakdown {
@@ -1682,6 +1705,7 @@ onMounted(loadData);
   justify-content: center;
   width: 42px;
   height: 42px;
+  flex-shrink: 0;
   border-radius: 14px;
   font-size: 22px;
 }

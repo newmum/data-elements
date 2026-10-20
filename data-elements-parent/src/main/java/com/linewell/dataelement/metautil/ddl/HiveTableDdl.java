@@ -38,7 +38,11 @@ public final class HiveTableDdl {
         }
         sql.append("\n)");
         if (!text(comment).isEmpty()) sql.append(" COMMENT '").append(literal(comment)).append("'");
-        return sql.append(";\n").toString();
+        // The production Hive deployment has verified this multi-character row delimiter.
+        // Keep visible escapes in the SQL sent to Hive, including the final literal backslash-n.
+        return sql.append("\nROW FORMAT DELIMITED\nFIELDS TERMINATED BY '\\001'\n")
+                .append("LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'\n")
+                .append("STORED AS TEXTFILE;\n").toString();
     }
 
     static String type(ColumnInfo column) {

@@ -12,6 +12,23 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class HiveTableDdlTest {
+    @Test void generatedPlainAndPartitionedDdlKeepTheProductionLineDelimiter() {
+        String terminator="LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'";
+        var config=new DataSourceConfig();config.setDatabaseType(DatabaseType.HIVE);config.setDatabase("warehouse");
+        var field=column("occurred_at","TIMESTAMP");
+        String plain=HiveTableDdl.generate("ods_lines",List.of(field),"换行验证");
+        assertThat(plain).contains("ROW FORMAT DELIMITED","FIELDS TERMINATED BY '\\001'",terminator,"STORED AS TEXTFILE");
+        var partitions=new TablePartitions();
+        var plan=partitions.normalize(new java.util.LinkedHashMap<>(java.util.Map.of("enabled",true,"strategy","MONTH",
+                "field","occurred_at","startMonth","2024-01","months",2)),List.of(field),DatabaseType.HIVE);
+        String partitioned=partitions.apply(plain,plan,config);
+        for(String sql:List.of(plain,partitioned)) {
+            assertThat(sql).containsOnlyOnce(terminator).doesNotContain("\u0002","\u0003");
+            assertThat(new CanvasTableDdl().submitted(sql,"ods_lines",config).get("ddl")).isEqualTo(sql);
+        }
+        assertThat(partitioned.indexOf("PARTITIONED BY")).isLessThan(partitioned.indexOf("ROW FORMAT"));
+        assertThat(partitioned.indexOf(terminator)).isLessThan(partitioned.indexOf("STORED AS"));
+    }
     private ColumnInfo column(String name, String type) {
         var column = new ColumnInfo(); column.setColumnName(name); column.setColumnType(type); return column;
     }

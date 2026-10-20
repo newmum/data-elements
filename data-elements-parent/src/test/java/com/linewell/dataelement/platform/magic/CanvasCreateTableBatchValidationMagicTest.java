@@ -40,6 +40,19 @@ class CanvasCreateTableBatchValidationMagicTest {
     private CountingPartitions partitions;
 
     @Test
+    void hiveMaterializationExecutesTheGeneratedMultiCharacterTerminatorVerbatim() throws Exception {
+        physical.allowCreate=true;
+        var column=new ColumnInfo();column.setColumnName("id");column.setColumnType("STRING");
+        String ddl=com.linewell.dataelement.metautil.ddl.HiveTableDdl.generate("ods_lines",List.of(column),"换行验证");
+        assertTrue(ddl.contains("LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'"));
+        var result=assertInstanceOf(Map.class,run(Map.of("canvas",true,"dbId","target-db",
+                "tableName","ods_lines","ddl",ddl,"partitionPlan",Map.of("enabled",false))));
+        assertEquals(true,result.get("created"));
+        assertEquals(List.of(ddl),physical.createdDdls);
+        assertEquals(0,partitions.calls);assertEquals(0,counter.writes);
+    }
+
+    @Test
     void nativeDatabaseFailureIsReturnedWithItsReasonAndSensitiveValuesRemoved() throws Exception {
         physical.allowCreate=true;
         physical.createFailure=new java.sql.SQLException("Hive ParseException: unexpected token; password='private-fixture-value'", "42000",40000);

@@ -58,6 +58,16 @@ public final class SchemaContract {
         for (JsonNode rule : plan.document().path("rules")) if (rule.path("sourceOptional").asBoolean() && rule.path("input").path("kind").asText().equals("FIELD")) optional.add(rule.path("input").path("name").asText());
         if (expected.isEmpty()) return;
         Map<String,String> declaredTypes=new HashMap<>();expected.forEach(field->declaredTypes.put(field.name(),field.logicalType()));
+        Set<String> jdbcMillisFields=new HashSet<>();
+        for(JsonNode field:contract.path("source"))if(field.path("dateContainsTime").asBoolean()
+                &&ValueTypes.type(field.path("physicalType").asText()).equals("DATE"))jdbcMillisFields.add(field.path("name").asText());
+        // JsonTreeReader sees the JSON carrier, not the original JDBC DATE type.
+        // Only declared Oracle DATE fields get this scalar transport allowance;
+        // per-value temporal conversion still rejects invalid values.
+        actual=actual.stream().map(field->jdbcMillisFields.contains(field.name())
+                &&Set.of("DATE","DATETIME","INSTANT").contains(declaredTypes.getOrDefault(field.name(),""))
+                &&Set.of("INT","LONG","DOUBLE","DECIMAL","STRING","DATE","DATETIME","INSTANT").contains(field.logicalType())
+                ?new Field(field.name(),declaredTypes.get(field.name()),field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         actual=actual.stream().map(field->field.logicalType().equals("DATETIME")&&"INSTANT".equals(declaredTypes.get(field.name()))
                 ?new Field(field.name(),"INSTANT",field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         if(!contract.path("enforceReaderNullability").asBoolean(false)){
@@ -90,7 +100,17 @@ public final class SchemaContract {
             if(physical.length()>0&&!output.has("length"))output.put("length",physical.length());
             if(physical.precision()>0){if(output.has("precision")&&output.path("precision").asInt()==0)output.put("precision",physical.precision()).put("scale",physical.scale());else{if(!output.has("precision"))output.put("precision",physical.precision());if(!output.has("scale"))output.put("scale",physical.scale());}}
         }
+        Set<String> millisFields=new HashSet<>();
+        for(JsonNode field:contract.path("source"))if(field.path("dateContainsTime").asBoolean()
+                &&ValueTypes.type(field.path("physicalType").asText()).equals("DATE"))millisFields.add(field.path("name").asText().toLowerCase(Locale.ROOT));
+        for(JsonNode rule:specification.path("rules"))temporalInputUnits(rule,millisFields);
     }
+    private static void temporalInputUnits(JsonNode rule,Set<String> millisFields) {
+        if(rule.path("input").path("kind").asText().equals("FIELD")
+                &&millisFields.contains(rule.path("input").path("name").asText().toLowerCase(Locale.ROOT)))JdbcTemporalTypes.annotateMillisInput(rule);
+        for(String branch:List.of("then","else"))if(rule.has(branch))temporalInputUnits(rule.path(branch),millisFields);
+    }
+
     private static Map<String,String> formats(JsonNode fields) {
         Map<String,String> formats=new HashMap<>();
         for(JsonNode field:fields){String value=field.path("registeredFormat").asText();if(Set.of("DATE","DATETIME").contains(value))formats.put(field.path("name").asText(),value);}

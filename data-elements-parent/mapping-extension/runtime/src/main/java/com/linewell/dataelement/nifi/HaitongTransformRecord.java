@@ -69,7 +69,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
             FlowFile success=session.create(original),invalid=session.create(original);derived.add(success);derived.add(invalid);long[]counts={0,0,0,0};Map<String,String>writerAttributes=new HashMap<>(),invalidAttributes=new HashMap<>();
             List<FlowFile>dynamicFiles=new ArrayList<>();
             try(InputStream in=session.read(original);RecordReader reader=MappingErrorRecords.isEnvelope(original.getAttributes(),nodeContext)?new MappingErrorRecords(in,original.getAttributes(),plan):readers.createRecordReader(original.getAttributes(),in,original.getSize(),getLogger());OutputStream out=session.write(success);OutputStream bad=session.write(invalid)){
-                if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(reader.getSchema()));
+                if(plan.document().path("schemaContract").path("source").isArray())SchemaContract.requireInput(plan,inputContract(reader.getSchema(),plan));
                 invalidAttributes.put(MappingErrorRecords.SCHEMA,MappingErrorRecords.schemaText(reader.getSchema()));
                 RecordSchema schema=outputSchema(plan,reader.getSchema());
                 DynamicOutput dynamic=plan.outputContracts().values().stream().anyMatch(type->type.logicalType().equals("ANY")||type.logicalType().equals("ARRAY")||type.logicalType().equals("DECIMAL")&&type.precision()==0)?new DynamicOutput(session,original,writers,schema,derived,dynamicFiles):null;
@@ -157,12 +157,29 @@ public class HaitongTransformRecord extends AbstractProcessor {
         });return new SimpleRecordSchema(new ArrayList<>(fields.values()));
     }
     private static int integer(String value){try{return value==null?0:Math.max(0,Integer.parseInt(value));}catch(Exception ex){return 0;}}
-    private static List<SchemaContract.Field> inputContract(RecordSchema schema){
+    private static List<SchemaContract.Field> inputContract(RecordSchema schema,MappingEngine.Plan plan){
+        Map<String,String> jdbcDates=new HashMap<>();
+        for(var declared:plan.document().path("schemaContract").path("source")) {
+            String logical=declared.path("logicalType").asText();
+            if(declared.path("dateContainsTime").asBoolean()&&declared.path("physicalType").asText().equalsIgnoreCase("DATE")
+                    &&Set.of("DATE","DATETIME","INSTANT").contains(logical))jdbcDates.put(declared.path("name").asText(),logical);
+        }
         List<SchemaContract.Field> result=new ArrayList<>();for(RecordField field:schema.getFields()){
-            var type=field.getDataType();if(type instanceof org.apache.nifi.serialization.record.type.ChoiceDataType choice){if(choice.getPossibleSubTypes().size()!=1)throw new MappingException("SCHEMA_DRIFT","Reader字段包含无法确定的联合类型");type=choice.getPossibleSubTypes().getFirst();}
+            var type=field.getDataType();if(type instanceof org.apache.nifi.serialization.record.type.ChoiceDataType choice){
+                if(choice.getPossibleSubTypes().size()==1)type=choice.getPossibleSubTypes().getFirst();
+                else if(jdbcDates.containsKey(field.getFieldName())&&!choice.getPossibleSubTypes().isEmpty()
+                        &&choice.getPossibleSubTypes().stream().allMatch(HaitongTransformRecord::temporalScalarCarrier)) {
+                    result.add(new SchemaContract.Field(field.getFieldName(),jdbcDates.get(field.getFieldName()),field.isNullable(),0,0,0));continue;
+                } else throw new MappingException("SCHEMA_DRIFT","Reader字段包含无法确定的联合类型");
+            }
             String logical=switch(type.getFieldType().name()){case "BYTE","SHORT","INT"->"INT";case "LONG","BIGINT"->"LONG";case "FLOAT","DOUBLE"->"DOUBLE";case "DECIMAL"->"DECIMAL";case "BOOLEAN"->"BOOLEAN";case "DATE"->"DATE";case "TIME"->"TIME";case "TIMESTAMP"->"DATETIME";case "ARRAY"->"ARRAY";case "STRING","CHAR"->"STRING";default->"ANY";};
             int precision=0,scale=0;if(type instanceof org.apache.nifi.serialization.record.type.DecimalDataType decimal){precision=decimal.getPrecision();scale=decimal.getScale();}
             result.add(new SchemaContract.Field(field.getFieldName(),logical,field.isNullable(),0,precision,scale));
         }return result;
+    }
+    private static boolean temporalScalarCarrier(org.apache.nifi.serialization.record.DataType type) {
+        if(type instanceof org.apache.nifi.serialization.record.type.ChoiceDataType choice)
+            return !choice.getPossibleSubTypes().isEmpty()&&choice.getPossibleSubTypes().stream().allMatch(HaitongTransformRecord::temporalScalarCarrier);
+        return Set.of("BYTE","SHORT","INT","LONG","BIGINT","FLOAT","DOUBLE","DECIMAL","STRING","CHAR","DATE","TIMESTAMP").contains(type.getFieldType().name());
     }
 }

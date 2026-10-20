@@ -16,6 +16,20 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class HivePartitionRoutingTest {
+    @Test void inheritedCalendarBucketValuesMatchDdlAndActualWriterRouting() throws Exception {
+        var field=new ColumnInfo();field.setColumnName("created_at");field.setColumnType("TIMESTAMP");
+        var parts=List.of(Map.of("name","p_0001","upper","2024-01-01 00:00:00"),
+                Map.of("name","p_0002","upper","2025-01-01 00:00:00"),
+                Map.of("name","p_0003","upper","2026-01-01 00:00:00"),Map.of("name","p_0004","upper","MAXVALUE"));
+        var plan=new TablePartitions().normalize(new LinkedHashMap<>(Map.of("enabled",true,"sourceBoundaries",true,
+                "displayStrategy","YEAR","strategy","RANGE","field","created_at","partitions",parts)),List.of(field),DatabaseType.HIVE);
+        List<String> payloads=new ArrayList<>(),buckets=new ArrayList<>();
+        execute(plan,"[{\"id\":1,\"created_at\":\"2023-12-31 23:59:59\"},{\"id\":2,\"created_at\":\"2024-01-01 00:00:00\"},{\"id\":3,\"created_at\":\"2025-01-01 00:00:00\"},{\"id\":4,\"created_at\":\"2026-01-01 00:00:00\"}]",payloads,buckets);
+        assertEquals(List.of("before_2024","2024","2025","future"),buckets);
+        var config=new com.linewell.dataelement.metautil.model.dto.DataSourceConfig();config.setDatabaseType(DatabaseType.HIVE);
+        String ddl=new TablePartitions().apply("CREATE TABLE events(id BIGINT, created_at TIMESTAMP)",plan,config);
+        for(String bucket:buckets)assertTrue(ddl.contains("`ods_partition`='"+bucket+"'"));
+    }
     @Test void yearlyRoutingUsesTheSameYearBoundariesAsTheGeneratedHivePartitions() throws Exception {
         var field=new ColumnInfo();field.setColumnName("created_at");field.setColumnType("TIMESTAMP");
         var plan=new TablePartitions().normalize(new LinkedHashMap<>(Map.of("enabled",true,"strategy","YEAR","field","created_at","startYear","2025","years",2)),List.of(field),DatabaseType.HIVE);

@@ -11,11 +11,13 @@ const ast = babel.Babel.transform(script, {ast:true,code:false,configFile:false,
   parserOpts:{sourceType:'module',plugins:['typescript']}}).ast;
 const names = ['normalizeNumber','firstNumber','firstText','isTableAnnotated','isTableRegistered',
   'tableHasIssue','tableChangeStatus','tableArrayStats','normalizeItem','datasourceUpdatedAt',
-  'compareDatasourceUpdated','loadSourceOverview'];
+  'compareDatasourceUpdated','loadSourceOverview','filterOptions','hasCompletedRegistrationStatus',
+  'hasIncompleteRegistrationStatus','isRegistrationComplete','statusText','matchedFilter',
+  'isMetricSelected','applyMetricFilter','applyIncompleteFilter','clearMetricFilter'];
 const executable = 'let loadGeneration=1;\n'+names.map(name => {
   const node=ast.program.body.find(n=>n.type==='VariableDeclaration' && n.declarations.some(d=>d.id.name===name));
   assert.ok(node,name);return script.slice(node.start,node.end);
-}).join('\n')+'\nglobalThis.actual={tableArrayStats,normalizeItem,loadSourceOverview};';
+}).join('\n')+'\nglobalThis.actual={tableArrayStats,normalizeItem,loadSourceOverview,filterOptions,statusText,matchedFilter,hasIncompleteRegistrationStatus,isMetricSelected,applyMetricFilter,applyIncompleteFilter,clearMetricFilter};';
 const tables=[];
 for(const businessType of ['business','业务表','dict','dictionary','字典表','log','日志表']) {
   for(const asset_status of [0,1,2,-1,null,undefined]) tables.push({businessType,asset_status,annotated:1});
@@ -40,5 +42,45 @@ for(const size of [20,100]) {
   assert.equal(calls[0].route,'/dst/database/departmentDataSources');assert.equal(calls[0].body.mode,'summary');
   for(const row of state.list) assert.equal(row.businessTableNum,4);
   assert.equal(state.loading,false);assert.equal(state.listError,'');
+  assert.deepEqual(Array.from(context.actual.filterOptions, option=>option.label),['全部','待标注','未完成','已完成','有变更']);
+  const sources=Array.from({length:size},(_,i)=>({tid:`source-${i}`,assetStatus:i%3,connectionStatus:i%2?'success':'failed'}));
+  const incomplete=sources.filter(row=>row.assetStatus===1);
+  state.filter='unannotated';state.metricFilter='tableIssues';
+  context.actual.applyIncompleteFilter();
+  assert.equal(state.filter,'incomplete');assert.equal(state.metricFilter,'sourceIssues');
+  const selected=sources.filter(context.actual.matchedFilter);
+  assert.deepEqual(selected,incomplete);
+  assert.ok(selected.every(row=>context.actual.statusText(row)==='未完成'));
+  assert.equal(sources.filter(context.actual.hasIncompleteRegistrationStatus).length,selected.length);
+  assert.ok(context.actual.hasIncompleteRegistrationStatus({asset_status:1}));
+  assert.ok(!context.actual.hasIncompleteRegistrationStatus({asset_status:0,connectionStatus:'failed'}));
+  assert.ok(!context.actual.hasIncompleteRegistrationStatus({assetStatus:2,connectionStatus:'failed'}));
+  context.actual.applyIncompleteFilter();assert.equal(state.filter,'all');
+  state.filter='incomplete';state.metricFilter='changed';context.actual.clearMetricFilter();
+  assert.equal(state.filter,'incomplete');assert.equal(state.metricFilter,'');
+  assert.deepEqual(sources.filter(context.actual.matchedFilter),incomplete);
+  const metricSources=sources.map((row,i)=>({...row,unannotatedTableNum:i%2,changedTableNum:i%5===0?1:0,problemTableNum:0}));
+  for (const [metric,filter,expected] of [
+    ['unannotated','unannotated',metricSources.filter(row=>row.unannotatedTableNum>0)],
+    ['tableIssues','incomplete',metricSources.filter(row=>row.assetStatus===1)],
+    ['changed','changed',metricSources.filter(row=>row.changedTableNum>0)],
+  ]) {
+    state.filter='all';state.metricFilter='';
+    context.actual.applyMetricFilter(metric);
+    assert.equal(state.filter,filter);assert.ok(context.actual.isMetricSelected(metric));
+    assert.deepEqual(metricSources.filter(context.actual.matchedFilter),expected);
+    if (metric==='tableIssues') assert.ok(!context.actual.isMetricSelected('sourceIssues'));
+    context.actual.applyMetricFilter(metric);assert.equal(state.filter,'all');assert.equal(state.metricFilter,'');
+  }
+  state.filter='unannotated';state.metricFilter='';
+  assert.ok(context.actual.isMetricSelected('unannotated'));
+  context.actual.applyMetricFilter('unannotated');assert.equal(state.filter,'all');
+  context.actual.applyIncompleteFilter();context.actual.applyMetricFilter('tableIssues');
+  assert.equal(state.filter,'incomplete');assert.ok(context.actual.isMetricSelected('tableIssues'));
+  assert.ok(!context.actual.isMetricSelected('sourceIssues'));
+  context.actual.clearMetricFilter();assert.ok(context.actual.isMetricSelected('sourceIssues'));
+  assert.equal(calls.length,1,'Card and segment filtering must not issue per-source reads');
   console.log(`Cards=${size}: one overview request; positive status fallback and authoritative zero passed`);
+  console.log(`Cards=${size}: incomplete metric, badge and card/segment filtering agree; draft and connection-only failures excluded`);
+  console.log(`Cards=${size}: annotation/registration/change cards select their segment; repeated clicks reset all; one registration card highlighted at a time`);
 }

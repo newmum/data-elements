@@ -15,7 +15,7 @@ public final class TemporalParser {
     private static final Pattern SHORT_OFFSET = Pattern.compile("([+-][0-9]{2})([0-9]{2})(?=\\[|$)");
     private static final Pattern HOUR_OFFSET = Pattern.compile("([T ][0-9].*)([+-][0-9]{2})(?=\\[|$)");
     private static final Pattern DIGITS = Pattern.compile("[0-9]+");
-    private static final Pattern AUTO_EPOCH = Pattern.compile("[+-]?[1-9](?:[0-9]{9}|[0-9]{12})");
+    private static final Pattern AUTO_EPOCH = Pattern.compile("[+-]?[1-9][0-9]{9,12}");
     private static final Pattern SIGNED_INTEGER = Pattern.compile("[+-]?[0-9]+");
     private static final Pattern ENGLISH_DATE = Pattern.compile("[A-Za-z]{3} [A-Za-z]{3} [0-9]{1,2} [0-9]{2}:[0-9]{2}:[0-9]{2} ([^ ]+) [0-9]{4}");
     private static final Pattern ORACLE_DATE = Pattern.compile("[0-9]{1,2}-[A-Za-z]{3}-[0-9]{2,4} .+");
@@ -39,7 +39,7 @@ public final class TemporalParser {
     private static final DateTimeFormatter MONTH_DAY = pattern("M-d");
     private static final DateTimeFormatter RFC = DateTimeFormatter.RFC_1123_DATE_TIME.withResolverStyle(ResolverStyle.STRICT);
 
-    /** Immutable parser; AUTO accepts conventional 10-digit seconds and 13-digit milliseconds. */
+    /** AUTO accepts 10-digit seconds and 11-13-digit milliseconds, including historical dates. */
     public record Parser(String mode, DateTimeFormatter formatter, String outputType, LocalDate defaultDate) {
         public Object parse(Object value, ZoneId zone, Locale locale) {
             if (value == null || value == ValueTypes.MISSING) return null;
@@ -96,7 +96,7 @@ public final class TemporalParser {
             try {calendar=ValueTypes.decimal(value).toBigIntegerExact().toString();}
             catch(ArithmeticException ex){throw new MappingException("DATE_UNIT_REQUIRED","非整数时间数值须明确格式或时间戳单位");}
             if(calendar.length()!=8&&calendar.length()!=14&&!AUTO_EPOCH.matcher(calendar).matches())
-                throw new MappingException("DATE_UNIT_REQUIRED","数值自动识别8位日期、14位紧凑日期时间及10位秒/13位毫秒时间戳；其他时间戳须明确单位");
+                throw new MappingException("DATE_UNIT_REQUIRED","数值自动识别8位日期、14位紧凑日期时间及10位秒/11至13位毫秒时间戳；其他时间戳须明确单位");
             value=calendar;
         }
         if (!(value instanceof CharSequence)) throw new MappingException("DATE_UNIT_REQUIRED", "数值时间戳须明确选择秒、毫秒、微秒或纳秒单位");
@@ -115,7 +115,7 @@ public final class TemporalParser {
                 if(s.length()>14)d=d.withNano(Integer.parseInt(s.substring(14)+"0".repeat(23-s.length())));
                 return new Parts(d.toLocalDate(),d.toLocalTime(),null,null,null);
             }
-            throw new MappingException("DATE_UNIT_REQUIRED", "纯数字自动识别8位日期、14至23位紧凑日期时间及10位秒/13位毫秒时间戳；其他时间戳须明确单位");
+            throw new MappingException("DATE_UNIT_REQUIRED", "纯数字自动识别8位日期、14至23位紧凑日期时间及10位秒/11至13位毫秒时间戳；其他时间戳须明确单位");
         }
         var numeric = NUMERIC_DATE.matcher(s);
         if (numeric.matches()) {
@@ -167,6 +167,11 @@ public final class TemporalParser {
             if (SIGNED_INTEGER.matcher(unquoted).matches()) return unquoted;
         }
         return s;
+    }
+
+    /** Only an explicitly declared JDBC temporal input may bypass AUTO's unit ambiguity. */
+    static boolean numericCarrier(Object value) {
+        return value instanceof Number || value instanceof CharSequence && SIGNED_INTEGER.matcher(numericTemporalText(value)).matches();
     }
 
     private static String normalizeOffset(String s) {

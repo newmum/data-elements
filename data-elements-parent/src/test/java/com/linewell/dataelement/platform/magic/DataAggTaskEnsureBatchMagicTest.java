@@ -703,7 +703,7 @@ class DataAggTaskEnsureBatchMagicTest {
             var service=new com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService(resolver,nifi);
             try(var tenant=com.linewell.dataelement.platform.tenant.domain.TenantContext.use("police")) {
             String canonical = CanonicalMagicSources.byId("76fd211790f54164947f276824d19c1d").replace("\r\n", "\n");
-            String aggregation = canonical.substring(canonical.indexOf("    // 表级工作流状态"),canonical.indexOf("    // ES 检索、接入任务补齐"));
+            String aggregation = canonical.substring(canonical.indexOf("    var tableWorkflowMap ="),canonical.indexOf("    // ES 检索、接入任务补齐"));
             String runtime=canonical.substring(canonical.indexOf("    // 只装饰当前已授权、可达任务"),canonical.indexOf("    return {\n        runtimeRevision:"));
             aggregation+="\nvar tablePage=tableItems;\n"+runtime;
             String helpers = """
@@ -715,8 +715,10 @@ class DataAggTaskEnsureBatchMagicTest {
                     """;
             Map<String,Object> inputs = new LinkedHashMap<>();
             inputs.put("taskRuntime",new com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeMagicModule(service));
+            inputs.put("tableRuntimeSnapshot",service.snapshot());
             inputs.put("db",f.db); inputs.put("tenantId","police"); inputs.put("dataScope",f.scope);
             inputs.put("candidateIds",ids); inputs.put("tableCandidates",rows);
+            inputs.put("registeredTableMap",rows.stream().collect(java.util.stream.Collectors.toMap(row -> row.get("tid").toString(),row -> row)));
             inputs.put("requestedAccessStatus","all"); inputs.put("selectedDatasourceNameMap",Map.of("source-db","来源库"));
             inputs.put("registeredDatasourceMap",Map.of("source-db",Map.of("tid","source-db","assetStatus",2,"dbType","mysql")));
             inputs.put("selectedDatasourceAppNameMap",Map.of());

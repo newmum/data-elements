@@ -246,24 +246,6 @@ var dataSourceOf = (asset) => {
     return dsConfig
 }
 
-// 华为 MRS Hive 采用用户要求的 Ctrl-A 分隔文本格式；只读取已登记配置，
-// 不根据浏览器传入的数据库类型判定，不连接目标库或逐项补查。
-var withHuaweiHiveStorage = (ddl, databaseType, connection, registeredType) => {
-    if (databaseType != DatabaseType.HIVE) { return ddl }
-    var mode = firstValue(connection, ['hiveConnectionMode', 'hive_connection_mode'])
-    var profile = firstValue(connection, ['hiveProfile', 'hive_profile'])
-    var platform = firstValue(connection, ['usePlatformHiveConfig', 'use_platform_hive_config'])
-    var managed = (!blank(mode) && textOf(mode).trim().toLowerCase() == 'huawei-mrs')
-        || !blank(profile) || platform == true || platform == 1 || textOf(platform) == 'true'
-        || (!blank(registeredType) && textOf(registeredType).trim().toLowerCase() == 'mrshive')
-    if (!managed) { return ddl }
-    var statement = textOf(ddl).trim()
-    // 已生成的存储声明保持完整；不要产生重复 ROW FORMAT/STORED AS。
-    if (statement.matches('(?is).*\\b(ROW\\s+FORMAT|STORED\\s+AS)\\b.*')) { return ddl }
-    statement = statement.replaceAll(';\\s*$', '')
-    return statement + "\nROW FORMAT DELIMITED\nFIELDS TERMINATED BY '\\001'\nSTORED AS TEXTFILE;\n"
-}
-
 // 显式打开DDL时只探查当前来源；全部目标一次预取并逐ID鉴权，不逐目标补查。
 if (body?.partitionProbe == true) {
     var probeTenant = textOf(tenantRuntime.id())
@@ -429,7 +411,6 @@ if (body?.batchGenerate == true) {
             var previewWarnings = []
             previewWarnings.addAll(converted.warnings)
             previewWarnings.addAll(constraintPreview.warnings)
-            ddl = withHuaweiHiveStorage(ddl, targetType, pool, targetTypeCode)
             ddl = tablePartitions.apply(ddl, partitionPlan, batchConfig)
             // 仅处理自动生成的DDL；手工提交语句不进入这些生成规则。
             generated.add({dbId: submittedDbId, requestedTableName: requestedTableName,
@@ -565,7 +546,6 @@ try {
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
     var partitionPlan = tablePartitions.normalize(body?.partitionPlan, converted.columns, dsConfig.getDatabaseType())
     ddl = tablePartitions.enrichConstraints(ddl, body?.sourceConstraints, dsConfig, partitionPlan).ddl
-    ddl = withHuaweiHiveStorage(ddl, dsConfig.getDatabaseType(), targetConnection, registeredTypeCode)
     return tablePartitions.apply(ddl, partitionPlan, dsConfig)
 } catch (e) {
     exit 400, '未能生成建表语句：' + ddlFailureTip(e)

@@ -48,7 +48,7 @@ class DataIngestionRegistrationScopeTest {
         assertThat(((Number)page.get("total")).intValue()).isEqualTo(count);
         assertThat((List<?>)page.get("list")).hasSize(count);
         assertThat((List<?>)page.get("list")).anySatisfy(raw -> assertThat(((Map<?,?>)raw).get("tid")).isEqualTo("table-1"));
-        assertThat(counter.reads).isEqualTo(8);
+        assertThat(counter.reads).isEqualTo(7);
         assertThat(scope.calls).isEqualTo(2);
         for(Object raw:(List<?>)page.get("list")) {
             Map<?,?> row=(Map<?,?>)raw;
@@ -61,17 +61,17 @@ class DataIngestionRegistrationScopeTest {
         Map<?,?> forbidden=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageNum",1,"pageSize",count,"datasourceIds",List.of("foreign","denied")),scope);
         assertThat((List<?>)forbidden.get("list")).isEmpty();
         assertThat(counter.reads).isEqualTo(2);
-        System.out.println("department page verification: items="+count+", SQL=8; foreign/denied datasource items=0, SQL=2");
+        System.out.println("department page verification: items="+count+", SQL=7; foreign/denied datasource items=0, SQL=2");
         counter.reads=0;
         Map<?,?> pending=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",count,"accessStatus","0"),scope);
         assertThat(((Number)pending.get("total")).intValue()).isEqualTo(count);
         assertThat((List<?>)pending.get("list")).hasSize(count);
-        assertThat(counter.reads).isEqualTo(9);
+        assertThat(counter.reads).isEqualTo(8);
         counter.reads=0;
         Map<?,?> search=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",count,"keyword","table-"),scope);
         assertThat(((Number)search.get("total")).intValue()).isEqualTo(count-1);
-        assertThat(counter.reads).isEqualTo(8);
-        System.out.println("filtered page verification: items="+count+", pending SQL=9; keyword SQL=8");
+        assertThat(counter.reads).isEqualTo(7);
+        System.out.println("filtered page verification: items="+count+", pending SQL=8; keyword SQL=7");
     }
     @ParameterizedTest @ValueSource(ints={20,100})
     void taskLinksResolveAllTargetsAndRealChainedSourcesInConstantReads(int count) throws Exception {
@@ -86,7 +86,7 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.execute("alter table db_table_t add schema_name varchar(64)");
         f.jdbc.execute("alter table db_table_t add source_table_id varchar(64)");
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
-        f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp)");
+        f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp,process_group_id varchar(64))");
         f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64))");
         f.jdbc.update("update db_datasource_t set asset_status=1,db_name='来源库'");
         f.jdbc.update("update db_table_t set asset_status=1,business_type='业务表',table_name=tid,schema_name='public',updated_time=current_timestamp");
@@ -100,17 +100,17 @@ class DataIngestionRegistrationScopeTest {
             f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,table_name) values(?,'other','target-db',2,0,'foreign-shadow'),(?,'ga','denied',2,0,'denied-table')",target,"denied-"+i);
             String dsl="{\"nodes\":[{\"category\":\"sink\",\"config\":{\"targetTableId\":\""+target+"\"}},{\"category\":\"sink\",\"config\":{\"targetTableId\":\""+hive+"\"}},{\"category\":\"sink\",\"config\":{\"targetTableId\":\"denied-"+i+"\"}}]}";
             f.jdbc.update("insert into nifi_pipeline_t(id,tenant_id,is_del,dsl_json) values(?,'ga',0,?)",pipeline,dsl);
-            f.jdbc.update("insert into data_access_agg_task_t values(?,?,?,?, 'ga',0,current_timestamp)","task-"+i,id,target,pipeline);
+            f.jdbc.update("insert into data_access_agg_task_t(tid,source_table_id,target_table_id,pipeline_id,tenant_id,is_del,updated_time) values(?,?,?,?, 'ga',0,current_timestamp)","task-"+i,id,target,pipeline);
         }
         // The next hop starts from the ODS table rather than the root table.
-        f.jdbc.update("insert into data_access_agg_task_t values('chain','ods-0','hive-0','chain-pipe','ga',0,current_timestamp)");
+        f.jdbc.update("insert into data_access_agg_task_t(tid,source_table_id,target_table_id,pipeline_id,tenant_id,is_del,updated_time) values('chain','ods-0','hive-0','chain-pipe','ga',0,current_timestamp)");
         f.jdbc.update("insert into nifi_pipeline_t(id,tenant_id,is_del,dsl_json) values('chain-pipe','ga',0,'{\"nodes\":[{\"category\":\"sink\",\"config\":{\"targetTableId\":\"hive-0\"}}]}')");
         var counter=new Counter();f.db.setSqlInterceptors(List.of(counter));
         var dialects=new DialectAdapter();dialects.add(new MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});
         f.db.setDialectAdapter(dialects);f.db.setResultProvider(new DefaultResultProvider("link-test"));
         Map<?,?> page=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",count,"datasourceIds",List.of("db")),new VisibleScope());
         assertThat((List<?>)page.get("list")).hasSize(count);
-        assertThat(counter.reads).isEqualTo(12);
+        assertThat(counter.reads).isEqualTo(11);
         for (Object raw:(List<?>)page.get("list")) {
             Map<?,?> row=(Map<?,?>)raw;
             List<?> tasks=(List<?>)row.get("tasks");
@@ -127,13 +127,13 @@ class DataIngestionRegistrationScopeTest {
         }
         System.out.println("task link verification: items="+count+", SQL="+counter.reads+"; DSL targets and chained source preserved");
         counter.reads=0;
-        Map<?,?> accessed=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",count,"datasourceIds",List.of("db"),"accessStatus","1"),new VisibleScope());
+        Map<?,?> accessed=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",count,"datasourceIds",List.of("db"),"accessStatus","3"),new VisibleScope());
         assertThat(((Number)accessed.get("total")).intValue()).isEqualTo(count);
         assertThat((List<?>)accessed.get("list")).hasSize(count);
-        assertThat(counter.reads).isEqualTo(13);
+        assertThat(counter.reads).isEqualTo(12);
         System.out.println("accessed link verification: items="+count+", SQL="+counter.reads);
         if (count==20) {
-            Map<?,?> together=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",100,"accessStatus","1"),new VisibleScope());
+            Map<?,?> together=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",100,"accessStatus","3"),new VisibleScope());
             assertThat(((Number)together.get("total")).intValue()).isEqualTo(21);
             List<?> all=(List<?>)together.get("list");
             assertThat(all).hasSize(21);

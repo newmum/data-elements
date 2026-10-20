@@ -6,7 +6,7 @@ const root = new URL('../../', import.meta.url), babel = {};
 vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/babel.min.js', root), 'utf8'), babel);
 const names = ['runtimeConnection','runtimeReadAt','runtimeWarning','runtimeHint','runtimeRevision','runtimeActive',
   'refreshRuntimePage','acceptRuntimeEvent','startRuntimeStream','stopRuntimeStream','runtimeVisibility',
-  'collectDatasourceIds','buildConditions','fetchSources','taskLinkStatus'];
+  'collectDatasourceIds','buildConditions','fetchSources','taskLinkStatus','tabs','accessStatusType'];
 for (const file of ['2.3.1 数据汇聚(data-convergence).vue','2.3.1 Hive元数据库(data-convergence-hive).vue']) {
   const source = await fs.readFile(new URL(`lowcode/03.数据接入/${file}`, root), 'utf8');
   const script = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/)[1];
@@ -16,7 +16,7 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue','2.3.1 Hive元数
   for (const count of [20,100]) {
     let listRequests=0, streamRequests=0, refreshedPage;
     const refreshes=[], ref=value=>({value});
-    const rows=Array.from({length:count},(_,i)=>({tid:`table-${i}`,tasks:[
+    const rows=Array.from({length:count},(_,i)=>({tid:`table-${i}`,accessStatus:String(i%4),accessStatusText:['待接入','已接入','待审批','待启动'][i%4],tasks:[
       {tid:`first-${i}`,runtimeState:'RUNNING',runtimeLabel:'运行中',runtimeFresh:true,taskStatus:2},
       {tid:`second-${i}`,runtimeState:'STOPPED',runtimeLabel:'已停止',runtimeFresh:true,taskStatus:2},
     ]}));
@@ -33,8 +33,17 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue','2.3.1 Hive元数
       fetch:async(url,options)=>{assert.ok(!url.includes('synthetic-session'));assert.equal(options.headers.token,'synthetic-session');let offset=0;
         return {ok:true,status:200,headers:{get:()=>'text/event-stream'},body:{getReader:()=>({read:async()=>offset>=bytes.length?{done:true}:{done:false,value:bytes.slice(offset,(offset+=7))},releaseLock(){}})}};},
     });
-    vm.runInContext(code+'\nglobalThis.actual={fetchSources,startRuntimeStream,stopRuntimeStream,acceptRuntimeEvent,taskLinkStatus,runtimeWarning};',ctx);
+    vm.runInContext(code+'\nglobalThis.actual={fetchSources,startRuntimeStream,stopRuntimeStream,acceptRuntimeEvent,taskLinkStatus,runtimeWarning,tabs,accessStatusType:typeof accessStatusType===\'function\'?accessStatusType:undefined};',ctx);
     const initial=await ctx.actual.fetchSources({pageSize:count});assert.equal(ctx.actual.taskLinkStatus(initial.list[0].tasks[1]).text,'已停止');
+    if(file.includes('(data-convergence).vue')) {
+      assert.deepEqual(Array.from(ctx.actual.tabs,tab=>tab.label),['全部','待接入','待审批','待启动','已接入']);
+      assert.deepEqual(Array.from(ctx.actual.tabs,tab=>tab.value),['all','0','2','3','1']);
+      assert.equal(initial.list[0].accessStatusText,'待接入');
+      assert.equal(initial.list[2].accessStatusText,'待审批');
+      assert.equal(initial.list[3].accessStatusText,'待启动');
+      assert.equal(ctx.actual.accessStatusType(initial.list[1]),'success');
+      assert.ok(!source.includes('驳回修改'));
+    }
     await ctx.actual.startRuntimeStream();await new Promise(resolve=>setTimeout(resolve,190));ctx.actual.stopRuntimeStream();
     assert.equal(streamRequests,1);assert.equal(listRequests,2);assert.deepEqual(refreshes,[false]);
     assert.ok(refreshedPage.list.every(row=>row.tasks.every(task=>ctx.actual.taskLinkStatus(task).text==='运行中')));

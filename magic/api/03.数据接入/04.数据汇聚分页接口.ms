@@ -17,7 +17,7 @@
   "headers" : [ ],
   "paths" : [ ],
   "responseBody" : "{\n  \"viewLevel\": \"tableDetail\",\n  \"detail\": {\n    \"tid\": \"015c09572d174e89b9bea9c765ef72df\",\n    \"tableName\": \"police_reexplore_new_case_clue\",\n    \"tableNameCn\": \"公安重新探查新增线索表\",\n    \"datasourceName\": \"出入境人员动管系统数据库\",\n    \"businessType\": \"业务表\",\n    \"fieldCount\": 8,\n    \"annotated\": true\n  }\n}",
-  "description" : "数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0，排除资源中心 ODS 层及分域配置的数据源作为主列表来源；表清单从 db_table_t 服务端分页，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。",
+  "description" : "数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0，排除资源中心 ODS 层及分域配置的数据源作为主列表来源；表清单从 db_table_t 服务端分页，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword、accessStatus（表视图：0待接入、1已接入、2待审批预留、3待启动）；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。",
   "requestBodyDefinition" : null,
   "responseBodyDefinition" : null
 }
@@ -26,7 +26,7 @@
 import cn.hutool.json.JSONUtil
 // 接口：04.数据汇聚分页接口
 // 路由：POST /ods/dataAggPage
-// 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0；表清单从 db_table_t 服务端分页，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
+// 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0；表清单从 db_table_t 服务端分页，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword、accessStatus（表视图：0待接入、1已接入、2待审批预留、3待启动）；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
 import tenantEs
 import '@/common/configData' as configData
 import tenantRuntime
@@ -278,6 +278,9 @@ var matchesTaskCategory = (datasource) => distributionView == warehouseDatasourc
 
 if (viewLevel == 'table') {
     var tableKeyword = text(body?.keyword).trim()
+    // 接入状态是查询契约，不复用登记 asset_status 或登记审批 flow_status。
+    // 0 待接入，1 已接入（本表任务实际运行），2 待审批（为后续申请业务预留），3 待启动。
+    // NiFi 无法确认已部署任务时返回空值及“状态待确认”，不伪造停止或运行状态。
     var requestedAccessStatus = text(body?.accessStatus)
 
     // 数据源和数据表的 asset_status 均大于 0 才可接入。
@@ -322,6 +325,25 @@ if (viewLevel == 'table') {
         }
     }
 
+    // 本轮仅预留待审批值，申请单与审批状态将在后续业务中接入；当前没有该类记录。
+    if (requestedAccessStatus == '2') {
+        return {viewLevel:'table', datasourceIds:scopedDatasourceIds, pageNum:pageNum, pageSize:pageSize, total:0, list:[]}
+    }
+    // 运行状态筛选先取一次快照；其他页签在查询后读取，避免长查询期间版本变化触发连续补刷。
+    var tableRuntimeSnapshot = requestedAccessStatus == '1' || requestedAccessStatus == '3' ? taskRuntime.snapshot() : null
+    var runningGroupChunks = []
+    var groupChunk = []
+    if (tableRuntimeSnapshot != null && tableRuntimeSnapshot.fresh == true && tableRuntimeSnapshot.index != null) {
+        var runtimeGroups = tableRuntimeSnapshot.index.groups()
+        for (groupId, runtimeGroup in runtimeGroups) {
+            if (runtimeGroup.running()) {
+                groupChunk.add(groupId)
+                if (groupChunk.size() == 500) { runningGroupChunks.add(groupChunk); groupChunk = [] }
+            }
+        }
+        if (groupChunk.size() > 0) { runningGroupChunks.add(groupChunk) }
+    }
+
     /*
      * 任务表候选必须有登记状态：asset_status>0。
      * annotated=1 仅代表第二步已经标注，不能越过表资产的完成边界。ES
@@ -362,19 +384,31 @@ if (viewLevel == 'table') {
           AND ("""+rootMatch+"))"
     }
     var registeredTablePage = null
-    if (sortField!='taskCount' && blank(tableKeyword) && requestedAccessStatus != '0' && requestedAccessStatus != '1') {
+    if (sortField!='taskCount' && blank(tableKeyword) && requestedAccessStatus != '0' && requestedAccessStatus != '1' && requestedAccessStatus != '3') {
         registeredTablePage = registeredTableQuery.orderBy(sortColumn, sortDir).orderBy('tid','asc')
             .page(pageSize, (pageNum - 1) * pageSize)
     } else {
         var keywordPattern = '%' + tableKeyword.toLowerCase().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
         var visibleTaskDatasourceIds = []
         var taskStatusSql = ''
-        if (requestedAccessStatus == '0' || requestedAccessStatus == '1') {
+        if (requestedAccessStatus == '0' || requestedAccessStatus == '1' || requestedAccessStatus == '3') {
             // 目标库不必是原始库的登记状态；但来源/目标都必须通过角色范围。
             var taskDatasourceRows = db.table('db_datasource_t').where()
                 .eq('tenant_id', tenantId).eq('is_del', 0).select()
             taskDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', taskDatasourceRows)
             for (taskDatasource in taskDatasourceRows) { visibleTaskDatasourceIds.add(text(taskDatasource.tid)) }
+            if (visibleTaskDatasourceIds.size() == 0) { visibleTaskDatasourceIds = ['__none__'] }
+            var accessPipelineJoin = requestedAccessStatus == '0' ? '' : """
+                    LEFT JOIN nifi_pipeline_t access_pipeline ON access_pipeline.id=task.pipeline_id
+                         AND access_pipeline.tenant_id=#{tenantId} AND access_pipeline.is_del=0
+            """
+            // 已绑定有效画布以其 PG 为准；旧任务才使用任务 PG，与下方任务装饰使用同一规则。
+            var effectiveGroupSql = '(CASE WHEN access_pipeline.id IS NOT NULL THEN access_pipeline.nifi_process_group_id ELSE task.process_group_id END)'
+            var taskRuntimeCondition = '1=0'
+            if (runningGroupChunks.size() > 0) {
+                taskRuntimeCondition = '<foreach collection="runningGroupChunks" item="groupBatch" open="(" close=")" separator=" OR ">'
+                    + effectiveGroupSql + ' IN <foreach collection="groupBatch" item="runningGroup" open="(" close=")" separator=",">#{runningGroup}</foreach></foreach>'
+            }
             var existsSql = """
                 EXISTS (
                     SELECT 1 FROM data_access_agg_task_t task
@@ -384,13 +418,26 @@ if (viewLevel == 'table') {
                          AND hop_db.tenant_id=#{tenantId} AND hop_db.is_del=0
                     JOIN db_table_t target ON target.tid=task.target_table_id
                          AND target.tenant_id=#{tenantId} AND target.is_del=0
+                    ${accessPipelineJoin}
                     WHERE task.tenant_id=#{tenantId} AND task.is_del=0
                       AND hop.tid=t.tid
                       AND hop.datasource_id IN <foreach collection="visibleTaskDatasourceIds" item="hopDb" open="(" close=")" separator=",">#{hopDb}</foreach>
                       AND target.datasource_id IN <foreach collection="visibleTaskDatasourceIds" item="targetDb" open="(" close=")" separator=",">#{targetDb}</foreach>
                 )
             """
-            taskStatusSql = ' AND ' + (requestedAccessStatus == '0' ? 'NOT ' : '') + existsSql
+            if (requestedAccessStatus == '0') {
+                taskStatusSql = ' AND NOT ' + existsSql
+            } else {
+                var runningExistsSql = existsSql.replace('AND hop.tid=t.tid', 'AND hop.tid=t.tid AND (' + taskRuntimeCondition + ')')
+                if (requestedAccessStatus == '1') {
+                    taskStatusSql = ' AND ' + runningExistsSql
+                } else {
+                    // 快照不可用时，仅无 PG 的未部署任务可确定为待启动，已有 PG 的任务保持待确认。
+                    var excludedExistsSql = tableRuntimeSnapshot.fresh == true ? runningExistsSql
+                        : existsSql.replace('AND hop.tid=t.tid', 'AND hop.tid=t.tid AND NULLIF(TRIM(' + effectiveGroupSql + "), '') IS NOT NULL")
+                    taskStatusSql = ' AND ' + existsSql + ' AND NOT ' + excludedExistsSql
+                }
+            }
         }
         var tablePageSql = """
             SELECT t.* FROM db_table_t t
@@ -480,14 +527,9 @@ if (viewLevel == 'table') {
         candidateIds.add(tableId)
     }
 
-    // 表级工作流状态以关系库为唯一事实来源，避免 ES 异步投影期间状态展示滞后。
-    var tableWorkflowMap = {}
-    if (candidateIds.size() > 0) {
-        var workflowRows = db.table('db_table_t').where().eq('tenant_id', tenantId).in('tid', candidateIds).eq('is_del', 0).select()
-        for (workflowRow in (workflowRows == null ? [] : workflowRows)) {
-            tableWorkflowMap[text(first(workflowRow, ['tid']))] = workflowRow
-        }
-    }
+    // 当前页登记表已经来自关系库，直接复用同一批权威记录。
+    // 重读完整行会重复传输字段治理和字典配置等大字段，导致大页在低带宽环境超时。
+    var tableWorkflowMap = registeredTableMap
 
     // 已有链路支持 source_table_id 保留原始根、逐跳父级两种历史表示，根自指也有效。
     // 固定 16 层按父级主键关联；用祖先 ID 集合过滤，避免每个 hop 与整页 root 的 OR 连接乘积。
@@ -833,11 +875,18 @@ if (viewLevel == 'table') {
         pageTable.orgName = pageOrgNameMap[text(pageTable.orgId)] || ''
     }
     // 只装饰当前已授权、可达任务；一次节点快照供全部链路复用，不逐任务查 NiFi。
-    var live = taskRuntime.snapshot()
+    var live = tableRuntimeSnapshot == null ? taskRuntime.snapshot() : tableRuntimeSnapshot
     var runtimeRows = []
     for (pageTable in tablePage) { for (task in pageTable.tasks) { runtimeRows.add(task) } }
     taskRuntime.decorate(runtimeRows, live)
     for (task in runtimeRows) { task.currentStatus = task.runtimeState; task.taskStatusText = task.runtimeLabel }
+    for (pageTable in tablePage) {
+        var ownTasks = pageTable.tasks.filter(task => text(task.sourceTableId) == text(pageTable.tid))
+        var ownRunning = ownTasks.filter(task => task.running == true).size() > 0
+        var ownUnconfirmed = ownTasks.filter(task => task.runtimeFresh != true && !blank(task.runtimeProcessGroupId)).size() > 0
+        pageTable.accessStatus = ownRunning ? '1' : ownTasks.size() == 0 ? '0' : ownUnconfirmed ? '' : '3'
+        pageTable.accessStatusText = ownRunning ? '已接入' : ownTasks.size() == 0 ? '待接入' : ownUnconfirmed ? '状态待确认' : '待启动'
+    }
     return {
         runtimeRevision: live.revision,
         runtimeFresh: live.fresh,

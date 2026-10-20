@@ -18,7 +18,7 @@
               :default-expand-all="false"
               :auto-expand-first-node="false"
               :expand-on-click-node="false"
-              search-placeholder="请输入组织/应用系统/数据库"
+              search-placeholder="请输入组织结构/系统名称/数据源名称"
               class="tree-container-custom"
               @node-click="handleNodeClick"
             >
@@ -70,13 +70,13 @@
           <div class="list-toolbar">
             <div class="list-toolbar__primary">
               <el-segmented v-model="state.accessStatus" :options="tabs" @change="handleSearch" />
-              <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
             </div>
             <div class="list-filters">
+              <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
               <el-input
                 v-model.trim="state.keyword"
                 class="keyword-input"
-                placeholder="请输入表名/表注释"
+                placeholder="请输入数据表名称/表注释"
                 clearable
                 :disabled="!state.leftSelectNode"
                 @clear="handleSearch"

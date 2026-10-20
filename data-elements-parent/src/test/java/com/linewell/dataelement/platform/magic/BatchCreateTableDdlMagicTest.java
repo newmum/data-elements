@@ -279,7 +279,31 @@ class BatchCreateTableDdlMagicTest {
     }
 
     @Test
-    void huaweiHivePreviewAddsTextfileStorageFromRegisteredConfigurationOnly() throws Exception {
+    void hiveRowTerminatorSurvivesBatchGenerationWithTwentyAndHundredFieldsAndScopedTargets() throws Exception {
+        for(int count:List.of(20,100)) {
+            Fixture fixture=new Fixture(20);
+            fixture.jdbc.update("update db_datasource_t set db_type='hive'");
+            fixture.ddlGenerator.expectedColumns=count;
+            var fields=new ArrayList<Map<String,Object>>();
+            for(int i=0;i<count;i++)fields.add(Map.of("columnName","f"+i,"dataType","varchar","length",64));
+            for(int i=0;i<fixture.targets.size();i++) {
+                var target=new LinkedHashMap<>(fixture.targets.get(i));target.put("tableItems",fields);fixture.targets.set(i,target);
+            }
+            var result=assertInstanceOf(Map.class,fixture.run());
+            for(Object raw:(List<?>)result.get("results")) {
+                String ddl=((Map<?,?>)raw).get("ddl").toString();
+                assertTrue(ddl.contains("LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'"),ddl);
+                assertEquals(ddl.indexOf("ROW FORMAT"),ddl.lastIndexOf("ROW FORMAT"));
+            }
+            assertEquals(1,fixture.counter.reads);assertEquals(0,fixture.counter.writes);
+            fixture.scope.deniedId="db-19";
+            assertInstanceOf(ExitValue.class,fixture.run(),"Mixed unauthorized targets must fail as a whole");
+            assertEquals(1,fixture.counter.reads);assertEquals(0,fixture.counter.writes);
+        }
+    }
+
+    @Test
+    void everyHivePreviewIncludesTheProductionRowTerminatorWithoutExtraMetadataReads() throws Exception {
         for (String configuration : List.of("{\"hiveConnectionMode\":\"huawei-mrs\"}",
                 "{\"hiveProfile\":\"default\"}", "{\"usePlatformHiveConfig\":true}")) {
             Fixture fixture = new Fixture(2);
@@ -289,6 +313,7 @@ class BatchCreateTableDdlMagicTest {
             String hiveDdl = ((Map<?, ?>) results.get(1)).get("ddl").toString();
             assertTrue(hiveDdl.contains("ROW FORMAT DELIMITED"), hiveDdl);
             assertTrue(hiveDdl.contains("FIELDS TERMINATED BY '\\001'"), hiveDdl);
+            assertTrue(hiveDdl.contains("LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'"), hiveDdl);
             assertTrue(hiveDdl.contains("STORED AS TEXTFILE"), hiveDdl);
             assertFalse(hiveDdl.contains("\u0001"), "The preview must retain a visible octal escape");
             assertFalse(((Map<?, ?>) results.getFirst()).get("ddl").toString().contains("TEXTFILE"));
@@ -299,7 +324,8 @@ class BatchCreateTableDdlMagicTest {
         plainHive.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg='{\"hiveConnectionMode\":\"open-source\"}'");
         Map<?, ?> response = assertInstanceOf(Map.class, plainHive.run());
         String ddl = ((Map<?, ?>) ((List<?>) response.get("results")).getFirst()).get("ddl").toString();
-        assertFalse(ddl.contains("TEXTFILE"), "Only registered Huawei Hive receives this storage policy");
+        assertTrue(ddl.contains("TEXTFILE"), "The requested storage policy applies to every Hive target");
+        assertTrue(ddl.contains("LINES TERMINATED BY '\\002\\002\\002\\003\\003\\003\\n'"),ddl);
     }
 
     @Test

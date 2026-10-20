@@ -33,12 +33,9 @@
             @click="showDdlView"
           >查看DDL语句</button>
         </div>
-        <span
-          v-if="editable && targetTablePlans.length"
-          class="access-apply-target-summary"
-          :title="targetTablePlanSummary"
-        >
-          {{ targetTablePlanSummary }}
+        <span v-if="sourcePartitionDetected" class="access-apply-partition-notice" role="status"
+          title="默认不创建分区。如需创建，请在查看DDL语句中手工勾选“创建分区”并确认配置。">
+          来源表是分区表，是否创建分区？
         </span>
       </div>
     </template>
@@ -325,6 +322,7 @@ const partitionPlans = ref<Record<string, any>>({});
 const ddlPartitionPlans = ref<Record<string, any>>({});
 const partitionSupport = ref<Record<string, boolean>>({});
 const partitionProbeMessage = ref("");
+const sourcePartitionDetected = ref(false);
 const sourceDefinitionMessage = ref("");
 const sourceConstraints = ref<any[]>([]);
 const partitionError = ref("");
@@ -431,10 +429,11 @@ const probePartitions = async (targets: any[]) => {
   sourceDefinitionMessage.value = result.source?.ddlReadStatus && result.source.ddlReadStatus !== 'unsupported'
     ? String(result.source.ddlReadMessage || '') : '';
   partitionProbeMessage.value = String(result.source?.message || "未识别到来源分区，可手动配置");
+  sourcePartitionDetected.value = result.source?.status === "detected";
   for (const target of targets) {
     if (partitionPlans.value[target.key]) continue;
     partitionPlans.value[target.key] = partitionSupport.value[target.key] && result.source?.status === "detected"
-      ? JSON.parse(JSON.stringify(result.source.plan)) : { enabled: false };
+      ? { ...JSON.parse(JSON.stringify(result.source.plan)), enabled: false } : { enabled: false };
   }
   partitionProbeIdentity = identity;
 };
@@ -1241,22 +1240,6 @@ const normalizeTargetTableName = (value: any, dbType: any) => {
 const targetDatasourceIds = ref<string[]>([]);
 const targetTableNameInput = ref("");
 
-const targetTablePlans = computed(() =>
-  targetDatasourceIds.value
-    .map((dbId) => {
-      const selected = datasourceMap.value[dbId];
-      const tableName = normalizeTargetTableName(targetTableNameInput.value, selected?.dbType);
-      return { dbId, dbName: selected?.datasourceName || selected?.dbName || selected?.label || "所选目标库", tableName };
-    })
-    .filter((item) => Boolean(item.dbId && item.tableName)),
-);
-
-const targetTablePlanSummary = computed(() => {
-  const plans = targetTablePlans.value;
-  if (!plans.length) return "请选择目标数据源";
-  return plans.map((item) => `在“${item.dbName}”创建“${item.tableName}”`).join("；");
-});
-
 const syncTargetDatasourceSelection = (value: any) => {
   const nextIds = orderTargetDatasourceIds(value);
   if (!sameStringList(targetDatasourceIds.value, nextIds)) targetDatasourceIds.value = nextIds;
@@ -1312,6 +1295,7 @@ const init = async () => {
   ddlPartitionPlans.value = {};
   partitionSupport.value = {};
   partitionProbeIdentity = "";
+  sourcePartitionDetected.value = false;
   sourceConstraints.value = [];
   sourceDefinitionMessage.value = "";
   partitionError.value = "";
@@ -2157,6 +2141,15 @@ onBeforeUnmount(stopDdlEditorSizing);
 }
 .access-apply-view-tab:hover:not(:disabled) { color: #1b67f8; }
 .access-apply-view-tab:disabled { cursor: wait; opacity: .65; }
+.access-apply-partition-notice {
+  flex: 0 1 auto;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #fff7e6;
+  color: #a66408;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .template-load-error {
   display: flex;
   flex-direction: column;
@@ -2187,18 +2180,6 @@ onBeforeUnmount(stopDdlEditorSizing);
   flex: 1;
   flex-direction: column;
   min-height: 0;
-}
-
-:global(.el-drawer__header .access-apply-target-summary) {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  color: #5b77a5;
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 22px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .materialization-field-toolbar {

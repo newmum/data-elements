@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.23";
+    public static final String VERSION="1.1.25";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=8L*1024*1024;
@@ -137,6 +137,11 @@ public final class MappingEngine {
             return f->{f.step="condition";f.diagnosticStep=null;return Expressions.truth(condition.evaluate(f))?yes.eval(f):no.eval(f);};}
         if(node.path("input").path("kind").asText().equals("STEP_INPUT"))throw new MappingException("INPUT_UNAVAILABLE","规则输入没有上一步结果，请选择源字段或明确引用已生成目标字段");
         Expressions.Expr input=Expressions.ast(node.path("input"),deps,fields,0);List<Eval> steps=new ArrayList<>();
+        String numericTemporalUnit=node.path("input").path("numericTemporalUnit").asText();
+        if(!numericTemporalUnit.isBlank()&&!Set.of("EPOCH_SECONDS","EPOCH_MILLIS","EPOCH_MICROS","EPOCH_NANOS").contains(numericTemporalUnit))
+            throw new MappingException("INVALID_ARGUMENT","来源日期数值单位无效");
+        TemporalParser.Parser numericTemporalParser=numericTemporalUnit.isBlank()||explicitTemporalPattern(node)?null:
+                TemporalParser.bind(numericTemporalUnit,"DATETIME",Map.of());
         if(node.path("steps").size()>32)throw new MappingException("BUDGET_EXCEEDED","单规则步骤超过32");
         for(JsonNode step:node.path("steps")){
             String operator=step.path("operator").asText(),stepId=step.path("stepId").asText("step-"+steps.size());JsonNode args=step.path("args");Eval eval;
@@ -162,7 +167,18 @@ public final class MappingEngine {
             Eval actual=eval;String fallback=step.path("onError").asText("ERROR");validateFallback(fallback);Object defaultValue=JSON.convertValue(step.get("defaultValue"),Object.class);
             steps.add(f->{f.step=stepId;f.diagnosticStep=step;Object before=f.current;try{Object value;try{value=actual.eval(f);}catch(ArithmeticException | java.time.DateTimeException ex){throw new MappingException("TYPE_MISMATCH","表达式数值或时间计算失败");}if(ValueTypes.bytes(value,0)>262144)throw new MappingException("BUDGET_EXCEEDED","字段结果超过256KiB");return value;}catch(MappingException ex){if(ex.code().equals("BUDGET_EXCEEDED"))throw ex;return switch(fallback){case "NULL"->null;case "KEEP_SOURCE","KEEP_ORIGINAL"->f.ruleInput;case "KEEP_INPUT"->before;case "DEFAULT_VALUE"->defaultValue;default->throw ex;};}});
         }
-        return f->{f.step="input";f.diagnosticStep=null;f.current=ValueTypes.MISSING;f.current=input.evaluate(f);f.ruleInput=f.current;for(Eval step:steps)f.current=step.eval(f);return f.current;};
+        return f->{f.step="input";f.diagnosticStep=null;f.current=ValueTypes.MISSING;f.current=input.evaluate(f);f.ruleInput=f.current;
+            if(numericTemporalParser!=null&&TemporalParser.numericCarrier(f.current))f.current=numericTemporalParser.parse(f.current,f.context.zone(),f.context.locale());
+            for(Eval step:steps)f.current=step.eval(f);return f.current;};
+    }
+    private static boolean explicitTemporalPattern(JsonNode node) {
+        for(JsonNode step:node.path("steps")) {
+            String pattern="";
+            if(step.path("operator").asText().equals("DATE_PARSE"))pattern=step.path("args").path("pattern").asText();
+            else if(step.path("args").path("function").asText().equals("parseDate"))pattern=step.path("args").path("parameters").path(0).asText();
+            if(!pattern.isBlank()&&!pattern.equalsIgnoreCase("AUTO"))return true;
+        }
+        return false;
     }
     private static Expressions.Expr compilePredicate(JsonNode p,Set<String>deps,Set<String>fields,int depth){
         if(depth>32)throw new MappingException("BUDGET_EXCEEDED","条件深度超限");String op=p.path("op").asText();
@@ -269,7 +285,7 @@ public final class MappingEngine {
         ObjectNode rule=JSON.createObjectNode();if(mapping.has("when")){rule.set("when",mapping.get("when"));rule.set("then",legacyRule(mapping.path("then")));if(mapping.has("else"))rule.set("else",legacyRule(mapping.path("else")));return rule;}
         ObjectNode input=rule.putObject("input");if(mapping.has("constant")){input.put("kind","LITERAL");input.set("value",mapping.get("constant"));}
         else if(mapping.hasNonNull("expression")){input.put("kind","EXPRESSION");input.put("expression",mapping.path("expression").asText());}
-        else if(mapping.hasNonNull("from")){input.put("kind","FIELD");input.put("name",ValueTypes.field(mapping.path("from").asText()));if(mapping.hasNonNull("fromLabel"))input.set("comment",mapping.get("fromLabel"));}
+        else if(mapping.hasNonNull("from")){input.put("kind","FIELD");input.put("name",ValueTypes.field(mapping.path("from").asText()));if(mapping.hasNonNull("fromLabel"))input.set("comment",mapping.get("fromLabel"));if(mapping.hasNonNull("sourceTemporalUnit"))input.set("numericTemporalUnit",mapping.get("sourceTemporalUnit"));}
         else {input.put("kind","LITERAL");input.putNull("value");}
         ArrayNode steps=rule.putArray("steps");JsonNode transform=mapping.path("transform");
         if(mapping.path("fromList").isArray()){ObjectNode step=steps.addObject();step.put("operator","CONCAT");ObjectNode args=step.putObject("args");ArrayNode inputs=args.putArray("inputs");mapping.path("fromList").forEach(n->inputs.addObject().put("kind","FIELD").put("name",ValueTypes.field(n.asText())));args.put("separator",transform.path("args").path(0).asText(""));args.put("nullElementPolicy","EMPTY");}

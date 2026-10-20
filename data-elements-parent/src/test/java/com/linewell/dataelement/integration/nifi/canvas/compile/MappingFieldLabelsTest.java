@@ -39,6 +39,20 @@ class MappingFieldLabelsTest {
         edges.add(new Pipeline.Edge("c","other","b","default"));
         assertFalse(new MappingFieldLabels(flow(List.of(source,other,first,second),edges)).enrich("b",spec).path("mappings").get(0).has("fromLabel"));
     }
+    @Test void oracleDateInputUnitsAreAttachedOnlyToDirectTemporalRulesAndNeverGuessedAcrossTransforms() throws Exception {
+        for(String dbType:List.of("ORACLE","OCEANBASE_ORACLE","MySQL")) {
+            var source=node("s","source",Map.of("dbType",dbType,"sourceColumns",List.of(Map.of("columnName","csrq","dataType","DATE","columnComment","出生日期"))));
+            var mapping=node("m","transform",Map.of());
+            var spec=JSON.readTree("{\"version\":\"1.0\",\"mappings\":[{\"from\":\"csrq\",\"to\":\"day\",\"targetType\":\"DATETIME\"},{\"from\":\"csrq\",\"to\":\"raw\",\"targetType\":\"STRING\"}]}");
+            var labels=new MappingFieldLabels(flow(List.of(source,mapping),List.of(new Pipeline.Edge("e","s","m","default"))));
+            var result=labels.enrich("m",spec);
+            assertEquals(!dbType.equals("MySQL"),result.path("mappings").get(0).has("sourceTemporalUnit"));
+            assertFalse(result.path("mappings").get(1).has("sourceTemporalUnit"));assertFalse(spec.path("mappings").get(0).has("sourceTemporalUnit"));
+            var second=node("second","transform",Map.of());
+            var chained=new MappingFieldLabels(flow(List.of(source,mapping,second),List.of(new Pipeline.Edge("e","s","m","default"),new Pipeline.Edge("next","m","second","default"))));
+            assertFalse(chained.enrich("second",spec).path("mappings").get(0).has("sourceTemporalUnit"));
+        }
+    }
     private static Pipeline.Node node(String id,String category,Map<String,Object> config){return new Pipeline.Node(id,category+".test",id,category,0,0,config);}
     private static Pipeline flow(List<Pipeline.Node> nodes,List<Pipeline.Edge> edges){return new Pipeline("labels","labels",null,null,null,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null);}
 }

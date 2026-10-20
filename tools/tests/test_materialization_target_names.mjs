@@ -15,12 +15,12 @@ const ast = babel.Babel.transform(script, {
 }).ast;
 const names = [
   'normalizeDbId', 'normalizeDbIds', 'syncDbTypeByDatasource', 'buildTargetTableName',
-  'sameStringList', 'normalizeTargetTableName', 'targetDatasourceIds', 'targetTableNameInput', 'targetTablePlans',
+  'sameStringList', 'normalizeTargetTableName', 'targetDatasourceIds', 'targetTableNameInput',
   'syncTargetDatasourceSelection', 'syncTargetTableNameInput', 'normalizeFormPayload',
   'isCurrentInit', 'trackLoad', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
   'isHiveTarget',
-  'partitionPlans', 'ddlPartitionPlans', 'partitionSupport', 'partitionProbeMessage', 'sourceDefinitionMessage',
+  'partitionPlans', 'ddlPartitionPlans', 'partitionSupport', 'partitionProbeMessage', 'sourceDefinitionMessage', 'sourcePartitionDetected',
   'sourceConstraints', 'partitionError', 'partitionProbeIdentity', 'ddlGenerationVersion', 'invalidateDdl', 'partitionInputError', 'partitionPayload', 'probePartitions',
   'normalizeCode', 'orderTargetDatasourceIds', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
   'materializationProgress', 'materializationElapsed', 'materializationAwaitingDecision',
@@ -197,7 +197,7 @@ for (const size of [20, 100]) {
   assert.equal(f.calls[0].body.taskCategory, 'distribution');
   assert.deepEqual(plain(f.context.datasourcePathMap.value['db-0']), ['dept-1', 'db-0']);
   f.actual.syncTargetDatasourceSelection([['dept-1', 'db-1']]);
-  assert.equal(f.actual.targetTablePlans.value[0].tableName, 'ods_t_sjycc_ckb', 'Department paths retain Hive target naming');
+  assert.equal(f.actual.targetTableNameInput.value, 'ods_t_sjycc_ckb', 'Department paths retain Hive target naming');
   f.context.props.type = 'view';
   await f.actual.init();
   assert.deepEqual(f.form.dbId, [['ODS', 'db-0']], 'Viewing saved distribution targets must preserve their existing paths');
@@ -216,8 +216,8 @@ for (const paths of [[['ODS', 'db-0'], ['ODS', 'db-1']], [['ODS', 'db-1']], [['O
     'Display and materialization follow the configured domain order, even after reversed clicks');
   assert.deepEqual(plain(multi.actual.normalizeFormPayload(multi.form).targetDbIds), expectedIds);
   assert.equal(multi.form.tableName, paths.length === 1 ? 'ods_user_confirmed' : multi.actual.targetTableNameInput.value);
-  for (const plan of multi.actual.targetTablePlans.value) {
-    assert.equal(plan.tableName, multi.actual.normalizeTargetTableName(multi.form.tableName, multi.context.datasourceMap.value[plan.dbId].dbType));
+  for (const plan of multi.actual.buildDdlTargets(multi.actual.normalizeFormPayload(multi.form))) {
+    assert.equal(plan.propList.tableName, multi.actual.normalizeTargetTableName(multi.form.tableName, multi.context.datasourceMap.value[plan.dbId].dbType));
   }
 }
 // Mixed targets share the entered base name while each uses its own physical naming policy.

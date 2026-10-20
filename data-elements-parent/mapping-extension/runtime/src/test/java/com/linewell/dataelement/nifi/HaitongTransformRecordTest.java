@@ -81,6 +81,31 @@ class HaitongTransformRecordTest {
             assertEquals(count,invalid.path("inputRecordIndex").asInt());assertEquals("DATE_INVALID",invalid.path("errors").get(0).path("code").asText());
         }
     }
+    @Test void historicalOracleDateMillisKeepTheirValueAcrossJsonReaderMappingAndWriter() throws Exception {
+        for(boolean registered:List.of(false,true)) {
+            var spec=JSON.readTree(registered?"""
+                {"schemaVersion":"2.0","policies":{"recordErrorMode":"ROUTE_INVALID","zoneId":"Asia/Shanghai"},
+                 "schemaContract":{"source":[{"name":"x","logicalType":"DATETIME","physicalType":"DATE","dateContainsTime":true}]},
+                 "rules":[{"input":{"kind":"FIELD","name":"x"},"target":{"name":"y","logicalType":"DATETIME"},"steps":[]}]}
+                """:"""
+                {"version":"1.0","recordErrorMode":"ROUTE_INVALID","zoneId":"Asia/Shanghai", "mappings":[{"from":"x","to":"y","targetType":"DATETIME"}]}
+                """);
+            var plan=MappingEngine.compile(spec);
+            List<Long> values=registered?List.of(197395200000L,99999999999L,-197395200000L,0L,1L,-1L,86400000L):List.of(197395200000L,99999999999L,-197395200000L);
+            for(int count:List.of(20,100)) {
+                var carrier=registered?RecordFieldType.CHOICE.getChoiceDataType(List.of(RecordFieldType.INT.getDataType(),RecordFieldType.LONG.getDataType(),RecordFieldType.STRING.getDataType())):RecordFieldType.STRING.getDataType();
+                var runner=runner("NULL","ROUTE_INVALID",carrier);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());
+                var rows=new ArrayList<Map<String,Object>>();
+                for(int i=0;i<count;i++){long value=values.get(i%values.size());rows.add(Map.of("x",switch(i%3){case 0->value;case 1->Long.toString(value);default->"\""+value+"\"";}));}
+                rows.add(Map.of("x","2025-02-30"));runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();
+                runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.INVALID,1);
+                runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);runner.assertTransferCount(HaitongTransformRecord.RETRY,0);
+                var output=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray());
+                assertEquals(count,output.size());for(int i=0;i<count;i++)assertEquals(values.get(i%values.size()).longValue(),output.get(i).path("y").asLong());
+                var invalid=JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst().toByteArray());assertEquals("DATE_INVALID",invalid.path("errors").get(0).path("code").asText());
+            }
+        }
+    }
     @Test void invalidSelfLoopUnwrapsOriginalRowAndKeepsSparseIndexWithoutNesting() throws Exception {
         var runner=runner("FAIL","ROUTE_INVALID");runner.enqueue("[{\"x\":\"valid\"},{}]");runner.run();
         var invalid=runner.getFlowFilesForRelationship(HaitongTransformRecord.INVALID).getFirst();
@@ -149,8 +174,25 @@ class HaitongTransformRecordTest {
         assertFalse(file.getAttributes().toString().contains("synthetic-private-invalid"));
         assertTrue(new String(file.toByteArray(),StandardCharsets.UTF_8).contains("synthetic-private-invalid"));
     }
-    private TestRunner runner(String missing,String mode)throws Exception{
-        TestRunner runner=TestRunners.newTestRunner(HaitongTransformRecord.class);runner.addControllerService("reader",new Reader());runner.enableControllerService(runner.getControllerService("reader"));runner.addControllerService("writer",new Writer());runner.enableControllerService(runner.getControllerService("writer"));runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
+    @Test void oracleDateUnionAllowanceDoesNotAcceptBooleanContainersOrUndeclaredFields() throws Exception {
+        for(boolean declared:List.of(false,true))for(var extra:List.of(RecordFieldType.LONG.getDataType(),RecordFieldType.BOOLEAN.getDataType(),RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.LONG.getDataType()))) {
+            var carrier=RecordFieldType.CHOICE.getChoiceDataType(List.of(RecordFieldType.STRING.getDataType(),extra));
+            var runner=runner("NULL","ROUTE_INVALID",carrier);
+            var spec=JSON.readTree("""
+                {"schemaVersion":"2.0","policies":{"zoneId":"Asia/Shanghai"},
+                 "schemaContract":{"source":[{"name":"x","logicalType":"DATETIME","physicalType":"DATE"}]},
+                 "rules":[{"input":{"kind":"FIELD","name":"x"},"target":{"name":"y","logicalType":"DATETIME"},"steps":[]}]}
+                """);
+            ((com.fasterxml.jackson.databind.node.ObjectNode)spec.path("schemaContract").path("source").get(0)).put("dateContainsTime",declared);
+            var plan=MappingEngine.compile(spec);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());runner.enqueue("[{\"x\":197395200000}]");runner.run();
+            boolean permitted=declared&&extra.getFieldType()==RecordFieldType.LONG;
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS,permitted?1:0);runner.assertTransferCount(HaitongTransformRecord.FAILURE,permitted?0:1);
+            if(!permitted)assertEquals("SCHEMA_DRIFT",runner.getFlowFilesForRelationship(HaitongTransformRecord.FAILURE).getFirst().getAttribute("ht.error.code"));
+        }
+    }
+    private TestRunner runner(String missing,String mode)throws Exception{return runner(missing,mode,RecordFieldType.STRING.getDataType());}
+    private TestRunner runner(String missing,String mode,DataType carrier)throws Exception{
+        TestRunner runner=TestRunners.newTestRunner(HaitongTransformRecord.class);runner.addControllerService("reader",new Reader(carrier));runner.enableControllerService(runner.getControllerService("reader"));runner.addControllerService("writer",new Writer());runner.enableControllerService(runner.getControllerService("writer"));runner.setProperty(HaitongTransformRecord.READER,"reader");runner.setProperty(HaitongTransformRecord.WRITER,"writer");
         var spec=JSON.createObjectNode().put("version","1.0").put("onMissingSource",missing).put("recordErrorMode",mode);spec.putArray("mappings").addObject().put("from","/x").put("to","/y");var plan=MappingEngine.compile(spec);runner.setProperty(HaitongTransformRecord.PLAN,plan.document().toString());runner.setProperty(HaitongTransformRecord.HASH,plan.hash());runner.assertValid();return runner;
     }
     @Test void decimalCoordinatesAndMixedScalesSurviveEveryWindowWithoutImplicitRounding()throws Exception {
@@ -169,8 +211,11 @@ class HaitongTransformRecordTest {
         }
     }
     public static class Reader extends AbstractControllerService implements RecordReaderFactory {
+        private final DataType carrier;
+        public Reader(){this(RecordFieldType.STRING.getDataType());}
+        Reader(DataType carrier){this.carrier=carrier;}
         public RecordReader createRecordReader(Map<String,String>a,InputStream in,long length,ComponentLog log)throws IOException,MalformedRecordException{
-            List<Map<String,Object>>rows=JSON.readValue(in,List.class);var schema=new SimpleRecordSchema(List.of(new RecordField("x",RecordFieldType.STRING.getDataType())));int[]index={0};RecordReader reader=mock(RecordReader.class);when(reader.getSchema()).thenReturn(schema);when(reader.nextRecord()).thenAnswer(i->index[0]<rows.size()?new MapRecord(schema,rows.get(index[0]++)):null);return reader;
+            List<Map<String,Object>>rows=JSON.readValue(in,List.class);var schema=new SimpleRecordSchema(List.of(new RecordField("x",carrier)));int[]index={0};RecordReader reader=mock(RecordReader.class);when(reader.getSchema()).thenReturn(schema);when(reader.nextRecord()).thenAnswer(i->index[0]<rows.size()?new MapRecord(schema,rows.get(index[0]++)):null);return reader;
         }
     }
     public static class Writer extends AbstractControllerService implements RecordSetWriterFactory {

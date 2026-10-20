@@ -18,7 +18,7 @@
               :default-expand-all="false"
               :auto-expand-first-node="false"
               :expand-on-click-node="false"
-              search-placeholder="请输入组织/应用系统/数据库"
+              search-placeholder="请输入组织结构/系统名称/数据源名称"
               class="tree-container-custom"
               @node-click="handleNodeClick"
             >
@@ -70,13 +70,13 @@
           <div class="list-toolbar">
             <div class="list-toolbar__primary">
               <el-segmented v-model="state.accessStatus" :options="tabs" @change="handleSearch" />
-              <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
             </div>
             <div class="list-filters">
+              <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
               <el-input
                 v-model.trim="state.keyword"
                 class="keyword-input"
-                placeholder="请输入表名/表注释"
+                placeholder="请输入数据表名称/表注释"
                 clearable
                 :disabled="!state.leftSelectNode"
                 @clear="handleSearch"
@@ -204,29 +204,13 @@
             </el-table-column>
             <el-table-column prop="accessStatusText" label="状态" width="112" align="center">
               <template #default="{ row }">
-                <el-tag
-                  v-if="Number(row.taskCount) > 0"
-                  type="success"
-                  size="small"
-                >
-                  已接入
-                </el-tag>
-                <el-button
-                  v-else
-                  link
-                  type="warning"
-                  class="reject-modify-action"
-                  :disabled="!getSourceTableId(row)"
-                  @click="handleRejectForModify(row)"
-                >
-                  驳回修改
-                </el-button>
+                <el-tag :type="accessStatusType(row)" size="small">{{ row.accessStatusText || '状态待确认' }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" fixed="right" width="104" align="center" header-align="center">
               <template #default="{ row }">
                 <el-button
-                  v-if="!row.taskCount"
+                  v-if="!row.taskCount && row.accessStatus !== '2'"
                   link
                   type="primary"
                   :loading="creatingTaskId === getSourceTableId(row)"
@@ -456,6 +440,8 @@ const deleteAllLoadingText = computed(() => {
 const tabs = [
   { label: "全部", value: "all" },
   { label: "待接入", value: "0" },
+  { label: "待审批", value: "2" },
+  { label: "待启动", value: "3" },
   { label: "已接入", value: "1" },
 ];
 
@@ -895,6 +881,9 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
   }
 };
 
+// 接入状态由分页接口权威返回；任务数量仅决定是否展示任务操作。
+const accessStatusType = (row) => ({ '0': 'info', '1': 'success', '2': 'warning', '3': 'warning' }[row.accessStatus] || 'info');
+
 const getSourceTableId = (row) => row?.sourceTableId || row?.tid || row?.tableId || "";
 
 const handleSearch = () => {
@@ -1296,32 +1285,6 @@ const handleCreateTask = async (row) => {
     creatingTaskId.value = "";
     console.error("创建接入任务失败", error);
     $message.error(error?.message || error || "创建接入任务失败");
-  }
-};
-
-const handleRejectForModify = async (row) => {
-  const tableId = getSourceTableId(row);
-  if (!tableId) {
-    $message.warning("无法读取来源表标识，暂不能驳回修改");
-    return;
-  }
-  try {
-    await ElMessageBox.confirm(
-      `确认驳回“${row.tableNameCn || row.tableComment || row.tableName || "该数据表"}”的登记信息吗？该表会回到未登记状态，数据源仍保持已注册。`,
-      "驳回修改",
-      { type: "warning" },
-    );
-    await $common.post("/ods/dataAggReject", {
-      tableId,
-      datasourceId: row.datasourceId || row.dbId || "",
-    });
-    $message.success("已驳回，请在数据源登记中重新标注该表");
-    await loadTree();
-    tableRef.value?.refresh?.();
-  } catch (error) {
-    if (error === "cancel" || error === "close") return;
-    console.error("驳回登记信息失败", error);
-    $message.error(error?.message || error || "驳回修改失败，请稍后重试");
   }
 };
 
@@ -1897,12 +1860,7 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.reject-modify-action {
-  min-height: 20px;
-  padding: 0;
-  font-size: 14px;
-  line-height: 20px;
-}
+
 
 .task-links { display: flex; flex-direction: column; gap: 14px; }
 .task-link-card { min-width: 0; padding: 0; border: 0; background: transparent; overflow-x: auto; }

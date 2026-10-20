@@ -21,6 +21,74 @@ class TaskCategoryWarehouseScopeMagicTest {
     private static final String INGEST_TREE = "ods_data_agg_tree_statistics_01";
     private static final String DISTRIBUTE_TREE = "2b8dd89d130a4738a8aa1d0c8584e401";
 
+    @Test
+    void ingestionStatesUseDirectLiveTasksBeforePagingAndReserveApprovalWithoutExtraRowReads() throws Exception {
+        Map<String, Integer> smallReads = new HashMap<>();
+        for (int count : List.of(20, 100)) {
+            var f = fixture(count);
+            var response = (com.fasterxml.jackson.databind.node.ObjectNode) TaskRuntimeMagicFixture.emptyRootStatus();
+            var groups = ((com.fasterxml.jackson.databind.node.ObjectNode) response.at("/processGroupStatus/aggregateSnapshot"))
+                    .putArray("processGroupStatusSnapshots");
+            for (int i = 0; i < count; i++) {
+                if (i % 4 == 0) continue;
+                insertTask(f, "access-" + i, "table-" + i, "warehouse-" + i, List.of("warehouse-" + i));
+                if (i % 4 != 3) {
+                    f.jdbc.update("update nifi_pipeline_t set status=?,nifi_process_group_id=? where id=?",
+                            i % 4 == 2 ? "STOPPED" : "RUNNING", "pg-" + i, "pipe-access-" + i);
+                    groups.addObject().putObject("processGroupStatusSnapshot").put("id", "pg-" + i)
+                            .putArray("processorStatusSnapshots").addObject().putObject("processorStatusSnapshot")
+                            .put("runStatus", i % 4 == 2 ? "Running" : "Stopped");
+                }
+            }
+            // 下游正在运行，不能把已停止的本表第一跳显示成已接入；无权目标也不能改变本表状态。
+            insertTask(f, "downstream", "warehouse-1", "raw-1", List.of("raw-1"));
+            f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id='downstream-pg' where id='pipe-downstream'");
+            groups.addObject().putObject("processGroupStatusSnapshot").put("id", "downstream-pg")
+                    .putArray("processorStatusSnapshots").addObject().putObject("processorStatusSnapshot").put("runStatus", "Running");
+            insertTask(f, "denied", "table-0", "denied-0", List.of("denied-0"));
+            var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
+            for (String state : List.of("all", "0", "1", "2", "3")) {
+                counter.reads = 0;
+                var result = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
+                        "datasourceIds", List.of("db"), "accessStatus", state), response);
+                int expected = switch (state) { case "all" -> count; case "2" -> 0; case "3" -> count / 2; default -> count / 4; };
+                assertThat(((Number) result.get("total")).intValue()).isEqualTo(expected);
+                assertThat((List<?>) result.get("list")).hasSize(expected);
+                for (Object value : (List<?>) result.get("list")) {
+                    var row = (Map<?, ?>) value;
+                    int index = Integer.parseInt(row.get("tid").toString().substring("table-".length()));
+                    String expectedState = index % 4 == 0 ? "0" : index % 4 == 2 ? "1" : "3";
+                    assertThat(row.get("accessStatus")).isEqualTo(expectedState);
+                    assertThat(row.get("accessStatusText")).isEqualTo(Map.of("0", "待接入", "1", "已接入", "3", "待启动").get(expectedState));
+                    if (!state.equals("all")) assertThat(row.get("accessStatus")).isEqualTo(state);
+                }
+                if (count == 20) smallReads.put(state, counter.reads);
+                else assertThat(counter.reads).isEqualTo(smallReads.get(state));
+                System.out.println("ingestion state=" + state + ", rows=" + count + ", SQL=" + counter.reads + ", NiFi root reads<=1");
+            }
+            var second = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", 2, "pageNum", 2,
+                    "datasourceIds", List.of("db"), "accessStatus", "1"), response);
+            assertThat(((Number) second.get("total")).intValue()).isEqualTo(count / 4);
+            assertThat((List<?>) second.get("list")).hasSize(2).allSatisfy(value ->
+                    assertThat(((Map<?, ?>) value).get("accessStatus")).isEqualTo("1"));
+            var offline = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count, "datasourceIds", List.of("db")), null);
+            assertThat((List<?>) offline.get("list")).anySatisfy(value -> {
+                var row = (Map<?, ?>) value;
+                assertThat(row.get("tid")).isEqualTo("table-1");
+                assertThat(row.get("accessStatus")).isEqualTo("");
+                assertThat(row.get("accessStatusText")).isEqualTo("状态待确认");
+            });
+            var offlineReady = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
+                    "datasourceIds", List.of("db"), "accessStatus", "3"), null);
+            assertThat(((Number) offlineReady.get("total")).intValue()).isEqualTo(count / 4);
+            assertThat((List<?>) offlineReady.get("list")).allSatisfy(value ->
+                    assertThat(((Map<?, ?>) value).get("accessStatus")).isEqualTo("3"));
+            var offlineRunning = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
+                    "datasourceIds", List.of("db"), "accessStatus", "1"), null);
+            assertThat(((Number) offlineRunning.get("total")).intValue()).isZero();
+        }
+    }
+
     @ParameterizedTest @ValueSource(ints = {20, 100})
     void liveRuntimeStateOverridesLifecycleSuccessfulBatchAndStaleStartFlagWithConstantQueries(int count) throws Exception {
         var f = fixture(count);
@@ -60,7 +128,7 @@ class TaskCategoryWarehouseScopeMagicTest {
             var result = run(f, resource, Map.of("viewLevel", "table", "pageSize", count,
                     "datasourceIds", List.of(resource.equals(INGEST_PAGE) ? "db" : "warehouse")), response);
             assertThat((List<?>) result.get("list")).hasSize(count);
-            assertThat(counter.reads).isEqualTo(resource.equals(INGEST_PAGE) ? 13 : 12);
+            assertThat(counter.reads).isEqualTo(12);
             for (Object raw : (List<?>) result.get("list")) {
                 var row = (Map<?, ?>) raw;
                 for (Object taskValue : (List<?>) row.get("tasks")) {
@@ -75,7 +143,7 @@ class TaskCategoryWarehouseScopeMagicTest {
                 }
             }
         }
-        System.out.println("runtime status evidence: " + count + " rows, ingestion SQL=13, distribution SQL=12; foreign/deleted pipelines excluded, historical SUCCESS retained");
+        System.out.println("runtime status evidence: " + count + " rows, ingestion SQL=12, distribution SQL=12; foreign/deleted pipelines excluded, historical SUCCESS retained");
     }
 
     @Test
@@ -107,7 +175,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         assertThat((List<?>) ingest.get("list")).hasSize(count);
         assertThat(((List<?>) ingest.get("datasourceIds")).stream().map(String::valueOf).toList()).containsExactlyInAnyOrder(
                 "db", "business-hive", "stale-binding", "foreign-binding", "deleted-node", "dwd-binding", "fake-root");
-        assertThat(counter.reads).isEqualTo(8);
+        assertThat(counter.reads).isEqualTo(7);
         counter.reads = 0;
         Map<?, ?> distribute = run(f, DISTRIBUTE_PAGE, Map.of("pageSize", count));
         assertThat(((Number) distribute.get("total")).intValue()).isEqualTo(3 * count);
@@ -141,7 +209,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         assertThat((List<?>) mixed.get("list")).allSatisfy(raw ->
                 assertThat(((Map<?, ?>) raw).get("datasourceId")).isEqualTo("warehouse"));
         System.out.println("task category evidence: page size=" + count
-                + ", ingestion SQL=8, distribution SQL=8, each tree SQL=3; mixed/denied IDs remain scoped");
+                + ", ingestion SQL=7, distribution SQL=8, each tree SQL=3; mixed/denied IDs remain scoped");
     }
 
     @ParameterizedTest @ValueSource(ints = {20, 100})
@@ -160,7 +228,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
         Map<?, ?> ingest = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count, "datasourceIds", List.of("db")));
         assertThat((List<?>) ingest.get("list")).hasSize(count);
-        assertThat(counter.reads).isEqualTo(13);
+        assertThat(counter.reads).isEqualTo(12);
         for (Object raw : (List<?>) ingest.get("list")) {
             Map<?, ?> source = (Map<?, ?>) raw;
             List<?> tasks = (List<?>) source.get("tasks");
@@ -185,7 +253,7 @@ class TaskCategoryWarehouseScopeMagicTest {
                     assertThat(((Map<?, ?>) task).get("sourceTableId")).isEqualTo(source.get("tid")));
         }
         System.out.println("task family evidence: page size=" + count
-                + ", root+three hops SQL=13, filtered distribution SQL=13; denied target and denied intermediate excluded");
+                + ", root+three hops SQL=12, filtered distribution SQL=13; denied target and denied intermediate excluded");
         f.jdbc.update("update db_datasource_t set asset_status=0 where tid='warehouse'");
         Map<?, ?> afterUnregister = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count, "datasourceIds", List.of("db")));
         for (Object raw : (List<?>) afterUnregister.get("list"))
@@ -212,7 +280,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         Map<?, ?> result = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count, "datasourceIds", List.of("db")));
         assertThat(((Number) result.get("total")).intValue()).isEqualTo(count);
         assertThat((List<?>) result.get("list")).hasSize(count);
-        assertThat(counter.reads).isEqualTo(13);
+        assertThat(counter.reads).isEqualTo(12);
         for (Object raw : (List<?>) result.get("list")) {
             Map<?, ?> row = (Map<?, ?>) raw;
             List<?> tasks = (List<?>) row.get("tasks");
@@ -259,7 +327,7 @@ class TaskCategoryWarehouseScopeMagicTest {
             assertThat(tasks.stream().map(task -> String.valueOf(((Map<?, ?>) task).get("tid"))).toList()).containsExactly(
                     row.get("tid").equals("table-0") ? new String[]{"first", "second"} : new String[]{"second"});
         }
-        assertThat(counter.reads).isEqualTo(13);
+        assertThat(counter.reads).isEqualTo(12);
     }
 
     @Test
@@ -287,7 +355,7 @@ class TaskCategoryWarehouseScopeMagicTest {
             f.jdbc.execute("alter table db_table_t add " + column + " varchar(100)");
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("create index idx_test_table_lookup on db_table_t(tenant_id,tid,is_del)");
-        f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp)");
+        f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp,process_group_id varchar(64))");
         f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64))");
         f.jdbc.execute("create table rm_org_t(tenant_id varchar(32),id varchar(64),name varchar(100),deleted int)");
         f.jdbc.update("insert into rm_org_t values('ga','org','当前租户部门',0),('other','org','其他租户部门',0)");
