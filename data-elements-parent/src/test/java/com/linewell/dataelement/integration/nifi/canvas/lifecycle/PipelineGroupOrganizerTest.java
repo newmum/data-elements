@@ -75,9 +75,11 @@ class PipelineGroupOrganizerTest {
     }
 
     @Test
-    void groupsResourcePipelinesUnderTheSharedSurveillanceEngineGroup() {
+    void groupsPolicySelectedPipelinesUnderTheSharedApplicationGroup() {
         try (var scope = TenantContext.use("tenant1")) {
             PipelineGroupOrganizer organizer = organizer();
+            organizer.setGroupingPolicies(List.of(pipeline -> Optional.of(
+                    new PipelineGroupingPolicy.Group("布控引擎组", "structured-surveillance"))));
             var first = organizer.prepare(surveillancePipeline("结构化数据布控引擎流组 - 大巴购票 [person_bus]"));
             var second = organizer.prepare(surveillancePipeline("结构化数据布控引擎流组 - 酒店住宿 [person_hotel]"));
 

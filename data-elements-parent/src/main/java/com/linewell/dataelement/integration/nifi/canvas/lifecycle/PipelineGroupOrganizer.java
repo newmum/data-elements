@@ -12,12 +12,11 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /** Resolves business ownership from tenant master data and organizes native NiFi groups. */
 @Component
 public class PipelineGroupOrganizer {
-    private static final String SURVEILLANCE_FLOW_PREFIX = "结构化数据布控引擎流组";
-    private static final String SURVEILLANCE_GROUP_NAME = "布控引擎组";
     private static final int GROUPS_PER_ROW = 5;
     private static final double COLUMN_PITCH = 520;
     private static final double ROW_PITCH = 300;
@@ -27,6 +26,12 @@ public class PipelineGroupOrganizer {
     private static final double MIN_VERTICAL_SEPARATION = 260;
     private final NifiClient nifi;
     private final JdbcTemplate jdbc;
+    private List<PipelineGroupingPolicy> groupingPolicies = List.of();
+
+    @Autowired(required = false)
+    public void setGroupingPolicies(List<PipelineGroupingPolicy> policies) {
+        groupingPolicies = List.copyOf(policies);
+    }
 
     public PipelineGroupOrganizer(NifiClient nifi, JdbcTemplate jdbc) {
         this.nifi = nifi;
@@ -72,10 +77,11 @@ public class PipelineGroupOrganizer {
         String taskName = label(task, "task_name", pipeline.name());
         String flowParent;
         String controllerServiceScope = "";
-        if (pipeline.name() != null && pipeline.name().startsWith(SURVEILLANCE_FLOW_PREFIX)) {
-            // Surveillance resources are independently deployable flows, but
-            // operators manage them together under one stable NiFi group.
-            flowParent = ensure(top, SURVEILLANCE_GROUP_NAME, marker("application", "structured-surveillance"));
+        var featureGroup = groupingPolicies.stream().map(policy -> policy.group(pipeline))
+                .flatMap(java.util.Optional::stream).findFirst();
+        if (featureGroup.isPresent()) {
+            var group = featureGroup.get();
+            flowParent = ensure(top, group.name(), marker("application", group.identity()));
             controllerServiceScope = flowParent;
         } else {
             String department = ensure(top, label(org, "name", "未归属部门"), marker("department", key(org, "id")));

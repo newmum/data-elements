@@ -735,4 +735,38 @@
 		</plugins>
 	</build>
 
+	<!-- Optional feature directories activate independently and can be removed without core dependencies. -->
+	<profiles>
+		<profile>
+			<id>bk</id>
+			<activation><file><exists>bk/src/main/java</exists></file></activation>
+			<build><plugins><plugin>
+				<groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.1</version>
+				<executions>
+					<execution><id>bk-sources</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals>
+						<configuration><sources><source>${project.basedir}/bk/src/main/java</source></sources></configuration></execution>
+					<execution><id>bk-tests</id><phase>generate-test-sources</phase><goals><goal>add-test-source</goal></goals>
+						<configuration><sources><source>${project.basedir}/bk/src/test/java</source></sources></configuration></execution>
+					<execution><id>bk-resources</id><phase>generate-resources</phase><goals><goal>add-resource</goal></goals>
+						<configuration><resources><resource><directory>${project.basedir}/bk/src/main/resources</directory></resource></resources></configuration></execution>
+				</executions>
+			</plugin></plugins></build>
+		</profile>
+		<profile>
+			<id>pinggao</id>
+			<activation><file><exists>pinggao/src/main/java</exists></file></activation>
+			<build><plugins><plugin>
+				<groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.1</version>
+				<executions>
+					<execution><id>pinggao-sources</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals>
+						<configuration><sources><source>${project.basedir}/pinggao/src/main/java</source></sources></configuration></execution>
+					<execution><id>pinggao-tests</id><phase>generate-test-sources</phase><goals><goal>add-test-source</goal></goals>
+						<configuration><sources><source>${project.basedir}/pinggao/src/test/java</source></sources></configuration></execution>
+					<execution><id>pinggao-resources</id><phase>generate-resources</phase><goals><goal>add-resource</goal></goals>
+						<configuration><resources><resource><directory>${project.basedir}/pinggao/src/main/resources</directory></resource></resources></configuration></execution>
+				</executions>
+			</plugin></plugins></build>
+		</profile>
+	</profiles>
+
 </project>
