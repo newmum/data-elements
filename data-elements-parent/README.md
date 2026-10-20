@@ -2,7 +2,7 @@
 
 `data-elements-parent` 是当前仓库中的单模块共享后端工程，基于 Spring Boot、MyBatis-Plus、Sa-Token、magic-api、Redis、Nacos、Warm Flow 等组件构建，为各前端提供接口、动态 API、认证、配置、流程和数据访问能力。目录名中的 `parent` 不表示 Maven 聚合父工程。
 
-布控引擎和品高集成分别集中在 [`bk/`](bk/README.md)、[`pinggao/`](pinggao/README.md)。两者通过 Maven 文件激活的独立 profile 加入同一后端，可以分别禁用或删除目录后干净构建；核心源码不依赖其实现类。
+布控引擎和品高集成分别集中在标准 Java 源码目录的 [`com.linewell.dataelement.bk`](src/main/java/com/linewell/dataelement/bk/) 与 [`com.linewell.dataelement.pinggao`](src/main/java/com/linewell/dataelement/pinggao/) 包中。两者随普通 Maven 构建编译并打入同一个后端 JAR，无需额外 profile 或源码目录插件。对应测试、资源位置及后续移除方法见[布控与品高代码目录](docs/布控与品高代码目录.md)。
 
 ## 技术栈
 
