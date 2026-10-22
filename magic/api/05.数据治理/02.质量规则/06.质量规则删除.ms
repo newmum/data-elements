@@ -26,6 +26,7 @@
 // 路由：POST /dwm/quality/deleteById
 // 业务说明：根据id删除数据质量校验规则；使用请求参数 tid；涉及 data_gov_quality_rule 等业务表。
 import log
+import tenantRuntime
 
 /**
  * 根据id删除数据质量校验规则
@@ -36,6 +37,7 @@ import log
 
 // 获取请求参数
 var tid = body?.tid
+var tenantId=tenantRuntime.id()
 
 if (tid == null || tid == '') {
     // 参数或业务状态不满足要求时立即终止请求。
@@ -44,11 +46,15 @@ if (tid == null || tid == '') {
 
 // 当前时间
 var now = new Date()
+var current=db.table('data_gov_quality_rule').columns('tid','scope_of_application').where().eq('tid',tid).eq('tenant_id',tenantId).eq('is_del',0).selectOne()
+if(current==null) {exit 403,'规则不存在或不在当前租户范围内'}
+if(current.scopeOfApplication=='QUALITY_SQL_TEMPLATE_V1') {exit 409,'请使用SQL模板入口删除此模板'}
 
 // ========== 逻辑删除数据 ==========
 var result = db.table('data_gov_quality_rule')
     .where()
     .eq('tid', tid)
+    .eq('tenant_id',tenantId)
     .eq('is_del', 0)
     .update({
         is_del: 1,

@@ -19,7 +19,8 @@ if (!$taskConfig.argumentLine.Replace('\', '/').ToLowerInvariant().Contains($tas
     throw 'Configured arguments must run this workspace runtime JAR'
 }
 foreach ($taskProperty in $taskConfig.environment.PSObject.Properties) {
-    if ($taskProperty.Name -notmatch '^(NACOS_|DATA_ELEMENT_|DATA_ELEMENTS_|SPRING_)[A-Z0-9_]+$') {
+    if ($taskProperty.Name -notmatch '^(NACOS_|DATA_ELEMENT_|DATA_ELEMENTS_|SPRING_)[A-Z0-9_]+$' -and
+        $taskProperty.Name -notin @('IDAAS_TRANSPORT_KEY', 'IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP')) {
         throw 'Unexpected runtime environment variable name'
     }
 }
@@ -34,12 +35,39 @@ foreach ($taskOwner in $taskOwners) {
         throw 'The port belongs to another process; refusing to stop it'
     }
 }
+foreach ($taskProperty in $taskConfig.environment.PSObject.Properties) {
+    [Environment]::SetEnvironmentVariable($taskProperty.Name, [string]$taskProperty.Value, 'Process')
+}
+if (![string]::IsNullOrWhiteSpace($env:IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP) -and
+    $env:IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP -notmatch '^(true|false)$') {
+    throw 'IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP must be true or false'
+}
+# Use the same persistent key as start-data-elements.ps1. It also protects write
+# receipts, so even a basic personnel save needs it. Never generate a replacement.
+$taskTransportKey = $env:IDAAS_TRANSPORT_KEY
+if ([string]::IsNullOrWhiteSpace($taskTransportKey)) {
+    $taskKeyPath = if ($taskConfig.transportKeyFile) { [string]$taskConfig.transportKeyFile }
+                   else { Join-Path $env:USERPROFILE '.codex/private/idaas-provision/transport-master.key' }
+    $taskKeyPath = [IO.Path]::GetFullPath($taskKeyPath)
+    if ($taskKeyPath.StartsWith($taskRepo + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'IDAAS transport key must stay outside the Git workspace'
+    }
+    if (Test-Path -LiteralPath $taskKeyPath -PathType Leaf) {
+        $taskTransportKey = Get-Content -LiteralPath $taskKeyPath -Raw -Encoding UTF8
+    }
+}
+if ([string]::IsNullOrWhiteSpace($taskTransportKey)) {
+    throw 'IDAAS transport key is missing; configure IDAAS_TRANSPORT_KEY or restore the existing private transportKeyFile'
+}
+$taskTransportKey = $taskTransportKey.Trim()
+try { $taskKeyBytes = [Convert]::FromBase64String($taskTransportKey) }
+catch { throw 'IDAAS transport key must be Base64 encoding of exactly 32 bytes' }
+if ($taskKeyBytes.Length -ne 32) { throw 'IDAAS transport key must be Base64 encoding of exactly 32 bytes' }
+[Environment]::SetEnvironmentVariable('IDAAS_TRANSPORT_KEY', $taskTransportKey, 'Process')
+# Validate configuration before interrupting an existing backend.
 foreach ($taskOwner in $taskOwners) {
     Stop-Process -Id $taskOwner -ErrorAction Stop
     Wait-Process -Id $taskOwner -ErrorAction SilentlyContinue -Timeout 20
-}
-foreach ($taskProperty in $taskConfig.environment.PSObject.Properties) {
-    [Environment]::SetEnvironmentVariable($taskProperty.Name, [string]$taskProperty.Value, 'Process')
 }
 $taskLogRoot = Join-Path $taskRepo 'logs/backend/local-runtime'
 New-Item -Path $taskLogRoot -ItemType Directory -Force | Out-Null

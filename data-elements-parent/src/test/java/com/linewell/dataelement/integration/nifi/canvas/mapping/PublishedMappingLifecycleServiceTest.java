@@ -29,6 +29,15 @@ class PublishedMappingLifecycleServiceTest {
     @Test void revokedPlanAuthorizationRejectsBeforeNativeReadsOrMutations()throws Exception{
         fixture();when(engine.compileBatch(anyMap())).thenThrow(new MappingException("RESOURCE_FORBIDDEN","revoked"));try(var tenant=TenantContext.use("tenant")){assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->service.start("p",2)).code());}verifyNoInteractions(nifi);
     }
+    @Test void embeddedPublicationReferenceWorksAndStillRejectsAnotherPublication()throws Exception{
+        fixture();JsonNode flow=nifi.get("/flow/process-groups/group",JsonNode.class);
+        var properties=(com.fasterxml.jackson.databind.node.ObjectNode)flow.path("processGroupFlow").path("flow").path("processors").get(1).path("component").path("config").path("properties");properties.remove("plan-id");
+        properties.put("execution-plan","{\"_deployment\":{\"planId\":\"plan\"}}");
+        try(var tenant=TenantContext.use("tenant")){service.start("p",2);}
+        clearInvocations(nifi);properties.put("execution-plan","{\"_deployment\":{\"planId\":\"other\"}}");
+        try(var tenant=TenantContext.use("tenant")){assertEquals("PLAN_VERSION_CONFLICT",assertThrows(MappingException.class,()->service.start("p",2)).code());}
+        verify(nifi,never()).put(anyString(),any(),any());verify(engine,times(2)).compileBatch(anyMap());
+    }
     @Test void missingSourceOrUnknownSuccessBranchBlocksStart()throws Exception{
         fixture();JsonNode flow=nifi.get("/flow/process-groups/group",JsonNode.class);((com.fasterxml.jackson.databind.node.ArrayNode)flow.path("processGroupFlow").path("flow").path("connections")).add(json.readTree("{\"id\":\"untracked\",\"component\":{\"source\":{\"id\":\"source\"},\"destination\":{\"id\":\"disabled-candidate\"},\"selectedRelationships\":[\"success\"]}}"));try(var tenant=TenantContext.use("tenant")){assertEquals("MAPPING_UPGRADE_RECOVERY_REQUIRED",assertThrows(MappingException.class,()->service.start("p",2)).code());}verify(nifi,never()).put(anyString(),any(),any());
     }

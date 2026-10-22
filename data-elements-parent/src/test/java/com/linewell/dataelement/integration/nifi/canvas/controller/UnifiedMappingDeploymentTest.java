@@ -69,4 +69,61 @@ class UnifiedMappingDeploymentTest {
         assertFalse(response.getBody().toString().contains("private-value"));
         verify(nifi,never()).cleanupProcessGroup("old");
     }
+    private void partitionFixture() {
+        fixture();
+        var p = new Pipeline("p", "Hive分区任务", "", 1L, 2L, new Pipeline.Dsl(1, List.of(
+                new Pipeline.Node("s", "source.mysql", "来源", "source", 0, 0, Map.of()),
+                new Pipeline.Node("h", "sink.hive", "分区目标", "sink", 320, 0,
+                        Map.of("partitionPlan", Map.of("enabled", true)))),
+                List.of(new Pipeline.Edge("edge", "s", "h", null))), "old", PipelineStatus.STOPPED,
+                "previous", 3L, null, new NifiNodeMapping(Map.of(), Map.of(), Map.of()), 0L);
+        when(repo.findById("p")).thenReturn(Optional.of(p));
+    }
+
+    @Test void hivePartitionWithoutMappingUsesCandidatePublicationAndCleansFailedPartialGraph() {
+        partitionFixture();
+        when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
+            ((java.util.function.Consumer<String>) call.getArgument(1)).accept("candidate");
+            throw new IllegalStateException("分区组件创建失败");
+        });
+        var response = controller.deploy("p", null);
+        assertEquals(409, response.getStatusCode().value());
+        verify(nifi).cleanupProcessGroup("candidate");
+        verify(nifi, never()).cleanupProcessGroup("old");
+        verify(nifi, never()).setProcessGroupState(eq("old"), anyString());
+        verify(compiler, never()).preflightMapping(any());
+        verify(errors).add(eq("p"), argThat(error -> error.message().contains("Hive分区") && error.detail().contains("分区组件创建失败")));
+    }
+
+    @Test void hivePartitionNativeValidationFailureCannotBePublishedAsStoppedSuccess() {
+        partitionFixture();
+        when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
+            ((java.util.function.Consumer<String>) call.getArgument(1)).accept("candidate");
+            return new DslCompiler.CompileResult("candidate", Map.of(), Map.of(), Map.of());
+        });
+        doThrow(new IllegalStateException("Hive分区/partition：Relationship success未连接")).when(nifi).requireValidGeneratedProcessGroup("candidate");
+        var response = controller.deploy("p", null);
+        assertEquals(409, response.getStatusCode().value());
+        verify(nifi).cleanupProcessGroup("candidate");
+        verify(nifi, never()).cleanupProcessGroup("old");
+        verify(nifi, never()).setProcessGroupState(eq("old"), anyString());
+    }
+
+    @Test void completeHivePartitionCandidateIsValidatedBeforeOldGraphIsStopped() {
+        partitionFixture();
+        when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
+            ((java.util.function.Consumer<String>) call.getArgument(1)).accept("candidate");
+            return new DslCompiler.CompileResult("candidate", Map.of(), Map.of(), Map.of());
+        });
+        var response = controller.deploy("p", null);
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("staged-hive-partition-deploy", ((Map<?, ?>) response.getBody()).get("mode"));
+        var order = inOrder(compiler, nifi);
+        order.verify(compiler).compile(any(), any(), any());
+        order.verify(nifi).requireValidGeneratedProcessGroup("candidate");
+        order.verify(nifi).setProcessGroupState("old", "STOPPED");
+        order.verify(nifi).cleanupProcessGroup("old");
+        verify(nifi, never()).cleanupProcessGroup("candidate");
+    }
+
 }

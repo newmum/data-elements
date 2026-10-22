@@ -23,13 +23,11 @@ final class MappingErrorRecords implements RecordReader {
             "ht.error.code", "ht.error.message", "ht.error.cause.type", "ht.retry.attempt", "ht.retry.nextAt", "ht.invalid.count");
     private static final ObjectMapper JSON = new ObjectMapper().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private final MappingIterator<JsonNode> iterator;
-    private final String hash;
     private final RecordSchema schema;
     private JsonNode pending;
     private long index;
 
     MappingErrorRecords(InputStream in, Map<String,String> attributes, MappingEngine.Plan plan) throws IOException {
-        hash = plan.hash();
         iterator = JSON.readerFor(JsonNode.class).readValues(in);
         pending = iterator.hasNextValue() ? iterator.nextValue() : null;
         if (pending != null) validate(pending);
@@ -71,8 +69,8 @@ final class MappingErrorRecords implements RecordReader {
     private void validate(JsonNode envelope) {
         if (!envelope.isObject() || !envelope.path("record").isObject() || !envelope.path("errors").isArray()
                 || !envelope.path("inputRecordIndex").isIntegralNumber() || !envelope.path("inputRecordIndex").canConvertToLong()
-                || envelope.path("inputRecordIndex").longValue() < 0 || !hash.equals(envelope.path("planHash").asText()))
-            throw new MappingException("INVALID_ERROR_ENVELOPE", "错误信封结构或原执行计划不一致，原内容已保留");
+                || envelope.path("inputRecordIndex").longValue() < 0)
+            throw new MappingException("INVALID_ERROR_ENVELOPE", "错误信封结构无效，原内容已保留");
     }
 
     static void snapshot(Map<String,Object> envelope, Map<String,Object> row) {

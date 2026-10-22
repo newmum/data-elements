@@ -7,6 +7,7 @@ import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.DslHasher;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineResourceReferences;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineStatus;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.ArrayList;
@@ -74,22 +75,14 @@ public class AccessTaskChainService {
         Map<String, Object> task = rows.getFirst();
         String id = required(text(task, "pipeline_id"));
         Pipeline pipeline = pipelines(tenant, Set.of(id)).get(id);
-        Set<String> datasourceIds = new LinkedHashSet<>();
-        Set<String> tableIds = new LinkedHashSet<>();
-        for (String key : List.of("source_db_id", "target_db_id", "actual_source_db_id", "actual_target_db_id")) {
+        var references = PipelineResourceReferences.from(pipeline);
+        PipelineResourceReferences.addTask(pipeline, task, references);
+        Set<String> datasourceIds = references.datasourceIds();
+        Set<String> tableIds = references.tableIds();
+        for (String key : List.of("actual_source_db_id", "actual_target_db_id")) {
             String value = text(task, key); if (!value.isBlank()) datasourceIds.add(value);
         }
-        // Historical registration links are not the saved design's resource references.
-        // Authorize their datasource scope, but only resolve table IDs actually used by the DSL.
-        if (pipeline.dsl() != null && pipeline.dsl().nodes() != null) for (Pipeline.Node node : pipeline.dsl().nodes()) {
-            if (node == null || node.config() == null) continue;
-            for (String key : List.of("registeredDatasourceId", "selectedDatabaseId", "sourceDbId", "targetDbId", "dbId", "datasourceId", "dataSourceId")) {
-                String value = text(node.config(), key); if (!value.isBlank()) datasourceIds.add(value);
-            }
-            for (String key : List.of("sourceTableId", "targetTableId", "registeredTableId")) {
-                String value = text(node.config(), key); if (!value.isBlank()) tableIds.add(value);
-            }
-        }
+        boolean standalone = PipelineResourceReferences.standalone(pipeline, task);
         if (tableIds.size() > 200) throw failure(HttpStatus.CONFLICT, "任务引用表超过200张");
         if (!tableIds.isEmpty()) {
             List<Object> tableArgs = new ArrayList<>(tableIds); tableArgs.add(tenant);
@@ -103,8 +96,8 @@ public class AccessTaskChainService {
             }
             if (!resolved.equals(tableIds)) throw failure(HttpStatus.FORBIDDEN, "任务引用的数据表不存在或无访问权限");
         }
-        if (datasourceIds.isEmpty()) throw failure(HttpStatus.FORBIDDEN, "无法确定当前任务的数据范围");
-        Map<String, Map<String, Object>> sources = authorizedSources(tenant, datasourceIds);
+        Map<String, Map<String, Object>> sources = datasourceIds.isEmpty()
+                ? Map.of() : authorizedSources(tenant, datasourceIds);
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("taskId", text(task, "task_id")); item.put("taskName", text(task, "task_name"));
         item.put("sourceTableId", text(task, "source_table_id")); item.put("targetTableId", text(task, "target_table_id"));
@@ -113,14 +106,19 @@ public class AccessTaskChainService {
         item.put("targetDbName", text(sources.get(text(task, "target_db_id")), "db_name"));
         item.put("sourceTableName", text(task, "source_table_name")); item.put("targetTableName", text(task, "target_table_name"));
         item.put("pipelineId", id); item.put("pipeline", pipeline);
-        item.put("unavailableReason", "关联链路暂不可用，可继续编辑当前任务保存的画布");
+        if (standalone && nativeReady(pipeline)) {
+            item.put("processGroupId", pipeline.nifiProcessGroupId());
+            item.put("nativeUrl", "/nifi-ui/#/process-groups/" + pipeline.nifiProcessGroupId());
+        } else if (!standalone) item.put("unavailableReason", "关联链路暂不可用，可继续编辑当前任务保存的画布");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rootSourceTableId", text(task, "source_table_id")); result.put("selectedTaskId", text(task, "task_id"));
         result.put("selectedPipelineId", id); result.put("items", List.of(item)); result.put("links", List.of());
+        result.put("standalone", standalone);
         result.put("readOnly", false);
-        result.put("relationshipUnavailable", true);
-        result.put("warnings", List.of(reason == null ? "关联链路暂不可用" : reason));
-        result.put("nativeCanvas", Map.of("mode", "NONE", "reason", "请先核对任务关联后重新打开"));
+        result.put("relationshipUnavailable", !standalone);
+        result.put("warnings", standalone ? List.of() : List.of(reason == null ? "关联链路暂不可用" : reason));
+        result.put("nativeCanvas", standalone ? nativeSelection(List.of(item), "可打开当前独立流程的原生画布")
+                : Map.of("mode", "NONE", "reason", "请先核对任务关联后重新打开"));
         return result;
     }
 

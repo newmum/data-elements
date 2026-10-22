@@ -30,6 +30,9 @@ test('governance naming preserves DSL identity, compile configuration and custom
     assert.equal(shown.fields[0].default,manifest.fields[0].default);assert.equal(shown.compile,manifest.compile);assert.equal(manifest.label,'字段映射');
     assert.equal(governanceNodeLabel(key,'字段映射'),'字段治理');assert.equal(governanceNodeLabel(key,'人员字段映射'),'人员字段映射');
   }
-  const other={key:'transform.sql',category:'transform',label:'自定义 SQL'};assert.equal(governanceManifest(other),other);
+  const other={key:'source.mysql',category:'source',label:'MySQL'};assert.equal(governanceManifest(other),other);
+  assert.equal(governanceManifest({key:'transform.sql',category:'transform',label:'自定义 SQL'}).label,'SQL 加工');
+  assert.equal(governanceNodeLabel('transform.sql','自定义 SQL'),'SQL 加工');
+  assert.equal(governanceNodeLabel('transform.sql','车辆 SQL'),'车辆 SQL');
   assert.equal(governanceNodeLabel('transform.sql','字段映射'),'字段映射');
 });

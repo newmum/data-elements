@@ -1,0 +1,50 @@
+# 独立运行模式覆盖示例。以 --spring.profiles.active=standalone 启用。
+# 它不会访问 data-elements 的 8088 登记校验服务；实际业务表、调用方和目标连接
+# 均必须在本文件或 application.yml 的受控配置中明确登记。示例中的密钥均为环境变量引用。
+relay:
+  registration-registry:
+    enabled: false
+    base-url: ""
+    shared-key: ""
+
+  # 数据源平台以 POST /api/v1/data-push + deliveryType=REGISTRY_SYNC 同步独立登记镜像。
+  # 请使用独立服务间密钥，不要复用业务 X-Api-Key；填写后设为 true 并重启。
+  standalone-registry:
+    sync-enabled: false
+    sync-key: "env:HAITONG_STANDALONE_REGISTRY_SYNC_KEY"
+
+  # YAML 契约仅作为无法同步平台时的兼容回退。正常独立模式请保持空，
+  # 由 REGISTRY_SYNC 写入 ht_standalone_datasource/table/column 三类镜像表。
+  standalone:
+    datasources: {}
+
+  security:
+    clients:
+      standalone-publisher:
+        api-key: "env:HAITONG_STANDALONE_PUSH_KEY"
+        channels: [table-to-ftp, table-to-kafka]
+        actions: []
+
+  # FTP 与 Kafka 的主机、凭据、Topic 必须按本环境实际填写。保持 false 时对应路由也必须保持 false。
+  ftp:
+    enabled: false
+  kafka:
+    enabled: false
+
+  routes:
+    table-to-ftp:
+      enabled: false
+      registration-managed: false
+      targets: [ftp]
+      file-format: JSONL
+      required-fields: [tableName, records]
+      batch-key-field: batchId
+      business-time-field: occurredAt
+    table-to-kafka:
+      enabled: false
+      registration-managed: false
+      targets: [kafka]
+      file-format: JSONL
+      required-fields: [tableName, records]
+      batch-key-field: batchId
+      business-time-field: occurredAt

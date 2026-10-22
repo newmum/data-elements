@@ -71,7 +71,7 @@ export default function TaskListPage({multi=false}:{multi?:boolean}){
     {title:'NiFi 关联',width:126,render:(_,task)=>task.pipelineId?<Tag color="success">已关联</Tag>:<span className="muted">待关联</span>},
     {title:'最近运行',key:'lastRunning',width:138,render:(_,task)=>task.lastRunning?formatTime(task.lastRunning).slice(5,16):<span className="muted">尚未运行</span>},
     {title:'触发策略',width:114,render:(_,task)=>text(task.scheduleFrequency)||'—'},
-    {title:'操作',fixed:'right',className:'ht-task-action-column',width:120,render:(_,task)=><Button type="link" onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>openCanvas(task)}>NiFi 画布</Button>},
+    {title:'操作',fixed:'right',className:'ht-task-action-column',width:120,render:(_,task)=><Button type="link" onMouseEnter={warmCanvas} onFocus={warmCanvas} onClick={()=>openCanvas(task)}>查看任务</Button>},
    ]}/>
   </Panel>
   <Modal title="选择已登记来源表" width={880} open={createOpen} onCancel={()=>setCreateOpen(false)} footer={<Button onClick={()=>setCreateOpen(false)}>关闭</Button>} destroyOnClose>

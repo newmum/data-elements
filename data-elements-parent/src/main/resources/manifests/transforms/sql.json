@@ -1,7 +1,7 @@
 {
   "key": "transform.sql",
   "category": "transform",
-  "label": "自定义 SQL",
+  "label": "SQL 加工",
   "icon": "code",
   "description": "",
   "fields": [

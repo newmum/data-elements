@@ -782,6 +782,60 @@ CREATE TABLE "baseline_beijing_gd"."data_access_field_mapping"
 "func_value" CLOB,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE data_access_mapping_plan_t
+CREATE TABLE "baseline_beijing_gd"."data_access_mapping_plan_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"pipeline_id" VARCHAR(64) NOT NULL,
+"node_id" VARCHAR(64) NOT NULL,
+"plan_revision" BIGINT NOT NULL,
+"draft_revision" BIGINT NOT NULL,
+"plan_hash" VARCHAR(64) NOT NULL,
+"plan_version" VARCHAR(16) NOT NULL,
+"engine_version" VARCHAR(16) NOT NULL,
+"function_version" VARCHAR(16) NOT NULL,
+"source_schema_hash" VARCHAR(64) NOT NULL,
+"target_schema_hash" VARCHAR(64) NOT NULL,
+"plan_content" CLOB NOT NULL,
+"resource_version_set" CLOB NOT NULL,
+"created_by" VARCHAR(64) NOT NULL,
+"created_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid"),
+CONSTRAINT "uk_mapping_plan_revision" UNIQUE("tenant_id", "pipeline_id", "node_id", "plan_revision"),
+CONSTRAINT "uk_mapping_plan_identity" UNIQUE("tenant_id", "pipeline_id", "node_id", "plan_hash", "draft_revision"),
+CONSTRAINT "uk_mapping_plan_tenant_id" UNIQUE("tenant_id", "tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE data_access_mapping_publication_t
+CREATE TABLE "baseline_beijing_gd"."data_access_mapping_publication_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"pipeline_id" VARCHAR(64) NOT NULL,
+"node_id" VARCHAR(64) NOT NULL,
+"plan_id" VARCHAR(32) NOT NULL,
+"process_group_id" VARCHAR(64) NOT NULL,
+"published_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid"),
+CONSTRAINT "uk_mapping_publication_node" UNIQUE("tenant_id", "pipeline_id", "node_id"),
+CONSTRAINT "fk_mapping_publication_plan" FOREIGN KEY("tenant_id", "plan_id") REFERENCES "baseline_beijing_gd"."data_access_mapping_plan_t"("tenant_id", "tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE data_access_mapping_resource_t
+CREATE TABLE "baseline_beijing_gd"."data_access_mapping_resource_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"resource_kind" VARCHAR(32) NOT NULL,
+"resource_key" VARCHAR(128) NOT NULL,
+"version_no" BIGINT NOT NULL,
+"resource_hash" VARCHAR(64) NOT NULL,
+"definition_json" CLOB NOT NULL,
+"resource_content" CLOB NOT NULL,
+"created_by" VARCHAR(64) NOT NULL,
+"created_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid"),
+CONSTRAINT "uk_mapping_resource_version" UNIQUE("tenant_id", "resource_kind", "resource_key", "version_no")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE data_access_multi_group_item_t
 CREATE TABLE "baseline_beijing_gd"."data_access_multi_group_item_t"
 (
@@ -1439,6 +1493,9 @@ CREATE TABLE "baseline_beijing_gd"."db_table_t"
 "resource_plan_id" VARCHAR(32),
 "resource_field_map" CLOB,
 "resource_revision_no" INT DEFAULT 1 NOT NULL,
+"access_request_status" INT DEFAULT 0 NOT NULL,
+"access_requested_by" VARCHAR(32),
+"access_requested_at" TIMESTAMP(6),
 CONSTRAINT "pk_db_table_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE dq_quality_issue_sample_t
@@ -2322,6 +2379,26 @@ CREATE TABLE "baseline_beijing_gd"."pingao_application_sync_state_t"
 "updated_time" TIMESTAMP(6) NOT NULL,
 CONSTRAINT "pk_pingao_application_sync_state_t" NOT CLUSTER PRIMARY KEY("tenant_id")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE push_node_t
+CREATE TABLE "baseline_beijing_gd"."push_node_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"network_code" VARCHAR(64) NOT NULL,
+"node_name" VARCHAR(128) NOT NULL,
+"node_code" VARCHAR(64) NOT NULL,
+"base_url" VARCHAR(255) NOT NULL,
+"enabled" SMALLINT DEFAULT 1 NOT NULL,
+"is_default" SMALLINT DEFAULT 0 NOT NULL,
+"remark" VARCHAR(500),
+"last_sync_time" TIMESTAMP(6),
+"last_sync_status" VARCHAR(16),
+"last_sync_source_id" VARCHAR(64),
+"created_time" TIMESTAMP(6) NOT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+"is_del" SMALLINT DEFAULT 0 NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE res_catalog_publish_request
 CREATE TABLE "baseline_beijing_gd"."res_catalog_publish_request"
 (
@@ -2945,6 +3022,245 @@ CREATE TABLE "baseline_beijing_gd"."service_node_t"
 "is_del" SMALLINT DEFAULT 0 NOT NULL,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE surveillance_control_item_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_control_item_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"rule_definition_tid" VARCHAR(32) NOT NULL,
+"snapshot_tid" VARCHAR(32) NOT NULL,
+"snapshot_version" BIGINT DEFAULT '0' NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"engine_code" VARCHAR(128) NOT NULL,
+"channel_code" VARCHAR(128) NOT NULL,
+"control_item_id" VARCHAR(128) NOT NULL,
+"rule_code" VARCHAR(128) NOT NULL,
+"subject_type" VARCHAR(32) NOT NULL,
+"identifier_type" VARCHAR(64) DEFAULT NULL,
+"identifier_value" VARCHAR(512) DEFAULT NULL,
+"identifier_hash" VARCHAR(128) DEFAULT NULL,
+"identifier_ciphertext" CLOB,
+"identifiers_json" CLOB,
+"attributes_json" CLOB,
+"source_rule_no" VARCHAR(128) DEFAULT NULL,
+"control_reason" VARCHAR(512) DEFAULT NULL,
+"effective_from" TIMESTAMP(6) DEFAULT NULL,
+"effective_to" TIMESTAMP(6) DEFAULT NULL,
+"status" VARCHAR(24) DEFAULT 'ACTIVE' NOT NULL,
+"metadata_json" CLOB,
+"created_time" TIMESTAMP(6) NOT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_kafka_connection_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_kafka_connection_t"
+(
+"tid" VARCHAR(64) NOT NULL,
+"tenant_id" VARCHAR(64) NOT NULL,
+"engine_code" VARCHAR(64) NOT NULL,
+"connection_role" VARCHAR(16) DEFAULT NULL,
+"connection_name" VARCHAR(128) NOT NULL,
+"bootstrap_servers" VARCHAR(1024) NOT NULL,
+"security_protocol" VARCHAR(32) DEFAULT 'PLAINTEXT' NOT NULL,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"created_time" TIMESTAMP(6) NOT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_kafka_topic_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_kafka_topic_t"
+(
+"tenant_id" VARCHAR(64) NOT NULL,
+"connection_id" VARCHAR(32) NOT NULL,
+"topic_name" VARCHAR(249) NOT NULL,
+"business_name" VARCHAR(128) DEFAULT '' NOT NULL,
+"schema_json" CLOB,
+"event_time_field" VARCHAR(128) DEFAULT '' NOT NULL,
+"description" VARCHAR(512) DEFAULT '' NOT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tenant_id", "connection_id", "topic_name")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_metric_batch_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_metric_batch_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"engine_code" VARCHAR(128) NOT NULL,
+"resource_code" VARCHAR(128) NOT NULL,
+"batch_id" VARCHAR(256) NOT NULL,
+"stat_date" TIMESTAMP(0) NOT NULL,
+"input_count" BIGINT DEFAULT '0' NOT NULL,
+"matched_count" BIGINT DEFAULT '0' NOT NULL,
+"unmatched_count" BIGINT DEFAULT '0' NOT NULL,
+"failure_count" BIGINT DEFAULT '0' NOT NULL,
+"created_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_resource_topic_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_resource_topic_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"engine_code" VARCHAR(128) NOT NULL,
+"channel_code" VARCHAR(128) NOT NULL,
+"resource_code" VARCHAR(128) NOT NULL,
+"source_table" VARCHAR(256) NOT NULL,
+"input_topic" VARCHAR(256) NOT NULL,
+"result_topic" VARCHAR(256) NOT NULL,
+"identifier_type" VARCHAR(64) NOT NULL,
+"key_field" VARCHAR(128) NOT NULL,
+"schema_json" CLOB,
+"status" VARCHAR(24) DEFAULT 'ACTIVE' NOT NULL,
+"created_time" TIMESTAMP(6) NOT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+"input_connection_ref" VARCHAR(32) GENERATED ALWAYS AS ( CASE  WHEN  NOT (json_unquote(json_extract(schema_json, '$.connectionIds.input')) IS NULL ) THEN json_unquote(json_extract(schema_json, '$.connectionIds.input')) WHEN  NOT (json_unquote(json_extract(schema_json, '$.connectionRoles.input')) IS NULL ) THEN json_unquote(json_extract(schema_json, '$.connectionRoles.input')) WHEN  NOT ( FALSE ) THEN 'INPUT' ELSE NULL  END) VIRTUAL ,
+"output_connection_ref" VARCHAR(32) GENERATED ALWAYS AS ( CASE  WHEN  NOT (json_unquote(json_extract(schema_json, '$.connectionIds.output')) IS NULL ) THEN json_unquote(json_extract(schema_json, '$.connectionIds.output')) WHEN  NOT (json_unquote(json_extract(schema_json, '$.connectionRoles.output')) IS NULL ) THEN json_unquote(json_extract(schema_json, '$.connectionRoles.output')) WHEN  NOT ( FALSE ) THEN 'OUTPUT' ELSE NULL  END) VIRTUAL ,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_result_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_result_t"
+(
+"result_id" CHAR(64) NOT NULL,
+"tenant_id" VARCHAR(64) NOT NULL,
+"engine_code" VARCHAR(64) NOT NULL,
+"resource_code" VARCHAR(255) NOT NULL,
+"channel_code" VARCHAR(32) NOT NULL,
+"event_id" VARCHAR(1024) NOT NULL,
+"snapshot_version" BIGINT NOT NULL,
+"subject_name" VARCHAR(255) NOT NULL,
+"identifier_value" VARCHAR(1024) NOT NULL,
+"occurred_at" TIMESTAMP(6) NOT NULL,
+"archived_at" TIMESTAMP(6) NOT NULL,
+"result_topic" VARCHAR(249) NOT NULL,
+"source_stream" CHAR(64) NOT NULL,
+"kafka_partition" INT NOT NULL,
+"kafka_offset" BIGINT NOT NULL,
+"record_index" INT NOT NULL,
+"payload_json" CLOB NOT NULL,
+NOT CLUSTER PRIMARY KEY("result_id")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_rule_definition_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_rule_definition_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"snapshot_tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"engine_code" VARCHAR(128) NOT NULL,
+"channel_code" VARCHAR(128) NOT NULL,
+"rule_code" VARCHAR(128) NOT NULL,
+"rule_name" VARCHAR(256) NOT NULL,
+"subject_type" VARCHAR(32) NOT NULL,
+"match_mode" VARCHAR(16) DEFAULT 'AND' NOT NULL,
+"match_fields_json" CLOB NOT NULL,
+"priority" INT DEFAULT '0' NOT NULL,
+"status" VARCHAR(24) DEFAULT 'ACTIVE' NOT NULL,
+"source_system" VARCHAR(256) DEFAULT NULL,
+"reason" VARCHAR(512) DEFAULT NULL,
+"effective_from" TIMESTAMP(6) DEFAULT NULL,
+"effective_to" TIMESTAMP(6) DEFAULT NULL,
+"metadata_json" CLOB,
+"created_time" TIMESTAMP(6) NOT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_rule_snapshot_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_rule_snapshot_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"engine_code" VARCHAR(128) NOT NULL,
+"channel_code" VARCHAR(128) NOT NULL,
+"snapshot_version" BIGINT NOT NULL,
+"digest" VARCHAR(128) DEFAULT NULL,
+"source_type" VARCHAR(32) DEFAULT NULL,
+"source_ref" VARCHAR(512) DEFAULT NULL,
+"rules_json" CLOB NOT NULL,
+"generated_at" TIMESTAMP(6) NOT NULL,
+"expires_at" TIMESTAMP(6) DEFAULT NULL,
+"snapshot_status" VARCHAR(24) DEFAULT 'ACTIVE' NOT NULL,
+"created_time" TIMESTAMP(6) NOT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_service_identity_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_service_identity_t"
+(
+"tid" VARCHAR(64) NOT NULL,
+"tenant_id" VARCHAR(64) NOT NULL,
+"engine_code" VARCHAR(64) NOT NULL,
+"channel_code" VARCHAR(32) NOT NULL,
+"resource_code" VARCHAR(128) NOT NULL,
+"pipeline_id" VARCHAR(64) NOT NULL,
+"token_hash" CHAR(64) NOT NULL,
+"status" VARCHAR(16) DEFAULT 'ACTIVE' NOT NULL,
+"expires_at" TIMESTAMP(6) DEFAULT NULL,
+"created_time" TIMESTAMP(6) NOT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+"is_del" SMALLINT DEFAULT '0' NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_task_deployment_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_task_deployment_t"
+(
+"tenant_id" VARCHAR(64) NOT NULL,
+"resource_code" VARCHAR(128) NOT NULL,
+"pipeline_id" VARCHAR(64) NOT NULL,
+"process_group_id" VARCHAR(64) NOT NULL,
+"input_connection_id" VARCHAR(32) NOT NULL,
+"output_connection_id" VARCHAR(32) NOT NULL,
+"deployment_hash" VARCHAR(128) NOT NULL,
+"resource_json" CLOB NOT NULL,
+"output_bootstrap_servers" VARCHAR(1024) NOT NULL,
+"output_security_protocol" VARCHAR(32) NOT NULL,
+"deployed_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tenant_id", "resource_code")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_task_history_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_task_history_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(64) NOT NULL,
+"resource_code" VARCHAR(256) NOT NULL,
+"action" VARCHAR(32) NOT NULL,
+"state" VARCHAR(32) NOT NULL,
+"message" VARCHAR(512) DEFAULT NULL,
+"created_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_task_lifecycle_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_task_lifecycle_t"
+(
+"tenant_id" VARCHAR(64) NOT NULL,
+"resource_code" VARCHAR(256) NOT NULL,
+"state" VARCHAR(32) NOT NULL,
+"pipelines_json" CLOB,
+"message" VARCHAR(512) DEFAULT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tenant_id", "resource_code")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE surveillance_topic_daily_stat_t
+CREATE TABLE "baseline_beijing_gd"."surveillance_topic_daily_stat_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32) NOT NULL,
+"engine_code" VARCHAR(128) NOT NULL,
+"channel_code" VARCHAR(128) NOT NULL,
+"resource_code" VARCHAR(128) NOT NULL,
+"input_topic" VARCHAR(256) NOT NULL,
+"result_topic" VARCHAR(256) NOT NULL,
+"stat_date" TIMESTAMP(0) NOT NULL,
+"input_count" BIGINT DEFAULT '0' NOT NULL,
+"matched_count" BIGINT DEFAULT '0' NOT NULL,
+"unmatched_count" BIGINT DEFAULT '0' NOT NULL,
+"failure_count" BIGINT DEFAULT '0' NOT NULL,
+"last_event_time" TIMESTAMP(6) DEFAULT NULL,
+"updated_time" TIMESTAMP(6) NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE sym_application_t
 CREATE TABLE "baseline_beijing_gd"."sym_application_t"
 (
@@ -3449,6 +3765,12 @@ CREATE OR REPLACE  INDEX "IDX_DATA_PUSH_SCHEMA_T_IDX_DATA_PUSH_SCHEMA_LOOKUP" ON
 
 CREATE OR REPLACE UNIQUE  INDEX "IDX_DATA_PUSH_SCHEMA_T_UK_DATA_PUSH_SCHEMA_TABLE" ON "baseline_beijing_gd"."data_push_schema_t"("tenant_id" ASC,"datasource_id" ASC,"table_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "idx_mapping_plan_history" ON "baseline_beijing_gd"."data_access_mapping_plan_t"("tenant_id" ASC,"pipeline_id" ASC,"node_id" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_mapping_publication_plan" ON "baseline_beijing_gd"."data_access_mapping_publication_t"("tenant_id" ASC,"plan_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_mapping_resource_list" ON "baseline_beijing_gd"."data_access_mapping_resource_t"("tenant_id" ASC,"resource_kind" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "idx_metadata_collection_latest" ON "baseline_beijing_gd"."metadata_table_collection_job_t"("tenant_id" ASC,"datasource_id" ASC,"is_del" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "idx_metadata_collection_running" ON "baseline_beijing_gd"."metadata_table_collection_job_t"("tenant_id" ASC,"datasource_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -3467,11 +3789,31 @@ CREATE OR REPLACE  INDEX "idx_sec_scan_task_status" ON "baseline_beijing_gd"."se
 
 CREATE OR REPLACE  INDEX "idx_sec_watermark_task_status" ON "baseline_beijing_gd"."sec_watermark_task"("tenant_id" ASC,"task_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "idx_surv_kafka_connection_status" ON "baseline_beijing_gd"."surveillance_kafka_connection_t"("tenant_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_surv_service_identity_scope" ON "baseline_beijing_gd"."surveillance_service_identity_t"("tenant_id" ASC,"engine_code" ASC,"pipeline_id" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_surveillance_control_item_direct_identifier" ON "baseline_beijing_gd"."surveillance_control_item_t"("tenant_id","engine_code","channel_code","identifier_type",SUBSTR("identifier_value", 1, 128),"status","is_del") STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_surveillance_control_item_rule" ON "baseline_beijing_gd"."surveillance_control_item_t"("rule_definition_tid" ASC,"status" ASC,"effective_from" ASC,"effective_to" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_surveillance_control_item_runtime" ON "baseline_beijing_gd"."surveillance_control_item_t"("tenant_id" ASC,"engine_code" ASC,"channel_code" ASC,"identifier_type" ASC,"identifier_hash" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_surveillance_resource_topic_status" ON "baseline_beijing_gd"."surveillance_resource_topic_t"("tenant_id" ASC,"engine_code" ASC,"channel_code" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_surveillance_rule_definition_channel" ON "baseline_beijing_gd"."surveillance_rule_definition_t"("tenant_id" ASC,"engine_code" ASC,"channel_code" ASC,"status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_surveillance_snapshot_current" ON "baseline_beijing_gd"."surveillance_rule_snapshot_t"("tenant_id" ASC,"engine_code" ASC,"channel_code" ASC,"snapshot_status" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "idx_surveillance_topic_daily_stat_query" ON "baseline_beijing_gd"."surveillance_topic_daily_stat_t"("tenant_id" ASC,"engine_code" ASC,"channel_code" ASC,"stat_date" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "idx_sym_application_pingao_options" ON "baseline_beijing_gd"."sym_application_t"("tenant_id" ASC,"data_origin" ASC,"sync_active" ASC,"is_del" ASC,"app_name" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "idx_sym_config_lookup" ON "baseline_beijing_gd"."sym_config_t"("tenant_id" ASC,"config_group" ASC,"is_use" ASC,"is_del" ASC,"sort_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "INDEX33572321" ON "baseline_beijing_gd"."data_access_multi_group_item_t"("group_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "INDEX33576452" ON "baseline_beijing_gd"."data_access_mapping_publication_t"("tenant_id" ASC,"plan_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_api_info_t_1u9uud" ON "baseline_beijing_gd"."api_info_t"("tenant_id" ASC,"is_del" ASC,"updated_time" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -3663,6 +4005,16 @@ CREATE OR REPLACE  INDEX "ix_nifi_pipeline_migration_mark_t_14e0jio" ON "baselin
 
 CREATE OR REPLACE  INDEX "ix_nifi_pipeline_t_1fcxbde" ON "baseline_beijing_gd"."nifi_pipeline_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "ix_push_node_code" ON "baseline_beijing_gd"."push_node_t"("tenant_id" ASC,"node_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_push_node_default" ON "baseline_beijing_gd"."push_node_t"("tenant_id" ASC,"is_del" ASC,"is_default" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_push_node_network" ON "baseline_beijing_gd"."push_node_t"("tenant_id" ASC,"network_code" ASC,"is_del" ASC,"enabled" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_result_delivery" ON "baseline_beijing_gd"."surveillance_result_t"("source_stream" ASC,"kafka_partition" ASC,"kafka_offset" ASC,"record_index" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_result_resource_time" ON "baseline_beijing_gd"."surveillance_result_t"("tenant_id" ASC,"engine_code" ASC,"resource_code" ASC,"occurred_at" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "ix_rm_blacklist_t_1fcxbde" ON "baseline_beijing_gd"."rm_blacklist_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_rm_menu_t_1x5skt3" ON "baseline_beijing_gd"."rm_menu_t"("tenant_id" ASC,"app_id" ASC,"resource_type" ASC,"status" ASC,"deleted" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -3704,6 +4056,8 @@ CREATE OR REPLACE  INDEX "ix_sym_dict_type_t_1fcxbde" ON "baseline_beijing_gd"."
 CREATE OR REPLACE  INDEX "ix_sym_form_1fcxbde" ON "baseline_beijing_gd"."sym_form"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_sym_server_t_1fcxbde" ON "baseline_beijing_gd"."sym_server_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_task_history" ON "baseline_beijing_gd"."surveillance_task_history_t"("tenant_id" ASC,"resource_code" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_wf_approval_action_log_t_1fk6w6f" ON "baseline_beijing_gd"."wf_approval_action_log_t"("tenant_id" ASC,"instance_id" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -3748,6 +4102,26 @@ CREATE OR REPLACE UNIQUE  INDEX "uk_sec_scan_task_code" ON "baseline_beijing_gd"
 CREATE OR REPLACE UNIQUE  INDEX "uk_sec_watermark_policy_code" ON "baseline_beijing_gd"."sec_watermark_policy"("tenant_id" ASC,"policy_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "uk_sec_watermark_task_code" ON "baseline_beijing_gd"."sec_watermark_task"("tenant_id" ASC,"task_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surv_kafka_connection_tenant_engine_role" ON "baseline_beijing_gd"."surveillance_kafka_connection_t"("tenant_id" ASC,"engine_code" ASC,"connection_role" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surv_service_identity_token" ON "baseline_beijing_gd"."surveillance_service_identity_t"("token_hash" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_control_item" ON "baseline_beijing_gd"."surveillance_control_item_t"("tenant_id" ASC,"engine_code" ASC,"channel_code" ASC,"control_item_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_metric_batch" ON "baseline_beijing_gd"."surveillance_metric_batch_t"("tenant_id" ASC,"engine_code" ASC,"resource_code" ASC,"batch_id" ASC,"stat_date" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_resource_code" ON "baseline_beijing_gd"."surveillance_resource_topic_t"("tenant_id" ASC,"engine_code" ASC,"resource_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_resource_topic" ON "baseline_beijing_gd"."surveillance_resource_topic_t"("tenant_id","engine_code","channel_code","input_connection_ref","input_topic","is_del") STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_result_topic" ON "baseline_beijing_gd"."surveillance_resource_topic_t"("tenant_id","engine_code","output_connection_ref","result_topic","is_del") STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_rule_definition" ON "baseline_beijing_gd"."surveillance_rule_definition_t"("snapshot_tid" ASC,"rule_code" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_snapshot_version" ON "baseline_beijing_gd"."surveillance_rule_snapshot_t"("tenant_id" ASC,"engine_code" ASC,"channel_code" ASC,"snapshot_version" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_topic_daily_stat" ON "baseline_beijing_gd"."surveillance_topic_daily_stat_t"("tenant_id" ASC,"engine_code" ASC,"resource_code" ASC,"stat_date" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "uk_sym_application_pingao_source" ON "baseline_beijing_gd"."sym_application_t"("tenant_id" ASC,"data_origin" ASC,"source_key" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -3820,6 +4194,9 @@ COMMENT ON TABLE "baseline_beijing_gd"."da_metadata_t" IS '数据标准-数据�
 COMMENT ON TABLE "baseline_beijing_gd"."da_prop_t" IS '数据盘点-业务扩展属性';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_agg_task_t" IS '数据接入-数据接入任务';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_field_mapping" IS '数据接入-数据接入字段映射';
+COMMENT ON TABLE "baseline_beijing_gd"."data_access_mapping_plan_t" IS '数据接入-字段映射不可变执行计划';
+COMMENT ON TABLE "baseline_beijing_gd"."data_access_mapping_publication_t" IS '数据接入-字段映射当前发布计划引用';
+COMMENT ON TABLE "baseline_beijing_gd"."data_access_mapping_resource_t" IS '数据接入-字段映射模板及字典快照版本';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_multi_group_item_t" IS '数据接入-多表任务编组成员';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_multi_group_t" IS '数据接入-多表任务编组';
 COMMENT ON TABLE "baseline_beijing_gd"."data_access_task_monitor_snap_t" IS '数据接入-数据接入监控快照';
@@ -3889,6 +4266,7 @@ COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_t" IS '数据接入-数据
 COMMENT ON TABLE "baseline_beijing_gd"."ods_batch_create_item_t" IS '数据接入-批量创建任务逐项结果';
 COMMENT ON TABLE "baseline_beijing_gd"."ods_batch_create_job_t" IS '数据接入-批量创建任务作业';
 COMMENT ON TABLE "baseline_beijing_gd"."pingao_application_sync_state_t" IS '应用系统同步-平澳应用目录同步状态';
+COMMENT ON TABLE "baseline_beijing_gd"."push_node_t" IS '数据接入-数据推送节点配置';
 COMMENT ON TABLE "baseline_beijing_gd"."res_catalog_publish_request" IS '资源中心-目录发布申请';
 COMMENT ON TABLE "baseline_beijing_gd"."res_logical_model" IS '资源中心-逻辑数据模型';
 COMMENT ON TABLE "baseline_beijing_gd"."res_logical_model_field" IS '资源中心-逻辑模型字段';
@@ -3919,6 +4297,19 @@ COMMENT ON TABLE "baseline_beijing_gd"."sec_scan_task" IS '数据安全-敏感�
 COMMENT ON TABLE "baseline_beijing_gd"."sec_watermark_policy" IS '数据安全-数据水印策略';
 COMMENT ON TABLE "baseline_beijing_gd"."sec_watermark_task" IS '数据安全-水印受控申请；不上传或保存文件载荷';
 COMMENT ON TABLE "baseline_beijing_gd"."service_node_t" IS '数据服务-发布节点配置';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_control_item_t" IS '布控管理-具体布控数据项';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_kafka_connection_t" IS '布控管理-Kafka消息连接';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_kafka_topic_t" IS '布控管理-Kafka主题业务定义';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_metric_batch_t" IS '布控管理-统计批次幂等记录';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_resource_topic_t" IS '布控管理-资源输入与结果主题注册';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_result_t" IS '布控管理-匹配结果归档';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_rule_definition_t" IS '布控管理-通道匹配规则定义';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_rule_snapshot_t" IS '布控管理-规范化规则快照与版本';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_service_identity_t" IS '布控管理-流程服务身份令牌摘要';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_task_deployment_t" IS '布控管理-任务部署配置';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_task_history_t" IS '布控管理-任务生命周期操作记录';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_task_lifecycle_t" IS '布控管理-任务当前生命周期状态';
+COMMENT ON TABLE "baseline_beijing_gd"."surveillance_topic_daily_stat_t" IS '布控管理-资源主题每日增量统计';
 COMMENT ON TABLE "baseline_beijing_gd"."sym_application_t" IS '应用系统管理-业务应用系统';
 COMMENT ON TABLE "baseline_beijing_gd"."sym_area_t" IS '系统管理-行政区域';
 COMMENT ON TABLE "baseline_beijing_gd"."sym_black_list_t" IS '系统管理-系统黑名单';
@@ -4542,6 +4933,39 @@ COMMENT ON COLUMN "baseline_beijing_gd"."data_access_field_mapping"."tenant_id" 
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_field_mapping"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_field_mapping"."updated_by" IS '更新人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_field_mapping"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."created_by" IS '编译操作者认证标识或系统任务标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."created_time" IS '计划创建时间，微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."draft_revision" IS '编译来源草稿更新时间版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."engine_version" IS 'Java转换内核版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."function_version" IS '函数库版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."node_id" IS '所属字段映射节点标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."pipeline_id" IS '所属画布流程标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."plan_content" IS '不含连接凭据的完整不可变计划JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."plan_hash" IS '规范执行计划SHA256摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."plan_revision" IS '节点计划递增版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."plan_version" IS '执行计划协议版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."resource_version_set" IS '固定字典及资源版本引用JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."source_schema_hash" IS '来源Schema规范摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."target_schema_hash" IS '目标Schema规范摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."tenant_id" IS '当前认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_plan_t"."tid" IS '执行计划版本标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_publication_t"."node_id" IS '已发布字段映射节点标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_publication_t"."pipeline_id" IS '已发布画布流程标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_publication_t"."plan_id" IS '当前启用的不可变执行计划标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_publication_t"."process_group_id" IS '承载当前计划的NiFi流程组标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_publication_t"."published_time" IS '当前计划启用时间，微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_publication_t"."tenant_id" IS '当前认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_publication_t"."tid" IS '发布引用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."created_by" IS '资源创建操作者认证标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."created_time" IS '资源版本创建时间，微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."definition_json" IS '资源的授权定义和协议摘要JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."resource_content" IS '模板规则或完整字典快照JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."resource_hash" IS '资源内容SHA256摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."resource_key" IS '同一租户内资源版本族名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."resource_kind" IS '资源类型：TEMPLATE模板，DICTIONARY_SNAPSHOT字典快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."tenant_id" IS '当前认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."tid" IS '不可变资源版本标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."data_access_mapping_resource_t"."version_no" IS '资源族内递增版本号';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_multi_group_item_t"."access_task_id" IS '关联的单表接入任务标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_multi_group_item_t"."created_time" IS '编组成员创建时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."data_access_multi_group_item_t"."group_id" IS '所属多表任务编组标识';
@@ -5034,6 +5458,9 @@ COMMENT ON COLUMN "baseline_beijing_gd"."db_table_column_t"."tenant_id" IS '租�
 COMMENT ON COLUMN "baseline_beijing_gd"."db_table_column_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."db_table_column_t"."updated_by" IS '更新人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."db_table_column_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."db_table_t"."access_request_status" IS '接入申请状态：0未申请，1待处理，2已受理';
+COMMENT ON COLUMN "baseline_beijing_gd"."db_table_t"."access_requested_at" IS '接入申请时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."db_table_t"."access_requested_by" IS '接入申请人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."db_table_t"."annotated" IS '已标注';
 COMMENT ON COLUMN "baseline_beijing_gd"."db_table_t"."asset_desc" IS '资产描述';
 COMMENT ON COLUMN "baseline_beijing_gd"."db_table_t"."asset_status" IS '资产状态';
@@ -5738,6 +6165,21 @@ COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."last_
 COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."last_success_at" IS '最近成功时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."base_url" IS 'haitong-data-pull服务根地址，不含凭据';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."created_time" IS '节点创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."enabled" IS '是否启用：0停用、1启用';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."is_default" IS '是否为所属网络默认节点：0否、1是';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."is_del" IS '逻辑删除标志：0正常、1已删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_sync_source_id" IS '最近同步的数据源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_sync_status" IS '最近配置同步结果：SUCCESS成功、FAILED失败';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."last_sync_time" IS '最近一次配置同步尝试时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."network_code" IS '所属网络字典编码，对应SSWL';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."node_code" IS '租户内推送节点业务编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."node_name" IS '推送节点显示名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."remark" IS '节点用途及部署说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."tenant_id" IS '所属行业租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."tid" IS '节点主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."updated_time" IS '节点配置更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."res_catalog_publish_request"."catalog_id" IS '目录标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."res_catalog_publish_request"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."res_catalog_publish_request"."created_time" IS '创建时间';
@@ -6210,6 +6652,180 @@ COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."service_type" IS '服�
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."service_node_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."attributes_json" IS '对象业务属性JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."channel_code" IS '布控通道编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."control_item_id" IS '布控数据项业务标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."control_reason" IS '布控原因';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."created_time" IS '记录创建时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."effective_from" IS '布控生效时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."effective_to" IS '布控失效时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."identifier_ciphertext" IS '对象标识值加密内容';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."identifier_hash" IS '对象标识值摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."identifier_type" IS '对象标识类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."identifier_value" IS '对象标识值';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."identifiers_json" IS '对象多标识信息JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."is_del" IS '逻辑删除标志：0有效，1已删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."metadata_json" IS '扩展元数据JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."rule_code" IS '布控规则编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."rule_definition_tid" IS '关联布控规则定义标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."snapshot_tid" IS '关联规则快照标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."snapshot_version" IS '规则快照版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."source_rule_no" IS '来源布控单编号';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."status" IS '记录业务状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."subject_type" IS '布控对象类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_control_item_t"."updated_time" IS '记录更新时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."bootstrap_servers" IS 'Kafka消息代理连接地址';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."connection_name" IS '消息连接名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."connection_role" IS '消息连接用途角色';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."created_time" IS '记录创建时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."is_del" IS '逻辑删除标志：0有效，1已删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."security_protocol" IS 'Kafka连接安全协议';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."status" IS '记录业务状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_connection_t"."updated_time" IS '记录更新时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_topic_t"."business_name" IS '主题业务名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_topic_t"."connection_id" IS '所属消息连接标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_topic_t"."description" IS '业务说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_topic_t"."event_time_field" IS '事件时间字段名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_topic_t"."schema_json" IS '数据结构及连接映射配置JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_topic_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_topic_t"."topic_name" IS 'Kafka主题名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_kafka_topic_t"."updated_time" IS '记录更新时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."batch_id" IS '统计批次幂等标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."created_time" IS '记录创建时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."failure_count" IS '处理失败记录数量，单位条';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."input_count" IS '输入记录数量，单位条';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."matched_count" IS '匹配命中记录数量，单位条';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."resource_code" IS '布控资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."stat_date" IS '统计归属日期';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_metric_batch_t"."unmatched_count" IS '未匹配记录数量，单位条';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."channel_code" IS '布控通道编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."created_time" IS '记录创建时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."identifier_type" IS '对象标识类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."input_connection_ref" IS '输入消息连接引用，优先连接标识、其次角色、缺省INPUT';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."input_topic" IS '输入消息主题名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."is_del" IS '逻辑删除标志：0有效，1已删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."key_field" IS '业务对象标识字段名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."output_connection_ref" IS '结果消息连接引用，优先连接标识、其次角色、缺省OUTPUT';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."resource_code" IS '布控资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."result_topic" IS '匹配结果消息主题名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."schema_json" IS '数据结构及连接映射配置JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."source_table" IS '来源数据表标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."status" IS '记录业务状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_resource_topic_t"."updated_time" IS '记录更新时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."archived_at" IS '匹配结果归档时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."channel_code" IS '布控通道编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."event_id" IS '来源事件标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."identifier_value" IS '对象标识值';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."kafka_offset" IS '来源Kafka消息偏移量';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."kafka_partition" IS '来源Kafka消息分区编号';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."occurred_at" IS '业务事件发生时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."payload_json" IS '匹配结果业务内容JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."record_index" IS '消息内记录序号';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."resource_code" IS '布控资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."result_id" IS '布控匹配结果唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."result_topic" IS '匹配结果消息主题名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."snapshot_version" IS '规则快照版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."source_stream" IS '来源消息流标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."subject_name" IS '命中的布控对象名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_result_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."channel_code" IS '布控通道编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."created_time" IS '记录创建时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."effective_from" IS '布控生效时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."effective_to" IS '布控失效时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."is_del" IS '逻辑删除标志：0有效，1已删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."match_fields_json" IS '匹配字段规则JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."match_mode" IS '匹配条件组合方式';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."metadata_json" IS '扩展元数据JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."priority" IS '规则优先级';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."reason" IS '规则业务原因';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."rule_code" IS '布控规则编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."rule_name" IS '布控规则名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."snapshot_tid" IS '关联规则快照标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."source_system" IS '规则来源系统';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."status" IS '记录业务状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."subject_type" IS '布控对象类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_definition_t"."updated_time" IS '记录更新时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."channel_code" IS '布控通道编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."created_time" IS '记录创建时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."digest" IS '规则快照内容摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."expires_at" IS '有效期截止时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."generated_at" IS '规则快照生成时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."is_del" IS '逻辑删除标志：0有效，1已删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."rules_json" IS '规范化规则集合JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."snapshot_status" IS '规则快照业务状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."snapshot_version" IS '规则快照版本号';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."source_ref" IS '规则快照来源引用';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."source_type" IS '规则快照来源类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_rule_snapshot_t"."updated_time" IS '记录更新时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."channel_code" IS '布控通道编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."created_time" IS '记录创建时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."expires_at" IS '有效期截止时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."is_del" IS '逻辑删除标志：0有效，1已删除';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."pipeline_id" IS '关联画布流程标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."resource_code" IS '布控资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."status" IS '记录业务状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."token_hash" IS '服务身份令牌摘要，不保存明文令牌';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_service_identity_t"."updated_time" IS '记录更新时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."deployed_time" IS '任务部署时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."deployment_hash" IS '已部署配置内容摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."input_connection_id" IS '已部署输入消息连接标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."output_bootstrap_servers" IS '结果消息Kafka代理连接地址';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."output_connection_id" IS '已部署结果消息连接标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."output_security_protocol" IS '结果消息Kafka安全协议';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."pipeline_id" IS '关联画布流程标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."process_group_id" IS '已部署NiFi流程组标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."resource_code" IS '布控资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."resource_json" IS '已部署资源配置JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_deployment_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_history_t"."action" IS '任务生命周期操作';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_history_t"."created_time" IS '记录创建时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_history_t"."message" IS '任务操作结果说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_history_t"."resource_code" IS '布控资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_history_t"."state" IS '任务生命周期状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_history_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_history_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_lifecycle_t"."message" IS '任务操作结果说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_lifecycle_t"."pipelines_json" IS '任务关联流程配置JSON';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_lifecycle_t"."resource_code" IS '布控资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_lifecycle_t"."state" IS '任务生命周期状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_lifecycle_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_task_lifecycle_t"."updated_time" IS '记录更新时间，精确到微秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."channel_code" IS '布控通道编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."engine_code" IS '布控引擎编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."failure_count" IS '处理失败记录数量，单位条';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."input_count" IS '输入记录数量，单位条';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."input_topic" IS '输入消息主题名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."last_event_time" IS '最近业务事件时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."matched_count" IS '匹配命中记录数量，单位条';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."resource_code" IS '布控资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."result_topic" IS '匹配结果消息主题名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."stat_date" IS '统计归属日期';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."tenant_id" IS '所属认证租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."tid" IS '记录唯一标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."unmatched_count" IS '未匹配记录数量，单位条';
+COMMENT ON COLUMN "baseline_beijing_gd"."surveillance_topic_daily_stat_t"."updated_time" IS '记录更新时间，精确到微秒';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."accress_validity" IS '访问有效期';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."app_desc" IS '应用描述';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."app_name" IS '应用名称';
@@ -6468,96 +7084,3 @@ CREATE OR REPLACE TRIGGER "baseline_beijing_gd"."ga_sec_watermark_policy_updated
 
 CREATE OR REPLACE TRIGGER "baseline_beijing_gd"."ga_sec_watermark_task_updated_time_2c746f16fde2" BEFORE UPDATE ON "baseline_beijing_gd"."sec_watermark_task" FOR EACH ROW BEGIN IF NOT UPDATING('updated_time') AND ((:OLD."tid" IS NULL AND :NEW."tid" IS NOT NULL) OR (:OLD."tid" IS NOT NULL AND :NEW."tid" IS NULL) OR (:OLD."tid" IS NOT NULL AND :NEW."tid" IS NOT NULL AND :OLD."tid"<>:NEW."tid") OR (:OLD."tenant_id" IS NULL AND :NEW."tenant_id" IS NOT NULL) OR (:OLD."tenant_id" IS NOT NULL AND :NEW."tenant_id" IS NULL) OR (:OLD."tenant_id" IS NOT NULL AND :NEW."tenant_id" IS NOT NULL AND :OLD."tenant_id"<>:NEW."tenant_id") OR (:OLD."task_code" IS NULL AND :NEW."task_code" IS NOT NULL) OR (:OLD."task_code" IS NOT NULL AND :NEW."task_code" IS NULL) OR (:OLD."task_code" IS NOT NULL AND :NEW."task_code" IS NOT NULL AND :OLD."task_code"<>:NEW."task_code") OR (:OLD."task_name" IS NULL AND :NEW."task_name" IS NOT NULL) OR (:OLD."task_name" IS NOT NULL AND :NEW."task_name" IS NULL) OR (:OLD."task_name" IS NOT NULL AND :NEW."task_name" IS NOT NULL AND :OLD."task_name"<>:NEW."task_name") OR (:OLD."watermark_policy_id" IS NULL AND :NEW."watermark_policy_id" IS NOT NULL) OR (:OLD."watermark_policy_id" IS NOT NULL AND :NEW."watermark_policy_id" IS NULL) OR (:OLD."watermark_policy_id" IS NOT NULL AND :NEW."watermark_policy_id" IS NOT NULL AND :OLD."watermark_policy_id"<>:NEW."watermark_policy_id") OR (:OLD."asset_type" IS NULL AND :NEW."asset_type" IS NOT NULL) OR (:OLD."asset_type" IS NOT NULL AND :NEW."asset_type" IS NULL) OR (:OLD."asset_type" IS NOT NULL AND :NEW."asset_type" IS NOT NULL AND :OLD."asset_type"<>:NEW."asset_type") OR (:OLD."asset_id" IS NULL AND :NEW."asset_id" IS NOT NULL) OR (:OLD."asset_id" IS NOT NULL AND :NEW."asset_id" IS NULL) OR (:OLD."asset_id" IS NOT NULL AND :NEW."asset_id" IS NOT NULL AND :OLD."asset_id"<>:NEW."asset_id") OR (:OLD."file_name" IS NULL AND :NEW."file_name" IS NOT NULL) OR (:OLD."file_name" IS NOT NULL AND :NEW."file_name" IS NULL) OR (:OLD."file_name" IS NOT NULL AND :NEW."file_name" IS NOT NULL AND :OLD."file_name"<>:NEW."file_name") OR (:OLD."trace_reference" IS NULL AND :NEW."trace_reference" IS NOT NULL) OR (:OLD."trace_reference" IS NOT NULL AND :NEW."trace_reference" IS NULL) OR (:OLD."trace_reference" IS NOT NULL AND :NEW."trace_reference" IS NOT NULL AND :OLD."trace_reference"<>:NEW."trace_reference") OR (:OLD."task_status" IS NULL AND :NEW."task_status" IS NOT NULL) OR (:OLD."task_status" IS NOT NULL AND :NEW."task_status" IS NULL) OR (:OLD."task_status" IS NOT NULL AND :NEW."task_status" IS NOT NULL AND :OLD."task_status"<>:NEW."task_status") OR (:OLD."request_summary" IS NULL AND :NEW."request_summary" IS NOT NULL) OR (:OLD."request_summary" IS NOT NULL AND :NEW."request_summary" IS NULL) OR (:OLD."request_summary" IS NOT NULL AND :NEW."request_summary" IS NOT NULL AND DBMS_LOB.COMPARE(:OLD."request_summary",:NEW."request_summary")<>0) OR (:OLD."created_by" IS NULL AND :NEW."created_by" IS NOT NULL) OR (:OLD."created_by" IS NOT NULL AND :NEW."created_by" IS NULL) OR (:OLD."created_by" IS NOT NULL AND :NEW."created_by" IS NOT NULL AND :OLD."created_by"<>:NEW."created_by") OR (:OLD."created_time" IS NULL AND :NEW."created_time" IS NOT NULL) OR (:OLD."created_time" IS NOT NULL AND :NEW."created_time" IS NULL) OR (:OLD."created_time" IS NOT NULL AND :NEW."created_time" IS NOT NULL AND :OLD."created_time"<>:NEW."created_time") OR (:OLD."updated_by" IS NULL AND :NEW."updated_by" IS NOT NULL) OR (:OLD."updated_by" IS NOT NULL AND :NEW."updated_by" IS NULL) OR (:OLD."updated_by" IS NOT NULL AND :NEW."updated_by" IS NOT NULL AND :OLD."updated_by"<>:NEW."updated_by") OR (:OLD."is_del" IS NULL AND :NEW."is_del" IS NOT NULL) OR (:OLD."is_del" IS NOT NULL AND :NEW."is_del" IS NULL) OR (:OLD."is_del" IS NOT NULL AND :NEW."is_del" IS NOT NULL AND :OLD."is_del"<>:NEW."is_del")) THEN :NEW."updated_time":=CURRENT_TIMESTAMP; END IF; END;
 /
-
--- TABLE data_access_mapping_plan_t
-CREATE TABLE "data_access_mapping_plan_t" (
-  "tid" VARCHAR(32) NOT NULL,
-  "tenant_id" VARCHAR(32) NOT NULL,
-  "pipeline_id" VARCHAR(64) NOT NULL,
-  "node_id" VARCHAR(64) NOT NULL,
-  "plan_revision" BIGINT NOT NULL,
-  "draft_revision" BIGINT NOT NULL,
-  "plan_hash" VARCHAR(64) NOT NULL,
-  "plan_version" VARCHAR(16) NOT NULL,
-  "engine_version" VARCHAR(16) NOT NULL,
-  "function_version" VARCHAR(16) NOT NULL,
-  "source_schema_hash" VARCHAR(64) NOT NULL,
-  "target_schema_hash" VARCHAR(64) NOT NULL,
-  "plan_content" CLOB NOT NULL,
-  "resource_version_set" CLOB NOT NULL,
-  "created_by" VARCHAR(64) NOT NULL,
-  "created_time" TIMESTAMP(6) NOT NULL,
-  PRIMARY KEY ("tid"),
-  CONSTRAINT "uk_mapping_plan_revision" UNIQUE ("tenant_id","pipeline_id","node_id","plan_revision"),
-  CONSTRAINT "uk_mapping_plan_identity" UNIQUE ("tenant_id","pipeline_id","node_id","plan_hash","draft_revision"),
-  CONSTRAINT "uk_mapping_plan_tenant_id" UNIQUE ("tenant_id","tid")
-);
-COMMENT ON TABLE "data_access_mapping_plan_t" IS '数据接入-字段映射不可变执行计划';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."tid" IS '执行计划版本标识';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."tenant_id" IS '当前认证租户标识';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."pipeline_id" IS '所属画布流程标识';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."node_id" IS '所属字段映射节点标识';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."plan_revision" IS '节点计划递增版本号';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."draft_revision" IS '编译来源草稿更新时间版本';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."plan_hash" IS '规范执行计划SHA256摘要';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."plan_version" IS '执行计划协议版本';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."engine_version" IS 'Java转换内核版本';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."function_version" IS '函数库版本';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."source_schema_hash" IS '来源Schema规范摘要';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."target_schema_hash" IS '目标Schema规范摘要';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."plan_content" IS '不含连接凭据的完整不可变计划JSON';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."resource_version_set" IS '固定字典及资源版本引用JSON';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."created_by" IS '编译操作者认证标识或系统任务标识';
-COMMENT ON COLUMN "data_access_mapping_plan_t"."created_time" IS '计划创建时间，微秒';
-CREATE INDEX "idx_mapping_plan_history" ON "data_access_mapping_plan_t" ("tenant_id","pipeline_id","node_id","created_time");
-
--- TABLE data_access_mapping_resource_t
-CREATE TABLE "data_access_mapping_resource_t" (
-  "tid" VARCHAR(32) NOT NULL,
-  "tenant_id" VARCHAR(32) NOT NULL,
-  "resource_kind" VARCHAR(32) NOT NULL,
-  "resource_key" VARCHAR(128) NOT NULL,
-  "version_no" BIGINT NOT NULL,
-  "resource_hash" VARCHAR(64) NOT NULL,
-  "definition_json" CLOB NOT NULL,
-  "resource_content" CLOB NOT NULL,
-  "created_by" VARCHAR(64) NOT NULL,
-  "created_time" TIMESTAMP(6) NOT NULL,
-  PRIMARY KEY ("tid"),
-  CONSTRAINT "uk_mapping_resource_version" UNIQUE ("tenant_id","resource_kind","resource_key","version_no")
-);
-COMMENT ON TABLE "data_access_mapping_resource_t" IS '数据接入-字段映射模板及字典快照版本';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."tid" IS '不可变资源版本标识';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."tenant_id" IS '当前认证租户标识';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."resource_kind" IS '资源类型：TEMPLATE模板，DICTIONARY_SNAPSHOT字典快照';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."resource_key" IS '同一租户内资源版本族名称';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."version_no" IS '资源族内递增版本号';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."resource_hash" IS '资源内容SHA256摘要';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."definition_json" IS '资源的授权定义和协议摘要JSON';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."resource_content" IS '模板规则或完整字典快照JSON';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."created_by" IS '资源创建操作者认证标识';
-COMMENT ON COLUMN "data_access_mapping_resource_t"."created_time" IS '资源版本创建时间，微秒';
-CREATE INDEX "idx_mapping_resource_list" ON "data_access_mapping_resource_t" ("tenant_id","resource_kind","created_time");
-
--- TABLE data_access_mapping_publication_t
-CREATE TABLE "data_access_mapping_publication_t" (
-  "tid" VARCHAR(32) NOT NULL,
-  "tenant_id" VARCHAR(32) NOT NULL,
-  "pipeline_id" VARCHAR(64) NOT NULL,
-  "node_id" VARCHAR(64) NOT NULL,
-  "plan_id" VARCHAR(32) NOT NULL,
-  "process_group_id" VARCHAR(64) NOT NULL,
-  "published_time" TIMESTAMP(6) NOT NULL,
-  PRIMARY KEY ("tid"),
-  CONSTRAINT "uk_mapping_publication_node" UNIQUE ("tenant_id","pipeline_id","node_id"),
-  CONSTRAINT "fk_mapping_publication_plan" FOREIGN KEY ("tenant_id","plan_id") REFERENCES "data_access_mapping_plan_t" ("tenant_id","tid")
-);
-COMMENT ON TABLE "data_access_mapping_publication_t" IS '数据接入-字段映射当前发布计划引用';
-COMMENT ON COLUMN "data_access_mapping_publication_t"."tid" IS '发布引用标识';
-COMMENT ON COLUMN "data_access_mapping_publication_t"."tenant_id" IS '当前认证租户标识';
-COMMENT ON COLUMN "data_access_mapping_publication_t"."pipeline_id" IS '已发布画布流程标识';
-COMMENT ON COLUMN "data_access_mapping_publication_t"."node_id" IS '已发布字段映射节点标识';
-COMMENT ON COLUMN "data_access_mapping_publication_t"."plan_id" IS '当前启用的不可变执行计划标识';
-COMMENT ON COLUMN "data_access_mapping_publication_t"."process_group_id" IS '承载当前计划的NiFi流程组标识';
-COMMENT ON COLUMN "data_access_mapping_publication_t"."published_time" IS '当前计划启用时间，微秒';
-CREATE INDEX "idx_mapping_publication_plan" ON "data_access_mapping_publication_t" ("tenant_id","plan_id");

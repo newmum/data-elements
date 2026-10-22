@@ -23,9 +23,9 @@ public class HaitongTransformRecord extends AbstractProcessor {
     public static final PropertyDescriptor WRITER=new PropertyDescriptor.Builder().name("record-writer").displayName("Record Writer").identifiesControllerService(RecordSetWriterFactory.class).required(true).build();
     public static final PropertyDescriptor DICTIONARIES=new PropertyDescriptor.Builder().name("dictionary-service").displayName("Dictionary Batch Service").identifiesControllerService(HaitongDictionaryService.class).required(false).build();
     public static final PropertyDescriptor PLAN=new PropertyDescriptor.Builder().name("execution-plan").displayName("Execution Plan").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
-    public static final PropertyDescriptor HASH=new PropertyDescriptor.Builder().name("plan-hash").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
-    public static final PropertyDescriptor PLAN_ID=new PropertyDescriptor.Builder().name("plan-id").required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
-    public static final PropertyDescriptor CONTEXT_NODE=new PropertyDescriptor.Builder().name("context-node-id").description("稳定的流程ID及画布节点ID，保持重放与原生组件替换后的确定性上下文").required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor HASH=new PropertyDescriptor.Builder().name("plan-hash").description("旧配置兼容，当前摘要由执行计划自动计算，无需手动维护").required(false).dynamic(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor PLAN_ID=new PropertyDescriptor.Builder().name("plan-id").description("旧配置兼容，发布引用由平台自动记录").required(false).dynamic(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor CONTEXT_NODE=new PropertyDescriptor.Builder().name("context-node-id").description("旧配置兼容，稳定节点上下文由平台自动记录，手工组件自动使用处理器ID").required(false).dynamic(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor ATTEMPTS=new PropertyDescriptor.Builder().name("max-retry-attempts").defaultValue("5").required(true).addValidator(StandardValidators.NON_NEGATIVE_INTEGER_VALIDATOR).build();
     public static final PropertyDescriptor ERROR_LOOP_DELAY=new PropertyDescriptor.Builder().name("error-loop-delay").displayName("Failure / Invalid Retry Delay").description("异常自环最小退避时间，重复失败指数退避，上限5分钟；不丢弃错误输入").defaultValue("30 sec").required(true).addValidator(StandardValidators.TIME_PERIOD_VALIDATOR).build();
     public static final Relationship SUCCESS=new Relationship.Builder().name("success").description("成功转换记录").build();
@@ -35,11 +35,24 @@ public class HaitongTransformRecord extends AbstractProcessor {
     private static final ObjectMapper JSON=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private volatile MappingEngine.Plan plan;
     private final java.util.concurrent.Semaphore windows=new java.util.concurrent.Semaphore(2);
-    @Override public List<PropertyDescriptor> getSupportedPropertyDescriptors(){return List.of(READER,TYPED_READER,WRITER,DICTIONARIES,PLAN,HASH,PLAN_ID,CONTEXT_NODE,MappingCompatibility.REQUIRED_VERSION,ATTEMPTS,ERROR_LOOP_DELAY);}
+    private volatile String nodeContext,planId;
+    @Override public List<PropertyDescriptor> getSupportedPropertyDescriptors(){return List.of(READER,TYPED_READER,WRITER,DICTIONARIES,PLAN,ATTEMPTS,ERROR_LOOP_DELAY);}
+    @Override protected PropertyDescriptor getSupportedDynamicPropertyDescriptor(String name) {
+        return switch(name){case "plan-hash"->HASH;case "plan-id"->PLAN_ID;case "context-node-id"->CONTEXT_NODE;case "required-engine-version"->MappingCompatibility.REQUIRED_VERSION;default->null;};
+    }
     @Override public Set<Relationship>getRelationships(){return Set.of(SUCCESS,INVALID,FAILURE,RETRY);}
     @OnScheduled public void scheduled(ProcessContext context)throws Exception{
-        MappingEngine.Plan compiled=MappingEngine.compile(JSON.readTree(context.getProperty(PLAN).getValue()));
-        if(!compiled.hash().equals(context.getProperty(HASH).getValue()))throw new MappingException("PLAN_HASH_MISMATCH","执行计划摘要与配置不一致");
+        MappingCompatibility.requireRuntime();
+        JsonNode document=JSON.readTree(context.getProperty(PLAN).getValue());
+        if(document.has("schemaVersion")&&!document.path("schemaVersion").asText().equals("2.0")
+                ||document.has("planVersion")&&!document.path("planVersion").asText().equals("1.0"))
+            throw new MappingException("UNSUPPORTED_PLAN_VERSION","执行计划格式不受当前组件支持，请使用平台重新生成规则");
+        JsonNode deployment=document.path("_deployment");
+        nodeContext=deployment.path("contextNodeId").asText(context.getProperty(CONTEXT_NODE).getValue());
+        if(nodeContext==null||nodeContext.isBlank())nodeContext=getIdentifier();
+        planId=deployment.path("planId").asText(context.getProperty(PLAN_ID).getValue());
+        if(document instanceof com.fasterxml.jackson.databind.node.ObjectNode object)object.remove("_deployment");
+        MappingEngine.Plan compiled=MappingEngine.compile(document);
         if(!compiled.dictionaries().isEmpty()&&!context.getProperty(DICTIONARIES).isSet())throw new MappingException("DICTIONARY_UNAVAILABLE","计划引用字典但未绑定批量服务");
         plan=compiled;
     }
@@ -53,9 +66,9 @@ public class HaitongTransformRecord extends AbstractProcessor {
                 Relationship waiting="invalid".equals(original.getAttribute(MappingErrorRecords.RELATIONSHIP))?INVALID:FAILURE;
                 session.transfer(session.penalize(original),waiting);context.yield();return;
             }
-            String nodeContext=context.getProperty(CONTEXT_NODE).isSet()?context.getProperty(CONTEXT_NODE).getValue():getIdentifier();String hashKey="ht.plan.hash."+nodeContext;String previous=original.getAttribute(hashKey);
-            if(previous==null&&original.getAttribute("ht.plan.node.id")==null)previous=original.getAttribute("ht.plan.hash");
-            if(previous!=null&&!previous.equals(plan.hash()))throw new MappingException("PLAN_VERSION_CONFLICT","输入须由原执行计划重放");
+            // Queued input is processed with the currently configured rules after an upgrade.
+            // Hashes remain diagnostic metadata and never block a queued record.
+            String hashKey="ht.plan.hash."+nodeContext;
             String next=original.getAttribute("ht.retry.nextAt");if(next!=null&&Long.parseLong(next)>System.currentTimeMillis()){session.transfer(session.penalize(original),RETRY);context.yield();return;}
             String identity=original.getAttribute("ht.input.identity"),clock=original.getAttribute("ht.execution.clock");
             if(identity==null)identity=original.getAttribute("uuid");if(clock==null)clock=Long.toString(original.getEntryDate());
@@ -84,7 +97,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
                 }
             }
             writerAttributes.putAll(Map.of("ht.plan.hash",plan.hash(),"ht.engine.version",MappingEngine.VERSION,"record.count",Long.toString(counts[0]),"ht.invalid.count",Long.toString(counts[1]),"ht.window.count",Long.toString(counts[2]),"ht.dictionary.batches",Long.toString(counts[3])));
-            if(context.getProperty(PLAN_ID).isSet())writerAttributes.put("ht.plan.id",context.getProperty(PLAN_ID).getValue());
+            if(planId!=null&&!planId.isBlank())writerAttributes.put("ht.plan.id",planId);
             if(dictionaries instanceof DictionarySpec.MeteredProvider metered)writerAttributes.put("ht.dictionary.sql.count",Integer.toString(metered.queryCount()));
             success=session.removeAllAttributes(success,MappingErrorRecords.TRANSIENT_ATTRIBUTES);
             success=session.putAllAttributes(success,writerAttributes);derived.set(0,success);

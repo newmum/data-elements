@@ -112,7 +112,7 @@
             flex-type="flex-[1_1_200px]"
             class="source-table"
             :row-class-name="sourceRowClassName"
-            :default-sort="{ prop: 'createdTime', order: 'descending' }"
+            :default-sort="{ prop: 'updatedTime', order: 'descending' }"
             @expand-change="handleExpandChange"
             @sort-change="handleSourceSortChange"
           >
@@ -153,7 +153,7 @@
               </template>
             </el-table-column>
 
-            <el-table-column prop="tableName" label="数据表" min-width="230">
+              <el-table-column prop="tableName" label="数据表" min-width="230">
               <template #default="{ row }">
                 <div class="table-name-cell" @click="openTableDetail(row)">
                   <Icon :icon="tableTypeIcon(row)" />
@@ -169,7 +169,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="taskCount" label="接入任务" width="100" align="center">
+              <el-table-column prop="taskCount" label="接入任务" width="100" align="center">
               <template #default="{ row }">
                 <span v-if="Number(row.taskCount) > 0">{{ row.taskCount || 0 }} 个</span>
                 <span v-else class="task-empty">未接入</span>
@@ -210,7 +210,7 @@
             <el-table-column label="操作" fixed="right" width="104" align="center" header-align="center">
               <template #default="{ row }">
                 <el-button
-                  v-if="!row.taskCount && row.accessStatus !== '2'"
+                  v-if="!row.taskCount"
                   link
                   type="primary"
                   :loading="creatingTaskId === getSourceTableId(row)"
@@ -468,7 +468,7 @@ const state = reactive({
   keyword: "",
   accessStatus: "all",
   leftSelectNode: treeData.value[0],
-  sortField: "createdTime",
+  sortField: "updatedTime",
   sortDir: "desc",
 });
 
@@ -893,7 +893,7 @@ const handleSearch = () => {
 const handleSourceSortChange = ({ prop, order }) => {
   if (order && !["tableName", "taskCount", "createdTime", "updatedTime", "fieldCount", "recordCount"].includes(prop)) return;
   if (!order) {
-    state.sortField = "createdTime";
+    state.sortField = "updatedTime";
     state.sortDir = "desc";
   } else {
     state.sortField = prop;

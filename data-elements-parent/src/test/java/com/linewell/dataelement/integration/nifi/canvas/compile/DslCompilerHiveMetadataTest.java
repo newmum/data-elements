@@ -345,7 +345,8 @@ class DslCompilerHiveMetadataTest {
         String detail = "Hive目标表`analytics`.`events`的字段分隔符不匹配：实际 field.delim=9；分区Writer要求Ctrl-A（U+0001）";
         when(hive.partitionLayout("analytics", "events")).thenThrow(new HiveModule.PartitionLayoutException(detail));
         assertThatThrownBy(() -> compiler.compile(partitionPipeline(20)))
-                .hasMessage(detail).hasCauseInstanceOf(HiveModule.PartitionLayoutException.class);
+                .hasMessage(detail).hasRootCauseInstanceOf(HiveModule.PartitionLayoutException.class);
+        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
         verify(hive, never()).partitionLocations(anyString(), anyString(), anyList());
         verify(nifi, never()).createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
     }
@@ -356,7 +357,7 @@ class DslCompilerHiveMetadataTest {
         DslCompiler compiler = partitionCompiler(mock(NifiClient.class), hive);
         when(hive.partitionLayout("analytics", "events")).thenThrow(new java.sql.SQLException("metadata unavailable"));
         assertThatThrownBy(() -> compiler.compile(partitionPipeline(20)))
-                .hasMessageContaining("请检查目标元数据访问").hasCauseInstanceOf(java.sql.SQLException.class);
+                .hasMessageContaining("请检查目标元数据访问").hasRootCauseInstanceOf(java.sql.SQLException.class);
     }
 
     @Test
@@ -371,7 +372,24 @@ class DslCompilerHiveMetadataTest {
             when(hive.partitionLayout("analytics", "events")).thenReturn(Map.of("location", "hdfs://cluster/custom",
                     "partitions", buckets.stream().map(bucket -> "ods_partition=" + bucket).toList()));
             when(hive.partitionLocations("analytics", "events", buckets)).thenReturn(locations);
-            compiler.compile(partitionPipeline(count));
+            Pipeline sinkOnly = partitionPipeline(count);
+            var source = new Pipeline.Node("source", "source.mysql", "数据库来源", "source", 0, 0, Map.of("table", "source_events", "incrementalColumn", "updated_at"));
+            var pipeline = new Pipeline("partition-test", "partition-test", null, null, null,
+                    new Pipeline.Dsl(1, List.of(source, sinkOnly.dsl().nodes().getFirst()),
+                            List.of(new Pipeline.Edge("source-hive", "source", "sink", "default"))),
+                    null, null, null, null, null, null, null);
+            var result = compiler.compile(pipeline);
+            var sink = result.nodes().get("sink");
+            assertThat(sink.processorIds).containsOnlyKeys("partition", "convert", "filename", "put");
+            assertThat(sink.inletProcessorId).isEqualTo(sink.processorIds.get("partition"));
+            String route = sink.processorIds.get("partition"), convert = sink.processorIds.get("convert");
+            verify(nifi).createConnection("pg", route, "PROCESSOR", convert, "PROCESSOR", List.of("success"));
+            verify(nifi).createConnection("pg", convert, "PROCESSOR", sink.processorIds.get("filename"), "PROCESSOR", List.of("success"));
+            verify(nifi).createConnection("pg", sink.processorIds.get("filename"), "PROCESSOR", sink.processorIds.get("put"), "PROCESSOR", List.of("success"));
+            verify(nifi).createConnection("pg", result.nodes().get("source").processorIds.get("execute"), "PROCESSOR", route, "PROCESSOR", List.of("success"));
+            verify(nifi).createConnection("pg", result.nodes().get("source").processorIds.get("fetch"), "PROCESSOR", result.nodes().get("source").processorIds.get("execute"), "PROCESSOR", List.of("success"));
+            assertThat(result.nodes().get("source").processorIds).containsOnlyKeys("fetch", "execute");
+            verify(nifi).finalizeGeneratedProcessGroup("pg");
             verify(hive).partitionLayout("analytics", "events");
             verify(hive).partitionLocations("analytics", "events", buckets);
             verify(nifi).listControllerServices("root");
@@ -384,13 +402,43 @@ class DslCompilerHiveMetadataTest {
             assertThat(encoded.find()).isTrue();
             String payload = new String(java.util.Base64.getDecoder().decode(encoded.group()), java.nio.charset.StandardCharsets.UTF_8);
             assertThat(payload).contains("hdfs://cluster/custom/p_0").contains("hdfs://cluster/custom/p_" + (count - 1));
+            String fixtureDirectory = System.getProperty("hive.partition.fixtureDirectory");
+            if (fixtureDirectory != null) {
+                var directory = java.nio.file.Path.of(fixtureDirectory);
+                java.nio.file.Files.createDirectories(directory);
+                java.nio.file.Files.writeString(directory.resolve("partition-" + count + ".groovy"), script);
+            }
         }
+    }
+
+    @Test void absentPartitionProcessorCannotLeaveAPartialNativeGroup() throws Exception {
+        var nifi = mock(NifiClient.class);
+        var hive = mock(HiveModule.class);
+        var compiler = partitionCompiler(nifi, hive);
+        when(nifi.findProcessorType("ExecuteScript")).thenReturn(java.util.Optional.empty());
+        assertThatThrownBy(() -> compiler.compile(partitionPipeline(20))).hasMessageContaining("ExecuteScript").hasMessageContaining("未创建流程");
+        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
+        verifyNoInteractions(hive);
+    }
+
+    @Test void incompleteLocationsFailBeforeAnyNativeMutation() throws Exception {
+        var nifi = mock(NifiClient.class);
+        var hive = mock(HiveModule.class);
+        var compiler = partitionCompiler(nifi, hive);
+        when(hive.partitionLayout("analytics", "events")).thenReturn(Map.of("partitions", List.of("ods_partition=p_0", "ods_partition=p_1")));
+        when(hive.partitionLocations(eq("analytics"), eq("events"), anyList())).thenReturn(Map.of("p_0", "hdfs://cluster/custom/0"));
+        assertThatThrownBy(() -> compiler.compile(partitionPipeline(2))).hasMessageContaining("Location缺失");
+        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
+        verify(nifi, never()).createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
     }
 
     private DslCompiler partitionCompiler(NifiClient nifi, HiveModule hive) throws Exception {
         ManifestRegistry registry = mock(ManifestRegistry.class);
         try (var stream = getClass().getResourceAsStream("/manifests/sinks/hive-sink.json")) {
             when(registry.get("sink.hive")).thenReturn(new ObjectMapper().readValue(stream, ComponentManifest.class));
+        }
+        try (var stream = getClass().getResourceAsStream("/manifests/sources/mysql.json")) {
+            when(registry.get("source.mysql")).thenReturn(new ObjectMapper().readValue(stream, ComponentManifest.class));
         }
         when(hive.resolveRuntimeProfile("default")).thenReturn(hiveRuntimeProfile());
         when(nifi.getRootProcessGroupId()).thenReturn("root");
@@ -400,8 +448,11 @@ class DslCompilerHiveMetadataTest {
         when(nifi.findProcessorType("ExecuteScript")).thenReturn(java.util.Optional.of("org.apache.nifi.processors.script.ExecuteScript"));
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         AtomicInteger sequence = new AtomicInteger();
+        when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenAnswer(call -> entity("cs-" + sequence.incrementAndGet()));
         when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class)))
                 .thenAnswer(call -> entity("processor-" + sequence.incrementAndGet()));
+        when(nifi.createConnection(anyString(), anyString(), anyString(), anyString(), anyString(), anyList()))
+                .thenAnswer(call -> entity("connection-" + sequence.incrementAndGet()));
         return new DslCompiler(nifi, registry, mock(FieldMappingService.class), hive);
     }
 

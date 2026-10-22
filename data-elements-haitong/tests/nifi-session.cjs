@@ -194,6 +194,43 @@ test('platform API recognizes HTTP-200 user_no_login as authentication expiry', 
   }
 });
 
+test('report uploads retain the native multipart body and discard results after tenant rotation', async () => {
+  const previousFetch = global.fetch;
+  let revision = 4;
+  let request;
+  let finish;
+  const api = loadTypeScript('src/api/platformApi.ts', {
+    '../services/platformSession': {
+      getPlatformSessionToken: async () => 'current-token',
+      redirectToPlatformLogin: () => { throw new Error('A tenant rotation must not log out the new tenant'); },
+    },
+    '../nifi/api/bridgeSession': {
+      getBridgeToken: () => 'current-token',
+      getSessionRevision: () => revision,
+    },
+  });
+  const workbook = new FormData();
+  workbook.set('file', new Blob(['synthetic workbook']), 'test.xlsx');
+  workbook.set('datasourceId', 'visible-source');
+  global.fetch = async (_url, options) => {
+    request = options;
+    return new Promise(resolve => { finish = resolve; });
+  };
+  try {
+    const pending = api.platformApi('/dst/database/report-file', workbook);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(request.method, 'POST');
+    assert.equal(request.body, workbook);
+    assert.equal(Object.keys(request.headers).some(key => key.toLowerCase() === 'content-type'), false,
+      'The browser must generate the multipart boundary');
+    revision += 1;
+    finish(new Response(JSON.stringify({ code: 0, data: { batchId: 'old-tenant-batch' } })));
+    await assert.rejects(pending, /旧请求结果已丢弃/);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test('closing an embedded canvas preserves the parent protocol while standalone close stays in HaiTong', () => {
   const previousWindow = global.window;
   const previousCustomEvent = global.CustomEvent;

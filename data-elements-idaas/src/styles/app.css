@@ -1,4 +1,4 @@
-/* 统一身份管理平台 v2.2 — Aurora Blue Compact. Readable compact layout. Type scale: app/typography.ts. See /design.md. Ant Design tokens: app/theme.ts; portal defaults: app/componentDefaults.ts. */
+/* 统一身份管理平台 v2.2 — Aurora Blue Compact. Readable compact layout. Type scale: app/typography.ts. See docs/data-elements-idaas.md（仓库根目录）. Ant Design tokens: app/theme.ts; portal defaults: app/componentDefaults.ts. */
 :root {
   font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif;
   font-synthesis: none;

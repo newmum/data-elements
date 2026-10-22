@@ -1,0 +1,21 @@
+.script-process-editor { color: var(--text-primary); font-size: 12px; }
+.node-selector__card:focus-visible { outline: 2px solid var(--primary-color, #1677ff); outline-offset: 2px; }
+.script-process-editor__intro, .script-process-editor__section { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.script-process-editor__intro strong { font-size: 14px; }
+.script-process-editor__intro span, .script-process-editor__section span, .script-process-editor__empty { color: var(--text-tertiary); font-size: 12px; }
+.script-process-editor .ant-form-item { margin-bottom: 16px; }
+.script-process-editor .ant-form-item-label > label { font-size: 12px; }
+.script-process-editor .ant-form-item-extra { font-size: 11px; line-height: 1.6; min-height: 0; margin-top: 4px; }
+.script-process-editor__section { padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--node-border); margin-bottom: 10px; }
+.script-process-editor__arguments { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.script-process-editor__arguments > .ant-btn { align-self: flex-start; }
+.script-process-editor__argument { display: flex; align-items: center; gap: 8px; }
+.script-process-editor__argument .ant-input { min-width: 0; }
+.script-process-editor__index { width: 16px; flex-shrink: 0; text-align: center; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.script-process-editor__empty { margin: 0 0 2px; }
+.script-process-editor__flow { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--node-border); border-radius: 6px; background: var(--node-bg); }
+.script-process-editor__flow > span:not(.anticon) { flex: 1; text-align: center; line-height: 1.8; }
+.script-process-editor__flow small { color: var(--text-tertiary); font-size: 11px; }
+.script-process-editor__flow .anticon { color: var(--text-tertiary); }
+.script-process-editor__note { color: var(--text-secondary); font-size: 12px; line-height: 1.8; margin: 10px 0 16px; }
+.script-process-editor__example { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; line-height: 1.8; margin: 0; padding: 12px; border: 1px solid var(--node-border); border-radius: 4px; }

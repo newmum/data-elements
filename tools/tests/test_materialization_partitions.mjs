@@ -10,7 +10,7 @@ vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/bab
 const ast = babel.Babel.transform(script, { ast:true, code:false, configFile:false, babelrc:false,
   parserOpts:{sourceType:'module',plugins:['typescript']} }).ast;
 const names = ['defaultRegionCodes','activePartition','activePartitionChoice','activeListPartitionText','partitionPayload',
-  'partitionProbeIdentity','probePartitions','togglePartition'];
+  'partitionProbeIdentity','probePartitions','togglePartition','partitionEnabled','calendarPartitionDefaults'];
 const selected = names.map(name => {
   const node = ast.program.body.find(n => n.type === 'VariableDeclaration' && n.declarations.some(d => d.id?.name === name));
   assert.ok(node,name);return script.slice(node.start,node.end);
@@ -20,11 +20,13 @@ const plans = {value:{target:{enabled:true,field:'DSBM',strategy:'MONTH'}}};
 let probeResult, readRequests=0, regenerationRequests=0;
 const context = vm.createContext({
   computed: definition => ({get value(){return typeof definition==='function'?definition():definition.get();},set value(value){definition.set(value);}}),
+  ref: value=>({value}),
   activeDdlKey:{value:'target'},partitionPlans:plans,tableRef:{value:{getData:()=>columns}},templateTableItems:{value:columns},
   partitionInputError: (_key,message)=>{throw new Error(message);},
   props:{id:'source'},formData:{value:{sourceTableId:'source'}},partitionSupport:{value:{}},
   sourceConstraints:{value:[]},sourceDefinitionMessage:{value:''},partitionProbeMessage:{value:''},sourcePartitionDetected:{value:false},
   ddlWasEdited:{value:false},updatePartitionDdl:async()=>{regenerationRequests++;},
+  currentDdlInput:async()=>({}),regenerateDdl:async()=>{regenerationRequests++;},
   $common:{post:async(_route,body)=>{readRequests++;assert.equal(body.partitionProbe,true);return {data:probeResult};}},
 });
 const executable = babel.Babel.transform(selected.join('\n'),{filename:'partitions.ts',presets:['typescript'],configFile:false,babelrc:false}).code;
@@ -58,7 +60,7 @@ for(const count of [20,100]) {
     Array.from({length:count},(_,i)=>({name:'p'+i,values:['v'+i]}))};
   const targets=Array.from({length:20},(_,i)=>({key:'t'+i,dbId:'t'+i}));
   probeResult={source:{status:'detected',plan:sourcePlan},targetSupport:Object.fromEntries(targets.map(t=>[t.key,true]))};
-  plans.value={};readRequests=0;await actual.probePartitions(targets);
+  plans.value={};actual.partitionEnabled.value=false;readRequests=0;await actual.probePartitions(targets);
   assert.equal(readRequests,1,'One probe covers all targets and source boundaries');
   assert.equal(context.sourcePartitionDetected.value,true,'Show the source-partition hint only on a positive detection');
   for(const target of targets) {
@@ -71,11 +73,15 @@ for(const count of [20,100]) {
   await actual.togglePartition(true);
   assert.equal(actual.partitionPayload('t0').partitions.length,count);
   assert.equal(actual.partitionPayload('t0').enabled,true);
+  context.activeDdlKey.value='t1';
+  await actual.togglePartition(true);
+  assert.equal(regenerationRequests,1,'Checking an already enabled global checkbox never regenerates another target');
   await actual.probePartitions(targets.slice(0,2));
   assert.equal(plans.value.t0.enabled,true,'Refreshing target support must preserve the user choice');
-  assert.equal(plans.value.t1.enabled,false);
+  assert.equal(plans.value.t1.enabled,true,'One checkbox enables every supported target');
   await actual.togglePartition(false);
   assert.equal(actual.partitionPayload('t0').enabled,false);
+  assert.equal(actual.partitionPayload('t1').enabled,false,'One checkbox also disables all supported targets');
   assert.equal(regenerationRequests,2,'Only explicit checkbox changes regenerate the preview');
   console.log(`Source partitions=${count}, targets=20: one probe, all default off; manual opt-in/out verified.`);
 }
@@ -89,3 +95,10 @@ for (const status of ['unknown','unsupported','not_partitioned']) {
   assert.equal(plans.value.target.enabled,false);
 }
 console.log('Detected-only partition hint and inconclusive-probe fallback verified.');
+for(const date of ['2026-01-01T12:00:00','2026-10-22T12:00:00','2035-12-01T12:00:00','2037-02-01T12:00:00']) {
+  const now=new Date(date),year=actual.calendarPartitionDefaults('YEAR',now),month=actual.calendarPartitionDefaults('MONTH',now);
+  assert.ok(Number(year.startYear)+year.years>=2036,'Include the entire year 2035');
+  const [y,m]=month.startMonth.split('-').map(Number);
+  assert.ok(y*12+m-1+month.months>=2036*12,'Include December 2035, not merely its start');
+}
+console.log('Year/month defaults include all of 2035 and still provide future ranges after 2035.');

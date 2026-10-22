@@ -11,6 +11,28 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class SourcePartitionDefinitionTest {
+    @Test void unsupportedClobStreamingFallsBackToTextInTheSameQuery() throws Exception {
+        for(var failure:List.of(new SQLFeatureNotSupportedException(),new SQLException("driver feature", "0A000",17023))) {
+            var connection=mock(Connection.class);var statement=nativeStatement("ignored");
+            var result=statement.executeQuery();
+            when(result.getCharacterStream(1)).thenThrow(failure);
+            when(result.getString(1)).thenReturn("CREATE TABLE APP.T(id NUMBER)");
+            when(connection.prepareStatement(anyString())).thenReturn(statement);
+            assertEquals("available",NativeSourceDefinition.read(connection,DatabaseType.ORACLE,"APP","T").status());
+            verify(connection,times(1)).prepareStatement(anyString());
+        }
+    }
+    @Test void failureMessagesDistinguishVendorCapabilityPermissionsTimeoutAndUnknownErrors() throws Exception {
+        var failures=List.of(new SQLException("private SQL", "42000",6550),new SQLException("private owner", "42000",31603),
+                new SQLTimeoutException("private host"),new SQLException("private credentials", "08006",12514));
+        var statuses=List.of("unsupported","permission_denied","timeout","unavailable");
+        for(int i=0;i<failures.size();i++) {
+            var connection=mock(Connection.class);when(connection.prepareStatement(anyString())).thenThrow(failures.get(i));
+            var result=NativeSourceDefinition.read(connection,DatabaseType.ORACLE,"APP","T");
+            assertEquals(statuses.get(i),result.status());
+            assertFalse(result.message().contains("private"),"Driver error details must not leak SQL, hosts or secrets");
+        }
+    }
     @Test void nativeOracleAndOceanbaseDdlCanIdentifyAnnualPartitionsWithoutCatalogPermissions() throws Exception {
         for(var type:List.of(DatabaseType.ORACLE,DatabaseType.OCEANBASE_ORACLE)) {
             String ddl="CREATE TABLE APP.T (id NUMBER, RIDEDATE DATE, CONSTRAINT PK_named_but_unique UNIQUE(id)) "

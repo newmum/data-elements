@@ -4,6 +4,11 @@ import vm from 'node:vm';
 
 const root = new URL('../../', import.meta.url);
 const source = await fs.readFile(new URL('lowcode/03.数据接入/2.3.1 数据汇聚(data-convergence).vue', root), 'utf8');
+for (const prop of ['tableName', 'taskCount']) {
+  const column = source.match(new RegExp(`<el-table-column\\s+[^>]*prop="${prop}"[^>]*>`))?.[0];
+  assert.ok(column, prop);
+  assert.ok(!/\bsortable\b/.test(column), `${prop} has no table-header sorting control`);
+}
 const script = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/)[1];
 const babel = {};
 vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/babel.min.js', root), 'utf8'), babel);
@@ -94,7 +99,7 @@ assert.deepEqual(plain(f.context.actual.targetTablesOf(row,{targetTableId:'targe
 assert.equal(f.context.actual.targetTablesOf(row).length,2);
 console.log('Task-specific target drawer and actual-source navigation passed');
 
-const pageNames = ['fetchSources', 'collectDatasourceIds', 'buildConditions', 'handleExpandChange',
+const pageNames = ['state', 'handleSourceSortChange', 'fetchSources', 'collectDatasourceIds', 'buildConditions', 'handleExpandChange',
   'qualifiedTableName', 'taskSourceTableName', 'taskLinkTargets'];
 const pageExecutable = pageNames.map(name => {
   const node = ast.program.body.find(node => node.type === 'VariableDeclaration' && node.declarations.some(d => d.id.name === name));
@@ -106,7 +111,9 @@ for (const count of [20, 100]) {
     tableName:`source_${i}`,tasks:[{tid:`task-${i}`,sourceTableId:`source-${i}`,sourceTableName:`source_${i}`,
     sourceSchemaName:'public',targetTables:[{targetTableId:`target-${i}`,targetDbName:'汇聚库',targetTableName:`ods_${i}`}]}]}));
   const ref = value => ({value});
-  const ctx = vm.createContext({console,taskFetchSequence:0,state:{accessStatus:'all'},treeData:ref([{children:[]}]),expandedRows:ref([]),
+  const resets=[];
+  const ctx = vm.createContext({console,reactive:value=>value,taskFetchSequence:0,treeData:ref([{children:[]}]),expandedRows:ref([]),
+    tableRef:ref({refresh:reset=>resets.push(reset)}),
     getSourceTableId:row=>row.tid,$message:{error:assert.fail},$common:{post:async(route,body)=>{
       calls.push({route,body:plain(body)});return {list:rows,total:count};
     }}});
@@ -120,6 +127,20 @@ for (const count of [20, 100]) {
   }
   assert.equal(calls.length,1,'Page and all expanded task links use one request');
   assert.equal(calls[0].route,'/ods/dataAggPage');
+  assert.equal(calls[0].body.sortField,'updatedTime');
+  assert.equal(calls[0].body.sortDir,'desc');
+  ctx.pageHandlers.handleSourceSortChange({prop:'createdTime',order:'ascending'});
+  await ctx.pageHandlers.fetchSources({pageNo:2,pageSize:count});
+  assert.equal(calls[1].body.pageNum,2);
+  assert.equal(calls[1].body.sortField,'createdTime');
+  assert.equal(calls[1].body.sortDir,'asc');
+  ctx.pageHandlers.handleSourceSortChange({prop:'createdTime',order:null});
+  ctx.pageHandlers.state.accessStatus='3';
+  await ctx.pageHandlers.fetchSources({pageNo:1,pageSize:count});
+  assert.equal(calls[2].body.sortField,'updatedTime');
+  assert.equal(calls[2].body.sortDir,'desc');
+  assert.equal(calls[2].body.accessStatus,'3');
+  assert.deepEqual(resets,[true,true]);
   assert.equal(ctx.pageHandlers.qualifiedTableName('public.orders','public'),'public.orders');
   assert.equal(ctx.pageHandlers.taskSourceTableName({sourceTableId:'other'},rows[0]),'来源表名称缺失',
     'Never label an unknown chained source with the root source');

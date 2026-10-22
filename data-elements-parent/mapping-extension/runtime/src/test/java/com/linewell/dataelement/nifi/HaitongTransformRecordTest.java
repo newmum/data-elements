@@ -17,6 +17,28 @@ import static org.mockito.Mockito.*;
 
 class HaitongTransformRecordTest {
     private static final ObjectMapper JSON=new ObjectMapper();
+    @Test void simplePropertiesRunOldPlansAndQueuedInputsWithoutManualHashesOrVersionEdits() throws Exception {
+        for(int count:List.of(20,100))for(boolean legacy:List.of(false,true)) {
+            var runner=runner("NULL","ROUTE_INVALID");runner.removeProperty(HaitongTransformRecord.HASH);
+            var document=JSON.readTree(runner.getProcessContext().getProperty(HaitongTransformRecord.PLAN).getValue());
+            ((com.fasterxml.jackson.databind.node.ObjectNode)document).put("engineVersion","1.1.25").put("functionLibraryVersion","1.1.25");
+            ((com.fasterxml.jackson.databind.node.ObjectNode)document).putObject("_deployment").put("planId","publication").put("contextNodeId","flow:node");
+            runner.setProperty(HaitongTransformRecord.PLAN,document.toString());
+            if(legacy){runner.setProperty(HaitongTransformRecord.HASH,"stale-old-hash");runner.setProperty(MappingCompatibility.REQUIRED_VERSION,"1.1.10");}
+            var rows=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)rows.add(Map.of("x","v"+i));
+            runner.enqueue(JSON.writeValueAsBytes(rows),Map.of("ht.plan.hash.flow:node","old-plan","ht.plan.hash","old-plan","ht.plan.node.id","flow:node"));runner.run();
+            runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);
+            var file=runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst();assertEquals(count,JSON.readTree(file.toByteArray()).size());
+            assertEquals("publication",file.getAttribute("ht.plan.id"));assertEquals("flow:node",file.getAttribute("ht.plan.node.id"));assertEquals("0",file.getAttribute("ht.dictionary.batches"));
+        }
+    }
+    @Test void fixedRulesReprocessAnOldInvalidEnvelopeWithoutNestingOrPlanConflicts() throws Exception {
+        var runner=runner("NULL","ROUTE_INVALID");runner.setProperty(HaitongTransformRecord.HASH,"old-hash");runner.setProperty(MappingCompatibility.REQUIRED_VERSION,"1.1.25");
+        var envelope=JSON.createObjectNode().put("planHash","old-hash").put("inputRecordIndex",56);envelope.putArray("errors").addObject().put("code","TYPE_MISMATCH");envelope.putObject("record").put("x","restored");
+        runner.enqueue(envelope.toString(),Map.of(MappingErrorRecords.ENVELOPE,"1","ht.plan.hash","old-hash","ht.plan.hash."+runner.getProcessor().getIdentifier(),"old-hash","ht.plan.node.id",runner.getProcessor().getIdentifier(),MappingErrorRecords.NEXT,"0"));runner.run();
+        runner.assertTransferCount(HaitongTransformRecord.SUCCESS,1);runner.assertTransferCount(HaitongTransformRecord.FAILURE,0);runner.assertTransferCount(HaitongTransformRecord.INVALID,0);
+        assertEquals("restored",JSON.readTree(runner.getFlowFilesForRelationship(HaitongTransformRecord.SUCCESS).getFirst().toByteArray()).path(0).path("y").asText());
+    }
     @Test void allWindowsCommitOnceAndCarryWriterSchema()throws Exception{
         var runner=runner("NULL","FAIL_FLOWFILE");List<Map<String,Object>>rows=new ArrayList<>();for(int i=0;i<600;i++)rows.add(Map.of("x","v"+i));runner.enqueue(JSON.writeValueAsBytes(rows));runner.run();
         runner.assertTransferCount(HaitongTransformRecord.SUCCESS,2);int total=0;

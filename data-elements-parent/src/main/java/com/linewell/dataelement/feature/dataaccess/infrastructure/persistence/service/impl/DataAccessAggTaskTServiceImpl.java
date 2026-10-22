@@ -211,8 +211,8 @@ public class DataAccessAggTaskTServiceImpl extends ServiceImpl<DataAccessAggTask
                 task.setSourceTablePrimaryKey(firstNonBlank(config, "primaryKey", "pk", "updateKeys"));
                 task.setSourceTableIncrementKey(firstNonBlank(config, "incrementalColumn", "incrementKey"));
             } else if ("sink".equalsIgnoreCase(category)) {
-                task.setTargetDbId(firstNonBlank(config, "targetDbId", "dbId", "jdbcUrl"));
-                task.setTargetTableId(firstNonBlank(config, "targetTableId", "table"));
+                task.setTargetDbId(firstNonBlank(config, "registeredDatasourceId", "selectedDatabaseId", "targetDbId", "dbId"));
+                task.setTargetTableId(firstNonBlank(config, "targetTableId", "registeredTableId"));
                 task.setTargetTablePrimaryKey(firstNonBlank(config, "updateKeys", "primaryKey", "pk"));
             }
         }

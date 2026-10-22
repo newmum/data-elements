@@ -1,6 +1,6 @@
 import { theme, type ThemeConfig } from 'antd';
 import { typeScale, typeColor, bodyFontFamily } from './typography';
-/** Aurora Blue 管理工作区：保留小尺寸组件语义，表格与表单采用舒展间距。见 /design.md。 */
+/** Aurora Blue 管理工作区：保留小尺寸组件语义，表格与表单采用舒展间距。见 docs/data-elements-idaas.md（仓库根目录）。 */
 export const appTheme: ThemeConfig = {
     algorithm: theme.compactAlgorithm,
     token: {

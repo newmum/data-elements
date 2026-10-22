@@ -402,7 +402,7 @@ public class PipelineController {
                         List.of(
                                 new Pipeline.Node(sourceNodeId, sourceNodeType, sourceNodeLabel, "source", -120, 120,
                                         sourceConfig),
-                                new Pipeline.Node(transformNodeId, "transform.field-enrichment", "字段映射", "transform", 420, 120, transformConfig),
+                                new Pipeline.Node(transformNodeId, "transform.field-enrichment", "字段治理", "transform", 420, 120, transformConfig),
                                 new Pipeline.Node(sinkNodeId,
                                         "HIVE".equalsIgnoreCase(String.valueOf(sinkConfig.get("dbType"))) ? "sink.hive" : "sink.jdbc",
                                         targetNodeLabel, "sink", 960, 120, sinkConfig)

@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: haitong-data-pull
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 101MB
+      file-size-threshold: 0
+  task:
+    scheduling:
+      pool:
+        size: 4
+server:
+  address: 127.0.0.1
+  port: 18083
+  shutdown: graceful
+  forward-headers-strategy: none
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never
+logging:
+  file:
+    name: ./logs/haitong.log
+  level:
+    root: INFO
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
+relay:
+  registration-registry:
+    enabled: false
+    base-url: ""
+    shared-key: ""
+    timeout-seconds: 8
+  targets:
+    local:
+      type: LOCAL
+      directory: out
+    kafka:
+      type: KAFKA
+    ftp:
+      type: FTP
+  routes:
+    demo:
+      targets: [local]
+    from-kafka:
+      targets: [local]
+    from-ftp:
+      targets: [local]
+  actions:
+    inspect:
+      mode: SYNC
+      handler: inspect
+      safe-retry: true

@@ -45,24 +45,25 @@ export default function FieldMappingEditor(props:Props) {
     }catch(cause:any){return {spec:null,error:cause.message};}
   },[props.value]);
   const schemaSignature=JSON.stringify([props.columnMeta?.sourceSchema??[],props.columnMeta?.targetSchema??[]]);
-  const [loaded,setLoaded]=useState<{source:unknown;schema:string;draft:UnifiedMappingDraft}|null>(null);
+  const referenceSignature=JSON.stringify({sourceRef:props.assetContext?.sourceRef,targetRef:props.assetContext?.targetRef});
+  const [loaded,setLoaded]=useState<{source:unknown;schema:string;references:string;draft:UnifiedMappingDraft}|null>(null);
   const [error,setError]=useState(''),[retry,setRetry]=useState(0);
   useEffect(()=>{
     if(!parsed.spec||parsed.spec.schemaVersion==='2.0'||props.columnsLoading)return;
     let active=true;setError('');
-    const context=props.assetContext;
+    const context=JSON.parse(referenceSignature) as NonNullable<Props['assetContext']>;
     const specification=context?.sourceRef||context?.targetRef
       ?mappingVersions.schema(context.sourceRef,context.targetRef).then(schemaContract=>({...parsed.spec,schemaContract}))
       :Promise.resolve(parsed.spec);
     specification.then(spec=>compileFieldMapping(spec,props.columnMeta?.sourceSchema??[],props.columnMeta?.targetSchema??[]))
-      .then(result=>{if(!result.plan)throw new Error('未能读取治理规则，请重试');if(active)setLoaded({source:props.value,schema:schemaSignature,draft:{...result.plan.executionPlan,executionEngine:'JAVA_RECORD'}});})
+      .then(result=>{if(!result.plan)throw new Error('未能读取治理规则，请重试');if(active)setLoaded({source:props.value,schema:schemaSignature,references:referenceSignature,draft:{...result.plan.executionPlan,executionEngine:'JAVA_RECORD'}});})
       .catch(cause=>{if(active)setError(cause?.response?.data?.error??cause.message??'读取治理规则失败');});
     return ()=>{active=false;};
-  },[props.value,retry,props.columnsLoading,schemaSignature]);
+  },[props.value,retry,props.columnsLoading,schemaSignature,referenceSignature]);
   const problem=parsed.error||(parsed.spec?.schemaVersion==='2.0'?'':error);
   if(problem)return <Alert type="error" showIcon message={problem} action={<Button onClick={()=>setRetry(retry+1)}>重试</Button>}/>;
   // Keep an open form mounted while metadata is refreshed in the background.
-  const draft=parsed.spec?.schemaVersion==='2.0'?parsed.spec:loaded&&loaded.source===props.value?loaded.draft:null;
+  const draft=parsed.spec?.schemaVersion==='2.0'?parsed.spec:loaded&&loaded.source===props.value&&loaded.references===referenceSignature?loaded.draft:null;
   if(!draft)return <Skeleton active paragraph={{rows:6}}/>;
   return <FieldMappingEditorContent {...props} value={draft}/>;
 }

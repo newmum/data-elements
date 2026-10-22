@@ -113,6 +113,9 @@ const parseDynamicRoutes = (rawRoutes: RouteVO[], rootPath = ""): RouteRecordRaw
     // path去掉路径前面的'/'，作为name
     const routeName = name || path?.replace(/^\//, "");
     let routePath = rootPath ? `${rootPath}${path}` : path;
+    // Keep the granted menu/component identity while exposing a general node
+    // configuration URL for extraction, push, and service nodes.
+    if (route.componentName === "nifi-node-config") routePath = "/node-config";
 
     // 筛选出可导航的子菜单（排除分组标题、外链、内链）
     const visibleChildren = children?.filter(
@@ -236,12 +239,20 @@ const ensureSurveillanceEngineMenu = (routes: RouteVO[]): RouteVO[] => {
       name: "structuredSurveillanceOutput",
       component: "deal/surveillance-engine/management",
       children: [],
-      meta: { title: "输出管理", icon: "menu-data-sync", keepAlive: true, managementType: "output" },
+      meta: {
+        title: "输出管理",
+        icon: "menu-data-sync",
+        keepAlive: true,
+        managementType: "output",
+      },
     },
   ];
   submenuDefinitions.forEach((submenu) => {
     const alreadyAdded = menu.children.some(
-      (child) => child.path === submenu.path || child.name === submenu.name || child.meta?.title === submenu.meta?.title,
+      (child) =>
+        child.path === submenu.path ||
+        child.name === submenu.name ||
+        child.meta?.title === submenu.meta?.title
     );
     if (!alreadyAdded) menu.children.push(submenu);
   });

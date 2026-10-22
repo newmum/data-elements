@@ -30,7 +30,7 @@ export interface CustomSqlEditorHandle { generate: () => void }
 type ColumnInfo = SqlColumn;
 type SourceTableInfo = { key: string; table: string; columns: ColumnInfo[]; node: CanvasNode; recordInput?: boolean };
 
-const SQL_PLACEHOLDER = `-- 自定义 SQL 使用示例，按实际场景修改
+const SQL_PLACEHOLDER = `-- SQL 加工使用示例，按实际场景修改
 -- 场景 1：对上游记录继续加工，FROM 固定写 FLOWFILE
 SELECT *
 FROM FLOWFILE;

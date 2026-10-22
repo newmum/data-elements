@@ -157,7 +157,15 @@ function SelectorContent({ onSelect, defaultCategory = 'source' }: NodeSelectorC
             <div
               key={m.key}
               className={`node-selector__card node-selector__card--${m.category}`}
+              role="button"
+              tabIndex={0}
               onClick={() => onSelect(m)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSelect(m);
+                }
+              }}
               title={m.description ?? m.key}
             >
               <div className="node-selector__card-icon">

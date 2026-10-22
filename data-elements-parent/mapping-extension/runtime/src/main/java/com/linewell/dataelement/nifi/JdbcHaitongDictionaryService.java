@@ -24,10 +24,11 @@ public class JdbcHaitongDictionaryService extends AbstractControllerService impl
     private final Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>> snapshotIndex=new java.util.concurrent.ConcurrentHashMap<>();
     public static final PropertyDescriptor AUTHORIZED=new PropertyDescriptor.Builder().name("authorized-definitions").description("发布时经租户、角色与登记关联校验的字典定义").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
     public static final PropertyDescriptor SNAPSHOTS=new PropertyDescriptor.Builder().name("snapshot-payloads").description("仅执行服务使用的固定版本完整字典快照").sensitive(true).defaultValue("{}").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
-    @Override protected List<PropertyDescriptor>getSupportedPropertyDescriptors(){return List.of(AUTHORIZED,SNAPSHOTS,MappingCompatibility.REQUIRED_VERSION);}
-    @OnEnabled public void enabled(ConfigurationContext context)throws Exception{this.context=context;authorized=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(context.getProperty(AUTHORIZED).getValue());snapshots=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(context.getProperty(SNAPSHOTS).getValue());cache.clear();snapshotIndex.clear();}
+    @Override protected List<PropertyDescriptor>getSupportedPropertyDescriptors(){return List.of(AUTHORIZED,SNAPSHOTS);}
+    @OnEnabled public void enabled(ConfigurationContext context)throws Exception{MappingCompatibility.requireRuntime();this.context=context;authorized=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(context.getProperty(AUTHORIZED).getValue());snapshots=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readTree(context.getProperty(SNAPSHOTS).getValue());cache.clear();snapshotIndex.clear();}
     @org.apache.nifi.annotation.lifecycle.OnDisabled public void clearCaches(){cache.clear();snapshotIndex.clear();}
     @Override protected PropertyDescriptor getSupportedDynamicPropertyDescriptor(String name){
+        if(name.equals("required-engine-version"))return MappingCompatibility.REQUIRED_VERSION;
         return new PropertyDescriptor.Builder().name(name).description("已授权datasourceId对应的DBCP连接服务").dynamic(true).identifiesControllerService(DBCPService.class).required(false).build();
     }
     @Override public DictionarySpec.Provider provider(){

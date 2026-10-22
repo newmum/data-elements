@@ -44,6 +44,8 @@ export default function EditorPage() {
   // Allow user to skip the error screen and continue with empty manifests
   const [forceContinue, setForceContinue] = useState(false);
   const [canvasDataLoading, setCanvasDataLoading] = useState(() => Boolean(getPipelineId() || getAccessTaskId() || getTid()));
+  const [canvasDataError, setCanvasDataError] = useState('');
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const loadDsl = useCanvasStore((s) => s.loadDsl);
   const setCurrentPipeline = useCanvasStore((s) => s.setCurrentPipeline);
   const currentPipelineId = useCanvasStore((s) => s.currentPipelineId);
@@ -69,6 +71,8 @@ export default function EditorPage() {
       return;
     }
     fetchStartedRef.current = true;
+    setCanvasDataLoading(true);
+    setCanvasDataError('');
     const revision = getSessionRevision();
     let active = true;
     const isCurrent = () => active && revision === getSessionRevision();
@@ -109,7 +113,7 @@ export default function EditorPage() {
         .catch((e: any) => {
           if (!isCurrent()) return;
           const errorMessage = e?.response?.data?.error ?? e?.message ?? '画布数据加载失败';
-          message.error('画布数据加载失败，请刷新重试');
+          setCanvasDataError(String(errorMessage));
           notifyCanvasContentError(String(errorMessage));
         })
         .finally(() => {
@@ -147,6 +151,7 @@ export default function EditorPage() {
           if (!isCurrent()) return;
           const errorMessage = e?.response?.data?.error ?? e?.message ?? '画布模板加载失败';
           console.warn('加载画布模板失败:', errorMessage);
+          setCanvasDataError(String(errorMessage));
           notifyCanvasContentError(String(errorMessage));
         })
         .finally(() => {
@@ -154,13 +159,13 @@ export default function EditorPage() {
         });
     }
     return () => { active = false; fetchStartedRef.current = false; };
-  }, [loadDsl, setCurrentPipeline, setChain, message, queryClient]);
+  }, [loadDsl, setCurrentPipeline, setChain, message, queryClient, loadAttempt]);
 
   useEffect(() => {
-    if (!manifestQuery.isLoading && !canvasDataLoading && !manifestQuery.isError) {
+    if (!manifestQuery.isLoading && !canvasDataLoading && !canvasDataError && !manifestQuery.isError) {
       notifyCanvasContentReady();
     }
-  }, [manifestQuery.isLoading, manifestQuery.isError, canvasDataLoading]);
+  }, [manifestQuery.isLoading, manifestQuery.isError, canvasDataLoading, canvasDataError]);
 
   useEffect(() => {
     if (manifestQuery.isError && !manifestQuery.data) {
@@ -194,6 +199,12 @@ export default function EditorPage() {
       </div>
     );
   }
+
+  if (canvasDataError) return <div className="nifi-loading-page"><Result status="error" title="任务画布未能加载" subTitle={canvasDataError}
+    extra={[
+      <Button key="retry" type="primary" icon={<ReloadOutlined />} onClick={() => setLoadAttempt(value => value + 1)}>重新加载</Button>,
+      <Button key="back" onClick={() => window.dispatchEvent(new Event('haitong:nifi-close-requested'))}>返回列表</Button>,
+    ]}/></div>;
 
   // Manifests error with no data — show retry UI
   if (manifestQuery.isError && !manifestQuery.data && !forceContinue) {
@@ -236,9 +247,9 @@ export default function EditorPage() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--canvas-bg)' }}>
       <Toolbar />
       {chain?.relationshipUnavailable && !chain.readOnly && chain.selectedPipelineId === currentPipelineId && <Alert type="info" showIcon message="已打开当前任务保存的画布，可继续编辑"
-        description="任务关联链路暂不可用。可修改组件、属性和连线；保存时保留你的配置，不自动恢复原来源或目标。" />}
+        description={`${chain.warnings?.join('；') || '任务关联链路暂不可用'}。可修改组件、属性和连线；保存时保留你的配置，不自动恢复原来源或目标。`} />}
       {chain?.readOnly && chain.selectedPipelineId === currentPipelineId && <Alert type="warning" showIcon message="已打开当前任务保存的画布（只读）"
-        description={`关联链路暂不可用：${chain.warnings?.join('；') || '任务关联需要核对'}。请修复任务与登记记录的关联后重新打开；当前不会自动改写流程配置。`} />}
+        description={`${chain.warnings?.join('；') || '任务关联需要核对'}。当前仅展示已保存的节点与连线，不允许保存、部署或启动。`} />}
       <div className="canvas-workarea">
         <div className="canvas-workarea__graph"><Canvas /></div>
         <Suspense fallback={null}>{drawerNodeId && <ConfigDrawer />}</Suspense>

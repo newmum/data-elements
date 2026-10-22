@@ -1,6 +1,88 @@
 import { expect, test } from '@playwright/test';
 import { installContract, login } from './helpers/backend-contract';
 
+for (const count of [20, 100]) test(`已有应用独立账号可下发，${count}条分配只读取一次`, async ({ page }) => {
+    const fixture = await installContract(page);
+    fixture.session.capabilities!.push('provisioning', 'assignments');
+    fixture.session.editableTables!.push('tasks', 'assignments');
+    fixture.session.appAssignableIds = count === 20 ? [] : ['a1'];
+    fixture.receiverConfigs.push({ id: 'receiver-a1', name: '业务接收端', appId: 'a1', enabled: true, lastTestResult: 'SUCCESS' });
+    const applicationAccount = 'application.user001';
+    fixture.assignments.push({ id: 'assignment-existing', subject_id: 'u1', app_id: 'a1',
+        account_alias: applicationAccount, directory_assigned: count === 20 ? 1 : 0, ack_version: count === 20 ? 2 : 0, version: 3 });
+    for (let index = 1; index < count; index++) fixture.assignments.push({ id: `assignment-${index}`, subject_id: `other-${index}`,
+        app_id: 'a1', account_alias: `other.${index}`, directory_assigned: 1, version: 1 });
+    fixture.assignments.push({ id: 'other-app', subject_id: 'u1', app_id: 'a2', account_alias: 'different.app', directory_assigned: 1, version: 5 });
+    let reads = 0;
+    const writes: Array<{ record: { subjectId: string; appId: string; accountAlias: string } }> = [];
+    page.on('request', request => {
+        if (new URL(request.url()).pathname.endsWith('/idaas/assignments/list')) reads++;
+        if (new URL(request.url()).pathname.endsWith('/idaas/assignments/save')) writes.push(request.postDataJSON());
+    });
+    await login(page);
+    await page.goto('/#/console/workforce/organization?user=u1');
+    const drawer = page.getByRole('dialog');
+    await drawer.getByRole('checkbox', { name: '保存后立即下发此用户' }).check();
+    await drawer.getByLabel('下发应用').click();
+    await page.locator('.ant-select-dropdown:visible').getByText(fixture.database.apps.find(app => app.id === 'a1')!.name, { exact: true }).click();
+    await drawer.getByLabel('接收配置').click();
+    await drawer.getByLabel('接收配置').press('ArrowDown');
+    await drawer.getByLabel('接收配置').press('Enter');
+    await drawer.getByRole('button', { name: /保\s*存/ }).click();
+    await expect(drawer).toHaveCount(0);
+    expect(reads).toBe(1);
+    expect(writes).toEqual(count === 20 ? [] : [expect.objectContaining({ record: expect.objectContaining({
+        subjectId: 'u1', appId: 'a1', accountAlias: applicationAccount,
+    }) })]);
+    expect(fixture.assignments.find(row => row.id === 'assignment-existing')!.account_alias).toBe(applicationAccount);
+    expect(fixture.assignments.find(row => row.id === 'other-app')).toEqual(expect.objectContaining({ account_alias: 'different.app', version: 5 }));
+    expect(fixture.provisionCreates).toEqual([expect.objectContaining({ selectedIds: ['u1'] })]);
+    expect(fixture.provisionTasks[0].status).toBe('success');
+});
+
+test('新建失败后修改账号，更新未确认分配并完成下发，不重复创建人员', async ({ page }) => {
+    const fixture = await installContract(page);
+    fixture.session.capabilities!.push('provisioning', 'assignments');
+    fixture.session.editableTables!.push('tasks', 'assignments');
+    fixture.session.appAssignableIds = ['a1'];
+    fixture.receiverConfigs.push({ id: 'receiver-a1', name: '业务接收端', appId: 'a1', enabled: true, lastTestResult: 'SUCCESS' });
+    let executions = 0;
+    await page.route('**/api/idaas/provision/execute', async route => {
+        if (executions++ > 0) return route.fallback();
+        const task = fixture.provisionTasks[0];
+        task.status = 'failed'; task.items[0] = { status: 'failed', result: { message: '账号已存在' } };
+        await route.fulfill({ json: { code: 200, data: { status: 'failed' } } });
+    });
+    await login(page);
+    await page.goto('/#/console/workforce/organization');
+    await page.getByRole('button', { name: /新建用户$/ }).click();
+    const drawer = page.getByRole('dialog');
+    await drawer.getByLabel('账号', { exact: true }).fill('draft.old');
+    await drawer.getByLabel('姓名', { exact: true }).fill('新用户');
+    await drawer.getByRole('checkbox', { name: '保存后立即下发此用户' }).check();
+    await drawer.getByLabel('下发应用').click();
+    await page.locator('.ant-select-dropdown:visible').getByText(fixture.database.apps.find(app => app.id === 'a1')!.name, { exact: true }).click();
+    await drawer.getByLabel('接收配置').click();
+    await drawer.getByLabel('接收配置').press('ArrowDown');
+    await drawer.getByLabel('接收配置').press('Enter');
+    await drawer.getByLabel('初始密码', { exact: true }).fill('ContractUser#2026');
+    await drawer.getByLabel('确认初始密码').fill('ContractUser#2026');
+    await drawer.getByRole('button', { name: /保\s*存/ }).click();
+    await expect(page.locator('.ant-message-notice-error')).toContainText('账号已存在');
+    expect(fixture.assignments[0].account_alias).toBe('draft.old');
+    await drawer.getByLabel('账号', { exact: true }).fill('draft.new');
+    await drawer.getByRole('button', { name: /保\s*存/ }).click();
+    await expect(drawer).toHaveCount(0);
+    const people = fixture.database.users.filter(user => user.account === 'draft.new' || user.account === 'draft.old');
+    expect(people).toHaveLength(1);
+    expect(people[0].account).toBe('draft.new');
+    expect(fixture.assignments).toHaveLength(1);
+    expect(fixture.assignments[0]).toEqual(expect.objectContaining({ subject_id: people[0].id, account_alias: 'draft.new' }));
+    expect(fixture.provisionCreates.map(row => row.selectedIds)).toEqual([[people[0].id], [people[0].id]]);
+    expect(fixture.provisionTasks[1].status).toBe('success');
+    expect(fixture.initialCredentialRequests).toHaveLength(1);
+});
+
 test('新建用户时预览角色权限、授权并明确下发同一用户', async ({ page }, testInfo) => {
     const fixture = await installContract(page);
     const app = fixture.database.apps.find(item => item.id === 'a1')!;

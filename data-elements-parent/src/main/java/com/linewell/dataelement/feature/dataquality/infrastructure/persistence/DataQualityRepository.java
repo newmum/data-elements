@@ -141,6 +141,12 @@ public class DataQualityRepository {
             if(!ownedColumns.contains(text(rule.get("columnName"))))throw new IllegalArgumentException("校验字段不存在于当前数据表");
             Map<String,Object> p=rule.get("parameters") instanceof Map<?,?> raw?new LinkedHashMap<>((Map<String,Object>)raw):new LinkedHashMap<>();
             p.remove("resolvedTargetTable");p.remove("evaluationTime");
+            if("SQL_TEMPLATE".equals(rule.get("ruleType"))) {
+                if(rule.get("relatedColumn")!=null && !String.valueOf(rule.get("relatedColumn")).isBlank()
+                        && !ownedColumns.contains(text(rule.get("relatedColumn")))) throw new IllegalArgumentException("关联字段不存在于当前数据表");
+                new com.linewell.dataelement.feature.dataquality.infrastructure.jdbc.QualitySqlTemplate().validate(
+                        text(p.get("sqlTemplate")),p.get("values") instanceof Map<?,?> valuesMap?(Map<String,Object>)valuesMap:Map.of());
+            }
             for(String key:List.of("columns","sourceColumns")) if(p.containsKey(key)) {
                 List<String> names=columnList(p.get(key));
                 if(!ownedColumns.containsAll(names))throw new IllegalArgumentException("联合规则含非本表字段");
@@ -194,7 +200,7 @@ public class DataQualityRepository {
                     "tid", NumericId.nextId(), "tenantId", tenantId, "taskId", taskId,
                     "ruleName", requiredText(rule, "ruleName", "规则名称不能为空"),
                     "ruleType", enumValue(rule.get("ruleType"),
-                            List.of("NOT_NULL", "NOT_EMPTY", "UNIQUE", "RANGE", "ENUM", "LENGTH", "REGEX", "TIMELINESS", "REFERENCE", "PROFILE"), null),
+                            List.of("NOT_NULL", "NOT_EMPTY", "UNIQUE", "RANGE", "ENUM", "LENGTH", "REGEX", "TIMELINESS", "REFERENCE", "PROFILE", "SQL_TEMPLATE"), null),
                     "dimension", defaultText(text(rule.get("dimension")), dimensionOf(text(rule.get("ruleType")))),
                     "columnName", requiredText(rule, "columnName", "校验字段不能为空"),
                     "relatedColumn", text(rule.get("relatedColumn")),

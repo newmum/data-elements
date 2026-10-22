@@ -23,4 +23,4 @@ python tools/check-db.py --config <受限演示配置路径> --authority baselin
 python tools/export-db.py --config <受限演示配置路径> --output db/environments/demo
 ```
 
-旧演示库 `baseline_ga` 和 `baseline_chengtian` 保留作为升级前恢复材料，当前业务路由不再使用。目录中不保存旧业务数据备份、账号授权或连接凭据。部署与恢复流程见 [演示环境部署](../../../docs/演示环境部署.md)。
+旧演示库 `baseline_ga` 和 `baseline_chengtian` 保留作为升级前恢复材料，当前业务路由不再使用。目录中不保存旧业务数据备份、账号授权或连接凭据。部署与恢复流程见 [演示环境部署](../../../docs/data-elements.md#demo-environment)。

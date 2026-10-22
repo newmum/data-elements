@@ -1,0 +1,87 @@
+.fs-script-preview .ant-drawer-header {
+  padding: 16px 20px;
+}
+.fs-script-preview .ant-drawer-title {
+  font-size: 14px;
+}
+.fs-script-preview .ant-drawer-body {
+  padding: 16px 20px;
+}
+.fs-script-preview__hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: #8c98aa;
+}
+.fs-diff {
+  border: 1px solid #e0e6ef;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.fs-diff__head,
+.fs-diff__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.fs-diff__head {
+  font-size: 11px;
+  color: #7c899d;
+  background: #f7f9fc;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e4e9f1;
+}
+.fs-diff__scroll {
+  max-height: 38vh;
+  overflow: auto;
+}
+.fs-diff__row pre {
+  display: flex;
+  margin: 0;
+  min-height: 22px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 2px 6px;
+  font:
+    11px/1.7 Consolas,
+    monospace;
+  color: #5e6d83;
+  border-right: 1px solid #edf1f6;
+}
+.fs-diff__row pre i {
+  font: inherit;
+  font-size: 10px;
+  width: 28px;
+  flex: none;
+  font-style: normal;
+  color: #acb6c5;
+  user-select: none;
+}
+.fs-diff__row .is-removed {
+  background: #fff0f0;
+  color: #ad5e66;
+}
+.fs-diff__row .is-added {
+  background: #edf8f0;
+  color: #3f8262;
+}
+.fs-script-preview__compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.fs-script-preview__compare > div {
+  min-width: 0;
+}
+.fs-script-preview__compare h4 {
+  font-size: 12px;
+  font-weight: 500;
+  color: #78869a;
+  margin: 0 0 8px;
+}
+.fs-script-preview__compare .fs-code-field textarea {
+  min-height: 180px;
+}
+@media (max-width: 700px) {
+  .fs-script-preview__compare {
+    grid-template-columns: 1fr;
+  }
+}

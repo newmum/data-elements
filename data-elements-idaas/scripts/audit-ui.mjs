@@ -46,10 +46,10 @@ check('removed:design-page-file', !fs.existsSync('src/pages/DesignSystem.tsx'));
 check('removed:design-navigation-and-route', !/design-system|DesignSystem|设计规范/.test(allUi));
 check('removed:density-toggle', !/setDensity|table-density|表格密度/.test(allUi));
 check('css:no-page-scale', !/zoom\s*:|transform\s*:\s*scale\(/i.test(css));
-// Windows 文件名不区分大小写，使用目录中的实际文件名检查文档命名。
-const rootFiles = fs.readdirSync(root);
-check('docs:lowercase-design', rootFiles.includes('design.md') && !rootFiles.includes('DESIGN.md'));
-check('docs:agent-entry', fs.existsSync('AGENTS.md') && fs.readFileSync('AGENTS.md', 'utf8').includes('design.md'));
+// 工程设计规范统一维护在仓库根目录的工程主文档。
+const designDocument = path.resolve(root, '../docs/data-elements-idaas.md');
+check('docs:canonical-design', fs.existsSync(designDocument) && fs.readFileSync(designDocument, 'utf8').includes('<a id="design-system"></a>'));
+check('docs:agent-entry', fs.existsSync('AGENTS.md') && fs.readFileSync('AGENTS.md', 'utf8').includes('../docs/data-elements-idaas.md#design-system'));
 const summary = { kind: 'static-source-audit-not-browser', files: files.length, tables, cards, forms, tabs, checks: checks.length, passed: checks.length - failures.length, failures, details: checks };
 const output = path.resolve(root, '../logs/idaas/audit');
 fs.mkdirSync(output, { recursive: true });

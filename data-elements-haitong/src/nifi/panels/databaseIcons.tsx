@@ -31,7 +31,7 @@ import tdsql from '../icons/tdsql.png';
 interface ProcessIconSpec {
   bg: string;
   fg?: string;
-  kind: 'filter' | 'mapping' | 'sql' | 'sink' | 'transform' | 'branch';
+  kind: 'filter' | 'mapping' | 'sql' | 'code' | 'sink' | 'transform' | 'branch';
   label: string;
 }
 
@@ -49,6 +49,8 @@ function DatabaseBrandIcon({ src, name, cropMark = false }: { src: string; name:
 function ProcessSvgIcon({ bg, fg = '#fff', kind, label }: ProcessIconSpec) {
   const icon = (() => {
     switch (kind) {
+      case 'code':
+        return <path d="m14 12-6 8 6 8m12-16 6 8-6 8m-4-18-4 20" fill="none" stroke={fg} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />;
       case 'filter':
         return <path d="M10 11h20l-7.2 8.4v7.2l-5.6 2.8v-10L10 11Z" fill="none" stroke={fg} strokeWidth="2.4" strokeLinejoin="round" />;
       case 'mapping':
@@ -115,6 +117,9 @@ export const COMPONENT_ICONS: Record<string, ReactNode> = {
   'transform.field-mapping': <ProcessSvgIcon bg="#6366f1" kind="mapping" label="GOV" />,
   'transform.field-enrichment': <ProcessSvgIcon bg="#6366f1" kind="mapping" label="GOV" />,
   'transform.sql': <ProcessSvgIcon bg="#7c3aed" kind="sql" label="SQL" />,
+  'transform.python': <ProcessSvgIcon bg="#3776ab" kind="code" label="PY" />,
+  'transform.java': <ProcessSvgIcon bg="#b45309" kind="code" label="JAVA" />,
+  'transform.shell': <ProcessSvgIcon bg="#475569" kind="code" label="SH" />,
   'sink.hive': <DatabaseBrandIcon src={hive} name="Apache Hive" />,
   'sink.jdbc': <ProcessSvgIcon bg="#16a34a" kind="sink" label="JDBC" />,
   transform: <ProcessSvgIcon bg="#6366f1" kind="transform" label="TRANS" />,

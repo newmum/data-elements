@@ -14,7 +14,6 @@ interface ImportMetaEnv {
   VITE_APP_API_URL: string;
   /** 祺智系统入口地址；支持同源子路径或完整 URL */
   VITE_QIZHI_BASE_URL: string;
-  VITE_REPORT_APP_URL: string;
   VITE_HAITONG_BASE_URL: string;
   VITE_WANXIANG_GOVERNANCE_URL: string;
   VITE_SEARCH_APP_URL: string;

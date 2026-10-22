@@ -191,6 +191,7 @@
           frameborder="0"
           allowfullscreen
           @load="onOrchestrationLoad"
+          @error="onOrchestrationError"
         ></iframe>
       </div>
       </div>
@@ -241,6 +242,7 @@ const orchestrationRow = ref(null);
 const orchestrationIframeRef = ref();
 let orchestrationAttempt = 0;
 let orchestrationProbeController = null;
+let orchestrationLoadTimer = null;
 const currentGroup = ref({ id: "", name: "全部" });
 const apiDetail = ref({});
 const groupTree = ref([{ id: "", name: "全部", count: 0, children: [] }]);
@@ -430,13 +432,25 @@ const handleEdit = async (row) => {
     ElMessage.error("服务详情加载失败，暂不能编辑");
   }
 };
-const getToken = () => localStorage.getItem("token") || "";
+const getToken = () => {
+  // Follow the platform's remember-me choice: ordinary logins use sessionStorage.
+  const rememberMe = localStorage.getItem("remember_me") === "true";
+  const stored = (rememberMe ? localStorage : sessionStorage).getItem("token");
+  if (!stored) return "";
+  try {
+    const parsed = JSON.parse(stored);
+    return typeof parsed === "string" ? parsed : "";
+  } catch {
+    return stored;
+  }
+};
 const normalizeBaseUrl = (url) => String(url || "").replace(/\/+$/, "");
 const getYuntiCandidates = () => {
-  const { protocol, hostname, port, origin } = window.location;
+  const { protocol, hostname, origin } = window.location;
   const isLocalHost = ["localhost", "127.0.0.1"].includes(hostname);
-  if (isLocalHost && port === "3000") {
-    return [6174, 6175, 6176, 6177, 6178]
+  if (isLocalHost) {
+    // Match Yunti's current Vite port, with bounded fallback for occupied ports and older setups.
+    return [3030, 3031, 3032, 3033, 3034, 6174, 6175, 6176, 6177, 6178]
       .map((candidatePort) => `${protocol}//${hostname}:${candidatePort}`)
       .concat(`${origin}/yunti`);
   }
@@ -456,16 +470,17 @@ const isYuntiDocument = (text) =>
 const isYuntiReachable = async (baseUrl, parentSignal) => {
   const controller = new AbortController();
   const abortProbe = () => controller.abort();
-  const timeout = window.setTimeout(abortProbe, 3000);
+  const timeout = window.setTimeout(abortProbe, 5000);
   parentSignal?.addEventListener("abort", abortProbe, { once: true });
   try {
     const response = await fetch(`${normalizeBaseUrl(baseUrl)}/?_health=${Date.now()}`, {
       method: "GET",
       cache: "no-store",
-      mode: isSameOrigin(baseUrl) ? "same-origin" : "no-cors",
+      mode: isSameOrigin(baseUrl) ? "same-origin" : "cors",
       signal: controller.signal,
     });
-    if (response.type === "opaque") return true;
+    // A listening port alone is not proof that it is the Yunti application.
+    if (response.type === "opaque") return false;
     if (!response.ok) return false;
     const text = await response.text().catch(() => "");
     return isYuntiDocument(text);
@@ -478,18 +493,18 @@ const isYuntiReachable = async (baseUrl, parentSignal) => {
 };
 const buildOrchestrationUrl = (baseUrl, row) => {
   const flowId = row?.flowId || row?.flow_id || row?.id || row?.tid;
-  const token = getToken();
   const params = new URLSearchParams({
     communication: "postMessage",
+    parentOrigin: window.location.origin,
     apiId: row?.id || row?.tid || "",
     flowId,
     orgId: $user?.orgId || "",
     returnTo: window.location.href,
   });
-  if (token) params.set("token", token);
   return `${normalizeBaseUrl(baseUrl)}/editor/${encodeURIComponent(flowId)}?${params.toString()}`;
 };
 const sendOrchestrationInitMessage = () => {
+  if (!orchestrationUrl.value) return;
   const row = orchestrationRow.value || {};
   orchestrationIframeRef.value?.contentWindow?.postMessage(
     {
@@ -502,7 +517,7 @@ const sendOrchestrationInitMessage = () => {
         returnTo: window.location.href,
       },
     },
-    "*"
+    new URL(orchestrationUrl.value).origin
   );
 };
 const detectYuntiUnexpectedLogin = () => {
@@ -518,11 +533,16 @@ const detectYuntiUnexpectedLogin = () => {
 };
 const onOrchestrationLoad = () => {
   if (!orchestrationVisible.value) return;
-  orchestrationLoading.value = false;
   sendOrchestrationInitMessage();
   detectYuntiUnexpectedLogin();
 };
+const onOrchestrationError = () => {
+  window.clearTimeout(orchestrationLoadTimer);
+  orchestrationLoading.value = false;
+  orchestrationError.value = "云梯画布连接中断，请确认 data-elements-yunti 服务仍在运行后重新检测。";
+};
 const closeOrchestration = () => {
+  window.clearTimeout(orchestrationLoadTimer);
   orchestrationAttempt += 1;
   orchestrationProbeController?.abort();
   orchestrationProbeController = null;
@@ -533,6 +553,7 @@ const closeOrchestration = () => {
   orchestrationRow.value = null;
 };
 const openOrchestration = async (row) => {
+  window.clearTimeout(orchestrationLoadTimer);
   const target = row || orchestrationRow.value;
   if (!target) return;
   const flowId = target.flowId || target.flow_id || target.id || target.tid;
@@ -563,19 +584,29 @@ const openOrchestration = async (row) => {
   if (!baseUrl) {
     orchestrationLoading.value = false;
     orchestrationError.value =
-      "未检测到 data-elements-yunti 画布应用。本地开发请从 6174 端口启动；端口占用时会自动顺延。生产环境请确认 /yunti 静态资源已发布。";
+      "未检测到云梯画布应用。本地开发默认地址为 http://localhost:3030，端口占用时会顺延；请检查服务启动终端中的地址。生产环境请确认 /yunti 静态资源已发布。";
     return;
   }
   orchestrationUrl.value = buildOrchestrationUrl(baseUrl, target);
+  orchestrationLoadTimer = window.setTimeout(() => {
+    if (currentAttempt !== orchestrationAttempt || !orchestrationVisible.value) return;
+    orchestrationLoading.value = false;
+    orchestrationError.value = "已连接云梯服务，但画布初始化超时。请重新检测；若仍无法打开，请检查云梯页面是否完整加载。";
+  }, 15000);
 };
 const handleOrchestrationMessage = (event) => {
   if (event.source !== orchestrationIframeRef.value?.contentWindow) return;
+  if (!orchestrationUrl.value || event.origin !== new URL(orchestrationUrl.value).origin) return;
   if (event.data?.type === "YUNTI_APP_CLOSE" || event.data?.type === "FLOWSERVE_APP_CLOSE") {
     closeOrchestration();
     return;
   }
   if (event.data?.type === "YUNTI_APP_READY" || event.data?.type === "FLOWSERVE_APP_READY") {
     sendOrchestrationInitMessage();
+  }
+  if (event.data?.type === "YUNTI_SESSION_READY") {
+    window.clearTimeout(orchestrationLoadTimer);
+    orchestrationLoading.value = false;
   }
 };
 const handleDelete = async (row) => {

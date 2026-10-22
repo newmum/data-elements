@@ -34,5 +34,6 @@ return [
     {ruleType:'LENGTH', ruleName:'长度校验', dimension:'VALIDITY', description:'文本长度必须位于配置范围'},
     {ruleType:'REGEX', ruleName:'格式校验', dimension:'VALIDITY', description:'文本必须匹配配置的正则表达式'},
     {ruleType:'TIMELINESS', ruleName:'时效性校验', dimension:'TIMELINESS', description:'时间字段处于执行提交时间的允许过去/未来区间'},
-    {ruleType:'REFERENCE', ruleName:'跨表引用校验', dimension:'CONSISTENCY', description:'同一登记数据源的目标表中存在对应单字段或联合键'}
+    {ruleType:'REFERENCE', ruleName:'跨表引用校验', dimension:'CONSISTENCY', description:'同一登记数据源的目标表中存在对应单字段或联合键'},
+    {ruleType:'SQL_TEMPLATE', ruleName:'SQL条件模板', dimension:'VALIDITY', description:'选择模板库中已保存的异常条件，绑定当前表字段与参数；保存时复制独立快照'}
 ]

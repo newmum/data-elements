@@ -1,0 +1,127 @@
+import { defineNode, IN_OUT, type NodeDef } from '../node-def';
+
+export const datasourceNodeDefs: NodeDef[] = [
+  defineNode({
+    type: 'sql-query',
+    category: 'datasource',
+    label: 'SQL 查询',
+    description: '执行 SELECT，返回结果集（支持 #{} 参数绑定与分页）',
+    icon: 'ConsoleSqlOutlined',
+    ports: IN_OUT,
+    defaultData: {
+      datasource: '',
+      sql: 'SELECT * FROM table WHERE id = #{id}',
+      paging: false,
+      single: false,
+      outputVar: 'result',
+    },
+  }),
+  defineNode({
+    type: 'sql-exec',
+    category: 'datasource',
+    label: 'SQL 执行',
+    description: 'INSERT / UPDATE / DELETE，返回影响行数或自增主键',
+    icon: 'EditOutlined',
+    ports: IN_OUT,
+    defaultData: {
+      datasource: '',
+      sql: 'UPDATE table SET col = #{val} WHERE id = #{id}',
+      returnGeneratedKey: false,
+      batchVar: '',
+      outputVar: 'affected',
+    },
+  }),
+  defineNode({
+    type: 'kafka-consume',
+    category: 'datasource',
+    label: 'Kafka 消息消费',
+    description: '拉取式消费一批消息（非常驻流），到上限或超时即返回',
+    icon: 'DownloadOutlined',
+    ports: IN_OUT,
+    defaultData: {
+      datasource: '',
+      topic: '',
+      consumerGroup: '',
+      maxRecords: 100,
+      pollTimeoutMs: 2000,
+      offsetReset: 'latest', // latest | earliest
+      valueFormat: 'json', // json | string
+      commit: false,
+      outputVar: 'messages',
+    },
+  }),
+  defineNode({
+    type: 'kafka-produce',
+    category: 'datasource',
+    label: 'Kafka 消息生产',
+    description: '向主题发送消息',
+    icon: 'UploadOutlined',
+    ports: IN_OUT,
+    defaultData: {
+      datasource: '',
+      topic: '',
+      keyExpr: '',
+      value: '${payload}',
+      waitAck: true,
+      outputVar: 'sendResult',
+    },
+  }),
+  defineNode({
+    type: 'es-query',
+    category: 'datasource',
+    label: 'Elasticsearch 查询',
+    description: '执行 Elasticsearch 查询并返回文档/聚合结果',
+    icon: 'SearchOutlined',
+    ports: IN_OUT,
+    defaultData: {
+      datasource: '',
+      index: '',
+      mode: 'dsl', // dsl | builder
+      dsl: '{\n  "query": { "match_all": {} }\n}',
+      builder: { conditions: [] },
+      size: 50,
+      from: 0,
+      sort: [],
+      aggs: '',
+      outputVar: 'esResult',
+    },
+  }),
+  defineNode({
+    type: 'http-call',
+    category: 'datasource',
+    label: 'HTTP 调用',
+    description: '调用外部 REST/HTTP 服务（集成/ESB 关键节点）',
+    icon: 'GlobalOutlined',
+    ports: IN_OUT,
+    defaultData: {
+      datasource: '',
+      method: 'GET',
+      url: 'https://api.example.com/path',
+      query: [],
+      headers: [],
+      body: '',
+      timeout: 5000,
+      retry: { times: 0, intervalMs: 500 },
+      follow: true,
+      parse: 'json', // json | text
+      extract: '', // JSONPath
+      outputVar: 'httpResult',
+    },
+  }),
+  defineNode({
+    type: 'redis',
+    category: 'datasource',
+    label: 'Redis 缓存',
+    description: 'Redis 缓存读写（get/set/del/hget…）',
+    icon: 'ThunderboltOutlined',
+    ports: IN_OUT,
+    defaultData: {
+      datasource: '',
+      op: 'get', // get | set | del | hget | hset | incr | expire
+      key: '',
+      value: '',
+      ttl: 0,
+      outputVar: 'redisResult',
+    },
+  }),
+];

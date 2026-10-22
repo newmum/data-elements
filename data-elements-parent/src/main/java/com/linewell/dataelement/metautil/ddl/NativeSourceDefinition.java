@@ -6,6 +6,10 @@ import com.alibaba.druid.sql.ast.statement.*;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import java.io.Reader;
 import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.sql.SQLTimeoutException;
 import java.util.*;
 
 /** Bounded, read-only native definition lookup for one already-authorized source object. */
@@ -20,7 +24,7 @@ final class NativeSourceDefinition {
             try(var result=statement.executeQuery()) {
                 if(!result.next())return new Facts("unavailable","未取得来源DDL，继续按系统目录识别",null);
                 String ddl;
-                try(Reader reader=result.getCharacterStream(1)) {
+                try(Reader reader=characterStream(result)) {
                     if(reader==null)ddl=result.getString(1);
                     else {
                         StringBuilder text=new StringBuilder();char[] chunk=new char[8192];int size;
@@ -42,8 +46,29 @@ final class NativeSourceDefinition {
                 }
                 return new Facts("read_unparsed","已取得来源DDL，未识别为普通表定义，继续按系统目录识别",null);
             }
+        } catch(SQLTimeoutException timeout) {
+            return new Facts("timeout","来源原生DDL读取超时；分区和约束继续按系统目录识别",null);
+        } catch(SQLException failure) {
+            int code=Math.abs(failure.getErrorCode());
+            if(code==1031||code==31603)
+                return new Facts("permission_denied","原生DDL接口未返回该对象定义（数据库错误码"+code+"）；表查询权限与DDL提取权限不同，分区和约束继续按系统目录识别",null);
+            if(failure instanceof SQLFeatureNotSupportedException||"0A000".equals(failure.getSQLState())
+                    ||Set.of(904,6550,6553,6576).contains(code))
+                return new Facts("unsupported","当前来源未提供兼容的DBMS_METADATA接口；分区和约束按系统目录识别",null);
+            return new Facts("unavailable","原生DDL接口调用失败（数据库错误码"+code+"）；分区和约束继续按系统目录识别",null);
         } catch(Exception unavailable) {
-            return new Facts("unavailable","来源原生DDL读取未完成，请检查版本或对象权限；继续按系统目录识别",null);
+            return new Facts("unavailable","原生DDL内容读取失败；分区和约束继续按系统目录识别",null);
+        }
+    }
+
+    private static Reader characterStream(ResultSet result) throws SQLException {
+        // Oracle-compatible drivers may only expose text/CLOB through getString.
+        // Reuse the same result; this fallback must not issue another query.
+        try { return result.getCharacterStream(1); }
+        catch(SQLFeatureNotSupportedException | UnsupportedOperationException unsupported) { return null; }
+        catch(SQLException failure) {
+            if("0A000".equals(failure.getSQLState())||Math.abs(failure.getErrorCode())==17023)return null;
+            throw failure;
         }
     }
 

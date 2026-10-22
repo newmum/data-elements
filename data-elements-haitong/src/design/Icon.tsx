@@ -41,6 +41,7 @@ export const paths={
  warning:'m12 3 10 18H2ZM12 9v5M12 17h.01',
  clock:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 7v5l4 2',
  download:'M12 3v12M7 10l5 5 5-5M4 15v6h16v-6',
+ upload:'M12 16V3M7 8l5-5 5 5M4 15v6h16v-6',
  panel:'M3 3h18v18H3zM9 3v18',
  layers:'m12 2 10 6-10 6L2 8ZM2 13l10 6 10-6M2 18l10 6 10-6',
  wave:'M2 8q5-6 10 0t10 0M2 15q5-6 10 0t10 0',

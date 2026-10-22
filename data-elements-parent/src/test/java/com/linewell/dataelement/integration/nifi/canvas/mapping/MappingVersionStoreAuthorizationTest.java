@@ -102,6 +102,47 @@ class MappingVersionStoreAuthorizationTest {
         }
     }
 
+    @Test void standaloneSourcesAndMappingsNeedOnlyTenantOwnershipForTwentyAndHundredNodes() {
+        for (int count : List.of(20, 100)) {
+            Fixture fixture = new Fixture();
+            List<Pipeline.Node> nodes = new ArrayList<>();
+            for (int i = 0; i < count; i++) nodes.add(new Pipeline.Node("source" + i, "source.oracle", "manual", "source", 0, 0,
+                    Map.of("host", "fixture.invalid", "table", "ORDERS", "incrementalColumn", "UPDATED_AT")));
+            Pipeline expected = fixture.pipeline(nodes);
+            try (var ignored = TenantContext.use("alpha")) {
+                fixture.jdbc.reads = 0;
+                assertSame(expected, fixture.store.requirePipeline("p"));
+                assertEquals(1, fixture.jdbc.reads, "one task association read, no registration or per-node reads");
+                verifyNoInteractions(fixture.scopes);
+            }
+        }
+    }
+
+    @Test void legacyStandaloneTaskConnectionAndPhysicalTableAreNotRegistrationIds() {
+        Fixture fixture = new Fixture();
+        Pipeline expected = fixture.pipeline(List.of(new Pipeline.Node("source", "source.oracle", "manual", "source", 0, 0,
+                Map.of("host", "fixture.invalid", "table", "ORDERS")),
+                new Pipeline.Node("sink", "sink.jdbc", "manual", "sink", 500, 0,
+                        Map.of("jdbcUrl", "jdbc:mysql://fixture.invalid/test", "table", "orders_copy"))));
+        fixture.jdbc.update("INSERT INTO data_access_agg_task_t VALUES('p','alpha',0,NULL,'jdbc:mysql://fixture.invalid/test',NULL,'orders_copy')");
+        try (var ignored = TenantContext.use("alpha")) {
+            assertSame(expected, fixture.store.requirePipeline("p"));
+            verifyNoInteractions(fixture.scopes);
+            // An unknown ID, unlike a matching inline connection, must not be reclassified as standalone.
+            fixture.jdbc.update("UPDATE data_access_agg_task_t SET target_db_id='missing-resource'");
+            forbidden(() -> fixture.store.requirePipeline("p"));
+        }
+    }
+
+    @Test void orphanRegisteredTableCannotBeTreatedAsAnUnregisteredCanvas() {
+        Fixture fixture = new Fixture();
+        fixture.table("orphan", "alpha", null);
+        fixture.pipeline(List.of(node("source", Map.of("registeredTableId", "orphan"))));
+        try (var ignored = TenantContext.use("alpha")) {
+            forbidden(() -> fixture.store.requirePipeline("p"));
+        }
+    }
+
     @Test void ordinaryOwnerAndOrganizationScopesApplyToEveryActualDatasource() {
         Fixture fixture = new Fixture();
         fixture.source("first", "alpha", "alice", "org-a");
@@ -187,9 +228,9 @@ class MappingVersionStoreAuthorizationTest {
         }
     }
 
-    @Test void unconfiguredAuthorizationAndUnresolvableOrOversizedScopesFailClosed() {
+    @Test void registeredResourcesStillRequireAuthorizationAndBoundedScopes() {
         Fixture fixture = new Fixture();
-        fixture.pipeline(List.of());
+        fixture.pipeline(List.of(node("source", Map.of("registeredDatasourceId", "first"))));
         try (var ignored = TenantContext.use("alpha")) {
             MappingVersionStore compatibility = new MappingVersionStore(fixture.jdbc, fixture.repository);
             assertEquals("AUTHORIZATION_UNAVAILABLE", assertThrows(MappingException.class,

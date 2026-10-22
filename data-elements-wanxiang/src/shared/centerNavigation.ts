@@ -12,7 +12,7 @@ export const centers=[
  {key:'service',name:'数据服务中心',description:'服务发布与运行交付',url:link(qizhi,'/services/overview')},
  {key:'knowledge',name:'知识图谱中心',description:'关系探索与知识推理',url:link(qizhi,'/overview')},
  {key:'search',name:'智能搜索中心',description:'信息检索与知识发现',url:new URL(base(import.meta.env.VITE_SEARCH_APP_URL,'http://localhost:3300/','/search/'),location.href).href},
- {key:'visualization',name:'数据可视化中心',description:'云图大屏与 BI 分析',url:link(base(import.meta.env.VITE_REPORT_APP_URL,'http://localhost:3004/','/report/'),'/')},
+ {key:'visualization',name:'数据可视化中心',description:'云图大屏与 BI 分析',url:link(qizhi,'/visualization/screens')},
  {key:'ops',name:'数据运行智能监控平台',description:'平台运行、指标与告警',url:link(qizhi,'/ops/overview')},
  {key:'ai',name:'人工智能支撑平台',description:'AI 编排与智能交互',url:link(qizhi,'/ai/overview')},
  {key:'identity',name:'统一身份管理平台',description:'统一账户、认证与访问管理',url:link(base(import.meta.env.VITE_IDAAS_CENTER_URL,'http://localhost:3005/','/idaas/'),'/console/workforce/overview')},

@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 class DslCompilerJdbcWriterTest {
 
     @Test
-    void batchesRecordsWithTheNativeCanvasMergeDefaultsBeforeJdbcWrite() throws Exception {
+    void jdbcSinkAcceptsExistingRecordBatchesWithoutAnotherMergeProcessor() throws Exception {
         NifiClient nifi = mockNifi();
 
         compile(nifi, Map.of("jdbcUrl", "jdbc:mysql://db:3306/demo", "username", "writer",
@@ -32,27 +32,20 @@ class DslCompilerJdbcWriterTest {
         ArgumentCaptor<String> names = ArgumentCaptor.forClass(String.class);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
-        verify(nifi, times(2)).createProcessor(eq("pg"), types.capture(), names.capture(),
+        verify(nifi, times(1)).createProcessor(eq("pg"), types.capture(), names.capture(),
                 anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
 
         org.assertj.core.api.Assertions.assertThat(types.getAllValues()).containsExactly(
-                "org.apache.nifi.processors.standard.MergeRecord",
                 "org.apache.nifi.processors.standard.PutDatabaseRecord");
-        org.assertj.core.api.Assertions.assertThat(names.getAllValues()).containsExactly("目标表/merge", "目标表/put");
+        org.assertj.core.api.Assertions.assertThat(names.getAllValues()).containsExactly("目标表/put");
         org.assertj.core.api.Assertions.assertThat(properties.getAllValues().getFirst())
-                .containsEntry("Merge Strategy", "Bin-Packing Algorithm")
-                .containsEntry("Correlation Attribute Name", "filename")
-                .containsEntry("Attribute Strategy", "Keep Only Common Attributes")
-                .containsEntry("Minimum Number of Records", "1")
-                .containsEntry("Maximum Number of Records", "10000")
-                .containsEntry("Minimum Bin Size", "0 B")
-                .containsEntry("Maximum Number of Bins", "10");
-        verify(nifi).createConnection(eq("pg"), eq("merge"), eq("PROCESSOR"), eq("put"),
-                eq("PROCESSOR"), eq(List.of("merged")));
+                .containsEntry("Record Reader", "global-json-reader");
+        verify(nifi, never()).createConnection(anyString(), anyString(), anyString(), anyString(),
+                anyString(), eq(List.of("merged")));
     }
 
     @Test
-    void batchesRecordsBeforeTemporalColumnsAreNormalizedAndWritten() throws Exception {
+    void temporalNormalizationConnectsDirectlyToTheWriter() throws Exception {
         NifiClient nifi = mock(NifiClient.class);
         AtomicInteger sequence = new AtomicInteger();
         when(nifi.getRootProcessGroupId()).thenReturn("root");
@@ -86,14 +79,17 @@ class DslCompilerJdbcWriterTest {
                         List.of(new Pipeline.Edge("edge", "source", "sink", null))),
                 null, null, null, null, null, null, null);
 
-        new DslCompiler(nifi, registry, mock(FieldMappingService.class), mock(HiveModule.class)).compile(pipeline);
+        var result = new DslCompiler(nifi, registry, mock(FieldMappingService.class), mock(HiveModule.class)).compile(pipeline);
 
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.QueryRecord"),
                 eq("目标表/normalize"), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
-        verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.MergeRecord"),
-                eq("目标表/merge"), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
+        verify(nifi, never()).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.MergeRecord"),
+                anyString(), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.PutDatabaseRecord"),
                 eq("目标表/put"), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
+        var sink = result.nodes().get("sink");
+        verify(nifi).createConnection("pg", sink.processorIds.get("normalize"), "PROCESSOR",
+                sink.processorIds.get("put"), "PROCESSOR", List.of("success"));
     }
 
     @Test
@@ -214,7 +210,7 @@ class DslCompilerJdbcWriterTest {
         when(nifi.createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble())).thenReturn(entity("pg"));
         when(nifi.createControllerService(anyString(), anyString(), anyString(), anyMap())).thenReturn(entity("cs"));
         when(nifi.createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
-                anyMap(), nullable(String.class), nullable(String.class))).thenReturn(entity("merge"), entity("put"));
+                anyMap(), nullable(String.class), nullable(String.class))).thenReturn(entity("put"));
         return nifi;
     }
 

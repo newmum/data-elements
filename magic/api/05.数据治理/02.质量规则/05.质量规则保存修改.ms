@@ -28,6 +28,7 @@
 import cn.hutool.core.util.IdUtil
 import log
 import tenantRuntime
+import cn.dev33.satoken.stp.StpUtil
 
 /**
  * 保存或更新数据质量校验规则
@@ -47,8 +48,8 @@ var ruleDescription = body?.ruleDescription
 var scopeOfApplication = body?.scopeOfApplication
 var configParameters = body?.configParameters
 var checkLogic = body?.checkLogic
-var createdBy = body?.createdBy
-var updatedBy = body?.updatedBy
+var createdBy = StpUtil.getLoginIdAsString()
+var updatedBy = createdBy
 var tenantId = tenantRuntime.id()
 
 var isUpdate = tid != null && tid != ''
@@ -58,9 +59,12 @@ var now = new Date()
 
 // ========== 保存数据 data_gov_quality_rule ==========
 if (isUpdate) {
+    var current=db.table('data_gov_quality_rule').columns('tid','scope_of_application').where().eq('tid',tid).eq('tenant_id',tenantId).eq('is_del',0).selectOne()
+    if(current==null) {exit 403,'规则不存在或不在当前租户范围内'}
+    if(current.scopeOfApplication=='QUALITY_SQL_TEMPLATE_V1') {exit 409,'请使用SQL模板入口维护此模板'}
     // 更新数据
     db.table('data_gov_quality_rule')
-        .primary('tid')
+        .where().eq('tid',tid).eq('tenant_id',tenantId).eq('is_del',0)
         .update({
             tid: tid,
             rule_name: ruleName,

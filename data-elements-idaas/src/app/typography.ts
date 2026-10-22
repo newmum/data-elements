@@ -1,6 +1,6 @@
 /** Semantic type scale. Density controls spacing, never the semantic role of text.
  * Source of truth for Ant Design tokens AND styles/typography-tokens.css.
- * After editing run npm run tokens:generate. See /design.md.
+ * After editing run npm run tokens:generate. See docs/data-elements-idaas.md（仓库根目录）.
  */
 export const typeScale = {
   caption: { size: 12, lineHeight: 18, weight: 400 },

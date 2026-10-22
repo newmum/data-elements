@@ -18,7 +18,7 @@ public final class DateTableFetchPolicy {
     public static String timestamp(Map<String, Object> config) {
         String column = SyncPolicy.text(config, "incrementalColumn");
         if (!column.matches("[A-Za-z_][A-Za-z0-9_$]*")) {
-            throw new IllegalStateException("时间分片来源缺少有效的登记时间戳字段，请在数据源登记中选择时间戳并更新来源配置；不能用主键代替时间戳");
+            throw new IllegalStateException("时间分片来源缺少有效的时间戳字段，请在来源组件填写时间戳列；登记集成流程可从登记配置带入，不能用主键代替时间戳");
         }
         return column;
     }
@@ -26,7 +26,7 @@ public final class DateTableFetchPolicy {
     public static void apply(Map<String, Object> config, Map<String, String> properties) {
         String timestamp = timestamp(config);
         if (!SyncPolicy.text(config, "tieBreakerColumn").isBlank()) {
-            throw new IllegalStateException("GenerateDateTableFetch 按登记时间戳分片，不支持次级水位列，请清空次级增量字段后发布");
+            throw new IllegalStateException("GenerateDateTableFetch 按来源配置的时间戳分片，不支持次级水位列，请清空次级增量字段后发布");
         }
         properties.put(PARTITION_COLUMN, timestamp);
         properties.put(PARTITION_SIZE, "10000");

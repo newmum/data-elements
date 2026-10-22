@@ -1,0 +1,48 @@
+# 可用 VS Code REST Client / JetBrains HTTP Client；填入自己的本地密钥。
+@base = http://127.0.0.1:18083
+@clientKey = REPLACE_WITH_CLIENT_KEY
+@adminKey = REPLACE_WITH_ADMIN_KEY
+@messageId = REPLACE_WITH_MESSAGE_ID
+@deliveryId = REPLACE_WITH_DELIVERY_ID
+
+### 受理 JSON；相同幂等键必须保持原正文
+POST {{base}}/api/v1/ingest/demo
+X-Api-Key: {{clientKey}}
+Idempotency-Key: example-000001
+Content-Type: application/json
+
+{"eventType":"device.status","data":{"deviceCode":"D001","online":true}}
+
+### 查询
+GET {{base}}/api/v1/messages/{{messageId}}
+X-Api-Key: {{clientKey}}
+
+### 内置同步校验
+POST {{base}}/api/v1/actions/inspect
+X-Api-Key: {{clientKey}}
+Content-Type: application/json
+
+{"deviceCode":"D001"}
+
+### 任务概览
+GET {{base}}/internal/v1/overview
+X-Admin-Key: {{adminKey}}
+
+### 实际有效配置摘要（不会输出密码）
+GET {{base}}/internal/v1/config-summary
+X-Admin-Key: {{adminKey}}
+
+### 失败任务
+GET {{base}}/internal/v1/deliveries?status=FAILED&limit=50&offset=0
+X-Admin-Key: {{adminKey}}
+
+### 仅修复原因并确认安全后调用，成功/UNKNOWN任务不允许普通重试
+POST {{base}}/internal/v1/deliveries/{{deliveryId}}/retry
+X-Admin-Key: {{adminKey}}
+Content-Type: application/json
+
+{"reason":"已修复目标配置，批准重试这条失败任务"}
+
+### FTP只读连通检查；必须已启用并配置FTP
+GET {{base}}/internal/v1/connectors/ftp/health
+X-Admin-Key: {{adminKey}}

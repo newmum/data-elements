@@ -127,10 +127,11 @@
           <el-tabs v-model="activeDdlKey" class="ddl-target-tabs">
             <el-tab-pane v-for="plan in ddlPlans" :key="plan.key" :name="plan.key" :label="plan.dbName" />
           </el-tabs>
-          <el-checkbox v-if="activePartitionSupported" :model-value="activePartition.enabled === true"
-            :disabled="!editable || ddlGenerating || isSaveing" @change="togglePartition">创建分区</el-checkbox>
+          <el-checkbox v-if="hasPartitionSupport" :model-value="partitionEnabled"
+            :disabled="!editable || ddlGenerating || isSaveing" @change="togglePartition">创建分区（所有支持的目标库）</el-checkbox>
         </div>
         <el-alert v-if="sourceDefinitionMessage" :title="sourceDefinitionMessage" type="info" :closable="false" show-icon />
+        <span v-if="partitionEnabled && !activePartitionSupported">当前目标库使用普通表，其他支持分区的目标库继续创建分区。</span>
         <div v-if="activePartitionSupported && activePartition.enabled" class="partition-settings">
           <span>{{ partitionProbeMessage }}</span>
           <div class="partition-settings-fields">
@@ -163,7 +164,7 @@
               v-model="activePartition.timezone" placeholder="分区时区，默认Asia/Shanghai" @change="updatePartitionDdl" />
             <el-input v-if="activePartition.strategy === 'LIST'" v-model="activeListPartitionText"
               class="partition-values-input" :placeholder="activePartitionChoice === 'REGION' ? '区域编码，用逗号分隔，如350100,350200' : '枚举值，用逗号分隔，如0,1,2'"
-              @input="invalidateDdl" @change="updatePartitionDdl" @keyup.enter="updatePartitionDdl" />
+              @change="updatePartitionDdl" @keyup.enter="updatePartitionDdl" />
           </div>
           <el-alert v-if="partitionError" :title="partitionError" :type="partitionErrorType" :closable="false" show-icon />
         </div>
@@ -316,11 +317,16 @@ const ddlPlans = ref<any[]>([]);
 const ddlSqlByTarget = ref<Record<string, string>>({});
 const ddlWarningsByTarget = ref<Record<string, any[]>>({});
 const ddlTableItemsByTarget = ref<Record<string, any[]>>({});
+const ddlGeneratedSqlByTarget = ref<Record<string, string>>({});
+const ddlInputFingerprintsByTarget = ref<Record<string, string>>({});
+const ddlPartitionInputsByTarget = ref<Record<string, any>>({});
 const activeDdlWarnings = computed(() => ddlWarningsByTarget.value[activeDdlKey.value] || []);
 const activeDdlKey = ref("");
 const partitionPlans = ref<Record<string, any>>({});
 const ddlPartitionPlans = ref<Record<string, any>>({});
 const partitionSupport = ref<Record<string, boolean>>({});
+const partitionEnabled = ref(false);
+const hasPartitionSupport = computed(() => Object.values(partitionSupport.value).some(Boolean));
 const partitionProbeMessage = ref("");
 const sourcePartitionDetected = ref(false);
 const sourceDefinitionMessage = ref("");
@@ -332,6 +338,13 @@ let partitionProbeIdentity = "";
 const activePartitionSupported = computed(() => partitionSupport.value[activeDdlKey.value] === true);
 const activePartition = computed(() => partitionPlans.value[activeDdlKey.value] || {});
 const defaultRegionCodes = ['350100', '350200', '350300', '350400', '350500', '350600', '350700', '350800', '350900', '351000'];
+const calendarPartitionDefaults = (strategy: string, now = new Date()) => {
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  return strategy === 'YEAR'
+    ? { startYear: String(year), years: Math.max(2035, year + 4) - year + 1 }
+    : { startMonth: `${year}-${String(month).padStart(2, '0')}`, months: (Math.max(2035, year + 1) - year) * 12 + 13 - month };
+};
 const activeListPartitionText = computed({
   get: () => activePartition.value.enumText ?? (activePartition.value.partitions || []).flatMap((row: any) => row.values || []).join(','),
   set: (value: string) => { activePartition.value.enumText = value; },
@@ -352,8 +365,7 @@ const activePartitionChoice = computed({
     delete plan.displayStrategy;
     if (value === 'REGION') Object.assign(plan, { displayStrategy: 'REGION', enumText: plan.regionText ?? defaultRegionCodes.join(',') });
     if (value === 'LIST') plan.enumText = plan.enumerationText ?? '';
-    if (value === 'YEAR') Object.assign(plan, { startYear: String(new Date().getFullYear()), years: 5 });
-    if (value === 'MONTH') Object.assign(plan, { startMonth: new Date().toISOString().slice(0, 7), months: 24 });
+    if (['YEAR', 'MONTH'].includes(value)) Object.assign(plan, calendarPartitionDefaults(value));
   },
 });
 const repartitionSource = async () => {
@@ -367,6 +379,9 @@ const invalidateDdl = () => {
   ddlPartitionPlans.value = {};
   ddlWarningsByTarget.value = {};
   ddlTableItemsByTarget.value = {};
+  ddlGeneratedSqlByTarget.value = {};
+  ddlInputFingerprintsByTarget.value = {};
+  ddlPartitionInputsByTarget.value = {};
   ddlSourceFingerprint.value = "";
   ddlWasEdited.value = false;
 };
@@ -432,17 +447,25 @@ const probePartitions = async (targets: any[]) => {
   sourcePartitionDetected.value = result.source?.status === "detected";
   for (const target of targets) {
     if (partitionPlans.value[target.key]) continue;
+    const existing = Object.values(partitionPlans.value).find((plan: any) => plan.enabled);
     partitionPlans.value[target.key] = partitionSupport.value[target.key] && result.source?.status === "detected"
-      ? { ...JSON.parse(JSON.stringify(result.source.plan)), enabled: false } : { enabled: false };
+      ? { ...JSON.parse(JSON.stringify(result.source.plan)), enabled: partitionEnabled.value }
+      : { ...JSON.parse(JSON.stringify(existing || {})), enabled: partitionEnabled.value && partitionSupport.value[target.key] === true };
   }
   partitionProbeIdentity = identity;
 };
-const updatePartitionDdl = async () => {
+const updatePartitionDdl = async (targetKeys?: any) => {
   partitionError.value = "";
   partitionErrorType.value = "error";
-  try { await regenerateDdl(await currentDdlInput()); }
+  const keys = Array.isArray(targetKeys) ? targetKeys : [activeDdlKey.value];
+  try { await regenerateDdl(await currentDdlInput(), keys); }
   catch (error: any) {
-    invalidateDdl();
+    if (error === 'cancel' || error === 'close') {
+      for (const key of keys) if (ddlPartitionInputsByTarget.value[key]) {
+        partitionPlans.value[key] = JSON.parse(JSON.stringify(ddlPartitionInputsByTarget.value[key]));
+      }
+      return;
+    }
     if (error?.partitionTargetKey) activeDdlKey.value = error.partitionTargetKey;
     partitionErrorType.value = error?.partitionValidation ? "warning" : "error";
     partitionError.value = String(error?.message || "无法生成建表语句，请检查分区字段和分区值后重试。");
@@ -457,19 +480,25 @@ const changePartitionStrategy = async () => {
   await updatePartitionDdl();
 };
 const togglePartition = async (enabled: any) => {
-  const key = activeDdlKey.value;
-  if (ddlWasEdited.value) {
-    try { await ElMessageBox.confirm("更改分区配置会重新生成建表语句并覆盖手工 SQL，是否继续？", "更新分区", { type: "warning" }); }
-    catch { return; }
+  if (partitionEnabled.value === !!enabled) return;
+  const previous = JSON.parse(JSON.stringify(partitionPlans.value));
+  const keys = Object.keys(partitionSupport.value).filter(key => partitionSupport.value[key]);
+  const fields = tableRef.value?.getData() || templateTableItems.value;
+  const temporal = fields.find((field: any) => /date|time/i.test(String(field.columnType || field.dataType))) || fields[0];
+  for (const key of keys) {
+    const plan = partitionPlans.value[key] || {};
+    if (enabled && !plan.field) Object.assign(plan, { field: temporal?.columnName || "", strategy: "MONTH", ...calendarPartitionDefaults('MONTH') });
+    partitionPlans.value[key] = { ...plan, enabled: !!enabled };
   }
-  const plan = partitionPlans.value[key] || {};
-  if (enabled && !plan.field) {
-    const fields = tableRef.value?.getData() || templateTableItems.value;
-    const temporal = fields.find((field: any) => /date|time/i.test(String(field.columnType || field.dataType))) || fields[0];
-    Object.assign(plan, { field: temporal?.columnName || "", strategy: "MONTH", startMonth: new Date().toISOString().slice(0, 7), months: 24 });
+  const before = partitionEnabled.value;
+  partitionEnabled.value = !!enabled;
+  try { await regenerateDdl(await currentDdlInput(), keys); }
+  catch (error: any) {
+    partitionPlans.value = previous;
+    partitionEnabled.value = before;
+    if (error === 'cancel' || error === 'close') return;
+    partitionError.value = String(error?.message || "无法更新分区配置，请重试。");
   }
-  partitionPlans.value[key] = { ...plan, enabled: !!enabled };
-  await updatePartitionDdl();
 };
 const ddlSourceFingerprint = ref("");
 const ddlWasEdited = ref(false);
@@ -1294,6 +1323,10 @@ const init = async () => {
   partitionPlans.value = {};
   ddlPartitionPlans.value = {};
   partitionSupport.value = {};
+  partitionEnabled.value = false;
+  ddlGeneratedSqlByTarget.value = {};
+  ddlInputFingerprintsByTarget.value = {};
+  ddlPartitionInputsByTarget.value = {};
   partitionProbeIdentity = "";
   sourcePartitionDetected.value = false;
   sourceConstraints.value = [];
@@ -1473,7 +1506,20 @@ const currentDdlInput = async () => {
   return { targets, tableItems, fingerprint };
 };
 
-const regenerateDdl = async (input: any) => {
+const ddlTargetFingerprint = (input: any, target: any) => JSON.stringify([
+  target.propList, input.tableItems, partitionPlans.value[target.key] || { enabled: false }, sourceConstraints.value,
+]);
+const regenerateDdl = async (input: any, targetKeys?: string[]) => {
+  // Only changed target inputs need regeneration. Tab switching and changes in
+  // another target must never replace an independently edited SQL draft.
+  const changed = input.targets.filter((target: any) => (!targetKeys || targetKeys.includes(target.key))
+    && ddlInputFingerprintsByTarget.value[target.key] !== ddlTargetFingerprint(input, target));
+  const edited = changed.filter((target: any) => ddlSqlByTarget.value[target.key]
+    && ddlSqlByTarget.value[target.key] !== ddlGeneratedSqlByTarget.value[target.key]);
+  if (targetKeys && edited.length) {
+    await ElMessageBox.confirm(`本次分区调整会重新生成“${edited.map((target: any) => target.dbName).join('、')}”的手工 SQL。是否继续？`,
+      "更新分区", { type: "warning", confirmButtonText: "重新生成", cancelButtonText: "取消" });
+  }
   const generationVersion = ++ddlGenerationVersion;
   ddlGenerating.value = true;
   ddlPlans.value = input.targets;
@@ -1483,21 +1529,24 @@ const regenerateDdl = async (input: any) => {
     const warnings: Record<string, any[]> = {};
     const convertedItems: Record<string, any[]> = {};
     const normalizedPlans: Record<string, any> = {};
-    const targets = input.targets.map((target: any) => {
+    const inputFingerprints = Object.fromEntries(changed.map((target: any) => [target.key, ddlTargetFingerprint(input, target)]));
+    const partitionInputs = Object.fromEntries(changed.map((target: any) => [target.key,
+      JSON.parse(JSON.stringify(partitionPlans.value[target.key] || { enabled: false }))]));
+    const targets = changed.map((target: any) => {
       return { propList: target.propList, tableItems: targetTableItems(input.tableItems, target.propList.dbType), partitionPlan: partitionPayload(target.key), sourceConstraints: sourceConstraints.value };
     });
-    const response = await $common.post("/dst/database/metadata/getCreateTableDDL", {
+    const response = targets.length ? await $common.post("/dst/database/metadata/getCreateTableDDL", {
       batchGenerate: true,
       canvas: true,
       targets,
-    }, { _hiddenErrorMsg: true });
+    }, { _hiddenErrorMsg: true }) : { data: { batchGenerate: true, results: [] } };
     const generated = response?.data || response || {};
     if (generationVersion !== ddlGenerationVersion) return;
     if (generated.batchGenerate !== true || !Array.isArray(generated.results)
-      || generated.results.length !== input.targets.length) {
+      || generated.results.length !== changed.length) {
       throw new Error("目标表批量建表语句生成结果不完整，请重试");
     }
-    for (const [index, target] of input.targets.entries()) {
+    for (const [index, target] of changed.entries()) {
       const result = generated.results[index];
       normalizedPlans[target.key] = result.partitionPlan || { enabled: false };
       if (String(result?.dbId) !== String(target.dbId)) {
@@ -1518,16 +1567,25 @@ const regenerateDdl = async (input: any) => {
       })) : original;
     }
     ddlPlans.value = input.targets;
-    ddlPartitionPlans.value = normalizedPlans;
-    ddlSqlByTarget.value = statements;
-    ddlWarningsByTarget.value = warnings;
-    ddlTableItemsByTarget.value = convertedItems;
+    const retain = (previous: Record<string, any>, next: Record<string, any>) => Object.fromEntries(
+      input.targets.filter((target: any) => target.key in next || target.key in previous)
+        .map((target: any) => [target.key, target.key in next ? next[target.key] : previous[target.key]]),
+    );
+    ddlPartitionPlans.value = retain(ddlPartitionPlans.value, normalizedPlans);
+    ddlSqlByTarget.value = retain(ddlSqlByTarget.value, statements);
+    ddlWarningsByTarget.value = retain(ddlWarningsByTarget.value, warnings);
+    ddlTableItemsByTarget.value = retain(ddlTableItemsByTarget.value, convertedItems);
+    ddlGeneratedSqlByTarget.value = retain(ddlGeneratedSqlByTarget.value, statements);
+    ddlInputFingerprintsByTarget.value = retain(ddlInputFingerprintsByTarget.value, inputFingerprints);
+    ddlPartitionInputsByTarget.value = retain(ddlPartitionInputsByTarget.value, partitionInputs);
     if (!input.targets.some((target: any) => target.key === activeDdlKey.value)) activeDdlKey.value = input.targets[0]?.key || "";
-    ddlSourceFingerprint.value = input.fingerprint;
-    ddlWasEdited.value = false;
+    ddlSourceFingerprint.value = input.targets.every((target: any) =>
+      ddlInputFingerprintsByTarget.value[target.key] === ddlTargetFingerprint(input, target)) ? input.fingerprint : "";
+    ddlWasEdited.value = input.targets.some((target: any) =>
+      ddlSqlByTarget.value[target.key] !== ddlGeneratedSqlByTarget.value[target.key]);
   } catch (error: any) {
     if (generationVersion !== ddlGenerationVersion) return;
-    invalidateDdl();
+    ddlSourceFingerprint.value = "";
     if (error && typeof error === "object") error.ddlGeneration = true;
     throw error;
   } finally {
@@ -1558,7 +1616,7 @@ const showDdlView = async () => {
     if (error === "cancel" || error === "close") return;
     if (partitionPlans.value[activeDdlKey.value]?.enabled) {
       ddlMode.value = true;
-      invalidateDdl();
+      ddlSourceFingerprint.value = "";
       partitionErrorType.value = error?.partitionValidation ? "warning" : "error";
       partitionError.value = String(error?.message || "分区配置无效，请调整字段或取消创建分区");
     }
@@ -1824,7 +1882,7 @@ const handleSave = async () => {
   } catch (error: any) {
     const message = String(error?.message || error || "");
     if (error?.partitionValidation || error?.ddlGeneration) {
-      invalidateDdl();
+      ddlSourceFingerprint.value = "";
       if (error?.partitionTargetKey) activeDdlKey.value = error.partitionTargetKey;
       ddlMode.value = true;
       partitionErrorType.value = error?.partitionValidation ? "warning" : "error";

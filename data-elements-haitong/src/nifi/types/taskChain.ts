@@ -18,6 +18,7 @@ export interface TaskChainItem {
 }
 
 export interface TaskChain {
+  standalone?: boolean;
   readOnly?: boolean;
   relationshipUnavailable?: boolean;
   warnings?: string[];

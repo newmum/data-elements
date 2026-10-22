@@ -47,6 +47,11 @@ class DslCompilerHiveTemporalWriterTest {
         try (var stream = getClass().getResourceAsStream("/manifests/sinks/hive-sink.json")) {
             when(registry.get("sink.hive")).thenReturn(json.readValue(stream, ComponentManifest.class));
         }
+        try (var stream = getClass().getResourceAsStream("/manifests/sinks/jdbc-sink.json")) {
+            when(registry.get("sink.jdbc")).thenReturn(json.readValue(stream, ComponentManifest.class));
+        }
+        when(nifi.findProcessorType("LinewellPutDatabaseRecord")).thenReturn(java.util.Optional.of(
+                "com.linewell.microservice.processors.database.LinewellPutDatabaseRecord"));
         HiveModule hive = mock(HiveModule.class);
         when(hive.resolveRuntimeProfile("default")).thenReturn(Map.of("dbType", "HIVE",
                 "jdbcUrl", "jdbc:hive2://hive.example:10000/default", "hiveConnectionMode", "JDBC",
@@ -86,6 +91,25 @@ class DslCompilerHiveTemporalWriterTest {
         compiler.setMappingVersions(versions);
     }
 
+    @ParameterizedTest @ValueSource(strings={"MySQL","Oracle","OCEANBASE_ORACLE"})
+    void governanceOutputConnectsDirectlyToJdbcWriterAndKeepsErrorRoutes(String database) {
+        var governance=new Pipeline.Node("mapping","transform.field-mapping","字段治理","transform",300,0,mapping().config());
+        var sink=new Pipeline.Node("sink","sink.jdbc","目标表","sink",600,0,Map.of(
+                "dbType",database,"jdbcUrl",database.equals("MySQL")?"jdbc:mysql://db/ods":"jdbc:oracle:thin:@//db:1521/service",
+                "table","TARGET_TABLE","targetColumns",List.of(
+                        Map.of("columnName","ID","dataType","BIGINT","primaryKey",true),
+                        Map.of("columnName","EVENT_TIME","dataType","TIMESTAMP"))));
+        var result=compiler.compile(hiveTargetFlow(List.of(source("source","mysql",Map.of()),governance,sink),
+                List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("ms","mapping","sink","default"))));
+        Created mapped=namedProcessor("字段治理"),put=namedProcessor("目标表/put");
+        assertThat(processors).noneMatch(p->p.type().endsWith(".MergeRecord")||p.name().endsWith("/normalize"));
+        assertThat(put.type()).endsWith(database.equals("MySQL")?".PutDatabaseRecord":".LinewellPutDatabaseRecord");
+        assertThat(result.nodes().get("sink").inletProcessorId).isEqualTo(put.id());
+        verify(nifi).createConnection("pg",mapped.id(),"PROCESSOR",put.id(),"PROCESSOR",List.of("success"));
+        assertErrorRoutes(mapped);
+        verify(nifi,times(1)).listControllerServices("root");
+    }
+
     @ParameterizedTest @ValueSource(strings={"hive","mysql","oracle","oceanbase"})
     void allMappingInputsAndOutputsUsePublicCodecs(String database) {
         Pipeline.Node mapping=mapping();
@@ -94,7 +118,7 @@ class DslCompilerHiveTemporalWriterTest {
         assertThat(processor.properties()).containsEntry("record-writer",database.equals("hive")?"global-hive-json-writer":"global-json-writer")
                 .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader");
         assertThat(processor.type()).isEqualTo("com.linewell.dataelement.nifi.HaitongTransformRecord");
-        assertThat(processor.properties()).containsEntry("context-node-id","temporal-test:mapping");
+        assertEmbeddedMappingMetadata(processor);
         verify(nifi,never()).waitForControllerServiceEnabled(eq("true"),anyLong());
         assertThat(namedProcessor("source/execute").properties()).containsEntry("Use Avro Logical Types","true");
         assertNoTaskJsonServices();
@@ -125,7 +149,7 @@ class DslCompilerHiveTemporalWriterTest {
         compiler.createMappingReplacement(flow(List.of(source("source",database,Map.of()),mapping())),mapping(),"existing-group","reader","typed-reader","existing-writer",prepared());
         assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer",database.equals("hive")?"global-hive-json-writer":"global-json-writer")
                 .containsEntry("record-reader","global-json-reader").containsEntry("typed-record-reader","global-json-reader");
-        assertThat(namedProcessor("字段映射").properties()).containsEntry("context-node-id","temporal-test:mapping");
+        assertEmbeddedMappingMetadata(namedProcessor("字段映射"));
         assertThat(processors).hasSize(1);
         // The same policy applies to field-only replacement, without touching source IDs/state.
         Created processor=namedProcessor("字段映射");
@@ -137,6 +161,18 @@ class DslCompilerHiveTemporalWriterTest {
     }
 
     private static Pipeline.Node mapping(){return new Pipeline.Node("mapping","transform.field-mapping","字段映射","transform",300,0,Map.of("executionEngine","JAVA_RECORD","mappings","{\"schemaVersion\":\"2.0\",\"rules\":[]}"));}
+    @ParameterizedTest @ValueSource(ints={20,100})
+    void mappingPreflightChecksClusterCapabilitiesOncePerGraph(int count) {
+        var nodes=new ArrayList<Pipeline.Node>();for(int i=0;i<count;i++)nodes.add(new Pipeline.Node("m"+i,"transform.field-mapping","字段治理","transform",0,0,mapping().config()));
+        compiler.preflightMapping(flow(nodes));verify(nifi,times(1)).requireMappingExtension();
+        verify(nifi,never()).get(anyString(),eq(com.fasterxml.jackson.databind.JsonNode.class));
+    }
+    private static void assertEmbeddedMappingMetadata(Created processor) {
+        assertThat(processor.properties()).doesNotContainKeys("plan-hash","plan-id","context-node-id","required-engine-version");
+        try {var deployment=new ObjectMapper().readTree(processor.properties().get("execution-plan")).path("_deployment");
+            assertThat(deployment.path("contextNodeId").asText()).isEqualTo("temporal-test:mapping");assertThat(deployment.path("planId").asText()).isEqualTo("plan-version");
+        }catch(Exception e){throw new AssertionError(e);}
+    }
     private static UnifiedMappingService.Compiled prepared(){try{return new UnifiedMappingService.Compiled(MappingEngine.compile(new ObjectMapper().readTree("{\"schemaVersion\":\"2.0\",\"policies\":{},\"rules\":[]}")),Map.of());}catch(Exception error){throw new IllegalStateException(error);}}
 
     @Test void hiveSourceUsesNamedTemporalWriterAndMatchingReader() {

@@ -52,7 +52,7 @@ const getSourceCode = async (tid: string) => {
   )) as unknown as string;
   if (res) {
     state.code = res;
-    compileAndRender(state.code);
+    await compileAndRender(state.code);
   }
 };
 
@@ -62,7 +62,7 @@ const compileAndRender = async (sourceCode: string) => {
 
   try {
     // 编译源码
-    const { compileJs, compileCss } = compileCode(sourceCode);
+    const { compileJs, compileCss } = await compileCode(sourceCode);
 
     // 生成唯一的组件名（驼峰格式，与 appComponent 保持一致）
     const rawName = `preview${tid.value}`;

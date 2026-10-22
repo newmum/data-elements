@@ -82,7 +82,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
-      "baseSha256": "dbd8a5777605ab2a53573d864fbd2c41bcf4007434b303d93961f12b62de26c1"
+      "baseSha256": "00ac6ee68820ff350e33d15483fd7fa3372063cbd6359814f2eebef83cc9a6d9"
     },
     {
       "id": "2008087014782078976",
@@ -592,7 +592,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence).vue",
-      "baseSha256": "ae8717010e8731f093171511494e4c3ef76cd64654efbdce1b40fdf171b21c69"
+      "baseSha256": "df3eeccd3d20a7f3e9753e5b83a4e0295e2d84e759d0df62ccfa0a0c195bb133"
     },
     {
       "id": "2066782132212649984",
@@ -622,7 +622,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
-      "baseSha256": "2f60efe37d5d31c8855004a89d1d2a136d6e0fb90ff3cf209fcf727cfaa2c65e"
+      "baseSha256": "bbb96c6b79bb9801e3e38982615992eb64eb6407116c7d7a2411208c265bd2de"
     },
     {
       "id": "2046880498703695872",
@@ -1152,7 +1152,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "06.数据服务/数据服务(data-serve).vue",
-      "baseSha256": "ad3fd299ddcf0655e731ae4641e3edad5dcc827aac711a9f229c4d74310af296"
+      "baseSha256": "6ce93b2ab3c9cac3d364c07dc7ed3be1c9c7a3db72b5368cda4a562261c3f05c"
     },
     {
       "id": "2017170871384870912",
@@ -1327,7 +1327,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "07.数据应用/2.4.1 应用仓库(app-warehouse)/发布预览（组件、表单）(publish-view).vue",
-      "baseSha256": "213f16d90ed25692734d30aa36bf8f6910f2dfe974db399dc25971f251fd1a73"
+      "baseSha256": "df1deed6377286353dfe05741aefd9706236fe1b0b0aa18b609f62041b06fabb"
     },
     {
       "id": "2029457633557684224",
@@ -1397,7 +1397,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/02.用户与权限/NiFi 节点配置(nifi-node-config).vue",
-      "baseSha256": "30c6886a461297a0112cc63b8eafec91c0667fa5089b0e9e02a7286adc866f72"
+      "baseSha256": "ace813281e457272461ee73a0638499177aa2d167458e454eae613c9573d78e7"
     },
     {
       "id": "178716197774800001",

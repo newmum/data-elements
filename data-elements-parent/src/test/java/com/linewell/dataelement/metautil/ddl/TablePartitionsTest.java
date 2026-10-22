@@ -11,6 +11,19 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class TablePartitionsTest {
+    @Test void yearAndMonthPlansCanCoverEveryPeriodThroughDecember2035() {
+        for(var type:List.of(DatabaseType.ORACLE,DatabaseType.OCEANBASE_ORACLE,DatabaseType.DAMENG,DatabaseType.HIVE,
+                DatabaseType.MYSQL,DatabaseType.MARIADB,DatabaseType.OCEANBASE_MYSQL)) {
+            for(var request:List.of(
+                    Map.<String,Object>of("enabled",true,"strategy","YEAR","field","created_at","startYear","2026","years",10),
+                    Map.<String,Object>of("enabled",true,"strategy","MONTH","field","created_at","startMonth","2026-10","months",111))) {
+                var plan=service.normalize(request,List.of(column("created_at","DATE")),type);
+                var parts=(List<?>)plan.get("partitions");
+                assertEquals("2036-01-01 00:00:00",((Map<?,?>)parts.get(parts.size()-2)).get("upper"));
+                assertEquals("MAXVALUE",((Map<?,?>)parts.getLast()).get("upper"));
+            }
+        }
+    }
     private final TablePartitions service=new TablePartitions();
     private static ColumnInfo column(String name,String type){var c=new ColumnInfo();c.setColumnName(name);c.setColumnType(type);return c;}
     private static DataSourceConfig config(DatabaseType type){var c=new DataSourceConfig();c.setDatabaseType(type);c.setUsername("APP");c.setDatabase("ods");return c;}
@@ -87,6 +100,9 @@ class TablePartitionsTest {
         var ob=service.normalize(raw,columns,DatabaseType.OCEANBASE_ORACLE);
         String ddl=service.apply("CREATE TABLE ods_t(created_at DATE);",ob,config(DatabaseType.OCEANBASE_ORACLE));
         assertFalse(ddl.contains("INTERVAL"));assertTrue(ddl.contains("MAXVALUE"));
+        var expanded=(List<?>)ob.get("partitions");
+        assertTrue(((Map<?,?>)expanded.get(expanded.size()-2)).get("upper").toString().compareTo("2036-01-01 00:00:00")>=0,
+                "Inherited month/year interval plans include the whole of 2035");
         assertDoesNotThrow(()->service.validate(ddl,new LinkedHashMap<>(ob),config(DatabaseType.OCEANBASE_ORACLE)));
     }
     @Test void explicitSourceProbeUsesFiveFixedReadsForTwentyOrHundredPartitions() throws Exception {

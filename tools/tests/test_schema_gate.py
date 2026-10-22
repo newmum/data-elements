@@ -44,6 +44,18 @@ class SchemaGateTests(unittest.TestCase):
         self.assertTrue(check.native_type_matches({'DATA_TYPE':'DECIMAL','DATA_PRECISION':20,'DATA_SCALE':0},{'COLUMN_TYPE':'bigint unsigned'}))
         self.assertFalse(check.native_type_matches({'DATA_TYPE':'BIGINT'},{'COLUMN_TYPE':'bigint unsigned'}))
 
+    def test_native_prefix_index_preserves_exact_length_and_direction(self):
+        parts=check.index_parts('"tenant_id",SUBSTR("identifier_value", 1, 128),"status" DESC')
+        self.assertEqual([check.native_index_part(p) for p in parts], [('tenant_id',None,'A'),('identifier_value',128,'A'),('status',None,'D')])
+        with self.assertRaises(ValueError):check.native_index_part('SUBSTR("identifier_value",2,128)')
+
+    def test_native_connection_generated_rule_compares_paths_and_fallback(self):
+        source="coalesce(json_unquote(json_extract(`schema_json`,_utf8mb4'$.connectionIds.input')),json_unquote(json_extract(`schema_json`,_utf8mb4'$.connectionRoles.input')),_utf8mb4'INPUT')"
+        native="CASE WHEN NOT (json_unquote(json_extract(schema_json,'$.connectionIds.input')) IS NULL) THEN json_unquote(json_extract(schema_json,'$.connectionIds.input')) WHEN NOT (json_unquote(json_extract(schema_json,'$.connectionRoles.input')) IS NULL) THEN json_unquote(json_extract(schema_json,'$.connectionRoles.input')) WHEN NOT (FALSE) THEN 'INPUT' ELSE NULL END"
+        self.assertTrue(check.native_generated_matches('surveillance_resource_topic_t','input_connection_ref',source,native))
+        self.assertFalse(check.native_generated_matches('surveillance_resource_topic_t','input_connection_ref',source,native.replace("'INPUT'","'OUTPUT'")))
+        self.assertFalse(check.native_generated_matches('surveillance_resource_topic_t','input_connection_ref',source,native.replace('connectionIds.input','connectionIds.other')))
+
 
 class MagicLayoutTests(unittest.TestCase):
     def entry(self,path,meta):return {'databasePath':'/magic-api/api/'+path,'path':'api/'+path,'content':json.dumps(meta)}

@@ -26,6 +26,7 @@ public final class DslHasher {
     public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v31";
     private static final String DATE_FETCH_COMPILER_REVISION = "direct-date-fetch-source-record-window-v3-"
             + com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.BUNDLE_VERSION;
+    private static final String HIVE_PARTITION_COMPILER_REVISION = "hive-partition-complete-candidate-v1";
     private static final String HIVE_TARGET_COMPILER_REVISION = "hive-global-codecs-all-columns-v3";
     private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-utf8-v2";
     private static final String JAVA_MAPPING_COMPILER_REVISION = "java-record-engine-"
@@ -68,6 +69,9 @@ public final class DslHasher {
             effectiveRevision += "|" + DATE_FETCH_COMPILER_REVISION;
         }
         if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(HiveSinkPublicationPolicy::isHiveSink)) effectiveRevision += "|" + HIVE_TARGET_COMPILER_REVISION;
+        if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(node -> HiveSinkPublicationPolicy.isHiveSink(node)
+                && node.config() != null && node.config().get("partitionPlan") instanceof Map<?, ?> plan
+                && Boolean.TRUE.equals(plan.get("enabled")))) effectiveRevision += "|" + HIVE_PARTITION_COMPILER_REVISION;
         if (usesFieldMapping(dsl)) effectiveRevision += "|" + FIELD_MAPPING_COMPILER_REVISION;
         if(usesJavaMapping(dsl))effectiveRevision+="|"+JAVA_MAPPING_COMPILER_REVISION;
         if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(node -> node != null

@@ -1,0 +1,257 @@
+.fs-editor {
+  --fs-text: #34425a;
+  --fs-muted: #8895a8;
+  --fs-border: #e0e6ef;
+  --fs-border-soft: #edf0f5;
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f6f8fb;
+  color: var(--fs-text);
+}
+.fs-editor__topbar {
+  height: 58px;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px 0 10px;
+  border-bottom: 1px solid var(--fs-border);
+  background: #fff;
+  z-index: 20;
+}
+.fs-editor__identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+.fs-editor__identity > .ant-btn {
+  flex: none;
+  color: #7b899d;
+}
+.fs-editor__identity-divider {
+  height: 22px;
+  width: 1px;
+  background: #e8edf3;
+}
+.fs-editor__brand-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #eef3fc;
+  color: #5483cf;
+  font-size: 17px;
+  flex: none;
+}
+.fs-editor__name {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.fs-editor__name > span {
+  color: #9aa5b5;
+  font-size: 10px;
+  line-height: 1;
+}
+.fs-editor__name strong {
+  max-width: 320px;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.fs-editor__save-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #95a0af;
+  font-size: 10px;
+  white-space: nowrap;
+  background: #f5f7fa;
+  padding: 3px 7px;
+  border-radius: 4px;
+}
+.fs-editor__save-state.is-dirty {
+  color: #b28a45;
+  background: #fcf7ed;
+}
+.fs-editor__actions {
+  flex: none;
+}
+.fs-editor__actions .ant-btn {
+  box-shadow: none;
+  font-size: 12px;
+}
+.fs-editor__close {
+  margin-left: 4px;
+  color: #93a0b2;
+}
+.fs-editor__main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+.fs-editor__workbench {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fs-editor__side-toggle {
+  position: absolute;
+  top: 14px;
+  z-index: 12;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 5px;
+  border-color: #e1e7ef;
+  background: #fff;
+  color: #93a0b2;
+  box-shadow: 0 2px 4px #233c5a05;
+}
+.fs-editor__side-toggle--left {
+  left: 12px;
+}
+.fs-editor__side-toggle--right {
+  right: 12px;
+}
+.fs-editor__side-toggle:disabled {
+  visibility: hidden;
+}
+.fs-editor__statusbar {
+  height: 32px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 0 16px;
+  color: #8f9caf;
+  font-size: 10px;
+  background: #fff;
+  border-top: 1px solid var(--fs-border);
+  z-index: 18;
+}
+.fs-editor__statusbar-sep {
+  padding: 0 9px;
+  color: #c5cdda;
+}
+.fs-editor__statusbar button {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: #8f9caf;
+  cursor: pointer;
+  height: 100%;
+}
+.fs-editor__statusbar button:hover {
+  color: #3974df;
+}
+.fs-editor__statusbar button:focus-visible {
+  outline: 2px solid #3974df;
+  outline-offset: 2px;
+}
+.fs-editor__statusbar button > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.fs-editor__statusbar .has-problems {
+  color: #bf9450;
+}
+.fs-editor__statusbar .fs-editor__run-toggle {
+  margin-left: auto;
+}
+.fs-editor-loading {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: #f6f8fb;
+}
+.fs-editor--resizing,
+.fs-editor--resizing * {
+  cursor: ns-resize !important;
+  user-select: none !important;
+}
+.fs-editor :where(button, input, textarea, [tabindex]):focus-visible {
+  outline-color: #3974df;
+}
+.fs-editor ::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.fs-editor ::-webkit-scrollbar-thumb {
+  background: #cbd4e1;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background-clip: padding-box;
+}
+.fs-editor ::-webkit-scrollbar-track {
+  background: transparent;
+}
+@media (max-width: 1100px) {
+  .fs-editor__save-state {
+    display: none;
+  }
+  .fs-editor__name strong {
+    max-width: 220px;
+  }
+  .fs-editor__topbar {
+    gap: 8px;
+    padding-right: 10px;
+  }
+}
+@media (max-width: 760px) {
+  .fs-editor__identity {
+    gap: 7px;
+  }
+  .fs-editor__brand-icon,
+  .fs-editor__identity-divider {
+    display: none;
+  }
+  .fs-editor__name strong {
+    max-width: 140px;
+  }
+  .fs-editor__actions {
+    gap: 4px !important;
+  }
+  .fs-editor__actions .ant-btn {
+    padding-inline: 6px;
+  }
+  .fs-editor__actions .ant-btn .anticon + span {
+    display: none;
+  }
+  .fs-editor__statusbar {
+    gap: 12px;
+    padding-inline: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fs-editor *,
+  .fs-editor *::before,
+  .fs-editor *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

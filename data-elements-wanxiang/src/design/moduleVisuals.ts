@@ -19,7 +19,7 @@ export const moduleVisuals: ModuleVisual[] = [
   { id:'encoding', title:'编码标准', category:'数据标准', english:'ENCODING CONVENTIONS', description:'用清晰的分段规则规范业务编码，校验字符与长度，让标识可理解、可检验、可复用。', promise:'编码有章 · 规则可验', highlights:['编码分段定义','字符长度约束','格式即时校验'] },
   { id:'profiling', title:'数据质量探查', category:'数据质量', english:'DATA PROFILING', description:'按全量或有界抽样读取真实字段聚合统计，查看空值率、文本空白率与非空去重值数。', promise:'洞察现状 · 发现问题', highlights:['真实字段统计','扫描范围明确','不上传业务行'] },
   { id:'profile-reports', title:'探查报告', category:'数据质量', english:'PROFILING INSIGHTS', description:'查看真实字段聚合统计，比较空值、文本空白与非空去重比例；明确区分全量和有界抽样结果。', promise:'让数据现状 · 有据可查', highlights:['真实字段统计','扫描范围明确','不制造评分'] },
-  { id:'rules', title:'数据质量规则', category:'数据质量', english:'QUALITY RULES', description:'将质量要求转化为任务内可执行规则，覆盖完整性、唯一性、数值范围、值域和格式，明确什么是合格数据。', promise:'定义好数据 · 守住质量', highlights:['质量模板复用','作用字段明确','执行快照保留'] },
+  { id:'rules', title:'数据质量规则', category:'数据质量', english:'QUALITY RULES', description:'管理常见质量模板与SQL条件模板，覆盖完整性、唯一性、一致性、准确性和规范性，复用于质检方案与任务。', promise:'定义好数据 · 守住质量', highlights:['内置与SQL模板','字段参数绑定','执行快照保留'] },
   { id:'plans', title:'质检方案与任务', category:'数据质量', english:'QUALITY OPERATIONS', description:'围绕数据表编排具体规则，统一管理预检、调度、分片与超时，让质量要求落到每一次检查。', promise:'规则成章 · 检查有序', highlights:['规则组合编排','执行状态可视','结果问题联动'] },
   { id:'reports', title:'质量报告', category:'数据质量', english:'QUALITY INSIGHTS', description:'集中呈现已执行规则、覆盖范围与违例结果，区分数据问题和执行异常，支撑治理优先级判断。', promise:'质量可见 · 行动有据', highlights:['检查结果透明','问题范围可追溯','工单整改联动'] },
   { id:'workorders', title:'质检工单', category:'数据质量', english:'QUALITY REMEDIATION', description:'从问题分派到整改复检，用清晰的责任、过程和验证结果推动质量问题形成处理闭环。', promise:'问题有主 · 整改有果', highlights:['责任分派明确','整改过程留痕','复检通过关单'] },

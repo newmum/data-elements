@@ -34,6 +34,18 @@ import org.ssssssss.script.runtime.ExitValue;
 class DataAggTaskEnsureBatchMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
+    @Test
+    void creatingTaskAcceptsPendingApplicationButDryRunDoesNot() throws Exception {
+        var f = new Fixture(1); f.prepareCreation();
+        f.jdbc.execute("alter table db_table_t add access_request_status int default 0");
+        f.jdbc.update("update db_table_t set access_request_status=1 where tid='source-1'");
+        assertInstanceOf(Map.class,f.run(Map.of("tableId","source-1","dryRun",true)));
+        assertEquals(1,f.jdbc.queryForObject("select access_request_status from db_table_t where tid='source-1'",Integer.class));
+        var created=assertInstanceOf(Map.class,f.run());
+        assertEquals(false,created.get("repairRequired"));
+        assertEquals(2,f.jdbc.queryForObject("select access_request_status from db_table_t where tid='source-1'",Integer.class));
+    }
+
     @ParameterizedTest @ValueSource(strings={"mysql","postgresql","oracle","kingbase8","ftp"})
     void timePartitionTaskKeepsSourceConnectorAndBatchesTwentyAndHundredTargets(String type) throws Exception {
         var reads=new ArrayList<Integer>();
@@ -53,6 +65,7 @@ class DataAggTaskEnsureBatchMagicTest {
             assertEquals(0,f.fileProbe.calls);
             var designs=f.jdbc.queryForList("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'");
             var nodes=cn.hutool.json.JSONUtil.parseObj(designs.getFirst().get("dsl_json")).getJSONArray("nodes");
+            assertEquals("字段治理",nodes.getJSONObject(1).getStr("label"));
             assertEquals(type.equals("kingbase8")?"source.kingbase":"source."+type,nodes.getJSONObject(0).getStr("manifestKey"));
             var sink=nodes.getJSONObject(nodes.size()-1).getJSONObject("config");
             assertEquals("updated_at",sink.getJSONObject("partitionPlan").getStr("field"));
@@ -532,7 +545,7 @@ class DataAggTaskEnsureBatchMagicTest {
         assertFalse(dsl.contains("\"targetTableId\":\"target-1\""));
         var nodes = cn.hutool.json.JSONUtil.parseObj(dsl).getJSONArray("nodes");
         assertEquals("人员信息", nodes.getJSONObject(0).getStr("label"));
-        assertEquals("字段映射", nodes.getJSONObject(1).getStr("label"));
+        assertEquals("字段治理", nodes.getJSONObject(1).getStr("label"));
         assertEquals("人员原始表", nodes.getJSONObject(2).getStr("label"));
         assertEquals(3, nodes.size());
         var downstream = fixture.jdbc.queryForMap("select source_table_id,target_table_id,source_db_id,target_db_id from data_access_agg_task_t where target_table_id='target-1'");
@@ -703,7 +716,7 @@ class DataAggTaskEnsureBatchMagicTest {
             var service=new com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService(resolver,nifi);
             try(var tenant=com.linewell.dataelement.platform.tenant.domain.TenantContext.use("police")) {
             String canonical = CanonicalMagicSources.byId("76fd211790f54164947f276824d19c1d").replace("\r\n", "\n");
-            String aggregation = canonical.substring(canonical.indexOf("    var tableWorkflowMap ="),canonical.indexOf("    // ES 检索、接入任务补齐"));
+            String aggregation = canonical.substring(canonical.indexOf("    var tableWorkflowMap ="),canonical.indexOf("    var tableTotal = registeredTableTotal"));
             String runtime=canonical.substring(canonical.indexOf("    // 只装饰当前已授权、可达任务"),canonical.indexOf("    return {\n        runtimeRevision:"));
             aggregation+="\nvar tablePage=tableItems;\n"+runtime;
             String helpers = """

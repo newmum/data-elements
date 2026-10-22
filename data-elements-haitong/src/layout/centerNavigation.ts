@@ -19,7 +19,7 @@ export const centers = [
   { key: 'security', name: '数据安全中心', description: '敏感发现、授权与安全防护', url: routeUrl(qizhi, '/security/overview') },
   { key: 'asset', name: '数据资产中心', description: '资产盘点、流通与运营', url: routeUrl(wanxiang, '/assets/overview') },
   { key: 'service', name: '数据服务中心', description: '服务发布与运行交付', url: routeUrl(qizhi, '/services/overview') },
-  { key: 'visualization', name: '数据可视化中心', description: '云图大屏与 BI 分析', url: routeUrl(base(import.meta.env.VITE_REPORT_APP_URL, 'http://localhost:3004/', '/report/'), '/') },
+  { key: 'visualization', name: '数据可视化中心', description: '云图大屏与 BI 分析', url: routeUrl(qizhi, '/visualization/screens') },
   { key: 'knowledge', name: '知识图谱中心', description: '关系探索与知识推理', url: routeUrl(qizhi, '/overview') },
   { key: 'search', name: '智能搜索中心', description: '信息检索与知识发现', url: new URL(base(import.meta.env.VITE_SEARCH_APP_URL, 'http://localhost:3300/', '/search/'), window.location.href).href },
   { key: 'identity', name: '统一身份管理平台', description: '统一账户、认证与访问管理', url: routeUrl(base(import.meta.env.VITE_IDAAS_CENTER_URL, 'http://localhost:3005/', '/idaas/'), '/console/workforce/overview') },

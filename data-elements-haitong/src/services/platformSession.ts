@@ -2,9 +2,17 @@ import { setBridgeToken } from '../nifi/api/bridgeSession';
 
 /** The platform owns login and tenant selection. HaiTong never persists a second credential. */
 export function getPortalBaseUrl(): URL {
-  const configured = import.meta.env.VITE_SOURCE_PLATFORM_HOME_URL?.trim();
-  const fallback = import.meta.env.DEV ? 'http://localhost:3000/#/home' : '/wanxiang/#/home';
+  const portalEnv = import.meta.env ?? {};
+  const configured = portalEnv.VITE_SOURCE_PLATFORM_HOME_URL?.trim();
+  const fallback = portalEnv.DEV ? 'http://localhost:3000/#/home' : '/wanxiang/#/home';
   return new URL(configured || fallback, window.location.href);
+}
+
+/** Let the platform root resolve the first menu available to the current user. */
+export function getPlatformHomeUrl(): string {
+  const portal = getPortalBaseUrl();
+  portal.hash = '/';
+  return portal.href;
 }
 
 /** The platform validates this return address against its configured capability centres. */

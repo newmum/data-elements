@@ -37,10 +37,11 @@ class MappingErrorRecordsTest {
             assertNull(reader.nextRecord());
         }
     }
-    @Test void wrongPlanOrNonEnvelopeContentIsKeptAsFailureRatherThanBusinessData() throws Exception {
+    @Test void olderPlanEnvelopesCanBeReprocessedButMalformedContentStillFails() throws Exception {
         var plan=MappingEngine.compile(JSON.readTree("{\"version\":\"1.0\",\"mappings\":[]}"));
         String content="{\"planHash\":\"wrong\",\"inputRecordIndex\":0,\"errors\":[],\"record\":{}}";
-        assertEquals("INVALID_ERROR_ENVELOPE",assertThrows(MappingException.class,()->new MappingErrorRecords(new ByteArrayInputStream(content.getBytes()),Map.of(),plan)).code());
+        try(var reader=new MappingErrorRecords(new ByteArrayInputStream(content.getBytes()),Map.of(),plan)){assertEquals(Map.of(),reader.nextRecord().toMap());}
+        assertEquals("INVALID_ERROR_ENVELOPE",assertThrows(MappingException.class,()->new MappingErrorRecords(new ByteArrayInputStream("{\"record\":{},\"errors\":[]}".getBytes()),Map.of(),plan)).code());
         assertFalse(MappingErrorRecords.isEnvelope(Map.of("mime.type","application/x-ndjson"),"node"));
     }
 }

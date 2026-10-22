@@ -3,7 +3,8 @@ import { Alert, App, Button, Col, Descriptions, Drawer, Empty, Form, Input, Inpu
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Row } from '../../services/api';
-import { qualityApi, qualityBody, qualityDraft, emptyQualityDraft, qualityExport, qualityRunning, qualityStatus, qualityScore, canMaintainQuality, dimensionLabel, severityLabel, qualityFormatPresets, runStates, orderStates, type QualityDraft, type QualityQuery } from '../../services/quality';
+import { qualityApi, qualityBody, qualityDraft, emptyQualityDraft, qualityExport, qualityRunning, qualityStatus, qualityScore, canMaintainQuality, dimensionLabel, severityLabel, qualityFormatPresets, qualitySqlDefinition, qualityParameterObject, runStates, orderStates, type QualityDraft, type QualityQuery } from '../../services/quality';
+import { QualityTemplatePicker, QualityTemplatesPage } from './QualityTemplates';
 import { useWorkspaceQuery } from '../../services/useWorkspaceQuery';
 import { ModuleIcon } from '../../design/ModuleIcon';
 import { DataTable, ErrorNotice, Page, date, download, required, text, useAction } from './common';
@@ -44,10 +45,13 @@ async function exportQuality(kind:keyof typeof csvColumns,query:Partial<QualityQ
  download('\uFEFF'+[columns.map(([label])=>safe(label)).join(','),...rows.map(r=>columns.map(([,key])=>safe(kind==='runs'&&key==='score'?score(r.score,r.checked_count):r[key])).join(','))].join('\r\n'),`${kind==='tasks'?'质检任务':kind==='runs'?'质量执行记录':'质量整改工单'}.csv`,'text/csv;charset=utf-8');
 }
 
-function RuleFields({index,columns,templates,tables}:{index:number;columns:Row[];templates:Row[];tables:Row[]}) {
+type ReferenceState={data:Record<string,Row[]>|null;loading:boolean;error:string|null;refresh:()=>void};
+function RuleFields({index,columns,templates,tables,references}:{index:number;columns:Row[];templates:Row[];tables:Row[];references:ReferenceState}) {
  const form=Form.useFormInstance(),type=Form.useWatch(['rules',index,'ruleType'],form),pattern=Form.useWatch(['rules',index,'parameters','pattern'],form);
+ // 正文与名称属于模板快照，不是可编辑字段；仍需订阅它们以显示已选模板。
+ const [picking,setPicking]=useState(false),parameters=Form.useWatch(['rules',index,'parameters'],{form,preserve:true});
  const referenceTable=Form.useWatch(['rules',index,'parameters','targetTableId'],form);
- const reference=useWorkspaceQuery('quality-reference-columns:'+referenceTable,signal=>referenceTable?qualityApi.columns(referenceTable,signal):Promise.resolve([]));
+ const reference={...references,data:references.data?.[referenceTable]||[]};
  const columnOptions=columns.map(c=>({value:c.column_name,label:`${c.column_comment||c.column_name} · ${c.column_name}`}));
  return <><GridRow gutter={16}>
   <Col xs={24} sm={12}><Form.Item name={[index,'ruleName']} label="规则名称" rules={required}><Input maxLength={128}/></Form.Item></Col>
@@ -55,7 +59,15 @@ function RuleFields({index,columns,templates,tables}:{index:number;columns:Row[]
   <Col xs={24} sm={12}><Form.Item name={[index,'columnName']} label="校验字段" rules={required}><Select showSearch optionFilterProp="label" options={columns.map(c=>({value:c.column_name,label:`${c.column_comment||c.column_name} · ${c.column_name}`}))}/></Form.Item></Col>
   <Col xs={24} sm={6}><Form.Item name={[index,'severity']} label="严重程度" rules={required}><Select options={severityOptions}/></Form.Item></Col>
   <Col xs={24} sm={6}><Form.Item name={[index,'weight']} label="评分权重" rules={required}><InputNumber min={1} max={100} precision={0}/></Form.Item></Col>
-  <Form.Item name={[index,'dimension']} hidden><Input/></Form.Item><Form.Item name={[index,'relatedColumn']} hidden><Input/></Form.Item>
+  <Form.Item name={[index,'dimension']} hidden><Input/></Form.Item>{type!=='SQL_TEMPLATE'&&<Form.Item name={[index,'relatedColumn']} hidden><Input/></Form.Item>}
+  {type==='SQL_TEMPLATE'&&<>
+   <Col span={24}><Space wrap><Button onClick={()=>setPicking(true)}>选择SQL模板</Button><span>{parameters?.templateName||'尚未选择模板'}</span></Space>
+    <Form.Item name={[index,'parameters','templateId']} hidden rules={required}><Input/></Form.Item>
+    {parameters?.sqlTemplate&&<pre className="wx-quality-error">{parameters.sqlTemplate}</pre>}
+   </Col>
+   <Col span={24}><Form.Item name={[index,'relatedColumn']} label="关联字段（模板使用relatedColumn时必选）"><Select allowClear options={columnOptions}/></Form.Item></Col>
+   <Col span={24}><Form.Item name={[index,'parameterText']} label="本次任务参数（JSON对象）" initialValue={JSON.stringify(parameters?.values||{},null,2)} rules={[{validator:async(_rule,value)=>{qualityParameterObject(value);}}]}><Input.TextArea rows={3}/></Form.Item></Col>
+  </>}
   {type==='UNIQUE'&&<Col span={24}><Form.Item name={[index,'parameters','columns']} label="联合唯一字段（留空时仅检查主要字段）"><Select mode="multiple" options={columnOptions} placeholder="选择多个字段，按完整组合检查重复"/></Form.Item></Col>}
   {type==='TIMELINESS'&&<><Col span={12}><Form.Item name={[index,'parameters','maxAgeMinutes']} label="最大允许过去时差（分钟）" rules={required}><InputNumber min={1} max={5256000}/></Form.Item></Col><Col span={12}><Form.Item name={[index,'parameters','futureToleranceMinutes']} label="未来时间容差（分钟）"><InputNumber min={0} max={5256000}/></Form.Item></Col></>}
   {type==='REFERENCE'&&<><Col span={24}><Form.Item name={[index,'parameters','targetTableId']} label="引用目标表（同一登记数据源）" rules={required}><Select showSearch optionFilterProp="label" options={tables.map(t=>({value:t.id,label:t.table_name_cn||t.table_name}))} onChange={()=>form.setFieldValue(['rules',index,'parameters','targetColumns'],[])}/></Form.Item></Col><Col span={12}><Form.Item name={[index,'parameters','sourceColumns']} label="来源联合字段（按选择顺序）" rules={required}><Select mode="multiple" options={columnOptions}/></Form.Item></Col><Col span={12}><Form.Item name={[index,'parameters','targetColumns']} label="目标联合字段（顺序一一对应）" rules={required}><Select loading={reference.loading} disabled={!!reference.error} mode="multiple" options={(reference.data||[]).map(c=>({value:c.column_name,label:c.column_comment||c.column_name}))}/></Form.Item></Col><Col span={24}><ErrorNotice error={reference.error} retry={reference.refresh}/><Form.Item name={[index,'parameters','allowNull']} label="空引用策略"><Select options={[{value:false,label:'空值算作异常'},{value:true,label:'允许空值，仅检查非空引用'}]}/></Form.Item></Col></>}
@@ -63,7 +75,15 @@ function RuleFields({index,columns,templates,tables}:{index:number;columns:Row[]
   {type==='LENGTH'&&<><Col span={12}><Form.Item name={[index,'parameters','minLength']} label="最小长度"><InputNumber min={0} max={65535} precision={0} placeholder="至少填写一个长度边界"/></Form.Item></Col><Col span={12}><Form.Item name={[index,'parameters','maxLength']} label="最大长度"><InputNumber min={0} max={65535} precision={0}/></Form.Item></Col></>}
   {type==='ENUM'&&<Col span={24}><Form.Item name={[index,'parameters','values']} label="允许值" rules={required}><Select mode="tags" tokenSeparators={[',','，']} placeholder="输入值后按 Enter；保留前导零"/></Form.Item></Col>}
   {type==='REGEX'&&<><Col xs={24} sm={8}><Form.Item label="预设格式"><Select aria-label="预设格式" value={qualityFormatPresets.some(p=>p.pattern===pattern)?pattern:''} options={[{value:'',label:'自定义正则'},...qualityFormatPresets.map(p=>({value:p.pattern,label:p.label}))]} onChange={value=>form.setFieldValue(['rules',index,'parameters','pattern'],value)}/></Form.Item></Col><Col xs={24} sm={16}><Form.Item name={[index,'parameters','pattern']} label="正则表达式" rules={required}><Input maxLength={1000} placeholder="例如：^[A-Z0-9]+$"/></Form.Item></Col></>}
- </GridRow></>;
+ </GridRow>{picking&&<QualityTemplatePicker onClose={()=>setPicking(false)} onSelect={row=>{
+  try {
+   const definition=qualitySqlDefinition(row);
+   form.setFieldValue(['rules',index,'parameters'],{templateId:row.id,templateName:row.rule_name,...definition});
+   form.setFieldValue(['rules',index,'dimension'],row.check_dimension);
+   form.setFieldValue(['rules',index,'parameterText'],JSON.stringify(definition.values,null,2));
+   setPicking(false);
+  } catch(error) {form.setFields([{name:['rules',index,'parameters','templateId'],errors:[(error as Error).message]}]);}
+ }}/>}</>;
 }
 
 function TaskWorkspace({mode}:{mode:'plans'|'rules'|'profiling'}) {
@@ -71,20 +91,24 @@ function TaskWorkspace({mode}:{mode:'plans'|'rules'|'profiling'}) {
  const [editor,setEditor]=useState<QualityDraft>(),[sources,setSources]=useState<Row[]>([]),[tables,setTables]=useState<Row[]>([]),[columns,setColumns]=useState<Row[]>([]),[templates,setTemplates]=useState<Row[]>([]),[optionsLoading,setOptionsLoading]=useState(false),[optionsError,setOptionsError]=useState(''),[runId,setRunId]=useState<string>();
  const [form]=Form.useForm<QualityDraft & {profileColumns?:string[];profileMode?:string;profileLimit?:number}>(),optionsSequence=useRef(0),dirty=useRef(false),opening=useRef(false);
  const datasourceId=Form.useWatch('datasourceId',form),tableId=Form.useWatch('tableId',form),trigger=Form.useWatch('triggerMode',form);
+ const watchedRules=Form.useWatch('rules',form)||[];
+ const referenceIds=[...new Set<string>(watchedRules.filter((r:Row)=>r?.ruleType==='REFERENCE'&&r.parameters?.targetTableId).map((r:Row)=>String(r.parameters.targetTableId)))].sort();
+ const references=useWorkspaceQuery('quality-reference-batch:'+JSON.stringify(referenceIds),signal=>editor&&referenceIds.length?qualityApi.columnsBatch(referenceIds,signal):Promise.resolve({}));
  const open=async(task?:Row)=>{const n=++optionsSequence.current;setOptionsLoading(true);setOptionsError('');try {
   const [sourceRows,templateRows,current]=await Promise.all([qualityApi.datasources(),qualityApi.templates(),task?qualityApi.taskDetail(task.id):Promise.resolve(null)]);
   const draft=current?qualityDraft(current):emptyQualityDraft();
   const [tableRows,columnRows]=draft.tableId?await Promise.all([qualityApi.tables(draft.datasourceId),qualityApi.columns(draft.tableId)]):[[],[]];
   if(n===optionsSequence.current){setSources(sourceRows);setTemplates(templateRows);setTables(tableRows);setColumns(columnRows);form.resetFields();form.setFieldsValue(draft);if(mode==='profiling')form.setFieldsValue({profileColumns:draft.rules.map(r=>r.columnName),profileMode:draft.rules[0]?.parameters.scanMode||'SAMPLE',profileLimit:draft.rules[0]?.parameters.scanLimit||2000,shardCount:1,sampleLimit:0});dirty.current=false;setEditor(draft);}
  }catch(cause){if(n===optionsSequence.current){setOptionsError(cause instanceof Error?cause.message:String(cause));message.error(cause instanceof Error?cause.message:String(cause));}}finally{if(n===optionsSequence.current)setOptionsLoading(false);}};
- useEffect(()=>{if(params.get('create')==='1'&&!opening.current){opening.current=true;void open();}return()=>{optionsSequence.current++;};},[params]);
+ // 路由打开配置时，清理失效请求也释放入口标记，避免严格模式重挂载后一直等待旧请求。
+ useEffect(()=>{if(params.get('create')==='1'&&!opening.current){opening.current=true;void open();}return()=>{optionsSequence.current++;opening.current=false;};},[params]);
  const chooseSource=async(value:string)=>{const n=++optionsSequence.current;form.setFieldsValue({datasourceId:value,tableId:undefined,shardKey:'',rules:[],profileColumns:[]});setTables([]);setColumns([]);setOptionsError('');setOptionsLoading(true);try{const rows=await qualityApi.tables(value);if(n===optionsSequence.current)setTables(rows);}catch(cause){if(n===optionsSequence.current)setOptionsError(String((cause as Error).message));}finally{if(n===optionsSequence.current)setOptionsLoading(false);}};
  const chooseTable=async(value:string)=>{const n=++optionsSequence.current;form.setFieldsValue({tableId:value,shardKey:'',rules:[],profileColumns:[]});setColumns([]);setOptionsError('');setOptionsLoading(true);try{const rows=await qualityApi.columns(value);if(n===optionsSequence.current)setColumns(rows);}catch(cause){if(n===optionsSequence.current)setOptionsError(String((cause as Error).message));}finally{if(n===optionsSequence.current)setOptionsLoading(false);}};
  const close=()=>{if(busy)return;const finish=()=>{optionsSequence.current++;setEditor(undefined);setOptionsLoading(false);};if(dirty.current)modal.confirm({title:'放弃未保存的质检配置？',okText:'放弃修改',cancelText:'继续编辑',onOk:finish});else finish();};
  const precheck=async(taskId:string)=>{const result=await qualityApi.precheck(taskId);if(result.success)message.success('预检通过');else modal.error({title:'预检未通过',content:<><p>{result.message}</p>{result.detail&&<pre className="wx-quality-error">{text(result.detail)}</pre>}</>});return result.success;};
  const save=async(withPrecheck:boolean)=>{
   if(optionsLoading||optionsError||!editor)return;
-  let draft:QualityDraft;try{const values=await form.validateFields();const rules=mode==='profiling'?(values.profileColumns||[]).map(columnName=>({ruleName:columnName+' · 字段探查',ruleType:'PROFILE',dimension:'PROFILE',columnName,severity:'LOW',weight:1,parameters:{scanMode:values.profileMode||'SAMPLE',scanLimit:values.profileLimit||2000}})):values.rules;draft=qualityBody({...editor,...values,rules});if(!sources.some(s=>s.id===draft.datasourceId)||!tables.some(t=>t.id===draft.tableId)||draft.rules.some(r=>!columns.some(c=>c.column_name===r.columnName)))throw new Error('源、表或字段已失效，请重新选择真实元数据');}catch(cause){if(cause instanceof Error)message.error(cause.message);return;}
+  let draft:QualityDraft;try{const values=await form.validateFields();const rules=mode==='profiling'?(values.profileColumns||[]).map(columnName=>({ruleName:columnName+' · 字段探查',ruleType:'PROFILE',dimension:'PROFILE',columnName,severity:'LOW',weight:1,parameters:{scanMode:values.profileMode||'SAMPLE',scanLimit:values.profileLimit||2000}})):values.rules.map(r=>r.ruleType==='SQL_TEMPLATE'?{...r,parameters:{...r.parameters,values:qualityParameterObject(r.parameterText??JSON.stringify(r.parameters?.values||{}))}}:r);draft=qualityBody({...editor,...values,rules});if(!sources.some(s=>s.id===draft.datasourceId)||!tables.some(t=>t.id===draft.tableId)||draft.rules.some(r=>!columns.some(c=>c.column_name===r.columnName)))throw new Error('源、表或字段已失效，请重新选择真实元数据');}catch(cause){if(cause instanceof Error)message.error(cause.message);return;}
   await run(async()=>{const saved=await qualityApi.saveTask(draft);dirty.current=false;setEditor(undefined);message.success('已保存到共享后端，任务已停用并需要重新预检');if(withPrecheck)await precheck(saved.id);},'');
  };
  const start=(row:Row)=>run(async()=>{if(row.precheck_status!=='PASSED'&&!await precheck(row.id))return;const result=await qualityApi.manualRun(row.id);setRunId(result.id);message.success('真实异步质检已提交');},'');
@@ -114,7 +138,7 @@ function TaskWorkspace({mode}:{mode:'plans'|'rules'|'profiling'}) {
      <Col xs={24} sm={12}><Form.Item name="tableId" label="数据表" rules={required}><Select showSearch optionFilterProp="label" disabled={!datasourceId} loading={optionsLoading} options={tables.map(t=>({value:t.id,label:`${t.table_name_cn||t.table_comment||t.table_name} · ${t.table_name}`}))} onChange={value=>void chooseTable(value)}/></Form.Item></Col>
     </GridRow>{tableId&&!columns.length&&!optionsLoading&&<Alert className="mb16" showIcon type="warning" title="该表没有已采集字段，请先完成元数据采集，不能凭空配置检查字段。"/>}
     <div className="wx-form-section-title"><span>02</span> {mode==='profiling'?'字段探查':'质量规则'}</div>
-    {mode==='profiling'?<><Form.Item name="profileColumns" label="探查字段（最多 64 个）" rules={required}><Select mode="multiple" maxCount={64} options={columns.map(c=>({value:c.column_name,label:c.column_comment||c.column_name}))}/></Form.Item><GridRow gutter={16}><Col span={12}><Form.Item name="profileMode" label="扫描范围" rules={required}><Select options={[{value:'SAMPLE',label:'有界抽样（不代表全量）'},{value:'FULL',label:'全量聚合（受超时限制）'}]}/></Form.Item></Col><Col span={12}><Form.Item name="profileLimit" label="抽样最大扫描行数"><InputNumber min={1} max={10000} precision={0}/></Form.Item></Col></GridRow><Alert className="mb16" showIcon type="info" title="真实字段统计" description="读取实际表的聚合统计：空值率、文本空白率、非空去重值数。报告标明全量或有界抽样；不上传业务行，不把字段统计当成质量评分。"/></>:<Form.List name="rules">{(fields,{add,remove})=><>{fields.map(field=><section className="wx-quality-rule-card" key={field.key}><header><b>规则 {field.name+1}</b><Button type="text" danger aria-label={`删除规则 ${field.name+1}`} icon={<DeleteOutlined/>} onClick={()=>remove(field.name)}/></header><RuleFields index={field.name} columns={columns} templates={templates} tables={tables}/></section>)}<Button block type="dashed" disabled={!columns.length||optionsLoading} icon={<PlusOutlined/>} onClick={()=>add({ruleName:'非空校验',ruleType:'NOT_NULL',columnName:'',dimension:'COMPLETENESS',severity:'MEDIUM',weight:10,parameters:{}})}>添加质量规则</Button></>}</Form.List>}
+    {mode==='profiling'?<><Form.Item name="profileColumns" label="探查字段（最多 64 个）" rules={required}><Select mode="multiple" maxCount={64} options={columns.map(c=>({value:c.column_name,label:c.column_comment||c.column_name}))}/></Form.Item><GridRow gutter={16}><Col span={12}><Form.Item name="profileMode" label="扫描范围" rules={required}><Select options={[{value:'SAMPLE',label:'有界抽样（不代表全量）'},{value:'FULL',label:'全量聚合（受超时限制）'}]}/></Form.Item></Col><Col span={12}><Form.Item name="profileLimit" label="抽样最大扫描行数"><InputNumber min={1} max={10000} precision={0}/></Form.Item></Col></GridRow><Alert className="mb16" showIcon type="info" title="真实字段统计" description="读取实际表的聚合统计：空值率、文本空白率、非空去重值数。报告标明全量或有界抽样；不上传业务行，不把字段统计当成质量评分。"/></>:<Form.List name="rules">{(fields,{add,remove})=><>{fields.map(field=><section className="wx-quality-rule-card" key={field.key}><header><b>规则 {field.name+1}</b><Button type="text" danger aria-label={`删除规则 ${field.name+1}`} icon={<DeleteOutlined/>} onClick={()=>remove(field.name)}/></header><RuleFields index={field.name} columns={columns} templates={templates} tables={tables} references={references}/></section>)}<Button block type="dashed" disabled={!columns.length||optionsLoading} icon={<PlusOutlined/>} onClick={()=>add({ruleName:'非空校验',ruleType:'NOT_NULL',columnName:'',dimension:'COMPLETENESS',severity:'MEDIUM',weight:10,parameters:{}})}>添加质量规则</Button></>}</Form.List>}
     <div className="wx-form-section-title"><span>03</span> 执行策略</div><GridRow gutter={16}>
      <Col xs={24} sm={12}><Form.Item name="triggerMode" label="触发方式" rules={required}><Select options={[{value:'MANUAL',label:'手动执行'},{value:'CRON',label:'定时执行'}]}/></Form.Item></Col>
      {trigger==='CRON'&&<Col xs={24} sm={12}><Form.Item name="cronExpression" label="Cron 表达式（六段）" rules={required}><Input maxLength={128} placeholder="0 0 2 * * *"/></Form.Item></Col>}
@@ -128,7 +152,7 @@ function TaskWorkspace({mode}:{mode:'plans'|'rules'|'profiling'}) {
   </Drawer><QualityRunDrawer runId={runId} onClose={()=>setRunId(undefined)}/>
  </Page>;
 }
-export function RulesPage(){return <TaskWorkspace mode="rules"/>;}
+export function RulesPage(){return <QualityTemplatesPage/>;}
 export function PlansPage(){return <TaskWorkspace mode="plans"/>;}
 export function ProfilingPage(){return <TaskWorkspace mode="profiling"/>;}
 

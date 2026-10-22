@@ -1360,6 +1360,16 @@ for (existingTask in existingTasks) {
     if (targetTableIds.contains(primaryTargetId) && existingTaskByTarget[primaryTargetId] == null) { existingTaskByTarget[primaryTargetId] = existingTask }
 }
 var responseOf = (tasks, createdCount, summaries) => {
+        // 只有真实任务已创建/复用且无待修复问题时才受理申请；管理员建任务即为审批通过。
+        // 与任务写入同属当前事务，dryRun 或失败不会改变申请，历史任务无需补申请。
+        if (!dryRun && repairReasons.size() == 0 && tasks.size() > 0
+            && text(first(sourceTable,['accessRequestStatus','access_request_status'])) == '1') {
+            db.update("""
+                UPDATE db_table_t SET access_request_status=2
+                WHERE tid=#{sourceTableId} AND tenant_id=#{tenantId} AND is_del=0 AND access_request_status=1
+            """)
+        }
+
     var firstTask = tasks.size() == 0 ? null : tasks[0]
     return {created: createdCount > 0, createdCount: createdCount, taskCount: tasks.size(), tasks: tasks,
         task: firstTask, taskId: firstTask == null ? '' : text(firstTask.tid),
@@ -1673,7 +1683,7 @@ var sourcePrimaryKeys = primarySourceKeys.join(',')
 var targetPrimaryKeys = primaryTargetKeys.join(',')
 var canUpsert = !blank(sourcePrimaryKeys) && !blank(targetPrimaryKeys)
 
-// 每个独立任务生成来源、自己的字段映射和唯一目标节点。
+// 每个独立任务生成来源、自己的字段治理和唯一目标节点。
 var sourceNodeId = 'source-' + sourceTableId
 var mapNodeId = 'map-' + taskId
 var dslNodes = [
@@ -1692,7 +1702,7 @@ var dslNodes = [
         // compatible with the existing mapping DSL while adding dictionary
         // translation, standard-format processing and source-SQL pushdown.
         manifestKey: 'transform.field-enrichment',
-        label: '字段映射',
+        label: '字段治理',
         category: 'transform',
         x: 540,
         y: 120,

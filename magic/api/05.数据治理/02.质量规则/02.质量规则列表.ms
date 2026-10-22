@@ -92,6 +92,7 @@
 // 业务说明：查询数据质量校验规则列表（不分页）；使用请求参数 ruleName、ruleCode、checkDimension、ruleLevel；涉及 data_gov_quality_rule 等业务表。
 // 核心业务逻辑：按接口约定编排当前请求并返回业务处理结果。
 import log
+import tenantRuntime
 
 /**
  * 查询数据质量校验规则列表
@@ -105,11 +106,13 @@ var ruleName = body?.ruleName
 var ruleCode = body?.ruleCode
 var checkDimension = body?.checkDimension
 var ruleLevel = body?.ruleLevel
+var tenantId = tenantRuntime.id()
 
 // 构建查询条件
 var query = db.table('data_gov_quality_rule')
     .where()
     .eq('is_del', 0)
+    .eq('tenant_id',tenantId)
 
 if (ruleName != null && ruleName != '') {
     query = query.like('rule_name', '%' + ruleName + '%')
@@ -135,4 +138,5 @@ var list = query
 log.info('查询数据质量规则列表成功, 共查询到 {} 条数据', list.length)
 
 // ========== 返回结果 ==========
-return list
+// 旧规则编辑器仍使用原有SQL文本契约，新SQL条件模板由独立模板入口维护。
+return list.filter(row=>row.scopeOfApplication!='QUALITY_SQL_TEMPLATE_V1')

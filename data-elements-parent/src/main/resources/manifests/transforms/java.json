@@ -1,0 +1,52 @@
+{
+  "key": "transform.java",
+  "category": "transform",
+  "label": "JAVA 加工",
+  "icon": "code",
+  "description": "执行 NiFi 服务器上的可执行 JAR 程序",
+  "fields": [
+    {
+      "key": "executable",
+      "label": "运行程序",
+      "type": "text",
+      "required": true,
+      "default": "java"
+    },
+    {
+      "key": "programPath",
+      "label": "JAR 路径",
+      "type": "text",
+      "required": true,
+      "placeholder": "/opt/nifi/scripts/process.jar"
+    },
+    {
+      "key": "arguments",
+      "label": "程序参数",
+      "type": "json-editor",
+      "default": []
+    },
+    {
+      "key": "workingDirectory",
+      "label": "工作目录",
+      "type": "text",
+      "required": false
+    }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "execute",
+        "type": "org.apache.nifi.processors.standard.ExecuteStreamCommand",
+        "properties": {}
+      }
+    ],
+    "inlet": "execute",
+    "outlets": [
+      {
+        "name": "default",
+        "processorRef": "execute",
+        "relationship": "output stream"
+      }
+    ]
+  }
+}

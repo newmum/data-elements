@@ -21,8 +21,74 @@ class TaskCategoryWarehouseScopeMagicTest {
     private static final String INGEST_TREE = "ods_data_agg_tree_statistics_01";
     private static final String DISTRIBUTE_TREE = "2b8dd89d130a4738a8aa1d0c8584e401";
 
+    @ParameterizedTest @ValueSource(ints = {20, 100})
+    void ingestionSortsTheWholeAuthorizedResultBeforePagingAndPreservesExplicitSort(int pageSize) throws Exception {
+        int count = 2 * pageSize + 5;
+        var f = fixture(count);
+        var base = java.time.Instant.parse("2026-01-01T00:00:00Z");
+        List<String> expected = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            var values = new LinkedHashMap<String,Object>();
+            values.put("updated_time", i >= count - 2 ? null : java.util.Date.from(base.plusSeconds(i / 2)));
+            values.put("access_request_status", 1);
+            // 仅准备测试数据；业务排序仍执行规范目录中的完整Magic接口。
+            MagicScript.create("db.table('db_table_t').withBlank().where().eq('tenant_id','ga').eq('tid',id).update(values)",null)
+                    .execute(new MagicScriptContext(Map.of("db",f.db,"id","table-"+i,"values",values)));
+            expected.add("table-"+i);
+        }
+        expected.sort(Comparator.<String>comparingInt(id -> {
+            int i = Integer.parseInt(id.substring(6)); return i >= count - 2 ? Integer.MAX_VALUE : -(i / 2);
+        }).thenComparing(Comparator.naturalOrder()));
+        var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
+        for (var filter : List.of(Map.<String,Object>of(), Map.<String,Object>of("keyword","table-"), Map.<String,Object>of("accessStatus","2"))) {
+            List<String> actual = new ArrayList<>();
+            for (int page = 1; page <= 3; page++) {
+                var body = new LinkedHashMap<String,Object>(filter);
+                body.putAll(Map.of("viewLevel","table","datasourceIds",List.of("db","denied","foreign"),"pageNum",page,"pageSize",pageSize));
+                counter.reads = 0;
+                var result = run(f, INGEST_PAGE, body);
+                assertThat(((Number)result.get("total")).intValue()).isEqualTo(count);
+                for (Object value : (List<?>)result.get("list")) {
+                    var row = (Map<?,?>)value;
+                    assertThat(row.get("datasourceId")).isEqualTo("db");
+                    actual.add(row.get("tid").toString());
+                }
+                assertThat(counter.reads).isEqualTo(filter.containsKey("accessStatus") ? 8 : 7);
+            }
+            assertThat(actual).containsExactlyElementsOf(expected);
+        }
+        var ascending = run(f, INGEST_PAGE, Map.of("viewLevel","table","datasourceIds",List.of("db"),
+                "pageSize",pageSize,"sortField","tableName","sortDir","asc"));
+        assertThat(((List<?>)ascending.get("list")).stream().map(value -> ((Map<?,?>)value).get("tableName").toString()).toList())
+                .containsExactlyElementsOf(expected.stream().sorted().limit(pageSize).toList());
+        assertThatThrownBy(() -> run(f, INGEST_PAGE, Map.of("viewLevel","table","sortField","untrusted-column")))
+                .hasMessageContaining("不支持的排序字段");
+        // 下游画布保存也应提升根表排序；任务监控时间、无权目标和异租户画布不能影响它。
+        insertTask(f,"recent-root","table-0","warehouse-0",List.of("warehouse-0"));
+        insertTask(f,"recent-hop","warehouse-0","raw-0",List.of("raw-0"));
+        insertTask(f,"monitor-only","table-2","warehouse-2",List.of("warehouse-2"));
+        insertTask(f,"null-table-time","table-"+(count-1),"warehouse-"+(count-1),List.of("warehouse-"+(count-1)));
+        insertTask(f,"denied-sort","table-1","denied-0",List.of("denied-0"));
+        var seedScript = """
+                db.table('db_table_t').where().eq('tid','warehouse-0').update({source_table_id:'table-0'})
+                db.table('nifi_pipeline_t').where().eq('id','pipe-recent-root').update({updated_at:base+100000})
+                db.table('nifi_pipeline_t').where().eq('id','pipe-recent-hop').update({updated_at:base+2000000})
+                db.table('nifi_pipeline_t').where().eq('id','pipe-monitor-only').update({updated_at:base+500000})
+                db.table('nifi_pipeline_t').where().eq('id','pipe-null-table-time').update({updated_at:base+1500000})
+                db.table('nifi_pipeline_t').where().eq('id','pipe-denied-sort').update({updated_at:base+5000000})
+                db.table('data_access_agg_task_t').where().eq('tid','monitor-only').update({updated_time:future})
+                db.table('nifi_pipeline_t').insert({id:'pipe-monitor-only',tenant_id:'other',is_del:0,updated_at:base+9000000})
+                """;
+        MagicScript.create(seedScript,null).execute(new MagicScriptContext(Map.of("db",f.db,"base",base.toEpochMilli(),
+                "future",java.util.Date.from(base.plusSeconds(90000)))));
+        var recent = run(f, INGEST_PAGE, Map.of("viewLevel","table","datasourceIds",List.of("db"),"pageSize",pageSize));
+        assertThat(((List<?>)recent.get("list")).stream().limit(3).map(value -> ((Map<?,?>)value).get("tid").toString()).toList())
+                .containsExactly("table-0","table-"+(count-1),"table-2");
+        System.out.println("ingestion sorted pages: size="+pageSize+", SQL=7/8; ties/nulls/filters and tenant/role bounds preserved");
+    }
+
     @Test
-    void ingestionStatesUseDirectLiveTasksBeforePagingAndReserveApprovalWithoutExtraRowReads() throws Exception {
+    void ingestionStatesUseDirectLiveTasksBeforePagingIncludingApprovalWithoutExtraRowReads() throws Exception {
         Map<String, Integer> smallReads = new HashMap<>();
         for (int count : List.of(20, 100)) {
             var f = fixture(count);
@@ -40,6 +106,7 @@ class TaskCategoryWarehouseScopeMagicTest {
                             .put("runStatus", i % 4 == 2 ? "Running" : "Stopped");
                 }
             }
+            f.jdbc.update("update db_table_t set access_request_status=1 where datasource_id='db' and mod(cast(substring(tid,7) as int),8)=0");
             // 下游正在运行，不能把已停止的本表第一跳显示成已接入；无权目标也不能改变本表状态。
             insertTask(f, "downstream", "warehouse-1", "raw-1", List.of("raw-1"));
             f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id='downstream-pg' where id='pipe-downstream'");
@@ -51,15 +118,15 @@ class TaskCategoryWarehouseScopeMagicTest {
                 counter.reads = 0;
                 var result = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
                         "datasourceIds", List.of("db"), "accessStatus", state), response);
-                int expected = switch (state) { case "all" -> count; case "2" -> 0; case "3" -> count / 2; default -> count / 4; };
+                int expected = switch (state) { case "all" -> count; case "0" -> count / 8; case "2" -> (count + 4) / 8; case "3" -> count / 2; default -> count / 4; };
                 assertThat(((Number) result.get("total")).intValue()).isEqualTo(expected);
                 assertThat((List<?>) result.get("list")).hasSize(expected);
                 for (Object value : (List<?>) result.get("list")) {
                     var row = (Map<?, ?>) value;
                     int index = Integer.parseInt(row.get("tid").toString().substring("table-".length()));
-                    String expectedState = index % 4 == 0 ? "0" : index % 4 == 2 ? "1" : "3";
+                    String expectedState = index % 8 == 0 ? "2" : index % 4 == 0 ? "0" : index % 4 == 2 ? "1" : "3";
                     assertThat(row.get("accessStatus")).isEqualTo(expectedState);
-                    assertThat(row.get("accessStatusText")).isEqualTo(Map.of("0", "待接入", "1", "已接入", "3", "待启动").get(expectedState));
+                    assertThat(row.get("accessStatusText")).isEqualTo(Map.of("0", "待接入", "1", "已接入", "2", "待审批", "3", "待启动").get(expectedState));
                     if (!state.equals("all")) assertThat(row.get("accessStatus")).isEqualTo(state);
                 }
                 if (count == 20) smallReads.put(state, counter.reads);
@@ -303,12 +370,13 @@ class TaskCategoryWarehouseScopeMagicTest {
         for (int i = 0; i < 2100; i++) rows.add(new Object[]{"many-" + i});
         relations.jdbc.batchUpdate("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,source_table_id) values(?,'ga','warehouse',0,0,'业务表','table-0')", rows);
         assertThat(runValue(relations, INGEST_PAGE, Map.of("viewLevel", "table", "datasourceIds", List.of("db")))).isInstanceOf(ExitValue.class);
-        assertThat(relationCounter.sql).noneSatisfy(sql -> assertThat(sql).contains("data_access_agg_task_t"));
+        // 固定排序聚合只读取任务标识/时间；超限后仍不得继续装载当前页任务和画布详情。
+        assertThat(relationCounter.sql.stream().filter(sql -> !sql.contains("task_ancestry")).toList()).noneSatisfy(sql -> assertThat(sql).contains("data_access_agg_task_t"));
         var tasks = fixture(1);
         var taskCounter = new Counter(); tasks.db.setSqlInterceptors(List.of(taskCounter));
         tasks.jdbc.batchUpdate("insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,is_del) values(?,'ga','table-0','warehouse-0',0)", rows);
         assertThat(runValue(tasks, INGEST_PAGE, Map.of("viewLevel", "table", "datasourceIds", List.of("db")))).isInstanceOf(ExitValue.class);
-        assertThat(taskCounter.sql).noneSatisfy(sql -> assertThat(sql).contains("nifi_pipeline_t"));
+        assertThat(taskCounter.sql.stream().filter(sql -> !sql.contains("task_ancestry")).toList()).noneSatisfy(sql -> assertThat(sql).contains("nifi_pipeline_t"));
     }
 
     @Test
@@ -341,7 +409,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         f.jdbc.batchUpdate("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,source_table_id) values(?,'ga','warehouse',0,0,'业务表','table-15')", leaves);
         var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
         assertThat(runValue(f, INGEST_PAGE, Map.of("viewLevel", "table", "datasourceIds", List.of("db")))).isInstanceOf(ExitValue.class);
-        assertThat(counter.sql).noneSatisfy(sql -> assertThat(sql).contains("data_access_agg_task_t"));
+        assertThat(counter.sql.stream().filter(sql -> !sql.contains("task_ancestry")).toList()).noneSatisfy(sql -> assertThat(sql).contains("data_access_agg_task_t"));
     }
 
     private static DatasourceCompletionMagicTest.Fixture fixture(int count) {
@@ -356,7 +424,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("create index idx_test_table_lookup on db_table_t(tenant_id,tid,is_del)");
         f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp,process_group_id varchar(64))");
-        f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64))");
+        f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64),updated_at bigint)");
         f.jdbc.execute("create table rm_org_t(tenant_id varchar(32),id varchar(64),name varchar(100),deleted int)");
         f.jdbc.update("insert into rm_org_t values('ga','org','当前租户部门',0),('other','org','其他租户部门',0)");
         f.jdbc.update("update db_datasource_t set asset_status=1,db_name='名称相同',db_type='mysql',org_id='org',app_id='app'");
@@ -399,7 +467,7 @@ class TaskCategoryWarehouseScopeMagicTest {
         String script = CanonicalMagicSources.byId(id).replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n", "");
         var scope = new DataIngestionRegistrationScopeTest.VisibleScope();
         var inputs = new LinkedHashMap<String, Object>(); inputs.put("db", f.db); inputs.put("body", body);
-        inputs.put("tenantRuntime", scope); inputs.put("dataScope", scope);
+        inputs.put("tenantRuntime", scope); inputs.put("dataScope", scope); inputs.put("identityRuntime",scope);
         inputs.put("tableSort", new TableSortMagicModule());
         try (var runtime = new TaskRuntimeMagicFixture(scope.id(), response)) {
             inputs.put("taskRuntime", runtime.module);
@@ -412,10 +480,12 @@ class TaskCategoryWarehouseScopeMagicTest {
         int reads;
         final List<String> sql = new ArrayList<>();
         @Override public void preHandle(BoundSql sql, RequestEntity request) {
-            if (sql.getSql().stripLeading().toLowerCase().startsWith("select")) {
+            String statement=sql.getSql().stripLeading().toLowerCase();
+            if (statement.startsWith("select") || statement.startsWith("with")) {
                 reads++;
                 this.sql.add(sql.getSql().toLowerCase());
             }
+            H2RecursiveCteParameters.adapt(sql);
         }
     }
 }

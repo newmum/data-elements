@@ -51,4 +51,54 @@ class NativeCanvasLayoutTest {
     private NativeCanvasLayout.Link link(String from, String to) {
         return new NativeCanvasLayout.Link(from + to, from, to, List.of("success"));
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {20, 100})
+    void keepsInvalidLabelsOutsideProcessorCardsAndMainSuccessQueues(int count) {
+        var processors = json.createArrayNode();
+        var funnels = json.createArrayNode();
+        var links = new ArrayList<NativeCanvasLayout.Link>();
+        for (int i = 0; i < count; i++) {
+            processors.addObject().put("id", "p" + i).putObject("component").putObject("position").put("x", i * 500);
+            funnels.addObject().put("id", "f" + i);
+            links.add(new NativeCanvasLayout.Link("invalid" + i, "p" + i, "f" + i, List.of("invalid")));
+            if (i > 0) links.add(link("p" + (i - 1), "p" + i));
+        }
+        var positions = NativeCanvasLayout.positions(processors, links);
+        var retentions = NativeCanvasLayout.retentionPositions(funnels, links, positions);
+        var queueLabels = new ArrayList<Box>();
+        for (var edge : links) {
+            if (!edge.relationships().contains("invalid")) continue;
+            var source = positions.get(edge.source());
+            var funnel = retentions.get(edge.target());
+            assertThat(funnel.x()).isGreaterThan(1430);
+            assertThat(funnel.y()).isLessThan(source.y());
+            var route = NativeCanvasLayout.invalidRoute(source, funnel);
+            int segment = route.labelIndex();
+            var a = route.bends().get(segment - 1);
+            var b = route.bends().get(segment);
+            assertThat(b.x() - a.x()).isGreaterThanOrEqualTo(260);
+            Box label = new Box((a.x() + b.x()) / 2 - 120, (a.y() + b.y()) / 2 - 22, 240, 44);
+            positions.values().forEach(p -> assertThat(label.overlaps(new Box(p.x(), p.y(), 350, 130))).isFalse());
+            for (var main : links) {
+                if (!main.relationships().contains("success")) continue;
+                var start = positions.get(main.source());
+                var end = positions.get(main.target());
+                Box success = new Box((start.x() + end.x()) / 2 + 175 - 120,
+                        (start.y() + end.y()) / 2 + 65 - 22, 240, 44);
+                assertThat(label.overlaps(success)).isFalse();
+            }
+            queueLabels.forEach(other -> assertThat(label.overlaps(other)).isFalse());
+            queueLabels.add(label);
+        }
+        assertThat(queueLabels).hasSize(count);
+        assertThat(retentions.values()).doesNotHaveDuplicates();
+    }
+
+    private record Box(double x, double y, double width, double height) {
+        boolean overlaps(Box other) {
+            return x < other.x + other.width && x + width > other.x
+                    && y < other.y + other.height && y + height > other.y;
+        }
+    }
 }

@@ -3,7 +3,7 @@ from pathlib import Path
 import json, hashlib, xml.etree.ElementTree as ET
 from PIL import Image
 ROOT=Path(__file__).resolve().parents[1]
-pkg=json.loads((ROOT/'package.json').read_text());base=json.loads((ROOT/'doc/basis/package.original.json').read_text())
+pkg=json.loads((ROOT/'package.json').read_text());base=json.loads((ROOT/'scripts/dependency-baseline.json').read_text())
 assert all(pkg[k][n]==v for k in ['dependencies','devDependencies'] for n,v in base[k].items())
 assert all(pkg['scripts'][n]==v for n,v in base['scripts'].items())
 assets=[]

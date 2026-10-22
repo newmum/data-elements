@@ -1,0 +1,1226 @@
+openapi: 3.0.3
+info:
+  title: haitong 海通数据接入与交换服务
+  version: 1.1.0-rebuilt
+  description: 202=持久化受理，不等于下游完成。主要配置在 config/application.yml。静态密钥不是JWT。
+servers:
+- url: http://127.0.0.1:18083
+security:
+- ClientKey: []
+paths:
+  /api/v1/ingest/{channel}:
+    post:
+      summary: 受理 JSON
+      operationId: post_api_v1_ingest__channel
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: &id001
+                type: object
+                additionalProperties: true
+        default: &id002
+          description: Request rejected or processing failure
+          content:
+            application/json:
+              schema: &id004
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+        '202':
+          description: Persisted and accepted; processing may still be pending
+          content:
+            application/json:
+              schema: *id001
+      parameters:
+      - name: channel
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 200
+        description: 异步动作必填；同键重试保留原请求字节。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+  /api/v1/data-push:
+    post:
+      summary: 统一表批次数据推送
+      description: 请求体 deliveryType 选择 FTP、KAFKA、LOG 或 REGISTRY_SYNC。路由 registration-managed=true 时，FTP 和 KAFKA 使用已完成登记并发布的表级推送契约；registration-managed=false 时，使用海通本地登记镜像表（无镜像记录时才兼容 YAML standalone.datasources）。REGISTRY_SYNC 仅允许数据源平台使用服务间同步密钥，按数据源全量同步本地数据源、表、字段和调用方授权。两种业务投递模式都不允许调用方指定或覆盖实际目的端。
+      operationId: post_api_v1_data_push
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 200
+        description: 同一逻辑批次重试时必须保持相同，且请求体不能改变。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deliveryType]
+              properties:
+                deliveryType:
+                  type: string
+                  enum: [FTP, KAFKA, LOG, REGISTRY_SYNC]
+                  description: FTP/KAFKA 需要 datasourceId、tableName、records；REGISTRY_SYNC 需要 datasource 配置对象，且只接受 X-Standalone-Registry-Key 服务间认证。
+                datasourceId:
+                  type: string
+                  description: FTP/KAFKA 必填。托管模式为已完成登记的数据源标识；独立模式必须匹配 standalone.datasources 的配置键。
+                tableName:
+                  type: string
+                  description: 已登记的数据表英文名。
+                schemaVersion:
+                  type: integer
+                  format: int64
+                  description: 可选；填写时必须等于当前已发布推送契约版本。
+                batchId:
+                  type: string
+                occurredAt:
+                  type: string
+                  format: date-time
+                records:
+                  type: array
+                  minItems: 1
+                  maxItems: 10000
+                  items:
+                    type: object
+                    additionalProperties: true
+                datasource:
+                  type: object
+                  description: deliveryType=REGISTRY_SYNC 时必填。完整契约见 docs/独立登记配置同步接口.md；一次同步覆盖一个 datasourceId 下的表、字段和调用方授权。
+      responses:
+        '202':
+          description: 已持久化受理，后台投递中
+        '200':
+          description: 同幂等键且请求体一致的重复提交
+        default: *id002
+  /api/v1/simple/ftp:
+    post: &id005
+      summary: 表批次写入 FTP/FTPS
+      deprecated: true
+      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=FTP。海通先向数据中台校验已完成登记的表级推送契约、字段和版本，再将业务 records 写至“登记 FTP 输出根目录/datasourceId/tableName/messageId.json”，并生成 .done 清单。
+      operationId: post_api_v1_simple_ftp
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 200
+      requestBody: &id006
+        required: true
+        content:
+          application/json:
+            schema: &id008
+              type: object
+              required: [datasourceId, tableName, records]
+              properties:
+                datasourceId:
+                  type: string
+                  description: 已完成登记的数据源标识；调用方不可指定租户或投递地址。
+                tableName:
+                  type: string
+                  description: 已登记的数据表英文名。
+                schemaVersion:
+                  type: integer
+                  format: int64
+                  description: 可选；填写时必须等于当前已发布推送契约版本。
+                batchId:
+                  type: string
+                occurredAt:
+                  type: string
+                  format: date-time
+                records:
+                  type: array
+                  minItems: 1
+                  maxItems: 10000
+                  items:
+                    type: object
+                    additionalProperties: true
+      responses: &id007
+        '202':
+          description: 已持久化受理，FTP 后台投递中
+        '200':
+          description: 同幂等键重复提交且已完成
+        default: *id002
+  /api/v1/simple/kafka:
+    post:
+      <<: *id005
+      summary: 表批次写入 Kafka
+      deprecated: true
+      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=KAFKA。Kafka Topic 由数据中台登记的推送契约确定，调用方不可传入或覆盖。
+      operationId: post_api_v1_simple_kafka
+  /api/v1/simple/log:
+    post:
+      <<: *id005
+      summary: 表批次打印运行日志
+      deprecated: true
+      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=LOG。只记录表名、批次、条数和摘要，不打印原始业务数据。
+      operationId: post_api_v1_simple_log
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+  /api/v1/messages/{messageId}:
+    get:
+      summary: 查询当前身份消息与目标状态
+      operationId: get_api_v1_messages__messageId
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/files/{channel}:
+    post:
+      summary: 上传文件
+      operationId: post_api_v1_files__channel
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+        '202':
+          description: Persisted and accepted; processing may still be pending
+          content:
+            application/json:
+              schema: *id001
+      parameters:
+      - name: channel
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 200
+        description: 异步动作必填；同键重试保留原请求字节。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+  /api/v1/files/{fileId}:
+    get:
+      summary: 查询文件接管和完成进度
+      operationId: get_api_v1_files__fileId
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/actions/{actionCode}:
+    post:
+      summary: 执行白名单操作
+      operationId: post_api_v1_actions__actionCode
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+        '202':
+          description: Persisted and accepted; processing may still be pending
+          content:
+            application/json:
+              schema: *id001
+      parameters:
+      - name: actionCode
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+        description: 异步动作必填；同键重试保留原请求字节。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+  /internal/v1/overview:
+    get:
+      summary: 运行概览
+      operationId: get_internal_v1_overview
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+  /internal/v1/config-summary:
+    get:
+      summary: 脱敏配置摘要
+      operationId: get_internal_v1_config_summary
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+  /internal/v1/deliveries:
+    get:
+      summary: 目标任务
+      operationId: get_internal_v1_deliveries
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - RUNNING
+          - RETRY_WAIT
+          - SUCCEEDED
+          - FAILED
+          - UNKNOWN
+  /internal/v1/files:
+    get:
+      summary: 文件检查点
+      operationId: get_internal_v1_files
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+  /internal/v1/quarantined:
+    get:
+      summary: 隔离记录
+      operationId: get_internal_v1_quarantined
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+  /internal/v1/deliveries/{id}/retry:
+    post:
+      summary: 仅安全FAILED任务重试
+      operationId: post_internal_v1_deliveries__id__retry
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id003
+              type: object
+              required:
+              - reason
+              properties:
+                reason:
+                  type: string
+                  minLength: 5
+                  maxLength: 1000
+  /internal/v1/deliveries/{id}/resolve:
+    post:
+      summary: 核实UNKNOWN任务
+      operationId: post_internal_v1_deliveries__id__resolve
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - decision
+              - reason
+              - evidence
+              properties:
+                decision:
+                  type: string
+                  enum:
+                  - MARK_SUCCEEDED
+                  - RETRY_CONFIRMED
+                reason:
+                  type: string
+                  minLength: 5
+                evidence:
+                  type: string
+                  minLength: 5
+  /internal/v1/files/{id}/retry:
+    post:
+      summary: 恢复失败文件
+      operationId: post_internal_v1_files__id__retry
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id003
+  /internal/v1/connectors/{name}/health:
+    get:
+      summary: 只读连接检查：kafka/ftp/database
+      operationId: get_internal_v1_connectors__name__health
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+  /internal/v1/ftp-scans/{routeCode}:
+    post:
+      summary: 扫描已配置且开启的FTP目录
+      operationId: post_internal_v1_ftp_scans__routeCode
+      responses:
+        '200':
+          description: Current result
+          content:
+            application/json:
+              schema: *id001
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: routeCode
+        in: path
+        required: true
+        schema:
+          type: string
+  /internal/v1/messages/{id}/payload:
+    get:
+      summary: 管理员读取原文
+      operationId: get_internal_v1_messages__id__payload
+      responses:
+        '200':
+          description: Raw bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default: *id002
+      security:
+      - AdminKey: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+  /internal/v1/openapi:
+    get:
+      summary: 静态接口定义
+      operationId: get_internal_v1_openapi
+      responses:
+        '200':
+          description: OpenAPI YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+        default: *id002
+      security:
+      - AdminKey: []
+  /internal/v1/exchange-logs:
+    get:
+      summary: 查询追加写交换日志
+      security:
+      - AdminKey: []
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: UTC Unix毫秒；from含边界，to不含边界；最长31天
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: UTC Unix毫秒；from含边界，to不含边界；最长31天
+      - name: protocol
+        in: query
+        schema:
+          type: string
+      - name: messageId
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: 管理员查询结果；不代表对方业务处理已成功
+        '400':
+          description: 时间或分页参数不合法
+        '401':
+          description: 未认证
+  /internal/v1/reconciliation/summary:
+    get:
+      summary: 按接收窗口查看本地传输对账汇总
+      security:
+      - AdminKey: []
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: UTC Unix毫秒；from含边界，to不含边界；最长31天
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
+        description: UTC Unix毫秒；from含边界，to不含边界；最长31天
+      responses:
+        '200':
+          description: 管理员查询结果；不代表对方业务处理已成功
+        '400':
+          description: 时间或分页参数不合法
+        '401':
+          description: 未认证
+  /api/v1/file-uploads:
+    post:
+      summary: 初始化上传会话，服务端绑定租户、集合和目标
+      tags:
+      - 非结构化文件
+      responses:
+        '202':
+          description: 202仅证明受理，不等于文件就绪或下游完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileUploadInit'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+    get:
+      summary: 按当前授权范围分页查询会话
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  rows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+          default: 0
+  /api/v1/file-uploads/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: 文件校验、投递和业务回执状态
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: 取消未提交且未进入校验的上传
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/file-uploads/status-batch:
+    post:
+      summary: 1至100项批量状态；任一ID无权访问则整批404
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - uploadIds
+              additionalProperties: false
+              properties:
+                uploadIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  items:
+                    type: string
+                    format: uuid
+  /api/v1/file-uploads/{id}/parts:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: 按片号游标查询已确认片
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uploadId:
+                    type: string
+                  parts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FilePart'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+  /api/v1/file-uploads/{id}/parts/{part}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: part
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 10000
+    put:
+      summary: 流式写单片并验证实际长度和SHA-256
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilePart'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-Part-SHA256
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+  /api/v1/file-uploads/{id}/complete:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      summary: 无正文；检查缺片后异步合并、校验、检查文件
+      tags:
+      - 非结构化文件
+      responses:
+        '202':
+          description: 202仅证明受理，不等于文件就绪或下游完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/file-uploads/{id}/submit:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      summary: 提交唯一业务意图；文件未就绪时WAITING_FILE
+      tags:
+      - 非结构化文件
+      responses:
+        '202':
+          description: 202仅证明受理，不等于文件就绪或下游完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileSubmission'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+  /api/v1/file-uploads/{id}/receipts:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      summary: 已授权接收方对已成功投递且摘要一致的文件回执
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  receiptId:
+                    type: string
+                  duplicate:
+                    type: boolean
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileBusinessReceipt'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+  /api/v1/file-uploads/{id}/content:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: 鉴权回读原文；附件返回，支持单Range、后缀Range、ETag、If-Range
+      tags:
+      - 非结构化文件
+      parameters:
+      - name: Range
+        in: header
+        required: false
+        schema:
+          type: string
+      - name: If-Range
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 完整文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: 单范围文件
+        '416':
+          description: 范围不合法
+        '404':
+          description: 不存在或无权访问
+        '409':
+          description: 未READY
+    head:
+      summary: 鉴权查询文件头
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 长度、类型和ETag；无正文
+        '404':
+          description: 不存在或无权访问
+components:
+  securitySchemes:
+    ClientKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+    AdminKey:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+    GatewayKey:
+      type: apiKey
+      in: header
+      name: X-Gateway-Key
+      description: 启用gateway.shared-key时额外要求；不能代替厂家密钥。
+  schemas:
+    Error: *id004
+
+    FileUploadInit:
+      type: object
+      additionalProperties: false
+      properties:
+        datasourceId:
+          type: string
+        collectionId:
+          type: string
+        fileName:
+          type: string
+          maxLength: 240
+        size:
+          type: integer
+          format: int64
+          minimum: 1
+        sha256:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$
+      required:
+      - datasourceId
+      - collectionId
+      - fileName
+      - size
+    FileSubmission:
+      type: object
+      additionalProperties: false
+      properties:
+        businessKey:
+          type: string
+          minLength: 1
+          maxLength: 200
+        metadata:
+          type: object
+          maxProperties: 100
+          description: 只接受集合声明的STRING/NUMBER/BOOLEAN字段；控制正文最多64KiB
+      required:
+      - businessKey
+      - metadata
+    FileBusinessReceipt:
+      type: object
+      additionalProperties: false
+      properties:
+        deliveryId:
+          type: string
+          format: uuid
+        sha256:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$
+        status:
+          type: string
+          enum:
+          - ACCEPTED
+          - REJECTED
+        businessRef:
+          type: string
+          maxLength: 200
+      required:
+      - deliveryId
+      - sha256
+      - status
+    FilePart:
+      type: object
+      properties:
+        partNumber:
+          type: integer
+        size:
+          type: integer
+          format: int64
+        sha256:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$
+    FileUploadStatus:
+      type: object
+      properties:
+        uploadId:
+          type: string
+        fileId:
+          type: string
+        fileName:
+          type: string
+        datasourceId:
+          type: string
+        collectionId:
+          type: string
+        sha256:
+          type: string
+        mediaType:
+          type: string
+        securityState:
+          type: string
+        messageId:
+          type: string
+        errorCode:
+          type: string
+        statusUrl:
+          type: string
+        contentUrl:
+          type: string
+        deliveryStatus:
+          type: string
+        size:
+          type: integer
+          format: int64
+        partSize:
+          type: integer
+          format: int64
+        partCount:
+          type: integer
+          format: int64
+        completedParts:
+          type: integer
+          format: int64
+        confirmedBytes:
+          type: integer
+          format: int64
+        expiresAt:
+          type: integer
+          format: int64
+        contractVersion:
+          type: integer
+          format: int64
+        state:
+          type: string
+          enum:
+          - CREATED
+          - UPLOADING
+          - FINALIZING
+          - READY
+          - REJECTED
+          - ABORTED
+          - EXPIRED
+        deliveries:
+          type: array
+          items:
+            type: object
+            properties:
+              deliveryId:
+                type: string
+                nullable: true
+              targetCode:
+                type: string
+                nullable: true
+              status:
+                type: string
+                nullable: true
+              errorCode:
+                type: string
+                nullable: true
+              businessStatus:
+                type: string
+                nullable: true
+              businessRef:
+                type: string
+                nullable: true
+              attempts:
+                type: integer

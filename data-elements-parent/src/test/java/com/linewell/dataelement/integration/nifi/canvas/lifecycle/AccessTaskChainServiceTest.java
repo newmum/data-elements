@@ -37,6 +37,79 @@ import org.springframework.web.server.ResponseStatusException;
 class AccessTaskChainServiceTest {
     @ParameterizedTest
     @ValueSource(ints = {20, 100})
+    void standaloneTasksOpenEditableSavedCanvasWithoutRegistrationWarningsWithThreeReads(int count) throws Exception {
+        Fixture fixture = new Fixture();
+        for (int i = 0; i < count; i++) fixture.nonTableTask("kafka" + i);
+        fixture.scope(DataScopeAuthorizationService.Scope.ALL);
+        String original = fixture.jdbc.queryForObject("select dsl_json from nifi_pipeline_t where id='p-kafka0'", String.class);
+        clearInvocations(fixture.jdbc, fixture.scopes);
+        try (var tenant = TenantContext.use("ga")) {
+            Map<String, Object> graph = fixture.service.byTask("kafka0");
+            assertThat(graph).containsEntry("readOnly", false).containsEntry("selectedPipelineId", "p-kafka0")
+                    .containsEntry("standalone", true).containsEntry("relationshipUnavailable", false).containsEntry("warnings", List.of());
+            assertThat(items(graph)).hasSize(1);
+            Pipeline pipeline = (Pipeline) items(graph).getFirst().get("pipeline");
+            assertThat(fixture.json.writeValueAsString(pipeline.dsl())).isEqualTo(original);
+            assertThat(graph.get("links")).isEqualTo(List.of());
+        }
+        verify(fixture.jdbc, times(3)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
+        verifyNoInteractions(fixture.scopes);
+        assertThat(org.mockito.Mockito.mockingDetails(fixture.jdbc).getInvocations())
+                .noneMatch(invocation -> Set.of("update", "execute", "batchUpdate").contains(invocation.getMethod().getName()));
+        verifyNoInteractions(fixture.nifi);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"OWNER", "ORG"})
+    void standaloneTasksUseTheirTenantCanvasWithoutRequiringAllDatasourceScope(String scope) throws Exception {
+        Fixture fixture = new Fixture(); fixture.nonTableTask("kafka");
+        fixture.scope(DataScopeAuthorizationService.Scope.valueOf(scope));
+        try (var tenant = TenantContext.use("ga")) {
+            assertThat(fixture.service.byTask("kafka")).containsEntry("standalone", true)
+                    .containsEntry("readOnly", false).containsEntry("relationshipUnavailable", false);
+            verifyNoInteractions(fixture.scopes);
+        }
+    }
+
+    @Test
+    void manuallyConfiguredDatabaseFlowOpensWithoutMistakingLegacyUrlAndTableForRegisteredIds() throws Exception {
+        Fixture fixture = new Fixture(); fixture.nonTableTask("manual");
+        var dsl = new Pipeline.Dsl(1, List.of(
+                new Pipeline.Node("source", "source.oracle", "manual", "source", 0, 0,
+                        Map.of("host", "fixture.invalid", "table", "ORDERS", "incrementalColumn", "UPDATED_AT")),
+                new Pipeline.Node("sink", "sink.jdbc", "manual", "sink", 500, 0,
+                        Map.of("jdbcUrl", "jdbc:mysql://fixture.invalid/test", "table", "orders_copy"))), List.of());
+        fixture.jdbc.update("update nifi_pipeline_t set dsl_json=? where id='p-manual'", fixture.json.writeValueAsString(dsl));
+        fixture.jdbc.update("update data_access_agg_task_t set target_db_id='jdbc:mysql://fixture.invalid/test',target_table_id='orders_copy'");
+        try (var tenant = TenantContext.use("ga")) {
+            assertThat(fixture.service.byTask("manual")).containsEntry("standalone", true).containsEntry("readOnly", false)
+                    .containsEntry("relationshipUnavailable", false).containsEntry("warnings", List.of());
+            fixture.jdbc.update("update data_access_agg_task_t set target_db_id='unknown-resource'");
+            assertThatThrownBy(() -> fixture.service.byTask("manual")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        }
+        verifyNoInteractions(fixture.nifi);
+    }
+
+    @Test
+    void allScopeCannotReadForeignPipelineOrTreatUnknownTableAsNonTableTask() throws Exception {
+        Fixture fixture = new Fixture(); fixture.nonTableTask("kafka");
+        fixture.scope(DataScopeAuthorizationService.Scope.ALL);
+        try (var tenant = TenantContext.use("ga")) {
+            assertThat(fixture.service.byPipeline("p-kafka")).containsEntry("readOnly", false);
+            fixture.jdbc.update("update data_access_agg_task_t set source_table_id='unknown'");
+            assertThatThrownBy(() -> fixture.service.byTask("kafka")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+            fixture.jdbc.update("update data_access_agg_task_t set source_table_id=null");
+            fixture.jdbc.update("update nifi_pipeline_t set tenant_id='other'");
+            assertThatThrownBy(() -> fixture.service.byTask("kafka")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+            fixture.jdbc.update("update nifi_pipeline_t set tenant_id='ga'");
+            fixture.jdbc.update("update data_access_agg_task_t set tenant_id='other'");
+            assertThatThrownBy(() -> fixture.service.byTask("kafka")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
+        }
+        verifyNoInteractions(fixture.nifi);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
     void twentyOrHundredTasksUseFiveReadsAndOneScopeDecisionWithoutNifi(int count) throws Exception {
         Fixture fixture = new Fixture();
         for (int i = 0; i < count; i++) fixture.task("t" + i, "root", "out" + i, "source", "target");
@@ -381,6 +454,15 @@ class AccessTaskChainServiceTest {
             });
         }
         void datasource(String id) { jdbc.update("insert into db_datasource_t values(?, 'ga', ?, 'user', 'org', 0)", id, id); }
+        void scope(DataScopeAuthorizationService.Scope scope) {
+            when(scopes.currentScope(DataScopeAuthorizationService.DATA_SOURCE_RESOURCE)).thenReturn(
+                    new DataScopeAuthorizationService.ScopeDecision("DATA_SOURCE", scope, "user", List.of("org"), List.of("role"), true));
+        }
+        void nonTableTask(String id) throws Exception {
+            jdbc.update("insert into data_access_agg_task_t(tid,tenant_id,task_name,pipeline_id,created_time,is_del) values(?, 'ga', ?, ?, ?, 0)", id, id, "p-" + id, System.nanoTime());
+            var dsl = new Pipeline.Dsl(1, List.of(new Pipeline.Node("source", "source.kafka", "Kafka 来源", "source", 0, 0, Map.of("topic", "example"))), List.of());
+            jdbc.update("insert into nifi_pipeline_t(id,tenant_id,name,status,dsl_json,is_del) values(?, 'ga', ?, 'SAVED', ?, 0)", "p-" + id, id, json.writeValueAsString(dsl));
+        }
         void table(String id, String ds, String parent) { jdbc.update("insert into db_table_t values(?, 'ga', ?, ?, ?, ?, 0)", id, ds, parent, id, id); }
         Pipeline.Dsl dsl(String source, String target, String sourceDb, String targetDb) {
             return new Pipeline.Dsl(1, List.of(

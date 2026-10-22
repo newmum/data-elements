@@ -2,12 +2,14 @@ import type { ComponentManifest } from '../types/manifest';
 
 const GOVERNANCE_KEYS = new Set(['transform.field-mapping', 'transform.field-enrichment']);
 export function governanceNodeLabel(key: string, label?: string, fallback?: string): string {
+  if (key === 'transform.sql' && (!label || ['自定义 SQL', '自定义SQL'].includes(label))) return 'SQL 加工';
   if (GOVERNANCE_KEYS.has(key) && (!label || ['字段映射', '字段增强'].includes(label))) return '字段治理';
   return label || fallback || '未命名';
 }
 
 /** Keep saved DSL identifiers and custom names intact while presenting the current product name. */
 export function governanceManifest(manifest: ComponentManifest): ComponentManifest {
+  if (manifest.key === 'transform.sql') return { ...manifest, label: 'SQL 加工' };
   if (!GOVERNANCE_KEYS.has(manifest.key)) return manifest;
   return { ...manifest, label: '字段治理',
     description: manifest.description?.replaceAll('字段映射', '字段治理'),

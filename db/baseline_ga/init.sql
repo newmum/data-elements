@@ -909,6 +909,63 @@ CREATE TABLE `data_access_field_mapping` (
   KEY `idx_data_access_field_mapping_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-数据接入字段映射';
 
+-- TABLE data_access_mapping_plan_t
+CREATE TABLE `data_access_mapping_plan_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '执行计划版本标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前认证租户标识',
+  `pipeline_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属画布流程标识',
+  `node_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属字段映射节点标识',
+  `plan_revision` bigint NOT NULL COMMENT '节点计划递增版本号',
+  `draft_revision` bigint NOT NULL COMMENT '编译来源草稿更新时间版本',
+  `plan_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '规范执行计划SHA256摘要',
+  `plan_version` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT '执行计划协议版本',
+  `engine_version` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Java转换内核版本',
+  `function_version` varchar(16) COLLATE utf8mb4_general_ci NOT NULL COMMENT '函数库版本',
+  `source_schema_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '来源Schema规范摘要',
+  `target_schema_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '目标Schema规范摘要',
+  `plan_content` mediumtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '不含连接凭据的完整不可变计划JSON',
+  `resource_version_set` mediumtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '固定字典及资源版本引用JSON',
+  `created_by` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '编译操作者认证标识或系统任务标识',
+  `created_time` datetime(6) NOT NULL COMMENT '计划创建时间，微秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_mapping_plan_revision` (`tenant_id`,`pipeline_id`,`node_id`,`plan_revision`),
+  UNIQUE KEY `uk_mapping_plan_identity` (`tenant_id`,`pipeline_id`,`node_id`,`plan_hash`,`draft_revision`),
+  UNIQUE KEY `uk_mapping_plan_tenant_id` (`tenant_id`,`tid`),
+  KEY `idx_mapping_plan_history` (`tenant_id`,`pipeline_id`,`node_id`,`created_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射不可变执行计划';
+
+-- TABLE data_access_mapping_publication_t
+CREATE TABLE `data_access_mapping_publication_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '发布引用标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前认证租户标识',
+  `pipeline_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '已发布画布流程标识',
+  `node_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '已发布字段映射节点标识',
+  `plan_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前启用的不可变执行计划标识',
+  `process_group_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '承载当前计划的NiFi流程组标识',
+  `published_time` datetime(6) NOT NULL COMMENT '当前计划启用时间，微秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_mapping_publication_node` (`tenant_id`,`pipeline_id`,`node_id`),
+  KEY `idx_mapping_publication_plan` (`tenant_id`,`plan_id`),
+  CONSTRAINT `fk_mapping_publication_plan` FOREIGN KEY (`tenant_id`, `plan_id`) REFERENCES `data_access_mapping_plan_t` (`tenant_id`, `tid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射当前发布计划引用';
+
+-- TABLE data_access_mapping_resource_t
+CREATE TABLE `data_access_mapping_resource_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '不可变资源版本标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '当前认证租户标识',
+  `resource_kind` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '资源类型：TEMPLATE模板，DICTIONARY_SNAPSHOT字典快照',
+  `resource_key` varchar(128) COLLATE utf8mb4_general_ci NOT NULL COMMENT '同一租户内资源版本族名称',
+  `version_no` bigint NOT NULL COMMENT '资源族内递增版本号',
+  `resource_hash` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '资源内容SHA256摘要',
+  `definition_json` mediumtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '资源的授权定义和协议摘要JSON',
+  `resource_content` mediumtext COLLATE utf8mb4_general_ci NOT NULL COMMENT '模板规则或完整字典快照JSON',
+  `created_by` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '资源创建操作者认证标识',
+  `created_time` datetime(6) NOT NULL COMMENT '资源版本创建时间，微秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_mapping_resource_version` (`tenant_id`,`resource_kind`,`resource_key`,`version_no`),
+  KEY `idx_mapping_resource_list` (`tenant_id`,`resource_kind`,`created_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射模板及字典快照版本';
+
 -- TABLE data_access_multi_group_item_t
 CREATE TABLE `data_access_multi_group_item_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '编组成员标识',
@@ -1633,6 +1690,9 @@ CREATE TABLE `db_table_t` (
   `resource_plan_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资源计划标识',
   `resource_field_map` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '资源字段映射',
   `resource_revision_no` int NOT NULL DEFAULT '1' COMMENT '资源修订版本序号',
+  `access_request_status` int NOT NULL DEFAULT '0' COMMENT '接入申请状态：0未申请，1待处理，2已受理',
+  `access_requested_by` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '接入申请人标识',
+  `access_requested_at` datetime(6) DEFAULT NULL COMMENT '接入申请时间',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565294` (`tid`) USING BTREE,
   KEY `idx_db_table_datasource` (`datasource_id`) USING BTREE,
@@ -2620,6 +2680,29 @@ CREATE TABLE `pingao_application_sync_state_t` (
   PRIMARY KEY (`tenant_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='应用系统同步-平澳应用目录同步状态';
 
+-- TABLE push_node_t
+CREATE TABLE `push_node_t` (
+  `tid` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '节点主键标识',
+  `tenant_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属行业租户标识',
+  `network_code` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '所属网络字典编码，对应SSWL',
+  `node_name` varchar(128) COLLATE utf8mb4_general_ci NOT NULL COMMENT '推送节点显示名称',
+  `node_code` varchar(64) COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户内推送节点业务编码',
+  `base_url` varchar(255) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'haitong-data-pull服务根地址，不含凭据',
+  `enabled` tinyint NOT NULL DEFAULT '1' COMMENT '是否启用：0停用、1启用',
+  `is_default` tinyint NOT NULL DEFAULT '0' COMMENT '是否为所属网络默认节点：0否、1是',
+  `remark` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '节点用途及部署说明',
+  `last_sync_time` datetime(6) DEFAULT NULL COMMENT '最近一次配置同步尝试时间',
+  `last_sync_status` varchar(16) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近配置同步结果：SUCCESS成功、FAILED失败',
+  `last_sync_source_id` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '最近同步的数据源标识',
+  `created_time` datetime(6) NOT NULL COMMENT '节点创建时间',
+  `updated_time` datetime(6) NOT NULL COMMENT '节点配置更新时间',
+  `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志：0正常、1已删除',
+  PRIMARY KEY (`tid`),
+  KEY `ix_push_node_network` (`tenant_id`,`network_code`,`is_del`,`enabled`),
+  KEY `ix_push_node_code` (`tenant_id`,`node_code`,`is_del`),
+  KEY `ix_push_node_default` (`tenant_id`,`is_del`,`is_default`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-数据推送节点配置';
+
 -- TABLE res_catalog_publish_request
 CREATE TABLE `res_catalog_publish_request` (
   `tid` varchar(32) NOT NULL COMMENT '主键标识',
@@ -3299,6 +3382,267 @@ CREATE TABLE `service_node_t` (
   KEY `ix_service_node_default` (`tenant_id`,`is_del`,`is_default`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据服务-发布节点配置';
 
+-- TABLE surveillance_control_item_t
+CREATE TABLE `surveillance_control_item_t` (
+  `tid` varchar(32) NOT NULL COMMENT '记录唯一标识',
+  `rule_definition_tid` varchar(32) NOT NULL COMMENT '关联布控规则定义标识',
+  `snapshot_tid` varchar(32) NOT NULL COMMENT '关联规则快照标识',
+  `snapshot_version` bigint NOT NULL DEFAULT '0' COMMENT '规则快照版本号',
+  `tenant_id` varchar(32) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(128) NOT NULL COMMENT '布控引擎编码',
+  `channel_code` varchar(128) NOT NULL COMMENT '布控通道编码',
+  `control_item_id` varchar(128) NOT NULL COMMENT '布控数据项业务标识',
+  `rule_code` varchar(128) NOT NULL COMMENT '布控规则编码',
+  `subject_type` varchar(32) NOT NULL COMMENT '布控对象类型',
+  `identifier_type` varchar(64) DEFAULT NULL COMMENT '对象标识类型',
+  `identifier_value` varchar(512) DEFAULT NULL COMMENT '对象标识值',
+  `identifier_hash` varchar(128) DEFAULT NULL COMMENT '对象标识值摘要',
+  `identifier_ciphertext` longtext COMMENT '对象标识值加密内容',
+  `identifiers_json` longtext COMMENT '对象多标识信息JSON',
+  `attributes_json` longtext COMMENT '对象业务属性JSON',
+  `source_rule_no` varchar(128) DEFAULT NULL COMMENT '来源布控单编号',
+  `control_reason` varchar(512) DEFAULT NULL COMMENT '布控原因',
+  `effective_from` datetime(6) DEFAULT NULL COMMENT '布控生效时间',
+  `effective_to` datetime(6) DEFAULT NULL COMMENT '布控失效时间',
+  `status` varchar(24) NOT NULL DEFAULT 'ACTIVE' COMMENT '记录业务状态',
+  `metadata_json` longtext COMMENT '扩展元数据JSON',
+  `created_time` datetime(6) NOT NULL COMMENT '记录创建时间，精确到微秒',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志：0有效，1已删除',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_surveillance_control_item` (`tenant_id`,`engine_code`,`channel_code`,`control_item_id`,`is_del`),
+  KEY `idx_surveillance_control_item_rule` (`rule_definition_tid`,`status`,`effective_from`,`effective_to`,`is_del`),
+  KEY `idx_surveillance_control_item_runtime` (`tenant_id`,`engine_code`,`channel_code`,`identifier_type`,`identifier_hash`,`status`,`is_del`),
+  KEY `idx_surveillance_control_item_direct_identifier` (`tenant_id`,`engine_code`,`channel_code`,`identifier_type`,`identifier_value`(128),`status`,`is_del`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-具体布控数据项';
+
+-- TABLE surveillance_kafka_connection_t
+CREATE TABLE `surveillance_kafka_connection_t` (
+  `tid` varchar(64) NOT NULL COMMENT '记录唯一标识',
+  `tenant_id` varchar(64) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(64) NOT NULL COMMENT '布控引擎编码',
+  `connection_role` varchar(16) DEFAULT NULL COMMENT '消息连接用途角色',
+  `connection_name` varchar(128) NOT NULL COMMENT '消息连接名称',
+  `bootstrap_servers` varchar(1024) NOT NULL COMMENT 'Kafka消息代理连接地址',
+  `security_protocol` varchar(32) NOT NULL DEFAULT 'PLAINTEXT' COMMENT 'Kafka连接安全协议',
+  `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '记录业务状态',
+  `created_time` datetime(6) NOT NULL COMMENT '记录创建时间，精确到微秒',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志：0有效，1已删除',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_surv_kafka_connection_tenant_engine_role` (`tenant_id`,`engine_code`,`connection_role`),
+  KEY `idx_surv_kafka_connection_status` (`tenant_id`,`status`,`is_del`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-Kafka消息连接';
+
+-- TABLE surveillance_kafka_topic_t
+CREATE TABLE `surveillance_kafka_topic_t` (
+  `tenant_id` varchar(64) NOT NULL COMMENT '所属认证租户标识',
+  `connection_id` varchar(32) NOT NULL COMMENT '所属消息连接标识',
+  `topic_name` varchar(249) NOT NULL COMMENT 'Kafka主题名称',
+  `business_name` varchar(128) NOT NULL DEFAULT '' COMMENT '主题业务名称',
+  `schema_json` text COMMENT '数据结构及连接映射配置JSON',
+  `event_time_field` varchar(128) NOT NULL DEFAULT '' COMMENT '事件时间字段名称',
+  `description` varchar(512) NOT NULL DEFAULT '' COMMENT '业务说明',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  PRIMARY KEY (`tenant_id`,`connection_id`,`topic_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-Kafka主题业务定义';
+
+-- TABLE surveillance_metric_batch_t
+CREATE TABLE `surveillance_metric_batch_t` (
+  `tid` varchar(32) NOT NULL COMMENT '记录唯一标识',
+  `tenant_id` varchar(32) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(128) NOT NULL COMMENT '布控引擎编码',
+  `resource_code` varchar(128) NOT NULL COMMENT '布控资源编码',
+  `batch_id` varchar(256) NOT NULL COMMENT '统计批次幂等标识',
+  `stat_date` date NOT NULL COMMENT '统计归属日期',
+  `input_count` bigint NOT NULL DEFAULT '0' COMMENT '输入记录数量，单位条',
+  `matched_count` bigint NOT NULL DEFAULT '0' COMMENT '匹配命中记录数量，单位条',
+  `unmatched_count` bigint NOT NULL DEFAULT '0' COMMENT '未匹配记录数量，单位条',
+  `failure_count` bigint NOT NULL DEFAULT '0' COMMENT '处理失败记录数量，单位条',
+  `created_time` datetime(6) NOT NULL COMMENT '记录创建时间，精确到微秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_surveillance_metric_batch` (`tenant_id`,`engine_code`,`resource_code`,`batch_id`,`stat_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-统计批次幂等记录';
+
+-- TABLE surveillance_resource_topic_t
+CREATE TABLE `surveillance_resource_topic_t` (
+  `tid` varchar(32) NOT NULL COMMENT '记录唯一标识',
+  `tenant_id` varchar(32) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(128) NOT NULL COMMENT '布控引擎编码',
+  `channel_code` varchar(128) NOT NULL COMMENT '布控通道编码',
+  `resource_code` varchar(128) NOT NULL COMMENT '布控资源编码',
+  `source_table` varchar(256) NOT NULL COMMENT '来源数据表标识',
+  `input_topic` varchar(256) NOT NULL COMMENT '输入消息主题名称',
+  `result_topic` varchar(256) NOT NULL COMMENT '匹配结果消息主题名称',
+  `identifier_type` varchar(64) NOT NULL COMMENT '对象标识类型',
+  `key_field` varchar(128) NOT NULL COMMENT '业务对象标识字段名称',
+  `schema_json` longtext COMMENT '数据结构及连接映射配置JSON',
+  `status` varchar(24) NOT NULL DEFAULT 'ACTIVE' COMMENT '记录业务状态',
+  `created_time` datetime(6) NOT NULL COMMENT '记录创建时间，精确到微秒',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志：0有效，1已删除',
+  `input_connection_ref` varchar(32) GENERATED ALWAYS AS (coalesce(json_unquote(json_extract(`schema_json`,_utf8mb4'$.connectionIds.input')),json_unquote(json_extract(`schema_json`,_utf8mb4'$.connectionRoles.input')),_utf8mb4'INPUT')) STORED COMMENT '输入消息连接引用，优先连接标识、其次角色、缺省INPUT',
+  `output_connection_ref` varchar(32) GENERATED ALWAYS AS (coalesce(json_unquote(json_extract(`schema_json`,_utf8mb4'$.connectionIds.output')),json_unquote(json_extract(`schema_json`,_utf8mb4'$.connectionRoles.output')),_utf8mb4'OUTPUT')) STORED COMMENT '结果消息连接引用，优先连接标识、其次角色、缺省OUTPUT',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_surveillance_resource_code` (`tenant_id`,`engine_code`,`resource_code`,`is_del`),
+  UNIQUE KEY `uk_surveillance_resource_topic` (`tenant_id`,`engine_code`,`channel_code`,`input_connection_ref`,`input_topic`,`is_del`),
+  UNIQUE KEY `uk_surveillance_result_topic` (`tenant_id`,`engine_code`,`output_connection_ref`,`result_topic`,`is_del`),
+  KEY `idx_surveillance_resource_topic_status` (`tenant_id`,`engine_code`,`channel_code`,`status`,`is_del`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-资源输入与结果主题注册';
+
+-- TABLE surveillance_result_t
+CREATE TABLE `surveillance_result_t` (
+  `result_id` char(64) NOT NULL COMMENT '布控匹配结果唯一标识',
+  `tenant_id` varchar(64) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(64) NOT NULL COMMENT '布控引擎编码',
+  `resource_code` varchar(255) NOT NULL COMMENT '布控资源编码',
+  `channel_code` varchar(32) NOT NULL COMMENT '布控通道编码',
+  `event_id` varchar(1024) NOT NULL COMMENT '来源事件标识',
+  `snapshot_version` bigint NOT NULL COMMENT '规则快照版本号',
+  `subject_name` varchar(255) NOT NULL COMMENT '命中的布控对象名称',
+  `identifier_value` varchar(1024) NOT NULL COMMENT '对象标识值',
+  `occurred_at` datetime(6) NOT NULL COMMENT '业务事件发生时间',
+  `archived_at` datetime(6) NOT NULL COMMENT '匹配结果归档时间',
+  `result_topic` varchar(249) NOT NULL COMMENT '匹配结果消息主题名称',
+  `source_stream` char(64) NOT NULL COMMENT '来源消息流标识',
+  `kafka_partition` int NOT NULL COMMENT '来源Kafka消息分区编号',
+  `kafka_offset` bigint NOT NULL COMMENT '来源Kafka消息偏移量',
+  `record_index` int NOT NULL COMMENT '消息内记录序号',
+  `payload_json` json NOT NULL COMMENT '匹配结果业务内容JSON',
+  PRIMARY KEY (`result_id`),
+  KEY `ix_result_resource_time` (`tenant_id`,`engine_code`,`resource_code`,`occurred_at`),
+  KEY `ix_result_delivery` (`source_stream`,`kafka_partition`,`kafka_offset`,`record_index`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-匹配结果归档';
+
+-- TABLE surveillance_rule_definition_t
+CREATE TABLE `surveillance_rule_definition_t` (
+  `tid` varchar(32) NOT NULL COMMENT '记录唯一标识',
+  `snapshot_tid` varchar(32) NOT NULL COMMENT '关联规则快照标识',
+  `tenant_id` varchar(32) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(128) NOT NULL COMMENT '布控引擎编码',
+  `channel_code` varchar(128) NOT NULL COMMENT '布控通道编码',
+  `rule_code` varchar(128) NOT NULL COMMENT '布控规则编码',
+  `rule_name` varchar(256) NOT NULL COMMENT '布控规则名称',
+  `subject_type` varchar(32) NOT NULL COMMENT '布控对象类型',
+  `match_mode` varchar(16) NOT NULL DEFAULT 'AND' COMMENT '匹配条件组合方式',
+  `match_fields_json` longtext NOT NULL COMMENT '匹配字段规则JSON',
+  `priority` int NOT NULL DEFAULT '0' COMMENT '规则优先级',
+  `status` varchar(24) NOT NULL DEFAULT 'ACTIVE' COMMENT '记录业务状态',
+  `source_system` varchar(256) DEFAULT NULL COMMENT '规则来源系统',
+  `reason` varchar(512) DEFAULT NULL COMMENT '规则业务原因',
+  `effective_from` datetime(6) DEFAULT NULL COMMENT '布控生效时间',
+  `effective_to` datetime(6) DEFAULT NULL COMMENT '布控失效时间',
+  `metadata_json` longtext COMMENT '扩展元数据JSON',
+  `created_time` datetime(6) NOT NULL COMMENT '记录创建时间，精确到微秒',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志：0有效，1已删除',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_surveillance_rule_definition` (`snapshot_tid`,`rule_code`,`is_del`),
+  KEY `idx_surveillance_rule_definition_channel` (`tenant_id`,`engine_code`,`channel_code`,`status`,`is_del`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-通道匹配规则定义';
+
+-- TABLE surveillance_rule_snapshot_t
+CREATE TABLE `surveillance_rule_snapshot_t` (
+  `tid` varchar(32) NOT NULL COMMENT '记录唯一标识',
+  `tenant_id` varchar(32) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(128) NOT NULL COMMENT '布控引擎编码',
+  `channel_code` varchar(128) NOT NULL COMMENT '布控通道编码',
+  `snapshot_version` bigint NOT NULL COMMENT '规则快照版本号',
+  `digest` varchar(128) DEFAULT NULL COMMENT '规则快照内容摘要',
+  `source_type` varchar(32) DEFAULT NULL COMMENT '规则快照来源类型',
+  `source_ref` varchar(512) DEFAULT NULL COMMENT '规则快照来源引用',
+  `rules_json` longtext NOT NULL COMMENT '规范化规则集合JSON',
+  `generated_at` datetime(6) NOT NULL COMMENT '规则快照生成时间',
+  `expires_at` datetime(6) DEFAULT NULL COMMENT '有效期截止时间',
+  `snapshot_status` varchar(24) NOT NULL DEFAULT 'ACTIVE' COMMENT '规则快照业务状态',
+  `created_time` datetime(6) NOT NULL COMMENT '记录创建时间，精确到微秒',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志：0有效，1已删除',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_surveillance_snapshot_version` (`tenant_id`,`engine_code`,`channel_code`,`snapshot_version`,`is_del`),
+  KEY `idx_surveillance_snapshot_current` (`tenant_id`,`engine_code`,`channel_code`,`snapshot_status`,`is_del`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-规范化规则快照与版本';
+
+-- TABLE surveillance_service_identity_t
+CREATE TABLE `surveillance_service_identity_t` (
+  `tid` varchar(64) NOT NULL COMMENT '记录唯一标识',
+  `tenant_id` varchar(64) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(64) NOT NULL COMMENT '布控引擎编码',
+  `channel_code` varchar(32) NOT NULL COMMENT '布控通道编码',
+  `resource_code` varchar(128) NOT NULL COMMENT '布控资源编码',
+  `pipeline_id` varchar(64) NOT NULL COMMENT '关联画布流程标识',
+  `token_hash` char(64) NOT NULL COMMENT '服务身份令牌摘要，不保存明文令牌',
+  `status` varchar(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '记录业务状态',
+  `expires_at` datetime(6) DEFAULT NULL COMMENT '有效期截止时间',
+  `created_time` datetime(6) NOT NULL COMMENT '记录创建时间，精确到微秒',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  `is_del` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除标志：0有效，1已删除',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_surv_service_identity_token` (`token_hash`),
+  KEY `idx_surv_service_identity_scope` (`tenant_id`,`engine_code`,`pipeline_id`,`status`,`is_del`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-流程服务身份令牌摘要';
+
+-- TABLE surveillance_task_deployment_t
+CREATE TABLE `surveillance_task_deployment_t` (
+  `tenant_id` varchar(64) NOT NULL COMMENT '所属认证租户标识',
+  `resource_code` varchar(128) NOT NULL COMMENT '布控资源编码',
+  `pipeline_id` varchar(64) NOT NULL COMMENT '关联画布流程标识',
+  `process_group_id` varchar(64) NOT NULL COMMENT '已部署NiFi流程组标识',
+  `input_connection_id` varchar(32) NOT NULL COMMENT '已部署输入消息连接标识',
+  `output_connection_id` varchar(32) NOT NULL COMMENT '已部署结果消息连接标识',
+  `deployment_hash` varchar(128) NOT NULL COMMENT '已部署配置内容摘要',
+  `resource_json` text NOT NULL COMMENT '已部署资源配置JSON',
+  `output_bootstrap_servers` varchar(1024) NOT NULL COMMENT '结果消息Kafka代理连接地址',
+  `output_security_protocol` varchar(32) NOT NULL COMMENT '结果消息Kafka安全协议',
+  `deployed_time` datetime(6) NOT NULL COMMENT '任务部署时间',
+  PRIMARY KEY (`tenant_id`,`resource_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-任务部署配置';
+
+-- TABLE surveillance_task_history_t
+CREATE TABLE `surveillance_task_history_t` (
+  `tid` varchar(32) NOT NULL COMMENT '记录唯一标识',
+  `tenant_id` varchar(64) NOT NULL COMMENT '所属认证租户标识',
+  `resource_code` varchar(256) NOT NULL COMMENT '布控资源编码',
+  `action` varchar(32) NOT NULL COMMENT '任务生命周期操作',
+  `state` varchar(32) NOT NULL COMMENT '任务生命周期状态',
+  `message` varchar(512) DEFAULT NULL COMMENT '任务操作结果说明',
+  `created_time` datetime(6) NOT NULL COMMENT '记录创建时间，精确到微秒',
+  PRIMARY KEY (`tid`),
+  KEY `ix_task_history` (`tenant_id`,`resource_code`,`created_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-任务生命周期操作记录';
+
+-- TABLE surveillance_task_lifecycle_t
+CREATE TABLE `surveillance_task_lifecycle_t` (
+  `tenant_id` varchar(64) NOT NULL COMMENT '所属认证租户标识',
+  `resource_code` varchar(256) NOT NULL COMMENT '布控资源编码',
+  `state` varchar(32) NOT NULL COMMENT '任务生命周期状态',
+  `pipelines_json` longtext COMMENT '任务关联流程配置JSON',
+  `message` varchar(512) DEFAULT NULL COMMENT '任务操作结果说明',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  PRIMARY KEY (`tenant_id`,`resource_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-任务当前生命周期状态';
+
+-- TABLE surveillance_topic_daily_stat_t
+CREATE TABLE `surveillance_topic_daily_stat_t` (
+  `tid` varchar(32) NOT NULL COMMENT '记录唯一标识',
+  `tenant_id` varchar(32) NOT NULL COMMENT '所属认证租户标识',
+  `engine_code` varchar(128) NOT NULL COMMENT '布控引擎编码',
+  `channel_code` varchar(128) NOT NULL COMMENT '布控通道编码',
+  `resource_code` varchar(128) NOT NULL COMMENT '布控资源编码',
+  `input_topic` varchar(256) NOT NULL COMMENT '输入消息主题名称',
+  `result_topic` varchar(256) NOT NULL COMMENT '匹配结果消息主题名称',
+  `stat_date` date NOT NULL COMMENT '统计归属日期',
+  `input_count` bigint NOT NULL DEFAULT '0' COMMENT '输入记录数量，单位条',
+  `matched_count` bigint NOT NULL DEFAULT '0' COMMENT '匹配命中记录数量，单位条',
+  `unmatched_count` bigint NOT NULL DEFAULT '0' COMMENT '未匹配记录数量，单位条',
+  `failure_count` bigint NOT NULL DEFAULT '0' COMMENT '处理失败记录数量，单位条',
+  `last_event_time` datetime(6) DEFAULT NULL COMMENT '最近业务事件时间',
+  `updated_time` datetime(6) NOT NULL COMMENT '记录更新时间，精确到微秒',
+  PRIMARY KEY (`tid`),
+  UNIQUE KEY `uk_surveillance_topic_daily_stat` (`tenant_id`,`engine_code`,`resource_code`,`stat_date`),
+  KEY `idx_surveillance_topic_daily_stat_query` (`tenant_id`,`engine_code`,`channel_code`,`stat_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='布控管理-资源主题每日增量统计';
+
 -- TABLE sym_application_t
 CREATE TABLE `sym_application_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
@@ -3605,60 +3949,3 @@ CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `da_asset_t` AS select `da_
 CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `data_apply_form_catalog_rela` AS select `da_catalog_apply_form_rela`.`tid` AS `tid`,`da_catalog_apply_form_rela`.`apply_form_id` AS `apply_form_id`,`da_catalog_apply_form_rela`.`catalog_id` AS `catalog_id`,`da_catalog_apply_form_rela`.`sort_no` AS `sort_no`,`da_catalog_apply_form_rela`.`tenant_id` AS `tenant_id`,`da_catalog_apply_form_rela`.`revision` AS `revision`,`da_catalog_apply_form_rela`.`created_time` AS `created_time`,`da_catalog_apply_form_rela`.`updated_by` AS `updated_by`,`da_catalog_apply_form_rela`.`updated_time` AS `updated_time`,`da_catalog_apply_form_rela`.`created_by` AS `created_by`,`da_catalog_apply_form_rela`.`is_del` AS `is_del`,`da_catalog_apply_form_rela`.`catalog_org_id` AS `catalog_org_id`,`da_catalog_apply_form_rela`.`catalog_org_path` AS `catalog_org_path` from `da_catalog_apply_form_rela`;
 
 SET FOREIGN_KEY_CHECKS=1;
-
--- TABLE data_access_mapping_plan_t
-CREATE TABLE `data_access_mapping_plan_t` (
-  `tid` varchar(32) NOT NULL COMMENT '执行计划版本标识',
-  `tenant_id` varchar(32) NOT NULL COMMENT '当前认证租户标识',
-  `pipeline_id` varchar(64) NOT NULL COMMENT '所属画布流程标识',
-  `node_id` varchar(64) NOT NULL COMMENT '所属字段映射节点标识',
-  `plan_revision` bigint NOT NULL COMMENT '节点计划递增版本号',
-  `draft_revision` bigint NOT NULL COMMENT '编译来源草稿更新时间版本',
-  `plan_hash` varchar(64) NOT NULL COMMENT '规范执行计划SHA256摘要',
-  `plan_version` varchar(16) NOT NULL COMMENT '执行计划协议版本',
-  `engine_version` varchar(16) NOT NULL COMMENT 'Java转换内核版本',
-  `function_version` varchar(16) NOT NULL COMMENT '函数库版本',
-  `source_schema_hash` varchar(64) NOT NULL COMMENT '来源Schema规范摘要',
-  `target_schema_hash` varchar(64) NOT NULL COMMENT '目标Schema规范摘要',
-  `plan_content` mediumtext NOT NULL COMMENT '不含连接凭据的完整不可变计划JSON',
-  `resource_version_set` mediumtext NOT NULL COMMENT '固定字典及资源版本引用JSON',
-  `created_by` varchar(64) NOT NULL COMMENT '编译操作者认证标识或系统任务标识',
-  `created_time` datetime(6) NOT NULL COMMENT '计划创建时间，微秒',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_mapping_plan_revision` (`tenant_id`,`pipeline_id`,`node_id`,`plan_revision`),
-  UNIQUE KEY `uk_mapping_plan_identity` (`tenant_id`,`pipeline_id`,`node_id`,`plan_hash`,`draft_revision`),
-  UNIQUE KEY `uk_mapping_plan_tenant_id` (`tenant_id`,`tid`),
-  KEY `idx_mapping_plan_history` (`tenant_id`,`pipeline_id`,`node_id`,`created_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射不可变执行计划';
-
--- TABLE data_access_mapping_resource_t
-CREATE TABLE `data_access_mapping_resource_t` (
-  `tid` varchar(32) NOT NULL COMMENT '不可变资源版本标识',
-  `tenant_id` varchar(32) NOT NULL COMMENT '当前认证租户标识',
-  `resource_kind` varchar(32) NOT NULL COMMENT '资源类型：TEMPLATE模板，DICTIONARY_SNAPSHOT字典快照',
-  `resource_key` varchar(128) NOT NULL COMMENT '同一租户内资源版本族名称',
-  `version_no` bigint NOT NULL COMMENT '资源族内递增版本号',
-  `resource_hash` varchar(64) NOT NULL COMMENT '资源内容SHA256摘要',
-  `definition_json` mediumtext NOT NULL COMMENT '资源的授权定义和协议摘要JSON',
-  `resource_content` mediumtext NOT NULL COMMENT '模板规则或完整字典快照JSON',
-  `created_by` varchar(64) NOT NULL COMMENT '资源创建操作者认证标识',
-  `created_time` datetime(6) NOT NULL COMMENT '资源版本创建时间，微秒',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_mapping_resource_version` (`tenant_id`,`resource_kind`,`resource_key`,`version_no`),
-  KEY `idx_mapping_resource_list` (`tenant_id`,`resource_kind`,`created_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射模板及字典快照版本';
-
--- TABLE data_access_mapping_publication_t
-CREATE TABLE `data_access_mapping_publication_t` (
-  `tid` varchar(32) NOT NULL COMMENT '发布引用标识',
-  `tenant_id` varchar(32) NOT NULL COMMENT '当前认证租户标识',
-  `pipeline_id` varchar(64) NOT NULL COMMENT '已发布画布流程标识',
-  `node_id` varchar(64) NOT NULL COMMENT '已发布字段映射节点标识',
-  `plan_id` varchar(32) NOT NULL COMMENT '当前启用的不可变执行计划标识',
-  `process_group_id` varchar(64) NOT NULL COMMENT '承载当前计划的NiFi流程组标识',
-  `published_time` datetime(6) NOT NULL COMMENT '当前计划启用时间，微秒',
-  PRIMARY KEY (`tid`),
-  UNIQUE KEY `uk_mapping_publication_node` (`tenant_id`,`pipeline_id`,`node_id`),
-  KEY `idx_mapping_publication_plan` (`tenant_id`,`plan_id`),
-  CONSTRAINT `fk_mapping_publication_plan` FOREIGN KEY (`tenant_id`,`plan_id`) REFERENCES `data_access_mapping_plan_t` (`tenant_id`,`tid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-字段映射当前发布计划引用';

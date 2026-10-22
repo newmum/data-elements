@@ -1,0 +1,41 @@
+# Merge into private deployment configuration. The API caller cannot supply tenant or destination addresses.
+# File mode requires the four new tables from the current root db/haitong/init.sql.
+relay:
+  files:
+    enabled: true
+    part-size-bytes: 16777216
+    max-file-bytes: 10737418240
+    storage-limit-bytes: 107374182400
+    max-active-uploads: 32
+    max-streams: 16
+    verification-threads: 2
+    session-hours: 24
+    lease-seconds: 120
+    # Example with a locally installed scanner; exit 0 means clean, all other codes reject.
+    scanner-command: ["/usr/bin/clamdscan", "--no-summary", "{file}"]
+    scanner-timeout-seconds: 300
+    collections:
+      case-documents:
+        tenant-id: police-demo
+        datasource-id: case-source
+        collection-id: case-documents
+        version: 1
+        clients: [case-producer]
+        read-clients: [case-receiver]
+        receipt-clients:
+          local: case-receiver
+        targets: [local]
+        max-file-bytes: 10737418240
+        quota-bytes: 53687091200
+        max-active-uploads: 8
+        allowed-extensions: [jpg, jpeg, png, pdf, docx]
+        require-malware-scan: true
+        metadata-types:
+          caseNo: STRING
+          captureTime: STRING
+          documentType: STRING
+        required-metadata: [caseNo, documentType]
+# Configure case-producer/case-receiver under relay.security.clients with distinct env:... API keys.
+# targets reuse existing LOCAL / FTP (including SFTP) / KAFKA definitions.
+# For an explicit isolated demonstration without a scanner, set require-malware-scan: false.
+# Its security state is HEADER_VERIFIED_NOT_SCANNED and never implies a successful malware scan.

@@ -120,6 +120,19 @@ public class DslCompiler {
     /** Validate all source configurations in memory, then query installed extensions once per publication. */
     public void preflightSources(Pipeline pipeline) {
         if (validateDateFetchConfigurations(pipeline)) nifi.requireDateFetchExtension();
+        preflightScriptProcesses(pipeline);
+    }
+
+    private void preflightScriptProcesses(Pipeline pipeline) {
+        boolean required = false;
+        for (Pipeline.Node node : pipeline.dsl().nodes()) {
+            if (!ScriptProcessPolicy.supports(node.manifestKey())) continue;
+            ScriptProcessPolicy.properties(node);
+            required = true;
+        }
+        // One capability read per graph, independent of the number of script nodes.
+        if (required && nifi.findProcessorType(ScriptProcessPolicy.PROCESSOR_TYPE).isEmpty())
+            throw new IllegalStateException("当前 NiFi 未安装 ExecuteStreamCommand，无法部署 Python / JAVA / Shell 加工；旧流程已保留");
     }
 
     private boolean validateDateFetchConfigurations(Pipeline pipeline) {
@@ -220,9 +233,19 @@ public class DslCompiler {
         Pipeline.Node periodicSource = SyncPolicy.periodicSource(pipeline);
         if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
         validateDateFetchConfigurations(pipeline);
+        try (var runtime = nifi.bindRuntimeNode()) {
+            return compileValidated(pipeline, processGroupCreatedCallback, layout, periodicSource);
+        }
+    }
+
+    private CompileResult compileValidated(Pipeline pipeline, Consumer<String> processGroupCreatedCallback,
+            com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer.Layout layout,
+            Pipeline.Node periodicSource) {
+        preflightScriptProcesses(pipeline);
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi,pipeline);
+        Map<String, PreparedHivePartition> hivePartitions = prepareHivePartitions(pipeline);
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
         String pgName = pipeline.name() == null ? pipeline.id() : pipeline.name();
         var position = layout == null
@@ -481,7 +504,7 @@ public class DslCompiler {
 
             if (isHiveBatchPutHdfs(m, "put", cfg)) {
                 buildHiveHdfsSink(pgId, n, nc, nodeLayout, cfg, sharedCs, hiveCsvWriterId,
-                        hiveHdfsWriterTypes.get(hiveHdfsWriterMode(cfg)));
+                        hiveHdfsWriterTypes.get(hiveHdfsWriterMode(cfg)), hivePartitions.get(n.id()));
                 continue;
             }
 
@@ -546,6 +569,7 @@ public class DslCompiler {
                 int row = 0;
                 for (var pSpec : spec.processors()) {
                     Map<String, String> resolved = resolveProps(pSpec.properties(), cfg, nc.csIds, sharedCs);
+                    if (ScriptProcessPolicy.supports(m.key())) resolved = ScriptProcessPolicy.properties(n);
                     applyJdbcSinkPreProcessingSql(m, pSpec.localId(), cfg, resolved);
                     normalizeLinewellJdbcSinkProperties(m, pSpec.localId(), cfg, resolved);
                     // 字段映射节点：将前端 mappings 编译成 NiFi 可执行查询表达式。
@@ -613,6 +637,11 @@ public class DslCompiler {
             }
 
             nc.inletProcessorId = spec.inlet() == null ? null : nc.processorIds.get(spec.inlet());
+            if (ScriptProcessPolicy.supports(m.key())) {
+                // A failed process must not feed partial output downstream or lose its diagnostics.
+                NifiEntity retained = nifi.createRetentionFunnel(pgId, nodeOriginX(nodeLayout) + 520, nodeOriginY(nodeLayout) + 180);
+                nifi.createConnection(pgId, nc.inletProcessorId, "PROCESSOR", retained.id(), "FUNNEL", List.of("nonzero status"));
+            }
             if (spec.outlets() != null) {
                 for (var o : spec.outlets()) {
                     nc.outlets.put(o.name(), new Outlet(nc.processorIds.get(o.processorRef()), o.relationship()));
@@ -1179,16 +1208,20 @@ public class DslCompiler {
     }
 
     private void buildJavaMapping(String pgId,Pipeline.Node node,NodeCompilation compiled,UnifiedMappingService.Compiled plan,Map<String,String>shared,String planId,String contextNodeId){
-        Map<String,String>properties=new LinkedHashMap<>();properties.put("record-reader",compiled.csIds.getOrDefault("jsonReader",shared.get("jsonReader")));properties.put("record-writer",compiled.csIds.get("typed-json-writer"));properties.put("execution-plan",plan.plan().document().toString());properties.put("plan-hash",plan.plan().hash());
+        ObjectNode execution=plan.plan().document().deepCopy();
+        ObjectNode deployment=execution.putObject("_deployment").put("contextNodeId",contextNodeId);
+        if(planId!=null)deployment.put("planId",planId);
+        Map<String,String>properties=new LinkedHashMap<>();properties.put("record-reader",compiled.csIds.getOrDefault("jsonReader",shared.get("jsonReader")));properties.put("record-writer",compiled.csIds.get("typed-json-writer"));properties.put("execution-plan",execution.toString());
         if(compiled.csIds.containsKey("dictionary-batch"))properties.put("dictionary-service",compiled.csIds.get("dictionary-batch"));
         properties.put("typed-record-reader",compiled.csIds.get("typed-json-reader"));
-        if(planId!=null)properties.put("plan-id",planId);
-        properties.put("context-node-id",contextNodeId);
         NifiEntity processor=nifi.createProcessor(pgId,"com.linewell.dataelement.nifi.HaitongTransformRecord",node.label(),node.x(),node.y(),properties,"0 sec","TIMER_DRIVEN");compiled.processorIds.put("map",processor.id());compiled.inletProcessorId=processor.id();compiled.outlets.put("default",new Outlet(processor.id(),"success"));
         // Preserve original failed input for backoff/replay; isolate invalid record envelopes.
         nifi.createConnection(pgId,processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("failure","retry"));
-        NifiEntity retained=nifi.createRetentionFunnel(pgId,node.x()+360,node.y()+30);
-        nifi.createConnection(pgId,processor.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("invalid"));
+        var sourcePoint=new com.linewell.dataelement.integration.nifi.canvas.nifi.NativeCanvasLayout.Point(node.x(),node.y());
+        var funnelPoint=com.linewell.dataelement.integration.nifi.canvas.nifi.NativeCanvasLayout.invalidFunnel(sourcePoint,node.x()+350,0);
+        NifiEntity retained=nifi.createRetentionFunnel(pgId,funnelPoint.x(),funnelPoint.y());
+        NifiEntity invalid=nifi.createConnection(pgId,processor.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("invalid"));
+        nifi.routeInvalidRetention(invalid,sourcePoint,funnelPoint);
         compiled.usedOutgoing.put(processor.id(),new LinkedHashSet<>(List.of("failure","invalid","retry")));
     }
     public record MappingReplacement(NodeCompilation node,String planId) {}
@@ -1260,16 +1293,12 @@ public class DslCompiler {
         applyJdbcSinkPreProcessingSql(null, putSpec.localId(), cfg, resolved);
         normalizeLinewellJdbcSinkProperties(manifest, putSpec.localId(), cfg, resolved);
         String processorType = resolveProcessorType(manifest, putSpec.localId(), putSpec.type(), cfg);
-        NifiEntity merge = nifi.createProcessor(pgId, MERGE_RECORD_TYPE, node.label() + "/merge",
-                x, y + PROCESSOR_ROW_GAP, jdbcBatchMergeProperties(sharedCs), null, null);
-        nc.processorIds.put("merge", merge.id());
+        // 转换后的记录批次可以直接写入；额外 MergeRecord 会再次编码并等待合并桶。
         NifiEntity put = nifi.createProcessor(pgId, processorType, node.label() + "/" + putSpec.localId(),
-                x, y + PROCESSOR_ROW_GAP * 2, resolved, null, null);
+                x, y + PROCESSOR_ROW_GAP, resolved, null, null);
         nc.processorIds.put(putSpec.localId(), put.id());
-        nifi.createConnection(pgId, normalize.id(), "PROCESSOR", merge.id(), "PROCESSOR", List.of("success"));
-        nifi.createConnection(pgId, merge.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("merged"));
+        nifi.createConnection(pgId, normalize.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));
         nc.usedOutgoing.computeIfAbsent(normalize.id(), key -> new LinkedHashSet<>()).add("success");
-        nc.usedOutgoing.computeIfAbsent(merge.id(), key -> new LinkedHashSet<>()).add("merged");
         if (spec.outlets() != null) {
             for (CompileSpec.Outlet outlet : spec.outlets()) {
                 nc.outlets.put(outlet.name(), new Outlet(put.id(), outlet.relationship()));
@@ -2590,25 +2619,6 @@ public class DslCompiler {
     }
 
     /**
-     * Batch records immediately before JDBC persistence. These values mirror the
-     * native-canvas MergeRecord baseline and are intentionally independent of a
-     * target database vendor or PutDatabaseRecord implementation.
-     */
-    private static Map<String, String> jdbcBatchMergeProperties(Map<String, String> sharedCs) {
-        Map<String, String> properties = new LinkedHashMap<>();
-        properties.put("Record Reader", sharedCs.get("jsonReader"));
-        properties.put("Record Writer", sharedCs.get("jsonWriter"));
-        properties.put("Merge Strategy", "Bin-Packing Algorithm");
-        properties.put("Correlation Attribute Name", "filename");
-        properties.put("Attribute Strategy", "Keep Only Common Attributes");
-        properties.put("Minimum Number of Records", "1");
-        properties.put("Maximum Number of Records", "10000");
-        properties.put("Minimum Bin Size", "0 B");
-        properties.put("Maximum Number of Bins", "10");
-        return properties;
-    }
-
-    /**
      * LinewellPutDatabaseRecord declares the required properties by stable API
      * keys, while the native processor accepts the display names used in the
      * generic JDBC manifest. Sending display names to Linewell creates dynamic
@@ -3421,10 +3431,74 @@ public class DslCompiler {
                 ? HIVE_BATCH_LAKE_MODE : HIVE_LINEWELL_HDFS_MODE;
     }
 
+    private record PreparedHivePartition(String processorType, String script) { }
+
+    /** Resolve the whole partition contract before creating a native graph. */
+    private Map<String, PreparedHivePartition> prepareHivePartitions(Pipeline pipeline) {
+        List<Pipeline.Node> targets = pipeline.dsl().nodes().stream()
+                .filter(HiveSinkPublicationPolicy::isHiveSink)
+                .filter(node -> node.config() != null && node.config().get("partitionPlan") instanceof Map<?, ?> plan
+                        && Boolean.TRUE.equals(plan.get("enabled"))).toList();
+        if (targets.isEmpty()) return Map.of();
+        String scriptType = nifi.findProcessorType("ExecuteScript").orElseThrow(() ->
+                new IllegalStateException("Hive分区写入需要NiFi的ExecuteScript（Groovy）组件；未创建流程，请在所有NiFi节点安装该组件"));
+        Map<String, PreparedHivePartition> prepared = new LinkedHashMap<>();
+        for (Pipeline.Node node : targets) {
+            try {
+                Map<String, Object> cfg = node.config();
+                if ("HIVE_RECORD_PUT".equalsIgnoreCase(stringConfig(cfg, "hiveWriteMode"))) {
+                    throw new IllegalStateException("Hive分区表需要按实际分区目录写入，请选择Linewell PutHwHDFS或NiFi原生PutHDFS");
+                }
+                List<com.linewell.dataelement.metautil.model.dto.ColumnInfo> columns = new ArrayList<>();
+                List<String> physicalColumns = new ArrayList<>();
+                if (cfg.get("targetColumns") instanceof List<?> rawColumns) for (Object raw : rawColumns) {
+                    var column = columnValues(raw);
+                    String name = stringValue(column.get("columnName"));
+                    if (name == null || name.equalsIgnoreCase("ods_partition")) continue;
+                    var info = new com.linewell.dataelement.metautil.model.dto.ColumnInfo();
+                    info.setColumnName(name);
+                    info.setColumnType(stringValue(column.get("dataType")));
+                    columns.add(info);
+                    physicalColumns.add(name);
+                }
+                Map<String, Object> plan = new com.linewell.dataelement.metautil.ddl.TablePartitions().normalize(
+                        MAPPER.convertValue(cfg.get("partitionPlan"), Map.class), columns, DatabaseType.HIVE);
+                plan.put("inputField", firstNonBlank(stringConfig(cfg, "partitionInputField"), String.valueOf(plan.get("field"))));
+                String database = firstNonBlankStatic(configText(cfg, "database"), "default");
+                String table = configText(cfg, "table");
+                Map<String, Object> storage;
+                try { storage = hiveModule.partitionLayout(database, table); }
+                catch (HiveModule.PartitionLayoutException mismatch) { throw new IllegalStateException(mismatch.getMessage(), mismatch); }
+                catch (Exception failure) { throw new IllegalStateException("无法核验Hive分区结构、文本格式和实际目录，请检查目标元数据访问", failure); }
+                List<?> present = storage.get("partitions") instanceof List<?> values ? values : List.of();
+                List<String> buckets = ((List<?>) plan.get("partitions")).stream()
+                        .map(part -> String.valueOf(((Map<?, ?>) part).get("bucket"))).toList();
+                Set<?> actual = new HashSet<>(present);
+                if (buckets.stream().anyMatch(bucket -> !actual.contains("ods_partition=" + bucket))) {
+                    throw new IllegalStateException("Hive目标缺少已配置分区，请先完成物化建表或分区注册");
+                }
+                Map<String, String> locations;
+                try { locations = hiveModule.partitionLocations(database, table, buckets); }
+                catch (Exception failure) { throw new IllegalStateException("无法批量核验Hive分区实际Location，请检查MRS客户端Metastore配置及权限", failure); }
+                if (locations == null || buckets.stream().anyMatch(bucket -> locations.get(bucket) == null || locations.get(bucket).isBlank())) {
+                    throw new IllegalStateException("Hive目标部分分区实际Location缺失，不能生成不完整写入链路");
+                }
+                plan.put("locations", locations);
+                prepared.put(node.id(), new PreparedHivePartition(scriptType, HivePartitionRouting.script(plan, physicalColumns)));
+            } catch (IllegalStateException failure) {
+                throw new NodeConfigException(node.id(), node.label(), "partitionPlan", failure.getMessage(), failure);
+            } catch (IllegalArgumentException failure) {
+                throw new NodeConfigException(node.id(), node.label(), "partitionPlan", failure.getMessage(), failure);
+            }
+        }
+        return prepared;
+    }
+
     /** Expand one Hive sink into the production-proven record-to-HDFS chain. */
     private void buildHiveHdfsSink(String pgId, Pipeline.Node node, NodeCompilation nc,
                                    NodeLayout layout, Map<String, Object> cfg,
-                                   Map<String, String> sharedCs, String csvWriterId, String putType) {
+                                   Map<String, String> sharedCs, String csvWriterId, String putType,
+                                   PreparedHivePartition partition) {
         if (csvWriterId == null || csvWriterId.isBlank()) {
             throw new IllegalStateException("Hive HDFS 写入缺少受管的 CSV Record Writer");
         }
@@ -3432,30 +3506,8 @@ public class DslCompiler {
             throw new IllegalStateException("Hive HDFS 写入组件类型未解析");
         }
         boolean linewell = HIVE_LINEWELL_HDFS_MODE.equals(hiveHdfsWriterMode(cfg));
-        Map<String,Object> partitionPlan=null;
-        Map<String,Object> writerConfig=cfg;
-        List<String> physicalColumns=new ArrayList<>();
-        if(cfg.get("partitionPlan") instanceof Map<?,?> rawPlan&&Boolean.TRUE.equals(rawPlan.get("enabled"))) {
-            List<com.linewell.dataelement.metautil.model.dto.ColumnInfo> columns=new ArrayList<>();
-            if(cfg.get("targetColumns") instanceof List<?> rawColumns)for(Object raw:rawColumns) {
-                var column=columnValues(raw);String name=stringValue(column.get("columnName"));
-                if(name==null||name.equalsIgnoreCase("ods_partition"))continue;
-                var info=new com.linewell.dataelement.metautil.model.dto.ColumnInfo();info.setColumnName(name);info.setColumnType(stringValue(column.get("dataType")));columns.add(info);physicalColumns.add(name);
-            }
-            partitionPlan=new com.linewell.dataelement.metautil.ddl.TablePartitions().normalize(MAPPER.convertValue(rawPlan,Map.class),columns,DatabaseType.HIVE);
-            partitionPlan.put("inputField",firstNonBlank(stringConfig(cfg,"partitionInputField"),String.valueOf(partitionPlan.get("field"))));
-            Map<String,Object> partitionLayout;
-            try {partitionLayout=hiveModule.partitionLayout(configText(cfg,"database"),configText(cfg,"table"));}
-            catch(HiveModule.PartitionLayoutException mismatch){throw new IllegalStateException(mismatch.getMessage(),mismatch);}
-            catch(Exception failure){throw new IllegalStateException("无法核验Hive分区结构、文本格式和实际目录，请检查目标元数据访问",failure);}
-            var present=(List<?>)partitionLayout.get("partitions");
-            for(Object item:(List<?>)partitionPlan.get("partitions"))if(!present.contains("ods_partition="+((Map<?,?>)item).get("bucket")))throw new IllegalStateException("Hive目标缺少已配置分区，请先完成物化建表或分区注册");
-            List<String> buckets=((List<?>)partitionPlan.get("partitions")).stream().map(p->String.valueOf(((Map<?,?>)p).get("bucket"))).toList();
-            try {partitionPlan.put("locations",hiveModule.partitionLocations(configText(cfg,"database"),configText(cfg,"table"),buckets));}
-            catch(Exception failure){throw new IllegalStateException("无法批量核验Hive分区实际Location，请检查MRS客户端Metastore配置及权限",failure);}
-            writerConfig=new LinkedHashMap<>(cfg);
-            writerConfig.put("hdfsDirectory","${hive.partition.directory}");
-        }
+        Map<String, Object> writerConfig = new LinkedHashMap<>(cfg);
+        if (partition != null) writerConfig.put("hdfsDirectory", "${hive.partition.directory}");
         double x = nodeOriginX(layout);
         double y = nodeOriginY(layout);
 
@@ -3473,13 +3525,13 @@ public class DslCompiler {
         nc.processorIds.put("filename", filename.id());
         nc.processorIds.put("put", put.id());
         nc.inletProcessorId = convert.id();
-        if(partitionPlan!=null) {
-            String scriptType=nifi.findProcessorType("ExecuteScript").orElseThrow(()->new IllegalStateException("Hive分区写入需要NiFi的ExecuteScript（Groovy）组件"));
-            NifiEntity route=nifi.createProcessor(pgId,scriptType,node.label()+"/partition",x-PROCESSOR_COLUMN_GAP,y,
-                    Map.of("Script Engine","Groovy","Script Body",HivePartitionRouting.script(partitionPlan,physicalColumns)),null,null);
-            nc.processorIds.put("partition",route.id());nc.inletProcessorId=route.id();
-            nifi.createConnection(pgId,route.id(),"PROCESSOR",convert.id(),"PROCESSOR",List.of("success"));
-            nc.usedOutgoing.computeIfAbsent(route.id(),ignored->new LinkedHashSet<>()).add("success");
+        if (partition != null) {
+            NifiEntity route = nifi.createProcessor(pgId, partition.processorType(), node.label() + "/partition",
+                    x - PROCESSOR_COLUMN_GAP, y, Map.of("Script Engine", "Groovy", "Script Body", partition.script()), null, null);
+            nc.processorIds.put("partition", route.id());
+            nc.inletProcessorId = route.id();
+            nifi.createConnection(pgId, route.id(), "PROCESSOR", convert.id(), "PROCESSOR", List.of("success"));
+            nc.usedOutgoing.computeIfAbsent(route.id(), ignored -> new LinkedHashSet<>()).add("success");
         }
         nifi.createConnection(pgId, convert.id(), "PROCESSOR", filename.id(), "PROCESSOR", List.of("success"));
         nifi.createConnection(pgId, filename.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));

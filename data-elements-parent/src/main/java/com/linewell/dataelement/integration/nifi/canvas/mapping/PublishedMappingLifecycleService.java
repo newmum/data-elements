@@ -36,7 +36,7 @@ public class PublishedMappingLifecycleService {
         if(pipeline.nodeMapping().edgeProcessorEndpoints()==null)throw new MappingException("RUNTIME_UNAVAILABLE","运行图缺少边界连接索引");
         Set<String> boundarySources=new HashSet<>(),knownConnections=new HashSet<>();for(var endpoint:pipeline.nodeMapping().edgeProcessorEndpoints().values()){JsonNode edge=edges.get(endpoint.connectionId());if(edge==null||!endpoint.sourceProcessorId().equals(edge.path("component").path("source").path("id").asText())||!endpoint.targetProcessorId().equals(edge.path("component").path("destination").path("id").asText()))throw new MappingException("RUNTIME_UNAVAILABLE","来源或目标边界连接发生变化，未启动运行图");boundarySources.add(endpoint.sourceProcessorId());knownConnections.add(endpoint.connectionId());}
         for(var edge:edges.entrySet())if(boundarySources.contains(edge.getValue().path("component").path("source").path("id").asText())&&!knownConnections.contains(edge.getKey()))for(JsonNode relation:edge.getValue().path("component").path("selectedRelationships"))if(relation.asText().equals("success"))throw new MappingException("MAPPING_UPGRADE_RECOVERY_REQUIRED","发现未登记的成功分支连接，请先完成运行图恢复");
-        for(var entry:published.entrySet()){String id=pipeline.nodeMapping().primaryProcessorIds().get(entry.getKey());JsonNode entity=all.get(id);if(entity==null||!entry.getValue().equals(entity.path("component").path("config").path("properties").path("plan-id").asText()))throw new MappingException("PLAN_VERSION_CONFLICT","当前原生字段节点与已发布计划引用不一致");}
+        for(var entry:published.entrySet()){String id=pipeline.nodeMapping().primaryProcessorIds().get(entry.getKey());JsonNode entity=all.get(id);if(entity==null||!entry.getValue().equals(publishedPlanId(entity)))throw new MappingException("PLAN_VERSION_CONFLICT","当前原生字段节点与已发布计划引用不一致");}
         int once=0;
         try{
             // Read revisions once per native scope; no per-processor GET calls.
@@ -55,5 +55,13 @@ public class PublishedMappingLifecycleService {
         }
     }
     private JsonNode flow(String group){return nifi.get("/flow/process-groups/"+group,JsonNode.class).path("processGroupFlow").path("flow");}
+    private static String publishedPlanId(JsonNode entity) {
+        JsonNode properties=entity.path("component").path("config").path("properties");
+        try {
+            JsonNode plan=JSON.readTree(properties.path("execution-plan").asText("{}"));
+            String embedded=plan.path("_deployment").path("planId").asText();
+            return embedded.isBlank()?properties.path("plan-id").asText():embedded;
+        } catch(Exception malformed){return properties.path("plan-id").asText();}
+    }
     private static boolean oneShot(JsonNode entity){JsonNode component=entity.path("component");String type=component.path("type").asText();return com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.isTableFetch(type)||type.endsWith(".GenerateFlowFile")||(type.endsWith(".QueryDatabaseTable")||type.endsWith(".QueryDatabaseTableRecord"))&&component.path("config").path("properties").path("Maximum-value Columns").asText().isBlank();}
 }

@@ -32,13 +32,14 @@ if (tenantId == '') {
     exit 401, '当前登录租户无效，请重新登录后再维护节点'
 }
 // 以下从 nifi_node_t 业务表读取或维护当前操作涉及的记录。
-var node = db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne()
+var nodeTable = text(body?.nodeType)=='push'?'push_node_t':'nifi_node_t'
+var node = db.table(nodeTable).where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne()
 if (node == null) {
-    exit 404, '数据同步节点不存在或已删除'
+    exit 404, '节点不存在或无权访问'
 }
 var isDefault = node.isDefault == null ? node.is_default : node.isDefault
 if (text(isDefault) == '1' || isDefault == true) {
     exit 400, '默认节点不能删除，请先设置其他节点为默认节点'
 }
-db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).update({ is_del: 1, updated_time: new Date() })
+db.table(nodeTable).where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).update({ is_del: 1, updated_time: new Date() })
 return { success: true }

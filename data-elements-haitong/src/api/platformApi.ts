@@ -1,8 +1,9 @@
 import { getPlatformSessionToken, redirectToPlatformLogin } from '../services/platformSession';
 import { getBridgeToken, getSessionRevision } from '../nifi/api/bridgeSession';
 
-const baseUrl = (import.meta.env.VITE_DATA_ELEMENTS_API_BASE_URL
-  || (import.meta.env.DEV ? '/dev-api' : '/prod-api')).replace(/\/$/, '');
+const platformEnv = import.meta.env ?? {};
+const baseUrl = (platformEnv.VITE_DATA_ELEMENTS_API_BASE_URL
+  || (platformEnv.DEV ? '/dev-api' : '/prod-api')).replace(/\/$/, '');
 
 export class PlatformApiError extends Error {
   constructor(public readonly path: string, message: string, public readonly status?: number) {
@@ -34,7 +35,7 @@ function unwrap<T>(response: unknown, path: string): T {
 }
 
 /** Shared platform contract. Tenant identity comes only from the backend token session. */
-export async function platformApi<T>(path: string, body?: unknown): Promise<T> {
+export async function platformApi<T>(path: string, body?: unknown, options: { method?: 'GET' | 'POST'; timeoutMs?: number } = {}): Promise<T> {
   if (!path.startsWith('/') || path.startsWith('//')) throw new PlatformApiError(path, '接口路径无效');
   const token = await getPlatformSessionToken();
   if (!token) {
@@ -47,13 +48,14 @@ export async function platformApi<T>(path: string, body?: unknown): Promise<T> {
     if (getSessionRevision() !== sessionRevision) throw new PlatformApiError(path, '登录会话已切换，旧请求结果已丢弃', 401);
   };
   let response: Response;
+  const multipart = body instanceof FormData;
   try {
     response = await fetch(`${baseUrl}${path}`, {
-      method: body === undefined ? 'GET' : 'POST',
-      headers: { token, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      method: options.method ?? (body === undefined ? 'GET' : 'POST'),
+      headers: { token, ...(body === undefined || multipart ? {} : { 'Content-Type': 'application/json' }) },
+      body: body === undefined ? undefined : multipart ? body as FormData : JSON.stringify(body),
       cache: 'no-store',
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 20000),
     });
   } catch (cause) {
     assertCurrentSession();

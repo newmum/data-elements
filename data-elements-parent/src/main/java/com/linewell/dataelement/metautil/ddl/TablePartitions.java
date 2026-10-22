@@ -136,6 +136,8 @@ public class TablePartitions {
             else if(!text(parts.getLast().get("upper")).equals("MAXVALUE")) {
                 LocalDateTime upper=LocalDateTime.parse(text(parts.getLast().get("upper")).replace(' ','T'));
                 LocalDateTime horizon=YearMonth.now(ZoneId.of(timezone)).plusMonths(24).atDay(1).atStartOfDay();
+                if(Set.of("MONTH","YEAR").contains(unit)&&horizon.isBefore(LocalDateTime.of(2036,1,1,0,0)))
+                    horizon=LocalDateTime.of(2036,1,1,0,0);
                 int generated=0;
                 while(upper.isBefore(horizon)) {
                     upper=switch(unit){case "DAY"->upper.plusDays(step);case "YEAR"->upper.plusYears(step);default->upper.plusMonths(step);};

@@ -282,6 +282,12 @@ public class JdbcDataQualityEngine {
             case "REGEX" -> regexPredicate(context, column, required(parameters, "pattern"));
             case "TIMELINESS" -> timelinessPredicate(column, parameters);
             case "REFERENCE" -> referencePredicate(context, parameters);
+            case "SQL_TEMPLATE" -> {
+                var values=parameters.get("values") instanceof Map<?,?> raw ? (Map<String,Object>)raw : Map.<String,Object>of();
+                var condition=QualitySqlTemplate.compile(required(parameters,"sqlTemplate"), values, column,
+                        blank(rule.relatedColumn())?null:context.column(rule.relatedColumn()));
+                yield new Predicate(condition.sql(),condition.arguments());
+            }
             default -> throw new IllegalArgumentException("不支持的质检规则类型: " + rule.type());
         };
     }
@@ -473,7 +479,7 @@ public class JdbcDataQualityEngine {
 
     private void validateRule(Rule rule) {
         if (blank(rule.columnName())) throw new IllegalArgumentException(rule.name() + " 未配置校验字段");
-        if (!List.of("NOT_NULL", "NOT_EMPTY", "UNIQUE", "RANGE", "ENUM", "LENGTH", "REGEX", "TIMELINESS", "REFERENCE", "PROFILE")
+        if (!List.of("NOT_NULL", "NOT_EMPTY", "UNIQUE", "RANGE", "ENUM", "LENGTH", "REGEX", "TIMELINESS", "REFERENCE", "PROFILE", "SQL_TEMPLATE")
                 .contains(rule.type())) {
             throw new IllegalArgumentException("不支持的质检规则类型: " + rule.type());
         }

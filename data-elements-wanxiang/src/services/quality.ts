@@ -1,7 +1,8 @@
 import { platformApi } from '../shared/platformApi';
 import { changed, getSession, type Row } from './api';
 
-export const qualityTypes = ['NOT_NULL', 'NOT_EMPTY', 'UNIQUE', 'RANGE', 'ENUM', 'LENGTH', 'REGEX', 'TIMELINESS', 'REFERENCE', 'PROFILE'];
+export const qualityTypes = ['NOT_NULL', 'NOT_EMPTY', 'UNIQUE', 'RANGE', 'ENUM', 'LENGTH', 'REGEX', 'TIMELINESS', 'REFERENCE', 'PROFILE', 'SQL_TEMPLATE'];
+export const qualityDimensions = ['COMPLETENESS','UNIQUENESS','CONSISTENCY','ACCURACY','VALIDITY','TIMELINESS'];
 export const qualityFormatPresets = [
  {label:'电子邮箱',pattern:'^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$'},
  {label:'电话号码',pattern:'^\\+?[\\d\\s-]{7,20}$'},
@@ -18,7 +19,7 @@ export function qualityScore(value:unknown,checkedCount?:unknown):string {
  return Number(value).toFixed(2);
 }
 export const qualityStatus = (status: unknown) => ({ PENDING:'等待执行', INITIALIZING:'准备分片', RUNNING:'执行中', COMPLETED:'检查完成', COMPLETED_WITH_ISSUES:'发现异常', FAILED:'执行失败', CANCELLED:'已取消', OPEN:'待分派', IN_PROGRESS:'整改中', PENDING_RECHECK:'待复检', CLOSED:'已关闭', ASSIGNED:'已关联工单' } as Row)[String(status)] || String(status || '未执行');
-export const dimensionLabel = (value: unknown) => ({ COMPLETENESS:'完整性', UNIQUENESS:'唯一性', VALIDITY:'规范性', ACCURACY:'准确性',TIMELINESS:'时效性',CONSISTENCY:'引用完整性',PROFILE:'字段探查' } as Row)[String(value)] || String(value || '—');
+export const dimensionLabel = (value: unknown) => ({ COMPLETENESS:'完整性', UNIQUENESS:'唯一性', VALIDITY:'规范性', ACCURACY:'准确性',TIMELINESS:'时效性',CONSISTENCY:'一致性',PROFILE:'字段探查' } as Row)[String(value)] || String(value || '—');
 export const severityLabel = (value: unknown) => ({ LOW:'一般', MEDIUM:'中等', HIGH:'严重', CRITICAL:'致命' } as Row)[String(value)] || String(value || '—');
 /** Original Java / Magic responses may use either naming convention. Preserve zero and false. */
 export function qualityRecord(value: unknown): Row {
@@ -51,7 +52,7 @@ export function qualityPage(value:unknown):QualityPage {
  if(!Number.isInteger(total)||total<0) throw new Error('质量列表总数不正确');
  return {list:list.map(qualityRecord),total};
 }
-export type QualityRule = {ruleName:string;ruleType:string;dimension:string;columnName:string;severity:string;weight:number;parameters:Row;relatedColumn?:string};
+export type QualityRule = {ruleName:string;ruleType:string;dimension:string;columnName:string;severity:string;weight:number;parameters:Row;relatedColumn?:string;parameterText?:string};
 export type QualityDraft = {tid?:string;taskName:string;taskCode:string;datasourceId:string;tableId:string;shardKey:string;shardCount:number;sampleLimit:number;timeoutMinutes:number;resourceGroup:string;triggerMode:string;cronExpression:string;description:string;rules:QualityRule[]};
 export const emptyQualityDraft = ():QualityDraft => ({taskName:'',taskCode:'',datasourceId:'',tableId:'',shardKey:'',shardCount:1,sampleLimit:200,timeoutMinutes:120,resourceGroup:'DEFAULT',triggerMode:'MANUAL',cronExpression:'',description:'',rules:[]});
 export function qualityRule(value:unknown):QualityRule {
@@ -107,6 +108,12 @@ export function qualityBody(input:QualityDraft):QualityDraft {
   }
   if(r.ruleType==='ENUM'&&(!Array.isArray(p.values)||!p.values.length||p.values.some((v:unknown)=>typeof v!=='string'&&typeof v!=='number')))throw new Error('请填写至少一个有效枚举值');
   if(r.ruleType==='REGEX'){p.pattern=bounded(p.pattern,1000,'正则表达式',true);try{new RegExp(p.pattern);}catch{throw new Error('正则表达式格式不正确');}}
+  if(r.ruleType==='SQL_TEMPLATE'){
+   p.templateId=bounded(p.templateId,64,'SQL模板',true);
+   if(p.values!=null&&(typeof p.values!=='object'||Array.isArray(p.values)))throw new Error('模板参数必须是JSON对象');
+   // 模板正文和维度由服务端按当前租户解析；表单只发送模板引用和参数。
+   for(const key of Object.keys(p))if(!['templateId','values'].includes(key))delete p[key];
+  }
   return {ruleName:bounded(r.ruleName,128,'规则名称',true),ruleType:r.ruleType,dimension:bounded(r.dimension,32,'质量维度',true),columnName:bounded(r.columnName,128,'校验字段',true),severity:r.severity,weight:integer(r.weight,1,100,'评分权重'),parameters:p,...(r.relatedColumn?{relatedColumn:bounded(r.relatedColumn,128,'关联字段')}:{})};
  });
  return out;
@@ -129,10 +136,33 @@ export const qualityApi={
  runIssues:async(runId:string,page=1,size=20,severity='',status='',signal?:AbortSignal,order:Record<string,unknown>={})=>qualityPage(await call('run/issues',{runId:id(runId),page,size,severity,status,...order},signal)),
  cancelRun:(runId:string)=>mutate('run/cancel',{runId:id(runId)}),
  datasources:(signal?:AbortSignal)=>records('options/datasources',{},signal),tables:(datasourceId:string,signal?:AbortSignal)=>records('options/tables',{datasourceId:id(datasourceId)},signal),columns:(tableId:string,signal?:AbortSignal)=>records('options/columns',{tableId:id(tableId)},signal),templates:(signal?:AbortSignal)=>records('options/templates',{},signal),organizations:(signal?:AbortSignal)=>records('options/organizations',{},signal),
+ columnsBatch:async(tableIds:string[],signal?:AbortSignal):Promise<Record<string,Row[]>>=>{
+  const ids=[...new Set(tableIds.map(id))];if(ids.length>100)throw new Error('一次最多读取100张表的字段');
+  const result:Record<string,Row[]>={};
+  for(let offset=0;offset<ids.length;offset+=50){const batch=ids.slice(offset,offset+50),rows=await call<Record<string,unknown>>('options/columns',{tableIds:batch},signal);
+   for(const tableId of batch){if(!Array.isArray(rows?.[tableId]))throw new Error('批量字段返回缺少已请求数据表');result[tableId]=(rows[tableId] as unknown[]).map(qualityRecord);}
+  }
+  return result;
+ },
+ sqlTemplatePage:async(query:Partial<QualityQuery>&{dimension?:string}={},signal?:AbortSignal)=>qualityPage(await call('templates/page',{page:query.page||1,size:query.size||20,keyword:query.keyword||'',dimension:query.dimension||'',sortField:query.sortField,sortDir:query.sortDir},signal)),
+ saveSqlTemplate:(draft:Row)=>mutate<Row>('templates/save',{tid:draft.id||undefined,ruleName:bounded(draft.ruleName,255,'模板名称',true),ruleCode:bounded(draft.ruleCode,255,'模板编码',true),dimension:draft.dimension,sqlTemplate:bounded(draft.sqlTemplate,4000,'SQL异常条件',true),values:draft.values||{},description:bounded(draft.description,1000,'说明')}),
+ deleteSqlTemplate:(templateId:string)=>mutate('templates/delete',{tid:id(templateId)}),
  workOrderPage:async(query:Partial<QualityQuery>={},signal?:AbortSignal):Promise<QualityPage>=>{const [result,orgs]=await Promise.all([call('workorders/page',{page:query.page||1,size:query.size||15,status:query.status||'',sortField:query.sortField,sortDir:query.sortDir},signal),records('options/organizations',{},signal)]);const page=qualityPage(result);return {...page,list:page.list.map(r=>({...r,assigneeOrgName:orgs.find(o=>o.id===String(r.assigneeOrgId))?.name||''}))};},
  createWorkOrder:async(issueId:string,assigneeOrgId?:string,remark?:string)=>qualityRecord(await mutate('workorders/create',{issueId:id(issueId),...(assigneeOrgId?{assigneeOrgId:id(assigneeOrgId)}:{}),...(remark?{remark:bounded(remark,1000,'工单说明')}:{})})),
  transitionWorkOrder:(orderId:string,action:string,opinion='',assigneeOrgId?:string)=>{if(!['START','SUBMIT_RECHECK','CLOSE'].includes(action))throw new Error('工单动作不合法');if(action==='START'&&!assigneeOrgId)throw new Error('请选择责任组织');if(action!=='START'&&!opinion.trim())throw new Error('请填写整改或复检说明');return mutate('workorders/transition',{orderId:id(orderId),action,opinion:bounded(opinion,1000,'整改说明'),...(assigneeOrgId?{assigneeOrgId:id(assigneeOrgId)}:{})});},
 };
+
+export function qualitySqlDefinition(row:Row):{sqlTemplate:string;values:Row} {
+ let config:Row;try{config=JSON.parse(row.check_logic??row.checkLogic);}catch{throw new Error('SQL模板内容损坏，请重新保存模板');}
+ if(typeof config?.sqlTemplate!=='string'||!config.values||typeof config.values!=='object'||Array.isArray(config.values))throw new Error('SQL模板格式不正确');
+ return {sqlTemplate:config.sqlTemplate,values:config.values};
+}
+
+export function qualityParameterObject(value:string):Row {
+ let parsed:unknown;try{parsed=JSON.parse(value||'{}');}catch{throw new Error('请填写有效的JSON参数对象');}
+ if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error('模板参数必须是JSON对象');
+ return parsed as Row;
+}
 /** Export every matched server page, not just the visible page. Fail on repeated/malformed pages. */
 export async function qualityExport(kind:'tasks'|'runs'|'orders',query:Partial<QualityQuery>):Promise<Row[]> {
  const loader=kind==='tasks'?qualityApi.taskPage:kind==='runs'?qualityApi.runPage:qualityApi.workOrderPage;

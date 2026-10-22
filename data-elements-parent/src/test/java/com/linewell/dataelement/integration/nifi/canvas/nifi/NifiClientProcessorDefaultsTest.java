@@ -2,6 +2,7 @@ package com.linewell.dataelement.integration.nifi.canvas.nifi;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -19,6 +20,19 @@ import org.mockito.ArgumentCaptor;
 class NifiClientProcessorDefaultsTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
+    @Test void clusterCoordinatorTypeResponsesAreSufficientWithoutAClusterSizeBan() {
+        for(int nodeCount:java.util.List.of(2,3)) {
+            var client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));String version=com.linewell.dataelement.mapping.core.MappingEngine.engineVersion();
+            var processors=mapper.createObjectNode();processors.putArray("processorTypes").addObject().put("type","com.linewell.dataelement.nifi.HaitongTransformRecord").putObject("bundle").put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version",version);
+            var services=mapper.createObjectNode();services.putArray("controllerServiceTypes").addObject().put("type","com.linewell.dataelement.nifi.JdbcHaitongDictionaryService").putObject("bundle").put("group","com.linewell.dataelement").put("artifact","haitong-mapping-nar").put("version",version);
+            doReturn(processors).when(client).get("/flow/processor-types",JsonNode.class);doReturn(services).when(client).get("/flow/controller-service-types",JsonNode.class);
+            var cluster=mapper.createObjectNode();cluster.putObject("clusterSummary").put("clustered",true).put("connectedNodeCount",nodeCount);org.mockito.Mockito.lenient().doReturn(cluster).when(client).get("/flow/cluster/summary",JsonNode.class);
+            client.requireMappingExtension();verify(client,org.mockito.Mockito.times(2)).get(anyString(),eq(JsonNode.class));
+            verify(client,org.mockito.Mockito.never()).get("/flow/cluster/summary",JsonNode.class);
+            ((com.fasterxml.jackson.databind.node.ArrayNode)services.path("controllerServiceTypes")).removeAll();
+            org.assertj.core.api.Assertions.assertThatThrownBy(client::requireMappingExtension).hasMessageContaining("JdbcHaitongDictionaryService 当前已注册：无");
+        }
+    }
 
     @Test void mappingPreflightListsActualVersionsAndRequiresBothMatchingRegistrations() {
         var client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));

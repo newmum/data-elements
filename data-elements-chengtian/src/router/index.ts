@@ -1,5 +1,11 @@
 import type { App } from "vue";
-import { createRouter, createWebHashHistory, type RouteRecordRaw, RouterView } from "vue-router";
+import {
+  createRouter,
+  createWebHashHistory,
+  type RouteRecordRaw,
+  type RouteLocation,
+  RouterView,
+} from "vue-router";
 import { RouteVO } from "@/api/system/menu-api";
 
 export const Layout = () => import("@/layouts/index.vue");
@@ -43,6 +49,15 @@ export const rootRoute: RouteVO = {
 
 // 静态路由
 export const constantRoutes: RouteRecordRaw[] = [
+  ...["/register/nifi-node-config", "/register/node-config"].map((path) => ({
+    path,
+    redirect: (to: RouteLocation) => ({
+      path: "/node-config",
+      query: to.query,
+      hash: to.hash,
+    }),
+    meta: { hidden: true },
+  })),
   {
     path: "/pingao-sso/callback",
     component: () => import("@/views/login/pingao-callback.vue"),

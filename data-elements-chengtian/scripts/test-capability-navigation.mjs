@@ -1,14 +1,24 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { parse } from "vue/compiler-sfc";
 import ts from "typescript";
 
 const project = new URL("../", import.meta.url);
-const source = readFileSync(new URL("../data/working/global-nav.vue", project), "utf8");
+const repository = new URL("../", project);
+const compileComponent = (file) => {
+  const result = execFileSync(process.execPath, [fileURLToPath(new URL("tools/compile-lowcode.mjs", repository)), file], {
+    cwd: fileURLToPath(repository), encoding: "utf8",
+  });
+  const output = JSON.parse(result.trim().split(/\r?\n/).at(-1));
+  return JSON.parse(readFileSync(new URL(output.compiled.replaceAll("\\", "/"), repository), "utf8")).compileJs;
+};
+const source = readFileSync(new URL("lowcode/10.通用组件/全局导航(global-nav).vue", repository), "utf8");
 const { descriptor } = parse(source);
 const script = descriptor.scriptSetup.content.replace(/^import .*;$/gm, "");
-const compiled = readFileSync(new URL("../data/working/global-nav.compile.js", project), "utf8");
+const compiled = compileComponent("lowcode/10.通用组件/全局导航(global-nav).vue");
 const registry = readFileSync(new URL("src/utils/capabilityCenters.ts", project), "utf8");
 const routes = {
   "数据资产中心": "/assets/my",
@@ -23,8 +33,8 @@ const routes = {
   "数据运行监控中心": "/ops/health",
   "数据安全中心": "/security/discovery/models",
 };
-const devPorts = { qizhi: "3001", wanxiang: "3010", haitong: "3002", search: "3300", report: "3004" };
-const prefixes = { qizhi: "/qizhi/", wanxiang: "/wanxiang-governance/", haitong: "/haitong/", search: "/search/", report: "/report/" };
+const devPorts = { qizhi: "3001", wanxiang: "3010", haitong: "3002", search: "3300" };
+const prefixes = { qizhi: "/qizhi/", wanxiang: "/wanxiang-governance/", haitong: "/haitong/", search: "/search/" };
 const owner = (route) => /^\/(assets|resource|governance)(\/|$)/.test(route) ? "wanxiang" : route.startsWith("/integration/") ? "haitong" : "qizhi";
 let checks = 0;
 
@@ -148,7 +158,7 @@ assert.equal(identityOverride.navigated.at(-1), "https://identity.example/custom
 assert.ok(source.includes('height: calc(100% - 55px)')); checks++;
 const main = readFileSync(new URL("src/main.ts", project), "utf8");
 assert.ok(main.includes("window.__DATA_ELEMENTS_IDAAS_BASE_URL__ = identityCenterBase")); checks++;
-for (const [key, center] of Object.entries({ QIZHI_BASE_URL: "qizhi", REPORT_URL: "report", WANXIANG_BASE_URL: "wanxiang", HAITONG_BASE_URL: "haitong", SEARCH_BASE_URL: "search" })) {
+for (const [key, center] of Object.entries({ QIZHI_BASE_URL: "qizhi", WANXIANG_BASE_URL: "wanxiang", HAITONG_BASE_URL: "haitong", SEARCH_BASE_URL: "search" })) {
   assert.ok(main.includes(`window.__DATA_ELEMENTS_${key}__ = capabilityCenterBases.${center}`));
   checks++;
 }
@@ -170,7 +180,7 @@ const bridge = {
   window: { parent, location: { href: "http://localhost:3000/capability-session.html" }, addEventListener: (name, listener) => { assert.equal(name, "message"); receive = listener; } },
 };
 vm.runInNewContext(sessionJs, bridge);
-for (const origin of ["http://localhost:3001", "http://localhost:3010", "http://localhost:3002", "http://localhost:3300", "http://localhost:3004"]) {
+for (const origin of ["http://localhost:3001", "http://localhost:3010", "http://localhost:3002", "http://localhost:3300"]) {
   await receive({ origin, source: parent, data: { type: "data-elements:session-request", nonce: "test-nonce" } });
   assert.equal(replies.at(-1)[1], origin);
   assert.equal(replies.at(-1)[0].nonce, "test-nonce");
@@ -178,6 +188,7 @@ for (const origin of ["http://localhost:3001", "http://localhost:3010", "http://
 }
 const replyCount = replies.length;
 for (const event of [
+  { origin: "http://localhost:3004", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },
   { origin: "http://localhost:3005", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },
   { origin: "http://localhost:5173", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },
   { origin: "http://127.0.0.1:3300", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },
@@ -187,6 +198,34 @@ for (const event of [
 ]) {
   await receive(event);
   assert.equal(replies.length, replyCount);
+  checks++;
+}
+// Exercise the actual compiled registration button after retiring the separate
+// report app. Entry selection belongs in Haitong's hash, with no stale query.
+const registration = compileComponent("lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue");
+const registrationAst = ts.createSourceFile("registration.js", registration, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+let reportHandler;
+function findReportHandler(node) {
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "openReportWorkspace") reportHandler = node.getText(registrationAst);
+  ts.forEachChild(node, findReportHandler);
+}
+findReportHandler(registrationAst);
+assert.ok(reportHandler);
+for (const [href, configured, expected] of [
+  ["http://localhost:3000/#/datasource-manage/index", "", "http://localhost:3002/#/report?datasourceId=selected-source"],
+  ["http://127.0.0.1:3000/#/datasource-manage/index", "", "http://127.0.0.1:3002/#/report?datasourceId=selected-source"],
+  ["https://platform.example/wanxiang/#/datasource-manage/index", "", "https://platform.example/haitong/#/report?datasourceId=selected-source"],
+  ["https://platform.example/wanxiang/#/datasource-manage/index", "https://centers.example/custom-haitong/?stale=1#old", "https://centers.example/custom-haitong/#/report?datasourceId=selected-source"],
+]) {
+  const location = new URL(href);
+  let target;
+  const entry = { URL, URLSearchParams, sourceTid: { value: "selected-source" },
+    window: { __DATA_ELEMENTS_HAITONG_BASE_URL__: configured, location: {
+      href, hostname: location.hostname, port: location.port, protocol: location.protocol,
+      assign: value => { target = value; },
+    } }, $message: { warning: () => assert.fail("A selected source must navigate") } };
+  vm.runInNewContext(`${reportHandler};openReportWorkspace();`, entry);
+  assert.equal(target, expected);
   checks++;
 }
 console.log(`Capability navigation: ${checks} checks passed (all menu handlers, dev/production URLs, overrides and shared authentication addresses).`);

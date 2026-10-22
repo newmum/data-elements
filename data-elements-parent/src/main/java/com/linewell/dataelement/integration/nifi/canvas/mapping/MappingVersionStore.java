@@ -30,19 +30,14 @@ public class MappingVersionStore {
     private List<Map<String,Object>> boundedRows(String query,List<?> args,int maximum){return jdbc.query(sql(query),statement->{statement.setMaxRows(maximum+1);statement.setQueryTimeout(10);for(int i=0;i<args.size();i++)statement.setObject(i+1,args.get(i));},(rs,i)->row(rs));}
     public Pipeline requirePipeline(String id){
         Pipeline pipeline=pipelines.findById(id).orElseThrow(()->forbidden());
-        if(scopes==null)throw new MappingException("AUTHORIZATION_UNAVAILABLE","流程数据范围校验服务未配置");
         String tenant=TenantContext.requireTenantId();
-        Set<String> datasourceIds=new LinkedHashSet<>(),tableIds=new LinkedHashSet<>();
+        if(TenantContext.usesControlDatabase()||TenantContext.isIgnored())throw forbidden();
+        var references=PipelineResourceReferences.from(pipeline);
+        Set<String> datasourceIds=references.datasourceIds(),tableIds=references.tableIds();
         // The task association is authoritative even when a saved draft omits its source fields.
         var tasks=boundedRows("SELECT `source_db_id`,`target_db_id`,`source_table_id`,`target_table_id` FROM `data_access_agg_task_t` WHERE `pipeline_id`=? AND `tenant_id`=? AND `is_del`=0",List.of(pipeline.id(),tenant),100);
         if(tasks.size()>100)throw new MappingException("BUDGET_EXCEEDED","流程关联任务超过100项");
-        for(var task:tasks){
-            for(String key:List.of("source_db_id","target_db_id"))addReference(datasourceIds,task.get(key));
-            for(String key:List.of("source_table_id","target_table_id"))addReference(tableIds,task.get(key));
-        }
-        if(pipeline.dsl()!=null&&pipeline.dsl().nodes()!=null)for(var node:pipeline.dsl().nodes()){
-            if(node!=null&&node.config()!=null)collectReferences(JSON.valueToTree(node.config()),datasourceIds,tableIds,0);
-        }
+        tasks.forEach(task->PipelineResourceReferences.addTask(pipeline,task,references));
         if(tableIds.size()>200||datasourceIds.size()>200)throw new MappingException("BUDGET_EXCEEDED","流程引用资源超过200项");
         if(!tableIds.isEmpty()){
             List<Object> args=new ArrayList<>(tableIds);args.add(tenant);
@@ -51,7 +46,12 @@ public class MappingVersionStore {
             for(var table:tables){resolved.add(String.valueOf(table.get("tid")));addReference(datasourceIds,table.get("datasource_id"));}
             if(!resolved.equals(tableIds))throw forbidden();
         }
-        if(datasourceIds.isEmpty())throw new MappingException("RESOURCE_FORBIDDEN","无法确定当前流程的已登记数据范围");
+        // Tenant-owned standalone flows need no fabricated registration to archive or run.
+        if(datasourceIds.isEmpty()){
+            if(!tableIds.isEmpty())throw forbidden();
+            return pipeline;
+        }
+        if(scopes==null)throw new MappingException("AUTHORIZATION_UNAVAILABLE","流程数据范围校验服务未配置");
         if(datasourceIds.size()>200)throw new MappingException("BUDGET_EXCEEDED","流程引用数据源超过200项");
         List<Object> args=new ArrayList<>(datasourceIds);args.add(tenant);
         var sources=jdbc.query(sql("SELECT `tid`,`created_by`,`org_id` FROM `db_datasource_t` WHERE `tid` IN ("+String.join(",",Collections.nCopies(datasourceIds.size(),"?"))+") AND `tenant_id`=? AND `is_del`=0"),(rs,i)->row(rs),args.toArray());
@@ -63,22 +63,6 @@ public class MappingVersionStore {
     }
     private static MappingException forbidden(){return new MappingException("RESOURCE_FORBIDDEN","流程或其引用资源不存在、不属于当前租户或超出当前角色数据范围");}
     private static void addReference(Set<String> values,Object value){if(value!=null){String text=value.toString().trim();if(!text.isBlank()&&!text.equals("null"))values.add(text);}}
-    private static void collectReferences(JsonNode node,Set<String> sources,Set<String> tables,int depth){
-        if(depth>32)throw new MappingException("BUDGET_EXCEEDED","流程资源引用嵌套过深");
-        if(node.isArray()){node.forEach(child->collectReferences(child,sources,tables,depth+1));return;}
-        if(!node.isObject())return;
-        for(String key:List.of("registeredDatasourceId","selectedDatabaseId","sourceDbId","targetDbId","dbId","datasourceId","dataSourceId","source_db_id","target_db_id","datasource_id"))if(node.hasNonNull(key))addReference(sources,node.path(key).asText());
-        for(String key:List.of("sourceTableId","targetTableId","registeredTableId","tableId","source_table_id","target_table_id","table_id"))if(node.hasNonNull(key))addReference(tables,node.path(key).asText());
-        node.fields().forEachRemaining(entry->{
-            // Literal business payloads may contain names such as tableId; they are not resource references.
-            if(entry.getKey().equals("value")&&Set.of("LITERAL","CONSTANT").contains(node.path("kind").asText()))return;
-            if(entry.getKey().equals("defaultValue")&&(node.has("ruleId")||node.has("stepId")||node.has("onError")||node.has("missPolicy")))return;
-            if(Set.of("sampleRows","snapshots").contains(entry.getKey())&&node.has("schemaVersion"))return;
-            JsonNode child=entry.getValue();
-            if(entry.getKey().equals("mappings")&&child.isTextual())child=parse(child.asText());
-            if(child.isContainerNode())collectReferences(child,sources,tables,depth+1);
-        });
-    }
     private static String actor(){try{return StpUtil.isLogin()?StpUtil.getLoginIdAsString():"system";}catch(cn.dev33.satoken.exception.SaTokenContextException unavailable){return "system";}}
     private static String id(){return UUID.randomUUID().toString().replace("-","");}
     private static void bounded(JsonNode content,int maximum){if(content==null||!content.isObject()||content.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length>maximum)throw new MappingException("BUDGET_EXCEEDED","版本内容无效或超过容量限制");}

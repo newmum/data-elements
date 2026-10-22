@@ -1,1 +1,0 @@
-Capability navigation: 73 checks passed (all menu handlers, dev/production URLs, overrides and shared authentication addresses).

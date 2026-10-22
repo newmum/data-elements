@@ -26,6 +26,7 @@ const Cross=lazy(()=>import('../pages/ops/CrossNetworkPage'));
 const Instant=lazy(()=>import('../pages/reconcile/InstantReconcilePage'));
 const Inventory=lazy(()=>import('../pages/reconcile/InventoryReconcilePage'));
 const Statements=lazy(()=>import('../pages/reconcile/InventoryStatementsPage'));
+const Report=lazy(()=>import('../report/ReportPage'));
 /** Keep iframe links from the original NiFi canvas usable after consolidation. */
 function EntryRoute(){
  const location=useLocation();
@@ -34,6 +35,7 @@ function EntryRoute(){
 export default function App(){
  const location=useLocation();
  const sessionRevision=useSessionRevision();
+ if(location.pathname==='/report')return <Suspense fallback={<Loading text="正在打开数据上报"/>}><Report key={`report-session-${sessionRevision}`}/></Suspense>;
  const livePaths=new Set(['/','/integration/overview','/overview','/development/tasks','/development/nifi-flows','/development/registry','/development/batch','/development/multi-table','/development/canvas','/ops/ingress','/ops/distribution','/ops/clusters','/ops/cross-network','/reconcile/instant','/reconcile/inventory','/reconcile/statements']);
  const localCanvas=location.pathname==='/development/canvas'&&new URLSearchParams(location.search).has('task');
  if(livePaths.has(location.pathname)&&!localCanvas)return <LoadedApp key={`platform-session-${sessionRevision}`} state={emptyWorkspace} act={localActionUnavailable} live/>;

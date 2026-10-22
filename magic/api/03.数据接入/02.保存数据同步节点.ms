@@ -15,11 +15,12 @@
   "script": null
 }
 ================================
-// 接口：02.保存数据同步节点
+// 接口：02.保存数据抽取节点
 // 路由：POST /ods/nifi-node/saveOrUpdate
-// 业务说明：保存数据同步节点（POST /ods/nifi-node/saveOrUpdate）。仅维护当前租户节点；每个所属网络保留一个默认节点，默认节点可以停用；使用请求参数 tid、nodeName、nodeCode、baseUrl、networkCode、authUsername、authPassword、insecureTls；涉及 sym_dict_t、nifi_node_t 等业务表。
+// 业务说明：保存数据抽取节点（POST /ods/nifi-node/saveOrUpdate）。仅维护当前租户节点；每个所属网络保留一个默认节点，默认节点可以停用；使用请求参数 tid、nodeName、nodeCode、baseUrl、networkCode、authUsername、authPassword、insecureTls；涉及 sym_dict_t、nifi_node_t 等业务表。
 import cn.hutool.core.util.IdUtil
 import tenantRuntime
+import java.net.URI
 
 var text = value => value == null ? '' : value + ''
 var blank = value => value == null || text(value).trim() == ''
@@ -30,6 +31,48 @@ var nodeCode = text(body?.nodeCode).trim()
 var baseUrl = text(body?.baseUrl).trim().replaceAll('/+$', '')
 // 业务租户从当前会话读取，不采用请求体中的租户标识。
 var tenantId = text(tenantRuntime.id()).trim()
+
+if (text(body?.nodeType) == 'push') {
+    if (blank(tenantId)) { exit 401, '当前登录租户无效' }
+    if (blank(nodeName) || blank(nodeCode) || blank(baseUrl) || nodeName.length()>128 || nodeCode.length()>64 || baseUrl.length()>255) {
+        exit 400, '请填写有效的节点名称、编码和推送服务地址'
+    }
+    if (text(body?.remark).length()>500) { exit 400, '节点说明最多500个字符' }
+    var uri = null
+    try { uri = new URI(baseUrl) } catch (e) { exit 400, '推送服务地址格式不正确' }
+    if (!['http','https'].contains(uri.getScheme()) || blank(uri.getHost()) || uri.getUserInfo()!=null || uri.getQuery()!=null || uri.getFragment()!=null) {
+        exit 400, '请填写不含账号、查询参数或锚点的 HTTP(S) 服务根地址'
+    }
+    var networkCode = text(body?.networkCode).trim()
+    var root = db.table('sym_dict_t').where().eq('tenant_id',tenantId).eq('dict_code','SSWL').eq('is_del',0).selectOne()
+    if (root == null || db.table('sym_dict_t').where().eq('tenant_id',tenantId).eq('parent_id',root.tid).eq('dict_code',networkCode).eq('is_del',0).selectOne()==null) {
+        exit 400, '所属网络不存在或已停用'
+    }
+    var existing = blank(tid)?null:db.table('push_node_t').where().eq('tenant_id',tenantId).eq('tid',tid).eq('is_del',0).selectOne()
+    if (!blank(tid) && existing==null) { exit 404, '数据推送节点不存在或无权访问' }
+    var duplicate = db.table('push_node_t').where().eq('tenant_id',tenantId).eq('node_code',nodeCode).eq('is_del',0).selectOne()
+    if (duplicate!=null && text(duplicate.tid)!=tid) { exit 409, '节点编码已存在，请使用其他编码' }
+    var enabled = body?.enabled==false || text(body?.enabled)=='0'?0:1
+    var isDefault = body?.isDefault==true || text(body?.isDefault)=='1'?1:0
+    var networkDefault = db.table('push_node_t').where().eq('tenant_id',tenantId).eq('network_code',networkCode).eq('is_del',0).eq('is_default',1).selectOne()
+    if (existing!=null && text(existing.isDefault == null?existing.is_default:existing.isDefault)=='1'
+        && (text(existing.networkCode || existing.network_code)!=networkCode || isDefault==0)) {
+        exit 409, '请先在原网络指定其他默认节点，再调整当前默认节点'
+    }
+    if (networkDefault==null) { isDefault=1 }
+    var now = new Date()
+    var values = {node_name:nodeName,node_code:nodeCode,network_code:networkCode,base_url:baseUrl,enabled:enabled,is_default:isDefault,remark:text(body?.remark).trim(),updated_time:now}
+    db.transaction(() => {
+        if (isDefault==1) { db.table('push_node_t').where().eq('tenant_id',tenantId).eq('network_code',networkCode).eq('is_del',0).update({is_default:0}) }
+        if (existing==null) {
+            tid=IdUtil.getSnowflakeNextIdStr()
+            values.tid=tid;values.tenant_id=tenantId;values.created_time=now;values.is_del=0
+            db.table('push_node_t').primary('tid').insert(values)
+        } else { db.table('push_node_t').where().eq('tenant_id',tenantId).eq('tid',tid).eq('is_del',0).update(values) }
+    })
+    return {tid:tid}
+}
+
 if (blank(nodeName) || blank(nodeCode) || blank(baseUrl)) {
     exit 400, '节点名称、节点编码和 NiFi 地址不能为空'
 }
@@ -82,7 +125,7 @@ if (blank(tid)) {
 } else {
     var existing = db.table('nifi_node_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne()
     if (existing == null) {
-        exit 404, '数据同步节点不存在或已删除'
+        exit 404, '数据抽取节点不存在或已删除'
     }
     var persistedDefault = existing.isDefault == null ? existing.is_default : existing.isDefault
     var persistedNetworkCode = text(existing.networkCode == null ? existing.network_code : existing.networkCode).trim()

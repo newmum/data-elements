@@ -1,0 +1,92 @@
+.fs-code-field {
+  border: 1px solid var(--fs-border, #dce2ea);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fbfcfe;
+}
+.fs-code-field:focus-within {
+  border-color: #3974df;
+  box-shadow: 0 0 0 2px #3974df12;
+}
+.fs-code-field__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid #e8ecf2;
+  color: #748095;
+  font:
+    10px/1.5 Consolas,
+    monospace;
+  letter-spacing: 0.4px;
+}
+.fs-code-field__lines {
+  margin-left: 10px;
+  color: #8993a3;
+}
+.fs-code-field .ant-input {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 10px 12px;
+  font:
+    12px/1.8 Consolas,
+    "Microsoft YaHei",
+    monospace;
+  color: #35445d;
+  resize: vertical;
+}
+.fs-code-modal .ant-modal-header {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e8ecf2;
+}
+.fs-code-modal .ant-modal-title {
+  font-size: 14px;
+}
+.fs-code-modal__hint {
+  margin: 0 0 12px;
+  color: #778399;
+  font-size: 12px;
+}
+.fs-code-modal .fs-code-modal__input {
+  height: min(58vh, 540px);
+  min-height: 160px;
+  padding: 14px;
+  font:
+    13px/1.8 Consolas,
+    "Microsoft YaHei",
+    monospace;
+  background: #fafbfd;
+  resize: vertical;
+  tab-size: 2;
+}
+.fs-json-field {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e4e9f0;
+  border-radius: 6px;
+  background: #fafbfd;
+}
+.fs-json-field__preview {
+  margin: 0;
+  width: 100%;
+  max-height: 110px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #64748b;
+  font:
+    11px/1.7 Consolas,
+    monospace;
+}
+.fs-field-error {
+  color: #cf4049;
+  font-size: 12px;
+  margin: 8px 0 0;
+}

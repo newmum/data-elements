@@ -17,7 +17,7 @@
   "headers" : [ ],
   "paths" : [ ],
   "responseBody" : "{\n  \"viewLevel\": \"tableDetail\",\n  \"detail\": {\n    \"tid\": \"015c09572d174e89b9bea9c765ef72df\",\n    \"tableName\": \"police_reexplore_new_case_clue\",\n    \"tableNameCn\": \"公安重新探查新增线索表\",\n    \"datasourceName\": \"出入境人员动管系统数据库\",\n    \"businessType\": \"业务表\",\n    \"fieldCount\": 8,\n    \"annotated\": true\n  }\n}",
-  "description" : "数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0，排除资源中心 ODS 层及分域配置的数据源作为主列表来源；表清单从 db_table_t 服务端分页，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword、accessStatus（表视图：0待接入、1已接入、2待审批预留、3待启动）；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。",
+  "description" : "数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0，排除资源中心 ODS 层及分域配置的数据源作为主列表来源；表清单默认按本表与已授权关联画布的最新修改时间倒序、表ID升序后服务端分页，空时间排末尾，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword、accessStatus（表视图：0待接入、1已接入、2待审批、3待启动）；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。",
   "requestBodyDefinition" : null,
   "responseBodyDefinition" : null
 }
@@ -26,10 +26,11 @@
 import cn.hutool.json.JSONUtil
 // 接口：04.数据汇聚分页接口
 // 路由：POST /ods/dataAggPage
-// 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0；表清单从 db_table_t 服务端分页，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword、accessStatus（表视图：0待接入、1已接入、2待审批预留、3待启动）；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
+// 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0；表清单默认按本表与已授权关联画布的最新修改时间倒序、表ID升序后服务端分页，空时间排末尾，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword、accessStatus（表视图：0待接入、1已接入、2待审批、3待启动）；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
 import tenantEs
 import '@/common/configData' as configData
 import tenantRuntime
+import identityRuntime
 import dataScope
 import taskRuntime
 
@@ -103,7 +104,7 @@ var pageSize = body?.pageSize == null ? 20 : body.pageSize::int
 if (pageNum < 1) { pageNum = 1 }
 if (pageSize < 1) { pageSize = 20 }
 if (pageSize > 100) { pageSize = 100 }
-// List sorting is allowlisted and applied before relational pagination.
+// 默认按本表与关联画布最新修改时间倒序；白名单排序先于分页，补齐链路后保持数据库顺序。
 import tableSort
 var sortFields={tableName:'table_name',createdTime:'created_time',updatedTime:'updated_time',
     fieldCount:'field_count',recordCount:'record_count',taskCount:'taskCount'}
@@ -279,17 +280,17 @@ var matchesTaskCategory = (datasource) => distributionView == warehouseDatasourc
 if (viewLevel == 'table') {
     var tableKeyword = text(body?.keyword).trim()
     // 接入状态是查询契约，不复用登记 asset_status 或登记审批 flow_status。
-    // 0 待接入，1 已接入（本表任务实际运行），2 待审批（为后续申请业务预留），3 待启动。
+    // 0 待接入，1 已接入（本表任务实际运行），2 待审批（部门提交接入申请，尚无任务），3 待启动。
     // NiFi 无法确认已部署任务时返回空值及“状态待确认”，不伪造停止或运行状态。
     var requestedAccessStatus = text(body?.accessStatus)
 
     // 数据源和数据表的 asset_status 均大于 0 才可接入。
     // flow_status 不作为登记完成的判断条件。
-    var registeredDatasourceRows = db.table('db_datasource_t').where()
-        .eq('tenant_id', tenantId).eq('is_del', 0)
-        .gt('asset_status', 0).select()
-    registeredDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', registeredDatasourceRows)
-    registeredDatasourceRows = registeredDatasourceRows.filter(matchesTaskCategory)
+    // 一次读取已授权主档；候选来源仍要求已登记，链路目标不因其登记进度被误排除。
+    var accessibleDatasourceRows = db.table('db_datasource_t').where()
+        .eq('tenant_id', tenantId).eq('is_del', 0).select()
+    accessibleDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', accessibleDatasourceRows)
+    var registeredDatasourceRows = accessibleDatasourceRows.filter(row => row.assetStatus > 0 || row.asset_status > 0).filter(matchesTaskCategory)
     var registeredDatasourceIds = []
     var registeredDatasourceMap = {}
     for (registeredDatasourceRow in (registeredDatasourceRows == null ? [] : registeredDatasourceRows)) {
@@ -325,10 +326,6 @@ if (viewLevel == 'table') {
         }
     }
 
-    // 本轮仅预留待审批值，申请单与审批状态将在后续业务中接入；当前没有该类记录。
-    if (requestedAccessStatus == '2') {
-        return {viewLevel:'table', datasourceIds:scopedDatasourceIds, pageNum:pageNum, pageSize:pageSize, total:0, list:[]}
-    }
     // 运行状态筛选先取一次快照；其他页签在查询后读取，避免长查询期间版本变化触发连续补刷。
     var tableRuntimeSnapshot = requestedAccessStatus == '1' || requestedAccessStatus == '3' ? taskRuntime.snapshot() : null
     var runningGroupChunks = []
@@ -349,107 +346,114 @@ if (viewLevel == 'table') {
      * annotated=1 仅代表第二步已经标注，不能越过表资产的完成边界。ES
      * 仅是搜索投影；候选直接从 db_table_t 主表产生，避免投影滞后或大库扫描。
      */
-    var registeredTableQuery = db.table('db_table_t').where()
-        .in('datasource_id', scopedDatasourceIds)
-        .eq('tenant_id', tenantId)
-        .eq('is_del', 0)
-        .gt('asset_status', 0)
-        .in('business_type', ['业务表', '日志表', '字典表'])
     // 所有页签和关键词均在数据库内分页，后续只批量装载当前页的链路。
     if (tableKeyword.length() > 100) { exit 400, '搜索词过长' }
-    var taskCountOrderSql = ''
-    if(sortField=='taskCount') {
-        // One bounded-depth relational expression covers the same root/ancestor family as the displayed chains.
-        var sortTargetSources=db.table('db_datasource_t').columns('tid','org_id','created_by').where()
-            .eq('tenant_id',tenantId).eq('is_del',0).select()
-        sortTargetSources=dataScope.visibleDataSourcesFor('MENU:2081000000000000002',sortTargetSources)
-        var sortTargetSourceIds=sortTargetSources.map(row=>text(row.tid))
-        if(sortTargetSourceIds.size()==0) {sortTargetSourceIds=['__none__']}
-        var countJoins=''
-        var rootMatch='hop.tid=t.tid OR (hop.tid<>hop.source_table_id AND hop.source_table_id=t.tid)'
-        var countDepth=1
-        while(countDepth<=15) {
-            var alias='sortAncestor'+countDepth
-            var prev=countDepth==1?'hop':'sortAncestor'+(countDepth-1)
-            countJoins=countJoins+' LEFT JOIN db_table_t '+alias+' ON '+alias+'.tid='+prev+'.source_table_id AND '+alias+'.tenant_id=#{tenantId} AND '+alias+'.is_del=0 AND '+alias+'.tid<>'+prev+'.tid'
-            rootMatch=rootMatch+' OR (hop.tid<>'+alias+'.source_table_id AND '+alias+'.source_table_id=t.tid)'
-            countDepth=countDepth+1
+    var taskEpochBase = new Date(0::long)
+    var sortTargetSourceIds=accessibleDatasourceRows.map(row=>text(row.tid))
+    if(sortTargetSourceIds.size()==0) {sortTargetSourceIds=['__none__']}
+    // 按实际租户业务库转换毫秒时间戳；复用现有技术模块取得方言，连接由模块负责释放。
+    var sortDatabaseProduct=text(identityRuntime.inspectTenantBinding(tenantId).databaseProduct).toLowerCase()
+    var pipelineTimeSql=''
+    if(sortDatabaseProduct.contains('mysql') || sortDatabaseProduct.contains('mariadb') || sortDatabaseProduct=='h2') {
+        pipelineTimeSql='TIMESTAMPADD(MICROSECOND,MOD(sortPipeline.updated_at,1000)*1000,TIMESTAMPADD(SECOND,FLOOR(sortPipeline.updated_at/1000),CAST(#{taskEpochBase} AS DATETIME(3))))'
+    } else if(sortDatabaseProduct.contains('dm') || sortDatabaseProduct.contains('oracle')) {
+        pipelineTimeSql="(CAST(#{taskEpochBase} AS TIMESTAMP)+NUMTODSINTERVAL(sortPipeline.updated_at/1000.0,'SECOND'))"
+    } else { exit 500, '当前业务库尚未适配任务修改时间排序' }
+    // 有画布时不采用任务监控更新时间；旧任务才回退任务时间，避免监控刷新让列表反复置顶。
+    // 数据库一次展开最多15跳授权祖先并聚合；先聚合再关联候选，避免逐候选重复追溯。
+    // MySQL/H2要求RECURSIVE关键字，达梦/Oracle使用递归WITH，不能直接复用同一前缀。
+    var recursivePrefix=sortDatabaseProduct.contains('dm') || sortDatabaseProduct.contains('oracle') ? 'WITH ' : 'WITH RECURSIVE '
+    var taskSortCteSql=recursivePrefix+"""
+        task_ancestry(task_id,root_table_id,parent_table_id,modified_time,hop_depth) AS (
+          SELECT sortTask.tid,hop.tid,hop.source_table_id,
+                 CASE WHEN sortPipeline.updated_at IS NOT NULL THEN """+pipelineTimeSql+""" ELSE sortTask.updated_time END,0
+            FROM data_access_agg_task_t sortTask
+            JOIN db_table_t hop ON hop.tid=sortTask.source_table_id AND hop.tenant_id=#{tenantId} AND hop.is_del=0
+            JOIN db_table_t sortTarget ON sortTarget.tid=sortTask.target_table_id AND sortTarget.tenant_id=#{tenantId} AND sortTarget.is_del=0
+            LEFT JOIN nifi_pipeline_t sortPipeline ON sortPipeline.id=sortTask.pipeline_id AND sortPipeline.tenant_id=#{tenantId} AND sortPipeline.is_del=0
+           WHERE sortTask.tenant_id=#{tenantId} AND sortTask.is_del=0
+             AND hop.datasource_id IN <foreach collection="sortTargetSourceIds" item="sortHopSource" open="(" close=")" separator=",">#{sortHopSource}</foreach>
+             AND sortTarget.datasource_id IN <foreach collection="sortTargetSourceIds" item="sortTargetSource" open="(" close=")" separator=",">#{sortTargetSource}</foreach>
+          UNION ALL
+          SELECT ancestry.task_id,parent.tid,parent.source_table_id,ancestry.modified_time,ancestry.hop_depth+1
+            FROM task_ancestry ancestry
+            JOIN db_table_t parent ON parent.tid=ancestry.parent_table_id AND parent.tenant_id=#{tenantId} AND parent.is_del=0
+           WHERE ancestry.hop_depth<15 AND parent.tid<>ancestry.root_table_id
+             AND parent.datasource_id IN <foreach collection="sortTargetSourceIds" item="sortAncestorSource" open="(" close=")" separator=",">#{sortAncestorSource}</foreach>
+        ),task_sort AS (
+          SELECT root_table_id,MAX(modified_time) AS task_modified_time,COUNT(DISTINCT task_id) AS sort_task_count
+            FROM task_ancestry GROUP BY root_table_id
+        )
+    """
+    var keywordPattern = '%' + tableKeyword.toLowerCase().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+    var visibleTaskDatasourceIds = []
+    var taskStatusSql = ''
+    if (['0','1','2','3'].contains(requestedAccessStatus)) {
+        // 目标库不必是原始库的登记状态；但来源/目标都必须通过角色范围。
+        var taskDatasourceRows = db.table('db_datasource_t').where()
+            .eq('tenant_id', tenantId).eq('is_del', 0).select()
+        taskDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', taskDatasourceRows)
+        for (taskDatasource in taskDatasourceRows) { visibleTaskDatasourceIds.add(text(taskDatasource.tid)) }
+        if (visibleTaskDatasourceIds.size() == 0) { visibleTaskDatasourceIds = ['__none__'] }
+        var accessPipelineJoin = ['0','2'].contains(requestedAccessStatus) ? '' : """
+                LEFT JOIN nifi_pipeline_t access_pipeline ON access_pipeline.id=task.pipeline_id
+                     AND access_pipeline.tenant_id=#{tenantId} AND access_pipeline.is_del=0
+        """
+        // 已绑定有效画布以其 PG 为准；旧任务才使用任务 PG，与下方任务装饰使用同一规则。
+        var effectiveGroupSql = '(CASE WHEN access_pipeline.id IS NOT NULL THEN access_pipeline.nifi_process_group_id ELSE task.process_group_id END)'
+        var taskRuntimeCondition = '1=0'
+        if (runningGroupChunks.size() > 0) {
+            taskRuntimeCondition = '<foreach collection="runningGroupChunks" item="groupBatch" open="(" close=")" separator=" OR ">'
+                + effectiveGroupSql + ' IN <foreach collection="groupBatch" item="runningGroup" open="(" close=")" separator=",">#{runningGroup}</foreach></foreach>'
         }
-        taskCountOrderSql="""(SELECT COUNT(DISTINCT sortTask.tid)
-          FROM data_access_agg_task_t sortTask
-          JOIN db_table_t hop ON hop.tid=sortTask.source_table_id AND hop.tenant_id=#{tenantId} AND hop.is_del=0
-          JOIN db_table_t sortTarget ON sortTarget.tid=sortTask.target_table_id AND sortTarget.tenant_id=#{tenantId} AND sortTarget.is_del=0
-        """+countJoins+""" WHERE sortTask.tenant_id=#{tenantId} AND sortTask.is_del=0
-          AND sortTarget.datasource_id IN <foreach collection="sortTargetSourceIds" item="sortTargetSource" open="(" close=")" separator=",">#{sortTargetSource}</foreach>
-          AND ("""+rootMatch+"))"
-    }
-    var registeredTablePage = null
-    if (sortField!='taskCount' && blank(tableKeyword) && requestedAccessStatus != '0' && requestedAccessStatus != '1' && requestedAccessStatus != '3') {
-        registeredTablePage = registeredTableQuery.orderBy(sortColumn, sortDir).orderBy('tid','asc')
-            .page(pageSize, (pageNum - 1) * pageSize)
-    } else {
-        var keywordPattern = '%' + tableKeyword.toLowerCase().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
-        var visibleTaskDatasourceIds = []
-        var taskStatusSql = ''
-        if (requestedAccessStatus == '0' || requestedAccessStatus == '1' || requestedAccessStatus == '3') {
-            // 目标库不必是原始库的登记状态；但来源/目标都必须通过角色范围。
-            var taskDatasourceRows = db.table('db_datasource_t').where()
-                .eq('tenant_id', tenantId).eq('is_del', 0).select()
-            taskDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', taskDatasourceRows)
-            for (taskDatasource in taskDatasourceRows) { visibleTaskDatasourceIds.add(text(taskDatasource.tid)) }
-            if (visibleTaskDatasourceIds.size() == 0) { visibleTaskDatasourceIds = ['__none__'] }
-            var accessPipelineJoin = requestedAccessStatus == '0' ? '' : """
-                    LEFT JOIN nifi_pipeline_t access_pipeline ON access_pipeline.id=task.pipeline_id
-                         AND access_pipeline.tenant_id=#{tenantId} AND access_pipeline.is_del=0
-            """
-            // 已绑定有效画布以其 PG 为准；旧任务才使用任务 PG，与下方任务装饰使用同一规则。
-            var effectiveGroupSql = '(CASE WHEN access_pipeline.id IS NOT NULL THEN access_pipeline.nifi_process_group_id ELSE task.process_group_id END)'
-            var taskRuntimeCondition = '1=0'
-            if (runningGroupChunks.size() > 0) {
-                taskRuntimeCondition = '<foreach collection="runningGroupChunks" item="groupBatch" open="(" close=")" separator=" OR ">'
-                    + effectiveGroupSql + ' IN <foreach collection="groupBatch" item="runningGroup" open="(" close=")" separator=",">#{runningGroup}</foreach></foreach>'
-            }
-            var existsSql = """
-                EXISTS (
-                    SELECT 1 FROM data_access_agg_task_t task
-                    JOIN db_table_t hop ON hop.tid=task.source_table_id
-                         AND hop.tenant_id=#{tenantId} AND hop.is_del=0
-                    JOIN db_datasource_t hop_db ON hop_db.tid=hop.datasource_id
-                         AND hop_db.tenant_id=#{tenantId} AND hop_db.is_del=0
-                    JOIN db_table_t target ON target.tid=task.target_table_id
-                         AND target.tenant_id=#{tenantId} AND target.is_del=0
-                    ${accessPipelineJoin}
-                    WHERE task.tenant_id=#{tenantId} AND task.is_del=0
-                      AND hop.tid=t.tid
-                      AND hop.datasource_id IN <foreach collection="visibleTaskDatasourceIds" item="hopDb" open="(" close=")" separator=",">#{hopDb}</foreach>
-                      AND target.datasource_id IN <foreach collection="visibleTaskDatasourceIds" item="targetDb" open="(" close=")" separator=",">#{targetDb}</foreach>
-                )
-            """
-            if (requestedAccessStatus == '0') {
-                taskStatusSql = ' AND NOT ' + existsSql
+        var existsSql = """
+            EXISTS (
+                SELECT 1 FROM data_access_agg_task_t task
+                JOIN db_table_t hop ON hop.tid=task.source_table_id
+                     AND hop.tenant_id=#{tenantId} AND hop.is_del=0
+                JOIN db_datasource_t hop_db ON hop_db.tid=hop.datasource_id
+                     AND hop_db.tenant_id=#{tenantId} AND hop_db.is_del=0
+                JOIN db_table_t target ON target.tid=task.target_table_id
+                     AND target.tenant_id=#{tenantId} AND target.is_del=0
+                ${accessPipelineJoin}
+                WHERE task.tenant_id=#{tenantId} AND task.is_del=0
+                  AND hop.tid=t.tid
+                  AND hop.datasource_id IN <foreach collection="visibleTaskDatasourceIds" item="hopDb" open="(" close=")" separator=",">#{hopDb}</foreach>
+                  AND target.datasource_id IN <foreach collection="visibleTaskDatasourceIds" item="targetDb" open="(" close=")" separator=",">#{targetDb}</foreach>
+            )
+        """
+        if (requestedAccessStatus == '0' || requestedAccessStatus == '2') {
+            taskStatusSql = ' AND NOT ' + existsSql + (requestedAccessStatus == '2' ? ' AND COALESCE(t.access_request_status,0)=1' : ' AND COALESCE(t.access_request_status,0)<>1')
+        } else {
+            var runningExistsSql = existsSql.replace('AND hop.tid=t.tid', 'AND hop.tid=t.tid AND (' + taskRuntimeCondition + ')')
+            if (requestedAccessStatus == '1') {
+                taskStatusSql = ' AND ' + runningExistsSql
             } else {
-                var runningExistsSql = existsSql.replace('AND hop.tid=t.tid', 'AND hop.tid=t.tid AND (' + taskRuntimeCondition + ')')
-                if (requestedAccessStatus == '1') {
-                    taskStatusSql = ' AND ' + runningExistsSql
-                } else {
-                    // 快照不可用时，仅无 PG 的未部署任务可确定为待启动，已有 PG 的任务保持待确认。
-                    var excludedExistsSql = tableRuntimeSnapshot.fresh == true ? runningExistsSql
-                        : existsSql.replace('AND hop.tid=t.tid', 'AND hop.tid=t.tid AND NULLIF(TRIM(' + effectiveGroupSql + "), '') IS NOT NULL")
-                    taskStatusSql = ' AND ' + existsSql + ' AND NOT ' + excludedExistsSql
-                }
+                // 快照不可用时，仅无 PG 的未部署任务可确定为待启动，已有 PG 的任务保持待确认。
+                var excludedExistsSql = tableRuntimeSnapshot.fresh == true ? runningExistsSql
+                    : existsSql.replace('AND hop.tid=t.tid', 'AND hop.tid=t.tid AND NULLIF(TRIM(' + effectiveGroupSql + "), '') IS NOT NULL")
+                taskStatusSql = ' AND ' + existsSql + ' AND NOT ' + excludedExistsSql
             }
         }
-        var tablePageSql = """
-            SELECT t.* FROM db_table_t t
-             WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.asset_status>0
-               AND t.datasource_id IN <foreach collection="scopedDatasourceIds" item="sourceDb" open="(" close=")" separator=",">#{sourceDb}</foreach>
-               AND t.business_type IN ('业务表','日志表','字典表')
-               AND (#{tableKeyword}='' OR LOWER(t.table_name) LIKE #{keywordPattern} ESCAPE '!'
-                    OR LOWER(t.table_name_cn) LIKE #{keywordPattern} ESCAPE '!'
-                    OR LOWER(t.table_comment) LIKE #{keywordPattern} ESCAPE '!')
-        """ + taskStatusSql + " ORDER BY "+(sortField=='taskCount'?taskCountOrderSql:'t.'+sortColumn)+' '+sortDir+',t.tid ASC'
-        registeredTablePage = db.page(tablePageSql, pageSize, (pageNum - 1) * pageSize)
     }
+    // 同值以表ID稳定排序，空值始终排末尾；全部、搜索和状态页签复用同一分页顺序。
+    var tableOrderExpression = sortField=='taskCount' ? 'ordered_table.sort_task_count' : sortField=='updatedTime' ? 'ordered_table.access_modified_time' : 'ordered_table.'+sortColumn
+    var tableNullOrderSql = sortField=='taskCount' ? '' : 'CASE WHEN '+tableOrderExpression+' IS NULL THEN 1 ELSE 0 END ASC,'
+    var tablePageSql = """
+        SELECT t.*
+    """+',task_sort.task_modified_time'+(sortField=='taskCount' ? ',COALESCE(task_sort.sort_task_count,0) AS sort_task_count' : '')+"""
+          FROM db_table_t t
+        LEFT JOIN task_sort ON task_sort.root_table_id=t.tid
+         WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.asset_status>0
+           AND t.datasource_id IN <foreach collection="scopedDatasourceIds" item="sourceDb" open="(" close=")" separator=",">#{sourceDb}</foreach>
+           AND t.business_type IN ('业务表','日志表','字典表')
+           AND (#{tableKeyword}='' OR LOWER(t.table_name) LIKE #{keywordPattern} ESCAPE '!'
+                OR LOWER(t.table_name_cn) LIKE #{keywordPattern} ESCAPE '!'
+                OR LOWER(t.table_comment) LIKE #{keywordPattern} ESCAPE '!')
+    """ + taskStatusSql
+    tablePageSql='SELECT modified_table.*,CASE WHEN modified_table.updated_time IS NULL OR modified_table.task_modified_time>modified_table.updated_time THEN modified_table.task_modified_time ELSE modified_table.updated_time END AS access_modified_time FROM ('+tablePageSql+') modified_table'
+    tablePageSql=taskSortCteSql+'SELECT ordered_table.* FROM ('+tablePageSql+') ordered_table ORDER BY '+tableNullOrderSql+tableOrderExpression+' '+sortDir+',ordered_table.tid ASC'
+    var registeredTablePage = db.page(tablePageSql, pageSize, (pageNum - 1) * pageSize)
     var registeredTableTotal = registeredTablePage == null || registeredTablePage.total == null ? 0 : registeredTablePage.total
     var registeredTableRows = registeredTablePage == null || registeredTablePage.list == null ? [] : registeredTablePage.list
     var registeredTableMap = {}
@@ -816,7 +820,8 @@ if (viewLevel == 'table') {
             dataCount: first(tableCandidate, ['recordCount', 'record_count']),
             // db_table_t 是表登记创建时间的事实来源；ES 仅在旧记录缺失该字段时兜底。
             createdTime: first(workflowRow, ['createdTime', 'created_time', 'createTime', 'create_time', 'regTime', 'reg_time']) || first(tableCandidate, ['createdTime', 'created_time', 'createTime', 'create_time', 'regTime', 'reg_time']),
-            updatedTime: first(tableCandidate, ['updatedTime', 'updated_time']),
+            updatedTime: first(tableCandidate, ['accessModifiedTime', 'access_modified_time', 'updatedTime', 'updated_time']),
+            tableUpdatedTime: first(tableCandidate, ['updatedTime', 'updated_time']),
             sourceCatalogId: first(tableCandidate, ['sourceCatalogId', 'source_catalog_id', 'catalogId', 'catalog_id']),
             catalogId: first(tableCandidate, ['sourceCatalogId', 'source_catalog_id', 'catalogId', 'catalog_id']),
             targetTableId: hasTask ? tasks[0].targetTableId : materializedTargetId,
@@ -825,29 +830,14 @@ if (viewLevel == 'table') {
             targetTables: targetTables,
             taskCount: tasks.size(),
             accessTaskId: hasTask ? tasks[0].tid : '',
+            accessRequestStatus: first(tableCandidate,['accessRequestStatus','access_request_status']) || 0,
+            requestedBy: first(tableCandidate,['accessRequestedBy','access_requested_by']),
+            requestedAt: first(tableCandidate,['accessRequestedAt','access_requested_at']),
             accessStatus: hasTask ? '1' : '0',
             accessStatusText: hasTask ? '已接入' : '待接入',
             tasks: tasks
         })
     }
-
-    // ES 检索、接入任务补齐和 MySQL 兜底合并后，必须按登记表最终的
-    // updated_time 再排序，避免 ES 投影延迟导致第一页顺序不稳定。
-    var tableUpdatedSortKey = (item) => {
-        var value = item?.updatedTime
-        return blank(value) ? '' : text(value).replace('T', ' ').replace('Z', '')
-    }
-    tableItems = tableItems.sort((left, right) => {
-        var leftKey = tableUpdatedSortKey(left)
-        var rightKey = tableUpdatedSortKey(right)
-        if (leftKey == rightKey) {
-            var leftId = text(left?.tid)
-            var rightId = text(right?.tid)
-            if (leftId == rightId) { return 0 }
-            return leftId > rightId ? 1 : -1
-        }
-        return rightKey > leftKey ? 1 : -1
-    })
 
     var tableTotal = registeredTableTotal
     var tablePage = tableItems
@@ -884,8 +874,9 @@ if (viewLevel == 'table') {
         var ownTasks = pageTable.tasks.filter(task => text(task.sourceTableId) == text(pageTable.tid))
         var ownRunning = ownTasks.filter(task => task.running == true).size() > 0
         var ownUnconfirmed = ownTasks.filter(task => task.runtimeFresh != true && !blank(task.runtimeProcessGroupId)).size() > 0
-        pageTable.accessStatus = ownRunning ? '1' : ownTasks.size() == 0 ? '0' : ownUnconfirmed ? '' : '3'
-        pageTable.accessStatusText = ownRunning ? '已接入' : ownTasks.size() == 0 ? '待接入' : ownUnconfirmed ? '状态待确认' : '待启动'
+        var pendingApproval = text(pageTable.accessRequestStatus) == '1'
+        pageTable.accessStatus = ownRunning ? '1' : ownTasks.size() == 0 ? pendingApproval ? '2' : '0' : ownUnconfirmed ? '' : '3'
+        pageTable.accessStatusText = ownRunning ? '已接入' : ownTasks.size() == 0 ? pendingApproval ? '待审批' : '待接入' : ownUnconfirmed ? '状态待确认' : '待启动'
     }
     return {
         runtimeRevision: live.revision,

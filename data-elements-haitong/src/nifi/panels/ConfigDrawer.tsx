@@ -30,13 +30,14 @@ import MaterializeTableModal from './MaterializeTableModal';
 import { getNifiOverlayContainer } from './overlayContainer';
 import { resolveDatasourceId } from '@/api/datasourceIdentity';
 import { upstreamTableSources } from './materializeSources';
-import { columnLabels, columnsForMapping, mappingColumnNodes, missingMappingColumnProbes } from './fieldMappingColumns';
+import { columnLabels, columnsForMapping, mappingColumnNodes, missingMappingColumnProbes, mappingTableReference, mappingTableSelectionPatch } from './fieldMappingColumns';
 import CustomSqlEditor, { type CustomSqlEditorHandle } from './CustomSqlEditor';
 import FilterEditor from './FilterEditor';
 import BranchEditor, { type BranchRoute } from './BranchEditor';
 import type { BusinessCondition } from './ConditionBuilder';
 import { COMPONENT_ICONS, getComponentIcon } from './databaseIcons';
 import ProbeColumnsModal, { type ProbeColumnsSummary } from './ProbeColumnsModal';
+import ScriptProcessEditor, { isScriptProcess, scriptProcessError } from './ScriptProcessEditor';
 
 const CAT_ICON: Record<ComponentCategory, React.ReactNode> = {
   source: <DatabaseOutlined />,
@@ -420,8 +421,8 @@ function expandIncrementalField(field: FieldSchema): FieldSchema[] {
       required: false,
       group: 'incremental',
       visibleWhen: { key: 'syncMode', equals: 'INCREMENTAL' },
-      placeholder: '登记的时间戳字段，如 updated_time',
-      help: '新建任务默认填入登记勾选的时间戳，可手工调整；历史任务缺失时请手工填写。全量同步时保留配置，切换增量后生效。时间戳建议配合次级字段避免同秒多条漏数。',
+      placeholder: '来源表时间戳列，如 updated_time',
+      help: '独立画布可直接填写来源表的时间戳列；登记集成任务会自动带入，仍可手工调整。该字段用于按月分片，增量模式同时作为水位字段。',
     },
     {
       key: 'tieBreakerColumn',
@@ -653,7 +654,7 @@ export default function ConfigDrawer() {
 
   const enhancedFields = useMemo(() => {
     const fields = (manifest?.fields ?? []).flatMap(expandIncrementalField);
-    if (manifest?.category !== 'source' || !manifest.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch'))) return fields;
+    if (manifest?.category !== 'source' || !manifest.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch') || p.type.endsWith('.GenerateDateTableFetch'))) return fields;
     return [
       { key: 'syncMode', label: '同步方式', type: 'select', required: true, group: 'sync', options: syncModes.map(item => ({ value: item.value, label: item.label })), help: '修改后请点击保存；启动使用已部署版本的同步方式。' },
       { key: 'fullSyncStrategy', label: '全量写入策略', type: 'select', default: 'UPSERT', group: 'sync', visibleWhen: { key: 'syncMode', equals: 'PERIODIC_FULL' }, options: [{ value: 'UPSERT', label: '有则更新、无则新增（需要业务主键/唯一键）' }, { value: 'TRUNCATE_RELOAD', label: '每轮清空重载（MySQL / 达梦）' }] },
@@ -727,7 +728,8 @@ export default function ConfigDrawer() {
   const isCustomSqlDrawer = manifest?.key === 'transform.sql';
   const isFilterDrawer = manifest?.key === 'transform.filter';
   const isBranchDrawer = manifest?.key === 'branch.conditions';
-  const isTopActionDrawer = isFieldMappingDrawer || isCustomSqlDrawer || isFilterDrawer || isBranchDrawer;
+  const isScriptDrawer = isScriptProcess(manifest?.key);
+  const isTopActionDrawer = isFieldMappingDrawer || isCustomSqlDrawer || isFilterDrawer || isBranchDrawer || isScriptDrawer;
 
   // 本地状态用于节点名称输入。
   const [nodeName, setNodeName] = useState(node ? governanceNodeLabel(node.manifestKey, node.label) : '');
@@ -1085,7 +1087,7 @@ export default function ConfigDrawer() {
   const applyTableSelection = useCallback(async (table: string) => {
     if (!node || !manifest) return;
     const key = manifest.category === 'sink' ? 'table' : 'table';
-    updateConfig(node.id, { [key]: table });
+    updateConfig(node.id, mappingTableSelectionPatch(node, table));
     if (!table) return;
     const selectionSequence = databaseSelectionSequence.current;
     setProbing(true);
@@ -1279,7 +1281,7 @@ export default function ConfigDrawer() {
             refreshMetadataTables(String(value ?? ''));
           }}
           onChange={(text) => {
-            updateConfig(node.id, { [field.key]: text });
+            updateConfig(node.id, { ...mappingTableSelectionPatch(node, text), [field.key]: text });
             tableRequestSequence.current++;
             if (tableSearchTimer.current) clearTimeout(tableSearchTimer.current);
             tableSearchTimer.current = setTimeout(() => refreshMetadataTables(text), 300);
@@ -1537,6 +1539,10 @@ export default function ConfigDrawer() {
 
   const handleSave = () => {
     if (!node || !manifest) return;
+    if (isScriptDrawer) {
+      const error = scriptProcessError(manifest.key, node.config);
+      if (error) { message.error(error); return false; }
+    }
     if (manifest.category === 'source' && enhancedFields.some(field => field.key === 'syncMode')) {
       const error = syncSettingsError(node.config, syncSettings(node.config));
       if (error) { message.error(error); return false; }
@@ -1613,8 +1619,8 @@ export default function ConfigDrawer() {
                   value={node.config[field.key] ?? FIELD_MAPPING_DEFAULT}
                   onChange={(v) => updateConfig(node.id, { [field.key]: v })}
                   assetContext={{pipelineId:mappingPipelineId,nodeId:node.id,
-                    sourceRef:mappingContext?.source?.category==='source' && resolveDatasourceId(mappingContext.source.config, dbList) ? {datasourceId:String(resolveDatasourceId(mappingContext.source.config, dbList)),table:String(mappingContext.source.config.table??mappingContext.source.config.tableName??'')} : undefined,
-                    targetRef:mappingContext?.target?.category==='sink' && resolveDatasourceId(mappingContext.target.config, dbList) ? {datasourceId:String(resolveDatasourceId(mappingContext.target.config, dbList)),table:String(mappingContext.target.config.table??mappingContext.target.config.tableName??mappingContext.target.config.targetTable??'')} : undefined}}
+                    sourceRef:mappingTableReference(mappingContext?.source, 'source', dbList, manifests ?? []),
+                    targetRef:mappingTableReference(mappingContext?.target, 'target', dbList, manifests ?? [])}}
                   columnMeta={columnMeta}
                   datasources={dbList.map(item=>({value:String(item.id??item.value),label:item.label}))}
                   columnsLoading={mappingColumnsLoading}
@@ -1673,7 +1679,7 @@ export default function ConfigDrawer() {
       open={open}
       getContainer={getNifiOverlayContainer}
       onClose={() => openDrawer(null)}
-      width={isFieldMappingDrawer ? 'min(980px, calc(100vw - 32px))' : isCustomSqlDrawer || isFilterDrawer || isBranchDrawer ? 'min(1180px, calc(100vw - 32px))' : 460}
+      width={isScriptDrawer ? 'min(660px, calc(100vw - 24px))' : isFieldMappingDrawer ? 'min(980px, calc(100vw - 32px))' : isCustomSqlDrawer || isFilterDrawer || isBranchDrawer ? 'min(1180px, calc(100vw - 32px))' : 460}
       placement="right"
       mask={false}
       closable={false}
@@ -1753,13 +1759,13 @@ export default function ConfigDrawer() {
           </div>
 
           <div className="coze-drawer-body">
-            {manifest.description && !isFieldMappingDrawer && (
+            {manifest.description && !isFieldMappingDrawer && !isScriptDrawer && (
               <div style={{ color: 'var(--text-tertiary)', fontSize: 12, marginBottom: 12 }}>
                 {manifest.description}
               </div>
             )}
             {/* 按配置分组展示字段。 */}
-            {grouped.length === 1 ? renderFields(grouped[0].fields) : (
+            {isScriptDrawer ? <ScriptProcessEditor key={node.id} manifestKey={manifest.key} config={node.config} onChange={patch => updateConfig(node.id, patch)} /> : grouped.length === 1 ? renderFields(grouped[0].fields) : (
               <Collapse
                 defaultActiveKey={grouped.map((g) => g.key)}
                 ghost

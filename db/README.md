@@ -9,12 +9,17 @@
 | 角色 | 实际数据库 | 方言 | 表数量 |
 | --- | --- | --- | ---: |
 | 控制库 | `baseline` | MySQL | 50 |
-| 公安 | `baseline_ga` | MySQL | 140 |
-| 澄天 | `chengtian` | MySQL | 140 |
-| 海渔 | `baseline_sea_fishery` | MySQL | 140 |
-| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 140 |
+| 公安 | `baseline_ga` | MySQL | 157 |
+| 澄天 | `chengtian` | MySQL | 157 |
+| 海渔 | `baseline_sea_fishery` | MySQL | 157 |
+| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 157 |
+| 海通数据推送服务（独立工程） | `haitong` | MySQL | 15 |
 
-上表为本机环境最近一次成功读取的物理结构。字段映射 1.1.1 已在四份行业初始化定义中加入三张版本表，可创建定义均为 143 张；清单使用 `reviewed-forward-definition` 和 `liveVerification=pending` 区分其尚未应用到旧本机配置的状态，保留 `lastVerifiedLiveObjects`。旧达梦连接未完成实际读取，不能把源文件更新当作该库已升级。当前已授权运行配置绑定的演示四行业库已实际升级至 143 张，结构比较和五库完整导出通过，证据与初始化定义位于 `environments/demo/`。
+`haitong-data-pull` 对应的独立库完整结构为 [haitong/init.sql](haitong/init.sql)，已通过真实 MySQL 的 `SHOW CREATE` 导出：15 张表、51 个索引（含主键及唯一索引）、5 个外键，没有视图、触发器、例程或事件。它不属于四行业同构基线。历史工程内 `sql/` 已整合移除，后续只在本目录更新完整定义；对账查询归入[海通推送服务文档](../docs/haitong-data-pull.md#reconciliation-queries)。
+
+原有达梦适配定义保存在 [haitong/compatibility/dameng.sql](haitong/compatibility/dameng.sql)，明确标记为未连接实库核验的 9 表模板，缺少 MySQL 中的推送凭据和 Magic 资源表；不能作为当前 15 表结构、完整兼容承诺或已有库升级脚本。应用打包使用的 H2 本地初始化资源继续保留在应用 `src/main/resources/db/h2.sql`，不作为生产 MySQL 基线。
+
+上表为当前本机后端实际绑定数据库的完整读取结果。四行业结构已统一至157张：原140张、字段映射三张版本表、现用布控模块13张表及数据推送节点配置表`push_node_t`；只补充缺失空结构，不复制其他租户业务记录。登记第五步的接入申请三字段已同步应用到四行业`db_table_t`。`check-db.py`核对完整表集合、列、主键、索引及外键通过，五库完整结构已重新导出。演示环境仍单独维护在`environments/demo/`，其143张结构未因本次本机更新而自动升级。
 
 四个行业租户维护同一套业务表、列、主键、索引和约束，以实际已确认的公安租户库为统一结构权威，不能按旧库名选择发布目标。原共同结构包含公安原 139 张表和以下一张有现用功能依据的公共表；新增版本表在各方言定义中完整维护，新增空表不复制其他租户数据。
 
@@ -42,7 +47,7 @@
 
 达梦初始化使用原生 DDL，保留实际引号标识符、大小写、MAIN 表空间及存储属性。由已有权限的 DBA 在兼容设置一致的环境初始化；本目录不创建数据库用户。JSON/长文本映射为原生长文本，无符号整数按范围表示，自动更新时间使用原生触发器；目前有 20 个自动更新时间触发器。
 
-登录名字段为 `VARCHAR(50)`，有效登录名生成规则为 `CASE WHEN deleted=0 THEN lower(trim(user_name)) ELSE NULL END`，联合唯一约束为租户 ID 与有效登录名。达梦以虚拟列/函数索引表达；其系统索引元数据会展开依赖列，因此校验使用实际索引 DDL 核对逻辑列。
+登录名字段为 `VARCHAR(50)`，有效登录名生成规则为 `CASE WHEN deleted=0 THEN lower(trim(user_name)) ELSE NULL END`，联合唯一约束为租户 ID 与有效登录名。达梦以虚拟列/函数索引表达；其系统索引元数据会展开依赖列，因此校验使用实际索引 DDL 核对逻辑列。布控连接引用生成列采用同一JSON路径与回退常量；达梦将COALESCE展开为CASE，结构检查逐路径、逐分支和回退值比较。标识值的MySQL前缀索引在达梦以SUBSTR(列,1,128)函数索引表达，检查保留前缀长度、列序和排序方向。
 
 以下是明确的方言表示，初始化文件保存各库真实结构：
 
@@ -61,8 +66,19 @@
 ```powershell
 python tools/check-db.py
 python tools/export-db.py
+python tools/export-db.py --project haitong-data-pull
 ```
 
 工具默认读取用户目录 `.codex/private/data-elements/resources.local.json`，也可用 `--config` 指定。私有配置含控制库连接及当前 Nacos API/运行配置的租户映射，不提交 Git。改变环境或租户路由后先重新定位，不能从过期 Nacos 数据库缓存猜测目标。环境参数优先取本机环境变量。
 
+独立工程通过私有配置的 `project_databases` 定义，例如 `project_databases.haitong-data-pull` 包含 `dialect: mysql`、`database: haitong` 及实际 MySQL 连接项。支持环境变量占位；账号、口令不写到本仓库。无 `--project` 时导出当前平台五库及已配置的独立工程库；指定工程时只替换该工程的 `init.sql` 和清单条目，其他库文件及清单条目保持原样。未配置的工程、重复输出目录或读取失败都会拒绝替换。
+
+独立工程清单条目带有 `project` 标识。只配置平台连接的其他开发环境导出五库时，会保留已有独立工程基线及其清单条目，不会误删；保留条目不表示本次已连接验证该工程库。
+
 工具使用 `pymysql`；达梦还使用 `jaydebeapi`、`JPype1` 和现有 JDBC 驱动。可用 `DATA_ELEMENTS_DM_JDBC_JAR` 指定驱动，或从当前用户 Maven 仓库发现。导出移除源账号 `DEFINER` 与随业务变化的表级自增计数，保留列自增属性；五库全部成功读取后才写本地文件。
+
+## 登记接入申请字段
+
+`db_table_t.access_request_status`为0未申请、1待处理、2已受理，默认0；`access_requested_by`保存认证申请人标识，`access_requested_at`保存申请时间。申请字段不替代`asset_status`登记进度或NiFi实时状态。MySQL时间使用DATETIME(6)，达梦使用TIMESTAMP(6)。接口和状态规则见[接入任务状态契约](../docs/data-elements-haitong.md#access-task-lifecycle)。
+
+现有部署升级时，必须先在每个实际行业业务库检查这三列，再发布申请相关Magic和页面。控制库`baseline`不是这些列的升级对象。完整初始化结构已经包含三列，但将新程序或Magic资源发布到已有库不会自动执行ALTER；生产缺列时只补缺失列，保留已有申请和任务数据。增量执行材料放在当次`logs/`或受限目录，先保存原表结构并核对目标方言，不能直接重跑`init.sql`。升级后重新检查实际列定义，再验证待审批分页和创建任务后的已受理/待启动流转。

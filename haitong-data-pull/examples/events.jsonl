@@ -1,0 +1,2 @@
+{"eventType":"device.status","data":{"deviceCode":"D001","online":true}}
+{"eventType":"device.status","data":{"deviceCode":"D002","online":false}}

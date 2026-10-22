@@ -1,0 +1,16 @@
+# 仅本地开发，显式选择：scripts/run --spring.profiles.active=local
+# 使用新文件，重复启动以IF NOT EXISTS保留已有H2数据，不替代正式数据库迁移。
+db:
+  type: h2
+  url: "jdbc:h2:file:./data/db/haitong;MODE=MySQL;DB_CLOSE_ON_EXIT=FALSE"
+  username: sa
+  password: ""
+  init-schema: true
+
+# 本机数据中台通过服务间密钥调用海通的内部签发接口；该密钥不是对外 X-Api-Key。
+# 真实 X-Api-Key 仅由海通生成，平台只保存客户端绑定关系，不保存密钥明文。
+relay:
+  registration-registry:
+    enabled: true
+    base-url: "http://127.0.0.1:8088"
+    shared-key: "${DATA_PUSH_REGISTRY_KEY:}"

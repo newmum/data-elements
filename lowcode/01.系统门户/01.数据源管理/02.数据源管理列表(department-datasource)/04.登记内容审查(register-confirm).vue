@@ -543,19 +543,26 @@
           </el-input>
       </div>
       <div class="section-content data-table-section-content">
-          <LoadingState v-if="tableListLoading" type="list" compact class="review-section-loading" />
-          <div v-else-if="!tables.length" class="business-empty">
+          <div v-if="reviewTableBusy && !visibleTables.length" class="registration-table-skeleton" role="status" aria-live="polite" aria-busy="true">
+            <div class="registration-loading-caption"><span class="registration-loading-dot"></span><strong>{{ reviewTableLoadingPhase }}</strong><span>登记信息、接入进度与同步记录将一并展示</span></div>
+            <div class="registration-skeleton-head"><span>序号</span><span>数据表</span><span>类型 / 字段</span><span>登记检查</span><span>数据是否接入</span><span>数据同步情况</span><span>操作</span></div>
+            <div v-for="n in 6" :key="n" class="registration-skeleton-row"><span class="skeleton-bar is-number"></span><div><span class="skeleton-bar is-name"></span><span class="skeleton-bar is-subtitle"></span></div><div><span class="skeleton-bar is-pill"></span><span class="skeleton-bar is-short"></span></div><span class="skeleton-bar is-pill"></span><div><span class="skeleton-bar is-pill"></span><span class="skeleton-bar is-short"></span></div><div><span v-for="line in 3" :key="line" class="skeleton-bar is-time"></span></div><div><span class="skeleton-bar is-short"></span><span class="skeleton-bar is-short"></span></div></div>
+          </div>
+          <div v-if="reviewOrderError || accessTaskError" class="registration-table-alert" role="alert"><span>{{ reviewOrderError || accessTaskError }}</span><el-button type="primary" link @click="reviewOrderError ? loadReviewPage() : refreshAccessSummary()">重新读取</el-button></div>
+          <div v-if="reviewTableBusy && visibleTables.length" class="registration-updating" role="status"><span class="registration-loading-dot"></span>{{ reviewTableLoadingPhase }}，当前内容保留</div>
+          <div v-if="!reviewTableBusy && !visibleTables.length && !reviewOrderError" class="business-empty">
             <div class="empty-visual"><Icon icon="el-icon-Files" /></div>
-            <strong>还没有进入审查的数据表</strong>
-            <p>请返回“探查数据表”步骤选择需要登记的数据表，系统会在这里集中校验表级和字段级信息。</p>
+            <strong>{{ tables.length ? '没有匹配的数据表' : '还没有进入检查的数据表' }}</strong>
+            <p>{{ tables.length ? '请调整搜索条件。' : '请返回“探查数据表”步骤选择需要登记的数据表。' }}</p>
           </div>
           <el-table
-            v-else
+            v-if="visibleTables.length"
             ref="reviewTableRef"
             :data="visibleTables"
             row-key="tableName"
             :expand-row-keys="activeTableDetails"
             class="review-table"
+            :aria-busy="reviewTableBusy"
             @expand-change="syncTableDetailExpansion"
             @sort-change="sortReviewTables"
           >
@@ -636,7 +643,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="登记 / 审查" min-width="185">
+            <el-table-column label="登记检查" min-width="185">
               <template #default="{ row: table }">
                 <div class="review-table-tags">
                   <el-popover v-if="tableIssueCount(table.tableName, 'error')" trigger="hover" placement="top-start" :width="440" popper-class="table-issue-popper">
@@ -666,7 +673,7 @@
                     </div>
                   </el-popover>
                   <el-tag v-if="!tableIssueCount(table.tableName)" size="small" type="success" effect="light">
-                    审查通过
+                    检查通过
                   </el-tag>
                 </div>
               </template>
@@ -690,11 +697,12 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="92" fixed="right" align="center">
+            <el-table-column label="操作" width="126" fixed="right" align="center">
               <template #default="{ row: table }">
                 <el-button type="primary" link size="small" @click.stop="goToStep(table.businessType === '字典表' ? 2 : 3, table.tableName)">
-                  编辑
+                  返回编辑
                 </el-button>
+                <el-button class="registration-access-action" type="primary" link size="small" :disabled="accessTaskLoading || !!accessTaskError || !findTableAccessTaskRow(table) || (!findTableAccessTaskRow(table)?.taskCount && !findTableAccessTaskRow(table)?.canApply && findTableAccessTaskRow(table)?.accessStatus !== '2')" @click.stop="openRegistrationAccess(table)">{{ registrationAction(table) }}</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -711,6 +719,24 @@
       </div>
       </section>
     </section>
+    <el-dialog v-model="accessDialogVisible" :title="accessDialogRow?.taskCount ? '管理数据同步' : accessDialogRow?.accessStatus === '2' ? '接入申请' : '确认数据接入'" width="720px" top="6vh" append-to-body :close-on-click-modal="!accessSubmitting && !accessCommand" :show-close="!accessSubmitting && !accessCommand" :close-on-press-escape="!accessSubmitting && !accessCommand" class="registration-access-dialog">
+      <div class="registration-access-object"><Icon icon="table" /><div><strong>{{ tableChineseName(accessDialogTable) || accessDialogTable?.tableName }}</strong><small>{{ accessDialogTable?.tableName }}</small></div><el-tag :type="tableTaskSummary(accessDialogTable).execution.type">{{ tableTaskSummary(accessDialogTable).execution.label }}</el-tag></div>
+      <div class="registration-access-context"><span>来源：<strong>{{ accessDialogRow?.datasourceName || source.dbName }}</strong></span><span>{{ accessDialogTable?.businessType }} · {{ accessDialogTable?.fieldCount || 0 }} 个字段</span><span>时间戳：{{ accessDialogRow?.timestampField || '未设置' }}</span></div>
+      <template v-if="accessDialogRow?.taskCount">
+        <div class="registration-sync-guide"><div><strong>在这里直接启动同步</strong><p>启动时自动完成所需部署，成功后开始同步。每个任务独立控制。</p></div></div>
+        <div class="registration-task-list">
+          <article v-for="(task,index) in accessDialogRow.tasks" :key="task.tid" class="registration-task-card" :aria-label="registrationTaskTitle(task)">
+            <header class="registration-task-heading"><div class="registration-task-identity"><span class="registration-task-number">{{ index + 1 }}</span><strong :title="task.taskName">{{ registrationTaskTitle(task) }}</strong></div><el-tag size="small" effect="light" :type="task.running ? 'success' : task.canStart ? 'warning' : 'info'">{{ task.running ? '同步中' : task.canStart ? '待启动' : task.taskStatusText }}</el-tag></header>
+            <dl class="registration-task-details"><div><dt>目标数据源</dt><dd>{{ task.targetDatasourceName || '未配置' }}</dd></div><div><dt>目标数据表</dt><dd>{{ task.targetTableNameCn || task.targetTableName || '未配置' }}<small v-if="task.targetTableName && task.targetTableName !== task.targetTableNameCn">{{ task.targetTableName }}</small></dd></div><div><dt>同步频率</dt><dd>{{ task.frequency || '未配置' }}</dd></div></dl>
+            <footer class="registration-task-controls"><span>{{ accessCommand === String(task.tid) && accessCommandPhase === 'execute' ? (task.running ? '正在停止同步，请稍候…' : '正在检查配置并部署、启动，请稍候…') : task.actionHint || (task.running ? '停止后保留已同步数据' : '启动时自动检查并完成所需部署') }}</span><el-button v-if="task.running" type="danger" plain :loading="accessCommand === String(task.tid) && accessCommandPhase === 'execute'" :disabled="!!accessCommand || !!accessTaskError || !!registrationRuntimeWarning || accessTaskLoading || !task.canStop" @click="controlRegistrationTask(task,'stop')">停止同步</el-button><el-button v-else type="primary" :loading="accessCommand === String(task.tid) && accessCommandPhase === 'execute'" :disabled="!!accessCommand || !!accessTaskError || !!registrationRuntimeWarning || accessTaskLoading || !task.canStart" @click="controlRegistrationTask(task,'start')">{{ task.requiresDeployment ? '部署并启动' : '启动同步' }}</el-button></footer>
+            <el-alert v-if="accessCommandError.taskId === String(task.tid)" :title="accessCommandError.message" type="error" :closable="false" show-icon />
+          </article>
+        </div>
+      </template>
+      <template v-else><p class="registration-access-explanation">{{ accessDialogRow?.accessStatus === '2' ? '接入申请已提交，任务配置完成后会在这里显示。届时可直接启动同步，无需重复申请。' : '提交这张数据表的接入申请。任务配置完成后，可在这里启动、停止同步并查看运行状态。' }}</p><p v-if="accessDialogRow?.requestedAt" class="registration-request-time">申请时间：{{ compactTaskTime(accessDialogRow.requestedAt) }}</p></template>
+      <el-alert v-if="accessTaskError || registrationRuntimeWarning" :title="accessTaskError || registrationRuntimeWarning" type="warning" :closable="false" show-icon />
+      <template #footer><el-button :disabled="accessSubmitting || !!accessCommand" @click="accessDialogVisible = false">关闭</el-button><el-button v-if="!accessDialogRow?.taskCount && accessDialogRow?.accessStatus !== '2'" type="primary" :loading="accessSubmitting" :disabled="!accessDialogRow?.canApply || !!accessTaskError || accessTaskLoading" @click="submitRegistrationAccess">发起接入申请</el-button></template>
+    </el-dialog>
     <el-dialog
       v-model="tablePreviewVisible"
       :title="tablePreviewTable ? `${tableChineseName(tablePreviewTable) || tablePreviewTable.tableName} · 表数据预览` : '表数据预览'"
@@ -795,7 +821,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRegisterStore } from "@/store";
 import { ElMessageBox } from "element-plus";
 
@@ -970,7 +996,7 @@ const tableChangeSnapshot = ref(null);
 const tableChangeLoading = ref(false);
 const tableChangeError = ref("");
 const sourceDetailLoading = ref(false);
-const tableListLoading = ref(false);
+const tableListLoading = ref(true);
 // 读取失败时不能继续以骨架屏掩盖错误；该状态只用于提示并提供一次显式重试，
 // 页面其余已经保存的登记内容仍然可以正常审查和提交。
 const reviewSummaryError = ref("");
@@ -1318,39 +1344,167 @@ const sourceAccessMode = computed(() => {
   }
   return { value: "", label: "未记录" };
 });
+// 动态任务状态只读取本页ID，不进入登记快照缓存；顶部计数由服务端按整个数据源汇总。
 const accessTaskRows = ref([]);
+const accessTotals = ref({});
 const accessTaskLoading = ref(false);
 const accessTaskLoaded = ref(false);
+const accessTaskError = ref("");
+const registrationRuntimeWarning = ref("");
+const accessSubmitting = ref(false);
+const accessCommand = ref("");
+const accessCommandPhase = ref("");
+const accessCommandError = ref({taskId:'',message:''});
+const accessDialogVisible = ref(false);
+const accessDialogTable = ref(null);
+const accessDialogRow = computed(() => findTableAccessTaskRow(accessDialogTable.value));
 let accessTaskRequestId = 0;
-
-watch(
-  sourceTid,
-  async (tid) => {
-    const requestId = ++accessTaskRequestId;
-    accessTaskRows.value = [];
-    accessTaskLoaded.value = false;
-    if (!tid) return;
-    accessTaskLoading.value = true;
-    try {
-      // 接入任务是独立业务数据，复用只读的表级接入接口统一读取任务、打回和运行状态。
-      const result = await $common.post("/ods/dataAggPage", {
-        viewLevel: "table",
-        datasourceId: tid,
-        pageNum: 1,
-        pageSize: 500,
-      });
-      if (requestId === accessTaskRequestId) {
-        accessTaskRows.value = Array.isArray(result?.list) ? result.list : [];
-        accessTaskLoaded.value = true;
-      }
-    } catch (error) {
-      console.warn("读取数据接入任务概览失败:", error);
-    } finally {
-      if (requestId === accessTaskRequestId) accessTaskLoading.value = false;
+function registrationTableId(table) {
+  return String(firstNonEmpty(table?.tid, table?.tableId, table?.id, table?.sourceTableId) || "");
+}
+async function refreshAccessSummary() {
+  const datasourceId = sourceTid.value;
+  const tableIds = [...new Set(visibleTables.value.map(registrationTableId).filter(Boolean))];
+  const requestId = ++accessTaskRequestId;
+  if (!datasourceId || !tableIds.length) { accessTaskRows.value = []; accessTaskLoaded.value = false; accessTaskLoading.value = false; return; }
+  accessTaskLoading.value = true;
+  accessTaskError.value = "";
+  try {
+    const result = await requestWithTimeout(() => $common.post('/ods/registrationAccessSummary', {datasourceId, tableIds}), '接入任务摘要', 20000);
+    if (requestId !== accessTaskRequestId || datasourceId !== sourceTid.value) return;
+    const rows = result?.list;
+    if (!Array.isArray(rows) || rows.length !== tableIds.length || new Set(rows.map(row => String(row.tableId))).size !== tableIds.length || rows.some(row => !tableIds.includes(String(row.tableId)))) throw new Error('接入摘要不完整，请重新读取');
+    accessTaskRows.value = rows;
+    accessTotals.value = result.totals || {};
+    accessTaskLoaded.value = true;
+    registrationRuntimeWarning.value = result.runtimeFresh ? '' : result.runtimeMessage || '运行状态暂时无法确认';
+    registrationRuntimeRevision = result.runtimeRevision || registrationRuntimeRevision;
+  } catch (error) {
+    if (requestId === accessTaskRequestId) accessTaskError.value = error?.message || '接入状态读取失败，请重试';
+  } finally { if (requestId === accessTaskRequestId) accessTaskLoading.value = false; }
+}
+function mergeRegistrationAccessResult(result) {
+  if (!result || !Array.isArray(result.list)) return;
+  const allowed = new Set(visibleTables.value.map(registrationTableId));
+  const confirmed = new Map(result.list.filter(row => allowed.has(String(row.tableId))).map(row => [String(row.tableId),row]));
+  accessTaskRows.value = accessTaskRows.value.map(row => confirmed.get(String(row.tableId)) || row);
+  if (result.totals) accessTotals.value = result.totals;
+}
+function openRegistrationAccess(table) {
+  accessCommandError.value = {taskId:'',message:''};
+  accessDialogTable.value = table;
+  accessDialogVisible.value = true;
+}
+function registrationTaskTitle(task) {
+  const name = String(task?.taskName || '接入任务');
+  const position = name.lastIndexOf(' → ');
+  const targets = [task?.targetTableName,task?.targetTableNameCn].filter(Boolean).map(table => `${task.targetDatasourceName} / ${table}`);
+  return position > 0 && targets.includes(name.slice(position + 3)) ? name.slice(0,position) : name;
+}
+function registrationAction(table) {
+  const row = findTableAccessTaskRow(table);
+  if (!row) return '数据接入';
+  if (row.taskCount > 1) return '管理接入任务';
+  if (row.taskCount) return row.accessStatus === '1' ? '停止任务' : '启动任务';
+  return row.accessStatus === '2' ? '查看申请' : '数据接入';
+}
+async function submitRegistrationAccess() {
+  if (accessSubmitting.value || accessCommand.value || !accessDialogRow.value?.canApply) return;
+  accessSubmitting.value = true;
+  try {
+    const result = await $common.post('/ods/registrationAccessApply', {datasourceId:sourceTid.value, tableId:registrationTableId(accessDialogTable.value)});
+    mergeRegistrationAccessResult(result);
+    if (result?.datasourceAssetStatus != null && sourceDetail.value) sourceDetail.value.assetStatus = result.datasourceAssetStatus;
+    await refreshAccessSummary();
+    $message.success('接入申请已提交，可在此查看配置进度');
+  } catch (error) { $message.error(error?.message || '接入申请提交失败'); }
+  finally { accessSubmitting.value = false; }
+}
+async function controlRegistrationTask(task, action) {
+  if (accessCommand.value || accessSubmitting.value || accessTaskError.value || registrationRuntimeWarning.value || !(action === 'start' ? task.canStart : task.canStop)) return;
+  const datasourceId = sourceTid.value, tableId = registrationTableId(accessDialogTable.value), taskId = String(task.tid);
+  accessCommand.value = taskId;
+  accessCommandPhase.value = 'confirm';
+  accessCommandError.value = {taskId:'',message:''};
+  try {
+    await ElMessageBox.confirm(`${action === 'start' ? '启动' : '停止'}“${registrationTaskTitle(task)}”？${action === 'stop' ? '停止后保留已同步数据，其他任务继续运行。' : '系统将检查已保存配置，按需自动部署后启动，仅操作这个任务。'}`, action === 'start' ? '启动数据同步' : '停止数据同步', {type:action === 'start' ? 'info' : 'warning',confirmButtonText:action === 'start' ? '确认启动' : '确认停止',cancelButtonText:'取消'});
+  } catch { accessCommand.value = ''; accessCommandPhase.value = ''; return; }
+  if (datasourceId !== sourceTid.value || tableId !== registrationTableId(accessDialogTable.value)) { accessCommand.value = ''; accessCommandPhase.value = ''; return; }
+  accessCommandPhase.value = 'execute';
+  try {
+    const result = await $common.post('/ods/registrationAccessControl', {datasourceId,tableId,taskId:task.tid,action}, {}, 180000);
+    if (!result?.accepted) throw new Error('任务操作未被接受');
+    if (datasourceId !== sourceTid.value) return;
+    mergeRegistrationAccessResult(result.summary);
+    await refreshAccessSummary();
+    $message.success(action === 'start' ? result.deploymentPerformed ? '部署完成，启动指令已接受，运行状态将自动更新' : '启动指令已接受，运行状态将自动更新' : '停止指令已接受，运行状态将自动更新');
+  } catch (error) {
+    if (datasourceId === sourceTid.value) {const message = error?.message || '操作未完成，请检查任务状态后重试';accessCommandError.value = {taskId,message};$message.error(message);void refreshAccessSummary();}
+  }
+  finally { accessCommand.value = ''; accessCommandPhase.value = ''; }
+}
+// 第五步只建立一个实时通道。事件合并为当前页一次批量刷新，离开页面或隐藏时释放。
+let registrationRuntimeRevision = '', registrationRuntimeActive = false, registrationRuntimeAbort = null;
+let registrationReconnect = null, registrationRefresh = null, registrationReconnectDelay = 1000;
+function queueRegistrationRefresh() {
+  if (registrationRefresh) return;
+  registrationRefresh = setTimeout(() => {registrationRefresh = null; if (registrationRuntimeActive && !document.hidden) void refreshAccessSummary();}, 250);
+}
+async function startRegistrationStream() {
+  if (!registrationRuntimeActive || document.hidden || registrationRuntimeAbort) return;
+  const controller = new AbortController(); registrationRuntimeAbort = controller;
+  let watchdog, stalled = false;
+  const armWatchdog = () => {clearTimeout(watchdog); watchdog = setTimeout(() => {stalled = true; controller.abort();}, 20000);};
+  armWatchdog();
+  try {
+    await $request.get('/nifi/api/task-runtime/events', {signal:controller.signal,timeout:0,responsePolicy:'raw',errorPolicy:'silent',headers:{Accept:'text/event-stream'},adapter:async config => {
+      const headers = Object.fromEntries(Object.entries(config.headers.toJSON()).filter(([,value]) => value != null).map(([key,value]) => [key,String(value)]));
+      const response = await fetch($request.getUri(config), {headers,signal:controller.signal,cache:'no-store'});
+      if (!response.ok || !response.headers.get('content-type')?.includes('text/event-stream') || !response.body) throw new Error('实时状态连接不可用');
+      registrationReconnectDelay = 1000;
+      const reader = response.body.getReader(), decoder = new TextDecoder(); let buffer = '';
+      try {
+        while (true) {
+          const {value,done} = await reader.read(); if (done) break;
+          armWatchdog(); buffer += decoder.decode(value,{stream:true}).replace(/\r/g,'');
+          if (buffer.length > 65536) throw new Error('实时状态消息过大');
+          let end;
+          while ((end = buffer.indexOf('\n\n')) >= 0) {
+            const event = buffer.slice(0,end); buffer = buffer.slice(end+2);
+            const data = event.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+            if (data && !controller.signal.aborted) {
+              const payload = JSON.parse(data);
+              if ((registrationRuntimeRevision && payload.revision !== registrationRuntimeRevision) || (payload.fresh && registrationRuntimeWarning.value)) queueRegistrationRefresh();
+              registrationRuntimeRevision = payload.revision;
+              registrationRuntimeWarning.value = payload.fresh ? '' : payload.message || '运行状态暂时无法确认，请稍后重试';
+            }
+          }
+        }
+      } finally { reader.releaseLock(); }
+      return {data:null,status:response.status,statusText:'OK',headers:{},config};
+    }});
+  } catch (error) {
+    if (!controller.signal.aborted || stalled) registrationRuntimeWarning.value = '实时状态连接中断，正在重连；任务操作暂不可用';
+  } finally {
+    clearTimeout(watchdog); const cancelled = controller.signal.aborted && !stalled; controller.abort();
+    if (registrationRuntimeAbort === controller) registrationRuntimeAbort = null;
+    if (registrationRuntimeActive && !document.hidden && !cancelled) {
+      registrationReconnect = setTimeout(startRegistrationStream, registrationReconnectDelay);
+      registrationReconnectDelay = Math.min(30000, registrationReconnectDelay * 2);
     }
-  },
-  { immediate: true }
-);
+  }
+}
+function stopRegistrationStream() {
+  registrationRuntimeAbort?.abort(); registrationRuntimeAbort = null;
+  clearTimeout(registrationReconnect); clearTimeout(registrationRefresh); registrationReconnect = null; registrationRefresh = null;
+}
+function registrationVisibility() {
+  if (document.hidden) stopRegistrationStream(); else {queueRegistrationRefresh(); void startRegistrationStream();}
+}
+onMounted(() => {registrationRuntimeActive = true; document.addEventListener('visibilitychange',registrationVisibility); void startRegistrationStream();});
+onActivated(() => {registrationRuntimeActive = true; queueRegistrationRefresh(); void startRegistrationStream();});
+onDeactivated(() => {registrationRuntimeActive = false; stopRegistrationStream();});
+onUnmounted(() => {registrationRuntimeActive = false; ++accessTaskRequestId; stopRegistrationStream(); document.removeEventListener('visibilitychange',registrationVisibility);});
 
 // 普通数据源按数据库类型展示图标；数据上报数据源则与数据源列表保持一致，
 // 使用紫色云上报标识，以清楚表达其接入方式而非数据库类型。
@@ -1729,14 +1883,15 @@ function openReportWorkspace() {
     $message.warning("未读取到当前数据源，暂时无法进入数据上报工作台");
     return;
   }
-  // Production is mounted by the gateway.  Development keeps the capability
-  // independent and receives the existing platform session through the
-  // origin-checked capability-session bridge; the token never enters this URL.
-  const explicitBase = window.__DATA_ELEMENTS_REPORT_URL__;
-  const localDevelopment = window.location.hostname === "localhost" && window.location.port === "3000";
-  const base = explicitBase || (localDevelopment ? "http://localhost:3004/" : "/report/");
+  // Reporting is a Haitong route and uses its existing exact-origin session
+  // bridge. Only the selected source ID is passed; credentials stay out of URLs.
+  const explicitBase = String(window.__DATA_ELEMENTS_HAITONG_BASE_URL__ || "").trim();
+  const localDevelopment = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname) && window.location.port === "3000";
+  const localBase = localDevelopment ? `${window.location.protocol}//${window.location.hostname}:3002/` : "/haitong/";
+  const base = explicitBase || localBase;
   const target = new URL(base, window.location.href);
-  target.searchParams.set("datasourceId", datasourceId);
+  target.search = "";
+  target.hash = `/report?${new URLSearchParams({ datasourceId })}`;
   window.location.assign(target.href);
 }
 const reportFileInput = ref(null);
@@ -1920,7 +2075,7 @@ function handleReportPreviewPageSizeChange() {
 watch(
   [sourceTid, isDataUploadSource],
   ([tid, uploadMode]) => {
-    // 上报工作台已经迁移到 data-elements-report。第五步不再预取、维护或
+    // 上报工作台由海通工程的独立页面维护。第五步不再预取、维护或
     // 展示上报批次；仅保留当前登记上下文并通过 openReportWorkspace 交接。
     reportBatches.value = [];
     reportPreviewTableName.value = "";
@@ -2533,39 +2688,11 @@ const standardMatchedFieldCount = computed(() =>
 const standardFormatCoveredTableCount = computed(() =>
   tables.value.filter((table) => fieldsFor(table).some((field) => fieldStandardFormat(field).type === "success")).length
 );
-const regularAccessTableCount = computed(
-  () => accessTaskRows.value.filter((row) => Number(row?.taskCount || row?.tasks?.length || 0) > 0).length
-);
+const regularAccessTableCount = computed(() => Number(accessTotals.value.running || 0));
 const returnedForModifyTableCount = computed(() => tables.value.filter((table) => tableChangeKind(table) === "modified").length);
-const taskProblemTableCount = computed(() => {
-  const affected = new Set();
-  accessTaskRows.value.forEach((row) => {
-    const hasProblem = (row?.tasks || []).some((task) => {
-      const status = String(task?.currentStatus || task?.monitorStatus || task?.taskStatus || "").toLowerCase();
-      return ["2", "failed", "fail", "error", "exception", "abnormal"].some((value) => status.includes(value));
-    });
-    if (hasProblem) affected.add(String(row?.sourceTableId || row?.tid || ""));
-  });
-  return [...affected].filter(Boolean).length;
-});
-const delayedUpdateTableCount = computed(() => {
-  const affected = new Set();
-  accessTaskRows.value.forEach((row) => {
-    const hasDelay = (row?.tasks || []).some((task) => {
-      const delay = String(task?.delayLevel || "").toUpperCase();
-      return [true, 1, "1", "true"].includes(task?.isTimeout) || ["WARNING", "WARN", "CRITICAL", "DELAY", "TIMEOUT"].includes(delay);
-    });
-    if (hasDelay) affected.add(String(row?.sourceTableId || row?.tid || ""));
-  });
-  return [...affected].filter(Boolean).length;
-});
-function tableAccessStatus(table) {
-  if (accessTaskLoading.value) return { label: "正在读取接入状态", type: "info" };
-  if (!accessTaskLoaded.value) return { label: "接入状态未获取", type: "info" };
-  const taskRow = findTableAccessTaskRow(table);
-  const taskCount = Number(taskRow?.taskCount || taskRow?.tasks?.length || 0);
-  return taskCount > 0 ? { label: "已接入", type: "success" } : { label: "未接入", type: "info" };
-}
+const taskProblemTableCount = computed(() => Number(accessTotals.value.problem || 0));
+const delayedUpdateTableCount = computed(() => Number(accessTotals.value.delayed || 0));
+function tableAccessStatus(table) { return tableTaskSummary(table).execution; }
 function findTableAccessTaskRow(table) {
   const tableIds = new Set(
     [table?.sourceTableId, table?.tid, table?.id, table?.tableId, table?.table_id]
@@ -2619,92 +2746,22 @@ function taskDataVolumeLabel(taskRow, table) {
   const raw = firstNonEmpty(
     taskRow?.dataCount,
     taskRow?.data_count,
-    table?.dataCount,
-    table?.data_count,
-    table?.recordCount,
-    table?.record_count
+    taskRow?.syncedRecordCount
   );
   if (raw === undefined || raw === null || String(raw).trim() === "") return "暂无数据";
   const value = Number(raw);
   return Number.isFinite(value) ? `${value.toLocaleString()} 条数据` : `${raw} 条数据`;
 }
 function tableTaskSummary(table) {
-  if (accessTaskLoading.value) {
-    return {
-      execution: { label: "任务状态读取中", type: "info" },
-      frequency: "读取中",
-      dataVolume: "读取中",
-      lastExecutedAt: "读取中",
-      lastBusinessTime: "读取中",
-      lastDataUpdatedAt: "读取中",
-    };
-  }
-  if (!accessTaskLoaded.value) {
-    return {
-      execution: { label: "任务状态未获取", type: "info" },
-      frequency: "暂无记录",
-      dataVolume: "暂无数据",
-      lastExecutedAt: "暂无记录",
-      lastBusinessTime: "暂无记录",
-      lastDataUpdatedAt: "暂无记录",
-    };
-  }
-  const taskRow = findTableAccessTaskRow(table);
-  const tasks = Array.isArray(taskRow?.tasks) ? taskRow.tasks : [];
-  const taskCount = Number(taskRow?.taskCount || tasks.length || 0);
-  const dataVolume = taskDataVolumeLabel(taskRow, table);
-  if (!taskCount) {
-    return {
-      execution: { label: "未接入", type: "info" },
-      frequency: "未配置",
-      dataVolume,
-      lastExecutedAt: "暂无记录",
-      lastBusinessTime: "暂无记录",
-      lastDataUpdatedAt: "暂无记录",
-    };
-  }
-  const hasException = tasks.some((task) => {
-    const status = String(task?.currentStatus || task?.monitorStatus || task?.taskStatus || "").toLowerCase();
-    return ["2", "failed", "fail", "error", "exception", "abnormal"].some((value) => status.includes(value));
-  });
-  const primaryTask = tasks[0] || {};
-  const taskStatus = String(primaryTask?.taskStatus ?? "").trim().toLowerCase();
-  const taskStatusText = String(primaryTask?.taskStatusText || "").trim();
-  const taskDisabled = ["0", "disabled", "stopped", "inactive", "unenabled"].includes(taskStatus) ||
-    ["未启用", "已停用", "已禁用"].some((value) => taskStatusText.includes(value));
-  const frequency = taskFrequencyLabel(primaryTask);
-  const lastExecutedAt = compactTaskTime(
-    primaryTask?.lastRunning || primaryTask?.lastRunTime || primaryTask?.scheduleTime
-  );
-  // 业务时间和数据更新时间是两个独立口径：前者优先采用任务/表登记的业务时间，
-  // 后者采用同步完成时间或数据时间戳。历史任务缺少业务时间时明确显示“暂无记录”，不拿同步时间冒充业务时间。
-  const lastBusinessTime = compactTaskTime(
-    primaryTask?.lastBusinessTime ||
-      primaryTask?.lastBusinessUpdateTime ||
-      primaryTask?.businessUpdateTime ||
-      table?.lastBusinessTime ||
-      table?.businessUpdateTime ||
-      table?.lastBizTime
-  );
-  const lastDataUpdatedAt = compactTaskTime(
-    primaryTask?.lastDataUpdatedAt ||
-      primaryTask?.lastDataUpdateTime ||
-      primaryTask?.dataUpdateTime ||
-      primaryTask?.endRunning ||
-      table?.dataUpdateTime ||
-      table?.updatedTime
-  );
+  const row = findTableAccessTaskRow(table);
+  const status = row?.accessStatus;
+  if (!row && accessTaskLoading.value) return {execution:{label:'接入状态读取中',type:'info'},frequency:'读取中',dataVolume:'读取中',lastExecutedAt:'读取中',lastBusinessTime:'读取中',lastDataUpdatedAt:'读取中'};
   return {
-    execution: hasException
-      ? { label: "任务异常", type: "danger" }
-      : taskDisabled
-        ? { label: taskStatusText || "未启用", type: "info" }
-        : { label: "运行正常", type: "success" },
-    frequency,
-    dataVolume,
-    lastExecutedAt: lastExecutedAt || "暂无记录",
-    lastBusinessTime: lastBusinessTime || "暂无记录",
-    lastDataUpdatedAt: lastDataUpdatedAt || "暂无记录",
+    execution: {label:row?.accessStatusText || (accessTaskLoading.value ? '接入状态读取中' : '接入状态未获取'),type:status === '1' ? 'success' : ['2','3'].includes(status) ? 'warning' : 'info'},
+    frequency: row?.frequency || '未配置', dataVolume: taskDataVolumeLabel(row,table),
+    lastExecutedAt: compactTaskTime(row?.lastExecutedAt) || '暂无记录',
+    lastBusinessTime: compactTaskTime(row?.lastBusinessTime) || '暂无记录',
+    lastDataUpdatedAt: compactTaskTime(row?.lastDataUpdatedAt) || '暂无记录',
   };
 }
 const reviewMetrics = computed(() => [
@@ -2799,7 +2856,7 @@ const reviewMetrics = computed(() => [
   },
   {
     label: "常态化接入",
-    value: `${regularAccessTableCount.value} 张`,
+    value: accessTaskLoaded.value ? `${regularAccessTableCount.value} 张` : "读取中",
     hint: accessTaskLoading.value ? "正在读取常态化接入状态" : "已实现常态化接入",
     detailKey: "regular-access",
     type: regularAccessTableCount.value ? "success" : "",
@@ -2813,14 +2870,14 @@ const reviewMetrics = computed(() => [
   },
   {
     label: "任务异常",
-    value: `${taskProblemTableCount.value} 张`,
+    value: accessTaskLoaded.value ? `${taskProblemTableCount.value} 张` : "读取中",
     hint: "存在失败、异常或错误接入任务的数据表",
     detailKey: "task-problem",
     type: taskProblemTableCount.value ? "error" : "",
   },
   {
     label: "更新延迟",
-    value: `${delayedUpdateTableCount.value} 张`,
+    value: accessTaskLoaded.value ? `${delayedUpdateTableCount.value} 张` : "读取中",
     hint: "接入任务监控判定为延迟或超时的数据表",
     detailKey: "delayed-update",
     type: delayedUpdateTableCount.value ? "warning" : "",
@@ -3478,22 +3535,31 @@ const filteredReviewTables = computed(() => {
 const visibleTableTotal = computed(() => filteredReviewTables.value.length);
 const reviewSort=ref({});
 const visibleTables=ref([]);
-let reviewOrderSequence=0;
-function sortReviewTables({prop,order}){
-  reviewSort.value=order&&prop?{sortField:prop,sortDir:order==='ascending'?'asc':'desc'}:{};
-  reviewTablePage.value=1;
+const reviewOrderLoading = ref(false);
+const reviewOrderError = ref('');
+let reviewOrderSequence = 0;
+function sortReviewTables({prop,order}) {
+  reviewSort.value = order && prop ? {sortField:prop,sortDir:order === 'ascending' ? 'asc' : 'desc'} : {};
+  reviewTablePage.value = 1;
 }
-watch(()=>[sourceTid.value,filteredReviewTables.value.map(table=>table.tableName).join('\n'),reviewTablePage.value,reviewSort.value],async()=>{
-  const sequence=++reviewOrderSequence,rows=filteredReviewTables.value;
-  if(!rows.length){visibleTables.value=[];return;}
-  try{
-    const result=await $common.post('/dst/database/metadata/tables/review-order',{dbId:sourceTid.value,names:rows.map(row=>row.tableName),pageNo:reviewTablePage.value,pageSize:reviewTablePageSize,...reviewSort.value});
-    if(sequence!==reviewOrderSequence)return;
-    const byName=new Map(rows.map(row=>[row.tableName,row]));
-    if(result.total!==rows.length||result.keys.some(key=>!byName.has(key))||new Set(result.keys).size!==result.keys.length)throw new Error('审查排序结果不完整或超出当前范围');
-    visibleTables.value=result.keys.map(key=>byName.get(key));
-  }catch(error){if(sequence!==reviewOrderSequence)return;visibleTables.value=[];$message.error(error?.message||'审查列表读取失败');}
-},{immediate:true});
+async function loadReviewPage() {
+  const sequence = ++reviewOrderSequence, rows = filteredReviewTables.value;
+  if (!rows.length) {visibleTables.value = []; reviewOrderLoading.value = false; return;}
+  reviewOrderLoading.value = true; reviewOrderError.value = '';
+  try {
+    const result = await requestWithTimeout(() => $common.post('/dst/database/metadata/tables/review-order', {dbId:sourceTid.value,names:rows.map(row => row.tableName),pageNo:reviewTablePage.value,pageSize:reviewTablePageSize,...reviewSort.value}), '数据表列表', 20000);
+    if (sequence !== reviewOrderSequence) return;
+    const byName = new Map(rows.map(row => [row.tableName,row]));
+    if (result.total !== rows.length || !Array.isArray(result.keys) || result.keys.some(key => !byName.has(key)) || new Set(result.keys).size !== result.keys.length) throw new Error('数据表列表不完整，请重试');
+    visibleTables.value = result.keys.map(key => byName.get(key));
+  } catch (error) { if (sequence === reviewOrderSequence) reviewOrderError.value = error?.message || '数据表列表读取失败'; }
+  finally { if (sequence === reviewOrderSequence) reviewOrderLoading.value = false; }
+}
+watch(() => [sourceTid.value,filteredReviewTables.value.map(table => table.tableName).join('\n'),reviewTablePage.value,reviewSort.value], loadReviewPage, {immediate:true});
+watch(sourceTid, () => {accessDialogVisible.value = false; accessDialogTable.value = null; accessCommandError.value = {taskId:'',message:''};accessTotals.value = {}; visibleTables.value = [];});
+watch(() => [sourceTid.value,visibleTables.value.map(registrationTableId).join(',')], () => {accessTaskRows.value = []; accessTaskLoaded.value = false; void refreshAccessSummary();}, {immediate:true});
+const reviewTableBusy = computed(() => tableListLoading.value || reviewOrderLoading.value || accessTaskLoading.value);
+const reviewTableLoadingPhase = computed(() => tableListLoading.value ? '正在读取已保存的登记信息' : reviewOrderLoading.value ? '正在整理数据表清单' : '正在核对接入任务与同步状态');
 const allTableDetailsExpanded = computed(() => {
   const tableNames = visibleTables.value.map((table) => table.tableName).filter(Boolean);
   return tableNames.length > 0 && tableNames.every((tableName) => activeTableDetails.value.includes(tableName));
@@ -8477,4 +8543,35 @@ defineExpose({ next, finish, commit });
 .api-pull-payload-preview { margin-top: 10px; padding: 10px 12px; border: 1px solid #e4eefc; border-radius: 6px; background: #fff; }
 .api-pull-payload-preview pre { max-height: 180px; margin: 0; overflow: auto; color: #52647d; font: 12px/1.55 Consolas, Monaco, monospace; white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 900px) { .api-pull-compact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .api-pull-compact-item:nth-child(3n) { border-right: 1px solid #edf2f8; } .api-pull-compact-item:nth-child(2n) { border-right: 0; } .api-pull-compact-item:nth-last-child(-n + 3) { border-bottom: 1px solid #edf2f8; } .api-pull-compact-item:nth-last-child(-n + 2) { border-bottom: 0; } .api-pull-compact-item.is-wide { grid-column: span 2; } }
+
+/* 数据表清单在首次读取时按真实业务列呈现，刷新时保留已确认内容。 */
+.registration-table-skeleton {overflow:hidden; border:1px solid #e5ebf4; border-radius:8px;}
+.registration-loading-caption {display:flex;align-items:center;gap:9px;padding:14px 16px;color:#52719b;font-size:12px;flex-wrap:wrap;}
+.registration-loading-caption strong {font-weight:500;color:#285790;}
+.registration-loading-dot {display:inline-block;width:7px;height:7px;border-radius:50%;background:#2c7bff;box-shadow:0 0 0 4px #e8f1ff;animation:registration-pulse 1.6s ease-in-out infinite;}
+.registration-skeleton-head,.registration-skeleton-row {display:grid;grid-template-columns:42px minmax(150px,1.5fr) minmax(82px,.8fr) minmax(90px,.8fr) minmax(100px,1fr) minmax(170px,1.5fr) 80px;gap:16px;align-items:center;padding:16px;min-width:850px;}
+.registration-skeleton-head {background:#f5f8fd;color:#5c6d87;font-size:12px;}
+.registration-skeleton-row {height:84px;border-top:1px solid #edf1f7;}
+.skeleton-bar {display:block;height:10px;margin:7px 0;border-radius:4px;background:linear-gradient(100deg,#edf2f8 20%,#f8fbff 45%,#edf2f8 70%);background-size:240% 100%;animation:registration-shimmer 1.7s ease-in-out infinite;}
+.skeleton-bar.is-number {width:18px;} .skeleton-bar.is-name {width:85%;height:13px;} .skeleton-bar.is-subtitle {width:68%;height:8px;} .skeleton-bar.is-pill {width:58px;height:20px;border-radius:5px;} .skeleton-bar.is-short {width:50px;} .skeleton-bar.is-time {width:88%;height:8px;}
+.registration-table-alert {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;margin-bottom:10px;background:#fff8eb;border-radius:6px;color:#926415;font-size:12px;}
+.registration-updating {display:flex;align-items:center;gap:9px;padding:8px 4px;color:#607a9e;font-size:12px;}
+.registration-access-action.el-button {display:flex;margin:6px auto 0;}
+.registration-access-object {display:flex;align-items:center;gap:12px;margin-bottom:10px;}.registration-access-object>div {flex:1;min-width:0;}.registration-access-object strong,.registration-access-object small {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.registration-access-object small {color:#8796aa;margin-top:4px;}
+.registration-access-context {display:flex;flex-wrap:wrap;gap:5px 16px;padding:0 0 10px;font-size:12px;line-height:1.5;color:#7a8a9e;}.registration-access-context strong {font-weight:500;color:#536b8b;}
+.registration-access-explanation {color:#61738e;line-height:1.8;margin:16px 0;}.registration-request-time {color:#8796aa;font-size:12px;}
+:global(.registration-access-dialog) {max-width:calc(100vw - 32px);border-radius:14px;}
+:global(.registration-access-dialog .el-dialog__body) {max-height:calc(88vh - 126px);overflow-y:auto;overscroll-behavior:contain;padding-right:4px;}
+.registration-sync-guide {display:flex;gap:10px;padding:10px 14px;margin-top:4px;border:1px solid #dce9ff;border-radius:10px;background:#f1f7ff;color:#2563a6;}
+.registration-sync-guide>.iconify {flex-shrink:0;margin-top:2px;}.registration-sync-guide strong {font-size:13px;}.registration-sync-guide p {margin:4px 0 0;font-size:12px;line-height:1.6;color:#536b8b;}
+.registration-task-list {display:grid;gap:12px;margin-top:14px;}
+.registration-task-card {min-width:0;border:1px solid #dfe6ef;background:#fff;border-radius:10px;padding:12px 16px;}
+.registration-task-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}.registration-task-heading>.el-tag {flex-shrink:0;}
+.registration-task-identity {display:flex;align-items:flex-start;min-width:0;gap:9px;}.registration-task-identity strong {font-size:14px;line-height:1.5;overflow-wrap:anywhere;color:#23334b;}.registration-task-number {display:grid;place-items:center;flex:0 0 23px;height:23px;border-radius:6px;background:#edf3fc;color:#3972be;font-size:12px;font-weight:600;}
+.registration-task-details {display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:12px;margin:12px 0;padding:10px 0;border-top:1px solid #edf0f5;border-bottom:1px solid #edf0f5;}.registration-task-details>div {min-width:0;}.registration-task-details dt {font-size:12px;color:#8090a4;margin-bottom:5px;}.registration-task-details dd {margin:0;color:#40536d;font-size:13px;line-height:1.5;overflow-wrap:anywhere;}.registration-task-details small {display:block;color:#8b98aa;font-size:11px;margin-top:3px;overflow-wrap:anywhere;}
+.registration-task-controls {display:flex;align-items:center;justify-content:space-between;gap:14px;}.registration-task-controls>span {flex:1;min-width:0;font-size:12px;line-height:1.5;color:#72849a;}.registration-task-controls>.el-button {flex-shrink:0;}.registration-task-card>.el-alert {margin-top:12px;}
+@media(max-width:600px) {.registration-task-details {grid-template-columns:1fr 1fr;}.registration-task-details>div:last-child {grid-column:1/-1;}.registration-task-controls {align-items:flex-start;}.registration-task-card {padding:12px;}}
+@keyframes registration-shimmer {to{background-position:-160% 0;}} @keyframes registration-pulse {50%{opacity:.4;}}
+@media(prefers-reduced-motion:reduce){.skeleton-bar,.registration-loading-dot {animation:none;}}
+
 </style>

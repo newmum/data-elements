@@ -50,17 +50,6 @@
       "Password": "${config.password}"
     }}],
     "processors": [
-      { "localId": "merge", "type": "org.apache.nifi.processors.standard.MergeRecord", "properties": {
-        "Record Reader": "${cs.jsonReader}",
-        "Record Writer": "${cs.jsonWriter}",
-        "Merge Strategy": "Bin-Packing Algorithm",
-        "Correlation Attribute Name": "filename",
-        "Attribute Strategy": "Keep Only Common Attributes",
-        "Minimum Number of Records": "1",
-        "Maximum Number of Records": "10000",
-        "Minimum Bin Size": "0 B",
-        "Maximum Number of Bins": "10"
-      }},
       { "localId": "put", "type": "org.apache.nifi.processors.standard.PutDatabaseRecord", "properties": {
       "Record Reader": "${cs.jsonReader}",
       "Database Connection Pooling Service": "${cs.dbcp}",
@@ -71,10 +60,8 @@
       "Unmatched Field Behavior": "Ignore Unmatched Fields",
       "Unmatched Column Behavior": "Ignore Unmatched Columns"
     }}],
-    "internalConnections": [
-      { "from": "merge", "to": "put", "relationship": "merged" }
-    ],
-    "inlet": "merge",
+    "internalConnections": [],
+    "inlet": "put",
     "outlets": []
   }
 }

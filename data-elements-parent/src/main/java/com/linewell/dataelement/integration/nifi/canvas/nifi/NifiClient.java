@@ -50,6 +50,38 @@ public class NifiClient {
     private final String clientId = UUID.randomUUID().toString();
     private final Map<String, TokenHolder> tokens = new ConcurrentHashMap<>();
     private final Map<String, ProvenanceProcessorField> provenanceProcessorFields = new ConcurrentHashMap<>();
+    private final ThreadLocal<RuntimeBinding> runtimeBinding = new ThreadLocal<>();
+
+    /** Resolve tenant routing before graph traversal, then pass that binding through synchronous NiFi operations. */
+    public RuntimeScope bindRuntimeNode() {
+        RuntimeBinding previous = runtimeBinding.get();
+        RuntimeNode node = selectedRuntimeNode();
+        runtimeBinding.set(new RuntimeBinding(node, com.linewell.dataelement.platform.tenant.domain.TenantContext.getTenantId()));
+        return new RuntimeScope(previous);
+    }
+
+    private RuntimeNode selectedRuntimeNode() {
+        RuntimeBinding binding = runtimeBinding.get();
+        if (binding == null) return runtimeResolver.resolve();
+        if (!java.util.Objects.equals(binding.tenantId(), com.linewell.dataelement.platform.tenant.domain.TenantContext.getTenantId()))
+            throw new IllegalStateException("NiFi 编译期间租户上下文发生变化，请重新发起部署");
+        return binding.node();
+    }
+
+    private record RuntimeBinding(RuntimeNode node, String tenantId) {}
+
+    public final class RuntimeScope implements AutoCloseable {
+        private final RuntimeBinding previous;
+        private final Thread owner = Thread.currentThread();
+        private boolean closed;
+        private RuntimeScope(RuntimeBinding previous) { this.previous = previous; }
+        @Override public void close() {
+            if (Thread.currentThread() != owner) throw new IllegalStateException("NiFi 节点绑定必须在原线程释放");
+            if (closed) return;
+            if (previous == null) runtimeBinding.remove(); else runtimeBinding.set(previous);
+            closed = true;
+        }
+    }
 
     public NifiClient(NifiNodeRuntimeResolver runtimeResolver, ObjectMapper mapper) {
         this.runtimeResolver = runtimeResolver;
@@ -117,8 +149,9 @@ public class NifiClient {
                 +com.linewell.dataelement.mapping.core.MappingEngine.engineVersion()+"；要求扩展："+bundleCoordinates(required)
                 +"；"+String.join("；",mismatches)+"；请安装匹配目标 NiFi SDK 的 haitong-mapping-nar-"
                 +required.path("version").asText()+".nar，并确认处理器与字典服务均已注册同版扩展；旧流程已保留");
-        JsonNode cluster=get("/flow/cluster/summary",JsonNode.class).path("clusterSummary");
-        if(cluster.path("clustered").asBoolean()&&cluster.path("connectedNodeCount").asInt()>1)throw new IllegalStateException("多节点集群须完成全部节点扩展版本核验后才能部署统一映射");
+        // These native type endpoints replicate through the NiFi coordinator.
+        // NiFi validates bundle availability during replicated component creation;
+        // a connected cluster is not itself a reason to reject publication.
     }
 
     public NifiEntity createRetentionFunnel(String pgId,double x,double y){
@@ -127,12 +160,25 @@ public class NifiClient {
         return post("/process-groups/"+pgId+"/funnels",envelope,NifiEntity.class);
     }
 
+    public void routeInvalidRetention(NifiEntity connection,NativeCanvasLayout.Point source,NativeCanvasLayout.Point funnel) {
+        var route=NativeCanvasLayout.invalidRoute(source,funnel);
+        ObjectNode update=mapper.createObjectNode().put("id",connection.id()).put("labelIndex",route.labelIndex());
+        update.set("bends",mapper.valueToTree(route.bends()));
+        putLayoutSnapshot("/connections/"+connection.id(),mapper.valueToTree(connection),update);
+    }
+
+    private JsonNode putLayoutSnapshot(String path,JsonNode snapshot,ObjectNode component) {
+        ObjectNode body=mapper.createObjectNode();body.set("component",component);
+        body.set("revision",mapper.createObjectNode().put("version",snapshot.path("revision").path("version").asLong()).put("clientId",clientId));
+        return put(path,body,JsonNode.class);
+    }
+
     // ---------------------------------------------------------------------
     // Auth
     // ---------------------------------------------------------------------
 
     private String authHeader() {
-        return authHeader(runtimeResolver.resolve());
+        return authHeader(selectedRuntimeNode());
     }
 
     private String authHeader(RuntimeNode node) {
@@ -172,7 +218,7 @@ public class NifiClient {
     }
 
     private RestClient http() {
-        return runtimeResolver.restClient(runtimeResolver.resolve());
+        return runtimeResolver.restClient(selectedRuntimeNode());
     }
 
     private RestClient http(RuntimeNode node) {
@@ -246,7 +292,7 @@ public class NifiClient {
     }
 
     public <T> T get(String path, Class<T> type) {
-        return get(runtimeResolver.resolve(), path, type);
+        return get(selectedRuntimeNode(), path, type);
     }
 
     private <T> T get(RuntimeNode node, String path, Class<T> type) {
@@ -278,7 +324,7 @@ public class NifiClient {
     }
 
     public <T> T put(String path, Object body, Class<T> type) {
-        return put(runtimeResolver.resolve(), path, body, type);
+        return put(selectedRuntimeNode(), path, body, type);
     }
 
     <T> T put(RuntimeNode node, String path, Object body, Class<T> type) {
@@ -345,7 +391,7 @@ public class NifiClient {
     // ---------------------------------------------------------------------
 
     public String getRootProcessGroupId() {
-        String configured = runtimeResolver.resolve().rootProcessGroupId();
+        String configured = selectedRuntimeNode().rootProcessGroupId();
         if (configured != null && !configured.isBlank() && !"root".equalsIgnoreCase(configured.trim())) {
             return configured.trim();
         }
@@ -684,7 +730,7 @@ public class NifiClient {
         }
         if (sources.size() != sourceIds.size()) throw new IllegalStateException("全量来源的部署映射不完整，请重新保存并部署");
         if (!downstream.isEmpty()) scheduleComponents(pgId, "RUNNING", downstream);
-        RuntimeNode runtimeNode = runtimeResolver.resolve();
+        RuntimeNode runtimeNode = selectedRuntimeNode();
         // NiFi 2.9 accepts RUN_ONCE on the group endpoint but does not execute it.
         // Its native processor endpoint is required. Revisions were prefetched
         // with the one flow-tree read; never read each processor again here.
@@ -794,6 +840,14 @@ public class NifiClient {
         if (processors.isEmpty()) return;
         var links = NativeCanvasLayout.links(flow.path("connections"));
         var positions = NativeCanvasLayout.positions(processors, links);
+        var retentions = NativeCanvasLayout.retentionPositions(flow.path("funnels"),links,positions);
+        Map<String,JsonNode> connectionSnapshots=new java.util.LinkedHashMap<>();
+        flow.path("connections").forEach(entity->connectionSnapshots.put(entity.path("id").asText(),entity));
+        for(JsonNode entity:flow.path("funnels")) {
+            String id=entity.path("id").asText();if(!retentions.containsKey(id))continue;
+            ObjectNode update=mapper.createObjectNode().put("id",id);update.set("position",mapper.valueToTree(retentions.get(id)));
+            putLayoutSnapshot("/funnels/"+id,entity,update);
+        }
         for (JsonNode entity : processors) {
             JsonNode processor = entity.path("component");
             String id = entity.path("id").asText();
@@ -819,11 +873,12 @@ public class NifiClient {
                     relationships.addAll(retained);
                     ObjectNode update = mapper.createObjectNode().put("id", loop.id());
                     update.set("selectedRelationships", mapper.valueToTree(relationships));
-                    putWithRevision("/connections/" + loop.id(), "/connections/" + loop.id(), update);
+                    connectionSnapshots.put(loop.id(),putLayoutSnapshot("/connections/"+loop.id(),connectionSnapshots.get(loop.id()),update));
                     links.set(links.indexOf(loop), new NativeCanvasLayout.Link(loop.id(), id, id, relationships));
                 } else {
                     NifiEntity loop = createConnection(pgId, id, "PROCESSOR", id, "PROCESSOR", retained);
                     links.add(new NativeCanvasLayout.Link(loop.id(), id, id, retained));
+                    connectionSnapshots.put(loop.id(),mapper.valueToTree(loop));
                 }
                 used.addAll(retained);
             }
@@ -836,12 +891,14 @@ public class NifiClient {
             }
             update.set("config", mapper.createObjectNode().set("autoTerminatedRelationships", autoTerminated));
             // Applying an empty list is essential when failure was previously auto-terminated.
-            putWithRevision("/processors/" + id, "/processors/" + id, update);
+            putLayoutSnapshot("/processors/"+id,entity,update);
         }
         int lane = 0;
         for (var link : links) {
-            if (!positions.containsKey(link.source()) || !positions.containsKey(link.target())) continue;
-            var route = NativeCanvasLayout.route(link, positions, lane);
+            if (!positions.containsKey(link.source())) continue;
+            boolean invalid=retentions.containsKey(link.target())&&link.relationships().contains("invalid");
+            if(!invalid&&!positions.containsKey(link.target()))continue;
+            var route = invalid?NativeCanvasLayout.invalidRoute(positions.get(link.source()),retentions.get(link.target())):NativeCanvasLayout.route(link, positions, lane);
             if (!link.source().equals(link.target()) && !route.bends().isEmpty()) lane++;
             ObjectNode update = mapper.createObjectNode().put("id", link.id()).put("labelIndex", route.labelIndex());
             update.set("bends", mapper.valueToTree(route.bends()));
@@ -850,7 +907,32 @@ public class NifiClient {
                 update.put("backPressureObjectThreshold", 10000);
                 update.put("backPressureDataSizeThreshold", "1 GB");
             }
-            putWithRevision("/connections/" + link.id(), "/connections/" + link.id(), update);
+            putLayoutSnapshot("/connections/"+link.id(),connectionSnapshots.get(link.id()),update);
+        }
+    }
+
+    /** One batch snapshot covers the whole candidate; no per-processor reads. */
+    public void requireValidGeneratedProcessGroup(String pgId) {
+        long deadline = System.currentTimeMillis() + 10_000L;
+        while (true) {
+            JsonNode processors = get("/process-groups/" + pgId + "/processors?includeDescendantGroups=true", JsonNode.class).path("processors");
+            if (!processors.isArray() || processors.isEmpty()) throw new IllegalStateException("Hive分区流程未生成完整处理器链路");
+            java.util.List<String> invalid = new java.util.ArrayList<>();
+            boolean validating = false;
+            for (JsonNode entity : processors) {
+                JsonNode component = entity.path("component");
+                String status = component.path("validationStatus").asText();
+                if ("VALIDATING".equals(status)) { validating = true; continue; }
+                if ("VALID".equals(status) && component.path("validationErrors").isEmpty()) continue;
+                java.util.List<String> details = new java.util.ArrayList<>();
+                component.path("validationErrors").forEach(error -> details.add(error.asText()));
+                invalid.add(component.path("name").asText() + "：" + (details.isEmpty() ? "原生组件尚未通过校验（" + status + "）" : String.join("；", details)));
+            }
+            if (!invalid.isEmpty()) throw new IllegalStateException("Hive分区候选流程校验失败，未替换旧流程：" + String.join("；", invalid));
+            if (!validating) return;
+            if (System.currentTimeMillis() >= deadline) throw new IllegalStateException("Hive分区候选流程仍在校验中，未替换旧流程，请稍后重试");
+            try { Thread.sleep(200); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException("Hive分区流程校验被中断", interrupted); }
         }
     }
 
@@ -1249,7 +1331,7 @@ public class NifiClient {
      * A top-level request.componentId is not a ProvenanceRequestDTO filter. */
     public JsonNode submitProcessorProvenance(String processorId, int maxResults) {
         if (processorId == null || processorId.isBlank()) throw new IllegalArgumentException("Processor id is required");
-        String cacheKey = runtimeResolver.resolve().tokenCacheKey();
+        String cacheKey = selectedRuntimeNode().tokenCacheKey();
         ProvenanceProcessorField cached = provenanceProcessorFields.get(cacheKey);
         if (cached == null || cached.expiresAt().isBefore(Instant.now())) {
             JsonNode options = get("/provenance/search-options", JsonNode.class);

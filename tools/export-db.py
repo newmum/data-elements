@@ -64,6 +64,22 @@ def connections(config):
             raise ValueError(f"Unsupported active datasource {key}")
 
 
+def project_connections(config, selected=None):
+    """Independent application databases do not participate in tenant parity checks."""
+    projects = config.get("project_databases", {})
+    if selected is not None and selected not in projects:
+        raise ValueError(f"Project {selected} has no private database configuration")
+    for key in sorted(projects):
+        if selected is not None and key != selected:
+            continue
+        source = {name: resolve(value) for name, value in projects[key].items()}
+        dialect = source.pop("dialect", "mysql")
+        schema = source.get("database") if dialect == "mysql" else source.get("schema")
+        if dialect not in ("mysql", "dameng") or not schema:
+            raise ValueError(f"Project {key} needs a supported dialect and explicit schema")
+        yield key, dialect, schema, source
+
+
 def mysql_identifier(name):
     return "`" + name.replace("`", "``") + "`"
 
@@ -265,11 +281,29 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path(os.environ.get("DATA_ELEMENTS_RESOURCE_CONFIG", str(Path.home() / ".codex/private/data-elements/resources.local.json"))))
     parser.add_argument("--output", type=Path, default=ROOT / "db")
+    parser.add_argument("--project", help="Export only a configured independent project; preserve other manifest entries")
     args = parser.parse_args()
     config = json.loads(args.config.read_text(encoding="utf-8-sig"))
+    try:
+        targets = list(project_connections(config, args.project))
+        if args.project is None:
+            targets = list(connections(config)) + targets
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
+    schemas = [schema.casefold() for _, _, schema, _ in targets]
+    if len(schemas) != len(set(schemas)):
+        raise SystemExit("Duplicate schema output paths; canonical files were not replaced")
+    manifest_path = args.output / "schema-manifest.json"
+    previous = json.loads(manifest_path.read_text(encoding="utf-8-sig")) if manifest_path.exists() else None
+    selected_paths = {schema.casefold() + "/init.sql": key for key, _, schema, _ in targets}
+    if previous:
+        for entry in previous["schemas"]:
+            owner = selected_paths.get(entry["file"].casefold())
+            if owner and entry["dataSourceKey"] != owner and (args.project or entry.get("project")):
+                raise SystemExit("Project schema path belongs to another datasource; canonical files were not replaced")
     exports = []
     # Prepare every database successfully before replacing any canonical baseline.
-    for key, dialect, schema, options in connections(config):
+    for key, dialect, schema, options in targets:
         try:
             actual_schema, sql, counts, notes = (mysql_export if dialect == "mysql" else dameng_export)(schema, options)
         except Exception as error:
@@ -279,7 +313,14 @@ def main():
             raise SystemExit(f"Datasource {key} needs an explicit safe local directory mapping; canonical files were not replaced")
         exports.append((key, dialect, actual_schema, sql, counts, notes))
         print(f"Read {key}: {dialect} {actual_schema}, {counts['tables']} tables, {counts['views']} views")
-    manifest = {"formatVersion": 1, "scope": "structure-only", "routingSource": "private current Nacos API/runtime snapshot", "schemas": []}
+    manifest = {"formatVersion": 1, "scope": "structure-only", "routingSource": "private current Nacos API/runtime snapshot and configured independent projects", "schemas": []}
+    if args.project and previous:
+        manifest = {**previous, "schemas": [entry for entry in previous["schemas"] if entry["dataSourceKey"] != args.project]}
+        manifest["routingSource"] = "private current Nacos API/runtime snapshot and configured independent projects"
+    elif previous:
+        # A platform-only private configuration must not remove another project's baseline.
+        target_keys = {key for key, *_ in targets}
+        manifest["schemas"] = [entry for entry in previous["schemas"] if entry.get("project") and entry["dataSourceKey"] not in target_keys]
     args.output.mkdir(parents=True, exist_ok=True)
     for key, dialect, schema, sql, counts, notes in exports:
         relative = Path(schema) / "init.sql"
@@ -288,8 +329,11 @@ def main():
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", newline="\n", dir=destination.parent, delete=False) as temporary:
             temporary.write(sql)
         Path(temporary.name).replace(destination)
-        manifest["schemas"].append({"dataSourceKey": key, "schema": schema, "dialect": dialect, "file": relative.as_posix(), "objects": counts, "sha256": hashlib.sha256(sql.encode("utf-8")).hexdigest(), "exportNotes": notes})
-    (args.output / "schema-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        entry = {"dataSourceKey": key, "schema": schema, "dialect": dialect, "file": relative.as_posix(), "objects": counts, "sha256": hashlib.sha256(sql.encode("utf-8")).hexdigest(), "exportNotes": notes}
+        if key in config.get("project_databases", {}):
+            entry["project"] = key
+        manifest["schemas"].append(entry)
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"Exported {len(exports)} current schema baselines; no live database was changed")
 
 

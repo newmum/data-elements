@@ -22,6 +22,7 @@ const names = [
   'isHiveTarget',
   'partitionPlans', 'ddlPartitionPlans', 'partitionSupport', 'partitionProbeMessage', 'sourceDefinitionMessage', 'sourcePartitionDetected',
   'sourceConstraints', 'partitionError', 'partitionProbeIdentity', 'ddlGenerationVersion', 'invalidateDdl', 'partitionInputError', 'partitionPayload', 'probePartitions',
+  'partitionEnabled', 'ddlGeneratedSqlByTarget', 'ddlInputFingerprintsByTarget', 'ddlPartitionInputsByTarget', 'ddlTargetFingerprint',
   'normalizeCode', 'orderTargetDatasourceIds', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
   'materializationProgress', 'materializationElapsed', 'materializationAwaitingDecision',
   'materializationStartedAt', 'materializationTimer', 'startMaterializationProgress', 'stopMaterializationProgress', 'confirmMaterialization',
@@ -329,6 +330,38 @@ renamed.context.renameResponse = true;
 await assert.rejects(renamed.actual.regenerateDdl(await renamed.actual.currentDdlInput()), /表名与输入框不一致/);
 renamed.form.tableName = 'ODS_TC_RKXT.T_SJYCC_CKB';
 await assert.rejects(renamed.actual.currentDdlInput(), /不能包含用户名/);
+
+const drafts=fixture();
+await drafts.actual.init();
+drafts.form.dbId=[['ODS','db-0'],['ODS','db-1']];
+const draftInput=await drafts.actual.currentDdlInput();
+await drafts.actual.regenerateDdl(draftInput);
+drafts.context.ddlSqlByTarget.value['db-0']+='; -- first target manual draft';
+drafts.context.ddlWasEdited.value=true;
+drafts.actual.partitionPlans.value['db-1']={enabled:true,field:'ODS_RKSJ',strategy:'YEAR',startYear:'2026',years:10};
+let nextInput=await drafts.actual.currentDdlInput();
+const beforeDraftChange=drafts.calls.length;
+await drafts.actual.regenerateDdl(nextInput,['db-1']);
+assert.ok(drafts.context.ddlSqlByTarget.value['db-0'].endsWith('first target manual draft'),'Changing the second target preserves the first manual draft');
+assert.equal(drafts.context.ddlWasEdited.value,true,'The retained draft must still be submitted as edited SQL');
+assert.deepEqual(drafts.calls.slice(beforeDraftChange).map(c=>c.body.targets.map(t=>t.propList.dbId)),[['db-1']]);
+const beforeTabSwitch=drafts.calls.length;
+await drafts.actual.regenerateDdl(nextInput);
+assert.equal(drafts.calls.length,beforeTabSwitch,'Unchanged target inputs must not issue a regeneration request');
+assert.ok(drafts.context.ddlSqlByTarget.value['db-0'].endsWith('first target manual draft'));
+const previousSql=plain(drafts.context.ddlSqlByTarget.value);
+drafts.context.ddlSqlByTarget.value['db-1']+=' -- second manual draft';
+drafts.actual.partitionPlans.value['db-1'].years=11;
+nextInput=await drafts.actual.currentDdlInput();
+drafts.context.ElMessageBox.confirm=async()=>{throw 'cancel';};
+await assert.rejects(drafts.actual.regenerateDdl(nextInput,['db-1']),error=>error==='cancel');
+assert.equal(drafts.context.ddlSqlByTarget.value['db-1'],previousSql['db-1']+' -- second manual draft');
+drafts.context.ElMessageBox.confirm=async()=>{};
+drafts.context.renameResponse=true;
+await assert.rejects(drafts.actual.regenerateDdl(nextInput,['db-1']),/表名与输入框不一致/);
+assert.equal(drafts.context.ddlSqlByTarget.value['db-0'],previousSql['db-0'],'A generation failure preserves all existing drafts');
+assert.equal(drafts.context.ddlSqlByTarget.value['db-1'],previousSql['db-1']+' -- second manual draft');
+console.log('Independent target drafts survive other-target changes, unchanged regeneration, cancellation and generation failure.');
 
 const requestCounts = [];
 for (const size of [20, 100]) {

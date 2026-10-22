@@ -1,0 +1,68 @@
+# 演示环境的安全覆盖配置。它覆盖 JAR 内置默认值，不包含任何数据库、消息队列或 FTP 口令。
+# 部署脚本会将此文件安装为 /opt/haitong-data-pull/config/application.yml；口令仅通过 systemd 环境文件注入。
+server:
+  address: 127.0.0.1
+  port: 18083
+
+db:
+  type: mysql
+  host: 127.0.0.1
+  port: 3306
+  name: haitong-data-pull
+  username: "${HAITONG_DB_USER:root}"
+  password: "${HAITONG_DB_PASSWORD:}"
+  url: "jdbc:mysql://${HAITONG_DB_HOST:127.0.0.1}:${HAITONG_DB_PORT:3306}/${HAITONG_DB_NAME:haitong}?useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=DISABLED"
+  pool-size: 10
+  init-schema: false
+
+relay:
+  work-dir: /opt/haitong-data-pull/data
+  kafka:
+    enabled: false
+  ftp:
+    enabled: false
+  registration-registry:
+    enabled: true
+    base-url: "http://127.0.0.1:8088"
+    shared-key: "${DATA_PUSH_REGISTRY_KEY:}"
+  targets:
+    local:
+      type: LOCAL
+      directory: out
+    table-log:
+      type: LOG
+    kafka:
+      type: KAFKA
+    ftp:
+      type: FTP
+  routes:
+    table-to-log:
+      enabled: true
+      batch-key-field: batchId
+      business-time-field: occurredAt
+      targets: [table-log]
+      file-format: JSONL
+      required-fields: [tableName, records]
+    table-to-ftp:
+      enabled: true
+      registration-managed: true
+      batch-key-field: batchId
+      business-time-field: occurredAt
+      targets: []
+      file-format: JSONL
+      required-fields: [tableName, records]
+    table-to-kafka:
+      enabled: true
+      registration-managed: true
+      batch-key-field: batchId
+      business-time-field: occurredAt
+      targets: []
+      file-format: JSONL
+      required-fields: [tableName, records]
+  actions:
+    inspect:
+      enabled: true
+      handler: inspect
+      mode: SYNC
+      safe-retry: true
+      required-fields: []

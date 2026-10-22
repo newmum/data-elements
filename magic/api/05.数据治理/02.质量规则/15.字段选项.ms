@@ -28,11 +28,12 @@
 import tenantRuntime
 import dataQuality
 import db
+import dataScope
 
 // 业务租户始终来自当前登录会话。
 var tenantId = tenantRuntime.id()
-if (body?.tableIds != null) {
-    var submittedIds = body.tableIds
+    var batch=body?.tableIds != null
+    var submittedIds = batch ? body.tableIds : [body?.tableId]
     if (!(submittedIds instanceof List) || submittedIds.size() == 0 || submittedIds.size() > 50) {
         exit 400, '数据表标识必须是 1 至 50 项的数组'
     }
@@ -42,6 +43,23 @@ if (body?.tableIds != null) {
         if (id == '' || id.length() > 32) { exit 400, '数据表标识不合法' }
         if (!tableIds.contains(id)) { tableIds.add(id) }
     }
+    // 先一次读取全部表所属数据源，再按角色范围逐ID核对；无字段的表也不能绕过归属检查。
+    var owners=db.select("""
+        SELECT t.tid table_id,d.tid,d.org_id,d.created_by FROM db_table_t t
+        JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=#{tenantId} AND d.is_del=0
+        WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.tid IN
+        <foreach collection="tableIds" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    """)
+    var sources={}
+    for(owner in owners) {sources[owner.tid]=owner}
+    var sourceRows=[]
+    for(sourceId,source in sources) {sourceRows.add(source)}
+    var visible=dataScope.visibleDataSources(sourceRows)
+    var visibleIds=[]
+    for(source in visible) {visibleIds.add(source.tid)}
+    var allowed=[]
+    for(owner in owners) {if(visibleIds.contains(owner.tid)) {allowed.add(owner.tableId)}}
+    if(allowed.size()!=tableIds.size()) {exit 403,'部分数据表不存在或不在当前租户和角色范围内'}
     var rows = db.select("""
         select c.table_id, c.tid, c.column_name, c.column_comment, c.data_type,
                c.column_type, c.nullable, c.primary_key, c.is_unique,
@@ -68,9 +86,4 @@ if (body?.tableIds != null) {
             result[id].add(item)
         }
     }
-    return result
-}
-// 根据已登记数据表读取字段，供规则表单选择。
-var tableId = body?.tableId == null ? '' : ('' + body.tableId).trim()
-if (tableId == '') { exit 400, '数据表ID不能为空' }
-return dataQuality.columns(tableId)
+    return batch ? result : result[tableIds[0]]

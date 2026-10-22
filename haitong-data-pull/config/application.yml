@@ -1,0 +1,223 @@
+# =================== 日常只修改本文件；保存后重启，无须重新编译 ===================
+# 默认连接你配置的 MySQL；Kafka、FTP 初始关闭，演示路由写本地文件。
+# 无数据库试跑：scripts/run --spring.profiles.active=local；真实接入请看根 docs/haitong-data-pull.md。
+# 请使用空格缩进；密码带 #、: 等字符时放在双引号内。
+server:
+  address: 127.0.0.1             # 本机试跑；被网关跨主机访问时改为服务器内网 IP 或 0.0.0.0
+  port: 18083
+
+# Magic-API 在线编辑器。接口脚本只保存在本服务的 haitong.ht_magic_api_file 表中，
+# 不使用 data/magic-api 文件夹，也不与数据元素平台的 baseline.api_file_t 共用。
+magic-api:
+  web: /api/web
+  resource:
+    type: database
+    table-name: ht_magic_api_file
+    prefix: /magic-api
+  security:
+    username: "${HAITONG_MAGIC_EDITOR_USERNAME:haitong-admin}"
+    password: "${HAITONG_MAGIC_EDITOR_PASSWORD}"
+
+db:
+  type: mysql                        # mysql / dm；本地测试使用 local profile
+  host: 192.168.175.86
+  port: 0                            # 0=按类型选择，MySQL 3306，达梦5236
+  name: haitong                      # MySQL数据库名；DM使用登录用户的默认Schema
+  username: root
+  password: "env:DB_PASSWORD"       # 数据库口令由运行环境提供，不写入 Git
+  # 当前受控测试环境的 MySQL 证书链未导入本机 JDK；临时关闭 TLS 校验以完成联通验证。
+  # 正式部署应删除本项，并在 JDK 信任库中导入数据库 CA 证书，恢复默认 VERIFY_IDENTITY 校验。
+  url: "jdbc:mysql://192.168.175.86:3306/haitong?useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=DISABLED"
+  pool-size: 10
+  init-schema: false                 # 空库结构见根 db/haitong/init.sql；已有库按差异升级，不能重跑初始化
+
+relay:
+  work-dir: ./data              # 必须持久化；不能删除，否则文件/本地密钥会丢失
+  # 供 Magic-API 的 /gateway/* 三个零信任网关接口使用。机密必须通过环境变量注入。
+  zero-trust-gateway:
+    enabled: false
+    token-url: "${HAITONG_ZERO_TRUST_TOKEN_URL:}"
+    push-url: "${HAITONG_ZERO_TRUST_PUSH_URL:}"
+    client-id: "${HAITONG_ZERO_TRUST_CLIENT_ID:}"
+    client-secret: "env:HAITONG_ZERO_TRUST_CLIENT_SECRET"
+    requester-ip: "${HAITONG_ZERO_TRUST_REQUESTER_IP:}"
+    timeout-seconds: 30
+    audit-defaults: {}
+  security:
+    # 留空自动生成，启动后分别保存在 data/keys/client.key、admin.key，不打印到日志。
+    # 也可直接填 >=24 字符的随机密钥，或 env:RELAY_CLIENT_KEY / file:client.key。
+    api-key: ""
+    admin-key: ""
+    requests-per-minute: 600
+    # 多厂家隔离时，将默认 api-key 留空，并启用 clients；每厂家密钥必须不同。
+    # clients:
+    #   vendor-a:
+    #     api-key: "env:VENDOR_A_KEY"
+    #     channels: [demo]
+    #     actions: [inspect]
+    #   vendor-b:
+    #     api-key: "env:VENDOR_B_KEY"
+    #     channels: [vendor-b-data]
+    #     actions: []
+
+  kafka:
+    # 已核验现网 Kafka，均为 PLAINTEXT/9092。业务 Topic 未在服务器清单中授权，
+    # 因此先完成连接配置，但不启用“接口收表数据 -> Kafka”场景；填写已授权 Topic 后再开启 table-to-kafka。
+    enabled: true
+    bootstrap-servers: "192.168.173.42:9092,192.168.173.44:9092,192.168.173.46:9092,192.168.173.47:9092"
+    producer-topic: ""                # 必填：填写已获业务方确认、已经存在的 Topic；本服务不自动创建
+    security-protocol: PLAINTEXT        # SSL / SASL_PLAINTEXT / SASL_SSL
+    sasl-mechanism: PLAIN               # SCRAM-SHA-256 / SCRAM-SHA-512 也支持
+    username: ""
+    password: ""                       # 可写 env:KAFKA_PASSWORD
+    truststore-location: ""            # TLS 使用自有 CA 时配置绝对路径
+    truststore-password: ""
+    timeout-seconds: 30
+    consumer:
+      enabled: false                   # 只发送时保持 false
+      topic: relay-input               # 与写入 Topic 不同，避免自循环
+      group-id: data-relay-v1
+      offset-reset: none               # 新组首次接入必须明确选 earliest 或 latest
+      source-epoch: v1                  # 源 Topic 删除重建时更换，避免旧坐标误去重
+      channel: from-kafka               # 消费后按下方同名 routes 处理
+
+  ftp:
+    # 192.168.175.30、192.168.175.32 的 21/22 端口可达，但清单 SSH 账号均被 FTP 登录拒绝。
+    # 当前程序只支持 FTP/FTPS，不支持 SFTP；取得可用 FTP/FTPS 账号、密码和输入/输出目录前保持关闭。
+    enabled: false
+    protocol: FTP                      # FTPS 也支持；不支持 SFTP
+    host: 127.0.0.1
+    port: 21
+    username: relay
+    password: ""                       # 可写 env:FTP_PASSWORD
+    passive: true                      # 放通服务端被动数据端口，不只是 21 端口
+    implicit-tls: false                # 显式 FTPS 为 false；隐式 FTPS 根据现网设 true
+    encoding: UTF-8
+    timeout-seconds: 30
+    output-dir: /out
+    scan:
+      enabled: false                   # 只写出文件时保持 false
+      input-dir: /in                   # 不能与任何输出目录重叠
+      channel: from-ftp
+      interval-ms: 30000
+      max-files-per-scan: 100           # 每轮新增文件数；要求 .done 完成清单
+
+  gateway:
+    # 这里只配置返回给调用方的外部地址，不会自动修改/注册现有网关。
+    # 例如网关 /relay/api/* -> 本服务 /api/*，这里填 https://gateway.example/relay
+    public-base-url: ""
+    # 可选附加校验：网关剥离用户同名头后，注入 X-Gateway-Key。
+    # 启用后，API 同时要求厂家 X-Api-Key 和本附加密钥；不是二选一。
+    shared-key: ""
+
+  registration-registry:
+    # 海通启动后即允许数据中台为已登记的数据源签发 X-Api-Key；密钥本身
+    # 仍通过同一把服务间密钥保护，未配置 DATA_PUSH_REGISTRY_KEY 时不会放行。
+    # 数据源、表和字段的契约校验同样以数据中台登记结果为准。
+    enabled: true
+    base-url: "http://127.0.0.1:8088"
+    shared-key: "${DATA_PUSH_REGISTRY_KEY:}" # 与数据中台使用同一把服务间密钥
+    timeout-seconds: 8
+
+  backend:
+    bearer-token: ""                  # 固定后端需要 Bearer 时填写；可 env:BACKEND_TOKEN
+
+  targets:
+    local:
+      type: LOCAL
+      directory: out                  # 相对于 work-dir；本地真实落文件，供试跑用
+    table-log:
+      type: LOG                        # 只写应用运行日志，不输出原始业务数据
+    kafka:
+      type: KAFKA
+      topic: ""                       # 空表示使用上方 producer-topic
+    ftp:
+      type: FTP
+      directory: ""                   # 空表示使用上方 output-dir
+    # 可新增目标别名，复用同一个 Kafka 或 FTP 连接：
+    # audit-kafka:
+    #   type: KAFKA
+    #   topic: audit-events
+
+  routes:
+    # ===== 三个最常用场景：对方每张表按同一 JSON 格式推送，无须传目标地址或 Topic =====
+    table-to-log:                      # POST /api/v1/data-push（deliveryType=LOG），立即可用
+      enabled: true
+      batch-key-field: batchId
+      business-time-field: occurredAt
+      targets: [table-log]
+      file-format: JSONL
+      required-fields: [tableName, records]
+    table-to-ftp:                      # POST /api/v1/data-push（deliveryType=FTP）；目录由登记推送契约决定
+      enabled: true
+      registration-managed: true
+      batch-key-field: batchId
+      business-time-field: occurredAt
+      targets: []
+      file-format: JSONL
+      required-fields: [tableName, records]
+    table-to-kafka:                    # POST /api/v1/data-push（deliveryType=KAFKA）；Topic 由登记推送契约决定
+      enabled: true
+      registration-managed: true
+      batch-key-field: batchId
+      business-time-field: occurredAt
+      targets: []
+      file-format: JSONL
+      required-fields: [tableName, records]
+    # 旧通用入口保留但默认关闭，避免与三个简单场景混用。
+    demo:
+      enabled: false
+      targets: [local]
+      file-format: JSONL
+    from-kafka:
+      enabled: false
+      targets: [local]                # Kafka -> FTP 时改 [ftp]
+      file-format: JSONL
+    from-ftp:
+      enabled: false
+      targets: [local]                # FTP -> Kafka 时改 [kafka]
+      file-format: JSONL              # CSV 源则改 CSV；必须与 .done 的 format 一致
+    # 整个文件原样写到 FTP：启用 FTP 后取消下面的注释。
+    # raw-file:
+    #   enabled: true
+    #   targets: [ftp]
+    #   file-format: BINARY
+    # 读取 CSV：
+    # csv-import:
+    #   enabled: true
+    #   targets: [local]
+    #   file-format: CSV
+
+  actions:
+    inspect:                          # 内置校验示例，POST /api/v1/actions/inspect
+      enabled: true
+      handler: inspect
+      mode: SYNC
+      safe-retry: true
+      required-fields: []
+    backend-job:                      # 对接你的真实后端后再启用；不是已实现某个业务系统
+      enabled: false
+      handler: http
+      mode: ASYNC
+      url: "http://127.0.0.1:9000/api/import/start"  # 固定完整地址，不接受用户传 URL
+      method: POST
+      timeout-seconds: 30
+      safe-retry: false               # 后端明确支持 Idempotency-Key 去重后才改 true
+      required-fields: [parameters.resourceCode]
+
+  # 以下可先不修改。容量不是吞吐承诺，真实数据量需要联调与压测。
+  limits:
+    max-message-bytes: 1048576         # JSON / 文件中单条记录上限 1 MiB
+    max-file-bytes: 104857600          # 单个上传/下载文件上限 100 MiB
+    max-pending-deliveries: 100000
+    max-pending-files: 1000
+    min-free-disk-bytes: 536870912
+    max-work-bytes: 10737418240        # 工作目录高水位 10 GiB
+  worker:
+    enabled: true
+    threads-per-type: 2
+    max-attempts: 10
+    poll-ms: 500
+    lease-seconds: 300
+    file-batch-size: 100
+    payload-retention-days: 0          # 0=不自动清理；只可清理已成功的非文件原文

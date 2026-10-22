@@ -1,0 +1,52 @@
+{
+  "key": "transform.python",
+  "category": "transform",
+  "label": "Python 加工",
+  "icon": "code",
+  "description": "执行 NiFi 服务器上的 Python 脚本",
+  "fields": [
+    {
+      "key": "executable",
+      "label": "运行程序",
+      "type": "text",
+      "required": true,
+      "default": "python3"
+    },
+    {
+      "key": "programPath",
+      "label": "脚本路径",
+      "type": "text",
+      "required": true,
+      "placeholder": "/opt/nifi/scripts/process.py"
+    },
+    {
+      "key": "arguments",
+      "label": "程序参数",
+      "type": "json-editor",
+      "default": []
+    },
+    {
+      "key": "workingDirectory",
+      "label": "工作目录",
+      "type": "text",
+      "required": false
+    }
+  ],
+  "compile": {
+    "processors": [
+      {
+        "localId": "execute",
+        "type": "org.apache.nifi.processors.standard.ExecuteStreamCommand",
+        "properties": {}
+      }
+    ],
+    "inlet": "execute",
+    "outlets": [
+      {
+        "name": "default",
+        "processorRef": "execute",
+        "relationship": "output stream"
+      }
+    ]
+  }
+}

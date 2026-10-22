@@ -73,6 +73,17 @@ class JdbcDataQualityEngineTest {
     private Evaluation evaluate(List<Rule> rules) {
         return engine.evaluate(new Plan("tenant","run","task",null,1,0,plan.endpoint(),rules,15),new Shard("one",0,null,null,true));
     }
+
+    @Test void sqlTemplateUsesTheRealAggregateAndBoundedIssueSamplePath() {
+        var rule=rule("SQL_TEMPLATE","id_card",Map.of("sqlTemplate","${column}=#{value}","values",Map.of("value","A")));
+        var input=new Plan("tenant","run","task",null,1,2,plan.endpoint(),List.of(rule),15);
+        assertThat(engine.precheck(input)).containsEntry("success",true);
+        var result=engine.evaluate(input,new Shard("one",0,null,null,true));
+        assertThat(result.metrics()).singleElement().satisfies(metric->{assertThat(metric.checkedCount()).isEqualTo(4);assertThat(metric.violationCount()).isEqualTo(2);});
+        assertThat(result.samples()).hasSize(2);
+        var injection=rule("SQL_TEMPLATE","id_card",Map.of("sqlTemplate","${column}=#{value}","values",Map.of("value","A' OR 1=1 --")));
+        assertThat(evaluate(List.of(injection)).violationCount()).isZero();
+    }
     private Rule rule(String type,String column,Map<String,Object> parameters) {
         return new Rule(type,type,type,"TEST",column,null,parameters,"HIGH",10);
     }

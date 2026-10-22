@@ -30,7 +30,7 @@ export async function installContract(page: Page) {
     const saved: Array<Record<string, unknown>> = [];
     const removed: Array<{ id: string; version: number }> = [];
     const receiverConfigs: Array<{ id: string; name: string; appId: string; enabled: boolean; lastTestResult: string; mappingMode?: string }> = [];
-    const assignments: Array<{ id: string; subject_id: string; app_id: string; account_alias: string; directory_assigned: number; version: number }> = [];
+    const assignments: Array<{ id: string; subject_id: string; app_id: string; account_alias: string; directory_assigned: number; ack_version?: number; version: number }> = [];
     const provisionCreates: Array<{ configId: string; requestId: string; kind: string; selectedIds: string[] }> = [];
     const provisionTasks: Array<{ id: string; status: string; items: Array<{ status: string; result?: { message?: string } }> }> = [];
     const initialCredentialRequests: Array<{ taskId: string; subjectId: string; initialPassword: string }> = [];
@@ -100,14 +100,21 @@ export async function installContract(page: Page) {
             const existing = assignments.find(item => item.subject_id === body.record.subjectId && item.app_id === body.record.appId);
             if (existing && (!body.record.id || body.record.version !== existing.version))
                 return route.fulfill({ json: { code: 409, message: '人员资料分配版本冲突', data: null } });
-            if (existing) { existing.directory_assigned = 1; existing.version++; }
+            if (existing) { existing.account_alias = body.record.accountAlias; existing.directory_assigned = 1; existing.version++; }
             else assignments.push({ id: `assignment-${assignments.length + 1}`, subject_id: body.record.subjectId, app_id: body.record.appId,
                 account_alias: body.record.accountAlias, directory_assigned: 1, version: 1 });
             data = { id: existing?.id || assignments.at(-1)!.id };
         } else if (pathname.endsWith('/idaas/provision/options')) data = [{ tenantId: 'tenant-contract', tenantName: '公安' }];
         else if (pathname.endsWith('/idaas/provision/objects')) data = { list: [], total: 0, page: 1, size: 20 };
-        else if (pathname.endsWith('/idaas/provision/configs')) data = receiverConfigs;
-        else if (pathname.endsWith('/idaas/provision/tasks')) data = provisionTasks;
+        else if (pathname.endsWith('/idaas/provision/configs')) {
+            const params = new URL(route.request().url()).searchParams;
+            const page = Math.max(1, Number(params.get('page') || 1)), size = Math.min(100, Math.max(1, Number(params.get('size') || 20)));
+            data = params.has('page') ? { list: receiverConfigs.slice((page - 1) * size, page * size), total: receiverConfigs.length, page, size } : receiverConfigs;
+        }
+        else if (pathname.endsWith('/idaas/provision/tasks')) {
+            const id = new URL(route.request().url()).searchParams.get('id');
+            data = id ? provisionTasks.filter(task => task.id === id) : provisionTasks;
+        }
         else if (pathname.endsWith('/idaas/provision/create')) {
             const body = route.request().postDataJSON() as { configId: string; requestId: string; kind: string; selectedIds: string[] };
             const config = receiverConfigs.find(item => item.id === body.configId && item.enabled && item.lastTestResult === 'SUCCESS');

@@ -101,6 +101,12 @@ def dameng_metadata(schema, options):
         # DM expands virtual-column dependencies in DBA_IND_COLUMNS. Its actual
         # INDEX DDL records the logical indexed columns; verify that representation.
         generated_tables = {c['TABLE_NAME'] for c in columns if c['DATA_DEFAULT'] and ' CASE ' in str(c['DATA_DEFAULT']).upper()}
+        # DM reports the base column of SUBSTR indexes without MySQL's SUB_PART.
+        # Read the exact DDL for tables containing a source prefix index as well.
+        q.execute('SELECT TABLE_NAME,INDEX_NAME FROM DBA_INDEXES WHERE OWNER=?', [schema])
+        for table, name in q.fetchall():
+            if table == 'surveillance_control_item_t':
+                generated_tables.add(table)
         for table in generated_tables:
             names = {r['INDEX_NAME'] for r in indexes if r['TABLE_NAME']==table}
             replacement = []
@@ -112,10 +118,10 @@ def dameng_metadata(schema, options):
                     continue
                 match = re.search(r'\bON\s+"[^"]+"\."[^"]+"\((.*?)\)\s+STORAGE',text,re.S|re.I)
                 if not match:raise ValueError('Unsupported native generated-column index DDL')
-                for position,part in enumerate(match[1].split(','),1):
-                    col = re.fullmatch(r'\s*"?(\w+)"?\s*(?:ASC)?\s*',part,re.I)
-                    if not col:raise ValueError('Unsupported native functional-index expression')
-                    replacement.append({'TABLE_NAME':table,'INDEX_NAME':name,'COLUMN_NAME':col[1],
+                for position, part in enumerate(index_parts(match[1]), 1):
+                    column, prefix, direction = native_index_part(part)
+                    replacement.append({'TABLE_NAME':table,'INDEX_NAME':name,'COLUMN_NAME':column,
+                                        'SUB_PART':prefix,'COLLATION':direction,
                                         'COLUMN_POSITION':position,'NON_UNIQUE':0 if kinds[name]=='UNIQUE' else 1})
             indexes = [r for r in indexes if r['TABLE_NAME']!=table] + replacement
         # JDBC's DM driver reports underlying column names, not SQL aliases. Use tuples for this join.
@@ -138,7 +144,7 @@ def native_type_matches(actual, source):
     kind = actual['DATA_TYPE'].upper()
     if re.fullmatch(r'(?:var)?char\(\d+\)', wanted):
         return kind in ({'CHAR','CHARACTER'} if wanted.startswith('char') else {'VARCHAR','VARCHAR2'}) and int(actual['DATA_LENGTH'])==int(re.search(r'\d+',wanted)[0])
-    if wanted in {'json','text','longtext'}:
+    if wanted in {'json','text','mediumtext','longtext'}:
         return kind in {'CLOB','TEXT','LONGVARCHAR'}
     if wanted=='longblob':
         return kind in {'BLOB','LONGVARBINARY'}
@@ -177,7 +183,48 @@ def default_value(value, native=False):
 def generated_expression(value):
     # Current business rule is a simple CASE expression; quoting and function
     # parentheses differ across dialects without changing its tokens.
-    return re.sub(r'[\s`"()]','',value or '').lower()
+    value = (value or '').replace("\\'", "'")
+    return re.sub(r'[\s`"()]','',re.sub(r'_utf8mb4(?=\')', '', value, flags=re.I)).lower()
+
+
+def index_parts(text):
+    """Split native index expressions at top-level commas, preserving SUBSTR args."""
+    result, start, depth = [], 0, 0
+    for index, char in enumerate(text):
+        if char == '(':
+            depth += 1
+        elif char == ')':
+            depth -= 1
+        elif char == ',' and depth == 0:
+            result.append(text[start:index]); start = index + 1
+    if depth != 0:
+        raise ValueError('Unbalanced native index expression')
+    return result + [text[start:]]
+
+
+def native_index_part(part):
+    column = re.fullmatch(r'\s*"?(\w+)"?\s*(ASC|DESC)?\s*', part, re.I)
+    prefix = re.fullmatch(r'\s*SUBSTR\("?(\w+)"?\s*,\s*1\s*,\s*(\d+)\)\s*(ASC|DESC)?\s*', part, re.I)
+    if column:
+        return column[1], None, 'D' if (column[2] or '').upper() == 'DESC' else 'A'
+    if prefix:
+        return prefix[1], int(prefix[2]), 'D' if (prefix[3] or '').upper() == 'DESC' else 'A'
+    raise ValueError('Unsupported native functional-index expression')
+
+
+def native_generated_matches(table, column, wanted, found):
+    if (table, column) == ('rm_user_t', 'active_login_name'):
+        return generated_expression(wanted) == generated_expression(found)
+    if table == 'surveillance_resource_topic_t' and column in {'input_connection_ref', 'output_connection_ref'}:
+        # Native DM expands COALESCE into this precise CASE. Compare every path,
+        # fallback literal and branch, rather than exempting generated expressions.
+        args = index_parts(re.sub(r'^coalesce\((.*)\)$', r'\1', wanted, flags=re.I))
+        if len(args) != 3:
+            return False
+        expected = 'CASE ' + ''.join('WHEN NOT ('+arg+' IS NULL) THEN '+arg+' ' for arg in args[:2])
+        expected += 'WHEN NOT (FALSE) THEN '+args[2]+' ELSE NULL END'
+        return generated_expression(expected) == generated_expression(found)
+    return False
 
 
 def compare(source, target, tenant, source_tenant):
@@ -212,9 +259,8 @@ def compare(source, target, tenant, source_tenant):
             if col=='tenant_id' and wanted_default==source_tenant:wanted_default=tenant
             found_default=default_value(found['DATA_DEFAULT'] if native else found['COLUMN_DEFAULT'],native)
             if native and wanted['GENERATION_EXPRESSION']:
-                if (table,col)!=('rm_user_t','active_login_name'):
-                    issue(table,'native-generated-expression-needs-review',col)
-                elif generated_expression(wanted['GENERATION_EXPRESSION'])!=generated_expression(found['DATA_DEFAULT']):issue(table,'generated-expression',col)
+                if not native_generated_matches(table,col,wanted['GENERATION_EXPRESSION'],found['DATA_DEFAULT']):
+                    issue(table,'generated-expression',col)
                 found_default=None
             if wanted['COLUMN_TYPE'].startswith(('decimal','int','bigint','tinyint','smallint')):
                 if wanted_default is not None and found_default is not None:

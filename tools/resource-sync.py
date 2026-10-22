@@ -1,6 +1,6 @@
 """Version shared Magic/low-code source locally; database access defaults to read-only.
 
-Connection settings stay outside Git. See docs/本地资源版本管理.md.
+Connection settings stay outside Git. See ../docs/data-elements.md#resource-versioning.
 """
 import argparse
 import errno

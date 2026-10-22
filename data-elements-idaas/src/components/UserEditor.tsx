@@ -143,17 +143,20 @@ export default function UserEditor({ open, user, initial, fields, domain, onClos
             const assignmentKey = JSON.stringify({ userId: state.userId, appId, account: state.savedUser.account });
             if (state.assignmentKey !== assignmentKey) {
                 try {
-                    const listed = await foundationApi.read<{ subjects: Array<{ id: string; subject_id: string; account_alias?: string; directory_assigned?: number; version: number }> }>(
+                    const listed = await foundationApi.read<{ subjects: Array<{ id: string; subject_id: string; account_alias?: string; directory_assigned?: number; ack_version?: number; version: number }> }>(
                         `/idaas/assignments/list?appId=${encodeURIComponent(appId)}&domain=${domain}`);
                     const existing = listed.subjects.find(item => item.subject_id === state!.userId);
-                    if (existing?.account_alias && existing.account_alias !== state.savedUser.account)
-                        throw new Error('该用户在目标应用已有不同账号，请先核对应用资料分配。');
-                    if (!existing?.directory_assigned) {
+                    // Application accounts are independent of the central account hint.
+                    // An unfinished new-user draft may correct its requested account;
+                    // acknowledged identities keep the application's existing account.
+                    const draftAccount = !user && !(Number(existing?.ack_version) > 0);
+                    const accountAlias = draftAccount ? state.savedUser.account : existing?.account_alias || state.savedUser.account;
+                    if (!existing?.directory_assigned || draftAccount && existing?.account_alias !== accountAlias) {
                         if (!session?.appAssignableIds?.includes(appId))
                             throw new Error('当前账号无权为该应用分配人员资料。');
                         await foundationApi.write('/idaas/assignments/save', {
                             record: { id: existing?.id, version: existing?.version, type: 'subject', subjectId: state.userId,
-                                appId, domain, accountAlias: state.savedUser.account },
+                                appId, domain, accountAlias },
                             creating: !existing, requestId: crypto.randomUUID(),
                         });
                     }

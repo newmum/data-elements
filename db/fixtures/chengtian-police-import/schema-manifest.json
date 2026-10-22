@@ -1,0 +1,17 @@
+{
+  "database": "ct_police_copy_targets",
+  "dialect": "mysql",
+  "tables": 25,
+  "views": 0,
+  "indexes": 25,
+  "foreignKeys": 0,
+  "triggers": 0,
+  "procedures": 0,
+  "functions": 0,
+  "events": 0,
+  "notes": {
+    "definitions": "SHOW CREATE",
+    "routineDefiners": "omitted",
+    "autoIncrementCounters": "omitted"
+  }
+}

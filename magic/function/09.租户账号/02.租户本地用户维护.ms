@@ -107,8 +107,7 @@ where tenant_id=#{tenantId}
  if(!creating && old==null) {exit 404,'用户不存在或不属于当前租户';}
  var realName=text(p.realName);var account=text(p.userName);var phone=text(p.phone);var orgId=text(p.orgId);var statusText=text(p.status);
  if(realName=='' || realName.length()>50) {exit 400,'请填写姓名，长度不超过50个字符';}
- if(account=='') {exit 400,'请填写用户账号';}
- if(account.length()>50) {exit 400,'用户账号长度不能超过50个字符';}
+ if(!account.matches('[A-Za-z][A-Za-z0-9_.-]{2,49}')) {exit 400,'账号须以字母开头，长度3至50位，可包含数字、下划线、点和短横线';}
  if(phone=='' || phone.length()>128) {exit 400,'请填写手机号，长度不超过128个字符';}
  if(!['0','1'].contains(statusText)) {exit 400,'账号状态无效，请选择启用或禁用';}
  var status=statusText::int;
