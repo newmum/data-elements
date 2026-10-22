@@ -75,7 +75,10 @@ if (body.all == true) {
     }
     if (pending.size()+skipped.size()>100) { exit 413, '单次全部同步最多100个推送数据源，请调整配置规模' }
     var ids = pending.map(item => item.row.tid)
-    var tables = [], columns = [], schemas = [], apps = []
+    var tables = []
+    var columns = []
+    var schemas = []
+    var apps = []
     if (ids.size()>0) {
         var tp = db.table('db_table_t').where().eq('tenant_id',tenantId).in('datasource_id',ids).eq('asset_status',2).and().sql('(is_del=0 OR is_del IS NULL)').orderBy('table_name').orderBy('tid').page(1001,0)
         if (tp.total>1000) { exit 413, '单次全部同步最多1000张表' }
@@ -90,26 +93,39 @@ if (body.all == true) {
         var appIds = pending.map(item => value(item.row,'appId','app_id')).filter(id => id != null && str(id) != '').distinct()
         if (appIds.size()>0) { apps = db.table('sym_application_t').where().eq('tenant_id',tenantId).in('tid',appIds).eq('is_del',0).select() }
     }
-    var columnsByTable = {}, tablesBySource = {}, oldByTable = {}, appsById = {}
+    var columnsByTable = {}
+    var tablesBySource = {}
+    var oldByTable = {}
+    var appsById = {}
     for (col in columns) { var id = str(value(col,'tableId','table_id'));if (columnsByTable[id]==null) { columnsByTable[id]=[] };columnsByTable[id].add(col) }
     for (table in tables) { var id=str(value(table,'datasourceId','datasource_id'));if(tablesBySource[id]==null){tablesBySource[id]=[]};tablesBySource[id].add(table) }
     for (schema in schemas) { oldByTable[str(value(schema,'tableId','table_id'))]=schema }
     for (app in apps) { appsById[str(app.tid)]=str(value(app,'appName','app_name')) }
-    var snapshots = [], publications = [], sourceIds = []
-    var totalTables = 0, totalColumns = 0
+    var snapshots = []
+    var publications = []
+    var sourceIds = []
+    var totalTables = 0
+    var totalColumns = 0
     for (item in pending) {
-        var id = str(item.row.tid), sourceTables = tablesBySource[id] || []
-        var normalized = [], sourcePublications = [], count = 0, reason = ''
+        var id = str(item.row.tid)
+        var sourceTables = tablesBySource[id] || []
+        var normalized = []
+        var sourcePublications = []
+        var count = 0
+        var reason = ''
         if (sourceTables.size()==0) { reason='尚无已完成登记的数据表' }
         if (sourceTables.size()>100) { reason='数据表超过单数据源100张上限' }
         var seenTables = []
         for (table in sourceTables) {
-            var tableId = str(table.tid), tableName = str(value(table,'tableName','table_name'))
+            var tableId = str(table.tid)
+            var tableName = str(value(table,'tableName','table_name'))
             if (!tableName.matches('[A-Za-z0-9_.-]{1,200}') || seenTables.contains(tableName.toLowerCase())) { reason='数据表名称不合法或重复' }
             seenTables.add(tableName.toLowerCase())
             var fields = columnsByTable[tableId] || []
             if (fields.size()==0) { reason='存在已登记但未配置有效字段的数据表' }
-            var normalizedFields = [], canonical = [], seenFields = []
+            var normalizedFields = []
+            var canonical = []
+            var seenFields = []
             for (field in fields) {
                 var fieldName = str(value(field,'columnName','column_name'))
                 var type = str(value(field,'columnType','column_type')) || str(value(field,'dataType','data_type'))
