@@ -18,8 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Local mirror of the source-platform datasource/table/column contract used
- * only by explicit standalone routes.  The platform sends one complete
- * datasource snapshot at a time; tables, columns and caller grants absent
+ * only by explicit standalone routes.  The platform sends complete datasource snapshots
+ * individually or in a bounded atomic batch; tables, columns and caller grants absent
  * from that snapshot are logically deleted in the same transaction.
  */
 @Repository
@@ -124,8 +124,42 @@ public class StandaloneRegistryStore {
             jdbc.update("insert into ht_standalone_registry_sync(idempotency_key,payload_sha256,datasource_id,applied_at) values (?,?,?,?)",
                     key, payloadHash, batchId, now);
         } catch (DuplicateKeyException duplicate) { throw RelayException.conflict(); }
-        for (Definition definition : definitions) apply(definition, now);
+        applyBatch(definitions, now);
         return new BatchSyncResult(List.copyOf(ids), false, tables, columns);
+    }
+
+    /** Multi-row statements keep a 100-source mirror from making a round trip per field. */
+    private void applyBatch(List<Definition> definitions,long now) {
+        List<Object[]> sources=new ArrayList<>(),clients=new ArrayList<>(),tables=new ArrayList<>(),columns=new ArrayList<>();
+        List<Object> args=new ArrayList<>();args.add(now);
+        for(Definition source:definitions) {
+            args.add(source.datasourceId());
+            sources.add(new Object[]{source.datasourceId(),source.datasourceName(),source.sourceSystemId(),source.sourceSystemName(),source.contractVersion(),source.enabled(),0,now,now});
+            for(String client:source.clientIds())clients.add(new Object[]{source.datasourceId(),client,1,0,now,now});
+            for(TableDefinition table:source.tables()) {
+                tables.add(new Object[]{source.datasourceId(),table.tableName(),table.tableId(),table.tableComment(),table.schemaVersion(),table.enabled(),0,now,now});
+                for(ColumnDefinition column:table.columns())columns.add(new Object[]{source.datasourceId(),table.tableName(),column.columnName(),column.columnComment(),column.dataType(),column.ordinal(),column.required(),column.enabled(),0,now,now});
+            }
+        }
+        String marks=String.join(",",java.util.Collections.nCopies(definitions.size(),"?"));
+        for(String table:List.of("ht_standalone_datasource_client","ht_standalone_table_column","ht_standalone_table"))
+            jdbc.update("update "+table+" set is_enable=0,is_del=1,updated_at=? where datasource_id in ("+marks+")",args.toArray());
+        upsertBatch("ht_standalone_datasource","datasource_id,datasource_name,source_system_id,source_system_name,contract_version,is_enable,is_del,created_at,updated_at",Set.of("datasource_id"),sources);
+        upsertBatch("ht_standalone_datasource_client","datasource_id,client_id,is_enable,is_del,created_at,updated_at",Set.of("datasource_id","client_id"),clients);
+        upsertBatch("ht_standalone_table","datasource_id,table_name,table_id,table_comment,schema_version,is_enable,is_del,created_at,updated_at",Set.of("datasource_id","table_name"),tables);
+        upsertBatch("ht_standalone_table_column","datasource_id,table_name,column_name,column_comment,data_type,ordinal_no,is_required,is_enable,is_del,created_at,updated_at",Set.of("datasource_id","table_name","column_name"),columns);
+    }
+
+    private void upsertBatch(String table,String columns,Set<String> keys,List<Object[]> rows) {
+        String[] names=columns.split(",");
+        String marks="("+String.join(",",java.util.Collections.nCopies(names.length,"?"))+")";
+        String assignments=java.util.Arrays.stream(names).filter(n->!keys.contains(n)&&!n.equals("created_at"))
+                .map(n->n+"=VALUES("+n+")").collect(java.util.stream.Collectors.joining(","));
+        for(int offset=0;offset<rows.size();offset+=500) {
+            List<Object[]> chunk=rows.subList(offset,Math.min(offset+500,rows.size()));
+            List<Object> args=new ArrayList<>();for(Object[] row:chunk)java.util.Collections.addAll(args,row);
+            jdbc.update("insert into "+table+" ("+columns+") values "+String.join(",",java.util.Collections.nCopies(chunk.size(),marks))+" ON DUPLICATE KEY UPDATE "+assignments,args.toArray());
+        }
     }
 
     /** Writes only; all validation and the single idempotency read happen first. */

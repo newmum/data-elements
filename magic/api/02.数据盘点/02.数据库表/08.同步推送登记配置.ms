@@ -17,7 +17,7 @@
   "headers" : [ ],
   "paths" : [ ],
   "responseBody" : "{}",
-  "description" : "将当前租户及角色范围内已完成登记的推送数据源表字段同步到 haitong-data-pull。接受 datasourceId、dryRun 和可选 nodeId；指定节点时校验当前租户及启用状态，未指定时保持现有默认目标。dryRun 只读，不发布契约、不调用海通。最多100张已登记表、10000字段、1MiB配置；不签发或轮换业务密钥。",
+  "description" : "将当前租户及角色范围内已完成登记的推送数据源表字段同步到 haitong-data-pull。接受 datasourceId、dryRun 和可选 nodeId；all=true 时批量同步当前租户角色可见全部推送源，最多100源/1000表/10000字段/1MiB，返回跳过原因；指定节点时校验当前租户及启用状态，未指定时保持现有默认目标。dryRun 只读，不发布契约、不调用海通。最多100张已登记表、10000字段、1MiB配置；不签发或轮换业务密钥。",
   "requestBodyDefinition" : null,
   "responseBodyDefinition" : null
 }
@@ -28,8 +28,15 @@ import cn.hutool.extra.spring.SpringUtil
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import java.util.Map
+import cn.hutool.crypto.digest.DigestUtil
+import java.lang.Math
 import cn.hutool.http.HttpRequest
 import cn.hutool.core.util.IdUtil
+
+import java.util.ArrayList
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.datasource.DataSourceTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 
 // 权威配置来自当前租户业务库；请求不能指定租户、表字段、地址、调用方或密钥。
 var tenantId = tenantRuntime.id()
@@ -80,15 +87,15 @@ if (body.all == true) {
     var schemas = []
     var apps = []
     if (ids.size()>0) {
-        var tp = db.table('db_table_t').where().eq('tenant_id',tenantId).in('datasource_id',ids).eq('asset_status',2).and().sql('(is_del=0 OR is_del IS NULL)').orderBy('table_name').orderBy('tid').page(1001,0)
+        var tp = db.table('db_table_t').where().eq('tenant_id',tenantId).in('datasource_id',ids).eq('asset_status',2).and(w => w.eq('is_del',0).or().isNull('is_del')).orderBy('table_name').orderBy('tid').page(1001,0)
         if (tp.total>1000) { exit 413, '单次全部同步最多1000张表' }
         tables = tp.list
         var tableIds = tables.map(item => item.tid)
         if (tableIds.size()>0) {
-            var cp = db.table('db_table_column_t').where().eq('tenant_id',tenantId).in('table_id',tableIds).and().sql('(is_del=0 OR is_del IS NULL)').orderBy('ordinal_position').orderBy('tid').page(10001,0)
+            var cp = db.table('db_table_column_t').where().eq('tenant_id',tenantId).in('table_id',tableIds).and(w => w.eq('is_del',0).or().isNull('is_del')).orderBy('ordinal_position').orderBy('tid').page(10001,0)
             if (cp.total>10000) { exit 413, '单次全部同步最多10000个字段' }
             columns = cp.list
-            schemas = db.table('data_push_schema_t').where().eq('tenant_id',tenantId).in('table_id',tableIds).eq('is_del',0).select()
+            schemas = db.table('data_push_schema_t').where().eq('tenant_id',tenantId).in('datasource_id',ids).in('table_id',tableIds).eq('is_del',0).select()
         }
         var appIds = pending.map(item => value(item.row,'appId','app_id')).filter(id => id != null && str(id) != '').distinct()
         if (appIds.size()>0) { apps = db.table('sym_application_t').where().eq('tenant_id',tenantId).in('tid',appIds).eq('is_del',0).select() }
@@ -99,7 +106,7 @@ if (body.all == true) {
     var appsById = {}
     for (col in columns) { var id = str(value(col,'tableId','table_id'));if (columnsByTable[id]==null) { columnsByTable[id]=[] };columnsByTable[id].add(col) }
     for (table in tables) { var id=str(value(table,'datasourceId','datasource_id'));if(tablesBySource[id]==null){tablesBySource[id]=[]};tablesBySource[id].add(table) }
-    for (schema in schemas) { oldByTable[str(value(schema,'tableId','table_id'))]=schema }
+    for (schema in schemas) { oldByTable[str(value(schema,'datasourceId','datasource_id'))+':'+str(value(schema,'tableId','table_id'))]=schema }
     for (app in apps) { appsById[str(app.tid)]=str(value(app,'appName','app_name')) }
     var snapshots = []
     var publications = []
@@ -137,8 +144,8 @@ if (body.all == true) {
                 // Keep the canonical property order identical to DataPushSchemaService.
                 canonical.add({name:fieldName,type:type,required:required,ordinal:ordinal})
             }
-            var hash = cn.hutool.crypto.digest.DigestUtil.sha256Hex(bm.writeValueAsString(canonical))
-            var old = oldByTable[tableId]
+            var hash = DigestUtil.sha256Hex(bm.writeValueAsString(canonical))
+            var old = oldByTable[id+':'+tableId]
             var version = old == null ? 1L : value(old,'schemaVersion','schema_version')::long + (str(value(old,'schemaHash','schema_hash')) == hash ? 0L : 1L)
             var schemaId = old == null ? IdUtil.getSnowflakeNextIdStr() : str(old.tid)
             sourcePublications.add({old:old,schemaId:schemaId,tableId:tableId,tableName:tableName,version:version,hash:hash,sourceId:id,delivery:bm.writeValueAsString(item.config.pushDelivery || {}),fields:canonical})
@@ -161,18 +168,61 @@ if (body.all == true) {
     if (settings.getStandaloneSyncKey()=='') { exit 503, '服务端尚未配置同步密钥' }
     // Publish from the batch prefetch only. No reads or single-source service
     // calls are made inside source/table/field iteration.
-    db.transaction(() => {
+    var tenantRegistry = SpringUtil.getBean('tenantDataSourceRegistry')
+    var batchSource = tenantRegistry.dataSourceForTenant(tenantId)
+    var jdbc = new JdbcTemplate(batchSource)
+    var tx = new TransactionTemplate(new DataSourceTransactionManager(batchSource))
+    var schemaIds = publications.map(pub => pub.schemaId)
+    var existingFields = db.table('data_push_schema_field_t').where().eq('tenant_id',tenantId).in('schema_id',schemaIds).select()
+    var fieldsByKey = {}
+    for (field in existingFields) { fieldsByKey[str(value(field,'schemaId','schema_id')) + ':' + str(value(field,'fieldName','field_name'))] = field }
+    // Parameterized multi-row INSERT and CASE UPDATE use one statement per
+    // bounded chunk. This also works when MySQL batch rewriting is disabled.
+    var insertRows = (table,names,rows) => {
+        var offset=0
+        while(offset<rows.size()) {
+            var chunk=rows.subList(offset,Math.min(offset+500,rows.size()))
+            var tuples=[];var args=new ArrayList()
+            for (row in chunk) { tuples.add('('+names.map(n => '?').join(',')+')');for(name in names){args.add(row[name])} }
+            jdbc.update('INSERT INTO '+table+' ('+names.join(',')+') VALUES '+tuples.join(','),args.toArray())
+            offset+=500
+        }
+    }
+    var updateRows = (table,names,rows) => {
+        var offset=0
+        while(offset<rows.size()) {
+            var chunk=rows.subList(offset,Math.min(offset+500,rows.size()))
+            var sets=[];var args=new ArrayList()
+            for (name in names) {
+                var cases=[]
+                for (row in chunk) { cases.add('WHEN tid=? THEN ?');args.add(row.tid);args.add(row[name]) }
+                sets.add(name+'=CASE '+cases.join(' ')+' ELSE '+name+' END')
+            }
+            args.add(tenantId);for(row in chunk){args.add(row.tid)}
+            jdbc.update('UPDATE '+table+' SET '+sets.join(',')+' WHERE tenant_id=? AND tid IN ('+chunk.map(row => '?').join(',')+')',args.toArray())
+            offset+=500
+        }
+    }
+    tx.execute(status => {
         var now = new Date()
+        var newSchemas=[];var changedSchemas=[];var newFields=[];var changedFields=[]
         for (pub in publications) {
-            var record={table_name:pub.tableName,schema_version:pub.version,schema_hash:pub.hash,status:'PUBLISHED',delivery_config:pub.delivery,published_time:now,updated_time:now}
-            if (pub.old==null) { record.tid=pub.schemaId;record.datasource_id=pub.sourceId;record.table_id=pub.tableId;record.tenant_id=tenantId;record.is_del=0;db.table('data_push_schema_t').primary('tid').insert(record) }
-            else { db.table('data_push_schema_t').where().eq('tenant_id',tenantId).eq('tid',pub.schemaId).update(record) }
-            db.table('data_push_schema_field_t').where().eq('tenant_id',tenantId).eq('schema_id',pub.schemaId).update({is_del:1})
+            var record={tid:pub.schemaId,table_name:pub.tableName,schema_version:pub.version,schema_hash:pub.hash,status:'PUBLISHED',delivery_config:pub.delivery,published_time:now,updated_time:now,datasource_id:pub.sourceId,table_id:pub.tableId,tenant_id:tenantId,is_del:0}
+            if (pub.old==null) {newSchemas.add(record)} else {changedSchemas.add(record)}
             for (field in pub.fields) {
-                var changed = db.table('data_push_schema_field_t').where().eq('tenant_id',tenantId).eq('schema_id',pub.schemaId).eq('field_name',field.name).update({data_type:field.type,required_flag:field.required?1:0,ordinal_position:field.ordinal,is_del:0})
-                if (changed==0) { db.table('data_push_schema_field_t').primary('tid').insert({tid:IdUtil.getSnowflakeNextIdStr(),schema_id:pub.schemaId,field_name:field.name,data_type:field.type,required_flag:field.required?1:0,ordinal_position:field.ordinal,tenant_id:tenantId,is_del:0}) }
+                var old=fieldsByKey[pub.schemaId+':'+field.name]
+                var row={tid:old==null?IdUtil.getSnowflakeNextIdStr():old.tid,schema_id:pub.schemaId,field_name:field.name,data_type:field.type,required_flag:field.required?1:0,ordinal_position:field.ordinal,tenant_id:tenantId,is_del:0}
+                if(old==null){newFields.add(row)}else{changedFields.add(row)}
             }
         }
+        insertRows('data_push_schema_t',['tid','datasource_id','table_id','table_name','schema_version','schema_hash','status','delivery_config','tenant_id','published_time','updated_time','is_del'],newSchemas)
+        updateRows('data_push_schema_t',['table_name','schema_version','schema_hash','status','delivery_config','published_time','updated_time'],changedSchemas)
+        var marks=schemaIds.map(id => '?').join(',')
+        var args=new ArrayList();args.add(tenantId);args.addAll(schemaIds)
+        jdbc.update('UPDATE data_push_schema_field_t SET is_del=1 WHERE tenant_id=? AND schema_id IN ('+marks+')',args.toArray())
+        insertRows('data_push_schema_field_t',['tid','schema_id','field_name','data_type','required_flag','ordinal_position','tenant_id','is_del'],newFields)
+        updateRows('data_push_schema_field_t',['data_type','required_flag','ordinal_position','is_del'],changedFields)
+        return null
     })
     var response = null
     try {
@@ -181,7 +231,7 @@ if (body.all == true) {
             .header('Idempotency-Key','node-batch-'+nodeId+'-'+IdUtil.fastSimpleUUID()).body(encoded).execute()
         if (response.getStatus()<200 || response.getStatus()>=300) { throw new IllegalStateException('节点未确认保存') }
         var received = bm.readValue(response.body(),Map)
-        if (received.datasourceIds==null || received.datasourceIds.size()!=sourceIds.size() || !sourceIds.containsAll(received.datasourceIds) || received.tableCount!=totalTables || received.columnCount!=totalColumns) { throw new IllegalStateException('节点返回的配置范围不匹配') }
+        if (received.datasourceIds==null || received.datasourceIds.size()!=sourceIds.size() || !sourceIds.containsAll(received.datasourceIds) || !received.datasourceIds.containsAll(sourceIds) || received.tableCount!=totalTables || received.columnCount!=totalColumns) { throw new IllegalStateException('节点返回的配置范围不匹配') }
         db.table('push_node_t').where().eq('tenant_id',tenantId).eq('tid',nodeId).eq('is_del',0).update({last_sync_time:new Date(),last_sync_status:'SUCCESS',last_sync_source_id:null})
     } catch(e) {
         db.table('push_node_t').where().eq('tenant_id',tenantId).eq('tid',nodeId).eq('is_del',0).update({last_sync_time:new Date(),last_sync_status:'FAILED',last_sync_source_id:null})

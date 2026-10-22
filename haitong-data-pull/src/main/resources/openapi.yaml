@@ -78,7 +78,7 @@ paths:
                 deliveryType:
                   type: string
                   enum: [FTP, KAFKA, LOG, REGISTRY_SYNC]
-                  description: FTP/KAFKA 需要 datasourceId、tableName、records；REGISTRY_SYNC 需要 datasource 配置对象，且只接受 X-Standalone-Registry-Key 服务间认证。
+                  description: FTP/KAFKA 需要 datasourceId、tableName、records；REGISTRY_SYNC 需要 datasource 配置对象或 datasources 批量数组，且只接受 X-Standalone-Registry-Key 服务间认证。
                 datasourceId:
                   type: string
                   description: FTP/KAFKA 必填。托管模式为已完成登记的数据源标识；独立模式必须匹配 standalone.datasources 的配置键。
@@ -103,8 +103,17 @@ paths:
                     additionalProperties: true
                 datasource:
                   type: object
-                  description: deliveryType=REGISTRY_SYNC 时必填。完整契约见 docs/独立登记配置同步接口.md；一次同步覆盖一个 datasourceId 下的表、字段和调用方授权。
+                  description: REGISTRY_SYNC 单源完整快照，与 datasources 二选一。完整契约见根 docs/haitong-data-pull.md。
+                datasources:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                  description: REGISTRY_SYNC 批量完整快照，与 datasource 二选一；最多100源、1000表、10000字段，整批事务保存。
       responses:
+        '201':
+          description: 登记配置已事务保存，返回 datasourceId 或 datasourceIds 及表字段数量
         '202':
           description: 已持久化受理，后台投递中
         '200':

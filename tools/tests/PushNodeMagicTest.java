@@ -18,7 +18,7 @@ public class PushNodeMagicTest {
         dialects.add(new org.ssssssss.magicapi.modules.db.dialect.MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});
         f.db.setDialectAdapter(dialects);
         f.db.setResultProvider(new org.ssssssss.magicapi.core.interceptor.DefaultResultProvider("push-node-test"));
-        f.jdbc.execute("create table push_node_t(tid varchar(32) primary key,tenant_id varchar(32),network_code varchar(64),node_name varchar(128),node_code varchar(64),base_url varchar(255),enabled int,is_default int,remark varchar(500),created_time timestamp,updated_time timestamp,is_del int,last_sync_time timestamp,last_sync_status varchar(16),last_sync_source_id varchar(64))");
+        f.jdbc.execute("create table if not exists push_node_t(tid varchar(32) primary key,tenant_id varchar(32),network_code varchar(64),node_name varchar(128),node_code varchar(64),base_url varchar(255),enabled int,is_default int,remark varchar(500),created_time timestamp,updated_time timestamp,is_del int,last_sync_time timestamp,last_sync_status varchar(16),last_sync_source_id varchar(64))");
         for(String id:List.of("node","foreign-node","disabled-node"))f.jdbc.update("insert into push_node_t(tid,tenant_id,network_code,node_name,node_code,base_url,enabled,is_default,is_del) values(?,?,'GAW',?,?,?, ?,0,0)",id,id.equals("foreign-node")?"ct":"ga",id,id,url,id.equals("disabled-node")?0:1);
         f.jdbc.execute("create table sym_dict_t(tid varchar(32),tenant_id varchar(32),dict_code varchar(64),parent_id varchar(32),is_del int)");
         f.jdbc.execute("insert into sym_dict_t values('network','ga','SSWL','0',0),('gaw','ga','GAW','network',0),('hlw','ga','HLW','network',0)");
@@ -55,6 +55,21 @@ public class PushNodeMagicTest {
                 for(int i=1;i<count;i++)f.jdbc.update("insert into push_node_t(tid,tenant_id,node_name,node_code,network_code,base_url,enabled,is_default,is_del) values(?,'ga','test',?,'GAW',?,1,0,0)","n"+i,"n"+i,url);
                 var page=(Map<?,?>)nodeCall(f,"01.数据同步节点列表.ms",Map.of("nodeType","push"));check(((List<?>)page.get("list")).size()==count,"all nodes");check(f.reads.get()==2,"node list fixed reads "+f.reads);
                 var health=(Map<?,?>)nodeCall(f,"01.数据同步节点列表.ms",Map.of("nodeType","push","action","health","tid","node"));check(Boolean.TRUE.equals(health.get("success")),"real HTTP health");
+                var checkedPage=(Map<?,?>)nodeCall(f,"01.数据同步节点列表.ms",Map.of("nodeType","push"));
+                check(f.reads.get()==2,"health display adds no SQL per node");
+                var checked=((List<Map<String,Object>>)checkedPage.get("list")).stream().filter(n->n.get("tid").equals("node")).findFirst().orElseThrow();
+                check("reachable".equals(checked.get("healthStatus")),"persisted green result");
+                f.jdbc.update("update push_node_t set base_url='http://127.0.0.1:1' where tid='node'");
+                var changedPage=(Map<?,?>)nodeCall(f,"01.数据同步节点列表.ms",Map.of("nodeType","push"));
+                var changed=((List<Map<String,Object>>)changedPage.get("list")).stream().filter(n->n.get("tid").equals("node")).findFirst().orElseThrow();
+                check("unknown".equals(changed.get("healthStatus")),"new URL resets to untested");
+                var down=(Map<?,?>)nodeCall(f,"01.数据同步节点列表.ms",Map.of("nodeType","push","action","health","tid","node"));
+                check(Boolean.FALSE.equals(down.get("success")),"unreachable test");
+                var downPage=(Map<?,?>)nodeCall(f,"01.数据同步节点列表.ms",Map.of("nodeType","push"));
+                var downNode=((List<Map<String,Object>>)downPage.get("list")).stream().filter(n->n.get("tid").equals("node")).findFirst().orElseThrow();
+                check("unreachable".equals(downNode.get("healthStatus")),"persisted red result");
+                f.jdbc.update("update push_node_t set base_url=? where tid='node'",url);
+
                 rejected(nodeCall(f,"01.数据同步节点列表.ms",Map.of("nodeType","push","action","health","tid","foreign-node")),404);
                 System.out.println(count+" items: list=2 SQL; preview=3 SQL/0 HTTP; sync=10 SQL/1 HTTP; tenant, role and disabled checks passed");
             }

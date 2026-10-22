@@ -23,6 +23,7 @@ import tenantRuntime
 import cn.hutool.http.HttpRequest
 import com.fasterxml.jackson.databind.ObjectMapper
 import java.util.Map
+import java.text.SimpleDateFormat
 import com.linewell.dataelement.utils.LocalCache
 
 var text = value => value == null ? '' : value + ''
@@ -43,7 +44,7 @@ if (text(body?.nodeType) == 'push') {
     var healthJson = LocalCache.get(healthKey)
     var health = healthJson == null ? {} : new ObjectMapper().readValue(healthJson,Map)
     var remember = (nodeId,baseUrl,result) => {
-        result.healthTime = new java.text.SimpleDateFormat('yyyy-MM-dd HH:mm:ss').format(new Date())
+        result.healthTime = new SimpleDateFormat('yyyy-MM-dd HH:mm:ss').format(new Date())
         health[nodeId] = {baseUrl:baseUrl,status:result.success?'reachable':'unreachable',message:result.message,time:result.healthTime,latencyMs:result.latencyMs}
         LocalCache.put(healthKey,new ObjectMapper().writeValueAsString(health))
         return result
@@ -60,9 +61,9 @@ if (text(body?.nodeType) == 'push') {
             var status = response.getStatus()
             var payload = new ObjectMapper().readValue(response.body(), Map)
             var success = status == 200 && text(payload.status) == 'UP'
-            return remember(nodeId,text(node.baseUrl || node.base_url),{ success:success,status:status,latencyMs:new Date().getTime()-started,message:success?'haitong-data-pull 服务健康':'推送服务健康检查未通过' })
+            return remember(nodeId,text(node.baseUrl || node.base_url),{ success:success,status:status,latencyMs:new Date().getTime()-started,message:success?'数据推送服务运行正常':'推送服务健康检查未通过' })
         } catch (e) {
-            return remember(nodeId,text(node.baseUrl || node.base_url),{ success:false,status:0,latencyMs:new Date().getTime()-started,message:'无法连接推送节点，请检查服务地址、网络及 haitong-data-pull 的运行状态' })
+            return remember(nodeId,text(node.baseUrl || node.base_url),{ success:false,status:0,latencyMs:new Date().getTime()-started,message:'无法连接数据推送节点，请检查服务地址、网络连接及推送服务是否正常运行' })
         } finally { if (response != null) { response.close() } }
     }
     var page = db.table('push_node_t').where().eq('tenant_id',tenantId).eq('is_del',0)
@@ -76,7 +77,7 @@ if (text(body?.nodeType) == 'push') {
         if (keyword != '' && !name.contains(keyword) && !code.contains(keyword) && !network.contains(keyword)) { continue }
         var checked = health[text(row.tid)]
         if (checked != null && checked.baseUrl != text(row.baseUrl || row.base_url)) { checked = null }
-        list.add({healthStatus:checked?.status || 'unknown',healthMessage:checked?.message || '',healthTime:checked?.time || '',healthLatencyMs:checked?.latencyMs,tid:row.tid,nodeName:name,nodeCode:code,networkCode:network,
+        list.add({healthStatus:checked?.status || 'unknown',healthMessage:text(checked?.message).replace('haitong-data-pull 服务健康','数据推送服务运行正常').replace(' haitong-data-pull ','数据推送服务'),healthTime:checked?.time || '',healthLatencyMs:checked?.latencyMs,tid:row.tid,nodeName:name,nodeCode:code,networkCode:network,
             baseUrl:row.baseUrl || row.base_url,enabled:row.enabled,isDefault:row.isDefault == null?row.is_default:row.isDefault,
             remark:row.remark,updatedTime:row.updatedTime || row.updated_time,
             lastSyncTime:row.lastSyncTime || row.last_sync_time,lastSyncStatus:row.lastSyncStatus || row.last_sync_status})
