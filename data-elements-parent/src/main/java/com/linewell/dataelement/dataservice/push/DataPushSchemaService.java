@@ -45,11 +45,11 @@ public class DataPushSchemaService {
         Source source = source(jdbc, tenantId, datasourceId);
         requirePushSource(source);
         List<Map<String, Object>> tables = jdbc.queryForList("""
-                select tid, table_name from db_table_t
+                select tid, table_name, field_governance_config from db_table_t
                  where tenant_id = ? and datasource_id = ? and asset_status = 2 and (is_del = 0 or is_del is null)
                  order by table_name, tid
                 """, tenantId, datasourceId);
-        if (tables.isEmpty()) throw new IllegalStateException("数据源尚无登记成功的数据表，无法发布推送契约");
+        if (tables.isEmpty()) throw new IllegalStateException("数据源尚无登记成功的数据表，无法发布推送规范");
         Map<String,List<Map<String,Object>>> fieldsByTable = columnsForTables(jdbc,tenantId,tables.stream().map(table->text(table.get("tid"))).toList());
         Map<String,Map<String,Object>> schemasByTable = new HashMap<>();
         for(Map<String,Object> schema:jdbc.queryForList("""
@@ -59,6 +59,16 @@ public class DataPushSchemaService {
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> table : tables) {
             String tableId=text(table.get("tid"));
+            Map<String,Map<String,Object>> attachments = new HashMap<>();
+            Object configured = map(table.get("field_governance_config")).get("attachmentFields");
+            if (configured instanceof List<?> list) for (Object value : list) {
+                Map<String,Object> policy=map(value);
+                attachments.put(text(policy.get("columnName")), policy);
+            }
+            for (Map<String,Object> column : fieldsByTable.getOrDefault(tableId,List.of())) {
+                Map<String,Object> policy=attachments.get(text(column.get("column_name")));
+                if (policy!=null) column.put("attachment",policy);
+            }
             result.add(publishTable(jdbc, tenantId, source, tableId, text(table.get("table_name")),
                     fieldsByTable.getOrDefault(tableId,List.of()), schemasByTable.get(tableId)));
         }
@@ -80,7 +90,8 @@ public class DataPushSchemaService {
         JdbcTemplate jdbc = jdbc(tenantId);
         Source source = source(jdbc, tenantId, datasourceId);
         requirePushSource(source);
-        List<Map<String, Object>> published = publish(tenantId, datasourceId);
+        List<Map<String, Object>> published = jdbc.queryForObject("select count(*) from db_table_t where tenant_id=? and datasource_id=? and asset_status=2 and (is_del=0 or is_del is null)", Integer.class, tenantId, datasourceId) > 0
+                ? publish(tenantId, datasourceId) : List.of();
         Map<String, Map<String, Object>> schemaByTable = new LinkedHashMap<>();
         for (Map<String, Object> schema : published) schemaByTable.put(text(schema.get("tableId")), schema);
         List<Map<String, Object>> rows = jdbc.queryForList("""
@@ -117,7 +128,8 @@ public class DataPushSchemaService {
             table.put("columns", normalizedColumns);
             tables.add(table);
         }
-        if (tables.isEmpty()) throw new IllegalStateException("数据源尚无可同步的已登记推送表");
+        // An empty snapshot can provision a source credential without granting
+        // access to any table. Registered tables are required by data validation.
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("datasourceId", source.id());
         snapshot.put("datasourceName", source.name());
@@ -159,11 +171,9 @@ public class DataPushSchemaService {
             for(var table:jdbc.queryForList("select tid from db_table_t where tenant_id=? and datasource_id=? and asset_status=2 and (is_del=0 or is_del is null) and tid in ("+marks+")",args.toArray()))activeTableIds.add(text(table.get("tid")));
         }
         List<Map<String,Object>> schemas=candidates.stream().filter(item->activeTableIds.contains(text(item.get("table_id")))).toList();
-        if (schemas.isEmpty()) throw new IllegalArgumentException("数据表未完成推送契约发布，请重新完成数据源登记");
+        if (schemas.isEmpty()) throw new IllegalArgumentException("数据表未完成推送规范发布，请重新完成数据源登记");
         Map<String, Object> schema = schemas.getFirst();
         long currentVersion = ((Number) schema.get("schema_version")).longValue();
-        if (batch.get("schemaVersion") != null && longValue(batch.get("schemaVersion"), currentVersion) != currentVersion)
-            throw new IllegalArgumentException("推送契约版本已更新，请按最新字段定义推送");
         List<Map<String, Object>> fields = jdbc.queryForList("""
                 select field_name, data_type, required_flag from data_push_schema_field_t
                  where tenant_id = ? and schema_id = ? and is_del = 0
@@ -218,7 +228,7 @@ public class DataPushSchemaService {
         Source source = source(jdbc, tenantId, datasourceId);
         requirePushSource(source);
         List<Map<String, Object>> schemas = jdbc.queryForList("""
-                select s.tid, s.table_id, s.table_name, s.schema_version, s.schema_hash, s.published_time
+                select s.tid, s.table_id, s.table_name, s.schema_version, s.schema_hash, s.published_time, s.delivery_config
                   from data_push_schema_t s
                   join db_table_t t on convert(t.tid using utf8mb4) collate utf8mb4_general_ci
                                      = convert(s.table_id using utf8mb4) collate utf8mb4_general_ci
@@ -239,12 +249,19 @@ public class DataPushSchemaService {
         for (Map<String, Object> schema : schemas) {
             List<Map<String, Object>> fields = fieldsBySchema.getOrDefault(text(schema.get("tid")),List.of());
             List<Map<String, Object>> normalized = new ArrayList<>();
+            Map<String,Map<String,Object>> attachments = new HashMap<>();
+            Object configured = map(schema.get("delivery_config")).get("attachmentFields");
+            if (configured instanceof List<?> list) for (Object value : list) {
+                Map<String,Object> policy=map(value);
+                attachments.put(text(policy.get("columnName")), policy);
+            }
             for (Map<String, Object> field : fields) {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("fieldName", text(field.get("field_name")));
                 item.put("dataType", text(field.get("data_type")));
                 item.put("required", integer(field.get("required_flag"), 0) == 1);
                 item.put("ordinal", integer(field.get("ordinal_position"), 0));
+                if (attachments.containsKey(text(field.get("field_name")))) item.put("attachment", attachments.get(text(field.get("field_name"))));
                 normalized.add(item);
             }
             Map<String, Object> item = new LinkedHashMap<>();
@@ -277,31 +294,42 @@ public class DataPushSchemaService {
                 Map.of("name", "X-Api-Key", "value", "业务调用方身份密钥", "required", true, "description", "用于识别推送业务数据的调用方，并校验其对当前数据源及已登记数据表的推送权限；平台不保存密钥明文，请勿放入请求体或前端代码中"),
                 Map.of("name", "Idempotency-Key", "value", "每次逻辑请求唯一 UUID", "required", true, "description", "相同键重试返回同一受理结果")));
         result.put("requiredParameters", List.of(
-                Map.of("name", "deliveryType", "required", true, "description", "投递类型，仅支持 FTP 或 KAFKA；目标地址由登记契约确定"),
+                Map.of("name", "deliveryType", "required", true, "description", "投递类型，仅支持 FTP 或 KAFKA；目标地址由登记规范确定"),
                 Map.of("name", "datasourceId", "required", true, "description", "固定为当前数据源编码"),
                 Map.of("name", "tableName", "required", true, "description", "必须为下方已发布的数据表英文名"),
                 Map.of("name", "batchId", "required", false, "description", "调用方批次标识，建议可追溯且不可复用"),
-                Map.of("name", "occurredAt", "required", false, "description", "批次产生时间，ISO 8601 格式"),
-                Map.of("name", "schemaVersion", "required", false, "description", "不传默认使用当前版本；传入时必须与表契约一致"),
                 Map.of("name", "records", "required", true, "description", "1 至 10,000 条记录，每条仅可包含已登记字段")));
-        result.put("endpoints", Map.of("dataPush", dataPush));
+        result.put("endpoints", Map.of("dataPush", dataPush, "fileUpload", Map.of(
+                "method", "POST", "path", "/api/v1/file-uploads/single", "defaultMode", "SINGLE",
+                "chunkedPath", "/api/v1/file-uploads",
+                "description", "默认整文件上传，节点默认上限20 MB；大文件可用分片上传。校验就绪后，关联字段填写fileId；大小和格式同时满足字段及集合策略")));
         result.put("tables", tables);
         return result;
     }
 
     private Map<String, Object> publishTable(JdbcTemplate jdbc, String tenantId, Source source, String tableId, String tableName,
             List<Map<String,Object>> fields,Map<String,Object> old) {
-        if (fields.isEmpty()) throw new IllegalStateException("数据表 " + tableName + " 未登记字段，无法发布推送契约");
+        if (fields.isEmpty()) throw new IllegalStateException("数据表 " + tableName + " 未登记字段，无法发布推送规范");
         List<Map<String, Object>> canonical = new ArrayList<>();
         for (Map<String, Object> field : fields) {
             String name = code(field.get("column_name"), "field", 255);
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("name", name); item.put("type", firstText(field, "column_type", "data_type"));
             item.put("required", required(field)); item.put("ordinal", integer(field.get("ordinal_position"), 0));
+            if (field.get("attachment") instanceof Map<?,?> policy) {
+                Map<String,Object> attachmentPolicy = new LinkedHashMap<>();
+                attachmentPolicy.put("columnName",name);
+                attachmentPolicy.put("maxFileBytes",longValue(policy.get("maxFileBytes"),0));
+                attachmentPolicy.put("allowedExtensions",policy.get("allowedExtensions"));
+                item.put("attachment",attachmentPolicy);
+            }
             canonical.add(item);
         }
         String hash = sha256(write(canonical));
-        Map<String, Object> delivery = pushDelivery(source.poolCfg());
+        Map<String, Object> delivery = new LinkedHashMap<>(pushDelivery(source.poolCfg()));
+        List<Object> attachmentPolicies = new ArrayList<>();
+        for (Map<String,Object> field : canonical) if (field.containsKey("attachment")) attachmentPolicies.add(field.get("attachment"));
+        delivery.put("attachmentFields", attachmentPolicies);
         Timestamp now = Timestamp.valueOf(LocalDateTime.now());
         String schemaId;
         long version;
@@ -355,8 +383,10 @@ public class DataPushSchemaService {
         return grouped;
     }
     private void requirePushSource(Source source) {
-        if (source.assetStatus() != 1 && source.assetStatus() != 2)
-            throw new IllegalStateException("数据源尚未完成登记");
+        // The fifth step may issue a key and publish saved table registrations
+        // before the datasource's overall registration is marked complete.
+        if (source.assetStatus() < 0 || source.assetStatus() > 2)
+            throw new IllegalStateException("数据源状态不支持推送");
         requirePushAccessMode(source);
     }
     private void requirePushAccessMode(Source source) {
@@ -416,7 +446,7 @@ public class DataPushSchemaService {
             return json.readValue(String.valueOf(value), MAP);
         } catch (Exception exception) { throw new IllegalArgumentException("数据源推送配置不是有效 JSON"); }
     }
-    private String write(Object value) { try { return json.writeValueAsString(value); } catch (Exception e) { throw new IllegalStateException("无法生成推送契约", e); } }
+    private String write(Object value) { try { return json.writeValueAsString(value); } catch (Exception e) { throw new IllegalStateException("无法生成推送规范", e); } }
     private String sha256(String text) { try { byte[] hash = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)); return java.util.HexFormat.of().formatHex(hash); } catch (Exception e) { throw new IllegalStateException(e); } }
     private String code(Object value, String name, int max) { String text = text(value); if (!text.matches("[A-Za-z0-9_.-]{1," + max + "}")) throw new IllegalArgumentException(name + " 格式不正确"); return text; }
     private String text(Object value) { return value == null ? "" : String.valueOf(value).trim(); }

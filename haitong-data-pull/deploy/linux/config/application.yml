@@ -96,7 +96,6 @@ relay:
       file-format: JSONL
       required-fields: [tableName, records]
       batch-key-field: batchId
-      business-time-field: occurredAt
     table-to-kafka:
       enabled: false
       registration-managed: false

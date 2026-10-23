@@ -22,11 +22,19 @@ public class FileStorage implements InitializingBean {
     public record Saved(Path path,String sha256,long size) {}
     private final RelayProperties relay;private final FileTransferProperties p;private final Path root;
     private final Semaphore streams;private FileChannel lockChannel;private FileLock lock;
+    private long incomingReserved;
     public FileStorage(RelayProperties relay,FileTransferProperties p){this.relay=relay;this.p=p;root=Path.of(relay.getWorkDir()).toAbsolutePath().normalize().resolve("unstructured");streams=new Semaphore(p.getMaxStreams());}
     @Override public void afterPropertiesSet() throws IOException {
         Files.createDirectories(root);if(Files.isSymbolicLink(root))throw new IOException("文件存储目录不可为符号链接");
         lockChannel=FileChannel.open(root.resolve(".node.lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);lock=lockChannel.tryLock();
         if(lock==null)throw new IllegalStateException("文件存储目录已被另一实例使用；本地文件模式仅支持单节点");
+        // These unreferenced, bounded staging files can only belong to an interrupted single request.
+        try(var entries=Files.newDirectoryStream(root,"incoming-*")){
+            for(Path path:entries){
+                if(!path.getFileName().toString().matches("incoming-[0-9a-f-]{36}")||!Files.isRegularFile(path,LinkOption.NOFOLLOW_LINKS))throw new IOException("附件暂存目录包含异常对象");
+                Files.delete(path);
+            }
+        }
     }
     public Path directory(String id) throws IOException {
         UUID.fromString(id);Path path=root.resolve(id);Files.createDirectories(path);
@@ -38,6 +46,37 @@ public class FileStorage implements InitializingBean {
     }
     public void acquire(){if(!streams.tryAcquire())throw RelayException.capacity();}public void release(){streams.release();}
     public void freeSpace() throws IOException {if(Files.getFileStore(root).getUsableSpace()<relay.getLimits().getMinFreeDiskBytes())throw RelayException.capacity();}
+    public final class Incoming implements AutoCloseable {
+        private final Saved saved;private final long reserved;
+        private Incoming(Saved saved,long reserved){this.saved=saved;this.reserved=reserved;}
+        public Saved saved(){return saved;}
+        @Override public void close() throws IOException {try{Files.deleteIfExists(saved.path());}finally{releaseIncoming(reserved);}}
+    }
+    private synchronized void reserveIncoming(long limit) throws IOException {
+        if(Files.getFileStore(root).getUsableSpace()-relay.getLimits().getMinFreeDiskBytes()-incomingReserved<limit)throw RelayException.capacity();
+        incomingReserved=Math.addExact(incomingReserved,limit);
+    }
+    private synchronized void releaseIncoming(long limit){incomingReserved-=limit;}
+    /** Caller holds the stream permit; at most maxStreams * singleUploadMaxBytes can be staged. */
+    public Incoming receiveSingle(InputStream input,long limit,long contentLength) throws IOException {
+        reserveIncoming(limit);Path path=root.resolve("incoming-"+UUID.randomUUID());boolean retained=false;
+        try{
+            MessageDigest digest=digest();long count=0,last=System.nanoTime();
+            try(FileChannel out=FileChannel.open(path,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){
+                byte[] buffer=new byte[65536];int n;
+                while((n=input.read(buffer))!=-1){
+                    if(Thread.currentThread().isInterrupted())throw new InterruptedIOException();if(n==0)continue;
+                    count+=n;if(count>limit)throw new RelayException(413,"SINGLE_UPLOAD_TOO_LARGE","文件超过字段或整文件上传上限，请核对规范或使用分片上传");
+                    digest.update(buffer,0,n);ByteBuffer bytes=ByteBuffer.wrap(buffer,0,n);while(bytes.hasRemaining())out.write(bytes);
+                    if(System.nanoTime()-last>TimeUnit.SECONDS.toNanos(10)){freeSpace();last=System.nanoTime();}
+                }
+                if(count==0)throw RelayException.invalid("附件正文不能为空");
+                if(contentLength>=0&&count!=contentLength)throw RelayException.invalid("附件正文与 Content-Length 不一致");
+                out.force(true);
+            }
+            Incoming incoming=new Incoming(new Saved(path,HexFormat.of().formatHex(digest.digest()),count),limit);retained=true;return incoming;
+        }finally{if(!retained){try{Files.deleteIfExists(path);}finally{releaseIncoming(limit);}}}
+    }
     public Saved save(String id,int no,String token,InputStream input,long expected,Runnable heartbeat) throws IOException {
         Path temp=directory(id).resolve("part-"+no+"-"+token);MessageDigest digest=digest();long count=0,last=System.nanoTime();
         try(FileChannel out=FileChannel.open(temp,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){

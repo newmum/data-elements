@@ -131,14 +131,19 @@ class ApplicationIntegrationTest {
         assertEquals(422,request("POST","/api/v1/data-push",KEY,"missing-target","{\"tableName\":\"customer\",\"records\":[{\"id\":\"C005\"}]}").statusCode());
     }
     @Test void standaloneTablePushUsesLocalContractWithoutThePlatformRegistry() throws Exception {
-        String body="{\"deliveryType\":\"FTP\",\"datasourceId\":\"source-001\",\"tableName\":\"customer\",\"schemaVersion\":\"v1\",\"records\":[{\"id\":\"C006\",\"name\":\"Alice\"}]}";
+        String body="{\"deliveryType\":\"FTP\",\"datasourceId\":\"source-001\",\"tableName\":\"customer\",\"records\":[{\"id\":\"C006\",\"name\":\"Alice\"}]}";
         var accepted=request("POST","/api/v1/data-push",KEY,"standalone-customer-001",body);
         assertEquals(202,accepted.statusCode(),accepted.body());String id=(String)object(accepted.body()).get("messageId");
         assertEquals("table-to-ftp",repo.message(id).orElseThrow().routeCode());
         assertEquals("standalone",json.object(repo.message(id).orElseThrow().sourceMetadata().getBytes(StandardCharsets.UTF_8)).get("mode"));
         assertTrue(worker.runOne(Kind.LOG));assertEquals("SUCCEEDED",repo.deliveries(id).getFirst().status());
         assertEquals(422,request("POST","/api/v1/data-push",KEY,"standalone-source-missing","{\"deliveryType\":\"FTP\",\"datasourceId\":\"unknown\",\"tableName\":\"customer\",\"records\":[{\"id\":\"C007\"}]}" ).statusCode());
-        assertEquals(422,request("POST","/api/v1/data-push",KEY,"standalone-field-missing","{\"deliveryType\":\"FTP\",\"datasourceId\":\"source-001\",\"tableName\":\"customer\",\"schemaVersion\":\"v1\",\"records\":[{\"name\":\"Alice\"}]}" ).statusCode());
+        assertEquals(422,request("POST","/api/v1/data-push",KEY,"standalone-field-missing","{\"deliveryType\":\"FTP\",\"datasourceId\":\"source-001\",\"tableName\":\"customer\",\"records\":[{\"name\":\"Alice\"}]}" ).statusCode());
+        for(String removed:List.of("schemaVersion","occurredAt")) {
+            var batch=new LinkedHashMap<String,Object>(Map.of("deliveryType","FTP","datasourceId","source-001","tableName","customer","records",List.of(Map.of("id","C007","name","Demo"))));
+            batch.put(removed,"obsolete");
+            assertEquals(422,request("POST","/api/v1/data-push",KEY,"removed-"+removed,new Json().write(batch)).statusCode());
+        }
     }
     @Test void invalidJsonAndUnsupportedEnvelopeAreRejected() throws Exception {
         assertEquals(422,request("POST","/api/v1/ingest/demo",KEY,"duplicate-fields","{\"x\":1,\"x\":2}").statusCode());

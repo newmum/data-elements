@@ -24,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.*;
     "db.url=jdbc:h2:mem:file-http;MODE=MySQL;DB_CLOSE_DELAY=-1","relay.worker.enabled=false","relay.limits.min-free-disk-bytes=0",
     "relay.security.api-key=file-producer-0123456789abcdef0123456789","relay.security.admin-key=file-admin-0123456789abcdef0123456789",
     "relay.security.clients.receiver.api-key=file-receiver-0123456789abcdef0123456789",
-    "relay.files.enabled=true","relay.files.collections.cases.tenant-id=ga","relay.files.collections.cases.datasource-id=police",
+    "relay.files.max-streams=1","relay.files.enabled=true","relay.files.collections.cases.tenant-id=ga","relay.files.collections.cases.datasource-id=police",
+    "relay.files.collections.cases.table-name=case_record","relay.files.collections.cases.field-name=document_id",
     "relay.files.collections.cases.collection-id=case-files","relay.files.collections.cases.clients[0]=default","relay.files.collections.cases.read-clients[0]=receiver",
     "relay.files.collections.cases.targets[0]=local","relay.files.collections.cases.receipt-clients.local=receiver","relay.files.collections.cases.require-malware-scan=false",
     "relay.files.collections.cases.metadata-types.caseNo=STRING","relay.files.collections.cases.required-metadata[0]=caseNo"
@@ -49,7 +50,7 @@ class FileUploadHttpTest {
         // Blocking sockets also work on Windows/JDK installations with a broken selector pipe.
         var request=(HttpURLConnection)URI.create("http://127.0.0.1:"+port+path).toURL().openConnection(Proxy.NO_PROXY);request.setConnectTimeout(10000);request.setReadTimeout(120000);request.setRequestMethod(method);request.setRequestProperty("X-Api-Key",key);
         if(idem!=null)request.setRequestProperty("Idempotency-Key",idem);headers.forEach(request::setRequestProperty);
-        try{if(body!=null){request.setDoOutput(true);request.setFixedLengthStreamingMode(body.length);try(OutputStream out=request.getOutputStream()){out.write(body);}}
+        try{if(body!=null){request.setDoOutput(true);if(headers.containsKey("Transfer-Encoding"))request.setChunkedStreamingMode(8192);else request.setFixedLengthStreamingMode(body.length);try(OutputStream out=request.getOutputStream()){out.write(body);}}
             int code=request.getResponseCode();InputStream in=code>=400?request.getErrorStream():request.getInputStream();byte[] result=in==null?new byte[0]:in.readAllBytes();if(in!=null)in.close();return new Reply(code,result,request.getHeaderFields());
         }finally{request.disconnect();}
     }
@@ -78,6 +79,22 @@ class FileUploadHttpTest {
         assertEquals(422,call("POST",base,PRODUCER,"forge-tenant",json.bytes(Map.of("tenantId","ct","datasourceId","police","collectionId","case-files","fileName","x.pdf","size",10)),Map.of("Content-Type","application/json")).statusCode());
         assertEquals(1,repo.deliveries(message).size());
     }
+    @Test void singleRequestHttpUploadIsDefaultAndUsesExistingContentAndDeliveryLifecycle() throws Exception {
+        byte[] content="%PDF-1.7\nSingle request demo\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        String query="?datasourceId=police&tableName=case_record&fieldName=document_id&fileName="+URLEncoder.encode("演示案卷.pdf",java.nio.charset.StandardCharsets.UTF_8);
+        String key="single-http-"+UUID.randomUUID();String endpoint="/api/v1/file-uploads/single"+query;
+        assertEquals(401,call("POST",endpoint,"invalid",key,content,Map.of("Content-Type","application/octet-stream")).statusCode());
+        assertEquals(404,call("POST",endpoint,RECEIVER,key,content,Map.of("Content-Type","application/octet-stream")).statusCode());
+        var accepted=object(call("POST",endpoint,PRODUCER,key,content,Map.of("Content-Type","application/octet-stream","Transfer-Encoding","chunked")),202);
+        String id=accepted.get("fileId").toString();assertEquals("SINGLE",accepted.get("uploadMode"));
+        assertEquals(id,object(call("POST",endpoint,PRODUCER,key,content,Map.of("Content-Type","application/octet-stream")),202).get("fileId"));
+        post("/api/v1/file-uploads/"+id+"/submit",key,Map.of("businessKey","SINGLE-DEMO","metadata",Map.of("caseNo","SINGLE-DEMO")));
+        awaitReady(id);assertTrue(worker.runOne(Kind.FILE_LOCAL));
+        assertArrayEquals(content,call("GET","/api/v1/file-uploads/"+id+"/content",RECEIVER,null,null,Map.of()).body());
+        for(String obsolete:List.of("size=1","sha256="+Rules.sha256(content),"collectionId=case-files"))assertEquals(422,call("POST",endpoint+"&"+obsolete,PRODUCER,key,content,Map.of("Content-Type","application/octet-stream")).statusCode());
+        assertEquals(422,call("POST",endpoint+"&fieldName=outside",PRODUCER,key,content,Map.of("Content-Type","application/octet-stream")).statusCode());
+        assertEquals(422,call("POST",endpoint+"&tenantId=other",PRODUCER,key,content,Map.of("Content-Type","application/octet-stream")).statusCode());
+    }
     @Test @EnabledIfSystemProperty(named="haitong.large-file.tests",matches="true") void threeGiBFileStreamsThroughRealHttpAndLocalDelivery() throws Exception {
         long size=3L*1024*1024*1024;Path source=WORK.resolve("three-gib.pdf");Files.createDirectories(WORK);
         try(FileChannel out=FileChannel.open(source,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){
@@ -98,7 +115,7 @@ class FileUploadHttpTest {
     @Test @EnabledIfSystemProperty(named="haitong.example-client.tests",matches="true") void pythonStreamingClientCanRepeatWithOriginalIdempotencyKey() throws Exception {
         Files.createDirectories(WORK);Path source=WORK.resolve("client-example.pdf");Files.writeString(source,"%PDF-1.7\nExample client\n%%EOF");String key="client-example-"+UUID.randomUUID();
         Path metadata=WORK.resolve("example-metadata.json");Files.writeString(metadata,"{\"caseNo\":\"DEMO-CLIENT\"}");
-        List<String> command=List.of("python","examples/upload_file.py",source.toString(),"--base-url","http://127.0.0.1:"+port,"--datasource","police","--collection","case-files","--business-key","DEMO-CLIENT","--idempotency-key",key,"--metadata-file",metadata.toString(),"--wait-seconds","20");
+        List<String> command=List.of("python","examples/upload_file.py",source.toString(),"--base-url","http://127.0.0.1:"+port,"--datasource","police","--table","case_record","--field","document_id","--business-key","DEMO-CLIENT","--idempotency-key",key,"--metadata-file",metadata.toString(),"--wait-seconds","20");
         String message=null;
         for(int repeat=0;repeat<2;repeat++){
             Path output=WORK.resolve("example-client-"+repeat+".json"),error=WORK.resolve("example-client-"+repeat+".log");

@@ -17,15 +17,17 @@ public class FileContractCatalog implements InitializingBean {
     public record Scope(Contract contract,boolean readAll) {}
     private final FileTransferProperties p;private final RouteCatalog routes;private final Json json;
     private Map<String,Contract> contracts=Map.of();
+    private Map<String,Contract> attachmentFields=Map.of();
     public FileContractCatalog(FileTransferProperties p,RouteCatalog routes,Json json){this.p=p;this.routes=routes;this.json=json;}
     @Override public void afterPropertiesSet(){
-        if(p.getPartSizeBytes()<65536 || p.getPartSizeBytes()>64L*1024*1024 || p.getMaxFileBytes()<1 ||
+        if(p.getSingleUploadMaxBytes()<1 || p.getSingleUploadMaxBytes()>p.getMaxFileBytes() ||
+           p.getPartSizeBytes()<65536 || p.getPartSizeBytes()>64L*1024*1024 || p.getMaxFileBytes()<1 ||
            p.getMaxFileBytes()>1024L*1024*1024*1024 || p.getStorageLimitBytes()<p.getMaxFileBytes()*2 ||
            p.getMaxStreams()<1 || p.getMaxStreams()>128 || p.getVerificationThreads()<1 || p.getVerificationThreads()>16 ||
            p.getSessionHours()<1 || p.getSessionHours()>168 || p.getLeaseSeconds()<60 || p.getMaxActiveUploads()<1 ||
            p.getScannerTimeoutSeconds()<1 || p.getScannerTimeoutSeconds()>3600 || p.getCollections().size()>100)
             throw new IllegalStateException("文件传输容量或并发配置不合法");
-        Map<String,Contract> built=new LinkedHashMap<>();
+        Map<String,Contract> built=new LinkedHashMap<>(),fields=new LinkedHashMap<>();
         for(var entry:p.getCollections().entrySet()){
             var c=entry.getValue();Rules.code(entry.getKey());
             if(c==null || !c.isEnabled())continue;
@@ -56,10 +58,23 @@ public class FileContractCatalog implements InitializingBean {
             RoutePlan plan=new RoutePlan("file."+entry.getKey(),"BINARY",List.of(),Map.of(),List.copyOf(targets));
             String hash=Rules.sha256(json.bytes(Map.of("policy",c,"plan",plan)));
             String lookup=c.getDatasourceId()+"\u0000"+c.getCollectionId();
-            if(built.put(lookup,new Contract(entry.getKey(),c.getTenantId(),c.getDatasourceId(),c.getCollectionId(),c.getVersion(),hash,c,plan))!=null)
+            Contract contract=new Contract(entry.getKey(),c.getTenantId(),c.getDatasourceId(),c.getCollectionId(),c.getVersion(),hash,c,plan);
+            if(built.put(lookup,contract)!=null)
                 throw new IllegalStateException("数据源和文件集合必须唯一，不能由请求选择租户");
+            String table=c.getTableName(),field=c.getFieldName();
+            // Existing explicitly configured table.field collections remain usable without changing their ledger identity.
+            if(table.isEmpty()&&field.isEmpty()){
+                String[] names=c.getCollectionId().split("\\.",-1);
+                if(names.length==2){table=names[0];field=names[1];}
+            }
+            if(!table.isEmpty()||!field.isEmpty()){
+                attachmentName(table);attachmentName(field);
+                if(fields.put(c.getDatasourceId()+"\u0000"+table+"\u0000"+field,contract)!=null)
+                    throw new IllegalStateException("同一数据源的附件表字段只能绑定一个文件集合");
+            }
         }
         contracts=Collections.unmodifiableMap(built);
+        attachmentFields=Collections.unmodifiableMap(fields);
     }
     public Collection<Contract> all(){return contracts.values();}
     public Contract get(String source,String collection){
@@ -67,6 +82,15 @@ public class FileContractCatalog implements InitializingBean {
     }
     public Contract upload(Secrets.Identity caller,String source,String collection){
         Contract c=get(source,collection);if(!caller.admin()&&!c.policy().getClients().contains(caller.id()))throw RelayException.notFound();return c;
+    }
+    public Contract uploadField(Secrets.Identity caller,String source,String table,String field){
+        attachmentName(table);attachmentName(field);
+        Contract c=attachmentFields.get(source+"\u0000"+table+"\u0000"+field);
+        if(c==null||!caller.admin()&&!c.policy().getClients().contains(caller.id()))throw RelayException.notFound();
+        return c;
+    }
+    private static void attachmentName(String name){
+        if(name==null||!name.matches("[A-Za-z_][A-Za-z0-9_]{0,127}"))throw RelayException.invalid("附件表名或字段名格式不正确");
     }
     public List<Scope> scopes(Secrets.Identity caller){
         List<Scope> result=new ArrayList<>();

@@ -37,13 +37,16 @@ const callCurrentStepMethod = async (fnName: string, actionName: string) => {
   return component[fnName]();
 };
 
-const customApi = async (fnName: string, callback: () => Promise<string | void>): Promise<void> => {
+const customApi = async (
+  fnName: string,
+  callback: () => Promise<string | false | void>
+): Promise<void> => {
   if (actionPending.value) return;
   actionPending.value = true;
   try {
     store.setLoadStatus(fnName, true);
     const finishType = await callback();
-    emit("finishTriggerFn", finishType || fnName);
+    emit("finishTriggerFn", finishType === false ? null : finishType || fnName);
   } catch (err: any) {
     console.error(`执行${fnName}事件异常, 原因:`, err instanceof Error ? err.message : String(err));
     emit("finishTriggerFn", null);
@@ -81,7 +84,12 @@ const saveApi = (): Promise<void> =>
 
 const nextApi = (): Promise<void> =>
   customApi("next", async () => {
-    await callCurrentStepMethod("next", "进入下一步");
+    const result: { navigationHandled?: boolean } | undefined = await callCurrentStepMethod(
+      "next",
+      "进入下一步"
+    );
+    // 代理访问已转到独立服务登记页，保留原底部按钮，但不再推进数据库探查步骤。
+    if (result?.navigationHandled) return false;
   });
 
 const finishApi = (): Promise<void> =>

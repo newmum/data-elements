@@ -79,6 +79,18 @@
           </div>
         </section>
 
+        <section v-if="accessMode === 'proxy'" class="proxy-service-registration">
+          <u-title name="本部门已登记服务" class="gap-4" style="height: 50px" />
+          <div class="proxy-service-toolbar"><el-input v-model.trim="proxyServiceKeyword" placeholder="搜索服务名称、编码或地址" clearable @clear="proxyServiceTableRef?.refresh?.(true)" @keyup.enter="proxyServiceTableRef?.refresh?.(true)"><template #suffix><el-button link title="查询服务" @click="proxyServiceTableRef?.refresh?.(true)"><Icon icon="search" /></el-button></template></el-input><el-button @click="proxyServiceTableRef?.refresh?.(true)">刷新列表</el-button></div>
+          <DataTable ref="proxyServiceTableRef" :data="fetchDepartmentServices" :columns="[]" :show-search="false" :show-reset="false" :page-sizes="[10,20,50,100]" row-key="tid" show-index class="proxy-service-table">
+            <el-table-column prop="serviceName" label="服务名称" min-width="180" sortable="custom" show-overflow-tooltip />
+            <el-table-column prop="method" label="请求方式" width="100" />
+            <el-table-column prop="publishAddressFull" label="服务地址" min-width="230" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="105"><template #default="{row}"><el-tag :type="row.status==='published'?'success':'info'" size="small">{{ row.status==='published'?'已发布':row.status==='offline'?'已停用':'草稿' }}</el-tag></template></el-table-column>
+            <el-table-column prop="updatedTime" label="更新时间" width="170" sortable="custom" />
+          </DataTable>
+        </section>
+
         <section v-if="accessMode === 'receive'" class="receive-spec-bordered">
           <div class="connection-guide receive-template-guide">
             <div class="receive-push-address">
@@ -212,7 +224,7 @@
                 <span class="guide-kicker">数据接收模板</span>
                 <strong>下载固定模板，填写后上传审核</strong>
                 <p>
-                  数据接收所需的数据表和字段规范已预先定义，无需在页面中重复填写。下载模板后按要求补充内容并上传；审核通过后，对方即可按照该规范将数据推送至本平台。
+                  数据接收所需的数据表和字段规范已预先定义，无需在页面中重复填写。下载模板后填写表、字段及关联附件的大小与格式要求，再上传保存。关联附件字段用于保存上传返回的 fileId。
                 </p>
                 <div class="offline-flow-steps">
                   <div class="offline-flow-step">
@@ -284,7 +296,7 @@
           </div>
         </section>
 
-        <section v-else-if="sourceType || accessMode === 'proxy'" class="link-config-bordered">
+        <section v-else-if="sourceType && accessMode !== 'proxy'" class="link-config-bordered">
           <div
             v-if="accessMode === 'capture'"
             class="capture-source-type-section"
@@ -2565,7 +2577,7 @@
           </div>
         </section>
 
-        <section v-else class="source-type-bordered">
+        <section v-else-if="accessMode !== 'proxy'" class="source-type-bordered">
           <div class="source-card-grid">
             <button
               v-for="item in sourceTypeCardOptions"
@@ -2680,7 +2692,10 @@ import {
   onMounted,
   reactive,
   ref,
+  watch,
 } from "vue";
+import { useRouter } from "vue-router";
+import { useRegisterModal } from "@/composables";
 import { useRegisterStore } from "@/store";
 import { get, set } from "lodash-es";
 import * as ExcelJS from "exceljs";
@@ -2704,6 +2719,26 @@ const currentDid = ref("");
 const loadedDatasourceDid = ref("");
 const store = useRegisterStore();
 const accessMode = ref("explore");
+const serviceRouter = useRouter();
+const registerModalContext = useRegisterModal();
+const proxyServiceTableRef = ref();
+const proxyServiceKeyword = ref('');
+const proxyNavigating = ref(false);
+const fetchDepartmentServices = async ({ pageNo=1,pageSize=10,sortField,sortDir }={}) => {
+  const response = await $common.post('/dws/flowserve/gateway/api/list', {departmentOnly:true,pageNum:pageNo,pageSize,sortField,sortDir,keyword:proxyServiceKeyword.value});
+  const payload = response?.data || response || {};
+  return {list:payload.list || [],total:Number(payload.total || 0)};
+};
+const goToServiceRegistration = async () => {
+  if (proxyNavigating.value) return { navigationHandled: true };
+  proxyNavigating.value=true;
+  try {
+    await serviceRouter.push({path:'/deal/data-server/list',query:{register:'1'}});
+    registerModalContext.open.value=false;
+    return { navigationHandled: true };
+  }
+  finally { proxyNavigating.value=false; }
+};
 const sourceType = ref("");
 const connectionEnabled = ref("");
 const receiveAccessNode = ref("");
@@ -3158,6 +3193,26 @@ const integrationTemplateTableHeaders = [
   "数据表注释 *",
   "业务类型 *",
 ];
+const pushAttachmentTemplateHeaders = ["是否关联附件", "附件大小上限(MB)", "附件格式"];
+const pushAttachmentExtensions = ["jpg", "jpeg", "png", "pdf", "docx"];
+function templateAttachment(row) {
+  const flag = getCellText(row, ["是否关联附件"]);
+  const size = getCellText(row, ["附件大小上限(MB)", "附件大小上限（MB）"]);
+  const formats = getCellText(row, ["附件格式"]);
+  if (flag && !booleanTemplateOptions.includes(flag)) throw new Error("“是否关联附件”只能填写是或否");
+  if (flag !== "是") {
+    if (size || formats) throw new Error("填写附件大小或格式时，必须将“是否关联附件”设置为是");
+    return null;
+  }
+  if (!/^\d+$/.test(size) || Number(size) < 1 || Number(size) > 1048576) throw new Error("附件大小上限(MB)应为1至1048576的整数");
+  const extensions = [...new Set(formats.toLowerCase().split(/[\s,，、;；]+/).filter(Boolean).map(value => value.replace(/^\./,"")))];
+  if (!extensions.length || extensions.some(value => !pushAttachmentExtensions.includes(value))) throw new Error("附件格式仅支持jpg、jpeg、png、pdf、docx，多种格式用逗号分隔");
+  const type = getCellText(row, ["字段类型"]).toLowerCase();
+  if (!/^(字符串|varchar|nvarchar|char|nchar|text|longtext|string)(\(|$)/.test(type)) throw new Error("关联附件字段须使用字符串类型保存fileId");
+  const length = getCellText(row,["字段长度"]);
+  if (length && Number(length) < 36) throw new Error("关联附件字段长度至少为36，以保存完整fileId");
+  return {enabled:true,maxFileBytes:Number(size)*1048576,allowedExtensions:extensions};
+}
 const integrationTemplateFieldHeaders = [
   "序号",
   "数据表名 *",
@@ -5924,6 +5979,7 @@ const detailApi = (tid, silent = false) => {
   });
 };
 const save = async () => {
+  if (accessMode.value === "proxy") throw new Error("请点击下一步进入服务登记页，服务无需保存为数据库数据源");
   try {
     store.state.loadStatus["main"] = true;
     await validate();
@@ -6071,6 +6127,7 @@ const save = async () => {
   }
 };
 const next = () => {
+  if (accessMode.value === "proxy") return goToServiceRegistration();
   if (!currentDb.value?.tid || currentDb.value?.detailMissing) {
     throw "请保存";
   }
@@ -6431,7 +6488,7 @@ async function downloadIntegrationMetadataTemplate() {
   const fieldSheet = addTemplateSheet(
     workbook,
     "数据字段",
-    integrationTemplateFieldHeaders,
+    accessMode.value === "receive" ? [...integrationTemplateFieldHeaders, ...pushAttachmentTemplateHeaders] : integrationTemplateFieldHeaders,
     fieldRows,
   );
   const optionRanges = addIntegrationTemplateOptionSheet(workbook);
@@ -6442,6 +6499,15 @@ async function downloadIntegrationMetadataTemplate() {
   applyListValidation(fieldSheet, "统一格式", optionRanges.standardFormats);
   applyListValidation(fieldSheet, "是否业务时间", optionRanges.booleans);
   applyListValidation(fieldSheet, "是否为空", optionRanges.booleans);
+  if (accessMode.value === "receive") {
+    applyListValidation(fieldSheet, "是否关联附件", optionRanges.booleans);
+    const guide = workbook.getWorksheet("填写说明");
+    guide.addRow(["关联附件", "在数据字段中将“是否关联附件”设为是，填写附件大小上限(MB)和附件格式。1MB=1048576字节；多种格式用逗号分隔，例如jpg,png。字段为字符串类型，存放上传完成返回的fileId，字段长度至少36。旧模板未填写附件列时按无附件处理。"]);
+    guide.addRow(["附件示例", "police_case_info.evidence_file_id：字符串、长度64、是否关联附件=是、附件大小上限(MB)=20、附件格式=jpg,png,pdf。模板仅登记限制，不填写实际附件或Base64正文；节点文件集合须配置相应大小、格式和调用方权限。"]);
+    setWorksheetColumnWidth(fieldSheet,"是否关联附件",16);
+    setWorksheetColumnWidth(fieldSheet,"附件大小上限(MB)",22);
+    setWorksheetColumnWidth(fieldSheet,"附件格式",28);
+  }
   markRequiredColumns(tableSheet, requiredIntegrationTemplateTableHeaders);
   markRequiredColumns(fieldSheet, requiredIntegrationTemplateFieldHeaders);
   setWorksheetColumnWidth(tableSheet, "序号", 8);
@@ -7541,6 +7607,9 @@ function validateImportedIntegrationTemplateRows(tableObjects, fieldObjects) {
   const fieldKeys = new Set();
   const tableFieldCount = new Map();
   fieldObjects.forEach((row) => {
+    if (accessMode.value === "receive") {
+      try { templateAttachment(row); } catch (error) { errors.push(`数据字段第 ${row.__rowNumber} 行：${error.message}`); }
+    }
     const tableName = requireTemplateCell(row, "数据表名", "数据字段", errors);
     const fieldName = requireTemplateCell(row, "字段名", "数据字段", errors);
     const fieldDescription = requireTemplateCell(
@@ -7968,6 +8037,7 @@ function normalizeImportedMetadata(tableObjects, fieldObjects, fileName) {
       isTimestamp: parseBooleanText(
         getCellText(row, ["是否时间戳", "是否时间戳字段"]),
       ),
+      attachment: accessMode.value === "receive" ? templateAttachment(row) : null,
       metadataSource: "template",
     });
   });
@@ -8332,6 +8402,8 @@ function selectCaptureSourceType(value) {
 function selectAccessMode(value) {
   if (!accessModeOptions.some((item) => item.value === value)) return;
   accessMode.value = value;
+  // 代理访问登记的是服务，不设置数据库类型，也不激活离线表格模板。
+  if (value === "proxy") return;
   // 每种接入方式仅显示自己的模板上传结果，切换方式时不复用其它方式的成功提示。
   activateMetadataImportForMode();
   if (value === "receive") nextTick(() => syncReceiveAccessNode());
@@ -8350,8 +8422,7 @@ function selectAccessMode(value) {
     if (!apiPullItems.value.length) addApiPullItem();
     return;
   }
-  if (value === "upload" || value === "proxy") {
-    // 代理访问复用离线元数据模板，不展示连接、调度或接入任务配置。
+  if (value === "upload") {
     formRef.value?.setValue({ dbType: "api" });
     changeSourceType("api", false);
     connectionEnabled.value = "0";
@@ -8950,6 +9021,23 @@ defineExpose({
 </script>
 
 <style scoped lang="scss">
+.proxy-service-registration {
+  min-width: 0;
+}
+.proxy-service-toolbar {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.proxy-service-toolbar .el-input {
+  width: 320px;
+  max-width: 100%;
+}
+.proxy-service-table {
+  min-height: 280px;
+  max-width: 100%;
+}
 /* ========== 连接配置面板（bordered 风格，与 JsonForm 统一） ========== */
 .link-config-bordered {
   margin: 14px 0 18px;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resumable file push using the standard library; credentials come only from the environment."""
+"""Single-request (default) or resumable file push using the standard library; credentials come only from the environment."""
 import argparse
 import hashlib
 import json
@@ -38,18 +38,25 @@ def digest(stream, length=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="海通照片/文档分片推送；同一幂等键重跑可续传")
+    parser = argparse.ArgumentParser(description="海通附件推送：默认整文件上传，--chunked 使用分片续传")
     parser.add_argument("file", type=Path)
     parser.add_argument("--base-url", default="http://127.0.0.1:18083")
     parser.add_argument("--datasource", required=True)
-    parser.add_argument("--collection", required=True)
+    parser.add_argument("--table", help="附件所属表的英文名，整文件上传必填")
+    parser.add_argument("--field", help="关联附件字段的英文名，整文件上传必填")
+    parser.add_argument("--collection", help="仅分片协议使用的服务端集合编号")
     parser.add_argument("--business-key", required=True)
     parser.add_argument("--idempotency-key", required=True)
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--metadata", default="{}", help="集合契约规定的 JSON 元数据")
     group.add_argument("--metadata-file", type=Path, help="从 UTF-8 JSON 文件读取元数据，避免命令行引号差异")
+    parser.add_argument("--chunked", action="store_true", help="大文件使用分片上传与断点续传")
     parser.add_argument("--wait-seconds", type=int, default=300)
     args = parser.parse_args()
+    if not args.chunked and (not args.table or not args.field or args.collection):
+        parser.error("整文件上传使用 --table 和 --field，不使用 --collection")
+    if args.chunked and not args.collection:
+        parser.error("分片上传需要 --collection 指定已登记的文件集合")
     key = os.environ.get("HAITONG_API_KEY")
     if not key:
         parser.error("请在环境变量 HAITONG_API_KEY 中设置密钥")
@@ -84,39 +91,47 @@ def main():
 
     with args.file.open("rb") as source:
         size = os.fstat(source.fileno()).st_size
-        sha256 = digest(source)
-        upload = request("POST", "/api/v1/file-uploads", {
-            "datasourceId": args.datasource, "collectionId": args.collection,
-            "fileName": args.file.name, "size": size, "sha256": sha256,
-        }, args.idempotency_key)
-        prefix = "/api/v1/file-uploads/" + upload["uploadId"]
-        # Server pages are authoritative. Reading each page is not a per-file detail request.
-        complete, after = set(), 0
-        if upload["state"] in ("CREATED", "UPLOADING"):
-            while True:
-                parts = request("GET", f"{prefix}/parts?after={after}&limit=100")["parts"]
-                if not parts:
-                    break
-                complete.update(p["partNumber"] for p in parts)
-                after = max(complete)
-                if len(parts) < 100:
-                    break
-            part_size = upload["partSize"]
-            for number in range(1, upload["partCount"] + 1):
-                if number in complete:
-                    continue
-                offset = (number - 1) * part_size
-                length = min(part_size, size - offset)
-                source.seek(offset)
-                checksum = digest(source, length)
-                source.seek(offset)
-                request("PUT", f"{prefix}/parts/{number}", Slice(source, length), headers={
-                    "Content-Type": "application/octet-stream", "Content-Length": str(length), "X-Part-SHA256": checksum,
-                })
-                print(f"已确认分片 {number}/{upload['partCount']}", file=sys.stderr)
-            request("POST", prefix + "/complete")
-        elif upload["state"] not in ("FINALIZING", "READY"):
-            raise ValueError("该会话已取消、拒绝或过期，请检查文件后使用新的幂等键")
+        if not args.chunked:
+            source.seek(0)
+            query = urllib.parse.urlencode({"datasourceId": args.datasource, "tableName": args.table, "fieldName": args.field,
+                "fileName": args.file.name})
+            upload = request("POST", "/api/v1/file-uploads/single?" + query, Slice(source, size), args.idempotency_key,
+                {"Content-Type": "application/octet-stream", "Content-Length": str(size)})
+            prefix = "/api/v1/file-uploads/" + upload["uploadId"]
+        else:
+            sha256 = digest(source)
+            upload = request("POST", "/api/v1/file-uploads", {
+                "datasourceId": args.datasource, "collectionId": args.collection,
+                "fileName": args.file.name, "size": size, "sha256": sha256,
+            }, args.idempotency_key)
+            prefix = "/api/v1/file-uploads/" + upload["uploadId"]
+            # Server pages are authoritative. Reading each page is not a per-file detail request.
+            complete, after = set(), 0
+            if upload["state"] in ("CREATED", "UPLOADING"):
+                while True:
+                    parts = request("GET", f"{prefix}/parts?after={after}&limit=100")["parts"]
+                    if not parts:
+                        break
+                    complete.update(p["partNumber"] for p in parts)
+                    after = max(complete)
+                    if len(parts) < 100:
+                        break
+                part_size = upload["partSize"]
+                for number in range(1, upload["partCount"] + 1):
+                    if number in complete:
+                        continue
+                    offset = (number - 1) * part_size
+                    length = min(part_size, size - offset)
+                    source.seek(offset)
+                    checksum = digest(source, length)
+                    source.seek(offset)
+                    request("PUT", f"{prefix}/parts/{number}", Slice(source, length), headers={
+                        "Content-Type": "application/octet-stream", "Content-Length": str(length), "X-Part-SHA256": checksum,
+                    })
+                    print(f"已确认分片 {number}/{upload['partCount']}", file=sys.stderr)
+                request("POST", prefix + "/complete")
+            elif upload["state"] not in ("FINALIZING", "READY"):
+                raise ValueError("该会话已取消、拒绝或过期，请检查文件后使用新的幂等键")
         accepted = request("POST", prefix + "/submit", {"businessKey": args.business_key, "metadata": metadata}, args.idempotency_key)
         deadline = time.monotonic() + max(0, args.wait_seconds)
         delay = 0.5
@@ -145,5 +160,5 @@ if __name__ == "__main__":
         print(f"HTTP {error.code}: {error.read(4096).decode('utf-8', errors='replace')}", file=sys.stderr)
         raise SystemExit(2)
     except (OSError, ValueError, KeyError) as error:
-        print(f"推送未完成：{type(error).__name__}；检查连接和文件后，使用原幂等键重新运行可续传。", file=sys.stderr)
+        print(f"推送未完成：{type(error).__name__}；检查连接和文件后，使用原幂等键重试；--chunked 模式可续传。", file=sys.stderr)
         raise SystemExit(2)

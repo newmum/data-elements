@@ -232,7 +232,9 @@ public class StandaloneRegistryStore {
         if (name.isBlank() || name.length() > 255) throw RelayException.invalid("datasource.datasourceName 必须为 1 到 255 字符");
         List<String> clients = identifiers(array(source.get("clientIds"), "datasource.clientIds 必须是 JSON 数组"), "datasource.clientIds", 128);
         List<Object> rawTables = array(source.get("tables"), "datasource.tables 必须是 JSON 数组");
-        if (rawTables.isEmpty()) throw RelayException.invalid("datasource.tables 至少需要一张表");
+        // Provisioning a datasource key before any table is registered is valid.
+        // An empty table set grants no table access; the full snapshot also
+        // revokes any previous table grants absent from this definition.
         List<TableDefinition> tables = new ArrayList<>();
         Set<String> names = new LinkedHashSet<>();
         for (Object rawTable : rawTables) {

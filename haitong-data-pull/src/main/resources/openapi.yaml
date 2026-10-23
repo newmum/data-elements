@@ -57,7 +57,7 @@ paths:
   /api/v1/data-push:
     post:
       summary: 统一表批次数据推送
-      description: 请求体 deliveryType 选择 FTP、KAFKA、LOG 或 REGISTRY_SYNC。路由 registration-managed=true 时，FTP 和 KAFKA 使用已完成登记并发布的表级推送契约；registration-managed=false 时，使用海通本地登记镜像表（无镜像记录时才兼容 YAML standalone.datasources）。REGISTRY_SYNC 仅允许数据源平台使用服务间同步密钥，按数据源全量同步本地数据源、表、字段和调用方授权。两种业务投递模式都不允许调用方指定或覆盖实际目的端。
+      description: 请求体 deliveryType 选择 FTP、KAFKA、LOG 或 REGISTRY_SYNC。路由 registration-managed=true 时，FTP 和 KAFKA 使用已完成登记并发布的表级推送规范；registration-managed=false 时，使用海通本地登记镜像表（无镜像记录时才兼容 YAML standalone.datasources）。REGISTRY_SYNC 仅允许数据源平台使用服务间同步密钥，按数据源全量同步本地数据源、表、字段和调用方授权。两种业务投递模式都不允许调用方指定或覆盖实际目的端。
       operationId: post_api_v1_data_push
       parameters:
       - name: Idempotency-Key
@@ -85,15 +85,8 @@ paths:
                 tableName:
                   type: string
                   description: 已登记的数据表英文名。
-                schemaVersion:
-                  type: integer
-                  format: int64
-                  description: 可选；填写时必须等于当前已发布推送契约版本。
                 batchId:
                   type: string
-                occurredAt:
-                  type: string
-                  format: date-time
                 records:
                   type: array
                   minItems: 1
@@ -103,7 +96,7 @@ paths:
                     additionalProperties: true
                 datasource:
                   type: object
-                  description: REGISTRY_SYNC 单源完整快照，与 datasources 二选一。完整契约见根 docs/haitong-data-pull.md。
+                  description: REGISTRY_SYNC 单源完整快照，与 datasources 二选一。完整规范见根 docs/haitong-data-pull.md。
                 datasources:
                   type: array
                   minItems: 1
@@ -123,7 +116,7 @@ paths:
     post: &id005
       summary: 表批次写入 FTP/FTPS
       deprecated: true
-      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=FTP。海通先向数据中台校验已完成登记的表级推送契约、字段和版本，再将业务 records 写至“登记 FTP 输出根目录/datasourceId/tableName/messageId.json”，并生成 .done 清单。
+      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=FTP。海通先向数据中台校验已完成登记的表级推送规范、字段和版本，再将业务 records 写至“登记 FTP 输出根目录/datasourceId/tableName/messageId.json”，并生成 .done 清单。
       operationId: post_api_v1_simple_ftp
       parameters:
       - name: Idempotency-Key
@@ -146,15 +139,8 @@ paths:
                 tableName:
                   type: string
                   description: 已登记的数据表英文名。
-                schemaVersion:
-                  type: integer
-                  format: int64
-                  description: 可选；填写时必须等于当前已发布推送契约版本。
                 batchId:
                   type: string
-                occurredAt:
-                  type: string
-                  format: date-time
                 records:
                   type: array
                   minItems: 1
@@ -173,7 +159,7 @@ paths:
       <<: *id005
       summary: 表批次写入 Kafka
       deprecated: true
-      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=KAFKA。Kafka Topic 由数据中台登记的推送契约确定，调用方不可传入或覆盖。
+      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=KAFKA。Kafka Topic 由数据中台登记的推送规范确定，调用方不可传入或覆盖。
       operationId: post_api_v1_simple_kafka
   /api/v1/simple/log:
     post:
@@ -656,6 +642,35 @@ paths:
           description: 时间或分页参数不合法
         '401':
           description: 未认证
+  /api/v1/file-uploads/single:
+    post:
+      summary: 默认整文件上传，一次请求发送原始文件
+      description: 按数据源、表名及附件字段定位服务端规则；不接收collectionId、size或sha256。实际大小和摘要由服务端计算，默认上限20MiB，并受字段规则限制；64KiB缓冲写盘，返回202后查询statusUrl等待READY。支持无Content-Length的有界流；重试发送同一完整文件，大文件改用分片协议。
+      tags: [非结构化文件]
+      parameters:
+      - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 200}}
+      - {name: datasourceId, in: query, required: true, schema: {type: string}}
+      - {name: tableName, in: query, required: true, schema: {type: string}, description: 已登记的附件所属表英文名}
+      - {name: fieldName, in: query, required: true, schema: {type: string}, description: 该表关联附件的字段英文名}
+      - {name: fileName, in: query, required: true, schema: {type: string}, description: 原始文件名，需URL编码}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '202':
+          description: 文件已接收并开始异步校验；不代表就绪或下游完成，返回uploadMode为SINGLE
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FileUploadStatus'}
+        '413':
+          description: 超过整文件或集合上限，请使用分片协议或符合规范的文件
+        default:
+          description: 认证、范围、内容摘要、幂等、容量或存储失败
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
   /api/v1/file-uploads:
     post:
       summary: 初始化上传会话，服务端绑定租户、集合和目标

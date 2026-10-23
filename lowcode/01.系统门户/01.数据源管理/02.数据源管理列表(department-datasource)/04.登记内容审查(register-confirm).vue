@@ -40,7 +40,7 @@
             </template>
             {{ isDataUploadSource
               ? (connectionInfoExpanded ? "收起上报面板" : "开始上报数据")
-              : (isDataPushSource ? (connectionInfoExpanded ? "收起推送契约" : "查看推送契约") : (isDataPullSource ? (connectionInfoExpanded ? "收起接口信息" : "查看接口信息") : (connectionInfoExpanded ? "收起连接信息" : "查看连接信息"))) }}
+              : (isDataPushSource ? (connectionInfoExpanded ? "收起推送规范" : "查看推送规范") : (isDataPullSource ? (connectionInfoExpanded ? "收起接口信息" : "查看接口信息") : (connectionInfoExpanded ? "收起连接信息" : "查看连接信息"))) }}
           </el-button>
           <el-button
             v-if="hasConnectionInfo && !isDataPushSource && !isDataPullSource"
@@ -70,16 +70,76 @@
           </el-button>
         </div>
         <div v-else-if="isDataPushSource" class="push-contract-panel">
-          <div class="push-contract-head"><div><span class="push-contract-kicker">对外数据推送契约</span><strong>按已登记的表和字段推送批次数据</strong><p>接口只受理当前数据源的已发布表结构。平台会校验身份、幂等键、字段和契约版本；文件投递目标由当前环境资源中心配置自动解析。</p></div><el-tag type="success" effect="light">已登记数据源</el-tag></div>
+          <div class="push-contract-head"><div><strong>数据推送接口规范</strong></div><el-tag :type="pushContractError ? 'danger' : pushContractIsPreview ? 'warning' : 'success'" effect="light">{{ pushContractError ? '规范读取失败' : pushContractIsPreview ? '数据推送规范' : '已发布表规范' }}</el-tag></div>
           <LoadingState v-if="pushContractLoading" type="list" compact class="review-section-loading" />
-          <div v-else-if="pushContractError" class="push-contract-error"><Icon icon="el-icon-WarningFilled" /><div><strong>暂时无法读取推送契约</strong><p>{{ pushContractError }}</p></div><el-button plain @click="loadPushContract(true)">重试</el-button></div>
-          <template v-else-if="pushContract">
-            <div class="push-contract-endpoint-grid"><div v-for="item in pushContractEndpointItems" :key="item.key" class="push-contract-endpoint"><span>{{ item.label }}</span><strong><em>{{ item.method }}</em>{{ item.path }}</strong><small>{{ item.description }}</small></div></div>
-            <section class="push-contract-section"><div class="push-contract-section-head"><strong>请求头要求</strong><span>密钥用于识别业务数据生产方；仅首次签发或主动轮换时展示</span></div><div class="push-contract-header-list"><div v-for="header in pushContract.requestHeaders || []" :key="header.name"><code>{{ header.name }}</code><strong>{{ header.name === 'X-Api-Key' ? (pushCredential?.revealed ? '已生成，可复制' : '业务调用方身份密钥') : header.value }}</strong><small>{{ header.name === 'X-Api-Key' ? '用于识别推送业务数据的调用方，并校验其对当前数据源及已登记数据表的推送权限；平台不保存密钥明文' : header.description }}</small></div></div><div class="push-credential-card" :class="{ 'is-ready': pushCredential?.revealed, 'is-error': pushCredentialError }"><div class="push-credential-info"><span class="push-credential-label">当前数据源 X-Api-Key</span><strong v-if="pushCredential?.revealed">已为当前业务数据生产方生成专属密钥</strong><strong v-else-if="pushCredentialError">业务调用方密钥签发未完成</strong><strong v-else>密钥已签发</strong><small v-if="pushCredential?.revealed">请立即复制并妥善保存。密钥明文仅在签发时返回，平台不保存；离开当前页面后将不再显示。</small><small v-else-if="pushCredentialError">{{ pushCredentialError }} 请检查推送服务配置后在此重新生成。</small><small v-else>为保护业务调用方凭据安全，平台不回显已签发密钥；如遗失，请主动重新生成。</small></div><template v-if="pushCredential?.revealed"><el-input :model-value="pushCredential.apiKey" readonly class="push-credential-input"><template #append><el-button @click="copyPushCredential">复制</el-button></template></el-input></template><el-button v-else type="primary" plain :loading="pushCredentialLoading" @click="rotatePushCredential">重新生成密钥</el-button></div></section>
-            <section class="push-contract-section"><div class="push-contract-section-head"><strong>请求体参数要求</strong><span>一次请求仅推送一张当前登记范围内的数据表的一批记录</span></div><DataTable :data="pushContract.requiredParameters || []" :preview-sort="{name:'text'}" :show-page="false" border size="small" max-height="240"><el-table-column prop="name" label="参数" sortable="custom" min-width="160"><template #default="{ row }"><code>{{ row.name }}</code></template></el-table-column><el-table-column label="是否必填" width="108" align="center"><template #default="{ row }"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{ row.required ? '必填' : '可选' }}</el-tag></template></el-table-column><el-table-column prop="description" label="说明" min-width="360" /></DataTable></section>
-            <section class="push-contract-section"><div class="push-contract-section-head"><strong>{{ pushContract.tableSource === 'registration' ? '已登记数据表' : '已发布数据表' }}</strong><span>{{ pushContract.tables?.length || 0 }} 张表</span></div><el-empty v-if="!(pushContract.tables || []).length" description="尚未读取到本次登记的数据表，请返回第二步确认标注结果" :image-size="72" /><el-collapse v-else v-model="pushContractOpenTables" class="push-contract-tables"><el-collapse-item v-for="table in pushContract.tables || []" :key="table.tableId" :name="table.tableId"><template #title><div class="push-contract-table-title"><strong>{{ table.tableName }}</strong><span>V{{ table.schemaVersion }} · {{ table.fieldCount }} 个字段</span></div></template><div class="push-contract-table-toolbar"><div><strong>推送字段约束</strong><span>下表说明该 JSON 的 <code>records[0]</code> 可传字段；所有字段已在示例中以空字符串预置，标有“必填”的字段不可为空。</span></div><el-button link type="primary" @click.stop="copyPushSample(table)"><Icon icon="el-icon-DocumentCopy" />复制示例</el-button></div><div class="push-contract-code"><pre>{{ pushContractSample(table) }}</pre></div><LoadingState v-if="pushContractFieldsLoading(table)" type="list" compact class="push-contract-field-loading" /><DataTable v-else-if="(table.fields || []).length" :data="table.fields || []" :preview-sort="{fieldName:'text'}" :show-page="false" border size="small" max-height="260"><el-table-column prop="ordinal" label="序号" width="72" align="center" /><el-table-column prop="fieldName" label="字段名" sortable="custom" min-width="180"><template #default="{ row }"><code>{{ row.fieldName }}</code></template></el-table-column><el-table-column prop="dataType" label="数据类型" min-width="140" /><el-table-column label="是否必填" width="108" align="center"><template #default="{ row }"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{ row.required ? '必填' : '可选' }}</el-tag></template></el-table-column></DataTable><el-empty v-else description="暂未读取到已登记字段，请返回第三步确认字段登记" :image-size="56" /></el-collapse-item></el-collapse></section>
-          </template>
-          <div v-else class="push-contract-empty"><Icon icon="el-icon-Document" /><span>尚未读取到已发布的推送契约。</span></div>
+          <div v-else-if="pushContractError" class="push-contract-error"><Icon icon="el-icon-WarningFilled" /><div><strong>正式规范读取失败</strong><p>{{ pushContractError }}</p></div><el-button plain @click="loadPushContract(true)">重试</el-button></div>
+          <div class="push-contract-endpoint-grid" role="radiogroup" aria-label="选择推送接口">
+            <button v-for="item in pushContractEndpointItems" :key="item.key" type="button" role="radio" :aria-checked="pushInterfaceType === item.key" aria-controls="push-interface-specification" class="push-contract-endpoint" :class="{'is-selected': pushInterfaceType === item.key}" @click="selectPushInterface(item.key)">
+              <span class="push-endpoint-label">{{ item.label }}<span class="push-endpoint-selection">{{ pushInterfaceType === item.key ? '已选择' : '点击选择' }}</span></span>
+              <strong><em>{{ item.method }}</em>{{ item.path }}</strong><small>{{ item.description }}</small>
+            </button>
+          </div>
+          <div id="push-interface-specification" class="push-interface-specification">
+            <section class="push-contract-section">
+              <div class="push-contract-section-head"><strong>身份认证与请求头</strong><span>使用当前数据源的业务密钥</span></div>
+              <div class="push-contract-auth-grid">
+                <div class="push-auth-header push-content-type-card"><code>Content-Type</code><strong>{{ pushRequestContentType }}</strong><small>{{ pushIsAttachmentMode ? '文件原始字节' : 'JSON 格式的表记录' }}</small></div>
+                <div class="push-auth-header push-credential-card">
+                  <div class="push-auth-card-heading"><code>X-Api-Key</code><div class="push-credential-actions"><el-button v-if="!pushCredential?.revealed" class="push-key-button" type="primary" size="small" :loading="pushCredentialLoading" :disabled="sourceDetailLoading" @click="issuePushCredential(sourceTid)">获取密钥</el-button><el-button v-if="pushCredential" link type="primary" size="small" :loading="pushCredentialLoading" @click="rotatePushCredential">轮换</el-button></div></div>
+                  <strong>{{ pushCredential?.revealed ? '密钥已生成' : pushCredentialError ? '获取失败' : pushCredential ? '密钥已配置' : '当前数据源访问密钥' }}</strong>
+                  <small :class="{'push-credential-error':pushCredentialError}">{{ pushCredentialError || (pushCredential?.revealed ? '明文仅展示一次，请保存。' : pushCredential ? '已有密钥不回显明文。' : '首次获取后请妥善保存。') }}</small>
+                  <el-input v-if="pushCredential?.revealed" :model-value="pushCredential.apiKey" readonly size="small" class="push-credential-input" aria-label="当前数据源 X-Api-Key"><template #append><el-button @click="copyPushCredential">复制</el-button></template></el-input>
+                </div>
+                <div v-for="header in pushContractHeaders" :key="header.name" class="push-auth-header"><code>{{ header.name }}</code><strong>{{ header.value }}</strong><small>{{ header.description }}</small></div>
+              </div>
+            </section>
+            <template v-if="pushContract && !pushContractLoading && !pushContractError">
+              <section class="push-contract-section">
+                <div class="push-contract-section-head"><strong>{{ pushIsAttachmentMode ? '附件请求参数' : '请求体参数' }}</strong><span>{{ pushIsAttachmentMode ? '查询参数4项，正文为单个附件' : '一批记录对应一张表；单批最多 10,000 条' }}</span></div>
+                <DataTable :data="pushSelectedParameters" :preview-sort="{name:'text'}" :show-page="false" height="auto" flex-type="flex-[0_1_auto]" :show-overflow-tooltip="false" border size="small">
+                  <el-table-column prop="name" label="参数" sortable="custom" min-width="150"><template #default="{ row }"><code>{{ row.name }}</code></template></el-table-column>
+                  <el-table-column prop="location" label="位置" width="100" />
+                  <el-table-column label="是否必填" width="90" align="center"><template #default="{ row }"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{ row.required ? '必填' : '可选' }}</el-tag></template></el-table-column>
+                  <el-table-column prop="description" label="说明" min-width="280" />
+                </DataTable>
+                <div v-if="pushIsAttachmentMode" class="push-attachment-guidance">
+                  <p>默认整文件推送，单个最多20 MB，并同时满足下方字段的大小和格式限制。返回202后查询 statusUrl，等待 READY，再将 fileId 填入对应表字段。</p>
+                  <p>按表名和字段名关联附件；大小与摘要由服务端自动计算。文件名需URL编码，正文不使用JSON、表单或Base64。同一文件重试保持幂等键和内容不变；大文件或断点续传使用 POST /api/v1/file-uploads 分片流程。</p>
+                </div>
+              </section>
+              <section class="push-contract-section">
+                <div class="push-contract-section-head"><strong>{{ pushIsAttachmentMode ? '待推送附件' : pushContractIsPreview ? '登记表结构预览' : '已发布数据表' }}</strong><span>{{ pushVisibleTables.length }} 张表<span v-if="pushIsAttachmentMode"> · {{ pushAttachmentFieldCount }} 个附件字段</span></span></div>
+                <LoadingState v-if="pushAttachmentFieldsLoading" type="list" compact />
+                <el-empty v-else-if="!pushVisibleTables.length" :description="pushIsAttachmentMode ? '尚未登记关联附件字段，请在第一步模板中补充' : '尚无可展示的数据表，请先完成表和字段登记'" :image-size="60" />
+                <el-collapse v-else v-model="pushContractOpenTables" class="push-contract-tables">
+                  <el-collapse-item v-for="table in pushVisibleTables" :key="table.tableId" :name="table.tableId">
+                    <template #title><div class="push-contract-table-title"><strong>{{ table.tableName }}</strong><span>{{ pushContractIsPreview ? '登记字段' : `V${table.schemaVersion}` }} · {{ pushIsAttachmentMode ? `${table.fields.length} 个附件字段` : `${table.fieldCount} 个字段` }}</span></div></template>
+                    <template v-if="pushIsAttachmentMode">
+                      <DataTable :data="table.fields" :preview-sort="{fieldName:'text'}" :show-page="false" border size="small" max-height="260">
+                        <el-table-column prop="fieldName" label="附件字段" sortable="custom" min-width="150" />
+                        <el-table-column label="大小上限" width="110"><template #default="{ row }">{{ pushAttachmentSize(row.attachment) }}</template></el-table-column>
+                        <el-table-column label="文件格式" min-width="130"><template #default="{ row }">{{ (row.attachment.allowedExtensions || []).join('、') }}</template></el-table-column>
+                        <el-table-column label="所属表" min-width="200"><template #default><code class="push-attachment-collection">{{ table.tableName }}</code></template></el-table-column>
+                        <el-table-column label="示例" width="100"><template #default="{ row }"><el-button link type="primary" size="small" :disabled="pushAttachmentFieldFor(table)?.fieldName === row.fieldName" @click="selectPushAttachmentField(table,row)">{{ pushAttachmentFieldFor(table)?.fieldName === row.fieldName ? '当前示例' : '查看示例' }}</el-button></template></el-table-column>
+                      </DataTable>
+                      <div class="push-contract-table-toolbar"><div><strong>附件推送示例 · {{ pushAttachmentFieldFor(table)?.fieldName }}</strong><span>推送就绪后，将返回的 fileId 填入 {{ table.tableName }}.{{ pushAttachmentFieldFor(table)?.fieldName }}。</span></div><el-button link type="primary" @click.stop="copyPushAttachmentSample(table)">复制示例</el-button></div>
+                      <div class="push-contract-code"><pre>{{ pushAttachmentSample(table,pushAttachmentFieldFor(table)) }}</pre></div>
+                    </template>
+                    <template v-else>
+                      <div class="push-contract-table-toolbar"><div><strong>请求示例与字段约束</strong><span>示例使用 deliveryType=FTP；如已配置并获授权的 Kafka 通道，改为 KAFKA。只有下方登记字段可以放入 records。</span></div><div class="push-contract-sample-actions"><el-button link type="primary" @click.stop="copyPushSample(table)">复制示例</el-button></div></div>
+                      <div class="push-contract-code"><pre>{{ pushContractSample(table) }}</pre></div>
+                      <LoadingState v-if="pushContractFieldsLoading(table)" type="list" compact />
+                      <DataTable v-else-if="(table.fields || []).length" :data="table.fields || []" :preview-sort="{fieldName:'text'}" :show-page="false" border size="small" max-height="260">
+                        <el-table-column prop="ordinal" label="序号" width="70" /><el-table-column prop="fieldName" label="字段名" sortable="custom" min-width="160" /><el-table-column prop="dataType" label="数据类型" min-width="120" /><el-table-column label="是否必填" width="100"><template #default="{ row }">{{ row.required ? '必填' : '可选' }}</template></el-table-column>
+                        <el-table-column label="关联附件" min-width="230"><template #default="{ row }"><div v-if="Number(row.attachment?.maxFileBytes) > 0" class="push-attachment-policy"><strong>单个附件 ≤ {{ pushAttachmentSize(row.attachment) }}</strong><span>格式：{{ (row.attachment.allowedExtensions || []).join('、').toUpperCase() }}</span></div><span v-else>—</span></template></el-table-column>
+                      </DataTable>
+                      <el-empty v-else description="尚未读取到字段，请核对字段登记" :image-size="48" />
+                    </template>
+                  </el-collapse-item>
+                </el-collapse>
+              </section>
+            </template>
+          </div>
         </div>
         <div v-else-if="isDataPullSource" class="api-pull-information-panel">
           <LoadingState v-if="sourceDetailLoading" type="list" compact class="review-section-loading" />
@@ -1728,34 +1788,97 @@ function apiPullTableStatus(item) {
   return apiPullTaskTableNames.value.has(tableName) ? "已登记，已创建任务" : "已登记，待创建任务";
 }
 
+// Push contract display is read-only until the user explicitly requests a credential.
+const pushDatasourceRegistered = computed(() => [1, 2].includes(Number(source.value?.assetStatus ?? source.value?.asset_status ?? 0)));
+const pushContractIsPreview = computed(() => pushContract.value?.tableSource !== "published");
+const pushInterfaceType = ref("dataPush");
+const pushIsAttachmentMode = computed(() => pushInterfaceType.value === "fileUpload");
+const pushAttachmentFieldSelections = ref({});
+const pushRequestContentType = computed(() => pushIsAttachmentMode.value ? "application/octet-stream" : "application/json");
+const pushContractHeaders = computed(() => [{name:"Idempotency-Key",value:"每次请求唯一 UUID",description:pushIsAttachmentMode.value ? "同一文件重试保持不变" : "同一批次重试保持不变"}]);
+const pushVisibleTables = computed(() => {
+  const all = pushContract.value?.tables || [];
+  if (!pushIsAttachmentMode.value) return all;
+  return all.map(table => ({...table,fields:(table.fields || []).filter(field => Number(field.attachment?.maxFileBytes) > 0)})).filter(table => table.fields.length);
+});
+const pushAttachmentFieldCount = computed(() => pushVisibleTables.value.reduce((total,table) => total + (table.fields || []).length,0));
+const pushAttachmentFieldsLoading = computed(() => pushIsAttachmentMode.value && (pushContract.value?.tables || []).some(table => pushContractFieldsLoading(table)));
+const pushSelectedParameters = computed(() => pushIsAttachmentMode.value ? [
+  {name:"datasourceId",location:"查询参数",required:true,description:"固定为当前数据源编码"},
+  {name:"tableName",location:"查询参数",required:true,description:"附件所属数据表的英文名，必须为下方已登记的表"},
+  {name:"fieldName",location:"查询参数",required:true,description:"该表中关联附件的字段英文名，必须为下方列出的附件字段"},
+  {name:"fileName",location:"查询参数",required:true,description:"包含扩展名的文件名，需URL编码，格式须符合附件字段规定"},
+  {name:"文件正文",location:"请求体",required:true,description:"单个文件的原始字节流，不封装为JSON、表单或Base64"},
+] : (pushContract.value?.requiredParameters || []).map(item => ({...item,location:"请求体"})));
+function selectPushInterface(type) {
+  if (!["dataPush","fileUpload"].includes(type) || pushInterfaceType.value === type) return;
+  pushInterfaceType.value = type;
+  pushContractOpenTables.value = pushVisibleTables.value.slice(0,1).map(table => table.tableId);
+}
+function pushAttachmentFieldFor(table) {
+  const name = pushAttachmentFieldSelections.value[table?.tableId || table?.tableName];
+  return (table?.fields || []).find(field => field.fieldName === name && Number(field.attachment?.maxFileBytes) > 0)
+    || (table?.fields || []).find(field => Number(field.attachment?.maxFileBytes) > 0) || null;
+}
+function selectPushAttachmentField(table,field) {
+  if (!(table?.fields || []).some(item => item.fieldName === field?.fieldName && Number(item.attachment?.maxFileBytes) > 0)) return;
+  pushAttachmentFieldSelections.value = {...pushAttachmentFieldSelections.value,[table.tableId || table.tableName]:field.fieldName};
+}
+function pushAttachmentSize(attachment) {
+  return Number(attachment?.maxFileBytes) > 0 ? `${Number((attachment.maxFileBytes / 1048576).toFixed(3))} MB` : "—";
+}
+let pushCredentialRequestId = 0;
+let pushContractRequestId = 0;
+let pushContractInFlightKey = "";
+function pushAttachmentDescription(attachment) {
+  if (!attachment?.maxFileBytes) return "—";
+  return `单个≤${Number((attachment.maxFileBytes / 1048576).toFixed(3))} MB · ${(attachment.allowedExtensions || []).join("、")}`;
+}
+function pushAttachmentSample(table,field) {
+  if (!field?.attachment) return "";
+  const extension = field.attachment.allowedExtensions?.[0] || "pdf";
+  return `POST <推送服务地址>/api/v1/file-uploads/single?datasourceId=${encodeURIComponent(pushContract.value?.datasourceId || sourceTid.value || "")}&tableName=${encodeURIComponent(table.tableName)}&fieldName=${encodeURIComponent(field.fieldName)}&fileName=attachment.${extension}\nX-Api-Key: <当前数据源业务密钥>\nIdempotency-Key: <本次附件的唯一UUID>\nContent-Type: application/octet-stream\n\n<文件原始字节>\n\n# 文件就绪后，将返回的fileId填入 ${table.tableName}.${field.fieldName}`;
+}
+async function copyPushAttachmentSample(table) {
+  try { await navigator.clipboard.writeText(pushAttachmentSample(table,pushAttachmentFieldFor(table))); $message.success("附件推送示例已复制"); }
+  catch (error) { $message.warning("当前浏览器不允许自动复制，请手动复制示例内容"); }
+}
+
 const pushContractEndpointItems = computed(() => {
   const endpoints = pushContract.value?.endpoints || {};
   const dataPush = endpoints.dataPush || {};
   return [
-    { key: "dataPush", label: "统一数据推送", method: dataPush.method || "POST", path: dataPush.path || "/api/v1/data-push", description: dataPush.description || "通过 deliveryType=FTP 或 KAFKA 选择已登记的投递通道" },
+    { key: "dataPush", label: "数据推送接口", method: dataPush.method || "POST", path: dataPush.path || "/api/v1/data-push", description: "接收业务系统的表数据，按登记规则校验并投递至目标端。" },
+    { key: "fileUpload", label: "附件推送接口", method: "POST", path: "/api/v1/file-uploads/single", description: "接收照片、文档等业务附件，供表数据关联和后续使用。" },
   ];
 });
 async function togglePushContract() { connectionInfoExpanded.value = !connectionInfoExpanded.value; if (connectionInfoExpanded.value) await loadPushContract(); }
 async function issuePushCredential(datasourceId, rotate = false) {
   const normalizedDatasourceId = String(datasourceId || "").trim();
-  if (!normalizedDatasourceId || (!rotate && pushCredentialDatasourceId.value === normalizedDatasourceId)) return;
+  if (!normalizedDatasourceId || (!rotate && pushCredentialDatasourceId.value === normalizedDatasourceId && pushCredential.value)) return;
+  if (pushCredentialLoading.value || normalizedDatasourceId !== String(sourceTid.value || "").trim()) return;
+  const credentialRequestId = ++pushCredentialRequestId;
   pushCredentialLoading.value = true;
   pushCredentialError.value = "";
   try {
     const result = await $common.postSilently(rotate ? "/dws/push/credential/rotate" : "/dws/push/credential/issue", { datasourceId: normalizedDatasourceId });
     const payload = result?.data || result || {};
+    if (credentialRequestId !== pushCredentialRequestId || normalizedDatasourceId !== String(sourceTid.value || "").trim()) return;
+    if (String(payload.datasourceId || "") !== normalizedDatasourceId) throw new Error("密钥响应与当前数据源不一致，请重试。");
     pushCredential.value = {
       clientId: String(payload.clientId || ""),
       apiKey: String(payload.apiKey || ""),
       revealed: Boolean(payload.revealed && payload.apiKey),
     };
     pushCredentialDatasourceId.value = normalizedDatasourceId;
+    await loadPushContract(true);
   } catch (error) {
+    if (credentialRequestId !== pushCredentialRequestId || normalizedDatasourceId !== String(sourceTid.value || "").trim()) return;
     pushCredential.value = null;
     pushCredentialError.value = String(error?.message || error?.msg || "平台暂时无法签发推送密钥，请稍后重试。");
     pushCredentialDatasourceId.value = normalizedDatasourceId;
   } finally {
-    pushCredentialLoading.value = false;
+    if (credentialRequestId === pushCredentialRequestId) pushCredentialLoading.value = false;
   }
 }
 async function copyPushCredential() {
@@ -1778,20 +1901,21 @@ function localPushContractField(field, index) {
   const fieldName = String(field?.columnName || field?.fieldName || field?.name || field?.code || `field_${index + 1}`).trim();
   const nullable = String(field?.nullable ?? field?.isNullable ?? "").trim().toLowerCase();
   return {
-    ordinal: Number(field?.ordinal || field?.sortNo || field?.columnIndex || index + 1),
+    ordinal: Number(field?.ordinal || field?.ordinalPosition || field?.serialNo || field?.sortNo || field?.columnIndex || index + 1),
     fieldName,
     dataType: String(field?.columnType || field?.dataType || field?.type || "string").trim() || "string",
-    required: Boolean(field?.required || field?.notNull || field?.primaryKey)
+    required: [field?.required, field?.notNull, field?.primaryKey].some(value => [true, 1, "1", "true", "yes"].includes(value))
       || ["false", "0", "no", "n"].includes(nullable),
   };
 }
 function buildLocalPushContract(datasourceId) {
   const contractTables = (Array.isArray(tables.value) ? tables.value : []).map((table, tableIndex) => {
-    const fields = fieldsFor(table).map(localPushContractField).filter((field) => field.fieldName);
+    const attachments = (governanceConfig(catalogFor(table)) || governanceConfig(table))?.attachmentFields || [];
+    const fields = fieldsFor(table).map((field,index) => ({...localPushContractField(field,index),attachment:attachments.find(policy => policy.columnName === String(field.columnName || field.fieldName || "")) || null})).filter((field) => field.fieldName);
     return {
       tableId: String(table?.tid || table?.id || table?.tableId || table?.tableName || `table_${tableIndex + 1}`),
       tableName: String(table?.tableName || table?.name || table?.sourceTableName || `table_${tableIndex + 1}`),
-      schemaVersion: String(table?.schemaVersion || table?.version || "1"),
+      schemaVersion: null,
       fieldCount: fields.length,
       fields,
     };
@@ -1809,12 +1933,10 @@ function buildLocalPushContract(datasourceId) {
       { name: "Idempotency-Key", required: true, value: "UUID", description: "同一批次重试时保持不变，避免重复写入" },
     ],
     requiredParameters: [
-      { name: "deliveryType", required: true, description: "投递类型，仅支持 FTP 或 KAFKA；目标地址由登记契约确定" },
+      { name: "deliveryType", required: true, description: "投递类型，仅支持 FTP 或 KAFKA；目标地址由登记规范确定" },
       { name: "datasourceId", required: true, description: "固定为当前数据源编码" },
       { name: "tableName", required: true, description: "必须为下方已登记的数据表英文名" },
       { name: "batchId", required: false, description: "调用方批次标识，建议可追溯且不可复用" },
-      { name: "occurredAt", required: false, description: "批次产生时间，使用 ISO 8601 格式" },
-      { name: "schemaVersion", required: false, description: "不传时使用当前版本；传入时必须与表契约一致" },
       { name: "records", required: true, description: "1 至 10,000 条记录，每条仅可包含已登记字段" },
     ],
     endpoints: {
@@ -1846,36 +1968,63 @@ function refreshRegistrationPushContract() {
   const contract = buildLocalPushContract(String(sourceTid.value || "").trim());
   const previouslyOpen = new Set(pushContractOpenTables.value);
   pushContract.value = contract;
-  pushContractOpenTables.value = contract.tables
+  pushContractOpenTables.value = pushVisibleTables.value
     .map((table) => table.tableId)
     .filter((tableId) => previouslyOpen.has(tableId));
-  if (!pushContractOpenTables.value.length && contract.tables.length) pushContractOpenTables.value = [contract.tables[0].tableId];
+  if (!pushContractOpenTables.value.length && pushVisibleTables.value.length) pushContractOpenTables.value = [pushVisibleTables.value[0].tableId];
 }
 async function loadPushContract(force = false) {
-  const datasourceId = String(sourceTid.value || "").trim(); if (!datasourceId) return;
-  if (!force && pushContractLoadedDatasourceId.value === datasourceId && pushContract.value) return;
-  pushContractLoading.value = true; pushContractError.value = "";
+  const datasourceId = String(sourceTid.value || "").trim();
+  if (!datasourceId) return;
+  const publishedRead = !sourceDetailLoading.value;
+  const key = `${datasourceId}:${publishedRead ? "published" : "preview"}`;
+  if (pushContractLoading.value && pushContractInFlightKey === key) return;
+  if (!force && pushContractLoadedDatasourceId.value === key && pushContract.value) return;
+  const requestId = ++pushContractRequestId;
+  pushContractInFlightKey = key;
+  pushContractLoading.value = true;
+  pushContractError.value = "";
   try {
-    // 第五步首次进入时表契约尚未最终发布，先按当前登记表单提供预览；
-    // 完成登记后则读取服务端已发布的权威契约，保证页面、鉴权和海通转发使用同一份表字段范围。
     let result;
-    try {
-      const remote = await $common.get("/dws/push/schema/contracts", { datasourceId });
+    if (!publishedRead) {
+      // Wait for authoritative source details; viewing never issues a key.
+      result = buildLocalPushContract(datasourceId);
+    } else {
+      const remote = await $common.getSilently("/dws/push/schema/contracts", { datasourceId });
       const payload = remote?.data || remote;
-      // 空契约常见于第五步提交前：服务端尚未最终发布表结构。此时应继续
-      // 使用当前登记快照，而不是把空数组当成“没有数据表”的权威结果。
-      result = Array.isArray(payload?.tables) && payload.tables.length ? { ...payload, tableSource: "published" } : null;
-    } catch (error) { result = null; }
-    result = result || buildLocalPushContract(datasourceId);
+      if (String(payload?.datasourceId || "") !== datasourceId || !Array.isArray(payload?.tables)) throw new Error("规范响应与当前数据源不一致，请重新读取。");
+      result = payload.tables.length ? { ...payload, tableSource: "published" } : buildLocalPushContract(datasourceId);
+    }
+    if (requestId !== pushContractRequestId || datasourceId !== String(sourceTid.value || "").trim()) return;
     pushContract.value = result;
-    pushContractLoadedDatasourceId.value = datasourceId;
-    pushContractOpenTables.value = result.tables.slice(0, 1).map((item) => item.tableId);
+    pushContractLoadedDatasourceId.value = key;
+    pushContractOpenTables.value = pushVisibleTables.value.slice(0, 1).map(item => item.tableId);
     loadRegistrationPushContractFields();
+  } catch (error) {
+    if (requestId !== pushContractRequestId || datasourceId !== String(sourceTid.value || "").trim()) return;
+    // Real authorization/network failures remain visible inline. They cannot
+    // be silently relabelled as an unpublished preview.
+    pushContract.value = null;
+    pushContractLoadedDatasourceId.value = "";
+    pushContractError.value = error?.message || "正式规范暂时不可用，请检查登记状态和访问权限后重试。";
+  } finally {
+    if (requestId === pushContractRequestId) { pushContractLoading.value = false; pushContractInFlightKey = ""; }
   }
-  finally { pushContractLoading.value = false; }
 }
-function pushContractFieldExample() { return ""; }
-function pushContractSample(table) { const record = {}; (table?.fields || []).forEach((field) => { record[field.fieldName] = pushContractFieldExample(field); }); return JSON.stringify({ datasourceId: pushContract.value?.datasourceId || sourceTid.value, tableName: table?.tableName, batchId: `${table?.tableName || "table"}-20260910-001`, occurredAt: "2026-09-10T07:30:00Z", schemaVersion: table?.schemaVersion, records: [record] }, null, 2); }
+function pushContractFieldExample(field) {
+  const type = String(field?.dataType || "").toLowerCase();
+  if (/bool|布尔/.test(type)) return false;
+  if (/int|decimal|numeric|double|float|number|real|整数|小数|数值/.test(type)) return 0;
+  if (/timestamp|datetime|日期时间/.test(type)) return "2026-10-22T08:00:00Z";
+  if (/date|日期/.test(type)) return "2026-10-22";
+  return field?.required ? "请填写真实值" : "";
+}
+function pushContractSample(table) {
+  const record = {};
+  (table?.fields || []).forEach(field => { record[field.fieldName] = field.attachment?.maxFileBytes ? "<已上传完成的fileId>" : pushContractFieldExample(field); });
+  const sample = {deliveryType:"FTP",datasourceId:pushContract.value?.datasourceId || sourceTid.value,tableName:table?.tableName,batchId:`${table?.tableName || "table"}-DEMO-001`,records:[record]};
+  return JSON.stringify(sample,null,2);
+}
 async function copyPushSample(table) { try { await navigator.clipboard.writeText(pushContractSample(table)); $message.success("推送示例已复制，可粘贴到接口调试工具中使用"); } catch (error) { $message.warning("当前浏览器不允许自动复制，请手动复制示例内容"); } }
 function openReportWorkspace() {
   const datasourceId = String(sourceTid.value || "").trim();
@@ -2189,11 +2338,18 @@ watch(connectionInfoExpanded, (expanded) => {
     visibleConnectionSecretKeys.value = new Set();
   }
 });
-watch([sourceTid, isDataPushSource], async ([datasourceId, isPush]) => {
+watch([sourceTid, isDataPushSource], () => {
+  ++pushContractRequestId;
+  pushContractInFlightKey = "";
+  pushContractLoading.value = false;
   pushContract.value = null; pushContractError.value = ""; pushContractLoadedDatasourceId.value = ""; pushContractOpenTables.value = [];
+  pushInterfaceType.value = "dataPush"; pushAttachmentFieldSelections.value = {};
+  ++pushCredentialRequestId; pushCredentialLoading.value = false;
   pushCredential.value = null; pushCredentialError.value = ""; pushCredentialDatasourceId.value = "";
-  if (isPush && datasourceId) await issuePushCredential(datasourceId);
 }, { immediate: true });
+watch([sourceDetailLoading, pushDatasourceRegistered], ([loading]) => {
+  if (!loading && isDataPushSource.value && connectionInfoExpanded.value) void loadPushContract(true);
+});
 function isTableAnnotated(table) {
   return [true, 1, "1", "true", "yes"].includes(table?.annotated);
 }
@@ -2209,7 +2365,7 @@ const annotatedTables = computed(() => uniqueTables(realtimeTables.value).filter
 const tables = computed(() => uniqueTables(realtimeTables.value).filter((table) =>
   ![true, 1, "1", "true"].includes(table?.isDel ?? table?.is_del)
 ));
-// 用户展开推送契约时，表级快照可能仍在异步读取。空契约先展示后，等快照
+// 用户展开推送规范时，表级快照可能仍在异步读取。空规范先展示后，等快照
 // 返回再补齐，避免必须手动收起、重新展开才看得到本次已登记的数据表。
 watch(tables, (registeredTables) => {
   if (!isDataPushSource.value || !connectionInfoExpanded.value || !registeredTables.length) return;
@@ -2238,7 +2394,7 @@ const fieldMetricLoading = computed(() =>
   tables.value.some((table) => tableFieldCount(table) > 0 && !fieldsFor(table).length)
 );
 const fieldMap = computed(() => ({ ...realtimeFieldMap.value }));
-// 推送契约的字段来自已登记字段快照。字段按需读取完成后立即重建示例和约束表，
+// 推送规范的字段来自已登记字段快照。字段按需读取完成后立即重建示例和约束表，
 // 使 records[0] 始终列出完整字段，而不是保留读取前的空对象。
 watch(fieldMap, () => refreshRegistrationPushContract());
 const catalogs = computed(() => uniqueCatalogs(realtimeCatalogs.value));
@@ -3295,7 +3451,7 @@ const issues = computed(() => {
   } else {
     const isPushSource = sourceAccessMode.value?.value === "receive";
     const isPullSource = sourceAccessMode.value?.value === "capture";
-    // 数据推送和 API 数据拉取登记的是接口契约，不存在 JDBC 源端连接。
+    // 数据推送和 API 数据拉取登记的是接口规范，不存在 JDBC 源端连接。
     // 不能把通用数据库连接参数错误地作为接口登记的必改项。
     const requiredSourceKeys = isPushSource
       ? ["dbName", "storageDomain", "orgId"]
@@ -3727,7 +3883,7 @@ async function loadTablePreview(table) {
       return;
     }
     if (sourceAccessMode.value?.value === "receive") {
-      // 推送方式登记的是字段契约，平台不会主动连接源端数据库读取样例。
+      // 推送方式登记的是字段规范，平台不会主动连接源端数据库读取样例。
       tablePreviewError.value = "该数据源采用数据推送方式，暂无已接收样例数据；请查看字段结构，或在收到首批推送数据后再查看样例。";
       return;
     }
@@ -4470,6 +4626,7 @@ async function commit(items) {
   const completedSource = items.find((item) => item.assetType === "db" && item.tid);
   if (completedSource && isDataPushSource.value && completedRegistrationTableCount.value > 0) {
     await $common.post("/dws/push/schema/publish", { datasourceId: completedSource.tid });
+    if (sourceDetail.value) sourceDetail.value = { ...sourceDetail.value, assetStatus: completedSource.assetStatus };
     await loadPushContract(true);
   }
   return items;
@@ -6450,10 +6607,16 @@ defineExpose({ next, finish, commit });
   flex-wrap: wrap;
 }
 
-.push-contract-panel { display: grid; gap: 16px; padding: 16px; border: 1px solid #cfe1ff; border-radius: 8px; background: linear-gradient(135deg, #f8fbff 0%, #fff 70%); }
+
+.push-contract-notice :deep(.el-alert__description) { line-height: 1.7; }
+.push-contract-endpoint > strong { white-space: normal; overflow-wrap: anywhere; }
+.push-contract-header-list small { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
+.push-contract-sample-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.push-contract-sample-actions :deep(.el-select) { width: 150px; }
+@media (max-width: 900px) { .push-file-overview { grid-template-columns: 1fr; }.push-file-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.push-contract-panel { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 16px; padding: 16px; border: 1px solid #cfe1ff; border-radius: 8px; background: linear-gradient(135deg, #f8fbff 0%, #fff 70%); }
 .push-contract-head, .push-contract-section-head, .push-contract-table-toolbar, .push-contract-error { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.push-contract-kicker { display: block; margin-bottom: 4px; color: #2468f2; font-size: 12px; font-weight: 650; }
-.push-contract-head strong { color: #1d2939; font-size: 15px; }.push-contract-head p { max-width: 760px; margin: 6px 0 0; color: #667085; font-size: 12px; line-height: 20px; }
+.push-contract-head strong { color: #1d2939; font-size: 15px; }
 .push-contract-endpoint-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }.push-contract-endpoint { min-width: 0; padding: 12px 14px; border: 1px solid #dbe7f4; border-radius: 8px; background: #fff; }.push-contract-endpoint > span, .push-contract-endpoint small { display: block; color: #667085; font-size: 12px; }.push-contract-endpoint > strong { display: flex; gap: 8px; align-items: center; margin: 7px 0; overflow: hidden; color: #1d2939; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }.push-contract-endpoint em { padding: 2px 5px; border-radius: 4px; background: #e8f1ff; color: #2468f2; font-family: inherit; font-size: 11px; font-style: normal; }
 .push-contract-section { padding-top: 14px; border-top: 1px solid #e7eef7; }.push-contract-section-head { align-items: center; margin-bottom: 10px; }.push-contract-section-head strong { color: #344054; font-size: 14px; }.push-contract-section-head span, .push-contract-table-toolbar > div > span { color: #667085; font-size: 12px; }
 .push-contract-header-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }.push-contract-header-list > div { min-width: 0; padding: 10px 12px; border-radius: 6px; background: #f8fafc; }.push-contract-header-list code, .push-contract-header-list strong, .push-contract-header-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.push-contract-header-list code { color: #2468f2; font-size: 12px; }.push-contract-header-list strong { margin: 5px 0; color: #344054; font-size: 12px; font-weight: 600; }.push-contract-header-list small { color: #7a8799; font-size: 11px; }
@@ -8574,4 +8737,42 @@ defineExpose({ next, finish, commit });
 @keyframes registration-shimmer {to{background-position:-160% 0;}} @keyframes registration-pulse {50%{opacity:.4;}}
 @media(prefers-reduced-motion:reduce){.skeleton-bar,.registration-loading-dot {animation:none;}}
 
+.push-contract-endpoint > strong { white-space: normal; overflow-wrap: anywhere; }
+.push-contract-header-list small { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
+
+.push-contract-auth-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.push-contract-auth-grid .push-credential-card { display: block; margin: 0; min-width: 0; padding: 12px; border: 0; border-radius: 6px; background: #f8fafc; }
+.push-contract-auth-grid .push-credential-input { width: 100%; }
+.push-credential-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.push-auth-header { min-width: 0; padding: 12px; background: #f8fafc; border-radius: 6px; }
+.push-auth-header code, .push-auth-header strong, .push-auth-header small { display: block; overflow-wrap: anywhere; }
+.push-auth-header code { color: #2468f2; font-size: 12px; }
+.push-auth-header strong { margin: 5px 0; color: #344054; font-size: 12px; }
+.push-auth-header small { color: #7a8799; font-size: 11px; line-height: 1.6; }
+@media (max-width: 800px) { .push-contract-auth-grid { grid-template-columns: 1fr; } }
+
+.push-attachment-collection { display: block; overflow-wrap: anywhere; color: #64748b; margin-top: 4px; }
+button.push-contract-endpoint { appearance: none; text-align: left; cursor: pointer; font: inherit; transition: border-color .15s, background-color .15s; }
+button.push-contract-endpoint:hover { border-color: #92b8ff; }
+button.push-contract-endpoint:focus-visible { outline: 2px solid #2468f2; outline-offset: 3px; }
+button.push-contract-endpoint.is-selected { border-color: #2468f2; background: #f0f6ff; box-shadow: inset 0 0 0 1px #2468f2; }
+.push-contract-endpoint .push-endpoint-label { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-weight: 600; }
+.push-endpoint-selection { flex-shrink: 0; color: #8590a2; font-size: 11px; font-weight: 400; }
+.is-selected .push-endpoint-selection { color: #2468f2; font-weight: 600; }
+.push-interface-specification { display: flex; flex-direction: column; min-width: 0; max-width: 100%; gap: 14px; }
+.push-interface-specification > .push-contract-section { min-width: 0; }
+.push-interface-specification .push-contract-code { min-width: 0; max-width: 100%; }
+.push-interface-specification .push-contract-code pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.push-auth-card-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.push-auth-card-heading .el-button { padding: 0; height: auto; font-size: 11px; }
+.push-auth-card-heading .el-button.push-key-button { height: 30px; padding: 0 14px; font-size: 12px; font-weight: 600; }
+.push-attachment-policy { display: grid; gap: 4px; padding: 3px 0; line-height: 1.5; }
+.push-attachment-policy strong { color: #344054; font-weight: 500; }
+.push-attachment-policy span { color: #667085; font-size: 12px; }
+.push-credential-error { color: #d92d20 !important; }
+.push-contract-auth-grid .push-credential-input { margin-top: 8px; }
+.push-attachment-guidance { margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: #f8fafc; color: #667085; font-size: 12px; line-height: 1.7; }
+.push-attachment-guidance p { margin: 0; overflow-wrap: anywhere; }
+.push-attachment-guidance p + p { margin-top: 5px; }
+.push-contract-tables .push-contract-table-toolbar { margin-top: 12px; }
 </style>

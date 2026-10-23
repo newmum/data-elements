@@ -28,11 +28,28 @@
  * 分组暂不独立建表，统一使用 sym_dict_t 的业务字典：
  * biz_type=apiServiceGroup，默认分组 tid=api_service_group_default。
  */
+import tenantRuntime
+import dataScope
+import "@post:/sym/user/me" as me
+var tenantId = tenantRuntime.id()
+var scope = dataScope.dataSource()
+var scopeOrgIds = scope.organizationIds
+var scopeUserId = scope.userId
+var serviceWhere = ' WHERE a.is_del=0 AND a.tenant_id=#{tenantId}'
+if (scope.scope=='OWNER') { serviceWhere += ' AND a.created_by=#{scopeUserId}' }
+else if (scope.scope=='ORG') { serviceWhere += scopeOrgIds.size()==0?' AND 1=0':' AND a.org_id IN (#{scopeOrgIds})' }
+else if (scope.scope!='ALL') { exit 403, '数据范围无效' }
+var currentOrgId = ''
+if (body?.departmentOnly == true) {
+    currentOrgId = me()?.orgId
+    if (currentOrgId==null || (currentOrgId+'').trim()=='') { exit 403, '当前账号未关联部门，无法查看本部门服务' }
+    serviceWhere += ' AND a.org_id=#{currentOrgId}'
+}
 var blank = value => value == null || (value + '').trim() == ''
 var sqlValue = value => "'" + ((value + '').replace("'", "''")) + "'"
 var likeValue = value => "'%" + ((value + '').replace("'", "''")) + "%'"
 
-var whereSql = " where is_del = 0 and biz_type = 'apiServiceGroup' "
+var whereSql = " where is_del = 0 and tenant_id=#{tenantId} and biz_type = 'apiServiceGroup' "
 if (!blank(body?.keyword || body?.name)) {
     var keyword = body?.keyword || body?.name
     whereSql += " and (dict_name like " + likeValue(keyword) + " or dict_code like " + likeValue(keyword) + ") "
@@ -41,7 +58,7 @@ if (!blank(body?.keyword || body?.name)) {
 var rows = db.select("""
 select
   tid as id,
-  tid as value,
+  tid as "value",
   dict_name as name,
   dict_name as label,
   dict_code as code,
@@ -54,8 +71,8 @@ order by sort_no, dict_name
 
 var countRows = db.select("""
 select coalesce(group_id, 'api_service_group_default') as groupId, count(1) as total
-  from api_info_t
- where is_del = 0
+  from api_info_t a
+""" + serviceWhere + """
  group by coalesce(group_id, 'api_service_group_default')
 """)
 var countMap = {}

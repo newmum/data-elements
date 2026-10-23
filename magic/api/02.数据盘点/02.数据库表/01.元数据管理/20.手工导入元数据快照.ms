@@ -26,12 +26,15 @@
 // 路由：POST /dst/database/metadata/importSnapshot
 // 业务说明：手工导入元数据快照（POST /dst/database/metadata/importSnapshot）。写入 db_table_t、db_table_column_t 和数据源表数量，不连接物理库；严格校验数据资源名称、表类型、业务类型、字段中文名、字段类型及必填布尔属性，并保存时间戳字段初始配置，使离线导入数据与自动探查数据共用第二步至第五步登记流程。传 dryRun=true 时只校验并返回表/字段数量，不写数据库；使用请求参数 tables、tableRows、fieldMap、dryRun。
 import tenantRuntime
+import dataScope
+import cn.hutool.json.JSONUtil
 import metadataAsset
 import cn.hutool.core.util.IdUtil
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import jsons
 import log
 import java.util.Map
+import java.util.List
 import java.util.regex.Pattern
 
 /*
@@ -116,9 +119,9 @@ var buildColumnType = (col) => {
     if (!blank(len) && textOf(columnType).indexOf('(') < 0) { return textOf(columnType) + '(' + textOf(len) + ')' }
     return textOf(columnType)
 }
-var existingTableMap = (dbId) => {
+var existingTableMap = (dbId, tenantId, names) => {
     var map = {}
-    var rows = db.table('db_table_t').where().eq('datasource_id', dbId).eq('is_del', 0).select()
+    var rows = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('datasource_id', dbId).in('table_name', names).eq('is_del', 0).select()
     for (row in rows == null ? [] : rows) {
         var name = firstValue(row, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
         if (!blank(name)) { map[lower(name)] = row }
@@ -128,7 +131,7 @@ var existingTableMap = (dbId) => {
 var columnsFor = (fieldMap, table) => {
     var tableName = firstValue(table, ['tableName', 'tableNameEn', 'name'])
     var fields = firstValue(table, ['fields', 'columns', 'columnList', 'tableColumns'])
-    if (fields != null && fields instanceof java.util.List) { return fields }
+    if (fields != null && fields instanceof List) { return fields }
     if (fieldMap == null || blank(tableName)) { return [] }
     var direct = fieldMap[tableName]
     if (direct == null) { direct = fieldMap[lower(tableName)] }
@@ -164,8 +167,7 @@ var columnValues = (tableId, columnId, col, index, tenantId) => {
         updated_time: nowTime()
     }
 }
-var saveColumns = (tableId, columns, tenantId) => {
-    var oldRows = db.table('db_table_column_t').where().eq('table_id', tableId).eq('is_del', 0).select()
+var saveColumns = (tableId, columns, tenantId, oldRows) => {
     var oldMap = {}
     for (old in oldRows == null ? [] : oldRows) {
         oldMap[lower(firstValue(old, ['columnName', 'column_name']))] = old
@@ -208,11 +210,15 @@ var saveEs = (tableId, doc) => {
 if (body == null) { exit 400, 'request body cannot be empty' }
 var dbId = firstValue(body, ['dbId', 'datasourceId', 'tid'])
 if (blank(dbId)) { exit 400, 'dbId cannot be empty' }
-var datasource = db.table('db_datasource_t').where().eq('tid', dbId).eq('is_del', 0).selectOne()
-if (datasource == null) { exit 404, 'datasource not found' }
-// 租户只能来自已认证请求的上下文，禁止由导入载荷或数据源记录决定。
+// Resolve identity before any business lookup; incoming tenant fields cannot choose ownership.
 var tenantId = tenantRuntime.id()
 if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录后再导入元数据' }
+var datasource = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', dbId).eq('is_del', 0).selectOne()
+if (datasource == null) { exit 404, 'datasource not found' }
+if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [datasource]).size() != 1) { exit 403, '数据源不在当前租户或角色数据范围内' }
+var sourcePool = rowValue(datasource, ['poolCfg', 'pool_cfg'])
+sourcePool = sourcePool instanceof Map ? sourcePool : (blank(sourcePool) ? {} : JSONUtil.parseObj(textOf(sourcePool)))
+var pushSource = ['receive', 'push'].contains(lower(firstValue(sourcePool, ['accessMode', 'access_mode'])))
 var sourceType = firstValue(body, ['dataSourceType', 'dbType'])
 if (blank(sourceType)) { sourceType = firstValue(datasource, ['dbType', 'db_type']) }
 var tables = body.tables == null ? (body.tableRows == null ? [] : body.tableRows) : body.tables
@@ -223,7 +229,10 @@ if ((tables == null || tables.size() == 0) && fieldMap != null) {
         tables.add({ tableName: name, tableComment: name, businessType: '业务表' })
     }
 }
-if (tables == null || tables.size() == 0) { exit 400, 'imported table list cannot be empty' }
+if (tables == null || tables.size() == 0 || tables.size() > 100) { exit 400, '一次导入须包含1至100张表' }
+var totalFields = 0
+for (table in tables) { totalFields = totalFields + columnsFor(fieldMap, table).size() }
+if (totalFields > 10000) { exit 400, '一次导入最多10000个字段' }
 
 // 在写库前进行后端强校验，避免绕过 Excel 下拉和前端校验写入不完整元数据。
 if (!inOptions(sourceType, allowedSourceTypes)) {
@@ -281,6 +290,28 @@ for (table in tables) {
             if (primaryKeyValue == null) { validationErrors.add('字段[' + tableName + '.' + columnName + ']的是否主键不能为空') }
             if (nullableValue == null) { validationErrors.add('字段[' + tableName + '.' + columnName + ']的是否可空不能为空') }
             if (timestampValue == null) { validationErrors.add('字段[' + tableName + '.' + columnName + ']的是否时间戳字段不能为空') }
+            var attachment = rowValue(col, ['attachment'])
+            if (attachment != null) {
+                if (!(attachment instanceof Map) || !pushSource || attachment.enabled != true) {
+                    validationErrors.add('字段[' + tableName + '.' + columnName + ']附件配置无效或数据源不是推送方式')
+                } else {
+                    var size = longValue(attachment.maxFileBytes, 0)
+                    var formats = attachment.allowedExtensions
+                    if (size < 1 || size > 1099511627776L || textOf(size) != textOf(attachment.maxFileBytes)) { validationErrors.add('附件大小必须为1至1TiB的整数字节数') }
+                    if (!(formats instanceof List) || formats.size() == 0 || formats.size() > 5) { validationErrors.add('附件格式不能为空且最多5种') }
+                    else {
+                        var seenFormats = {}
+                        for (format in formats) {
+                            var extension = lower(format)
+                            if (!['jpg','jpeg','png','pdf','docx'].contains(extension) || seenFormats[extension] != null) { validationErrors.add('附件格式不支持或重复') }
+                            seenFormats[extension] = true
+                        }
+                    }
+                    if (!Pattern.compile('^(字符串|varchar|nvarchar|char|nchar|text|longtext|string)(\\(|$)').matcher(lower(columnType)).find()) { validationErrors.add('关联附件字段须为字符串类型') }
+                    var attachmentLength = longValue(firstValue(col, ['columnLength', 'length', 'columnSize']), null)
+                    if (attachmentLength != null && attachmentLength < 36) { validationErrors.add('关联附件字段长度至少为36') }
+                }
+            }
             var columnKey = lower(columnName)
             if (!blank(columnKey)) {
                 if (seenColumns[columnKey] != null) {
@@ -326,7 +357,14 @@ if (dryRun) {
     }
 }
 
-var existingMap = existingTableMap(dbId)
+var tableNames = tables.map(table => firstValue(table, ['tableName', 'tableNameEn', 'name']))
+var existingMap = existingTableMap(dbId, tenantId, tableNames)
+var existingTableIds = existingMap.values().map(table => table.tid).distinct()
+var oldColumnsByTable = {}
+if (existingTableIds.size() > 0) {
+    var oldColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('table_id', existingTableIds).eq('is_del', 0).select()
+    oldColumnsByTable = oldColumns.group(column => column.tableId)
+}
 var rows = []
 var importedFieldCount = 0
 for (table in tables) {
@@ -346,10 +384,15 @@ for (table in tables) {
     var businessType = normalizeBusinessType(firstValue(table, ['businessType']))
     var timestampField = ''
     var governanceFields = []
+    var attachmentFields = []
     for (governanceColumn in columns) {
         var governanceColumnName = firstValue(governanceColumn, ['columnName', 'name', 'fieldName', 'column_name'])
         var governanceTimestamp = boolValue(firstValue(governanceColumn, ['isTimestamp', 'isTimestampField']), false)
         if (governanceTimestamp) { timestampField = governanceColumnName }
+        var attachment = rowValue(governanceColumn, ['attachment'])
+        if (attachment != null && attachment.enabled == true) {
+            attachmentFields.add({ columnName: governanceColumnName, maxFileBytes: longValue(attachment.maxFileBytes, 0), allowedExtensions: attachment.allowedExtensions.map(format => lower(format)) })
+        }
         governanceFields.add({
             columnName: governanceColumnName,
             columnComment: firstValue(governanceColumn, ['columnComment', 'comment', 'fieldComment', 'column_comment']),
@@ -364,6 +407,7 @@ for (table in tables) {
     }
     var governanceConfig = {
         version: 2,
+        attachmentFields: attachmentFields,
         tableName: tableName,
         tableComment: comment,
         businessType: businessType,
@@ -412,7 +456,7 @@ for (table in tables) {
     } else {
         db.table('db_table_t').primary('tid').update(values, true)
     }
-    fieldCount = saveColumns(tableId, columns, tenantId)
+    fieldCount = saveColumns(tableId, columns, tenantId, oldColumnsByTable[tableId])
     importedFieldCount = importedFieldCount + fieldCount
     if (fieldCount != values.field_count) {
         values.field_count = fieldCount
@@ -443,7 +487,7 @@ for (table in tables) {
     rows.add(output)
 }
 metadataAsset.refreshRegistrationStatus(dbId, false)
-var activeTableCount = db.table('db_table_t').where().eq('datasource_id', dbId).eq('is_del', 0).select().size()
+var activeTableCount = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('datasource_id', dbId).eq('is_del', 0).count()
 db.table('db_datasource_t').primary('tid').update({ tid: dbId, table_num: activeTableCount, updated_time: nowTime() }, true)
 return {
     dbId: dbId,

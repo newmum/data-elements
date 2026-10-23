@@ -27,6 +27,7 @@ import dataScope
 import cn.hutool.extra.spring.SpringUtil
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
+import java.util.LinkedHashMap
 import java.util.Map
 import cn.hutool.crypto.digest.DigestUtil
 import java.lang.Math
@@ -132,6 +133,11 @@ if (body.all == true) {
             if (fields.size()==0) { reason='存在已登记但未配置有效字段的数据表' }
             var normalizedFields = []
             var canonical = []
+            var attachmentPolicies = []
+            var attachmentByName = {}
+            var governanceRaw = value(table,'fieldGovernanceConfig','field_governance_config')
+            var governance = governanceRaw instanceof Map ? governanceRaw : (str(governanceRaw)=='' ? {} : bm.readValue(str(governanceRaw),Map))
+            for (attachment in governance.attachmentFields || []) { attachmentByName[str(attachment.columnName)] = attachment }
             var seenFields = []
             for (field in fields) {
                 var fieldName = str(value(field,'columnName','column_name'))
@@ -142,13 +148,22 @@ if (body.all == true) {
                 seenFields.add(fieldName.toLowerCase())
                 normalizedFields.add({columnName:fieldName,columnComment:str(value(field,'columnComment','column_comment')).substring(0,Math.min(str(value(field,'columnComment','column_comment')).length(),255)),dataType:type,ordinal:ordinal,required:required,enabled:true})
                 // Keep the canonical property order identical to DataPushSchemaService.
-                canonical.add({name:fieldName,type:type,required:required,ordinal:ordinal})
+                var canonicalField = {name:fieldName,type:type,required:required,ordinal:ordinal}
+                var attachment = attachmentByName[fieldName]
+                if (attachment != null) {
+                    var policy = {columnName:fieldName,maxFileBytes:attachment.maxFileBytes::long,allowedExtensions:attachment.allowedExtensions}
+                    canonicalField.attachment = policy
+                    attachmentPolicies.add(policy)
+                }
+                canonical.add(canonicalField)
             }
             var hash = DigestUtil.sha256Hex(bm.writeValueAsString(canonical))
             var old = oldByTable[id+':'+tableId]
             var version = old == null ? 1L : value(old,'schemaVersion','schema_version')::long + (str(value(old,'schemaHash','schema_hash')) == hash ? 0L : 1L)
             var schemaId = old == null ? IdUtil.getSnowflakeNextIdStr() : str(old.tid)
-            sourcePublications.add({old:old,schemaId:schemaId,tableId:tableId,tableName:tableName,version:version,hash:hash,sourceId:id,delivery:bm.writeValueAsString(item.config.pushDelivery || {}),fields:canonical})
+            var delivery = new LinkedHashMap(item.config.pushDelivery || {})
+            delivery.attachmentFields = attachmentPolicies
+            sourcePublications.add({old:old,schemaId:schemaId,tableId:tableId,tableName:tableName,version:version,hash:hash,sourceId:id,delivery:bm.writeValueAsString(delivery),fields:canonical})
             var comment = str(value(table,'tableNameCn','table_name_cn')) || str(value(table,'tableComment','table_comment')) || tableName
             normalized.add({tableId:tableId,tableName:tableName,tableComment:comment.substring(0,Math.min(comment.length(),255)),schemaVersion:version+'',enabled:true,columns:normalizedFields})
             count += fields.size()

@@ -208,6 +208,8 @@ public class RelayController {
     private record PushRoute(String channel,String destination,boolean registrySync) { }
     private void validateTableBatch(byte[] input,boolean requireDatasource) {
         Map<String,Object> batch=json.object(input);
+        if(batch.containsKey("schemaVersion")||batch.containsKey("occurredAt"))
+            throw RelayException.invalid("schemaVersion 和 occurredAt 已取消，请从表批次请求中移除");
         Object table=batch.get("tableName");
         if(!(table instanceof String name) || name.isBlank() || name.length()>200)
             throw RelayException.invalid("tableName 必须是 1 到 200 字符的表名");

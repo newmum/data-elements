@@ -21,7 +21,7 @@
 - [推送密钥与独立登记同步说明](#guide-a25caa3b)
 - [独立登记配置同步接口](#guide-f5f5b5dd)
 - [独立运行模式](#guide-985aca91)
-- [海通与数据源登记推送契约接入说明](#guide-a3391486)
+- [海通与数据源登记推送规范接入说明](#guide-a3391486)
 - [haitong-data-pull（海通数据推送服务）V1.1 配置与部署](#guide-3e6991f8)
 - [Linux 部署](#linux-deployment)
 - [Windows 独立部署](#windows-deployment)
@@ -31,39 +31,39 @@
 
 ## 非结构化数据接入：当前实现与平台扩展设计
 
-**当前已实现海通服务自身的完整文件链路：服务端集合契约 → 初始化并预留配额 → 分片上传/续传 → 异步合并、SHA-256、格式及可选外部安全检查 → 原有投递台账 → LOCAL/FTP/SFTP 原文投递或 Kafka 引用通知 → 鉴权回读及业务回执。** 默认关闭，通过 `relay.files.enabled=true` 和明确的集合、调用方、目标配置启用；原表批次接口继续共用同一 JAR、认证和投递账本。
+**当前已实现海通服务自身的完整文件链路：服务端集合规范 → 初始化并预留配额 → 分片上传/续传 → 异步合并、SHA-256、格式及可选外部安全检查 → 原有投递台账 → LOCAL/FTP/SFTP 原文投递或 Kafka 引用通知 → 鉴权回读及业务回执。** 默认关闭，通过 `relay.files.enabled=true` 和明确的集合、调用方、目标配置启用；原表批次接口继续共用同一 JAR、认证和投递账本。
 
-按当前开发范围，**数据源登记页面、平台契约同步、行业 FILE 资产/不可变版本、目录/超市与 ES、平台 FJGHCC 异步复制及对象存储直传仍待后续实施**。当前 `fileId` 是海通服务内固定内容的文件标识，不等同于行业平台的 `assetVersionId`。第 4 节是已实现的接口契约；涉及平台的其余设计仍表示后续目标，不能据此调用尚未实现的接口。
+按当前开发范围，**数据源登记页面中的文件集合登记、FILE 域规范同步、行业 FILE 资产/不可变版本、目录/超市与 ES、平台 FJGHCC 异步复制及对象存储直传仍待后续实施**。当前 `fileId` 是海通服务内固定内容的文件标识，不等同于行业平台的 `assetVersionId`。第 4 节是已实现的接口规范；涉及平台的其余设计仍表示后续目标，不能据此调用尚未实现的接口。
 
-可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，标准库流式续传客户端为 [`upload_file.py`](../haitong-data-pull/examples/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
+可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，默认整文件、可选分片续传的标准库流式客户端为 [`upload_file.py`](../haitong-data-pull/examples/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
 
 当前使用单节点持久卷，目录加进程锁；相同本地卷不能同时运行两个文件实例，也不能将各自拥有本地卷的多个实例直接置于随机负载均衡后。正式多实例需完成共享对象存储适配及跨节点校验。普通文件 API 与旧表批次共用 HTTP 服务，分片流量仍会占用该进程的网络和数据库；文件校验池、FILE_LOCAL/FILE_FTP/FILE_KAFKA 投递池分别有界，不承诺物理资源完全隔离。
 
 ### 1. 总体决策与现状依据
 
-**沿用同一个海通推送应用、统一认证、登记契约与投递账本，增加文件专用入口、可恢复上传会话和文件版本能力。** 原 `/api/v1/data-push` 继续接收表批次 JSON；新文件接口传文件原始字节或已上传文件的引用，文件内容不进入表批次 JSON、MySQL 大字段或 Kafka 消息。
+**沿用同一个海通推送应用、统一认证、登记规范与投递账本，增加文件专用入口、可恢复上传会话和文件版本能力。** 原 `/api/v1/data-push` 继续接收表批次 JSON；新文件接口传文件原始字节或已上传文件的引用，文件内容不进入表批次 JSON、MySQL 大字段或 Kafka 消息。
 
 | 现有基础 | 源码中已具备的行为 | 本设计要补充的部分 |
 | --- | --- | --- |
-| [RelayController](../haitong-data-pull/src/main/java/com/haitong/api/RelayController.java) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、契约版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
+| [RelayController](../haitong-data-pull/src/main/java/com/haitong/api/RelayController.java) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
 | [PayloadFiles](../haitong-data-pull/src/main/java/com/haitong/core/PayloadFiles.java) | 64KiB 缓冲流式写本地持久卷、计算 SHA-256、同步文件并原子改名 | 存储适配器、分片会话、多实例可访问的持久化位置、存储对象与数据库之间的恢复 |
 | [FileService](../haitong-data-pull/src/main/java/com/haitong/core/FileService.java) | JSONL、CSV 与 BINARY；BINARY 只保存文件引用；文件处理 `runOne()` 串行，接收容量检查会 `Files.walk` 全工作目录 | 受控并发文件处理、配额账本、异步整文件校验和隔离检查，去掉每次上传的目录遍历 |
 | [DeliveryWorker](../haitong-data-pull/src/main/java/com/haitong/core/DeliveryWorker.java) | 已按协议建立可配置线程池，带租约、续租、重试及不确定结果处理 | 同一协议内进一步区分大文件和表批次的资源预算；文件目标的就绪条件及远端异步复制状态 |
 | [FtpConnector](../haitong-data-pull/src/main/java/com/haitong/connector/FtpConnector.java) | 文件流上传、临时名、远端读回校验、改名、`.done` 完成清单；FTP、FTPS、SFTP | 大文件的带宽预算、能力明确的续传、固定目标路径和接收端业务回执；读回校验成本不能忽略 |
 | [RouteCatalog](../haitong-data-pull/src/main/java/com/haitong/config/RouteCatalog.java) | 当前 BINARY 只允许 FTP 或 LOCAL；现有 Kafka 发送的是消息字节 | 文件引用通知适配器、存储适配器；不能直接给旧 BINARY 路由增加 Kafka 然后发送整个文件 |
-| 平台 [DataPushSchemaService](../data-elements-parent/src/main/java/com/linewell/dataelement/dataservice/push/DataPushSchemaService.java) | 现有推送发布和校验基于数据表、字段，不能发布无表的文件集合 | 文件集合的独立契约；复用既有发布、客户端绑定及服务间校验入口的组织方式 |
+| 平台 [DataPushSchemaService](../data-elements-parent/src/main/java/com/linewell/dataelement/dataservice/push/DataPushSchemaService.java) | 现有推送发布和校验基于数据表、字段，不能发布无表的文件集合 | 文件集合的独立规范；复用既有发布、客户端绑定及服务间校验入口的组织方式 |
 | [资源目录发布服务](../data-elements-parent/src/main/java/com/linewell/dataelement/feature/assetcenter/application/AssetCenterPublicationService.java) | 已定义 `FILE` 资源类型，但会拒绝没有可锁定版本服务的文件挂接 | 文件版本解析器、固定版本快照、目录与订阅的文件交付；不能只放开类型枚举 |
-| `file_upload_t` | 通用附件记录，`file_size` 为 INT，缺少文件集合、不可变版本和投递契约 | 保留附件用途；非结构化业务文件使用专门的版本模型，长度与配额用 BIGINT |
+| `file_upload_t` | 通用附件记录，`file_size` 为 INT，缺少文件集合、不可变版本和投递规范 | 保留附件用途；非结构化业务文件使用专门的版本模型，长度与配额用 BIGINT |
 
 当前应用内配置为 multipart 单文件 100MB、请求 101MB、落盘阈值 0，`RelayProperties` 默认单文件限制为 100MiB。外部配置、网关和部署可能覆盖这些值，真实有效上限取各层限制中的最小值。Spring 的落盘阈值只控制 multipart 临时存储，并不提供业务续传；属性语义见 [Spring Boot 3.3 MultipartProperties](https://docs.spring.io/spring-boot/3.3/api/java/org/springframework/boot/autoconfigure/web/servlet/MultipartProperties.html)。
 
 ### 2. 服务边界与部署方式
 
-一期继续一个 `haitong-data-pull` JAR。登记平台与共享后端负责数据源、组织权限、文件集合及契约发布；海通负责上传和传输任务；受控存储保存原始字节。管理页面请求元数据，不通过低代码或 Magic 转发 GB 级文件正文。登记与权限仍使用现有权威业务表和服务，不另建一套数据源主表。
+一期继续一个 `haitong-data-pull` JAR。登记平台与共享后端负责数据源、组织权限、文件集合及规范发布；海通负责上传和传输任务；受控存储保存原始字节。管理页面请求元数据，不通过低代码或 Magic 转发 GB 级文件正文。登记与权限仍使用现有权威业务表和服务，不另建一套数据源主表。
 
 ```mermaid
 flowchart LR
-    R[数据源登记与文件集合] --> C[发布版本契约与调用方授权]
+    R[数据源登记与文件集合] --> C[发布版本规范与调用方授权]
     C --> H[海通推送服务]
     U[来源系统或浏览器] --> I[上传会话与分片]
     I --> H
@@ -98,11 +98,11 @@ flowchart LR
 
 | 步骤 | 文件类登记行为 | 核心校验 |
 | --- | --- | --- |
-| 1. 登记数据源 | 选内容类型、所属应用/机构、数据推送或数据抓取；推送不要求来源方提供数据库连接；抓取支持已有 FTP/SFTP/对象存储连接 | 当前租户、组织与应用范围；连接密钥受限保存，不进入公开契约 |
+| 1. 登记数据源 | 选内容类型、所属应用/机构、数据推送或数据抓取；推送不要求来源方提供数据库连接；抓取支持已有 FTP/SFTP/对象存储连接 | 当前租户、组织与应用范围；连接密钥受限保存，不进入公开规范 |
 | 2. 定义或探查文件集合 | 建立“现场照片”“案件卷宗”等逻辑集合；抓取模式按目录/前缀分页探查文件元数据；推送模式填写集合定义和元数据模板 | 不伪造 JDBC 表，不将 JPEG、PDF 送入结构化表解析器；一次探查限制条数、目录深度、文件头采样字节 |
 | 3. 登记元数据规范 | 维护 `businessKey`、业务编号、采集时间、文件类别、说明等字段、类型、必填、枚举和字典 | 标准与字典复用现有治理能力；受约束业务引用要验证归属，元数据最多 64KiB、字段数有界 |
 | 4. 设置存储与交付 | 选择受控存储、允许格式、最大文件、保留策略、隔离检查和已登记的投递方案；需要时关联已存在业务表的逻辑业务键 | 调用方只能选择获授权的方案编号，不能提交实际 FTP 地址、目录、Bucket、Topic、回调 URL 或 SQL |
-| 5. 审查并发布 | 展示文件契约、上传/续传示例、限额、接收进度、投递及回执状态；沿用现有数据源密钥签发与轮换 | 草稿与已发布版本明确区分；未发布集合不得正式推送；配置和密钥齐备时在当前入口完成启动准备 |
+| 5. 审查并发布 | 展示文件规范、上传/续传示例、限额、接收进度、投递及回执状态；沿用现有数据源密钥签发与轮换 | 草稿与已发布版本明确区分；未发布集合不得正式推送；配置和密钥齐备时在当前入口完成启动准备 |
 
 集合示例：`case_materials`，允许 JPEG/PNG/PDF/DOCX，元数据要求业务编号和材料类别，按业务键形成同一文件资产的后续版本。格式、上限、必填项、字典版本及交付规则冻结为 `contractVersion + contractHash`。修改草稿不改变已受理文件；旧版本能否继续接收由明确的有效期和吊销状态决定。
 
@@ -112,11 +112,14 @@ flowchart LR
 
 ### 4. 当前文件接口与原接口兼容
 
-以下接口已在 `FileUploadController` 实现，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和契约快照，快照不含连接凭据。
+源数据管理平台第一步模板可声明字段关联附件、大小上限和格式；第五步在表数据推送接口旁统一展示非结构化上传地址、规范及字段附件限制，已移除独立照片文档页签。先上传附件并校验就绪，业务表的关联字段保存返回的fileId。平台字段限制已纳入登记规范版本，但文件集合仍须在推送服务配置相应大小、格式、目标及调用方权限；现有表配置同步不会自动维护FILE集合，页面接入说明不代表节点已启用文件功能。
+
+以下接口已在 `FileUploadController` 实现，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和规范快照，快照不含连接凭据。
 
 | 已实现接口 | 行为与边界 |
 | --- | --- |
-| `POST /api/v1/file-uploads` | JSON 初始化会话并预留容量；返回 uploadId/fileId、partSize、partCount、状态、到期时间和查询入口 |
+| `POST /api/v1/file-uploads/single` | 默认整文件入口：查询参数 datasourceId、tableName、fieldName、fileName，application/octet-stream 正文直接发送完整文件；携带 X-Api-Key、Idempotency-Key；返回202和fileId/statusUrl，自动进入异步校验 |
+| `POST /api/v1/file-uploads` | 大文件分片模式：JSON 初始化会话并预留容量；返回 uploadId/fileId、partSize、partCount、状态、到期时间和查询入口 |
 | `PUT /api/v1/file-uploads/{uploadId}/parts/{part}` | `application/octet-stream` 原始字节；片号从 1 开始；必填 `X-Part-SHA256`；服务端逐字节校验长度和 SHA-256，64KiB 缓冲写盘 |
 | `GET /api/v1/file-uploads/{uploadId}/parts?after=0&limit=100` | 返回已确认片的 partNumber/size/sha256；按片号游标分页，最多 100 片 |
 | `POST /api/v1/file-uploads/{uploadId}/complete` | 无正文；检查片数和实际字节总数，置 FINALIZING 返回 202；后台合并、校验、检查格式及运行配置的扫描器 |
@@ -128,7 +131,11 @@ flowchart LR
 | `GET/HEAD /api/v1/file-uploads/{uploadId}/content` | 就绪文件鉴权回读，支持单 Range、后缀 Range、ETag 和 If-Range；无权限 404，非法范围 416，附件方式返回 |
 | `POST /api/v1/file-uploads/{uploadId}/receipts` | 已指定接收方身份回执；校验 deliveryId、目标、传输 SUCCEEDED、文件摘要和幂等键；业务状态为 ACCEPTED/REJECTED |
 
-初始化正文（字段名与实际接口一致；不接收 tenantId、contractVersion、mediaType 或目标地址）：
+整文件默认上限20MiB，由 `relay.files.single-upload-max-bytes` 配置，并同时满足字段绑定集合的大小和格式限制；超限返回413 `SINGLE_UPLOAD_TOO_LARGE`。调用方只传 `datasourceId、tableName、fieldName、fileName` 和原始文件正文，不再传 `collectionId、size、sha256`，旧参数会被拒绝。文件名须URL编码，不接受租户或目标地址。服务端先按可信配置校验数据源、表、字段和调用方授权，再以64KiB缓冲有界暂存、统计实际字节数并计算SHA-256，支持没有Content-Length的流；空文件、超限、断线和长度不符会清理暂存。接收阶段不占用长数据库事务，暂存并发受max-streams限制，额外临时磁盘上界为max-streams × single-upload-max-bytes，并预留磁盘安全余量；启动持有节点锁后清理断电遗留的incoming文件。测得大小后才创建持久会话和两倍大小的配额预留，复用原有分片落盘、异步格式/扫描、下载和业务提交机制。该方案增加一次有界磁盘拷贝，以避免整文件占用堆内存；大文件仍走原分片续传协议。重复请求比较服务端计算的实际正文摘要，同键不同文件409；中断后使用相同幂等键重发整文件，两种模式不能混用同一初始化幂等键。
+
+整文件附件绑定在服务端集合配置中声明 `table-name` 和 `field-name`，数据源与表字段组合唯一；现有显式配置为 `表名.字段名` 的集合可按同样命名解析，不创建新集合、不扩大租户或密钥权限。未配置或无权的表字段返回404。内部文件长度、摘要、配额与分片完整性字段继续由服务端维护；大文件分片初始化仍保留其独立协议所需的size及可选sha256。
+
+分片初始化正文（字段名与实际接口一致；不接收 tenantId、contractVersion、mediaType 或目标地址）：
 
 ```json
 {
@@ -154,11 +161,11 @@ flowchart LR
 }
 ```
 
-元数据按冻结集合契约限制字段、类型和必填项，单次控制正文最多 64KiB；目前类型为 STRING/NUMBER/BOOLEAN，尚未接入行业字典和业务表外键解析。相同会话只能提交一个业务意图；同键同内容返回同一标识，不同内容 409。`complete` 根据会话状态幂等，无需额外幂等键。重复片也重新核对实际正文，不能仅凭声明摘要返回成功。
+元数据按冻结集合规范限制字段、类型和必填项，单次控制正文最多 64KiB；目前类型为 STRING/NUMBER/BOOLEAN，尚未接入行业字典和业务表外键解析。相同会话只能提交一个业务意图；同键同内容返回同一标识，不同内容 409。`complete` 根据会话状态幂等，无需额外幂等键。重复片也重新核对实际正文，不能仅凭声明摘要返回成功。
 
 受理前 `/messages/{messageId}` 返回 WAITING_FILE 或明确的终态；READY 并正式建任务后兼容原消息查询。状态页首选会话 statusUrl，能同时看到文件校验、各目标传输及业务回执。Kafka 消息包含 schemaVersion、messageId、deliveryId、fileId、集合、大小、摘要、元数据和相对 contentUrl；接收方使用约定的海通 base URL 与其自身只读凭据获取文件，通知中没有密钥、私有磁盘路径或 Base64 原文。
 
-原 `/api/v1/data-push`、旧 `/files/{channel}` 和原通道路由保持原有语义。旧 BINARY 通道不会自动成为新的文件集合。平台 FILE_VERSION_REF、短时下载授权、`/file-push` 快捷入口、multipart 小文件便利入口、批量业务提交和内部 FJGHCC 复制回调目前均未开放；小文件直接使用相同会话协议即可。
+原 `/api/v1/data-push`、旧 `/files/{channel}` 和原通道路由保持原有语义。旧 BINARY 通道不会自动成为新的文件集合。平台 FILE_VERSION_REF、短时下载授权、`/file-push` 快捷入口、multipart 表单入口、批量业务提交和内部 FJGHCC 复制回调目前均未开放；默认使用 `/api/v1/file-uploads/single` 原始字节整文件接口；大文件保留原分片协议。
 
 ### 5. 大文件上传与存储
 
@@ -166,12 +173,12 @@ flowchart LR
 
 | 文件规模 | 上传策略 | 初始参数 |
 | --- | --- | --- |
-| 不超过 20MiB | 小文件便利接口或标准会话均可，流式落地 | 不在业务堆中整文件缓存；扫描和投递仍异步 |
+| 不超过 20MiB | 默认整文件接口，流式落地；需要续传可显式选分片 | 不在业务堆中整文件缓存；扫描和投递仍异步 |
 | 20MiB 至 1GiB | 标准分片，失败只重传缺失片 | 默认 16MiB/片，单文件 2～4 个并发片 |
 | 1GiB 至 10GiB | 强制分片和续传，显式预留容量 | 初始单文件上限 10GiB；单调用方在途大文件数、总字节受限 |
 | 超过 10GiB | 通过集合策略和压测放开，优先存储直传及受控复制 | 不通过简单放大一个 HTTP 超时宣称支持任意大文件；每种存储验证自身分片限制 |
 
-一期通过海通的 raw 分片接口流式写入受控存储；浏览器只使用 `Blob.slice` 等有界分片，禁止整文件 `arrayBuffer`、整文件 Base64 或每片再复制成多份大数组。对象存储直传作为同一会话协议的可选模式，后续可避免文件正文经过应用节点；存储的 multipart 与业务 `complete` 状态必须对应并可恢复。
+整文件与raw分片接口都流式写入受控存储；浏览器只使用 `Blob.slice` 等有界分片，禁止整文件 `arrayBuffer`、整文件 Base64 或每片再复制成多份大数组。对象存储直传作为同一会话协议的可选模式，后续可避免文件正文经过应用节点；存储的 multipart 与业务 `complete` 状态必须对应并可恢复。
 
 生产多实例优先复用现网受控的对象存储；初期小规模单节点可用已有持久卷，存储适配接口至少提供创建会话、写片、列片、完成、读取、取消和删除能力。对象定位保存存储编号、对象键和原生版本，不能保存会过期的下载 URL。存储扩展不改变业务文件 ID。
 
@@ -179,18 +186,18 @@ flowchart LR
 
 使用 S3 类 multipart 时，适配器须验证服务端的片数、片大小、完成列表和校验语义；不能因为接口名称兼容就假设行为完全相同。16MiB 是本系统初始选择，实际边界参考所用产品。S3 原生支持失败片独立重传，其限制见 [S3 multipart 约束](https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html)，流程见 [multipart 上传说明](https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html)。
 
-完整 SHA-256 必须针对按片号拼接后的原始字节计算。片摘要拼接后的摘要、multipart ETag、存储复合校验值不能冒充整文件 SHA-256。若存储没有提供满足本契约的完整 SHA-256，后台流式读一次计算并与客户端可选声明比对；该读流量必须计入容量与时间预算。校验类型差异见 [S3 完整对象与复合校验说明](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html)。
+完整 SHA-256 必须针对按片号拼接后的原始字节计算。片摘要拼接后的摘要、multipart ETag、存储复合校验值不能冒充整文件 SHA-256。若存储没有提供满足本规范的完整 SHA-256，后台流式读一次计算并与客户端可选声明比对；该读流量必须计入容量与时间预算。校验类型差异见 [S3 完整对象与复合校验说明](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html)。
 
 本地合并模式通常需要分片与最终文件同时存在的空间，容量按接近两份原文及在途写入预留；对象存储原生合并也要计入未完成 multipart 的占用。不能把“合并不占堆”理解为“不占额外存储”。
 
 ### 6. 当前上传、恢复与正式受理
 
-1. 初始化在一个事务中预留全局和集合容量，插入带服务端租户、owner 和冻结契约的会话。配额任一步失败，事务回滚；不会只扣全局额度。每会话按两倍声明文件大小预留，为分片和合并原文同时存在留空间。
+1. 初始化在一个事务中预留全局和集合容量，插入带服务端租户、owner 和冻结规范的会话。配额任一步失败，事务回滚；不会只扣全局额度。每会话按两倍声明文件大小预留，为分片和合并原文同时存在留空间。
 2. 单片短事务锁父会话，检查状态、长度及旧片摘要，领取 attempt_token；正文在事务外用 64KiB 缓冲写盘、计算摘要并 force。完成时再次锁父会话，以 token 条件更新 COMPLETE。重复片也读取并验证实际正文；错误正文不能替换已确认片。
 3. `complete` 锁会话并一次聚合核对已确认片数和字节，置 FINALIZING。后台有界线程池领取带租约的会话，一次读取片清单；按顺序流式合并，同时复核每片摘要并计算整文件 SHA-256。格式或扫描不通过则 REJECTED，不建投递任务。
 4. 业务 `submit` 可先持久化唯一意图和稳定 messageId；此时意图保存在上传会话，`ht_message` 尚未建立，`/messages/{id}` 回退查询并显示 WAITING_FILE。拒绝/过期时回退查询展示明确终态。
 5. READY 后清理分片，按原文实际大小将 RESERVED 转为 COMMITTED；失败保留预留并重试。随后持父会话锁，在同一海通事务内建立 INGESTED 文件检查点、ACCEPTED 消息、接收账本及全部目标任务，并标记 published_at。旧文件解析器无法领取该检查点；文件工作者只会处理已就绪原文。
-6. LOCAL/FTP/SFTP 传原文，Kafka 传固定文件引用。文件 FTP 路径为受控根目录/数据源/文件集合/消息ID.扩展名，不再要求伪造 tableName；LOCAL/FTP 完成清单包含固定 fileId、messageId、deliveryId、集合、契约版本及业务元数据。目标任务沿用租约、重试和 UNKNOWN 处理；传输状态与接收方 ACCEPTED/REJECTED 回执分开。原文不写入 MySQL 消息正文。
+6. LOCAL/FTP/SFTP 传原文，Kafka 传固定文件引用。文件 FTP 路径为受控根目录/数据源/文件集合/消息ID.扩展名，不再要求伪造 tableName；LOCAL/FTP 完成清单包含固定 fileId、messageId、deliveryId、集合、规范版本及业务元数据。目标任务沿用租约、重试和 UNKNOWN 处理；传输状态与接收方 ACCEPTED/REJECTED 回执分开。原文不写入 MySQL 消息正文。
 7. 取消和过期清理要等活动片租约结束。只删除该 UUID 会话私有目录内的对象，不跟随链接；物理清理成功后再幂等释放配额。READY 且已提交的原文不会按未完成会话超时删除。
 
 进程在写片/合并期间中断时，未确认尝试不会被视为可恢复进度；客户端按服务端已确认片清单只补缺片。新工作者等旧租约失效后接管；合并前清理无数据库确认的孤立尝试，保留已确认片；发布事务失败则整体回滚，从持久化 READY/提交意图再次建立任务。过期持有者的数据库落账都检查领取 token。Windows 使用 force 与目录约束验证了进程级持久化，断电保证仍需结合部署磁盘和系统验证。
@@ -199,7 +206,7 @@ flowchart LR
 
 ### 7. 投递方式与业务闭环
 
-文件原文和文件通知分开定义，发布契约的 `deliveryProfileId` 决定必需目标及其依赖。调用方不能删除方案中的必需目标，也不能以临时输入修改目标地址。
+文件原文和文件通知分开定义，发布规范的 `deliveryProfileId` 决定必需目标及其依赖。调用方不能删除方案中的必需目标，也不能以临时输入修改目标地址。
 
 | 方案 | 发送内容 | 成功证据 |
 | --- | --- | --- |
@@ -208,7 +215,7 @@ flowchart LR
 | Kafka 文件引用通知 | `eventId`、文件及版本 ID、大小、SHA-256、业务元数据和受控获取入口；消息体建议最多 256KiB | broker ACK 仅证明消息到达代理；业务完成须另有接收回执 |
 | 平台 FJGHCC 文件落地 | 新的异步文件复制命令引用固定文件版本，由持有目标连接权限的工作者流式复制 | 远端复制任务完成并反馈核验结果；提交复制作业得到 202 不算投递完成 |
 
-现有 `PLATFORM_FTP` 会把表批次 JSON 交给平台 `/internal/ftp-deliver`，尚不接受原始大文件。不能把 `packet.bytes()` 换成 Base64 后继续走这条链路。增加专用文件复制适配：海通发送小型受认证命令，平台复用现有 FJGHCC 绑定和连接权限，通过专用文件工作池从受控存储/受限下载授权获取原文，随后异步回报。管理请求线程不等待整个复制，目标连接凭据不出现在公开契约中。
+现有 `PLATFORM_FTP` 会把表批次 JSON 交给平台 `/internal/ftp-deliver`，尚不接受原始大文件。不能把 `packet.bytes()` 换成 Base64 后继续走这条链路。增加专用文件复制适配：海通发送小型受认证命令，平台复用现有 FJGHCC 绑定和连接权限，通过专用文件工作池从受控存储/受限下载授权获取原文，随后异步回报。管理请求线程不等待整个复制，目标连接凭据不出现在公开规范中。
 
 内部复制结果通过独立内部接口推进传输任务；工作者回报失败或结果丢失时，按已保存的远端作业 ID 做有界状态核对。远端作业超过截止时间仍不能确认时进入 UNKNOWN 待核实，不能把没有响应解释为未执行。对方业务 ACCEPTED/REJECTED 回执则只推进业务确认层，不替代文件传输证据。
 
@@ -257,7 +264,7 @@ Kafka 只发文件描述和引用。当前生产者与代理都有消息大小�
 
 | 现用表 | 用途 | 主要约束 |
 | --- | --- | --- |
-| `ht_file_upload` | 服务端租户/调用方/集合、冻结契约、初始化和提交指纹、文件大小和摘要、状态、配额状态、租约、到期时间及预分配 messageId | 租户+owner+数据源+集合+init_key/submission_key 唯一；messageId 唯一；状态、租约、下次执行时间、创建时间索引 |
+| `ht_file_upload` | 服务端租户/调用方/集合、冻结规范、初始化和提交指纹、文件大小和摘要、状态、配额状态、租约、到期时间及预分配 messageId | 租户+owner+数据源+集合+init_key/submission_key 唯一；messageId 唯一；状态、租约、下次执行时间、创建时间索引 |
 | `ht_file_upload_part` | 分片长度、实际摘要、服务端生成路径、WRITING/COMPLETE、attempt_token 和租约 | uploadId+片号主键；tenantId+uploadId 外键，防止跨租户挂片 |
 | `ht_storage_quota` | 全局与集合范围的 limit/reserved/committed 字节、活动会话计数 | quota_key 主键；条件更新原子预留、转换和释放，事务同时更新两个范围 |
 | `ht_file_receipt` | 接收方身份、幂等键、deliveryId、文件摘要、业务状态/编号、载荷指纹及收到时间 | 租户+sender_id+receipt_key 唯一；deliveryId 唯一；租户+uploadId 及 deliveryId 外键 |
@@ -266,15 +273,15 @@ Kafka 只发文件描述和引用。当前生产者与代理都有消息大小�
 
 集合暂由服务端 YAML 配置提供，完整快照写入会话。尚未新增 `ht_standalone_file_contract` 镜像主档；平台文件资产发布尚未开始，因此也不建立空转的 `ht_relay_outbox`。当前 READY 发布在同一个海通事务中原子写入检查点、消息、交换账本、全部目标任务及 published_at，重试以锁和唯一键保证一次建立。未来跨行业平台登记时，再按该跨库事务边界引入 outbox 及明确的 FILE 版本绑定。
 
-### 10. 租户、契约同步与权限
+### 10. 租户、规范同步与权限
 
 托管模式复用控制库 `data_push_relay_client_t` 及 `RelayClientRegistry` 的客户端到租户/数据源映射。外部 `datasourceId` 只是被校验的资源选择项，不能决定租户；行业页面从认证租户上下文解析，内部调用通过已认证服务身份和绑定解析，客户端不得自行设置可信 `X-Relay-Client-Id`。
 
-新会话、业务提交、平台版本登记和下载授权必须有当前有效的登记权限。上传分片绑定服务器签发的短期会话授权及本地吊销版本，不逐片远程查询整份契约；授权到期后重新校验才能继续。提交和正式放行前再核对吊销状态，停用数据源可以阻止发布及交付，不必删除用户已经上传的字节。
+新会话、业务提交、平台版本登记和下载授权必须有当前有效的登记权限。上传分片绑定服务器签发的短期会话授权及本地吊销版本，不逐片远程查询整份规范；授权到期后重新校验才能继续。提交和正式放行前再核对吊销状态，停用数据源可以阻止发布及交付，不必删除用户已经上传的字节。
 
-托管服务不可用时停止新的受理授权和过期授权续期，已确认片保留用于恢复，不回退到未受控的独立模式。独立模式必须显式部署并维护其可信的本地契约镜像，功能和权限边界与托管模式相同。
+托管服务不可用时停止新的受理授权和过期授权续期，已确认片保留用于恢复，不回退到未受控的独立模式。独立模式必须显式部署并维护其可信的本地规范镜像，功能和权限边界与托管模式相同。
 
-登记同步扩展为显式声明版本和完整域范围的快照，例如 `snapshotFormat=2, domains=[TABLE,FILE]`。旧版只同步表的请求中缺少 `fileCollections`，不能解释为删除所有文件集合；只有明确声明覆盖 FILE 域的完整快照才可停用缺失集合。契约内容哈希包含格式、元数据、目标方案、有效期规则和策略版本；快照与运行任务都不包含连接口令。
+登记同步扩展为显式声明版本和完整域范围的快照，例如 `snapshotFormat=2, domains=[TABLE,FILE]`。旧版只同步表的请求中缺少 `fileCollections`，不能解释为删除所有文件集合；只有明确声明覆盖 FILE 域的完整快照才可停用缺失集合。规范内容哈希包含格式、元数据、目标方案、有效期规则和策略版本；快照与运行任务都不包含连接口令。
 
 对象直传的短时签名仅限某个会话、对象、片号、大小和期限，作为受限凭据在客户端内存中使用，不写日志或持久页面存储。普通 API Key、平台会话 token 不进入 URL。环境禁止签名直传时使用同域分片中转。直接存储访问授予的有效期与撤销窗口必须被接受并测试，不能假设发布停用会立即撤销已经发出的所有存储签名。
 
@@ -299,7 +306,7 @@ Kafka 只发文件描述和引用。当前生产者与代理都有消息大小�
 | --- | --- | --- |
 | 文件集合或文件资产分页 | 浏览器 1 次主查询；分页与总数/有界汇总、当前页版本/目标摘要批量读取，业务 SQL 固定不超过 4 条；共同认证开销另列 | SQL 带当前租户和角色数据范围；ID 在集合内查交集，不从客户端声明扩权 |
 | 文件版本详情批量解析 | 一次批量请求，最多 100 ID；一次带范围的关联读取及必要固定授权查询，不在辅助方法按文件 selectOne | 未授权 ID 与不存在 ID 均返回统一受限结果，不泄露跨租户存在性 |
-| 上传会话批量初始化 | 一次元数据请求；绑定、契约、数据范围批量预取，按有界配额组处理；记录写入使用批量语句，不能先逐项读再写 | 每个数据源/集合都必须在允许交集中，不因多个 ID 放宽校验 |
+| 上传会话批量初始化 | 一次元数据请求；绑定、规范、数据范围批量预取，按有界配额组处理；记录写入使用批量语句，不能先逐项读再写 | 每个数据源/集合都必须在允许交集中，不因多个 ID 放宽校验 |
 | 文件列表上的投递状态 | 页面主查询聚合或后端到海通的一次有界批量状态请求；按实际服务分组且严格限制分组数 | 海通再按已验证租户与调用范围筛选，不能相信上游任意 ID 列表 |
 | 上传分片 | 每片独立写入和校验，属于主动数据传输；片状态分页或批量查询，禁止逐片自动补读 | 每个请求锁定同一会话、调用方、片号和租户，不可串用其他会话 |
 
@@ -316,7 +323,7 @@ Kafka 只发文件描述和引用。当前生产者与代理都有消息大小�
 | 文件校验 | 单线程大文件会堵住后续小文件；哈希、扫描重复读原文 | 校验池有界并按大小公平调度，流式读取、可复用已验证证据，限制每存储并发和读带宽 |
 | FTP/SFTP | 原实现整文件上传并读回校验，至少增加一份远端回读流量；重试可能再次整传 | 专用大文件队列，连接/带宽上限；验证后才启用目标续传；不能单凭大小相同替代摘要核验 |
 | JVM 与客户端 | SDK 预取、分片 byte[]、浏览器整文件加载会将分片大小乘并发数放大 | 显式 Content-Length、流式 SDK、预取上限；只持有有界缓冲；压测含堆外内存、连接缓冲和缓存 |
-| 内部 HTTP | 原契约客户端部分响应读取为 `readAllBytes()`，不能用于拉取原文 | 契约响应做有界读取，原文走独立流式存储能力；超长异常响应也要截断 |
+| 内部 HTTP | 原规范客户端部分响应读取为 `readAllBytes()`，不能用于拉取原文 | 规范响应做有界读取，原文走独立流式存储能力；超长异常响应也要截断 |
 | 目标长时间不可用 | 未投递原文持续堆积，仍接收会耗尽盘 | 按待投字节和最老任务等待时间背压，配额预留失败返回 429/503 与重试信息，不无限排队 |
 | 查询与通知 | 状态逐文件轮询和全量目录扫描随规模线性放大 | 当前页批量状态、退避轮询或有界事件流、索引分页和增量清单；ES 走既有资产事件重试 |
 
@@ -357,13 +364,15 @@ Kafka 只发文件描述和引用。当前生产者与代理都有消息大小�
 - `FileUploadHttpTest` 通过真实 HTTP/H2 和真实 HTTP/MySQL 验证接收、投递、Range/HEAD/If-Range、接收方回读及业务回执；MySQL 集成只使用独立 haitong 的明确演示文件，不清空原表。测试凭据/运行材料在私有配置或忽略的 logs 内。
 - 四行业真实库各 156 表，同构检查通过；控制库、四行业及独立 haitong 共六库已读取并重新导出完整结构。此功能没有修改共享 Magic/低代码，不涉及其发布。
 
+示例客户端 `haitong-data-pull/examples/upload_file.py` 默认整文件上传；改用 `--chunked --collection <已登记集合编号>` 使用原分片续传。两者都从 `HAITONG_API_KEY` 读取密钥，保持原有元数据提交和状态查询。
+
 启用与调用：复制配置示例的文件段到受限部署配置，明确配置调用方密钥、集合及目标；为现有库按本次四张新增表的审阅差异升级，再运行当前构建。密钥用环境变量或受限文件引用，不能写进示例/命令参数。
 
 ```text
-python haitong-data-pull/examples/upload_file.py material.pdf --datasource case-source --collection case-documents --business-key DEMO-CASE-001 --idempotency-key DEMO-MATERIAL-001 --metadata '{"caseNo":"DEMO-CASE-001","documentType":"DOCUMENT"}'
+python haitong-data-pull/examples/upload_file.py material.pdf --datasource case-source --table police_case_record --field document_file_id --business-key DEMO-CASE-001 --idempotency-key DEMO-MATERIAL-001 --metadata '{"caseNo":"DEMO-CASE-001","documentType":"DOCUMENT"}'
 ```
 
-Windows 或自动化调用可用 --metadata-file metadata.json 从 UTF-8 文件读取元数据，避免命令行引号差异。调用前在当前终端环境设置 HAITONG_API_KEY；同文件、同业务意图用原幂等键重跑即可续传。客户端哈希和发送均以小缓冲读取文件，分页读取已确认片后只补缺片，查询退避至最多每 5 秒一次。
+Windows 或自动化调用可用 --metadata-file metadata.json 从 UTF-8 文件读取元数据，避免命令行引号差异。调用前在当前终端环境设置 HAITONG_API_KEY；同文件、同业务意图用原幂等键重跑：默认整文件重新发送，--chunked模式分页读取已确认片后只补缺片。客户端哈希和发送均以小缓冲读取文件，查询退避至最多每 5 秒一次。
 
 可重复验证命令（工作目录 haitong-data-pull）：
 
@@ -379,7 +388,7 @@ mvn -Dhaitong.loopback.tests=true -Dhaitong.large-file.tests=true -Dtest=FileUpl
 
 | 阶段 | 需要交付 | 通过条件 |
 | --- | --- | --- |
-| A. 登记与模型 | 文件集合、不可变契约、租户绑定、资产版本基础、海通会话和配额结构；各库完整 DDL | 四行业同构检查和实际完整结构导出通过；发布无文件集合不再错误要求伪造数据表；旧表契约保持兼容 |
+| A. 登记与模型 | 文件集合、不可变规范、租户绑定、资产版本基础、海通会话和配额结构；各库完整 DDL | 四行业同构检查和实际完整结构导出通过；发布无文件集合不再错误要求伪造数据表；旧表规范保持兼容 |
 | B. 上传与恢复 | 专用接口、raw 分片、完整摘要、隔离检查、状态与崩溃恢复；单文件原文受控保存 | 小文件与 3/10GiB 文件真实传输；断网重启后只补缺失片；同键冲突可验证；没有整文件堆内缓存 |
 | C. 资产与投递 | 平台文件登记、outbox、FTP/SFTP、Kafka 引用和 FJGHCC 异步复制适配；独立业务回执 | 文件与版本 ID 可解析；目标字节摘要一致；各阶段响应丢失均可幂等恢复；业务失败不会误报成功 |
 | D. 页面与发布 | 五步登记分支、文件管理、固定版本 FILE 挂接、既有审批/订阅、ES 文件投影及授权下载 | 用真实租户从登记到可授权获取和回执走通；未授权机构/租户无法获取文件；ES 下架与下载权限一致 |
@@ -393,7 +402,7 @@ mvn -Dhaitong.loopback.tests=true -Dhaitong.large-file.tests=true -Dtest=FileUpl
 2. 同一片重复、并发冲突、片摘要错误、整文件摘要错误、缺片提交、过期授权、断网、应用重启、存储不可用和磁盘配额耗尽。
 3. 3GiB、10GiB 的真实传输与恢复，验证合并、实际字节数和最终 SHA-256；是否支持 10GiB 以该结果确认，不凭配置值宣布。
 4. FTP/SFTP 在最终文件发布、完成标记发布及任务落账之间断连；Kafka ACK 后接收方业务失败；FJGHCC 作业 202 后复制失败；任务不确定结果的人工核实。
-5. 上传者越权选择集合、租户混入批量 ID、来源方伪造回执、下载范围越权、旧密钥轮换、停用数据源、契约升级和旧同步请求遗漏 FILE 域。
+5. 上传者越权选择集合、租户混入批量 ID、来源方伪造回执、下载范围越权、旧密钥轮换、停用数据源、规范升级和旧同步请求遗漏 FILE 域。
 6. 页面 20/100 项的浏览器请求、内部 HTTP 和 SQL 计数，缺少任意 ID 权限时仍逐项受限；批量前置读取不能藏在循环辅助方法中。
 7. 单节点基准和混合负载，观测堆/堆外、GC、磁盘、临时空间、每目标带宽、队列字节及原 JSON 接口延迟。初始验收目标可设为限额内上传时原接口 p95 不劣于同条件基准的 1.2 倍、元数据查询 p95 不超过 500ms；这些是待实测目标，硬件、并发、速率和样本必须一起记录。
 8. 目录发布固定版本后上传新版本，旧订阅仍获取旧版本；下架与拒绝下载、索引延迟、备份恢复及原文清理条件均可验证。
@@ -404,7 +413,7 @@ mvn -Dhaitong.loopback.tests=true -Dhaitong.large-file.tests=true -Dtest=FileUpl
 
 ## 工程概览与使用
 
-一个 Java 21 / Spring Boot 3.3.8 单模块后端工程。HTTP 接入和受控后端操作，Kafka 双向、FTP/FTPS 双向与 SFTP 投递，MySQL 默认数据库、DM8 适配，提供运行账本、交换日志与登记契约持久化。
+一个 Java 21 / Spring Boot 3.3.8 单模块后端工程。HTTP 接入和受控后端操作，Kafka 双向、FTP/FTPS 双向与 SFTP 投递，MySQL 默认数据库、DM8 适配，提供运行账本、交换日志与登记规范持久化。
 
 如果你的需求只是“3～4 张表推到一个接口，再写 FTP、Kafka 或打印日志”，优先阅读 [三个场景快速使用](#guide-a185e7e4)。它提供了三个固定接口，调用方不需要理解通道或目标配置。
 
@@ -611,7 +620,7 @@ Kafka ACK、FTP文件核验、HTTP响应不是对方业务成功回执。原表�
 > **适用服务**：`haitong-data-pull`（数据推送服务）  
 > **统一入口**：`POST /api/v1/data-push`  
 > **数据格式**：JSON 表批次（一次请求提交一张登记表的一批记录）  
-> **面向对象**：默认面向已在源数据管理平台完成“数据推送方式”登记的系统调用方；也支持由部署方在服务本地维护数据源和表契约的独立运行场景。
+> **面向对象**：默认面向已在源数据管理平台完成“数据推送方式”登记的系统调用方；也支持由部署方在服务本地维护数据源和表规范的独立运行场景。
 
 本文档定义外部系统向平台推送结构化数据的统一协议。调用方只需要指定本次投递类型 `deliveryType`；FTP 的实际文件存储位置、Kafka 的业务 Topic、目标数据源和权限范围，均由受控配置决定，**不得也不能由请求参数覆盖**。受控配置有两种模式：登记托管模式由数据元素平台提供，独立运行模式由本服务的受版本管理配置提供。
 
@@ -638,7 +647,7 @@ Kafka ACK、FTP文件核验、HTTP响应不是对方业务成功回执。原表�
 | 处理模式 | 异步、可查询、幂等 |
 | 单次推送范围 | **一张表**的一批记录 |
 
-成功返回 `202 Accepted` 的含义是：服务已经通过基础校验、登记契约校验并将投递任务可靠受理。它**不等同于**文件已写入 FTP 或消息已写入 Kafka。请使用返回的 `statusUrl` 或消息查询接口确认最终投递状态。
+成功返回 `202 Accepted` 的含义是：服务已经通过基础校验、登记规范校验并将投递任务可靠受理。它**不等同于**文件已写入 FTP 或消息已写入 Kafka。请使用返回的 `statusUrl` 或消息查询接口确认最终投递状态。
 
 
 <a id="guide-38565d24--12-支持的投递类型"></a>
@@ -679,22 +688,24 @@ Kafka ACK、FTP文件核验、HTTP响应不是对方业务成功回执。原表�
 
 #### 2.0 先确认部署模式
 
-| 部署模式 | 路由配置 | 契约和权限来源 | 是否需要数据元素平台 |
+| 部署模式 | 路由配置 | 规范和权限来源 | 是否需要数据元素平台 |
 | --- | --- | --- | --- |
-| 登记托管模式 | `registration-managed: true` | 已登记、已发布的数据源/表/字段契约与平台签发密钥 | 是；服务会调用平台内部登记校验服务 |
-| 独立运行模式 | `registration-managed: false` | `relay.standalone.datasources` 中的数据源、表、字段契约和本地调用方授权 | 否；服务不会访问平台的 8088 登记校验地址 |
+| 登记托管模式 | `registration-managed: true` | 已登记、已发布的数据源/表/字段规范与平台签发密钥 | 是；服务会调用平台内部登记校验服务 |
+| 独立运行模式 | `registration-managed: false` | `relay.standalone.datasources` 中的数据源、表、字段规范和本地调用方授权 | 否；服务不会访问平台的 8088 登记校验地址 |
 
-两种模式是**显式配置选择**，不是故障自动降级。登记托管模式在平台不可用时会拒绝请求，避免绕过已登记的表结构和授权；需要离线部署时，运维人员应切换为独立运行模式并完整配置本地契约。具体配置请参阅 [独立运行模式](#guide-985aca91)。
+业务表推送请求已取消 `schemaVersion` 和 `occurredAt`。对外参数为 deliveryType、datasourceId、tableName、可选batchId、records；带已取消参数的新请求返回422并提示移除。登记同步快照、内部审计及投递清单中的规范版本由服务端维护，与调用方请求参数分开。
+
+两种模式是**显式配置选择**，不是故障自动降级。登记托管模式在平台不可用时会拒绝请求，避免绕过已登记的表结构和授权；需要离线部署时，运维人员应切换为独立运行模式并完整配置本地规范。具体配置请参阅 [独立运行模式](#guide-985aca91)。
 
 
 <a id="guide-38565d24--21-调用前必须满足的条件"></a>
 
 #### 2.1 调用前必须满足的条件
 
-1. 使用登记托管模式时：源数据管理平台中已登记数据源，且接入方式为**数据推送方式**；使用独立运行模式时：部署配置中已登记等效的数据源和表契约。
+1. 使用登记托管模式时：源数据管理平台中已登记数据源，且接入方式为**数据推送方式**；使用独立运行模式时：部署配置中已登记等效的数据源和表规范。
 2. 该数据源已完成登记发布；需要推送的表已经登记并发布，字段结构可被平台识别。
 3. 登记托管模式：在登记第五步为该数据源签发过 `X-Api-Key`；独立运行模式：部署方为调用方配置本地 `X-Api-Key`。
-4. 推送请求中的 `datasourceId` 与 `tableName` 必须属于调用方的授权范围。登记托管模式由平台授权关系决定；独立运行模式由 `clients`、表契约和路由权限共同决定。
+4. 推送请求中的 `datasourceId` 与 `tableName` 必须属于调用方的授权范围。登记托管模式由平台授权关系决定；独立运行模式由 `clients`、表规范和路由权限共同决定。
 5. 若投递类型为 `FTP`：登记托管模式下，资源中心 ODS 层中分域编码为 `FJGHCC` 的关联数据源已配置可用的文件存储；独立运行模式下，本服务 FTP 目标参数已由运维配置。
 6. 若投递类型为 `KAFKA`：登记托管模式下，登记数据源已配置并被授权有效的 Kafka Topic；独立运行模式下，服务端静态 Topic 已配置。两种模式均要求对应路由已启用。
 
@@ -734,7 +745,7 @@ haitong-data-pull
   ├─ 验证访问密钥、通道权限、限流、请求体大小、幂等键
   ├─ 按 deliveryType 分流：FTP / KAFKA
   ├─ 登记托管：向源数据管理平台核验数据源、表、字段、发布状态、投递权限
-  ├─ 独立运行：按本地受控契约核验数据源、表、字段和调用方权限
+  ├─ 独立运行：按本地受控规范核验数据源、表、字段和调用方权限
   ├─ 持久化接收消息与投递任务（返回 202）
   ▼
 异步投递执行器
@@ -775,7 +786,7 @@ haitong-data-pull
 2. 平台为该数据源创建一个推送调用方身份（逻辑名称通常为 `push-<datasourceId>`）；
 3. 服务端生成高强度随机密钥，仅在**首次签发响应**中以明文返回；服务端持久化的是不可逆摘要，不保存可回显的明文；
 4. 平台记录此调用方与数据源的授权关联，并授予该数据源下已发布数据表的 `table-to-ftp`、`table-to-kafka` 推送通道；
-5. 每一次请求均以该密钥定位调用方，再以 `datasourceId`、`tableName` 和登记契约校验其访问范围。
+5. 每一次请求均以该密钥定位调用方，再以 `datasourceId`、`tableName` 和登记规范校验其访问范围。
 
 因此，一个数据源的密钥可以推送该数据源下已发布的多张表，但不能用来推送别的数据源或未发布的表。密钥轮换后旧密钥会失效；请将新密钥更新到调用系统的受控密钥库，而不是写入前端代码、接口文档、日志或 Git 仓库。
 
@@ -812,9 +823,7 @@ haitong-data-pull
   "deliveryType": "FTP",
   "datasourceId": "2097976748808962048",
   "tableName": "police_person_info",
-  "schemaVersion": "v1",
   "batchId": "police_person_info-20260915-000001",
-  "occurredAt": "2026-09-15T09:30:00Z",
   "records": [
     {
       "person_id": "P000001",
@@ -834,9 +843,7 @@ haitong-data-pull
 | `deliveryType` | string | 是 | `FTP` / `KAFKA`；大小写不敏感 | 选择本次的受管投递类型。建议始终使用大写。 |
 | `datasourceId` | string | FTP、Kafka 时是 | 已登记数据源标识，1–64 位，允许字母、数字、`_`、`-` | 必须是本 `X-Api-Key` 绑定的数据源。不要传数据源展示名称。 |
 | `tableName` | string | 是 | 1–200 字符，例如 `police_person_info` | 必须是该数据源下已登记并发布的表英文名。一次请求只能有一个表名。 |
-| `schemaVersion` | string | 否 | 例如 `v1` | 调用方维护的结构版本标记，用于审计和升级追踪；不替代平台表结构校验。 |
 | `batchId` | string | 否，强烈建议 | 例如 `police_person_info-20260915-000001` | 调用方业务批次号。建议与 `Idempotency-Key` 一一对应或可相互追溯。 |
-| `occurredAt` | string | 否，强烈建议 | ISO 8601，例如 `2026-09-15T09:30:00Z` | 本批数据的产生/提取时间，不是接口发送时间。 |
 | `records` | array<object> | 是 | 1–10,000 条 | 当前表的记录集合；数组不能为空，数组内每项必须为 JSON 对象。 |
 
 
@@ -844,7 +851,7 @@ haitong-data-pull
 
 #### 4.3 `records` 字段规则
 
-1. `records` 中每个对象的字段应与已发布登记表的字段定义一致；字段名、必填性、类型和约束由平台数据源登记契约校验。
+1. `records` 中每个对象的字段应与已发布登记表的字段定义一致；字段名、必填性、类型和约束由平台数据源登记规范校验。
 2. 一次请求只能包含同一张表的数据。不要把 `police_person_info` 和 `police_vehicle_info` 混入同一个 `records`。
 3. 单次最多 10,000 条；超过时按业务批次拆分，并为每个分片使用不同的 `Idempotency-Key`。
 4. 请求体默认上限为 1 MiB。即使记录数未超过 10,000，JSON 体积过大也应拆分。
@@ -903,9 +910,7 @@ Idempotency-Key: police_person_info-20260915-000001
   "deliveryType": "FTP",
   "datasourceId": "2097976748808962048",
   "tableName": "police_person_info",
-  "schemaVersion": "v1",
   "batchId": "police_person_info-20260915-000001",
-  "occurredAt": "2026-09-15T09:30:00Z",
   "records": [
     {
       "person_id": "P350200000001",
@@ -940,7 +945,6 @@ curl --request POST "http://127.0.0.1:18083/api/v1/data-push" \
     "datasourceId":"2097976748808962048",
     "tableName":"police_person_info",
     "batchId":"police_person_info-20260915-000001",
-    "occurredAt":"2026-09-15T09:30:00Z",
     "records":[{"person_id":"P350200000001","person_name":"张三"}]
   }'
 ```
@@ -981,9 +985,7 @@ Idempotency-Key: police_person_info-20260915-000002
   "deliveryType": "KAFKA",
   "datasourceId": "2097976748808962048",
   "tableName": "police_person_info",
-  "schemaVersion": "v1",
   "batchId": "police_person_info-20260915-000002",
-  "occurredAt": "2026-09-15T10:00:00Z",
   "records": [
     {
       "person_id": "P350200000003",
@@ -1003,7 +1005,7 @@ Idempotency-Key: police_person_info-20260915-000002
 - 调用方只填写 `deliveryType: "KAFKA"`，不能在 JSON 中指定 `topic`、Broker 或消费者组。
 - 目标 Topic 由数据源登记配置并经平台授权；未配置 Topic 时服务不会假装投递成功。
 - 异步投递成功后，状态详情中可安全返回 `partition`、`offset` 等投递结果；不要据此推断或公开完整 Broker 连接信息。
-- 一次请求提交的 `records` 是一个表批次；下游应以 `datasourceId`、`tableName`、`batchId`、`occurredAt` 等业务信息完成可追溯处理。
+- 一次请求提交的 `records` 是一个表批次；下游应以 `datasourceId`、`tableName`、`batchId` 等业务信息完成可追溯处理。
 
 ---
 
@@ -1159,7 +1161,7 @@ Kafka 成功投递时，`result` 中可能包含 `partition`、`offset`；FTP �
 | 503 | `CAPACITY_EXHAUSTED` | 服务暂时无足够接收容量或存储空间 | 按提示稍后使用**原幂等键**重试。 |
 | 503 | `PERSISTENCE_UNAVAILABLE` | 服务暂时无法确认是否已经受理 | 绝不能改键盲发；使用原幂等键重试或查询。 |
 
-对于来自登记平台的校验失败，具体业务错误码可能会随平台策略扩展。处理原则不变：先确认“数据源登记状态 → 表发布状态 → 字段契约 → 目标投递配置 → 密钥授权范围”。
+对于来自登记平台的校验失败，具体业务错误码可能会随平台策略扩展。处理原则不变：先确认“数据源登记状态 → 表发布状态 → 字段规范 → 目标投递配置 → 密钥授权范围”。
 
 ---
 
@@ -1284,9 +1286,9 @@ POST /api/v1/data-push
 
 | 能力 | 所在系统 | 用途 |
 | --- | --- | --- |
-| 数据源/数据表/字段登记与发布 | 源数据管理平台 | 定义允许接收的 `datasourceId`、`tableName` 和字段契约。 |
+| 数据源/数据表/字段登记与发布 | 源数据管理平台 | 定义允许接收的 `datasourceId`、`tableName` 和字段规范。 |
 | 推送密钥签发与轮换 | 源数据管理平台 | 为“数据推送方式”的数据源生成、展示一次、轮换 `X-Api-Key`。 |
-| 推送契约查询 | 源数据管理平台 | `GET /dws/push/schema/contracts`，供管理端展示接口、表及目的端状态；不返回密钥和目的端凭据。 |
+| 推送规范查询 | 源数据管理平台 | `GET /dws/push/schema/contracts`，供管理端展示接口、表及目的端状态；不返回密钥和目的端凭据。 |
 | FTP/FJGHCC 关联配置 | 资源中心/数仓分层分域 | 决定当前环境 FTP 文件投递的实际关联数据源。 |
 | Kafka Topic 授权 | 数据源登记配置 | 决定当前数据源可投递的 Kafka Topic。 |
 | 消息投递查询 | `haitong-data-pull` | `GET /api/v1/messages/{messageId}`，供调用方确认最终投递结果。 |
@@ -1734,14 +1736,13 @@ INGESTED是文件数据已接管；COMPLETED在状态查询中根据全部关联
 
 ### 对方统一发送格式
 
-日志场景可只使用 `tableName` 与 `records`。FTP、Kafka 的生产推送场景还必须使用已登记的 `datasourceId`，并会按数据中台发布的字段契约校验；详见 [登记推送契约接入说明](#guide-a3391486)。`records` 是本次批次的记录数组；一张表可分多批发送。每次请求的 `Idempotency-Key` 必须唯一，网络超时重发同一批时必须保持不变。
+日志场景可只使用 `tableName` 与 `records`。FTP、Kafka 的生产推送场景还必须使用已登记的 `datasourceId`，并会按数据中台发布的字段规范校验；详见 [登记推送规范接入说明](#guide-a3391486)。`records` 是本次批次的记录数组；一张表可分多批发送。每次请求的 `Idempotency-Key` 必须唯一，网络超时重发同一批时必须保持不变。
 
 ```json
 {
   "datasourceId": "已完成登记的数据源ID",
   "tableName": "customer",
   "batchId": "customer-20260908-001",
-  "occurredAt": "2026-09-08T10:30:00+08:00",
   "records": [
     {"customerId": "C001", "name": "示例客户", "status": "ACTIVE"},
     {"customerId": "C002", "name": "示例客户二", "status": "ACTIVE"}
@@ -1754,7 +1755,7 @@ INGESTED是文件数据已接管；COMPLETED在状态查询中根据全部关联
 - `datasourceId`：FTP、Kafka 场景必填，必须是已完成“数据推送方式”登记的数据源。
 - `tableName`：表名，必填。
 - `records`：至少一条记录的 JSON 数组；单次最多 10,000 条，或受 `max-message-bytes` 限制时拆成更小批次。
-- `batchId`、`occurredAt`：建议填写，便于后续按批次查账；不是必填。
+- `batchId`：建议填写，便于后续按批次查账；不是必填。
 - 每条 `records` 元素必须是 JSON 对象。
 - 每张表、每个批次使用不同的 `Idempotency-Key`，例如 `customer-20260908-001`。
 
@@ -1771,7 +1772,6 @@ $body = @'
   "datasourceId": "已登记的数据源编码",
   "tableName": "customer",
   "batchId": "customer-20260908-001",
-  "occurredAt": "2026-09-08T10:30:00+08:00",
   "records": [
     {"customerId": "C001", "name": "示例客户", "status": "ACTIVE"}
   ]
@@ -1845,14 +1845,14 @@ relay:
   kafka:
     enabled: true
     bootstrap-servers: "Kafka地址1:9092,Kafka地址2:9092"
-    producer-topic: ""               # 登记契约动态指定 Topic，不使用全局默认 Topic
+    producer-topic: ""               # 登记规范动态指定 Topic，不使用全局默认 Topic
     security-protocol: PLAINTEXT
   routes:
     table-to-kafka:
       enabled: true
 ```
 
-Kafka 中每条消息就是一个“表批次” JSON，包含 `tableName`、`batchId`、`occurredAt` 和 `records`。海通不会自动创建 Topic，也不会让调用方在请求中填 Topic。
+Kafka 中每条消息就是一个“表批次” JSON，包含 `tableName`、`batchId` 和 `records`。海通不会自动创建 Topic，也不会让调用方在请求中填 Topic。
 
 
 <a id="guide-a185e7e4--场景三接口收表数据只打印运行日志"></a>
@@ -1939,7 +1939,7 @@ V1.0 relay_message→ht_message，relay_delivery→ht_delivery，relay_file_chec
 | 配置项 | 请求头 | 使用方 | 唯一职责 | 与数据库的关系 |
 | --- | --- | --- | --- | --- |
 | `relay.security.clients.<clientId>.api-key` | `X-Api-Key` | 业务数据生产方 | 认证调用方，并授予其进入 FTP/Kafka/LOG 推送通道的资格 | 认证后得到 `clientId`；该编号与 `ht_standalone_datasource_client.client_id` 匹配，决定它可推哪些数据源 |
-| `relay.standalone-registry.sync-key` | `X-Standalone-Registry-Key` | 数据元素平台服务 | 仅允许同步登记契约，不可推送业务 records | 调用 `REGISTRY_SYNC` 后全量维护 `ht_standalone_datasource`、`ht_standalone_table`、`ht_standalone_table_column`、`ht_standalone_datasource_client` |
+| `relay.standalone-registry.sync-key` | `X-Standalone-Registry-Key` | 数据元素平台服务 | 仅允许同步登记规范，不可推送业务 records | 调用 `REGISTRY_SYNC` 后全量维护 `ht_standalone_datasource`、`ht_standalone_table`、`ht_standalone_table_column`、`ht_standalone_datasource_client` |
 
 两把密钥绝不能复用。第一把密钥泄露的影响是“可作为某个业务系统推送数据”；第二把密钥泄露的影响是“可修改允许推送的数据源、表和字段范围”。
 
@@ -1949,7 +1949,7 @@ V1.0 relay_message→ht_message，relay_delivery→ht_delivery，relay_file_chec
 ### 数据流
 
 ```text
-数据元素平台 -- X-Standalone-Registry-Key + REGISTRY_SYNC --> 海通 ht_standalone_* 契约镜像
+数据元素平台 -- X-Standalone-Registry-Key + REGISTRY_SYNC --> 海通 ht_standalone_* 规范镜像
 业务系统       -- X-Api-Key + FTP/KAFKA/LOG -------------> 海通认证得到 clientId
 海通           -- clientId + datasourceId ---------------> 校验 datasource_client、表、字段、版本
 海通           -- 已校验数据 -----------------------------> FTP / Kafka / 日志目标
@@ -1985,7 +1985,7 @@ Content-Type: application/json
 }
 ```
 
-这是一个“单数据源完整快照”接口。某个数据源本次快照里未出现的表、字段、调用方授权会被逻辑停用；所以不能用局部数据覆盖完整登记契约。
+这是一个“单数据源完整快照”接口。某个数据源本次快照里未出现的表、字段、调用方授权会被逻辑停用；所以不能用局部数据覆盖完整登记规范。
 
 
 <a id="guide-a25caa3b--magic-api-调试入口"></a>
@@ -1998,7 +1998,7 @@ Content-Type: application/json
 - `POST /push-operations/message-status`：查询当前调用方拥有的异步消息状态；
 - `POST /ftp-diagnostics/probe`：使用服务器配置的 FTP 参数检查连接、目录、上传、回读和清理。
 
-Magic API 仅承担可见、可编辑的请求编排和调试入口；鉴权、幂等、契约校验、持久化和异步投递仍保留在 Java 服务层。
+Magic API 仅承担可见、可编辑的请求编排和调试入口；鉴权、幂等、规范校验、持久化和异步投递仍保留在 Java 服务层。
 
 <a id="guide-f5f5b5dd"></a>
 
@@ -2032,7 +2032,7 @@ token: <当前平台登录会话>
 
 服务器从 `tenantRuntime.id()` 取得租户，并按数据源管理菜单 `MENU:2081000000000000002` 的当前角色范围检查数据源。仅允许 `pool_cfg.accessMode=receive/push`（兼容既有同义字段），拒绝显式停用推送的数据源。来源登记已结束（状态 1/2）时，仅同步状态 2 的有效表及其有效字段；状态 1 的部分完成数据源也可同步已完成部分。应用系统标识和名称同样从当前租户主表关联读取。
 
-复用既有 `DataPushSchemaService.standaloneSnapshot` 生成/发布权威表契约，以及 `HaitongStandaloneRegistryClient` 发送 `REGISTRY_SYNC`；不另建数据源主表，不从请求体接收表字段、租户、调用方或投递地址。固定调用方编号为 `push-<datasourceId>`，其授权随配置镜像维护；此操作本身不签发或轮换 `X-Api-Key`。业务密钥仍由原 `/dws/push/credential/issue|rotate` 单独处理。
+复用既有 `DataPushSchemaService.standaloneSnapshot` 生成/发布权威表规范，以及 `HaitongStandaloneRegistryClient` 发送 `REGISTRY_SYNC`；不另建数据源主表，不从请求体接收表字段、租户、调用方或投递地址。固定调用方编号为 `push-<datasourceId>`，其授权随配置镜像维护；此操作本身不签发或轮换 `X-Api-Key`。业务密钥仍由原 `/dws/push/credential/issue|rotate` 单独处理。第五步即可主动获取密钥，无须结束数据源登记；签发会同步当前已登记表的完整快照。未登记表不进入快照，空表快照不授予表访问权限。密钥首次签发或显式轮换时仅回显一次明文；重复获取保留原密钥并只返回状态。
 
 成功响应示例：
 
@@ -2051,9 +2051,9 @@ token: <当前平台登录会话>
 }
 ```
 
-预检返回 `valid/dryRun` 及表字段数量，既不发布平台契约，也不调用海通。正式成功要求海通返回可确认的成功状态和相同数据源 ID；失败返回明确错误，不能仅凭请求已发出就报告同步完成。业务 JSON 中 `code` 是平台错误判断依据：参数非法 400，无权/不存在 403，接入方式不符 422，登记未完成或缺少字段 409，规模超限 413，海通配置不全或同步无法确认 503。
+预检返回 `valid/dryRun` 及表字段数量，既不发布平台规范，也不调用海通。正式成功要求海通返回可确认的成功状态和相同数据源 ID；失败返回明确错误，不能仅凭请求已发出就报告同步完成。业务 JSON 中 `code` 是平台错误判断依据：参数非法 400，无权/不存在 403，接入方式不符 422，登记未完成或缺少字段 409，规模超限 413，海通配置不全或同步无法确认 503。
 
-单次处理一个完整数据源快照，最多 100 张已完成登记表、10000 个字段、序列化后 1MiB；超限明确拒绝，不截断快照，避免海通将被遗漏的配置误判为删除。20/100 张表的执行测试均为预检 2 次业务 SQL 读取，正式同步 9 次业务读取、1 次海通请求，字段在表循环外批量预取；权限计算的固定开销另计。正式同步会更新平台的契约发布状态，跨平台库与海通库不构成一个分布式事务；海通不可用时可重试同一数据源，重复同步会更新既有镜像，不增加重复表字段。
+单次处理一个完整数据源快照，最多 100 张已完成登记表、10000 个字段、序列化后 1MiB；超限明确拒绝，不截断快照，避免海通将被遗漏的配置误判为删除。20/100 张表的执行测试均为预检 2 次业务 SQL 读取，正式同步 9 次业务读取、1 次海通请求，字段在表循环外批量预取；权限计算的固定开销另计。正式同步会更新平台的规范发布状态，跨平台库与海通库不构成一个分布式事务；海通不可用时可重试同一数据源，重复同步会更新既有镜像，不增加重复表字段。
 
 本机已通过真实登录会话及真实 MySQL 验证：1 数据源、1 表、14 字段、1 调用方授权；字段名/类型/顺序逐项匹配，重复调用保持镜像记录数量和业务凭据数量不变。未登录、无权数据源及注入 tenantId 的请求均被拒绝。 全量同步已在本机实际页面与 MySQL 验证3个数据源、7张表、331字段及3条调用方授权，另1个未完成登记的源明确跳过；重复同步约3.4秒，镜像和业务凭据数量均不增加。可维护源为根 `magic/api/02.数据盘点/02.数据库表/08.同步推送登记配置.ms`，已发布到控制库 `baseline` 并完成运行刷新/回读。
 
@@ -2065,9 +2065,9 @@ token: <当前平台登录会话>
 {"all":true,"nodeId":"当前租户已启用的推送节点ID"}
 ```
 
-可追加 `dryRun:true` 只读预检。服务器一次批量读取当前角色可见的数据推送数据源、已登记表、有效字段、既有契约及所属应用；逐个过滤角色范围，浏览器不能指定租户、地址或字段快照。未完成数据源登记、显式停用、没有已登记表或字段不合法的数据源记录在 `skipped` 中，不以空快照覆盖海通原镜像。返回 `datasourceCount/tableCount/columnCount/skipped`，页面展示成功数量和跳过原因。全部同步最多100个推送数据源、1000张表（每源100张）、10000字段和1MiB；总体超限拒绝，不截取前N条。单数据源原有调用及默认目标继续兼容。
+可追加 `dryRun:true` 只读预检。服务器一次批量读取当前角色可见的数据推送数据源、已登记表、有效字段、既有规范及所属应用；逐个过滤角色范围，浏览器不能指定租户、地址或字段快照。未完成数据源登记、显式停用、没有已登记表或字段不合法的数据源记录在 `skipped` 中，不以空快照覆盖海通原镜像。返回 `datasourceCount/tableCount/columnCount/skipped`，页面展示成功数量和跳过原因。全部同步最多100个推送数据源、1000张表（每源100张）、10000字段和1MiB；总体超限拒绝，不截取前N条。单数据源原有调用及默认目标继续兼容。
 
-批量契约在循环外预取后发布，字段摘要与 `DataPushSchemaService` 的属性顺序和版本递增规则相同。发送端仅发送一次 `{deliveryType:"REGISTRY_SYNC",datasources:[完整数据源快照...]}`，接收端先验证所有定义、重复ID和批次规模，再读取一次幂等账本，并在同一事务保存所有源；任何源写入失败都回滚整批和账本。成功必须返回同一组源ID和相同表字段数量。每源未出现的旧表字段和授权逻辑停用，批次之外的数据源保持原样。平台契约发布与海通保存仍是两个数据库事务，失败可重试，页面不会将失败报告为成功。
+批量规范在循环外预取后发布，字段摘要与 `DataPushSchemaService` 的属性顺序和版本递增规则相同。发送端仅发送一次 `{deliveryType:"REGISTRY_SYNC",datasources:[完整数据源快照...]}`，接收端先验证所有定义、重复ID和批次规模，再读取一次幂等账本，并在同一事务保存所有源；任何源写入失败都回滚整批和账本。成功必须返回同一组源ID和相同表字段数量。每源未出现的旧表字段和授权逻辑停用，批次之外的数据源保持原样。平台规范发布与海通保存仍是两个数据库事务，失败可重试，页面不会将失败报告为成功。
 
 节点图标使用检测结果显示绿/红/灰，悬停显示说明、时间、耗时。推送节点检测状态由当前后端进程缓存；地址改变或进程重启后恢复尚未检测。节点列表只回显结果，不逐行自动探测。未部署的示例节点保持停用，替换真实地址并检测后再启用。节点记录不存放服务间密钥，受限配置与接收端配对。
 
@@ -2087,7 +2087,7 @@ token: <当前平台登录会话>
 - `ht_standalone_datasource_client`：数据源与调用方授权关系；
 - `ht_standalone_registry_sync`：配置同步的幂等账本。
 
-它只同步业务契约和授权标识，**不接收、不保存**业务 `X-Api-Key` 明文、FTP/SFTP 密码、Kafka 密码或目标地址。
+它只同步业务规范和授权标识，**不接收、不保存**业务 `X-Api-Key` 明文、FTP/SFTP 密码、Kafka 密码或目标地址。
 
 每个数据源均按完整快照同步（单源 `datasource` 或批量 `datasources`）：快照中不再出现的表、字段、调用方授权会在海通数据库中被逻辑停用。因此不能使用不完整的局部列表覆盖已有配置。
 
@@ -2177,9 +2177,9 @@ X-Standalone-Registry-Key: <服务间同步密钥>
 | `datasource.datasourceName` | 是 | 数据源显示名称。 |
 | `datasource.enabled` | 否 | 默认 `true`；`false` 后该数据源不能再接收业务推送。 |
 | `datasource.clientIds` | 是 | 已在海通 `relay.security.clients` 中配置的调用方编号。空数组表示所有拥有路由权限的本地调用方可推送。 |
-| `tables` | 是 | 至少一张表，且代表该数据源的完整允许表清单。 |
+| `tables` | 是 | 完整允许表清单；允许空数组，表示尚未登记任何表并撤销既有表授权。数据源密钥仍可签发，实际表推送必须匹配已登记表和字段。 |
 | `tableName` | 是 | 业务推送请求使用的表名。 |
-| `schemaVersion` | 否 | 配置后，业务推送请求必须传完全相同的值。 |
+| `schemaVersion` | 否 | 服务间登记快照的内部规范版本；业务推送不传该参数，海通自动使用已登记版本。 |
 | `columns` | 是 | 至少一个字段，代表完整允许字段清单。 |
 | `required` | 否 | 默认 `false`；为 `true` 时每条 `records` 数据必须提供非空值。 |
 | `enabled` | 否 | 默认 `true`；停用的表或字段不允许用于业务推送。 |
@@ -2203,7 +2203,7 @@ X-Standalone-Registry-Key: <服务间同步密钥>
 
 使用相同 `Idempotency-Key` 和完全相同请求体重试时返回 `200 OK` 与 `ALREADY_SYNCED`。相同键但请求体不同返回 `409 IDEMPOTENCY_CONFLICT`。
 
-同步完成后，业务调用方按原方式调用 `deliveryType: "FTP"` 或 `"KAFKA"`。海通从本地数据库镜像读取数据源、调用方、表及字段契约，而不会调用 8088。
+同步完成后，业务调用方按原方式调用 `deliveryType: "FTP"` 或 `"KAFKA"`。海通从本地数据库镜像读取数据源、调用方、表及字段规范，而不会调用 8088。
 
 
 <a id="guide-f5f5b5dd--建表与上线"></a>
@@ -2271,7 +2271,7 @@ relay:
 | 数据库 `ht_standalone_datasource` | 必须存在且启用；不存在返回 `STANDALONE_DATASOURCE_NOT_CONFIGURED`。 |
 | `ht_standalone_datasource_client` | 非空时，调用方客户端编号必须列在其中；为空时仍要求调用方拥有相应路由通道权限。 |
 | `ht_standalone_table` | 必须存在且启用；不存在返回 `STANDALONE_TABLE_NOT_CONFIGURED`。 |
-| `schema_version` | 配置后，请求中的 `schemaVersion` 必须精确相同。 |
+| `schema_version` | 保存服务端登记版本，用于审计；调用方无需提交版本参数。 |
 | `ht_standalone_table_column.is_required` | 每条 `records` 记录必须提供且不可为空。 |
 | 有效字段镜像 | 每条记录不得出现未被同步且启用的字段。 |
 
@@ -2296,17 +2296,17 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
 
 ### 安全边界
 
-独立模式不是登记托管模式故障时的自动降级。若一条路由已经设置 `registration-managed: true`，平台不可用时仍会失败关闭，不会静默切到本地契约。要切换模式，必须由部署人员显式修改路由配置并重启服务，这样才能避免撤销的表权限或目标配置在平台故障期间被绕过。
+独立模式不是登记托管模式故障时的自动降级。若一条路由已经设置 `registration-managed: true`，平台不可用时仍会失败关闭，不会静默切到本地规范。要切换模式，必须由部署人员显式修改路由配置并重启服务，这样才能避免撤销的表权限或目标配置在平台故障期间被绕过。
 
 <a id="guide-a3391486"></a>
 
-## 海通与数据源登记推送契约接入说明
+## 海通与数据源登记推送规范接入说明
 
 <a id="guide-a3391486--目标"></a>
 
 ### 目标
 
-“数据推送方式”不再只是一段说明文字。数据源登记完成后，平台从 `db_datasource_t`、`db_table_t` 和 `db_table_column_t` 生成每张表的只读推送契约；海通的 FTP、Kafka 两个表批次接口在受理前必须通过该契约校验。
+“数据推送方式”不再只是一段说明文字。数据源登记完成后，平台从 `db_datasource_t`、`db_table_t` 和 `db_table_column_t` 生成每张表的只读推送规范；海通的 FTP、Kafka 两个表批次接口在受理前必须通过该规范校验。
 
 平台主数据仍只有原有的数据源、数据表和字段表。`data_push_schema_t` 与 `data_push_schema_field_t` 是可追溯的发布快照，不会替代或复制主数据。
 
@@ -2315,7 +2315,7 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
 
 ### 必须先完成的配置
 
-1. 对照根目录 `db/` 核查控制库及各实际租户库的推送契约结构。控制面的登记配置与租户业务快照保持各自归属；已有库只执行审查后的缺失结构差异，不恢复旧迁移文件，也不直接重跑完整初始化。
+1. 对照根目录 `db/` 核查控制库及各实际租户库的推送规范结构。控制面的登记配置与租户业务快照保持各自归属；已有库只执行审查后的缺失结构差异，不恢复旧迁移文件，也不直接重跑完整初始化。
 2. 在数据中台运行配置（建议 Nacos）设置同一把不少于 24 字符的密钥：
 
    ```yaml
@@ -2361,13 +2361,13 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
 ```text
 数据推送方式登记 → 表、字段登记 → 第五步完成登记
   → POST /dws/push/schema/publish
-  → 表级契约 PUBLISHED（schemaVersion 从 1 开始）
+  → 表级规范 PUBLISHED（schemaVersion 从 1 开始）
   → 调用方 POST /api/v1/data-push（deliveryType=FTP 或 KAFKA）
   → 海通用调用方身份绑定租户，再核验数据源、表、字段、版本、目标
   → 受理、幂等落账、后台投递
 ```
 
-字段发生改变后再次完成登记会重新发布契约：字段哈希改变时版本号递增。调用方若提交旧 `schemaVersion`，会收到清晰的版本不匹配错误；未填写版本时海通按当前版本校验字段。
+字段发生改变后再次完成登记会重新发布规范：字段哈希改变时版本号递增。海通自动使用服务端当前已发布版本校验字段，并将版本保存到内部审计元数据，调用方不传版本参数。
 
 
 <a id="guide-a3391486--调用方请求"></a>
@@ -2379,9 +2379,7 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
   "deliveryType": "FTP",
   "datasourceId": "2097228700579295232",
   "tableName": "police_vehicle_info",
-  "schemaVersion": 1,
   "batchId": "police_vehicle_info-20260910-001",
-  "occurredAt": "2026-09-10T07:30:00Z",
   "records": [
     { "vehicle_id": "A001", "plate_no": "闽A12345" }
   ]
@@ -2395,8 +2393,8 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
 
 ### 下游投递语义
 
-- FTP：文件正文是业务 `records` 的 JSON 数组，固定写入 `FTP 输出根目录 / datasourceId / tableName / messageId.json`；同名 `.done` 清单包含数据源、表、契约版本、条数、文件大小和 SHA-256。
-- Kafka：消息正文保留表批次 JSON；Kafka Headers 补充 `relay-datasource-id`、`relay-table-id`、`relay-schema-version`、消息号和投递号。Topic 只来自登记推送契约。
+- FTP：文件正文是业务 `records` 的 JSON 数组，固定写入 `FTP 输出根目录 / datasourceId / tableName / messageId.json`；同名 `.done` 清单包含数据源、表、规范版本、条数、文件大小和 SHA-256。
+- Kafka：消息正文保留表批次 JSON；Kafka Headers 补充 `relay-datasource-id`、`relay-table-id`、`relay-schema-version`、消息号和投递号。Topic 只来自登记推送规范。
 - 统一接口均先持久化受理，再异步投递。`202 Accepted` 不代表 FTP 或 Kafka 已完成；调用返回的 `statusUrl` 查询最终状态。
 
 
@@ -2405,7 +2403,7 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
 ### 安全边界
 
 - 租户只由控制库中 `relay_client_id → tenant_id` 绑定得出；请求体没有 tenantId，也不会被接受。
-- 海通只获得契约验证结果和非敏感目标；平台不向它返回业务数据库账号密码。
+- 海通只获得规范验证结果和非敏感目标；平台不向它返回业务数据库账号密码。
 - 所有记录字段采用严格白名单校验：未知字段、缺少必填字段、基础类型不匹配、未发布表、非推送方式数据源、未配置目标都会在受理前拒绝。
 
 <a id="guide-3e6991f8"></a>
@@ -2499,7 +2497,7 @@ SASL支持PLAIN及SCRAM，TLS需要truststore时填写位置及密钥引用。�
 
 X-Api-Key传递厂家身份；可设置额外X-Gateway-Key，网关必须剥离外部同名头后注入。不得所有厂家共用密钥却宣称租户隔离。当前没有应用端JWT验签模块，现有JWT可在网关校验后按厂家映射独立应用密钥。
 
-`relay.actions`注册固定HTTP后端URL。响应超时可能已经执行；下游没有可靠幂等契约时safe-retry保持false，进入UNKNOWN而非自动重复执行。同步操作只允许显式安全的校验或查询用途。
+`relay.actions`注册固定HTTP后端URL。响应超时可能已经执行；下游没有可靠幂等规范时safe-retry保持false，进入UNKNOWN而非自动重复执行。同步操作只允许显式安全的校验或查询用途。
 
 
 <a id="guide-3e6991f8--容器"></a>
@@ -2703,7 +2701,7 @@ http://<Windows服务器IP>:18083/api/web/index.html#/home
 
 ### 4. 发送样例请求
 
-按 `#guide-f5f5b5dd` 的契约准备实际登记请求文件，再调用可复用的同步脚本。脚本从 `config\application.yml` 读取同步密钥；请求文件和实际凭据由部署环境维护，不纳入源码：
+按 `#guide-f5f5b5dd` 的规范准备实际登记请求文件，再调用可复用的同步脚本。脚本从 `config\application.yml` 读取同步密钥；请求文件和实际凭据由部署环境维护，不纳入源码：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\sync-registry.ps1 -RequestPath "C:\private\registry-request.json" -IdempotencyKey "registry-source-v1"

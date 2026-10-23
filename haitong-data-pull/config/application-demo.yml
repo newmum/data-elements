@@ -39,7 +39,6 @@ relay:
     table-to-log:
       enabled: true
       batch-key-field: batchId
-      business-time-field: occurredAt
       targets: [table-log]
       file-format: JSONL
       required-fields: [tableName, records]
@@ -47,7 +46,6 @@ relay:
       enabled: true
       registration-managed: true
       batch-key-field: batchId
-      business-time-field: occurredAt
       targets: []
       file-format: JSONL
       required-fields: [tableName, records]
@@ -55,7 +53,6 @@ relay:
       enabled: true
       registration-managed: true
       batch-key-field: batchId
-      business-time-field: occurredAt
       targets: []
       file-format: JSONL
       required-fields: [tableName, records]

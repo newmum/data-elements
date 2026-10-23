@@ -46,14 +46,14 @@ public class PushRegistrySyncMagicTest {
             jdbc.execute("create table push_node_t(tid varchar(64),tenant_id varchar(32),base_url varchar(255),enabled int,is_del int,last_sync_time timestamp,last_sync_status varchar(32),last_sync_source_id varchar(64),network_code varchar(64),node_name varchar(128),node_code varchar(64),is_default int,remark varchar(500),created_time timestamp,updated_time timestamp)");
             jdbc.execute("create table db_datasource_t(tid varchar(64),tenant_id varchar(32),db_name varchar(255),asset_status int,pool_cfg varchar(2000),is_del int,org_id varchar(64),created_by varchar(64),app_id varchar(64))");
             jdbc.execute("create table sym_application_t(tid varchar(64),tenant_id varchar(32),app_name varchar(255),is_del int)");
-            jdbc.execute("create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),table_name varchar(255),table_name_cn varchar(255),table_comment varchar(255),asset_status int,is_del int)");
+            jdbc.execute("create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),table_name varchar(255),table_name_cn varchar(255),table_comment varchar(255),asset_status int,is_del int,field_governance_config clob)");
             jdbc.execute("create table db_table_column_t(tid varchar(64),tenant_id varchar(32),table_id varchar(64),column_name varchar(255),column_comment varchar(255),data_type varchar(64),column_type varchar(64),nullable int,primary_key int,ordinal_position int,is_del int)");
             jdbc.execute("create table data_push_schema_t(tid varchar(64),datasource_id varchar(64),table_id varchar(64),table_name varchar(255),schema_version bigint,schema_hash varchar(128),status varchar(32),delivery_config varchar(2000),tenant_id varchar(32),published_time timestamp,updated_time timestamp,is_del int)");
             jdbc.execute("create table data_push_schema_field_t(tid varchar(64),schema_id varchar(64),field_name varchar(255),data_type varchar(64),required_flag int,ordinal_position int,tenant_id varchar(32),is_del int)");
             jdbc.update("insert into db_datasource_t values('source','ga','DEMO',1,?,0,'org','user','app')","{\"accessMode\":\"receive\",\"password\":\"must-not-leak\"}");
             jdbc.update("insert into db_datasource_t values('foreign','ct','OTHER',2,'{\"accessMode\":\"receive\"}',0,'org','other','app')");
             jdbc.update("insert into sym_application_t values('app','ga','DEMO SYSTEM',0)");
-            for(int i=0;i<count;i++){String id="table_"+i;jdbc.update("insert into db_table_t values(?,'ga','source',?,'示例表','',2,0)",id,id);jdbc.update("insert into db_table_column_t values(?,'ga',?,'id','标识','int','int',0,1,1,0)","column_"+i,id);}
+            for(int i=0;i<count;i++){String id="table_"+i;jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,table_name_cn,table_comment,asset_status,is_del) values(?,'ga','source',?,'示例表','',2,0)",id,id);jdbc.update("insert into db_table_column_t values(?,'ga',?,'id','标识','int','int',0,1,1,0)","column_"+i,id);}
             var dynamic=new MagicDynamicDataSource();dynamic.setDefault(source);db=new SQLModule(dynamic);db.setDataSourceNode(dynamic.getDataSource());
             var dialects=new org.ssssssss.magicapi.modules.db.dialect.DialectAdapter();dialects.add(new org.ssssssss.magicapi.modules.db.dialect.MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});db.setDialectAdapter(dialects);db.setResultProvider(new org.ssssssss.magicapi.core.interceptor.DefaultResultProvider("registry-test"));
             var columns=new ColumnMapperAdapter();columns.add(new DefaultColumnMapperProvider());columns.add(new CamelColumnMapperProvider());columns.setDefault("camel");db.setColumnMapperProvider(columns);db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());db.setRowMapColumnMapper(v->v);db.setSqlInterceptors(List.of());db.setNamedTableInterceptors(List.of());
@@ -92,11 +92,11 @@ public class PushRegistrySyncMagicTest {
     public static void main(String[] args) throws Exception {
         for(int count:List.of(20,100)){
             var f=new Fixture(count);Map<?,?> dry=(Map<?,?>)f.call(Map.of("datasourceId","source","dryRun",true));check(dry.get("tableCount").equals(count),"dry count");check(f.reads.get()==2,"dry fixed reads");check(f.relay.calls==0,"preview transport");check(f.jdbc.queryForObject("select count(*) from data_push_schema_t",Integer.class)==0,"preview writes");
-            Map<?,?> result=(Map<?,?>)f.call(Map.of("datasourceId","source"));check(Boolean.TRUE.equals(result.get("synced")),"synced");check(f.reads.get()==9,"fixed source+scope snapshot reads: "+f.reads);check(f.relay.calls==1,"one upstream request");check(((List<?>)f.relay.last.get("tables")).size()==count,"all tables");check(f.relay.last.get("sourceSystemName").equals("DEMO SYSTEM"),"system association");check(!f.mapper.writeValueAsString(f.relay.last).contains("must-not-leak"),"credentials excluded");
+            Map<?,?> result=(Map<?,?>)f.call(Map.of("datasourceId","source"));check(Boolean.TRUE.equals(result.get("synced")),"synced");check(f.reads.get()==10,"fixed source+scope snapshot reads: "+f.reads);check(f.relay.calls==1,"one upstream request");check(((List<?>)f.relay.last.get("tables")).size()==count,"all tables");check(f.relay.last.get("sourceSystemName").equals("DEMO SYSTEM"),"system association");check(!f.mapper.writeValueAsString(f.relay.last).contains("must-not-leak"),"credentials excluded");
             f.scope.denied=true;rejected(f.call(Map.of("datasourceId","source")),403);check(f.relay.calls==1,"denied no transport");f.scope.denied=false;
             rejected(f.call(Map.of("datasourceId","foreign")),403);rejected(f.call(Map.of("datasourceId","source","tenantId","ct")),400);
             f.jdbc.update("update db_datasource_t set pool_cfg='{\"accessMode\":\"upload\"}' where tid='source'");rejected(f.call(Map.of("datasourceId","source")),422);
-            System.out.println(count+" tables: preview=2 reads, sync=9 reads, upstream=1; role/tenant/injected metadata rejected");
+            System.out.println(count+" tables: preview=2 reads, sync=10 reads, upstream=1; role/tenant/injected metadata rejected");
         }
         try (var upstream = new BatchUpstream()) {
             for(int count:List.of(20,100)) {
@@ -105,11 +105,12 @@ public class PushRegistrySyncMagicTest {
                 for(int i=0;i<count;i++) {
                     String id="s"+i,table="t"+i;
                     f.jdbc.update("insert into db_datasource_t values(?,'ga',?,2,'{\"accessMode\":\"receive\"}',0,'org','user','app')",id,id);
-                    f.jdbc.update("insert into db_table_t values(?,'ga',?,?,'示例表','',2,0)",table,id,table);
+                    f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,table_name_cn,table_comment,asset_status,is_del) values(?,'ga',?,?,'示例表','',2,0)",table,id,table);
                     f.jdbc.update("insert into db_table_column_t values(?,'ga',?,'id','标识','int','int',0,1,1,0)","c"+i,table);
                 }
                 f.jdbc.update("insert into push_node_t(tid,tenant_id,base_url,enabled,is_del) values('node','ga',?,1,0)",upstream.url());
                 f.jdbc.update("insert into push_node_t(tid,tenant_id,base_url,enabled,is_del) values('foreign-node','ct',?,1,0)",upstream.url());
+                f.jdbc.update("update db_table_t set field_governance_config=? where tid='t0'",f.mapper.writeValueAsString(Map.of("attachmentFields",List.of(Map.of("columnName","id","maxFileBytes",20971520,"allowedExtensions",List.of("pdf"))))));
                 Map<?,?> dry=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","dryRun",true));
                 check(dry.get("datasourceCount").equals(count),"bulk preview count: "+dry);
                 int previewReads=f.reads.get();
@@ -123,6 +124,7 @@ public class PushRegistrySyncMagicTest {
                 f.call(Map.of("datasourceId","s0"));
                 check(hash.equals(f.jdbc.queryForObject("select schema_hash from data_push_schema_t where datasource_id='s0'",String.class)),"batch and single publish canonical hash must agree");
                 check(f.jdbc.queryForObject("select schema_version from data_push_schema_t where datasource_id='s0'",Long.class)==1L,"unchanged canonical version");
+                check(f.jdbc.queryForObject("select delivery_config from data_push_schema_t where datasource_id='s0'",String.class).contains("20971520"),"attachment limits survive bulk and single synchronization");
                 f.scope.hidden="s0";
                 Map<?,?> scoped=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","dryRun",true));
                 check(scoped.get("datasourceCount").equals(count-1),"per source role scope");

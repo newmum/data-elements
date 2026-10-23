@@ -33,10 +33,6 @@ public final class StandalonePushSchema {
         }
         LocalContract contract = databaseContract(datasourceId, tableName, callerId).orElseGet(() -> yamlContract(datasourceId, tableName, callerId));
         String configuredVersion = contract.schemaVersion();
-        String suppliedVersion = text(batch.get("schemaVersion"));
-        if (!configuredVersion.isBlank() && !configuredVersion.equals(suppliedVersion)) {
-            throw new RelayException(422, "STANDALONE_SCHEMA_VERSION_MISMATCH", "schemaVersion 与独立表契约不一致");
-        }
         Object value = batch.get("records");
         if (!(value instanceof List<?> rows)) {
             throw RelayException.invalid("records 必须是 JSON 数组");

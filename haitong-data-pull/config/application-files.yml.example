@@ -3,6 +3,8 @@
 relay:
   files:
     enabled: true
+    # Default single-request raw upload. Larger files use the resumable endpoints below.
+    single-upload-max-bytes: 20971520
     part-size-bytes: 16777216
     max-file-bytes: 10737418240
     storage-limit-bytes: 107374182400
@@ -19,6 +21,9 @@ relay:
         tenant-id: police-demo
         datasource-id: case-source
         collection-id: case-documents
+        # Single endpoint resolves these server-owned table/field names.
+        table-name: police_case_record
+        field-name: document_file_id
         version: 1
         clients: [case-producer]
         read-clients: [case-receiver]

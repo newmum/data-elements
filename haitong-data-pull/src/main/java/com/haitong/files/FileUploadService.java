@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @ConditionalOnProperty(prefix="relay.files",name="enabled",havingValue="true")
 public class FileUploadService {
     public record Init(String datasourceId,String collectionId,String fileName,long size,String sha256) {}
+    public record Single(String datasourceId,String tableName,String fieldName,String fileName) {}
     public record Submission(String businessKey,Map<String,Object> metadata) {}
     public record Receipt(String deliveryId,String sha256,String status,String businessRef) {}
     private record PartClaim(Upload upload,String token,long size,Map<String,Object> previous) {}
@@ -26,13 +27,19 @@ public class FileUploadService {
         this.repo=repo;this.catalog=catalog;this.p=p;this.storage=storage;this.tx=tx;this.json=json;this.ingress=ingress;this.relay=relay;
     }
     public Map<String,Object> initialize(Secrets.Identity caller,String key,Init input) throws IOException {
+        return initialize(caller,key,input,false);
+    }
+    private Map<String,Object> initialize(Secrets.Identity caller,String key,Init input,boolean single) throws IOException {
         Rules.key(key);var c=catalog.upload(caller,input.datasourceId(),input.collectionId());String name=Rules.fileName(input.fileName());
         String extension=Rules.extension(name).replaceFirst("^\\.","").toLowerCase(Locale.ROOT);
         if(!c.policy().getAllowedExtensions().contains(extension))throw RelayException.invalid("文件格式不在集合白名单内");
         if(input.size()<1||input.size()>c.policy().getMaxFileBytes())throw new RelayException(413,"FILE_TOO_LARGE","文件大小超出集合约定");
-        String hash=optionalHash(input.sha256());long count=(input.size()+p.getPartSizeBytes()-1)/p.getPartSizeBytes();
+        String hash=optionalHash(input.sha256());long partSize=single?input.size():p.getPartSizeBytes();
+        long count=(input.size()+partSize-1)/partSize;
         if(count>10000)throw RelayException.invalid("分片总数超过10000，请调整服务端分片大小");
         String identityHash=Rules.sha256(json.bytes(List.of(name,input.size(),hash,c.tenantId(),c.datasourceId(),c.collectionId())));
+        if(single)identityHash=Rules.sha256(json.bytes(List.of(identityHash,"SINGLE")));
+        final String frozenIdentityHash=identityHash;
         var old=repo.existing(c,caller.id(),key);if(old.isPresent())return duplicateInit(old.get(),identityHash);
         storage.freeSpace();String id=UUID.randomUUID().toString();long now=repo.now();
         try{
@@ -41,14 +48,36 @@ public class FileUploadService {
                   INSERT INTO ht_file_upload(upload_id,tenant_id,owner,datasource_id,collection_id,contract_version,contract_hash,contract_json,
                     init_key,init_hash,file_name,media_type,size_bytes,expected_sha256,part_size,part_count,state,security_state,quota_state,created_at,updated_at,expires_at)
                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'CREATED','PENDING','RESERVED',?,?,?)
-                  """,id,c.tenantId(),caller.id(),c.datasourceId(),c.collectionId(),c.version(),c.hash(),json.write(c),key,identityHash,name,media(extension),input.size(),hash.isEmpty()?null:hash,p.getPartSizeBytes(),count,now,now,now+p.getSessionHours()*3600000L);
+                  """,id,c.tenantId(),caller.id(),c.datasourceId(),c.collectionId(),c.version(),c.hash(),json.write(c),key,frozenIdentityHash,name,media(extension),input.size(),hash.isEmpty()?null:hash,partSize,count,now,now,now+p.getSessionHours()*3600000L);
             });
         }catch(DataIntegrityViolationException e){return duplicateInit(repo.existing(c,caller.id(),key).orElseThrow(()->e),identityHash);}
         return basic(repo.raw(id,false).orElseThrow());
     }
+    /** One raw HTTP body, bounded memory, same ledger and asynchronous validation as resumable uploads. */
+    public Map<String,Object> single(Secrets.Identity caller,String key,Single input,long contentLength,InputStream body) throws IOException {
+        Rules.key(key);var c=catalog.uploadField(caller,input.datasourceId(),input.tableName(),input.fieldName());
+        String name=Rules.fileName(input.fileName());
+        if(!c.policy().getAllowedExtensions().contains(Rules.extension(name).substring(1).toLowerCase(Locale.ROOT)))throw RelayException.invalid("文件格式不在附件字段白名单内");
+        long limit=Math.min(p.getSingleUploadMaxBytes(),c.policy().getMaxFileBytes());
+        if(contentLength>limit)throw new RelayException(413,"SINGLE_UPLOAD_TOO_LARGE","文件超过字段或整文件上传上限，请核对规范或使用分片上传");
+        storage.acquire();
+        try(var incoming=storage.receiveSingle(body,limit,contentLength)){
+            var saved=incoming.saved();
+            // Only server-measured size/digest enter the immutable identity and persistent quota ledger.
+            var init=new Init(c.datasourceId(),c.collectionId(),name,saved.size(),saved.sha256());
+            Map<String,Object> initialized=initialize(caller,key,init,true);String id=initialized.get("uploadId").toString();
+            if(!Set.of("FINALIZING","READY").contains(initialized.get("state").toString())){
+                try(InputStream staged=Files.newInputStream(saved.path())){putPartWithPermit(caller,id,1,saved.sha256(),saved.size(),staged);}
+            }
+            Map<String,Object> result=complete(caller,id);result.put("uploadMode","SINGLE");return result;
+        }finally{storage.release();}
+    }
     private Map<String,Object> duplicateInit(Upload u,String hash){if(!u.text("init_hash").equals(hash))throw RelayException.conflict();Map<String,Object> out=basic(u);out.put("duplicate",true);return out;}
     public Map<String,Object> putPart(Secrets.Identity caller,String id,int no,String checksum,long contentLength,InputStream input) throws IOException {
-        String expectedHash=requiredHash(checksum);storage.acquire();PartClaim claim=null;FileStorage.Saved saved=null;boolean committed=false;
+        storage.acquire();try{return putPartWithPermit(caller,id,no,checksum,contentLength,input);}finally{storage.release();}
+    }
+    private Map<String,Object> putPartWithPermit(Secrets.Identity caller,String id,int no,String checksum,long contentLength,InputStream input) throws IOException {
+        String expectedHash=requiredHash(checksum);PartClaim claim=null;FileStorage.Saved saved=null;boolean committed=false;
         try{
             storage.freeSpace();claim=Objects.requireNonNull(tx.execute(status->{Upload u=owned(caller,id,true);long now=repo.now();
                 writable(u,now);if(no<1||no>u.number("part_count"))throw RelayException.invalid("分片序号从1开始且不能超过总数");
@@ -85,7 +114,7 @@ public class FileUploadService {
                 }catch(Exception ignored){/* Keep the private object and quota until the database outcome can be established. */}
             }
             throw e;
-        }finally{storage.release();}
+        }
     }
     private void restorePart(PartClaim c,int no){
         var old=c.previous();if(old!=null&&old.get("sha256")!=null)

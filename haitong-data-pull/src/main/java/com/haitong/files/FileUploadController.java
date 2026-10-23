@@ -17,6 +17,16 @@ import org.springframework.web.bind.annotation.*;
 public class FileUploadController {
     private final FileUploadService service;private final Json json;private final FileStorage storage;
     public FileUploadController(FileUploadService service,Json json,FileStorage storage){this.service=service;this.json=json;this.storage=storage;}
+    @PostMapping(path="/single",consumes=MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public ResponseEntity<?> single(@RequestHeader("Idempotency-Key") String key,@RequestParam String datasourceId,
+            @RequestParam String tableName,@RequestParam String fieldName,@RequestParam String fileName,
+            HttpServletRequest request) throws IOException {
+        if(!Set.of("datasourceId","tableName","fieldName","fileName").containsAll(request.getParameterMap().keySet())
+                ||request.getParameterMap().values().stream().anyMatch(values->values.length!=1))
+            throw RelayException.invalid("请求包含未定义参数，租户和投递地址由服务端确定");
+        return ResponseEntity.accepted().body(service.single(AuthenticationFilter.identity(request),key,
+                new FileUploadService.Single(datasourceId,tableName,fieldName,fileName),request.getContentLengthLong(),request.getInputStream()));
+    }
     @PostMapping(consumes=MediaType.APPLICATION_JSON_VALUE) public ResponseEntity<?> init(@RequestHeader("Idempotency-Key") String key,HttpServletRequest request) throws IOException {
         var body=body(request);rejectUnknown(body,Set.of("datasourceId","collectionId","fileName","size","sha256"));
         var input=new FileUploadService.Init(text(body,"datasourceId"),text(body,"collectionId"),text(body,"fileName"),number(body,"size"),optional(body,"sha256"));

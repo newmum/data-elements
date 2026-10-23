@@ -48,12 +48,13 @@ class ConfigurationTest {
         table.setRequiredFields(List.of("id"));table.setAllowedFields(List.of("id","name"));
         source.getTables().put("customer",table);p.getStandalone().getDatasources().put("source-001",source);
         var standalone=new StandalonePushSchema(p,new Json(),null);
-        var input=new Json().bytes(Map.of("datasourceId","source-001","tableName","customer","schemaVersion","v1",
+        var input=new Json().bytes(Map.of("datasourceId","source-001","tableName","customer",
             "records",List.of(Map.of("id","1001","name","张三"))));
         var metadata=standalone.validate("publisher",input);
         assertEquals("standalone",metadata.get("mode"));assertEquals("source-001",metadata.get("datasourceId"));
+        assertEquals("v1",metadata.get("schemaVersion"),"使用服务端版本，不要求调用方填写版本");
         var error=assertThrows(RelayException.class,()->standalone.validate("publisher",new Json().bytes(Map.of(
-            "datasourceId","source-001","tableName","customer","schemaVersion","v1","records",List.of(Map.of("name","张三"))))));
+            "datasourceId","source-001","tableName","customer","records",List.of(Map.of("name","张三"))))));
         assertEquals("STANDALONE_REQUIRED_FIELD_MISSING",error.code());
     }
     @Test void platformRegistrySyncPersistsStandaloneContractForPushValidation() {
@@ -69,8 +70,8 @@ class ConfigurationTest {
         var first=store.synchronize("registry-sync-001",sync);assertFalse(first.duplicate());assertEquals(1,first.tableCount());assertEquals(2,first.columnCount());
         assertTrue(store.synchronize("registry-sync-001",sync).duplicate());
         var p=base();var standalone=new StandalonePushSchema(p,json,store);
-        assertEquals("standalone",standalone.validate("publisher",json.bytes(Map.of("datasourceId","source-001","tableName","person","schemaVersion","v1","records",List.of(Map.of("id","1","name","张三"))))).get("mode"));
-        var error=assertThrows(RelayException.class,()->standalone.validate("publisher",json.bytes(Map.of("datasourceId","source-001","tableName","person","schemaVersion","v1","records",List.of(Map.of("id","1","unknown","x"))))));
+        assertEquals("standalone",standalone.validate("publisher",json.bytes(Map.of("datasourceId","source-001","tableName","person","records",List.of(Map.of("id","1","name","张三"))))).get("mode"));
+        var error=assertThrows(RelayException.class,()->standalone.validate("publisher",json.bytes(Map.of("datasourceId","source-001","tableName","person","records",List.of(Map.of("id","1","unknown","x"))))));
         assertEquals("STANDALONE_FIELD_NOT_ALLOWED",error.code());
     }
 }

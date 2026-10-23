@@ -27,6 +27,7 @@
 // 业务说明：数据表管理 05：保存登记步骤 3/4 的表治理配置；使用请求参数 tableId、tid、propList、fieldGovernanceConfig、dryRun、columns、catalogItems、fields；涉及 db_table_column_t、db_table_t 等业务表。
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import jsons
+import cn.hutool.json.JSONUtil
 import '@/common/registeredTableCatalogProjection' as registeredTableCatalogProjection
 import java.util.Map
 import java.util.List
@@ -182,6 +183,14 @@ var governance = body.fieldGovernanceConfig == null ? props.fieldGovernanceConfi
 // 文件定位由登记采集保存；治理编辑保留它，不能由客户端更换文件或带入连接凭据。
 governance = StructuredSourceProbeService.preserveFtpFileSnapshot(
     rowValue(table, ['fieldGovernanceConfig', 'field_governance_config']), governance)
+// 附件限制由第一步模板登记维护，后续治理保存不能丢失或静默修改。
+var previousGovernance = rowValue(table, ['fieldGovernanceConfig', 'field_governance_config'])
+previousGovernance = previousGovernance instanceof Map ? previousGovernance : (blank(previousGovernance) ? {} : JSONUtil.parseObj(textOf(previousGovernance)))
+if (previousGovernance.containsKey('attachmentFields') || (!blank(governance) && textOf(governance).contains('attachmentFields'))) {
+    governance = governance instanceof Map ? governance : (blank(governance) ? {} : JSONUtil.parseObj(textOf(governance)))
+    governance.remove('attachmentFields')
+    if (previousGovernance.containsKey('attachmentFields')) { governance.attachmentFields = previousGovernance.attachmentFields }
+}
 var dictionaryCategories = props.dictionaryCategories
 var dictionaryProfiles = props.dictionaryProfiles
 var dictionaryProfile = props.dictionaryProfile

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties("relay.files")
 public class FileTransferProperties {
     private boolean enabled;
+    private long singleUploadMaxBytes=20L*1024*1024;
     private long partSizeBytes=16L*1024*1024, maxFileBytes=10L*1024*1024*1024,
             storageLimitBytes=100L*1024*1024*1024;
     private int maxActiveUploads=32, maxStreams=16, verificationThreads=2, sessionHours=24, leaseSeconds=120;
@@ -16,6 +17,7 @@ public class FileTransferProperties {
     private int scannerTimeoutSeconds=300;
     private Map<String,CollectionContract> collections=new LinkedHashMap<>();
     public boolean isEnabled(){return enabled;} public void setEnabled(boolean v){enabled=v;}
+    public long getSingleUploadMaxBytes(){return singleUploadMaxBytes;} public void setSingleUploadMaxBytes(long v){singleUploadMaxBytes=v;}
     public long getPartSizeBytes(){return partSizeBytes;} public void setPartSizeBytes(long v){partSizeBytes=v;}
     public long getMaxFileBytes(){return maxFileBytes;} public void setMaxFileBytes(long v){maxFileBytes=v;}
     public long getStorageLimitBytes(){return storageLimitBytes;} public void setStorageLimitBytes(long v){storageLimitBytes=v;}
@@ -29,7 +31,7 @@ public class FileTransferProperties {
     public Map<String,CollectionContract> getCollections(){return collections;} public void setCollections(Map<String,CollectionContract> v){collections=v;}
 
     public static class CollectionContract {
-        private String tenantId="",datasourceId="",collectionId="";
+        private String tenantId="",datasourceId="",collectionId="",tableName="",fieldName="";
         private long version=1, maxFileBytes=10L*1024*1024*1024,quotaBytes=50L*1024*1024*1024;
         private int maxActiveUploads=8;
         private boolean enabled=true,requireMalwareScan=true;
@@ -39,6 +41,8 @@ public class FileTransferProperties {
         public String getTenantId(){return tenantId;} public void setTenantId(String v){tenantId=v;}
         public String getDatasourceId(){return datasourceId;} public void setDatasourceId(String v){datasourceId=v;}
         public String getCollectionId(){return collectionId;} public void setCollectionId(String v){collectionId=v;}
+        public String getTableName(){return tableName;} public void setTableName(String v){tableName=v;}
+        public String getFieldName(){return fieldName;} public void setFieldName(String v){fieldName=v;}
         public long getVersion(){return version;} public void setVersion(long v){version=v;}
         public long getMaxFileBytes(){return maxFileBytes;} public void setMaxFileBytes(long v){maxFileBytes=v;}
         public long getQuotaBytes(){return quotaBytes;} public void setQuotaBytes(long v){quotaBytes=v;}

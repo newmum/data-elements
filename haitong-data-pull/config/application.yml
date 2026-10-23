@@ -144,7 +144,6 @@ relay:
     table-to-log:                      # POST /api/v1/data-push（deliveryType=LOG），立即可用
       enabled: true
       batch-key-field: batchId
-      business-time-field: occurredAt
       targets: [table-log]
       file-format: JSONL
       required-fields: [tableName, records]
@@ -152,7 +151,6 @@ relay:
       enabled: true
       registration-managed: true
       batch-key-field: batchId
-      business-time-field: occurredAt
       targets: []
       file-format: JSONL
       required-fields: [tableName, records]
@@ -160,7 +158,6 @@ relay:
       enabled: true
       registration-managed: true
       batch-key-field: batchId
-      business-time-field: occurredAt
       targets: []
       file-format: JSONL
       required-fields: [tableName, records]

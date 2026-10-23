@@ -64,7 +64,7 @@
     <main class="serve-main right-panel pl-4">
       <div class="list-toolbar source-toolbar">
         <div class="list-toolbar__primary">
-          <el-button type="primary" icon="plus" @click="openRegister">创建服务</el-button>
+          <el-button type="primary" icon="plus" @click="openRegister">登记服务</el-button>
         </div>
         <div class="list-filters toolbar-filters">
           <el-select class="filter-select" v-model="filters.method" clearable placeholder="请求方式" @change="queryFirstPage">
@@ -222,11 +222,12 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, onUnmounted, reactive, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 
 const router = useRouter();
+const route = useRoute();
 const groupTreeRef = ref();
 const tableRef = ref();
 const groupLoading = ref(false);
@@ -313,7 +314,7 @@ const statusTagType = (status) => {
 const loadGroups = async () => {
   groupLoading.value = true;
   try {
-    const res = await $common.post("/dws/flowserve/gateway/group/list", {});
+    const res = await $common.post("/dws/flowserve/gateway/group/list", {departmentOnly:true});
     const data = extractPayload(res);
     const children = data.children || data.list || [];
     const rootCount = Number(data.total || children.reduce((sum, item) => sum + Number(item.count || 0), 0));
@@ -329,6 +330,7 @@ const loadGroups = async () => {
 
 const fetchServices = async ({ pageNo = 1, pageSize = 20, sortField = undefined, sortDir = undefined } = {}) => {
   const res = await $common.post("/dws/flowserve/gateway/api/list", {
+    departmentOnly: true,
     pageNum: pageNo,
     pageSize,sortField,sortDir,
     keyword: filters.keyword,
@@ -351,7 +353,7 @@ const handleGroupClick = (node) => {
   queryFirstPage();
 };
 const openRegister = () => {
-  apiDetail.value = {};
+  apiDetail.value = {groupId: currentGroup.value?.id || "api_service_group_default"};
   registerModalVisible.value = true;
 };
 const loadApiDetail = async (row) => {
@@ -619,7 +621,13 @@ const handleDelete = async (row) => {
   ElMessage.success("删除成功");
   await Promise.all([loadGroups(), tableRef.value?.refresh?.()]);
 };
-const onModalClose = (result) => {
+const onModalClose = async (result) => {
+  // 当前路由以完整地址为页面标识；打开时清理参数会重建页面并关闭登记框。
+  if (route.query.register === '1') {
+    const query = { ...route.query }; delete query.register;
+    await router.replace({ path: route.path, query });
+    return;
+  }
   if (result === "success") {
     Promise.all([loadGroups(), tableRef.value?.refresh?.()]);
   }
@@ -628,6 +636,12 @@ const refreshTableDensity = () => {
   // 侧栏占用空间后，窄工作区只保留定位服务所需的核心列，避免主区域产生横向滚动条。
   isCompactTable.value = window.innerWidth < 1480;
 };
+
+// 代理登记返回的页面可能仍在缓存中，路由意图不能仅在首次挂载时处理。
+watch(() => [route.path, route.query.register], ([path, register]) => {
+  if (path !== '/deal/data-server/list' || register !== '1') return;
+  openRegister();
+}, { immediate: true });
 
 onMounted(async () => {
   refreshTableDensity();

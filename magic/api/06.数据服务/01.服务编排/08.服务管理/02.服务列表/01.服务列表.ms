@@ -32,6 +32,7 @@ import magicResourceLink
  * 读取 api_info_t 作为服务主表，api_param_t/api_file_t 只聚合当前页服务，
  * sym_dict_t 中 biz_type=apiServiceGroup 的字典项作为左侧分组名称。
  */
+import "@post:/sym/user/me" as me
 import tenantRuntime
 import dataScope
 import tableSort
@@ -50,6 +51,13 @@ if (pageSize > 100) { pageSize = 100 }
 
 var statusExpr = "coalesce(a.status, case when coalesce(a.is_use, 1) = 1 then 'published' else 'offline' end)"
 var whereSql = " where a.is_del = 0 AND a.tenant_id=#{tenantId} "
+// 本部门入口只收窄范围；组织标识由真实会话确定，不能由请求体指定。
+var currentOrgId = ''
+if (body?.departmentOnly == true) {
+    currentOrgId = me()?.orgId
+    if (blank(currentOrgId)) { exit 403, '当前账号未关联部门，无法查看本部门服务' }
+    whereSql += ' AND a.org_id=#{currentOrgId}'
+}
 if(scope.scope=='OWNER') {whereSql=whereSql+' AND a.created_by=#{scopeUserId}'}
 else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND a.org_id IN (#{scopeOrgIds})')}
 else if(scope.scope!='ALL') {exit 403,'数据范围无效'}
@@ -72,6 +80,14 @@ if (!blank(body?.method)) {
 }
 if (!blank(body?.status)) {
     whereSql += " and " + statusExpr + " = " + sqlValue(body.status) + " "
+}
+// 登记工作区只列出直接登记的服务，避免将编排生成的服务作为登记表单编辑。
+var serviceCreateType = body?.serviceCreateType
+if (!blank(serviceCreateType)) {
+    if (serviceCreateType != 'api' && serviceCreateType != 'apiBuild') {
+        exit 400, '服务创建类型无效'
+    }
+    whereSql += " AND coalesce(a.service_create_type, 'api')=#{serviceCreateType} "
 }
 
 var offset = (pageNum - 1) * pageSize

@@ -1,7 +1,5 @@
 {
   "eventType": "device.status",
-  "schemaVersion": "1.0",
-  "occurredAt": "2026-09-05T01:00:00Z",
   "data": {
     "deviceCode": "D001",
     "online": true

@@ -40,11 +40,19 @@ class StandaloneRegistryBatchTest {
         }
     }
     @Test void invalidOrDuplicateSourceRejectsWholeBatchBeforeAnyWrite(){
-        var f=new Fixture();var invalid=source("bad");invalid.put("tables",List.of());
+        var f=new Fixture();var invalid=source("bad");invalid.put("tables",List.of(Map.of("tableName","cases","columns",List.of())));
         assertThrows(RelayException.class,()->f.sync("bad",List.of(source("good"),invalid)));
         assertThrows(RelayException.class,()->f.sync("duplicate",List.of(source("good"),source("good"))));
         assertEquals(0,f.jdbc.queryForObject("select count(*) from ht_standalone_datasource",Integer.class));
         assertEquals(0,f.jdbc.queryForObject("select count(*) from ht_standalone_registry_sync",Integer.class));
+    }
+    @Test void emptyTableSnapshotProvisionsDatasourceIdentityAndRevokesPreviousTableGrants(){
+        var f=new Fixture();var source=source("key-before-finish");f.sync("registered",List.of(source));
+        source.put("tables",List.of());var result=f.sync("empty",List.of(source));
+        assertEquals(0,result.tableCount());assertEquals(Set.of("push-key-before-finish"),f.store.clients("key-before-finish"));
+        assertTrue(f.store.datasource("key-before-finish").orElseThrow().enabled());
+        assertTrue(f.store.table("key-before-finish","cases").orElseThrow().deleted());
+        assertTrue(f.store.columns("key-before-finish","cases").isEmpty());
     }
     @Test void failureDuringApplyRollsBackAllSourcesAndAudit(){
         var f=new Fixture();f.jdbc.execute("alter table ht_standalone_datasource add constraint fail_test check(datasource_id <> 'bad')");

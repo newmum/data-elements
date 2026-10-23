@@ -1,75 +1,79 @@
 <template>
-  <div class="api-register-content">
-    <!-- ?? -->
-    <json-form ref="formRef" bordered :rules="formRules" :disabled="currentMode === 'view'">
-      <!-- ???????:detail ???????/??/???? -->
+  <div v-loading="initializing" class="api-register-content">
+    <div v-if="context === 'detail'" class="registration-heading-actions">
+      <el-button v-if="!isEditing" type="primary" plain @click="startEdit">编辑服务</el-button>
+      <template v-else>
+        <el-button :disabled="saveLoading" @click="handleCancel">取消编辑</el-button>
+        <el-button type="primary" :loading="saveLoading" @click="handleSave">保存修改</el-button>
+      </template>
+    </div>
+    <el-alert
+      v-if="initializationError"
+      type="error"
+      :title="initializationError"
+      show-icon
+      :closable="false"
+    >
+      <el-button type="primary" link @click="setFormData(data)">重新加载登记信息</el-button>
+    </el-alert>
+    <json-form
+      ref="formRef"
+      bordered
+      label-width="144px"
+      :rules="formRules"
+      :disabled="currentMode === 'view' || !!initializationError"
+    >
       <template #type-u-title="{ rule }">
-        <u-title :name="rule.props?.name" class="gap-4" style="height: 50px">
-          <div v-if="context === 'detail' && rule.props.name === '????'">
-            <template v-if="!isEditing">
-              <el-button type="primary" plain icon="edit" @click="startEdit">????</el-button>
-            </template>
-            <template v-else>
-              <el-button type="primary" link @click="handleCancel">??</el-button>
-              <el-button type="primary" link :loading="saveLoading" @click="handleSave">
-                <Icon icon="save" class="mr-1" />
-                ??
-              </el-button>
-            </template>
-          </div>
-        </u-title>
+        <u-title :name="rule.props?.name" class="registration-section-title" />
       </template>
       <template #field-httpMethod="scope">
         <el-radio-group
-          v-model="scope.model.value"
+          :model-value="scope.model.value"
           :disabled="currentMode === 'view'"
-          @change="(val: string | number | boolean | undefined) => handleChange(String(val))"
+          class="request-methods"
+          @change="
+            (value: string | number | boolean | undefined) =>
+              formRef?.setValue({ httpMethod: value })
+          "
         >
-          <el-radio
-            v-for="item in scope.rule.props.options"
-            :key="item.value"
-            :label="item.value"
-            :style="{
-              borderColor: `${item.color}40`,
-              backgroundColor: `${item.color}20`,
-              width: '90px',
-              height: '26px',
-              marginRight: '10px',
-              fontSize: '12px',
-              borderRadius: '4px',
-            }"
-            border
-          >
-            {{ item.label }}
+          <el-radio v-for="method in methods" :key="method" :value="method" border>
+            {{ method }}
           </el-radio>
         </el-radio-group>
       </template>
     </json-form>
-
-    <!-- ???? -->
-    <u-title name="????" />
-    <v-table
-      ref="paramsRef"
-      :options="paramsTableOptions"
-      :show-operation="currentMode === 'edit'"
-      :editable="currentMode === 'edit'"
-      class="api-params-table"
-    ></v-table>
-
-    <u-title name="????" />
-    <div style="height: 300px">
-      <code-editor v-model="requestExample" :lang="'sql'" :read-only="currentMode === 'view'" />
-    </div>
-
-    <!-- ???? -->
-    <u-title name="????" />
-    <div style="height: 300px">
-      <code-editor v-model="responseExample" :lang="'sql'" :read-only="currentMode === 'view'" />
-    </div>
-
-    <!-- ??? -->
-    <!-- <u-title name="???" />
-    <ServiceStatusTable ref="statusRef" :readonly="currentMode === 'view'" /> -->
+    <section class="registration-parameters">
+      <u-title name="服务参数" class="registration-section-title" />
+      <p class="section-hint">
+        填写调用所需的参数；没有参数的服务可以留空。参数名称和参数位置须与实际接口一致。
+      </p>
+      <v-table
+        ref="paramsRef"
+        :options="paramsTableOptions"
+        :show-operation="currentMode === 'edit'"
+        :editable="currentMode === 'edit'"
+        class="api-params-table"
+      />
+    </section>
+    <section class="registration-examples">
+      <u-title name="调用示例" class="registration-section-title" />
+      <el-tabs v-model="exampleTab">
+        <el-tab-pane label="请求示例" name="request">
+          <div class="example-editor">
+            <code-editor v-model="requestExample" lang="json" :read-only="currentMode === 'view'" />
+          </div>
+        </el-tab-pane>
+        <el-tab-pane label="响应示例" name="response" lazy>
+          <div class="example-editor">
+            <code-editor
+              v-model="responseExample"
+              lang="json"
+              :read-only="currentMode === 'view'"
+            />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </section>
   </div>
 </template>
 
@@ -78,221 +82,195 @@ import { ref, reactive, computed, watch, nextTick } from "vue";
 import { FormUtils } from "@/utils/form";
 import { ElMessage } from "element-plus";
 import { useDictStore } from "@/store";
-// import ServiceStatusTable from "./ServiceStatusTable.vue";
 
-const props = withDefaults(
-  defineProps<{
-    /** ????:modal=????, detail=?????/?? */
-    context: "modal" | "detail";
-    /** ??????????(? id ????,? id ????) */
-    data?: Record<string, any>;
-  }>(),
-  {
-    context: "modal",
-    data: () => ({}),
-  }
-);
-
-const emit = defineEmits<{
-  (e: "saved", data: Record<string, any>): void;
-}>();
-
-const dictStore = useDictStore();
-
-// ==================== ????(? detail ??) ====================
-const isEditing = ref(props.context === "modal");
-const saveLoading = ref(false);
-/** ??????:modal ?????,detail ?? isEditing ?? */
-const currentMode = computed(() => {
-  if (props.context === "modal") return "edit";
-  return isEditing.value ? "edit" : "view";
+type RecordValue = Record<string, unknown>;
+interface FormApi {
+  validate(): Promise<boolean>;
+  getFormData(): Promise<RecordValue>;
+  setValue(value: RecordValue): void;
+}
+interface ServiceParameter {
+  paramName: string;
+  description: string;
+  paramType: string;
+  paramPosition: string;
+  required: string;
+  defaultValue: string;
+  showcaseValue: string;
+  paramScope: string;
+}
+interface ParameterApi {
+  validate(): Promise<boolean>;
+  getData(): unknown[];
+  setData(rows: ServiceParameter[]): void;
+}
+interface Snapshot {
+  form: RecordValue;
+  params: ServiceParameter[];
+  request: string;
+  response: string;
+}
+const props = withDefaults(defineProps<{ context?: "modal" | "detail"; data?: RecordValue }>(), {
+  context: "modal",
+  data: () => ({}),
 });
+const emit = defineEmits<{
+  (event: "saved", data: RecordValue): void;
+  (event: "ready", ready: boolean): void;
+}>();
+const record = (value: unknown): RecordValue => {
+  if (typeof value === "string") {
+    try {
+      return record(JSON.parse(value));
+    } catch {
+      return {};
+    }
+  }
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as RecordValue)
+    : {};
+};
+const text = (value: unknown): string => (value == null ? "" : String(value));
+const payloadOf = (response: unknown): RecordValue => {
+  const value = record(response);
+  return record(value.data ?? value);
+};
+const messageOf = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : text(record(error).message) || fallback;
+const dictStore = useDictStore();
+const formRef = ref<FormApi>();
+const paramsRef = ref<ParameterApi>();
+const isEditing = ref(props.context === "modal");
+const currentMode = computed(() =>
+  props.context === "modal" || isEditing.value ? "edit" : "view"
+);
+const saveLoading = ref(false),
+  initializing = ref(false),
+  initializationError = ref("");
+const requestExample = ref(""),
+  responseExample = ref(""),
+  exampleTab = ref("request");
+const methods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+let snapshot: Snapshot = { form: {}, params: [], request: "", response: "" };
+let initializationVersion = 0;
+let userRequest: Promise<RecordValue> | undefined;
+const currentUser = (): Promise<RecordValue> =>
+  (userRequest ??= $common
+    .post("/sym/user/me", {})
+    .then(payloadOf)
+    .catch((error: unknown) => {
+      userRequest = undefined;
+      throw error;
+    }));
 
-// ==================== Refs ====================
-const formRef = ref();
-const paramsRef = ref();
-const responseExample = ref("");
-const requestExample = ref("");
-
-// ==================== ????(????:view=transFormText, edit=rawRules) ====================
-const rawRules: any[] = [
-  { type: "UTitle", props: { name: "????" } },
-  {
-    type: "cascader",
-    field: "orgId",
-    title: "????",
-    $dict: "org",
-    props: {
-      props: {
-        checkStrictly: false,
-        emitPath: false,
-      },
-      placeholder: "???????",
-      clearable: true,
-    },
-    class: "w-full",
-    col: {
-      span: 12,
-    },
-    $required: true,
-  },
-  {
-    type: "DictSelect",
-    title: "??????",
-    field: "dataDomain",
-    props: { options: "dataDomain", placeholder: "?????????" },
-    col: { span: 12 },
-    $required: true,
-  },
-  {
-    type: "cascader",
-    title: "??????",
-    field: "dataCategory",
-    $dict: "dataCategory",
-    class: "w-full",
-    col: { span: 12 },
-    props: {
-      props: {
-        checkStrictly: false,
-        emitPath: false,
-      },
-      placeholder: "?????????",
-    },
-    $required: true,
-  },
-  {
-    type: "dict-select",
-    title: "????",
-    field: "dataLevel",
-    props: { options: "dataLevel", placeholder: "???????" },
-    col: { span: 12 },
-    $required: true,
-  },
-  {
-    type: "input",
-    field: "description",
-    title: "????",
-    props: {
+const titleRule = (name: string) => ({ type: "UTitle", props: { name } });
+const inputRule = (
+  field: string,
+  title: string,
+  required = false,
+  props: RecordValue = {},
+  span = 12
+) => ({
+  type: "input",
+  field,
+  title,
+  props,
+  col: { span },
+  $required: required,
+});
+const dictRule = (field: string, title: string, options: string, required = true) => ({
+  type: "DictSelect",
+  field,
+  title,
+  props: { options, placeholder: `请选择${title}`, clearable: true },
+  col: { span: 12 },
+  $required: required,
+});
+const rawRules = [
+  titleRule("基本信息"),
+  inputRule("name", "服务名称", true, {
+    placeholder: "请输入清晰、完整的服务名称",
+    maxlength: 255,
+  }),
+  inputRule("serviceCode", "服务编码", false, {
+    placeholder: "留空时由系统生成",
+    maxlength: 64,
+  }),
+  inputRule("orgName", "所属部门", false, {
+    disabled: true,
+    placeholder: "按当前登录部门登记",
+  }),
+  inputRule("version", "服务版本", true, {
+    placeholder: "例如 1.0",
+    maxlength: 64,
+  }),
+  inputRule(
+    "description",
+    "服务说明",
+    true,
+    {
       type: "textarea",
-      placeholder: "????????????????????????",
+      rows: 2,
       maxlength: 500,
-      rows: 4,
       showWordLimit: true,
+      placeholder: "说明服务用途、适用场景和数据内容",
     },
-    col: { span: 24 },
-    $required: true,
-  },
-  { type: "UTitle", props: { name: "????" } },
-  { type: "input", title: "????", field: "name", col: { span: 12 }, $required: true },
-  {
-    type: "DictSelect",
-    title: "????",
-    field: "returnType",
-    col: { span: 12 },
-    props: {
-      placeholder: "???????",
-      options: "returnType",
-    },
-    $required: true,
-  },
-  {
-    type: "DictSelect",
-    title: "????",
-    field: "protocol",
-    col: { span: 12 },
-    props: {
-      placeholder: "???????",
-      options: "accessProtocol",
-    },
-    $required: true,
-  },
-  {
-    type: "DictSelect",
-    title: "????",
-    field: "dataUpdateFreq",
-    props: { options: "dataUpdateFreq", placeholder: "???????" },
-    col: { span: 12 },
-    $required: true,
-  },
-  {
-    type: "input",
-    title: "????",
-    field: "address",
-    col: { span: 12 },
-    props: { placeholder: "??: http://172.16.45.4:8000" },
-    $required: true,
-  },
-  {
-    type: "input",
-    title: "????",
-    field: "publishAddress",
-    props: {
-      placeholder: "??????????????,??:getUserInfo/{userId}",
-    },
-    col: { span: 12 },
-    $required: true,
-  },
+    24
+  ),
+  titleRule("访问配置"),
+  dictRule("protocol", "访问协议", "accessProtocol"),
+  dictRule("returnType", "返回格式", "returnType"),
   {
     type: "fieldComponent",
-    title: "????",
     field: "httpMethod",
-    value: "get",
+    title: "请求方式",
+    value: "GET",
+    props: { type: "radio" },
+    col: { span: 24 },
+    $required: true,
+  },
+  inputRule("address", "服务地址", true, {
+    placeholder: "例如 https://api.example.com/services/query",
+    maxlength: 1000,
+  }),
+  inputRule("publishAddress", "发布路径", true, {
+    placeholder: "例如 /services/query",
+    maxlength: 1000,
+  }),
+  dictRule("shareType", "共享类型", "shareType"),
+  dictRule("dataUpdateFreq", "更新频率", "dataUpdateFreq"),
+  titleRule("资源分类"),
+  dictRule("dataDomain", "数据所属领域", "dataDomain"),
+  {
+    type: "cascader",
+    field: "dataCategory",
+    title: "数据资源分类",
+    $dict: "dataCategory",
     props: {
-      type: "radio",
-      options: [
-        { label: "GET", value: "get", color: "#fa8c16" },
-        { label: "POST", value: "post", color: "#1677ff" },
-        { label: "PUT", value: "put", color: "#389e0d" },
-        { label: "DELETE", value: "delete", color: "#9254de" },
-      ],
+      props: { checkStrictly: true, emitPath: false },
+      placeholder: "请选择数据资源分类",
+      clearable: true,
     },
     col: { span: 12 },
     $required: true,
   },
-  {
-    type: "dict-select",
-    title: "????",
-    field: "shareType",
-    col: { span: 12 },
-    props: { options: "shareType", placeholder: "???????" },
-    $required: true,
-  },
-  {
-    type: "input",
-    field: "apiDescription",
-    title: "????",
-    props: { type: "textarea", maxlength: 255, rows: 4 },
-    col: { span: 24 },
-  },
+  dictRule("dataLevel", "数据分级", "dataLevel"),
+  inputRule(
+    "apiDescription",
+    "补充说明",
+    false,
+    {
+      type: "textarea",
+      rows: 2,
+      maxlength: 255,
+      placeholder: "可补充接口约定或使用注意事项",
+    },
+    24
+  ),
 ];
-
-/** ????????? field ??,?? detail ???? */
-const basicElementFields = new Set([
-  "orgId",
-  "dataDomain",
-  "dataCategory",
-  "dataLevel",
-  "description",
-]);
-
-/** ?????????(detail ?????) */
-const filterBasicElement = (rules: any[]) => {
-  return rules.filter((rule) => {
-    // ????????
-    if (rule.type === "UTitle" && rule.props?.name === "????") return false;
-    // ??????????
-    if (rule.field && basicElementFields.has(rule.field)) return false;
-    return true;
-  });
-};
-
-const formRules = computed(() => {
-  const rules = props.context === "detail" ? filterBasicElement(rawRules) : rawRules;
-  if (currentMode.value === "view") return FormUtils.transFormText(rules);
-  return rules;
-});
-
-// ==================== ???? v-table ?? ====================
+const formRules = computed(() =>
+  currentMode.value === "view" ? FormUtils.transFormText(rawRules) : rawRules
+);
 const paramsTableOptions = reactive({
   importConfig: { mode: "covering" },
   toolbarConfig: {
@@ -302,460 +280,378 @@ const paramsTableOptions = reactive({
         icon: "vxe-icon-cloud-upload",
         mode: "text",
         status: "primary",
-        name: "??",
+        name: "导入参数",
       },
       {
         code: "open_export",
         icon: "vxe-icon-download",
         mode: "text",
         status: "primary",
-        name: "??",
+        name: "导出参数",
       },
       {
         code: "append_edit",
         icon: "vxe-icon-add",
-        name: "????",
-        status: "primary",
         mode: "text",
+        status: "primary",
+        name: "添加参数",
       },
     ],
     tools: [],
   },
   columns: [
-    { type: "seq", width: 60, title: "??" },
+    { type: "seq", width: 58, title: "序号" },
     {
       field: "paramName",
-      title: "????",
-      editRender: { name: "VxeInput", props: { placeholder: "???????", maxlength: 256 } },
+      title: "参数名称",
+      minWidth: 150,
+      editRender: {
+        name: "VxeInput",
+        props: { placeholder: "例如 pageSize", maxlength: 255 },
+      },
     },
     {
       field: "description",
-      title: "?????",
-      editRender: { name: "VxeInput", props: { placeholder: "????????", maxlength: 256 } },
-    },
-    {
-      field: "showcaseValue",
-      title: "???",
-      editRender: { name: "VxeInput", props: { placeholder: "??????", maxlength: 256 } },
+      title: "参数说明",
+      minWidth: 180,
+      editRender: {
+        name: "VxeInput",
+        props: { placeholder: "说明参数含义", maxlength: 255 },
+      },
     },
     {
       field: "paramType",
-      title: "????",
+      title: "参数类型",
       width: 120,
       editRender: {
         name: "ElSelect",
         options: dictStore.getDictItems("paramType"),
-        props: { placeholder: "???????" },
+        props: { placeholder: "请选择类型" },
       },
     },
     {
       field: "paramPosition",
-      title: "????",
+      title: "参数位置",
       width: 120,
       editRender: {
         name: "ElSelect",
         options: dictStore.getDictItems("paramPosition"),
-        props: { placeholder: "???????" },
+        props: { placeholder: "请选择位置" },
       },
     },
     {
       field: "required",
-      title: "????",
-      width: 120,
+      title: "是否必填",
+      width: 110,
       editRender: {
         name: "ElSelect",
         options: dictStore.getDictItems("requiredAttribute"),
-        props: { placeholder: "???????" },
+        props: { placeholder: "请选择" },
       },
     },
     {
       field: "defaultValue",
-      title: "???",
-      width: 120,
-      editRender: { name: "VxeInput", props: { placeholder: "??????", maxlength: 256 } },
+      title: "默认值",
+      minWidth: 120,
+      editRender: { name: "VxeInput", props: { maxlength: 255 } },
+    },
+    {
+      field: "showcaseValue",
+      title: "示例值",
+      minWidth: 120,
+      editRender: { name: "VxeInput", props: { maxlength: 255 } },
     },
   ],
   editRules: {
-    paramName: [{ required: true, message: "????????", trigger: "blur" }],
-    paramDesc: [{ required: true, message: "?????????", trigger: "blur" }],
-    paramType: [{ required: true, message: "????????", trigger: "change" }],
-    paramPosition: [
-      {
-        validator: ({ cellValue, row }: any) => row.req !== 1 || !!cellValue,
-        message: "???????????",
-        trigger: "change",
-      },
-    ],
-    required: [
-      {
-        validator: ({ cellValue, row }: any) => row.req !== 1 || !!cellValue,
-        message: "???????????",
-        trigger: "change",
-      },
-    ],
+    paramName: [{ required: true, message: "请填写参数名称", trigger: "blur" }],
+    paramType: [{ required: true, message: "请选择参数类型", trigger: "change" }],
   },
 });
-
-const handleChange = (val: string) => {
-  formRef.value?.setValue({ httpMethod: val });
-};
-
-// ==================== ??(???? value,?? label ??) ====================
-let _dataSnapshot: Record<string, any> = {};
-
-// ==================== ??????(? detail ??) ====================
-const startEdit = () => {
-  // ??????????(params?responseExample)
-  _dataSnapshot.paramsData = paramsRef.value?.getData() || [];
-  _dataSnapshot.requestExample = requestExample.value;
-  _dataSnapshot.responseExample = responseExample.value;
-  // formData ?? setFormData ?????????,?? view ?? getFormData ??
-  isEditing.value = true;
-  // formRules ?? ? ???? ? nextTick ???? value ??
-  nextTick(() => {
-    if (_dataSnapshot.formData && Object.keys(_dataSnapshot.formData).length > 0) {
-      formRef.value?.setValue(_dataSnapshot.formData);
+const normalizeParams = (values: unknown): ServiceParameter[] => {
+  let rows: unknown = values;
+  if (typeof rows === "string") {
+    try {
+      rows = JSON.parse(rows);
+    } catch {
+      rows = [];
     }
+  }
+  return (Array.isArray(rows) ? rows : []).map((value) => {
+    const row = record(value);
+    return {
+      paramName: text(row.paramName || row.param_name),
+      description: text(row.description || row.paramDesc),
+      paramType: text(row.paramType || row.param_type),
+      paramPosition: text(row.paramPosition || row.param_position),
+      required: row.required === true || text(row.required) === "1" ? "1" : "0",
+      defaultValue: text(row.defaultValue),
+      showcaseValue: text(row.showcaseValue),
+      paramScope: row.paramScope === "response" || row.res === 1 ? "response" : "request",
+    };
   });
 };
-
-const handleCancel = () => {
-  isEditing.value = false;
-  nextTick(() => {
-    // ????:view ???? label ??????
-    formRef.value?.setValue(_dataSnapshot.formData || {});
-    paramsRef.value?.setData(_dataSnapshot.paramsData || []);
-    requestExample.value = _dataSnapshot.requestExample || "";
-    responseExample.value = _dataSnapshot.responseExample || "";
-  });
-};
-
-// ==================== ???????? ====================
-/**
- * ??????? + ??????????????????
- */
-const buildPayload = (formData: Record<string, any>, paramList: any[]) => {
-  // ????? ? publishParams,?? ordering ??
-  const publishParams = paramList.map((row: any, index: number) => ({
+const formValues = async (): Promise<RecordValue> => ({
+  ...snapshot.form,
+  ...(await formRef.value?.getFormData()),
+  // 服务标识以保存结果为准，避免未重新挂载的表单模型恢复首次登记时的空值。
+  id: snapshot.form.id,
+  orgId: snapshot.form.orgId,
+});
+const buildPayload = (form: RecordValue, rows: ServiceParameter[]): RecordValue => ({
+  id: text(snapshot.form.id),
+  name: text(form.name).trim(),
+  serviceCode: text(form.serviceCode).trim(),
+  version: text(form.version) || "1.0",
+  description: text(form.description),
+  labels: text(snapshot.form.labels),
+  groupId: props.data.groupId || "api_service_group_default",
+  status: props.data.status || "draft",
+  serviceCreateType: "api",
+  resourceId: props.data.resourceId,
+  providerConfig: {
+    ...record(props.data.providerConfig),
+    protocol: form.protocol,
+    address: text(form.address).trim(),
+    httpMethod: form.httpMethod,
+  },
+  publishConfig: {
+    ...record(props.data.publishConfig),
+    publishProtocol: form.protocol,
+    publishAddress: text(form.publishAddress).trim(),
+    publishMethod: form.httpMethod,
+  },
+  publishParams: rows.map((row, index) => ({
+    ...row,
     ordering: String(index + 1),
-    paramPosition: row.paramPosition || "",
-    paramType: row.paramType || "",
-    paramName: row.paramName || "",
-    required: row.required || "",
-    description: row.description || "",
-    defaultValue: row.defaultValue || "",
-    showcaseValue: row.showcaseValue || "",
-  }));
-
-  const providerConfig = {
-    protocol: formData.protocol || "",
-    address: formData.address || "",
-    httpMethod: formData.httpMethod || "",
-  };
-
-  const publishConfig = {
-    publishProtocol: formData.protocol || "",
-    publishAddress: formData.publishAddress || "",
-    publishMethod: formData.httpMethod || "",
-  };
-
-  const extendInfo = {
-    orgId: formData.orgId || "",
-    dataDomain: formData.dataDomain || "",
-    dataCategory: formData.dataCategory || "",
-    dataLevel: formData.dataLevel || "",
-    returnType: formData.returnType || "",
-    dataUpdateFreq: formData.dataUpdateFreq || "",
-    shareType: formData.shareType || "",
-    apiDescription: formData.apiDescription || "",
-    requestExample: requestExample.value || "",
-    responseExample: responseExample.value || "",
-  };
-
-  return {
-    name: formData.name || "",
-    version: formData.version || "1.0",
-    description: formData.description || "",
-    labels: formData.labels || "",
-    providerConfig,
-    providerParams: [],
-    constantParams: [],
-    publishConfig,
-    publishParams,
-    paramsMapping: [],
-    requestBodyShowcase: "",
-    responseShowcase: "",
-    failedResponseShowcase: "",
-    errorCodeShowcase: "",
-    extendInfo,
-  };
+    res: row.paramScope === "response" ? 1 : 0,
+  })),
+  extendInfo: {
+    ...record(props.data.extendInfo),
+    orgId: form.orgId,
+    dataDomain: form.dataDomain,
+    dataCategory: form.dataCategory,
+    dataLevel: form.dataLevel,
+    returnType: form.returnType,
+    dataUpdateFreq: form.dataUpdateFreq,
+    shareType: form.shareType,
+    apiDescription: text(form.apiDescription),
+    requestExample: requestExample.value,
+    responseExample: responseExample.value,
+  },
+});
+const restore = async () => {
+  await nextTick();
+  formRef.value?.setValue({ ...snapshot.form });
+  paramsRef.value?.setData(snapshot.params.map((row) => ({ ...row })));
+  requestExample.value = snapshot.request;
+  responseExample.value = snapshot.response;
 };
-
-/**
- * ??????????????????? + ????
- */
-const parsePayload = (
-  data: Record<string, any>
-): { formData: Record<string, any>; paramsData: any[] } => {
-  const ext =
-    typeof data.extendInfo === "string" ? JSON.parse(data.extendInfo) : data.extendInfo || {};
-  const provider =
-    typeof data.providerConfig === "string"
-      ? JSON.parse(data.providerConfig)
-      : data.providerConfig || {};
-  const publish =
-    typeof data.publishConfig === "string"
-      ? JSON.parse(data.publishConfig)
-      : data.publishConfig || {};
-
-  const formData: Record<string, any> = {
-    id: data.id || "",
-    name: data.name || "",
-    version: data.version || "1.0",
-    description: data.description || "",
-    labels: data.labels || "",
-    // providerConfig
-    protocol: provider.protocol || "",
-    address: provider.address || "",
-    httpMethod: provider.httpMethod || "",
-    // publishConfig
-    publishAddress: publish.publishAddress || "",
-    // extendInfo
-    orgId: ext.orgId || "",
-    dataDomain: ext.dataDomain || "",
-    dataCategory: ext.dataCategory || "",
-    dataLevel: ext.dataLevel || "",
-    returnType: ext.returnType || "",
-    dataUpdateFreq: ext.dataUpdateFreq || "",
-    shareType: ext.shareType || "",
-    apiDescription: ext.apiDescription || "",
-  };
-
-  // ??/??????? ref
-  const reqExample = ext.requestExample || "";
-  const resExample = ext.responseExample || "";
-
-  // ????:publishParams ? ???
-  const paramsData =
-    typeof data.publishParams === "string"
-      ? JSON.parse(data.publishParams)
-      : data.publishParams || [];
-
-  return { formData, paramsData, _requestExample: reqExample, _responseExample: resExample } as any;
-};
-
-// ==================== ??(modal ? detail ??) ====================
-const handleSave = async (): Promise<boolean> => {
+const setFormData = async (data: RecordValue = {}) => {
+  const version = ++initializationVersion;
+  initializing.value = true;
+  emit("ready", false);
+  initializationError.value = "";
   try {
-    saveLoading.value = true;
-    const valid = await validate();
-    if (!valid) {
-      ElMessage.warning("???????????");
+    const user = await currentUser();
+    if (version !== initializationVersion) return;
+    const ext = record(data.extendInfo),
+      provider = record(data.providerConfig),
+      publish = record(data.publishConfig);
+    const orgId = ext.orgId || data.orgId || user.orgId;
+    const form: RecordValue = {
+      id: text(data.id || data.tid),
+      name: text(data.serviceName || data.name),
+      serviceCode: text(data.serviceCode || data.code),
+      version: text(data.version) || "1.0",
+      description: text(data.description || data.serviceDesc),
+      labels: text(data.labels),
+      orgId,
+      orgName:
+        text(data.orgName) || (text(orgId) === text(user.orgId) ? text(user.orgName) : text(orgId)),
+      protocol: provider.protocol || data.protocol || "HTTP",
+      address: text(provider.address || data.address || data.uri),
+      httpMethod: text(provider.httpMethod || data.method || "GET").toUpperCase(),
+      publishAddress: text(publish.publishAddress || data.publishAddress || data.uri),
+      dataDomain: ext.dataDomain || data.dataDomain || "",
+      dataCategory: ext.dataCategory || data.dataCategory || "",
+      dataLevel: ext.dataLevel || data.dataLevel || "",
+      returnType: ext.returnType || data.returnType || "",
+      dataUpdateFreq: ext.dataUpdateFreq || data.dataUpdateFreq || "",
+      shareType: ext.shareType || data.shareType || "",
+      apiDescription: text(ext.apiDescription),
+    };
+    snapshot = {
+      form,
+      params: normalizeParams(data.publishParams || data.paramList),
+      request: text(ext.requestExample || data.requestExample),
+      response: text(ext.responseExample || data.responseExample),
+    };
+    await restore();
+  } catch (error) {
+    if (version === initializationVersion)
+      initializationError.value = messageOf(error, "登记信息加载失败，请关闭后重试");
+  } finally {
+    if (version === initializationVersion) {
+      initializing.value = false;
+      emit("ready", !initializationError.value);
+    }
+  }
+};
+const validate = async (): Promise<boolean> => {
+  if (initializing.value || initializationError.value) return false;
+  try {
+    const valid = await formRef.value?.validate();
+    if (valid === false) return false;
+    if ((await paramsRef.value?.validate()) === false) return false;
+    const form = await formValues();
+    if (!text(form.orgId)) {
+      ElMessage.warning("当前账号未关联部门，请先完善部门信息");
       return false;
     }
-    const formData = (await formRef.value?.getFormData()) || {};
-    const paramList = paramsRef.value?.getData() || [];
-
-    const payload = buildPayload(formData, paramList);
-    // ????? id
-    const id = _dataSnapshot?.formData?.id || "";
-    await $common.post("/dws/flowserve/gateway/save", { ...payload, id });
-
+    const address = text(form.address).trim();
+    if (!/^https?:\/\/[^\s]+$/i.test(address) && !address.startsWith("/")) {
+      ElMessage.warning("服务地址须为HTTP(S)地址或已有服务相对路径");
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+const handleSave = async (): Promise<boolean> => {
+  if (saveLoading.value) return false;
+  saveLoading.value = true;
+  try {
+    if (!(await validate())) {
+      ElMessage.warning("请完善服务登记中的必填项后再提交");
+      return false;
+    }
+    const form = await formValues(),
+      rows = normalizeParams(paramsRef.value?.getData() || []);
+    const payload = buildPayload(form, rows),
+      saved = payloadOf(await $common.post("/dws/flowserve/gateway/save", payload));
+    const id = text(saved.id || saved.tid);
+    if (!id) throw new Error("保存请求未返回服务标识，请刷新列表确认结果后再操作");
+    snapshot = {
+      form: { ...form, id },
+      params: rows,
+      request: requestExample.value,
+      response: responseExample.value,
+    };
     if (props.context === "detail") {
       isEditing.value = false;
-      // ?????????
-      _dataSnapshot = {
-        formData: { ...formData, id },
-        paramsData: [...paramList],
-        requestExample: requestExample.value,
-        responseExample: responseExample.value,
-      };
-      nextTick(() => {
-        formRef.value?.setValue(formData);
-      });
+      await restore();
     }
-
     emit("saved", { ...payload, id });
-    ElMessage.success(props.context === "detail" ? "????" : "??????");
+    ElMessage.success(props.context === "detail" ? "服务修改已保存" : "服务登记已保存");
     return true;
   } catch (error) {
-    console.error("????:", error);
-    // ???????????????;???????,???????
-    if (!error?.handled) {
-      ElMessage.error("????,???");
-    }
+    if (record(error).handled !== true)
+      ElMessage.error(messageOf(error, "服务登记未保存，请检查填写内容后重试"));
     return false;
   } finally {
     saveLoading.value = false;
   }
 };
-
-// ==================== ???? ====================
-/** ???? Java ???? */
-const generateDefaultReqExample = (path?: string) => {
-  return `public static void main(String[] args) {
-  String path = " ${path || ""} ";
-  String query = "";
-  CloseableHttpClient client = HttpClients.createDefault();
-  HttpGet httpGet = new HttpGet(path + "?" + query);
-  try {
-      HttpResponse response = client.execute(httpGet);
-      System.out.println(response.toString());
-  } catch (IOException e) {
-      e.printStackTrace();
-  }
-}`;
+const startEdit = async () => {
+  isEditing.value = true;
+  await restore();
 };
-
-const defaultResExample = `{
-  "code": 0,
-  "msg": "success",
-  "success": true,
-  "data": {}
-}`;
-
-const defaultParamsData = [
-  {
-    paramName: "ID",
-    description: "ID",
-    paramType: "string",
-    showcaseValue: "",
-    paramPosition: "path",
-    required: true,
-  },
-];
-
-/** ??????/??????????? */
-const setDefaultSelectValues = (formData: Record<string, any>) => {
-  // DictSelect/dict-select ????
-  const requiredSelectFields: Record<string, string> = {
-    dataDomain: "dataDomain",
-    dataLevel: "dataLevel",
-    returnType: "returnType",
-    protocol: "accessProtocol",
-    dataUpdateFreq: "dataUpdateFreq",
-    shareType: "shareType",
-  };
-
-  Object.entries(requiredSelectFields).forEach(([fieldName, dictCode]) => {
-    if (!formData[fieldName]) {
-      const dictItems = dictStore.getDictItems(dictCode);
-      if (dictItems.length > 0) {
-        formData[fieldName] = dictItems[0].value;
-      }
-    }
-  });
+const handleCancel = async () => {
+  isEditing.value = false;
+  await restore();
 };
-
-const setFormData = (data: Record<string, any>) => {
-  console.log("setFormData", data);
-  if (!data || !Object.keys(data).length) return;
-  nextTick(() => {
-    const parsed = parsePayload(data) as any;
-    const formData = parsed.formData || {};
-    let paramsData = parsed.paramsData || [];
-    let reqExample = parsed.requestExample || "";
-    let resExample = parsed.responseExample || "";
-
-    // ???????,?? publishAddressFull ??????
-    if (!reqExample) {
-      reqExample = generateDefaultReqExample(data?.publishAddressFull);
-    }
-
-    // ???????,??????
-    if (!resExample) {
-      resExample = defaultResExample;
-    }
-
-    // ???????,????????
-    if (!paramsData || paramsData.length === 0) {
-      paramsData = defaultParamsData;
-    }
-
-    // ??????/???????????
-    setDefaultSelectValues(formData);
-
-    // ????????(?????)
-    _dataSnapshot = {
-      formData: { ...formData },
-      paramsData: [...paramsData],
-      requestExample: reqExample,
-      responseExample: resExample,
-    };
-
-    // ????/??/??
-    formRef.value?.setValue(formData);
-    requestExample.value = reqExample;
-    responseExample.value = resExample;
-    paramsRef.value?.setData(paramsData);
-  });
-};
-
-// ?? data prop ??
 watch(
   () => props.data,
-  () => {
-    nextTick(() => setFormData(props.data));
+  (data) => {
+    void setFormData(data);
   },
   { immediate: true, deep: true }
 );
-
-// onMounted(async () => {
-//   // catalog ??????,??????????(?? view ?? label ??)
-//   if (props.data && Object.keys(props.data).length > 0 && currentMode.value === "view") {
-//     nextTick(() => setFormData(props.data));
-//   }
-// });
-
-// ==================== Validate ====================
-const validate = async (): Promise<boolean> => {
-  try {
-    const paramsValid = await paramsRef.value?.validate();
-    const formValid = await formRef.value?.validate();
-    return paramsValid !== false && formValid !== false;
-  } catch {
-    return false;
-  }
-};
-
-// ==================== Expose ====================
 defineExpose({
-  getFormData: async () => (await formRef.value?.getFormData()) || {},
-  getParamsData: () => paramsRef.value?.getData() || [],
-  getRequestExample: () => requestExample.value || "",
-  getResponseExample: () => responseExample.value || "",
-  /** ????????? payload */
-  getPayload: async () => {
-    const formData = (await formRef.value?.getFormData()) || {};
-    const paramList = paramsRef.value?.getData() || [];
-    return buildPayload(formData, paramList);
-  },
+  handleSave,
   validate,
   setFormData,
-  /** ??(modal ? detail ????,??????) */
-  handleSave,
-  reset: () => {
-    formRef.value?.resetFields();
-    requestExample.value = "";
-    responseExample.value = "";
-    paramsRef.value?.setData([]);
-  },
+  reset: () => setFormData(props.data),
+  getFormData: formValues,
+  getParamsData: () => normalizeParams(paramsRef.value?.getData() || []),
+  getRequestExample: () => requestExample.value,
+  getResponseExample: () => responseExample.value,
+  getPayload: async () =>
+    buildPayload(await formValues(), normalizeParams(paramsRef.value?.getData() || [])),
 });
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .api-register-content {
-  .el-radio__label {
-    font-size: 12px;
-  }
-  .api-params-table {
-    min-height: 200px;
-    position: relative;
-    :deep(.vxe-grid--toolbar-wrapper) {
-      position: absolute;
-      right: 0;
-      top: -39px;
-    }
+  width: 100%;
+  max-width: 1160px;
+  min-width: 0;
+  margin: 0 auto;
+  padding-bottom: 12px;
+  color: #25344b;
+}
+.section-hint {
+  margin: 6px 0 0;
+  color: #758298;
+  font-size: 12px;
+  line-height: 20px;
+}
+.registration-heading-actions {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  padding: 8px 0;
+}
+.request-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 0;
+}
+.request-methods :deep(.el-radio) {
+  min-width: 88px;
+  height: 34px;
+  margin: 0;
+  padding: 0 14px;
+  border-radius: 4px;
+}
+.registration-section-title {
+  min-height: 38px;
+  margin: 8px 0 12px;
+}
+.api-register-content :deep(.el-form-item) {
+  margin-bottom: 14px;
+}
+.api-register-content :deep(.el-form-item__label) {
+  font-size: 13px;
+}
+.api-register-content :deep(.el-form-item__content) {
+  min-width: 0;
+}
+.registration-parameters,
+.registration-examples {
+  min-width: 0;
+  margin-top: 16px;
+}
+.section-hint {
+  margin: -6px 0 8px;
+}
+.api-params-table {
+  min-height: 170px;
+  min-width: 0;
+  max-width: 100%;
+}
+.example-editor {
+  height: 180px;
+  border: 1px solid #e5eaf1;
+  border-radius: 4px;
+  overflow: hidden;
+}
+@media (max-width: 760px) {
+  .api-register-content :deep(.el-col-12) {
+    max-width: 100%;
+    flex-basis: 100%;
   }
 }
 </style>

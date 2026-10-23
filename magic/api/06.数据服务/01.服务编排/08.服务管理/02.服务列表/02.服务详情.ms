@@ -30,7 +30,17 @@
  * 以 api_info_t 为主表读取服务登记信息，api_param_t 回填请求参数，
  * api_file_t 仅统计关联脚本数量，接口不写入业务数据。
  */
+import tenantRuntime
+import dataScope
 import magicResourceLink
+var tenantId=tenantRuntime.id()
+var scope=dataScope.dataSource()
+var scopeOrgIds=scope.organizationIds
+var scopeUserId=scope.userId
+var scopeSql=' AND tenant_id=#{tenantId}'
+if(scope.scope=='OWNER') {scopeSql+=' AND created_by=#{scopeUserId}'}
+else if(scope.scope=='ORG') {scopeSql+=scopeOrgIds.size()==0?' AND 1=0':' AND org_id IN (#{scopeOrgIds})'}
+else if(scope.scope!='ALL') {exit 403,'数据范围无效'}
 import cn.hutool.json.JSONUtil
 
 var blank = value => value == null || (value + '').trim() == ''
@@ -93,7 +103,8 @@ select
   updated_time as updatedTime
 from api_info_t
 where coalesce(is_del, 0) = 0
-  and tid = """ + sqlValue(apiId) + """
+  and tid = #{apiId}
+""" + scopeSql + """
 limit 1
 """)
 if (rows == null || rows.size() == 0) {
@@ -116,7 +127,7 @@ select
   sort_no as sortNo
 from api_param_t
 where coalesce(is_del, 0) = 0
-  and api_id = """ + sqlValue(apiId) + """
+  and tenant_id=#{tenantId} and api_id = #{apiId}
 order by coalesce(sort_no, 9999), created_time
 """)
 var publishParams = []
@@ -138,7 +149,7 @@ for (p in paramRows) {
 var provider = asObj(row.providerConfig || row.providerconfig || row.provider_config)
 var publish = asObj(row.publishConfig || row.publishconfig || row.publish_config)
 var ext = {}
-var extRows = db.table('da_prop_t').where().eq('parent_id', apiId).eq('data_type', 'api').eq('is_del', 0).select()
+var extRows = db.table('da_prop_t').where().eq('tenant_id',tenantId).eq('parent_id', apiId).eq('data_type', 'api').eq('is_del', 0).select()
 for (prop in extRows) {
     var propName = prop.propName || prop.prop_name
     if (!blank(propName)) {
@@ -168,7 +179,7 @@ var groupRows = db.select("""
 select dict_name as name
 from sym_dict_t
 where coalesce(is_del, 0) = 0
-  and biz_type = 'apiServiceGroup'
+  and tenant_id=#{tenantId} and biz_type = 'apiServiceGroup'
   and tid = """ + sqlValue(row.groupId || row.groupid || 'api_service_group_default') + """
 limit 1
 """)
