@@ -1,5 +1,12 @@
 <template>
-  <div v-loading="initializing" class="api-register-content">
+  <div
+    v-loading="initializing && context !== 'detail'"
+    :aria-busy="initializing"
+    class="api-register-content"
+    :class="{ 'is-readonly': currentMode === 'view' }"
+  >
+    <LoadingState v-if="initializing && context === 'detail'" type="form" />
+    <div v-show="!initializing || context !== 'detail'">
     <div v-if="context === 'detail'" class="registration-heading-actions">
       <el-button v-if="!isEditing" type="primary" plain @click="startEdit">编辑服务</el-button>
       <template v-else>
@@ -17,71 +24,23 @@
       <el-button type="primary" link @click="setFormData(data)">重新加载登记信息</el-button>
     </el-alert>
     <json-form
+      v-if="definitionLoaded"
       ref="formRef"
       bordered
       label-width="144px"
       :rules="formRules"
-      :disabled="currentMode === 'view' || !!initializationError"
-    >
-      <template #type-u-title="{ rule }">
-        <u-title :name="rule.props?.name" class="registration-section-title" />
-      </template>
-      <template #field-httpMethod="scope">
-        <el-radio-group
-          :model-value="scope.model.value"
-          :disabled="currentMode === 'view'"
-          class="request-methods"
-          @change="
-            (value: string | number | boolean | undefined) =>
-              formRef?.setValue({ httpMethod: value })
-          "
-        >
-          <el-radio v-for="method in methods" :key="method" :value="method" border>
-            {{ method }}
-          </el-radio>
-        </el-radio-group>
-      </template>
-    </json-form>
-    <section class="registration-parameters">
-      <u-title name="服务参数" class="registration-section-title" />
-      <p class="section-hint">
-        填写调用所需的参数；没有参数的服务可以留空。参数名称和参数位置须与实际接口一致。
-      </p>
-      <v-table
-        ref="paramsRef"
-        :options="paramsTableOptions"
-        :show-operation="currentMode === 'edit'"
-        :editable="currentMode === 'edit'"
-        class="api-params-table"
-      />
-    </section>
-    <section class="registration-examples">
-      <u-title name="调用示例" class="registration-section-title" />
-      <el-tabs v-model="exampleTab">
-        <el-tab-pane label="请求示例" name="request">
-          <div class="example-editor">
-            <code-editor v-model="requestExample" lang="json" :read-only="currentMode === 'view'" />
-          </div>
-        </el-tab-pane>
-        <el-tab-pane label="响应示例" name="response" lazy>
-          <div class="example-editor">
-            <code-editor
-              v-model="responseExample"
-              lang="json"
-              :read-only="currentMode === 'view'"
-            />
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </section>
+      :options="formOptions"
+      @change="emit('change')"
+    />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, nextTick } from "vue";
-import { FormUtils } from "@/utils/form";
+import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
+import type { FormRule } from "@form-create/element-ui";
+import { cloneDeep } from "lodash-es";
 import { ElMessage } from "element-plus";
-import { useDictStore } from "@/store";
 
 type RecordValue = Record<string, unknown>;
 interface FormApi {
@@ -99,11 +58,6 @@ interface ServiceParameter {
   showcaseValue: string;
   paramScope: string;
 }
-interface ParameterApi {
-  validate(): Promise<boolean>;
-  getData(): unknown[];
-  setData(rows: ServiceParameter[]): void;
-}
 interface Snapshot {
   form: RecordValue;
   params: ServiceParameter[];
@@ -117,6 +71,7 @@ const props = withDefaults(defineProps<{ context?: "modal" | "detail"; data?: Re
 const emit = defineEmits<{
   (event: "saved", data: RecordValue): void;
   (event: "ready", ready: boolean): void;
+  (event: "change"): void;
 }>();
 const record = (value: unknown): RecordValue => {
   if (typeof value === "string") {
@@ -137,20 +92,57 @@ const payloadOf = (response: unknown): RecordValue => {
 };
 const messageOf = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : text(record(error).message) || fallback;
-const dictStore = useDictStore();
 const formRef = ref<FormApi>();
-const paramsRef = ref<ParameterApi>();
 const isEditing = ref(props.context === "modal");
 const currentMode = computed(() =>
   props.context === "modal" || isEditing.value ? "edit" : "view"
 );
 const saveLoading = ref(false),
-  initializing = ref(false),
+  initializing = ref(true),
   initializationError = ref("");
-const requestExample = ref(""),
-  responseExample = ref(""),
-  exampleTab = ref("request");
-const methods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
+const formRules = ref<FormRule[]>([]);
+const definitionLoaded = ref(false);
+const formOptions = computed(() => ({
+  form: {
+    disabled: currentMode.value === "view" || !!initializationError.value,
+    showMessage: true,
+    labelWidth: "144px",
+    labelPosition: "right",
+    colon: false,
+  },
+  global: {
+    "*": {
+      props: {
+        disabled: currentMode.value === "view",
+        readOnly: currentMode.value === "view",
+      },
+    },
+  },
+}));
+let definitionRequest: Promise<void> | undefined;
+const configuredDefaults: RecordValue = {};
+const collectDefaults = (rules: unknown[]) => {
+  for (const item of rules) {
+    const rule = record(item);
+    if (typeof rule.field === "string" && rule.value !== undefined)
+      configuredDefaults[rule.field] = cloneDeep(rule.value);
+    if (Array.isArray(rule.children)) collectDefaults(rule.children);
+  }
+};
+const loadDefinition = () =>
+  (definitionRequest ??= $form
+    .loadDefinition("登记API服务")
+    .then((definition) => {
+      if (!definition.rules.length)
+        throw new Error("登记API服务的表单规则为空，请在表单配置中完善");
+      collectDefaults(definition.rules);
+      formRules.value = cloneDeep(definition.rules);
+      definitionLoaded.value = true;
+    })
+    .catch((error: unknown) => {
+      definitionRequest = undefined;
+      throw error;
+    }));
 let snapshot: Snapshot = { form: {}, params: [], request: "", response: "" };
 let initializationVersion = 0;
 let userRequest: Promise<RecordValue> | undefined;
@@ -163,210 +155,6 @@ const currentUser = (): Promise<RecordValue> =>
       throw error;
     }));
 
-const titleRule = (name: string) => ({ type: "UTitle", props: { name } });
-const inputRule = (
-  field: string,
-  title: string,
-  required = false,
-  props: RecordValue = {},
-  span = 12
-) => ({
-  type: "input",
-  field,
-  title,
-  props,
-  col: { span },
-  $required: required,
-});
-const dictRule = (field: string, title: string, options: string, required = true) => ({
-  type: "DictSelect",
-  field,
-  title,
-  props: { options, placeholder: `请选择${title}`, clearable: true },
-  col: { span: 12 },
-  $required: required,
-});
-const rawRules = [
-  titleRule("基本信息"),
-  inputRule("name", "服务名称", true, {
-    placeholder: "请输入清晰、完整的服务名称",
-    maxlength: 255,
-  }),
-  inputRule("serviceCode", "服务编码", false, {
-    placeholder: "留空时由系统生成",
-    maxlength: 64,
-  }),
-  inputRule("orgName", "所属部门", false, {
-    disabled: true,
-    placeholder: "按当前登录部门登记",
-  }),
-  inputRule("version", "服务版本", true, {
-    placeholder: "例如 1.0",
-    maxlength: 64,
-  }),
-  inputRule(
-    "description",
-    "服务说明",
-    true,
-    {
-      type: "textarea",
-      rows: 2,
-      maxlength: 500,
-      showWordLimit: true,
-      placeholder: "说明服务用途、适用场景和数据内容",
-    },
-    24
-  ),
-  titleRule("访问配置"),
-  dictRule("protocol", "访问协议", "accessProtocol"),
-  dictRule("returnType", "返回格式", "returnType"),
-  {
-    type: "fieldComponent",
-    field: "httpMethod",
-    title: "请求方式",
-    value: "GET",
-    props: { type: "radio" },
-    col: { span: 24 },
-    $required: true,
-  },
-  inputRule("address", "服务地址", true, {
-    placeholder: "例如 https://api.example.com/services/query",
-    maxlength: 1000,
-  }),
-  inputRule("publishAddress", "发布路径", true, {
-    placeholder: "例如 /services/query",
-    maxlength: 1000,
-  }),
-  dictRule("shareType", "共享类型", "shareType"),
-  dictRule("dataUpdateFreq", "更新频率", "dataUpdateFreq"),
-  titleRule("资源分类"),
-  dictRule("dataDomain", "数据所属领域", "dataDomain"),
-  {
-    type: "cascader",
-    field: "dataCategory",
-    title: "数据资源分类",
-    $dict: "dataCategory",
-    props: {
-      props: { checkStrictly: true, emitPath: false },
-      placeholder: "请选择数据资源分类",
-      clearable: true,
-    },
-    col: { span: 12 },
-    $required: true,
-  },
-  dictRule("dataLevel", "数据分级", "dataLevel"),
-  inputRule(
-    "apiDescription",
-    "补充说明",
-    false,
-    {
-      type: "textarea",
-      rows: 2,
-      maxlength: 255,
-      placeholder: "可补充接口约定或使用注意事项",
-    },
-    24
-  ),
-];
-const formRules = computed(() =>
-  currentMode.value === "view" ? FormUtils.transFormText(rawRules) : rawRules
-);
-const paramsTableOptions = reactive({
-  importConfig: { mode: "covering" },
-  toolbarConfig: {
-    buttons: [
-      {
-        code: "import",
-        icon: "vxe-icon-cloud-upload",
-        mode: "text",
-        status: "primary",
-        name: "导入参数",
-      },
-      {
-        code: "open_export",
-        icon: "vxe-icon-download",
-        mode: "text",
-        status: "primary",
-        name: "导出参数",
-      },
-      {
-        code: "append_edit",
-        icon: "vxe-icon-add",
-        mode: "text",
-        status: "primary",
-        name: "添加参数",
-      },
-    ],
-    tools: [],
-  },
-  columns: [
-    { type: "seq", width: 58, title: "序号" },
-    {
-      field: "paramName",
-      title: "参数名称",
-      minWidth: 150,
-      editRender: {
-        name: "VxeInput",
-        props: { placeholder: "例如 pageSize", maxlength: 255 },
-      },
-    },
-    {
-      field: "description",
-      title: "参数说明",
-      minWidth: 180,
-      editRender: {
-        name: "VxeInput",
-        props: { placeholder: "说明参数含义", maxlength: 255 },
-      },
-    },
-    {
-      field: "paramType",
-      title: "参数类型",
-      width: 120,
-      editRender: {
-        name: "ElSelect",
-        options: dictStore.getDictItems("paramType"),
-        props: { placeholder: "请选择类型" },
-      },
-    },
-    {
-      field: "paramPosition",
-      title: "参数位置",
-      width: 120,
-      editRender: {
-        name: "ElSelect",
-        options: dictStore.getDictItems("paramPosition"),
-        props: { placeholder: "请选择位置" },
-      },
-    },
-    {
-      field: "required",
-      title: "是否必填",
-      width: 110,
-      editRender: {
-        name: "ElSelect",
-        options: dictStore.getDictItems("requiredAttribute"),
-        props: { placeholder: "请选择" },
-      },
-    },
-    {
-      field: "defaultValue",
-      title: "默认值",
-      minWidth: 120,
-      editRender: { name: "VxeInput", props: { maxlength: 255 } },
-    },
-    {
-      field: "showcaseValue",
-      title: "示例值",
-      minWidth: 120,
-      editRender: { name: "VxeInput", props: { maxlength: 255 } },
-    },
-  ],
-  editRules: {
-    paramName: [{ required: true, message: "请填写参数名称", trigger: "blur" }],
-    paramType: [{ required: true, message: "请选择参数类型", trigger: "change" }],
-  },
-});
 const normalizeParams = (values: unknown): ServiceParameter[] => {
   let rows: unknown = values;
   if (typeof rows === "string") {
@@ -435,16 +223,19 @@ const buildPayload = (form: RecordValue, rows: ServiceParameter[]): RecordValue 
     dataUpdateFreq: form.dataUpdateFreq,
     shareType: form.shareType,
     apiDescription: text(form.apiDescription),
-    requestExample: requestExample.value,
-    responseExample: responseExample.value,
+    requestExample: text(form.requestExample),
+    responseExample: text(form.responseExample),
   },
 });
 const restore = async () => {
   await nextTick();
-  formRef.value?.setValue({ ...snapshot.form });
-  paramsRef.value?.setData(snapshot.params.map((row) => ({ ...row })));
-  requestExample.value = snapshot.request;
-  responseExample.value = snapshot.response;
+  formRef.value?.setValue({
+    ...snapshot.form,
+    publishParams: snapshot.params.map((row) => ({ ...row })),
+    requestExample: snapshot.request,
+    responseExample: snapshot.response,
+  });
+  await nextTick();
 };
 const setFormData = async (data: RecordValue = {}) => {
   const version = ++initializationVersion;
@@ -452,7 +243,7 @@ const setFormData = async (data: RecordValue = {}) => {
   emit("ready", false);
   initializationError.value = "";
   try {
-    const user = await currentUser();
+    const [user] = await Promise.all([currentUser(), loadDefinition()]);
     if (version !== initializationVersion) return;
     const ext = record(data.extendInfo),
       provider = record(data.providerConfig),
@@ -462,15 +253,17 @@ const setFormData = async (data: RecordValue = {}) => {
       id: text(data.id || data.tid),
       name: text(data.serviceName || data.name),
       serviceCode: text(data.serviceCode || data.code),
-      version: text(data.version) || "1.0",
+      version: text(data.version) || text(configuredDefaults.version) || "1.0",
       description: text(data.description || data.serviceDesc),
       labels: text(data.labels),
       orgId,
       orgName:
         text(data.orgName) || (text(orgId) === text(user.orgId) ? text(user.orgName) : text(orgId)),
-      protocol: provider.protocol || data.protocol || "HTTP",
+      protocol: provider.protocol || data.protocol || configuredDefaults.protocol || "HTTP",
       address: text(provider.address || data.address || data.uri),
-      httpMethod: text(provider.httpMethod || data.method || "GET").toUpperCase(),
+      httpMethod: text(
+        provider.httpMethod || data.method || configuredDefaults.httpMethod || "GET"
+      ).toUpperCase(),
       publishAddress: text(publish.publishAddress || data.publishAddress || data.uri),
       dataDomain: ext.dataDomain || data.dataDomain || "",
       dataCategory: ext.dataCategory || data.dataCategory || "",
@@ -480,6 +273,12 @@ const setFormData = async (data: RecordValue = {}) => {
       shareType: ext.shareType || data.shareType || "",
       apiDescription: text(ext.apiDescription),
     };
+    if (!form.id && !data.providerConfig) {
+      for (const [field, value] of Object.entries(configuredDefaults)) {
+        if (field in form && !["id", "orgId", "orgName"].includes(field) && form[field] === "")
+          form[field] = cloneDeep(value);
+      }
+    }
     snapshot = {
       form,
       params: normalizeParams(data.publishParams || data.paramList),
@@ -500,9 +299,10 @@ const setFormData = async (data: RecordValue = {}) => {
 const validate = async (): Promise<boolean> => {
   if (initializing.value || initializationError.value) return false;
   try {
-    const valid = await formRef.value?.validate();
+    await nextTick();
+    if (!definitionLoaded.value || !formRef.value) return false;
+    const valid = await formRef.value.validate();
     if (valid === false) return false;
-    if ((await paramsRef.value?.validate()) === false) return false;
     const form = await formValues();
     if (!text(form.orgId)) {
       ElMessage.warning("当前账号未关联部门，请先完善部门信息");
@@ -527,7 +327,7 @@ const handleSave = async (): Promise<boolean> => {
       return false;
     }
     const form = await formValues(),
-      rows = normalizeParams(paramsRef.value?.getData() || []);
+      rows = normalizeParams(form.publishParams);
     const payload = buildPayload(form, rows),
       saved = payloadOf(await $common.post("/dws/flowserve/gateway/save", payload));
     const id = text(saved.id || saved.tid);
@@ -535,8 +335,8 @@ const handleSave = async (): Promise<boolean> => {
     snapshot = {
       form: { ...form, id },
       params: rows,
-      request: requestExample.value,
-      response: responseExample.value,
+      request: text(form.requestExample),
+      response: text(form.responseExample),
     };
     if (props.context === "detail") {
       isEditing.value = false;
@@ -574,12 +374,15 @@ defineExpose({
   setFormData,
   reset: () => setFormData(props.data),
   getFormData: formValues,
-  getParamsData: () => normalizeParams(paramsRef.value?.getData() || []),
-  getRequestExample: () => requestExample.value,
-  getResponseExample: () => responseExample.value,
-  getPayload: async () =>
-    buildPayload(await formValues(), normalizeParams(paramsRef.value?.getData() || [])),
+  getParamsData: async () => normalizeParams((await formValues()).publishParams),
+  getRequestExample: async () => text((await formValues()).requestExample),
+  getResponseExample: async () => text((await formValues()).responseExample),
+  getPayload: async () => {
+    const form = await formValues();
+    return buildPayload(form, normalizeParams(form.publishParams));
+  },
 });
+onBeforeUnmount(() => { initializationVersion++; });
 </script>
 
 <style scoped>
@@ -591,62 +394,17 @@ defineExpose({
   padding-bottom: 12px;
   color: #25344b;
 }
-.section-hint {
-  margin: 6px 0 0;
-  color: #758298;
-  font-size: 12px;
-  line-height: 20px;
-}
 .registration-heading-actions {
   display: flex;
-  flex-shrink: 0;
   justify-content: flex-end;
   padding: 8px 0;
 }
-.request-methods {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 2px 0;
-}
-.request-methods :deep(.el-radio) {
-  min-width: 88px;
-  height: 34px;
-  margin: 0;
-  padding: 0 14px;
-  border-radius: 4px;
-}
-.registration-section-title {
-  min-height: 38px;
-  margin: 8px 0 12px;
-}
-.api-register-content :deep(.el-form-item) {
-  margin-bottom: 14px;
-}
-.api-register-content :deep(.el-form-item__label) {
-  font-size: 13px;
+.api-register-content.is-readonly {
+  --el-disabled-text-color: var(--el-text-color-regular);
+  --el-disabled-bg-color: #fafbfc;
 }
 .api-register-content :deep(.el-form-item__content) {
   min-width: 0;
-}
-.registration-parameters,
-.registration-examples {
-  min-width: 0;
-  margin-top: 16px;
-}
-.section-hint {
-  margin: -6px 0 8px;
-}
-.api-params-table {
-  min-height: 170px;
-  min-width: 0;
-  max-width: 100%;
-}
-.example-editor {
-  height: 180px;
-  border: 1px solid #e5eaf1;
-  border-radius: 4px;
-  overflow: hidden;
 }
 @media (max-width: 760px) {
   .api-register-content :deep(.el-col-12) {

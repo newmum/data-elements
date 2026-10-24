@@ -6,7 +6,27 @@
     aria-live="polite"
   >
     <div class="loading-state__visual" aria-hidden="true">
-      <template v-if="type === 'tree'">
+      <template v-if="type === 'form'">
+        <div v-for="section in 2" :key="section" class="loading-state__form-section">
+          <div class="loading-state__form-heading">
+            <span class="skeleton-block"></span>
+          </div>
+          <div class="loading-state__form-grid">
+            <div
+              v-for="field in section === 1 ? 7 : 4"
+              :key="field"
+              class="loading-state__form-field"
+              :class="{ 'is-wide': section === 1 && field === 7 }"
+            >
+              <span class="loading-state__form-label"><span class="skeleton-block"></span></span>
+              <span class="loading-state__form-value">
+                <span class="skeleton-block" :style="{ width: `${48 + (field % 3) * 15}%` }"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template v-else-if="type === 'tree'">
         <div class="loading-state__tree-search skeleton-block"></div>
         <div
           v-for="(level, index) in treeLevels"
@@ -68,7 +88,7 @@ const treeWidths = [58, 72, 64, 78, 54, 68, 46];
 
 const props = withDefaults(
   defineProps<{
-    type?: "table" | "tree" | "list";
+    type?: "table" | "tree" | "list" | "form";
     title?: string;
     description?: string;
     compact?: boolean;
@@ -82,6 +102,7 @@ const props = withDefaults(
 );
 
 const defaultTitle = computed(() => {
+  if (props.type === "form") return "正在加载详情";
   if (props.type === "table") return "正在加载表格数据";
   if (props.type === "tree") return "正在加载树形数据";
   return "正在加载数据";
@@ -113,6 +134,85 @@ const tableCellWidth = (row: number, column: number) => {
 .loading-state__visual {
   width: 100%;
   max-width: 100%;
+}
+
+.loading-state--form {
+  padding: 0;
+  container-type: inline-size;
+}
+
+.loading-state__form-section + .loading-state__form-section {
+  margin-top: 20px;
+}
+
+.loading-state__form-heading {
+  display: flex;
+  align-items: center;
+  height: 50px;
+
+  span {
+    width: 108px;
+    height: 16px;
+  }
+}
+
+.loading-state__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid #ebedf0;
+  border-left: 1px solid #ebedf0;
+}
+
+.loading-state__form-field {
+  display: flex;
+  min-width: 0;
+  min-height: 56px;
+  border-right: 1px solid #ebedf0;
+  border-bottom: 1px solid #ebedf0;
+
+  &.is-wide {
+    grid-column: 1 / -1;
+    min-height: 112px;
+  }
+}
+
+.loading-state__form-label,
+.loading-state__form-value {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 16px;
+
+  .skeleton-block {
+    height: 12px;
+  }
+}
+
+.loading-state__form-label {
+  flex: 0 0 clamp(100px, 24%, 180px);
+  justify-content: flex-end;
+  background: #f4f7fc;
+
+  .skeleton-block {
+    width: 72%;
+    max-width: 96px;
+  }
+}
+
+.loading-state__form-value {
+  flex: 1;
+}
+
+.is-wide .loading-state__form-label,
+.is-wide .loading-state__form-value {
+  align-items: flex-start;
+  padding-top: 20px;
+}
+
+@container (max-width: 600px) {
+  .loading-state__form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .loading-state--tree .loading-state__visual {

@@ -30,7 +30,12 @@
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
     <dependency><groupId>org.apache.ftpserver</groupId><artifactId>ftpserver-core</artifactId><version>1.2.1</version><scope>test</scope></dependency>
   </dependencies>
-  <build><finalName>haitong-data-pull</finalName><plugins>
+  <build><finalName>haitong-data-pull</finalName>
+    <resources>
+      <resource><directory>src/main/resources</directory></resource>
+      <resource><directory>../magic/haitong</directory><targetPath>magic-api-bootstrap</targetPath><excludes><exclude>.manifest.json</exclude></excludes></resource>
+    </resources>
+    <plugins>
     <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId><configuration><layout>ZIP</layout></configuration></plugin>
     <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
       <configuration><reportsDirectory>${project.basedir}/../logs/haitong-data-pull/surefire</reportsDirectory><systemPropertyVariables>

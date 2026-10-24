@@ -44,7 +44,7 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
         // The Magic operations endpoint is a controlled alias of the same
         // REGISTRY_SYNC service flow, so it accepts the same service-to-service
         // credential. It cannot use that credential to publish business data:
-        // RelayController still checks the route/channel after JSON parsing.
+        // The Magic push function checks route/channel permissions after JSON parsing.
         boolean standaloneRegistrySync = ("/api/v1/data-push".equals(path) || "/push-operations/data-push".equals(path))
                 && p.getStandaloneRegistry().isSyncEnabled();
         if (identity == null && platformCredentialIssue && p.getRegistrationRegistry().isEnabled()) {

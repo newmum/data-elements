@@ -22,6 +22,13 @@ class MetadataReadOnlyAdaptersLiveTest {
         assertThat(explorer.getTables(config)).isNotEmpty();
         var columns=explorer.getColumns(config,config.getDatabase());assertThat(columns).isNotEmpty();
         assertThat(explorer.getTableRowCount(config,config.getDatabase())).isGreaterThanOrEqualTo(0L);
+        for(int size:java.util.List.of(20,100)) {
+            var request=new com.linewell.dataelement.metautil.model.dto.PageQueryRequest();
+            request.setDataSource(config);request.setTableName(config.getDatabase());request.setPageSize(size);
+            var page=explorer.queryPage(request);
+            assertThat(page.getRows().size()).isLessThanOrEqualTo(size);
+            assertThat(page.getTotal()).isGreaterThanOrEqualTo(page.getRows().size());
+        }
         System.out.println("Existing ES metadata / index mapping / count read-only PASS; mapping fields="+columns.size());
     }
 

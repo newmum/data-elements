@@ -738,7 +738,9 @@ public class ConnectionTestController {
         String nodes = req(config, "nodes");
         String firstNode = nodes.split(",")[0].trim();
         String protocol = str(config.getOrDefault("protocol", "http"));
-        URI uri = URI.create(protocol + "://" + firstNode + "/");
+        // 登记页提交完整Endpoint，画布仍可提交host:port；两种形式共用同一协议探测。
+        String endpoint = firstNode.matches("(?i)^https?://.*") ? firstNode : protocol + "://" + firstNode;
+        URI uri = URI.create(endpoint.endsWith("/") ? endpoint : endpoint + "/");
         long t0 = System.currentTimeMillis();
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri).timeout(java.time.Duration.ofSeconds(8)).GET();
         String authMethod = str(config.getOrDefault("authMethod", "NONE"));

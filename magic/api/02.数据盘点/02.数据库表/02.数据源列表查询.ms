@@ -31,8 +31,8 @@ import '@/common/configData' as configData
 // 下拉列表同样读取 ES，避免每次打开表单扫描主表和全部动态属性。
 var filters = [ { term: { assetType: 'db' } } ]
 var excluded = [
-    { wildcard: { dbName: 'codex_*' } },
-    { wildcard: { database: 'codex_*' } }
+    { wildcard: { dbName: 'validation_*' } },
+    { wildcard: { database: 'validation_*' } }
 ]
 // 解析请求体并为可选参数设置默认值。
 if (body?.appId != null && (body.appId + '').trim() != '') {

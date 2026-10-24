@@ -139,6 +139,10 @@ mvn package
 
 ### magic-api 说明
 
+Magic 与普通接口共用 `ApiErrorResolver`。异常链或调用栈明确来自 Elasticsearch 客户端时，连接拒绝、连接重置、DNS/TLS/连接关闭分别归入全文检索连接错误，超时归入全文检索超时；服务返回 401/403、429/502/503/504、其他查询错误时分别显示认证授权、暂时不可用及查询配置提示。对应错误码为 `SEARCH-CONNECTION-001`、`SEARCH-TIMEOUT-002`、`SEARCH-AUTH-003`、`SEARCH-UNAVAILABLE-001`、`SEARCH-QUERY-004`。页面优先展示可执行的中文提示，详情保留原异常和跟踪号。不能只凭 `Connection reset` 字样把数据库、HTTP 或脚本参数错误判成全文检索故障，也不能用空结果冒充查询成功。
+
+数据源树统计仍按租户索引检索候选，再一次性按 `tenant_id`、有效状态与角色数据范围核验所有候选 ID；20/100 个候选均为一次 ES 查询、一次 SQL 读取和一次批量权限过滤。验证资源统一使用 `validation` 前缀，演示数据表使用 `demo`；过滤条件与验证资源更名需要同时发布并同步检索投影。
+
 项目依赖 magic-api 提供动态 API 能力。若前端访问 `/sym/menu`、`/portal/index` 等接口返回 `No static resource ...`，通常说明 magic-api 脚本没有加载。
 
 排查方向：

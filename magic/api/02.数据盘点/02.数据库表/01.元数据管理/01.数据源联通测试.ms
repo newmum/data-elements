@@ -13,7 +13,7 @@
   "method": "POST",
   "parameters": [],
   "options": [],
-  "requestBody": "{\n    \"tid\": \"codex_oracle_helowin\",\n    \"dbType\": \"oracle\",\n    \"host\": \"192.168.175.86\",\n    \"port\": 1521,\n    \"database\": \"helowin\",\n    \"username\": \"system\",\n    \"password\": \"******\",\n    \"jdbcURL\": \"jdbc:oracle:thin:@192.168.175.86:1521:helowin\"\n}",
+  "requestBody": "{\n    \"tid\": \"validation_oracle_metadata\",\n    \"dbType\": \"oracle\",\n    \"host\": \"192.168.175.86\",\n    \"port\": 1521,\n    \"database\": \"helowin\",\n    \"username\": \"system\",\n    \"password\": \"******\",\n    \"jdbcURL\": \"jdbc:oracle:thin:@192.168.175.86:1521:helowin\"\n}",
   "headers": [],
   "paths": [],
   "responseBody": null,

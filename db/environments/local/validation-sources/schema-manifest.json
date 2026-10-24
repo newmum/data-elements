@@ -1,0 +1,30 @@
+{
+  "formatVersion": 1,
+  "scope": "structure-only",
+  "routingSource": "private current Nacos API/runtime snapshot and configured independent projects",
+  "schemas": [
+    {
+      "dataSourceKey": "validation-source",
+      "schema": "personaldb",
+      "dialect": "mysql",
+      "file": "personaldb/init.sql",
+      "objects": {
+        "tables": 15,
+        "views": 0,
+        "indexes": 38,
+        "foreignKeys": 0,
+        "triggers": 0,
+        "procedures": 0,
+        "functions": 0,
+        "events": 0
+      },
+      "sha256": "652eed00bb4f1c1e6207d5be9a0afd923f9597931cd38d419f21a3eb56fd19ef",
+      "exportNotes": {
+        "definitions": "SHOW CREATE",
+        "routineDefiners": "omitted",
+        "autoIncrementCounters": "omitted"
+      },
+      "project": "validation-source"
+    }
+  ]
+}

@@ -172,9 +172,18 @@ public class DataSourceConnectionTestService {
             }
             case "elasticsearch" -> {
                 manifestKey = "source.elasticsearch";
-                put(config, "nodes", first(source, "nodes", "host", "apiUrl", "jdbcURL", "jdbcUrl"));
+                // 登记表的 host 不包含端口；优先复用完整Endpoint，避免把9200误测成80。
+                String endpoint = first(source, "nodes", "jdbcURL", "jdbcUrl", "apiUrl");
+                if (blank(endpoint)) {
+                    String host = first(source, "host", "dbIp");
+                    endpoint = host != null && host.matches("(?i)^https?://.*") ? host
+                            : defaultText(first(source, "protocol"), "http") + "://" + host + ":"
+                            + defaultText(first(source, "port", "dbPort"), "9200");
+                }
+                put(config, "nodes", endpoint);
                 put(config, "protocol", defaultText(first(source, "protocol"), "http"));
-                put(config, "authMethod", defaultText(first(source, "authMethod"), "NONE"));
+                put(config, "authMethod", defaultText(first(source, "authMethod"),
+                        !blank(first(source, "apiKey")) ? "API_KEY" : !blank(first(source, "username")) ? "BASIC" : "NONE"));
                 put(config, "username", first(source, "username"));
                 put(config, "password", first(source, "password"));
                 put(config, "apiKey", first(source, "apiKey"));

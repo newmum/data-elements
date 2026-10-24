@@ -31,7 +31,7 @@ const report={tenant:context.name,sourceCount:list.list.length,objectCount:table
 async function waitProjection(id,expected){let last=[];for(let n=0;n<12;n++){const page=await call('/dst/database/page',{pageNum:1,pageSize:20,conditions:[{field:'tid',type:'eq',value:id}],includeMetadataCounts:true});last=page.list;if(page.list.some(row=>String(row.tid||row.id)===String(id))===expected)return;await new Promise(resolve=>setTimeout(resolve,500));}console.log({projectionFixture:id,returned:last.map(row=>({tid:row.tid,id:row.id,status:row.assetStatus,keys:Object.keys(row)}))});throw new Error('Search projection did not become consistent');}
 let fixture='';
 try{
- // The shared page deliberately excludes codex_* databases. Do not use that
+ // The shared page deliberately excludes validation_* databases. Do not use that
  // prefix when verifying ordinary registration/search projection consistency.
  const props={dbName:'WX_数据源接口联调_20260928_'+Date.now(),dbType:'mysql',orgId:user.orgId,appId:real.appId,storageDomain:'政务外网',host:'127.0.0.1',port:1,database:'wx_contract_no_database',username:'wx_contract_no_login',jdbcURL:'jdbc:mysql://127.0.0.1:1/wx_contract_no_database',assetDesc:'Disposable datasource UI integration fixture; no source database access',accessMode:'explore',dataAccessMode:'explore',showConnect:1,preserveSourceOrg:true,assetStatus:2};
  const tick=Date.now();

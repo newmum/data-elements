@@ -72,7 +72,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue",
-      "baseSha256": "ad8c1cfbc21c29bc99c5cd62eaa1f3a75eef10e0177b732a093b894a5fe5add6"
+      "baseSha256": "b8a08642d2237471fbbe82723affbf55ed1fc9fa5f0017513058aaf5e880504b"
     },
     {
       "id": "2075055310869430272",
@@ -292,7 +292,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/登记订阅申请单(register-apply)/申请单表单(apply-json-form).vue",
-      "baseSha256": "40a929391045f18be629b0a779c7617a34ebfabc226a119615f62bd105dbe0e4"
+      "baseSha256": "b29d000595d21f4ff1045aaf152793cf83164c9733530b94e0e22c6a60cb26e3"
     },
     {
       "id": "2020438813065162752",
@@ -352,7 +352,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/1. 资产【app%7Cdb%7Ctable%7Ccategory】详情(base-detail).vue",
-      "baseSha256": "4052d76d5c2bcf5d228f37439ef924b9c1af200cecf214e40c2be4ef717b2729"
+      "baseSha256": "57be98fa1efd6e32f7805da3f783c1784505393c40c379aaa1963a0e73760833"
     },
     {
       "id": "2063240154598391808",
@@ -422,7 +422,7 @@
       "type": "1",
       "sortOrder": 9,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表1-数据表字段(table-col).vue",
-      "baseSha256": "864eacff9bd0160f57b35e78b6bdf4a70db10beb63558eb96d7854402faf55b0"
+      "baseSha256": "4ebe18ece28f9c31c845c5f78680d6b6ec894fcb9dd7dbf0dd05dac6fe32dd63"
     },
     {
       "id": "2027271778864726016",
@@ -452,7 +452,7 @@
       "type": "1",
       "sortOrder": 12,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表4-数据预览(table-preview).vue",
-      "baseSha256": "fdcbdbe1bc7668925ffd5a91a64165b8991172bf2abb5c19c9f5e4c3e19bcfd8"
+      "baseSha256": "fa45fae5dd2fabdb003ef83b563b0990df492d2db3e801dd791a9c5bde289597"
     },
     {
       "id": "2008427924812271616",
@@ -1182,7 +1182,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "06.数据服务/数据服务(data-serve)/api详情(api-detail).vue",
-      "baseSha256": "ac2d2ac56054c7400bb921363996fbf76c29ae822822eef9f046ac2dce37ac21"
+      "baseSha256": "8876360a07a8538b854a12e0a4bb7c935a3c100e404831b3c721cdf7dab2bab3"
     },
     {
       "id": "2060245186132844544",
@@ -1227,7 +1227,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "06.数据服务/数据服务(data-serve)/服务组件/api注册(api-register-content).vue",
-      "baseSha256": "03e21f4a0589f787de1a875c6aa1d63d1ac4f350c588f276a0bfd2cbec298d13"
+      "baseSha256": "75084a8e31e7c76ee4c4af70ca1bea631a0776f038afe312be7db8d3d936f3c5"
     },
     {
       "id": "2063874447825747968",
@@ -1267,7 +1267,7 @@
       "type": "1",
       "sortOrder": 6,
       "path": "06.数据服务/数据服务(data-serve)/服务组件/服务注册弹窗(api-register-modal).vue",
-      "baseSha256": "9e6840d5b294cf240e598b3b217b020b2e7d89608851a6372dbcccaabde637e8"
+      "baseSha256": "d71723ec524334ec3e048b43c25d647334675fa70437c4ec6aa99b3208032b10"
     },
     {
       "id": "2014616362783674368",
@@ -1547,7 +1547,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "09.系统管理/1.3 表单配置页(form-config).vue",
-      "baseSha256": "0e200e1f2789817a623cc9ebae642aafe9bfa8c70a71f73ee5db0a40375da8ed"
+      "baseSha256": "fb77e802b4f0ecea8445861e66527037506f6aa8227aed526136597aeead66f1"
     },
     {
       "id": "2037465914704191488",

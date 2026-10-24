@@ -35,7 +35,11 @@ import log
 import cn.hutool.core.util.IdUtil
 import metadataAsset
 import tenantRuntime
+import dataScope
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService
+import tableSchemaSync
+import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
+import cn.dev33.satoken.stp.StpUtil
 var tenantId = tenantRuntime.id()
 
 /*
@@ -166,6 +170,25 @@ var registeredColumnItems = (tableId, items) => {
     }
     return result
 }
+// 详情页只允许编辑当前表已存在的字段，校验全部 ID 后才开始写入。
+var validateDetailColumns = (items, registeredItems) => {
+    if (items == null || items.size() == 0 || items.size() > 2000) { exit 400, '字段数量须为 1 至 2000' }
+    if (registeredItems.size() != items.size()) { exit 403, '包含不属于当前表的字段' }
+    var seen = {}
+    for (registered in registeredItems) {
+        var item = registered.item
+        var column = registered.column
+        var id = textOf(itemValue(item, ['tid', 'tableColumnId', 'id', 'sourceTableColumnId']))
+        var columnId = textOf(rowValue(column, ['tid']))
+        var name = textOf(itemValue(item, ['columnName', 'colEn']))
+        var columnName = textOf(rowValue(column, ['columnName', 'column_name']))
+        if ((!blank(id) && id != columnId) || (!blank(name) && name.trim().toLowerCase() != columnName.trim().toLowerCase()) || seen[columnId] == true) {
+            exit 403, '字段 ID、名称或归属不匹配'
+        }
+        seen[columnId] = true
+    }
+    return registeredItems
+}
 // 解析请求体并为可选参数设置默认值。
 var tableId = body == null ? null : (body.tableId == null ? body.tid : body.tableId)
 if (blank(tableId)) {
@@ -177,6 +200,43 @@ var table = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', t
 if (table == null) {
     // 参数或业务状态不满足要求时立即终止请求。
     exit 404, '数据表不存在或已删除'
+}
+var sourceId = rowValue(table, ['datasourceId', 'datasource_id'])
+var source = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', sourceId).eq('is_del', 0).selectOne()
+if (source == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [source]).size() != 1) {
+    exit 403, '数据表不在当前租户或角色数据范围内'
+}
+// 结构同步只接受当前租户已保存的字段快照；客户端不能提交连接、字段定义或执行 SQL。
+if (!blank(body.schemaAction)) {
+    if (body.schemaAction != 'compare' && body.schemaAction != 'apply') { exit 400, '无效的结构同步操作' }
+    var snapshotPage = db.table('db_table_column_t').where()
+        .eq('tenant_id', tenantId).eq('table_id', tableId).eq('is_del', 0)
+        .orderBy('ordinal_position', 'asc').orderBy('tid').page(2001, 0)
+    var snapshot = snapshotPage.list
+    if (snapshot == null || snapshot.size() == 0 || snapshot.size() > 2000) { exit 400, '字段快照须包含 1 至 2000 个字段' }
+    // 历史字段行的主键标记可能为空；与详情页保持一致，以已保存治理快照中的可编辑属性为准。
+    var savedConfig = rowValue(table, ['fieldGovernanceConfig', 'field_governance_config'])
+    savedConfig = savedConfig instanceof Map ? savedConfig : (blank(savedConfig) ? {} : JSONUtil.parseObj(textOf(savedConfig)))
+    var savedByName = {}
+    for (item in savedConfig.fields == null ? [] : savedConfig.fields) {
+        var name = textOf(itemValue(item, ['columnName', 'colEn']))
+        if (!blank(name)) { savedByName[name.trim().toLowerCase()] = item }
+    }
+    for (field in snapshot) {
+        var savedField = savedByName[textOf(rowValue(field, ['columnName', 'column_name'])).trim().toLowerCase()]
+        if (savedField != null) {
+            if (savedField.containsKey('primaryKey')) { field.primaryKey = savedField.primaryKey }
+            if (savedField.containsKey('columnComment')) { field.columnComment = savedField.columnComment }
+        }
+    }
+    var connection = datasourceConnectionConfig('read', sourceId, null, false)
+    var physicalName = textOf(rowValue(table, ['tableName', 'table_name']))
+    var binding = tenantId + ':' + StpUtil.getLoginIdAsString() + ':' + tableId + ':' + jsons.toJSONStr(snapshot)
+    if (body.schemaAction == 'compare' || body?.dryRun == true) {
+        return tableSchemaSync.preview(connection, physicalName, snapshot, binding)
+    }
+    return tableSchemaSync.apply(connection, physicalName, snapshot, binding,
+        textOf(body.fingerprint), textOf(body.confirmation), body.acknowledged == true)
 }
 var props = body.propList == null ? {} : body.propList
 var governance = body.fieldGovernanceConfig == null ? props.fieldGovernanceConfig : body.fieldGovernanceConfig
@@ -194,6 +254,50 @@ if (previousGovernance.containsKey('attachmentFields') || (!blank(governance) &&
 var dictionaryCategories = props.dictionaryCategories
 var dictionaryProfiles = props.dictionaryProfiles
 var dictionaryProfile = props.dictionaryProfile
+if (body.editMode == 'fields') {
+    var registeredItems = validateDetailColumns(body.columns, registeredColumnItems(tableId, body.columns))
+    governance = governance instanceof Map ? governance : (blank(governance) ? {} : JSONUtil.parseObj(textOf(governance)))
+    // 登记完成标记属于原流程，详情编辑不能把未登记表变成已登记表。
+    for (key in ['registrationSavedPhase', 'registrationSavedAt', 'tableName', 'tableComment', 'businessType']) {
+        governance.remove(key)
+        if (previousGovernance.containsKey(key)) { governance[key] = previousGovernance[key] }
+    }
+    var result = {
+        tid: tableId, tableId: tableId,
+        businessType: rowValue(table, ['businessType', 'business_type']),
+        businessTypeReason: rowValue(table, ['businessTypeReason', 'business_type_reason']),
+        annotated: rowValue(table, ['annotated']),
+        fieldGovernanceConfig: governance,
+        saved: body?.dryRun != true, dryRun: body?.dryRun == true
+    }
+    if (body?.dryRun == true) { return result }
+    db.transaction(() => {
+        for (registered in registeredItems) {
+            var item = registered.item
+            // 物理类型、可空性和连接信息保持已采集快照；只更新登记页面可编辑的属性。
+            db.table('db_table_column_t').primary('tid').update({
+                tid: rowValue(registered.column, ['tid']),
+                column_comment: itemValue(item, ['columnComment', 'colName']),
+                primary_key: item.primaryKey == true || textOf(item.primaryKey) == '1' ? 1 : 0,
+                data_standard_id: item.dataStandardId,
+                enable_code_table: item.enableCodeTable,
+                code_table_id: item.codeTableId,
+                updated_time: nowTime()
+            }, true)
+        }
+        db.table('db_table_t').primary('tid').update({
+            tid: tableId,
+            timestamp_field: governance.timestampField,
+            dictionary_structure_type: governance.dictionaryStructureType,
+            dictionary_categories: valueText(governance.dictionaryCategories),
+            dictionary_profiles: valueText(governance.dictionaryProfiles),
+            dictionary_profile: valueText(governance.dictionaryProfile),
+            field_governance_config: valueText(governance),
+            updated_time: nowTime()
+        }, true)
+    })
+    return result
+}
 // “暂不处理”是已记录但尚未标注的特殊状态。历史数据中的“不确定”一并按该语义处理，
 // 不能在保存治理配置时又被强制写为已标注，否则返回第二步会进入右侧已标注列表。
 var businessType = blank(props.businessType)

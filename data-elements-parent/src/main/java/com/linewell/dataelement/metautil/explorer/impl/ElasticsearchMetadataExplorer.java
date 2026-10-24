@@ -13,11 +13,17 @@ import com.linewell.dataelement.metautil.model.dto.SampleRequest;
 import com.linewell.dataelement.metautil.model.dto.TableInfo;
 import com.linewell.dataelement.metautil.model.dto.TablePageResult;
 import com.linewell.dataelement.metautil.model.dto.SqlValidationResult;
+import com.linewell.dataelement.metautil.model.dto.PageQueryRequest;
+import com.linewell.dataelement.metautil.model.dto.PageQueryResult;
+import com.linewell.dataelement.metautil.model.enums.DatabaseType;
+import com.linewell.dataelement.metautil.query.DataQueryExecutor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -30,17 +36,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
- * Elasticsearch/OpenSearch metadata explorer.
- *
- * <p>The registration workflow treats one Elasticsearch index as one data table
- * and index mapping properties as data items. Hidden/system indices that start
- * with "." are excluded by default so business registration does not count ES
- * internal indices.</p>
+ * Elasticsearch/OpenSearch只读协议适配：普通索引对应表，mapping对应字段。
+ * 输入为调用方已授权的连接与索引，输出统一元数据/分页文档；不读写平台业务表，不执行SQL。
+ * HttpClient可并发复用，请求有超时且完整消费响应；无文档、索引或mapping写入副作用。
+ * 隐藏索引不参与登记，索引范围来自database，显示名称不得充当索引名。
  */
 @Slf4j
-public class ElasticsearchMetadataExplorer implements MetadataExplorer {
+@Component
+public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQueryExecutor {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int DEFAULT_TIMEOUT_SECONDS = 15;
@@ -51,6 +57,11 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
 
     private Map<String, String> options(DataSourceConfig config) {
         Map<String, String> map = new LinkedHashMap<>();
+        if (config.getConnectorProperties() != null) {
+            config.getConnectorProperties().forEach((key, value) -> {
+                if (value != null) map.put(key, String.valueOf(value));
+            });
+        }
         String extra = config.getExtraParams();
         if (extra == null || extra.isBlank()) {
             return map;
@@ -61,7 +72,8 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
             if (idx <= 0) {
                 continue;
             }
-            map.put(item.substring(0, idx), item.substring(idx + 1));
+            map.put(URLDecoder.decode(item.substring(0, idx), StandardCharsets.UTF_8),
+                    URLDecoder.decode(item.substring(idx + 1), StandardCharsets.UTF_8));
         }
         return map;
     }
@@ -72,6 +84,12 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
             if (url.startsWith("http://") || url.startsWith("https://")) {
                 return trimSlash(url);
             }
+        }
+        String nodes = options(config).get("nodes");
+        if (nodes != null && !nodes.isBlank()) {
+            String node = nodes.split(",")[0].trim();
+            return trimSlash(node.startsWith("http://") || node.startsWith("https://") ? node
+                    : options(config).getOrDefault("protocol", "http") + "://" + node);
         }
         String host = config.getHost() == null ? "" : config.getHost().trim();
         if (host.startsWith("http://") || host.startsWith("https://")) {
@@ -110,11 +128,13 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
         Map<String, String> opts = options(config);
         String token = opts.get("token");
         String apiKey = opts.get("apiKey");
-        if (apiKey != null && !apiKey.isBlank()) {
+        String method = opts.getOrDefault("authMethod", "").toUpperCase(Locale.ROOT);
+        boolean automatic = method.isBlank();
+        if ((automatic || method.equals("API_KEY")) && apiKey != null && !apiKey.isBlank()) {
             builder.header("Authorization", "ApiKey " + apiKey);
-        } else if (token != null && !token.isBlank()) {
+        } else if ((automatic || method.equals("TOKEN") || method.equals("BEARER")) && token != null && !token.isBlank()) {
             builder.header("Authorization", "Bearer " + token);
-        } else if (config.getUsername() != null && !config.getUsername().isBlank()) {
+        } else if ((automatic || method.equals("BASIC")) && config.getUsername() != null && !config.getUsername().isBlank()) {
             String raw = config.getUsername() + ":" + (config.getPassword() == null ? "" : config.getPassword());
             builder.header("Authorization", "Basic " + Base64.getEncoder().encodeToString(raw.getBytes(StandardCharsets.UTF_8)));
         }
@@ -128,7 +148,7 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             int status = response.statusCode();
             if (status < 200 || status >= 300) {
-                throw new RuntimeException("HTTP " + status + " " + response.body());
+                throw new IllegalStateException("Elasticsearch读取失败，HTTP " + status);
             }
             String body = response.body();
             if (body == null || body.isBlank()) {
@@ -152,7 +172,7 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             int status = response.statusCode();
             if (status < 200 || status >= 300) {
-                throw new RuntimeException("HTTP " + status + " " + response.body());
+                throw new IllegalStateException("Elasticsearch查询失败，HTTP " + status);
             }
             return MAPPER.readTree(response.body());
         } catch (IOException e) {
@@ -208,19 +228,36 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
 
     @Override
     public List<TableInfo> getTables(DataSourceConfig config) {
-        return getTablesPage(config, 1, 500, null).getRows();
+        // 后台采集需要完整名称清单，不沿用交互页500条上限截断；字段在打开表时按需读取。
+        return discoverTables(config, null);
     }
 
     @Override
     public TablePageResult getTablesPage(DataSourceConfig config, Integer pageNo, Integer pageSize, String keyword) {
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
         int safePageSize = pageSize == null || pageSize < 1 ? 50 : Math.min(pageSize, 500);
+        List<TableInfo> all = discoverTables(config, keyword);
+        int fromIndex = (int) Math.min((long) (safePageNo - 1) * safePageSize, all.size());
+        int toIndex = Math.min(fromIndex + safePageSize, all.size());
+        List<TableInfo> page = new ArrayList<>(all.subList(fromIndex, toIndex));
+        Map<String, List<ColumnInfo>> columns = getColumnsByTables(config,
+                page.stream().map(TableInfo::getTableName).toList());
+        page.forEach(table -> table.setColumnCount(columns.get(table.getTableName().toLowerCase(Locale.ROOT)).size()));
+        TablePageResult result = new TablePageResult();
+        result.setPageNo(safePageNo);
+        result.setPageSize(safePageSize);
+        result.setTotal((long) all.size());
+        result.setRows(page);
+        return result;
+    }
+
+    private List<TableInfo> discoverTables(DataSourceConfig config, String keyword) {
         String pattern = indexPattern(config);
         String path = "/_cat/indices";
         if (!pattern.isBlank()) {
             path += "/" + encodePath(pattern);
         }
-        path += "?format=json&bytes=b&s=index";
+        path += "?format=json&bytes=b&s=index&h=index,docs.count,store.size,pri.store.size";
 
         JsonNode array = json(config, path);
         List<TableInfo> all = new ArrayList<>();
@@ -245,24 +282,12 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
                 table.setDataSizeFormatted(formatBytes(size));
                 table.setTotalSizeBytes(size);
                 table.setTotalSizeFormatted(formatBytes(size));
-                try {
-                    table.setColumnCount(getColumns(config, index).size());
-                } catch (Exception e) {
-                    log.debug("Read ES mapping failed for index {}: {}", index, e.getMessage());
-                    table.setColumnCount(0);
-                }
                 all.add(table);
+                if (all.size() > 10000) throw new IllegalArgumentException("可见索引超过10000个，请缩小索引范围");
             }
         }
 
-        int fromIndex = Math.min((safePageNo - 1) * safePageSize, all.size());
-        int toIndex = Math.min(fromIndex + safePageSize, all.size());
-        TablePageResult result = new TablePageResult();
-        result.setPageNo(safePageNo);
-        result.setPageSize(safePageSize);
-        result.setTotal((long) all.size());
-        result.setRows(new ArrayList<>(all.subList(fromIndex, toIndex)));
-        return result;
+        return all;
     }
 
     @Override
@@ -285,12 +310,42 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
 
     @Override
     public List<ColumnInfo> getColumns(DataSourceConfig config, String tableName) {
-        JsonNode mapping = json(config, "/" + encodePath(tableName) + "/_mapping");
-        JsonNode indexNode = mapping.path(tableName);
-        if (indexNode.isMissingNode() && mapping.fields().hasNext()) {
-            indexNode = mapping.fields().next().getValue();
+        return getColumnsByTables(config, List.of(tableName)).get(tableName.toLowerCase(Locale.ROOT));
+    }
+
+    /** 最多500个索引；每批最多100个且路径不超过3000字符，避免ES默认HTTP首行上限。 */
+    @Override
+    public Map<String, List<ColumnInfo>> getColumnsByTables(DataSourceConfig config, List<String> tableNames) {
+        Map<String, List<ColumnInfo>> result = new LinkedHashMap<>();
+        if (tableNames == null || tableNames.isEmpty()) return result;
+        List<String> names = tableNames.stream().distinct().toList();
+        if (names.size() > 500) throw new IllegalArgumentException("单批最多读取500个索引的字段");
+        names.forEach(name -> checkIndexScope(config, name));
+        List<List<String>> batches = new ArrayList<>();
+        List<String> batch = new ArrayList<>();
+        int pathLength = 0;
+        for (String name : names) {
+            int length = encodePath(name).length() + 1;
+            if (!batch.isEmpty() && (batch.size() == 100 || pathLength + length > 3000)) {
+                batches.add(batch); batch = new ArrayList<>(); pathLength = 0;
+            }
+            batch.add(name); pathLength += length;
         }
-        JsonNode properties = indexNode.path("mappings").path("properties");
+        if (!batch.isEmpty()) batches.add(batch);
+        var mappings = MAPPER.createObjectNode();
+        for (List<String> current : batches) {
+            JsonNode response = json(config, "/" + String.join(",", current.stream().map(this::encodePath).toList()) + "/_mapping");
+            response.fields().forEachRemaining(entry -> mappings.set(entry.getKey(), entry.getValue()));
+        }
+        for (String name : names) {
+            JsonNode indexNode = mappings.path(name);
+            if (indexNode.isMissingNode()) throw new IllegalStateException("未读取到索引mapping：" + name);
+            result.put(name.toLowerCase(Locale.ROOT), columns(indexNode.path("mappings").path("properties")));
+        }
+        return result;
+    }
+
+    private List<ColumnInfo> columns(JsonNode properties) {
         List<ColumnInfo> columns = new ArrayList<>();
         collectProperties(properties, "", columns);
         return columns;
@@ -336,13 +391,14 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
 
     @Override
     public Long getTableRowCount(DataSourceConfig config, String tableName) {
+        checkIndexScope(config, tableName);
         JsonNode count = json(config, "/" + encodePath(tableName) + "/_count");
         return count.path("count").asLong(0L);
     }
 
     @Override
     public Long getTableSize(DataSourceConfig config, String tableName) {
-        for (TableInfo table : getTablesPage(config, 1, 500, tableName).getRows()) {
+        for (TableInfo table : discoverTables(config, tableName)) {
             if (tableName.equals(table.getTableName())) {
                 return table.getDataSizeBytes();
             }
@@ -363,9 +419,10 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
 
     @Override
     public SampleDataResult sampleData(SampleRequest request) {
+        checkIndexScope(request.getDataSource(), request.getTableName());
         int size = request.getSampleSize() == null ? 20 : Math.min(request.getSampleSize(), 200);
         JsonNode result = postJson(request.getDataSource(), "/" + encodePath(request.getTableName()) + "/_search",
-                "{\"size\":" + size + ",\"query\":{\"match_all\":{}},\"sort\":[\"_doc\"]}");
+                "{\"size\":" + size + ",\"track_total_hits\":true,\"query\":{\"match_all\":{}},\"sort\":[\"_doc\"]}");
         List<Map<String, Object>> rows = new ArrayList<>();
         List<String> columns = new ArrayList<>();
         JsonNode hits = result.path("hits").path("hits");
@@ -413,6 +470,182 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer {
                 row.put(name, MAPPER.convertValue(value, Object.class));
             }
         }
+    }
+
+    @Override
+    public boolean supports(DatabaseType type) {
+        return type == DatabaseType.ELASTICSEARCH;
+    }
+
+    /**
+     * 原生DSL分页预览：一次mapping和一次search，20/100条均不逐文档补查。
+     * 当前租户和登记表归属由Magic入口校验；此处继续限定连接的索引范围与真实字段。
+     * from/size受ES默认10000窗口约束，总数用track_total_hits精确返回；不执行SQL或写索引。
+     */
+    @Override
+    public PageQueryResult queryPage(PageQueryRequest request) {
+        DataSourceConfig config = request.getDataSource();
+        String index = request.getTableName();
+        checkIndexScope(config, index);
+        int pageNo = request.getPageNo() == null ? 1 : request.getPageNo();
+        int size = request.getPageSize() == null ? 20 : request.getPageSize();
+        long offset = (long) (pageNo - 1) * size;
+        if (pageNo < 1 || size < 1 || size > 200 || offset + size > 10000) {
+            throw new IllegalArgumentException("ES预览最多读取前10000条，请缩小筛选范围");
+        }
+        JsonNode mapping = json(config, "/" + encodePath(index) + "/_mapping").path(index);
+        if (mapping.isMissingNode()) throw new IllegalStateException("未读取到索引mapping：" + index);
+        JsonNode properties = mapping.path("mappings").path("properties");
+        Map<String, String> types = new LinkedHashMap<>();
+        types.put("_id", "keyword");
+        columns(properties).forEach(column -> types.put(column.getColumnName(), column.getDataType()));
+        List<String> selected = request.getColumns() == null || request.getColumns().isEmpty()
+                ? new ArrayList<>(types.keySet()) : request.getColumns().stream().distinct().toList();
+        selected.forEach(field -> requireField(types, field));
+        Map<String, Object> query = new LinkedHashMap<>();
+        query.put("from", offset);
+        query.put("size", size);
+        query.put("track_total_hits", true);
+        query.put("_source", selected.stream().filter(field -> !field.equals("_id")).toList());
+        List<Object> filters = new ArrayList<>();
+        if (request.getConditions() != null) {
+            for (var condition : request.getConditions()) {
+                String field = condition.getField();
+                requireField(types, field);
+                Object value = condition.getValue();
+                String op = condition.getOp() == null ? "eq" : condition.getOp().toLowerCase(Locale.ROOT);
+                Object filter;
+                if (op.equals("isnull") || op.equals("is_null") || value == null && List.of("eq", "=").contains(op)) {
+                    filter = Map.of("bool", Map.of("must_not", List.of(Map.of("exists", Map.of("field", field)))));
+                } else if (op.equals("notnull") || op.equals("is_not_null") || value == null && op.equals("ne")) {
+                    filter = Map.of("exists", Map.of("field", field));
+                } else {
+                    String queryField = exactField(properties, field, types.get(field));
+                    filter = switch (op) {
+                        case "eq", "=" -> Map.of("term", Map.of(queryField, value));
+                        case "ne", "neq", "<>" -> Map.of("bool", Map.of("must_not", List.of(Map.of("term", Map.of(queryField, value)))));
+                        case "gt", "ge", "gte", "lt", "le", "lte" -> Map.of("range", Map.of(queryField,
+                                Map.of(op.equals("ge") ? "gte" : op.equals("le") ? "lte" : op, value)));
+                        case "in" -> Map.of("terms", Map.of(queryField, value));
+                        case "like" -> Map.of("wildcard", Map.of(queryField, "*" + String.valueOf(value).replace("*", "\\*").replace("?", "\\?") + "*"));
+                        default -> throw new IllegalArgumentException("ES预览不支持该过滤方式：" + op);
+                    };
+                }
+                // nested文档必须在对应路径内匹配，不能当普通object扁平查询。
+                JsonNode parent = properties;
+                List<String> nestedPaths = new ArrayList<>();
+                String path = "";
+                for (String part : field.split("\\.")) {
+                    path = path.isEmpty() ? part : path + "." + part;
+                    JsonNode definition = parent.path(part);
+                    if (definition.path("type").asText().equals("nested")) {
+                        nestedPaths.add(path);
+                    }
+                    parent = definition.path("properties");
+                }
+                for (int i = nestedPaths.size() - 1; i >= 0; i--) {
+                    filter = Map.of("nested", Map.of("path", nestedPaths.get(i), "query", filter));
+                }
+                filters.add(filter);
+            }
+        }
+        query.put("query", filters.isEmpty() ? Map.of("match_all", Map.of()) : Map.of("bool", Map.of("filter", filters)));
+        List<Object> sorts = new ArrayList<>();
+        if (request.getSorts() != null) {
+            for (var sort : request.getSorts()) {
+                requireField(types, sort.getField());
+                if (sort.getField().equals("_id")) throw new IllegalArgumentException("ES文档_id不支持排序，请选择业务字段");
+                String direction = sort.getDirection() == null ? "asc" : sort.getDirection().toLowerCase(Locale.ROOT);
+                if (!List.of("asc", "desc").contains(direction)) throw new IllegalArgumentException("排序方向无效");
+                sorts.add(Map.of(exactField(properties, sort.getField(), types.get(sort.getField())),
+                        Map.of("order", direction, "missing", "_last")));
+            }
+        }
+        sorts.add("_doc");
+        query.put("sort", sorts);
+        JsonNode response = postJson(config, "/" + encodePath(index) + "/_search", jsonText(query));
+        if (response.path("timed_out").asBoolean() || response.path("_shards").path("failed").asInt() > 0) {
+            throw new IllegalStateException("ES预览查询未完整执行，请检查集群状态后重试");
+        }
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (JsonNode hit : response.path("hits").path("hits")) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            selected.forEach(field -> row.put(field, field.equals("_id") ? hit.path("_id").asText()
+                    : sourceValue(hit.path("_source"), field)));
+            rows.add(row);
+        }
+        PageQueryResult result = new PageQueryResult();
+        result.setPageNo(pageNo); result.setPageSize(size);
+        JsonNode total = response.path("hits").path("total");
+        result.setTotal(total.isNumber() ? total.asLong() : total.path("value").asLong());
+        result.setColumns(selected); result.setColumnTypes(selected.stream().map(types::get).toList());
+        result.setRows(rows);
+        return result;
+    }
+
+    /** 保留object/数组原值，同时能读取对象数组中的叶字段，不把实际存在的数据展示为空。 */
+    private Object sourceValue(JsonNode source, String field) {
+        if (source == null || source.isMissingNode() || source.isNull()) return null;
+        if (source.isArray()) {
+            List<Object> values = new ArrayList<>();
+            source.forEach(item -> values.add(sourceValue(item, field)));
+            return values;
+        }
+        JsonNode literal = source.get(field);
+        if (literal != null) return MAPPER.convertValue(literal, Object.class);
+        int dot = field.indexOf('.');
+        return dot < 0 ? null : sourceValue(source.path(field.substring(0, dot)), field.substring(dot + 1));
+    }
+
+    private void requireField(Map<String, String> fields, String name) {
+        if (!fields.containsKey(name)) throw new IllegalArgumentException("索引中不存在该字段：" + name);
+    }
+
+    private String exactField(JsonNode properties, String field, String type) {
+        if (List.of("object", "nested").contains(type)) throw new IllegalArgumentException("请选择具体的标量字段：" + field);
+        if (!"text".equals(type)) return field;
+        JsonNode node = properties;
+        String[] parts = field.split("\\.");
+        for (int i = 0; i < parts.length; i++) {
+            node = node.path(parts[i]);
+            if (i < parts.length - 1) node = node.path("properties");
+        }
+        var subfields = node.path("fields").fields();
+        while (subfields.hasNext()) {
+            var subfield = subfields.next();
+            if ("keyword".equals(subfield.getValue().path("type").asText())) return field + "." + subfield.getKey();
+        }
+        throw new IllegalArgumentException("文本字段缺少keyword子字段，无法精确过滤或排序：" + field);
+    }
+
+    @Override
+    public List<Map<String, Object>> queryGroupedValues(PageQueryRequest request, String groupColumn, String nameColumn) {
+        throw new IllegalArgumentException("ES预览暂不提供字典类别分组，请使用普通数据预览");
+    }
+
+    private String jsonText(Object value) {
+        try { return MAPPER.writeValueAsString(value); }
+        catch (IOException error) { throw new IllegalArgumentException("ES查询参数无法序列化", error); }
+    }
+
+    private void checkIndexScope(DataSourceConfig config, String name) {
+        if (name == null || name.isBlank() || name.startsWith(".") || name.matches(".*[,*/?#].*")) {
+            throw new IllegalArgumentException("请选择一个普通索引");
+        }
+        String scope = indexPattern(config);
+        if (scope.isBlank()) return;
+        boolean allowed = false;
+        for (String item : scope.split(",")) {
+            String pattern = item.trim();
+            boolean excluded = pattern.startsWith("-");
+            if (excluded) pattern = pattern.substring(1);
+            String regex = Pattern.quote(pattern).replace("*", "\\E.*\\Q").replace("?", "\\E.\\Q");
+            if (name.matches(regex)) {
+                if (excluded) throw new IllegalArgumentException("索引不在当前连接范围内");
+                allowed = true;
+            }
+        }
+        if (!allowed) throw new IllegalArgumentException("索引不在当前连接范围内");
     }
 
     @Override

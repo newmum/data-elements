@@ -32,11 +32,10 @@ export const usePermissionStore = defineStore("permission", () => {
   async function generateRoutes(): Promise<RouteRecordRaw[]> {
     try {
       const data = await MenuAPI.getRoutes(); // 获取当前登录人拥有的菜单路由
-      const routesWithSurveillance = ensureSurveillanceEngineMenu(data);
       const dynamicRoutes = parseDynamicRoutes([
         {
           ...rootRoute,
-          children: [...routesWithSurveillance, ...errorRoutes] as any,
+          children: [...data, ...errorRoutes] as any,
         },
       ]);
 
@@ -178,90 +177,6 @@ const parseDynamicRoutes = (rawRoutes: RouteVO[], rootPath = ""): RouteRecordRaw
   });
 
   return parsedRoutes;
-};
-
-/**
- * 布控引擎的业务入口属于“数据服务”下的“数据加工开发”能力。
- * 菜单主体仍由后端权限树提供；这里仅在已有数据服务权限下补齐入口，
- * 并在后端未来下发同名菜单时自动去重，避免出现两项“布控引擎”。
- */
-const ensureSurveillanceEngineMenu = (routes: RouteVO[]): RouteVO[] => {
-  const dataService = routes.find(
-    (route) => route.path === "/deal" || route.meta?.title === "数据服务"
-  );
-  if (!dataService) return routes;
-
-  const children = dataService.children || (dataService.children = []);
-  const existingMenu = children.find(
-    (route) =>
-      route.path === "/surveillance-engine" ||
-      route.name === "structuredSurveillanceEngine" ||
-      route.meta?.title === "布控引擎"
-  );
-  const menu: RouteVO = existingMenu || {
-    path: "/surveillance-engine",
-    name: "structuredSurveillanceEngine",
-    component: "deal/surveillance-engine/layout",
-    children: [],
-    meta: {
-      title: "布控引擎",
-      icon: "menu-monitor",
-      keepAlive: true,
-    },
-  };
-  menu.component = "deal/surveillance-engine/layout";
-  menu.children = menu.children || [];
-
-  const submenuDefinitions: RouteVO[] = [
-    {
-      path: "/overview",
-      name: "structuredSurveillanceOverview",
-      component: "deal/surveillance-engine/index",
-      children: [],
-      meta: { title: "引擎总览", icon: "menu-monitor", keepAlive: true },
-    },
-    {
-      path: "/input",
-      name: "structuredSurveillanceInput",
-      component: "deal/surveillance-engine/management",
-      children: [],
-      meta: { title: "布控资源管理", icon: "menu-data", keepAlive: true, managementType: "input" },
-    },
-    {
-      path: "/rules",
-      name: "structuredSurveillanceRules",
-      component: "deal/surveillance-engine/management",
-      children: [],
-      meta: { title: "通道布控信息", icon: "menu-rule", keepAlive: true, managementType: "rules" },
-    },
-    {
-      path: "/output",
-      name: "structuredSurveillanceOutput",
-      component: "deal/surveillance-engine/management",
-      children: [],
-      meta: {
-        title: "输出管理",
-        icon: "menu-data-sync",
-        keepAlive: true,
-        managementType: "output",
-      },
-    },
-  ];
-  submenuDefinitions.forEach((submenu) => {
-    const alreadyAdded = menu.children.some(
-      (child) =>
-        child.path === submenu.path ||
-        child.name === submenu.name ||
-        child.meta?.title === submenu.meta?.title
-    );
-    if (!alreadyAdded) menu.children.push(submenu);
-  });
-
-  if (!existingMenu) {
-    const serviceIndex = children.findIndex((route) => route.meta?.title === "服务管理");
-    children.splice(serviceIndex >= 0 ? serviceIndex + 1 : children.length, 0, menu);
-  }
-  return routes;
 };
 
 /**

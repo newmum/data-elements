@@ -1,6 +1,12 @@
 <template>
-  <div class="apply-json-form">
+  <div v-loading="loading && editable" class="apply-json-form" :aria-busy="loading">
+    <LoadingState v-if="loading && !editable" type="form" />
+    <el-result v-else-if="loadError" icon="error" title="申请单加载失败" :sub-title="loadError">
+      <template #extra><el-button type="primary" @click="loadDetail">重新加载</el-button></template>
+    </el-result>
+    <div v-show="!loading && !loadError">
     <JsonForm ref="formRef" bordered :rules="formRules" label-width="250px"></JsonForm>
+    </div>
 
     <!--  打印  -->
     <apply-print-modal
@@ -13,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref } from "vue";
+import { nextTick, reactive, ref, watch, onBeforeUnmount } from "vue";
 import { cloneDeep } from "lodash-es";
 import { FormUtils } from "@/utils/form";
 import { useRegisterStore } from "@/store";
@@ -45,26 +51,29 @@ const printState = reactive({
   rules: [],
 });
 
-// 初始化
-onMounted(async () => {
-  await loadFormRules();
-  await initFormData();
-});
-
-/** 加载表单规则 */
-const loadFormRules = async () => {
+const loading = ref(true);
+const loadError = ref("");
+let loadVersion = 0;
+const loadDetail = async () => {
+  const version = ++loadVersion;
+  loading.value = true;
+  loadError.value = "";
   try {
-    formRules.value = await ($form as any).get("登记申请单");
-    if (!props.editable) {
-      formRules.value = FormUtils.transFormText(formRules.value);
-    }
-  } catch (error) {
-    console.error("加载表单规则失败:", error);
+    const rules = await $form.get("登记申请单");
+    if (version !== loadVersion) return;
+    if (!rules?.length) throw new Error("申请单表单配置为空，请完善配置后重试");
+    formRules.value = props.editable ? rules : FormUtils.transFormText(rules);
+    await initFormData(version);
+  } catch (error: unknown) {
+    if (version === loadVersion)
+      loadError.value = error instanceof Error ? error.message : "申请单暂时无法加载，请稍后重试";
+  } finally {
+    if (version === loadVersion) loading.value = false;
   }
 };
 
 /** 初始化表单数据 */
-const initFormData = async () => {
+const initFormData = async (version: number) => {
   let initData: any = {
     applyOrgId: ($user as any).orgId,
     usci: ($user as any).usci,
@@ -92,14 +101,15 @@ const initFormData = async () => {
   catalogs = catalogs.map((el: any) => ({ ...el }));
 
   // 同步设置表单中的申请资源字段
-  nextTick(() => {
-    formRef.value?.setValue({ ...initData, applyResource: catalogs });
+  await nextTick();
+  if (version !== loadVersion) return;
+  formRef.value?.setValue({ ...initData, applyResource: catalogs });
     formRef.value.api.on("change", (field: string, value: any) => {
       if (field === "applyResource") {
         handleResChange(value);
       }
     });
-  });
+  await nextTick();
 };
 
 /** 资源选择变化 */
@@ -184,6 +194,8 @@ defineExpose({
   openPrint,
   formRef,
 });
+watch(() => [props.initData, props.editable, props.copy], loadDetail, { immediate: true });
+onBeforeUnmount(() => { loadVersion++; });
 </script>
 
 <style scoped lang="scss">

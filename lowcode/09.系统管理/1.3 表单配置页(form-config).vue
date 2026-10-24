@@ -8,15 +8,15 @@
           <span class="sidebar-title__icon" aria-hidden="true"><Icon icon="document" /></span>
           <span>表单配置</span>
         </div>
-          <el-button
-            class="add-form-button"
-            type="text"
-            title="新增表单"
-            aria-label="新增表单"
-            @click="handleAddForm"
-          >
-            <Icon icon="el-icon-plus" />
-          </el-button>
+        <el-button
+          class="add-form-button"
+          type="text"
+          title="新增表单"
+          aria-label="新增表单"
+          @click="handleAddForm"
+        >
+          <Icon icon="el-icon-plus" />
+        </el-button>
       </div>
 
       <!-- 表单列表内容 -->
@@ -94,7 +94,12 @@
             <Icon icon="el-icon-edit" />
           </el-button>
         </div>
-        <el-button :type="'primary'" :disabled="!isModified" @click="handleSave">
+        <el-button
+          :type="'primary'"
+          :disabled="!isModified || saving"
+          :loading="saving"
+          @click="handleSave"
+        >
           <template #icon><Icon icon="save" /></template>
           保存
         </el-button>
@@ -133,7 +138,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from "vue";
-  import { cloneDeep } from "lodash-es";
+import { cloneDeep } from "lodash-es";
+import { FormUtils } from "@/utils/form";
 
 interface FormListItem {
   tid: string;
@@ -141,6 +147,7 @@ interface FormListItem {
   formJson: string;
   env: string;
   fieldCount: number;
+  formConfig?: string | null;
 }
 
 // ─── 状态 ────────────────────────────────────────────────────────────────────
@@ -151,15 +158,19 @@ const currentForm = ref<FormListItem>();
 const currentFormName = ref<string>("");
 const currentJson = ref<string>("");
 const isModified = ref<boolean>(false);
+const saving = ref(false);
 const formList = ref<FormListItem[]>([]);
 const previewError = ref<string>("");
 const previewFormRef = ref<any>(null);
 
-const currentFormObj = computed(() =>
-  formList.value.find((f) => f.formName === currentFormName.value)
-);
+const currentFormObj = computed(() => currentForm.value);
 
 const currentRules = computed(() => getRulesArray(currentJson.value));
+const isFormDefinition = (value: unknown): value is FormListItem => {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return ["tid", "env", "formName", "formJson"].every((key) => typeof row[key] === "string");
+};
 
 // ─── 工具函数 ────────────────────────────────────────────────────────────────
 
@@ -172,8 +183,7 @@ const getRulesArray = (value: any): any[] => {
   if (Array.isArray(value)) return value;
   if (typeof value === "string") {
     try {
-      const parsed = eval(value);
-      return Array.isArray(parsed) ? parsed : [];
+      return FormUtils.parseRules(value);
     } catch (e: any) {
       previewError.value = `配置格式错误，无法预览：${e?.message}`;
       return [];
@@ -187,7 +197,9 @@ const getRulesArray = (value: any): any[] => {
 const loadForms = async (env = currentEnv.value) => {
   try {
     const data = await $common.post("/sym/form?action=get", { env });
-    configStore[env] = data.map((el) => {
+    if (!Array.isArray(data) || !data.every(isFormDefinition))
+      throw new Error("表单列表格式不正确");
+    configStore[env] = data.map((el: FormListItem) => {
       const rules = getRulesArray(el.formJson);
       return { ...el, fieldCount: Array.isArray(rules) ? rules.length : 0 };
     });
@@ -214,47 +226,62 @@ const handleFormChange = async (form?: FormListItem) => {
   }
   currentForm.value = form;
   currentFormName.value = form?.formName ?? "";
-  currentJson.value = cloneDeep(form?.formJson);
+  currentJson.value = cloneDeep(form?.formJson ?? "");
   isModified.value = false;
   previewError.value = "";
 };
 
 // ─── 编辑器 ──────────────────────────────────────────────────────────────────
 
-const handleEditorChange = (value: string) => {
+const handleEditorChange = () => {
   isModified.value = currentForm.value?.formJson !== currentJson.value;
-  // 强制更新，否则表单渲染不会更新
-  currentRules.value = currentRules.value;
+};
+
+// Preserve server-owned metadata and refuse to overwrite another editor's rules.
+const readCurrentDefinition = async (form: FormListItem): Promise<FormListItem> => {
+  const rows = await $common.post("/sym/form?action=get", {
+    tid: form.tid,
+    env: form.env,
+  });
+  if (!Array.isArray(rows) || rows.length !== 1 || !isFormDefinition(rows[0]))
+    throw new Error("该表单已被移除，请刷新列表");
+  const latest = rows[0];
+  if (latest.formJson !== form.formJson || latest.formName !== form.formName)
+    throw new Error("该表单已被其他编辑者更新，请保留当前内容后刷新比较");
+  return latest;
 };
 
 // ─── 保存 ────────────────────────────────────────────────────────────────────
 
 const handleSave = async () => {
-  if (!currentFormName.value || !isModified.value) return;
-
+  const selected = currentFormObj.value;
+  if (!selected || !isModified.value || saving.value) return;
   getRulesArray(currentJson.value);
   if (previewError.value) return;
-
+  const savedJson = currentJson.value.trim();
+  saving.value = true;
   try {
+    const latest = await readCurrentDefinition(selected);
     await $common.post("/sym/form?action=save", {
-      tid: currentFormObj.value?.tid,
-      env: currentEnv.value,
-      formName: currentFormName.value,
-      formJson: currentJson.value,
+      tid: latest.tid,
+      env: latest.env,
+      formName: latest.formName,
+      formJson: savedJson,
+      formConfig: latest.formConfig,
     });
-
-    // 同步本地缓存
-    const envForms = configStore[currentEnv.value] || [];
-    const idx = envForms.findIndex((item) => item.formName === currentFormName.value);
-    if (idx > -1) {
-      envForms[idx].formJson = currentJson.value;
+    selected.formJson = savedJson;
+    selected.formConfig = latest.formConfig;
+    selected.fieldCount = getRulesArray(savedJson).length;
+    $form.clearCache();
+    if (currentForm.value?.tid === selected.tid && currentJson.value.trim() === savedJson) {
+      currentJson.value = savedJson;
+      isModified.value = false;
     }
-
-    isModified.value = false;
-    $message.success("配置已保存");
+    $message.success("配置已保存，重新打开业务表单即可生效");
   } catch (error) {
-    $message.error("配置格式错误，无法保存");
-    console.error(error);
+    $message.error(error instanceof Error ? error.message : "配置未保存，请检查网络后重试");
+  } finally {
+    saving.value = false;
   }
 };
 
@@ -279,13 +306,13 @@ const DEFAULT_FORM_JSON = `[
 ]`;
 
 const handleAddForm = () => {
-  $dialog
+  return $dialog
     .prompt("", "新增表单", {
       confirmButtonText: "确定",
       cancelButtonText: "取消",
       inputValue: "新表单",
     })
-    .then(async ({ value }) => {
+    .then(async ({ value }: { value: string }) => {
       if (!value?.trim()) {
         $message.error("表单名称不能为空");
         return;
@@ -306,7 +333,8 @@ const handleAddForm = () => {
         currentFormName.value = value;
         currentJson.value = DEFAULT_FORM_JSON;
         isModified.value = false;
-        loadForms();
+        await loadForms();
+        await handleFormChange(formList.value.find((form) => form.formName === value));
       } catch (error) {
         console.error(error);
       }
@@ -317,13 +345,13 @@ const handleAddForm = () => {
 
 const handleRenameForm = (form: FormListItem | undefined) => {
   if (!form) return;
-  $dialog
+  return $dialog
     .prompt("", "重命名表单", {
       confirmButtonText: "确定",
       cancelButtonText: "取消",
       inputValue: form.formName,
     })
-    .then(async ({ value }) => {
+    .then(async ({ value }: { value: string }) => {
       if (!value?.trim() || value === form.formName) return;
       const isDuplicate = (configStore[currentEnv.value] || []).some(
         (item) => item.formName === value && item.tid !== form.tid
@@ -333,12 +361,18 @@ const handleRenameForm = (form: FormListItem | undefined) => {
         return;
       }
       try {
+        const latest = await readCurrentDefinition(form);
         await $common.post("/sym/form?action=save", {
-          env: currentEnv.value,
+          env: latest.env,
           formName: value,
-          tid: form.tid,
+          tid: latest.tid,
+          formJson: latest.formJson,
+          formConfig: latest.formConfig,
         });
-        loadForms();
+        $form.clearCache();
+        if (currentFormName.value === form.formName) currentFormName.value = value;
+        form.formName = value;
+        $message.success("表单已重命名");
       } catch (error) {
         $message.error("重命名失败，请重试");
         console.error(error);
@@ -367,6 +401,7 @@ const handleDeleteForm = async (form: FormListItem) => {
     }
 
     formList.value = newForms;
+    $form.clearCache();
     $message.success(`表单 "${form.formName}" 已删除`);
   } catch (error) {
     if (error !== "cancel") {
@@ -447,8 +482,7 @@ onBeforeUnmount(() => {
       background-color: #1890ff1a;
     }
   }
-
-  }
+}
 
 // ─── 表单列表区域 ────────────────────────────────────────────────────────────
 .form-list-section {

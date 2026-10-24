@@ -159,7 +159,7 @@ var connectionNames = [
     'kafkaSecurityProtocol', 'securityProtocol', 'kafkaSaslMechanism', 'saslMechanism',
     'kafkaUsername', 'saslUsername', 'kafkaPassword', 'saslPassword', 'kafkaSchemaRegistryUrl',
     'kafkaSampleSize', 'kafkaPollTimeoutMs',
-    'nodes'
+    'nodes', 'authMethod', 'apiKey', 'indexName', 'defaultIndex'
 ]
 // Existing values are the source of truth for fields not rendered in step one.
 var old = db.table('db_datasource_t').where().eq('tid', tid).eq('is_del', 0).selectOne()
@@ -175,7 +175,14 @@ var requestedConnectionType = blank(first(props, ['dbType', 'db_type', 'database
 if (requestedConnectionType == 'sftp') {
     requestedConnectionType = 'ftp'
 }
+if (['es', 'elastic'].contains(requestedConnectionType)) {
+    requestedConnectionType = 'elasticsearch'
+}
 var blankOverwriteNamesByType = {
+    elasticsearch: {
+        database: true, indexName: true, defaultIndex: true, jdbcURL: true,
+        nodes: true, username: true, password: true, apiKey: true, token: true
+    },
     minio: {
         minioEndpoint: true, minioAccessKey: true, minioSecretKey: true,
         minioBucket: true, minioRegion: true, minioUseSSL: true,
@@ -436,6 +443,12 @@ var valueOrOld = (value, keys) => blank(value) && old != null ? first(old, keys)
 var mainJdbcUrl = valueOrOld(first(props, ['jdbcURL', 'jdbcUrl', 'jdbc_url']), ['jdbcUrl', 'jdbc_url'])
 var mainUsername = valueOrOld(props.username, ['username'])
 var mainPassword = valueOrOld(props.password, ['password'])
+// ES允许匿名连接；主表镜像也应接收明确清空的值，否则重新读取时会覆盖pool_cfg中的空值。
+if (requestedConnectionType == 'elasticsearch' && props instanceof Map) {
+    if (props.containsKey('jdbcURL')) { mainJdbcUrl = props.jdbcURL }
+    if (props.containsKey('username')) { mainUsername = props.username }
+    if (props.containsKey('password')) { mainPassword = props.password }
+}
 
 var main = {
     tid: tid,

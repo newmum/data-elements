@@ -64,7 +64,7 @@ if (requestedAssetType == 'db' && countFields.size() == 1 && countFields[0] == '
     for (datasourceRow in (datasourceRows == null ? [] : datasourceRows)) {
         var orgId = datasourceRow.orgId == null ? datasourceRow.org_id : datasourceRow.orgId;
         var dbName = datasourceRow.dbName == null ? datasourceRow.db_name : datasourceRow.dbName;
-        if (blank(orgId) || lower(dbName).startsWith('codex_')) {
+        if (blank(orgId) || lower(dbName).startsWith('validation_')) {
             continue;
         }
         var key = text(orgId);

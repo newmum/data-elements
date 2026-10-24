@@ -47,7 +47,9 @@ public class PushNodeMagicTest {
             for(int count:List.of(20,100)){
                 var f=new PushRegistrySyncMagicTest.Fixture(count);prepare(f,url);int before=calls.get();
                 var dry=(Map<?,?>)f.call(Map.of("datasourceId","source","nodeId","node","dryRun",true));check(Boolean.TRUE.equals(dry.get("valid")),"selected-node preview");check(f.reads.get()==3,"preview fixed reads");check(calls.get()==before,"preview no HTTP");
-                var result=(Map<?,?>)f.call(Map.of("datasourceId","source","nodeId","node"));check(Boolean.TRUE.equals(result.get("synced")),"selected-node saved");check(f.reads.get()==10,"sync fixed reads "+f.reads);check(calls.get()==before+1 && tables.get()==count,"one complete HTTP request");
+                // The selected-node path adds one ownership/enabled lookup to
+                // the ten reads used by a source synchronization without nodeId.
+                var result=(Map<?,?>)f.call(Map.of("datasourceId","source","nodeId","node"));check(Boolean.TRUE.equals(result.get("synced")),"selected-node saved");check(f.reads.get()==11,"sync fixed reads "+f.reads);check(calls.get()==before+1 && tables.get()==count,"one complete HTTP request");
                 check("SUCCESS".equals(f.jdbc.queryForObject("select last_sync_status from push_node_t where tid='node'",String.class)),"confirmed sync status");
                 rejected(f.call(Map.of("datasourceId","source","nodeId","foreign-node")),403);rejected(f.call(Map.of("datasourceId","foreign","nodeId","node")),403);rejected(f.call(Map.of("datasourceId","source","nodeId","disabled-node")),409);
                 f.scope.denied=true;rejected(f.call(Map.of("datasourceId","source","nodeId","node")),403);f.scope.denied=false;check(calls.get()==before+1,"denied no HTTP");
@@ -71,7 +73,7 @@ public class PushNodeMagicTest {
                 f.jdbc.update("update push_node_t set base_url=? where tid='node'",url);
 
                 rejected(nodeCall(f,"01.数据同步节点列表.ms",Map.of("nodeType","push","action","health","tid","foreign-node")),404);
-                System.out.println(count+" items: list=2 SQL; preview=3 SQL/0 HTTP; sync=10 SQL/1 HTTP; tenant, role and disabled checks passed");
+                System.out.println(count+" items: list=2 SQL; preview=3 SQL/0 HTTP; sync=11 SQL/1 HTTP; tenant, role and disabled checks passed");
             }
             var f=new PushRegistrySyncMagicTest.Fixture(1);prepare(f,url);
             f.jdbc.update("update push_node_t set is_del=1");

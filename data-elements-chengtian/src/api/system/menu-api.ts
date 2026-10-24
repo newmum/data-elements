@@ -41,6 +41,4 @@ export interface Meta {
   openMode?: "iframe" | "link";
   /** 节点类型，group=分组标题（不可点击，不生成路由） */
   type?: "group";
-  /** 布控引擎管理页面的业务分区 */
-  managementType?: "input" | "rules" | "output";
 }

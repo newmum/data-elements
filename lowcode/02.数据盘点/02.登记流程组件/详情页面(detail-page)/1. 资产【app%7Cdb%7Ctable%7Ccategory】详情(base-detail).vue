@@ -1,5 +1,12 @@
 <template>
-  <div v-loading="state.loading" class="px-5 py-2 bg-white flex-1">
+  <div v-loading="state.loading" class="px-5 py-2 bg-white flex-1" :aria-busy="detailLoading">
+    <LoadingState v-if="detailLoading" type="form" />
+    <el-result v-else-if="loadError" icon="error" title="详情加载失败" :sub-title="loadError">
+      <template #extra>
+        <el-button type="primary" @click="loadDetail">重新加载</el-button>
+      </template>
+    </el-result>
+    <div v-show="!detailLoading && !loadError">
     <JsonForm ref="formRef" bordered :rules="formRules">
       <template #type-u-title="{ rule }">
         <u-title :name="rule.props?.name" class="gap-4" style="height: 50px">
@@ -21,14 +28,15 @@
         </u-title>
       </template>
     </JsonForm>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive, computed, h, nextTick } from "vue";
+import { ref, reactive, computed, nextTick, watch, onBeforeUnmount } from "vue";
 import { FormUtils } from "@/utils/form";
 import { useDetailStore } from "@/store";
-import { get, set, omit, pick } from "lodash-es";
+import { get, set, omit } from "lodash-es";
 
 const props = defineProps<{
   /*资产id*/
@@ -38,9 +46,11 @@ const props = defineProps<{
 // refs
 const formRef = ref();
 const formRules = ref([]);
+const detailLoading = ref(true);
+const loadError = ref("");
+let loadVersion = 0;
 const store = useDetailStore();
 const state = reactive<any>({
-  ruleMap: {},
   rules: [],
   formData: {},
   loading: false,
@@ -50,13 +60,7 @@ const state = reactive<any>({
 // 详情类型
 const currentData = computed(() => state.formData || {});
 const detailClass = computed(() => store.state.detailClass);
-const txtRules = computed(() => {
-  // eslint-disable-next-line vue/no-side-effects-in-computed-properties
-  state.rules = state.ruleMap[detailClass.value] ? state.ruleMap[detailClass.value] : [];
-
-  const displayRules = state.rules.map(metadataDisplayRule);
-  return FormUtils.transFormText(displayRules);
-});
+const txtRules = computed(() => FormUtils.transFormText(state.rules.map(metadataDisplayRule)));
 
 const metadataDisplayRule = (rule: any) => {
   if (detailClass.value === "table" && rule.field === "dataUpdateTime") {
@@ -72,57 +76,41 @@ const metadataDisplayRule = (rule: any) => {
   return rule;
 };
 
-onMounted(() => {
-  // 表单规则
-  switch (detailClass.value) {
-    case "app":
-      $form.get("系统详情").then((data) => {
-        state.ruleMap["app"] = data;
-        handleAction("init");
-      });
-      break;
-    case "db":
-      $form.get("库详情").then((data) => {
-        state.ruleMap["db"] = data;
-        handleAction("init");
-      });
-      break;
-    case "catalog":
-      $form.get("目录详情").then((data) => {
-        state.ruleMap["catalog"] = data;
-        handleAction("init");
-      });
-      break;
-    case "table":
-      $form.get("表详情").then((data) => {
-        state.ruleMap["table"] = data;
-        handleAction("init");
-      });
-      break;
-    case "fileCatalog":
-      $form.get("文件目录详情").then((data) => {
-        state.ruleMap["fileCatalog"] = data;
-        handleAction("init");
-      });
-      break;
+// 配置和详情并行读取；两者都完成且表单回填后才结束骨架屏。
+const loadDetail = async () => {
+  const version = ++loadVersion;
+  const tid = props.tid;
+  const type = detailClass.value;
+  detailLoading.value = true;
+  loadError.value = "";
+  state.editing = false;
+  try {
+    const formName = {
+      app: "系统详情", db: "库详情", catalog: "目录详情", table: "表详情", fileCatalog: "文件目录详情",
+    }[type];
+    if (!tid) throw new Error("缺少资源标识，请从资源列表重新进入");
+    if (!formName) throw new Error("暂不支持此资源的详情表单，请返回列表重试");
+    const [rules, data] = await Promise.all([$form.get(formName), detailApi(tid, type)]);
+    if (version !== loadVersion) return;
+    if (!Array.isArray(rules) || !rules.length) throw new Error("详情表单配置为空，请在表单配置中完善后重新加载");
+    state.rules = rules;
+    state.formData = { ...data };
+    formRules.value = txtRules.value;
+    await nextTick();
+    if (version !== loadVersion) return;
+    formRef.value?.setValue(displayDataForDetail(state.formData, type));
+    await nextTick();
+    if (version === loadVersion) store.setData(data);
+  } catch (error: unknown) {
+    if (version === loadVersion)
+      loadError.value = error instanceof Error ? error.message : "详情数据暂时无法加载，请稍后重试";
+  } finally {
+    if (version === loadVersion) detailLoading.value = false;
   }
-});
+};
 
-const handleAction = (type: string) => {
-  switch (type) {
-    case "init":
-      formRules.value = txtRules.value;
-      if (!props.tid) return;
-      detailApi(props.tid).then((data) => {
-        nextTick(() => {
-          state.formData = { ...data };
-          formRef.value?.setValue(displayDataForDetail(state.formData));
-          // 更新详情
-          store.setData(data);
-        });
-      });
-      break;
-  }
+const handleAction = (action: string) => {
+  if (action === "init") return loadDetail();
 };
 
 const titleActions = (rule: any) => {
@@ -149,7 +137,7 @@ const titleActions = (rule: any) => {
 };
 
 const isTitleActionDisabled = (action: any) =>
-  state.loading || state.actionLoading[action.key] === true || (action.requiresEditable === true && !props.editable);
+  detailLoading.value || !!loadError.value || state.loading || state.actionLoading[action.key] === true || (action.requiresEditable === true && !props.editable);
 
 const resolveActionValue = (value: any): any => {
   if (value === "$tid") return props.tid;
@@ -207,14 +195,14 @@ const handleTitleAction = async (action: any) => {
   }
 };
 
-const detailApi = (tid: string) => {
-  if (detailClass.value === "app") {
+const detailApi = (tid: string, type = detailClass.value) => {
+  if (type === "app") {
     return $common.post("/dst/application/detail", { tid });
   }
-  if (detailClass.value === "db") {
+  if (type === "db") {
     return $common.post("/dst/database/detail", { tid });
   }
-  if (detailClass.value === "table") {
+  if (type === "table") {
     return $common.post("/ods/dataAggPage", { viewLevel: "tableDetail", tableId: tid }).then((res: any) => {
       const payload = res?.data || res || {};
       return payload.detail || payload;
@@ -223,8 +211,8 @@ const detailApi = (tid: string) => {
   return $common.post("/dst/catalog/detail", { tid });
 };
 
-const displayDataForDetail = (data: Record<string, any>) => {
-  if (detailClass.value !== "db") {
+const displayDataForDetail = (data: Record<string, any>, type = detailClass.value) => {
+  if (type !== "db") {
     return data;
   }
   return {
@@ -296,7 +284,7 @@ const save = async (): Promise<any> => {
     if (metadataWarning) $message.warning("数据源已保存，但元数据刷新失败，可在详情中重试");
     else $message.success("保存成功");
     state.editing = false;
-    handleAction("init");
+    await handleAction("init");
   } catch (err: any) {
     console.log(err.message);
     $message.error(err);
@@ -304,6 +292,8 @@ const save = async (): Promise<any> => {
     state.loading = false;
   }
 };
+watch(() => [props.tid, detailClass.value], loadDetail, { immediate: true });
+onBeforeUnmount(() => { loadVersion++; });
 </script>
 
 <style scoped lang="scss">

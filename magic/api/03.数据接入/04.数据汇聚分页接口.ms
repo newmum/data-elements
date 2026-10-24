@@ -899,8 +899,8 @@ var accessStatus = ''
 var datasourceViewStartedAt = System.currentTimeMillis()
 var must = [{ term: { assetType: 'db' } }]
 var mustNot = [
-    { wildcard: { dbName: 'codex_*' } },
-    { wildcard: { database: 'codex_*' } }
+    { wildcard: { dbName: 'validation_*' } },
+    { wildcard: { database: 'validation_*' } }
 ]
 
 // 将前端筛选条件转换成 ES 查询条件；accessStatus 需要回表后判断，所以只记录不进入 ES。

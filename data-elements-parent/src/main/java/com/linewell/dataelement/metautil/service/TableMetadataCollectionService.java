@@ -839,10 +839,11 @@ public class TableMetadataCollectionService {
         source.putAll(connections.resolve(tenantId, datasourceId));
         DatabaseType type = DatabaseType.fromCode(first(source, "dbType", "db_type"));
         // FTP/SFTP files are logical tables.  They use the FtpFileMetadataExplorer
-        // rather than JDBC, but must follow the same durable step-2 collection
-        // workflow as relational sources.  API/Kafka remain configuration-driven
+        // rather than JDBC. ES uses ordinary indices and bulk mappings through
+        // its HTTP explorer. Both reuse the durable step-2 collection workflow.
+        // API/Kafka remain configuration-driven
         // sources and deliberately do not enter this physical/file scanner.
-        if (type == null || (!type.isRelational() && type != DatabaseType.FTP)) {
+        if (type == null || (!type.isRelational() && type != DatabaseType.FTP && type != DatabaseType.ELASTICSEARCH)) {
             throw new IllegalArgumentException("当前数据源不支持数据表采集");
         }
         DataSourceConfig config = new DataSourceConfig();
@@ -857,7 +858,10 @@ public class TableMetadataCollectionService {
         config.setPort(integer(ftpSource
                 ? first(source, "ftpPort", "port", "dbPort")
                 : first(source, "port", "dbPort"), type.getDefaultPort()));
-        config.setDatabase(first(source, "database", "dbName", "db_name", "dbMetaDbName"));
+        // ES 的显示名称不是索引范围；未设置范围时由探查器列出当前连接可见的普通索引。
+        config.setDatabase(type == DatabaseType.ELASTICSEARCH
+                ? first(source, "database", "indexName", "defaultIndex")
+                : first(source, "database", "dbName", "db_name", "dbMetaDbName"));
         config.setUsername(ftpSource
                 ? first(source, "ftpUsername", "username", "dbUser", "dbMetaUser", "user")
                 : first(source, "username", "dbUser", "dbMetaUser", "user"));

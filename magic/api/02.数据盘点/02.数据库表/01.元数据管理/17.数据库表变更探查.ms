@@ -221,8 +221,8 @@ var dataSourceOf = (source) => {
     }
     config.setHost(textOf(firstValue(source, ['ftpHost', 'host', 'dbIp'])))
     var port = firstValue(source, ['ftpPort', 'port', 'dbPort'])
-    config.setPort(blank(port) ? 3306 : port::int)
-    config.setDatabase(textOf(firstValue(source, ['database', 'dbName', 'dbMetaDbName'])))
+    config.setPort(blank(port) ? config.getDatabaseType().getDefaultPort() : port::int)
+    config.setDatabase(config.getDatabaseType() == DatabaseType.ELASTICSEARCH ? textOf(firstValue(source, ['database', 'indexName', 'defaultIndex'])) : textOf(firstValue(source, ['database', 'dbName', 'dbMetaDbName'])))
     config.setUsername(textOf(firstValue(source, ['ftpUsername', 'username', 'dbUser', 'dbMetaUser'])))
     config.setPassword(textOf(firstValue(source, ['ftpPassword', 'password', 'dbPassword', 'dbMetaPassword'])))
     // 保留 FTP 协议、目录、匹配规则及解析选项，使第二步与第一步识别同一批文件。

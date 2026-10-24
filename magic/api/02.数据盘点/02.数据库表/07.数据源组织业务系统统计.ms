@@ -79,8 +79,8 @@ var result = tenantEs.index(configData().es_dataassets).search({
         bool: {
             filter: filters,
             must_not: [
-                { wildcard: { dbName: 'codex_*' } },
-                { wildcard: { database: 'codex_*' } }
+                { wildcard: { dbName: 'validation_*' } },
+                { wildcard: { database: 'validation_*' } }
             ]
         }
     }
@@ -98,7 +98,7 @@ for (hit in hits) {
 var datasourceById = {}
 if (candidateIds.size() > 0) {
     var datasourceRows = db.table('db_datasource_t').where()
-        .in('tid', candidateIds).eq('is_del', 0).select()
+        .in('tid', candidateIds).eq('tenant_id', tenantId).eq('is_del', 0).select()
     datasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', datasourceRows)
     for (datasource in datasourceRows) {
         var datasourceId = datasource?.tid

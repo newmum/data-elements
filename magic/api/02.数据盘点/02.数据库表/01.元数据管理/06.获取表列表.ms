@@ -14,7 +14,7 @@
   "parameters": [
     {
       "name": "dbId",
-      "value": "codex_kingbase_firmament_data_v6",
+      "value": "validation_kingbase_metadata",
       "description": "数据源ID",
       "required": true,
       "dataType": "String",

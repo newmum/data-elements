@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import test from "node:test";
+import vm from "node:vm";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const require = createRequire(path.join(root, "data-elements-chengtian/package.json"));
 const vue = require("vue"),
@@ -18,10 +19,15 @@ const compiled = JSON.parse(
   })
 );
 const bundle = JSON.parse(fs.readFileSync(path.join(root, compiled.compiled), "utf8"));
-function contentFixture(post) {
+const definitionSource = fs.readFileSync(
+  path.join(root, "docs/assets/data-elements-chengtian/forms/登记API服务.js"),
+  "utf8"
+);
+const definitionRules = () =>
+  vm.runInNewContext(definitionSource, { $dict: { getDictItems: () => [] } });
+function contentFixture(post, loadDefinition = async () => ({ rules: definitionRules() })) {
   let refIndex = 0,
-    model = {},
-    parameters = [];
+    model = {};
   const feedback = [],
     events = [];
   let api;
@@ -32,21 +38,9 @@ function contentFixture(post) {
       model = { ...value };
     },
   };
-  const parameterApi = {
-    validate: async () => true,
-    getData: () => parameters,
-    setData: (value) => {
-      parameters = value;
-    },
-  };
   const runtime = {
     ...vue,
-    ref: (value) =>
-      value === undefined && refIndex++ === 0
-        ? vue.ref(form)
-        : value === undefined && refIndex === 2
-          ? vue.ref(parameterApi)
-          : vue.ref(value),
+    ref: (value) => (value === undefined && refIndex++ === 0 ? vue.ref(form) : vue.ref(value)),
   };
   const messages = {
     success: (value) => feedback.push(value),
@@ -57,11 +51,12 @@ function contentFixture(post) {
     vue: runtime,
     "element-plus": { ElMessage: messages },
     "@/store": { useDictStore: () => ({ getDictItems: () => [] }) },
-    "@/utils/form": { FormUtils: { transFormText: (value) => value } },
+    "lodash-es": { cloneDeep: (value) => structuredClone(value) },
   };
-  const component = new Function("___magic__import__", "$common", bundle.compileJs)(
+  const component = new Function("___magic__import__", "$common", "$form", bundle.compileJs)(
     (name, key) => libraries[name]?.[key],
-    { post }
+    { post },
+    { loadDefinition }
   );
   component.setup(
     { context: "modal", data: {} },
@@ -357,7 +352,10 @@ test("registration route stays intact until the dialog closes, preserving a page
     )
     .getText(ast);
   const routes = [],
-    route = { path: "/deal/data-server/list", query: { register: "1", keyword: "保留上下文" } };
+    route = {
+      path: "/deal/data-server/list",
+      query: { register: "1", keyword: "保留上下文" },
+    };
   let opened = 0;
   const closeDialog = new Function(
     "route",
@@ -432,7 +430,10 @@ function workspaceFixture(post = async () => ({ list: [], total: 0 })) {
         return post(url, payload);
       },
     },
-    { error: (msg) => messages.push(msg), warning: (msg) => messages.push(msg) },
+    {
+      error: (msg) => messages.push(msg),
+      warning: (msg) => messages.push(msg),
+    },
     {
       confirm: async (...args) => {
         confirmations.push(args);
@@ -470,7 +471,10 @@ function workspaceFixture(post = async () => ({ list: [], total: 0 })) {
 for (const count of [20, 100])
   test(`workspace ${count} rows use one bounded department request without detail fan-out`, async () => {
     const f = workspaceFixture(async () => ({
-      list: Array.from({ length: count }, (_, i) => ({ id: `s${i}`, serviceName: `服务${i}` })),
+      list: Array.from({ length: count }, (_, i) => ({
+        id: `s${i}`,
+        serviceName: `服务${i}`,
+      })),
       total: 200,
     }));
     await f.api.loadServices(2, count);
@@ -495,7 +499,10 @@ test("workspace keeps each service's unsaved fields, parameters and examples whi
   await f.api.addDraft();
   await f.ready();
   const second = f.api.entries.value[1];
-  f.setModel({ name: "第二条", providerConfig: { address: "https://example.test/second" } });
+  f.setModel({
+    name: "第二条",
+    providerConfig: { address: "https://example.test/second" },
+  });
   await f.api.selectEntry(first);
   await f.ready();
   assert.equal(f.api.editorData.value.name, "第一条");
@@ -588,4 +595,383 @@ test("workspace ignores an older list response and exposes retryable list errors
   await f.api.loadServices(3);
   assert.equal(f.api.listError.value, "服务列表暂时不可用");
   assert.equal(f.api.listLoading.value, false);
+});
+
+test("registration reads configured rules once per workspace and keeps parameter and example fields in the form model", async () => {
+  let definitions = 0;
+  const f = contentFixture(
+    async (url) => (url === "/sym/user/me" ? { orgId: "org" } : { id: "saved" }),
+    async (name) => {
+      definitions++;
+      assert.equal(name, "登记API服务");
+      return { rules: definitionRules() };
+    }
+  );
+  await f.api.setFormData({
+    publishParams: [{ paramName: "page", paramType: "string" }],
+    extendInfo: { requestExample: "one" },
+  });
+  assert.equal((await f.api.getPayload()).publishParams[0].paramName, "page");
+  f.setFields({
+    requestExample: "two",
+    responseExample: "response",
+    publishParams: [{ paramName: "size", paramType: "number" }],
+  });
+  assert.equal((await f.api.getPayload()).extendInfo.requestExample, "two");
+  assert.equal((await f.api.getPayload()).extendInfo.responseExample, "response");
+  assert.equal((await f.api.getPayload()).publishParams[0].paramName, "size");
+  await f.api.setFormData({ name: "another" });
+  assert.equal(definitions, 1);
+  assert.equal((await f.api.getPayload()).publishParams.length, 0);
+});
+test("a missing or invalid dynamic form prevents saving and supports a fresh retry", async () => {
+  let attempts = 0,
+    saves = 0;
+  const f = contentFixture(
+    async (url) => {
+      if (url.endsWith("/save")) saves++;
+      return { orgId: "org" };
+    },
+    async () => {
+      if (++attempts === 1) throw new Error("未找到登记API服务配置");
+      return { rules: definitionRules() };
+    }
+  );
+  await f.api.setFormData({});
+  assert.equal(await f.api.handleSave(), false);
+  assert.equal(saves, 0);
+  await f.api.setFormData({});
+  assert.equal((await f.api.getFormData()).orgId, "org");
+  assert.equal(attempts, 2);
+});
+function formUtilsFixture(post, setting = { systemCode: "公安" }) {
+  const source = fs.readFileSync(
+    path.join(root, "data-elements-chengtian/src/utils/form.ts"),
+    "utf8"
+  );
+  const ast = ts.createSourceFile("form.ts", source, ts.ScriptTarget.Latest, true);
+  const body = ast.statements
+    .filter((node) => !ts.isImportDeclaration(node))
+    .map((node) => node.getText(ast))
+    .join("\n")
+    .replace("export class FormUtils", "class FormUtils");
+  const js = ts.transpileModule(body, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const calls = [];
+  const Class = new Function(
+    "formCreate",
+    "get",
+    "set",
+    "$setting",
+    "$common",
+    "$dict",
+    `${js}\nreturn FormUtils;`
+  )(
+    {},
+    undefined,
+    undefined,
+    setting,
+    {
+      post: async (url, payload) => {
+        calls.push({ url, payload });
+        return post(payload);
+      },
+    },
+    { $dict: {}, getDictItems: () => [] }
+  );
+  return { Class, instance: new Class(), calls, setting };
+}
+test("trusted form parser accepts native layout and custom fields, and rejects duplicate nested fields", () => {
+  const { Class } = formUtilsFixture(async () => []);
+  assert.equal(
+    Class.parseRules('[{type:"ElTabs",children:[{type:"CodeEditor",field:"example"}]}]').length,
+    1
+  );
+  assert.throws(() => Class.parseRules("{}"), /规则数组/);
+  assert.throws(
+    () =>
+      Class.parseRules(
+        '[{type:"input",field:"name"},{type:"ElTabs",children:[{type:"input",field:"name"}]}]'
+      ),
+    /字段重复/
+  );
+  assert.throws(() => Class.parseRules('[{field:"name"}]'), /type/);
+});
+test("definition lookup uses the active environment, reads fresh rules, and does not accept a client tenant ID", async () => {
+  let title = "first";
+  const f = formUtilsFixture(async (payload) => [
+    {
+      tid: "form",
+      formName: payload.formName,
+      env: payload.env,
+      formConfig: "preserved",
+      formJson: `[{type:"input",field:"name",title:"${title}"}]`,
+    },
+  ]);
+  const one = await f.instance.loadDefinition("登记API服务");
+  assert.equal(one.rules[0].title, "first");
+  title = "changed";
+  f.setting.systemCode = "海渔";
+  const two = await f.instance.loadDefinition("登记API服务");
+  assert.equal(two.rules[0].title, "changed");
+  assert.equal(two.meta.formConfig, "preserved");
+  assert.deepEqual(
+    f.calls.map((c) => c.payload),
+    [
+      { formName: "登记API服务", env: "公安" },
+      { formName: "登记API服务", env: "海渔" },
+    ]
+  );
+});
+test("missing, duplicate, and malformed definitions fail closed", async () => {
+  const missing = formUtilsFixture(async () => []);
+  await assert.rejects(missing.instance.loadDefinition("登记API服务"), /未找到/);
+  const duplicate = formUtilsFixture(async () =>
+    Array.from({ length: 2 }, () => ({
+      formName: "登记API服务",
+      env: "公安",
+      formJson: "[]",
+    }))
+  );
+  await assert.rejects(duplicate.instance.loadDefinition("登记API服务"), /重复/);
+  const malformed = formUtilsFixture(async () => ({ unexpected: true }));
+  await assert.rejects(malformed.instance.loadDefinition("登记API服务"), /格式/);
+});
+test("configured defaults apply to new services while persisted method and version keep their values", async () => {
+  const rules = definitionRules();
+  rules.find((r) => r.field === "httpMethod").value = "PATCH";
+  rules.find((r) => r.field === "version").value = "2.4";
+  const f = contentFixture(
+    async () => ({ orgId: "org" }),
+    async () => ({ rules })
+  );
+  await f.api.setFormData({});
+  assert.equal((await f.api.getFormData()).httpMethod, "PATCH");
+  assert.equal((await f.api.getFormData()).version, "2.4");
+  await f.api.setFormData({
+    id: "existing",
+    version: "1.8",
+    providerConfig: { httpMethod: "POST" },
+  });
+  assert.equal((await f.api.getFormData()).httpMethod, "POST");
+  assert.equal((await f.api.getFormData()).version, "1.8");
+});
+function formTableFixture() {
+  const source = fs
+    .readFileSync(
+      path.join(root, "data-elements-chengtian/src/components/form/form-table.vue"),
+      "utf8"
+    )
+    .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
+  const ast = ts.createSourceFile("adapter.ts", source, ts.ScriptTarget.Latest, true);
+  const body = ast.statements
+    .filter((node) => !ts.isImportDeclaration(node))
+    .map((node) => node.getText(ast))
+    .join("\n");
+  const js = ts.transpileModule(body, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const props = vue.reactive({ modelValue: [] }),
+    data = vue.ref([]),
+    events = [];
+  const factory = new Function(
+    "computed",
+    "nextTick",
+    "ref",
+    "watch",
+    "cloneDeep",
+    "defineProps",
+    "withDefaults",
+    "defineEmits",
+    "defineExpose",
+    `${js}\nreturn tableRef;`
+  );
+  const table = factory(
+    vue.computed,
+    vue.nextTick,
+    vue.ref,
+    vue.watch,
+    (v) => structuredClone(vue.toRaw(v)),
+    () => props,
+    (v) => v,
+    () => (name, rows) => {
+      events.push(name);
+      if (name === "update:modelValue") props.modelValue = rows;
+    },
+    () => {}
+  );
+  table.value = {
+    getData: () => data.value.map((row) => ({ ...row })),
+    setData: (rows) => {
+      data.value = rows;
+    },
+  };
+  return {
+    props,
+    data,
+    events,
+    flush: async () => {
+      await vue.nextTick();
+      await vue.nextTick();
+      await vue.nextTick();
+    },
+  };
+}
+for (const count of [20, 100])
+  test(`form table synchronizes ${count} imported rows, edits, removals and external draft changes without losing model values`, async () => {
+    const f = formTableFixture();
+    await f.flush();
+    f.data.value = Array.from({ length: count }, (_, i) => ({
+      paramName: `p${i}`,
+      paramType: "string",
+    }));
+    await f.flush();
+    assert.equal(f.props.modelValue.length, count);
+    f.data.value[0].paramName = "edited";
+    await f.flush();
+    assert.equal(f.props.modelValue[0].paramName, "edited");
+    f.data.value.splice(0, 1);
+    await f.flush();
+    assert.equal(f.props.modelValue.length, count - 1);
+    f.props.modelValue = [{ paramName: "other draft", paramType: "number" }];
+    await f.flush();
+    assert.equal(f.data.value[0].paramName, "other draft");
+    assert.equal(f.events.filter((e) => e === "update:modelValue").length, 3);
+  });
+function formEditorFixture() {
+  const source = fs
+    .readFileSync(path.join(root, "lowcode/09.系统管理/1.3 表单配置页(form-config).vue"), "utf8")
+    .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
+  const ast = ts.createSourceFile("editor.ts", source, ts.ScriptTarget.Latest, true);
+  const body = ast.statements
+    .filter((node) => !ts.isImportDeclaration(node))
+    .map((node) => node.getText(ast))
+    .join("\n");
+  const js = ts.transpileModule(body, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const rows = [
+    {
+      tid: "original",
+      formName: "登记API服务",
+      env: "公安",
+      formJson: '[{type:"input",field:"name",title:"原始标题"}]',
+      formConfig: '{"owned":"tenant"}',
+    },
+  ];
+  const requests = [],
+    feedback = [];
+  let cacheClears = 0;
+  const factory = new Function(
+    "ref",
+    "reactive",
+    "computed",
+    "onMounted",
+    "onBeforeUnmount",
+    "cloneDeep",
+    "FormUtils",
+    "$setting",
+    "$common",
+    "$message",
+    "$dialog",
+    "$form",
+    `${js}\nreturn {loadForms,handleFormChange,handleSave,handleRenameForm,handleAddForm,currentForm,currentFormName,currentJson,isModified,formList,saving};`
+  );
+  const api = factory(
+    vue.ref,
+    vue.reactive,
+    vue.computed,
+    () => {},
+    () => {},
+    (v) => structuredClone(vue.toRaw(v)),
+    formUtilsFixture(async () => []).Class,
+    { systemCode: "公安" },
+    {
+      post: async (url, payload) => {
+        requests.push({ url, payload: structuredClone(payload) });
+        if (url.endsWith("action=get"))
+          return rows
+            .filter((row) => !payload.tid || payload.tid === row.tid)
+            .map((row) => ({ ...row }));
+        if (url.endsWith("action=save")) {
+          let row = rows.find((row) => row.tid === payload.tid);
+          if (!row) {
+            row = { tid: "new-form" };
+            rows.push(row);
+          }
+          Object.assign(row, payload);
+          return row.tid;
+        }
+        throw new Error("unexpected request");
+      },
+    },
+    { success: (v) => feedback.push(v), error: (v) => feedback.push(v) },
+    { confirm: async () => {}, prompt: async () => ({ value: "新配置" }) },
+    { clearCache: () => cacheClears++ }
+  );
+  return {
+    api,
+    rows,
+    requests,
+    feedback,
+    get cacheClears() {
+      return cacheClears;
+    },
+  };
+}
+test("form editor preserves auxiliary metadata and canonical whitespace on repeated saves", async () => {
+  const f = formEditorFixture();
+  await f.api.loadForms();
+  f.api.currentJson.value = '[{type:"input",field:"name",title:"新标题"}]\n';
+  f.api.isModified.value = true;
+  await f.api.handleSave();
+  assert.equal(f.rows[0].formConfig, '{"owned":"tenant"}');
+  assert.equal(f.api.isModified.value, false);
+  assert.equal(f.cacheClears, 1);
+  f.api.currentJson.value = '[{type:"input",field:"name",title:"再次修改"}]\n';
+  f.api.isModified.value = true;
+  await f.api.handleSave();
+  assert.equal(f.requests.filter((r) => r.url.endsWith("action=save")).length, 2);
+  assert.equal(f.rows[0].formJson, f.api.currentJson.value);
+  assert.equal(f.api.saving.value, false);
+});
+test("form editor refuses a stale overwrite and preserves unsaved text", async () => {
+  const f = formEditorFixture();
+  await f.api.loadForms();
+  f.rows[0].formJson = '[{type:"input",field:"name",title:"其他编辑者"}]';
+  f.api.currentJson.value = '[{type:"input",field:"name",title:"尚未保存"}]';
+  f.api.isModified.value = true;
+  await f.api.handleSave();
+  assert.equal(f.requests.filter((r) => r.url.endsWith("action=save")).length, 0);
+  assert.match(f.feedback[0], /其他编辑者/);
+  assert.match(f.api.currentJson.value, /尚未保存/);
+  assert.equal(f.api.isModified.value, true);
+});
+test("form rename sends the complete definition and retains the current unsaved edit", async () => {
+  const f = formEditorFixture();
+  await f.api.loadForms();
+  f.api.currentJson.value = '[{type:"input",field:"name",title:"尚未保存"}]';
+  f.api.isModified.value = true;
+  await f.api.handleRenameForm(f.api.currentForm.value);
+  const request = f.requests.find((r) => r.url.endsWith("action=save"));
+  assert.equal(request.payload.formName, "新配置");
+  assert.match(request.payload.formJson, /原始标题/);
+  assert.equal(request.payload.formConfig, '{"owned":"tenant"}');
+  assert.equal(f.api.currentFormName.value, "新配置");
+  assert.equal(f.api.isModified.value, true);
+  assert.match(f.api.currentJson.value, /尚未保存/);
+});
+test("creating a configuration selects the new record ID before subsequent editing", async () => {
+  const f = formEditorFixture();
+  await f.api.loadForms();
+  await f.api.handleAddForm();
+  assert.equal(f.api.currentForm.value.tid, "new-form");
+  assert.equal(f.api.currentFormName.value, "新配置");
+  f.api.currentJson.value = '[{type:"input",field:"name",title:"新增后编辑"}]';
+  f.api.isModified.value = true;
+  await f.api.handleSave();
+  const save = f.requests.filter((r) => r.url.endsWith("action=save")).at(-1);
+  assert.equal(save.payload.tid, "new-form");
+  assert.match(f.rows[1].formJson, /新增后编辑/);
 });

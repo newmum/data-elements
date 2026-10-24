@@ -1,9 +1,12 @@
 package com.linewell.dataelement.shared.error;
 
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
+import java.io.EOFException;
+import java.io.InterruptedIOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.ConnectException;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.sql.SQLException;
@@ -13,6 +16,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.net.ssl.SSLException;
+import org.elasticsearch.client.ResponseException;
 
 /**
  * Converts exception chains into a concise public message and complete diagnostic detail.
@@ -49,8 +54,11 @@ public final class ApiErrorResolver {
         Throwable root = rootCause(actual);
         String messages = causalMessages(actual);
         String combined = messages.toLowerCase(Locale.ROOT);
+        ErrorDescriptor searchError = describeSearchFailure(actual, combined);
         String backendMessage = extractBackendMessage(messages);
-        ErrorDescriptor descriptor = describe(root, combined, backendMessage);
+        ErrorDescriptor descriptor = searchError == null
+                ? describe(root, combined, backendMessage)
+                : searchError;
         return new ApiErrorDetails(
                 descriptor.code(),
                 descriptor.message(),
@@ -58,6 +66,73 @@ public final class ApiErrorResolver {
                 newTraceId(),
                 actual.getClass().getName()
         );
+    }
+
+    /** Identify the failed client from its cause/stack, rather than guessing from an endpoint name. */
+    private static ErrorDescriptor describeSearchFailure(Throwable throwable, String messages) {
+        if (!hasSearchClientCause(throwable)) {
+            return null;
+        }
+        ResponseException response = findCause(throwable, ResponseException.class);
+        int status = response == null ? 0 : response.getResponse().getStatusLine().getStatusCode();
+        var clientError = findCause(throwable, co.elastic.clients.elasticsearch._types.ElasticsearchException.class);
+        if (status == 0 && clientError != null) {
+            status = clientError.status();
+        }
+        if (status == 401 || status == 403) {
+            return new ErrorDescriptor("SEARCH-AUTH-003",
+                    "全文检索服务认证或授权失败，请联系管理员检查服务账号及索引访问权限。");
+        }
+        if (status == 429 || status == 502 || status == 503 || status == 504) {
+            return new ErrorDescriptor("SEARCH-UNAVAILABLE-001",
+                    "全文检索服务暂时不可用，请稍后重试；如持续失败，请联系管理员检查服务状态与负载。");
+        }
+        if (findCause(throwable, InterruptedIOException.class) != null
+                || findCause(throwable, TimeoutException.class) != null) {
+            return new ErrorDescriptor("SEARCH-TIMEOUT-002",
+                    "全文检索服务连接或查询超时，请稍后重试；如持续失败，请联系管理员检查网络和服务负载。");
+        }
+        if (status == 0 && (findCause(throwable, SocketException.class) != null
+                || findCause(throwable, UnknownHostException.class) != null
+                || findCause(throwable, EOFException.class) != null
+                || findCause(throwable, SSLException.class) != null
+                || containsAny(messages, "connection reset", "connection refused", "connection closed",
+                        "connection is closed", "unknown host", "no route to host", "nohttpresponseexception"))) {
+            return new ErrorDescriptor("SEARCH-CONNECTION-001",
+                    "全文检索服务无法连接或连接已中断，请稍后重试；如持续失败，请联系管理员检查服务地址、网络及运行状态。");
+        }
+        if (response != null || clientError != null) {
+            return new ErrorDescriptor("SEARCH-QUERY-004",
+                    "全文检索查询失败，请联系管理员检查索引状态与查询配置，并提供错误码和跟踪号。");
+        }
+        return null;
+    }
+
+    private static boolean hasSearchClientCause(Throwable throwable) {
+        Throwable current = throwable;
+        int depth = 0;
+        while (current != null && depth++ < MAX_CAUSE_DEPTH) {
+            if (isSearchClientClass(current.getClass().getName())) {
+                return true;
+            }
+            for (StackTraceElement frame : current.getStackTrace()) {
+                if (isSearchClientClass(frame.getClassName())) {
+                    return true;
+                }
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static boolean isSearchClientClass(String name) {
+        return name.startsWith("org.elasticsearch.")
+                || name.startsWith("co.elastic.clients.")
+                || name.startsWith("org.springframework.data.elasticsearch.")
+                || name.startsWith("org.ssssssss.magicapi.elasticsearch.")
+                || name.equals("com.linewell.dataelement.elasticsearch.EsCommonService")
+                || name.equals("com.linewell.dataelement.elasticsearch.TenantElasticSearchModule")
+                || name.equals("com.linewell.dataelement.elasticsearch.SearchProjectionEsMagicModule");
     }
 
     public static ApiErrorDetails business(String code, String message, String detail) {

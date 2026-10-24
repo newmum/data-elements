@@ -10,6 +10,7 @@
 
 ## 目录
 
+- [Magic API 统一入口与业务实现](#magic-first)
 - [非结构化数据接入：当前实现与平台扩展设计](#unstructured-design)
 - [工程概览与使用](#overview)
 - [统一数据推送接口文档](#guide-38565d24)
@@ -26,6 +27,50 @@
 - [Linux 部署](#linux-deployment)
 - [Windows 独立部署](#windows-deployment)
 - [只读对账查询](#reconciliation-queries)
+
+<a id="magic-first"></a>
+
+## Magic API 统一入口与业务实现
+
+海通推送服务的 **37 个原 Java Controller 方法/路径组合均由 Magic API 注册**，原 `/api/v1/**`、`/internal/v1/**` 和 `/internal/push-credentials/issue` 地址继续使用。5 个业务 Controller 和将全部推送业务转给 Controller 的 `PushOperationsApi` 已移除。编辑器、Actuator 健康检查等框架管理入口仍由框架提供，不属于这 37 个业务接口。
+
+本机已启动的独立服务为 `http://localhost:8080`，编辑器为 `http://localhost:8080/api/web/index.html`。8088 是共享平台后端；配置文件内默认端口 18083 可以被仓库外运行配置覆盖，不能由默认值推断运行地址。
+
+唯一可维护源码位于 [`magic/haitong/`](../magic/haitong/)，独立索引为该目录 `.manifest.json`。Maven 将它打包到 JAR 的 `magic-api-bootstrap/`；该目录只是类路径资源名称，工程内不再维护第二份脚本。运行源仍是独立 MySQL `haitong.ht_magic_api_file`，不会写入共享控制库 `baseline.api_file_t`。启动只补缺失目录和资源，不覆盖编辑器已有内容。
+
+| 编辑器分组 | 方法/路径数量 | 职责 |
+| --- | ---: | --- |
+| 05.数据接收入口 | 9 | 统一推送、FTP/Kafka/日志兼容入口、通道接收、消息状态、文件批量导入与操作执行 |
+| 06.运维管理 | 14 | 概览、配置摘要、任务分页、失败重试、UNKNOWN 核实、文件扫描、协议探测、隔离消息、原文、OpenAPI、日志与对账 |
+| 07.推送密钥 | 1 | 平台服务签发和显式轮换数据源业务密钥 |
+| 08.附件传输 | 13 | 单次上传、初始化、分片、完成、提交、取消、状态、分页、批量状态、回执及 GET/HEAD 内容读取 |
+
+原 02.零信任网关对接、03.FTP诊断和04.数据推送调试仍保留。04 分组与正式入口共用脚本业务函数；旧调试入口保留 Magic 成功信封和原有 JSON 规范化幂等语义，正式入口保留原始 JSON 字节幂等语义及原生 HTTP/JSON 响应。
+
+`function/01.海通业务/` 的九个函数分别维护公共请求边界、表批次契约、消息与文件统计、登记同步、密钥签发、推送编排、运维状态处理、交换台账与对账、附件请求与传输编排。以下规则与 SQL 已实际迁入 MagicScript，而非通过脚本转发 Java Controller：
+
+- 登记完整快照的规模、重复项及字段合法性验证，同一事务内批量停用/写入数据源、调用方、表与字段；幂等账本与镜像一起提交或回滚。
+- 独立表模式的服务器授权、表/字段白名单、必填字段及服务端规范版本检查；数据库镜像已有记录时不回退 YAML。每批固定四次规范读取，不逐记录查询。
+- 密钥首次签发、重复获取不泄露明文、显式轮换和摘要持久化；Java 认证适配器只按摘要查找调用方。
+- 推送通道选择、登记规范与幂等前置、同步/异步操作编排、消息归属与结果脱敏。
+- 运维列表 SQL、失败安全重试、UNKNOWN 人工核实与审计上限，状态更新和审计在同一事务；对账窗口与汇总 SQL。
+- 附件请求字段、分页与批量规模、状态呈现、授权批量查询和下载就绪判断。
+
+Java 保留通用 HTTP 安全与字节流适配、数据库连接与方言、认证/审计、协议客户端、持久队列、执行租约，以及文件上传传输内核。文件内核目前仍负责会话初始化、分片写入、配额账本、完成/提交/取消/回执的原子状态操作和后台合并/签名/安全校验；这些是本次未继续拆出的边界，不能声称全部 Java 业务规则已清空。改变文件集合权限模型、上传持久状态协议或后台执行算法仍需修改相应 Java 并部署 JAR。日常登记字段、推送编排、查询、密钥生命周期和运维规则调整可只发布所选 Magic 函数。
+
+`MagicHttp` 只提供组件查找、受限正文、随机数、标准 HTTP 响应与受控路径流式读取，不包含业务表 SQL。JSON 在进入 Magic 转换器前受限读取并保存原始字节，防止破坏幂等或无界解析；octet-stream 不经过 JSON 缓存，上传/下载使用 64KiB 缓冲，保留 Range、If-Range、HEAD、ETag 和并发流预算。
+
+维护命令均在仓库根目录运行：
+
+```powershell
+python tools/resource-sync.py status --project haitong-data-pull --kind magic
+python tools/resource-sync.py plan --project haitong-data-pull --file "magic/haitong/function/01.海通业务/06.数据推送编排.ms"
+python tools/resource-sync.py publish --project haitong-data-pull --file "magic/haitong/function/01.海通业务/06.数据推送编排.ms" --apply
+```
+
+首次接管使用 `pull --project haitong-data-pull` 只读核对并登记当前基准，不覆盖本地源。发布前比较资源 ID、路径及基准摘要，备份到仓库外私有目录；编辑器保存后核对运行脚本和数据库正文。分组元数据通过有条件更新保存后要求冷加载，不能将持久化成功当作运行已刷新。日常脚本发布不需要重启；新增 Java、依赖或目录变更须重新打包部署并回读。此迁移没有增加或修改数据库结构。
+
+`MagicBusinessHttpTest` 通过实际 Magic HTTP 处理器覆盖登记 20/100 项固定 4 次读取 SQL（含两次 HTTP 审计时钟读取）、批次授权收紧、故障事务回滚、原始字节幂等、运维查询与原文下载；`PushOperationsMagicTest` 编译全部脚本并核对 37 路由无重复及没有业务 `@RestController`。`FileUploadHttpTest` 的阻塞 HTTP 用例覆盖附件完整生命周期、回执、Range/HEAD 与单次流式上传，需显式启用 `-Dhaitong.loopback.tests=true`。3GiB 压力用例与真实 MySQL专用用例另有独立开关，未启用时不计为通过。
 
 <a id="unstructured-design"></a>
 
@@ -45,7 +90,7 @@
 
 | 现有基础 | 源码中已具备的行为 | 本设计要补充的部分 |
 | --- | --- | --- |
-| [RelayController](../haitong-data-pull/src/main/java/com/haitong/api/RelayController.java) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
+| [Magic 数据接收入口](../magic/haitong/api/05.数据接收入口/) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
 | [PayloadFiles](../haitong-data-pull/src/main/java/com/haitong/core/PayloadFiles.java) | 64KiB 缓冲流式写本地持久卷、计算 SHA-256、同步文件并原子改名 | 存储适配器、分片会话、多实例可访问的持久化位置、存储对象与数据库之间的恢复 |
 | [FileService](../haitong-data-pull/src/main/java/com/haitong/core/FileService.java) | JSONL、CSV 与 BINARY；BINARY 只保存文件引用；文件处理 `runOne()` 串行，接收容量检查会 `Files.walk` 全工作目录 | 受控并发文件处理、配额账本、异步整文件校验和隔离检查，去掉每次上传的目录遍历 |
 | [DeliveryWorker](../haitong-data-pull/src/main/java/com/haitong/core/DeliveryWorker.java) | 已按协议建立可配置线程池，带租约、续租、重试及不确定结果处理 | 同一协议内进一步区分大文件和表批次的资源预算；文件目标的就绪条件及远端异步复制状态 |
@@ -114,7 +159,7 @@ flowchart LR
 
 源数据管理平台第一步模板可声明字段关联附件、大小上限和格式；第五步在表数据推送接口旁统一展示非结构化上传地址、规范及字段附件限制，已移除独立照片文档页签。先上传附件并校验就绪，业务表的关联字段保存返回的fileId。平台字段限制已纳入登记规范版本，但文件集合仍须在推送服务配置相应大小、格式、目标及调用方权限；现有表配置同步不会自动维护FILE集合，页面接入说明不代表节点已启用文件功能。
 
-以下接口已在 `FileUploadController` 实现，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和规范快照，快照不含连接凭据。
+以下接口已在根目录 `magic/haitong/api/08.附件传输/` 定义，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和规范快照，快照不含连接凭据。
 
 | 已实现接口 | 行为与边界 |
 | --- | --- |
@@ -1996,9 +2041,18 @@ Content-Type: application/json
 
 - `POST /push-operations/data-push`：与正式 `/api/v1/data-push` 复用同一 Java 推送业务逻辑；
 - `POST /push-operations/message-status`：查询当前调用方拥有的异步消息状态；
+- `POST /push-operations/template-test`：模板配套测试入口，编辑器中预填 `push_template_demo` 的五字段请求示例及必需请求头；与正式推送接口使用同一鉴权、登记规范、幂等和异步投递逻辑；
 - `POST /ftp-diagnostics/probe`：使用服务器配置的 FTP 参数检查连接、目录、上传、回读和清理。
 
 Magic API 仅承担可见、可编辑的请求编排和调试入口；鉴权、幂等、规范校验、持久化和异步投递仍保留在 Java 服务层。
+
+模板配套示例表为 `push_template_demo`：`record_id`（字符串64、主键、必填）、`business_no`（字符串64、必填）、`occur_time`（日期时间、时间戳及业务时间、必填）、`title`（字符串200、必填）、`attachment_file_id`（字符串64、可空、关联附件）。附件上限10MB，允许 `jpg,jpeg,png,pdf`。登记模板只定义字段和限制，不填写业务记录或附件原文。编辑器示例中的 `datasourceId` 为本机联调源，其他环境须替换成实际已登记的数据源ID，并使用该源第五步签发的 `X-Api-Key`，不能使用编辑器密码、管理员密钥或节点同步密钥代替。
+
+验证顺序为：导入模板并完成表与数据源登记 → 节点管理选择已启用的数据推送节点并“同步配置” → 第五步获取数据源业务密钥 → 如有附件，调用 `POST /api/v1/file-uploads/single` 上传原始字节并查询至 `READY` → 将返回的 `fileId` 填入 `attachment_file_id` → 在 `03.模板配套推送测试` 中发送记录 → 在 `02.消息状态查询` 中核对最终状态。节点同步只下发表字段规范及调用方授权，不发送业务数据、不签发或轮换密钥，也不自动创建文件集合。附件集合及同源调用方须由节点配置显式维护。
+
+返回 `ACCEPTED` 表示已经受理；须继续查询到 `SUCCEEDED` 并核对 `FILE_AND_MARKER_VERIFIED` 才表示FTP文件及完成标记已确认。`relay.worker.enabled=false` 时消息只会等待，不会自动投递；启用前应核查已有待处理队列。相同 `Idempotency-Key` 和正文返回同一消息，修改正文时使用新的幂等键。附件原文使用独立上传幂等键，不能将Base64或文件字节放进表记录。
+
+推送及状态查询脚本通过 `request.get().getRequest()` 取得当前认证的原生请求，在 Magic 业务函数内校验并编排，不再转发 Java Controller。`PushOperationsMagicTest` 编译全部实际资源并核对路由。运行资源使用 `haitong.ht_magic_api_file` 数据库存储；编辑器保存后须回读脚本并实际调用，单独修改随包初始化文件不会覆盖已有在线资源。
 
 <a id="guide-f5f5b5dd"></a>
 

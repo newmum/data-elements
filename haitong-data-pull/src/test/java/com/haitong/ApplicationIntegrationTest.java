@@ -95,16 +95,6 @@ class ApplicationIntegrationTest {
         assertEquals(401,request("GET","/internal/v1/overview",KEY,null,null).statusCode());
         assertEquals(200,request("GET","/actuator/health",null,null,null).statusCode());
     }
-    @Test void datasourcePushCredentialIsOneTimeAndRestrictedToPushChannels() {
-        var first=pushCredentials.issue("push-source-001",false);
-        assertTrue(first.revealed());assertFalse(first.apiKey().isBlank());
-        var identity=pushCredentials.authenticate(first.apiKey());
-        assertNotNull(identity);assertEquals("push-source-001",identity.id());
-        assertTrue(identity.channel("table-to-ftp"));assertTrue(identity.channel("table-to-kafka"));assertFalse(identity.channel("demo"));
-        assertFalse(pushCredentials.issue("push-source-001",false).revealed());
-        var rotated=pushCredentials.issue("push-source-001",true);
-        assertTrue(rotated.revealed());assertNull(pushCredentials.authenticate(first.apiKey()));assertNotNull(pushCredentials.authenticate(rotated.apiKey()));
-    }
     @Test void receiptDeduplicationAndBodyConflict() throws Exception {
         var first=request("POST","/api/v1/ingest/demo",KEY,"idem","{\"v\":1}");
         assertEquals(202,first.statusCode(),first.body());String id=(String)object(first.body()).get("messageId");

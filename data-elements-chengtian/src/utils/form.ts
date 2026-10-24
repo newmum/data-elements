@@ -1,4 +1,4 @@
-import formCreate from "@form-create/element-ui";
+import formCreate, { type FormRule } from "@form-create/element-ui";
 import { get, set } from "lodash-es";
 
 /**
@@ -12,17 +12,59 @@ interface FormItem {
   createdTime: string;
   updatedTime: string;
   isDel: number;
+  formConfig?: string | null;
 }
 
 /**
  * 表单配置类型（formJson 解析后的类型）
  */
-type FormConfig = Record<string, any> | Array<Record<string, any>>;
+type FormConfig = string;
 
 /**
  * @description: 用于动态表单的各种工具：如解析json，转json，以及从表单规则rule中获取字段中文值等
  */
 export class FormUtils {
+  /** Existing trusted form expressions share one parser in the editor and runtime. */
+  public static parseRules(source: string): FormRule[] {
+    const rules: unknown = eval(source);
+    if (!Array.isArray(rules)) throw new Error("表单配置必须是规则数组");
+    const fields = new Set<string>();
+    const visit = (items: unknown[]) => {
+      for (const item of items) {
+        if (typeof item === "string") continue;
+        if (!item || typeof item !== "object" || Array.isArray(item))
+          throw new Error("表单规则必须是对象");
+        const rule = item as Record<string, unknown>;
+        if (typeof rule.type !== "string" || !rule.type.trim())
+          throw new Error("表单规则缺少组件类型 type");
+        if (rule.field !== undefined) {
+          if (typeof rule.field !== "string" || !rule.field.trim())
+            throw new Error("表单字段 field 不能为空");
+          if (fields.has(rule.field)) throw new Error(`表单字段重复：${rule.field}`);
+          fields.add(rule.field);
+        }
+        if (Array.isArray(rule.children)) visit(rule.children);
+      }
+    };
+    visit(rules);
+    return rules as FormRule[];
+  }
+
+  /** Read a fresh, unambiguous definition in the active tenant and environment. */
+  async loadDefinition(formName: string) {
+    const matches = (await this.requestFormData({ formName })).filter(
+      (item) => item.formName === formName && item.env === $setting.systemCode
+    );
+    if (matches.length !== 1)
+      throw new Error(
+        matches.length
+          ? `存在重复的【${formName}】配置，请先在表单配置中处理`
+          : `未找到【${formName}】配置，请先在表单配置中配置该表单`
+      );
+    const meta = matches[0];
+    return { meta, rules: FormUtils.parseRules(meta.formJson) };
+  }
+
   /**
    * 解析json
    * @param json
@@ -100,7 +142,7 @@ export class FormUtils {
   // 完整表单元数据缓存：{ 表单名称: FormItem }
   private formMetaCache: Record<string, FormItem> = {};
   // 加载状态锁，避免重复请求
-  private loadingMap: Map<string, Promise<FormConfig>> = new Map();
+  private loadingMap: Map<string, Promise<FormRule[]>> = new Map();
   private metaLoadingMap: Map<string, Promise<FormItem | null>> = new Map();
 
   /**
@@ -110,10 +152,11 @@ export class FormUtils {
    */
   private async requestFormData(params: Record<string, any>): Promise<FormItem[]> {
     try {
-      const data = await $common.post("/sym/form?action=get", {
+      const data: unknown = await $common.post("/sym/form?action=get", {
         ...params,
         env: $setting.systemCode,
       });
+      if (!Array.isArray(data)) throw new Error("表单接口返回格式不正确");
       return data;
     } catch (error) {
       console.error("表单接口请求失败：", error);
@@ -127,11 +170,11 @@ export class FormUtils {
    * @param formName 表单名称（用于错误提示）
    * @returns {FormConfig} 解析后的表单配置
    */
-  private parseFormJson(formJson: string, formName: string): [] {
+  private parseFormJson(formJson: string, formName: string): FormRule[] {
     try {
       return eval(formJson);
     } catch (error) {
-      console.error(`表单【${formName}】的 formJson 解析失败：`, error, "原始内容：", formJson);
+      console.error(`表单【${formName}】的 formJson 解析失败：`, error);
       return [];
     }
   }
@@ -190,7 +233,7 @@ export class FormUtils {
    * @param {string} key 表单名称
    * @returns {Promise<[]>} 解析后的 formJson 配置
    */
-  async get(key: string): Promise<[]> {
+  async get(key: string): Promise<FormRule[]> {
     // 1. 缓存中存在，直接返回解析后的 formJson
     if (this.formCache[key]) {
       return this.parseFormJson(this.formCache[key], key);

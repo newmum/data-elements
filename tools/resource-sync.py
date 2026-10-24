@@ -433,7 +433,8 @@ def status(connection, kind, files=None):
                             'missingLocal': local_hash is None, 'missingRemote': r is None})
     unknown = [kind + '/' + p.relative_to(ROOT / kind).as_posix()
                for p in (ROOT / kind).rglob('*.ms' if kind == 'magic' else '*.vue')
-               if p.relative_to(ROOT / kind).as_posix() not in known]
+               if p.relative_to(ROOT / kind).as_posix() not in known
+               and not (kind == 'magic' and p.is_relative_to(ROOT / 'magic/haitong'))]
     remote_new = [kind + '/' + e['path'] for e in remote['resources']
                   if not is_directory(e, kind) and e['path'] not in known]
     return {'kind': kind, 'changes': changes, 'unregisteredFiles': unknown,
@@ -673,6 +674,136 @@ def repair_compiled(connection, config, bundles):
     return {'repairedComponents': len(bundles), 'sourceChanged': False, 'runtimeVerified': True}
 
 
+def haitong_resources(args):
+    """Independent Haitong store; deliberately never connects to shared baseline."""
+    import importlib.util
+    import uuid
+    import yaml
+    import pymysql
+    base = ROOT / 'magic/haitong'
+    manifest_path = base / '.manifest.json'
+    config = read_json(args.config)
+    spec = importlib.util.spec_from_file_location('export_db', ROOT / 'tools/export-db.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    candidates = list(module.project_connections(config, 'haitong-data-pull'))
+    if len(candidates) != 1:
+        raise ValueError('Haitong requires one explicit independent database binding')
+    connection = pymysql.connect(**candidates[0][3], cursorclass=pymysql.cursors.DictCursor)
+    runtime = yaml.safe_load((PRIVATE_CONFIG.parent / 'haitong-registry-service.yml').read_text(encoding='utf-8-sig'))
+    resource = runtime['magic-api']['resource']
+    table, prefix = resource['table-name'], resource['prefix']
+    if resource['type'] != 'database' or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', table):
+        raise ValueError('Haitong runtime must use its confirmed database resource store')
+    manifest = read_json(manifest_path) if manifest_path.exists() else {'project':'haitong-data-pull','resources':[]}
+    entries = {e['path']:e for e in manifest['resources']}
+    def equivalent(left, right):
+        if left is None or right is None:return left is right
+        a, sa = metadata(left)
+        b, sb = metadata(right)
+        # Editor-owned audit fields and CRLF are not a change of business source.
+        for audit_key in ['createTime','updateTime','createBy','updateBy']:
+            a.pop(audit_key,None)
+            b.pop(audit_key,None)
+        def normalize(value):
+            if isinstance(value,dict):return {key:normalize(item) for key,item in value.items() if item is not None}
+            if isinstance(value,list):return [normalize(item) for item in value]
+            return value
+        a, b = normalize(a), normalize(b)
+        return a == b and digest(sa) == digest(sb)
+    try:
+        with connection.cursor() as q:
+            q.execute('SELECT file_path,file_content FROM '+table+' WHERE file_path LIKE %s', (prefix+'/%',))
+            remote = {r['file_path']:r['file_content'] for r in q.fetchall()}
+        files = sorted(p for p in base.rglob('*') if p.suffix == '.ms' or p.name == 'group.json')
+        identities = set()
+        groups = {}
+        for path in files:
+            meta, _ = metadata(read_source(path))
+            if meta['id'] in identities:
+                raise ValueError('Duplicate Haitong metadata ID')
+            identities.add(meta['id'])
+            if path.name == 'group.json': groups[meta['id']] = meta
+        results = []
+        selected = set(args.file or [])
+        known_paths = {prefix+'/'+p.relative_to(base).as_posix() for p in files}
+        if not selected:
+            for unknown_path in sorted(set(remote)-known_paths):
+                if unknown_path.endswith('.ms') or unknown_path.endswith('/group.json'):
+                    results.append({'databasePath':unknown_path,'state':'remote-only-review-required'})
+        for path in files:
+            relative = path.relative_to(ROOT).as_posix()
+            if selected and relative not in selected: continue
+            local = read_source(path)
+            meta, script = metadata(local)
+            parent = meta.get('parentId') if path.name == 'group.json' else meta.get('groupId')
+            if parent != '0' and parent not in groups:
+                raise ValueError('Broken Haitong group identity: '+relative)
+            if (path.parent.name if path.name == 'group.json' else path.stem) != meta['name']:
+                raise ValueError('Haitong physical name differs from editor name: '+relative)
+            database_path = prefix+'/'+path.relative_to(base).as_posix()
+            previous = remote.get(database_path)
+            entry = entries.get(relative)
+            current = digest(previous) if previous is not None else None
+            if args.command == 'pull':
+                # Initial reconciliation indexes the current store without overwriting reviewed sources.
+                if entry and entry.get('baseSha256') != current and not equivalent(local,previous):
+                    raise ValueError('Remote changed; merge before accepting a new baseline: '+relative)
+                entry = {'path':relative,'id':meta['id'],'databasePath':database_path,'baseSha256':current}
+                entries[relative] = entry
+            state = 'missing-remote' if previous is None else 'equal' if equivalent(local,previous) else 'local-change'
+            if entry and entry.get('baseSha256') != current and not equivalent(local,previous):state='conflict'
+            results.append({'file':relative,'id':meta['id'],'state':state,'target':candidates[0][3]['database']+'.'+table})
+            if args.command != 'publish':continue
+            if not entry or state=='conflict':raise ValueError('Reconcile current Haitong resource before publication')
+            if previous is None:raise ValueError('Start the reviewed JAR to seed new resources before editor publication')
+            backup_dir=PRIVATE_CONFIG.parent/'haitong-resource-backups'
+            backup_dir.mkdir(parents=True,exist_ok=True)
+            write_json(backup_dir/(uuid.uuid4().hex+'.private.json'),{'path':database_path,'content':previous})
+            if path.name=='group.json':
+                # Directory metadata is refreshed by the explicitly scheduled application restart.
+                with connection.cursor() as q:
+                    q.execute('UPDATE '+table+' SET file_content=%s WHERE file_path=%s AND BINARY file_content=BINARY %s',(local,database_path,previous))
+                    if q.rowcount!=1 and previous!=local:raise ValueError('Concurrent Haitong group change prevented publication')
+                connection.commit()
+                entry['baseSha256']=digest(local)
+                results[-1]['state']='persisted-cold-load-required'
+                continue
+            security=runtime['magic-api']['security']
+            port=runtime['server']['port']
+            url='http://127.0.0.1:'+str(port)+'/api/web'
+            opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            login=urllib.parse.urlencode({'username':security['username'],'password':security['password']}).encode()
+            with opener.open(urllib.request.Request(url+'/login',data=login),timeout=20) as response:
+                token=response.headers.get('Magic-Token')
+                if not json.load(response).get('data') or not token:raise ValueError('Haitong editor authentication failed')
+            connection.rollback()
+            with connection.cursor() as q:
+                q.execute('SELECT file_content FROM '+table+' WHERE file_path=%s',(database_path,))
+                if q.fetchone()['file_content']!=previous:raise ValueError('Concurrent Haitong change prevented publication')
+            request=urllib.request.Request(url+'/resource/file/'+('function' if '/function/' in relative else 'api')+'/save',data=local.encode('utf-8'),headers={'Content-Type':'text/plain;charset=UTF-8','Magic-Token':token})
+            with opener.open(request,timeout=30) as response:
+                saved=json.load(response)
+                if saved.get('code')!=1 or saved.get('data')!=meta['id']:raise ValueError('Haitong editor rejected publication')
+            request=urllib.request.Request(url+'/resource/file/'+urllib.parse.quote(meta['id'],safe=''),headers={'Magic-Token':token})
+            with opener.open(request,timeout=30) as response: loaded=json.load(response).get('data',{})
+            if loaded.get('id')!=meta['id'] or loaded.get('script','').strip()!=script.strip():raise ValueError('Haitong runtime readback differs')
+            connection.rollback()
+            with connection.cursor() as q:
+                q.execute('SELECT file_content FROM '+table+' WHERE file_path=%s',(database_path,))
+                persisted=q.fetchone()['file_content']
+            if not equivalent(persisted,local):raise ValueError('Haitong persisted resource differs')
+            entry['baseSha256']=digest(persisted)
+            results[-1]['state']='published-and-runtime-verified'
+        if selected-set(r['file'] for r in results):raise ValueError('Selected file is not a Haitong resource')
+        if args.command in {'pull','publish'}:
+            manifest['resources']=sorted(entries.values(),key=lambda e:e['path'])
+            write_json(manifest_path,manifest)
+        return results
+    finally:
+        connection.close()
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('command', choices=['pull', 'status', 'plan', 'publish'])
@@ -681,9 +812,14 @@ def main():
     p.add_argument('--file', action='append')
     p.add_argument('--compiled', type=Path)
     p.add_argument('--apply', action='store_true')
+    p.add_argument('--project', choices=['shared', 'haitong-data-pull'], default='shared')
     args = p.parse_args()
     if args.command == 'publish' and (not args.apply or not args.file or len(args.file) != 1):
         p.error('publish requires --apply and exactly one --file; use plan to review first')
+    if args.project == 'haitong-data-pull':
+        if args.kind == 'lowcode':p.error('Haitong has no independent low-code resource store')
+        print(json.dumps(haitong_resources(args),ensure_ascii=False,indent=2))
+        return
     config = read_json(args.config)
     connection = connect(config)
     try:

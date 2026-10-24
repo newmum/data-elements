@@ -1,6 +1,6 @@
 <template>
-  <div class="api-detail card-container px-5 pt-5 flex flex-col">
-    <el-skeleton v-if="loading" :rows="8" animated class="detail-loading" />
+  <div class="api-detail card-container px-5 pt-5 flex flex-col" :aria-busy="loading">
+    <LoadingState v-if="loading" type="form" />
     <el-result
       v-else-if="loadError"
       icon="error"
@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 
@@ -37,7 +37,8 @@ const props = defineProps({
 const route = useRoute();
 const serviceData = ref({});
 const serviceType = ref("register");
-const loading = ref(false);
+const loading = ref(true);
+let loadVersion = 0;
 const loadError = ref("");
 const serviceId = computed(() => String(props.tid || route.query.id || ""));
 
@@ -106,8 +107,10 @@ const normalizeDetail = (data) => {
 };
 
 const loadServiceData = async () => {
+  const version = ++loadVersion;
   const id = serviceId.value;
   if (!id) {
+    loading.value = false;
     serviceData.value = {};
     loadError.value = "缺少服务标识，请从数据服务列表重新进入";
     return;
@@ -119,6 +122,7 @@ const loadServiceData = async () => {
     const response = await $common.post("/dws/flowserve/gateway/api/detail", {
       apiId: id,
     });
+    if (version !== loadVersion) return;
     const detail = normalizeDetail(extractPayload(response) || {});
     serviceData.value = detail;
     const requestedType = String(route.query.apiType || "").toLowerCase();
@@ -126,12 +130,13 @@ const loadServiceData = async () => {
     serviceType.value =
       requestedType === "build" || createType === "apibuild" ? "build" : "register";
   } catch (error) {
+    if (version !== loadVersion) return;
     console.error("服务详情加载失败", error);
     serviceData.value = {};
     loadError.value = error?.message || "服务详情接口请求失败，请稍后重试";
     ElMessage.error("服务详情加载失败");
   } finally {
-    loading.value = false;
+    if (version === loadVersion) loading.value = false;
   }
 };
 
@@ -140,6 +145,7 @@ watch(
   () => loadServiceData(),
   { immediate: true }
 );
+onBeforeUnmount(() => { loadVersion++; });
 </script>
 
 <style lang="scss" scoped>
@@ -148,7 +154,4 @@ watch(
   overflow: auto;
 }
 
-.detail-loading {
-  padding: 12px 4px;
-}
 </style>

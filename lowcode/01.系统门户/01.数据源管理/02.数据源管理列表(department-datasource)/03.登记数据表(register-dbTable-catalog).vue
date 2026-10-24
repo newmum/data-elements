@@ -1,5 +1,5 @@
 <template>
-  <div class="batch-register-page" :class="{ 'is-business-phase': catalogPhase === 'business' }" :aria-busy="tableLoading || undefined">
+  <div class="batch-register-page" :class="{ 'is-business-phase': catalogPhase === 'business', 'is-detail-mode': detailMode }" :aria-busy="tableLoading || undefined">
     <div v-if="tableLoadError && !tableLoading" class="empty-state register-error-state">
       <el-result icon="error" title="数据表读取失败" :sub-title="tableLoadError">
         <template #extra>
@@ -29,7 +29,7 @@
     </div>
 
     <div v-else class="content-layout">
-      <aside ref="tableListRef" class="table-list" @scroll.passive="handleTableListScroll">
+      <aside v-if="!detailMode" ref="tableListRef" class="table-list" @scroll.passive="handleTableListScroll">
         <div class="table-list-title">
           <el-input
             v-if="tableSearchVisible"
@@ -167,14 +167,47 @@
             title="正在读取登记信息"
           />
           <template v-else>
-          <div v-if="catalogPhase === 'business' && !isActiveDictionaryTable" class="field-toolbar">
+          <div v-if="detailMode" class="detail-field-toolbar">
+            <div class="detail-field-actions">
+              <el-button type="primary" link :loading="syncingFields" :disabled="!activeTable?.tid || activeFieldLoading" @click="syncActiveTableFields"><template #icon><Icon icon="el-icon-Refresh" /></template>同步字段</el-button>
+              <el-button type="primary" link :disabled="!activeFields.length || activeFieldLoading" @click="exportDetailFields"><template #icon><Icon icon="el-icon-Download" /></template>导出</el-button>
+              <el-button type="primary" link :loading="store.state.loadStatus.main" :disabled="!activeFields.length || activeFieldLoading" @click="saveDetailFields"><template #icon><Icon icon="el-icon-DocumentChecked" /></template>保存</el-button>
+              <el-button type="primary" link :loading="schemaSync.loading" :disabled="!activeFields.length || activeFieldLoading || store.state.loadStatus.main" @click="openSchemaSync"><template #icon><Icon icon="el-icon-Connection" /></template>同步变更</el-button>
+            </div>
+          </div>
+          <el-dialog v-if="detailMode" v-model="schemaSync.visible" title="同步变更" width="min(1080px, calc(100vw - 40px))" top="4vh" append-to-body class="schema-sync-dialog" :close-on-click-modal="!schemaSync.applying" :close-on-press-escape="!schemaSync.applying" :show-close="!schemaSync.applying">
+            <div v-loading="schemaSync.loading" class="schema-sync-content">
+              <div class="schema-sync-target"><strong>{{ activeTable?.tableName }}</strong><span v-if="schemaSync.plan">{{ schemaSync.plan.changes.length }} 项差异</span><el-button type="primary" link :disabled="schemaSync.applying" @click="compareSchema">重新比较</el-button></div>
+              <el-alert v-if="schemaSync.error" type="error" :closable="false" :title="schemaSync.error" show-icon />
+              <template v-if="schemaSync.plan">
+                <el-alert v-for="reason in schemaSync.plan.blockers" :key="reason" type="warning" :closable="false" :title="reason" show-icon />
+                <el-table :data="schemaSync.plan.changes.slice((schemaSync.page - 1) * 20, schemaSync.page * 20)" stripe empty-text="字段快照与数据库结构一致，无需同步">
+                  <el-table-column prop="field" label="字段 / 约束" width="160" show-overflow-tooltip />
+                  <el-table-column prop="kind" label="变更" width="100" />
+                  <el-table-column label="数据库当前结构" min-width="210"><template #default="{ row }"><code class="schema-definition">{{ row.before || '不存在' }}</code></template></el-table-column>
+                  <el-table-column label="快照目标结构" min-width="210"><template #default="{ row }"><code class="schema-definition">{{ row.after || '删除' }}</code></template></el-table-column>
+                  <el-table-column label="影响" min-width="190"><template #default="{ row }"><el-tag :type="row.risk === 'high' ? 'warning' : 'info'" size="small">{{ row.risk === 'high' ? '结构变更' : '注释更新' }}</el-tag><p class="schema-impact">{{ row.message }}</p></template></el-table-column>
+                </el-table>
+                <el-pagination v-if="schemaSync.plan.changes.length > 20" v-model:current-page="schemaSync.page" :page-size="20" :total="schemaSync.plan.changes.length" layout="total, prev, pager, next" />
+                <section v-if="schemaSync.plan.sql" class="schema-sql" aria-label="将执行的结构变更语句">
+                  <div class="schema-sql-title">将执行的结构变更语句</div>
+                  <pre tabindex="0">{{ schemaSync.plan.sql }}</pre>
+                </section>
+              </template>
+            </div>
+            <template #footer>
+              <el-button :disabled="schemaSync.applying" @click="schemaSync.visible = false">取消</el-button>
+              <el-button type="primary" :loading="schemaSync.applying" :disabled="schemaSync.loading || !schemaSync.plan?.canApply" @click="applySchemaSync">确认覆盖表结构</el-button>
+            </template>
+          </el-dialog>
+          <div v-if="!detailMode && catalogPhase === 'business' && !isActiveDictionaryTable" class="field-toolbar">
             <div class="field-toolbar-title">
               <strong>字段治理配置</strong>
               <el-button class="field-sync-button" v-if="businessViewMode === 'fields'" title="同步字段" aria-label="同步字段" :loading="syncingFields" :disabled="!activeTable?.tid" @click="syncActiveTableFields">
                 <template #icon><Icon icon="el-icon-Refresh" /></template>
               </el-button>
             </div>
-            <div class="business-view-switch" role="tablist" aria-label="字段治理视图">
+            <div v-if="!detailMode" class="business-view-switch" role="tablist" aria-label="字段治理视图">
               <button
                 type="button"
                 role="tab"
@@ -497,7 +530,7 @@
 
                 <section class="dictionary-block preview-block">
                   <div class="preview-table-head">
-                    <div class="dictionary-preview-switch" role="tablist" aria-label="字典登记视图">
+                    <div v-if="!detailMode" class="dictionary-preview-switch" role="tablist" aria-label="字典登记视图">
                       <button
                         type="button"
                         role="tab"
@@ -518,10 +551,10 @@
                       </button>
                     </div>
                     <div class="preview-head-actions">
-                      <el-button class="preview-sync-fields" size="small" v-if="dictionaryViewMode === 'fields'" :loading="syncingFields" :disabled="!activeTable?.tid" @click="syncActiveTableFields">
+                      <el-button class="preview-sync-fields" size="small" v-if="!detailMode && dictionaryViewMode === 'fields'" :loading="syncingFields" :disabled="!activeTable?.tid" @click="syncActiveTableFields">
                         <template #icon><Icon icon="el-icon-Refresh" /></template>同步字段
                       </el-button>
-                      <span class="preview-count-pill">
+                      <span v-if="!detailMode" class="preview-count-pill">
                         数据量 {{ dictionaryPreview.total || dictionaryPreview.rows.length }} 条
                       </span>
                       <button
@@ -771,6 +804,9 @@
                           </div>
                         </template>
                       </el-table-column>
+                      <el-table-column label="是否为空" width="100" align="center">
+                        <template #default="{ row }">{{ nullableText(row.nullable) }}</template>
+                      </el-table-column>
                       <el-table-column label="统一格式" min-width="144" fixed="right">
                         <template #default="{ row }">
                           <div class="standard-format-cell">
@@ -812,7 +848,7 @@
             </div>
           </template>
 
-          <div v-if="businessFieldViewMounted" v-show="businessViewMode === 'fields'" class="field-config-layout">
+          <div v-if="businessFieldViewMounted && !isActiveDictionaryTable" v-show="businessViewMode === 'fields'" class="field-config-layout">
             <div class="field-grid-pane">
               <el-alert v-if="activeFieldMessage && activeFields.length" class="catalog-field-error" type="error" :closable="false" :title="activeFieldMessage" show-icon />
               <DataTable
@@ -821,14 +857,15 @@
                 :show-page="false"
                 row-key="_rowKey"
                 height="100%"
+                :flex-type="detailMode ? 'flex-1' : undefined"
                 class="field-table"
                 highlight-current-row
                 @selection-change="(rows) => (selectedBusinessFields = rows || [])"
                 @row-click="selectDictionaryField"
               >
-            <el-table-column type="selection" width="34" />
+            <el-table-column v-if="!detailMode" type="selection" width="34" />
             <el-table-column prop="serialNo" label="序号" width="56" align="center" />
-            <el-table-column prop="columnName" label="字段名" min-width="196" show-overflow-tooltip>
+            <el-table-column prop="columnName" :label="detailMode ? '字段名称' : '字段名'" :min-width="detailMode ? 188 : 196" show-overflow-tooltip>
               <template #default="{ row }">
                 <div :class="['column-name-cell', fieldValidationError(row, 'name') ? 'is-invalid' : '']">
                   <div class="field-name-heading">
@@ -894,9 +931,9 @@
                       </el-popover>
                     </span>
                   </div>
-                  <div v-if="fieldPropertyValues(row).length" class="field-property-tags">
+                  <div v-if="(detailMode ? timeRolesFor(row) : fieldPropertyValues(row)).length" class="field-property-tags">
                     <el-tag
-                      v-for="value in fieldPropertyValues(row)"
+                      v-for="value in (detailMode ? timeRolesFor(row) : fieldPropertyValues(row))"
                       :key="value"
                       size="small"
                       :type="fieldPropertyTagType(value)"
@@ -908,10 +945,10 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="字段中文名" min-width="180">
+            <el-table-column :label="detailMode ? '字段注释' : '字段中文名'" min-width="180">
               <template #header>
                 <span class="field-comment-header">
-                  字段中文名
+                  {{ detailMode ? '字段注释' : '字段中文名' }}
                   <el-tooltip content="批量填充字段中文名" placement="top">
                     <el-button class="batch-comment-trigger" size="small" text circle @click.stop="openBatchFieldCommentDialog">
                       <Icon icon="el-icon-EditPen" />
@@ -929,17 +966,17 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="字段类型" width="176" show-overflow-tooltip>
+            <el-table-column label="字段类型" :width="detailMode ? 136 : 176" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="field-type-cell">
                   <span
                     class="field-type-readonly"
                     :title="row.columnType || row.dataType || '未知类型'"
                   >
-                    {{ row.columnType || row.dataType || '未知类型' }}
+                    {{ detailMode ? detailFieldType(row) : row.columnType || row.dataType || '未知类型' }}
                   </span>
                   <el-tag
-                    v-if="standardFieldTypeText(row.standardField)"
+                    v-if="!detailMode && standardFieldTypeText(row.standardField)"
                     size="small"
                     effect="plain"
                     type="primary"
@@ -949,7 +986,13 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column v-if="isActiveDictionaryTable" label="字段用途" min-width="160">
+            <el-table-column v-if="detailMode" label="长度" width="72" align="center">
+              <template #default="{ row }">{{ detailFieldLength(row) }}</template>
+            </el-table-column>
+            <el-table-column v-if="!detailMode" label="是否为空" width="100" align="center">
+              <template #default="{ row }">{{ nullableText(row.nullable) }}</template>
+            </el-table-column>
+                      <el-table-column v-if="isActiveDictionaryTable" label="字段用途" min-width="160">
               <template #default="{ row }">
                 <el-select
                   v-model="row.dictionaryRole"
@@ -1017,7 +1060,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column v-if="!isActiveDictionaryTable" label="统一格式" width="150" fixed="right">
+            <el-table-column v-if="!isActiveDictionaryTable" label="统一格式" width="150" :fixed="detailMode ? false : 'right'">
               <template #default="{ row }">
                 <div class="standard-format-cell">
                   <el-select
@@ -1045,6 +1088,9 @@
                   </el-select>
                 </div>
               </template>
+            </el-table-column>
+            <el-table-column v-if="detailMode" label="非空" width="76" align="center">
+              <template #default="{ row }"><Icon v-if="nullableText(row.nullable) === '否'" class="detail-nonnull-check" icon="el-icon-Check" aria-label="非空" /></template>
             </el-table-column>
                 <template #empty>
                   <el-empty :description="activeFieldMessage || '暂无字段数据'" :image-size="72">
@@ -1486,13 +1532,36 @@ import { useRegisterStore } from "@/store";
 import { ElMessageBox } from "element-plus";
 
 const props = defineProps({
+  detailTableId: { type: String, default: "" },
   catalogPhase: {
     type: String,
     default: "",
   },
 });
 
-const store = useRegisterStore();
+// 详情编辑使用独立状态，不能覆盖用户正在进行的数据源登记会话。
+const detailMode = computed(() => Boolean(props.detailTableId));
+const detailSavedSnapshot = ref("");
+const schemaSync = reactive({ visible: false, loading: false, applying: false, error: "", plan: null, page: 1, requestId: 0 });
+
+// 只拆分展示，不回写类型或长度；物理结构仍由采集快照维护。
+function detailFieldType(field) {
+  return String(field.columnType || field.dataType || field.typeName || "未知类型")
+    .replace(/\s*\([^)]*\)/g, "");
+}
+
+function detailFieldLength(field) {
+  const length = field.length ?? field.columnLength ?? field.columnSize;
+  if (length !== undefined && length !== null && String(length).trim() && Number(length) > 0) return length;
+  const type = String(field.columnType || field.dataType || "");
+  // 时间类型的括号是小数秒精度，枚举的括号是候选值，不能当作字段长度。
+  if (!/^(?:n?varchar2?|nvarchar2?|char|nchar|character(?: varying)?|varbinary|binary|bit|numeric|decimal|number)\b/i.test(type)) return "";
+  return type.match(/\(\s*(\d+(?:\s*,\s*\d+)?)\s*\)/)?.[1] || "";
+}
+
+const store = props.detailTableId
+  ? reactive({ data: {}, state: { currentStep: 3, loadStatus: { main: false } } })
+  : useRegisterStore();
 const loading = ref(false);
 const tableLoading = ref(false);
 const tableRows = ref([]);
@@ -1734,6 +1803,7 @@ const sourceAccessMode = computed(() => {
 });
 const isPushSource = computed(() => sourceAccessMode.value === "receive");
 const catalogPhase = computed(() => {
+  if (detailMode.value) return tableRows.value[0]?.businessType === "字典表" ? "dictionary" : "business";
   if (props.catalogPhase) return props.catalogPhase;
   return store.state.currentStep >= 3 ? "business" : "dictionary";
 });
@@ -1769,6 +1839,7 @@ const tableBusinessTypeOrder = {
   "不确定": 6,
 };
 const tables = computed(() => {
+  if (detailMode.value) return tableRows.value;
   return tableRows.value
     .filter((table) =>
       isAnnotatedForRegistration(table) &&
@@ -2438,7 +2509,32 @@ function fallbackTableRows() {
   return dedupeTableRows(Array.from(localTableRows().values()).map((row) => normalizeCatalogTableRow(row)));
 }
 
+async function loadDetailTable() {
+  tableLoading.value = true;
+  tableLoadError.value = "";
+  try {
+    // 精确定位当前租户与角色可见的表；字段只读登记快照，不触发来源库探查。
+    const result = await $common.postSilently("/dst/database/table/page", { tid: props.detailTableId, pageNum: 1, pageSize: 1 });
+    const row = unwrapList(result)[0];
+    if (!row || String(row.tid) !== String(props.detailTableId)) throw new Error("数据表不存在或不在当前数据范围内");
+    const sourceId = row.dbId || row.datasourceId;
+    const source = await $common.postSilently("/dst/database/detail", { tid: sourceId });
+    store.data = { db: source, dbId: sourceId };
+    const catalog = normalizeCatalogConfig(row);
+    if (hasGovernanceContent(catalog)) applyCatalogToMap(catalog);
+    if (isPhaseSavedCatalog(catalog)) applySavedCatalogToMap(catalog);
+    governanceLoadedMap[row.tid] = true;
+    tableRows.value = [normalizeCatalogTableRow(row)];
+  } catch (error) {
+    tableRows.value = [];
+    tableLoadError.value = error?.message || "读取字段登记信息失败";
+  } finally {
+    tableLoading.value = false;
+  }
+}
+
 async function loadCatalogTables() {
+  if (detailMode.value) return loadDetailTable();
   const id = dbId.value;
   if (store.data?.metadataImport?.source === "template") {
     tableRows.value = fallbackTableRows();
@@ -2529,7 +2625,7 @@ watch(generatedSql, (sql) => {
 });
 
 watch(
-  () => [dbId.value, catalogPhase.value],
+  () => detailMode.value ? [props.detailTableId] : [dbId.value, catalogPhase.value],
   () => {
     tableLoadKey.value = "";
     resetCatalogMap();
@@ -2634,8 +2730,9 @@ watch(
 watch(
   () => activeTableName.value,
   (tableName) => {
-    businessViewMode.value = "preview";
-    dictionaryViewMode.value = "preview";
+    businessViewMode.value = detailMode.value ? "fields" : "preview";
+    dictionaryViewMode.value = detailMode.value ? "fields" : "preview";
+    if (detailMode.value) businessFieldViewMounted.value = true;
     selectedBusinessFields.value = [];
     batchCommentDialog.visible = false;
     batchCommentDialog.content = "";
@@ -2648,8 +2745,8 @@ watch(
     });
     const table = tables.value.find((item) => item.tableName === tableName);
     if (table) {
-      loadFields(table);
-      if (table.businessType !== "字典表") loadBusinessPreview();
+      loadFields(table, false, !detailMode.value);
+      if (!detailMode.value && table.businessType !== "字典表") loadBusinessPreview();
     }
   },
   { immediate: true }
@@ -2670,7 +2767,7 @@ watch(
         activeFields.value.some((item) => item.columnName === selectedDictionaryFieldName.value)
           ? selectedDictionaryFieldName.value
           : activeFields.value[0]?.columnName || "";
-      if (activeTable.value?.tid && !dictionaryPreview.loaded && !dictionaryPreview.loading) {
+      if (!detailMode.value && activeTable.value?.tid && !dictionaryPreview.loaded && !dictionaryPreview.loading) {
         loadDictionaryPreview();
       }
     }
@@ -2778,6 +2875,7 @@ async function loadFields(table, force = false, collectIfMissing = true) {
     table.id = resolvedTid;
     table.sourceTableId = resolvedTid;
     fieldMap[table.tableName] = normalizeFieldRows(resolvedRows, table.tableName);
+    if (detailMode.value) detailSavedSnapshot.value = JSON.stringify(fieldExportRows());
     delete fieldErrorMap[table.tableName];
   } catch (error) {
     console.error(`读取 ${table.tableName} 字段失败:`, error);
@@ -2829,6 +2927,14 @@ async function loadTableGovernance(table, force = false) {
 }
 
 async function loadDictionaryTables() {
+  if (detailMode.value) {
+    if (!dbId.value || !tableRows.value.length) return;
+    const result = await $common.postSilently("/dst/database/table/page", { dbId: dbId.value, businessType: "字典表", pageNum: 1, pageSize: 100 });
+    dictionaryTables.value = unwrapList(result).map((row) => normalizeCatalogTableRow(row));
+    if (Number(result?.total || 0) > 100) $message.warning("当前加载前 100 张字典表，请在数据源登记中维护更多字典关联");
+    await ensureDictionaryProfilesLoaded();
+    return;
+  }
   if (store.data?.metadataImport?.source === "template") {
     dictionaryTables.value = fallbackTableRows().filter((table) => table.businessType === "字典表");
     await ensureDictionaryProfilesLoaded();
@@ -6942,7 +7048,17 @@ async function persistGovernanceTable(table, strictValidation = true) {
       field.dictionaryRelation?.dictionaryTable ||
       "",
   }));
-  const governanceConfig = buildGovernanceConfig(table, fields);
+  const governanceConfig = {
+    ...normalizeCatalogConfig(table).fieldGovernanceConfig,
+    ...buildGovernanceConfig(table, fields),
+  };
+  if (detailMode.value) {
+    const previous = normalizeCatalogConfig(table).fieldGovernanceConfig || {};
+    for (const key of ["registrationSavedPhase", "registrationSavedAt"]) {
+      delete governanceConfig[key];
+      if (Object.prototype.hasOwnProperty.call(previous, key)) governanceConfig[key] = previous[key];
+    }
+  }
   const propList = {
     tableName: table.tableName,
     tableNameCn: table.tableComment,
@@ -6977,6 +7093,7 @@ async function persistGovernanceTable(table, strictValidation = true) {
   };
   const data = await $common.post("/dst/database/table/governance/save", {
     tableId: table.tid,
+    editMode: detailMode.value ? "fields" : undefined,
     propList,
     columns: tableColumns,
     fieldGovernanceConfig: governanceConfig,
@@ -7016,7 +7133,7 @@ async function save() {
   if (!table) return { success: false, msg: "请选择要保存的数据表" };
   try {
     store.state.loadStatus.main = true;
-    await persistGovernanceTable(table, true);
+    await persistGovernanceTable(table, !detailMode.value);
     return { success: true, msg: `${table.tableName} 保存成功` };
   } catch (error) {
     console.error("保存目录失败:", error);
@@ -7024,6 +7141,103 @@ async function save() {
   } finally {
     store.state.loadStatus.main = false;
   }
+}
+
+async function saveDetailFields() {
+  try {
+    const result = await save();
+    if (result.success) {
+      detailSavedSnapshot.value = JSON.stringify(fieldExportRows());
+      $message.success("字段配置已保存到平台数据库");
+    }
+    else $message.warning(result.msg);
+    return result.success;
+  } catch (error) {
+    $message.warning(error?.message || "保存字段配置失败");
+    return false;
+  }
+}
+
+async function openSchemaSync() {
+  if (schemaSync.loading || schemaSync.applying) return;
+  if (detailSavedSnapshot.value && detailSavedSnapshot.value !== JSON.stringify(fieldExportRows())) {
+    try {
+      await ElMessageBox.confirm("当前字段配置尚未保存。先保存到平台数据库，再与来源表结构进行比较。", "保存后比较", { confirmButtonText: "保存并比较", cancelButtonText: "取消", type: "info" });
+    } catch { return; }
+    if (!await saveDetailFields()) return;
+  }
+  schemaSync.visible = true;
+  await compareSchema();
+}
+
+async function compareSchema() {
+  if (schemaSync.applying) return;
+  const requestId = ++schemaSync.requestId;
+  schemaSync.loading = true;
+  schemaSync.plan = null;
+  schemaSync.error = "";
+  schemaSync.page = 1;
+  try {
+    const plan = await $common.postSilently("/dst/database/table/governance/save", { tableId: props.detailTableId, schemaAction: "compare" });
+    if (requestId === schemaSync.requestId) schemaSync.plan = plan;
+  } catch (error) {
+    if (requestId === schemaSync.requestId) schemaSync.error = error?.message || "比较失败，请检查来源数据库连接后重试";
+  } finally {
+    if (requestId === schemaSync.requestId) schemaSync.loading = false;
+  }
+}
+
+async function applySchemaSync() {
+  if (schemaSync.loading || schemaSync.applying || !schemaSync.plan?.canApply) return;
+  schemaSync.applying = true;
+  schemaSync.error = "";
+  try {
+    const result = await $common.postSilently("/dst/database/table/governance/save", {
+      tableId: props.detailTableId, schemaAction: "apply", fingerprint: schemaSync.plan.fingerprint,
+      // 按钮点击即确认当前服务端比较计划，保留既有接口契约和过期校验。
+      confirmation: schemaSync.plan.tableName, acknowledged: true,
+    });
+    schemaSync.plan = result;
+    schemaSync.page = 1;
+    if (result.applied && result.verified) $message.success(`已同步 ${result.appliedCount} 项变更，并核对数据库结构一致`);
+    else schemaSync.error = "结构变更已执行，但核对仍有差异。请重新比较并检查数据库状态。";
+  } catch (error) {
+    schemaSync.error = error?.message || "同步未确认完成，请重新比较数据库结构后再操作";
+    if (schemaSync.plan) schemaSync.plan.canApply = false;
+  } finally {
+    schemaSync.applying = false;
+  }
+}
+
+function nullableText(value) {
+  if (value === true || value === 1 || ["1", "true", "yes", "y"].includes(String(value).toLowerCase())) return "是";
+  if (value === false || value === 0 || ["0", "false", "no", "n"].includes(String(value).toLowerCase())) return "否";
+  return "未知";
+}
+
+function fieldExportRows() {
+  return [["序号", "字段名", "字段中文名", "字段类型", "是否为空", "主键", "字典翻译", "统一格式", "时间属性"],
+    ...activeFields.value.map((field, index) => [index + 1, field.columnName, field.columnComment,
+      field.columnType || field.dataType, nullableText(field.nullable), normalizePrimaryKey(field.primaryKey) ? "是" : "否",
+      field.dictionaryRelation?.enabled ? JSON.stringify(field.dictionaryRelation) : "",
+      standardFieldOptions.find((option) => option.value === normalizeStandardField(field.standardField))?.label || "",
+      timeRolesFor(field).map((role) => ({ timestamp: "时间戳", business: "业务时间", occurrence: "发生时间" }[role] || role)).join("、")])];
+}
+
+function exportDetailFields() {
+  // 从当前编辑快照导出所有字段，不受选择行和滚动位置影响；防止电子表格公式注入。
+  const cell = (value) => {
+    let text = String(value ?? "");
+    if (/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
+    return '"' + text.replace(/"/g, '""') + '"';
+  };
+  const csv = "\uFEFF" + fieldExportRows().map((row) => row.map(cell).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${activeTable.value.tableName.replace(/[\\/:*?"<>|]/g, "_")}_字段配置.csv`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function finish() {
@@ -7055,6 +7269,45 @@ defineExpose({ next, save, finish, commit });
   color: #1f2937;
   background: #f6f7f9;
 }
+
+.is-detail-mode {
+  padding: 0;
+  background: #fff;
+}
+.detail-field-toolbar, .detail-field-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 22px;
+}
+.detail-field-toolbar {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding-bottom: 12px;
+}
+.detail-field-actions {
+  flex-wrap: wrap;
+  :deep(.el-button + .el-button) { margin-left: 0; }
+  :deep(.el-button:focus-visible) { outline: 2px solid #8ab4ff; outline-offset: 3px; }
+}
+.schema-sync-content { display: flex; flex-direction: column; gap: 12px; max-height: calc(92vh - 140px); overflow: auto; }
+.schema-sync-content > * { flex-shrink: 0; }
+.schema-sync-target { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.schema-sync-target strong { overflow-wrap: anywhere; }
+.schema-sync-target > span { flex: 1; color: #667085; font-size: 13px; }
+.schema-definition { display: block; white-space: pre-wrap; overflow-wrap: anywhere; color: #35445b; font-family: Consolas, "Microsoft YaHei", monospace; font-size: 13px; line-height: 1.6; }
+.schema-impact { margin: 6px 0 0; color: #667085; font-size: 12px; line-height: 1.6; }
+.schema-sql { padding: 10px 12px; border: 1px solid #e5eaf0; border-radius: 6px; background: #f8fafc; }
+.schema-sql-title { color: #526b8b; font-size: 13px; font-weight: 500; }
+.schema-sql pre { max-height: 180px; overflow: auto; margin: 10px 0 0; color: #35445b; font-family: Consolas, "Microsoft YaHei", monospace; font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.schema-sql pre:focus-visible { outline: 2px solid #8ab4ff; outline-offset: 3px; }
+.is-detail-mode .content-layout {
+  grid-template-columns: minmax(0, 1fr);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.is-detail-mode .field-panel { padding: 0; border: 0; border-radius: 0; }
 
 .empty-state {
   display: grid;
@@ -9206,6 +9459,10 @@ button.preview-count-pill:hover {
     background: #f8fafc;
   }
 
+}
+
+.business-preview-table,
+.is-detail-mode .field-table {
   :deep(.el-scrollbar__bar) {
     z-index: 4;
     border-radius: 7px;
@@ -10203,6 +10460,53 @@ button.preview-count-pill:hover {
       color: #98a2b3;
     }
   }
+}
+
+/* 详情页沿用原有元数据表的平面布局，不继承登记工作台的多层卡片。 */
+.is-detail-mode.is-business-phase .field-panel { padding-top: 0; }
+.is-detail-mode .field-table {
+  border: 0;
+  border-radius: 8px 8px 0 0;
+
+  :deep(> div) { min-height: 0; overflow: hidden; }
+  :deep(.el-table) {
+    --el-table-header-bg-color: #f4f6fb;
+    --el-table-tr-bg-color: #fff;
+    --el-table-row-hover-bg-color: #f0f6ff;
+    --el-table-border-color: #e9edf4;
+    --el-table-text-color: #3b4252;
+    --el-table-header-text-color: #5276a7;
+    font-size: 14px;
+  }
+  :deep(.el-table__header th) {
+    height: 44px;
+    background: #f4f6fb;
+    color: #5276a7;
+  }
+  :deep(.el-table__body td) { height: 48px; padding: 8px 0; }
+  :deep(.el-table__row--striped > td) { background: #f8f9fb; }
+  :deep(.el-table__body tr:last-child > td) { border-bottom: 1px solid #e9edf4; }
+  :deep(.el-table__row:hover > td) { background: #f0f6ff; }
+  :deep(.el-table .cell) { padding-right: 12px; padding-left: 12px; }
+
+  .column-name-cell { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .column-name-cell strong { font-family: inherit; font-size: 14px; font-weight: 400; color: #3b4252; }
+  .field-property-tags { gap: 4px; }
+  .detail-nonnull-check { color: #5276a7; font-size: 20px; vertical-align: middle; }
+  :deep(.el-input__wrapper) {
+    background: transparent;
+    box-shadow: none;
+    padding: 1px 8px;
+    transition: box-shadow 160ms, background-color 160ms;
+  }
+  :deep(.el-input__wrapper:hover) { background: #fff; box-shadow: 0 0 0 1px #d6e0ed inset; }
+  :deep(.el-input__wrapper.is-focus) { background: #fff; box-shadow: 0 0 0 1px #1d63ff inset; }
+  :deep(.el-input__inner) { font-size: 14px; }
+  :deep(.is-required-error .el-input__wrapper) { box-shadow: 0 0 0 1px #f56c6c inset; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-detail-mode .field-table :deep(.el-input__wrapper) { transition: none; }
 }
 
 @media (max-width: 1100px) {

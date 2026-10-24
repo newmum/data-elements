@@ -165,6 +165,7 @@ function detailRow(label: string, value?: string) {
 
 function openErrorDetail(info: ApiErrorInfo) {
   const rows = [
+    detailRow("错误原因", info.message),
     detailRow("错误码", info.code),
     detailRow("跟踪号", info.traceId),
     detailRow("请求", [info.method, info.path].filter(Boolean).join(" ")),
@@ -172,7 +173,7 @@ function openErrorDetail(info: ApiErrorInfo) {
   ].filter(Boolean);
 
   void ElMessageBox.alert(
-    h("div", { style: "text-align:left;" }, [
+    h("div", { style: "text-align:left;max-height:calc(100dvh - 190px);overflow:auto;" }, [
       ...rows,
       h(DiagnosticErrorAction, { info }),
       h(
@@ -186,7 +187,7 @@ function openErrorDetail(info: ApiErrorInfo) {
         "pre",
         {
           style:
-            "max-height:52vh;margin:0;padding:12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--el-border-color);border-radius:6px;background:var(--el-fill-color-light);font:12px/1.6 Consolas,Monaco,monospace;color:var(--el-text-color-primary);",
+            "margin:0;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--el-border-color);border-radius:6px;background:var(--el-fill-color-light);font:12px/1.6 Consolas,Monaco,monospace;color:var(--el-text-color-primary);",
         },
         info.detail || info.message
       ),
@@ -198,6 +199,7 @@ function openErrorDetail(info: ApiErrorInfo) {
       customStyle: {
         width: "min(900px, calc(100vw - 48px))",
         maxWidth: "900px",
+        maxHeight: "calc(100dvh - 32px)",
       },
       closeOnClickModal: true,
       draggable: true,

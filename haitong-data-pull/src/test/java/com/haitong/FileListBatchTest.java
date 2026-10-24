@@ -1,6 +1,6 @@
 package com.haitong;
 
-import com.haitong.api.OperationsController;
+
 import com.haitong.core.FileService;
 import com.haitong.core.RelayException;
 import com.haitong.core.Models.*;
@@ -53,11 +53,11 @@ class FileListBatchTest {
         jdbc.update("UPDATE ht_file_checkpoint SET status='INGESTED',eof_reached=1,total_records=2 WHERE id='file-0'");
 
         FileService files=new FileService(null,null,repo,null,null,null,null);
-        OperationsController operations=new OperationsController(repo,null,null,null,null,null,null,files);
+
         try {
             for(int limit:List.of(20,100)) {
                 jdbc.resetSelects();
-                List<Map<String,Object>> page=operations.fileList(limit,0);
+                List<Map<String,Object>> page=files.statusesForAdminList(repo.listFiles(limit,0));
                 assertEquals(limit,page.size());
                 assertEquals(3,jdbc.selects(),"查询数不得随文件行数增长");
                 Map<String,Object> first=page.stream().filter(row->row.get("fileId").equals("file-0")).findFirst().orElseThrow();
@@ -68,7 +68,7 @@ class FileListBatchTest {
             jdbc.resetSelects();
             assertTrue(files.statusesForAdminList(List.of()).isEmpty());
             assertEquals(0,jdbc.selects());
-            assertEquals(422,assertThrows(RelayException.class,()->operations.fileList(201,0)).status());
+
             assertThrows(IllegalArgumentException.class,()->repo.fileStatsBatch(Collections.nCopies(201,"file-0")));
         } finally { files.close(); }
     }

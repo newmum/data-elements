@@ -29,24 +29,11 @@ public class MagicDatabaseResourceConfiguration {
     private static final String BOOTSTRAP = "magic-api-bootstrap/";
     /** DatabaseResource requires explicit directory records; without them the
      * editor can show an empty tree and runtime API routes are not discovered. */
-    private static final List<String> DIRECTORIES = List.of(
-            "",
-            "api/",
-            "api/02.零信任网关对接/",
-            "api/03.FTP诊断/",
-            "api/04.数据推送调试/");
-    private static final List<String> FILES = List.of(
-            "api/02.零信任网关对接/group.json",
-            "api/02.零信任网关对接/01.网关配置检查.ms",
-            "api/02.零信任网关对接/02.网关令牌状态.ms",
-            "api/02.零信任网关对接/03.统一数据推送.ms",
-            "api/03.FTP诊断/group.json",
-            "api/03.FTP诊断/01.FTP连接与写入测试.ms",
-            "api/04.数据推送调试/group.json",
-            "api/04.数据推送调试/01.统一数据推送.ms",
-            "api/04.数据推送调试/02.消息状态查询.ms");
+    private static final List<String> DIRECTORIES = MagicResourceCatalog.directories();
+    private static final List<String> FILES = MagicResourceCatalog.files();
 
     @Bean
+    @org.springframework.context.annotation.DependsOn("haitongSchemaInitializer")
     public org.ssssssss.magicapi.core.resource.Resource haitongMagicDatabaseResource(
             DataSource dataSource, Environment environment) {
         String tableName = identifier(environment.getProperty("magic-api.resource.table-name", "ht_magic_api_file"));

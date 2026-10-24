@@ -21,18 +21,12 @@ class PushCredentialStoreTest {
                 """);
         PushCredentialStore store = new PushCredentialStore(jdbc);
 
-        var first = store.issue("push-source-001", false);
-        assertTrue(first.revealed());
-        assertFalse(first.apiKey().isBlank());
-        assertNotNull(store.authenticate(first.apiKey()));
-        assertTrue(store.authenticate(first.apiKey()).channel("table-to-ftp"));
-        assertTrue(store.authenticate(first.apiKey()).channel("table-to-kafka"));
-        assertFalse(store.authenticate(first.apiKey()).channel("demo"));
-        assertFalse(store.issue("push-source-001", false).revealed());
-
-        var rotated = store.issue("push-source-001", true);
-        assertTrue(rotated.revealed());
-        assertNull(store.authenticate(first.apiKey()));
-        assertNotNull(store.authenticate(rotated.apiKey()));
+        String key="synthetic-push-key-0123456789abcdef";
+        jdbc.update("INSERT INTO ht_push_api_client VALUES (?,?,1,0,0,0)", "push-source-001", com.haitong.core.Rules.sha256(key.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertNotNull(store.authenticate(key));
+        assertTrue(store.authenticate(key).channel("table-to-ftp"));
+        assertFalse(store.authenticate(key).channel("demo"));
+        jdbc.update("UPDATE ht_push_api_client SET is_enable=0");
+        assertNull(store.authenticate(key));
     }
 }

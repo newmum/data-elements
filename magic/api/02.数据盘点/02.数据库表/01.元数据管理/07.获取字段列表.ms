@@ -160,7 +160,9 @@ var dataSourceOf = (asset) => {
     dsConfig.setDatabaseType(dbType)
     dsConfig.setHost(blank(host) ? (hiveZooKeeperDiscovery ? '' : 'virtual') : textOf(host))
     dsConfig.setPort(blank(port) ? dbType.getDefaultPort() : port::int)
-    dsConfig.setDatabase(blank(databaseName) ? typeCode + '_resource' : textOf(databaseName))
+    // ES索引范围与数据源展示名分开保存；允许空范围，不能用展示名拼出不存在的索引。
+    dsConfig.setDatabase(dbType == DatabaseType.ELASTICSEARCH ? textOf(firstValue(asset, ['database', 'indexName', 'defaultIndex'])) : (blank(databaseName) ? typeCode + '_resource' : textOf(databaseName)))
+    dsConfig.setConnectorProperties(asset)
     dsConfig.setUsername(blank(username) ? '' : textOf(username))
     dsConfig.setPassword(blank(password) ? '' : textOf(password))
     // Oracle SID and Service Name use different URL formats; reuse the tested JDBC URL.

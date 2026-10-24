@@ -50,8 +50,8 @@ var rows = db.select("""
     SELECT tid, db_name, db_type, show_connect, connection_status, node_id
       FROM db_datasource_t
      WHERE is_del = 0
-       AND (tid IS NULL OR tid NOT LIKE 'codex\_%')
-       AND (db_name IS NULL OR db_name NOT LIKE 'codex\_%')
+       AND (tid IS NULL OR tid NOT LIKE 'validation\_%')
+       AND (db_name IS NULL OR db_name NOT LIKE 'validation\_%')
      ORDER BY updated_time DESC, created_time DESC, db_name ASC
      LIMIT 500
 """)

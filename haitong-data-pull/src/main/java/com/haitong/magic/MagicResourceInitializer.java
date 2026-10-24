@@ -20,16 +20,7 @@ import org.springframework.core.env.Environment;
 public final class MagicResourceInitializer implements ApplicationContextInitializer<ConfigurableApplicationContext> {
     private static final Logger log = LoggerFactory.getLogger(MagicResourceInitializer.class);
     private static final String BOOTSTRAP = "magic-api-bootstrap/";
-    private static final List<String> FILES = List.of(
-            "api/02.零信任网关对接/group.json",
-            "api/02.零信任网关对接/01.网关配置检查.ms",
-            "api/02.零信任网关对接/02.网关令牌状态.ms",
-            "api/02.零信任网关对接/03.统一数据推送.ms",
-            "api/03.FTP诊断/group.json",
-            "api/03.FTP诊断/01.FTP连接与写入测试.ms",
-            "api/04.数据推送调试/group.json",
-            "api/04.数据推送调试/01.统一数据推送.ms",
-            "api/04.数据推送调试/02.消息状态查询.ms");
+    private static final List<String> FILES = MagicResourceCatalog.files();
 
     @Override
     public void initialize(ConfigurableApplicationContext context) {

@@ -158,8 +158,8 @@ var dbSearch = safeAssetSearch({
         bool: {
             filter: dbFilters,
             must_not: [
-                { wildcard: { dbName: 'codex_*' } },
-                { wildcard: { database: 'codex_*' } }
+                { wildcard: { dbName: 'validation_*' } },
+                { wildcard: { database: 'validation_*' } }
             ]
         }
     },

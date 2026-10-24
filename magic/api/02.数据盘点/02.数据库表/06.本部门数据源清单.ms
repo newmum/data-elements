@@ -45,7 +45,7 @@ var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
 var numberValue = (value) => value == null ? 0 : value::int
 
-// CODEX_ACTIVE_DATASOURCE_GUARD: 以当前租户业务库的有效记录过滤 ES 残留投影。
+// ACTIVE_DATASOURCE_GUARD: 以当前租户业务库的有效记录过滤 ES 残留投影。
 var tenantId = text(tenantRuntime.id()).trim()
 if (blank(tenantId)) {
     exit 401, '无法识别当前租户'
@@ -232,8 +232,8 @@ var datasourceSearch = tenantEs.index(configData().es_dataassets).search({
         bool: {
             must: datasourceMust,
             must_not: [
-                { wildcard: { dbName: 'codex_*' } },
-                { wildcard: { database: 'codex_*' } }
+                { wildcard: { dbName: 'validation_*' } },
+                { wildcard: { database: 'validation_*' } }
             ]
         }
     },
@@ -320,7 +320,7 @@ var datasourceRows = db.select("""
        and ifnull(o.deleted, 0) = 0
      where ifnull(d.is_del, 0) = 0
        and d.tenant_id = '${escapedTenantId}'
-       and ifnull(d.db_name, '') not like 'codex_%'
+       and ifnull(d.db_name, '') not like 'validation_%'
        ${keywordSql}
      order by d.updated_time desc
      limit 1000

@@ -17,7 +17,7 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "元数据管理 13：数据表分页预览；使用请求参数 tableId、pageNo、pageSize、columns、conditions、sorts、groupByColumn、groupNameColumn；涉及 db_datasource_t、db_table_t 等业务表。",
+  "description": "数据表分页预览；支持 tableId、pageNo、pageSize、columns、conditions、sorts 及字典分组。详情页可传 countMode=none，让托管 Hive 只读取当前页及一条探测记录，返回 total=null、totalKnown=false、hasMore，避免全表总数统计阻断预览；省略时保留精确统计。租户和角色范围由服务端校验。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -150,7 +150,7 @@ var dataSourceOf = (asset) => {
     var databaseName = firstValue(asset, ['database', 'dbName', 'dbMetaDbName'])
     var username = firstValue(asset, ['username', 'dbUser', 'dbMetaUser', 'user'])
     var password = firstValue(asset, ['password', 'dbPassword', 'dbMetaPassword'])
-    if (blank(databaseName) || (!hiveZooKeeperDiscovery && (blank(host) || blank(username)))) {
+    if (databaseType != DatabaseType.ELASTICSEARCH && (blank(databaseName) || (!hiveZooKeeperDiscovery && (blank(host) || blank(username))))) {
         // 参数或业务状态不满足要求时立即终止请求。
         exit 400, '数据源连接参数不完整'
     }
@@ -158,7 +158,9 @@ var dataSourceOf = (asset) => {
     dsConfig.setDatabaseType(databaseType)
     dsConfig.setHost(blank(host) ? (hiveZooKeeperDiscovery ? '' : 'virtual') : textOf(host))
     dsConfig.setPort(blank(port) ? databaseType.getDefaultPort() : port::int)
-    dsConfig.setDatabase(textOf(databaseName))
+    // ES支持匿名连接和空索引范围，完整认证选项仅传给服务端协议适配器。
+    dsConfig.setDatabase(databaseType == DatabaseType.ELASTICSEARCH ? textOf(firstValue(asset, ['database', 'indexName', 'defaultIndex'])) : textOf(databaseName))
+    dsConfig.setConnectorProperties(asset)
     dsConfig.setUsername(blank(username) ? '' : textOf(username))
     dsConfig.setPassword(password == null ? '' : textOf(password))
     // Oracle SID and Service Name use different URL formats; reuse the tested JDBC URL.
@@ -279,6 +281,8 @@ if(requestedSorts.size()>10){exit 400,'最多选择10个排序字段';}
 if(request.getPageNo()<1||request.getPageNo()>100000||request.getPageSize()<1||request.getPageSize()>100){exit 400,'数据预览分页参数无效';}
 
 var sourceType=textOf(firstValue(dbAsset,['dbType','databaseType','dataSourceType'])).toLowerCase()
+var countMode=blank(body?.countMode)?'exact':textOf(body.countMode).toLowerCase()
+if(countMode!='exact'&&countMode!='none'){exit 400,'预览计数方式无效';}
 // hwhive 对应 platform.magic.module.HiveModule，只用于已登记为服务端托管的 MRS 连接。
 // 直接 JDBC Hive 保持自己的连接，不能误查服务端连接池所指向的另一套集群。
 var managedHive=sourceType=='hive' && (
@@ -407,11 +411,17 @@ if(managedHive){
     for(name in selected){projection.add(quote(name));types.add(physicalTypes[name.toLowerCase()])}
     // Hive 会把未引用且以下划线开头的名称解析为字符集名，AS 后必须使用合法字段别名。
     // 使用字母开头的内部别名，避免 H2/MySQL 可执行而 Hive 在总数统计阶段解析失败。
-    var countRows=queryHive('SELECT COUNT(*) AS preview_total FROM '+qualified+where,'总数统计')
-    if(countRows==null||countRows.size()!=1||hiveValue(countRows[0],'preview_total')==null){exit 500,'Hive 预览总数查询结果无效';}
+    var total=null
+    if(countMode=='exact'){
+        var countRows=queryHive('SELECT COUNT(*) AS preview_total FROM '+qualified+where,'总数统计')
+        if(countRows==null||countRows.size()!=1||hiveValue(countRows[0],'preview_total')==null){exit 500,'Hive 预览总数查询结果无效';}
+        total=hiveValue(countRows[0],'preview_total')
+    }
+    // 无总数预览只多取一条以判断下一页，不将前面所有页读入应用内存，也不伪造总数。
+    var readLimit=request.getPageSize()+(countMode=='none'?1:0)
     var offset=(request.getPageNo()-1)*request.getPageSize()
     var orderSql=orders.size()==0?'':' ORDER BY '+orders.join(', ')
-    var pageSql='SELECT '+projection.join(', ')+' FROM '+qualified+where+orderSql+' LIMIT '+request.getPageSize()
+    var pageSql='SELECT '+projection.join(', ')+' FROM '+qualified+where+orderSql+' LIMIT '+readLimit
     if(offset>0){
         // Hive 1.x 不支持 LIMIT offset, rows；用服务端行号分页，始终只返回当前页。
         // 行号别名避开实际字段，不让辅助列覆盖真实数据或出现在返回字段中。
@@ -420,16 +430,17 @@ if(managedHive){
         // 此别名由服务端生成，不通过只允许真实物理字段的 quote/checkedField。
         var rowNumberSql='`'+rowNumber+'`'
         var numbered='SELECT '+projection.join(', ')+', ROW_NUMBER() OVER ('+orderSql.trim()+') AS '+rowNumberSql+' FROM '+qualified+where
-        pageSql='SELECT '+projection.join(', ')+' FROM ('+numbered+') preview_page WHERE '+rowNumberSql+' > '+offset+' AND '+rowNumberSql+' <= '+(offset+request.getPageSize())+' ORDER BY '+rowNumberSql+' LIMIT '+request.getPageSize()
+        pageSql='SELECT '+projection.join(', ')+' FROM ('+numbered+') preview_page WHERE '+rowNumberSql+' > '+offset+' AND '+rowNumberSql+' <= '+(offset+readLimit)+' ORDER BY '+rowNumberSql+' LIMIT '+readLimit
     }
     var dataRows=queryHive(pageSql,'分页查询')
     var rows=[]
     for(row in dataRows){
+        if(rows.size()>=request.getPageSize()){break}
         var normalized={}
         for(name in selected){normalized[name]=hiveValue(row,name)}
         rows.add(normalized)
     }
-    return {rows:rows,columns:selected,columnTypes:types,columnLabels:columnLabels,total:hiveValue(countRows[0],'preview_total'),pageNo:request.getPageNo(),pageSize:request.getPageSize()}
+    return {rows:rows,columns:selected,columnTypes:types,columnLabels:columnLabels,total:total,totalKnown:countMode=='exact',hasMore:countMode=='none'?dataRows.size()>request.getPageSize():offset+rows.size()<total,pageNo:request.getPageNo(),pageSize:request.getPageSize()}
 }
 
 request.setDataSource(dataSourceOf(dbAsset))

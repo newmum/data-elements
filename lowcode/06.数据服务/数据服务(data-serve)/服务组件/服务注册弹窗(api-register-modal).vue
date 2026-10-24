@@ -117,6 +117,7 @@
               context="modal"
               @ready="onEditorReady"
               @saved="onSaved"
+              @change="scheduleCapture"
             />
           </div>
         </el-scrollbar>
@@ -310,7 +311,9 @@ const addDraft = async () => {
   switching.value = true;
   try {
     await captureCurrent();
-    const entry = newEntry({ groupId: props.apiDetail.groupId || "api_service_group_default" });
+    const entry = newEntry({
+      groupId: props.apiDetail.groupId || "api_service_group_default",
+    });
     entries.value.push(entry);
     activate(entry);
   } finally {
@@ -330,7 +333,9 @@ const selectService = async (service: ServiceItem) => {
     await captureCurrent();
     // 详情仅由用户主动点击读取，列表加载不逐条补查。
     const detail = payloadOf(
-      await $common.post("/dws/flowserve/gateway/api/detail", { apiId: service.id })
+      await $common.post("/dws/flowserve/gateway/api/detail", {
+        apiId: service.id,
+      })
     );
     if (textOf(detail.id || detail.tid) !== service.id)
       throw new Error("服务详情标识不一致，请刷新后重试");
@@ -374,7 +379,11 @@ const removeDraft = async (entry: Entry) => {
       await ElMessageBox.confirm(
         `“${entry.name}”尚未保存，移除将丢弃填写内容。`,
         "移除待登记服务",
-        { type: "warning", confirmButtonText: "移除", cancelButtonText: "继续编辑" }
+        {
+          type: "warning",
+          confirmButtonText: "移除",
+          cancelButtonText: "继续编辑",
+        }
       );
     } catch {
       return;
@@ -396,7 +405,11 @@ const canClose = async (): Promise<boolean> => {
     await ElMessageBox.confirm(
       `还有${dirtyCount}条服务的填写内容未保存，关闭将丢弃这些修改。已保存的服务会保留。`,
       "关闭服务登记",
-      { type: "warning", confirmButtonText: "放弃并关闭", cancelButtonText: "继续登记" }
+      {
+        type: "warning",
+        confirmButtonText: "放弃并关闭",
+        cancelButtonText: "继续登记",
+      }
     );
     return true;
   } catch {

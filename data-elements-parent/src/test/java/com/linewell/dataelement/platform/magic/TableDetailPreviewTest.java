@@ -200,4 +200,35 @@ public class TableDetailPreviewTest {
         assertEquals(502, failure.code); assertTrue(failure.getMessage().contains("总数统计"));
         assertFalse(failure.getMessage().contains("private count")); assertEquals(2, f.hive.queries.size());
     }
+    @Test void detailPreviewDoesNotDependOnCountAndUsesBoundedLookaheadForTwentyAndHundredRows() throws Exception {
+        var f=new Fixture();f.hive.legacySyntaxOnly=true;
+        f.hive.failure="COUNT is unavailable on this Hive cluster";f.hive.failureSqlPrefix="SELECT COUNT(*)";
+        for(int size:List.of(20,100)){
+            f.hive.queries.clear();f.counter.count=0;
+            var first=f.run(Map.of("tableId","table","pageSize",size,"countMode","none"));
+            assertNull(first.get("total"));assertEquals(false,first.get("totalKnown"));assertEquals(true,first.get("hasMore"));
+            assertEquals(size,((List<?>)first.get("rows")).size());assertEquals(2,f.hive.queries.size());assertEquals(5,f.counter.count);
+            assertTrue(f.hive.queries.getLast().endsWith("LIMIT "+(size+1)));
+            var next=f.run(Map.of("tableId","table","pageNo",2,"pageSize",size,"countMode","none"));
+            assertEquals(size+1,((List<Map<String,Object>>)next.get("rows")).getFirst().get("id"));
+            assertTrue(f.hive.queries.stream().noneMatch(sql->sql.startsWith("SELECT COUNT(*)")));
+        }
+        var last=f.run(Map.of("tableId","table","pageNo",12,"pageSize",20,"countMode","none"));
+        assertEquals(20,((List<?>)last.get("rows")).size());assertEquals(false,last.get("hasMore"));assertNull(last.get("total"));
+        var empty=f.run(Map.of("tableId","table","pageNo",13,"pageSize",20,"countMode","none"));
+        assertEquals(List.of(),empty.get("rows"));assertEquals(false,empty.get("hasMore"));assertNull(empty.get("total"));
+    }
+    @Test void countFreePreviewKeepsFiltersSortAndScopeValidation() throws Exception {
+        var f=new Fixture();
+        var response=f.run(Map.of("tableId","table","countMode","none","sortField","id","sortDir","desc","conditions",Map.of("gender_code","F")));
+        assertEquals(240,((List<Map<String,Object>>)response.get("rows")).getFirst().get("id"));
+        assertEquals(List.of("id","gender_code"),response.get("columns"));
+        f.hive.queries.clear();f.scope.denied=true;
+        assertEquals(403,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table","countMode","none"))).code);
+        assertEquals(0,f.hive.queries.size());f.scope.denied=false;
+        assertEquals(500,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","foreign-table","countMode","none"))).code);
+        assertEquals(0,f.hive.queries.size());
+        assertEquals(400,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table","countMode","unbounded"))).code);
+        assertEquals(0,f.hive.queries.size());
+    }
 }

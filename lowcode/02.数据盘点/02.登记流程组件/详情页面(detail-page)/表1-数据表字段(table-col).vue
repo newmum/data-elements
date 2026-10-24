@@ -1,192 +1,29 @@
 <template>
-  <div class="card-container h-auto px-5 pt-2 flex-1">
-    <v-table
-      ref="colRef"
-      :options="tableOptions"
-      :sort-provider="sortFields" show-page :page="pageState" @page-change="loadPage"
-      show-operation
-      @btn-click="({ code }) => handleAction(code)"
-    >
-      <template #toolbarButtons></template>
-      <template #columnName="{ row }">
-        <el-text>
-          <Icon
-            v-if="row.primaryKey === 1"
-            style="color: var(--el-color-warning); transform: rotate(35deg)"
-            icon="el-icon-key"
-          />
-          {{ row.columnName }}
-        </el-text>
-      </template>
-      <template #columnComment="{ row }">
-        <el-text>
-          {{ row.columnComment || row.columnName || "" }}
-        </el-text>
-      </template>
-      <template #columnComment_edit="{ row }">
-        <el-input v-model="row.columnComment" placeholder="请输入">
-          <template #prefix>
-            <Icon
-              v-if="row.primaryKey === 1"
-              style="color: var(--el-color-warning); transform: rotate(35deg)"
-              icon="el-icon-key"
-            />
-          </template>
-        </el-input>
-      </template>
-      <template #primaryKey="{ row }">
-        <Icon v-if="row.primaryKey === 1" icon="yes" />
-      </template>
-      <template #primaryKey_edit="{ row }">
-        <el-checkbox v-model="row.primaryKey" true-label="1" false-label="0" />
-      </template>
-      <template #nullable="{ row }">
-        <Icon v-if="row.nullable === 0" icon="yes" />
-      </template>
-      <template #nullable_edit="{ row }">
-        <el-checkbox v-model="row.nullable" true-label="0" false-label="1" />
-      </template>
-    </v-table>
-  </div>
+  <section class="table-field-detail">
+    <register-dbTable-catalog v-if="tableId" :key="tableId" :detail-table-id="tableId" />
+  </section>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted, reactive } from "vue";
-
-const props = defineProps({
-  tableId: String,
-});
-
-// refs
-const colRef = ref();
-
-onMounted(() => {
-  handleAction("init");
-});
-
-const handleAction = (type: string, item?: any) => {
-  switch (type) {
-    case "init":
-      init();
-      break;
-  }
-};
-
-const pageState = reactive({pageNo:1,pageSize:20,total:0});
-let sorting = {};
-const sortFields = async (sort) => { sorting=sort; pageState.pageNo=1; await init(); };
-const loadPage = async ({pageNo,pageSize}) => {pageState.pageNo=pageNo;pageState.pageSize=pageSize;await init();};
-const init = async () => {
-  const tableId = props.tableId;
-  if (!tableId) return;
-
-  colRef.value?.setLoading(true);
-  try {
-    const fieldNames={columnName:'column_name',length:'length'};
-    const data = await $common.get('/dwm/metadata-governance/tables/columns/page',{tableId,page:pageState.pageNo,size:pageState.pageSize,sortDir:sorting.sortDir,sortField:fieldNames[sorting.sortField]});
-    pageState.total=data.total;
-    colRef.value.setData((data.list||[]).map(row=>({...row,columnName:row.column_name,columnComment:row.column_comment,dataType:row.data_type,primaryKey:row.primary_key})));
-  } finally {
-    colRef.value?.setLoading(false);
-  }
-};
-
-// 表单规则
-const tableOptions = reactive({
-  rowConfig: {
-    drag: true,
-  },
-  showOverflow: true,
-  height: "100%",
-  toolbarConfig: {
-    buttons: [
-      {
-        code: "append_edit", // 底部新增
-        icon: "vxe-icon-add",
-        name: "新增字段",
-        status: "primary",
-        mode: "text",
-      },
-      {
-        code: "保存",
-        icon: "vxe-icon-save",
-        name: "保存",
-        status: "primary",
-        mode: "text",
-      },
-    ],
-    tools: [
-      {
-        code: "custom",
-        icon: "vxe-icon-custom-column",
-        mode: "text",
-        status: "primary",
-        name: "显示列",
-      },
-      // {
-      //   code: "import",
-      //   icon: "vxe-icon-cloud-upload",
-      //   mode: "text",
-      //   status: "primary",
-      //   name: "导入",
-      // },
-      {
-        code: "open_export",
-        icon: "vxe-icon-download",
-        mode: "text",
-        status: "primary",
-        name: "导出",
-      },
-    ],
-  },
-  columns: [
-    { type: "seq", width: 70 },
-    {
-      field: "columnName", // 可编辑-插槽渲染
-      title: "字段名称",
-      minWidth: 200,
-      editRender: {},
-      slots: { default: "columnName" },
-    },
-    {
-      field: "columnComment", // 可编辑-插槽渲染
-      title: "字段注释",
-      minWidth: 200,
-      editRender: {},
-      slots: { default: "columnComment", edit: "columnComment_edit" },
-    },
-    {
-      field: "dataType", // 可编辑-配置渲染
-      title: "字段类型",
-      width: 150,
-      editRender: { name: "ElSelect", options: $dict.getDictItems("tableColType") },
-    },
-    {
-      field: "length", // 可编辑-配置渲染
-      title: "字段长度",
-      editRender: { name: "ElInputNumber", props: { controlsPosition: "right" } },
-    },
-    {
-      field: "primaryKey", // 可编辑-配置渲染
-      title: "主键",
-      editRender: {},
-      width: 100,
-      align: "center",
-      slots: { default: "primaryKey", edit: "primaryKey_edit" },
-    },
-    {
-      field: "nullable",
-      title: "非空",
-      editRender: {},
-      width: 100,
-      align: "center",
-      slots: { default: "nullable", edit: "nullable_edit" },
-    },
-  ],
-  editRules: {
-    columnComment: [{ required: true, content: "字段名称不能为空", trigger: "blur" }],
-    columnName: [{ required: true, content: "英文名称不能为空", trigger: "blur" }],
-    dataType: [{ required: true, content: "字段类型不能为空", trigger: "blur" }],
-  },
-});
+<script setup>
+defineProps({ tableId: { type: String, required: true } });
 </script>
+
+<style scoped>
+.table-field-detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 16px 28px 16px;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 8px;
+}
+
+@media (max-width: 1280px) {
+  .table-field-detail {
+    padding: 12px 20px 16px;
+  }
+}
+</style>

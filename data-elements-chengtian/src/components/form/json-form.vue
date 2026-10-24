@@ -13,6 +13,7 @@
       :rule="formRules"
       :option="{ ...option, ...previewOption, ...options }"
       :preview="preview"
+      @change="onChange"
     >
       <template v-for="(value, name) in $slots" #[name]="slotProps">
         <slot :name="name" v-bind="slotProps"></slot>
@@ -27,7 +28,7 @@ import formCreate, { type Api, Options, FormRule } from "@form-create/element-ui
 const props = withDefaults(
   defineProps<{
     data?: Record<string, any>;
-    rules: FormRule;
+    rules: FormRule[];
     preview?: boolean;
     options?: Options;
     bordered?: boolean;
@@ -40,6 +41,8 @@ const props = withDefaults(
   }
 );
 
+const emit = defineEmits<{ (event: "change", field: string, value: unknown): void }>();
+const onChange = (field: string, value: unknown) => emit("change", field, value);
 const fApi = ref<Api>();
 const formRules = ref();
 

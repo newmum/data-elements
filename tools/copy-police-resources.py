@@ -11,7 +11,7 @@ OUT=ROOT/'logs/police-copy';PRIVATE=m.PRIVATE/'police-copy';SHADOW='ct_police_co
 CAP=50000;TOTAL_CAP=160000;PAGE=1000
 TABLES=('sym_application_t','db_datasource_t','db_table_t','db_table_column_t','da_catalog_t','da_catalog_item_t','da_metadata_t','da_metadata_code_t','res_logical_model','res_logical_model_field','dwm_metadata_relation_t','data_access_agg_task_t','data_access_field_mapping','nifi_pipeline_t','data_access_mapping_plan_t','data_access_mapping_publication_t','data_access_mapping_resource_t','app_workshop_repository','app_workshop_repository_tab','app_workshop_big_screen','dq_quality_task_t','dq_quality_task_rule_t','da_prop_t')
 KEYS={'nifi_pipeline_t':'id'}
-BAD=re.compile(r'布控|surveillance|codex[-_ ]|race[-_ ]|registry[-_ ]check',re.I)
+BAD=re.compile(r'布控|surveillance|validation[-_ ]|race[-_ ]|registry[-_ ]check',re.I)
 REFS={'app_id':'sym_application_t','datasource_id':'db_datasource_t','table_id':'db_table_t','catalog_id':'da_catalog_t','task_id':'data_access_agg_task_t','model_id':'res_logical_model','source_table_id':'db_table_t','target_table_id':'db_table_t','resource_model_id':'res_logical_model'}
 
 def uid(value):return uuid.uuid5(uuid.NAMESPACE_URL,'chengtian-copy-police-v1/'+str(value)).hex
