@@ -51,7 +51,7 @@ public class MetadataExplorerFactory {
         // use the same real-file discovery as the initial connection probe.
         explorerMap.put(DatabaseType.FTP, new FtpFileMetadataExplorer());
         explorerMap.put(DatabaseType.API, virtualExplorer);
-        explorerMap.put(DatabaseType.KAFKA, virtualExplorer);
+        explorerMap.put(DatabaseType.KAFKA, new KafkaTopicMetadataExplorer());
         explorerMap.put(DatabaseType.HDFS, virtualExplorer);
         explorerMap.put(DatabaseType.HBASE, virtualExplorer);
         explorerMap.put(DatabaseType.ELASTICSEARCH, new ElasticsearchMetadataExplorer());

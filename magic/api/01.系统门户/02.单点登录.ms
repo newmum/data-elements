@@ -52,6 +52,7 @@
 // 接口：02.单点登录
 // 路由：GET /portal/ssoLogin
 // 业务说明：核验当前租户的登录请求，区分公安本地账号与其他租户原有认证分支；登录成功后建立会话并记录登录结果。
+import auditEvents;
 import tenantAccounts
 import cn.hutool.core.util.StrUtil
 import cn.hutool.core.util.IdUtil
@@ -117,21 +118,7 @@ var tenantId = loginTenant.tenantId
 var saToken;
 saToken = StpUtil.getTokenValueByLoginId(user.id)
 
-db.table('log_user_login_t').insert({
-    tid: IdUtil.getSnowflakeNextIdStr(),
-    account: user.userName,
-    is_success: 1,
-    token: saToken,
-    ip: request.getClientIP(),
-    browser: ua.getBrowser().toString(),
-    os: ua.getOs().toString(),
-    created_by: user.id,
-    updated_by: user.id,
-    created_time: new Date(),
-    updated_time: new Date(),
-    is_del: 0,
-    tenant_id: tenantId
-})
+
 user.appId = appId;
 tenantAccounts.session().set("user", user);
 
@@ -139,6 +126,7 @@ tenantAccounts.session().set("user", user);
 tenantAccounts.session().set("name", user.userName);
 tenantAccounts.session().set("appId", appId);
 
+try {auditEvents.authentication(tenantId,user.id,'AUTH_LOGIN_SUCCEEDED','SUCCESS',null);}catch(error){auditEvents.compensateLogin();throw error;}
 // 返回当前业务分支的标准结果。
 return {
     token: saToken

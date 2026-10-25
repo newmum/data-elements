@@ -13,7 +13,7 @@ export async function request<T>(path: string, options: HttpOptions = {}): Promi
     try {
         response = await fetch(`/api${path}`, {
             method: options.method || 'GET',
-            headers: { Accept: 'application/json', ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(options.token ? { token: options.token } : {}) },
+            headers: { 'X-Audit-Route':window.location.hash.slice(1).split('?')[0], Accept: 'application/json', ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(options.token ? { token: options.token } : {}) },
             body: options.body === undefined ? undefined : JSON.stringify(options.body),
             signal: options.signal,
             credentials: 'same-origin',

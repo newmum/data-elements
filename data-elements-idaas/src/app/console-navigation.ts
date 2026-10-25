@@ -8,11 +8,12 @@ export function canView(session: Session, path: string): boolean {
     if (path === 'overview' || path === 'profile') return true;
     if (session.mustChangePassword) return false;
     if (session.realm === 'platform') {
+        if(path==='audit/logs')return ['audit:read','audit:export','audit:archive','audit:configure'].some(code=>session.globalPermissions?.includes(code));
         const permission = path === 'apps' || path.startsWith('apps/') || path === 'app-groups' ? 'apps:read'
             : path === 'auth-accounts' ? 'auth-accounts:read' : path === 'verifications' || path === 'entities' ? 'public:read'
             : path === 'persons' || path === 'organization' ? 'users:read' : path.startsWith('org-settings/') ? 'directory:read'
             : path === 'delegates' || path === 'system/access/admins' || path === 'locked-accounts' ? 'operators:read'
-            : path.startsWith('audit/') ? 'audit:read' : path === 'system/access/roles' ? 'platform-roles:read'
+            : path === 'audit/exports' ? 'audit:export' : path === 'audit/policies' ? 'audit:configure' : path === 'audit/archives' ? 'audit:archive' : path.startsWith('audit/') ? 'audit:read' : path === 'system/access/roles' ? 'platform-roles:read'
             : path.startsWith('grants/') || path === 'permission-groups' ? 'grants:read'
             : path.startsWith('sync/') ? 'sync:read' : path.startsWith('system/settings/') ? 'settings:read' : '';
         const permissions = path === 'apps' || path.startsWith('apps/') || path === 'organization' || path === 'persons' || path.startsWith('grants/')
@@ -36,7 +37,7 @@ export function canViewDomain(session: Session, domain: Domain, path: string): b
 const publicEntries = [
     ['overview', '公众总览'], ['persons', '自然人管理'], ['entities', '法人管理'],
     ['auth-accounts', '公众认证账号'], ['verifications', '身份核验'],
-    ['apps', '公众应用'], ['app-groups', '公众应用分组'], ['audit/statistics', '公众统计'],
+    ['apps', '公众应用'], ['app-groups', '公众应用分组'],
 ] as const;
 
 /** One stable console menu. Public business pages select their own data context by route. */

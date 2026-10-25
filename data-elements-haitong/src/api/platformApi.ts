@@ -35,7 +35,7 @@ function unwrap<T>(response: unknown, path: string): T {
 }
 
 /** Shared platform contract. Tenant identity comes only from the backend token session. */
-export async function platformApi<T>(path: string, body?: unknown, options: { method?: 'GET' | 'POST'; timeoutMs?: number } = {}): Promise<T> {
+export async function platformApi<T>(path: string, body?: unknown, options: { method?: 'GET' | 'POST' | 'PUT'; timeoutMs?: number } = {}): Promise<T> {
   if (!path.startsWith('/') || path.startsWith('//')) throw new PlatformApiError(path, '接口路径无效');
   const token = await getPlatformSessionToken();
   if (!token) {
@@ -52,7 +52,7 @@ export async function platformApi<T>(path: string, body?: unknown, options: { me
   try {
     response = await fetch(`${baseUrl}${path}`, {
       method: options.method ?? (body === undefined ? 'GET' : 'POST'),
-      headers: { token, ...(body === undefined || multipart ? {} : { 'Content-Type': 'application/json' }) },
+      headers: { 'X-Audit-Route':window.location.hash.slice(1).split('?')[0], token, ...(body === undefined || multipart ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : multipart ? body as FormData : JSON.stringify(body),
       cache: 'no-store',
       signal: AbortSignal.timeout(options.timeoutMs ?? 20000),

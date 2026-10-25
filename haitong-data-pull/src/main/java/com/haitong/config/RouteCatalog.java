@@ -20,36 +20,11 @@ public final class RouteCatalog implements InitializingBean {
         List<TargetPlan> targets=r.getTargets().stream().map(this::target).toList();
         return new RoutePlan(code,r.getFileFormat(),List.copyOf(r.getRequiredFields()),Map.copyOf(r.getRenameFields()),targets,r.getBusinessKeyField(),r.getBatchKeyField(),r.getBusinessTimeField());
     }
-    /** Build a route only after the platform has authenticated and resolved its table-level destination. */
-    public RoutePlan registrationManagedRoute(String code,Kind kind,String destination) {
-        RelayProperties.Route route=p.getRoutes().get(code);
-        if(route==null || !route.isEnabled() || !route.isRegistrationManaged())
-            throw new RelayException(503,"SCENE_NOT_READY","数据推送登记校验尚未启用");
-        if(kind==Kind.KAFKA) {
-            if(!p.getKafka().isEnabled()) throw new RelayException(503,"SCENE_NOT_READY","Kafka 投递连接尚未配置");
-            if(destination==null || !destination.matches("[a-zA-Z0-9._-]{1,249}"))
-                throw new RelayException(503,"DESTINATION_NOT_CONFIGURED","登记数据源尚未配置 Kafka Topic");
-            return plan(code,route,new TargetPlan("registered-kafka",Kind.KAFKA,destination,"",kafka(),null,null));
-        }
-        if(kind==Kind.FTP) {
-            if(!p.getFtp().isEnabled()) throw new RelayException(503,"SCENE_NOT_READY","FTP 投递连接尚未配置");
-            String root=destination==null || destination.isBlank()?p.getFtp().getOutputDir():destination;
-            return plan(code,route,new TargetPlan("registered-ftp",Kind.FTP,"",Rules.remoteDirectory(root),null,ftp(),null));
-        }
-        if(kind==Kind.PLATFORM_FTP) {
-            // Credentials and the environment-specific endpoint stay in the data platform.
-            return plan(code,route,new TargetPlan("registered-platform-fjghcc",Kind.PLATFORM_FTP,"","",null,null,null));
-        }
-        throw new IllegalArgumentException("Registration-managed routes only support Kafka or FTP");
-    }
-    private RoutePlan plan(String code,RelayProperties.Route r,TargetPlan target) {
-        return new RoutePlan(code,r.getFileFormat(),List.copyOf(r.getRequiredFields()),Map.copyOf(r.getRenameFields()),List.of(target),r.getBusinessKeyField(),r.getBatchKeyField(),r.getBusinessTimeField());
-    }
     public TargetPlan target(String code) {
         var t=p.getTargets().get(code);
         if(t==null) throw new IllegalStateException("未配置目标："+code);
         Kind kind=Kind.valueOf(t.getType().toUpperCase(Locale.ROOT));
-        if(kind==Kind.ACTION || kind.name().startsWith("FILE_")) throw new IllegalStateException("ACTION 和 FILE_* 为内部专用目标，不能作为通用数据目标配置");
+        if(!Set.of(Kind.KAFKA,Kind.FTP,Kind.LOCAL,Kind.LOG).contains(kind)) throw new IllegalStateException("通用目标仅允许本地配置的 KAFKA、FTP、LOCAL、LOG");
         var k=p.getKafka();var f=p.getFtp();
         if(kind==Kind.KAFKA && !k.isEnabled()) throw new IllegalStateException("路由使用 Kafka，但 relay.kafka.enabled=false");
         if(kind==Kind.FTP && !f.isEnabled()) throw new IllegalStateException("路由使用 FTP，但 relay.ftp.enabled=false");
@@ -87,10 +62,10 @@ public final class RouteCatalog implements InitializingBean {
         for(var item:p.getRoutes().entrySet()) {
             Rules.code(item.getKey());if(!item.getValue().isEnabled()) continue;
             RoutePlan r=route(item.getKey());
-            if(!item.getValue().isRegistrationManaged() && (r.targets().isEmpty() || new HashSet<>(item.getValue().getTargets()).size()!=r.targets().size()))
+            if(r.targets().isEmpty() || new HashSet<>(item.getValue().getTargets()).size()!=r.targets().size())
                 throw new IllegalStateException("每条路由必须有至少一个目标，且不能重复");
-            if(item.getValue().isRegistrationManaged() && !r.targets().isEmpty())
-                throw new IllegalStateException("登记管理路由不能配置静态目标");
+            if(item.getValue().isRegistrationManaged())
+                throw new IllegalStateException("海通仅支持本地投递，请设置 registration-managed=false 并配置 targets");
             if(!Set.of("JSONL","CSV","BINARY").contains(r.fileFormat())) throw new IllegalStateException("file-format 必须为 JSONL、CSV 或 BINARY");
             if(r.fileFormat().equals("BINARY") && r.targets().stream().anyMatch(t->t.kind()!=Kind.FTP && t.kind()!=Kind.LOCAL))
                 throw new IllegalStateException("BINARY 整文件仅允许传往 FTP 或 LOCAL");
@@ -166,12 +141,5 @@ public final class RouteCatalog implements InitializingBean {
         var standaloneRegistry=p.getStandaloneRegistry();
         if(standaloneRegistry.isSyncEnabled() && secrets.resolve(standaloneRegistry.getSyncKey()).length()<24)
             throw new IllegalStateException("独立登记配置同步密钥长度至少 24");
-        var registry=p.getRegistrationRegistry();
-        if(registry.isEnabled()) {
-            URI uri=URI.create(registry.getBaseUrl());
-            if(!Set.of("http","https").contains(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null || uri.getQuery()!=null || uri.getFragment()!=null || registry.getTimeoutSeconds()<1 || registry.getTimeoutSeconds()>60)
-                throw new IllegalStateException("登记校验服务配置不合法");
-            if(secrets.resolve(registry.getSharedKey()).length()<24) throw new IllegalStateException("登记校验服务密钥长度至少 24");
-        }
     }
 }

@@ -10,6 +10,7 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 @Component
 @MagicModule("authSession")
 public class AuthAccountSessionMagicModule {
+ @org.springframework.beans.factory.annotation.Autowired(required=false) private com.linewell.dataelement.platform.audit.AuditSessionEvents auditSessionEvents;
  public static final StpLogic LOGIC=new StpLogic("idaas-auth-account");
  @Value("${idaas.protocol.secure-cookie:${IDAAS_PROTOCOL_SECURE_COOKIE:true}}") private boolean secureCookie;
  public void login(String id,long version){login(id,version,1800,true);}
@@ -21,9 +22,9 @@ public class AuthAccountSessionMagicModule {
  public String id(){return LOGIC.getLoginIdAsString();}
  public String token(){return LOGIC.getTokenValue();}
  public SaSession session(){return LOGIC.getTokenSession();}
- public void revoke(String id){LOGIC.kickout(id);}
+ public void revoke(String id){if(auditSessionEvents==null)LOGIC.kickout(id);else auditSessionEvents.revoke(null,"AUTH_ACCOUNT",id,null,"public",()->LOGIC.kickout(id));}
  public void logout(){LOGIC.logout();cookie("",0);}
  public Map<String,Object> principal(String token){return principal(token,1800);}
- public Map<String,Object> principal(String token,Number idleSeconds){if(token==null || !LOGIC.isValidToken(token))return Map.of();long last=LOGIC.getTokenLastActiveTime(token);if(last>0 && System.currentTimeMillis()-last>idleSeconds.longValue()*1000){LOGIC.logoutByTokenValue(token);return Map.of();}try{LOGIC.checkActiveTimeout(token);}catch(RuntimeException e){return Map.of();}LOGIC.updateLastActiveToNow(token);var session=LOGIC.getTokenSessionByToken(token,false);return session==null?Map.of():Map.of("id",String.valueOf(LOGIC.getLoginIdByTokenNotThinkFreeze(token)),"securityVersion",session.get("securityVersion"));}
+ public Map<String,Object> principal(String token,Number idleSeconds){if(token==null || !LOGIC.isValidToken(token))return Map.of();long last=LOGIC.getTokenLastActiveTime(token);if(last>0 && System.currentTimeMillis()-last>idleSeconds.longValue()*1000){var target=LOGIC.getLoginIdByTokenNotThinkFreeze(token);var snapshot=LOGIC.getTokenSessionByToken(token,false);LOGIC.logoutByTokenValue(token);if(auditSessionEvents!=null&&target!=null){auditSessionEvents.expired("AUTH_ACCOUNT",String.valueOf(target),snapshot==null||snapshot.get("auditDomain")==null?"public":String.valueOf(snapshot.get("auditDomain")),snapshot==null?null:String.valueOf(snapshot.get("auditSessionRef")),java.time.Instant.ofEpochMilli(last+idleSeconds.longValue()*1000));}return Map.of();}try{LOGIC.checkActiveTimeout(token);}catch(RuntimeException e){return Map.of();}LOGIC.updateLastActiveToNow(token);var session=LOGIC.getTokenSessionByToken(token,false);return session==null?Map.of():Map.of("id",String.valueOf(LOGIC.getLoginIdByTokenNotThinkFreeze(token)),"securityVersion",session.get("securityVersion"));}
  private void cookie(String value,int ttl){SaHolder.getResponse().addHeader("Set-Cookie","IDAAS_AUTH="+value+"; Path=/idaas; HttpOnly; SameSite=Lax; Max-Age="+ttl+(secureCookie?"; Secure":""));}
 }

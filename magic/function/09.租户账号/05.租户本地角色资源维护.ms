@@ -21,6 +21,7 @@
 // 业务说明：维护租户本地角色与菜单资源的关联，供本地系统权限判断使用。
 // 函数输入：payload：该动作所需的账号、角色或资源资料。
 import db;
+import '@/common/audit-operation' as auditOperation;
 import tenantRuntime;
 import cn.hutool.core.util.IdUtil;
 import identityRuntime;
@@ -42,17 +43,11 @@ where local_id=#{roleId}
 """)!=null) {exit 409,'中央拥有角色的资源请在平台维护或先脱管';}
 if(role==null) {exit 404,'角色不存在或不属于当前租户';}
 var ids=[];var appId=role.appId;
-for(resourceId in (p.resourceIds||[])) {
- var id=resourceId+'';
- if(sql.selectOne("""
-select id
-from rm_menu_t
-where tenant_id=#{tenantId}
-    and app_id=#{appId}
-    and id=#{id}
-    and deleted=0
-""")==null) {exit 400,'所选菜单不存在或不属于当前应用';}
- if(!ids.contains(id)) {ids.add(id);}
+for(resourceId in (p.resourceIds||[])) {var id=resourceId+'';if(!ids.contains(id)){ids.add(id);}}
+if(ids.size()>500){exit 400,'一次最多分配500个资源';}
+if(ids.size()>0) {
+ var valid=sql.select('select id from rm_menu_t where tenant_id=#{tenantId} and app_id=#{appId} and id in (#{ids}) and deleted=0').map(r=>r.id);
+ if(valid.size()!=ids.size()){exit 400,'所选菜单不存在或不属于当前应用';}
 }
 return sql.transaction(()=>{
  sql.update("""
@@ -66,5 +61,6 @@ insert into rm_role_menu_rela_t(tenant_id,
                 id, role_id, app_resource_id, extend_id)
 values(#{tenantId},#{id},#{roleId},#{resourceId},'')
 """);}
+ auditOperation('ROLE_RESOURCES_UPDATED','ROLE',roleId,null,{id:roleId,targetIds:ids,count:ids.size()});
  return {roleId:roleId,count:ids.size()};
 });

@@ -22,9 +22,11 @@ relay:
   ftp:
     enabled: false
   registration-registry:
-    enabled: true
-    base-url: "http://127.0.0.1:8088"
+    # Legacy inbound properties only; business delivery never calls the platform.
+    enabled: false
+    base-url: ""
     shared-key: "${DATA_PUSH_REGISTRY_KEY:}"
+
   targets:
     local:
       type: LOCAL
@@ -42,18 +44,18 @@ relay:
       targets: [table-log]
       file-format: JSONL
       required-fields: [tableName, records]
-    table-to-ftp:
-      enabled: true
-      registration-managed: true
+    table-to-ftp: # Uses only relay.ftp and the YAML target below.
+      enabled: false
+      registration-managed: false
       batch-key-field: batchId
-      targets: []
+      targets: [ftp]
       file-format: JSONL
       required-fields: [tableName, records]
-    table-to-kafka:
-      enabled: true
-      registration-managed: true
+    table-to-kafka: # Uses only relay.kafka and the YAML target below.
+      enabled: false
+      registration-managed: false
       batch-key-field: batchId
-      targets: []
+      targets: [kafka]
       file-format: JSONL
       required-fields: [tableName, records]
   actions:

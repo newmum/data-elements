@@ -29,6 +29,19 @@ sync = load('resource_sync', 'resource-sync.py')
 configure = load('configure_resources', 'configure-resources.py')
 
 
+class EditorParameterDefaultsTest(unittest.TestCase):
+    def test_optional_editor_default_does_not_hide_required_or_name_changes(self):
+        local={'parameters':[{'name':'input','dataType':'Object'}]}
+        runtime={'parameters':[{'name':'input','dataType':'Object','required':False}]}
+        sync.editor_parameter_defaults(local)
+        self.assertEqual(local,runtime)
+        required=copy.deepcopy(runtime);required['parameters'][0]['required']=True
+        sync.editor_parameter_defaults(required)
+        self.assertNotEqual(local,required)
+        renamed=copy.deepcopy(runtime);renamed['parameters'][0]['name']='other'
+        self.assertNotEqual(local,renamed)
+
+
 class Cursor:
     def __init__(self, connection):
         self.connection = connection
@@ -78,6 +91,43 @@ class Connection:
 
 
 class ResourceTests(unittest.TestCase):
+    def registration_files(self):
+        group = {'id': 'new-group', 'name': '新分组', 'type': 'api', 'parentId': '0', 'path': '/workbench'}
+        api = {'id': 'new-api', 'name': '概览', 'groupId': 'new-group', 'path': '/overview', 'method': 'POST'}
+        files = ['magic/api/新分组/group.json', 'magic/api/新分组/概览.ms']
+        for file, meta in zip(files, [group, api]):
+            target = self.root / file
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(meta) + '\n' + sync.SEPARATOR + ('\nreturn 1' if file.endswith('.ms') else ''), encoding='utf8')
+        return files
+
+    def test_new_magic_registration_is_bounded_and_defaults_to_plan(self):
+        files = self.registration_files()
+        with patch.object(sync, 'snapshot', return_value=self.remote):
+            result = sync.register_magic(self.connection, {}, files)
+        self.assertEqual(result['result'], 'registration-plan')
+        self.assertEqual(len(result['files']), 3)  # folder row, group metadata, script
+        self.assert_no_write()
+
+    def test_new_magic_registration_rejects_existing_identity_and_missing_parent(self):
+        files = self.registration_files()
+        with self.assertRaisesRegex(ValueError, 'already registered'):
+            sync.registration_plan({'database': 'baseline', 'resources': [{'path': 'api/新分组/group.json'}]}, self.remote, files)
+        with self.assertRaisesRegex(ValueError, 'missing parent'):
+            sync.registration_plan(self.manifest, self.remote, [files[1]])
+        with self.assertRaisesRegex(ValueError, 'distinct'):
+            sync.registration_plan(self.manifest, self.remote, files + files)
+        self.assert_no_write()
+
+    def test_new_magic_registration_blocks_concurrent_registry_edit(self):
+        files = self.registration_files()
+        changed = copy.deepcopy(self.remote)
+        changed['resources'][0]['baseSha256'] = 'concurrent'
+        with patch.object(sync, 'snapshot', side_effect=[self.remote, changed]), patch.object(sync, 'runtime_call', return_value={'id': 'tenant'}):
+            with self.assertRaisesRegex(ValueError, 'Concurrent Magic registry'):
+                sync.register_magic(self.connection, {}, files, apply=True)
+        self.assert_no_write()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

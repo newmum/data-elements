@@ -399,11 +399,7 @@ public final class ApiErrorResolver {
     }
 
     private static String newTraceId() {
-        return UUID.randomUUID()
-                .toString()
-                .replace("-", "")
-                .substring(0, 16)
-                .toUpperCase(Locale.ROOT);
+        return com.linewell.dataelement.platform.audit.AuditTrace.traceId();
     }
 
     private static boolean containsAny(String text, String... candidates) {

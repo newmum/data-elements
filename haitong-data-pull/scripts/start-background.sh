@@ -16,7 +16,7 @@ fi
   echo '未找到可执行 Java。请设置 HAITONG_JAVA_BIN 为 JDK 21 的 java 路径。' >&2
   exit 1
 }
-"$JAVA_BIN" -version 2>&1 | grep -qE '"21\\.| version "21\\.' || {
+"$JAVA_BIN" --version | grep -qE '^(openjdk|java) 21([.[:space:]]|$)' || {
   echo "需要 JDK/JRE 21，当前 Java：$JAVA_BIN" >&2
   exit 1
 }

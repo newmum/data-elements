@@ -233,6 +233,7 @@ public class DslCompiler {
         Pipeline.Node periodicSource = SyncPolicy.periodicSource(pipeline);
         if (periodicSource != null) validatePeriodicPolicy(pipeline, periodicSource);
         validateDateFetchConfigurations(pipeline);
+        FileConsumptionCompiler.validate(pipeline);
         try (var runtime = nifi.bindRuntimeNode()) {
             return compileValidated(pipeline, processGroupCreatedCallback, layout, periodicSource);
         }
@@ -704,6 +705,7 @@ public class DslCompiler {
             nifi.createConnection(pgId, previousId, previousType, source.processorIds.get("fetch"), "PROCESSOR",
                     "INPUT_PORT".equals(previousType) ? List.of() : List.of("success"));
         }
+        new FileConsumptionCompiler(nifi).acknowledge(pgId,pipeline,compiled);
         nifi.finalizeGeneratedProcessGroup(pgId);
         if (periodicSource != null) nifi.finalizeGeneratedProcessGroup(rootPgId);
 
@@ -898,10 +900,18 @@ public class DslCompiler {
         // installed defaults for transfer and post-download handling.
         double x = nodeOriginX(nodeLayout);
         double y = nodeOriginY(nodeLayout);
-        NifiEntity fetch = nifi.createProcessor(pgId,
-                sftp ? "org.apache.nifi.processors.standard.GetSFTP" : "org.apache.nifi.processors.standard.GetFTP",
-                node.label() + "/fetch", x, y,
-                fetchProperties, schedulingPeriod, "TIMER_DRIVEN");
+        NifiEntity fetch;
+        if (FileConsumptionCompiler.enabled(cfg)) {
+            Map<String,String> connection=new LinkedHashMap<>();
+            for(String key:List.of("Hostname","Port","Username","Password"))connection.put(key,fetchProperties.get(key));
+            String root=remotePath;while(root.endsWith("/"))root=root.substring(0,root.length()-1);
+            fetch=new FileConsumptionCompiler(nifi).fetch(pgId,node,nc,connection,root,schedulingPeriod,sftp,x,y);
+        } else {
+            fetch=nifi.createProcessor(pgId,
+                    sftp ? "org.apache.nifi.processors.standard.GetSFTP" : "org.apache.nifi.processors.standard.GetFTP",
+                    node.label() + "/fetch", x, y,
+                    fetchProperties, schedulingPeriod, "TIMER_DRIVEN");
+        }
         nc.processorIds.put("fetch", fetch.id());
 
         Map<String, String> routes = new LinkedHashMap<>();

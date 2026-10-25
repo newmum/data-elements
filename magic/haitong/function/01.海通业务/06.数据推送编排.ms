@@ -26,7 +26,7 @@ if(action=='upload'){
     if(file==null){_fail(400,'INVALID_REQUEST','缺少file文件字段')}
     if(file.getSize()>c.p.getLimits().getMaxFileBytes()){_fail(413,'FILE_TOO_LARGE','文件超过限制')}
     var stream=file.getInputStream();var accepted=null
-    try{accepted=files.upload(caller.id(),channel,key,_text(file.getOriginalFilename())==''?'upload.bin':file.getOriginalFilename(),stream)}finally{stream.close()}
+    try{accepted=files.upload(caller.id(),channel,key,_text(file.getSubmittedFileName())==''?'upload.bin':file.getSubmittedFileName(),stream)}finally{stream.close()}
     req.setAttribute('haitong.fileId',accepted.id());var url=_absolute('/api/v1/files/'+accepted.id())
     var result=message({action:'file',id:accepted.id(),caller:caller});result.duplicate=accepted.duplicate();result.statusUrl=url
     return {status:accepted.duplicate()?200:202,body:result,location:url}
@@ -57,26 +57,23 @@ if(delivery=='REGISTRY_SYNC'){
     return {status:synced.duplicate?200:201,body:synced}
 }
 var routes={FTP:'table-to-ftp',KAFKA:'table-to-kafka',LOG:'table-to-log'};var channel=routes[delivery]
-if(channel==null){_fail(delivery==''?400:422,delivery==''?'INVALID_REQUEST':'UNSUPPORTED_DELIVERY_TYPE','deliveryType仅支持FTP、KAFKA、LOG或REGISTRY_SYNC')}
+if(channel==null){_fail(422,delivery==''?'INVALID_BODY':'UNSUPPORTED_DELIVERY_TYPE','deliveryType仅支持FTP、KAFKA、LOG或REGISTRY_SYNC')}
 if(!caller.channel(channel)){_fail(403,'FORBIDDEN_CHANNEL','没有此数据通道的权限')}
 var config=c.p.getRoutes().get(channel)
 if(config==null || !config.isEnabled()){_fail(503,'SCENE_NOT_READY',delivery+'场景尚未配置完成')}
-if(body.containsKey('schemaVersion') || body.containsKey('occurredAt')){_fail(400,'INVALID_REQUEST','schemaVersion和occurredAt已取消，请从表批次请求移除')}
-if(!(body.tableName instanceof String) || body.tableName.trim()=='' || body.tableName.length()>200){_fail(400,'INVALID_REQUEST','tableName必须是1至200字符的表名')}
+if(body.containsKey('schemaVersion') || body.containsKey('occurredAt')){_fail(422,'INVALID_BODY','schemaVersion和occurredAt已取消，请从表批次请求移除')}
+if(!(body.tableName instanceof String) || body.tableName.trim()=='' || body.tableName.length()>200){_fail(422,'INVALID_BODY','tableName必须是1至200字符的表名')}
 var push=delivery!='LOG'
-if(push && (!(body.datasourceId instanceof String) || !body.datasourceId.matches('[A-Za-z0-9_-]{1,64}'))){_fail(400,'INVALID_REQUEST','datasourceId必须是已登记数据源标识')}
+if(push && (!(body.datasourceId instanceof String) || !body.datasourceId.matches('[A-Za-z0-9_-]{1,64}'))){_fail(422,'INVALID_BODY','datasourceId必须是已登记数据源标识')}
 var rows=_list(body.records)
-if(rows.size()==0 || rows.size()>10000){_fail(400,'INVALID_REQUEST','records必须有1至10000条记录')}
+if(rows.size()==0 || rows.size()>10000){_fail(422,'INVALID_BODY','records必须有1至10000条记录')}
 for(row in rows){_object(row)}
 // 先复核幂等正文。已受理消息不因登记版本更新而被再次执行。
 var duplicate=ingress.existingHttp(caller.id(),channel,key,raw)
 if(duplicate.isPresent()){return receipt(duplicate.get())}
 var accepted=null
-if(push && config.isRegistrationManaged()){
-    var resolved=_bean('registrationSchemaClient').validate(caller.id(),channel,raw)
-    var plan=catalog.registrationManagedRoute(channel,resolved.kind(),resolved.destination())
-    accepted=ingress.http(caller.id(),channel,key,raw,plan,resolved.metadata())
-}else if(push){
+if(push){
+    // Runtime contracts are local; destination connections come only from this deployment's YAML.
     var metadata=tableContract({batch:body,caller:caller})
     accepted=ingress.http(caller.id(),channel,key,raw,catalog.route(channel),metadata)
 }else{accepted=ingress.http(caller.id(),channel,key,raw)}

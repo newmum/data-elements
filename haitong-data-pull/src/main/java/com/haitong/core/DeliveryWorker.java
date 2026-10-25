@@ -4,7 +4,6 @@ import com.haitong.config.*;
 import com.haitong.connector.*;
 import com.haitong.core.Models.*;
 import com.haitong.store.RelayRepository;
-import com.haitong.registry.RegistrationSchemaClient;
 import org.slf4j.*;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,13 +17,12 @@ public class DeliveryWorker implements SmartLifecycle {
     private static final Logger log=LoggerFactory.getLogger(DeliveryWorker.class);
     private final RelayRepository repo;private final RelayProperties p;private final Json json;
     private final KafkaConnector kafka;private final FtpConnector ftp;private final LocalConnector local;private final LogConnector logTarget;private final ActionConnector actions;
-    private final RegistrationSchemaClient registration;
     private final List<ExecutorService> executors=new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService heartbeats=Executors.newScheduledThreadPool(2,Thread.ofPlatform().daemon().name("relay-lease-",0).factory());
     private volatile boolean running;
     @org.springframework.beans.factory.annotation.Value("${relay.files.enabled:false}") private boolean fileTransfers;
-    public DeliveryWorker(RelayRepository repo,RelayProperties p,Json json,KafkaConnector kafka,FtpConnector ftp,LocalConnector local,LogConnector logTarget,ActionConnector actions,RegistrationSchemaClient registration) {
-        this.repo=repo;this.p=p;this.json=json;this.kafka=kafka;this.ftp=ftp;this.local=local;this.logTarget=logTarget;this.actions=actions;this.registration=registration;
+    public DeliveryWorker(RelayRepository repo,RelayProperties p,Json json,KafkaConnector kafka,FtpConnector ftp,LocalConnector local,LogConnector logTarget,ActionConnector actions) {
+        this.repo=repo;this.p=p;this.json=json;this.kafka=kafka;this.ftp=ftp;this.local=local;this.logTarget=logTarget;this.actions=actions;
     }
     @Override public synchronized void start() {
         if(running || !p.getWorker().isEnabled()) return;running=true;
@@ -65,7 +63,8 @@ public class DeliveryWorker implements SmartLifecycle {
             Map<String,Object> result=switch(d.kind()) {
                 case LOCAL, FILE_LOCAL -> local.deliver(target,packet);
                 case FTP, FILE_FTP -> ftp.deliver(target,packet);
-                case PLATFORM_FTP -> registration.deliverFtp(m.owner(),d.id(),packet.bytes());
+                // Preserve historical enum values for ledger reads, but never call a platform to deliver data.
+                case PLATFORM_FTP -> throw new DeliveryFailure("LEGACY_PLATFORM_TARGET_REQUIRES_LOCAL_CONFIGURATION",false,false);
                 case KAFKA -> kafka.deliver(target,packet);
                 case FILE_KAFKA -> kafka.deliver(target,fileReference(packet));
                 case LOG -> logTarget.deliver(target,packet);

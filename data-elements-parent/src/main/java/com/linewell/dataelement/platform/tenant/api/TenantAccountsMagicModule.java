@@ -20,6 +20,8 @@ import org.ssssssss.magicapi.core.annotation.MagicModule;
 public class TenantAccountsMagicModule {
     private final TenantIdentityQueryService queries;
     private final TenantAccessService access;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    private com.linewell.dataelement.platform.audit.AuditSessionEvents auditSessionEvents;
     public TenantAccountsMagicModule(TenantIdentityQueryService queries, TenantAccessService access) {
         this.queries=queries; this.access=access;
     }
@@ -49,7 +51,8 @@ public class TenantAccountsMagicModule {
             if (!logic.isValidToken(token) || !userId.equals(String.valueOf(logic.getLoginIdByTokenNotThinkFreeze(token)))) continue;
             SaSession session=logic.getTokenSessionByToken(token,false);
             if (session!=null && tenantId.equals(session.get("tenantId")) && "tenant-local-v1".equals(session.get("authRealm"))) {
-                logic.kickoutByTokenValue(token);
+                if(auditSessionEvents==null)logic.kickoutByTokenValue(token);
+                else auditSessionEvents.revoke(tenantId,"TENANT_USER",userId,session.get("auditSessionRef")==null?null:String.valueOf(session.get("auditSessionRef")),null,()->logic.kickoutByTokenValue(token));
             }
         }
     }

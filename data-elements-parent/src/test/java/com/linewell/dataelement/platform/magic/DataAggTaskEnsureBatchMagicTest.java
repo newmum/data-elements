@@ -231,6 +231,41 @@ class DataAggTaskEnsureBatchMagicTest {
         assertFalse(dsl.contains("unauthorized"));
     }
 
+    @Test
+    void pushRegistrationUsesOdsFileBindingAndCommitAcknowledgementWithFixedReads() throws Exception {
+        var reads=new ArrayList<Integer>();
+        for(int size:List.of(20,100)) {
+            var f=new Fixture(size);f.prepareCreation();
+            f.jdbc.execute("alter table dwm_center_layer_source_t add layer_code varchar(32)");
+            f.jdbc.execute("alter table dwm_center_layer_source_t add updated_time timestamp");
+            f.jdbc.update("update db_datasource_t set db_type='receive',pool_cfg=? where tid='source-db'","{\"accessMode\":\"receive\"}");
+            f.jdbc.update("insert into db_datasource_t(tid,tenant_id,db_type,pool_cfg,is_del) values('files','police','ftp',?,0)","{\"ftpProtocol\":\"sftp\",\"ftpHost\":\"managed.invalid\",\"ftpPort\":22,\"ftpPath\":\"/incoming\"}");
+            f.jdbc.update("insert into dwm_center_layer_source_t(tenant_id,target_id,target_type,datasource_id,is_del,layer_code) values('police','domain','domain','files',0,'fjghcc')");
+            f.jdbc.update("update db_table_t set field_governance_config=? where tid='source-1'","{\"timestampField\":\"updated_at\"}");
+            f.jdbc.update("insert into db_table_column_t values('source-time','police','source-1','updated_at',null,2,0)");
+            for(int i=0;i<size;i++) {
+                f.jdbc.update("insert into db_table_column_t values(?,'police',?,'updated_at',null,2,0)","target-time-"+i,"target-"+i);
+                f.jdbc.update("insert into db_table_column_t values(?,'police',?,'ODS_GXSJ',null,3,0)","target-audit-"+i,"target-"+i);
+                f.jdbc.update("update db_table_t set field_governance_config=? where tid=?","{\"timestampField\":\"ODS_GXSJ\"}","target-"+i);
+            }
+            var preflight=assertInstanceOf(Map.class,f.run(Map.of("tableId","source-1","validateSourceOnly",true,"dryRun",true)));
+            assertEquals("source.sftp",preflight.get("sourceManifestKey"));assertEquals(0,f.counter.writes);
+            assertInstanceOf(Map.class,f.run());reads.add(f.counter.queries);
+            var config=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'",String.class)).getJSONArray("nodes").getJSONObject(0).getJSONObject("config");
+            assertEquals("DELETE_AFTER_DATABASE_COMMIT",config.getStr("fileConsumptionPolicy"));
+            assertEquals("/incoming/source-db/person/",config.getStr("remotePath"));
+            var last=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id=?",String.class,"target-"+(size-1)));
+            assertEquals("updated_at",last.getJSONArray("nodes").getJSONObject(0).getJSONObject("config").getStr("incrementalColumn"));
+            var first=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'",String.class));
+            assertEquals("FAIL_FLOWFILE",cn.hutool.json.JSONUtil.parseObj(first.getJSONArray("nodes").getJSONObject(1).getJSONObject("config").getStr("mappings")).getStr("recordErrorMode"));
+            f.scope.deniedId="files";assertInstanceOf(ExitValue.class,f.run(Map.of("tableId","source-1","validateSourceOnly",true,"dryRun",true)));assertEquals(0,f.counter.writes);
+            f.scope.deniedId=null;f.jdbc.update("update db_datasource_t set tenant_id='other' where tid='files'");
+            assertInstanceOf(ExitValue.class,f.run(Map.of("tableId","source-1","validateSourceOnly",true,"dryRun",true)));assertEquals(0,f.counter.writes);
+            System.out.println("Push file task targets="+size+", metadata SQL="+reads.getLast()+", storage scope checked");
+        }
+        assertEquals(reads.getFirst(),reads.getLast());
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"NUMBER(10,0)", "varchar(2)"})
     void registeredEnumCarriesSourceFieldTypeIntoGeneratedDslAndPersistence(String type) throws Exception {
@@ -402,6 +437,11 @@ class DataAggTaskEnsureBatchMagicTest {
         }
         if (raw.equals("kafka")) {
             assertEquals("broker:9092", source.getJSONObject("config").getStr("bootstrapServers"));
+            assertEquals("0 sec", source.getJSONObject("config").getStr("schedulingPeriod"));
+            assertEquals("ingestion-police-source-1", source.getJSONObject("config").getStr("groupId"));
+        }
+        if (raw.equals("minio")) {
+            assertEquals("registered/nested/person.json", source.getJSONObject("config").getStr("minioObjectKey"));
         }
         if (raw.equals("oceanbaseoracle")) {
             assertEquals("ORACLE", source.getJSONObject("config").getStr("compatibleMode"));

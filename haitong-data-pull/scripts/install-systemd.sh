@@ -82,7 +82,7 @@ if [[ -z "$JAVA_BIN" ]]; then
 fi
 [[ -n "$JAVA_BIN" && -x "$JAVA_BIN" ]] || die "未找到可执行 Java；请通过 --java-bin 指定 JDK/JRE 21 的 java。"
 JAVA_BIN="$(readlink -f "$JAVA_BIN")"
-"$JAVA_BIN" -version 2>&1 | grep -qE '"21\.| version "21\.' || die "需要 Java 21：$JAVA_BIN"
+"$JAVA_BIN" --version | grep -qE '^(openjdk|java) 21([.[:space:]]|$)' || die "需要 Java 21：$JAVA_BIN"
 
 # The service account owns only mutable runtime state.  Keep the JAR and
 # configuration under the deployment account/root ownership when possible.

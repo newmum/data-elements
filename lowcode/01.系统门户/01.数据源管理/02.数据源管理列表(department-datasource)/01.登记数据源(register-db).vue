@@ -93,42 +93,26 @@
 
         <section v-if="accessMode === 'receive'" class="receive-spec-bordered">
           <div class="connection-guide receive-template-guide">
-            <div class="receive-push-address">
-              <span class="receive-push-address-label">数据推送地址</span>
-              <code>{{ receivePushAddress }}</code>
-              <small>当前所属网络：{{ receiveNetworkName }}</small>
-            </div>
             <div class="receive-delivery-profile">
               <label class="receive-delivery-field">
-                <span>推送数据大小</span>
-                <el-select
-                  v-model="receiveDeliveryProfile.pushDataSize"
-                  placeholder="请选择推送数据大小"
-                  clearable
-                >
-                  <el-option
-                    v-for="item in receivePushDataSizeOptions"
-                    :key="item"
-                    :label="item"
-                    :value="item"
-                  />
-                </el-select>
-              </label>
-              <label class="receive-delivery-field">
-                <span>推送数据频率</span>
+                <span>推送频率</span>
                 <el-select
                   v-model="receiveDeliveryProfile.dataTimeliness"
-                  placeholder="请选择推送数据频率"
-                  clearable
+                  placeholder="请选择推送频率"
                 >
                   <el-option
                     v-for="item in receiveDataTimelinessOptions"
-                    :key="item"
-                    :label="item"
-                    :value="item"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
                   />
                 </el-select>
               </label>
+              <div class="receive-push-address">
+                <span class="receive-push-address-label">推送地址</span>
+                <code :title="receivePushAddress">{{ receivePushAddress }}</code>
+                <small>当前所属网络：{{ receiveNetworkName }}</small>
+              </div>
             </div>
             <div
               v-if="hasMetadataImportResult"
@@ -2743,16 +2727,8 @@ const sourceType = ref("");
 const connectionEnabled = ref("");
 const receiveAccessNode = ref("");
 const defaultAccessNodeOptions = [];
-// 当前仅用于前端演示：三类所属网络分别映射到固定的服务总线地址。
-// 实际接入节点上线后，应由 /ods/nifi-node/access-options 返回的节点地址替换。
-const simulatedReceiveBusAddresses = {
-  GAW: "https://gaw-bus.example.com/open/data-receive",
-  公安网: "https://gaw-bus.example.com/open/data-receive",
-  SPZW: "https://spzw-bus.example.com/open/data-receive",
-  专网: "https://spzw-bus.example.com/open/data-receive",
-  HLW: "https://hlw-bus.example.com/open/data-receive",
-  互联网: "https://hlw-bus.example.com/open/data-receive",
-};
+const receivePushNodes = ref([]);
+const receivePushNodesState = ref("loading");
 const accessNodeValueAliases = {};
 const normalizeAccessNodeValue = (value) => {
   const text = String(value || "").trim();
@@ -2779,15 +2755,16 @@ const mergeAccessNodeOptions = (remoteOptions = []) => {
 };
 const accessNodeOptions = ref(mergeAccessNodeOptions());
 const accessNetworkOptions = ref([]);
-const selectedAccessNode = computed(
-  () =>
-    accessNodeOptions.value.find(
-      (item) => item.networkCode === receiveAccessNode.value && item.isDefault,
-    ) ||
-    accessNodeOptions.value.find(
-      (item) => item.networkCode === receiveAccessNode.value,
-    ) ||
-    null,
+const receiveNetworkPushNodes = computed(() =>
+  receivePushNodes.value.filter(
+    (item) => item.networkCode === receiveAccessNode.value,
+  ),
+);
+const selectedReceivePushNode = computed(() =>
+  receiveNetworkPushNodes.value.find((item) => item.isDefault) ||
+  (receiveNetworkPushNodes.value.length === 1
+    ? receiveNetworkPushNodes.value[0]
+    : null),
 );
 const receiveNetworkName = computed(
   () =>
@@ -2796,28 +2773,51 @@ const receiveNetworkName = computed(
     )?.label || "当前所属网络",
 );
 const receivePushAddress = computed(() => {
-  const simulatedAddress =
-    simulatedReceiveBusAddresses[receiveAccessNode.value];
-  if (simulatedAddress) return simulatedAddress;
-  const baseUrl = String(selectedAccessNode.value?.baseUrl || "").replace(
-    /\/+$/,
-    "",
-  );
-  return baseUrl ? baseUrl + "/open/data-receive" : "待选择数据接入节点";
+  if (!receiveAccessNode.value) return "请先选择所属网络";
+  if (receivePushNodesState.value === "loading") return "正在加载推送节点…";
+  if (receivePushNodesState.value === "error") return "推送节点加载失败，请重新打开登记页面";
+  const baseUrl = selectedReceivePushNode.value?.baseUrl;
+  if (baseUrl) return baseUrl + "/api/v1/data-push";
+  return receiveNetworkPushNodes.value.length > 1
+    ? "当前网络有多个推送节点，请在节点管理中设置默认节点"
+    : "当前网络未配置启用的推送节点";
 });
-const receivePushDataSizeOptions = [
-  "10B - 100KB",
-  "100KB - 10MB",
-  "10MB - 1GB",
+const receiveDataTimelinessOptions = [
+  { value: "实时", label: "实时（100KB–10MB）", size: "100KB - 10MB" },
+  { value: "非实时", label: "非实时（10MB–1GB）", size: "10MB - 1GB" },
 ];
-const receiveDataTimelinessOptions = ["实时", "非实时"];
 const receiveDeliveryProfile = reactive({
-  pushDataSize: "",
-  dataTimeliness: "",
+  dataTimeliness: "非实时",
 });
+const receivePushDataSize = computed(() =>
+  receiveDataTimelinessOptions.find(
+    (item) => item.value === receiveDeliveryProfile.dataTimeliness,
+  )?.size || "10MB - 1GB",
+);
 const syncReceiveDeliveryProfile = (data = {}) => {
-  receiveDeliveryProfile.pushDataSize = String(data.pushDataSize || "").trim();
-  receiveDeliveryProfile.dataTimeliness = String(data.dataTimeliness || "").trim();
+  receiveDeliveryProfile.dataTimeliness =
+    String(data.dataTimeliness || "").trim() === "实时" ? "实时" : "非实时";
+};
+const loadReceivePushNodes = async () => {
+  receivePushNodesState.value = "loading";
+  try {
+    // 与节点管理复用同一租户接口，一次读取所有有界配置，不逐数据源或节点补查。
+    const response = await $common.post("/ods/nifi-node/page", { nodeType: "push" });
+    const payload = response?.data || response || {};
+    receivePushNodes.value = (Array.isArray(payload.list) ? payload.list : [])
+      .filter((item) => Number(item.enabled) === 1)
+      .map((item) => ({
+        networkCode: String(item.networkCode || item.network_code || "").trim(),
+        baseUrl: String(item.baseUrl || item.base_url || "").trim().replace(/\/+$/, ""),
+        isDefault: Number(item.isDefault ?? item.is_default ?? 0) === 1,
+      }))
+      .filter((item) => item.networkCode && item.baseUrl);
+    receivePushNodesState.value = "ready";
+  } catch (error) {
+    receivePushNodes.value = [];
+    receivePushNodesState.value = "error";
+    console.warn("加载数据推送节点失败", error);
+  }
 };
 const syncReceiveAccessNode = (
   value = formRef.value?.api?.getValue?.("SSWL"),
@@ -2840,6 +2840,7 @@ const normalizeAccessNodeOptions = (payload) => {
           "",
       ).trim(),
       networkName: String(item?.networkName || item?.network_name || "").trim(),
+      networkCode: String(item?.networkCode || item?.network_code || "").trim(),
       baseUrl: String(item?.baseUrl || item?.base_url || "").replace(
         /\/+$/,
         "",
@@ -3028,20 +3029,20 @@ const sourceTypeLabels = {
   oracle: "Oracle",
   oceanbasemysql: "OceanBase MySQL",
   oceanbaseoracle: "OceanBase Oracle",
+  kingbase8: "人大金仓 KingbaseES",
+  postgresql: "PostgreSQL",
+  dameng: "达梦数据库",
+  hive: "Hive",
   gaussdb: "GaussDB",
+  ftp: "FTP",
+  kafka: "Kafka",
+  minio: "MinIO",
+  elasticsearch: "Elasticsearch",
   gbase8a: "GBase 8a",
   sqlserver: "SQL Server",
-  hive: "Hive",
-  maxcompute: "MaxCompute",
   vertica: "Vertica",
-  dameng: "达梦数据库",
-  postgresql: "PostgreSQL",
-  kingbase8: "人大金仓 KingbaseES",
-  minio: "MinIO",
-  ftp: "FTP",
   api: "API",
-  kafka: "Kafka",
-  elasticsearch: "Elasticsearch",
+  maxcompute: "MaxCompute",
 };
 const normalizeSourceType = (value) => {
   const normalized = String(value || "")
@@ -3090,7 +3091,7 @@ const sourceTypeDescriptions = {
 };
 const sourceTypeCardOptions = computed(() =>
   Object.entries(sourceTypeLabels)
-    .filter(([value]) => accessMode.value !== "explore" || value !== "api")
+    .filter(([value]) => value !== "maxcompute" && (accessMode.value !== "explore" || value !== "api"))
     .map(([value, label]) => ({
       value,
       label,
@@ -5375,6 +5376,7 @@ const initData = computed(() => {
   return obj;
 });
 onMounted(() => {
+  loadReceivePushNodes();
   const initialDb = ensureInitialDatasource();
   // 接口按当前会话部门进行权限约束，左侧只展示当前用户可访问的数据源。
   loadAccessibleDatasources()
@@ -6035,7 +6037,7 @@ const save = async () => {
     const receiveDeliveryData =
       accessMode.value === "receive"
         ? {
-            pushDataSize: receiveDeliveryProfile.pushDataSize,
+            pushDataSize: receivePushDataSize.value,
             dataTimeliness: receiveDeliveryProfile.dataTimeliness,
           }
         : {};
@@ -8697,8 +8699,7 @@ function validateConnector() {
       throw new Error("请选择有效的抓取时间");
   }
   if (accessMode.value === "receive") {
-    // 推送数据大小和推送数据频率仅用于补充描述，可按实际情况选择，
-    // 不应阻止用户保存或进入下一步。
+    // 推送频率及其对应大小范围属于登记描述，不代替推送节点的实际接收策略。
     const imported = activeMetadataImport();
     if (
       !imported?.metadataImport ||
@@ -9248,16 +9249,10 @@ defineExpose({
 
 .receive-push-address {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  margin: 0 auto 16px;
-  padding: 11px 14px;
-  width: min(860px, 100%);
-  border: 1px solid #cfe1fa;
-  border-radius: 10px;
-  background: rgb(255 255 255 / 82%);
-  box-shadow: 0 4px 12px rgb(35 103 189 / 5%);
+  gap: 6px 10px;
+  min-width: 0;
 }
 
 .receive-push-address-label {
@@ -9279,6 +9274,7 @@ defineExpose({
 }
 
 .receive-push-address small {
+  grid-column: 2;
   color: #667085;
   font-size: 12px;
   white-space: nowrap;
@@ -9286,10 +9282,17 @@ defineExpose({
 
 .receive-delivery-profile {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: 270px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
   width: min(860px, 100%);
   margin: 0 auto 16px;
+  padding: 11px 14px;
+  box-sizing: border-box;
+  border: 1px solid #cfe1fa;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 0 4px 12px rgb(35 103 189 / 5%);
 }
 
 .receive-delivery-field {

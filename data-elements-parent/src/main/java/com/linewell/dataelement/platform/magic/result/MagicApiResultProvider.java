@@ -39,7 +39,10 @@ public class MagicApiResultProvider implements ResultProvider {
 
     @Override
     public Object buildResult(RequestEntity requestEntity, int code, String message, Object data) {
+        var servletRequest=com.linewell.dataelement.platform.audit.AuditIdentityResolver.request();
+        if(servletRequest!=null&&requestEntity!=null&&requestEntity.getApiInfo()!=null) servletRequest.setAttribute("audit.functionName",requestEntity.getApiInfo().getName());
         boolean success = code == 0 || code == 1 || code == 200;
+        auditResult(code,success);
         String displayMessage = success
                 ? defaultText(message, "success")
                 : friendlyBusinessMessage(message);
@@ -77,6 +80,7 @@ public class MagicApiResultProvider implements ResultProvider {
 
     @Override
     public Object buildException(RequestEntity requestEntity, Throwable throwable) {
+        auditResult(500,false);
         Throwable actual = throwable == null ? new IllegalStateException("Unknown Magic API error") : throwable;
         ApiErrorDetails error = ApiErrorResolver.resolve(actual);
 
@@ -91,6 +95,14 @@ public class MagicApiResultProvider implements ResultProvider {
         Map<String, Object> result = baseResult(ERROR_CODE, error.message(), false, null);
         result.put("error", diagnosticError(error, requestEntity));
         return result;
+    }
+
+    private void auditResult(int code,boolean success) {
+        var request=com.linewell.dataelement.platform.audit.AuditIdentityResolver.request();
+        if(request!=null) {
+            request.setAttribute(com.linewell.dataelement.platform.audit.AuditWebInterceptor.BUSINESS_CODE,String.valueOf(code));
+            request.setAttribute(com.linewell.dataelement.platform.audit.AuditWebInterceptor.BUSINESS_RESULT,success?"SUCCESS":code==403?"DENIED":"FAILED");
+        }
     }
 
     private Map<String, Object> baseResult(int code, String message, boolean success, Object data) {

@@ -9,16 +9,16 @@
       "dialect": "mysql",
       "file": "baseline/init.sql",
       "objects": {
-        "tables": 50,
+        "tables": 55,
         "views": 2,
-        "indexes": 149,
+        "indexes": 165,
         "foreignKeys": 1,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "646b9655e4616179cf874acc24266d8cbce290dc008e49eaaecdd0113d4c509f",
+      "sha256": "a3e0bcc4c5671c386cd3a0887596b01e78def330b3543623a25166134b6cc757",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -31,17 +31,17 @@
       "dialect": "dameng",
       "file": "baseline_beijing_gd/init.sql",
       "objects": {
-        "tables": 157,
+        "tables": 162,
         "views": 5,
-        "indexes": 635,
-        "explicitIndexes": 316,
+        "indexes": 660,
+        "explicitIndexes": 331,
         "foreignKeys": 2,
         "triggers": 20,
         "procedures": 0,
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "3aee6cf59e3fc15ea0fc32f3db6d924b14fa76b9f19778636a15521c69e84b3f",
+      "sha256": "2d18187edbb11f4518182f635bf6e7d346a647512fd8b8b79d9d2946de7ad6ca",
       "exportNotes": {
         "definitions": "DBMS_METADATA.GET_DDL",
         "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
@@ -54,16 +54,16 @@
       "dialect": "mysql",
       "file": "chengtian/init.sql",
       "objects": {
-        "tables": 157,
+        "tables": 162,
         "views": 0,
-        "indexes": 557,
+        "indexes": 577,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "b4fb3e755d09f92e7d48a2a78ffe3bfa97ee8cec1db4ded4d246b1a490a3a234",
+      "sha256": "0700e768b0b3e47274d2e9575164f2cf99fcd2f03096f53e211d156f97c99024",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -76,16 +76,16 @@
       "dialect": "mysql",
       "file": "baseline_ga/init.sql",
       "objects": {
-        "tables": 157,
+        "tables": 162,
         "views": 5,
-        "indexes": 557,
+        "indexes": 577,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "61cf0fb93f66813cf06074c5d74f3087af3010a97753fe0a3e1db228f4bef31c",
+      "sha256": "ae90967ea370ef3d563074bf60337fe1deb616b42432ced5229dbff90518bb34",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -98,16 +98,16 @@
       "dialect": "mysql",
       "file": "baseline_sea_fishery/init.sql",
       "objects": {
-        "tables": 157,
+        "tables": 162,
         "views": 5,
-        "indexes": 557,
+        "indexes": 577,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "409f8369a52da67e2646560acc91b72dc71f9d666336da7c0b23fcd8b19d3a0e",
+      "sha256": "a78d2f50d4b8c17342037886d1945aab46f0ca1e84ae9d4c55d52014ea93189d",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

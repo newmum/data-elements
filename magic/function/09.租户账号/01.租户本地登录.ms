@@ -22,6 +22,7 @@
 // 业务说明：在当前租户库核验本地账号、密码和状态，返回租户本地登录结果；不接受统一身份平台账号冒充本地账号。
 // 函数输入：payload：该动作所需的账号、角色或资源资料。
 import db;
+import auditEvents;
 import identityRuntime;
 import tenantAccounts;
 import cn.hutool.core.util.IdUtil;
@@ -47,14 +48,13 @@ where tenant_id=#{tenantId}
     and user_name=#{account}
     and deleted=0
 """));
-if(user==null || user.status!=0 || user.password==null || !PwdRuleUtil.checkPwdBySalt(password,user.password)) {exit -1,'用户名或密码错误';}
-if(!identityRuntime.inTenant(tenantId,()=>sourceCheck(user.id)).allowed) {exit -1,'此账号的统一管理来源已停用，请联系管理员或办理脱管';}
+if(user==null || user.status!=0 || user.password==null || !PwdRuleUtil.checkPwdBySalt(password,user.password)) {auditEvents.authentication(tenantId,null,'AUTH_LOGIN_FAILED','FAILED','INVALID_CREDENTIALS');exit -1,'用户名或密码错误';}
+if(!identityRuntime.inTenant(tenantId,()=>sourceCheck(user.id)).allowed) {auditEvents.authentication(tenantId,null,'AUTH_LOGIN_FAILED','DENIED','SOURCE_DISABLED');exit -1,'此账号的统一管理来源已停用，请联系管理员或办理脱管';}
 var token=tenantAccounts.loginLocal(tenantId,user.id,(p.appId||'')+'',account);
-var logId=IdUtil.getSnowflakeNextIdStr();
-sql.update("""
-insert into log_user_login_t(tid,
-                account, is_success, token, created_by, updated_by, created_time, updated_time, is_del,
-                tenant_id)
-values(#{logId},#{account},1,#{token},#{user.id},#{user.id},current_timestamp,current_timestamp,0,#{tenantId})
-""");
+try {
+    auditEvents.authentication(tenantId,user.id,'AUTH_LOGIN_SUCCEEDED','SUCCESS',null);
+} catch(error) {
+    auditEvents.compensateLogin();
+    throw error;
+}
 return {token:token,url:'/home',authRealm:'tenant-local-v1',tenantId:tenantId};

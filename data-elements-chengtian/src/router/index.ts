@@ -49,6 +49,7 @@ export const rootRoute: RouteVO = {
 
 // 静态路由
 export const constantRoutes: RouteRecordRaw[] = [
+  {path:'/register/logs/:legacy',redirect:'/register/logs',meta:{hidden:true}},
   ...["/register/nifi-node-config", "/register/node-config"].map((path) => ({
     path,
     redirect: (to: RouteLocation) => ({

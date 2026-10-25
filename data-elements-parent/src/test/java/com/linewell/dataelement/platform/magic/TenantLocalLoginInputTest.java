@@ -31,6 +31,7 @@ class TenantLocalLoginInputTest {
     private static final String DIGEST = SmUtil.sm3(FIXTURE_PASSWORD).toUpperCase();
     private SQLModule db;
     private JdbcTemplate jdbc;
+    private Audit audit;
     private final Accounts accounts = new Accounts();
     private final Receiver receiver = new Receiver();
 
@@ -53,7 +54,8 @@ class TenantLocalLoginInputTest {
         db.setNamedTableInterceptors(List.of());
         jdbc = new JdbcTemplate(source);
         jdbc.execute("create table rm_user_t(id varchar(40),tenant_id varchar(40),user_name varchar(50),password varchar(256),status int,deleted int)");
-        jdbc.execute("create table log_user_login_t(tid varchar(40),account varchar(50),is_success int,token varchar(100),created_by varchar(40),updated_by varchar(40),created_time timestamp,updated_time timestamp,is_del int,tenant_id varchar(40))");
+        jdbc.execute("create table log_user_login_t(tid varchar(40),account varchar(50),is_success int,token varchar(100),created_by varchar(40),updated_by varchar(40),created_time timestamp,updated_time timestamp,is_del int,tenant_id varchar(40),action_code varchar(64),result varchar(24))");
+        audit=new Audit(jdbc,accounts);
         for (String name : List.of("246810", "001234", "0", "manager")) {
             jdbc.update("insert into rm_user_t values(?,?,?,?,0,0)", "user-" + name, "tenant-a", name,
                     PwdRuleUtil.encryptPwdBySalt(DIGEST));
@@ -82,7 +84,7 @@ class TenantLocalLoginInputTest {
         String before = jdbc.queryForObject("select password from rm_user_t where user_name='246810'", String.class);
         assertExit(-1, run(246810, SmUtil.sm3(FIXTURE_PASSWORD + " "), "tenant-a"));
         assertEquals(0, accounts.logins);
-        assertEquals(0, jdbc.queryForObject("select count(*) from log_user_login_t", Integer.class));
+        assertEquals(1, jdbc.queryForObject("select count(*) from log_user_login_t where result='FAILED'", Integer.class));
         assertInstanceOf(Map.class, run(246810, DIGEST, "tenant-a"));
         assertEquals(1, accounts.logins);
         assertEquals(before, jdbc.queryForObject("select password from rm_user_t where user_name='246810'", String.class));
@@ -116,13 +118,13 @@ class TenantLocalLoginInputTest {
 
     private Object run(Object account, Object password, String tenant) throws Exception {
         String script = CanonicalMagicSources.byId("ga_local_login_01")
-                .replaceAll("(?m)^import (db|identityRuntime|tenantAccounts);\\r?\\n", "")
+                .replaceAll("(?m)^import (db|identityRuntime|tenantAccounts|auditEvents);\\r?\\n", "")
                 .replaceAll("(?m)^import '@/[^\\r\\n]+;\\r?\\n", "");
         var payload = new LinkedHashMap<String, Object>();
         payload.put("account", account); payload.put("password", password);
         payload.put("tenantId", tenant); payload.put("appId", "app-a");
         var context = Map.<String,Object>of("payload", payload, "db", db,
-                "identityRuntime", new Runtime(), "tenantAccounts", accounts, "receiver", receiver);
+                "identityRuntime", new Runtime(), "tenantAccounts", accounts, "receiver", receiver,"auditEvents",audit);
         return MagicScript.create("var sourceCheck=id=>receiver.check(id);\n" + script, null)
                 .execute(new MagicScriptContext(context));
     }
@@ -132,6 +134,25 @@ class TenantLocalLoginInputTest {
         assertEquals(expected, ((Number)exit.getValues()[0]).intValue());
     }
 
+    @Test void successfulLoginNeverPersistsBearerCredential()throws Exception{
+        assertInstanceOf(Map.class,run("manager",DIGEST,"tenant-a"));
+        assertEquals(0,jdbc.queryForObject("select count(*) from log_user_login_t where token is not null",Integer.class));
+        assertEquals("SUCCESS",jdbc.queryForObject("select result from log_user_login_t",String.class));
+    }
+    @Test void failedFinalAuditCompensatesNewlyIssuedSession()throws Exception{
+        audit.fail=true;
+        assertThrows(Exception.class,()->run("manager",DIGEST,"tenant-a"));
+        assertTrue(accounts.revoked);
+    }
+    public static class Audit {
+        final JdbcTemplate jdbc;final Accounts accounts;boolean fail;
+        Audit(JdbcTemplate jdbc,Accounts accounts){this.jdbc=jdbc;this.accounts=accounts;}
+        public void authentication(String tenant,String user,String action,String result,String reason){
+            if(fail)throw new IllegalStateException("validation audit write unavailable");
+            jdbc.update("insert into log_user_login_t(tid,tenant_id,created_by,action_code,result) values(?,?,?,?,?)",UUID.randomUUID().toString(),tenant,user,action,result);
+        }
+        public void compensateLogin(){accounts.revoked=true;}
+    }
     public static class Runtime {
         public Object inTenant(String tenant, MagicScriptLambdaFunction callback) {
             assertEquals("tenant-a", tenant);
@@ -140,7 +161,7 @@ class TenantLocalLoginInputTest {
     }
 
     public static class Accounts {
-        int logins; String lastAccount;
+        int logins; String lastAccount;boolean revoked;
         public boolean isLocal(String tenant) { return "tenant-a".equals(tenant); }
         public String loginLocal(String tenant, String user, String app, String account) {
             assertEquals("tenant-a", tenant); assertEquals("app-a", app);

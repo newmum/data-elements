@@ -25,7 +25,7 @@ const PermissionGroups = lazy(() => import('../pages/Authorization').then(m => (
 const Synchronization = lazy(() => import('../pages/Synchronization'));
 const CatalogPage = lazy(() => import('../pages/CatalogPage'));
 const PlatformAccess = lazy(() => import('../pages/PlatformAccess'));
-const Audit = lazy(() => import('../pages/Audit'));
+const LowcodeLogs = lazy(() => import('../components/LowcodeLogs'));
 const Settings = lazy(() => import('../pages/Settings'));
 const Profile = lazy(() => import('../pages/Settings').then(m => ({ default: m.Profile })));
 const PublicEntities = lazy(() => import('../pages/PublicEntities'));
@@ -142,10 +142,7 @@ export default function Shell() {
             return <Authorization domain={domain} mode={path.split('/')[1] as 'apps' | 'users' | 'orgs'}/>;
         if (['sync/configs', 'sync/entities', 'sync/tasks'].includes(path))
             return <Synchronization domain={domain} view={path.split('/')[1] as 'configs' | 'entities' | 'tasks'}/>;
-        if (path === 'audit/statistics')
-            return <Dashboard domain={domain} statistics/>;
-        if (['audit/operations', 'audit/logins', 'audit/api'].includes(path))
-            return <Audit domain={domain} type={path === 'audit/operations' ? 'operation' : path === 'audit/logins' ? 'login' : 'api'}/>;
+        if (path.startsWith('audit/')) return <LowcodeLogs domain={domain}/>;
         if (['system/settings/security', 'system/settings/sso', 'system/settings/encryption', 'system/settings/api', 'system/settings/branding'].includes(path))
             return <Settings domain={domain} kind={path.split('/')[2]}/>;
         if (path === 'profile')
@@ -169,7 +166,7 @@ export default function Shell() {
     const matchingUsers = search && session.domain === domain && canView(session, domain === 'public' ? 'persons' : 'organization') ? db.users.filter(u => allowedUser(db, session, u) && `${u.name} ${u.account}`.toLowerCase().includes(search.toLowerCase())).slice(0, 6) : [];
     const attention = [
         ...(domain === 'workforce' && canView(session, 'sync/tasks') ? [{ key: 'sync/tasks', icon: <ReloadOutlined />, title: '同步异常需要处理', text: `${db.tasks.filter(t => t.domain === domain && ['partial', 'failed'].includes(t.status)).length} 个任务包含失败项，请查看明细后重试。` }] : []),
-        ...(canView(session, 'audit/logins') ? [{ key: 'audit/logins', icon: <SafetyOutlined />, title: '近期身份访问记录', text: '集中查看登录结果、来源地址和关联应用。' }] : []),
+        ...(canView(session, 'audit/logs') ? [{ key: 'audit/logs', icon: <SafetyOutlined />, title: '近期身份访问记录', text: '集中查看登录结果、来源地址和关联应用。' }] : []),
         ...(canView(session, 'locked-accounts') ? [{ key: 'locked-accounts', icon: <UserOutlined />, title: '账号锁定提醒', text: `${db.users.filter(u => allowedUser(db, session, u) && u.locked).length} 个账号处于锁定状态。` }] : []),
     ];
     const menu = <Menu className="business-navigation" theme="dark" mode="inline" inlineCollapsed={collapsed} items={desktopMenuItems} selectedKeys={[`${domain}:${info?.key || path}`]} openKeys={collapsed ? popupOpenKeys : openKeys} onOpenChange={collapsed ? setPopupOpenKeys : setOpenKeys} onClick={v => go(v.key)} style={{ borderInlineEnd: 0, background: 'transparent' }}/>;
@@ -214,7 +211,7 @@ export default function Shell() {
             { key: 'version', label: '平台版本', children: '2.2.0' },
         ]}/>
         <Card size="small" title="常用操作" className="section-gap"><div className="help-actions">
-          {visible.filter(p => ['organization', 'apps', 'grants/users', 'audit/operations', 'persons', 'entities'].includes(p.key)).map(p => <Button key={p.id} block onClick={() => { setHelpOpen(false); go(p.id); }}>{p.label}<ArrowRightOutlined /></Button>)}
+          {visible.filter(p => ['organization', 'apps', 'grants/users', 'audit/logs', 'persons', 'entities'].includes(p.key)).map(p => <Button key={p.id} block onClick={() => { setHelpOpen(false); go(p.id); }}>{p.label}<ArrowRightOutlined /></Button>)}
         </div></Card>
         <Card size="small" title="操作提示"><div className="help-copy"><p>使用顶部搜索快速定位用户、应用或功能，快捷键为 Ctrl / ⌘ + K。</p><p>授权前核对对象、角色与有效期；撤销单一来源不会移除其他仍有效的授权。</p><p>高风险操作请先检查影响范围。未保存的表单内容在关闭后不会保留。</p></div></Card>
       </Drawer>

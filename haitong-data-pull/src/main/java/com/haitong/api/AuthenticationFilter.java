@@ -7,6 +7,11 @@ import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.ssssssss.magicapi.core.config.MagicConfiguration;
+import org.ssssssss.magicapi.core.model.ApiInfo;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
@@ -20,7 +25,14 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
     private record Window(long minute,int count) {}
     private final ConcurrentHashMap<String,Window> windows=new ConcurrentHashMap<>();
     private final Secrets secrets;private final RelayProperties p;private final Json json;private final PushCredentialStore pushCredentials;
+    private ObjectProvider<MagicConfiguration> editorConfigurations;
+    private Environment environment;
     public AuthenticationFilter(Secrets secrets,RelayProperties p,Json json,PushCredentialStore pushCredentials) { this.secrets=secrets;this.p=p;this.json=json;this.pushCredentials=pushCredentials; }
+    @Autowired
+    void editorConfiguration(ObjectProvider<MagicConfiguration> configurations, Environment environment) {
+        this.editorConfigurations = configurations;
+        this.environment = environment;
+    }
     @Override protected boolean shouldNotFilter(HttpServletRequest r) {
         String path=r.getRequestURI();
         // Magic-API owns its editor session/login protocol below this path.  Do
@@ -38,6 +50,17 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
         if(path.contains("%") || path.contains(";") || path.contains("\\") || path.contains("//") || path.contains("/../") || path.contains("/./")) {
             error(res,400,"INVALID_PATH","接口路径不能包含编码分隔符或路径参数");return;
         }
+        // These are executable HTTP examples for the authenticated editor, not
+        // public business endpoints. A business key must never grant access to
+        // a server-side example that uses a separately configured test key.
+        if (path.startsWith("/validation/")) {
+            if (!editorValidation(req)) {
+                error(res,401,"EDITOR_REQUIRED","请登录海通 Magic 编辑器运行验证示例，并启用私有配置 haitong.validation.enabled");
+                return;
+            }
+            chain.doFilter(req,res);
+            return;
+        }
         boolean internal=req.getRequestURI().startsWith("/internal/") || req.getRequestURI().startsWith("/actuator/");
         Secrets.Identity identity=secrets.admin(req.getHeader("X-Admin-Key"));
         boolean platformCredentialIssue = "/internal/push-credentials/issue".equals(path);
@@ -47,8 +70,10 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
         // The Magic push function checks route/channel permissions after JSON parsing.
         boolean standaloneRegistrySync = ("/api/v1/data-push".equals(path) || "/push-operations/data-push".equals(path))
                 && p.getStandaloneRegistry().isSyncEnabled();
-        if (identity == null && platformCredentialIssue && p.getRegistrationRegistry().isEnabled()) {
-            String registryKey = secrets.resolve(p.getRegistrationRegistry().getSharedKey());
+        if (identity == null && platformCredentialIssue && p.getStandaloneRegistry().isSyncEnabled()) {
+            // Compatibility for an optional inbound issuer key; no URL or platform lookup is used.
+            String configured = p.getRegistrationRegistry().getSharedKey();
+            String registryKey = secrets.resolve(configured.isBlank() ? p.getStandaloneRegistry().getSyncKey() : configured);
             if (!registryKey.isBlank() && Rules.constantEquals(registryKey, req.getHeader("X-Relay-Registry-Key")))
                 identity = new Secrets.Identity("platform-credential-issuer", true, Set.of("*"), Set.of("*"));
         }
@@ -74,6 +99,29 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
             if(w.count()>p.getSecurity().getRequestsPerMinute()) {res.setHeader("Retry-After","60");error(res,429,"RATE_LIMITED","请求过于频繁");return;}
         }
         req.setAttribute(IDENTITY,identity);chain.doFilter(req,res);
+    }
+    private boolean editorValidation(HttpServletRequest req) {
+        if (environment == null || !environment.getProperty("haitong.validation.enabled", Boolean.class, false)) return false;
+        String token = req.getHeader("Magic-Token");
+        String scriptId = req.getHeader("Magic-Request-Script-Id");
+        if (token == null || token.isBlank() || scriptId == null || scriptId.isBlank()) return false;
+        try {
+            var configuration = editorConfigurations.getIfAvailable();
+            if (configuration == null) return false;
+            var authorization = configuration.getAuthorizationInterceptor();
+            if (!authorization.requireLogin()) return false;
+            var user = authorization.getUserByToken(token);
+            if (user == null) return false;
+            var resources = MagicConfiguration.getMagicResourceService();
+            var resource = resources.file(scriptId);
+            if (!(resource instanceof ApiInfo api) || !req.getMethod().equalsIgnoreCase(api.getMethod())) return false;
+            String mappedPath = ("/" + resources.getGroupPath(api.getGroupId()) + "/" + api.getPath()).replaceAll("/+", "/");
+            if (!mappedPath.equals(req.getRequestURI())) return false;
+            req.setAttribute(IDENTITY, new Secrets.Identity("magic-editor:" + user.getUsername(), false, Set.of(), Set.of()));
+            return true;
+        } catch (Exception invalidEditorSession) {
+            return false;
+        }
     }
     private void error(HttpServletResponse response,int code,String name,String message) throws IOException {
         response.setStatus(code);response.setContentType("application/json;charset=UTF-8");

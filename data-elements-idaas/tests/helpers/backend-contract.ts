@@ -1,6 +1,7 @@
 import { expect, type Page } from '@playwright/test';
 import { createSeed } from '../../src/domain/seed';
 import type { Database, EntityTable, Session } from '../../src/domain/types';
+import { loggingQuery } from './logging-contract';
 
 /** Match the paged HTTP contract; fixture ordering is deliberately separate from UI ordering. */
 function tablePage(database: Database, params: URLSearchParams, domain: string) {
@@ -38,7 +39,8 @@ export async function installContract(page: Page) {
     await page.route('**/api/**', async route => {
         const pathname = new URL(route.request().url()).pathname;
         let data: unknown;
-        if (pathname.endsWith('/sym/tenant/login-options')) data = [{ tenantId: session.tenantId, tenantName: session.tenantName }];
+        if (pathname.endsWith('/idaas/logs/query')) data = loggingQuery(new URL(route.request().url()).searchParams);
+        else if (pathname.endsWith('/sym/tenant/login-options')) data = [{ tenantId: session.tenantId, tenantName: session.tenantName }];
         else if (pathname.endsWith('/idaas/auth/login')) {
             const body = route.request().postDataJSON();
             expect(body.tenantId).toBeUndefined();
@@ -195,6 +197,7 @@ export async function installConsoleContract(page: Page, options: { publicAllowe
         } else if (path.endsWith('/idaas/auth/logout')) data = true;
         else if (path.endsWith('/idaas/auth-accounts/list') || path.endsWith('/idaas/users/operations') || path.endsWith('/idaas/verifications/list')) data = [];
         else if (path.endsWith('/idaas/verifications/provider')) data = { status: 'UNCONFIGURED' };
+        else if (path.endsWith('/idaas/logs/query')) data = loggingQuery(new URL(route.request().url()).searchParams);
         else if (path.endsWith('/idaas/audit/list')) data = { list: [], total: 0 };
         else return route.fulfill({ json: { code: 404, msg: '接口未开通', data: null } });
         await route.fulfill({ json: { code: 200, data } });

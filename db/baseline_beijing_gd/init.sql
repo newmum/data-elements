@@ -2112,16 +2112,159 @@ CREATE TABLE "baseline_beijing_gd"."idaas_receiver_receipt_t"
 CONSTRAINT "ga_idaas_receiver_receipt_t_pk_75d36e4d46e8" NOT CLUSTER PRIMARY KEY("id"),
 CONSTRAINT "ga_idaas_receiver_receipt_t_source_version_range_3206d83b3af8" CHECK("source_version" BETWEEN 0 AND 18446744073709551615.)) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+-- TABLE log_archive_batch_t
+CREATE TABLE "baseline_beijing_gd"."log_archive_batch_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"scope_kind" VARCHAR(16) NOT NULL,
+"scope_id" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32),
+"created_time" TIMESTAMP(6) NOT NULL,
+"event_store" VARCHAR(16) NOT NULL,
+"range_start" TIMESTAMP(6) NOT NULL,
+"range_end" TIMESTAMP(6) NOT NULL,
+"generation" INT DEFAULT 1 NOT NULL,
+"status" VARCHAR(20) NOT NULL,
+"record_count" BIGINT DEFAULT 0 NOT NULL,
+"byte_count" BIGINT DEFAULT 0 NOT NULL,
+"object_key" VARCHAR(512),
+"manifest_key" VARCHAR(512),
+"sha256" CHAR(64),
+"retention_until" TIMESTAMP(6) NOT NULL,
+"hold_status" VARCHAR(16),
+"hold_reason" VARCHAR(512),
+"verified_at" TIMESTAMP(6),
+"purge_completed_at" TIMESTAMP(6),
+"operator_id" VARCHAR(64),
+"updated_time" TIMESTAMP(6) NOT NULL,
+"version" BIGINT DEFAULT 1 NOT NULL,
+"identity_domain" VARCHAR(16) DEFAULT 'global' NOT NULL,
+"worker_id" VARCHAR(64),
+"lease_until" TIMESTAMP(6),
+"actor_name" VARCHAR(128),
+"actor_account" VARCHAR(128),
+"actor_org_name" VARCHAR(256),
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE log_audit_outbox_t
+CREATE TABLE "baseline_beijing_gd"."log_audit_outbox_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"scope_kind" VARCHAR(16) NOT NULL,
+"scope_id" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32),
+"created_time" TIMESTAMP(6) NOT NULL,
+"event_store" VARCHAR(16) NOT NULL,
+"event_id" VARCHAR(32) NOT NULL,
+"destination_code" VARCHAR(64) NOT NULL,
+"payload_version" INT DEFAULT 1 NOT NULL,
+"payload_json" TEXT NOT NULL,
+"status" VARCHAR(16) DEFAULT 'PENDING' NOT NULL,
+"attempt_count" INT DEFAULT 0 NOT NULL,
+"next_retry_at" TIMESTAMP(6) NOT NULL,
+"lease_owner" VARCHAR(128),
+"lease_until" TIMESTAMP(6),
+"last_error_code" VARCHAR(100),
+"last_error_summary" VARCHAR(512),
+"updated_time" TIMESTAMP(6) NOT NULL,
+"version" BIGINT DEFAULT 1 NOT NULL,
+"identity_domain" VARCHAR(16) DEFAULT 'global' NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE log_batch_item_t
+CREATE TABLE "baseline_beijing_gd"."log_batch_item_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"scope_kind" VARCHAR(16) NOT NULL,
+"scope_id" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32),
+"created_time" TIMESTAMP(6) NOT NULL,
+"event_store" VARCHAR(16) NOT NULL,
+"event_id" VARCHAR(32) NOT NULL,
+"batch_id" VARCHAR(64) NOT NULL,
+"item_no" INT NOT NULL,
+"target_type" VARCHAR(48) NOT NULL,
+"target_id" VARCHAR(64) NOT NULL,
+"target_name" VARCHAR(256),
+"target_app_id" VARCHAR(32),
+"target_org_id" VARCHAR(64),
+"action_code" VARCHAR(100) NOT NULL,
+"result" VARCHAR(24) NOT NULL,
+"reason_code" VARCHAR(100),
+"summary" VARCHAR(1000),
+"detail_json" TEXT,
+"event_time" TIMESTAMP(6) NOT NULL,
+"identity_domain" VARCHAR(16) DEFAULT 'global' NOT NULL,
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE log_export_job_t
+CREATE TABLE "baseline_beijing_gd"."log_export_job_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"scope_kind" VARCHAR(16) NOT NULL,
+"scope_id" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32),
+"created_time" TIMESTAMP(6) NOT NULL,
+"owner_kind" VARCHAR(24) NOT NULL,
+"owner_id" VARCHAR(64) NOT NULL,
+"query_json" TEXT NOT NULL,
+"scope_snapshot_json" TEXT NOT NULL,
+"permission_version" VARCHAR(64),
+"cutoff_time" TIMESTAMP(6) NOT NULL,
+"status" VARCHAR(16) NOT NULL,
+"format_code" VARCHAR(16) NOT NULL,
+"row_limit" BIGINT NOT NULL,
+"row_count" BIGINT DEFAULT 0 NOT NULL,
+"object_key" VARCHAR(512),
+"sha256" CHAR(64),
+"expires_at" TIMESTAMP(6),
+"finished_at" TIMESTAMP(6),
+"last_error_code" VARCHAR(100),
+"updated_time" TIMESTAMP(6) NOT NULL,
+"version" BIGINT DEFAULT 1 NOT NULL,
+"identity_domain" VARCHAR(16) DEFAULT 'global' NOT NULL,
+"worker_id" VARCHAR(64),
+"lease_until" TIMESTAMP(6),
+"actor_name" VARCHAR(128),
+"actor_account" VARCHAR(128),
+"actor_org_name" VARCHAR(256),
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+-- TABLE log_policy_t
+CREATE TABLE "baseline_beijing_gd"."log_policy_t"
+(
+"tid" VARCHAR(32) NOT NULL,
+"scope_kind" VARCHAR(16) NOT NULL,
+"scope_id" VARCHAR(32) NOT NULL,
+"tenant_id" VARCHAR(32),
+"created_time" TIMESTAMP(6) NOT NULL,
+"category" VARCHAR(24) NOT NULL,
+"enabled" SMALLINT DEFAULT 1 NOT NULL,
+"hot_days" INT NOT NULL,
+"total_retention_days" INT NOT NULL,
+"sample_rate" DECIMAL(6,5) DEFAULT 1 NOT NULL,
+"detail_limit_bytes" INT DEFAULT 32768 NOT NULL,
+"field_policy_json" TEXT,
+"archive_enabled" SMALLINT DEFAULT 1 NOT NULL,
+"updated_by" VARCHAR(64),
+"updated_time" TIMESTAMP(6) NOT NULL,
+"version" BIGINT DEFAULT 1 NOT NULL,
+"identity_domain" VARCHAR(16) DEFAULT 'global' NOT NULL,
+"actor_name" VARCHAR(128),
+"actor_account" VARCHAR(128),
+"actor_org_name" VARCHAR(256),
+NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 -- TABLE log_request_t
 CREATE TABLE "baseline_beijing_gd"."log_request_t"
 (
 "tid" VARCHAR(32) NOT NULL,
 "user_id" VARCHAR(64),
-"account" VARCHAR(32),
-"full_name" VARCHAR(32),
+"account" VARCHAR(128),
+"full_name" VARCHAR(128),
 "org_id" VARCHAR(64),
-"org_name" VARCHAR(128),
-"ip" VARCHAR(20),
+"org_name" VARCHAR(256),
+"ip" VARCHAR(64),
 "request_method" VARCHAR(255),
 "request_url" VARCHAR(255),
 "request_uri" VARCHAR(255),
@@ -2144,15 +2287,55 @@ CREATE TABLE "baseline_beijing_gd"."log_request_t"
 "updated_by" VARCHAR(32),
 "updated_time" TIMESTAMP(6),
 "is_del" SMALLINT,
+"category" VARCHAR(24),
+"source_app" VARCHAR(64),
+"actor_kind" VARCHAR(24),
+"target_name" VARCHAR(256),
+"received_time" TIMESTAMP(6),
+"request_id" VARCHAR(32),
+"operation_id" VARCHAR(64),
+"session_ref" VARCHAR(64),
+"origin_key" VARCHAR(160),
+"module_code" VARCHAR(64),
+"function_code" VARCHAR(100),
+"user_agent" VARCHAR(512),
+"business_code" VARCHAR(64),
+"batch_id" VARCHAR(64),
+"task_id" VARCHAR(64),
+"total_count" BIGINT,
+"success_count" BIGINT,
+"failure_count" BIGINT,
+"skipped_count" BIGINT,
+"action_code" VARCHAR(100),
+"target_type" VARCHAR(32),
+"target_id" VARCHAR(64),
+"result" VARCHAR(24),
+"reason_code" VARCHAR(100),
+"event_time" TIMESTAMP(6),
+"trace_id" VARCHAR(64),
+"route_path" VARCHAR(1000),
+"duration_ms" BIGINT,
+"http_status" INT,
+"detail_json" TEXT,
+"request_bytes" BIGINT,
+"response_bytes" BIGINT,
+"sampled" SMALLINT,
+"sample_rate" DECIMAL(6,5),
+"downstream_code" VARCHAR(64),
+"error_ref" VARCHAR(64),
+"menu_id" VARCHAR(64),
+"menu_path" VARCHAR(1000),
+"page_route" VARCHAR(512),
+"operation_name" VARCHAR(256),
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE log_system_t
 CREATE TABLE "baseline_beijing_gd"."log_system_t"
 (
 "tid" VARCHAR(32) NOT NULL,
-"user_account" VARCHAR(32),
-"user_id" VARCHAR(32),
-"org_id" VARCHAR(32),
+"user_account" VARCHAR(128),
+"user_id" VARCHAR(64),
+"org_id" VARCHAR(64),
 "area_code" VARCHAR(32),
 "user_name" VARCHAR(255),
 "log_type" VARCHAR(32),
@@ -2173,6 +2356,45 @@ CREATE TABLE "baseline_beijing_gd"."log_system_t"
 "updated_by" VARCHAR(32),
 "updated_time" TIMESTAMP(6),
 "is_del" SMALLINT,
+"category" VARCHAR(24),
+"source_app" VARCHAR(64),
+"actor_kind" VARCHAR(24),
+"target_name" VARCHAR(256),
+"received_time" TIMESTAMP(6),
+"request_id" VARCHAR(32),
+"operation_id" VARCHAR(64),
+"session_ref" VARCHAR(64),
+"origin_key" VARCHAR(160),
+"module_code" VARCHAR(64),
+"function_code" VARCHAR(100),
+"user_agent" VARCHAR(512),
+"business_code" VARCHAR(64),
+"batch_id" VARCHAR(64),
+"task_id" VARCHAR(64),
+"total_count" BIGINT,
+"success_count" BIGINT,
+"failure_count" BIGINT,
+"skipped_count" BIGINT,
+"action_code" VARCHAR(100),
+"target_type" VARCHAR(32),
+"target_id" VARCHAR(64),
+"result" VARCHAR(24),
+"reason_code" VARCHAR(100),
+"event_time" TIMESTAMP(6),
+"trace_id" VARCHAR(64),
+"route_path" VARCHAR(1000),
+"duration_ms" BIGINT,
+"http_status" INT,
+"org_name" VARCHAR(256),
+"ip" VARCHAR(64),
+"request_method" VARCHAR(16),
+"change_json" TEXT,
+"origin_record_type" VARCHAR(64),
+"origin_record_id" VARCHAR(64),
+"menu_id" VARCHAR(64),
+"menu_path" VARCHAR(1000),
+"page_route" VARCHAR(512),
+"operation_name" VARCHAR(256),
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE log_template_t
@@ -2189,6 +2411,13 @@ CREATE TABLE "baseline_beijing_gd"."log_template_t"
 "updated_by" VARCHAR(32),
 "updated_time" TIMESTAMP(6),
 "is_del" SMALLINT,
+"action_code" VARCHAR(100),
+"module_code" VARCHAR(64),
+"function_code" VARCHAR(100),
+"audit_level" VARCHAR(16),
+"field_policy_json" TEXT,
+"enabled" SMALLINT DEFAULT 1 NOT NULL,
+"version" BIGINT DEFAULT 1 NOT NULL,
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE log_user_login_t
@@ -2196,10 +2425,10 @@ CREATE TABLE "baseline_beijing_gd"."log_user_login_t"
 (
 "tid" VARCHAR(32) NOT NULL,
 "is_success" SMALLINT,
-"account" VARCHAR(64),
+"account" VARCHAR(128),
 "password" VARCHAR(64),
 "token" VARCHAR(64),
-"ip" VARCHAR(16),
+"ip" VARCHAR(64),
 "browser" VARCHAR(64),
 "os" VARCHAR(64),
 "remark" VARCHAR(500),
@@ -2209,6 +2438,51 @@ CREATE TABLE "baseline_beijing_gd"."log_user_login_t"
 "updated_time" TIMESTAMP(6),
 "is_del" SMALLINT,
 "tenant_id" VARCHAR(32) DEFAULT '2084109831682699265' NOT NULL,
+"category" VARCHAR(24),
+"source_app" VARCHAR(64),
+"actor_kind" VARCHAR(24),
+"target_name" VARCHAR(256),
+"received_time" TIMESTAMP(6),
+"request_id" VARCHAR(32),
+"operation_id" VARCHAR(64),
+"session_ref" VARCHAR(64),
+"origin_key" VARCHAR(160),
+"module_code" VARCHAR(64),
+"function_code" VARCHAR(100),
+"user_agent" VARCHAR(512),
+"business_code" VARCHAR(64),
+"batch_id" VARCHAR(64),
+"task_id" VARCHAR(64),
+"total_count" BIGINT,
+"success_count" BIGINT,
+"failure_count" BIGINT,
+"skipped_count" BIGINT,
+"action_code" VARCHAR(100),
+"target_type" VARCHAR(32),
+"target_id" VARCHAR(64),
+"result" VARCHAR(24),
+"reason_code" VARCHAR(100),
+"event_time" TIMESTAMP(6),
+"trace_id" VARCHAR(64),
+"route_path" VARCHAR(1000),
+"duration_ms" BIGINT,
+"http_status" INT,
+"full_name" VARCHAR(128),
+"org_id" VARCHAR(64),
+"org_name" VARCHAR(256),
+"request_method" VARCHAR(16),
+"detail_json" TEXT,
+"auth_realm" VARCHAR(32),
+"auth_step" VARCHAR(24),
+"termination_reason" VARCHAR(48),
+"account_fingerprint" CHAR(64),
+"fingerprint_key_version" INT,
+"expires_at" TIMESTAMP(6),
+"observed_at" TIMESTAMP(6),
+"menu_id" VARCHAR(64),
+"menu_path" VARCHAR(1000),
+"page_route" VARCHAR(512),
+"operation_name" VARCHAR(256),
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE log_version_t
@@ -3991,6 +4265,16 @@ CREATE OR REPLACE  INDEX "ix_fs_runtime_node_14e0jio" ON "baseline_beijing_gd"."
 
 CREATE OR REPLACE  INDEX "ix_gateway_user_app_rela_1fcxbde" ON "baseline_beijing_gd"."gateway_user_app_rela"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "ix_log_archive_status" ON "baseline_beijing_gd"."log_archive_batch_t"("status" ASC,"updated_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_log_batch_target" ON "baseline_beijing_gd"."log_batch_item_t"("tenant_id" ASC,"target_type" ASC,"target_id" ASC,"event_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_log_export_owner" ON "baseline_beijing_gd"."log_export_job_t"("scope_kind" ASC,"scope_id" ASC,"owner_id" ASC,"created_time" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_log_export_status" ON "baseline_beijing_gd"."log_export_job_t"("status" ASC,"created_time" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_log_outbox_due" ON "baseline_beijing_gd"."log_audit_outbox_t"("status" ASC,"next_retry_at" ASC,"lease_until" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "ix_log_request_t_1fcxbde" ON "baseline_beijing_gd"."log_request_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_log_system_t_1fcxbde" ON "baseline_beijing_gd"."log_system_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -4010,6 +4294,8 @@ CREATE OR REPLACE  INDEX "ix_push_node_code" ON "baseline_beijing_gd"."push_node
 CREATE OR REPLACE  INDEX "ix_push_node_default" ON "baseline_beijing_gd"."push_node_t"("tenant_id" ASC,"is_del" ASC,"is_default" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_push_node_network" ON "baseline_beijing_gd"."push_node_t"("tenant_id" ASC,"network_code" ASC,"is_del" ASC,"enabled" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_request_t_event" ON "baseline_beijing_gd"."log_request_t"("tenant_id" ASC,"event_time" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_result_delivery" ON "baseline_beijing_gd"."surveillance_result_t"("source_stream" ASC,"kafka_partition" ASC,"kafka_offset" ASC,"record_index" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4057,7 +4343,11 @@ CREATE OR REPLACE  INDEX "ix_sym_form_1fcxbde" ON "baseline_beijing_gd"."sym_for
 
 CREATE OR REPLACE  INDEX "ix_sym_server_t_1fcxbde" ON "baseline_beijing_gd"."sym_server_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "ix_system_t_event" ON "baseline_beijing_gd"."log_system_t"("tenant_id" ASC,"event_time" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "ix_task_history" ON "baseline_beijing_gd"."surveillance_task_history_t"("tenant_id" ASC,"resource_code" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE  INDEX "ix_user_logi_event" ON "baseline_beijing_gd"."log_user_login_t"("tenant_id" ASC,"event_time" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_wf_approval_action_log_t_1fk6w6f" ON "baseline_beijing_gd"."wf_approval_action_log_t"("tenant_id" ASC,"instance_id" ASC,"created_time" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4148,6 +4438,20 @@ CREATE OR REPLACE UNIQUE  INDEX "ux_dq_quality_task_t_1m3zdvf" ON "baseline_beij
 CREATE OR REPLACE UNIQUE  INDEX "ux_dwm_center_layer_source_t_1g0u452" ON "baseline_beijing_gd"."dwm_center_layer_source_t"("target_id" ASC,"target_type" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_fs_flow_version_1d0wdf9" ON "baseline_beijing_gd"."fs_flow_version"("flow_id" ASC,"version" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_log_archive_range" ON "baseline_beijing_gd"."log_archive_batch_t"("scope_kind" ASC,"scope_id" ASC,"identity_domain" ASC,"event_store" ASC,"range_start" ASC,"range_end" ASC,"generation" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_log_batch_event" ON "baseline_beijing_gd"."log_batch_item_t"("scope_kind" ASC,"scope_id" ASC,"event_store" ASC,"event_id" ASC,"item_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_log_outbox_event" ON "baseline_beijing_gd"."log_audit_outbox_t"("scope_kind" ASC,"scope_id" ASC,"event_store" ASC,"event_id" ASC,"destination_code" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_log_policy_scope" ON "baseline_beijing_gd"."log_policy_t"("scope_kind" ASC,"scope_id" ASC,"identity_domain" ASC,"category" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_request_t_origin" ON "baseline_beijing_gd"."log_request_t"("tenant_id" ASC,"origin_key" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_system_t_origin" ON "baseline_beijing_gd"."log_system_t"("tenant_id" ASC,"origin_key" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
+CREATE OR REPLACE UNIQUE  INDEX "ux_user_logi_origin" ON "baseline_beijing_gd"."log_user_login_t"("tenant_id" ASC,"origin_key" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_wf_process_binding_t_1spue7v" ON "baseline_beijing_gd"."wf_process_binding_t"("tenant_id" ASC,"business_type" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4253,6 +4557,11 @@ COMMENT ON TABLE "baseline_beijing_gd"."gateway_user_app_rela" IS '网关管理-
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_binding_t" IS '统一身份-标准接收端固定绑定及加密服务密钥';
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_object_t" IS '统一身份-中央来源映射、版本与拥有关系；不复制本地密码';
 COMMENT ON TABLE "baseline_beijing_gd"."idaas_receiver_receipt_t" IS '统一身份-每次接收持久回执与重放约束';
+COMMENT ON TABLE "baseline_beijing_gd"."log_archive_batch_t" IS '日志管理-日志归档校验与保留记录';
+COMMENT ON TABLE "baseline_beijing_gd"."log_audit_outbox_t" IS '日志管理-审计事件可靠投递';
+COMMENT ON TABLE "baseline_beijing_gd"."log_batch_item_t" IS '日志管理-批量操作结果明细';
+COMMENT ON TABLE "baseline_beijing_gd"."log_export_job_t" IS '日志管理-受控日志导出任务';
+COMMENT ON TABLE "baseline_beijing_gd"."log_policy_t" IS '日志管理-采集保留与脱敏策略';
 COMMENT ON TABLE "baseline_beijing_gd"."log_request_t" IS '日志管理-请求日志';
 COMMENT ON TABLE "baseline_beijing_gd"."log_system_t" IS '日志管理-系统日志';
 COMMENT ON TABLE "baseline_beijing_gd"."log_template_t" IS '日志管理-日志模板';
@@ -5965,85 +6274,334 @@ COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."payload_hash
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."result_json" IS '结果JSON数据';
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."source_id" IS '来源标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."idaas_receiver_receipt_t"."source_version" IS '来源版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."actor_account" IS '管理操作发生时的账号快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."actor_name" IS '管理操作发生时的人员姓名快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."actor_org_name" IS '管理操作发生时的所属部门名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."byte_count" IS '归档字节数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."created_time" IS '创建时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."event_store" IS '归档权威事件类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."generation" IS '同范围归档或迟到增补代次';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."hold_reason" IS '保留冻结必要原因';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."hold_status" IS '保留冻结状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."identity_domain" IS '所属身份域；行业固定global，平台为workforce或public';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."lease_until" IS '工作租约截止时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."manifest_key" IS '归档校验清单键';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."object_key" IS '受控归档文件键';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."operator_id" IS '发起主体标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."purge_completed_at" IS '热库清理完成时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."range_end" IS 'UTC半开范围终点';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."range_start" IS 'UTC半开范围起点';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."record_count" IS '归档记录数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."retention_until" IS '允许保留截止时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."scope_id" IS '所属租户或PLATFORM，由可信服务生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."scope_kind" IS '所属范围：TENANT或PLATFORM';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."sha256" IS '归档文件完整性摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."status" IS 'PREPARING、WRITTEN、VERIFIED、PURGING、COMPLETE、FAILED';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."tenant_id" IS '行业租户标识；平台记录为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."tid" IS '稳定主键，由应用生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."updated_time" IS '更新时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."verified_at" IS '回读校验时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."version" IS '乐观锁版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_archive_batch_t"."worker_id" IS '当前工作实例标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."attempt_count" IS '实际投递尝试次数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."created_time" IS '创建时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."destination_code" IS '受控目标编码，不允许任意URL';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."event_id" IS '本库事件标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."event_store" IS '事件存储类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."identity_domain" IS '所属身份域；行业固定global，平台为workforce或public';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."last_error_code" IS '脱敏错误编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."last_error_summary" IS '脱敏投递失败摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."lease_owner" IS '当前工作实例';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."lease_until" IS '租约截止时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."next_retry_at" IS '下次可取时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."payload_json" IS '已经脱敏的事件信封';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."payload_version" IS '信封版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."scope_id" IS '所属租户或PLATFORM，由可信服务生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."scope_kind" IS '所属范围：TENANT或PLATFORM';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."status" IS 'PENDING、PROCESSING、RETRY、DONE、DEAD';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."tenant_id" IS '行业租户标识；平台记录为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."tid" IS '稳定主键，由应用生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."updated_time" IS '更新时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_audit_outbox_t"."version" IS '乐观锁版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."action_code" IS '动作编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."batch_id" IS '稳定业务批次';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."created_time" IS '创建时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."detail_json" IS '白名单脱敏详情';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."event_id" IS '当前范围内父事件标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."event_store" IS '父事件存储类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."event_time" IS '事实发生时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."identity_domain" IS '所属身份域；行业固定global，平台为workforce或public';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."item_no" IS '批次内序号，从1开始';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."reason_code" IS '失败或拒绝原因编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."result" IS '单项执行结果';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."scope_id" IS '所属租户或PLATFORM，由可信服务生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."scope_kind" IS '所属范围：TENANT或PLATFORM';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."summary" IS '脱敏业务说明';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."target_app_id" IS '目标应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."target_id" IS '目标对象标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."target_name" IS '目标名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."target_org_id" IS '目标部门范围标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."target_type" IS '目标对象类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."tenant_id" IS '行业租户标识；平台记录为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_batch_item_t"."tid" IS '稳定主键，由应用生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."actor_account" IS '管理操作发生时的账号快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."actor_name" IS '管理操作发生时的人员姓名快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."actor_org_name" IS '管理操作发生时的所属部门名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."created_time" IS '创建时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."cutoff_time" IS '采集截止时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."expires_at" IS '文件失效时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."finished_at" IS '任务完成时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."format_code" IS 'CSV或JSONL';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."identity_domain" IS '所属身份域；行业固定global，平台为workforce或public';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."last_error_code" IS '脱敏失败原因编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."lease_until" IS '工作租约截止时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."object_key" IS '受控文件键，不允许任意路径';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."owner_id" IS '发起主体标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."owner_kind" IS '发起主体类别';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."permission_version" IS '权限变更检测依据';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."query_json" IS '有界查询条件，不含SQL或凭据';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."row_count" IS '实际导出行数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."row_limit" IS '允许导出数量上限';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."scope_id" IS '所属租户或PLATFORM，由可信服务生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."scope_kind" IS '所属范围：TENANT或PLATFORM';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."scope_snapshot_json" IS '创建时授权范围快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."sha256" IS '文件完整性摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."status" IS 'PENDING、RUNNING、SUCCESS、FAILED、CANCELLED、EXPIRED';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."tenant_id" IS '行业租户标识；平台记录为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."tid" IS '稳定主键，由应用生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."updated_time" IS '更新时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."version" IS '乐观锁版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_export_job_t"."worker_id" IS '当前工作实例标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."actor_account" IS '管理操作发生时的账号快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."actor_name" IS '管理操作发生时的人员姓名快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."actor_org_name" IS '管理操作发生时的所属部门名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."archive_enabled" IS '是否归档';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."category" IS '日志类别';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."created_time" IS '创建时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."detail_limit_bytes" IS '脱敏详情字节上限';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."enabled" IS '是否采集；强制审计类别始终启用';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."field_policy_json" IS '字段允许及隐藏策略';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."hot_days" IS '在线保留天数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."identity_domain" IS '所属身份域；行业固定global，平台为workforce或public';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."sample_rate" IS '普通成功请求采样比例';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."scope_id" IS '所属租户或PLATFORM，由可信服务生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."scope_kind" IS '所属范围：TENANT或PLATFORM';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."tenant_id" IS '行业租户标识；平台记录为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."tid" IS '稳定主键，由应用生成';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."total_retention_days" IS '含在线期的总保留天数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."updated_by" IS '更新主体标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."updated_time" IS '更新时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_policy_t"."version" IS '乐观锁版本';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."account" IS '账号';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."action_code" IS '稳定业务动作编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."actor_kind" IS '可信主体类别';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."batch_id" IS '关联业务批次';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."business_code" IS '独立业务结果编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."category" IS '事件类别：AUTH、OPERATION、REQUEST、SECURITY、TASK';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."detail_json" IS '白名单脱敏事件摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."downstream_code" IS '下游结果编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."duration_ms" IS '执行耗时，毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."error_ref" IS '受控错误引用';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."event_time" IS '事实发生时间，UTC；历史未知时为空';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."execute_time" IS '执行时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."failure_count" IS '失败目标数量';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."full_name" IS '完整名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."function_code" IS '功能资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."http_status" IS '实际HTTP响应状态';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."ip" IS 'IP地址';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."is_del" IS '删除标志：0正常，1删除';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."log_content" IS '日志内容';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."log_type" IS '日志类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."menu_id" IS '操作时已核验的菜单资源标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."menu_name" IS '菜单名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."menu_path" IS '操作时菜单名称层级快照，箭头分隔';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."module_code" IS '功能模块编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."operation_id" IS '稳定业务操作关联标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."operation_name" IS '操作时Magic接口或显式动作的中文名称';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."operation_type" IS '操作类型';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."opt_browser" IS '选项浏览器';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."opt_system" IS '选项系统';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."org_id" IS '组织标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."org_name" IS '组织名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."origin_key" IS '原始事件幂等标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."page_route" IS '已核验的页面路由，不含查询参数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."reason_code" IS '脱敏原因编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."received_time" IS '事件接收时间，UTC';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."req_header" IS '请求请求头';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."req_param" IS '请求参数';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."req_status" IS '请求状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."request_bytes" IS '请求字节数，未知时为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."request_id" IS '本次请求关联标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."request_method" IS '请求方法';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."request_uri" IS '请求资源地址';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."request_url" IS '请求访问地址';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."res_param" IS '资源参数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."response_bytes" IS '响应字节数，未知时为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."result" IS '业务结果：SUCCESS、FAILED、DENIED、PARTIAL等';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."route_path" IS '请求路由，不含查询参数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."sample_rate" IS '实际采样比例';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."sampled" IS '是否按策略采样';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."session_ref" IS '独立随机会话引用，不含登录凭据';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."skipped_count" IS '跳过目标数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."source_app" IS '事件来源应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."success_count" IS '成功目标数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."target_id" IS '目标对象稳定标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."target_name" IS '操作目标名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."target_type" IS '目标对象类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."task_id" IS '关联执行任务';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."tid" IS '主键标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."total_count" IS '操作目标总数，未知时为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."trace_id" IS '统一请求链路标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."updated_by" IS '更新人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."user_agent" IS '经限长的终端描述';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."user_id" IS '用户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."user_role_id" IS '用户角色标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_request_t"."user_role_name" IS '用户角色名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."action_code" IS '稳定业务动作编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."actor_kind" IS '可信主体类别';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."area_code" IS '区域编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."batch_id" IS '关联业务批次';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."business_code" IS '独立业务结果编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."category" IS '事件类别：AUTH、OPERATION、REQUEST、SECURITY、TASK';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."change_json" IS '白名单脱敏字段变更';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."class_name" IS '类别名称';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."created_time" IS '创建时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."detail_json" IS '详情JSON数据';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."duration_ms" IS '执行耗时，毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."event_time" IS '事实发生时间，UTC；历史未知时为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."failure_count" IS '失败目标数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."function_code" IS '功能资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."http_status" IS '实际HTTP响应状态';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."ip" IS '直接连接或可信代理确认的客户端地址';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."is_del" IS '删除标志：0正常，1删除';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."is_success" IS '是否成功';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."log_desc" IS '日志描述';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."log_level" IS '日志级别';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."log_type" IS '日志类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."menu_id" IS '操作时已核验的菜单资源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."menu_path" IS '操作时菜单名称层级快照，箭头分隔';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."method_name" IS '方法名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."module_code" IS '功能模块编码';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."module_name" IS '模块名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."operation_id" IS '稳定业务操作关联标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."operation_name" IS '操作时Magic接口或显式动作的中文名称';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."org_id" IS '组织标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."org_name" IS '当时所属部门名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."origin_key" IS '原始事件幂等标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."origin_record_id" IS '原领域记录标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."origin_record_type" IS '原领域记录类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."page_route" IS '已核验的页面路由，不含查询参数';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."post_params" IS '提交参数';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."project_code" IS '项目编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."reason_code" IS '脱敏原因编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."received_time" IS '事件接收时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."request_id" IS '本次请求关联标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."request_method" IS 'HTTP请求方法';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."result" IS '业务结果：SUCCESS、FAILED、DENIED、PARTIAL等';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."return_result" IS '返回结果';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."route_path" IS '请求路由，不含查询参数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."session_ref" IS '独立随机会话引用，不含登录凭据';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."skipped_count" IS '跳过目标数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."source_app" IS '事件来源应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."success_count" IS '成功目标数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."target_id" IS '目标对象稳定标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."target_name" IS '操作目标名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."target_type" IS '目标对象类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."task_id" IS '关联执行任务';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."time_consuming" IS '时间消费中';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."total_count" IS '操作目标总数，未知时为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."trace_id" IS '统一请求链路标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."updated_by" IS '更新人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."user_account" IS '用户账号';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."user_agent" IS '经限长的终端描述';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."user_id" IS '用户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_system_t"."user_name" IS '用户名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."action_code" IS '声明式业务动作编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."audit_level" IS '审计等级';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."enabled" IS '是否启用规则';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."field_policy_json" IS '脱敏白名单字段策略';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."function_code" IS '功能资源编码';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."is_del" IS '删除标志：0正常，1删除';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."log_content" IS '日志内容';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."log_type" IS '日志类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."module_code" IS '模块编码';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."request_method" IS '请求方法';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."request_uri" IS '请求资源地址';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."updated_by" IS '更新人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_template_t"."version" IS '规则乐观锁版本';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."account" IS '账号';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."account_fingerprint" IS '失败账号带密钥HMAC指纹，不含口令';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."action_code" IS '稳定业务动作编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."actor_kind" IS '可信主体类别';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."auth_realm" IS '会话认证域';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."auth_step" IS '认证或会话阶段';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."batch_id" IS '关联业务批次';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."browser" IS '浏览器';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."business_code" IS '独立业务结果编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."category" IS '事件类别：AUTH、OPERATION、REQUEST、SECURITY、TASK';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."created_time" IS '创建时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."detail_json" IS '白名单脱敏事件摘要';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."duration_ms" IS '执行耗时，毫秒';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."event_time" IS '事实发生时间，UTC；历史未知时为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."expires_at" IS '会话实际失效时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."failure_count" IS '失败目标数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."fingerprint_key_version" IS '账号HMAC密钥版本';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."full_name" IS '当时姓名快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."function_code" IS '功能资源编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."http_status" IS '实际HTTP响应状态';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."ip" IS 'IP地址';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."is_del" IS '删除标志：0正常，1删除';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."is_success" IS '是否成功';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."menu_id" IS '操作时已核验的菜单资源标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."menu_path" IS '操作时菜单名称层级快照，箭头分隔';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."module_code" IS '功能模块编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."observed_at" IS '服务端观察到失效的时间，UTC';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."operation_id" IS '稳定业务操作关联标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."operation_name" IS '操作时Magic接口或显式动作的中文名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."org_id" IS '当时所属部门标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."org_name" IS '当时所属部门名称';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."origin_key" IS '原始事件幂等标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."os" IS '操作系统';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."page_route" IS '已核验的页面路由，不含查询参数';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."password" IS '密码摘要，不存储明文';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."reason_code" IS '脱敏原因编码';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."received_time" IS '事件接收时间，UTC';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."remark" IS '备注';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."request_id" IS '本次请求关联标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."request_method" IS 'HTTP请求方法';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."result" IS '业务结果：SUCCESS、FAILED、DENIED、PARTIAL等';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."route_path" IS '请求路由，不含查询参数';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."session_ref" IS '独立随机会话引用，不含登录凭据';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."skipped_count" IS '跳过目标数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."source_app" IS '事件来源应用标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."success_count" IS '成功目标数量';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."target_id" IS '目标对象稳定标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."target_name" IS '操作目标名称快照';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."target_type" IS '目标对象类型';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."task_id" IS '关联执行任务';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."tenant_id" IS '租户标识';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."termination_reason" IS '会话终止原因';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."token" IS '票据';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."total_count" IS '操作目标总数，未知时为空';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."trace_id" IS '统一请求链路标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."updated_by" IS '更新人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."updated_time" IS '更新时间';
+COMMENT ON COLUMN "baseline_beijing_gd"."log_user_login_t"."user_agent" IS '经限长的终端描述';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_version_t"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_version_t"."created_time" IS '创建时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."log_version_t"."is_antivirus" IS '是否防病毒';

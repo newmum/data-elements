@@ -32,7 +32,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/01.工作台(my-workbench).vue",
-      "baseSha256": "c76337ec87c857fa86d852444089f28ab51e9f0abbfc4f7909f65b2912324a14"
+      "baseSha256": "ebede7168e5d16943392c21033beb20b91f28184f3926421540144f94e52a897"
     },
     {
       "id": "deptdatasourceui00000000000001",
@@ -42,7 +42,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
-      "baseSha256": "2211358646e9b8155e1705f675cc4ad8699730e4e23b8d1b2fdd79d335e56c02"
+      "baseSha256": "847dc4dbad313e9b132b719389e9a242699f1ee1ffbf9ccd05e8ce96d38318e0"
     },
     {
       "id": "2016435561264910336",
@@ -52,7 +52,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
-      "baseSha256": "023aa301b090f44068215249abdc27fc0bd7f4fe45988cc2c5b9605cdb7f9425"
+      "baseSha256": "d1dcfbdc3e59b948e5d77900938ffa8ff2860c644965c17f7e669f00a35c8f77"
     },
     {
       "id": "2074806689771094016",
@@ -92,7 +92,7 @@
       "type": "1",
       "sortOrder": 5,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/05.数据源详情库表信息(db-table).vue",
-      "baseSha256": "01426e20f6162ab404e589b96ceabc3bad319db64dfb8a40608cf0d29e52e516"
+      "baseSha256": "ce12cf546f86971576b77e34e86f02724e3d4818c256d883f2e5fe5b500b94c3"
     },
     {
       "id": "2001578680197386240",
@@ -1578,6 +1578,27 @@
       "sortOrder": 1,
       "path": "10.通用组件/全局导航(global-nav).vue",
       "baseSha256": "38e3c5a07ecc83da0546018bc665316805cc4ebf3caf28c1bf699a9ab421037c"
+    },
+    {
+      "id": "ui_log_management_v1",
+      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "name": "09.日志管理",
+      "displayName": "09.日志管理",
+      "type": "0",
+      "sortOrder": 9,
+      "path": "09.系统管理/09.日志管理",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "ui_log_event_list_v1",
+      "parentId": "ui_log_management_v1",
+      "name": "log-management",
+      "displayName": "日志列表",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "09.系统管理/09.日志管理/日志管理(log-management).vue",
+      "baseSha256": "dffadcad91fc3f0758efb19e110abfeb4d2f5ab1e9ae92fac14cc61f6b9ed1d4",
+      "remark": "日志管理"
     }
   ]
 }

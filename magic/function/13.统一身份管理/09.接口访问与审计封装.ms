@@ -78,27 +78,5 @@ where category='API_ACCESS'
     return response;
 }
 finally {
-    var ctx=platformSession.isLogin()?{
-        userId:platformSession.id()
-    }
-    :null;
-    if(ctx==null && authSession.isLogin()) {
-        var account=db.normal().selectOne("""
-select identity_domain
-from iam_auth_account_t
-where tid=#{authSession.id()}
-""");
-        ctx={
-            userId:authSession.id(),actorKind:'AUTH_ACCOUNT',requiredDomain:account==null?'public':account.identity_domain
-        };
-    }
-    var id=audit(ctx,result,'api:'+path,null,result=='SUCCESS'?null:'REQUEST_FAILED',null);
-    var duration=(System.nanoTime()-started)/1000000;
-    var status=result=='SUCCESS'?200:null;
-    db.normal().update("""
-update iam_audit_event_t
-set request_path=#{path},http_method=#{method},http_status=#{status},
-    duration_ms=#{duration}
-where tid=#{id}
-""");
+    // 实际 HTTP 与业务结果由统一请求采集器在响应结束时记录。
 }

@@ -95,28 +95,9 @@
   "mappingPath": null
 }
 ================================
-// 共享函数：03.记录脱敏审计
-// 业务说明：写入操作主体、对象、动作与结果，对请求摘要中的敏感字段脱敏，供多个写接口复用。
-// 函数输入：ctx：已校验的操作上下文；result：业务执行结果；action：审计动作编码；objectId：被操作对象标识；reason：操作原因；summary：脱敏后的审计摘要。
-// 返回与副作用：写入操作主体、对象、动作与结果，对请求摘要中的敏感字段脱敏，供多个写接口复用。
+// 在调用方同一个 Magic SQL 对象和事务中追加已脱敏事件；不先插入再补写。
 import db;
-import request;
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.json.JSONUtil;
-
-// 脱敏审计。调用方仅传入白名单摘要，严禁密码、密钥、令牌或请求原文。
-var sql=db.normal();
-var id=IdUtil.fastSimpleUUID();
-var actor=ctx==null?null:ctx.userId;
-var eventType=action.startsWith('auth:')?'AUTH':action.startsWith('api:')?'API':'OPERATION';
-var snapshot=summary==null?null:JSONUtil.toJsonStr(summary);
-var ip=request.getClientIP();
-var actorKind=ctx==null?'ANONYMOUS':ctx.actorKind||'OPERATOR';
-var domain=ctx==null?'workforce':ctx.requiredDomain||'workforce';
-sql.update("""
-insert into iam_audit_event_t(tid,
-                event_type, identity_domain, actor_kind, actor_id, app_id, action, object_type, object_id,
-                result, reason_code, trace_id, ip, event_time, snapshot_json, created_time, updated_time)
-values(#{id},#{eventType},#{domain},#{actorKind},#{actor},null,#{action},'IAM',#{objectId},#{result},#{reason},#{id},#{ip},utc_timestamp(6),#{snapshot},utc_timestamp(6),utc_timestamp(6))
-""");
-return id;
+import auditEvents;
+var event=auditEvents.preparePlatform(ctx,result,action,objectId,reason,summary);
+db.normal().table(event.table).primary('tid').insert(event.row);
+return event.row.tid;

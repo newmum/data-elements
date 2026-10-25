@@ -72,7 +72,7 @@ test('missing registration links allow saving the manually replaced source and o
   assert.deepEqual(requests, ['/pipelines/selected', '/pipelines/selected/stop']);
 });
 
-test('the actual editor explains the fallback reason only for the selected saved task, editable or read-only', () => {
+test('the actual editor opens an editable saved task without a persistent banner and retains the read-only warning', () => {
   const ts = compiler(), localRequire = createRequire(import.meta.url);
   const source = fs.readFileSync(new URL('../pages/EditorPage.tsx', import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: {
@@ -99,8 +99,8 @@ test('the actual editor explains the fallback reason only for the selected saved
     const markup = renderToStaticMarkup(React.createElement(exports.default));
     assert.match(markup, /data-testid="saved-canvas"/);
     assert.equal(markup.includes('已打开当前任务保存的画布（只读）'), readOnly && currentPipelineId === 'selected');
-    assert.equal(markup.includes('来源库已更换，任务关联需核对'), currentPipelineId === 'selected');
-    assert.equal(markup.includes('已打开当前任务保存的画布，可继续编辑'), !readOnly && currentPipelineId === 'selected');
+    assert.equal(markup.includes('来源库已更换，任务关联需核对'), readOnly && currentPipelineId === 'selected');
+    assert.equal(markup.includes('已打开当前任务保存的画布，可继续编辑'), false);
   }
   }
 });

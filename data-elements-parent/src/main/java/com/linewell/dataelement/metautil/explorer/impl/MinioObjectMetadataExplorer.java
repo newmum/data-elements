@@ -115,15 +115,16 @@ public class MinioObjectMetadataExplorer extends AbstractMetadataExplorer {
     private Map<String, Object> toSource(DataSourceConfig config) {
         if (config == null) throw new IllegalArgumentException("MinIO datasource configuration cannot be empty");
         Map<String, Object> source = new LinkedHashMap<>();
+        if (config.getConnectorProperties() != null) source.putAll(config.getConnectorProperties());
         source.put("dbType", "minio");
-        source.put("minioEndpoint", endpoint(config));
-        source.put("minioAccessKey", config.getUsername());
-        source.put("minioSecretKey", config.getPassword());
-        source.put("minioBucket", config.getDatabase());
+        source.putIfAbsent("minioEndpoint", endpoint(config));
+        source.putIfAbsent("minioAccessKey", config.getUsername());
+        source.putIfAbsent("minioSecretKey", config.getPassword());
+        source.putIfAbsent("minioBucket", config.getDatabase());
         if (config.getSchema() != null && !config.getSchema().isBlank()) {
             source.put("minioPrefix", config.getSchema());
         }
-        source.put("minioUseSSL", Boolean.TRUE.equals(config.getSsl()));
+        source.putIfAbsent("minioUseSSL", Boolean.TRUE.equals(config.getSsl()));
         return source;
     }
 

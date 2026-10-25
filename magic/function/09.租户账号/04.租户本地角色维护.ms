@@ -27,6 +27,7 @@
 // 业务说明：复用租户本地角色的查询与保存规则，限制角色操作在当前租户库。
 // 函数输入：operation：要执行的本地账号业务动作；payload：该动作所需的账号、角色或资源资料。
 import db;
+import '@/common/audit-operation' as auditOperation;
 import tenantRuntime;
 import tenantAccounts;
 import cn.dev33.satoken.stp.StpUtil;
@@ -55,10 +56,11 @@ where local_id=#{id}
 if(!creating && old==null) {exit 404,'角色不存在或不属于当前应用';}
 var selected=[];
 if(operation=='save') {
- for(userId in ((p.userIds||'')+'').split(',')) {
-  var uid=userId.trim();if(uid=='') {continue;}
-  if(tenantAccounts.find(tenantId,uid)==null) {exit 400,'所选用户不是本租户的本地用户';}
-  if(!selected.contains(uid)) {selected.add(uid);}
+ for(value in ((p.userIds||'')+'').split(',')) {var uid=value.trim();if(uid!=''&&!selected.contains(uid)){selected.add(uid);}}
+ if(selected.size()>100){exit 400,'一次最多分配100个用户';}
+ if(selected.size()>0) {
+  var valid=sql.select('select id from rm_user_t where tenant_id=#{tenantId} and id in (#{selected}) and deleted=0').map(r=>r.id);
+  if(valid.size()!=selected.size()){exit 400,'所选用户不是本租户的本地用户';}
  }
 }
 var self=sql.selectOne("""
@@ -91,6 +93,7 @@ from rm_role_menu_rela_t
 where tenant_id=#{tenantId}
     and role_id=#{id}
 """);
+  auditOperation('ROLE_DELETED','ROLE',id,null,{id:id});
   return {id:id,deleted:true};
  }
  if(operation!='save') {exit 400,'不支持的角色操作';}
@@ -131,5 +134,6 @@ insert into rm_user_role_rela_t(tenant_id,
                 id, user_id, role_id, auth_from, edit_time, is_temporary)
 values(#{tenantId},#{rid},#{uid},#{id},0,current_timestamp,0)
 """);}
+ auditOperation(creating?'ROLE_CREATED':'ROLE_UPDATED','ROLE',id,name,{id:id,name:name,targetIds:selected});
  return {success:true,id:id};
 });

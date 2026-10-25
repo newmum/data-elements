@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
     "db.type=h2", "db.init-schema=true", "db.username=sa", "db.password=",
     "db.url=jdbc:h2:mem:relaytests;MODE=MySQL;DB_CLOSE_DELAY=-1",
     "relay.work-dir=./target/test-data",
+    "magic-api.resource.location=./target/test-data/magic-api",
     "relay.worker.enabled=false",
     "relay.limits.min-free-disk-bytes=0",
     "relay.security.api-key=test-client-0123456789abcdef0123456789",

@@ -20,6 +20,8 @@
   "responseBody": null
 }
 ================================
+import auditEvents;
+import identityTransport;
 // 接口：01.登录管理控制台
 // 路由：POST /idaas/auth/login
 // 业务说明：根据平台操作账号读取独立凭据与安全状态，检查失败锁定、密码和多因子挑战，成功后签发平台会话并记录登录审计；租户本地账号不能在此登录。
@@ -50,13 +52,13 @@ return identityRuntime.control(()=>apiCall(()=>{
     if(p.domain!='workforce' || username=='' || username.length()>50 || password=='' || password.length()>256) {
         exit 400,'请输入有效的平台账号与密码';
     }
-    var fingerprint=DigestUtil.sha256Hex(username);
+    var fingerprint=auditEvents.fingerprint(username,'AUDIT_ACCOUNT_V1');
     var ip=request.getClientIP();
     var limited=sql.selectOne("""
 select count(*) as total
 from iam_audit_event_t
 where event_type='AUTH'
-    and result!='SUCCESS'
+    and result in ('FAILED','DENIED')
     and (account_fingerprint=#{fingerprint}
          or ip=#{ip})
     and event_time>date_sub(utc_timestamp(6),interval 10 minute)
@@ -154,14 +156,7 @@ where tid=#{u.id}
         };
     });
     // 记录操作主体、目标及结果，供审计与故障追踪。
-    var trace=audit(outcome.id==null?null:{
-        userId:outcome.id
-    },outcome.error==null?'SUCCESS':'FAILED','auth:login',outcome.userId,outcome.error,null);
-    sql.update("""
-update iam_audit_event_t
-set account_fingerprint=#{fingerprint}
-where tid=#{trace}
-""");
+    audit({userId:outcome.id,actorKind:'OPERATOR',requiredDomain:'workforce',accountFingerprint:fingerprint},outcome.error==null?'ACCEPTED':'FAILED','auth:password-verified',outcome.id,outcome.error,null);
     if(outcome.error=='LOCKED') {
         exit 429,'账号暂时锁定，请稍后重试或申请解锁';
     }
@@ -196,6 +191,7 @@ where category='SECURITY'
     platformSession.login(outcome.id,1800);
     platformSession.session().set('securityVersion',outcome.securityVersion);
     try {
+        audit({userId:outcome.id,requiredDomain:'workforce'},'SUCCESS','auth:login',outcome.id,null,null);
         return {
             token:platformSession.token(),session:sessionInfo()
         };

@@ -11,6 +11,7 @@ db:
 # 真实 X-Api-Key 仅由海通生成，平台只保存客户端绑定关系，不保存密钥明文。
 relay:
   registration-registry:
-    enabled: true
-    base-url: "http://127.0.0.1:8088"
+    # Legacy inbound properties only; business delivery never calls the platform.
+    enabled: false
+    base-url: ""
     shared-key: "${DATA_PUSH_REGISTRY_KEY:}"

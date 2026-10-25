@@ -380,11 +380,12 @@
 <script setup>
 import { reactive, computed, nextTick, onMounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { useRouter } from "vue-router";
+import { useRouter, useRoute } from "vue-router";
 import { useRegisterModal } from "@/composables";
 
 const { openRegisterModal, completedVersion } = useRegisterModal();
 const router = useRouter();
+const route = useRoute();
 const treeRef = ref();
 const orgTreeSource = ref([]);
 const treeData = ref([
@@ -419,6 +420,20 @@ const filterOptions = [
   { label: "已完成", value: "completed" },
   { label: "有变更", value: "changed" },
 ];
+
+// 工作台沿用本页已有的筛选口径；路由只提供筛选条件，不接收租户或权限范围。
+watch(
+  () => [route.path, route.query.filter, route.query.metric],
+  () => {
+    if (route.path !== "/datasource-manage/index") return;
+    const filter = typeof route.query.filter === "string" ? route.query.filter : "all";
+    state.filter = filterOptions.some((item) => item.value === filter) ? filter : "all";
+    state.metricFilter = state.filter === "incomplete" && route.query.metric === "tableIssues" ? "tableIssues" : "";
+    state.expanded = [];
+    state.sourceDisplayLimit = SOURCE_BATCH_SIZE;
+  },
+  { immediate: true }
+);
 
 const userOrgName = computed(() => $user?.orgName || "当前部门");
 

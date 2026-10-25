@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { ApiOutlined, FolderOpenOutlined, LockOutlined } from '@ant-design/icons';
 import { normalizeSourceManifestKey } from './registeredDatasourceType';
+import api from '../icons/api.svg';
 import clickhouse from '../icons/clickhouse.png';
 import dameng from '../icons/dameng.svg';
 import db2 from '../icons/db2.svg';
 import doris from '../icons/doris.svg';
 import elasticsearch from '../icons/elasticsearch.png';
+import ftp from '../icons/ftp.svg';
 import gaussdb from '../icons/gaussdb.svg';
 import gbase from '../icons/gbase8a.svg';
 import hailiang from '../icons/hailiang.png';
@@ -25,6 +26,7 @@ import oracle from '../icons/oracle.svg';
 import oscar from '../icons/oscar.png';
 import postgresql from '../icons/postgresql.svg';
 import sqlserver from '../icons/sqlserver.png';
+import sftp from '../icons/sftp.svg';
 import starrocks from '../icons/starrocks.svg';
 import tdsql from '../icons/tdsql.png';
 
@@ -36,7 +38,7 @@ interface ProcessIconSpec {
 }
 
 // Local assets keep vendor colors and work without an Internet connection.
-// Provenance and redistribution notices live in icons/README.md.
+// Provenance and redistribution notices live in docs/data-elements-haitong.md#source-icon-assets.
 function DatabaseBrandIcon({ src, name, cropMark = false }: { src: string; name: string; cropMark?: boolean }) {
   return (
     <span className="database-brand-icon" title={name}>
@@ -78,9 +80,9 @@ function ProcessSvgIcon({ bg, fg = '#fff', kind, label }: ProcessIconSpec) {
 }
 
 export const DATA_SOURCE_ICONS: Record<string, ReactNode> = {
-  'source.api': <span className="datasource-protocol-icon" title="HTTP API"><ApiOutlined /></span>,
-  'source.ftp': <span className="datasource-protocol-icon" title="FTP"><FolderOpenOutlined /></span>,
-  'source.sftp': <span className="datasource-protocol-icon" title="SFTP"><LockOutlined /></span>,
+  'source.api': <DatabaseBrandIcon src={api} name="HTTP API" />,
+  'source.ftp': <DatabaseBrandIcon src={ftp} name="FTP" />,
+  'source.sftp': <DatabaseBrandIcon src={sftp} name="SFTP" />,
   'source.clickhouse': <DatabaseBrandIcon src={clickhouse} name="ClickHouse" />,
   'source.dameng': <DatabaseBrandIcon src={dameng} name="达梦" />,
   'source.db2': <DatabaseBrandIcon src={db2} name="IBM Db2" />,

@@ -15,4 +15,5 @@ export const routes:Array<{path:string;title:string;group:string;icon:IconName;a
  {path:'/reconcile/instant',title:'即时对账',group:'数据对账',icon:'instant',art:'instant',description:'查看真实来源与目标对账实例，追踪数量和字段差异。',highlights:['对账实例','数量比对','核销待接入']},
  {path:'/reconcile/inventory',title:'盘点对账',group:'数据对账',icon:'inventory',art:'inventory',description:'按窗口、主键与字段建立盘点口径，检查漏数和内容差异。',highlights:['区间盘点','复合主键','SHA1 内容摘要']},
  {path:'/reconcile/statements',title:'盘点对账记录',group:'数据对账',icon:'statements',art:'statements',description:'查看盘点历史结果、脱敏字段差异，并按接口上限导出明细。',highlights:['历史结果','字段差异','脱敏明细导出']},
+ {path:'/management/logs',title:'日志管理',group:'后台管理',icon:'registry',art:'registry',description:'',highlights:[]},
 ];

@@ -25,6 +25,12 @@ def digest(text):
     return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
 
 
+def editor_parameter_defaults(meta):
+    """Magic's editor serializes an omitted optional parameter flag as false."""
+    for parameter in meta.get('parameters') or []:
+        parameter.setdefault('required', False)
+
+
 def read_json(path):
     return json.loads(path.read_text(encoding='utf-8'))
 
@@ -479,6 +485,101 @@ def verify_runtime_magic(loaded, meta, script):
         raise ValueError('Runtime source differs from control database; do not publish')
 
 
+def registration_plan(manifest, remote, files):
+    """Add only explicitly selected, new canonical Magic identities; never replace rows."""
+    import uuid
+    if not files or len(files) > 50 or len(set(files)) != len(files):
+        raise ValueError('Registration requires 1 to 50 distinct Magic files')
+    if manifest.get('database') != remote.get('database'):
+        raise ValueError('Control database identity changed; inspect before registration')
+    entries = []
+    known_paths = {e['databasePath'].casefold() for e in remote['resources']}
+    known_ids = {e.get('metadataId') for e in remote['resources']}
+    local_paths = {e['path'] for e in manifest['resources']}
+    for file in files:
+        if not file.startswith('magic/') or not file.endswith(('.ms', '/group.json')):
+            raise ValueError('Registration accepts canonical Magic scripts and group.json only')
+        relative = file[len('magic/'):]
+        source = read_source(safe_path(ROOT / 'magic', relative))
+        meta, script = metadata(source)
+        identity = meta.get('id')
+        group = relative.endswith('/group.json')
+        root = relative.split('/')[0]
+        if root not in {'api', 'function', 'task'} or not identity or not meta.get('name'):
+            raise ValueError('Incomplete Magic resource identity: ' + file)
+        if (not group and not script) or (group and meta.get('type') != root):
+            raise ValueError('Incomplete Magic script or wrong group type: ' + file)
+        database_path = '/magic-api/' + relative
+        if (relative in local_paths or database_path.casefold() in known_paths
+                or identity in known_ids):
+            raise ValueError('Resource path/ID already registered; compare before publishing: ' + file)
+        entry = {'path': relative, 'databasePath': database_path, 'rowIds': [uuid.uuid4().hex],
+                 'kind': 'group' if group else root, 'metadataId': identity,
+                 'baseSha256': digest(source), 'content': source}
+        entries.append(entry)
+        known_paths.add(database_path.casefold())
+        known_ids.add(identity)
+        if group:
+            directory = '/magic-api/' + relative.removesuffix('group.json')
+            if directory.casefold() not in known_paths:
+                entries.append({'path': relative.removesuffix('/group.json'),
+                    'databasePath': directory, 'rowIds': [uuid.uuid4().hex], 'kind': 'directory',
+                    'content': 'this is directory', 'baseSha256': digest('this is directory')})
+                known_paths.add(directory.casefold())
+    combined = remote['resources'] + entries
+    added_paths = {e['path'] for e in entries}
+    warnings = magic_layout_warnings(combined)
+    if any(any(value in added_paths for value in warning.values() if isinstance(value, str))
+           for warning in warnings):
+        raise ValueError('New resource has a missing parent or editor/path mismatch')
+    return entries
+
+
+def register_magic(connection, config, files, apply=False):
+    manifest = load_manifest('magic')
+    remote = snapshot(connection, 'magic')
+    entries = registration_plan(manifest, remote, files)
+    result = {'database': remote['database'], 'files': [e['path'] for e in entries],
+              'result': 'registration-plan'}
+    if not apply:
+        return result
+    if not runtime_call(config, '/sym/tenant/current'):
+        raise ValueError('Registration requires an authenticated runtime')
+    # Preserve a bounded recovery record and recheck the full identity registry under lock.
+    write_json(ROOT / 'logs/resources/backups' / ('registration-' + digest('|'.join(files)) + '.json'),
+               {'database': remote['database'], 'newEntries': entries})
+    connection.rollback()
+    try:
+        with connection.cursor() as query:
+            query.execute('SET TRANSACTION ISOLATION LEVEL SERIALIZABLE')
+        locked = snapshot(connection, 'magic', for_update=True)
+        registration_plan(manifest, locked, files)
+        # Existing parent metadata must not change between review and registration.
+        if {(e['databasePath'], e['baseSha256']) for e in locked['resources']} != {
+                (e['databasePath'], e['baseSha256']) for e in remote['resources']}:
+            raise ValueError('Concurrent Magic registry change; review registration again')
+        with connection.cursor() as query:
+            query.executemany('INSERT INTO api_file_t '
+                '(tid,api_id,file_kind,file_content,file_path,is_del,created_time,updated_time) '
+                'VALUES (%s,%s,%s,%s,%s,0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)',
+                [(e['rowIds'][0], e.get('metadataId'), e['kind'], e['content'], e['databasePath'])
+                 for e in entries])
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    runtime_call(config, '/sym/node-config/magic-resource/refresh', {})
+    for entry in entries:
+        if entry['path'].endswith('.ms'):
+            meta, script = metadata(entry['content'])
+            verify_runtime_magic(runtime_call(config, '/api/web/resource/file/' + meta['id']), meta, script)
+    manifest['resources'].extend({key: value for key, value in e.items() if key != 'content'} for e in entries)
+    manifest['resources'].sort(key=lambda e: e['path'])
+    write_json(ROOT / 'magic/.manifest.json', manifest)
+    result['result'] = 'registered-and-runtime-verified'
+    return result
+
+
 def publish(connection, config, file, compiled=None):
     kind, _, rel = file.replace('\\', '/').partition('/')
     if kind not in {'magic', 'lowcode'}:
@@ -705,6 +806,11 @@ def haitong_resources(args):
         for audit_key in ['createTime','updateTime','createBy','updateBy']:
             a.pop(audit_key,None)
             b.pop(audit_key,None)
+        # The editor supplies an empty properties object for resources that omit it.
+        a.setdefault('properties', {})
+        b.setdefault('properties', {})
+        editor_parameter_defaults(a)
+        editor_parameter_defaults(b)
         def normalize(value):
             if isinstance(value,dict):return {key:normalize(item) for key,item in value.items() if item is not None}
             if isinstance(value,list):return [normalize(item) for item in value]
@@ -781,13 +887,16 @@ def haitong_resources(args):
             with connection.cursor() as q:
                 q.execute('SELECT file_content FROM '+table+' WHERE file_path=%s',(database_path,))
                 if q.fetchone()['file_content']!=previous:raise ValueError('Concurrent Haitong change prevented publication')
-            request=urllib.request.Request(url+'/resource/file/'+('function' if '/function/' in relative else 'api')+'/save',data=local.encode('utf-8'),headers={'Content-Type':'text/plain;charset=UTF-8','Magic-Token':token})
+            # The editor adds its own CRLF. Sending Windows CRLF would persist CRCRLF
+            # and insert a blank line into every script line on each publication.
+            editor_source=local.replace('\r\n','\n').replace('\r','\n')
+            request=urllib.request.Request(url+'/resource/file/'+('function' if '/function/' in relative else 'api')+'/save',data=editor_source.encode('utf-8'),headers={'Content-Type':'text/plain;charset=UTF-8','Magic-Token':token})
             with opener.open(request,timeout=30) as response:
                 saved=json.load(response)
                 if saved.get('code')!=1 or saved.get('data')!=meta['id']:raise ValueError('Haitong editor rejected publication')
             request=urllib.request.Request(url+'/resource/file/'+urllib.parse.quote(meta['id'],safe=''),headers={'Magic-Token':token})
             with opener.open(request,timeout=30) as response: loaded=json.load(response).get('data',{})
-            if loaded.get('id')!=meta['id'] or loaded.get('script','').strip()!=script.strip():raise ValueError('Haitong runtime readback differs')
+            if loaded.get('id')!=meta['id'] or digest(loaded.get('script','').strip())!=digest(script.strip()):raise ValueError('Haitong runtime readback differs')
             connection.rollback()
             with connection.cursor() as q:
                 q.execute('SELECT file_content FROM '+table+' WHERE file_path=%s',(database_path,))
@@ -806,7 +915,7 @@ def haitong_resources(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('command', choices=['pull', 'status', 'plan', 'publish'])
+    p.add_argument('command', choices=['pull', 'status', 'plan', 'register', 'publish'])
     p.add_argument('--kind', choices=['all', 'magic', 'lowcode'], default='all')
     p.add_argument('--config', type=Path, default=PRIVATE_CONFIG)
     p.add_argument('--file', action='append')
@@ -814,6 +923,8 @@ def main():
     p.add_argument('--apply', action='store_true')
     p.add_argument('--project', choices=['shared', 'haitong-data-pull'], default='shared')
     args = p.parse_args()
+    if args.command == 'register' and (args.project != 'shared' or args.kind != 'magic'):
+        p.error('register requires --kind magic and the shared project')
     if args.command == 'publish' and (not args.apply or not args.file or len(args.file) != 1):
         p.error('publish requires --apply and exactly one --file; use plan to review first')
     if args.project == 'haitong-data-pull':
@@ -823,7 +934,9 @@ def main():
     config = read_json(args.config)
     connection = connect(config)
     try:
-        if args.command == 'publish':
+        if args.command == 'register':
+            result = register_magic(connection, config, args.file, args.apply)
+        elif args.command == 'publish':
             result = publish(connection, config, args.file[0], args.compiled)
         else:
             kinds = ['magic', 'lowcode'] if args.kind == 'all' else [args.kind]

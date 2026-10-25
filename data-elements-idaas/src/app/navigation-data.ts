@@ -24,10 +24,7 @@ export const pages: NavPage[] = [
     { key: 'sync/configs', label: '同步配置', description: '配置下游应用的身份数据同步方式', group: '同步管理' },
     { key: 'sync/entities', label: '同步对象', description: '查看待同步的用户、机构与关联状态', group: '同步管理' },
     { key: 'sync/tasks', label: '同步任务', description: '跟踪任务进度、失败原因与重试结果', group: '同步管理' },
-    { key: 'audit/operations', label: '操作日志', description: '追溯管理动作与重要配置变更', group: '审计日志' },
-    { key: 'audit/logins', label: '登录日志', description: '检查身份验证与应用访问结果', group: '审计日志' },
-    { key: 'audit/api', label: 'API 日志', description: '查询接口调用与身份数据访问记录', group: '审计日志' },
-    { key: 'audit/statistics', label: '统计分析', description: '比较访问趋势与应用使用情况', group: '审计日志' },
+    { key: 'audit/logs', label: '日志管理', description: '查询登录、操作、接口、安全事件及日志管理记录', group: '审计日志' },
     { key: 'system/access/admins', label: '管理员管理', description: '管理平台成员及其系统角色', group: '系统管理' },
     { key: 'system/access/roles', label: '系统角色', description: '配置平台功能权限与管理范围', group: '系统管理' },
     { key: 'system/settings/security', label: '账号安全', description: '配置账号密码、锁定与多因子策略', group: '系统管理' },
@@ -42,7 +39,7 @@ export const pages: NavPage[] = [
     { key: 'entities', label: '法人管理', description: '管理法人信息及关联自然人和子账号', group: '公众身份' },
     { key: 'profile', label: '个人中心', description: '查看个人资料与账户安全选项', group: '个人中心' },
 ];
-export const publicPageKeys = new Set(['auth-accounts', 'verifications', 'overview', 'apps', 'app-groups', 'persons', 'entities', 'audit/operations', 'audit/logins', 'audit/api', 'audit/statistics', 'system/access/admins', 'system/access/roles', 'system/settings/security', 'system/settings/branding']);
+export const publicPageKeys = new Set(['auth-accounts', 'verifications', 'overview', 'apps', 'app-groups', 'persons', 'entities', 'audit/logs', 'system/access/admins', 'system/access/roles', 'system/settings/security', 'system/settings/branding']);
 export const authPaths = ['/auth/identity/login', '/login', '/auth/public/login', '/auth/public/register/person', '/auth/public/register/company', '/auth/workforce/forgot', '/auth/public/forgot', '/auth/workforce/mfa', '/auth/public/mfa'];
 export function domainPages(domain: Domain): NavPage[] {
     return pages.filter(p => domain === 'public' ? publicPageKeys.has(p.key) || p.key === 'profile' : !['persons', 'entities', 'verifications'].includes(p.key));

@@ -1,5 +1,0 @@
-deviceCode,status,note
-D001,online,"first device"
-D002,offline,"quoted, comma"
-D003,online,"multi-line
-note"

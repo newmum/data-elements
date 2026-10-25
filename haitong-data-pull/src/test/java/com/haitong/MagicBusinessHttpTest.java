@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "db.url=jdbc:h2:mem:magic-business;MODE=MySQL;DB_CLOSE_DELAY=-1","relay.worker.enabled=false","relay.limits.min-free-disk-bytes=0",
     "relay.security.api-key=magic-producer-0123456789abcdef0123456789","relay.security.admin-key=magic-admin-0123456789abcdef0123456789",
     "relay.standalone-registry.sync-enabled=true","relay.standalone-registry.sync-key=magic-sync-0123456789abcdef0123456789",
-    "relay.routes.table-to-ftp.targets[0]=local"})
+    "relay.routes.table-to-ftp.targets[0]=local","relay.registration-registry.base-url=http://127.0.0.1:1"})
 @AutoConfigureMockMvc
 class MagicBusinessHttpTest {
     static final String ADMIN="magic-admin-0123456789abcdef0123456789",CLIENT="magic-producer-0123456789abcdef0123456789";

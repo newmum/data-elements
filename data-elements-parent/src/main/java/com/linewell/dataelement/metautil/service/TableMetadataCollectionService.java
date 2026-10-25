@@ -841,9 +841,9 @@ public class TableMetadataCollectionService {
         // FTP/SFTP files are logical tables.  They use the FtpFileMetadataExplorer
         // rather than JDBC. ES uses ordinary indices and bulk mappings through
         // its HTTP explorer. Both reuse the durable step-2 collection workflow.
-        // API/Kafka remain configuration-driven
-        // sources and deliberately do not enter this physical/file scanner.
-        if (type == null || (!type.isRelational() && type != DatabaseType.FTP && type != DatabaseType.ELASTICSEARCH)) {
+        // Object files and configured Kafka topics also have real inferred schemas.
+        if (type == null || (!type.isRelational() && !Set.of(DatabaseType.FTP, DatabaseType.ELASTICSEARCH,
+                DatabaseType.MINIO, DatabaseType.KAFKA).contains(type))) {
             throw new IllegalArgumentException("当前数据源不支持数据表采集");
         }
         DataSourceConfig config = new DataSourceConfig();
@@ -862,10 +862,10 @@ public class TableMetadataCollectionService {
         config.setDatabase(type == DatabaseType.ELASTICSEARCH
                 ? first(source, "database", "indexName", "defaultIndex")
                 : first(source, "database", "dbName", "db_name", "dbMetaDbName"));
-        config.setUsername(ftpSource
+        config.setUsername(type == DatabaseType.MINIO ? first(source, "minioAccessKey", "username") : ftpSource
                 ? first(source, "ftpUsername", "username", "dbUser", "dbMetaUser", "user")
                 : first(source, "username", "dbUser", "dbMetaUser", "user"));
-        config.setPassword(ftpSource
+        config.setPassword(type == DatabaseType.MINIO ? first(source, "minioSecretKey", "password") : ftpSource
                 ? first(source, "ftpPassword", "password", "dbPassword", "dbMetaPassword")
                 : first(source, "password", "dbPassword", "dbMetaPassword"));
         config.setJdbcUrl(first(source, "jdbcURL", "jdbcUrl", "jdbc_url"));

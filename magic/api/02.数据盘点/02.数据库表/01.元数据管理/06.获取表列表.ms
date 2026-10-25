@@ -115,6 +115,45 @@
       "error": null,
       "expression": null,
       "children": null
+    },
+    {
+      "name": "allSnapshots",
+      "value": "false",
+      "description": "paged=true 时包含未标注与已标注快照；默认保持第二步已标注列表口径",
+      "required": false,
+      "dataType": "Boolean",
+      "type": null,
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
+    },
+    {
+      "name": "sortField",
+      "value": "",
+      "description": "快照分页白名单排序字段",
+      "required": false,
+      "dataType": "String",
+      "type": null,
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
+    },
+    {
+      "name": "sortDir",
+      "value": "",
+      "description": "快照分页白名单排序方向",
+      "required": false,
+      "dataType": "String",
+      "type": null,
+      "defaultValue": null,
+      "validateType": null,
+      "error": null,
+      "expression": null,
+      "children": null
     }
   ],
   "options": [],
@@ -133,6 +172,7 @@
 import java.util.Map
 import jsons
 import tenantRuntime
+import dataScope
 var tenantId = tenantRuntime.id()
 
 /*
@@ -230,6 +270,9 @@ if (blank(dbId)) {
 var datasource = db.table('db_datasource_t')
     .columns('tid', 'db_name', 'app_id', 'org_id', 'tenant_id')
     .where().eq('tid', dbId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
+if (datasource == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [datasource]).size() != 1) {
+    exit 403, '数据源不在当前租户或角色数据范围内'
+}
 
 /* 登记目录抽屉：复用同一 db_table_t 采集快照，按目录关联状态真分页。
  * 只读、不连接源库、不写资产；不传 catalogPaged 时保持第二步原有接口行为。
@@ -352,6 +395,8 @@ if (pendingMode) {
         .select()
 }var pagedMode = textOf(paged).trim().toLowerCase() == 'true' || textOf(paged) == '1'
 if (pagedMode) {
+    // 详情页展示与登记两侧共用的全部快照；默认仍为第二步已标注列表。
+    var allSnapshotsFlag = textOf(allSnapshots).toLowerCase() == 'true' || textOf(allSnapshots) == '1'
     var safePageNo = pageNo == null || pageNo::int < 1 ? 1 : pageNo::int
     var safePageSize = pageSize == null || pageSize::int < 1 ? 50 : Math.min(pageSize::int, 100)
     var selectedBusinessType = blank(businessType) || textOf(businessType) == '全部' ? null : textOf(businessType)
@@ -364,19 +409,19 @@ if (pagedMode) {
                    t.total_size_bytes, t.total_size_formatted, t.org_id, t.org_path,
                    t.related_directory, t.data_source_type, t.timestamp_field,
                    t.dictionary_structure_type, t.dictionary_table_flag, t.source_catalog_id,
-                   t.field_governance_config, t.dictionary_profiles,
-                   t.dictionary_profile, t.dictionary_categories,
+                   <if test="includeGovernanceFlag">t.field_governance_config, t.dictionary_profiles,
+                   t.dictionary_profile, t.dictionary_categories,</if>
                    t.source_table_id, t.source_table_name, t.manage_unit, t.asset_status,
                    t.flow_status, t.reg_time, t.created_time, t.updated_time, t.tenant_id,
                    row_number() over (
                        partition by lower(t.table_name)
-                       order by coalesce(t.field_count, 0) desc, t.updated_time desc, t.tid desc
+                       order by coalesce(t.annotated, 0) desc, coalesce(t.field_count, 0) desc, t.updated_time desc, t.tid desc
                    ) as row_rank
               from db_table_t t
              where t.tenant_id = #{tenantId}
                and t.datasource_id = #{dbId}
                and t.is_del = 0
-               and t.annotated = 1
+               <if test="!allSnapshotsFlag">and t.annotated = 1</if>
         ) ranked
         where ranked.row_rank = 1
           <if test="selectedBusinessType != null and selectedBusinessType != ''">
@@ -388,45 +433,52 @@ if (pagedMode) {
                  or lower(coalesce(ranked.table_comment, '')) like #{searchKeyword})
           </if>
     """
-    var page = db.page(dedupSql + ' order by ranked.updated_time desc, ranked.tid desc', safePageSize, (safePageNo - 1) * safePageSize)
+    var sortColumns = {tableName: 'ranked.table_name', tableComment: 'ranked.table_comment', fieldCount: 'ranked.field_count', annotated: 'ranked.annotated', businessType: 'ranked.business_type'}
+    var selectedSort = sortColumns[textOf(sortField)]
+    var orderSql = selectedSort == null ? 'ranked.updated_time desc, ranked.tid desc' : selectedSort + (textOf(sortDir).toLowerCase() == 'desc' ? ' desc' : ' asc') + ', ranked.tid desc'
+    var page = db.page(dedupSql + ' order by ' + orderSql, safePageSize, (safePageNo - 1) * safePageSize)
     var rows = []
     for (row in page.list == null ? [] : page.list) {
         rows.add(tableItem(row, datasource))
     }
 
     var statsRows = db.select("""
-        select coalesce(grouped.business_type, '业务表') as business_type, count(1) as total
+        select coalesce(grouped.business_type, '业务表') as business_type, grouped.annotated, count(1) as total
           from (
-            select ranked.business_type
+            select ranked.business_type, ranked.annotated
               from (
-                select t.table_name, t.business_type,
+                select t.table_name, t.business_type, t.annotated,
                        row_number() over (
                            partition by lower(t.table_name)
-                           order by coalesce(t.field_count, 0) desc, t.updated_time desc, t.tid desc
+                           order by coalesce(t.annotated, 0) desc, coalesce(t.field_count, 0) desc, t.updated_time desc, t.tid desc
                        ) as row_rank
                   from db_table_t t
                  where t.tenant_id = #{tenantId}
                    and t.datasource_id = #{dbId}
                    and t.is_del = 0
-                   and t.annotated = 1
+                   <if test="!allSnapshotsFlag">and t.annotated = 1</if>
               ) ranked
              where ranked.row_rank = 1
           ) grouped
-         group by coalesce(grouped.business_type, '业务表')
+         group by coalesce(grouped.business_type, '业务表'), grouped.annotated
     """)
     var businessStats = {}
     var annotatedTotal = 0
+    var snapshotTotal = 0
     for (stat in statsRows == null ? [] : statsRows) {
         var type = firstValue(stat, ['businessType', 'business_type'])
         var count = rowValue(stat, ['total']) == null ? 0 : rowValue(stat, ['total'])::long
-        businessStats[blank(type) ? '业务表' : type] = count
-        annotatedTotal = annotatedTotal + count
+        var key = blank(type) ? '业务表' : type
+        businessStats[key] = (businessStats[key] == null ? 0 : businessStats[key]) + count
+        snapshotTotal = snapshotTotal + count
+        if (textOf(rowValue(stat, ['annotated'])) == '1' || textOf(rowValue(stat, ['annotated'])) == 'true') { annotatedTotal = annotatedTotal + count }
     }
     return {
         pageNo: safePageNo,
         pageSize: safePageSize,
         total: page.total == null ? 0 : page.total,
         annotatedTotal: annotatedTotal,
+        snapshotTotal: snapshotTotal,
         businessStats: businessStats,
         rows: rows,
         list: rows

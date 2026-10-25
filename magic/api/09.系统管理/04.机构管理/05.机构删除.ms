@@ -26,6 +26,8 @@
 // 路由：POST /sym/org/delete
 // 业务说明：组织机构删除接口（支持批量，并递归删除全部子机构）；使用请求参数 ids、id；涉及 rm_org_t 等业务表。
 // 组织机构删除接口（支持批量，并递归删除全部子机构）
+import '@/common/audit-operation' as auditOperation;
+import tenantRuntime;
 import "@post:/sym/user/me" as me
 
 var now = new Date();
@@ -40,7 +42,11 @@ if (ids == null || ids.size() == 0) {
     exit 400, '机构ID不能为空';
 }
 
+var tenantId=tenantRuntime.id();var sql=db.normal();
 try {
+ return sql.transaction(()=>{
+    var orgRows=sql.table('rm_org_t').where().eq('tenantId',tenantId).eq('deleted',0).limit(5001).select();
+    if(orgRows.size()>5000){exit 400,'机构范围过大，请分级维护';}
     var updateId = me().create_id;
     var rootIds = [];
     for (id in ids) {
@@ -56,7 +62,7 @@ try {
         exit 400, '全部机构为系统根节点，不能删除';
     }
 
-    var existList = db.table('rm_org_t').where().in('id', rootIds).eq('deleted', 0).select();
+    var existList = sql.table('rm_org_t').where().in('id', rootIds).eq('deleted', 0).select();
     var existIds = [];
     for (item in existList) {
         existIds.add(item.id);
@@ -85,23 +91,25 @@ try {
         }
         visited[currentId] = true;
         deleteIds.add(currentId);
-        var children = db.table('rm_org_t').where().eq('parentId', currentId).eq('deleted', 0).select();
+        var children = orgRows.filter(org=>org.parentId==currentId);
         for (child in children) {
             queue.add(child.id);
         }
     }
 
-    db.table('rm_org_t').where().in('id', deleteIds).update({
+    sql.table('rm_org_t').where().in('id', deleteIds).update({
         deleted: 1,
         updateId: updateId,
         updateTime: now
     });
+    auditOperation('ORG_ARCHIVED','ORGANIZATION',null,null,{orgIds:deleteIds,count:deleteIds.size()});
     return {
         ids: rootIds,
         count: deleteIds.size(),
         deleted: true,
         recursive: true
     };
+ });
 } catch (e) {
     exit 500, '删除失败: ' + e.message;
 }

@@ -1,8 +1,16 @@
 # 万象数据治理中心（data-elements-wanxiang）
 
-本文件是本工程唯一的持续维护说明。功能、接口、配置、部署和验证边界在对应章节原位更新；版本差异通过 Git 查看，不再新增按日期、版本或阶段命名的增量文档。工程 README 仅保留入口。
+<a id="lowcode-logging"></a>
 
-仓库规则以 [AGENTS.md](../AGENTS.md) 为准；数据库现行完整结构见 [db/](../db/README.md)。文中保留的设计背景与既往验证只说明当时范围，不代表新环境已验收，也不能覆盖现行租户与身份边界。历史截图、JSON 报告和旧版本评审材料不作为当前文档依赖。
+## 低代码日志管理
+
+日志管理已收口为一个菜单、一个共享低代码页面 `log-management`，顶部按权限显示登录日志、操作日志、接口日志、安全日志、导出日志、归档日志六个页签；日志策略为同一栏右侧的配置按钮，点击弹窗配置各类别的保留天数与成功请求采样比例。源码唯一位于根 `lowcode/09.系统管理/09.日志管理/日志管理(log-management).vue`，原八个入口/统计组件已核对引用并软删除，不保留第二份页面业务代码。页面仅含页签与配置入口、查询栏、表格和分页，无顶部标题或统计卡；表格以序号、人员、时间、功能路径与具体操作为先。
+
+查询、排序、导出、归档、冻结与权限契约见[公共日志实现说明](data-elements.md#logging-design)。本机结构、所选 Magic 与低代码资源已发布，8088 已按授权换包启动并完成运行回读。真实行业会话隔离、平台/行业登录退出、CSV/JSONL 下载及归档状态往返已验证；实际权限和验证边界见公共说明，演示与生产尚未发布。
+
+本文件是本工程唯一的持续维护说明。功能、接口、配置、部署和验证边界在对应章节原位更新；版本差异通过 Git 查看，不再新增按日期、版本或阶段命名的增量文档。仓库仅保留根目录 README 总入口。
+
+仓库规则以 [AGENTS.md](../AGENTS.md) 为准；数据库现行完整结构见 [db/](data-elements.md#database-schema)。文中保留的设计背景与既往验证只说明当时范围，不代表新环境已验收，也不能覆盖现行租户与身份边界。历史截图、JSON 报告和旧版本评审材料不作为当前文档依赖。
 
 ## 目录
 
@@ -300,3 +308,53 @@ npm run dev
 ### 5. 验证与预览
 
 实际执行结果见 `02-测试报告.md`。`visual/3.2.1/` 为项目 TSX/CSS 与本地数据生成的隔离 DOM 浏览器截图，**不是完整 React/Ant Design 应用运行截图**；Hooks 与 Ant 控件采用明确的测试适配器。当前环境无法取得完整 npm 依赖，生产构建仍需在联网环境补验。
+
+<a id="visual-regression"></a>
+
+## 隔离视觉回归检查
+
+这些文件用于样式回归，**不是业务入口、完整 React/Ant Design 页面，也不是后端模拟服务**。测试数据只存在于 tests/visual；src 继续调用已有真实 HTTP 服务。
+
+### 运行
+
+需要 Python 3.12+、Playwright 与可用 Chromium。工程不携带浏览器或字体文件。
+
+```bash
+python -m pip install -r tests/visual/requirements.txt
+# 没有可用浏览器时，在允许联网的环境安装测试浏览器：
+python -m playwright install chromium
+python tests/visual/build-fixtures.py
+python tests/visual/review.py --screenshots
+```
+
+已安装系统 Chromium 时可设置 `CHROMIUM_PATH`，例如 Linux 的 `/usr/bin/chromium` 或 Windows 中 chrome.exe 的完整路径。工具通过 `set_content` 读取本地样板和项目 CSS，不请求生产接口、不写业务库。字体采用测试机器系统字体，因此不同机器的换行与渲染可能有差异。
+
+输出仓库根目录 `logs/wanxiang/visual-review/visual-results.json` 与截图，均不提交 Git。260 个组合覆盖 26 个页面/表单样板、两种主题和五种尺寸；失败返回非零退出码。检查文档宽度、主要容器边界、文字尺寸、深色顶部及全屏区域尺寸。
+
+**没有检测到溢出不等于每种数据长度或 Ant Design 动态组件都已通过。** 仍需启动真实前后端检查表格固定列、Popover/Select/DatePicker、抽屉滚动、焦点恢复、React Flow 连线与键盘操作。请勿把本工具输出作为业务端到端验收证明。
+
+### 框架启动与服务异常页（真实 React / Ant Design）
+
+本次新增的 `startup-preview.html` 使用正式的 `StartupScene` 组件、主题和 CSS，不使用上述简化页面适配器。它只是开发环境的隔离视觉入口，不调用登录或业务接口，也不进入生产构建。
+
+启动 Vite 后可访问：
+
+- `/tests/visual/startup-preview.html?state=loading&theme=dark`：首次加载；`phase=workspace` 为工作区准备阶段。
+- `/tests/visual/startup-preview.html?state=sync&theme=dark`：真实登录同步超时文案的展示。
+- `/tests/visual/startup-preview.html?state=network&theme=light`：网络连接失败。
+- `state=timeout/service/permission/authentication`：对应响应超时、503、403和登录失效。
+- `theme=light/dark`：两种主题；`contained=true&phase=module`：嵌入工作台的模块加载。
+
+预览里的“重新连接”只切换到加载画面，用于视觉和键盘交互检查，不代表真实后端连接成功。正式入口的重试仍执行原来的 `loadSession()`，没有认证旁路、假数据或定时自动重试。
+
+<a id="dom-review"></a>
+
+## Source-driven DOM review
+
+This is an explicitly isolated layout test, not a replacement for React, Ant Design or a production build.
+
+1. `npm run review:dom` executes page TSX with local Mock query values and small DOM adapters for hooks/Ant components.
+2. `python tests/review/review.py --screenshots` loads the generated local HTML in Chromium and measures 384 light/dark/layout cases.
+3. Generated artifacts stay in the repository root `logs/wanxiang/review/` and are excluded from Git. Use `--modules=review,mapping,landing` for a targeted rerun.
+
+Install Playwright for Python and Chromium independently. `CHROMIUM_PATH` can select the browser; `TYPESCRIPT_PATH` can select a test compiler. Do not report these snapshots as production application screenshots or interactive E2E results.

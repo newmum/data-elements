@@ -18,7 +18,7 @@ import {
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import { useComponentManifests } from '@/api/manifests';
-import { useFlowStatus } from '@/api/pipelines';
+import { useFlowStatus, useLiveFlowBulletins } from '@/api/pipelines';
 import { useLineageStore } from '@/stores/lineageStore';
 import { buildFlowRuntimeMetrics, type EdgeRuntimeMetric } from '@/runtime/runtimeMetrics';
 import { useOceanTheme } from '../../design/theme';
@@ -27,6 +27,7 @@ import NodeSelector from '@/panels/NodeSelector';
 import { useTaskChainStore } from '../stores/taskChainStore';
 import { buildCompositeCanvas } from '../utils/compositeCanvas';
 import { selectTaskNode } from '../utils/taskSelection';
+import { groupActiveFlowErrors } from '../runtime/activeFlowErrors';
 
 const NODE_WIDTH = 360;
 const NODE_HEIGHT = 220; // approximate; X6 will keep node at this size
@@ -166,8 +167,12 @@ export default function Canvas() {
   const requestAddAfter = useCanvasStore((s) => s.requestAddAfter);
   const focusNodeId = useCanvasStore((s) => s.focusNodeId);
   const focusNonce = useCanvasStore((s) => s.focusNodeNonce);
-  void useComponentManifests; // selector below uses it indirectly via NodeSelector
+  const { data: manifests } = useComponentManifests();
+  const manifestsByKey = useMemo(() => Object.fromEntries((manifests ?? []).map(item => [item.key, item])), [manifests]);
   const statusQuery = useFlowStatus(currentPipelineId, canvasMode === 'EDIT' ? 5000 : 3000);
+  const liveBulletins = useLiveFlowBulletins(currentPipelineId, statusQuery.data?.deployed === true);
+  const nodeErrors = useMemo(() => groupActiveFlowErrors(statusQuery.data, liveBulletins.data ?? [], new Set(Object.keys(nodes))),
+    [statusQuery.data, liveBulletins.data, nodes]);
   const runtimeMetrics = useMemo(
     () => buildFlowRuntimeMetrics(statusQuery.data, nodes, edges),
     [statusQuery.data, nodes, edges],
@@ -415,7 +420,10 @@ export default function Canvas() {
     let addedAny = false;
     Object.values(composite.nodes).forEach((display) => {
       const n = display.node;
-      const data = { node: n, runtime: display.readonly ? undefined : runtimeMetrics.nodeMetrics[n.id], mode: canvasMode,
+      const metric = runtimeMetrics.nodeMetrics[n.id];
+      const runtime = liveBulletins.isError && metric ? { ...metric, state: 'warning' as const } : metric;
+      const data = { node: n, runtime: display.readonly ? undefined : runtime, mode: canvasMode,
+        manifest: manifestsByKey[n.manifestKey], errors: display.readonly ? [] : nodeErrors[n.id] ?? [],
         readonly: display.readonly, taskName: display.taskName, pipelineId: display.pipelineId, originalNodeId: display.originalNodeId };
       const existing = g.getCellById(n.id);
       if (!existing) {
@@ -457,7 +465,7 @@ export default function Canvas() {
       g.cleanSelection();
     }
     syncingGraphRef.current = false;
-  }, [composite.nodes, selectedNodeId, selectedEdgeId, runtimeMetrics.nodeMetrics, canvasMode, taskChain]);
+  }, [composite.nodes, selectedNodeId, selectedEdgeId, runtimeMetrics.nodeMetrics, canvasMode, taskChain, manifestsByKey, nodeErrors, liveBulletins.isError]);
 
   // ------------------------------------------------------------
   // Sync store edges -> graph

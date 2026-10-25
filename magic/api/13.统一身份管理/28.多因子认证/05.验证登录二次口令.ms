@@ -193,7 +193,7 @@ where tid=#{credential.id}
             // 记录操作主体、目标及结果，供审计与故障追踪。
             audit({
                 userId:id,actorKind:kind=='OPERATOR'?'OPERATOR':'AUTH_ACCOUNT'
-            },'SUCCESS','auth:mfa-login',id,null,{
+            },'ACCEPTED','auth:mfa-verified',id,null,{
                 id:id
             });
             return {
@@ -280,15 +280,17 @@ where principal_kind=#{kind}
             // 密码及附加挑战通过后才签发独立的平台会话。
             platformSession.login(id,1800);
             platformSession.session().set('securityVersion',result.version);
-            return {
-                token:platformSession.token(),session:sessionInfo()
-            };
+            try {
+                audit({userId:id,actorKind:'OPERATOR'},'SUCCESS','auth:login',id,null,null);
+                return {token:platformSession.token(),session:sessionInfo()};
+            } catch(error) { platformSession.logout(); throw error; }
         }
         var policy=sessionPolicy('issue',id);
         authSession.login(id,result.version,policy.idleSeconds,policy.allowConcurrent);
-        return {
-            token:authSession.token(),realm:'auth-account'
-        };
+        try {
+            audit({userId:id,actorKind:'AUTH_ACCOUNT'},'SUCCESS','auth:account-login',id,null,null);
+            return {token:authSession.token(),realm:'auth-account'};
+        } catch(error) { authSession.logout(); throw error; }
     }
     if(result.relogin==true) {
         if(kind=='OPERATOR') {

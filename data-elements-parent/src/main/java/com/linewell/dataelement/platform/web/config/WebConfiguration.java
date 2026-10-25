@@ -20,6 +20,9 @@ public class WebConfiguration implements WebMvcConfigurer {
     @Autowired
     private TenantWebInterceptor tenantWebInterceptor;
 
+    @Autowired
+    private com.linewell.dataelement.platform.audit.AuditWebInterceptor auditWebInterceptor;
+
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler(Global.USER_FILES_BASE_URL + "**").addResourceLocations("file:" + Global.getDir() + Global.USER_FILES_BASE_URL);
@@ -34,6 +37,7 @@ public class WebConfiguration implements WebMvcConfigurer {
     // 注册自定义拦截器
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(auditWebInterceptor);
         // 注册PermissionInterceptor拦截器，对所有路径生效
         registry.addInterceptor(globalInterceptor)
             .excludePathPatterns(

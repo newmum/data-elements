@@ -1,8 +1,8 @@
 # 海通数据推送服务（haitong-data-pull）
 
-本文件是本工程唯一的持续维护说明。功能、接口、配置、部署和验证边界在对应章节原位更新；版本差异通过 Git 查看，不再新增按日期、版本或阶段命名的增量文档。工程 README 仅保留入口。
+本文件是本工程唯一的持续维护说明。功能、接口、配置、部署和验证边界在对应章节原位更新；版本差异通过 Git 查看，不再新增按日期、版本或阶段命名的增量文档。仓库仅保留根目录 README 总入口。
 
-仓库规则以 [AGENTS.md](../AGENTS.md) 为准；数据库现行完整结构见 [db/](../db/README.md)。文中保留的设计背景与既往验证只说明当时范围，不代表新环境已验收，也不能覆盖现行租户与身份边界。历史截图、JSON 报告和旧版本评审材料不作为当前文档依赖。
+仓库规则以 [AGENTS.md](../AGENTS.md) 为准；数据库现行完整结构见 [db/](data-elements.md#database-schema)。文中保留的设计背景与既往验证只说明当时范围，不代表新环境已验收，也不能覆盖现行租户与身份边界。历史截图、JSON 报告和旧版本评审材料不作为当前文档依赖。
 
 当前 MySQL `haitong` 完整结构统一维护在 [`db/haitong/init.sql`](../db/haitong/init.sql)，当前实库为 15 张表（含文件上传、分片、配额、业务回执四张运行表）。达梦原有适配定义保存在 [`compatibility/dameng.sql`](../db/haitong/compatibility/dameng.sql)，为未核验的 9 表兼容模板；本次文件功能仅支持 MySQL/H2，达梦启用时明确拒绝。H2 资源仍随应用打包，供本地运行与测试。已有库升级需审查差异，不能直接重跑完整初始化文件。
 
@@ -13,6 +13,7 @@
 - [Magic API 统一入口与业务实现](#magic-first)
 - [非结构化数据接入：当前实现与平台扩展设计](#unstructured-design)
 - [工程概览与使用](#overview)
+- [Linux / Windows 原生部署包](#native-release-packages)
 - [统一数据推送接口文档](#guide-38565d24)
 - [FTP / SFTP 投递诊断说明](#guide-ee01ab21)
 - [Magic-API：02.零信任网关对接](#guide-89fdbceb)
@@ -34,9 +35,11 @@
 
 海通推送服务的 **37 个原 Java Controller 方法/路径组合均由 Magic API 注册**，原 `/api/v1/**`、`/internal/v1/**` 和 `/internal/push-credentials/issue` 地址继续使用。5 个业务 Controller 和将全部推送业务转给 Controller 的 `PushOperationsApi` 已移除。编辑器、Actuator 健康检查等框架管理入口仍由框架提供，不属于这 37 个业务接口。
 
-本机已启动的独立服务为 `http://localhost:8080`，编辑器为 `http://localhost:8080/api/web/index.html`。8088 是共享平台后端；配置文件内默认端口 18083 可以被仓库外运行配置覆盖，不能由默认值推断运行地址。
+文件资源模式默认读取 `./data/magic-api`，与内置资源初始化目录一致；正式原生部署模板使用独立数据库资源，不受此文件目录影响。批量文件导入通过 Servlet `Part` 读取原始 multipart 文件；表批次的缺失类型、空记录数组及已取消字段等基础契约错误返回 422，与本文件接口规范一致。集成测试的文件资源隔离在测试工作目录内，避免把上一次保留的脚本当成本次构建版本。
 
-唯一可维护源码位于 [`magic/haitong/`](../magic/haitong/)，独立索引为该目录 `.manifest.json`。Maven 将它打包到 JAR 的 `magic-api-bootstrap/`；该目录只是类路径资源名称，工程内不再维护第二份脚本。运行源仍是独立 MySQL `haitong.ht_magic_api_file`，不会写入共享控制库 `baseline.api_file_t`。启动只补缺失目录和资源，不覆盖编辑器已有内容。
+本机独立海通服务与原生部署模板统一使用 **18083**：服务为 `http://localhost:18083`，编辑器为 `http://localhost:18083/api/web/index.html`。共享元数据平台后端仍使用 8088；登记页面推送地址来自当前网络的推送节点配置，节点根地址与平台海通同步目标均应使用 18083。
+
+唯一可维护源码位于 [`magic/haitong/`](../magic/haitong)，独立索引为该目录 `.manifest.json`。Maven 将它打包到 JAR 的 `magic-api-bootstrap/`；该目录只是类路径资源名称，工程内不再维护第二份脚本。运行源仍是独立 MySQL `haitong.ht_magic_api_file`，不会写入共享控制库 `baseline.api_file_t`。启动只补缺失目录和资源，不覆盖编辑器已有内容。
 
 | 编辑器分组 | 方法/路径数量 | 职责 |
 | --- | ---: | --- |
@@ -46,6 +49,22 @@
 | 08.附件传输 | 13 | 单次上传、初始化、分片、完成、提交、取消、状态、分页、批量状态、回执及 GET/HEAD 内容读取 |
 
 原 02.零信任网关对接、03.FTP诊断和04.数据推送调试仍保留。04 分组与正式入口共用脚本业务函数；旧调试入口保留 Magic 成功信封和原有 JSON 规范化幂等语义，正式入口保留原始 JSON 字节幂等语义及原生 HTTP/JSON 响应。
+
+`09.数据推送验证` 是可直接运行的 Postman 请求示例。01～06 分别向正式 `POST /api/v1/data-push` 发送状态字典、机构字典、人员、车辆、事件和事件操作日志各两行合成数据；07～09 对正式附件接口发送内嵌 PNG 的原始字节；10 提交附件；11、12 各执行一次附件或业务消息状态查询。每条脚本按 URL、Headers、Body、一次 HTTP 调用、响应的顺序格式化，逐项说明数据源 ID、登记表名、字段、幂等键及返回 ID 的获取位置。脚本不直接调用内部业务函数，也不隐藏同步、查询数据库或轮询流程。
+
+本机登录编辑器后打开示例并点击“运行”，无需填写下方接口信息页。脚本中的 `X-Api-Key` 从仓库外 YAML 的 `haitong.validation.api-key` 读取，并经通用密钥解析器支持 `env:` 引用；本机绑定已获授权的测试客户端及测试源，响应只显示脱敏请求头。复制到 Postman 时使用脚本中的正式 URL、对应请求头和 Body，并在本机填入该源业务密钥。部署到其他环境须先登记自己的测试源，替换源 ID、表名与返回 ID，再配置专属测试密钥。
+
+`/validation/**` 仅供已登录的海通编辑器执行示例：需显式启用 `haitong.validation.enabled`，校验编辑器令牌、资源 ID、实际路由和 HTTP 方法。普通业务密钥不能调用这些持有服务器测试密钥的示例；正式 `/api/v1/**` 仍只接受其原业务认证。原生包默认停用示例执行，已有正常业务接口不受影响。Java 过滤器只补齐编辑器会话与 HTTP 示例执行入口的认证适配，HTTP 参数及调用保留在 Magic 源码中。
+
+本机示例还预填已验证的附件、消息标识及各接口独立的幂等键，填写本数据源的 `X-Api-Key` 即可重放并查询原结果；修改请求正文时须同步更换 `Idempotency-Key`。状态查询只要求业务密钥，不要求幂等键。编辑器登录口令与业务密钥分别维护在仓库外受限配置中，不能放进脚本、工作簿或发布包。
+
+附件测试按以下顺序进行：在 `07.人员附件上传`、`08.车辆附件上传` 或 `09.事件附件上传` 中填写本数据源密钥并执行，查询 `11.附件状态查询` 至 `state=READY`；再执行 `10.附件提交投递`，查询至 `deliveryStatus=SUCCEEDED`；把返回的 `fileId` 写入相应业务记录的 `attachment_file_id`，执行业务数据接口后用 `12.业务消息状态查询` 确认完成。上传测试入口仅接受 1～65536 字节的 Base64 原文，正常大附件继续使用正式二进制流或分片接口。附件大小、扩展名、所属表字段、调用方和目标均由服务端集合契约校验；上传完成不能代替目标投递完成。
+
+配套工作簿的登记工作表为 `数据表信息` 和 `数据字段`，附带 `填写说明`、`业务数据示例`、`附件清单`。附件字段须声明 `是否关联附件`、`附件大小上限(MB)` 和 `附件格式`；示例为三个字符串附件字段、每文件上限 10MB、PNG 格式。六张表共 45 个字段、36 条业务示例、六个实际附件。示例不包含任何密钥；业务密钥从登记第五步获取，节点管理同步当前已完成登记的配置后再测试。
+
+平台接入与海通投递分别配置同一文件通道：海通 `relay.ftp.output-dir` 为业务根目录，平台 ODS/FJGHCC 绑定到相同协议、服务器和根目录，平台任务再拼接 `datasourceId/tableName/`。任务按 `.json.done` 发现已完成批次，数据库成功提交后删除 JSON 和标记；下载或处理失败不删除，字段校验按整份文件失败。后续库通过接入链路读取首个落地库，并继承登记的时间戳字段。`SUCCEEDED` 是海通已投递的历史证据；平台成功接入后源文件会被删除。重放同一幂等键只返回原受理结果，不重新生成文件，验证新数据须更换批次和幂等键。附件原文位于独立集合目录，不由结构化 JSON 接入任务删除。
+
+通用 JSON 回放过滤器适用于所有动态业务路由，仅排除 Magic 编辑器资源接口。新增分组不再要求修改 Java 路径白名单；重复读取仍受消息体大小和压缩限制保护，正式接口继续以原始字节核验幂等。Magic 发布工具向编辑器提交统一 LF，并在回读时规范化换行和编辑器补充的空 `properties`，避免 Windows CRLF 被重复扩展；数据库并发摘要校验仍比较实际运行内容。
 
 `function/01.海通业务/` 的九个函数分别维护公共请求边界、表批次契约、消息与文件统计、登记同步、密钥签发、推送编排、运维状态处理、交换台账与对账、附件请求与传输编排。以下规则与 SQL 已实际迁入 MagicScript，而非通过脚本转发 Java Controller：
 
@@ -80,7 +99,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 按当前开发范围，**数据源登记页面中的文件集合登记、FILE 域规范同步、行业 FILE 资产/不可变版本、目录/超市与 ES、平台 FJGHCC 异步复制及对象存储直传仍待后续实施**。当前 `fileId` 是海通服务内固定内容的文件标识，不等同于行业平台的 `assetVersionId`。第 4 节是已实现的接口规范；涉及平台的其余设计仍表示后续目标，不能据此调用尚未实现的接口。
 
-可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，默认整文件、可选分片续传的标准库流式客户端为 [`upload_file.py`](../haitong-data-pull/examples/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
+可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，默认整文件、可选分片续传的标准库流式客户端为 [`upload_file.py`](../haitong-data-pull/scripts/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
 
 当前使用单节点持久卷，目录加进程锁；相同本地卷不能同时运行两个文件实例，也不能将各自拥有本地卷的多个实例直接置于随机负载均衡后。正式多实例需完成共享对象存储适配及跨节点校验。普通文件 API 与旧表批次共用 HTTP 服务，分片流量仍会占用该进程的网络和数据库；文件校验池、FILE_LOCAL/FILE_FTP/FILE_KAFKA 投递池分别有界，不承诺物理资源完全隔离。
 
@@ -90,7 +109,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 | 现有基础 | 源码中已具备的行为 | 本设计要补充的部分 |
 | --- | --- | --- |
-| [Magic 数据接收入口](../magic/haitong/api/05.数据接收入口/) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
+| [Magic 数据接收入口](../magic/haitong/api/05.数据接收入口) | `POST /api/v1/files/{channel}` 接收 multipart，`GET /api/v1/files/{id}` 查询状态；依通道授权 | 数据源、文件集合、规范版本、业务元数据、分片及续传；旧通道入口不能绕过新登记权限 |
 | [PayloadFiles](../haitong-data-pull/src/main/java/com/haitong/core/PayloadFiles.java) | 64KiB 缓冲流式写本地持久卷、计算 SHA-256、同步文件并原子改名 | 存储适配器、分片会话、多实例可访问的持久化位置、存储对象与数据库之间的恢复 |
 | [FileService](../haitong-data-pull/src/main/java/com/haitong/core/FileService.java) | JSONL、CSV 与 BINARY；BINARY 只保存文件引用；文件处理 `runOne()` 串行，接收容量检查会 `Files.walk` 全工作目录 | 受控并发文件处理、配额账本、异步整文件校验和隔离检查，去掉每次上传的目录遍历 |
 | [DeliveryWorker](../haitong-data-pull/src/main/java/com/haitong/core/DeliveryWorker.java) | 已按协议建立可配置线程池，带租约、续租、重试及不确定结果处理 | 同一协议内进一步区分大文件和表批次的资源预算；文件目标的就绪条件及远端异步复制状态 |
@@ -260,7 +279,7 @@ flowchart LR
 | Kafka 文件引用通知 | `eventId`、文件及版本 ID、大小、SHA-256、业务元数据和受控获取入口；消息体建议最多 256KiB | broker ACK 仅证明消息到达代理；业务完成须另有接收回执 |
 | 平台 FJGHCC 文件落地 | 新的异步文件复制命令引用固定文件版本，由持有目标连接权限的工作者流式复制 | 远端复制任务完成并反馈核验结果；提交复制作业得到 202 不算投递完成 |
 
-现有 `PLATFORM_FTP` 会把表批次 JSON 交给平台 `/internal/ftp-deliver`，尚不接受原始大文件。不能把 `packet.bytes()` 换成 Base64 后继续走这条链路。增加专用文件复制适配：海通发送小型受认证命令，平台复用现有 FJGHCC 绑定和连接权限，通过专用文件工作池从受控存储/受限下载授权获取原文，随后异步回报。管理请求线程不等待整个复制，目标连接凭据不出现在公开规范中。
+平台代写的 `PLATFORM_FTP` 已停止支持。结构化记录与原始附件均由海通按自身 YAML 的 FTP/SFTP 目标投递；平台独立配置 ODS/FJGHCC 文件来源并运行接入任务，不承担海通的运行时校验或文件代写。大文件仍采用原始字节流和专用文件队列，不能放进业务表记录的 Base64 字段。
 
 内部复制结果通过独立内部接口推进传输任务；工作者回报失败或结果丢失时，按已保存的远端作业 ID 做有界状态核对。远端作业超过截止时间仍不能确认时进入 UNKNOWN 待核实，不能把没有响应解释为未执行。对方业务 ACCEPTED/REJECTED 回执则只推进业务确认层，不替代文件传输证据。
 
@@ -409,12 +428,12 @@ Kafka 只发文件描述和引用。当前生产者与代理都有消息大小�
 - `FileUploadHttpTest` 通过真实 HTTP/H2 和真实 HTTP/MySQL 验证接收、投递、Range/HEAD/If-Range、接收方回读及业务回执；MySQL 集成只使用独立 haitong 的明确演示文件，不清空原表。测试凭据/运行材料在私有配置或忽略的 logs 内。
 - 四行业真实库各 156 表，同构检查通过；控制库、四行业及独立 haitong 共六库已读取并重新导出完整结构。此功能没有修改共享 Magic/低代码，不涉及其发布。
 
-示例客户端 `haitong-data-pull/examples/upload_file.py` 默认整文件上传；改用 `--chunked --collection <已登记集合编号>` 使用原分片续传。两者都从 `HAITONG_API_KEY` 读取密钥，保持原有元数据提交和状态查询。
+示例客户端 `haitong-data-pull/scripts/upload_file.py` 默认整文件上传；改用 `--chunked --collection <已登记集合编号>` 使用原分片续传。两者都从 `HAITONG_API_KEY` 读取密钥，保持原有元数据提交和状态查询。
 
 启用与调用：复制配置示例的文件段到受限部署配置，明确配置调用方密钥、集合及目标；为现有库按本次四张新增表的审阅差异升级，再运行当前构建。密钥用环境变量或受限文件引用，不能写进示例/命令参数。
 
 ```text
-python haitong-data-pull/examples/upload_file.py material.pdf --datasource case-source --table police_case_record --field document_file_id --business-key DEMO-CASE-001 --idempotency-key DEMO-MATERIAL-001 --metadata '{"caseNo":"DEMO-CASE-001","documentType":"DOCUMENT"}'
+python haitong-data-pull/scripts/upload_file.py material.pdf --datasource case-source --table police_case_record --field document_file_id --business-key DEMO-CASE-001 --idempotency-key DEMO-MATERIAL-001 --metadata '{"caseNo":"DEMO-CASE-001","documentType":"DOCUMENT"}'
 ```
 
 Windows 或自动化调用可用 --metadata-file metadata.json 从 UTF-8 文件读取元数据，避免命令行引号差异。调用前在当前终端环境设置 HAITONG_API_KEY；同文件、同业务意图用原幂等键重跑：默认整文件重新发送，--chunked模式分页读取已确认片后只补缺片。客户端哈希和发送均以小缓冲读取文件，查询退避至最多每 5 秒一次。
@@ -476,16 +495,80 @@ haitong-data-pull/
   config/application-local.yml     显式本地开发配置
   src/main/java/com/haitong/       真实后端源码
   src/main/resources/openapi.yaml
-  src/test/                        JUnit回归测试
-  scripts/                         构建、启动、离线检查
-  lib/                             部署时放达梦JDBC驱动
-  examples/                        数据样例、请求及FTP完成清单生成器
+  src/test/                        Maven 自动化测试
+  scripts/                         构建、原生启停与文件工具
 ```
 
 源码和部署模板保存在 Git。`target/`、日志、验收报告、`data/` 中的运行数据库和自动生成密钥均不提交；不要删除有效运行数据库或用空密钥覆盖已有密钥。配置文件中的密码使用环境变量或 `config/secrets/` 下的受限文件提供，数据库密码默认读取 `DB_PASSWORD`。已填写口令的私人配置使用被忽略的 `config/application-private.yml`，不要提交实际凭据。
 
 使用私人配置时可运行 `scripts\run.cmd --spring.profiles.active=private`。使用基础 MySQL 配置时，先在启动进程设置 `DB_PASSWORD` 和 `HAITONG_MAGIC_EDITOR_PASSWORD`；本地 H2 的 `local` profile 不需要数据库口令，但仍需提供编辑器密码。
 
+
+<a id="native-release-packages"></a>
+
+### Linux / Windows 原生部署包
+
+部署包由同一次 Java 21 干净构建产生，Linux 为 `haitong-data-pull-<版本>-<构建号>-linux.tar.gz`，Windows 为同名 `windows.zip`。两者的 JAR 校验值一致，运行时无需 Maven、源码或 Docker；不捆绑 JRE。产物统一放忽略的 `logs/haitong-data-pull/releases/`，包内 `release.json` 记录版本、JAR 和结构摘要，`SHA256SUMS.txt` 校验文件。
+
+维护入口为 `python tools/package-haitong.py --jar <已完成 clean verify 的 JAR>`。工具逐文件核对 JAR 内的独立 Magic 资源与根 `magic/haitong/`，确认运行依赖及已删除的平台注册回调客户端没有混入，再按明确清单生成两种系统的包。发布配置由通用模板生成，不复制开发机已填写的 `config/`、仓库外私有配置、密钥、业务数据库、登记镜像或运行文件。Linux 脚本使用 LF 和可执行权限，Windows CMD 使用 CRLF，PowerShell 脚本使用 UTF-8 BOM。
+
+两种包的目录均为 `haitong-data-pull/`，含 `target/haitong-data-pull.jar`、`config/application.yml`、附件集合示例、`db/init.sql`、`openapi.yaml`、本系统启动脚本、文件工具和 `部署说明.txt`。`data/`、`logs/` 首次运行时创建；升级保留旧数据库、`config/` 与 `data/`。新空 MySQL 库执行包内 15 表完整结构；已有库不能直接重跑初始化文件。
+
+通用部署模板默认监听 `0.0.0.0:18083`，启用本地 FTP 目标和独立登记配置接收，Kafka 默认停用，不访问元数据平台。先填写 MySQL 主机及账号、文件服务器协议/主机/端口/账号/目录，再配置以下五项。可以直接把引用替换为部署机自己的值；保留引用时须在实际启动进程中提供环境变量。
+
+| 配置项 | 模板引用 |
+| --- | --- |
+| 数据库密码 | `db.password: env:DB_PASSWORD` |
+| Magic API 编辑器密码 | `magic-api.security.password: ${HAITONG_MAGIC_EDITOR_PASSWORD}` |
+| FTP / SFTP 密码 | `relay.ftp.password: env:HAITONG_FTP_PASSWORD` |
+| 静态业务调用方密钥 | `relay.security.clients.standalone-publisher.api-key: env:HAITONG_STANDALONE_PUSH_KEY` |
+| 登记配置同步密钥 | `relay.standalone-registry.sync-key: env:HAITONG_STANDALONE_REGISTRY_SYNC_KEY` |
+
+编辑器账号默认为 `admin`，包内不提供默认密码。业务密钥与同步密钥使用不同随机值，至少 24 字符。附件功能还须按真实登记的表和字段配置集合、格式、大小及调用方权限；集合示例不会自动启用或导入业务数据。表批次目的地只取海通自己的 YAML；与平台联调时，ODS 非结构化数据配置指向同一个文件服务器。
+
+Linux 解压后执行 `bash scripts/start-background.sh`，再用 `bash scripts/status.sh` 检查进程和所配置端口的健康状态，停止用 `bash scripts/stop-background.sh`。长期运行可用 `scripts/install-systemd.sh`，提前按服务账号准备 `data/`、`logs/` 的访问权限。Windows 在命令提示符中进入解压目录后执行 `scripts\run.cmd`，保持窗口打开，Ctrl+C 停止。
+
+Windows 启动脚本为 Java 21 的 HTTP 回环连接设置短临时目录，默认 `%SystemDrive%\Temp\haitong-uds`；如当前账号无法创建该目录，先把 `HAITONG_UDS_DIR` 指向自己可写的短绝对路径。示例业务时间显式使用北京时间，避免启动器的 UTC 时区影响增量水位。
+
+启动成功后检查 `http://<服务器IP>:18083/actuator/health`，编辑器为 `/api/web/index.html`，统一表推送入口为 `POST /api/v1/data-push`。本机私有配置、推送节点和部署包均使用 18083。
+
+<a id="local-startup"></a>
+
+### 本机启动与 IDE 配置
+
+在仓库根目录直接运行 `com.haitong.HaitongApplication` 时，Spring Boot 不会自动读取子工程的 `haitong-data-pull/config/`。未指定数据库配置会使用 `127.0.0.1:3306/haitong` 默认值；`Connection refused` 表示该地址没有可连接的数据库服务，随后出现的 Tomcat、认证过滤器和连接池错误是同一失败的上层依赖链。
+
+本机入口为根目录 `start-haitong-data-pull.cmd`，实现位于 `tools/start-local-haitong.ps1`，默认加载用户目录 `.codex/private/data-elements/haitong-registry-service.yml`。可以通过 `-ConfigPath` 指定另一份仓库外配置，通过 `-JavaPath` 指定 Java 21；端口从该 YAML 的 `server.port` 读取，表达式端口可用 `-Port` 指定健康检查端口，不覆盖应用端口。入口复用已有数据库、密钥及工作目录，不初始化生产结构、不停止其他进程；只有健康检查返回 `UP` 才报告成功。
+
+IDE 启动使用主类 `com.haitong.HaitongApplication`、工作目录 `haitong-data-pull`，并在 Program arguments 填写 `--spring.config.location=classpath:/application.yml,file:<仓库外私有YAML的绝对路径>`。这里必须使用当前环境真实路径；不要把数据库口令、访问密钥写到启动参数或版本库。若只使用公开的 `config/application.yml` 模板，则按其配置设置 `DB_PASSWORD`、编辑器密码等环境变量；模板本身不代表已经配置好运行凭据。
+
+日志统一查看根目录 `logs/haitong-data-pull/local-runtime/`；本机私有配置与工程通用模板均使用 18083，启动器会核对实际健康检查地址。
+
+<a id="configuration-layout"></a>
+
+### 外置配置、默认资源与运行目录
+
+`src/main/resources/application.yml` 随 JAR 打包，保存应用默认监听、框架、管理与默认路由设置。`scripts/run.cmd` 和 `scripts/run.sh` 在此基础上加载 `config/`；部署时的数据库、FTP、Kafka、路由与认证参数在 JAR 外覆盖，修改后重启，无需重新编译。当前正在运行的服务也可以通过启动参数指定仓库外私有配置，不能用公开模板覆盖它。
+
+| 路径 | 用途与维护方式 |
+| --- | --- |
+| `config/application.yml` | 原生部署的完整配置模板，真实地址和密钥在部署环境填写 |
+| `config/application-local.yml` | 显式 `local` profile，使用 H2 的本地开发配置 |
+| `config/application-standalone.yml` | 独立登记镜像和授权的可选 profile |
+| `config/application-demo.yml` | 显式演示部署覆盖，不能当成本机或生产配置 |
+| `config/application-files.yml.example` | 文件传输功能配置示例，复制并明确选用后才生效 |
+| `config/secrets/` | 受限秘密文件，不提交 Git |
+| `data/` | 运行数据库、自动生成密钥和文件暂存，保留并备份，不提交 Git |
+| `src/test/` | Maven 唯一自动化测试目录，覆盖核心规则、方言及协议集成 |
+| `scripts/` | 构建、原生启停、systemd、登记同步、文件上传及完成标记工具 |
+
+不再维护 Docker 部署文件、`deploy/`、`examples/`、独立 `tests/` 或空的驱动说明目录。可复用的文件工具已经归入 `scripts/upload_file.py`、`scripts/make_done.py`，协议测试同步使用新路径。
+
+<a id="external-jdbc-driver"></a>
+
+### 可选外置 JDBC 驱动
+
+MySQL 与 H2 驱动通过 Maven 打进 JAR，当前 MySQL 部署无需 `lib/`。达梦 JDBC 驱动不随工程分发；明确采用达梦时，在部署目录自行创建 `lib/` 并放入与 DM8 / Java 21 匹配的驱动，原生启动脚本的 `loader.path` 会加载它。该运行目录不提交 Git；达梦结构兼容范围仍以数据库基线说明为准。
 
 <a id="overview--2-mysql部署"></a>
 
@@ -536,7 +619,6 @@ bash scripts/run.sh
 /opt/haitong-data-pull/
   target/haitong-data-pull.jar
   config/application.yml
-  lib/                    # 使用达梦时放 JDBC 驱动
   data/                   # 必须持久化
   logs/                   # 必须保留
   scripts/install-systemd.sh
@@ -603,7 +685,7 @@ scripts\run.cmd --spring.profiles.active=local
 
 路由 `demo.targets: [kafka, ftp]` 表示两个必需目标，需同时开启并配置对应连接。只写Kafka用 `[kafka]`，只写FTP用 `[ftp]`。不自动创建Topic或改变已有消费组。
 
-FTP读取需要数据文件及 `<文件名>.done` 清单，可用 `examples/make_done.py` 生成。清单含文件ID、大小、SHA256、格式及可选逻辑记录数；BINARY不把“一个文件”等同“一条业务记录”。SFTP 投递配置见部署说明。
+FTP读取需要数据文件及 `<文件名>.done` 清单，可用 `scripts/make_done.py` 生成。清单含文件ID、大小、SHA256、格式及可选逻辑记录数；BINARY不把“一个文件”等同“一条业务记录”。SFTP 投递配置见部署说明。
 
 网关中仅发布 `/api/**`，不公开 `/internal/**`。网关注册和网络放通仍需在已有网关上设置，`public-base-url` 不会替你修改网关。
 
@@ -654,7 +736,7 @@ Kafka ACK、FTP文件核验、HTTP响应不是对方业务成功回执。原表�
 
 ### 8. 检查与现网验收
 
-`bash scripts/check-offline.sh` 只执行JDK逻辑测试与语法解析；`mvn install` 会解析依赖、运行不依赖网络的配置测试并生成部署包。测试报告保存在相邻的 `logs/haitong-data-pull/` 下，不提交 Git。`ApplicationIntegrationTest` 和 `FtpProtocolTest` 会启动本机 HTTP/FTP 服务，依赖操作系统可用的回环网络；在测试机上用 `mvn install -Dhaitong.loopback.tests=true` 显式运行它们。实际MySQL/DM数据库、Kafka生产消费、FTP/FTPS证书/被动端口、网关认证、主机重启恢复必须另行联调。
+`mvn verify` 统一解析依赖、编译正式代码、执行 `src/test/` 下的配置、核心规则、CSV、文件落地和数据库方言测试，并生成部署包。原独立 JDK 检查已并入 `CoreInvariantsTest`、`DatabaseDialectTest`，不再保留第二套测试目录或仅解析语法的构建入口。测试报告保存在相邻的 `logs/haitong-data-pull/` 下，不提交 Git。`ApplicationIntegrationTest` 和 `FtpProtocolTest` 会启动本机 HTTP/FTP 服务，依赖操作系统可用的回环网络；在测试机上用 `mvn install -Dhaitong.loopback.tests=true` 显式运行它们。实际MySQL/DM数据库、Kafka生产消费、FTP/FTPS证书/被动端口、网关认证、主机重启恢复必须另行联调。
 
 详细设计见 `haitong-data-pull.md#guide-81a7266f`，当前接口见 `src/main/resources/openapi.yaml` 和 `haitong-data-pull.md#guide-38565d24`。保留构建、运行、测试脚本与示例源码；历史交付状态、验收输出、固定业务 ID 的演示数据和旧压缩包不作为源码维护。
 
@@ -735,24 +817,23 @@ Kafka ACK、FTP文件核验、HTTP响应不是对方业务成功回执。原表�
 
 | 部署模式 | 路由配置 | 规范和权限来源 | 是否需要数据元素平台 |
 | --- | --- | --- | --- |
-| 登记托管模式 | `registration-managed: true` | 已登记、已发布的数据源/表/字段规范与平台签发密钥 | 是；服务会调用平台内部登记校验服务 |
-| 独立运行模式 | `registration-managed: false` | `relay.standalone.datasources` 中的数据源、表、字段规范和本地调用方授权 | 否；服务不会访问平台的 8088 登记校验地址 |
+| 独立运行模式 | `registration-managed: false`，显式配置本地 `targets` | 海通库登记镜像及调用方授权；没有数据库记录时才使用 `relay.standalone.datasources` | 否；校验和投递均不调用平台，FTP/Kafka 连接及目标只来自本地 YAML |
 
 业务表推送请求已取消 `schemaVersion` 和 `occurredAt`。对外参数为 deliveryType、datasourceId、tableName、可选batchId、records；带已取消参数的新请求返回422并提示移除。登记同步快照、内部审计及投递清单中的规范版本由服务端维护，与调用方请求参数分开。
 
-两种模式是**显式配置选择**，不是故障自动降级。登记托管模式在平台不可用时会拒绝请求，避免绕过已登记的表结构和授权；需要离线部署时，运维人员应切换为独立运行模式并完整配置本地规范。具体配置请参阅 [独立运行模式](#guide-985aca91)。
+海通与源数据平台可分别部署在互不连通的网络。旧 `registration-managed: true` 已停止支持，启动时明确拒绝，不保留平台反向校验或代写 FTP 的业务分支。节点同步是可选的配置准备通道；也可在隔离网络导入等效登记快照，不构成运行时依赖。具体配置请参阅 [独立运行模式](#guide-985aca91)。
 
 
 <a id="guide-38565d24--21-调用前必须满足的条件"></a>
 
 #### 2.1 调用前必须满足的条件
 
-1. 使用登记托管模式时：源数据管理平台中已登记数据源，且接入方式为**数据推送方式**；使用独立运行模式时：部署配置中已登记等效的数据源和表规范。
-2. 该数据源已完成登记发布；需要推送的表已经登记并发布，字段结构可被平台识别。
-3. 登记托管模式：在登记第五步为该数据源签发过 `X-Api-Key`；独立运行模式：部署方为调用方配置本地 `X-Api-Key`。
-4. 推送请求中的 `datasourceId` 与 `tableName` 必须属于调用方的授权范围。登记托管模式由平台授权关系决定；独立运行模式由 `clients`、表规范和路由权限共同决定。
-5. 若投递类型为 `FTP`：登记托管模式下，资源中心 ODS 层中分域编码为 `FJGHCC` 的关联数据源已配置可用的文件存储；独立运行模式下，本服务 FTP 目标参数已由运维配置。
-6. 若投递类型为 `KAFKA`：登记托管模式下，登记数据源已配置并被授权有效的 Kafka Topic；独立运行模式下，服务端静态 Topic 已配置。两种模式均要求对应路由已启用。
+1. 海通本地已准备数据源、表及字段规范，可使用海通数据库镜像或 YAML 回退定义。
+2. 当前调用方在海通本地具有该数据源和表的授权；平台租户数据库不参与业务推送校验。
+3. 调用方使用海通签发或本地配置的 `X-Api-Key`；编辑器口令和配置同步密钥不能替代业务密钥。
+4. 推送请求中的 `datasourceId` 与 `tableName` 只标识已授权数据集，不能指定租户、连接或目标地址。
+5. `FTP` 使用海通 YAML 的 `relay.ftp` 及路由目标；平台若需接入这些文件，须独立将 ODS/FJGHCC 绑定到同一协议、服务器和业务根目录。
+6. `KAFKA` 使用海通 YAML 的连接及目标 Topic，不查询平台登记表中的 Topic；对应连接和路由须同时启用。
 
 
 <a id="guide-38565d24--22-调用方需要提供什么"></a>
@@ -1076,8 +1157,8 @@ Idempotency-Key: police_person_info-20260915-000002
   "deliveries": [
     {
       "deliveryId": "ddc05eb8-9f13-4ebf-a914-1a9e7d6d2c3c",
-      "targetCode": "PLATFORM_FTP",
-      "type": "PLATFORM_FTP",
+      "targetCode": "ftp",
+      "type": "FTP",
       "status": "PENDING",
       "attempts": 0,
       "errorCode": null,
@@ -1132,8 +1213,8 @@ curl "http://127.0.0.1:18083/api/v1/messages/d0225d20-8c7b-43ac-a6d1-05e32d66dd8
   "deliveries": [
     {
       "deliveryId": "ddc05eb8-9f13-4ebf-a914-1a9e7d6d2c3c",
-      "targetCode": "PLATFORM_FTP",
-      "type": "PLATFORM_FTP",
+      "targetCode": "ftp",
+      "type": "FTP",
       "status": "SUCCEEDED",
       "attempts": 1,
       "errorCode": null,
@@ -2039,12 +2120,12 @@ Content-Type: application/json
 
 服务启动后，Magic 编辑器中的 **04.数据推送调试** 提供：
 
-- `POST /push-operations/data-push`：与正式 `/api/v1/data-push` 复用同一 Java 推送业务逻辑；
+- `POST /push-operations/data-push`：与正式 `/api/v1/data-push` 复用同一 Magic 推送业务函数；
 - `POST /push-operations/message-status`：查询当前调用方拥有的异步消息状态；
 - `POST /push-operations/template-test`：模板配套测试入口，编辑器中预填 `push_template_demo` 的五字段请求示例及必需请求头；与正式推送接口使用同一鉴权、登记规范、幂等和异步投递逻辑；
 - `POST /ftp-diagnostics/probe`：使用服务器配置的 FTP 参数检查连接、目录、上传、回读和清理。
 
-Magic API 仅承担可见、可编辑的请求编排和调试入口；鉴权、幂等、规范校验、持久化和异步投递仍保留在 Java 服务层。
+Magic API 保存通道选择、登记授权、字段校验、配置同步、密钥签发及受理编排等业务规则；Java 提供认证适配、事务队列、文件流、协议客户端和异步执行等通用技术能力。
 
 模板配套示例表为 `push_template_demo`：`record_id`（字符串64、主键、必填）、`business_no`（字符串64、必填）、`occur_time`（日期时间、时间戳及业务时间、必填）、`title`（字符串200、必填）、`attachment_file_id`（字符串64、可空、关联附件）。附件上限10MB，允许 `jpg,jpeg,png,pdf`。登记模板只定义字段和限制，不填写业务记录或附件原文。编辑器示例中的 `datasourceId` 为本机联调源，其他环境须替换成实际已登记的数据源ID，并使用该源第五步签发的 `X-Api-Key`，不能使用编辑器密码、管理员密钥或节点同步密钥代替。
 
@@ -2111,7 +2192,7 @@ token: <当前平台登录会话>
 
 本机已通过真实登录会话及真实 MySQL 验证：1 数据源、1 表、14 字段、1 调用方授权；字段名/类型/顺序逐项匹配，重复调用保持镜像记录数量和业务凭据数量不变。未登录、无权数据源及注入 tenantId 的请求均被拒绝。 全量同步已在本机实际页面与 MySQL 验证3个数据源、7张表、331字段及3条调用方授权，另1个未完成登记的源明确跳过；重复同步约3.4秒，镜像和业务凭据数量均不增加。可维护源为根 `magic/api/02.数据盘点/02.数据库表/08.同步推送登记配置.ms`，已发布到控制库 `baseline` 并完成运行刷新/回读。
 
-平台使用 `data-element.push-registry.relay-base-url`、`standalone-sync-key` 与海通 `relay.standalone-registry.sync-enabled/sync-key` 配对配置。当前本机共享后端的进程环境将目标地址覆盖为 `http://127.0.0.1:8080`，海通监听已与此对齐；工程默认 18083 和 Nacos 中的默认值不能替代当前实际绑定。连接和密钥配置保存在受限部署配置中，不写入请求示例或 Git。
+平台使用 `data-element.push-registry.relay-base-url`、`standalone-sync-key` 与海通 `relay.standalone-registry.sync-enabled/sync-key` 配对配置。本机目标地址与海通监听统一为 `http://127.0.0.1:18083`，当前租户推送节点也使用相同地址；仍须检查运行时实际绑定，避免旧进程环境覆盖当前配置。连接和密钥配置保存在受限部署配置中，不写入请求示例或 Git。
 
 后台管理的“节点配置”位于 `#/node-config`。“数据推送节点配置”的“同步配置”直接弹出确认框，确认后提交：
 
@@ -2270,26 +2351,14 @@ X-Standalone-Registry-Key: <服务间同步密钥>
 
 ## 独立运行模式
 
-`haitong-data-pull` 支持两种受控的数据推送运行模式。选择由每条 `table-to-ftp`、`table-to-kafka` 路由的 `registration-managed` 决定，因此同一个部署可以逐条路由迁移，但一条已接收消息的投递计划会在受理时冻结，不会因后续配置变更而改变。
+`haitong-data-pull` 独立运行，业务规则、鉴权和表规范从海通自身配置及数据库读取。`table-to-ftp`、`table-to-kafka` 均须配置 `registration-managed: false` 和本地目标，所有 FTP/Kafka 连接、根目录和 Topic 由本部署 YAML 决定。
 
 
 <a id="guide-985aca91--登记托管模式"></a>
 
-### 登记托管模式
+### 历史登记回调配置
 
-```yaml
-relay:
-  registration-registry:
-    enabled: true
-    base-url: "http://data-elements-internal:8088"
-    shared-key: "env:DATA_PUSH_REGISTRY_KEY"
-  routes:
-    table-to-ftp:
-      registration-managed: true
-      targets: []
-```
-
-适用于已经使用数据元素平台登记数据源、表、字段，并且 FTP 目标由资源中心 ODS/FJGHCC 关联关系决定的场景。海通会调用平台校验数据源、表、字段、调用方权限，并由平台解析 FTP 目标或 Kafka Topic。
+旧平台回调客户端已经移除。`registration-managed: true` 配置必须迁移为下面的独立运行配置；历史账本中的 `PLATFORM_FTP` 类型保留读取能力，但不再执行对平台的投递回调，不能将未完成的旧计划自动改写成其他目标。`registration-registry.shared-key` 仅兼容保护可选的入站密钥签发请求，不参与业务目标解析，也不要求配置平台地址。
 
 
 <a id="guide-985aca91--独立运行模式"></a>
@@ -2350,7 +2419,7 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
 
 ### 安全边界
 
-独立模式不是登记托管模式故障时的自动降级。若一条路由已经设置 `registration-managed: true`，平台不可用时仍会失败关闭，不会静默切到本地规范。要切换模式，必须由部署人员显式修改路由配置并重启服务，这样才能避免撤销的表权限或目标配置在平台故障期间被绕过。
+本地已存在登记镜像时，停用、删除和权限校验以该镜像为准，不回退 YAML 绕过撤销。可选的配置同步和密钥签发只接收入站管理请求；业务推送不会向平台发起请求。部署到隔离网络时应携带本地登记规范、授权和密钥，并确认海通到自身 YAML 所配置 FTP/Kafka 的网络通路。
 
 <a id="guide-a3391486"></a>
 
@@ -2485,7 +2554,7 @@ sudo systemctl stop haitong-data-pull
 sudo journalctl -u haitong-data-pull -f
 ```
 
-`--app-dir` 可以是任意绝对目录，例如 `/srv/haitong-data-pull` 或 `/data/apps/haitong-data-pull`，但目录路径不要包含空格。该目录中必须保留 `target/haitong-data-pull.jar`、`config/application.yml`、`data/`、`logs/`，使用达梦时还要保留 `lib/`。服务会以指定用户写入 `data/` 和 `logs/`；JAR 与配置建议由发布账号或 root 只读管理。升级时停止服务、备份 `config/ data/ logs/`、替换 JAR 后再启动，避免丢失本地密钥、待处理文件和收发账本。
+`--app-dir` 可以是任意绝对目录，例如 `/srv/haitong-data-pull` 或 `/data/apps/haitong-data-pull`，但目录路径不要包含空格。该目录中必须保留 `target/haitong-data-pull.jar`、`config/application.yml`、`data/`、`logs/`，使用达梦时自行创建 `lib/` 并放入匹配的 JDBC 驱动。服务会以指定用户写入 `data/` 和 `logs/`；JAR 与配置建议由发布账号或 root 只读管理。升级时停止服务、备份 `config/ data/ logs/`、替换 JAR 后再启动，避免丢失本地密钥、待处理文件和收发账本。
 
 
 <a id="guide-3e6991f8--mysql"></a>
@@ -2554,13 +2623,6 @@ X-Api-Key传递厂家身份；可设置额外X-Gateway-Key，网关必须剥离�
 `relay.actions`注册固定HTTP后端URL。响应超时可能已经执行；下游没有可靠幂等规范时safe-retry保持false，进入UNKNOWN而非自动重复执行。同步操作只允许显式安全的校验或查询用途。
 
 
-<a id="guide-3e6991f8--容器"></a>
-
-### 容器
-
-compose只启动应用，不另建MySQL、Kafka或FTP。容器127.0.0.1不是宿主机上的数据库，需填写容器网络可达地址。`config`和`lib`只读挂载，data和logs持久化挂载。使用env:DB_PASSWORD时需在compose.environment中明确传入该变量。
-
-
 <a id="guide-3e6991f8--日志配置与归档"></a>
 
 ### 日志配置与归档
@@ -2583,7 +2645,7 @@ compose只启动应用，不另建MySQL、Kafka或FTP。容器127.0.0.1不是宿
 
 ## Linux 部署
 
-此发行包与 Windows 包使用同一原则：**只编辑 `config/application.yml`，不需要设置 `HAITONG_*` 环境变量，也不需要 `.env` 文件。**
+Linux 与 Windows 统一使用工程的 `target/haitong-data-pull.jar`、`config/` 和 `scripts/` 原生部署结构，不另维护 `deploy/` 中的重复脚本与配置。实际凭据由外置配置或环境变量注入。
 
 
 <a id="linux-deployment--运行条件"></a>
@@ -2606,8 +2668,7 @@ compose只启动应用，不另建MySQL、Kafka或FTP。容器127.0.0.1不是宿
 cd /opt/haitong-data-pull
 vi config/application.yml
 chmod 600 config/application.yml
-chmod +x start.sh status.sh stop.sh
-./start.sh
+bash scripts/start-background.sh
 ```
 
 在 `config/application.yml` 填写实际的数据库、FTP、推送 API Key、登记同步密钥和 Magic-API 编辑器密码。密码、API Key 与同步密钥均应只保存在服务器，不要提交到版本库或发送到聊天工具。
@@ -2617,14 +2678,14 @@ chmod +x start.sh status.sh stop.sh
 常用命令：
 
 ```bash
-./start.sh                    # 后台启动
-./status.sh                   # 进程与健康状态
-tail -f logs/haitong-data-pull.out
-./stop.sh                     # 优雅停止
+bash scripts/start-background.sh    # 后台启动
+bash scripts/status.sh              # 进程与健康状态
+tail -f logs/haitong-console.out
+bash scripts/stop-background.sh     # 优雅停止
 curl -fsS http://127.0.0.1:18083/actuator/health
 ```
 
-启动脚本不会扫描或拦截配置中的说明性文本。若数据库、FTP 或端口配置不正确，应用会把真实失败原因输出到 `logs/haitong-data-pull.out`。
+启动脚本不会扫描或拦截配置中的说明性文本。若数据库、FTP 或端口配置不正确，应用会把真实失败原因输出到 `logs/haitong-console.out`。
 
 
 <a id="linux-deployment--ftp--sftp-输出规则"></a>
@@ -2657,14 +2718,14 @@ FTP 诊断版会记录：协议、FTP 地址和端口、登录账号、密码是
 ### 包内目录
 
 ```text
-haitong-data-pull.jar  应用程序
-config/                唯一配置文件 application.yml
-start.sh                后台一键启动脚本
-status.sh               状态及健康检查脚本
-stop.sh                 停止脚本
-logs/                   本地诊断日志
-data/                   运行时消息、密钥与日志数据（不存储 Magic-API 脚本）
-examples/               可复用的请求与文件清单示例
+target/haitong-data-pull.jar  Maven 构建的应用程序
+config/                     JAR 外的部署配置
+scripts/                    原生构建、启停、同步与文件工具
+src/main/resources/         随 JAR 打包的默认配置和资源
+src/test/                   Maven 自动化测试
+data/                       运行数据库、密钥与文件暂存（不存储 Magic 脚本）
+logs/                       原生后台启动脚本的控制台日志，不提交 Git
+../logs/haitong-data-pull/   仓库运行日志和测试报告
 ```
 
 <a id="windows-deployment"></a>
@@ -2733,10 +2794,10 @@ relay:
 双击或在命令行执行：
 
 ```bat
-scripts\start-standalone.cmd
+scripts\run.cmd
 ```
 
-脚本会检查 `application.yml` 是否仍包含 `REPLACE_WITH_` 占位符；未填写完整时不会启动。启动后控制台窗口请保持打开，以便查看 FTP 分阶段诊断日志。
+启动脚本加载外置配置，配置完整性由应用启动校验；不会扫描说明文字或要求一份额外环境脚本。控制台窗口请保持打开，以便查看启动与 FTP 分阶段诊断日志。
 
 健康检查：
 
@@ -2767,7 +2828,7 @@ powershell -ExecutionPolicy Bypass -File scripts\sync-registry.ps1 -RequestPath 
 powershell -ExecutionPolicy Bypass -File scripts\sync-registry.ps1 -BaseUrl "http://<服务器IP>:18083" -RequestPath "C:\private\registry-request.json" -IdempotencyKey "registry-source-v1"
 ```
 
-登记完成后，参照 `#guide-38565d24` 和 `examples/requests.http` 提交真实表数据。固定业务 ID 的历史联调请求与模拟人员数据不随源码分发。
+登记完成后，参照[统一推送接口规范](#guide-38565d24)或海通 Magic API 的“数据推送验证”目录提交真实表数据。固定业务 ID 的历史联调请求与模拟人员数据不随源码分发。
 
 
 <a id="windows-deployment--5-ftp-诊断日志"></a>

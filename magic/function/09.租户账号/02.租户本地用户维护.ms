@@ -35,6 +35,8 @@ var sortDirection = tableSort.direction(payload)
 // 业务说明：复用租户本地用户的查询、保存及状态规则，读写本地账号资料而不修改控制库统一认证账号。
 // 函数输入：operation：要执行的本地账号业务动作；payload：该动作所需的账号、角色或资源资料。
 import db;
+import tableSort;
+import '@/common/audit-operation' as auditOperation;
 import tenantRuntime;
 import tenantAccounts;
 import cn.dev33.satoken.stp.StpUtil;
@@ -53,6 +55,7 @@ if(operation=='page' || operation=='list') {
  if(ids!=null && ids.size()==0) {return operation=='list'?[]:{list:[],total:0};}
  var where=`from rm_user_t u where u.tenant_id=#{tenantId} and u.deleted=0 and u.user_name like #{account} and u.real_name like #{name}`;
  if(ids!=null) {where=where+` and u.id in (#{ids})`;}
+ var sortColumn=tableSort.field(p,{userName:'u.user_name',realName:'u.real_name',createTime:'u.create_time',updateTime:'u.update_time'},'createTime');var sortDirection=tableSort.direction(p);
  var total=sql.selectOne('select count(*) as total '+where).total;
  var rows=sql.select("""
 select u.id,u.real_name as "realName",u.user_name as "userName",u.phone,u.gender,u.status,
@@ -101,6 +104,7 @@ set deleted=1,update_id=#{actor},update_time=current_timestamp
 where tenant_id=#{tenantId}
     and id=#{old.appFileId}
 """);}
+  auditOperation('USER_DELETED','USER',id,null,{id:id,status:'DELETED'});
   return {id:id,accountDeleted:true};
  }
  if(operation!='save') {exit 400,'不支持的用户操作';}
@@ -187,6 +191,7 @@ insert into rm_user_org_rela_t(tenant_id, id, user_id, org_id, job_type, sort_nu
 values(#{tenantId},#{relationId},#{id},#{orgId},'1',0)
 """);
  }
+ auditOperation(creating?'USER_CREATED':'USER_UPDATED','USER',id,realName,{id:id,name:realName,status:status});
  return {id:id};
 });
 if(operation=='delete' || passwordChanged || p.status==1) {tenantAccounts.revoke(id);}

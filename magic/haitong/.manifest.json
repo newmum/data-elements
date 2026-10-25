@@ -308,6 +308,84 @@
       "baseSha256": "ebef0f79450d8c6de65615f920749fe3fee806c8ff48db2719addae16f72237b"
     },
     {
+      "path": "magic/haitong/api/09.数据推送验证/01.状态字典数据推送.ms",
+      "id": "haitong-validation-push-status_dict",
+      "databasePath": "/magic-api/api/09.数据推送验证/01.状态字典数据推送.ms",
+      "baseSha256": "50af391d43869d30087b864110cdfe837bbfca0cc65ca54c7683629a5703744b"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/02.机构字典数据推送.ms",
+      "id": "haitong-validation-push-org_dict",
+      "databasePath": "/magic-api/api/09.数据推送验证/02.机构字典数据推送.ms",
+      "baseSha256": "bc8a9822ec6004de0153062a7fa007a7eaaad1bbf2a9e03dea990341c2feef54"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/03.人员登记数据推送.ms",
+      "id": "haitong-validation-push-person",
+      "databasePath": "/magic-api/api/09.数据推送验证/03.人员登记数据推送.ms",
+      "baseSha256": "3e9b00017966e2281cd78604a5d997df30ea4a59b298773a3832470766d10a56"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/04.车辆登记数据推送.ms",
+      "id": "haitong-validation-push-vehicle",
+      "databasePath": "/magic-api/api/09.数据推送验证/04.车辆登记数据推送.ms",
+      "baseSha256": "04fe5bb6b5f435f250db1fd6a0fe15652286e6b25e050463e783f33b7444690c"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/05.事件登记数据推送.ms",
+      "id": "haitong-validation-push-event",
+      "databasePath": "/magic-api/api/09.数据推送验证/05.事件登记数据推送.ms",
+      "baseSha256": "6a2d89f9ef95f2293058941a52fd7b26735d6470ede0959c2938304b1606355a"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/06.事件操作日志数据推送.ms",
+      "id": "haitong-validation-push-event_log",
+      "databasePath": "/magic-api/api/09.数据推送验证/06.事件操作日志数据推送.ms",
+      "baseSha256": "a140ca3a77901a241072e5bfa152750a28c6a7dc1f988056bf4106ab51945ce1"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/07.人员附件上传.ms",
+      "id": "haitong-validation-upload-person",
+      "databasePath": "/magic-api/api/09.数据推送验证/07.人员附件上传.ms",
+      "baseSha256": "8e3adea78168bda39926857e3e2d658b73f1af6ed9f7b4065df53f2915a480a7"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/08.车辆附件上传.ms",
+      "id": "haitong-validation-upload-vehicle",
+      "databasePath": "/magic-api/api/09.数据推送验证/08.车辆附件上传.ms",
+      "baseSha256": "45eb1fdc019e902ece622b073ca18e187a894abc10692a64571a40de529cdb78"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/09.事件附件上传.ms",
+      "id": "haitong-validation-upload-event",
+      "databasePath": "/magic-api/api/09.数据推送验证/09.事件附件上传.ms",
+      "baseSha256": "3cfd9e5270028db35f5405f27051b949cc74d05ecb0ec63a286eab682a56a57e"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/10.附件提交投递.ms",
+      "id": "haitong-validation-10",
+      "databasePath": "/magic-api/api/09.数据推送验证/10.附件提交投递.ms",
+      "baseSha256": "271fab3c31fc186c10fff8114042d8d9239146ad1a0fe3a1d238d7af9bcdb5d0"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/11.附件状态查询.ms",
+      "id": "haitong-validation-11",
+      "databasePath": "/magic-api/api/09.数据推送验证/11.附件状态查询.ms",
+      "baseSha256": "131eac85cd8d605eab0be30a43c575a1455e86e315b79477fa49d953d9f01866"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/12.业务消息状态查询.ms",
+      "id": "haitong-validation-12",
+      "databasePath": "/magic-api/api/09.数据推送验证/12.业务消息状态查询.ms",
+      "baseSha256": "bcde515d6a67b65b5573e259ab4d0982f0715f706bf0c15a0dc4d16c20fbfc13"
+    },
+    {
+      "path": "magic/haitong/api/09.数据推送验证/group.json",
+      "id": "haitong-validation-api",
+      "databasePath": "/magic-api/api/09.数据推送验证/group.json",
+      "baseSha256": "4bbc09134f216c915c2813437949f83dd0d32878e0d6ce410d90f4945500db8e"
+    },
+    {
       "path": "magic/haitong/function/01.海通业务/01.请求契约与公共能力.ms",
       "id": "haitong-function-common",
       "databasePath": "/magic-api/function/01.海通业务/01.请求契约与公共能力.ms",
@@ -341,7 +419,7 @@
       "path": "magic/haitong/function/01.海通业务/06.数据推送编排.ms",
       "id": "haitong-function-push",
       "databasePath": "/magic-api/function/01.海通业务/06.数据推送编排.ms",
-      "baseSha256": "1fe52cd565d848cda4bff98f832ac4046d35dfc43905245b474bfbb67dd81465"
+      "baseSha256": "0ff61ad158e1c02935d885e02419568ce22b5531675e5aea2e20b4991f85541a"
     },
     {
       "path": "magic/haitong/function/01.海通业务/07.运维查询与状态处理.ms",

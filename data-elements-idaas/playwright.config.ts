@@ -9,7 +9,7 @@ const liveTests = process.env.IDAAS_LIVE_TEST === '1';
 // pointed at a closed loopback port so the default suite cannot reach 8088.
 if (!liveTests) process.env.VITE_IDAAS_API_TARGET = 'http://127.0.0.1:9';
 
-const contractSpecs = ['**/e2e.spec.ts', '**/compact.spec.ts', '**/typography.spec.ts', '**/navigation.spec.ts', '**/console-navigation.spec.ts', '**/application-detail.spec.ts', '**/branding.spec.ts', '**/dashboard-audit.spec.ts', '**/backend-p1.spec.ts', '**/manual-sync.spec.ts', '**/organization-tree.spec.ts', '**/user-workflow.spec.ts'];
+const contractSpecs = ['**/logging.spec.ts', '**/e2e.spec.ts', '**/compact.spec.ts', '**/typography.spec.ts', '**/navigation.spec.ts', '**/console-navigation.spec.ts', '**/application-detail.spec.ts', '**/branding.spec.ts', '**/dashboard-audit.spec.ts', '**/backend-p1.spec.ts', '**/manual-sync.spec.ts', '**/organization-tree.spec.ts', '**/user-workflow.spec.ts'];
 const liveSpecs = ['**/console-live.spec.ts', '**/application-detail-live.spec.ts', '**/backend-p2.spec.ts', '**/backend-stages.spec.ts'];
 
 export default defineConfig({

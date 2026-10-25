@@ -246,8 +246,6 @@ export default function EditorPage() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--canvas-bg)' }}>
       <Toolbar />
-      {chain?.relationshipUnavailable && !chain.readOnly && chain.selectedPipelineId === currentPipelineId && <Alert type="info" showIcon message="已打开当前任务保存的画布，可继续编辑"
-        description={`${chain.warnings?.join('；') || '任务关联链路暂不可用'}。可修改组件、属性和连线；保存时保留你的配置，不自动恢复原来源或目标。`} />}
       {chain?.readOnly && chain.selectedPipelineId === currentPipelineId && <Alert type="warning" showIcon message="已打开当前任务保存的画布（只读）"
         description={`${chain.warnings?.join('；') || '任务关联需要核对'}。当前仅展示已保存的节点与连线，不允许保存、部署或启动。`} />}
       <div className="canvas-workarea">

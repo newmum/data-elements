@@ -412,8 +412,7 @@
 }
 
 /* A neutral backing preserves original brand colors in both canvas themes. */
-.database-brand-icon,
-.datasource-protocol-icon {
+.database-brand-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -436,13 +435,7 @@
 }
 /* Show the mark at the left of the official 神通 wordmark, without stretching it. */
 .database-brand-icon__image--mark { object-fit: cover; object-position: left center; }
-.datasource-protocol-icon {
-  background: var(--picker-schema-bg);
-  color: var(--picker-schema-text);
-  font-size: 22px;
-}
-.coze-node__icon .database-brand-icon,
-.coze-node__icon .datasource-protocol-icon { width: 26px; height: 26px; padding: 2px; font-size: 18px; }
+.coze-node__icon .database-brand-icon { width: 26px; height: 26px; padding: 2px; }
 
 .fm-list-table .ant-table-tbody > tr.is-selected > td {
   background: var(--fm-list-selected-bg, #eef5ff);

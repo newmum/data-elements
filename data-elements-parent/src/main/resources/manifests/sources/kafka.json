@@ -36,14 +36,14 @@
       "bootstrap.servers": "${config.bootstrapServers}",
       "security.protocol": "${config.securityProtocol}",
       "sasl.mechanism": "${config.saslMechanism}",
-      "credentials.reference": "${config.credentialRef}",
+      "sasl.username": "${config.saslUsername}",
+      "sasl.password": "${config.saslPassword}",
       "sasl.kerberos.service.name": "${config.kerberosServiceName}",
       "kerberos.principal": "${config.principal}",
       "kerberos.keytab": "${config.keytabPath}",
-      "request.timeout.ms": "30000",
-      "client.id": "haitong-nifi"
+      "default.api.timeout.ms": "30 sec"
     }}],
-    "processors": [{ "localId": "consume", "type": "org.apache.nifi.processors.kafka.pubsub.ConsumeKafka", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Kafka Connection Service": "${cs.kafka}", "Topic Name(s)": "${config.topic}", "Group ID": "${config.groupId}", "Offset Reset": "earliest" } }],
+    "processors": [{ "localId": "consume", "type": "org.apache.nifi.kafka.processors.ConsumeKafka", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Kafka Connection Service": "${cs.kafka}", "Topic Format": "names", "Topics": "${config.topic}", "Group ID": "${config.groupId}", "auto.offset.reset": "earliest", "Commit Offsets": "true", "Processing Strategy": "FLOW_FILE" } }],
     "outlets": [{ "name": "default", "processorRef": "consume", "relationship": "success" }]
   }
 }

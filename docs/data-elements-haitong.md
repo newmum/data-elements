@@ -1,8 +1,16 @@
 # 海通数据集成中心（data-elements-haitong）
 
-本文件是本工程唯一的持续维护说明。功能、接口、配置、部署和验证边界在对应章节原位更新；版本差异通过 Git 查看，不再新增按日期、版本或阶段命名的增量文档。工程 README 仅保留入口。
+<a id="lowcode-logging"></a>
 
-仓库规则以 [AGENTS.md](../AGENTS.md) 为准；数据库现行完整结构见 [db/](../db/README.md)。文中保留的设计背景与既往验证只说明当时范围，不代表新环境已验收，也不能覆盖现行租户与身份边界。历史截图、JSON 报告和旧版本评审材料不作为当前文档依赖。
+## 低代码日志管理
+
+日志管理已收口为一个菜单、一个共享低代码页面 `log-management`，顶部按权限显示登录日志、操作日志、接口日志、安全日志、导出日志、归档日志六个页签；日志策略为同一栏右侧的配置按钮，点击弹窗配置各类别的保留天数与成功请求采样比例。源码唯一位于根 `lowcode/09.系统管理/09.日志管理/日志管理(log-management).vue`，原八个入口/统计组件已核对引用并软删除，不保留第二份页面业务代码。页面仅含页签与配置入口、查询栏、表格和分页，无顶部标题或统计卡；表格以序号、人员、时间、功能路径与具体操作为先。
+
+查询、排序、导出、归档、冻结与权限契约见[公共日志实现说明](data-elements.md#logging-design)。本机结构、所选 Magic 与低代码资源已发布，8088 已按授权换包启动并完成运行回读。真实行业会话隔离、平台/行业登录退出、CSV/JSONL 下载及归档状态往返已验证；实际权限和验证边界见公共说明，演示与生产尚未发布。
+
+本文件是本工程唯一的持续维护说明。功能、接口、配置、部署和验证边界在对应章节原位更新；版本差异通过 Git 查看，不再新增按日期、版本或阶段命名的增量文档。仓库仅保留根目录 README 总入口。
+
+仓库规则以 [AGENTS.md](../AGENTS.md) 为准；数据库现行完整结构见 [db/](data-elements.md#database-schema)。文中保留的设计背景与既往验证只说明当时范围，不代表新环境已验收，也不能覆盖现行租户与身份边界。历史截图、JSON 报告和旧版本评审材料不作为当前文档依赖。
 
 ## 目录
 
@@ -105,7 +113,7 @@ NiFi 与业务接口使用数据平台的登录会话。独立打开海通时，
 
 ### 画布图标与主题
 
-数据源在组件选择器、节点和配置抽屉中共用本地品牌图标，资源来源及许可见 [数据源图标说明](../data-elements-haitong/src/nifi/icons/README.md)。图标随静态构建打包，离线环境不需要访问图片 CDN；API、FTP、SFTP 使用通用协议图标。JDBC 目标节点按配置中的数据库类型选择图标。
+数据源在组件选择器、节点和配置抽屉中共用 `src/nifi/panels/databaseIcons.tsx` 提供的本地图标，资源来源及许可见 [数据源图标说明](#source-icon-assets)。图标随静态构建打包，离线环境不需要访问图片 CDN；API、FTP、SFTP 分别使用蓝色接口、橙色双向文件传输、绿色加密文件传输图形，与其他数据源共用白色圆角底板、尺寸、留白和缩放规则，深浅色主题均保持图形原色。JDBC 目标节点按配置中的数据库类型选择图标，不通过接口逐节点加载图片。
 
 深色画布的启动主按钮和高级设置菜单按钮使用深黑底色；悬停、键盘焦点与禁用状态保持可识别。选择库、选择表和其他下拉控件使用当前主题的弹层与状态色，名称、注释、类型／Schema 标签、占位文字及错误提示不应硬编码浅色配色。
 
@@ -1513,35 +1521,35 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 
 | 证据 | 位置与核查内容 |
 | --- | --- |
-| [字段映射协议](D:/Sourcecode/data-elements/data-elements-haitong/src/nifi/api/fieldMapping.ts:51) | 现有响应、DSL策略及404本地降级路径 |
-| [画布编辑器](D:/Sourcecode/data-elements/data-elements-haitong/src/nifi/panels/FieldMappingEditor.tsx:120) | 10个UI函数、条件配置、模板/预览/编译入口；1851附近为合成样例 |
-| [ODS模板工具](D:/Sourcecode/data-elements/data-elements-haitong/src/nifi/utils/fieldMapping.ts:24) | 系统主键生成模板，与编辑器另一模板存在差异 |
-| [映射服务](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/FieldMappingService.java:763) | 编译分支、函数白名单、预览实现和全局策略差距；1536附近为51函数名单 |
-| [映射接口](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/FieldMappingController.java:22) | 六个现有接口、响应及公开字典摘要 |
-| [NiFi发布编译](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompiler.java:1866) | 单值/多值展开链、组件数量；2797附近为来源下推边界 |
-| [多值运行脚本](D:/Sourcecode/data-elements/data-elements-parent/src/main/resources/nifi/multi-value-translation.groovy:43) | 100记录、500键、重复键与部分命中语义 |
-| [多值脚本测试](D:/Sourcecode/data-elements/data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/RecordLookupScriptTest.java:25) | 20/100/201记录与元数据/查询次数断言；本次未执行 |
-| [部署拓扑测试](D:/Sourcecode/data-elements/data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompilerLookupDeploymentTest.java:29) | 多值链无SplitRecord、混合链和同连接合并；本次未执行 |
+| [字段映射协议](../data-elements-haitong/src/nifi/api/fieldMapping.ts:51) | 现有响应、DSL策略及404本地降级路径 |
+| [画布编辑器](../data-elements-haitong/src/nifi/panels/FieldMappingEditor.tsx:120) | 10个UI函数、条件配置、模板/预览/编译入口；1851附近为合成样例 |
+| [ODS模板工具](../data-elements-haitong/src/nifi/utils/fieldMapping.ts:24) | 系统主键生成模板，与编辑器另一模板存在差异 |
+| [映射服务](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/FieldMappingService.java:763) | 编译分支、函数白名单、预览实现和全局策略差距；1536附近为51函数名单 |
+| [映射接口](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/FieldMappingController.java:22) | 六个现有接口、响应及公开字典摘要 |
+| [NiFi发布编译](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompiler.java:1866) | 单值/多值展开链、组件数量；2797附近为来源下推边界 |
+| [多值运行脚本](../data-elements-parent/src/main/resources/nifi/multi-value-translation.groovy:43) | 100记录、500键、重复键与部分命中语义 |
+| [多值脚本测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/RecordLookupScriptTest.java:25) | 20/100/201记录与元数据/查询次数断言；本次未执行 |
+| [部署拓扑测试](../data-elements-parent/src/test/java/com/linewell/dataelement/integration/nifi/canvas/compile/DslCompilerLookupDeploymentTest.java:29) | 多值链无SplitRecord、混合链和同连接合并；本次未执行 |
 | [登记治理组件](<D:/Sourcecode/data-elements/lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue:1576>) | 统一格式、字典/枚举、强制对标、附加条件 |
 | [真实接入申请](<D:/Sourcecode/data-elements/lowcode/03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue:1205>) | 模板、目标/字段限制、DDL和物化提交 |
-| [任务生成Magic](D:/Sourcecode/data-elements/magic/api/03.数据接入/13.按来源表补齐接入任务.ms:715) | 日期规则、枚举fallback、字典条件、任务/DSL/映射初建及级联 |
-| [目标物化Magic](D:/Sourcecode/data-elements/magic/api/03.数据接入/02.数据接入物化建表.ms:501) | fieldTransformBindings及目标列落位 |
-| [模板Magic](D:/Sourcecode/data-elements/magic/api/03.数据接入/11.根据表或目录获取建表申请模板.ms:357) | 译名列、系统字段、来源类型和显式清空 |
-| [部署规则Binder](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/AccessTaskFieldMappingBinder.java:62) | 补齐旧映射、默认策略和按目标列恢复的边界 |
-| [画布保存](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineController.java:478) | DSL保存与版本控制，不等同映射投影统一事务已完成 |
-| [现有部署生命周期](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineRunController.java:567) | 旧组清理后重编译，需升级状态保存/恢复 |
-| [NiFi客户端](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/nifi/NifiClient.java:706) | failure/retry自环、队列保护和简单类型匹配 |
-| [部署指纹](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/pipeline/DslHasher.java:27) | 现有编译版本和DSL摘要机制 |
-| [任务映射实体](D:/Sourcecode/data-elements/data-elements-parent/src/main/java/com/linewell/dataelement/feature/dataaccess/infrastructure/persistence/entity/DataAccessFieldMapping.java:17) | 现有列与租户/版本字段 |
-| [MySQL完整结构](D:/Sourcecode/data-elements/db/baseline_sea_fishery/init.sql:896)、[达梦完整结构](D:/Sourcecode/data-elements/db/baseline_beijing_gd/init.sql:782) | func_value已为TEXT/CLOB |
-| [NiFi测试依赖](D:/Sourcecode/data-elements/data-elements-parent/pom.xml:113) | 当前2.9.0测试依赖，不能代替运行版本证明 |
+| [任务生成Magic](../magic/api/03.数据接入/13.按来源表补齐接入任务.ms:715) | 日期规则、枚举fallback、字典条件、任务/DSL/映射初建及级联 |
+| [目标物化Magic](../magic/api/03.数据接入/02.数据接入物化建表.ms:501) | fieldTransformBindings及目标列落位 |
+| [模板Magic](../magic/api/03.数据接入/11.根据表或目录获取建表申请模板.ms:357) | 译名列、系统字段、来源类型和显式清空 |
+| [部署规则Binder](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/mapping/AccessTaskFieldMappingBinder.java:62) | 补齐旧映射、默认策略和按目标列恢复的边界 |
+| [画布保存](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineController.java:478) | DSL保存与版本控制，不等同映射投影统一事务已完成 |
+| [现有部署生命周期](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/controller/PipelineRunController.java:567) | 旧组清理后重编译，需升级状态保存/恢复 |
+| [NiFi客户端](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/nifi/NifiClient.java:706) | failure/retry自环、队列保护和简单类型匹配 |
+| [部署指纹](../data-elements-parent/src/main/java/com/linewell/dataelement/integration/nifi/canvas/pipeline/DslHasher.java:27) | 现有编译版本和DSL摘要机制 |
+| [任务映射实体](../data-elements-parent/src/main/java/com/linewell/dataelement/feature/dataaccess/infrastructure/persistence/entity/DataAccessFieldMapping.java:17) | 现有列与租户/版本字段 |
+| [MySQL完整结构](../db/baseline_sea_fishery/init.sql:896)、[达梦完整结构](../db/baseline_beijing_gd/init.sql:782) | func_value已为TEXT/CLOB |
+| [NiFi测试依赖](../data-elements-parent/pom.xml:113) | 当前2.9.0测试依赖，不能代替运行版本证明 |
 
 
 <a id="field-mapping--202-项目约束与外部依据"></a>
 
 #### 20.2 项目约束与外部依据
 
-- [项目协作约定](D:/Sourcecode/data-elements/AGENTS.md)、[低代码与Magic业务约束](D:/Sourcecode/data-elements/data-elements.md#lowcode-magic)、[批量查询与分页规范](D:/Sourcecode/data-elements/data-elements.md#batch-pagination)：租户、级联、唯一源、分页和发布依据。
+- [项目协作约定](../AGENTS.md)、[低代码与Magic业务约束](data-elements.md#lowcode-magic)、[批量查询与分页规范](data-elements.md#batch-pagination)：租户、级联、唯一源、分页和发布依据。
 - [data-elements-lowcode技能](C:/Users/Administrator/.codex/skills/data-elements-lowcode/SKILL.md)：本地资源核对、编译、发布、运行验证流程。
 - Apache官方QueryRecord、UpdateRecord、DatabaseRecordLookupService及Developer Guide，链接已在相应设计段落标注。本次访问日期2026-10-13；公共页面可能滚动更新，开发须按实际目标版本复核API。
 - GB 11643-1999原文用于18位号码结构与校验位算法；15位数据世纪补全、错误回退和敏感字段处理是本系统的显式设计选择。
@@ -1842,7 +1850,7 @@ LIVE_BATCH在两次执行间被外部修改时不能强求旧结果，测试需�
 | NiFi 运行上下文和敏感快照属性 | `mapping-extension/runtime/.../HaitongTransformRecord.java`、`JdbcHaitongDictionaryService.java` |
 | 海通操作界面 | `src/nifi/panels/UnifiedFieldMappingEditor.tsx`、`MappingAssetsPanel.tsx`、`src/nifi/api/fieldMapping.ts` |
 
-Java 路径均位于 `data-elements-parent/src/main/java/com/linewell/dataelement/`，海通路径位于 `data-elements-haitong/`。构建、NAR 检查与运行维护见 [扩展 README](data-elements-parent.md#mapping-extension)。
+Java 路径均位于 `data-elements-parent/src/main/java/com/linewell/dataelement/`，海通路径位于 `data-elements-haitong/`。构建、NAR 检查与运行维护见 [扩展说明](data-elements-parent.md#mapping-extension)。
 
 
 <a id="field-mapping--23-可视化规则配置与-hive-时间适配"></a>
@@ -1925,7 +1933,7 @@ Hive 来源新发布时，来源 `ExecuteSQLRecord.Record Writer` 和自定义 `
 
 已完成前端构建和表单模型验证、Hive/普通数据库发布与字段节点升级回归、20/100项分页和权限拒绝测试。本地与演示接口已对表单模型生成的原值、常量、类型转换、函数、日期、身份证、码表、条件、表达式、输出校验及空值/失败策略执行合成样本；预览与执行计划没有生成转换 SQL。NiFi 2.11.0 的自定义组件已用合成 DATE/TIME/TIMESTAMP 与 NULL 验证指定 Writer，验证组不接入业务数据，完成后清理。
 
-当前缺少真实 Hive JDBC 及其它待测数据库连接，上述验证不等同于所有数据库驱动、时间精度、Hive SerDe 或目标写入方式的完整验收。完整运行参数和操作细节继续以 [扩展 README](data-elements-parent.md#mapping-extension) 为准。
+当前缺少真实 Hive JDBC 及其它待测数据库连接，上述验证不等同于所有数据库驱动、时间精度、Hive SerDe 或目标写入方式的完整验收。完整运行参数和操作细节继续以 [扩展说明](data-elements-parent.md#mapping-extension) 为准。
 
 
 <a id="field-mapping--24-原有交互恢复与-uuid日期时间完整性v25"></a>
@@ -2081,7 +2089,7 @@ Oracle的 `DATE` 存储年月日及时、分、秒，OceanBase Oracle模式具�
 
 Oracle投影SQL在本地H2 Oracle兼容模式下实际执行，结果JDBC类型为TIMESTAMP且保留时分秒；这属于兼容测试，不是Oracle实库认证。NiFi 2.11禁止H2 JDBC驱动，本次没有修改该保护，原生往返改用现有MySQL。其它数据库为物理类型、转换、模式和发布契约测试，仍缺少实际连接；生产现场的具体字段类型与NiFi地址尚未获得，不能宣称生产零点问题已经现场修复，也不能代替所有驱动、时区或写入模式的完整验收。
 
-部署必须同时更新后端与对应NiFi版本的1.1.6包，并更新海通页面。2.11.0包位于 `logs/field-mapping-extension/haitong-mapping-nar/`，2.9.0包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/`；两者文件名相同，但父NAR依赖和摘要不同，不能混用。NiFi版本以实际运行API为准，不能仅凭旧画布卡片版本判断。构建方法、检查及操作顺序见 [扩展README](data-elements-parent.md#mapping-extension)。
+部署必须同时更新后端与对应NiFi版本的1.1.6包，并更新海通页面。2.11.0包位于 `logs/field-mapping-extension/haitong-mapping-nar/`，2.9.0包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/`；两者文件名相同，但父NAR依赖和摘要不同，不能混用。NiFi版本以实际运行API为准，不能仅凭旧画布卡片版本判断。构建方法、检查及操作顺序见 [扩展说明](data-elements-parent.md#mapping-extension)。
 
 
 
@@ -2292,7 +2300,11 @@ HiveRecordPut 模式同样旁路字段对标并使用 Hive 目标的来源 Write
 
 登记来源库变化、来源组件被手工替换为 FTP、原登记链不完整、关联循环或链路超过组合画布上限时，先验证当前任务、当前租户保存的 Pipeline、DSL 中真实引用的数据源和表及角色范围，然后打开该任务独立保存的 DSL。关联异常使用 `relationshipUnavailable=true`，`readOnly=false`；不再因登记关系失效将当前任务统一锁为只读。
 
-前端给出不阻塞的“已打开当前任务保存的画布，可继续编辑”说明。用户可以修改当前任务的组件、属性、连线和位置，保存后重新打开继续保持手工配置；不会依据旧登记记录恢复原来源、目标或规则。登记历史 tableId 不作为独立 DSL 的必需表引用；DSL 自己明确引用的 tableId 仍逐 ID 校验归属，来源及目标数据源仍按当前角色核验。访问权限不足、跨租户对象、选中 DSL 损坏等错误不会通过降级绕过。
+可编辑的已保存画布直接打开，不再显示“已打开当前任务保存的画布，可继续编辑”常驻说明。用户可以修改当前任务的组件、属性、连线和位置，保存后重新打开继续保持手工配置；不会依据旧登记记录恢复原来源、目标或规则。真正限制保存、部署和启动的只读状态仍显示原因，不因去掉普通提示而放宽权限。登记历史 tableId 不作为独立 DSL 的必需表引用；DSL 自己明确引用的 tableId 仍逐 ID 校验归属，来源及目标数据源仍按当前角色核验。访问权限不足、跨租户对象、选中 DSL 损坏等错误不会通过降级绕过。
+
+错误面板显示“错误与告警记录”，记录通过服务端持久保留，任务恢复运行后也不会自动删除。记录条数不能用作当前故障数；当前状态读取实时运行快照，排查时结合 NiFi 当前公告、记录时间和实际文件落库结果。SFTP 的 SSH 认证/会话关闭错误表示当次连接失败，不能仅凭历史记录判断当前密码错误；已恢复的连接继续沿用持久队列及成功落库后确认删除文件的流程，不为消除错误显示清空队列、重置文件清单水位或更换凭据。
+
+节点的运行错误红标只使用当前 NiFi 公告，不以持久运行历史覆盖实时状态。画布层集中读取组件清单、任务状态和整条流程的当前公告，再将组件及按节点分组的当前错误传入 `BaseNode`；节点本身不发起读取请求。20/100 个节点均只需要一次当前公告请求，后端沿用一次当前租户流程定位和一次 NiFi 公告读取，不随节点数量增加 SQL 或远端调用。新建未部署流程不查询公告，公告读取失败显示状态待确认的警示色并保留已有快照。公告按当前流程的处理器映射解析到画布节点，只在缺少处理器标识且历史标签归属唯一时兼容旧返回格式，未知处理器、其他节点 ID 和歧义标签不会使无关节点标红；配置和部署错误继续保留。`activeFlowErrors.test.mjs` 覆盖恢复后去掉旧红标、当前告警保留、20/100 节点请求数和节点零读取，以及未知/越界映射拒绝；历史面板仍提供原错误全文。
 
 组合画布中的其他任务依然是独立保存对象，保留其既有编辑边界。运行中的任务以及需要补齐配置才能发布的组件，仍遵守正常运行和配置校验，不能把“可编辑”解释为任意缺失配置都可直接启动。关联失效时不提供虚构的跨任务原生链路；当前任务的单独流程入口按其实际部署状态处理。
 
@@ -2456,7 +2468,7 @@ NiFi2.9原生AvroReader/ConvertRecord对异构联合类型仍存在隐式转换�
 
 当前本地后端使用开发`.86`控制/业务库，capabilities、编译计划、函数库均回读1.1.16；开发NiFi `https://10.231.176.56:8443`（2.9.0、单个已连接节点）已安装1.1.16并用隔离合成流程实际执行。2.11本轮完成构建及SDK测试，没有将历史演示结果冒充本轮部署。Hive只在生产可用，本轮按用户要求不验证Hive。生产未部署，Oracle、达梦、PostgreSQL、SQL Server等所有真实驱动落库亦未在本轮补齐认证。
 
-本轮只更新共享内核、后端NiFi版本选择及海通静态前端，不修改Magic/低代码或数据库结构。旧业务任务继续引用其原版本，不在验收时批量重发或清队列。升级已有任务须按既有受控升级入口同步NAR Bundle、执行计划、required-engine-version和同版本字典服务；仅安装新NAR不会自动修复旧任务。匹配SDK产物和重测命令见扩展README的当前版本节。所有测试组、合成平台任务及自有模板/快照在验收后清理，已有业务任务和来源state保持原状。
+本轮只更新共享内核、后端NiFi版本选择及海通静态前端，不修改Magic/低代码或数据库结构。旧业务任务继续引用其原版本，不在验收时批量重发或清队列。升级已有任务须按既有受控升级入口同步NAR Bundle、执行计划、required-engine-version和同版本字典服务；仅安装新NAR不会自动修复旧任务。匹配SDK产物和重测命令见扩展说明的当前版本节。所有测试组、合成平台任务及自有模板/快照在验收后清理，已有业务任务和来源state保持原状。
 
 
 
@@ -2861,4 +2873,47 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 权限回归必须覆盖当前租户、另一个租户、同租户但角色数据范围不同、混入一个无权或不存在 ID、目标库授权被撤销、目标关联在作业创建后变化、重复 ID、超过批次上限、重试和并发双启动。每个输入 ID 必须有当前会话权限及来源/目标关系证据；不能把无权项过滤掉后继续创建。若未来增加物理表/列，遵守中文表注释和每列中文注释约定。
 
 在上述端点和真实 20/100 项 SQL、请求数证据齐备前，批量页只能是**持久匹配作业与用户主动逐项创建**，不能启用自动逐项执行或宣称批量确保已完成。
+
+<a id="source-icon-assets"></a>
+
+## 数据源图标来源与许可
+
+`data-elements-haitong/src/nifi/icons/` 保存画布使用的本地图标。`databaseIcons.tsx` 统一供组件选择器、画布节点和配置抽屉使用；JDBC 目标节点按实际 `dbType` 选择图标。构建时打包本地资源，不使用远程图片地址，不按列表行调用接口获取图标。
+
+保留品牌原色，用中性底板确保深浅色模式都能识别；不再用自绘数据库圆柱与字母缩写代替品牌。API、FTP、SFTP 是通用协议，使用本工程自绘的 `api.svg`、`ftp.svg`、`sftp.svg`：蓝色接口、橙色双向文件传输、绿色加密文件传输，不冒充厂商标识。三者与品牌图标共用白色底板、尺寸和缩放规则，不再使用灰色通用线框。GBase 两个版本共用 GBase 品牌；TDSQL 两个版本共用腾讯云品牌；HetuEngine 使用华为品牌，具体产品由旁边的文字区分。
+
+### 本次补充资源与来源
+
+以下资源保持上游图形。ICO 文件仅解码为 PNG；神通保留完整官方图片，界面以 `object-position` 显示其左侧标识，不拉伸图像。
+
+| 本地文件 | 来源 | 原始资源 |
+| --- | --- | --- |
+| `clickhouse.png` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.clickhouse/icons/clickhouse_icon_big@2x.png) |
+| `db2.svg` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.db2/icons/db2_icon_big.svg) |
+| `doris.svg` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.doris/icons/doris_icon_big.svg) |
+| `elasticsearch.png` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.generic/icons/elasticsearch_icon_big@2x.png) |
+| `iotdb.png` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.iotdb/icons/iotdb_icon_big@2x.png) |
+| `mariadb.png` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.mysql/icons/mariadb_icon_big@2x.png) |
+| `sqlserver.png` | DBeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.mssql/icons/mssql_icon_big@2x.png) |
+| `starrocks.svg` | dbeaver | [原始资源](https://raw.githubusercontent.com/dbeaver/dbeaver/71cee3a752a7f5b967a39cec50d9b971a2ba43a6/plugins/org.jkiss.dbeaver.ext.starrocks/icons/starrocks_icon_big.svg) |
+| `hbase.svg` | official | [原始资源](https://hbase.apache.org/images/logo.svg) |
+| `hdfs.png` | official | [原始资源](https://hadoop.apache.org/elephant.png) |
+| `oscar.png` | official | [原始资源](https://shentongdata.com/data/attachment/2019-12/2019121608431415700s.png) |
+| `hailiang.png` | official | [原始资源](https://docs.vastdata.com.cn/favicon.ico) |
+| `tdsql.png` | official | [原始资源](https://cloudcache.tencent-cloud.com/qcloud/favicon.ico) |
+| `highgo.png` | official favicon; ICO decoded to PNG | [原始资源](https://highgo.com/favicon.ico) |
+| `kafka.svg` | Simple Icons CC0; 添加品牌色 | [原始资源](https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/apachekafka.svg) |
+| `minio.svg` | Simple Icons CC0; 添加品牌色 | [原始资源](https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/minio.svg) |
+| `hetu.svg` | Simple Icons CC0; 添加品牌色 | [原始资源](https://raw.githubusercontent.com/simple-icons/simple-icons/98820a4dc8c363ca72fa2c0d294ea4a0a9bba75d/icons/huawei.svg) |
+
+### 继承原工程的图标
+
+`dameng.svg`、`gaussdb.svg`、`gbase8a.svg`、`hive.svg`、`kingbase8.svg`、`mysql.svg`、`oceanbasemysql.svg`、`oracle.svg`、`postgresql.svg` 为原工程已有的品牌造型，本次直接复用；原工程未记录其下载地址及作者，不能声称这些文件由本次从官网下载。
+
+### 许可与维护
+
+- DBeaver 资源来自上述固定提交，遵循 Apache License 2.0；完整许可证见 [LICENSE-DBeaver.txt](../data-elements-haitong/src/nifi/icons/LICENSE-DBeaver.txt)，上游作者为 DBeaver Corp 及贡献者。
+- Simple Icons 资源遵循 [CC0](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md)；本地仅添加品牌颜色，图形路径保持不变。
+- 官网资源及产品商标归各自权利人所有，本系统仅用于标识实际连接的数据源；保留厂商／项目原色和品牌造型。
+- 新增数据源时同时补充本地图标及来源，在浅色、深色和支持的最低浏览器版本检查清晰度。不要在运行时引用在线 CDN。
 

@@ -23,6 +23,7 @@
 // 接口：02.登录统一认证账号
 // 路由：POST /idaas/auth-account/login
 // 业务说明：校验账号状态、密码、锁定和多因子策略，签发统一认证会话并记录认证事件；该会话不能登录管理控制台。
+import auditEvents;
 import identityTransport;
 import db;
 import authSession;
@@ -72,7 +73,7 @@ where p.subject_id=#{a.subject_id}
             exit 400,'请输入有效认证账号与密码';
         }
         var ip=request.getClientIP();
-        var fingerprint=DigestUtil.sha256Hex(domain+':'+username);
+        var fingerprint=auditEvents.fingerprint(domain+':'+username,'AUDIT_ACCOUNT_V1');
         if(sql.selectOne("""
 select count(*) n
 from iam_audit_event_t
@@ -157,14 +158,7 @@ where tid=#{sec.id}
             };
         });
         // 记录操作主体、目标及结果，供审计与故障追踪。
-        var trace=audit(outcome.id==null?null:{
-            userId:outcome.id,actorKind:'AUTH_ACCOUNT',requiredDomain:domain
-        },outcome.error==null?'SUCCESS':'FAILED','auth:account-login',outcome.id,outcome.error,null);
-        sql.update("""
-update iam_audit_event_t
-set account_fingerprint=#{fingerprint}
-where tid=#{trace}
-""");
+        audit({userId:outcome.id,actorKind:'AUTH_ACCOUNT',requiredDomain:domain,accountFingerprint:fingerprint},outcome.error==null?'ACCEPTED':'FAILED','auth:password-verified',outcome.id,outcome.error,null);
         if(outcome.error!=null) {
             exit 401,'认证账号或密码不正确';
         }
@@ -183,9 +177,10 @@ where owner_kind='AUTH_ACCOUNT'
         }
         var policy=sessionPolicy('issue',outcome.id);
         authSession.login(outcome.id,outcome.version,policy.idleSeconds,policy.allowConcurrent);
-        return {
-            token:authSession.token(),profile:toProfile(context().account)
-        };
+        try {
+            audit({userId:outcome.id,actorKind:'AUTH_ACCOUNT',requiredDomain:domain},'SUCCESS','auth:account-login',outcome.id,null,null);
+            return {token:authSession.token(),profile:toProfile(context().account)};
+        } catch(error) { authSession.logout(); throw error; }
     }
     var ctx=context();
     var a=ctx.account;

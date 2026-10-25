@@ -1,7 +1,0 @@
-.git
-.vscode
-target/*
-!target/data-element.jar
-logs
-*.iml
-Dockerfile

@@ -37,6 +37,16 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** The template must stay local-first, bounded and scoped to the current role. */
 class MaterializationTemplateMagicTest {
+
+    @Test
+    void manuallyRegisteredPushSnapshotDoesNotWarnAboutAnUnneededSqlDialect() throws Exception {
+        var fixture=new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type='receive',pool_cfg=? where tid='source-db'","{\"accessMode\":\"receive\"}");
+        var result=assertInstanceOf(Map.class,fixture.run(false));
+        assertTrue(((List<?>)result.get("warnings")).isEmpty());
+        assertFalse(((List<?>)result.get("tableItems")).isEmpty());
+        assertEquals(0,fixture.explorer.calls);assertEquals(0,fixture.fileProbe.calls);assertEquals(0,fixture.connectionConfigCalls);
+    }
     private static final String SOURCE_ID = "f93a8e653ac6413e89660f5d77d45769";
 
     @ParameterizedTest

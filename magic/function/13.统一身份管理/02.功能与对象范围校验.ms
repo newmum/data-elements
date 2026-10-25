@@ -61,6 +61,7 @@
 // 函数输入：permission：待校验的功能权限编码；appId：目标业务应用标识；identityDomain：人员或公众身份域。
 // 返回与副作用：按功能编码、应用和身份域校验操作人的权限及对象范围；越权时拒绝请求，成功时返回可用于后续查询的上下文。
 import '@/idaas/context' as context;
+import auditEvents;
 import '@/idaas/audit' as audit;
 
 // 功能与范围必须来自同一角色分配，防止只读全域范围扩大局部写权限。
@@ -84,6 +85,7 @@ for(pair in ctx.pairs) {
             ctx.requiredPermission=permission;
             ctx.requiredAppId=appId;
             ctx.requiredDomain=domain;
+            auditEvents.bindPlatform(ctx);
             return ctx;
         }
     }

@@ -1,194 +1,153 @@
 <template>
   <div class="db-table-page">
-    <u-title>
-      <template #name>数据表信息</template>
-      <div class="db-table-title-extra">
-        <div class="segmented-like business-segment" role="radiogroup">
-          <button
-            v-for="item in businessSegmentOptions"
-            :key="item.value"
-            :class="['segment-option', state.businessTypeFilter === item.value ? 'is-selected' : '']"
-            type="button"
-            role="radio"
-            :aria-checked="state.businessTypeFilter === item.value"
-            @click="setBusinessTypeFilter(item.value)"
-          >
-            <span class="segment-label">{{ item.label }}</span>
-            <span class="segment-count">{{ item.count }}</span>
-          </button>
-        </div>
-        <div class="toolbar-actions">
-          <el-button
-            class="refresh-probe-btn"
-            plain
-            :loading="state.refreshLoading"
-            @click="handleAction('刷新数据表')"
-          >
-            <template #icon>
-              <Icon icon="el-icon-Refresh" />
-            </template>
-            {{ state.refreshLoading ? "正在探查" : "重新探查" }}
-          </el-button>
-          <div v-if="state.diffReady" class="segmented-like diff-filter-tabs" role="radiogroup">
-            <button
-              v-for="item in diffSegmentOptions"
-              :key="item.value"
-              type="button"
-              :class="['segment-option', 'diff-filter-tab', state.diffFilter === item.value ? 'is-selected' : '', `is-${item.className}`]"
-              role="radio"
-              :aria-checked="state.diffFilter === item.value"
-              @click="setDiffFilter(item.value)"
-            >
-              <span class="segment-label">{{ item.label }}</span>
-              <span class="segment-count">{{ item.count }}</span>
-            </button>
-          </div>
-          <el-button
-            class="register-resource-btn"
-            type="primary"
-            :loading="state.dbAssetLoading"
-            @click="openDbTableRegistration"
-          >
-            <template #icon>
-              <Icon icon="el-icon-Plus" />
-            </template>
-            登记数据资源
-          </el-button>
-        </div>
+    <div class="table-toolbar">
+      <u-title name="数据表信息" />
+      <div class="business-segment" role="radiogroup" aria-label="数据表业务类型">
+        <button
+          v-for="type in businessTypes"
+          :key="type"
+          type="button"
+          role="radio"
+          :aria-checked="state.businessType === type"
+          :class="{ 'is-selected': state.businessType === type }"
+          @click="setBusinessType(type)"
+        >
+          {{ type === "全部" ? "全部表" : type }}
+          <span>{{ type === "全部" ? state.snapshotTotal : state.businessStats[type] || 0 }}</span>
+        </button>
       </div>
-    </u-title>
-
-    <transition name="probe-reveal">
-      <section v-if="state.refreshLoading" class="metadata-probe" aria-live="polite">
-        <div class="probe-visual" aria-hidden="true">
-          <span class="probe-node probe-database"><Icon icon="db" /></span>
-          <span class="probe-path">
-            <i></i>
-            <i></i>
-            <i></i>
-          </span>
-          <span class="probe-node probe-table"><Icon icon="table" /></span>
-          <span class="probe-scan-beam"></span>
-        </div>
-        <div class="probe-content">
-          <div class="probe-heading">
-            <strong>正在探查数据库结构</strong>
-            <span>正在连接数据源，读取库表与字段，并与已登记元数据进行差异比对</span>
-          </div>
-          <div class="probe-progress"><i></i></div>
-          <div class="probe-steps">
-            <span><Icon icon="el-icon-Link" />连接数据源</span>
-            <span><Icon icon="el-icon-Search" />扫描库表字段</span>
-            <span><Icon icon="el-icon-DataAnalysis" />分析结构差异</span>
-          </div>
-        </div>
-      </section>
-    </transition>
-
-    <data-table
+      <div class="toolbar-actions">
+        <el-button
+          v-if="canCollect"
+          plain
+          :loading="collecting"
+          :disabled="!state.source"
+          @click="startCollection"
+        >
+          <template #icon><Icon icon="el-icon-Refresh" /></template>
+          重新探查
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="state.openingRegistration"
+          @click="openDbTableRegistration"
+        >
+          <template #icon><Icon icon="el-icon-Plus" /></template>
+          登记数据资源
+        </el-button>
+      </div>
+    </div>
+    <el-alert
+      v-if="state.listError"
+      :title="state.listError"
+      type="error"
+      show-icon
+      :closable="false"
+    >
+      <el-button link type="primary" @click="refreshTable">重新读取快照</el-button>
+    </el-alert>
+    <div
+      v-if="collecting || state.collectionError"
+      class="collection-status"
+      :class="{ 'is-error': state.collectionError }"
+      role="status"
+    >
+      <template v-if="collecting">
+        <Icon icon="el-icon-Loading" />
+        <span>
+          {{ state.collectionPhase === "PERSISTING" ? "正在保存表快照" : "正在后台探查数据表" }}
+        </span>
+        <el-progress :percentage="state.collectionProgress" :stroke-width="5" :show-text="true" />
+      </template>
+      <template v-else>
+        <Icon icon="el-icon-Warning" />
+        <span>{{ state.collectionError }}</span>
+        <el-button link type="primary" @click="startCollection">重新探查</el-button>
+      </template>
+    </div>
+    <DataTable
       ref="tableRef"
-      :class="['metadata-table', { 'is-probing': state.refreshLoading }]"
-      row-key="tableName"
-      :loading="state.loading && !state.refreshLoading"
-      :columns="state.cols"
+      class="metadata-table"
+      row-key="tid"
+      :loading="state.loading"
+      :columns="[]"
       :data="fetchData"
       :init-page-size="20"
-      :page-sizes="[10, 20, 50, 100]"
-      :operation-width="72"
-      @filter-change="handleAction('filter-change', $event)"
+      :page-sizes="[20, 50, 100]"
+      :operation-width="74"
+      :empty-description="
+        state.listError
+          ? '可点击重新读取快照后重试'
+          : '尚无数据表快照，请手动探查或进入登记流程维护'
+      "
     >
-      <template #column-tableName="{ row }">
-        <div :class="['table-name-cell', row.changeStatus === '删除' ? 'is-deleted' : '']">
-          <span
-            :class="['table-type-icon', row.tableType === '视图' ? 'is-view' : 'is-table']"
-            :title="tableTypeTip(row)"
-          >
-            <Icon :icon="row.tableType === '视图' ? 'el-icon-View' : 'table'" />
-          </span>
-          <el-text
-            v-if="row.changeStatus !== '删除'"
-            class="table-name-link"
-            type="primary"
-            truncated
-            @click.stop="openFields(row, 'rows')"
-          >
-            {{ row.tableName }}
-          </el-text>
-          <span v-else class="table-name-link is-disabled" :title="changeStatusTip(row)">
-            {{ row.tableName }}
-          </span>
+      <el-table-column prop="serialNo" label="序号" width="64" align="center" />
+      <el-table-column
+        prop="tableName"
+        label="数据表名"
+        min-width="250"
+        sortable="custom"
+        show-overflow-tooltip
+      >
+        <template #default="{ row }">
+          <div class="table-name-cell">
+            <Icon :icon="isViewTable(row) ? 'el-icon-View' : 'table'" />
+            <el-button link type="primary" class="table-name-link" @click="openTablePreview(row)">
+              {{ row.tableName }}
+            </el-button>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="tableComment" label="表注释" min-width="220" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.tableComment || row.tableNameCn || "" }}</template>
+      </el-table-column>
+      <el-table-column
+        prop="fieldCount"
+        label="字段数"
+        width="100"
+        align="center"
+        sortable="custom"
+      >
+        <template #default="{ row }">
+          <el-button type="primary" link @click="openTablePreview(row, 'fields')">
+            {{ row.fieldCount ?? 0 }}
+          </el-button>
+        </template>
+      </el-table-column>
+      <el-table-column prop="annotated" label="是否标注" width="104" align="center">
+        <template #default="{ row }">
           <el-tag
-            v-if="state.diffReady && row.changeStatus && row.changeStatus !== '无变化'"
-            :class="['name-change-tag', changeStatusClass(row.changeStatus)]"
             size="small"
+            :type="isAnnotated(row.annotated) ? 'success' : 'info'"
             effect="light"
-            :title="changeStatusTip(row)"
           >
-            {{ row.changeStatus }}
+            {{ isAnnotated(row.annotated) ? "已标注" : "未标注" }}
           </el-tag>
-        </div>
-      </template>
-
-      <template #column-tableComment="{ row }">
-        <el-input
-          v-model="row.tableComment"
-          class="comment-input"
-          size="small"
-          clearable
-          placeholder="请规范填写数据表中文名"
-          title="请规范填写数据表中文名"
-          @change="(value) => updateTableComment(row, value)"
-        />
-      </template>
-
-      <template #column-businessType="{ row }">
-        <span :class="['business-select', businessClass(row.businessType)]" :title="businessTypeReason(row)">
-          <select
-            v-model="row.businessType"
-            class="business-select__control"
-            aria-label="业务类型"
-            @change="updateBusinessType(row, row.businessType)"
-          >
-            <option
-            v-for="item in businessTypeOptions"
-            :key="item.value"
-            :value="item.value"
-            >{{ item.label }}</option>
-          </select>
-          <Icon class="business-select__arrow" icon="el-icon-ArrowDown" />
-        </span>
-      </template>
-
-      <template #column-fieldCount="{ row }">
-        <el-button class="field-count-link" type="primary" link @click.stop="openFields(row, 'fields')">
-          {{ row.fieldCount ?? 0 }}
-        </el-button>
-      </template>
-
+        </template>
+      </el-table-column>
+      <el-table-column prop="businessType" label="业务类型" width="104" align="center">
+        <template #default="{ row }">
+          <el-tag size="small" type="info" effect="plain">
+            {{ row.businessType || "业务表" }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <template #operation="{ row }">
         <el-button
-          v-if="row.changeStatus === '删除'"
-          class="delete-link"
           type="danger"
           link
-          :loading="row._deleteLoading"
-          @click.stop="deleteRemovedTable(row)"
+          :loading="state.deletingId === row.tid"
+          @click="deleteTableSnapshot(row)"
         >
           删除
         </el-button>
-        <el-tag v-else-if="row.registered" class="operation-status-tag" size="small" type="success" effect="light">
-          已登记
-        </el-tag>
-        <el-button v-else class="save-link" type="primary" link @click.stop="registerRow(row)">
-          保存
-        </el-button>
       </template>
-    </data-table>
-
+    </DataTable>
     <el-dialog
       v-model="state.previewDialogVisible"
       class="preview-dialog"
-      width="1280px"
+      width="min(1280px, calc(100vw - 40px))"
+      top="4vh"
       append-to-body
       :title="`${state.currentTableName || ''} 表数据预览`"
     >
@@ -196,111 +155,146 @@
         <main class="preview-data">
           <div class="preview-section-head">
             <div class="preview-mode-switch">
-              <button :class="{ 'is-active': state.previewMode === 'rows' }" type="button" @click="state.previewMode = 'rows'">行数据预览</button>
-              <button :class="{ 'is-active': state.previewMode === 'fields' }" type="button" @click="state.previewMode = 'fields'">字段结构</button>
+              <button
+                :class="{ 'is-active': state.previewMode === 'rows' }"
+                :disabled="state.previewLoading"
+                type="button"
+                @click="changePreviewMode('rows')"
+              >
+                行数据预览
+              </button>
+              <button
+                :class="{ 'is-active': state.previewMode === 'fields' }"
+                :disabled="state.previewLoading"
+                type="button"
+                @click="changePreviewMode('fields')"
+              >
+                字段结构
+              </button>
             </div>
+            <el-button
+              v-if="state.previewMode === 'fields' && state.currentPreviewTableId && !isPushSource"
+              :loading="state.syncingFields"
+              @click="syncPreviewFields"
+            >
+              <template #icon><Icon icon="el-icon-Refresh" /></template>
+              同步字段
+            </el-button>
             <div class="preview-topbar-meta">
               {{ state.previewColumns.length }} 个字段
               <span v-if="state.previewMode === 'rows'">
-                {{ state.previewRows.length ? ` · 展示 ${state.previewRows.length} 条数据` : ` · ${state.previewMessage || "暂无样例数据"}` }}
+                {{
+                  state.previewRows.length
+                    ? ` · 展示 ${state.previewRows.length} 条数据`
+                    : ` · ${state.previewMessage || "暂无样例数据"}`
+                }}
               </span>
-              <span v-else> · 右侧展示首条数据</span>
+              <span v-else>· 显示已读取的字段结构</span>
             </div>
           </div>
           <DataTable
             v-if="state.previewMode === 'rows'"
+            class="sample-preview-table"
             :columns="[]"
             :data="state.previewRows"
             :show-page="false"
             border
             stripe
-            height="520"
+            height="min(520px, calc(100vh - 190px))"
           >
             <el-table-column
               v-for="field in state.previewColumns"
               :key="field.columnName"
               :prop="field.columnName"
-              min-width="180"
+              min-width="170"
               show-overflow-tooltip
             >
               <template #header>
-                <div class="preview-column-title" :title="field.columnName">
-                  <strong>
-                    {{ field.columnName }}
-                  </strong>
-                  <small>
-                    {{ displayColumnType(field) }}
-                    <i v-if="displayColumnLength(field)">({{ displayColumnLength(field) }})</i>
+                <div class="preview-column-title">
+                  <el-tooltip
+                    :content="field.columnComment || field.columnName"
+                    placement="top"
+                    :show-after="400"
+                  >
+                    <strong>{{ field.columnComment || field.columnName }}</strong>
+                  </el-tooltip>
+                  <el-tooltip :content="field.columnName" placement="top" :show-after="400">
+                    <small>{{ field.columnName }}</small>
+                  </el-tooltip>
+                  <small v-if="false">
+                    {{ field.columnType || field.dataType || "未知类型" }}
+                    <em v-if="shouldShowColumnLength(field)">({{ field.columnLength }})</em>
                     · {{ field.columnComment || "未填中文名" }}
-                    <b v-if="isPrimaryKey(field.primaryKey)">主键</b>
+                    <b v-if="field.primaryKey">主键</b>
                   </small>
                 </div>
               </template>
-              <template #default="{ row }">{{ formatPreviewCell(row[field.columnName]) }}</template>
             </el-table-column>
             <template #empty>
-              <el-empty :description="state.previewMessage || '暂无样例数据'" :image-size="72" />
+              <div class="preview-friendly-empty">
+                <el-empty :description="state.previewMessage || '暂无样例数据'" :image-size="88">
+                  <template #description>
+                    <strong>{{ state.previewMessage || "暂无样例数据" }}</strong>
+                    <span>
+                      可以切换到字段结构查看字段说明，或确认数据源连接、表权限后重新预览。
+                    </span>
+                  </template>
+                </el-empty>
+              </div>
             </template>
           </DataTable>
-          <DataTable v-else :columns="[]" :data="state.fieldRows" :show-page="false" border stripe height="520" :row-class-name="fieldRowClassName">
+          <DataTable
+            v-else
+            :columns="[]"
+            :data="state.fieldRows"
+            :show-page="false"
+            border
+            stripe
+            height="min(520px, calc(100vh - 190px))"
+          >
             <el-table-column prop="serialNo" label="序号" width="70" align="center" />
-            <el-table-column prop="columnName" label="字段名" min-width="180" show-overflow-tooltip>
+            <el-table-column
+              prop="columnName"
+              label="字段名"
+              min-width="160"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              prop="columnComment"
+              label="字段注释"
+              min-width="180"
+              show-overflow-tooltip
+            >
+              <template #default="{ row }">{{ row.columnComment || "-" }}</template>
+            </el-table-column>
+            <el-table-column
+              prop="columnType"
+              label="字段类型"
+              min-width="140"
+              show-overflow-tooltip
+            >
+              <template #default="{ row }">{{ row.columnType || row.dataType || "-" }}</template>
+            </el-table-column>
+            <el-table-column prop="primaryKey" label="主键" width="72" align="center">
               <template #default="{ row }">
-                <div class="field-name-with-status">
-                  <span>{{ row.columnName }}</span>
-                  <el-tag
-                    v-if="row._diffStatus"
-                    :class="['field-diff-tag', fieldDiffClass(row)]"
-                    size="small"
-                    effect="light"
-                    :title="row._diffText"
-                  >
-                    {{ row._diffStatus }}
-                  </el-tag>
-                </div>
+                <el-tag v-if="row.primaryKey" size="small" type="warning" effect="light">是</el-tag>
+                <span v-else>-</span>
               </template>
             </el-table-column>
-            <el-table-column prop="columnComment" label="字段注释" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">
-                <div class="field-attr-cell">
-                  <span>{{ row.columnComment || "-" }}</span>
-                  <small v-if="fieldChangeNote(row, 'columnComment')">{{ fieldChangeNote(row, 'columnComment') }}</small>
-                </div>
-              </template>
+            <el-table-column prop="nullable" label="可空" width="72" align="center">
+              <template #default="{ row }">{{ row.nullable === false ? "否" : "是" }}</template>
             </el-table-column>
-            <el-table-column prop="columnType" label="字段类型" min-width="150" show-overflow-tooltip>
-              <template #default="{ row }">
-                <div class="field-attr-cell">
-                  <span>{{ displayColumnType(row) }}</span>
-                  <small v-if="fieldChangeNote(row, 'columnType')">{{ fieldChangeNote(row, 'columnType') }}</small>
-                </div>
-              </template>
+            <el-table-column
+              prop="defaultValue"
+              label="默认值"
+              min-width="100"
+              show-overflow-tooltip
+            >
+              <template #default="{ row }">{{ row.defaultValue || "-" }}</template>
             </el-table-column>
-            <el-table-column prop="primaryKey" label="主键" width="96" align="center">
-              <template #default="{ row }">
-                <div class="field-attr-cell is-center">
-                  <span><el-tag v-if="isPrimaryKey(row.primaryKey)" size="small" type="warning" effect="light">是</el-tag><template v-else>-</template></span>
-                  <small v-if="fieldChangeNote(row, 'primaryKey')">{{ fieldChangeNote(row, 'primaryKey') }}</small>
-                </div>
-              </template>
+            <el-table-column label="首条数据" min-width="160" show-overflow-tooltip>
+              <template #default="{ row }">{{ firstPreviewValue(row) }}</template>
             </el-table-column>
-            <el-table-column prop="nullable" label="可空" width="96" align="center">
-              <template #default="{ row }">
-                <div class="field-attr-cell is-center">
-                  <span>{{ nullableLabel(row.nullable) }}</span>
-                  <small v-if="fieldChangeNote(row, 'nullable')">{{ fieldChangeNote(row, 'nullable') }}</small>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="defaultValue" label="默认值" min-width="130" show-overflow-tooltip>
-              <template #default="{ row }">
-                <div class="field-attr-cell">
-                  <span>{{ row.defaultValue || "-" }}</span>
-                  <small v-if="fieldChangeNote(row, 'defaultValue')">{{ fieldChangeNote(row, 'defaultValue') }}</small>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="首条数据" min-width="160" show-overflow-tooltip><template #default="{ row }">{{ firstPreviewValue(row) }}</template></el-table-column>
             <template #empty>
               <el-empty :description="state.previewMessage || '暂无字段信息'" :image-size="72" />
             </template>
@@ -311,1733 +305,786 @@
   </div>
 </template>
 
-<script setup>
-import { ref, reactive, computed, watch } from "vue";
+<script setup lang="ts">
+import { ref, reactive, computed, watch, onBeforeUnmount } from "vue";
+import { ElMessageBox } from "element-plus";
 import { useRegisterModal } from "@/composables";
 
-const props = defineProps({
-  dbId: String,
-  dataSourceType: String,
-});
-
-const tableRef = ref();
-const { openRegisterModal } = useRegisterModal();
-
-const businessTypeOptions = [
-  { label: "业务表", value: "业务表" },
-  { label: "日志表", value: "日志表" },
-  { label: "字典表", value: "字典表" },
-  { label: "过程表", value: "过程表" },
-  { label: "备份表", value: "备份表" },
-];
-
-const businessFilterOptions = [
-  { label: "全部表", value: "全部" },
-  ...businessTypeOptions,
-];
-
-const businessSegmentOptions = computed(() =>
-  businessFilterOptions.map((item) => ({
-    ...item,
-    count: businessTypeCount(item.value),
-  }))
-);
-
-const diffFilterOptions = [
-  { label: "全部", value: "全部", className: "all" },
-  { label: "新增", value: "新增", className: "added" },
-  { label: "删除", value: "删除", className: "deleted" },
-  { label: "变更", value: "变更", className: "modified" },
-  { label: "无变化", value: "无变化", className: "unchanged" },
-];
-
-const diffSegmentOptions = computed(() =>
-  diffFilterOptions.map((item) => ({
-    ...item,
-    count: diffStatusCount(item.value),
-  }))
-);
-
+type Row = Record<string, unknown>;
+interface TableRow extends Row {
+  tid: string;
+  tableName: string;
+  tableNameCn?: string;
+  tableComment?: string;
+  fieldCount?: number;
+  annotated?: unknown;
+  businessType?: string;
+}
+interface FieldRow extends Row {
+  serialNo: number;
+  columnName: string;
+  columnComment: string;
+  columnType: string;
+  dataType: string;
+  primaryKey: boolean;
+  nullable: boolean;
+  columnLength: unknown;
+  defaultValue: unknown;
+}
+const props = defineProps<{ dbId: string; dataSourceType?: string }>();
+const tableRef = ref<{ refresh(reset?: boolean): void }>();
+const { openRegisterModal, open: registrationOpen } = useRegisterModal();
+const businessTypes = ["全部", "业务表", "日志表", "字典表", "过程表", "备份表"];
 const state = reactive({
-  cols: [],
   loading: false,
-  refreshLoading: false,
-  businessTypeFilter: "全部",
-  metaCache: {},
-  metaCacheDbId: "",
-  dbAsset: null,
-  dbAssetLoading: false,
-  registeredTableMap: {},
-  registeredLoadDbId: "",
-  registeredLoading: false,
-  tableRows: [],
-  filteredRows: [],
-  summary: {
-    tableCount: 0,
-    viewCount: 0,
-    fieldCount: 0,
-  },
-  businessStats: {},
-  diffReady: false,
-  diffFilter: "全部",
-  diffRows: [],
-  diffStats: {
-    total: 0,
-    added: 0,
-    deleted: 0,
-    modified: 0,
-    unchanged: 0,
-  },
+  listError: "",
+  businessType: "全部",
+  businessStats: {} as Record<string, number>,
+  snapshotTotal: 0,
+  rows: [] as TableRow[],
+  total: 0,
+  source: null as Row | null,
+  openingRegistration: false,
+  deletingId: "",
+  collectionStarting: false,
+  collectionStatus: "",
+  collectionProgress: 0,
+  collectionPhase: "",
+  collectionError: "",
+  jobId: "",
   previewDialogVisible: false,
   previewLoading: false,
   previewMode: "rows",
-  previewColumns: [],
-  previewRows: [],
-  previewMessage: "",
-  fieldRows: [],
   currentTableName: "",
-  diffViewId:"",allTableTotal:0,
+  currentPreviewTableId: "",
+  previewColumns: [] as FieldRow[],
+  fieldRows: [] as FieldRow[],
+  previewRows: [] as Row[],
+  previewMessage: "",
+  syncingFields: false,
 });
-
-/**
- * 详情路由会复用同一个 db-table 组件；数据库切换后必须清空上一个库的探查结果和元数据缓存。
- * 否则 diffReady 仍为 true，fetchData 会直接展示旧缓存，当前数据库的表不会重新探查。
- */
-watch(
-  () => props.dbId,
-  (nextDbId, previousDbId) => {
-    if (!nextDbId || nextDbId === previousDbId) return;
-
-    state.metaCache = {};
-    state.metaCacheDbId = "";
-    state.dbAsset = null;
-    state.dbAssetLoading = false;
-    state.registeredTableMap = {};
-    state.registeredLoadDbId = "";
-    state.registeredLoading = false;
-    state.tableRows = [];
-    state.filteredRows = [];
-    state.businessStats = {};
-    state.diffReady = false;
-    state.diffFilter = "全部";
-    state.diffRows = [];
-    state.summary = { tableCount: 0, viewCount: 0, fieldCount: 0 };
-    state.diffStats = { total: 0, added: 0, deleted: 0, modified: 0, unchanged: 0 };
-    state.previewDialogVisible = false;
-    state.previewColumns = [];
-    state.previewRows = [];
-    state.previewMessage = "";
-    state.fieldRows = [];
-    state.currentTableName = "";
-
-    tableRef.value?.refresh(true);
-  },
-  { flush: "post" }
+let generation = 0,
+  listVersion = 0,
+  previewVersion = 0,
+  disposed = false;
+let collectionTimer: ReturnType<typeof setTimeout> | undefined;
+let sourceRequest: Promise<Row> | undefined;
+let previewTable: TableRow | undefined;
+let previewHasSample = false;
+const objectOf = (value: unknown): Row =>
+  value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Row) : {};
+const payloadOf = (value: unknown): Row => {
+  const outer = objectOf(value);
+  return Array.isArray(outer.data) ? outer : objectOf(outer.data ?? outer);
+};
+const text = (value: unknown): string => (value == null ? "" : String(value));
+const messageOf = (value: unknown, fallback: string): string =>
+  text(objectOf(value).message) || fallback;
+const parseObject = (value: unknown): Row => {
+  if (typeof value !== "string") return objectOf(value);
+  try {
+    return objectOf(JSON.parse(value));
+  } catch {
+    return {};
+  }
+};
+const sourceType = computed(() =>
+  text(state.source?.dbType || state.source?.databaseType || props.dataSourceType).toLowerCase()
 );
-
-const handleAction = (type, row) => {
-  switch (type) {
-    case "filter-change":
-      refreshTable(false);
-      break;
-    case "刷新数据表":
-      runReExplore();
-      break;
+const accessMode = computed(() => {
+  const source = state.source || {};
+  const pool = parseObject(source.poolCfg ?? source.pool_cfg);
+  return text(
+    source.accessMode ??
+      source.access_mode ??
+      source.dataAccessMode ??
+      pool.accessMode ??
+      pool.access_mode ??
+      pool.dataAccessMode
+  ).toLowerCase();
+});
+const isPushSource = computed(() => ["receive", "push"].includes(accessMode.value));
+const isOfflineSource = computed(
+  () =>
+    isPushSource.value ||
+    ["capture", "pull"].includes(accessMode.value) ||
+    ["0", "false"].includes(text(state.source?.showConnect))
+);
+const canCollect = computed(
+  () => !!state.source && (!isOfflineSource.value || sourceType.value === "ftp")
+);
+const collecting = computed(() => state.collectionStarting || state.collectionStatus === "RUNNING");
+const structured = computed(() => ["api", "ftp", "kafka"].includes(sourceType.value));
+const serverManagedMrs = computed(
+  () =>
+    text(state.source?.metadataAccessMode || state.source?.metadata_access_mode).toLowerCase() ===
+      "server-managed-mrs" || text(state.source?.hiveConnectionMode).toLowerCase() === "huawei-mrs"
+);
+const isAnnotated = (value: unknown) => value === true || value === 1 || value === "1";
+const isViewTable = (row: TableRow) => /view|视图/i.test(text(row.tableType));
+const refreshTable = () => tableRef.value?.refresh(true);
+const setBusinessType = (value: string) => {
+  if (state.businessType !== value) {
+    state.businessType = value;
+    refreshTable();
   }
 };
-
-const refreshTable = (resetPage = true) => {
-  tableRef.value?.refresh(resetPage);
+const getSource = (): Promise<Row> => {
+  if (state.source) return Promise.resolve(state.source);
+  if (sourceRequest) return sourceRequest;
+  const version = generation,
+    dbId = props.dbId;
+  sourceRequest = $common
+    .post("/dst/database/detail", { tid: dbId })
+    .then((result: unknown) => {
+      const source = payloadOf(result);
+      if (disposed || version !== generation) return source;
+      if (source.found === false || !source.tid)
+        throw new Error("数据源不存在或无访问权限，请返回数据源列表重试");
+      state.source = source;
+      return source;
+    })
+    .catch((error: unknown) => {
+      if (version === generation) sourceRequest = undefined;
+      throw error;
+    });
+  return sourceRequest;
 };
-
-const setBusinessTypeFilter = (value) => {
-  state.businessTypeFilter = value;
-  refreshTable(true);
-};
-
-const setDiffFilter = (value) => {
-  state.diffFilter = value;
-  refreshTable(true);
-};
-
-const fetchData = async ({ pageNo = 1, pageSize = 20, sortField, sortDir }) => {
-  if (!props.dbId) {
-    resetRows();
-    return { list: [], total: 0 };
-  }
-
-  ensureMetaCache();
-  loadDbContextInBackground();
+async function fetchData({ pageNo = 1, pageSize = 20, sortField = "", sortDir = "" } = {}) {
+  const version = ++listVersion,
+    current = generation,
+    dbId = props.dbId;
+  if (!dbId) return { list: [], total: 0 };
   state.loading = true;
-  const autoExplore = !state.diffReady;
-  if (autoExplore) {
-    state.refreshLoading = true;
-  }
+  state.listError = "";
   try {
-    if (!state.diffReady) {
-      await loadReExploreData();
-    }
-
-    const readPage=()=> $common.post('/dst/database/metadata/tables/diff-view/page',{viewId:state.diffViewId,pageNo,pageSize,sortField,sortDir,
-      businessType:state.businessTypeFilter,changeStatus:state.diffFilter,overrides:state.metaCache});
-    let result;
-    try { result=await readPage(); } catch(error) {
-      if(!String(error?.message||'').includes('探查结果已过期')) throw error;
-      const filter=state.diffFilter;
-      await loadReExploreData();state.diffFilter=filter;
-      result=await readPage();
-    }
-    state.businessStats=result.businessStats;state.summary=result.summary;state.allTableTotal=result.allTotal;
-    state.diffStats={total:result.allTotal,added:result.changeStats['新增']||0,deleted:result.changeStats['删除']||0,modified:result.changeStats['变更']||0,unchanged:result.changeStats['无变化']||0};
-    state.diffRows=normalizeRows(result.list||[]);state.tableRows=state.diffRows;state.filteredRows=state.diffRows;
-    return {list:state.diffRows,total:result.total};
-  } catch (error) {
-    console.error("探查数据表列表失败:", error);
-    resetRows();
-    $message.error(error?.message || "数据表读取失败，请稍后重试");
-    throw error;
-  } finally {
-    state.loading = false;
-    if (autoExplore) {
-      state.refreshLoading = false;
-    }
-  }
-};
-
-const runReExplore = async () => {
-  if (!props.dbId) return;
-  state.refreshLoading = true;
-  state.loading = true;
-  try {
-    const result = await loadReExploreData();
-    refreshTable(true);
-    const summary = result?.summary || {};
-    $message.success(
-      `重新探查完成：新增 ${summary.addedCount || 0}，删除 ${summary.deletedCount || 0}，变更 ${summary.modifiedCount || 0}`
+    // 与登记第二步共用快照接口；列表不读取来源表或逐行补查字段。
+    const result = payloadOf(
+      await $common.get("/dst/database/metadata/tables", {
+        dbId,
+        paged: true,
+        allSnapshots: true,
+        includeGovernance: false,
+        pageNo,
+        pageSize,
+        sortField,
+        sortDir,
+        businessType: state.businessType === "全部" ? "" : state.businessType,
+      })
     );
-  } catch (error) {
-    console.error("重新探查数据库表差异失败:", error);
-    $message.error(error?.message || "重新探查失败");
+    if (disposed || current !== generation || version !== listVersion)
+      return { list: state.rows, total: state.total };
+    const raw = Array.isArray(result.rows)
+      ? result.rows
+      : Array.isArray(result.list)
+        ? result.list
+        : [];
+    state.rows = raw.map((value, index) => {
+      const row = objectOf(value);
+      return {
+        ...row,
+        tid: text(row.tid || row.id),
+        tableName: text(row.tableName),
+        serialNo: (pageNo - 1) * pageSize + index + 1,
+      } as TableRow;
+    });
+    state.businessStats = Object.fromEntries(
+      Object.entries(objectOf(result.businessStats)).map(([key, value]) => [
+        key,
+        Number(value) || 0,
+      ])
+    );
+    state.snapshotTotal =
+      Number(result.snapshotTotal ?? result.annotatedTotal ?? result.total) || 0;
+    state.total = Number(result.total) || 0;
+    return { list: state.rows, total: state.total };
+  } catch (error: unknown) {
+    if (!disposed && current === generation && version === listVersion) {
+      state.listError = messageOf(error, "表快照读取失败，请稍后重试");
+      state.rows = [];
+      state.total = 0;
+    }
+    return { list: state.rows, total: state.total };
   } finally {
-    state.loading = false;
-    state.refreshLoading = false;
+    if (current === generation && version === listVersion) state.loading = false;
   }
-};
-
-const loadReExploreData = async () => {
-  const result = await $common.post(
-    "/dst/database/metadata/tables/reExplore",
-    {
-      dbId: props.dbId,
-      diffViewOnly: true,
-    },
-    {},
-    300 * 1000
-  );
-  state.diffReady = true;
-  state.diffFilter = "全部";
-  state.diffViewId=result.viewId;
-  return result || {};
-};
-
-const resetRows = () => {
-  state.allTableTotal=0;
-  state.tableRows = [];
-  state.filteredRows = [];
-  updateStats([], []);
-};
-
-const normalizeRows = (rows) => {
-  return rows.map((row, index) => {
-    const normalized = {
-      serialNo: row.serialNo || index + 1,
-      ...row,
-    };
-    const key = getRowKey(normalized);
-    const cached = state.metaCache[key] || {};
-
+}
+function stopPolling() {
+  if (collectionTimer) clearTimeout(collectionTimer);
+  collectionTimer = undefined;
+}
+function applyCollectionStatus(value: unknown) {
+  const result = payloadOf(value);
+  state.collectionStatus = text(result.status);
+  state.jobId = text(result.jobId);
+  state.collectionPhase = text(result.phase);
+  state.collectionProgress = Math.max(0, Math.min(100, Number(result.progressPercent) || 0));
+  state.collectionError = text(result.error);
+  return result;
+}
+async function readCollectionStatus(version: number, notify = false) {
+  const dbId = props.dbId;
+  try {
+    const value = await $common.get("/dst/database/metadata/tables/collection/status", {
+      dbId,
+      jobId: state.jobId || undefined,
+    });
+    if (disposed || generation !== version) return;
+    const result = applyCollectionStatus(value);
+    if (result.status === "RUNNING") {
+      stopPolling();
+      collectionTimer = setTimeout(() => {
+        void readCollectionStatus(version, notify);
+      }, 1500);
+    } else if (result.status === "SUCCEEDED" && notify) {
+      refreshTable();
+      $message.success(`数据表探查完成，新增 ${Number(result.addedCount) || 0} 张`);
+    }
+  } catch (error: unknown) {
+    if (!disposed && generation === version) {
+      state.collectionError = messageOf(error, "采集状态读取失败，可重新探查后重试");
+      if (collecting.value)
+        collectionTimer = setTimeout(() => {
+          void readCollectionStatus(version, notify);
+        }, 3000);
+    }
+  }
+}
+async function startCollection() {
+  if (collecting.value || !props.dbId) return;
+  const version = generation,
+    dbId = props.dbId;
+  state.collectionStarting = true;
+  state.collectionError = "";
+  try {
+    await getSource();
+    if (disposed || version !== generation) return;
+    if (!canCollect.value) {
+      $message.info("该来源使用登记快照，请进入登记流程维护其数据表定义");
+      return;
+    }
+    const result = await $common.post("/dst/database/metadata/tables/collection/start", {
+      dbId,
+      mode: "REFRESH",
+    });
+    if (disposed || version !== generation) return;
+    applyCollectionStatus(result);
+    await readCollectionStatus(version, true);
+  } catch (error: unknown) {
+    if (version === generation)
+      state.collectionError = messageOf(error, "无法启动探查，请检查数据源连接后重试");
+  } finally {
+    if (version === generation) state.collectionStarting = false;
+  }
+}
+async function openDbTableRegistration() {
+  if (state.openingRegistration || !props.dbId) return;
+  const version = generation;
+  state.openingRegistration = true;
+  try {
+    const source = await getSource();
+    if (disposed || version !== generation) return;
+    openRegisterModal({
+      registerClass: "dbTable",
+      registerData: { db: [{ ...source, tid: props.dbId, id: props.dbId }], currentStep: 1 },
+    });
+  } catch (error: unknown) {
+    $message.error(messageOf(error, "无法读取数据源信息，请重试"));
+  } finally {
+    if (version === generation) state.openingRegistration = false;
+  }
+}
+async function deleteTableSnapshot(row: TableRow) {
+  if (state.deletingId || !row.tid) return;
+  const dbId = props.dbId,
+    version = generation;
+  try {
+    await ElMessageBox.confirm(
+      `确认删除“${row.tableName}”的表快照吗？将清理平台内关联的字段、目录和接入配置，不会删除来源数据库中的物理表或记录。`,
+      "删除表快照",
+      { type: "warning", confirmButtonText: "删除快照", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  if (disposed || version !== generation) return;
+  state.deletingId = row.tid;
+  try {
+    const result = payloadOf(
+      await $common.post("/dst/database/metadata/tables/deleteAsset", { dbId, tableId: row.tid })
+    );
+    if (result.deleted !== true) throw new Error("快照未确认删除，请刷新后重试");
+    if (!disposed && version === generation) {
+      $message.success("表快照已删除");
+      refreshTable();
+    }
+  } catch (error: unknown) {
+    $message.error(messageOf(error, "删除失败，请重试"));
+  } finally {
+    if (version === generation) state.deletingId = "";
+  }
+}
+const boolValue = (value: unknown) =>
+  value === true || value === 1 || ["1", "true", "yes", "y"].includes(text(value).toLowerCase());
+function normalizeFields(value: unknown): FieldRow[] {
+  const payload = payloadOf(value),
+    rows = Array.isArray(value)
+      ? value
+      : Array.isArray(payload.data)
+        ? payload.data
+        : Array.isArray(payload.list)
+          ? payload.list
+          : Array.isArray(payload.columns)
+            ? payload.columns
+            : [];
+  return rows.map((item, index) => {
+    const field = objectOf(item);
     return {
-      ...normalized,
-      businessType: cached.businessType || normalized.businessType || "业务表",
-      tableComment: cached.tableComment ?? normalized.tableComment ?? normalized.tableNameCn ?? "",
-      registered: !!normalized.registered,
-      tableAssetId: normalized.tableAssetId || normalized.tid || "",
-      changeStatus: state.diffReady ? normalized.changeStatus || "无变化" : "",
-      changes: normalized.changes || null,
-      before: normalized.before || null,
-      businessTypeReason: cached.businessTypeReason || normalizeBusinessReason(normalized),
+      ...field,
+      serialNo: index + 1,
+      columnName: text(field.columnName || field.name || field.fieldName),
+      columnComment: text(field.columnComment || field.comment),
+      columnType: text(field.columnType || field.dataType || field.typeName),
+      dataType: text(field.dataType || field.typeName),
+      columnLength: field.columnLength ?? field.length ?? field.columnSize ?? "",
+      primaryKey: boolValue(field.primaryKey),
+      nullable: field.nullable == null ? true : boolValue(field.nullable),
+      defaultValue: field.defaultValue ?? field.columnDefault ?? "",
     };
   });
-};
-
-const getRowKey = (row) => row.tableName || row.name || String(row.serialNo || "");
-
-const updateBusinessType = (row, value) => {
-  const key = getRowKey(row);
-  state.metaCache[key] = {
-    ...(state.metaCache[key] || {}),
-    businessType: value,
-    businessTypeReason: "人工调整业务类型",
-  };
-  row.businessType = value;
-  row.businessTypeReason = "人工调整业务类型";
-  refreshTable(false);
-};
-
-const updateTableComment = (row, value) => {
-  const key = getRowKey(row);
-  state.metaCache[key] = {
-    ...(state.metaCache[key] || {}),
-    tableComment: value,
-  };
-  row.tableComment = value;
-};
-
-const deleteRemovedTable = async (row) => {
-  const tableId = row.tableAssetId || row.tid || row.id;
-  if (!props.dbId || !tableId) {
-    $message.error("缺少表资产ID，无法删除");
-    return;
-  }
-  try {
-    await $dialog.confirm(
-      `确认删除已失效的表资产“${row.tableName || ""}”？删除后会递归清理字段、目录、关系、接入任务及历史脏数据。`,
-      "删除确认",
-      {
-        type: "warning",
-        confirmButtonText: "确认删除",
-        cancelButtonText: "取消",
-      }
-    );
-  } catch (error) {
-    return;
-  }
-  row._deleteLoading = true;
-  try {
-    await $common.post("/dst/database/metadata/tables/deleteAsset", {
+}
+const firstPreviewValue = (field: FieldRow) => text(state.previewRows[0]?.[field.columnName]);
+const shouldShowColumnLength = (field: FieldRow) => !!field.columnLength;
+async function mrsMetadata(action: string, extra: Row) {
+  const source = await getSource();
+  const database = text(source.database || source.dbName || source.dbMetaDbName || source.schema);
+  if (!database) throw new Error("数据源缺少已登记的数据库名，请在登记流程中补充");
+  return $common.post("/dst/database/metadata/huaweiMrsHiveJdbcDebug", {
+    action,
+    contract: "registration",
+    database,
+    ...extra,
+  });
+}
+async function fetchFields(row: TableRow) {
+  if (serverManagedMrs.value) return mrsMetadata("columns", { table: row.tableName });
+  if (structured.value && !isPushSource.value)
+    return $common.post("/dst/database/metadata/structuredColumns", {
       dbId: props.dbId,
-      tableId,
       tableName: row.tableName,
     });
-    $message.success("删除成功");
-    state.diffReady = false;
-    refreshTable(true);
-  } catch (error) {
-    console.error("删除表资产失败:", error);
-    $message.error(error?.message || "删除失败");
-  } finally {
-    row._deleteLoading = false;
-  }
-};
-
-const ensureMetaCache = () => {
-  if (state.metaCacheDbId === props.dbId) return;
-  state.metaCacheDbId = props.dbId || "";
-  state.metaCache = {};
-};
-
-const normalizeTableKey = (value) => String(value || "").trim().toLowerCase();
-
-const loadDbContextInBackground = () => {
-  if (!props.dbId) return;
-  if (!state.dbAsset && !state.dbAssetLoading) {
-    state.dbAssetLoading = true;
-    loadDbAsset()
-      .then((dbAsset) => {
-        state.dbAsset = dbAsset;
-      })
-      .finally(() => {
-        state.dbAssetLoading = false;
-      });
-  }
-
-};
-
-const ensureDbAsset = async () => {
-  if (state.dbAsset) return state.dbAsset;
-  state.dbAssetLoading = true;
-  try {
-    state.dbAsset = await loadDbAsset();
-    return state.dbAsset;
-  } finally {
-    state.dbAssetLoading = false;
-  }
-};
-
-const loadDbAsset = async () => {
-  try {
-    return await $common.post("/dst/database/detail", { tid: props.dbId });
-  } catch (error) {
-    console.warn("读取数据库连接信息失败:", error);
-    return null;
-  }
-};
-
-const updateStats = (allRows, filteredRows) => {
-  const rows = filteredRows || allRows || [];
-  const businessStats = {};
-  for (const item of businessTypeOptions) {
-    businessStats[item.value] = 0;
-  }
-  for (const row of allRows || []) {
-    const type = row.businessType || "业务表";
-    businessStats[type] = (businessStats[type] || 0) + 1;
-  }
-  state.businessStats = businessStats;
-  state.summary = {
-    tableCount: rows.filter((row) => (row.tableType || "数据表") !== "视图").length,
-    viewCount: rows.filter((row) => row.tableType === "视图").length,
-    fieldCount: rows.reduce((sum, row) => sum + Number(row.fieldCount || 0), 0),
-  };
-};
-
-const businessTypeCount = (value) => {
-  if (value === "全部") return state.allTableTotal;
-  return state.businessStats[value] || 0;
-};
-
-const diffStatusCount = (value) => {
-  if (value === "新增") return state.diffStats.added;
-  if (value === "删除") return state.diffStats.deleted;
-  if (value === "变更") return state.diffStats.modified;
-  if (value === "无变化") return state.diffStats.unchanged;
-  return state.diffStats.total;
-};
-
-const normalizeBusinessReason = (row) => {
-  const reason = row.businessTypeReason || "";
-  if (!reason || reason.includes("未命中")) {
-    return "表名和注释未呈现日志、字典、流程或备份特征，更符合承载核心业务对象与业务过程数据的业务表特征";
-  }
-  return reason;
-};
-
-const businessTypeReason = (row) => normalizeBusinessReason(row);
-
-const tableTypeTip = (row) => (row.tableType === "视图" ? "视图" : "数据表");
-
-const businessClass = (type) => {
-  const mapping = {
-    业务表: "is-business",
-    日志表: "is-log",
-    字典表: "is-dict",
-    过程表: "is-process",
-    备份表: "is-backup",
-  };
-  return mapping[type] || "is-business";
-};
-
-const changeStatusClass = (status) => {
-  const mapping = {
-    新增: "is-added",
-    删除: "is-deleted",
-    变更: "is-modified",
-    无变化: "is-unchanged",
-  };
-  return mapping[status] || "is-unchanged";
-};
-
-const changeStatusTip = (row) => {
-  if (!state.diffReady) return "";
-  if (row.changeStatus === "新增") return "当前数据库存在，但尚未登记为表资产";
-  if (row.changeStatus === "删除") return "已登记为表资产，但当前数据库中没有探查到这张表";
-  if (row.changeStatus === "变更") {
-    const changes = row.changes || {};
-    const messages = [];
-    if (changes.columnsAdded?.length) messages.push(`新增字段：${changes.columnsAdded.join("、")}`);
-    if (changes.columnsDeleted?.length) messages.push(`删除字段：${changes.columnsDeleted.join("、")}`);
-    if (changes.columnsModified?.length) {
-      messages.push(`字段属性变更：${changes.columnsModified.map((item) => item.columnName).join("、")}`);
-    }
-    if (changes.tableCommentChanged) messages.push("表注释变化");
-    if (changes.tableTypeChanged) messages.push("表类型变化");
-    if (changes.fieldCountChanged) messages.push("字段数量变化");
-    if (changes.recordCountChanged) messages.push("记录数变化");
-    return messages.join("；") || "表结构或元数据发生变化";
-  }
-  return "已登记表与当前探查结果一致";
-};
-
-const openFields = async (row, mode = "rows") => {
-  if (!props.dbId || !row?.tableName) return;
-  state.currentTableName = row.tableName;
-  state.previewMode = mode;
-  state.previewDialogVisible = true;
-  state.previewLoading = true;
-  state.fieldRows = [];
-  state.previewColumns = [];
-  state.previewRows = [];
-  state.previewMessage = "";
-  try {
-    const fields = await loadFieldsWithDiff(row);
-    state.fieldRows = fields;
-    const previewFields = fields.filter((field) => field._diffStatus !== "删除");
-    state.previewColumns = previewFields.length ? previewFields : fields;
-    await loadPreviewRows(row, previewFields);
-  } catch (error) {
-    console.error("查询字段列表失败:", error);
-    state.previewMessage = error?.message || "字段列表查询失败";
-    $message.error(state.previewMessage);
-  } finally {
-    state.previewLoading = false;
-  }
-};
-
-const loadFieldsWithDiff = async (row) => {
-  const beforeFields = row.tableAssetId ? await loadRegisteredColumns(row.tableAssetId) : [];
-
-  if (row.changeStatus === "删除") {
-    return beforeFields.map((field) => ({
-      ...field,
-      _diffStatus: "删除",
-      _diffText: "物理库中已不存在该字段，仅保留登记快照",
-    }));
-  }
-
-  await ensureDbAsset();
-  const probe = await probeColumns(row.tableName);
-  if (!probe.success) {
-    throw new Error(probe.error || "未探查到字段");
-  }
-  const currentFields = normalizeFieldRows(probe.columns || []);
-
-  if (row.changeStatus === "新增") {
-    return currentFields.map((field) => ({
-      ...field,
-      _diffStatus: "新增",
-      _diffText: "新增数据表中的字段",
-    }));
-  }
-
-  if (row.changeStatus === "变更" && beforeFields.length) {
-    return decorateFieldDiffs(currentFields, beforeFields);
-  }
-
-  return currentFields;
-};
-
-const loadRegisteredColumns = async (tableAssetId) => {
-  if (!tableAssetId) return [];
-  const result = await $common.get("/dst/database/metadata/columns", { tid: tableAssetId });
-  return normalizeFieldRows(Array.isArray(result) ? result : result?.list || result?.data || []);
-};
-
-const loadPreviewRows = async (row, fields = []) => {
-  if (row.changeStatus === "删除") {
-    state.previewRows = [];
-    state.previewMessage = "物理表已删除，仅展示登记快照字段";
-    return;
-  }
-  if (!row.tableAssetId) {
-    state.previewRows = [];
-    state.previewMessage = "新增表尚未登记，当前仅展示字段结构";
-    return;
-  }
-  try {
-    const result = await $common.post("/dst/database/metadata/table/sample-data", {
-      tableId: row.tableAssetId,
-      sampleSize: 10,
-    });
-    const preview = normalizePreviewResult(result, fields);
-    state.previewColumns = preview.columns.length ? preview.columns : state.previewColumns;
-    state.previewRows = preview.rows;
-    state.previewMessage = preview.rows.length ? "" : "暂无样例数据，仅展示字段结构";
-  } catch (error) {
-    state.previewRows = [];
-    state.previewMessage = error?.message || "样例数据读取失败，仅展示字段结构";
-  }
-};
-
-const normalizePreviewResult = (result, fields = []) => {
-  const data = result?.data && !Array.isArray(result.data) ? result.data : result || {};
-  const rawColumns = Array.isArray(data.columns)
-    ? data.columns
-    : Array.isArray(data.fields)
-      ? data.fields
+  return $common.get("/dst/database/metadata/columns", {
+    tid: row.tid,
+    dbId: props.dbId,
+    tableName: row.tableName,
+  });
+}
+function normalizeSample(value: unknown, fields: FieldRow[]) {
+  const data = payloadOf(value),
+    rawColumns = Array.isArray(data.columns)
+      ? data.columns
       : Array.isArray(data.columnNames)
         ? data.columnNames
         : [];
+  const names = rawColumns.map((item) =>
+    typeof item === "string" ? item : text(objectOf(item).columnName || objectOf(item).name)
+  );
   const rawRows = Array.isArray(data.rows)
     ? data.rows
     : Array.isArray(data.list)
       ? data.list
-      : Array.isArray(data.records)
-        ? data.records
-        : Array.isArray(data.data)
-          ? data.data
-          : Array.isArray(data)
-            ? data
-            : [];
-  const columnNames = rawColumns.map((column) =>
-    typeof column === "string" ? column : column.columnName || column.name || column.prop
-  ).filter(Boolean);
-  const rows = rawRows.map((row) => {
-    if (!Array.isArray(row)) return row;
-    const item = {};
-    columnNames.forEach((column, index) => { item[column] = row[index]; });
-    return item;
-  });
-  const rowColumns = columnNames.length ? columnNames : Array.from(rows.reduce((set, row) => { Object.keys(row || {}).forEach((key) => set.add(key)); return set; }, new Set()));
-  const fieldMapByName = new Map((fields || []).map((field) => [field.columnName, field]));
-  const resolvedColumns = (rowColumns.length ? rowColumns : (fields || []).map((field) => field.columnName))
-    .filter(Boolean)
-    .map((column) => {
-      const field = fieldMapByName.get(column);
-      if (field) return field;
-      const index = columnNames.indexOf(column);
-      return { columnName: column, columnComment: "", columnType: Array.isArray(data.columnTypes) && index >= 0 ? data.columnTypes[index] : "", dataType: Array.isArray(data.columnTypes) && index >= 0 ? data.columnTypes[index] : "", columnLength: "", primaryKey: false };
-    });
-  return { columns: resolvedColumns, rows };
-};
-
-const decorateFieldDiffs = (currentFields, beforeFields) => {
-  const beforeMap = new Map(beforeFields.map((field) => [normalizeTableKey(field.columnName), field]));
-  const currentMap = new Map(currentFields.map((field) => [normalizeTableKey(field.columnName), field]));
-  const rows = currentFields.map((field) => {
-    const before = beforeMap.get(normalizeTableKey(field.columnName));
-    if (!before) {
-      return { ...field, _diffStatus: "新增", _diffText: "字段为本次重新探查新增" };
-    }
-    const diffInfo = describeFieldChange(before, field);
-    if (!diffInfo.text) return field;
-    return { ...field, _diffStatus: "变更", _diffText: diffInfo.text, _diffMap: diffInfo.map };
-  });
-  beforeFields.forEach((field) => {
-    if (!currentMap.has(normalizeTableKey(field.columnName))) {
-      rows.push({
-        ...field,
-        serialNo: rows.length + 1,
-        _diffStatus: "删除",
-        _diffText: "字段已从物理库删除",
-      });
-    }
-  });
-  return rows.map((field, index) => ({ ...field, serialNo: index + 1 }));
-};
-
-const describeFieldChange = (before, current) => {
-  const changes = [];
-  const map = {};
-  if (normalizeColumnTypeForDiff(before.columnType || before.dataType) !== normalizeColumnTypeForDiff(current.columnType || current.dataType)) {
-    const beforeValue = before.columnType || before.dataType || "-";
-    const currentValue = current.columnType || current.dataType || "-";
-    map.columnType = `曾为 ${beforeValue}`;
-    changes.push(`类型：${beforeValue} -> ${currentValue}`);
-  }
-  if (normalizeCompareValue(before.columnComment) !== normalizeCompareValue(current.columnComment)) {
-    const beforeValue = before.columnComment || "-";
-    const currentValue = current.columnComment || "-";
-    map.columnComment = `曾为 ${beforeValue}`;
-    changes.push(`注释：${beforeValue} -> ${currentValue}`);
-  }
-  if (isPrimaryKey(before.primaryKey) !== isPrimaryKey(current.primaryKey)) {
-    const beforeValue = isPrimaryKey(before.primaryKey) ? "是" : "否";
-    const currentValue = isPrimaryKey(current.primaryKey) ? "是" : "否";
-    map.primaryKey = `曾为 ${beforeValue}`;
-    changes.push(`主键：${beforeValue} -> ${currentValue}`);
-  }
-  if (normalizeNullable(before.nullable) !== normalizeNullable(current.nullable)) {
-    const beforeValue = nullableLabel(before.nullable);
-    const currentValue = nullableLabel(current.nullable);
-    map.nullable = `曾为 ${beforeValue}`;
-    changes.push(`可空：${beforeValue} -> ${currentValue}`);
-  }
-  if (normalizeCompareValue(before.defaultValue) !== normalizeCompareValue(current.defaultValue)) {
-    const beforeValue = before.defaultValue || "-";
-    const currentValue = current.defaultValue || "-";
-    map.defaultValue = `曾为 ${beforeValue}`;
-    changes.push(`默认值：${beforeValue} -> ${currentValue}`);
-  }
-  return { text: changes.join("；"), map };
-};
-
-const normalizeCompareValue = (value) => String(value ?? "").trim().toLowerCase();
-
-const TEMPORAL_COLUMN_TYPES = new Set(["date", "time", "datetime", "timestamp", "year"]);
-const MYSQL_DISPLAY_WIDTH_TYPES = new Set(["int", "integer", "bigint", "smallint", "tinyint", "mediumint"]);
-
-const columnTypeText = (field) => String(field?.columnType || field?.dataType || "").trim();
-
-const columnTypeBase = (value) => {
-  const text = String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-  const bracketIndex = text.indexOf("(");
-  return (bracketIndex >= 0 ? text.slice(0, bracketIndex) : text).trim();
-};
-
-const normalizeColumnTypeForDiff = (value) => {
-  const text = String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
-  if (!text) return "";
-  const base = columnTypeBase(text);
-  if (TEMPORAL_COLUMN_TYPES.has(base)) return base;
-  if (MYSQL_DISPLAY_WIDTH_TYPES.has(base)) return base;
-  return text;
-};
-
-const displayColumnType = (field) => {
-  const text = columnTypeText(field);
-  if (!text) return "-";
-  const base = columnTypeBase(text);
-  if (TEMPORAL_COLUMN_TYPES.has(base)) return base.toUpperCase();
-  return text;
-};
-
-const displayColumnLength = (field) => {
-  const length = String(field?.columnLength || "").trim();
-  if (!length) return "";
-  const text = columnTypeText(field).replace(/\s+/g, "").toLowerCase();
-  const base = columnTypeBase(text);
-  if (TEMPORAL_COLUMN_TYPES.has(base)) return "";
-  if (text.endsWith(`(${length.toLowerCase()})`)) return "";
-  return length;
-};
-
-const normalizeBoolish = (value, defaultValue = false) => {
-  if (value === true || value === false) return value;
-  if (value === 1 || value === "1") return true;
-  if (value === 0 || value === "0") return false;
-  const text = String(value ?? "").trim().toLowerCase();
-  if (!text) return defaultValue;
-  if (["true", "yes", "y", "是", "主键", "pk"].includes(text)) return true;
-  if (["false", "no", "n", "否", "非主键"].includes(text)) return false;
-  return defaultValue;
-};
-
-const isPrimaryKey = (value) => normalizeBoolish(value, false);
-
-const normalizeNullable = (value) => {
-  if (value === null || value === undefined || value === "") return true;
-  const text = String(value).trim().toLowerCase();
-  if (["false", "0", "no", "n", "否", "not null", "no null"].includes(text)) return false;
-  if (["true", "1", "yes", "y", "是", "nullable", "null"].includes(text)) return true;
-  return normalizeBoolish(value, true);
-};
-
-const nullableLabel = (value) => (normalizeNullable(value) ? "是" : "否");
-
-const formatPreviewCell = (value) => {
-  if (value === null || value === undefined || value === "") return "-";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-};
-
-const firstPreviewValue = (field) => formatPreviewCell(state.previewRows[0]?.[field.columnName]);
-
-const fieldChangeNote = (row, prop) => row?._diffMap?.[prop] || "";
-
-const fieldDiffClass = (field) => {
-  const mapping = {
-    新增: "is-added",
-    删除: "is-deleted",
-    变更: "is-modified",
-  };
-  return mapping[field?._diffStatus] || "";
-};
-
-const fieldRowClassName = ({ row }) => {
-  const className = fieldDiffClass(row);
-  return className ? `field-row-${className}` : "";
-};
-
-const probeColumns = async (tableName) => {
-  const dbAsset = state.dbAsset;
-  if (!dbAsset) {
-    throw new Error("数据库连接信息读取失败");
-  }
-  const response = await fetch("/nifi/api/columns-probe", {
-    method: "POST",
-    headers: buildFetchHeaders(),
-    body: JSON.stringify({
-      manifestKey: resolveManifestKey(dbAsset),
-      config: buildProbeConfig(dbAsset),
-      table: tableName,
-    }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data?.error || "字段探查请求失败");
-  }
-  return data;
-};
-
-const buildFetchHeaders = () => {
-  const token = readStorageValue("token");
-  const accessToken = readStorageValue("Access-Token");
-  const headers = {
-    "Content-Type": "application/json",
-  };
-  if (token) headers.token = token;
-  if (accessToken) headers["Access-Token"] = accessToken;
-  return headers;
-};
-
-const readStorageValue = (key) => {
-  const raw = localStorage.getItem(key) || sessionStorage.getItem(key) || "";
-  if (!raw) return "";
+      : Array.isArray(data.data)
+        ? data.data
+        : [];
+  const rows = rawRows.map((item) =>
+    Array.isArray(item)
+      ? Object.fromEntries(names.map((name, index) => [name, item[index]]))
+      : objectOf(item)
+  );
+  const keys = names.length
+    ? names
+    : fields.length
+      ? fields.map((field) => field.columnName)
+      : Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+  const byName = new Map(fields.map((field) => [field.columnName, field]));
+  const columns = keys.map(
+    (name, index) =>
+      byName.get(name) || {
+        serialNo: index + 1,
+        columnName: name,
+        columnComment: "",
+        columnType: "",
+        dataType: "",
+        columnLength: "",
+        nullable: true,
+        primaryKey: false,
+        defaultValue: "",
+      }
+  );
+  return { rows, columns };
+}
+async function openTablePreview(row: TableRow, mode = "rows") {
+  const version = ++previewVersion,
+    current = generation;
+  previewTable = row;
+  previewHasSample = false;
+  state.previewDialogVisible = true;
+  state.previewMode = mode;
+  state.previewLoading = true;
+  state.currentTableName = row.tableName;
+  state.currentPreviewTableId = row.tid;
+  state.previewRows = [];
+  state.previewColumns = [];
+  state.fieldRows = [];
+  state.previewMessage = "";
   try {
-    return JSON.parse(raw) || "";
-  } catch (error) {
-    return raw;
+    await getSource();
+    if (disposed || current !== generation || version !== previewVersion) return;
+    const fields = normalizeFields(await fetchFields(row));
+    if (disposed || current !== generation || version !== previewVersion) return;
+    state.fieldRows = fields;
+    state.previewColumns = fields;
+    if (mode === "rows") await readSample(row, version, current);
+  } catch (error: unknown) {
+    if (version === previewVersion) state.previewMessage = messageOf(error, "预览读取失败，请重试");
+  } finally {
+    if (current === generation && version === previewVersion) state.previewLoading = false;
   }
-};
-
-const buildProbeConfig = (asset) => {
-  const dbType = firstValue(asset, ["dbType", "databaseType", "dataSourceType"]) || props.dataSourceType || "mysql";
-  return {
-    host: firstValue(asset, ["host", "dbIp", "ip"]),
-    port: firstValue(asset, ["port", "dbPort"]),
-    database: firstValue(asset, ["database", "dbName", "dbMetaDbName", "serviceName"]),
-    username: firstValue(asset, ["username", "dbUser", "dbMetaUser", "user"]),
-    password: firstValue(asset, ["password", "dbPassword", "dbMetaPassword"]),
-    currentSchema: firstValue(asset, ["schema", "defaultSchema"]),
-    defaultSchema: firstValue(asset, ["schema", "defaultSchema", "dbName"]),
-    sid: firstValue(asset, ["sid", "serviceName", "database", "dbName"]),
-    serverName: firstValue(asset, ["serverName"]),
-    dbType,
-  };
-};
-
-const resolveManifestKey = (asset) => {
-  const type = String(
-    firstValue(asset, ["dbType", "databaseType", "dataSourceType"]) || props.dataSourceType || "mysql"
-  )
-    .trim()
-    .toLowerCase()
-    .replace(/_/g, "-");
-  const mapping = {
-    mysql: "source.mysql",
-    mariadb: "source.mariadb",
-    oracle: "source.oracle",
-    postgresql: "source.postgresql",
-    postgres: "source.postgresql",
-    "tdsql-pg": "source.tdsql-pg",
-    gaussdb: "source.gaussdb",
-    opengauss: "source.gaussdb",
-    sqlserver: "source.sqlserver",
-    "sql-server": "source.sqlserver",
-    db2: "source.db2",
-    dm: "source.dameng",
-    dameng: "source.dameng",
-    kingbase: "source.kingbase",
-    gbase8a: "source.gbase8a",
-    gbase8s: "source.gbase8s",
-    oscar: "source.oscar",
-    highgo: "source.highgo",
-    "tdsql-mysql": "source.tdsql-mysql",
-    oceanbase: "source.oceanbase",
-    clickhouse: "source.clickhouse",
-  };
-  return mapping[type] || "source.mysql";
-};
-
-const firstValue = (source, keys) => {
-  for (const key of keys) {
-    const value = source?.[key];
-    if (value !== undefined && value !== null && value !== "") {
-      return value;
-    }
-  }
-  return "";
-};
-
-const normalizeFieldRows = (rows) => {
-  return (rows || []).map((row, index) => ({
-    serialNo: row.serialNo || index + 1,
-    columnName: row.columnName || row.name || row.fieldName || row.column_name,
-    columnComment: row.columnComment || row.comment || row.remarks || row.column_comment,
-    columnType: row.columnType || buildColumnType(row),
-    dataType: row.dataType || row.typeName,
-    nullable: row.nullable,
-    primaryKey: row.primaryKey,
-    defaultValue: row.defaultValue || row.columnDefault || row.default_value,
-    columnLength: row.columnLength || row.columnSize || row.length || "",
-  }));
-};
-
-const buildColumnType = (row) => {
-  const type = row.typeName || row.dataType || "";
-  const size = row.columnSize;
-  const scale = row.decimalDigits;
-  if (!type) return "";
-  if (size && scale) return `${type}(${size},${scale})`;
-  if (size) return `${type}(${size})`;
-  return type;
-};
-
-const openDbTableRegistration = async () => {
-  if (!props.dbId) {
-    $message.error("缺少数据源ID，无法进入登记流程");
+}
+async function readSample(row: TableRow, version = previewVersion, current = generation) {
+  if (isOfflineSource.value && sourceType.value !== "ftp") {
+    state.previewMessage = "该来源使用已保存快照，仅展示字段结构";
     return;
   }
-  const dbAsset = (await ensureDbAsset()) || { tid: props.dbId, id: props.dbId };
-  openRegisterModal({
-    registerClass: "dbTable",
-    registerData: {
-      db: [
-        {
-          ...dbAsset,
-          tid: dbAsset.tid || dbAsset.id || props.dbId,
-          id: dbAsset.id || dbAsset.tid || props.dbId,
-        },
-      ],
-      currentStep: 1,
-    },
-  });
-};
-
-const registerRow = (row) => {
-  const tableName = row.tableName || row.name || "";
-  const tableNameCn = row.tableNameCn || row.tableComment || tableName;
-  openRegisterModal({
-    registerClass: "catalog",
-    registerData: {
-      catalog: [
-        {
-          tid: row.catalogId,
-          catalogName: `${String(tableNameCn || tableName).replace("表", "目录")}(${tableName})`,
-          catalogNameEn: tableName,
-          assetDesc: `${String(tableNameCn || tableName).replace("表", "目录")}(${tableName})`,
-          sourceTableId: row.tid,
-          dbId: props.dbId,
-          businessType: row.businessType,
-        },
-      ],
-      table: [
-        {
-          ...row,
-          tableName,
-          tableNameCn,
-        },
-      ],
-    },
-  });
-};
-
-state.cols = [
-  { label: "序号", prop: "serialNo", width: 72, align: "center", fixed: "left" },
-  { label: "数据表名", prop: "tableName", minWidth: 290, fixed: "left" },
-  { label: "表注释", prop: "tableComment", minWidth: 260 },
-  { label: "字段数", prop: "fieldCount", width: 86, align: "center" },
-  {
-    label: "业务类型",
-    prop: "businessType",
-    width: 144,
-    align: "center",
-    showOverflowTooltip: false,
-    className: "business-type-column",
+  const body = {
+    tableId: row.tid,
+    dbId: props.dbId,
+    tableName: text(row.sourceTableName) || row.tableName,
+    sampleSize: 10,
+  };
+  const result = serverManagedMrs.value
+    ? await mrsMetadata("sample", { table: body.tableName, limit: 10 })
+    : await $common.post(
+        structured.value
+          ? "/dst/database/metadata/structuredSampleData"
+          : "/dst/database/metadata/table/sample-data",
+        body
+      );
+  if (disposed || current !== generation || version !== previewVersion) return;
+  const sample = normalizeSample(result, state.fieldRows);
+  state.previewRows = sample.rows;
+  state.previewColumns = sample.columns;
+  previewHasSample = true;
+  state.previewMessage = sample.rows.length ? "" : "暂无样例数据，可切换查看字段结构";
+}
+async function changePreviewMode(mode: string) {
+  state.previewMode = mode;
+  if (mode !== "rows" || previewHasSample || !previewTable || state.previewLoading) return;
+  const version = previewVersion,
+    current = generation;
+  state.previewLoading = true;
+  try {
+    await readSample(previewTable, version, current);
+  } catch (error: unknown) {
+    if (version === previewVersion)
+      state.previewMessage = messageOf(error, "样例数据读取失败，请重试");
+  } finally {
+    if (current === generation && version === previewVersion) state.previewLoading = false;
+  }
+}
+async function syncPreviewFields() {
+  if (state.syncingFields || !state.currentPreviewTableId) return;
+  const tableId = state.currentPreviewTableId,
+    version = previewVersion,
+    current = generation;
+  try {
+    await ElMessageBox.confirm(
+      "从来源重新同步当前表的字段快照？新增、类型和注释将更新，已删除字段将移出配置。",
+      "同步字段",
+      { type: "warning", confirmButtonText: "确认同步", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  if (disposed || version !== previewVersion || current !== generation) return;
+  state.syncingFields = true;
+  try {
+    const fields = normalizeFields(
+      await $common.post("/dst/database/metadata/collectColumns", { tableId, force: true })
+    );
+    if (version === previewVersion) {
+      state.fieldRows = fields;
+      state.previewColumns = fields;
+      $message.success(`已同步 ${fields.length} 个字段`);
+      refreshTable();
+    }
+  } catch (error: unknown) {
+    $message.error(messageOf(error, "字段同步失败，请重试"));
+  } finally {
+    state.syncingFields = false;
+  }
+}
+async function initialize() {
+  generation++;
+  listVersion++;
+  previewVersion++;
+  stopPolling();
+  state.collectionStarting = false;
+  state.loading = false;
+  state.listError = "";
+  state.openingRegistration = false;
+  state.deletingId = "";
+  state.previewLoading = false;
+  sourceRequest = undefined;
+  state.source = null;
+  state.rows = [];
+  state.total = 0;
+  state.snapshotTotal = 0;
+  state.businessStats = {};
+  state.businessType = "全部";
+  state.collectionStatus = "";
+  state.collectionError = "";
+  state.jobId = "";
+  state.previewDialogVisible = false;
+  const current = generation;
+  try {
+    await getSource();
+    if (!disposed && current === generation && canCollect.value)
+      await readCollectionStatus(current);
+  } catch (error: unknown) {
+    if (current === generation) state.listError = messageOf(error, "数据源读取失败，请重试");
+  }
+}
+watch(
+  () => props.dbId,
+  () => {
+    void initialize();
+    refreshTable();
   },
-];
+  { immediate: true }
+);
+watch(registrationOpen, (open, previous) => {
+  if (!disposed && previous && !open) {
+    sourceRequest = undefined;
+    state.source = null;
+    void getSource().catch(() => {});
+    refreshTable();
+  }
+});
+watch(
+  () => state.previewDialogVisible,
+  (visible) => {
+    if (!visible) {
+      previewVersion++;
+      state.previewLoading = false;
+      previewTable = undefined;
+    }
+  }
+);
+onBeforeUnmount(() => {
+  disposed = true;
+  generation++;
+  previewVersion++;
+  listVersion++;
+  stopPolling();
+});
 </script>
 
 <style scoped lang="scss">
 .db-table-page {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  height: 100%;
+  min-width: 0;
   min-height: 0;
+  height: 100%;
   padding: 10px 18px 14px;
   overflow: hidden;
   background: #fff;
+  gap: 12px;
 }
-
-.db-table-title-extra {
+.table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.table-toolbar > :deep(.u-title) {
+  width: auto;
+  height: 40px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+.business-segment {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: #f4f5f7;
+  border-radius: 7px;
+}
+.business-segment button {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex: 1 1 auto;
-  gap: 10px;
-  margin-left: 16px;
-  min-width: 0;
-  overflow: visible;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #526176;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background-color 160ms,
+    color 160ms;
 }
-
+.business-segment button:hover {
+  color: #2563eb;
+  background: #eaf0fb;
+}
+.business-segment button.is-selected {
+  color: #14253d;
+  background: #fff;
+  box-shadow: 0 1px 4px #172b4d12;
+  font-weight: 600;
+}
+.business-segment span {
+  min-width: 17px;
+  padding: 1px 4px;
+  border-radius: 8px;
+  color: #667085;
+  background: #e9edf3;
+  text-align: center;
+  font-size: 11px;
+}
+.business-segment button:focus-visible,
+.preview-mode-switch button:focus-visible {
+  outline: 2px solid #8ab4ff;
+  outline-offset: 2px;
+}
 .toolbar-actions {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex: 0 1 auto;
   gap: 8px;
-  min-width: 0;
+  margin-left: auto;
 }
-
-.register-resource-btn {
-  flex: 0 0 auto;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 7px;
-  font-weight: 400;
-  white-space: nowrap;
+.toolbar-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
-
-.diff-filter-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.diff-filter-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: #4b5563;
-  background: #fff;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.diff-filter-tab b {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  color: #475467;
-  background: #f2f4f7;
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.diff-filter-tab.is-selected {
-  border-color: #1677ff;
-  color: #0958d9;
-  background: #eaf3ff;
-}
-
-.diff-filter-tab.is-added.is-selected {
-  border-color: #52c41a;
-  color: #237804;
-  background: #f0fdf4;
-}
-
-.diff-filter-tab.is-deleted.is-selected {
-  border-color: #ff7875;
-  color: #a8071a;
-  background: #fff1f0;
-}
-
-.diff-filter-tab.is-modified.is-selected {
-  border-color: #faad14;
-  color: #ad6800;
-  background: #fffbe6;
-}
-
-.segmented-like {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  height: 32px;
-  padding: 2px;
-  border-radius: 8px;
-  background: #f5f5f5;
-  gap: 2px;
-}
-
-.business-segment {
-  max-width: 468px;
-}
-
-.segment-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 28px;
-  min-width: 58px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #475569;
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-  transition: background-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
-
-  &:hover {
-    color: #1f2937;
-  }
-
-  &.is-selected {
-    background: #fff;
-    color: #111827;
-    font-weight: 600;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
-  }
-}
-
-.segment-label,
-.segment-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.segment-count {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #e5e7eb;
-  color: #374151;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.segment-option.is-selected .segment-count {
-  background: #f1f5f9;
-  color: #0f172a;
-}
-
 .metadata-table {
+  flex: 1;
   min-height: 0;
-  margin-top: 8px;
-}
-
-.table-name-cell {
   min-width: 0;
+}
+.table-name-cell {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
+  color: #409eff;
+  min-width: 0;
 }
-
 .table-name-link {
   min-width: 0;
-  cursor: pointer;
-
-  &:hover {
-    text-decoration: underline;
-  }
-
-  &.is-disabled {
-    color: #98a2b3;
-    cursor: not-allowed;
-    text-decoration: line-through;
-  }
-}
-
-.table-name-cell.is-deleted .table-type-icon {
-  color: #98a2b3;
-  background: #f2f4f7;
-}
-
-.name-change-tag {
-  flex: 0 0 auto;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 5px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.name-change-tag.is-added {
-  border-color: #b7eb8f;
-  color: #237804;
-  background: #f6ffed;
-}
-
-.name-change-tag.is-modified {
-  border-color: #ffd666;
-  color: #ad6800;
-  background: #fffbe6;
-}
-
-.name-change-tag.is-deleted {
-  border-color: #d0d5dd;
-  color: #667085;
-  background: #f2f4f7;
-}
-
-.table-type-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-
-  &.is-table {
-    color: var(--el-color-primary);
-    background: var(--el-color-primary-light-9);
-  }
-
-  &.is-view {
-    color: var(--el-color-warning);
-    background: var(--el-color-warning-light-9);
-  }
-}
-
-.comment-input {
-  width: 100%;
-
-  :deep(.el-input__wrapper) {
-    min-height: 28px;
-    box-shadow: 0 0 0 1px var(--el-border-color-lighter) inset;
-  }
-}
-
-.business-select {
-  position: relative;
-  width: 104px;
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-  color: #0958d9;
-
-  &.is-business {
-    color: #0958d9;
-
-    .business-select__control {
-      background: #e6f4ff;
-      border-color: #bae0ff;
-    }
-  }
-
-  &.is-log {
-    color: #ad6800;
-
-    .business-select__control {
-      background: #fff1b8;
-      border-color: #ffe58f;
-    }
-  }
-
-  &.is-dict {
-    color: #237804;
-
-    .business-select__control {
-      background: #d9f7be;
-      border-color: #b7eb8f;
-    }
-  }
-
-  &.is-process {
-    color: #531dab;
-
-    .business-select__control {
-      background: #efdbff;
-      border-color: #d3adf7;
-    }
-  }
-
-  &.is-backup {
-    color: #434343;
-
-    .business-select__control {
-      background: #f0f0f0;
-      border-color: #d9d9d9;
-    }
-  }
-}
-
-.business-select__control {
-  width: 100%;
-  height: 26px;
-  padding: 0 28px 0 12px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  outline: none;
-  appearance: none;
-  color: inherit;
-  font: inherit;
-  line-height: 24px;
-  cursor: pointer;
-  transition: border-color 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
-
-  &:hover {
-    filter: brightness(0.98);
-  }
-
-  &:focus-visible {
-    border-color: var(--el-color-primary);
-    box-shadow: 0 0 0 2px var(--el-color-primary-light-8);
-  }
-}
-
-.business-select__arrow {
-  position: absolute;
-  right: 8px;
-  width: 14px;
-  height: 14px;
-  pointer-events: none;
-}
-
-:deep(.business-type-column .cell) {
-  overflow: visible;
-  text-overflow: clip;
-}
-
-.field-count-link {
-  min-width: 34px;
-  padding: 0;
-  font-weight: 700;
-}
-
-.save-link {
-  padding: 0;
-}
-
-.operation-status-tag.is-deleted {
-  border-color: #ffa39e;
-  color: #a8071a;
-  background: #fff1f0;
-}
-
-.operation-status-tag {
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 5px;
-  font-weight: 500;
-}
-
-:deep(.el-table__cell) {
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-:deep(.el-table__fixed-right) {
-  box-shadow: var(--el-box-shadow-light);
-}
-
-.preview-dialog :deep(.el-dialog) {
-  border-radius: 12px;
   overflow: hidden;
 }
-
-.preview-dialog :deep(.el-dialog__header) {
-  margin: 0;
-  padding: 14px 18px;
-  border-bottom: 1px solid #edf0f3;
-}
-
-.preview-dialog :deep(.el-dialog__body) {
-  padding: 14px 16px 16px;
-  background: #f6f7f9;
-}
-
-.preview-layout {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 612px;
-}
-
-.preview-topbar-meta {
+.table-name-link :deep(span) {
   overflow: hidden;
-  color: #667085;
-  font-size: 12px;
-  text-align: right;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
-
-.preview-mode-switch {
-  display: inline-flex;
-  gap: 4px;
-  padding: 2px;
-  border: 0;
-  border-radius: 7px;
-  background: #edf2f7;
-
-  button {
-    min-width: 86px;
-    height: 28px;
-    border: 0;
-    border-radius: 6px;
-    color: #475467;
-    font-size: 12px;
-    font-weight: 650;
-    background: transparent;
-    cursor: pointer;
-
-    &.is-active {
-      color: #fff;
-      background: #1677ff;
-      box-shadow: 0 4px 10px rgba(22, 119, 255, 0.18);
-    }
-  }
+.collection-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid #dbe6f6;
+  background: #f5f8fd;
+  border-radius: 6px;
+  color: #52647c;
+  font-size: 13px;
 }
-
+.collection-status .el-progress {
+  flex: 1;
+  max-width: 280px;
+  margin-left: auto;
+}
+.collection-status.is-error {
+  color: #b54708;
+  background: #fffaeb;
+  border-color: #fedf89;
+}
+.preview-layout,
 .preview-data {
   display: flex;
   flex-direction: column;
-  flex: 1;
   min-width: 0;
-  min-height: 0;
-  border: 1px solid #e1e5ea;
-  border-radius: 10px;
-  background: #fff;
-  overflow: hidden;
 }
-
 .preview-section-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 48px;
-  padding: 0 12px;
-  border-bottom: 1px solid #edf0f3;
-  background: linear-gradient(180deg, #fff 0%, #fafcff 100%);
+  gap: 12px;
+  padding-bottom: 12px;
 }
-
-.preview-section-head strong {
-  color: #111827;
-  font-size: 13px;
-}
-
-.preview-section-head span {
-  margin-left: 8px;
-  color: #667085;
-  font-size: 12px;
-}
-
-.preview-data :deep(.el-table) {
-  border-right: 0;
-  border-left: 0;
-}
-
-.preview-data :deep(.el-table__header th) {
-  background: #f8fafc;
-}
-
-.preview-column-title {
+.preview-mode-switch {
   display: flex;
-  flex-direction: column;
+  gap: 3px;
+  padding: 3px;
+  background: #f2f4f7;
+  border-radius: 6px;
+}
+.preview-mode-switch button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 4px;
+  color: #667085;
+  background: transparent;
+  cursor: pointer;
+}
+.preview-mode-switch button.is-active {
+  background: #fff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px #10182814;
+}
+.preview-topbar-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: #667085;
+}
+.preview-column-title {
+  display: grid;
   gap: 3px;
   min-width: 0;
-  line-height: 16px;
+  line-height: 18px;
 }
-
 .preview-column-title strong,
 .preview-column-title small {
-  display: block;
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .preview-column-title strong {
-  color: #111827;
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 12px;
+  font-weight: 600;
+  color: #344054;
 }
-
 .preview-column-title small {
+  font-weight: 400;
   color: #667085;
   font-size: 11px;
-  font-weight: 400;
 }
-
-.preview-column-title i {
-  font-style: normal;
-}
-
-.preview-column-title b {
-  display: inline-flex;
-  margin-left: 4px;
-  padding: 0 4px;
-  border-radius: 4px;
-  color: #b54708;
-  background: #fffaeb;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.field-name-with-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.field-attr-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
-  line-height: 18px;
-
-  &.is-center {
-    align-items: center;
-  }
-
-  span {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  small {
-    display: inline-flex;
-    align-items: center;
-    max-width: 100%;
-    height: 16px;
-    padding: 0;
-    border: 0;
-    color: #b7791f;
-    background: transparent;
-    font-size: 11px;
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
-.field-diff-tag {
-  border-radius: 5px;
-  font-weight: 600;
-}
-
-.field-diff-tag.is-added {
-  border-color: #b7eb8f;
-  color: #237804;
-  background: #f6ffed;
-}
-
-.field-diff-tag.is-modified {
-  border-color: #ffd666;
-  color: #ad6800;
-  background: #fffbe6;
-}
-
-.field-diff-tag.is-deleted {
-  border-color: #d0d5dd;
-  color: #667085;
-  background: #f2f4f7;
-}
-
-.preview-data :deep(.field-row-is-deleted td) {
-  color: #98a2b3;
-  background: #f2f4f7 !important;
-  text-decoration: line-through;
-}
-
-.preview-data :deep(.field-row-is-added td) {
-  background: #f6ffed !important;
-}
-
-.preview-data :deep(.field-row-is-modified td) {
-  background: #fffbe6 !important;
-}
-
-.metadata-probe {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 18px;
-  min-height: 102px;
-  margin: 4px 0 12px;
-  padding: 16px 22px;
-  overflow: hidden;
-  border: 1px solid #b7d6ff;
-  border-radius: 12px;
-  background: linear-gradient(105deg, #f4f9ff 0%, #edf6ff 54%, #f7fbff 100%);
-  box-shadow: 0 8px 24px rgb(22 119 255 / 8%);
-}
-
-.metadata-probe::after {
-  position: absolute;
-  top: -48px;
-  right: -34px;
-  width: 180px;
-  height: 180px;
-  border: 28px solid rgb(22 119 255 / 5%);
-  border-radius: 50%;
-  content: "";
-}
-
-.probe-visual {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 190px;
-  height: 64px;
-}
-
-.probe-node {
-  position: relative;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid #91caff;
-  border-radius: 14px;
-  color: #1677ff;
-  background: #fff;
-  box-shadow: 0 6px 18px rgb(22 119 255 / 16%);
-  font-size: 24px;
-  animation: probe-node-pulse 1.8s ease-in-out infinite;
-}
-
-.probe-table {
-  animation-delay: 0.7s;
-}
-
-.probe-path {
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  width: 82px;
-  height: 2px;
-  margin: 0 6px;
-  background: #b7d6ff;
-}
-
-.probe-path i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #409eff;
-  box-shadow: 0 0 0 4px rgb(64 158 255 / 12%);
-  animation: probe-data-flow 1.35s ease-in-out infinite;
-}
-
-.probe-path i:nth-child(2) { animation-delay: 0.24s; }
-.probe-path i:nth-child(3) { animation-delay: 0.48s; }
-
-.probe-scan-beam {
-  position: absolute;
-  z-index: 3;
-  top: 7px;
-  left: 8px;
-  width: 28px;
-  height: 50px;
-  border-radius: 14px;
-  background: linear-gradient(90deg, transparent, rgb(22 119 255 / 16%), transparent);
-  animation: probe-scan 2.1s ease-in-out infinite;
-}
-
-.probe-content {
-  position: relative;
-  z-index: 2;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.probe-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.probe-heading strong {
-  flex: 0 0 auto;
-  color: #1d4f91;
-  font-size: 16px;
-}
-
-.probe-heading span {
-  overflow: hidden;
-  color: #667085;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.probe-progress {
-  height: 5px;
-  margin: 12px 0 10px;
-  overflow: hidden;
-  border-radius: 3px;
-  background: #dcecff;
-}
-
-.probe-progress i {
+.preview-friendly-empty strong,
+.preview-friendly-empty span {
   display: block;
-  width: 42%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #69b1ff, #1677ff, #69b1ff);
-  animation: probe-progress-move 1.65s ease-in-out infinite;
 }
-
-.probe-steps {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  color: #5f6b7a;
+.preview-friendly-empty span {
+  margin-top: 8px;
   font-size: 12px;
+  color: #98a2b3;
 }
-
-.probe-steps span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  animation: probe-step-highlight 3s ease-in-out infinite;
-}
-
-.probe-steps span:nth-child(2) { animation-delay: 1s; }
-.probe-steps span:nth-child(3) { animation-delay: 2s; }
-
-.metadata-table {
-  transition: opacity 0.25s ease, filter 0.25s ease;
-}
-
-.metadata-table.is-probing {
-  opacity: 0.56;
-  filter: saturate(0.65);
-  pointer-events: none;
-}
-
-.probe-reveal-enter-active,
-.probe-reveal-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.probe-reveal-enter-from,
-.probe-reveal-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
-@keyframes probe-node-pulse {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-3px) scale(1.04); }
-}
-
-@keyframes probe-data-flow {
-  0%, 100% { opacity: 0.28; transform: scale(0.7); }
-  50% { opacity: 1; transform: scale(1.15); }
-}
-
-@keyframes probe-scan {
-  0% { opacity: 0; transform: translateX(0); }
-  15% { opacity: 1; }
-  80% { opacity: 0.85; }
-  100% { opacity: 0; transform: translateX(150px); }
-}
-
-@keyframes probe-progress-move {
-  0% { transform: translateX(-105%); }
-  100% { transform: translateX(345%); }
-}
-
-@keyframes probe-step-highlight {
-  0%, 22%, 100% { color: #7b8794; }
-  10% { color: #1677ff; }
-}
-
-@media (max-width: 980px) {
-  .probe-visual { flex-basis: 150px; }
-  .probe-heading span { display: none; }
-  .probe-steps { gap: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .business-segment button {
+    transition: none;
+  }
 }
 </style>

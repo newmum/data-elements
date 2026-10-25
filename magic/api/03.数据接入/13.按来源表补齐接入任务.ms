@@ -509,6 +509,9 @@ var resolveOdsPushFtp = (logicalDatasourceId, sourceTableName) => {
     var storage = db.table('db_datasource_t').where()
         .eq('tenant_id', tenantId).eq('tid', storageId).eq('is_del', 0).selectOne()
     if (storage == null) { exit 404, '资源中心 ODS 数据域 fjghcc 绑定的数据源不存在' }
+    if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [storage]).size() != 1) {
+        exit 403, 'ODS 非结构化存储不在当前角色数据范围内'
+    }
     // FTP fields in the tenant-owned datasource row are authoritative.
     var cfg = readCfg(storage)
     if (cfg == null) { cfg = {} }
@@ -806,7 +809,7 @@ var temporalMappingsOf = (sourceColumns, governanceConfig) => {
     }
     return result
 }
-var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, transformBindings, sourceLookupConfig, temporalMappings, preserveSystemFields) => {
+var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, transformBindings, sourceLookupConfig, temporalMappings, preserveSystemFields, atomicFileBatch) => {
     var sourceNames = {}
     var sourceDataTypes = {}
     var relations = preserveSystemFields ? {} : dictionaryRelations(sourceTable)
@@ -907,6 +910,7 @@ var mappingDsl = (sourceColumns, targetColumns, sourceTable, lookupSources, tran
         passthroughCaseSensitive: true,
         onMissingSource: 'NULL',
         onTypeMismatch: 'SKIP_ROW',
+        recordErrorMode: atomicFileBatch == true ? 'FAIL_FLOWFILE' : 'ROUTE_INVALID',
         mappings: mappings
     })
 }
@@ -957,8 +961,11 @@ var sourceGovernanceConfig = governanceConfigOf(sourceTable)
 if (body?.validateSourceOnly == true) {
     var preflightCfg = readCfg(sourceDb)
     var preflightType = first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
-    var preflightManifest = normalizeSourceKey(preflightType, preflightCfg)
     var preflightMode = pushAccessMode(sourceDb, preflightCfg)
+    var preflightFile = ['receive', 'upload', 'push'].contains(preflightMode)
+        ? resolveOdsPushFtp(sourceDbId, first(sourceTable, ['tableName','table_name'])) : null
+    var preflightManifest = preflightFile == null ? normalizeSourceKey(preflightType, preflightCfg)
+        : normalizeSourceKey(preflightFile.dbType, preflightFile.config)
     var needsFileLocator = ['source.ftp', 'source.sftp'].contains(preflightManifest)
         && !['receive', 'upload', 'push'].contains(preflightMode)
     if (needsFileLocator) { directFileLocator(preflightCfg, sourceTable) }
@@ -1443,7 +1450,7 @@ var sourceNodeConfig = {
 }
 // Preserve the connector's registered options instead of silently taking manifest defaults.
 // Server-managed Hive keeps only a tenant-owned reference; client secrets stay on the server.
-if (isServerManagedHuaweiMrsHive(sourceDbType, sourceCfg)) {
+if (pushFileSource == null && isServerManagedHuaweiMrsHive(sourceDbType, sourceCfg)) {
     sourceNodeConfig.hiveProfile = first(sourceCfg, ['hiveProfile', 'hive_profile']) || 'default'
     sourceNodeConfig.metadataAccessMode = 'server-managed-mrs'
     sourceNodeConfig.hiveConnectionMode = 'huawei-mrs'
@@ -1512,6 +1519,12 @@ if (pushFileSource != null) {
         registeredDatasourceId: pushFileSource.datasourceId,
         logicalSourceDatasourceId: sourceDbId, pushStorageDomain: 'fjghcc'
     }
+    // Push batches are complete only after their sidecar is published; consume them after JDBC commit.
+    if (accessMode != 'upload') {
+        sourceNodeConfig.fileConsumptionPolicy = 'DELETE_AFTER_DATABASE_COMMIT'
+        sourceNodeConfig.fileFormat = 'json'
+        sourceNodeConfig.fileFilterRegex = '(?i).*\\.json$'
+    }
 }
 // API 拉取的请求、分页、增量与调度来自第一步的同一条 API 定义。这里仅在
 // 明确创建任务时读取并写入 NiFi 画布；不在第二步新增任何规则编辑入口。
@@ -1536,12 +1549,8 @@ if (sourceManifestKey == 'source.minio') {
             + text(first(sourceCfg, ['host', 'dbMetaIp'])).trim() + ':'
             + text(first(sourceCfg, ['port', 'dbMetaPort'])).trim()
     }
-    var minioObjectKey = text(first(sourceTable, ['tableComment', 'table_comment'])).trim()
-    if (minioObjectKey.indexOf('MinIO对象 ') == 0) {
-        minioObjectKey = minioObjectKey.substring(8)
-    } else {
-        minioObjectKey = ''
-    }
+    var objectLocator = structuredFileProbe.resolveMinioObjectLocator(sourceCfg, text(sourceTableName))
+    var minioObjectKey = objectLocator.objectKey
     sourceNodeConfig.minioEndpoint = minioEndpoint
     sourceNodeConfig.minioAccessKey = first(sourceCfg, ['minioAccessKey', 'accessKey', 'username', 'dbMetaUser'])
     sourceNodeConfig.minioSecretKey = first(sourceCfg, ['minioSecretKey', 'secretKey', 'password', 'dbMetaPassword'])
@@ -1551,6 +1560,22 @@ if (sourceManifestKey == 'source.minio') {
     sourceNodeConfig.minioObjectKey = minioObjectKey
     sourceNodeConfig.syncMode = 'FULL'
 }
+// Each registered index/topic is a distinct dataset; a datasource-wide wildcard or
+// comma-separated topic scope must never flow into an individual table's task.
+if (sourceManifestKey == 'source.elasticsearch') {
+    sourceNodeConfig.defaultIndex = sourceTableName
+    sourceNodeConfig.queryJson = '{"query":{"match_all":{}},"size":1000}'
+    sourceNodeConfig.syncMode = 'FULL'
+}
+if (sourceManifestKey == 'source.kafka') {
+    // Keep polling the consumer so partition assignment and heartbeats can complete.
+    sourceNodeConfig.schedulingPeriod = '0 sec'
+    sourceNodeConfig.bootstrapServers = first(sourceCfg, ['kafkaBootstrapServers','bootstrapServers'])
+    sourceNodeConfig.topic = sourceTableName
+    sourceNodeConfig.groupId = 'ingestion-' + tenantId + '-' + sourceTableId
+    sourceNodeConfig.securityProtocol = first(sourceCfg, ['kafkaSecurityProtocol','securityProtocol']) || 'PLAINTEXT'
+    sourceNodeConfig.syncMode = 'FULL'
+}
 
 var pipelineRows = []
 var taskRows = []
@@ -1558,6 +1583,7 @@ var allMappings = []
 var allTargetSummaries = []
 var originalSourceNodeConfig = sourceNodeConfig
 var originalSourceManifestKey = sourceManifestKey
+var pushChainTimestamp = pushFileSource == null ? '' : registeredTimestampColumn(rootSourceTable, rootSourceColumns)
 for (targetTable in targetsToCreate) {
 sourceTable = hopSourceByTarget[text(targetTable.tid)]
 sourceTableId = text(sourceTable.tid)
@@ -1569,7 +1595,8 @@ sourceColumns = firstHop ? rootSourceColumns : targetColumnsById[sourceTableId]
 sourceTableName = first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
 sourceTableLabel = text(first(sourceTable, ['tableNameCn', 'table_name_cn'])).trim()
 if (blank(sourceTableLabel)) { sourceTableLabel = text(sourceTableName).trim() }
-sourceDbType = first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
+sourceDbType = firstHop && pushFileSource != null ? pushFileSource.dbType
+    : first(sourceDb, ['dbType', 'db_type', 'databaseType', 'database_type'])
 sourceManifestKey = firstHop ? originalSourceManifestKey : normalizeSourceKey(sourceDbType, sourceCfg)
 sourceTemporalMappings = firstHop ? originalSourceTemporalMappings : {}
 sourceDictionaryRelations = firstHop ? originalDictionaryRelations : {}
@@ -1577,6 +1604,15 @@ sourceColumnMap = {}
 for (sourceColumn in sourceColumns) { sourceColumnMap[text(colName(sourceColumn)).toLowerCase()] = sourceColumn }
 sourceNodeConfig = originalSourceNodeConfig
 if (!firstHop) {
+    var downstreamTimestamp = registeredTimestampColumn(sourceTable, sourceColumns)
+    // Keep the explicitly registered timestamp across the push chain instead of a coarse ODS date.
+    if (!blank(pushChainTimestamp)) {
+        for (column in sourceColumns) {
+            if (text(colName(column)).toLowerCase() == text(pushChainTimestamp).toLowerCase()) {
+                downstreamTimestamp = colName(column)
+            }
+        }
+    }
     sourceService = first(sourceCfg, ['serviceName', 'sid', 'database', 'dbName', 'dbMetaDbName'])
     sourceSchema = first(sourceCfg, ['defaultSchema', 'schema', 'currentSchema', 'schemaName', 'owner', 'dbSchema'])
         || first(sourceTable, ['schemaName', 'schema_name', 'owner', 'tableSchema', 'table_schema'])
@@ -1589,7 +1625,7 @@ if (!firstHop) {
         username: first(sourceCfg, ['username', 'dbMetaUser']), password: first(sourceCfg, ['password', 'dbMetaPassword']),
         sourceDbId: sourceDbId, sourceDbName: first(sourceDb, ['dbName', 'db_name']),
         sourceTableId: sourceTableId, sourceTableName: sourceTableName, table: sourceTableName,
-        sourceColumns: columnList(sourceColumns), incrementalColumn: registeredTimestampColumn(sourceTable, sourceColumns),
+        sourceColumns: columnList(sourceColumns), incrementalColumn: downstreamTimestamp,
         schedulingPeriod: '60 sec', syncMode: 'FULL_THEN_INCR', initialStrategy: 'START_AT_BEGINNING',
         lookbackSeconds: 5, safetyLagSeconds: 1, batchSize: 5000, maxRowsPerRun: 20000,
         softDeleteEnabled: false, deleteReconcileStrategy: 'NONE'
@@ -1711,7 +1747,8 @@ var dslNodes = [
             targetTableId: targetTableId,
             executionMode: 'AUTO',
             mappings: mappingDsl(sourceColumns, targetColumns, sourceTable, dictionaryLookupSources,
-                targetFieldBindings, { datasourceId: sourceDbId, dbType: sourceDbType }, sourceTemporalMappings, !firstHop)
+                targetFieldBindings, { datasourceId: sourceDbId, dbType: sourceDbType }, sourceTemporalMappings, !firstHop,
+                firstHop && pushFileSource != null && accessMode != 'upload')
         }
     }
 ]

@@ -54,6 +54,7 @@ for(const domain of ['workforce'] as const) {
     await expect(page.locator('.organization-layout .table-card')).toBeVisible();
     await expect(page.locator('.page-heading')).toHaveCount(0);
    }
+   else if(route.key==='audit/logs'){await expect(page.locator('.log-tabs')).toBeVisible();await expect(page.locator('.page-heading')).toHaveCount(0);}
    else await expect(page.locator('.page-heading')).toBeVisible();
    await audit(page,info,route.key.replaceAll('/','-'));
   }

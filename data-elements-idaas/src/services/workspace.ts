@@ -257,6 +257,13 @@ export function getWorkspaceState() { return state; }
 export function getStorageWarning() { return ''; }
 /** Platform administration uses the separately authenticated IAM routes. */
 export const foundationApi = {
+    async downloadLog(id:string,domain:string):Promise<void> {
+        const currentToken=token;
+        const response=await fetch('/api/idaas/logs/export-download?'+new URLSearchParams({id,domain}),{headers:{token:currentToken},cache:'no-store'});
+        if(token!==currentToken)throw new DomainError('登录会话已变更，请重试。','SESSION_CHANGED');
+        if(!response.ok||/^application\/(?:[\w.-]+\+)?json(?:;|$)/i.test(response.headers.get('content-type')||'')) {const body=await response.json().catch(()=>({}));throw new DomainError(body.message||body.msg||'日志文件下载失败。');}
+        const blob=await response.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='日志-'+id+(response.headers.get('content-disposition')?.includes('.jsonl')?'.jsonl':'.csv');a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    },
     list: <T>(path: string) => authenticated<T[]>(path),
     read: <T>(path: string) => authenticated<T>(path),
     async write<T>(path: string, body: Record<string, unknown>): Promise<T> {

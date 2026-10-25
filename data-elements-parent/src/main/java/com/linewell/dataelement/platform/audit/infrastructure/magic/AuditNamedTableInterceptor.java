@@ -22,6 +22,10 @@ public class AuditNamedTableInterceptor implements NamedTableInterceptor {
 
     @Override
     public void preHandle(SqlMode sqlMode, NamedTable namedTable) {
+        if(java.util.Set.of("iam_audit_event_t","log_user_login_t","log_system_t","log_request_t","log_batch_item_t","log_audit_outbox_t").contains(namedTable.getTableName().toLowerCase(java.util.Locale.ROOT))) {
+            // Event writer has frozen its actor and UTC timestamps inside the caller's transaction.
+            return;
+        }
         if (sqlMode != SqlMode.INSERT && sqlMode != SqlMode.UPDATE) {
             return;
         }

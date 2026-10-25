@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import vm from 'node:vm';
 import { createRequire } from 'node:module';
 const root = new URL('../../', import.meta.url);
 const source = await fs.readFile(new URL('lowcode/01.系统门户/01.数据源管理/01.工作台(my-workbench).vue', root), 'utf8');
 const section = source.split('// WORKBENCH_EXPORT_START')[1].split('// WORKBENCH_EXPORT_END')[0];
-const block = section.slice(section.indexOf('\n') + 1);
+const compiler={};vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/babel.min.js',root),'utf8'),compiler);
+const block=compiler.Babel.transform(section.slice(section.indexOf('\n')+1),{filename:'workbench-export.ts',presets:['typescript']}).code;
 const require = createRequire(new URL('data-elements-chengtian/package.json', root));
 const ExcelJS = require('exceljs');
 // Use the app's same-realm function factory: ExcelJS detects arrays by their realm.
 const service = {post:async()=>{throw new Error('network unavailable')}};
-const actual = new Function('ref','ExcelJS','Date','setTimeout','notify','$common','activeScope',
+const actual = new Function('ref','ExcelJS','Date','setTimeout','notify','$common','activeScope','payloadOf',
   block+'\nreturn {collectReportRows,createReportWorkbook,reportHeaders,reportValues,exportData,exporting,exportError};')
-  (value=>({value}),ExcelJS,Date,setTimeout,()=>{},service,{value:'all'});
+  (value=>({value}),ExcelJS,Date,setTimeout,()=>{},service,{value:'all'},value=>value);
 const makeRow = i => ({datasourceId:String(i), orgName:'科信总队', appName:'测试应用', dbName:'数据源'+i, dbType:'postgresql', contactName:'创建者', directoryCount:10,
   registrationStartTime:'2026-10-14 09:30:00', annotatedCount:8, dictionaryCount:1,businessCount:5,logCount:2,completedCount:8,registrationRate:80,
   sourceAssetStatus:1,accessMode:'数据抽取', accessedTableCount:3,accessCandidateCount:5,accessStartTime:'2026-10-14T10:00:00',runningTaskCount:2,errorTaskCount:1,idleTaskCount:0});

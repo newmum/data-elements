@@ -17,7 +17,12 @@ public final class JsonBodyFilter extends OncePerRequestFilter {
     public static final String RAW=JsonBodyFilter.class.getName()+".raw";
     private final RelayProperties properties;private final Json json;
     public JsonBodyFilter(RelayProperties properties,Json json){this.properties=properties;this.json=json;}
-    @Override protected boolean shouldNotFilter(HttpServletRequest r){String p=r.getRequestURI();return !(p.startsWith("/api/v1/")||p.startsWith("/internal/")||p.startsWith("/push-operations/"));}
+    @Override protected boolean shouldNotFilter(HttpServletRequest r){
+        String path=r.getRequestURI();
+        // Dynamic business routes must receive the same bounded, replayable JSON
+        // without adding a Java path whitelist whenever the editor adds an API.
+        return path.equals("/api/web")||path.startsWith("/api/web/");
+    }
     @Override protected void doFilterInternal(HttpServletRequest request,HttpServletResponse response,FilterChain chain)throws IOException,ServletException {
         String type=request.getContentType();boolean jsonType=false;
         try{jsonType=type!=null&&MediaType.APPLICATION_JSON.isCompatibleWith(MediaType.parseMediaType(type));}catch(IllegalArgumentException ignored){}

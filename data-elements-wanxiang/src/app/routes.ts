@@ -26,6 +26,7 @@ export const navigation: NavigationGroup[] = [
     {key:'/governance/quality/reports',label:'质量报告',icon:'reports'},
     {key:'/governance/quality/workorders',label:'质检工单',icon:'workorders'},
   ]},
+  {label:'后台管理',children:[{key:'/governance/logs',label:'日志管理',icon:'reports'}]},
 ];
 export function selectedMenu(path: string): NavigationItem | undefined {
   return navigation.flatMap(g=>g.children).filter(i=>path===i.key||path.startsWith(i.key+'/')).sort((a,b)=>b.key.length-a.key.length)[0];

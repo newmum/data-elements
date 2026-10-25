@@ -32,6 +32,8 @@
 // 参数: id(可选,有则更新无则新增), name, parentId, shortName, creditCode, standard, nature,
 //       nationalCode, nationalName, regionCode, nodeType, label, leaderOrgId
 
+import '@/common/audit-operation' as auditOperation;
+import tenantRuntime;
 import cn.hutool.core.util.IdUtil
 import "@post:/sym/user/me" as me
 
@@ -61,7 +63,13 @@ var createId      = me().createId;
 var updateId      = body?.updateId || '';
 
 
+var tenantId=tenantRuntime.id();
+var sql=db.normal();
 try {
+ return sql.transaction(()=>{
+    var orgRows=sql.table('rm_org_t').where().eq('tenantId',tenantId).eq('deleted',0).limit(5001).select();
+    if(orgRows.size()>5000){exit 400,'机构范围过大，请分级维护';}
+    var orgById={};for(org in orgRows){orgById[org.id]=org;}
     // 构建字段数据（驼峰，与数据库字段一致）
     var data = {
         name: name,
@@ -86,7 +94,7 @@ try {
 
     if (id != null && id != '') {
         // ========== 更新逻辑 ==========
-        var exist = db.table("rm_org_t")
+        var exist = sql.table("rm_org_t")
             .where().eq("id", id).eq("deleted", 0).selectOne();
 
         if (exist == null) {
@@ -137,7 +145,7 @@ try {
                 exit 400, '不能将机构设置为自身的上级机构';
             }
 
-            var parent = db.table("rm_org_t")
+            var parent = sql.table("rm_org_t")
                 .where().eq("id", targetParentId).eq("deleted", 0).selectOne();
             if (parent == null) {
                 exit 404, '上级机构不存在: ' + targetParentId;
@@ -154,22 +162,21 @@ try {
                     exit 400, '上级机构层级存在循环，无法保存';
                 }
                 visitedParents[ancestorId] = true;
-                var ancestor = db.table("rm_org_t")
-                    .where().eq("id", ancestorId).eq("deleted", 0).selectOne();
+                var ancestor = orgById[ancestorId];
                 if (ancestor == null) {
                     exit 404, '上级机构链不完整';
                 }
                 ancestorId = ancestor.parentId;
             }
 
-            var siblings = db.table("rm_org_t")
+            var siblings = sql.table("rm_org_t")
                 .where().eq("parentId", targetParentId).eq("deleted", 0).select();
             var nextNum = siblings.size() + 1;
             var nextNumStr = nextNum < 10 ? ('000' + nextNum) : (nextNum < 100 ? ('00' + nextNum) : (nextNum < 1000 ? ('0' + nextNum) : ('' + nextNum)));
             newSerialNumber = (parent.serialNumber || '') + nextNumStr;
             newOrgPath = (parent.orgPath || '') != '' ? (parent.orgPath + '/' + data.name) : data.name;
         } else if (nameChanged) {
-            var currentParent = db.table("rm_org_t")
+            var currentParent = sql.table("rm_org_t")
                 .where().eq("id", targetParentId).eq("deleted", 0).selectOne();
             newOrgPath = currentParent != null && (currentParent.orgPath || '') != ''
                 ? currentParent.orgPath + '/' + data.name
@@ -177,7 +184,7 @@ try {
         }
 
         if (parentChanged || nameChanged) {
-            var duplicate = db.table("rm_org_t")
+            var duplicate = sql.table("rm_org_t")
                 .where().eq("parentId", targetParentId).eq("name", data.name).eq("deleted", 0).ne("id", id).selectOne();
             if (duplicate != null) {
                 exit 400, '上级机构下已存在同名机构: ' + data.name;
@@ -187,17 +194,16 @@ try {
         }
 
         // 先持久化当前机构，再重写全部子孙的路径前缀，保证父级修改后树路径保持一致。
-        db.table("rm_org_t").withBlank()
+        sql.table("rm_org_t").withBlank()
             .where().eq("id", id)
             .update(data);
 
         if ((parentChanged || nameChanged) && oldOrgPath != '' && newOrgPath != oldOrgPath) {
             var descendants = [];
-            var queue = [id];
+            var queue = [id];var traversed={};
             while (queue.size() > 0) {
-                var currentId = queue.remove(0);
-                var children = db.table("rm_org_t")
-                    .where().eq("parentId", currentId).eq("deleted", 0).select();
+                var currentId = queue.remove(0);if(traversed[currentId]==true){continue;}traversed[currentId]=true;
+                var children = orgRows.filter(org=>org.parentId==currentId);
                 for (child in children) {
                     descendants.add(child);
                     queue.add(child.id);
@@ -214,21 +220,19 @@ try {
                 if (parentChanged && oldSerialNumber != '' && descendantSerial.startsWith(oldSerialNumber)) {
                     descendantData.serialNumber = newSerialNumber + descendantSerial.substring(oldSerialNumber.length());
                 }
-                db.table("rm_org_t").where().eq("id", descendant.id).update(descendantData);
+                sql.table("rm_org_t").where().eq("id", descendant.id).update(descendantData);
             }
         }
 
         // 启用/禁用级联：更新该节点及所有子孙节点的status
         if (body?.status != null && (body.status == 0 || body.status == 1)) {
             var allIds = [id];
-            var queue = [id];
+            var queue = [id];var traversed={};
 
             while (queue.size() > 0) {
-                var currentId = queue.remove(0);
+                var currentId = queue.remove(0);if(traversed[currentId]==true){continue;}traversed[currentId]=true;
                 // 从 MySQL 业务表读取当前有效数据。
-                var children = db.table("rm_org_t")
-                    .where().eq("parentId", currentId).eq("deleted", 0)
-                    .select();
+                var children = orgRows.filter(org=>org.parentId==currentId);
 
                 for (child in children) {
                     allIds.add(child.id);
@@ -239,13 +243,14 @@ try {
             // 批量更新所有子孙节点status（自身已在上方更新）
             if (allIds.size() > 1) {
                 // 从 MySQL 业务表读取当前有效数据。
-                db.table("rm_org_t")
+                sql.table("rm_org_t")
                     .where().in("id", allIds).ne("id", id)
                     .update({ status: status, updateId: updateId, updateTime: now });
             }
         }
 
         // 返回当前业务分支的标准结果。
+        auditOperation('ORG_UPDATED','ORGANIZATION',id,data.name,{id:id,name:data.name,status:data.status});
         return { id: id, parentId: targetParentId, orgPath: newOrgPath, serialNumber: newSerialNumber };
 
     } else {
@@ -260,7 +265,7 @@ try {
         parentId = parentId || "ROOT"
 
         // 同级下同名校验
-        var sameName = db.table("rm_org_t")
+        var sameName = sql.table("rm_org_t")
             .where().eq("parentId", parentId).eq("name", name).eq("deleted", 0).selectOne();
         if (sameName != null) {
             // 参数或业务状态不满足要求时立即终止请求。
@@ -272,7 +277,7 @@ try {
         // 若未传sortNum，查同级最大值+1
         if (!sortNum) {
             // 从 MySQL 业务表读取当前有效数据。
-            var maxSortRow = db.table("rm_org_t")
+            var maxSortRow = sql.table("rm_org_t")
                 .where().eq("parentId", parentId != '' ? parentId : 'ROOT').eq("deleted", 0)
                 .orderBy("sortNum", "desc").selectOne();
             sortNum = maxSortRow != null ? (maxSortRow.sortNum + 1) : 1;
@@ -283,7 +288,7 @@ try {
         var serialNumberNew = '';
 
         // 从 MySQL 业务表读取当前有效数据。
-        var parent = db.table("rm_org_t")
+        var parent = sql.table("rm_org_t")
                 .where().eq("id", parentId).eq("deleted", 0).selectOne();
 
         if (!parent) {
@@ -296,7 +301,7 @@ try {
 
         var parentSerial = parent.serialNumber || '';
         // 从 MySQL 业务表读取当前有效数据。
-        var siblingCount = db.table("rm_org_t")
+        var siblingCount = sql.table("rm_org_t")
             .where().eq("parentId", parentId).eq("deleted", 0).select();
         var nextNum = siblingCount.size() + 1;
         // 4位补零格式：0001、0021、0102
@@ -315,12 +320,14 @@ try {
         data.deleted = 0;
 
         // 将校验后的业务数据写入 MySQL 主表。
-        db.table("rm_org_t").insert(data);
+        sql.table("rm_org_t").insert(data);
 
         // 返回当前业务分支的标准结果。
+        auditOperation('ORG_CREATED','ORGANIZATION',newId,name,{id:newId,name:name});
         return { id: newId };
     }
 
+ });
 } catch(e) {
     // 参数或业务状态不满足要求时立即终止请求。
     exit 500, '操作失败: ' + e.message;

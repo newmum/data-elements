@@ -8,8 +8,7 @@
 /config/secrets/
 /config/application.local.yml
 /config/application-private.yml
-/deploy/**/config/application-private.yml
-/deploy/**/config/application-direct.yml
+/lib/
 /.vscode/
 *.log
 *.log.*

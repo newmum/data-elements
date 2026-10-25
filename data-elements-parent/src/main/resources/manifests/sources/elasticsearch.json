@@ -29,16 +29,16 @@
   ],
   "compile": {
     "controllerServices": [{ "localId": "es", "type": "org.apache.nifi.elasticsearch.ElasticSearchClientServiceImpl", "properties": {
-      "el-cs-http-hosts": "${config.protocol}://${config.nodes}",
-      "el-cs-username": "${config.username}",
-      "el-cs-password": "${config.password}",
-      "el-cs-api-key": "${config.apiKey}",
-      "el-cs-authorization-scheme": "${config.authMethod}",
-      "el-cs-connect-timeout": "5 sec",
-      "el-cs-socket-timeout": "30 sec",
-      "el-cs-charset": "UTF-8"
+      "HTTP Hosts": "${config.protocol}://${config.nodes}",
+      "Username": "${config.username}",
+      "Password": "${config.password}",
+      "API Key": "${config.apiKey}",
+      "Authorization Scheme": "${config.authMethod}",
+      "Connect Timeout": "5000",
+      "Read Timeout": "30000",
+      "Character Set": "UTF-8"
     }}],
-    "processors": [{ "localId": "query", "type": "org.apache.nifi.processors.elasticsearch.JsonQueryElasticsearch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "el-rest-client-service": "${cs.es}", "Index": "${config.defaultIndex}", "Query": "${config.queryJson}" } }],
+    "processors": [{ "localId": "query", "type": "org.apache.nifi.processors.elasticsearch.JsonQueryElasticsearch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Client Service": "${cs.es}", "Index": "${config.defaultIndex}", "Query": "${config.queryJson}", "Search Results Format": "SOURCE_ONLY", "Search Results Split": "splitUp-no" } }],
     "outlets": [{ "name": "default", "processorRef": "query", "relationship": "hits" }]
   }
 }

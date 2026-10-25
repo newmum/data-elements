@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    @ExceptionHandler(SecurityException.class)
+    public CommonResponse handleSecurityException(SecurityException error){return CommonResponse.fail(403,error.getMessage(),"ACCESS_DENIED");}
 
     /**
      * 处理自定义业务异常

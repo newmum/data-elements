@@ -39,7 +39,7 @@ export async function platformApi<T>(path: string, body?: unknown, options?: Pla
   try {
     response = await fetch(`${apiBase}${path}`, {
       method: options?.method ?? (body === undefined ? 'GET' : 'POST'),
-      headers: { ...options?.headers, token, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      headers: { ...options?.headers, 'X-Audit-Route':window.location.hash.slice(1).split('?')[0], token, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: options?.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs ?? 20000)]) : AbortSignal.timeout(options?.timeoutMs ?? 20000),
       cache: 'no-store',

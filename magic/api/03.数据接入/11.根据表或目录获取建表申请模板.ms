@@ -569,6 +569,9 @@ for (registeredField in (registeredFields == null ? [] : registeredFields)) {
 
 var sourceTableName = text(first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])).trim()
 var sourceTypeCode = lower(first(sourceDatasource, ['dbType', 'db_type', 'databaseType', 'database_type'])).trim()
+var sourceAccessMode = lower(first(sourcePoolCfg, ['accessMode', 'access_mode', 'dataAccessMode', 'data_access_mode'])).trim()
+var registeredFileSnapshot = ['receive','push','upload'].contains(sourceAccessMode)
+    || ['receive','push','upload'].contains(sourceTypeCode)
 if (blank(sourceTypeCode)) {
     sourceTypeCode = lower(first(sourcePoolCfg, ['dbType', 'db_type', 'databaseType', 'database_type', 'dataSourceType'])).trim()
 }
@@ -589,7 +592,7 @@ var columns = db.table('db_table_column_t').where()
     .select()
 var tableItems = []
 var snapshotIssues = []
-if (sourceDialectCode == null) {
+if (sourceDialectCode == null && !registeredFileSnapshot) {
     snapshotIssues.add(blank(sourceTypeCode)
         ? '来源类型尚未登记，已按中性字段模型返回快照；请确认日期、时间戳等来源特定语义'
         : '来源连接不使用已识别的SQL方言，已按中性字段模型返回快照；请确认来源特定类型语义')

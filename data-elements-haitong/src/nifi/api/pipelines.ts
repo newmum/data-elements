@@ -452,6 +452,28 @@ export function useFlowErrors(id: string | null) {
   });
 }
 
+export interface LiveFlowBulletin {
+  id: string;
+  level: 'ERROR' | 'WARNING';
+  sourceId?: string;
+  sourceName: string;
+  message: string;
+  timestamp: string;
+}
+
+/** A single authorized read covers all nodes in the selected, deployed flow. */
+export function useLiveFlowBulletins(id: string | null, deployed: boolean) {
+  const tokenReady = useTokenReady();
+  const sessionRevision = useSessionRevision();
+  return useQuery<LiveFlowBulletin[]>({
+    enabled: tokenReady && !!id && deployed,
+    queryKey: ['pipeline-live-bulletins', id, sessionRevision],
+    queryFn: async ({ signal }) => requireListResponse<LiveFlowBulletin>((await api.get<unknown>(
+      `/pipelines/${id}/bulletins/live`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data, 'NiFi 当前告警'),
+    refetchInterval: 5000,
+  });
+}
+
 export function useClearFlowErrors() {
   const qc = useQueryClient();
   return useMutation({

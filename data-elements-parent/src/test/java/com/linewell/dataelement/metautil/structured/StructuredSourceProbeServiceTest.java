@@ -1,6 +1,8 @@
 package com.linewell.dataelement.metautil.structured;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -314,12 +316,41 @@ class StructuredSourceProbeServiceTest {
         when(client.getReply()).thenReturn(226);
 
         var stream = new StructuredSourceProbeService.PendingFtpInputStream(
-                new java.io.ByteArrayInputStream("unread remainder".getBytes(StandardCharsets.UTF_8)), client);
+                new java.io.ByteArrayInputStream(new byte[100000]), client);
         stream.read();
         stream.close();
 
         verify(client).abort();
         verify(client).getReply();
+    }
+
+    @Test
+    void smallCompleteFtpDocumentsConsumeCompletionWithoutLeavingAnAbortReply() throws Exception {
+        FTPClient client = mock(FTPClient.class);
+        when(client.completePendingCommand()).thenReturn(true);
+        var stream = new StructuredSourceProbeService.PendingFtpInputStream(
+                new java.io.ByteArrayInputStream("[]".getBytes(StandardCharsets.UTF_8)), client);
+        stream.read(); stream.close();
+        verify(client).completePendingCommand(); verify(client, never()).abort();
+    }
+
+    @Test
+    void kafkaScopeUsesExplicitBoundedNamesAndRejectsPatterns() {
+        assertThat(StructuredSourceProbeService.kafkaTopics("dict,orders,dict")).containsExactly("dict", "orders");
+        assertThatThrownBy(() -> StructuredSourceProbeService.kafkaTopics("orders.*")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> StructuredSourceProbeService.kafkaTopics(" ")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void exactFtpTableNameWinsOverAnotherFilesPrefix() throws Exception {
+        var result = new StructuredProbeResult();
+        var opened = new java.util.ArrayList<String>();
+        service.parseRemoteFiles(Map.of("dbType","ftp","ftpFilePattern","*.json","_registeredTableName","event_log"),
+            List.of(new StructuredSourceProbeService.RemoteFile("/data/event.json","event.json",10),
+                    new StructuredSourceProbeService.RemoteFile("/data/event_log.json","event_log.json",10)),
+            file -> { opened.add(file.name()); return new ByteArrayInputStream("[{\"id\":1}]".getBytes(StandardCharsets.UTF_8)); },result);
+        assertThat(opened).containsExactly("event_log.json");
+        assertThat(result.getTables()).hasSize(1);
     }
 
     @Test

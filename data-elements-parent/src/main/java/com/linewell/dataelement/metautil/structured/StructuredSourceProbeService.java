@@ -185,6 +185,15 @@ public class StructuredSourceProbeService {
         return findTable(source, tableName).getColumns();
     }
 
+    /** Resolves the selected logical table to its real object key, independent of an editable comment. */
+    public Map<String,Object> resolveMinioObjectLocator(Map<String,Object> source, String tableName) {
+        if (!"minio".equals(sourceType(source))) throw new IllegalArgumentException("Expected a MinIO source");
+        StructuredTableData table = findTable(source, tableName);
+        String key = table.getSourcePath();
+        if (blank(key) || key.contains("#")) throw new IllegalArgumentException("Select a single object dataset");
+        return Map.of("objectKey", key, "format", table.getFileRecordFormat());
+    }
+
     /** Registration owns the field snapshot and its file locator; neither is recollected at materialization. */
     public static Object preserveFtpFileSnapshot(Object previous, Object submitted) {
         Map<String, Object> old = snapshotObject(previous), next = snapshotObject(submitted);
@@ -721,7 +730,8 @@ public class StructuredSourceProbeService {
         if (!blank(registeredTable)) {
             // Logical table names sanitize punctuation and append sheet/JSON dataset names.
             // Limit network reads to the selected candidate; reject ambiguous old registrations.
-            matched = matched.stream().filter(file -> {
+            List<RemoteFile> exact = matched.stream().filter(file -> registeredTable.equalsIgnoreCase(safeName(fileStem(file.name)))).toList();
+            matched = !exact.isEmpty() ? exact : matched.stream().filter(file -> {
                 String base = safeName(fileStem(file.name));
                 return registeredTable.equalsIgnoreCase(base)
                         || registeredTable.toLowerCase(Locale.ROOT).startsWith(base + "_");
@@ -1268,14 +1278,16 @@ public class StructuredSourceProbeService {
 
     private StructuredProbeResult probeKafka(Map<String, Object> source) {
         String bootstrap = required(source, "Kafka bootstrap servers cannot be empty", "kafkaBootstrapServers", "bootstrapServers");
-        String topic = required(source, "Kafka topic cannot be empty", "kafkaTopic", "topic");
+        List<String> topics = kafkaTopics(required(source, "Kafka topic cannot be empty", "kafkaTopic", "topic"));
         int sampleSize = Math.min(integer(first(source, "kafkaSampleSize"), 50), MAX_SAMPLE_ROWS);
         int pollTimeout = integer(first(source, "kafkaPollTimeoutMs"), 8_000);
         Properties properties = kafkaProperties(source, bootstrap);
+        List<TopicPartition> partitions;
         try (AdminClient admin = AdminClient.create(properties)) {
-            if (!admin.listTopics().names().get(8, TimeUnit.SECONDS).contains(topic)) {
-                throw new IllegalArgumentException("Kafka topic does not exist: " + topic);
-            }
+            // A single metadata request checks the entire explicit topic scope.
+            var descriptions = admin.describeTopics(topics).allTopicNames().get(8, TimeUnit.SECONDS);
+            partitions = descriptions.values().stream().flatMap(topic -> topic.partitions().stream()
+                    .map(partition -> new TopicPartition(topic.name(), partition.partition()))).toList();
         } catch (Exception exception) {
             throw propagate("Kafka cluster or topic validation failed", exception);
         }
@@ -1285,43 +1297,53 @@ public class StructuredSourceProbeService {
         properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
         properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
         properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, String.valueOf(sampleSize));
-        List<Map<String, Object>> rows = new ArrayList<>();
+        Map<String, List<Map<String, Object>>> rowsByTopic = new LinkedHashMap<>();
+        topics.forEach(topic -> rowsByTopic.put(topic, new ArrayList<>()));
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(properties)) {
-            List<PartitionInfo> infos = consumer.partitionsFor(topic, Duration.ofSeconds(8));
-            List<TopicPartition> partitions = infos.stream().map(info -> new TopicPartition(topic, info.partition())).toList();
             consumer.assign(partitions);
             Map<TopicPartition, Long> beginning = consumer.beginningOffsets(partitions, Duration.ofSeconds(8));
             Map<TopicPartition, Long> end = consumer.endOffsets(partitions, Duration.ofSeconds(8));
-            int perPartition = Math.max(1, (int) Math.ceil((double) sampleSize / Math.max(1, partitions.size())));
+            int perPartition = Math.max(1, (int) Math.ceil((double) sampleSize * topics.size() / Math.max(1, partitions.size())));
             for (TopicPartition partition : partitions) {
                 consumer.seek(partition, Math.max(beginning.get(partition), end.get(partition) - perPartition));
             }
             long deadline = System.currentTimeMillis() + pollTimeout;
-            while (rows.size() < sampleSize && System.currentTimeMillis() < deadline) {
+            while (rowsByTopic.values().stream().anyMatch(rows -> rows.size() < sampleSize) && System.currentTimeMillis() < deadline) {
                 var records = consumer.poll(Duration.ofMillis(Math.min(1000, Math.max(1, deadline - System.currentTimeMillis()))));
                 for (var record : records) {
+                    var rows = rowsByTopic.get(record.topic());
+                    if (rows == null || rows.size() >= sampleSize) continue;
                     for (Map<String, Object> payload : kafkaPayloadRows(record.value())) {
-                        payload.put("_kafka_key", record.key());
-                        payload.put("_kafka_partition", record.partition());
-                        payload.put("_kafka_offset", record.offset());
-                        payload.put("_kafka_timestamp", Instant.ofEpochMilli(record.timestamp()).toString());
+                        // Infer the message value's schema. Broker attributes belong to
+                        // flow metadata and must not become required business columns.
                         rows.add(payload);
                         if (rows.size() >= sampleSize) break;
                     }
-                    if (rows.size() >= sampleSize) break;
                 }
                 if (records.isEmpty()) break;
             }
         } catch (Exception exception) {
             throw propagate("Kafka message sampling failed", exception);
         }
-        if (rows.isEmpty()) {
+        if (rowsByTopic.values().stream().anyMatch(List::isEmpty)) {
             throw new IllegalStateException("Kafka connection succeeded, but the topic has no readable sample messages");
         }
-        StructuredProbeResult result = baseResult("kafka", "Kafka", bootstrap + "/" + topic);
-        result.setResponsePreview(preview(writeJson(rows.get(0)), 4000));
-        result.getTables().add(buildTable(safeName(topic), "Kafka topic " + topic, topic, rows));
+        StructuredProbeResult result = baseResult("kafka", "Kafka", bootstrap + "/" + String.join(",", topics));
+        result.setResponsePreview(preview(writeJson(rowsByTopic.values().iterator().next().getFirst()), 4000));
+        rowsByTopic.forEach((topic, rows) -> result.getTables().add(buildTable(safeName(topic), "Kafka topic " + topic, topic, rows)));
         return result;
+    }
+
+    static List<String> kafkaTopics(String configured) {
+        var topics = new LinkedHashSet<String>();
+        for (String value : configured.split("[,\\r\\n]")) {
+            String topic = value.trim();
+            if (topic.isEmpty() || !topic.matches("[a-zA-Z0-9._-]{1,249}") || topic.equals(".") || topic.equals(".."))
+                throw new IllegalArgumentException("Kafka topic must be an explicit valid name");
+            topics.add(topic);
+        }
+        if (topics.isEmpty() || topics.size() > 100) throw new IllegalArgumentException("Configure between 1 and 100 Kafka topics");
+        return List.copyOf(topics);
     }
 
     private Properties kafkaProperties(Map<String, Object> source, String bootstrap) {
@@ -1843,6 +1865,17 @@ public class StructuredSourceProbeService {
         @Override public void close() throws java.io.IOException {
             if (closed) return;
             closed = true;
+            // Parsers can finish a small complete document without requesting EOF.
+            // Drain a bounded tail first so its 226 reply cannot be confused with ABOR.
+            if (!reachedEnd) {
+                byte[] tail = new byte[4096];
+                int remaining = 65536;
+                while (remaining > 0) {
+                    int count = in.read(tail, 0, Math.min(tail.length, remaining));
+                    if (count < 0) { reachedEnd = true; break; }
+                    remaining -= count;
+                }
+            }
             super.close();
             if (reachedEnd) {
                 if (!client.completePendingCommand()) {

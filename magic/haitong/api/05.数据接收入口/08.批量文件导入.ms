@@ -5,5 +5,5 @@ import request
 var c=common();var _media=c.media;var _caller=c.caller;;var req=request.get().getRequest();var caller=_caller(req)
 import '@/haitong/push' as push
 _media(req,'multipart/form-data')
-var result=push({action:'upload',caller:caller,request:req,channel:path.channel,key:req.getHeader('Idempotency-Key'),file:req.getFile('file')})
+var result=push({action:'upload',caller:caller,request:req,channel:path.channel,key:req.getHeader('Idempotency-Key'),file:req.getPart('file')})
 return result.location==null?c.http.reply(result.status::int,result.body):c.http.located(result.status::int,result.body,result.location)

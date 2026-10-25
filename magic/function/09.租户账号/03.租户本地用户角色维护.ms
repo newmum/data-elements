@@ -22,6 +22,7 @@
 // 业务说明：读取或维护租户本地用户与角色的关联，校验关联对象后返回角色配置结果。
 // 函数输入：payload：该动作所需的账号、角色或资源资料。
 import db;
+import '@/common/audit-operation' as auditOperation;
 import tenantRuntime;
 import tenantAccounts;
 import cn.dev33.satoken.stp.StpUtil;
@@ -93,5 +94,6 @@ insert into rm_user_role_rela_t(tenant_id,
 values(#{tenantId},#{id},#{userId},#{roleId},0,current_timestamp,0)
 """);
  }
+ auditOperation('USER_ROLES_UPDATED','USER',userId,null,{id:userId,roleIds:ids});
  return {userId:userId,roleIds:ids};
 });

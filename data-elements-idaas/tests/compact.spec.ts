@@ -56,6 +56,7 @@ for (const domain of ['workforce'] as const) {
             if (route.key === 'overview') await expect(page.getByText('身份用户总数', { exact: true })).toBeVisible();
             else if (route.key === 'apps') await expect(page.getByText('应用数量', { exact: true })).toBeVisible();
             else if (route.key === 'organization') await expect(page.locator('.organization-layout .table-card')).toBeVisible();
+            else if(route.key==='audit/logs') await expect(page.locator('.log-tabs')).toBeVisible();
             else await expect(page.locator('.page-title')).toBeVisible();
             await checkSurface(page);
             await page.screenshot({ path: testInfo.outputPath(`${route.key.replaceAll('/', '-')}.png`), fullPage: true });

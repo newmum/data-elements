@@ -118,6 +118,7 @@ test('the actual error panel renders the failed response even when the server er
     return {};
   } });
   const html = renderToStaticMarkup(React.createElement(exports.default));
+  assert.match(html, /错误与告警记录/);
   assert.match(html, /部署 \(1\)/);
   assert.match(html, /字段映射发布前检查失败/);
   assert.match(html, /NiFi 缺少 1.1.12 扩展/);

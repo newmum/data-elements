@@ -111,13 +111,10 @@ relay:
     shared-key: ""
 
   registration-registry:
-    # 海通启动后即允许数据中台为已登记的数据源签发 X-Api-Key；密钥本身
-    # 仍通过同一把服务间密钥保护，未配置 DATA_PUSH_REGISTRY_KEY 时不会放行。
-    # 数据源、表和字段的契约校验同样以数据中台登记结果为准。
-    enabled: true
-    base-url: "http://127.0.0.1:8088"
-    shared-key: "${DATA_PUSH_REGISTRY_KEY:}" # 与数据中台使用同一把服务间密钥
-    timeout-seconds: 8
+    # Legacy inbound properties only; business delivery never calls the platform.
+    enabled: false
+    base-url: ""
+    shared-key: "${DATA_PUSH_REGISTRY_KEY:}"
 
   backend:
     bearer-token: ""                  # 固定后端需要 Bearer 时填写；可 env:BACKEND_TOKEN
@@ -147,18 +144,18 @@ relay:
       targets: [table-log]
       file-format: JSONL
       required-fields: [tableName, records]
-    table-to-ftp:                      # POST /api/v1/data-push（deliveryType=FTP）；目录由登记推送契约决定
-      enabled: true
-      registration-managed: true
+    table-to-ftp: # Uses only relay.ftp and the YAML target below.
+      enabled: false
+      registration-managed: false
       batch-key-field: batchId
-      targets: []
+      targets: [ftp]
       file-format: JSONL
       required-fields: [tableName, records]
-    table-to-kafka:                    # POST /api/v1/data-push（deliveryType=KAFKA）；Topic 由登记推送契约决定
-      enabled: true
-      registration-managed: true
+    table-to-kafka: # Uses only relay.kafka and the YAML target below.
+      enabled: false
+      registration-managed: false
       batch-key-field: batchId
-      targets: []
+      targets: [kafka]
       file-format: JSONL
       required-fields: [tableName, records]
     # 旧通用入口保留但默认关闭，避免与三个简单场景混用。

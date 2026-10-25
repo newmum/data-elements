@@ -84,8 +84,23 @@ var authUsername = text(body?.authUsername).trim()
 var authPassword = text(body?.authPassword).trim()
 var insecureTls = body?.insecureTls == false || text(body?.insecureTls) == '0' ? 0 : 1
 var jdbcDriverDirectory = text(body?.jdbcDriverDirectory).trim()
-if (jdbcDriverDirectory != '' && (!jdbcDriverDirectory.startsWith('/') || jdbcDriverDirectory.contains('\n') || jdbcDriverDirectory.contains('\r') || jdbcDriverDirectory.contains('='))) {
-    exit 400, 'JDBC 驱动目录必须填写 NiFi 节点上的 Linux 绝对目录，例如 /opt/nifi/nifi-current/lib/jdbc'
+if (jdbcDriverDirectory.length() > 4096) { exit 400, 'JDBC 驱动位置配置最多4096个字符' }
+if (jdbcDriverDirectory != '') {
+    // The runtime supports a shared directory or an explicit per-dialect JAR.
+    // Assets uploaded through NiFi can reside outside the default driver directory.
+    var locations = jdbcDriverDirectory.contains('=') ? jdbcDriverDirectory.split('[;\\r\\n]+') : [jdbcDriverDirectory]
+    if (locations.size() > 32) { exit 400, '最多配置32项JDBC驱动位置' }
+    for (entry in locations) {
+        var location = text(entry).trim()
+        if (jdbcDriverDirectory.contains('=')) {
+            var separator = location.indexOf('=')
+            if (separator < 1 || !location.substring(0,separator).matches('[A-Za-z0-9_*]+')) { exit 400, '驱动映射须使用数据库类型=绝对路径' }
+            location = location.substring(separator+1).trim()
+        }
+        if (!location.startsWith('/') || location.contains('=') || location.contains('\n') || location.contains('\r') || location.contains('\u0000')) {
+            exit 400, 'JDBC驱动位置须为NiFi节点上的Linux绝对目录或JAR路径'
+        }
+    }
 }
 if (networkCode == '') {
     exit 400, '请选择所属网络'

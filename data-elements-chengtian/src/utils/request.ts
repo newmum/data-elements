@@ -25,6 +25,7 @@ const httpRequest = axios.create({
  */
 httpRequest.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    config.headers["X-Audit-Route"] = window.location.hash.slice(1).split("?")[0];
     const accessToken = AuthStorage.getAccessToken();
     if (accessToken) {
       config.headers[AUTH_KEYS.ACCESS_TOKEN] = accessToken;

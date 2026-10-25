@@ -12,8 +12,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: bash scripts/check-offline.sh
-      - run: mvn --batch-mode --no-transfer-progress clean verify
+      - run: mvn --batch-mode --no-transfer-progress clean verify -Dhaitong.loopback.tests=true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -21,4 +20,3 @@ jobs:
           path: |
             ../logs/haitong-data-pull/surefire/
             target/haitong-data-pull.jar
-            ../logs/haitong-data-pull/offline-checks.txt

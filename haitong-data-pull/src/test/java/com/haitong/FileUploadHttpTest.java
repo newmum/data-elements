@@ -115,7 +115,7 @@ class FileUploadHttpTest {
     @Test @EnabledIfSystemProperty(named="haitong.example-client.tests",matches="true") void pythonStreamingClientCanRepeatWithOriginalIdempotencyKey() throws Exception {
         Files.createDirectories(WORK);Path source=WORK.resolve("client-example.pdf");Files.writeString(source,"%PDF-1.7\nExample client\n%%EOF");String key="client-example-"+UUID.randomUUID();
         Path metadata=WORK.resolve("example-metadata.json");Files.writeString(metadata,"{\"caseNo\":\"DEMO-CLIENT\"}");
-        List<String> command=List.of("python","examples/upload_file.py",source.toString(),"--base-url","http://127.0.0.1:"+port,"--datasource","police","--table","case_record","--field","document_id","--business-key","DEMO-CLIENT","--idempotency-key",key,"--metadata-file",metadata.toString(),"--wait-seconds","20");
+        List<String> command=List.of("python","scripts/upload_file.py",source.toString(),"--base-url","http://127.0.0.1:"+port,"--datasource","police","--table","case_record","--field","document_id","--business-key","DEMO-CLIENT","--idempotency-key",key,"--metadata-file",metadata.toString(),"--wait-seconds","20");
         String message=null;
         for(int repeat=0;repeat<2;repeat++){
             Path output=WORK.resolve("example-client-"+repeat+".json"),error=WORK.resolve("example-client-"+repeat+".log");

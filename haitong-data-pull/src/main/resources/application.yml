@@ -10,6 +10,13 @@ spring:
     scheduling:
       pool:
         size: 4
+# Keep the file-mode reader aligned with MagicResourceInitializer's bootstrap
+# directory. Private/native deployment config selects the independent database
+# resource store instead; its explicit resource.type takes precedence.
+magic-api:
+  resource:
+    type: file
+    location: ./data/magic-api
 server:
   address: 127.0.0.1
   port: 18083

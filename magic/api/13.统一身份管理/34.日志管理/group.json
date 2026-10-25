@@ -1,0 +1,12 @@
+{
+  "id": "log_management_api_group_v1",
+  "name": "34.日志管理",
+  "type": "api",
+  "parentId": "1ae52a0ba8565e9d820f00dec5d199af",
+  "path": "/logs",
+  "properties": {},
+  "paths": [],
+  "options": []
+}
+================================
+

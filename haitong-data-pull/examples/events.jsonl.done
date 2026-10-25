@@ -1,8 +1,0 @@
-{
-  "fileId": "example-batch-0001",
-  "fileName": "events.jsonl",
-  "format": "JSONL",
-  "size": 147,
-  "sha256": "b9192255bb95ea0bdf837d8aa39ffca6949c7785b0366a21fb390c4cf438d374",
-  "recordCount": 2
-}

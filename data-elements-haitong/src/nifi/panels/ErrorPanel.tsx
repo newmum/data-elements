@@ -143,7 +143,9 @@ export default function ErrorPanel() {
       className="error-panel-drawer"
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span>错误与告警</span>
+          <Tooltip title="保留已发生的错误与告警，当前运行情况以顶部任务状态为准">
+            <span>错误与告警记录</span>
+          </Tooltip>
           <Tag color="default">{counts.ALL}</Tag>
         </div>
       }

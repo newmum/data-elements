@@ -126,7 +126,7 @@ class UnstructuredFileTest {
         }
     }
     @Test void kafkaDescriptorContainsOnlyPublicReferenceAndNeverBinaryOrDiskPath(){
-        var worker=new DeliveryWorker(null,null,new Json(),null,null,null,null,null,null);
+        var worker=new DeliveryWorker(null,null,new Json(),null,null,null,null,null);
         try{byte[] raw=pdf(1000);var packet=new Packet("m","d","file.cases",1,raw,"C:/private/opaque-payload","a.pdf",Map.of("fileId","file-1","contentUrl","/api/v1/file-uploads/file-1/content","sha256",Rules.sha256(raw)));
             var descriptor=worker.fileReference(packet);assertFalse(descriptor.isFile());var data=new Json().object(descriptor.bytes());assertEquals("d",data.get("deliveryId"));assertEquals("file-1",data.get("fileId"));assertFalse(new String(descriptor.bytes(),java.nio.charset.StandardCharsets.UTF_8).contains("private"));assertTrue(descriptor.bytes().length<1000);
         }finally{worker.destroy();}

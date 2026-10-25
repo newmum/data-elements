@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import type { Node as X6Node } from '@antv/x6';
 import {
   DatabaseOutlined,
@@ -17,8 +16,7 @@ import type { CanvasNode } from '@/types/dsl';
 import type { ComponentCategory, ComponentManifest, FieldSchema } from '@/types/manifest';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { getNifiOverlayContainer } from '../panels/overlayContainer';
-import { useComponentManifests } from '@/api/manifests';
-import { useFlowErrors, type FlowError } from '@/api/pipelines';
+import type { FlowError } from '@/api/pipelines';
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import type { NodeRuntimeMetric } from '@/runtime/runtimeMetrics';
 import { COMPONENT_ICONS, getComponentIcon } from '@/panels/databaseIcons';
@@ -127,7 +125,7 @@ interface BaseNodeProps {
 }
 
 export default function BaseNode({ node: cell }: BaseNodeProps) {
-  const data = cell.getData<{ node?: CanvasNode; runtime?: NodeRuntimeMetric; mode?: string; readonly?: boolean; taskName?: string } | undefined>();
+  const data = cell.getData<{ node?: CanvasNode; runtime?: NodeRuntimeMetric; manifest?: ComponentManifest; errors?: FlowError[]; mode?: string; readonly?: boolean; taskName?: string } | undefined>();
   const cn = data?.node;
   const runtime = data?.runtime;
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
@@ -136,18 +134,9 @@ export default function BaseNode({ node: cell }: BaseNodeProps) {
   const pipelineId = useCanvasStore((s) => s.currentPipelineId);
   const syncCompletion = useCanvasStore((s) => s.syncCompletion);
   const openErrorPanel = useErrorPanelStore((s) => s.open);
-  const { data: manifests } = useComponentManifests();
-  const { data: flowErrors } = useFlowErrors(data?.readonly ? null : pipelineId);
-  const manifest = useMemo(
-    () => manifests?.find((m) => m.key === cn?.manifestKey),
-    [manifests, cn?.manifestKey],
-  );
-
-  // Errors targeting this node
-  const myErrors: FlowError[] = useMemo(
-    () => (flowErrors ?? []).filter((e) => e.nodeId === cn?.id),
-    [flowErrors, cn?.id],
-  );
+  // The canvas supplies the shared manifest and current errors; nodes perform no read requests.
+  const manifest = data?.manifest;
+  const myErrors = data?.errors ?? [];
   const hasErrorBadge = myErrors.some((e) => e.level === 'ERROR');
   const hasWarningBadge = !hasErrorBadge && myErrors.some((e) => e.level === 'WARNING');
 
