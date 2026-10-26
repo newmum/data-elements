@@ -97,12 +97,12 @@ class TableSnapshotListMagicTest {
    assertEquals(4,f.reads);
   }
  }
- @Test void crossTenantAndRoleDeniedSourcesStopBeforePageQueries() throws Exception {
+ @Test void foreignSourcesStopBeforePageQueriesWhileMenuRoleDoesNotBlock() throws Exception {
   var f=new Fixture(20);
    assertInstanceOf(ExitValue.class,f.read(true,100,"","foreign-source"));
    assertEquals(1,f.reads);f.scope.denied=true;
-   assertInstanceOf(ExitValue.class,f.read(true,100,"","source"));
-   assertEquals(1,f.reads);f.scope.denied=false;f.scope.tenant="none";
+   assertInstanceOf(Map.class,f.read(true,100,"","source"));
+   assertEquals(4,f.reads);f.scope.denied=false;f.scope.tenant="none";
    assertInstanceOf(ExitValue.class,f.read(true,100,"","source"));
    assertEquals(1,f.reads);
  }

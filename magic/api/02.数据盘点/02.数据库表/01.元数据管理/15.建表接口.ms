@@ -37,7 +37,6 @@ import java.util.Map
 import java.util.List
 import com.linewell.dataelement.feature.diagnostics.DiagnosticSanitizer
 import tenantRuntime
-import dataScope
 import canvasTableDdl
 import hwhive
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
@@ -379,15 +378,14 @@ if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
     }
     var registeredRows = db.table('db_datasource_t').where()
         .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', targetIds).select()
-    var visibleRows = dataScope.visibleDataSourcesFor(
-        'MENU:2081000000000000002', registeredRows == null ? [] : registeredRows)
+    var visibleRows = (registeredRows == null ? [] : registeredRows)
     var registeredById = {}
     for (registeredRow in visibleRows) {
         registeredById[textOf(rowValue(registeredRow, ['tid']))] = registeredRow
     }
     for (targetId in targetIds) {
         if (registeredById[targetId] == null) {
-            exit 403, '目标数据源不存在或不在当前角色的数据范围内'
+            exit 403, '目标数据源不存在或已删除'
         }
     }
     var validated = []
@@ -491,7 +489,7 @@ if (body.canvas == true) {
     config.setSchema(parsed.schemaName)
     if (body.reuseExistingOnly == true) {
         var scoped = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', dbId).eq('is_del', 0).select()
-        if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', scoped).size() != 1) { exit 403, '已有目标表不在当前角色的数据范围内' }
+        if ((scoped).size() != 1) { exit 403, '已有目标表关联的数据源不存在或已删除' }
         var columns = managedHive ? hiveColumns(config, parsed.lookupName) : metadataExplorerService.getColumns(config, parsed.lookupName)
         var warnings = []
         var tableItems = reusedTableItems(body.tableItems, columns, config, parsed.tableName, warnings)

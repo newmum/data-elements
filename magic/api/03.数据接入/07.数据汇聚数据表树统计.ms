@@ -17,17 +17,16 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"total\": 374,\n  \"orgCounts\": {\"1351480103971975170\": 23},\n  \"orgApps\": {\"1351480103971975170\": [{\"value\": \"1980105567668809728\", \"label\": \"福建省指挥中心警情受理处置应用系统\", \"count\": 3, \"datasources\": [{\"value\": \"4b5d9992d89744b9b514f8905dc27998\", \"label\": \"出入境人员动管系统数据库\", \"count\": 9}]}]}\n}",
-  "description": "数据接入左侧树数据表统计（POST /ods/dataAggTreeStatistics）。只读接口；关系库限定数据源与数据表登记状态均大于 0，排除资源中心 ODS 层及分域配置的数据源作为树来源，按当前租户及角色范围一次分组统计业务表/日志表/字典表，Elasticsearch 投影仅辅助层级展示；没有表的数据源统计为 0。与右侧列表使用相同的数据源资格边界；使用请求参数 keyword、orgIds；涉及 db_datasource_t、db_table_t 等业务表。",
+  "description": "数据接入左侧树数据表统计（POST /ods/dataAggTreeStatistics）。只读接口；关系库限定数据源与数据表登记状态均大于 0，排除资源中心 ODS 层及分域配置的数据源作为树来源，按当前租户内对象归属一次分组统计业务表/日志表/字典表，Elasticsearch 投影仅辅助层级展示；没有表的数据源统计为 0。与右侧列表使用相同的数据源资格边界；使用请求参数 keyword、orgIds；涉及 db_datasource_t、db_table_t 等业务表。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：07.数据汇聚数据表树统计
 // 路由：POST /ods/dataAggTreeStatistics
-// 业务说明：数据接入左侧树数据表统计（POST /ods/dataAggTreeStatistics）。只读接口；关系库限定数据源与数据表登记状态均大于 0，按当前租户及角色范围一次分组统计业务表/日志表/字典表，Elasticsearch 投影仅辅助层级展示；没有表的数据源统计为 0。与右侧列表使用相同的数据源资格边界；使用请求参数 keyword、orgIds；涉及 db_datasource_t、db_table_t 等业务表。
+// 业务说明：数据接入左侧树数据表统计（POST /ods/dataAggTreeStatistics）。只读接口；关系库限定数据源与数据表登记状态均大于 0，按当前租户内对象归属一次分组统计业务表/日志表/字典表，Elasticsearch 投影仅辅助层级展示；没有表的数据源统计为 0。与右侧列表使用相同的数据源资格边界；使用请求参数 keyword、orgIds；涉及 db_datasource_t、db_table_t 等业务表。
 import tenantEs
 import tenantRuntime
-import dataScope
 import '@/common/configData' as configData
 
 /*
@@ -116,7 +115,6 @@ var orgIds = body?.orgIds
 var registeredDatasourceRows = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId).eq('is_del', 0)
     .gt('asset_status', 0).select()
-registeredDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', registeredDatasourceRows)
 registeredDatasourceRows = registeredDatasourceRows.filter(matchesTaskCategory)
 var registeredDatasourceIds = []
 var registeredDatasourceMap = {}

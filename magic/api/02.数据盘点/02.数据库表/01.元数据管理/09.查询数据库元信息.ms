@@ -37,7 +37,7 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "查询当前租户及角色范围内的数据源概览；传 tableId 时仅查询当前表的实时概览，不写入资产。",
+  "description": "查询当前租户内的数据源概览；传 tableId 时仅查询当前表的实时概览，不写入资产。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -47,7 +47,6 @@
 // 业务说明：元数据管理 09：查询数据库概览信息；涉及 db_datasource_t 等业务表。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import tenantRuntime
-import dataScope
 import hwhive
 import cn.hutool.core.date.DateUtil
 import jsons
@@ -106,10 +105,7 @@ var loadAsset = (assetId) => {
         // 返回当前业务分支的标准结果。
         return null
     }
-    if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [main]).size() != 1) {
-        exit 403, '数据源不在当前角色数据范围内'
-    }
-    var result = {
+        var result = {
         tid: rowValue(main, ['tid']), id: rowValue(main, ['tid']), assetType: 'db',
         dbName: rowValue(main, ['dbName', 'db_name']),
         dbType: rowValue(main, ['dbType', 'db_type']),

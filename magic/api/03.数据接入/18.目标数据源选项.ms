@@ -17,7 +17,7 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"options\": [\n    {\n      \"label\": \"贴源层 ODS\",\n      \"value\": \"ODS\",\n      \"children\": [\n        {\n          \"label\": \"原始库 / 示例数据源\",\n          \"value\": \"datasource-id\",\n          \"layerCode\": \"ODS\"\n        }\n      ]\n    }\n  ],\n  \"list\": []\n}",
-  "description": "物化建表目标数据源选项。taskCategory=ingestion（默认）返回当前租户、角色可见的 ODS 分域数据源；distribution 返回接入左树同口径的已登记非 ODS 数据源，按部门→数据源分组，不依赖 ES。分发最多读取 1000 个候选，一次关联查询，不返回连接凭据；未完成登记或未提供连接的叶节点仅展示、不可选。涉及 sym_dict_t、dwm_center_layer_source_t、db_datasource_t、rm_org_t。",
+  "description": "物化建表目标数据源选项。taskCategory=ingestion（默认）返回当前租户内有效的 ODS 分域数据源；distribution 返回接入左树同口径的已登记非 ODS 数据源，按部门→数据源分组，不依赖 ES。分发最多读取 1000 个候选，一次关联查询，不返回连接凭据；未完成登记或未提供连接的叶节点仅展示、不可选。涉及 sym_dict_t、dwm_center_layer_source_t、db_datasource_t、rm_org_t。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -27,10 +27,9 @@
 // 接入返回 ODS 分域；分发按接入左树数据源范围返回部门→数据源。
 /*
  * 物化建表目标数据源选项。
- * 两种任务共享真实数据库类型和角色范围校验，分发目标不默认勾选。
+ * 两种任务共享真实数据库类型和当前租户归属检查，分发目标不默认勾选。
  */
 import tenantRuntime
-import dataScope
 
 var text = value => value == null ? '' : value + ''
 var blank = value => text(value).trim() == ''
@@ -70,7 +69,7 @@ if (taskCategory == 'distribution') {
     if (candidates.size() > 1000) {
         exit 400, '分发目标数据源候选超过 1000 个，请联系管理员调整可用数据源范围'
     }
-    var visibleCandidates = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', candidates)
+    var visibleCandidates = (candidates)
     var departmentOptions = []
     var departmentMap = {}
     var distributionList = []
@@ -170,8 +169,7 @@ var datasourceRows = db.table('db_datasource_t').where()
     .eq('is_del', 0)
     .eq('show_connect', 1)
     .select()
-var visibleDatasources = dataScope.visibleDataSourcesFor(
-    'MENU:2081000000000000002', datasourceRows == null ? [] : datasourceRows)
+var visibleDatasources = (datasourceRows == null ? [] : datasourceRows)
 var datasourceMap = {}
 for (datasource in visibleDatasources) {
     datasourceMap[text(datasource.tid)] = datasource

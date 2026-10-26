@@ -381,8 +381,8 @@ class HuaweiHiveTargetDeletionMagicTest {
     }
 
     @Test
-    void batchPreflightRejectsInvisibleTargetDatasourceBeforePhysicalProbe() throws Exception {
-        fixture.deniedDatasourceId = "target-db";
+    void batchPreflightRejectsDeletedTargetDatasourceBeforePhysicalProbe() throws Exception {
+        jdbc.update("update db_datasource_t set is_del=1 where tid='target-db'");
         var targets = List.<Map<String, Object>>of(Map.of(
                 "targetDbId", "target-db", "targetTableName", "ods_person", "targetTableId", "target-1"));
         assertInstanceOf(ExitValue.class, run(batchRequest(targets)));
@@ -482,8 +482,8 @@ class HuaweiHiveTargetDeletionMagicTest {
     }
 
     @Test
-    void singleTargetDeleteRechecksRoleScopeAfterAnyEarlierDryRun() throws Exception {
-        fixture.deniedDatasourceId = "target-db";
+    void singleTargetDeleteRechecksTargetExistenceAfterAnyEarlierDryRun() throws Exception {
+        jdbc.update("update db_datasource_t set is_del=1 where tid='target-db'");
         assertInstanceOf(ExitValue.class, run(request()));
         assertLifecycleIntact();
         verifyNoInteractions(hive, explorer);
@@ -606,7 +606,7 @@ class HuaweiHiveTargetDeletionMagicTest {
         jdbc.update("update data_access_agg_task_t set target_table_id='different-target' where tid='task-1'");
         assertInstanceOf(ExitValue.class,run(request()));
         assertLifecycleIntact();assertEquals(0,queryCounter.writes);
-        setUp();prepareCascadeOrigin("police");fixture.deniedDatasourceId="target-db";
+        setUp();prepareCascadeOrigin("police");jdbc.update("update db_datasource_t set is_del=1 where tid='target-db'");
         assertInstanceOf(ExitValue.class,run(request()));
         assertLifecycleIntact();assertEquals(0,queryCounter.writes);
         setUp();prepareCascadeOrigin("police");

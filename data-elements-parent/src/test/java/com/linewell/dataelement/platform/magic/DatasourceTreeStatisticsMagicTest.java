@@ -27,6 +27,7 @@ class DatasourceTreeStatisticsMagicTest {
             fixture.jdbc.update("insert into db_datasource_t(tid,tenant_id,is_del,asset_status,db_name,db_type,org_id,app_id,app_name) values(?,'ga',0,2,?,'mysql','org','app','真实系统')", "source-" + i, "数据库" + i);
         }
         fixture.jdbc.update("insert into db_datasource_t(tid,tenant_id,is_del,asset_status) values('foreign','other',0,2),('denied','ga',0,2),('deleted','ga',1,2)");
+        fixture.jdbc.update("update db_datasource_t set is_del=1 where tid='denied'");
         var counter = new Counter();
         fixture.db.setSqlInterceptors(List.of(counter));
         var scope = new Scope();
@@ -45,9 +46,9 @@ class DatasourceTreeStatisticsMagicTest {
         assertThat(((Number) result.get("total")).intValue()).isEqualTo(count);
         assertThat(result.get("orgCounts")).isEqualTo(Map.of("org", count));
         assertThat(counter.reads).isEqualTo(1);
-        assertThat(scope.calls).isEqualTo(1);
+        assertThat(scope.calls).isZero();
         assertThat(index.reads).isEqualTo(1);
-        System.out.println("tree statistics " + count + " candidates: ES=1, SQL=1, role batch=1; tenant/denied/deleted/stale candidates excluded");
+        System.out.println("tree statistics " + count + " candidates: ES=1, SQL=1, role lookups=0; foreign/deleted/stale candidates excluded");
     }
 
     public static class Scope {

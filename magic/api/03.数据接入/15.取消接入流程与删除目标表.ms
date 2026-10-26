@@ -19,14 +19,14 @@
   "headers" : [ ],
   "paths" : [ ],
   "responseBody" : null,
-  "description" : "取消或重建数据接入；仅清理当前租户所选来源表关联的目标和流程。未关联但没有任务、目录及衍生表引用的同名目标，预检返回 targetUnlinked；实际删除须指定预检确认的目标表 ID 并提交 confirmUnlinkedTarget=true，且不清理当前来源表任务。Hive（含 MRS 与普通 Hive）仅清理接入流程和目标登记，不连接或删除物理表；非 Hive 执行删表，连接或删除异常时保留画布、任务及目标登记供重试，确认物理清理后用事务批量更新关联记录。NiFi 清理失败保留流程记录。dryRun=true 只读预检；batchDryRun=true 时需同时提交 dryRun=true、deleteTargetTable=true 与最多 20 个 targets，服务端批量预取并逐 ID 校验租户及角色范围，只读预检不写业务数据；checkPhysicalExistence=true 用于物化重名检查，否则 Hive 跳过物理探查。单目标删除仍须再次授权。涉及 db_table_t、data_access_agg_task_t、db_datasource_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t 等业务表。",
+  "description" : "取消或重建数据接入；仅清理当前租户所选来源表关联的目标和流程。未关联但没有任务、目录及衍生表引用的同名目标，预检返回 targetUnlinked；实际删除须指定预检确认的目标表 ID 并提交 confirmUnlinkedTarget=true，且不清理当前来源表任务。Hive（含 MRS 与普通 Hive）仅清理接入流程和目标登记，不连接或删除物理表；非 Hive 执行删表，连接或删除异常时保留画布、任务及目标登记供重试，确认物理清理后用事务批量更新关联记录。NiFi 清理失败保留流程记录。dryRun=true 只读预检；batchDryRun=true 时需同时提交 dryRun=true、deleteTargetTable=true 与最多 20 个 targets，服务端批量预取并逐 ID 校验当前租户内对象归属，只读预检不写业务数据；checkPhysicalExistence=true 用于物化重名检查，否则 Hive 跳过物理探查。单目标删除仍须再次授权。涉及 db_table_t、data_access_agg_task_t、db_datasource_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t 等业务表。",
   "requestBodyDefinition" : null,
   "responseBodyDefinition" : null
 }
 ================================
 // 接口：15.取消接入流程与删除目标表
 // 路由：POST /ods/dataAggReset
-// 业务说明：取消或重建数据接入。batchDryRun=true 只读预检最多 20 个 targets，批量读取并逐 ID 核验当前租户及角色权限；未关联且无人引用的登记目标须用明确 ID 和 confirmUnlinkedTarget 二次确认，且不清理来源任务。单目标删除重新授权。Hive 清理保留物理表；物化重名预检显式提交 checkPhysicalExistence=true。非 Hive 连接/删除异常和 NiFi 清理异常返回待重试状态并保留相关记录。
+// 业务说明：取消或重建数据接入。batchDryRun=true 只读预检最多 20 个 targets，批量读取并逐 ID 核验当前租户内对象归属；未关联且无人引用的登记目标须用明确 ID 和 confirmUnlinkedTarget 二次确认，且不清理来源任务。单目标删除重新授权。Hive 清理保留物理表；物化重名预检显式提交 checkPhysicalExistence=true。非 Hive 连接/删除异常和 NiFi 清理异常返回待重试状态并保留相关记录。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 /*
  * Rebuild recovery for a source table.
@@ -48,7 +48,6 @@ import log
 import tenantRuntime
 import portableDdl
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver
-import dataScope
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -261,13 +260,12 @@ if (body?.batchDryRun == true) {
     }
     var databaseRows = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
         .eq('is_del', 0).in('tid', allDbIds).select()
-    var visibleDatabases = dataScope.visibleDataSourcesFor(
-        'MENU:2081000000000000002', databaseRows == null ? [] : databaseRows)
+    var visibleDatabases = (databaseRows == null ? [] : databaseRows)
     var databaseById = {}
     for (databaseRow in visibleDatabases) { databaseById[text(first(databaseRow, ['tid']))] = databaseRow }
     for (selectedDbId in allDbIds) {
         if (databaseById[selectedDbId] == null) {
-            exit 403, '来源或目标数据源不存在，或不在当前角色的数据范围内'
+            exit 403, '来源或目标数据源不存在或已删除'
         }
     }
     var sourceName = text(first(batchSource, ['tableName', 'table_name']))
@@ -695,13 +693,12 @@ if (!blank(targetDbId) && !singleDatasourceIds.contains(targetDbId)) { singleDat
 if (singleDatasourceIds.size() == 0) { exit 409, '来源表缺少所属数据源' }
 var singleDatasourceRows = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', singleDatasourceIds).select()
-var visibleSingleDatasources = dataScope.visibleDataSourcesFor(
-    'MENU:2081000000000000002', singleDatasourceRows == null ? [] : singleDatasourceRows)
+var visibleSingleDatasources = (singleDatasourceRows == null ? [] : singleDatasourceRows)
 var visibleSingleIds = []
 for (visibleRow in visibleSingleDatasources) { visibleSingleIds.add(text(first(visibleRow, ['tid']))) }
 for (selectedId in singleDatasourceIds) {
     if (!visibleSingleIds.contains(selectedId)) {
-        exit 403, '来源或目标数据源不存在，或不在当前角色的数据范围内'
+        exit 403, '来源或目标数据源不存在或已删除'
     }
 }
 

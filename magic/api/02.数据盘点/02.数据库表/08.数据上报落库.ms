@@ -26,7 +26,6 @@
 // 路由：POST /dst/database/report-data
 // 业务说明：数据上报工作区接口。按登记表字段白名单校验，将实际上报数据和批次记录写入 test1；支持批次列表、实际入库数据预览、导入与删除；使用请求参数 tables；涉及 db_datasource_t、db_table_t、db_table_column_t 等业务表。
 import tableSort
-import dataScope
 import tenantRuntime
 import approvalRuntime
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
@@ -121,7 +120,6 @@ if (blank(datasourceId)) { exit 400, '数据源不能为空' }
 var source = db.table('db_datasource_t').where()
     .eq('tid', datasourceId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
 if (source == null) { exit 404, '数据源不存在或不属于当前租户' }
-if (!dataScope.canReadDataSource(source)) { exit 403,'无权读取此数据源' }
 var sourceConfig = datasourceConnectionConfig('read', datasourceId, null, false)
 var accessMode = firstText(sourceConfig, ['accessMode', 'access_mode']).toLowerCase()
 if (accessMode == 'report') { accessMode = 'upload' }

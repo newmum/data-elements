@@ -36,9 +36,14 @@ class ExistingTargetMaterializationMagicTest {
     }
 
     @Test
-    void roleDenialAndOtherSourceOwnershipCannotAdoptExistingTable() throws Exception {
+    void registrationIgnoresMenuScopeButRejectsForeignTenantsAndOtherSourceOwnership() throws Exception {
         Fixture denied=new Fixture(1); denied.base.scope.deniedId="retained-db";
-        assertInstanceOf(ExitValue.class,denied.run(false)); assertEquals(0,denied.physicalCalls);
+        assertInstanceOf(Map.class,denied.run(false)); assertEquals(1,denied.physicalCalls);
+        for (String datasource : List.of("source-db", "retained-db")) {
+            Fixture foreign=new Fixture(1);
+            foreign.jdbc.update("update db_datasource_t set tenant_id='other' where tid=?",datasource);
+            assertInstanceOf(ExitValue.class,foreign.run(false)); assertEquals(0,foreign.physicalCalls);
+        }
         Fixture owned=new Fixture(1);
         owned.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del) values('owned','police','retained-db','ods_retained','another-source',0)");
         assertInstanceOf(ExitValue.class,owned.run(false)); assertEquals(0,owned.physicalCalls);
@@ -54,7 +59,7 @@ class ExistingTargetMaterializationMagicTest {
     }
 
     @Test
-    void twentyAndHundredDictionaryFieldsPrefetchMetadataAndKeepRoleChecks() throws Exception {
+    void twentyAndHundredDictionaryFieldsPrefetchMetadataAndKeepTenantChecks() throws Exception {
         List<Integer> reads=new ArrayList<>();
         for(int size:List.of(20,100)) {
             Fixture f=new Fixture(size);
@@ -76,7 +81,9 @@ class ExistingTargetMaterializationMagicTest {
         hidden.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values('hidden-dict','police','hidden-dict-db','dictionary',0)");
         hidden.jdbc.update("update db_table_column_t set code_table_id='hidden-dict' where table_id='source-1'");
         hidden.base.scope.deniedId="hidden-dict-db";
-        assertInstanceOf(ExitValue.class,hidden.run(true)); assertEquals(0,hidden.physicalCalls); assertEquals(0,hidden.base.writeCount());
+        assertInstanceOf(Map.class,hidden.run(true)); assertEquals(1,hidden.physicalCalls); assertEquals(0,hidden.base.writeCount());
+        hidden.jdbc.update("update db_table_t set tenant_id='other' where tid='hidden-dict'");
+        assertInstanceOf(ExitValue.class,hidden.run(true)); assertEquals(1,hidden.physicalCalls); assertEquals(0,hidden.base.writeCount());
     }
 
     public static class Fixture {

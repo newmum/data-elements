@@ -42,7 +42,7 @@ public class DataSourceConnectionPropertyResolver {
         this.identifiers = new com.linewell.dataelement.platform.persistence.TenantIdentifierSql(jdbcTemplate);
     }
 
-    /** One tenant-scoped read, one role-scope decision and an explicit check of every ID. */
+    /** One tenant-scoped read and an explicit check of every ID. */
     public Map<String, Map<String, Object>> resolveBatch(String tenantId, Collection<String> datasourceIds, String resource) {
         if (blank(tenantId)) throw new IllegalStateException("缺少当前租户上下文");
         var ids = new LinkedHashSet<>(datasourceIds == null ? List.<String>of() : datasourceIds);
@@ -55,8 +55,12 @@ public class DataSourceConnectionPropertyResolver {
                 + String.join(",", Collections.nCopies(ids.size(), "?")) + ") AND tenant_id = ? AND is_del = 0";
         if (com.linewell.dataelement.platform.tenant.domain.TenantContext.getTenantId() != null) sql = identifiers.adapt(sql);
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, parameters.toArray());
-        if (scopes == null) throw new IllegalStateException("字典数据源权限校验服务未配置");
-        rows = scopes.visibleDataSources(resource, rows);
+        // Registration/access uses the active tenant's sources without an additional menu scope.
+        // Other consumers retain their explicitly requested resource policy.
+        if (!"MENU:2081000000000000002".equals(resource)) {
+            if (scopes == null) throw new IllegalStateException("字典数据源权限校验服务未配置");
+            rows = scopes.visibleDataSources(resource, rows);
+        }
         Map<String, Map<String, Object>> result = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) result.put(String.valueOf(row.get("tid")), connectionValues(row));
         for (String id : ids) {

@@ -373,6 +373,8 @@ SSE 事件为 progress（message）、evidence（证据数组）、delta（text�
 
 后端使用模拟 HTTP 网关验证真实 Chat Completions/SSE、UTF-8 分片、认证错误、流中断和关闭空闲上游连接。H2 回归分别建立 20/100 个关联资源，验证两次批量 SQL、四次 NiFi 读取和逐 ID 数据范围；流程读取及角色权限解析另有固定调用。混入无权/跨租户 ID 时，NiFi 与模型均不得被调用。
 
+错误快照回归使用可控执行器分别验证保存成功、存储失败、150ms 超时、队列拒绝和请求中断，并核对当前租户及用户归属、凭据脱敏和 Spring 实际装配。成功路径不依赖测试机在 150ms 内调度真实线程；运行服务仍使用有界后台线程池，超过等待上限不附加 `diagnosticRef`，原错误响应保持完整。
+
 前端协议回归分别运行：
 
     node --experimental-strip-types --test scripts/diagnostics.test.mjs

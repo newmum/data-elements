@@ -35,7 +35,6 @@ import log
 import cn.hutool.core.util.IdUtil
 import metadataAsset
 import tenantRuntime
-import dataScope
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService
 import tableSchemaSync
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
@@ -203,8 +202,8 @@ if (table == null) {
 }
 var sourceId = rowValue(table, ['datasourceId', 'datasource_id'])
 var source = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', sourceId).eq('is_del', 0).selectOne()
-if (source == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [source]).size() != 1) {
-    exit 403, '数据表不在当前租户或角色数据范围内'
+if (source == null) {
+    exit 403, '数据表关联的数据源不存在或已删除'
 }
 // 结构同步只接受当前租户已保存的字段快照；客户端不能提交连接、字段定义或执行 SQL。
 if (!blank(body.schemaAction)) {

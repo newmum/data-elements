@@ -5,21 +5,13 @@
 set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
-JAVA_BIN="${HAITONG_JAVA_BIN:-${JAVA_HOME:+$JAVA_HOME/bin/java}}"
+cd "$APP_DIR"
+source "$APP_DIR/scripts/java-env.sh"
+JAVA_BIN="$(haitong_resolve_java "$APP_DIR")"
 PID_FILE="$APP_DIR/data/haitong.pid"
 LOG_FILE="$APP_DIR/logs/haitong-console.out"
 
-if [[ -z "$JAVA_BIN" ]]; then
-  JAVA_BIN="$(command -v java || true)"
-fi
-[[ -n "$JAVA_BIN" && -x "$JAVA_BIN" ]] || {
-  echo '未找到可执行 Java。请设置 HAITONG_JAVA_BIN 为 JDK 21 的 java 路径。' >&2
-  exit 1
-}
-"$JAVA_BIN" --version | grep -qE '^(openjdk|java) 21([.[:space:]]|$)' || {
-  echo "需要 JDK/JRE 21，当前 Java：$JAVA_BIN" >&2
-  exit 1
-}
+echo "使用 Java 21：$JAVA_BIN"
 [[ -f "$APP_DIR/target/haitong-data-pull.jar" ]] || {
   echo "未找到 $APP_DIR/target/haitong-data-pull.jar" >&2
   exit 1

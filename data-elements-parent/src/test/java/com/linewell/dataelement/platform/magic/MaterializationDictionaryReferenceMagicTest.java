@@ -77,15 +77,15 @@ class MaterializationDictionaryReferenceMagicTest {
     }
 
     @Test
-    void actualMissingForeignAndDeniedDictionaryReferencesStillRejectBeforeWriting() throws Exception {
-        for(String scenario:List.of("missing","foreign","denied")) {
+    void actualMissingForeignAndDeletedDictionaryReferencesStillRejectBeforeWriting() throws Exception {
+        for(String scenario:List.of("missing","foreign","deleted")) {
             var f=new ExistingTargetMaterializationMagicTest.Fixture(2);
             f.jdbc.update("update db_table_column_t set code_table_id='real-dictionary' where tid='source-col-1'");
             if(!scenario.equals("missing")) {
                 f.jdbc.update("insert into db_datasource_t(tid,tenant_id,db_type,is_del) values('dictionary-db',?,'mysql',0)",scenario.equals("foreign")?"other-tenant":"police");
                 f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values('real-dictionary',?,'dictionary-db','dictionary',0)",scenario.equals("foreign")?"other-tenant":"police");
             }
-            if(scenario.equals("denied")) f.base.scope.deniedId="dictionary-db";
+            if(scenario.equals("deleted")) f.jdbc.update("update db_datasource_t set is_del=1 where tid='dictionary-db'");
             saveGovernance(f,List.of(Map.of("columnName","field_0","dictionaryRelation",Map.of("enabled",true,
                 "mode","enum","enumItems",List.of(Map.of("value","1","label","枚举值"))))));
             var denied=assertInstanceOf(ExitValue.class,f.run(false,true));

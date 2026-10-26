@@ -307,7 +307,7 @@ class RegisteredMappingSchemaServiceTest {
         }
     }
 
-    @Test void realRoleResolverRejectsMixedAuthorizedDatasourceIdsBeforeTableOrPhysicalReads()throws Exception {
+    @Test void realConnectionResolverRejectsTableDatasourceMismatchBeforePhysicalReads()throws Exception {
         Fixture fixture=new Fixture(100);
         var scopes=mock(DataScopeAuthorizationService.class);
         var sources=new DataSourceConnectionPropertyResolver(fixture.jdbc,JSON,scopes);
@@ -317,9 +317,10 @@ class RegisteredMappingSchemaServiceTest {
         when(scopes.visibleDataSources(eq("MENU:2081000000000000002"),anyList())).thenAnswer(invocation->
                 ((List<Map<String,Object>>)invocation.getArgument(1)).stream().filter(row->row.get("tid").equals("db")).toList());
         ((com.fasterxml.jackson.databind.node.ObjectNode)fixture.references.get("ref-99")).put("datasourceId","denied-db");
-        try (var ignored=TenantContext.use("tenant-A")) { assertThrows(IllegalStateException.class,()->service.resolve(fixture.references)); }
-        verify(scopes,times(1)).visibleDataSources(anyString(),anyList());
-        verify(fixture.jdbc,never()).queryForList(contains("FROM db_table_t"),any(Object[].class));
+        try (var ignored=TenantContext.use("tenant-A")) { assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->service.resolve(fixture.references)).code()); }
+        verifyNoInteractions(scopes);
+        verify(fixture.jdbc,times(1)).queryForList(contains("FROM db_table_t"),any(Object[].class));
+        verify(fixture.jdbc,never()).queryForList(contains("db_table_column_t"),any(Object[].class));
         verifyNoInteractions(fixture.engine);
     }
 
@@ -338,7 +339,7 @@ class RegisteredMappingSchemaServiceTest {
         try (var ignored=TenantContext.use("tenant-A")) { assertEquals(1,service.resolve(fixture.references).size()); }
         try (var ignored=TenantContext.use("tenant-B")) { assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->service.resolve(fixture.references)).code()); }
         verifyNoInteractions(fixture.engine);
-        verify(scopes,times(2)).visibleDataSources(anyString(),anyList());
+        verifyNoInteractions(scopes);
     }
 
     @Test void missingPhysicalTableAndFieldBudgetsFailClosedWithoutAdditionalQueries()throws Exception {

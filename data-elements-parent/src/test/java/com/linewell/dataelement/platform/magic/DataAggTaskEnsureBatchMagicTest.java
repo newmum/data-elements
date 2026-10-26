@@ -84,7 +84,7 @@ class DataAggTaskEnsureBatchMagicTest {
         assertEquals("source.mysql",result.get("sourceManifestKey"));
         assertEquals(false,result.get("fileLocatorRequired")); assertEquals(false,result.get("sideEffectsApplied"));
         assertEquals(0,f.fileProbe.locatorCalls); assertEquals(0,f.counter.writes);
-        f.scope.deniedId="source-db"; assertInstanceOf(ExitValue.class,f.run(body));
+        f.scope.deniedId="source-db"; assertInstanceOf(Map.class,f.run(body));
         assertEquals(0,f.fileProbe.locatorCalls); assertEquals(0,f.counter.writes);
         f.scope.deniedId=null; f.jdbc.update("update db_table_t set tenant_id='other' where tid='source-1'");
         assertInstanceOf(ExitValue.class,f.run(body)); assertEquals(0,f.counter.writes);
@@ -258,7 +258,7 @@ class DataAggTaskEnsureBatchMagicTest {
             assertEquals("updated_at",last.getJSONArray("nodes").getJSONObject(0).getJSONObject("config").getStr("incrementalColumn"));
             var first=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'",String.class));
             assertEquals("FAIL_FLOWFILE",cn.hutool.json.JSONUtil.parseObj(first.getJSONArray("nodes").getJSONObject(1).getJSONObject("config").getStr("mappings")).getStr("recordErrorMode"));
-            f.scope.deniedId="files";assertInstanceOf(ExitValue.class,f.run(Map.of("tableId","source-1","validateSourceOnly",true,"dryRun",true)));assertEquals(0,f.counter.writes);
+            f.scope.deniedId="files";assertInstanceOf(Map.class,f.run(Map.of("tableId","source-1","validateSourceOnly",true,"dryRun",true)));assertEquals(0,f.counter.writes);
             f.scope.deniedId=null;f.jdbc.update("update db_datasource_t set tenant_id='other' where tid='files'");
             assertInstanceOf(ExitValue.class,f.run(Map.of("tableId","source-1","validateSourceOnly",true,"dryRun",true)));assertEquals(0,f.counter.writes);
             System.out.println("Push file task targets="+size+", metadata SQL="+reads.getLast()+", storage scope checked");
@@ -476,11 +476,11 @@ class DataAggTaskEnsureBatchMagicTest {
     }
 
     @Test
-    void deniedSourceCannotBeUsedEvenWithVisibleTargets() throws Exception {
+    void sourcePreflightIgnoresMetadataMenuRole() throws Exception {
         Fixture fixture = new Fixture(1);
         fixture.prepareCreation();
         fixture.scope.deniedId = "source-db";
-        assertInstanceOf(ExitValue.class, fixture.run());
+        assertInstanceOf(Map.class, fixture.run(Map.of("tableId","source-1","validateSourceOnly",true,"dryRun",true)));
         assertEquals(0, fixture.counter.writes);
     }
 
@@ -503,11 +503,11 @@ class DataAggTaskEnsureBatchMagicTest {
     }
 
     @Test
-    void aDeniedTargetDatasourceRejectsTheWholeBatch() throws Exception {
+    void metadataMenuRoleDoesNotRejectValidTargetBatch() throws Exception {
         Fixture fixture = new Fixture(20);
         fixture.scope.deniedId = "target-db-19";
 
-        assertInstanceOf(ExitValue.class, fixture.run());
+        assertInstanceOf(Map.class, fixture.run());
 
         assertEquals(0, fixture.counter.writes);
         assertEquals(1, fixture.jdbc.queryForObject(
@@ -685,8 +685,8 @@ class DataAggTaskEnsureBatchMagicTest {
         assertEquals(List.of("target-1", "target-0"), moved.get("targetTableIds"));
         assertEquals("target-1", changed.jdbc.queryForObject("select source_table_id from data_access_agg_task_t where target_table_id='target-0'", String.class));
         Fixture denied = new Fixture(2); denied.prepareCreation(); denied.scope.deniedId = "target-db-1";
-        assertInstanceOf(ExitValue.class, denied.run(Map.of("tableId", "source-1", "targetTableIds", List.of("target-1", "target-0"))));
-        assertEquals(0, denied.counter.writes, "Sorting must never bypass per-ID role authorization");
+        assertInstanceOf(Map.class, denied.run(Map.of("tableId", "source-1", "targetTableIds", List.of("target-1", "target-0"))));
+        assertEquals(3, denied.counter.writes, "Current-tenant valid targets retain configured order without a menu-role gate");
     }
 
     @Test
@@ -793,7 +793,7 @@ class DataAggTaskEnsureBatchMagicTest {
             }
             f.scope.deniedId="target-db-1";
             actual=assertInstanceOf(List.class,MagicScript.create(helpers+aggregation+"\nreturn tableItems",null).execute(new MagicScriptContext(inputs)));
-            for(Object value:actual) assertEquals(1,assertInstanceOf(Map.class,value).get("taskCount"));
+            for(Object value:actual) assertEquals(2,assertInstanceOf(Map.class,value).get("taskCount"));
             assertEquals(0,f.counter.writes);
             System.out.println("List rows="+size+", aggregate metadata SQL="+readCounts.getLast()+", NiFi root reads=1");
             } finally { service.close(); }

@@ -29,7 +29,6 @@ import "@post:/sym/user/me" as me
 import tableSort
 import tenantRuntime
 import tenantEs
-import dataScope
 import tenantAccounts
 import '@/common/configData' as configData
 
@@ -69,7 +68,7 @@ if (requestMode == 'reportTables') {
         if (blank(sourceId) || sourceId.length() > 32) { exit 400, '数据源标识不合法' }
         if (!requestedIds.contains(sourceId)) { requestedIds.add(sourceId) }
     }
-    // 先按租户过滤主表，再应用当前菜单的角色数据范围，任何越权项使整批失败。
+    // 按当前租户批量读取主表，任一 ID 不存在时整批失败。
     var allowedSources = db.select("""
         select tid, org_id, created_by,
                coalesce(
@@ -81,7 +80,6 @@ if (requestMode == 'reportTables') {
          where tenant_id=#{tenantId} and is_del=0 and tid in
                <foreach collection="requestedIds" item="id" open="(" close=")" separator=",">#{id}</foreach>
     """)
-    allowedSources = dataScope.visibleDataSourcesFor(scopeResource, allowedSources)
     if (allowedSources == null || allowedSources.size() != requestedIds.size()) {
         exit 403, '数据源不存在或无权访问'
     }
@@ -143,7 +141,6 @@ if (requestMode == 'tables') {
     if (blank(datasourceId)) { exit 400, '缺少数据源标识' }
     var sourceRows = db.table('db_datasource_t').where()
         .eq('tid', datasourceId).eq('tenant_id', tenantId).eq('is_del', 0).select()
-    sourceRows = dataScope.visibleDataSourcesFor(scopeResource, sourceRows)
     if (sourceRows == null || sourceRows.size() == 0) { exit 404, '数据源不存在或无权访问' }
     var pageNum = body?.pageNum == null ? 1 : body.pageNum::int
     var pageSize = body?.pageSize == null ? 10 : body.pageSize::int
@@ -200,7 +197,7 @@ if (requestMode == 'tables') {
 var summaryOnly = requestMode == 'summary'
 
 
-// 页面只提供关键字搜索；最终范围由“数据源管理”菜单的角色数据权限统一过滤。
+// 页面只提供关键字搜索；最终数据归属由当前行业库及租户条件限定。
 var keywordText = text(body?.keyword).trim()
 var datasourceMust = [
     { term: { assetType: 'db' } }
@@ -278,7 +275,7 @@ for (hit in (datasourceSearch?.hits?.hits == null ? [] : datasourceSearch.hits.h
 }
 
 // ES 数据源主投影可能存在刷新延迟。按当前租户批量回表补齐主卡片，
-// 并由菜单级角色范围过滤，避免前端参数扩大可见范围。
+// 并按当前租户过滤，避免前端参数切换到其他行业数据。
 var escapedTenantId = tenantId.replace("'", "''")
 var keywordSql = ""
 if (!blank(keywordText)) {
@@ -325,8 +322,7 @@ var datasourceRows = db.select("""
      order by d.updated_time desc
      limit 1000
 """)
-// 按“数据源管理”菜单绑定的角色范围过滤：全部 / 本部门 / 本人登记。
-datasourceRows = dataScope.visibleDataSourcesFor(scopeResource, datasourceRows)
+// 当前行业库内按筛选条件查询，不再按角色的全部、本部门或本人范围过滤。
 // 创建人主数据位于控制库；批量解析可见数据源的显示名称，避免逐卡片查询。
 var creatorIds = []
 for (row in datasourceRows) {

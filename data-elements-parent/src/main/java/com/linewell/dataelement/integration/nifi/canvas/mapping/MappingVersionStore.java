@@ -51,17 +51,16 @@ public class MappingVersionStore {
             if(!tableIds.isEmpty())throw forbidden();
             return pipeline;
         }
-        if(scopes==null)throw new MappingException("AUTHORIZATION_UNAVAILABLE","流程数据范围校验服务未配置");
         if(datasourceIds.size()>200)throw new MappingException("BUDGET_EXCEEDED","流程引用数据源超过200项");
         List<Object> args=new ArrayList<>(datasourceIds);args.add(tenant);
         var sources=jdbc.query(sql("SELECT `tid`,`created_by`,`org_id` FROM `db_datasource_t` WHERE `tid` IN ("+String.join(",",Collections.nCopies(datasourceIds.size(),"?"))+") AND `tenant_id`=? AND `is_del`=0"),(rs,i)->row(rs),args.toArray());
         Set<String> allowed=new LinkedHashSet<>();
-        // Resolve the current role scope once for the complete source set, then verify every ID.
-        scopes.visibleDataSources("MENU:2081000000000000002",sources).forEach(source->allowed.add(String.valueOf(source.get("tid"))));
+        // The query already checks every source ID in the active tenant; no additional menu scope applies.
+        sources.forEach(source->allowed.add(String.valueOf(source.get("tid"))));
         if(!allowed.equals(datasourceIds))throw forbidden();
         return pipeline;
     }
-    private static MappingException forbidden(){return new MappingException("RESOURCE_FORBIDDEN","流程或其引用资源不存在、不属于当前租户或超出当前角色数据范围");}
+    private static MappingException forbidden(){return new MappingException("RESOURCE_FORBIDDEN","流程或其引用资源不存在或不属于当前租户");}
     private static void addReference(Set<String> values,Object value){if(value!=null){String text=value.toString().trim();if(!text.isBlank()&&!text.equals("null"))values.add(text);}}
     private static String actor(){try{return StpUtil.isLogin()?StpUtil.getLoginIdAsString():"system";}catch(cn.dev33.satoken.exception.SaTokenContextException unavailable){return "system";}}
     private static String id(){return UUID.randomUUID().toString().replace("-","");}

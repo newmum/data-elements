@@ -328,7 +328,7 @@ public class AccessTaskChainService {
         List<Map<String, Object>> rows = query("select tid, db_name, created_by, org_id from db_datasource_t where tid in ("
                 + placeholders(ids.size()) + ") and tenant_id = ? and is_del = 0", args, 201);
         Map<String, Map<String, Object>> authorized = new LinkedHashMap<>();
-        for (Map<String, Object> row : scopes.visibleDataSources(RESOURCE, rows)) authorized.put(text(row, "tid"), row);
+        for (Map<String, Object> row : rows) authorized.put(text(row, "tid"), row);
         if (!authorized.keySet().equals(ids)) throw failure(HttpStatus.FORBIDDEN, "链路数据源不存在或无访问权限");
         return authorized;
     }

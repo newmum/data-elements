@@ -28,7 +28,6 @@
 // /ods/dataAggTaskEnsure，再携租约回报结果。页面离开时不在后台继续执行。
 import tenantRuntime
 import tableSort
-import dataScope
 import cn.hutool.core.util.IdUtil
 import cn.hutool.json.JSONUtil
 
@@ -45,7 +44,7 @@ var visibleDbIdsFor = ids => {
     if (ids.size() == 0) { return [] }
     var rows = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
         .eq('is_del', 0).in('tid', ids).select()
-    var visible = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', rows)
+    var visible = (rows)
     var result = []
     for (row in visible) { result.add(text(row.tid)) }
     return result
@@ -54,7 +53,7 @@ var assertJobVisible = job => {
     if (job == null) { exit 404, '批量作业不存在或不属于当前租户' }
     var visibleIds = visibleDbIdsFor([text(job.sourceDbId), text(job.targetDbId)])
     if (!visibleIds.contains(text(job.sourceDbId)) || !visibleIds.contains(text(job.targetDbId))) {
-        exit 403, '批量作业的来源库或目标库不在当前角色的数据范围内'
+        exit 403, '批量作业的来源库或目标库不存在或已删除'
     }
     return job
 }
@@ -112,7 +111,7 @@ var refreshStatus = id => {
 }
 
 if (action == 'list') {
-    // 最近 100 个租户作业的来源/目标库一次批量预取并按当前角色过滤。
+    // 最近 100 个租户作业的来源/目标库一次批量预取并校验当前租户有效记录。
     var page = db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId)
         .orderBy('created_time', 'desc').page(100, 0)
     var rows = page == null || page.list == null ? [] : page.list
@@ -133,21 +132,12 @@ if (action == 'list') {
     return {jobs: jobs}
 }
 if (action == 'sourceOptions') {
-    // 在数据库分页之前施加当前角色的 ALL/ORG/OWNER 条件；不先取全量再过滤。
-    var scope = dataScope.resource('MENU:2081000000000000002')
+    // 直接在当前行业库分页查询有效数据源，不再叠加角色 OWNER/ORG 范围。
     var query = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
         .eq('is_del', 0).gt('asset_status', 0)
-    if (scope.scope == 'OWNER') { query = query.eq('created_by', scope.userId) }
-    if (scope.scope == 'ORG') {
-        if (scope.organizationIds == null || scope.organizationIds.size() == 0) {
-            return {list: [], total: 0}
-        }
-        query = query.in('org_id', scope.organizationIds)
-    }
-    if (!['ALL', 'ORG', 'OWNER'].contains(text(scope.scope))) { exit 403, '当前角色数据范围无效' }
     var optionsPage = query.orderBy('updated_time', 'desc').page(201, 0)
     if (optionsPage != null && optionsPage.total > 200) {
-        exit 400, '当前角色可见来源库超过200个，请先缩小数据范围'
+        exit 400, '当前行业来源库超过200个，请先缩小筛选范围'
     }
     var options = []
     var optionRows = optionsPage == null || optionsPage.list == null ? [] : optionsPage.list
@@ -159,7 +149,7 @@ if (action == 'sourceOptions') {
         total: optionsPage == null ? 0 : optionsPage.total}
 }
 if (action == 'targetOptions') {
-    // 目标库仍须属于 ODS 分域配置，同时按当前角色数据源范围过滤。
+    // 目标库仍须属于 ODS 分域配置，按当前租户读取有效数据源。
     var dictRoot = db.table('sym_dict_t').where().eq('tenant_id', tenantId)
         .eq('dict_code', 'dataSourceType').eq('parent_id', '0').eq('is_del', 0).selectOne()
     if (dictRoot == null) { return {list: [], total: 0} }
@@ -186,7 +176,7 @@ if (action == 'targetOptions') {
     if (dbIds.size() == 0) { return {list: [], total: 0} }
     var dbRows = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
         .eq('is_del', 0).eq('show_connect', 1).in('tid', dbIds).select()
-    var visibleRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', dbRows)
+    var visibleRows = (dbRows)
     var options = []
     for (row in visibleRows) {
         options.add({tid: text(row.tid), dbName: text(row.dbName), dbType: text(row.dbType)})
@@ -202,8 +192,8 @@ if (action == 'preview') {
     }
     var previewDb = db.table('db_datasource_t').where().eq('tenant_id', tenantId)
         .eq('tid', previewDbId).eq('is_del', 0).gt('asset_status', 0).selectOne()
-    if (previewDb == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [previewDb]).size() != 1) {
-        exit 403, '来源库不存在或不在当前角色的数据范围内'
+    if (previewDb == null) {
+        exit 403, '来源库不存在或不在当前租户有效记录范围内'
     }
     var sourceColumn=tableSort.field(body,{tableName:"coalesce(nullif(table_name_cn,''),table_name)"},'tableName')
     var sourceDirection=tableSort.direction(body)
@@ -329,13 +319,13 @@ if (action == 'create') {
     if (sourceDb == null || targetDb == null || (first(sourceDb, ['assetStatus', 'asset_status']) == null || first(sourceDb, ['assetStatus', 'asset_status'])::int <= 0)) {
         exit 400, '所选数据库不存在、不属于当前租户或来源库尚未完成登记'
     }
-    // 当前会话角色的 ALL/ORG/OWNER 数据源范围只计算一次，随后每个
+    // 当前租户的数据源只批量读取一次，随后每个
     // 来源/目标 ID 都须通过已授权的数据源关系；混入无权项整单拒绝。
-    var visibleDbs = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [sourceDb, targetDb])
+    var visibleDbs = ([sourceDb, targetDb])
     var visibleDbIds = []
     for (visibleDb in visibleDbs) { visibleDbIds.add(text(visibleDb.tid)) }
     if (!visibleDbIds.contains(sourceDbId) || !visibleDbIds.contains(targetDbId)) {
-        exit 403, '来源库或目标库不在当前角色的数据范围内'
+        exit 403, '来源库或目标库不存在或已删除'
     }
     var prior = db.table('ods_batch_create_job_t').where().eq('tenant_id', tenantId)
         .eq('request_key', requestKey).selectOne()

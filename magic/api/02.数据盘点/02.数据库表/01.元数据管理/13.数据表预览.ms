@@ -28,7 +28,6 @@
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
 import tenantRuntime
-import dataScope
 import tableSort
 import hwhive
 import log
@@ -252,7 +251,6 @@ if (dbAsset == null) {
     exit 500, '表所属数据源不存在'
 }
 
-if(dataScope.visibleDataSourcesFor('MENU:2081000000000000002',[dbAsset]).size()!=1){exit 403,'表所属数据源不在当前角色数据范围内';}
 // 一次批量读取当前租户的字段快照，同时用于中文表头、排序白名单和主键补序。
 var fieldRows=db.table('db_table_column_t').where().eq('tenant_id',tenantId).eq('table_id',tableId).eq('is_del',0).page(1001,0)
 if(fieldRows.total>1000){exit 413,'字段超过1000项，不能使用此数据预览';}

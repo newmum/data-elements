@@ -14,7 +14,7 @@ import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
 import org.ssssssss.script.*;
 import org.ssssssss.script.runtime.ExitValue;
 
-/** Executes the editable resources against real SQL, including mixed and denied IDs. */
+/** Executes the editable resources against real SQL, including mixed tenant IDs and legacy menu scope. */
 class TaskCategoryWarehouseScopeMagicTest {
     private static final String INGEST_PAGE = "76fd211790f54164947f276824d19c1d";
     private static final String DISTRIBUTE_PAGE = "1f475a245fda4ba4a885b3ac4f8e2d59";
@@ -63,7 +63,7 @@ class TaskCategoryWarehouseScopeMagicTest {
                 .containsExactlyElementsOf(expected.stream().sorted().limit(pageSize).toList());
         assertThatThrownBy(() -> run(f, INGEST_PAGE, Map.of("viewLevel","table","sortField","untrusted-column")))
                 .hasMessageContaining("不支持的排序字段");
-        // 下游画布保存也应提升根表排序；任务监控时间、无权目标和异租户画布不能影响它。
+        // 同租户目标不再受数据源菜单范围过滤；任务监控时间和异租户画布不能提升根表排序。
         insertTask(f,"recent-root","table-0","warehouse-0",List.of("warehouse-0"));
         insertTask(f,"recent-hop","warehouse-0","raw-0",List.of("raw-0"));
         insertTask(f,"monitor-only","table-2","warehouse-2",List.of("warehouse-2"));
@@ -82,9 +82,9 @@ class TaskCategoryWarehouseScopeMagicTest {
         MagicScript.create(seedScript,null).execute(new MagicScriptContext(Map.of("db",f.db,"base",base.toEpochMilli(),
                 "future",java.util.Date.from(base.plusSeconds(90000)))));
         var recent = run(f, INGEST_PAGE, Map.of("viewLevel","table","datasourceIds",List.of("db"),"pageSize",pageSize));
-        assertThat(((List<?>)recent.get("list")).stream().limit(3).map(value -> ((Map<?,?>)value).get("tid").toString()).toList())
-                .containsExactly("table-0","table-"+(count-1),"table-2");
-        System.out.println("ingestion sorted pages: size="+pageSize+", SQL=7/8; ties/nulls/filters and tenant/role bounds preserved");
+        assertThat(((List<?>)recent.get("list")).stream().limit(4).map(value -> ((Map<?,?>)value).get("tid").toString()).toList())
+                .containsExactly("table-1","table-0","table-"+(count-1),"table-2");
+        System.out.println("ingestion sorted pages: size="+pageSize+", SQL=7/8; ties/nulls/filters and tenant bounds preserved without menu scope");
     }
 
     @Test
@@ -107,7 +107,7 @@ class TaskCategoryWarehouseScopeMagicTest {
                 }
             }
             f.jdbc.update("update db_table_t set access_request_status=1 where datasource_id='db' and mod(cast(substring(tid,7) as int),8)=0");
-            // 下游正在运行，不能把已停止的本表第一跳显示成已接入；无权目标也不能改变本表状态。
+            // 下游运行不代表本表第一跳运行；旧菜单范围内隐藏的同租户任务仍参与本表状态计算。
             insertTask(f, "downstream", "warehouse-1", "raw-1", List.of("raw-1"));
             f.jdbc.update("update nifi_pipeline_t set nifi_process_group_id='downstream-pg' where id='pipe-downstream'");
             groups.addObject().putObject("processGroupStatusSnapshot").put("id", "downstream-pg")
@@ -118,13 +118,13 @@ class TaskCategoryWarehouseScopeMagicTest {
                 counter.reads = 0;
                 var result = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
                         "datasourceIds", List.of("db"), "accessStatus", state), response);
-                int expected = switch (state) { case "all" -> count; case "0" -> count / 8; case "2" -> (count + 4) / 8; case "3" -> count / 2; default -> count / 4; };
+                int expected = switch (state) { case "all" -> count; case "0" -> count / 8; case "2" -> (count + 4) / 8 - 1; case "3" -> count / 2 + 1; default -> count / 4; };
                 assertThat(((Number) result.get("total")).intValue()).isEqualTo(expected);
                 assertThat((List<?>) result.get("list")).hasSize(expected);
                 for (Object value : (List<?>) result.get("list")) {
                     var row = (Map<?, ?>) value;
                     int index = Integer.parseInt(row.get("tid").toString().substring("table-".length()));
-                    String expectedState = index % 8 == 0 ? "2" : index % 4 == 0 ? "0" : index % 4 == 2 ? "1" : "3";
+                    String expectedState = index == 0 ? "3" : index % 8 == 0 ? "2" : index % 4 == 0 ? "0" : index % 4 == 2 ? "1" : "3";
                     assertThat(row.get("accessStatus")).isEqualTo(expectedState);
                     assertThat(row.get("accessStatusText")).isEqualTo(Map.of("0", "待接入", "1", "已接入", "2", "待审批", "3", "待启动").get(expectedState));
                     if (!state.equals("all")) assertThat(row.get("accessStatus")).isEqualTo(state);
@@ -147,7 +147,7 @@ class TaskCategoryWarehouseScopeMagicTest {
             });
             var offlineReady = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
                     "datasourceIds", List.of("db"), "accessStatus", "3"), null);
-            assertThat(((Number) offlineReady.get("total")).intValue()).isEqualTo(count / 4);
+            assertThat(((Number) offlineReady.get("total")).intValue()).isEqualTo(count / 4 + 1);
             assertThat((List<?>) offlineReady.get("list")).allSatisfy(value ->
                     assertThat(((Map<?, ?>) value).get("accessStatus")).isEqualTo("3"));
             var offlineRunning = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count,
@@ -214,7 +214,7 @@ class TaskCategoryWarehouseScopeMagicTest {
     }
 
     @Test
-    void singleChainTargetDetailKeepsTenantAndRoleBoundariesWithoutChangingListEligibility() throws Exception {
+    void singleChainTargetDetailKeepsTenantAndRelationBoundariesWithoutMenuScope() throws Exception {
         var f = fixture(1);
         f.jdbc.update("update db_table_t set asset_status=0 where tid='warehouse-0'");
         f.jdbc.update("update db_datasource_t set asset_status=0 where tid='warehouse'");
@@ -223,7 +223,8 @@ class TaskCategoryWarehouseScopeMagicTest {
         for (String resource : List.of(INGEST_PAGE, DISTRIBUTE_PAGE)) {
             Map<?, ?> detail = run(f, resource, Map.of("viewLevel", "tableDetail", "tableId", "warehouse-0"));
             assertThat(((Map<?, ?>) detail.get("detail")).get("tid")).isEqualTo("warehouse-0");
-            assertThat(run(f, resource, Map.of("viewLevel", "tableDetail", "tableId", "denied-0")).get("detail")).isNull();
+            Map<?, ?> menuHiddenTarget = (Map<?, ?>) run(f, resource, Map.of("viewLevel", "tableDetail", "tableId", "denied-0")).get("detail");
+            assertThat(menuHiddenTarget.get("tid")).isEqualTo("denied-0");
             assertThat(run(f, resource, Map.of("viewLevel", "tableDetail", "tableId", "foreign-0")).get("detail")).isNull();
             assertThat(run(f, resource, Map.of("viewLevel", "tableDetail", "tableId", "warehouse-draft-0")).get("detail")).isNull();
         }
@@ -245,9 +246,9 @@ class TaskCategoryWarehouseScopeMagicTest {
         assertThat(counter.reads).isEqualTo(7);
         counter.reads = 0;
         Map<?, ?> distribute = run(f, DISTRIBUTE_PAGE, Map.of("pageSize", count));
-        assertThat(((Number) distribute.get("total")).intValue()).isEqualTo(3 * count);
+        assertThat(((Number) distribute.get("total")).intValue()).isEqualTo(3 * count + 1);
         assertThat((List<?>) distribute.get("list")).hasSize(count);
-        assertThat(((List<?>) distribute.get("datasourceIds")).stream().map(String::valueOf).toList()).containsExactlyInAnyOrder("warehouse", "raw", "files");
+        assertThat(((List<?>) distribute.get("datasourceIds")).stream().map(String::valueOf).toList()).containsExactlyInAnyOrder("warehouse", "raw", "files", "denied");
         assertThat(counter.reads).isEqualTo(8);
         // Warehouse tables need not have historical source_table_id: ordinary registered rows are valid sources too.
         counter.reads = 0;
@@ -259,24 +260,34 @@ class TaskCategoryWarehouseScopeMagicTest {
         assertThat(((Number) run(f, INGEST_TREE, Map.of()).get("total")).intValue()).isEqualTo(count + 6);
         assertThat(counter.reads).isEqualTo(3);
         counter.reads = 0;
-        assertThat(((Number) run(f, DISTRIBUTE_TREE, Map.of()).get("total")).intValue()).isEqualTo(3 * count);
+        assertThat(((Number) run(f, DISTRIBUTE_TREE, Map.of()).get("total")).intValue()).isEqualTo(3 * count + 1);
         assertThat(counter.reads).isEqualTo(3);
 
         for (String resource : List.of(INGEST_PAGE, DISTRIBUTE_PAGE)) {
             counter.reads = 0;
-            Map<?, ?> denied = run(f, resource, Map.of("viewLevel", "table", "pageSize", count,
+            Map<?, ?> mixedScope = run(f, resource, Map.of("viewLevel", "table", "pageSize", count,
                     "tenantId", "other", "datasourceIds", List.of("denied", "foreign", "warehouse-draft")));
-            assertThat((List<?>) denied.get("list")).isEmpty();
+            if (resource.equals(DISTRIBUTE_PAGE)) {
+                assertThat((List<?>) mixedScope.get("list")).singleElement().satisfies(raw ->
+                        assertThat(((Map<?, ?>) raw).get("tid")).isEqualTo("denied-0"));
+                assertThat(counter.reads).isEqualTo(8);
+            } else {
+                assertThat((List<?>) mixedScope.get("list")).isEmpty();
+                assertThat(counter.reads).isEqualTo(2);
+            }
+            counter.reads = 0;
+            assertThat((List<?>) run(f, resource, Map.of("viewLevel", "table", "tenantId", "other", "datasourceIds",
+                    List.of("foreign", "warehouse-draft", "missing"))).get("list")).isEmpty();
             assertThat(counter.reads).isEqualTo(2);
         }
-        // Supplying mixed IDs never makes classification override authorization or the current tenant.
+        // ODS 资格和可信租户保持生效；旧数据源菜单范围不再隐藏有效同租户对象。
         Map<?, ?> mixed = run(f, DISTRIBUTE_PAGE, Map.of("pageSize", count,
                 "datasourceIds", List.of("warehouse", "db", "denied", "foreign")));
-        assertThat(((List<?>) mixed.get("datasourceIds")).stream().map(String::valueOf).toList()).containsExactly("warehouse");
+        assertThat(((List<?>) mixed.get("datasourceIds")).stream().map(String::valueOf).toList()).containsExactlyInAnyOrder("warehouse", "denied");
         assertThat((List<?>) mixed.get("list")).allSatisfy(raw ->
-                assertThat(((Map<?, ?>) raw).get("datasourceId")).isEqualTo("warehouse"));
+                assertThat(((Map<?, ?>) raw).get("datasourceId")).isIn("warehouse", "denied"));
         System.out.println("task category evidence: page size=" + count
-                + ", ingestion SQL=7, distribution SQL=8, each tree SQL=3; mixed/denied IDs remain scoped");
+                + ", ingestion SQL=7, distribution SQL=8, each tree SQL=3; foreign/missing/draft IDs excluded without menu scope");
     }
 
     @ParameterizedTest @ValueSource(ints = {20, 100})
@@ -285,13 +296,15 @@ class TaskCategoryWarehouseScopeMagicTest {
         f.jdbc.update("update db_table_t set source_table_id=concat('table-',substring(tid,locate('-',tid)+1)) where datasource_id in ('warehouse','raw','files')");
         for (int i = 0; i < count; i++) {
             insertTask(f, "root-" + i, "table-" + i, "warehouse-" + i,
-                    List.of("warehouse-" + i, "raw-" + i, "denied-0"));
+                    List.of("warehouse-" + i, "raw-" + i, "denied-0", "foreign-0", "deleted"));
             insertTask(f, "second-" + i, "warehouse-" + i, "raw-" + i, List.of("raw-" + i));
             insertTask(f, "third-" + i, "raw-" + i, "files-" + i, List.of("files-" + i));
         }
-        // An inaccessible intermediary cannot be made visible by including it in an otherwise valid family.
+        // 同租户中间表不受旧菜单范围过滤；跨租户中间表不能因关联至有效根表而被读取。
         f.jdbc.update("update db_table_t set source_table_id='table-0' where tid='denied-0'");
         insertTask(f, "denied-hop", "denied-0", "raw-0", List.of("raw-0"));
+        f.jdbc.update("update db_table_t set source_table_id='table-0' where tid='foreign-0'");
+        insertTask(f, "foreign-hop", "foreign-0", "raw-0", List.of("raw-0"));
         var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
         Map<?, ?> ingest = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count, "datasourceIds", List.of("db")));
         assertThat((List<?>) ingest.get("list")).hasSize(count);
@@ -299,11 +312,14 @@ class TaskCategoryWarehouseScopeMagicTest {
         for (Object raw : (List<?>) ingest.get("list")) {
             Map<?, ?> source = (Map<?, ?>) raw;
             List<?> tasks = (List<?>) source.get("tasks");
-            assertThat(tasks).hasSize(3);
-            assertThat(tasks).noneSatisfy(task -> assertThat(((Map<?, ?>) task).get("tid")).isEqualTo("denied-hop"));
             String suffix = String.valueOf(source.get("tid")).substring("table-".length());
+            assertThat(tasks).hasSize(suffix.equals("0") ? 4 : 3);
+            assertThat(tasks).noneSatisfy(task -> assertThat(((Map<?, ?>) task).get("tid")).isEqualTo("foreign-hop"));
+            if (suffix.equals("0")) assertThat(tasks).anySatisfy(task ->
+                    assertThat(((Map<?, ?>) task).get("tid")).isEqualTo("denied-hop"));
             Map<?, ?> first = (Map<?, ?>) tasks.stream().filter(task -> ("root-" + suffix).equals(((Map<?, ?>) task).get("tid"))).findFirst().orElseThrow();
-            assertThat((List<?>) first.get("targetTables")).hasSize(2);
+            assertThat((List<?>) first.get("targetTables")).hasSize(3).allSatisfy(target ->
+                    assertThat(((Map<?, ?>) target).get("targetDbId")).isIn("warehouse", "raw", "denied"));
             Map<?, ?> second = (Map<?, ?>) tasks.stream().filter(task -> ("second-" + suffix).equals(((Map<?, ?>) task).get("tid"))).findFirst().orElseThrow();
             assertThat(second.get("sourceDbName")).isEqualTo("名称相同");
             assertThat(second.get("sourceTableId")).isEqualTo("warehouse-" + suffix);
@@ -320,7 +336,7 @@ class TaskCategoryWarehouseScopeMagicTest {
                     assertThat(((Map<?, ?>) task).get("sourceTableId")).isEqualTo(source.get("tid")));
         }
         System.out.println("task family evidence: page size=" + count
-                + ", root+three hops SQL=12, filtered distribution SQL=13; denied target and denied intermediate excluded");
+                + ", root+three hops SQL=12, filtered distribution SQL=13; valid menu-hidden target retained, foreign/deleted targets excluded");
         f.jdbc.update("update db_datasource_t set asset_status=0 where tid='warehouse'");
         Map<?, ?> afterUnregister = run(f, INGEST_PAGE, Map.of("viewLevel", "table", "pageSize", count, "datasourceIds", List.of("db")));
         for (Object raw : (List<?>) afterUnregister.get("list"))

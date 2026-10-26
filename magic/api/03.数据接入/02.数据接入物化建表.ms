@@ -26,7 +26,6 @@
 // 路由：POST /ods/createTapleApply
 // 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，dryRun=true只读校验登记、字典类型和DDL，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
 import tenantRuntime
-import dataScope
 import metadataAsset
 /*
  * 物化建表并自动补目录。
@@ -612,14 +611,14 @@ if (targetDatasource == null) {
     exit 404, '目标数据源不存在'
 }
 if (sourceDatasource == null) { exit 404, '来源数据源不存在或不属于当前租户' }
-var visibleDatabases = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [sourceDatasource, targetDatasource])
+var visibleDatabases = ([sourceDatasource, targetDatasource])
 var visibleDatabaseIds = []
 for (databaseRow in (visibleDatabases == null ? [] : visibleDatabases)) {
     visibleDatabaseIds.add(text(databaseRow.tid))
 }
 if (sourceDatasource == null || !visibleDatabaseIds.contains(text(sourceDatasource.tid))
     || !visibleDatabaseIds.contains(text(targetDatasource.tid))) {
-    exit 403, '来源或目标数据源不在当前角色数据范围内'
+    exit 403, '来源或目标数据源不存在或已删除'
 }
 if (!blank(catalogId)) {
     var selectedCatalog = db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('tid', catalogId).eq('is_del', 0).selectOne()
@@ -655,14 +654,14 @@ if (dictionaryIds.size() > 0) {
     }
     var dictionaryDbRows = dictionaryDbIds.size() == 0 ? [] : db.table('db_datasource_t').where()
         .eq('tenant_id', tenantId).in('tid', dictionaryDbIds).eq('is_del', 0).select()
-    var visibleDictionaryDbs = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', dictionaryDbRows)
+    var visibleDictionaryDbs = (dictionaryDbRows)
     var permittedDictionaryDbIds = []
     for (dictionaryDb in visibleDictionaryDbs) { permittedDictionaryDbIds.add(text(dictionaryDb.tid)) }
     for (dictionaryId in dictionaryIds) {
         var dictionary = metadataTableById[dictionaryId]
         var fieldNames = dictionaryFieldsById[dictionaryId].join('、')
         if (dictionary == null) { exit 403, '字段“' + fieldNames + '”关联的数据库字典表不存在、已删除或不属于当前租户，请在登记第4步核对字典表关联' }
-        if (!permittedDictionaryDbIds.contains(text(dictionary.datasourceId))) { exit 403, '字段“' + fieldNames + '”关联的字典数据源不在当前角色的数据范围内' }
+        if (!permittedDictionaryDbIds.contains(text(dictionary.datasourceId))) { exit 403, '字段“' + fieldNames + '”关联的字典数据源不存在或已删除' }
     }
     var dictionaryColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('table_id', dictionaryIds).eq('is_del', 0).select()
     for (column in dictionaryColumns) {

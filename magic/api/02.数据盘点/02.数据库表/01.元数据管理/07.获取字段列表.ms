@@ -81,7 +81,6 @@
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
 import tenantRuntime
-import dataScope
 var currentTenantId = tenantRuntime.id()
 if (currentTenantId == null || (currentTenantId+'').trim() == '') { exit 401, '当前登录租户无效，请重新登录' }
 import java.util.Map
@@ -125,8 +124,7 @@ var loadDatasource = (datasourceId) => {
     if (blank(datasourceId)) { return null }
     var row = db.table('db_datasource_t').where().eq('tenant_id', currentTenantId).eq('tid', datasourceId).eq('is_del', 0).selectOne()
     if (row == null) { return null }
-    if(dataScope.visibleDataSourcesFor('MENU:2081000000000000002',[row]).size()!=1){exit 403,'数据源不在当前租户或角色数据范围内';}
-    var result = {
+        var result = {
         tid: rowValue(row, ['tid']),
         dbName: rowValue(row, ['dbName', 'db_name']),
         dbType: rowValue(row, ['dbType', 'db_type']),
@@ -192,8 +190,8 @@ if (!blank(tid)) {
     if(tables.size()!=tids.size()){exit 404,'数据表不存在或无访问权限';}
     var sourceIds=tables.map(row=>row.datasourceId).distinct()
     var sources=db.table('db_datasource_t').where().eq('tenant_id',currentTenantId).in('tid',sourceIds).eq('is_del',0).select()
-    if(sources.size()!=sourceIds.size() || dataScope.visibleDataSourcesFor('MENU:2081000000000000002',sources).size()!=sourceIds.size()){
-        exit 403,'数据源不在当前租户或角色数据范围内'
+    if(sources.size()!=sourceIds.size()){
+        exit 404,'数据源不存在或已删除'
     }
     var snapshot = db.table('db_table_column_t').excludes(excludes).where()
         .eq('tenant_id', currentTenantId).in('table_id', tids).eq('is_del', 0).select()

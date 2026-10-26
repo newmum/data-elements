@@ -26,7 +26,6 @@
 // 路由：POST /dst/database/metadata/collectColumns
 // 业务说明：登记第三、四步按表采集/同步字段（POST /dst/database/metadata/collectColumns）。默认已有 db_table_column_t 快照直接返回；force=true 时重新探查当前物理表，按字段名保留已有 ID 和治理设置，更新结构、新增字段，并将来源已移除字段软删除。数据行预览由独立接口实时查询。 支持 dryRun=true 仅探查并返回字段差异，不写入；涉及 db_datasource_t、db_table_t、db_table_column_t 等业务表。
 import tenantRuntime
-import dataScope
 import hwhive
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService as structuredSourceProbeService
 import metadataAsset
@@ -140,8 +139,8 @@ var tableAsset = db.table("db_table_t").where().eq("tenant_id", currentTenantId)
 if (tableAsset == null) { exit 404, "数据表不存在或无访问权限" }
 var datasourceId = firstValue(tableAsset, ["datasourceId", "datasource_id"])
 var sourceRow = db.table('db_datasource_t').where().eq('tenant_id', currentTenantId).eq('tid', datasourceId).eq('is_del', 0).selectOne()
-if (sourceRow == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [sourceRow]).size() != 1) {
-    exit 403, "数据源不在当前租户或角色数据范围内"
+if (sourceRow == null) {
+    exit 403, "数据源不存在或已删除"
 }
 var snapshot = db.table("db_table_column_t").where().eq("tenant_id", currentTenantId).eq("table_id", requestedTableId).eq("is_del", 0).select()
 var force = body != null && (body.force == true || textOf(body.force) == 'true')

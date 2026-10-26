@@ -34,6 +34,8 @@
 
 ## 租户、身份与数据边界
 
+- 按用户确认，数据源登记、元数据探查与数据接入配置不再额外应用数据源管理菜单的 ALL/ORG/OWNER 范围过滤；批量仍按当前行业库、可信租户及逐 ID 有效记录/关联关系校验。该业务例外不取消租户路由、SQL 归属、登录、画布操作及审批权限，不扩大到身份、日志或其他资源模块。详细范围见 `docs/data-elements.md#lowcode-magic`。
+
 - 租户是行业应用的数据边界。控制库 `baseline` 保存租户定义、数据库映射以及共享 `ui_component_t`、`api_file_t`；业务读写使用运行配置中映射到的真实租户数据库，不能因库名相似选择旧副本。物理分库隔离和 `tenant_id` 条件同时生效。
 - Java 使用 `TenantContext`、`TenantDataSourceRegistry` 和 `TenantRoutingDataSource` 路由行业库；控制面服务明确使用 `@UseControlDataSource`。共享页面/API 不表示业务数据跨租户共享，不创建重复主表或第二套等价业务后端。
 - 已认证行业业务 Magic 只从 `tenantRuntime.id()` 取得租户，一次解析后用于写入和原生 SQL 条件；不能以 `body`、`param`、`principal`、浏览器选项或旧记录的租户字段决定数据归属。上下文缺失即拒绝，不能回退到旧记录租户。敏感对象及跨资源关联仍需显式校验归属。

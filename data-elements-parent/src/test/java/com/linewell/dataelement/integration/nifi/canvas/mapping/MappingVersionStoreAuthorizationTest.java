@@ -96,8 +96,7 @@ class MappingVersionStoreAuthorizationTest {
                 assertSame(expected, fixture.store.requirePipeline("p"));
                 assertEquals(3, fixture.jdbc.reads, "task, tables and datasources are each read once");
                 verify(fixture.repository, times(1)).findById("p");
-                verify(fixture.scopes, times(1)).currentScope(RESOURCE);
-                verify(fixture.scopes, times(1)).visibleDataSources(eq(RESOURCE), argThat(rows -> rows.size() == count));
+                verifyNoInteractions(fixture.scopes);
             }
         }
     }
@@ -143,7 +142,7 @@ class MappingVersionStoreAuthorizationTest {
         }
     }
 
-    @Test void ordinaryOwnerAndOrganizationScopesApplyToEveryActualDatasource() {
+    @Test void registeredSourcesIgnoreOwnerAndOrganizationMenuScopes() {
         Fixture fixture = new Fixture();
         fixture.source("first", "alpha", "alice", "org-a");
         fixture.source("second", "alpha", "bob", "org-a");
@@ -153,11 +152,11 @@ class MappingVersionStoreAuthorizationTest {
         fixture.pipeline(List.of(node("one", Map.of("registeredDatasourceId", "first", "registeredTableId", "one")),
                 node("two", Map.of("registeredDatasourceId", "first", "registeredTableId", "two"))));
         try (var ignored = TenantContext.use("alpha")) {
-            forbidden(() -> fixture.store.requirePipeline("p"));
+            assertNotNull(fixture.store.requirePipeline("p"));
             fixture.scope(Scope.ORG, "alice", List.of("org-a"));
             assertNotNull(fixture.store.requirePipeline("p"));
             fixture.scope(Scope.ORG, "alice", List.of("other-org"));
-            forbidden(() -> fixture.store.requirePipeline("p"));
+            assertNotNull(fixture.store.requirePipeline("p"));
             fixture.scope(Scope.ALL, "alice", List.of());
             assertNotNull(fixture.store.requirePipeline("p"));
         }
@@ -188,7 +187,7 @@ class MappingVersionStoreAuthorizationTest {
     @Test void canonicalTaskAndSerializedMappingReferencesCannotBeRemovedToBypassScope() {
         Fixture fixture = new Fixture();
         fixture.source("first", "alpha", "alice", "org-a");
-        fixture.source("hidden", "alpha", "bob", "org-b");
+        fixture.source("hidden", "foreign", "bob", "org-b");
         fixture.jdbc.update("INSERT INTO data_access_agg_task_t VALUES('p','alpha',0,'hidden',NULL,NULL,NULL)");
         fixture.pipeline(List.of(node("one", Map.of("registeredDatasourceId", "first"))));
         try (var ignored = TenantContext.use("alpha")) {
@@ -210,7 +209,7 @@ class MappingVersionStoreAuthorizationTest {
             fixture.jdbc.update("UPDATE db_table_t SET is_del=1");
             assertNotNull(fixture.store.requirePipeline("p"));
             fixture.jdbc.update("UPDATE db_datasource_t SET created_by='bob'");
-            forbidden(() -> fixture.store.requirePipeline("p"));
+            assertNotNull(fixture.store.requirePipeline("p"));
             fixture.scope(Scope.ALL, "alice", List.of());
             fixture.jdbc.update("UPDATE db_datasource_t SET is_del=1");
             forbidden(() -> fixture.store.requirePipeline("p"));
@@ -233,7 +232,7 @@ class MappingVersionStoreAuthorizationTest {
         fixture.pipeline(List.of(node("source", Map.of("registeredDatasourceId", "first"))));
         try (var ignored = TenantContext.use("alpha")) {
             MappingVersionStore compatibility = new MappingVersionStore(fixture.jdbc, fixture.repository);
-            assertEquals("AUTHORIZATION_UNAVAILABLE", assertThrows(MappingException.class,
+            assertEquals("RESOURCE_FORBIDDEN", assertThrows(MappingException.class,
                     () -> compatibility.requirePipeline("p")).code());
             forbidden(() -> fixture.store.requirePipeline("p"));
             List<Pipeline.Node> nodes = new ArrayList<>();
@@ -263,7 +262,7 @@ class MappingVersionStoreAuthorizationTest {
                 assertFalse(published.containsKey("foreign-node"));
                 assertFalse(published.containsKey("other-node"));
                 assertEquals(3, fixture.jdbc.reads, "two authorization reads plus one publication read");
-                verify(fixture.scopes, times(1)).currentScope(RESOURCE);
+                verifyNoInteractions(fixture.scopes);
                 assertThrows(UnsupportedOperationException.class, () -> published.put("changed", "changed"));
             }
         }
@@ -275,8 +274,8 @@ class MappingVersionStoreAuthorizationTest {
         fixture.pipeline(List.of(node("first", Map.of("registeredDatasourceId", "first"))));
         try (var ignored = TenantContext.use("alpha")) {
             fixture.jdbc.reads = 0;
-            forbidden(() -> fixture.store.publishedReferences("p"));
-            assertEquals(2, fixture.jdbc.reads, "publication is not read when current scope rejects a datasource");
+            assertTrue(fixture.store.publishedReferences("p").isEmpty());
+            assertEquals(3, fixture.jdbc.reads, "Current-tenant source requires no menu-role query");
             fixture.scope(Scope.ORG, "alice", List.of("org-a"));
             assertTrue(fixture.store.publishedReferences("p").isEmpty());
             fixture.jdbc.update("INSERT INTO data_access_mapping_publication_t VALUES('alpha','p','same','first')");
@@ -313,7 +312,7 @@ class MappingVersionStoreAuthorizationTest {
                 assertEquals(new HashSet<>(ids), plans.keySet());
                 assertEquals(document, plans.get("plan-0"));
                 assertEquals(3, fixture.jdbc.reads, "two authorization reads plus one digest-verified batch read");
-                verify(fixture.scopes, times(1)).currentScope(RESOURCE);
+                verifyNoInteractions(fixture.scopes);
                 assertThrows(UnsupportedOperationException.class, () -> plans.put("changed", document));
             }
         }

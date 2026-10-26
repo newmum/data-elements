@@ -172,7 +172,6 @@
 import java.util.Map
 import jsons
 import tenantRuntime
-import dataScope
 var tenantId = tenantRuntime.id()
 
 /*
@@ -270,8 +269,10 @@ if (blank(dbId)) {
 var datasource = db.table('db_datasource_t')
     .columns('tid', 'db_name', 'app_id', 'org_id', 'tenant_id')
     .where().eq('tid', dbId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
-if (datasource == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [datasource]).size() != 1) {
-    exit 403, '数据源不在当前租户或角色数据范围内'
+// 登记步骤读取数据源快照，不再叠加元数据管理菜单的角色范围校验。
+// tenantRuntime 与 SQL 租户条件仍限定本次读取的数据归属。
+if (datasource == null) {
+    exit 404, '数据源不存在或已删除'
 }
 
 /* 登记目录抽屉：复用同一 db_table_t 采集快照，按目录关联状态真分页。
@@ -388,6 +389,7 @@ if (pendingMode) {
     // “暂不处理 / 不确定”的记录采用其分类，其他未标注记录仍按物理元数据推断。
     // 直接返回 NamedTable 行，避免额外对象转换导致字段名在不同驱动下丢失。
     return db.table('db_table_t').where()
+        .eq('tenant_id', tenantId)
         .eq('datasource_id', dbId)
         .eq('is_del', 0)
         .eq('annotated', 0)

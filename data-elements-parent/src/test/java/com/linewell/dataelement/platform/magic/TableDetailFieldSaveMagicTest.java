@@ -28,8 +28,9 @@ class TableDetailFieldSaveMagicTest {
     public static class Jsons { public String toJSONStr(Object value) { return cn.hutool.json.JSONUtil.toJsonStr(value); } }
     public static class Scope {
         boolean denied;
+        int menuScopeCalls;
         public String id() { return "police"; }
-        public List<?> visibleDataSourcesFor(String resource, List<?> rows) { return denied ? List.of() : rows; }
+        public List<?> visibleDataSourcesFor(String resource, List<?> rows) { menuScopeCalls++; return denied ? List.of() : rows; }
     }
     static class Fixture {
         final JdbcTemplate jdbc;
@@ -77,7 +78,8 @@ class TableDetailFieldSaveMagicTest {
     }
     @Test void twentyAndHundredFieldsUseFixedReadsAndPreserveWorkflowAndPhysicalMetadata() throws Exception {
         for (int count : List.of(20,100)) {
-            var f=new Fixture(count); assertInstanceOf(Map.class,f.save("table",false)); assertEquals(3,f.reads);
+            var f=new Fixture(count); f.scope.denied=true;
+            assertInstanceOf(Map.class,f.save("table",false)); assertEquals(3,f.reads); assertEquals(0,f.scope.menuScopeCalls);
             assertEquals(count,f.jdbc.queryForObject("select count(*) from db_table_column_t where column_comment='新注释'",Integer.class));
             assertEquals(0,f.jdbc.queryForObject("select nullable from db_table_column_t where tid='c0'",Integer.class));
             var table=f.jdbc.queryForMap("select * from db_table_t where tid='table'");
@@ -87,10 +89,9 @@ class TableDetailFieldSaveMagicTest {
             System.out.println("Detail field save: fields="+count+", SQL reads="+f.reads+", registration/approval/nullable/attachment policy retained");
         }
     }
-    @Test void foreignTenantRoleAndColumnIdsAreRejectedBeforeAnyWrites() throws Exception {
+    @Test void foreignTenantAndColumnIdsAreRejectedBeforeAnyWrites() throws Exception {
         var f = new Fixture(20);
         assertInstanceOf(ExitValue.class,f.save("foreign",false)); assertEquals(1,f.reads);
-        f.scope.denied=true; assertInstanceOf(ExitValue.class,f.save("table",false)); assertEquals(2,f.reads); f.scope.denied=false;
         f.fields.get(19).put("tid","foreign-column"); assertInstanceOf(ExitValue.class,f.save("table",false)); assertEquals(3,f.reads);
         f.fields.get(19).put("tid","other-table-column"); assertInstanceOf(ExitValue.class,f.save("table",false)); assertEquals(3,f.reads);
         assertEquals(0,f.jdbc.queryForObject("select count(*) from db_table_column_t where column_comment='新注释'",Integer.class));
@@ -105,8 +106,9 @@ class TableDetailFieldSaveMagicTest {
             assertTrue(adapter.received.stream().allMatch(row->row.get("tid").toString().matches("c[0-9]+")));
             var first=adapter.received.stream().filter(row->row.get("tid").equals("c0")).findFirst().orElseThrow();
             assertEquals(true,first.get("primaryKey")); assertEquals("已保存注释",first.get("columnComment"));
-            f.scope.denied=true; assertInstanceOf(ExitValue.class,f.schema("table",adapter)); assertEquals(2,f.reads); assertEquals(1,adapter.previews);
-            f.scope.denied=false; assertInstanceOf(ExitValue.class,f.schema("foreign",adapter)); assertEquals(1,f.reads); assertEquals(1,adapter.previews);
+            f.scope.denied=true; assertInstanceOf(Map.class,f.schema("table",adapter)); assertEquals(4,f.reads); assertEquals(2,adapter.previews);
+            assertEquals(0,f.scope.menuScopeCalls);
+            assertInstanceOf(ExitValue.class,f.schema("foreign",adapter)); assertEquals(1,f.reads); assertEquals(2,adapter.previews);
             System.out.println("Schema scope: fields="+count+", fixed 4 business reads plus one connection-config read in runtime, foreign columns excluded before adapter");
         }
     }

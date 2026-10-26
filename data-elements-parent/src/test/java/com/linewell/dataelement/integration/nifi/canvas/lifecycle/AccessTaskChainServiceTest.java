@@ -120,7 +120,7 @@ class AccessTaskChainServiceTest {
             assertThat(graph).containsEntry("rootSourceTableId", "root").containsEntry("selectedPipelineId", "p-t0");
         }
         verify(fixture.jdbc, times(5)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
-        verify(fixture.scopes, times(1)).visibleDataSources(eq("MENU:2081000000000000002"), any());
+        verifyNoInteractions(fixture.scopes);
         verifyNoMoreInteractions(fixture.scopes);
         verifyNoInteractions(fixture.nifi);
     }
@@ -172,11 +172,12 @@ class AccessTaskChainServiceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"source", "target"})
-    void everyRootAndTargetSourceRequiresCurrentRoleVisibility(String hidden) throws Exception {
+    void everyRootAndTargetSourceIgnoresMetadataMenuRole(String hidden) throws Exception {
         Fixture fixture = new Fixture(); fixture.task("t", "root", "ods", "source", "target");
         fixture.deny(hidden);
         try (var tenant = TenantContext.use("ga")) {
-            assertThatThrownBy(() -> fixture.service.byTask("t")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+            assertThat(fixture.service.byTask("t")).isNotEmpty();
+            verifyNoInteractions(fixture.scopes);
         }
     }
 
@@ -198,7 +199,7 @@ class AccessTaskChainServiceTest {
     @Test
     void foreignOrHiddenSecondSinkInLegacyMultiTargetDslRejectsTheWholeGraph() throws Exception {
         Fixture fixture = new Fixture(); fixture.task("t", "root", "ods", "source", "target");
-        fixture.datasource("hidden"); fixture.table("secret", "hidden", "root"); fixture.deny("hidden");
+        fixture.datasource("hidden"); fixture.table("secret", "hidden", "root"); fixture.jdbc.update("update db_datasource_t set tenant_id='other' where tid='hidden'");
         Pipeline.Dsl original = fixture.dsl("root", "ods", "source", "target");
         List<Pipeline.Node> nodes = new ArrayList<>(original.nodes());
         nodes.add(new Pipeline.Node("hidden-sink", "sink.jdbc", "隐藏目标", "sink", 700, 0,
@@ -295,7 +296,7 @@ class AccessTaskChainServiceTest {
             assertThat(graph.get("warnings").toString()).contains("任务来源或目标关联不完整");
         }
         verify(fixture.jdbc, times(6)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
-        verify(fixture.scopes).visibleDataSources(eq("MENU:2081000000000000002"), any());
+        verifyNoInteractions(fixture.scopes);
         assertThat(org.mockito.Mockito.mockingDetails(fixture.jdbc).getInvocations())
                 .noneMatch(invocation -> Set.of("update", "execute", "batchUpdate").contains(invocation.getMethod().getName()));
         verifyNoInteractions(fixture.nifi);
@@ -303,13 +304,14 @@ class AccessTaskChainServiceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"source", "target", "replacement"})
-    void sourceDatabaseChangeStillRequiresEveryRecordedAndActualDatasourcePermission(String hidden) throws Exception {
+    void sourceDatabaseChangeKeepsTenantRecordChecksWithoutMenuRole(String hidden) throws Exception {
         Fixture fixture = new Fixture(); fixture.task("t", "root", "ods", "source", "target");
         fixture.datasource("replacement");
         fixture.jdbc.update("update db_table_t set datasource_id='replacement' where tid='root'");
         fixture.deny(hidden);
         try (var tenant = TenantContext.use("ga")) {
-            assertThatThrownBy(() -> fixture.service.byTask("t")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+            assertThat(fixture.service.byTask("t")).isNotEmpty();
+            verifyNoInteractions(fixture.scopes);
         }
     }
 
@@ -323,7 +325,8 @@ class AccessTaskChainServiceTest {
             assertThat(items(graph)).hasSize(1);
             assertThat(items(graph).getFirst()).doesNotContainKeys("nativeUrl", "processGroupId");
             fixture.deny("source");
-            assertThatThrownBy(() -> fixture.service.byTask("t")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+            assertThat(fixture.service.byTask("t")).containsEntry("relationshipUnavailable", true);
+            verifyNoInteractions(fixture.scopes);
         }
     }
 

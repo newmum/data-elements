@@ -2,6 +2,7 @@ package com.linewell.dataelement.shared.error;
 
 import com.linewell.dataelement.platform.tenant.domain.TenantAccessException;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.net.ConnectException;
 import java.net.SocketException;
@@ -36,7 +37,7 @@ class ApiErrorResolverTest {
         assertThat(error.detail())
                 .contains("java.sql.SQLException")
                 .contains("ORA-01017");
-        assertThat(error.traceId()).hasSize(16);
+        assertThat(error.traceId()).matches("[0-9a-f]{32}");
     }
 
     @Test
@@ -92,7 +93,27 @@ class ApiErrorResolverTest {
         assertThat(error.code()).isEqualTo("SEARCH-CONNECTION-001");
         assertThat(error.message()).contains("全文检索服务", "连接已中断", "稍后重试");
         assertThat(error.detail()).contains("Connection reset", "ElasticSearchIndex.search");
-        assertThat(error.traceId()).hasSize(16);
+        assertThat(error.traceId()).matches("[0-9a-f]{32}");
+    }
+
+    @Test
+    void keepsTheRequestTraceForResolvedAndBusinessErrors() {
+        String traceId = "0123456789abcdef0123456789abcdef";
+        String previousTrace = MDC.get("trace_id");
+        try {
+            MDC.put("trace_id", traceId);
+
+            assertThat(ApiErrorResolver.resolve(new ConnectException("Connection refused")).traceId())
+                    .isEqualTo(traceId);
+            assertThat(ApiErrorResolver.business("VALIDATION-001", "验证失败", null).traceId())
+                    .isEqualTo(traceId);
+        } finally {
+            if (previousTrace == null) {
+                MDC.remove("trace_id");
+            } else {
+                MDC.put("trace_id", previousTrace);
+            }
+        }
     }
 
     @Test

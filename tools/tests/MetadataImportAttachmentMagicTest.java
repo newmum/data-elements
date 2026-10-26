@@ -46,13 +46,13 @@ public class MetadataImportAttachmentMagicTest {
             check(governance.contains("attachmentFields")&&governance.contains("20971520"),"attachment constraints persisted");
             check(f.jdbc.queryForObject("select count(*) from db_table_column_t where column_name='file_id' and is_del=0",Integer.class)==count,"all fields saved");
             System.out.println(count+" tables: 4 reads, attachment constraints persisted");
-            f.scope.denied=true;check(run(f,payload) instanceof ExitValue,"role scope rejected");check(f.writes.get()==0,"role rejection writes nothing");f.scope.denied=false;
+            f.scope.denied=true;payload.put("dryRun",true);check(!(run(f,payload) instanceof ExitValue),"import ignores metadata-menu role scope");check(f.writes.get()==0,"dry preview writes nothing");payload.remove("dryRun");f.scope.denied=false;
             payload.put("dbId","foreign");check(run(f,payload) instanceof ExitValue,"foreign tenant rejected");check(f.writes.get()==0,"tenant rejection writes nothing");
         }
         var f=fixture(1);var payload=input(1);payload.put("dryRun",true);
         ((Map<String,Object>)((List<?>)((Map<?,?>)payload.get("fieldMap")).get("table_0")).getFirst()).put("attachment",Map.of("enabled",true,"maxFileBytes",0,"allowedExtensions",List.of("exe")));
         check(run(f,payload) instanceof ExitValue,"invalid policy rejected");check(f.writes.get()==0,"invalid import has no writes");
-        System.out.println("invalid attachment policy, role scope and tenant ownership rejected before writes");
+        System.out.println("invalid attachment policy and foreign-tenant IDs rejected before writes; role scope absent");
         String governance=Files.readString(Path.of("magic/api/02.数据盘点/02.数据库表/02.数据表管理/05.保存数据表治理配置.ms"));
         governance=governance.substring(governance.indexOf("================================")+32);MagicScript.create(governance,null).compile();
         String preserve="import java.util.Map\nimport java.util.List\nimport cn.hutool.json.JSONUtil\n"+governance.substring(governance.indexOf("var textOf ="),governance.indexOf("var itemValue ="))+governance.substring(governance.indexOf("var previousGovernance ="),governance.indexOf("var dictionaryCategories ="))+"\nreturn governance";

@@ -107,7 +107,7 @@
       "path": "magic/haitong/api/05.数据接收入口/08.批量文件导入.ms",
       "id": "haitong-public-8",
       "databasePath": "/magic-api/api/05.数据接收入口/08.批量文件导入.ms",
-      "baseSha256": "16cac7b75f7ecf47a273b48d1bc85647bda272ccc79862226c73e2c14d75e92b"
+      "baseSha256": "0b47ae09f6977ea5ef0c4037330e914f61bd3b03e9fbaba112459c4b9738c3a3"
     },
     {
       "path": "magic/haitong/api/05.数据接收入口/09.导入文件状态.ms",
@@ -419,7 +419,7 @@
       "path": "magic/haitong/function/01.海通业务/06.数据推送编排.ms",
       "id": "haitong-function-push",
       "databasePath": "/magic-api/function/01.海通业务/06.数据推送编排.ms",
-      "baseSha256": "0ff61ad158e1c02935d885e02419568ce22b5531675e5aea2e20b4991f85541a"
+      "baseSha256": "557c79f85a82cd85ed292c403d2e98875f12e271dc0d0be8184a329961698b6d"
     },
     {
       "path": "magic/haitong/function/01.海通业务/07.运维查询与状态处理.ms",

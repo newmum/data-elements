@@ -160,15 +160,9 @@ var matches = (item, condition) => {
 
 // Sort and page the authorized, deduplicated source-table set in the database.
 import tableSort;
-import dataScope;
 import java.util.List;
 var whereSql=' WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t._row_rank=1';
-var scope=dataScope.resource('MENU:2081000000000000002');
-var scopeUserId=scope.userId;
-var scopeOrgIds=scope.organizationIds;
-if(scope.scope=='OWNER') {whereSql=whereSql+' AND d.created_by=#{scopeUserId}';}
-else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND d.org_id IN (#{scopeOrgIds})');}
-else if(scope.scope!='ALL') {exit 403,'数据范围无效';}
+// 数据表列表按当前行业库和 tenant_id 查询，不再叠加 OWNER/ORG 角色范围。
 var fields={tid:'t.tid',dbId:'t.datasource_id',datasourceId:'t.datasource_id',tableName:'t.table_name',
     tableNameEn:'t.table_name',tableNameCn:'t.table_name_cn',tableComment:'t.table_comment',
     appId:'d.app_id',orgId:'coalesce(t.org_id,d.org_id)',businessType:'t.business_type',

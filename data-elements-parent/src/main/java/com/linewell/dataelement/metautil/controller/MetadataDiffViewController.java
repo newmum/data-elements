@@ -72,7 +72,8 @@ public class MetadataDiffViewController {
     }
     private void requireSource(String tenant,String source){
         var rows=jdbc.queryForList("SELECT tid,tenant_id,created_by,org_id FROM db_datasource_t WHERE tenant_id=? AND tid=? AND is_del=0",tenant,source);
-        if(rows.size()!=1||!scopes.canReadDataSource(rows.getFirst()))throw new IllegalArgumentException("数据源不存在或无权读取");
+        // Registration exploration uses the current tenant's source; it does not reapply menu OWNER/ORG scope.
+        if(rows.size()!=1)throw new IllegalArgumentException("数据源不存在或已删除");
     }
     private synchronized void purge(){views.entrySet().removeIf(e->e.getValue().expires<=clock.millis());}
     private int retainedRows(){return views.values().stream().mapToInt(view->view.rows.size()).sum();}

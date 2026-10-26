@@ -26,7 +26,8 @@ class MetadataDiffViewControllerTest {
             smallBody.put("pageSize",100);clearInvocations(jdbc);var large=(Map<String,Object>)service.page(smallBody).get("data");verify(jdbc,times(1)).queryForList(anyString(),eq("a"),eq("source"));
             var list=(List<Map<String,Object>>)large.get("list");assertEquals(7177,large.get("total"));assertEquals("Table 7176",list.getFirst().get("tableName"));assertEquals(small.get("list"),list.subList(0,20));
             auth.when(StpUtil::getLoginIdAsString).thenReturn("another");assertThrows(IllegalArgumentException.class,()->service.page(smallBody));
-            auth.when(StpUtil::getLoginIdAsString).thenReturn("owner");when(scopes.canReadDataSource(anyMap())).thenReturn(false);assertThrows(IllegalArgumentException.class,()->service.page(smallBody));
+            auth.when(StpUtil::getLoginIdAsString).thenReturn("owner");when(scopes.canReadDataSource(anyMap())).thenReturn(false);assertDoesNotThrow(()->service.page(smallBody));
+            verifyNoInteractions(scopes);
             when(scopes.canReadDataSource(anyMap())).thenReturn(true);
             try(var other=TenantContext.use("b")){assertThrows(IllegalArgumentException.class,()->service.page(smallBody));}
             smallBody.put("overrides",Map.of("Other table",Map.of("businessType","业务表")));assertThrows(IllegalArgumentException.class,()->service.page(smallBody));

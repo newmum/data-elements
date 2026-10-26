@@ -611,8 +611,7 @@
                   >
                     <el-input
                       v-model="connectorForm.password"
-                      type="password"
-                      show-password
+                      v-bind="passwordInputBindings('connectorForm.password')"
                       autocomplete="new-password"
                       placeholder="请输入连接密码"
                     />
@@ -841,8 +840,7 @@
                     <el-form-item label="元数据库密码">
                       <el-input
                         v-model="connectorForm.dbMetaPassword"
-                        type="password"
-                        show-password
+                        v-bind="passwordInputBindings('connectorForm.dbMetaPassword')"
                         autocomplete="new-password"
                       />
                     </el-form-item>
@@ -952,8 +950,7 @@
                     </template>
                     <el-input
                       v-model="connectorForm.maxcomputeAccessKeySecret"
-                      type="password"
-                      show-password
+                      v-bind="passwordInputBindings('connectorForm.maxcomputeAccessKeySecret')"
                       autocomplete="new-password"
                     />
                   </el-form-item>
@@ -1030,8 +1027,7 @@
                     </template>
                     <el-input
                       v-model="connectorForm.minioSecretKey"
-                      type="password"
-                      show-password
+                      v-bind="passwordInputBindings('connectorForm.minioSecretKey')"
                       autocomplete="new-password"
                     />
                   </el-form-item>
@@ -1131,8 +1127,7 @@
                   <el-form-item label="密码">
                     <el-input
                       v-model="connectorForm.ftpPassword"
-                      type="password"
-                      show-password
+                      v-bind="passwordInputBindings('connectorForm.ftpPassword')"
                       autocomplete="new-password"
                       placeholder="请输入连接密码"
                     />
@@ -1211,8 +1206,7 @@
                       <el-form-item label="认证密码">
                         <el-input
                           v-model="connectorForm.apiPassword"
-                          type="password"
-                          show-password
+                          v-bind="passwordInputBindings('connectorForm.apiPassword')"
                           autocomplete="new-password"
                         />
                       </el-form-item>
@@ -1233,8 +1227,7 @@
                       </template>
                       <el-input
                         v-model="connectorForm.apiToken"
-                        type="password"
-                        show-password
+                        v-bind="passwordInputBindings('connectorForm.apiToken')"
                         autocomplete="new-password"
                       />
                     </el-form-item>
@@ -1250,8 +1243,7 @@
                       <el-form-item label="密钥值">
                         <el-input
                           v-model="connectorForm.apiKeyValue"
-                          type="password"
-                          show-password
+                          v-bind="passwordInputBindings('connectorForm.apiKeyValue')"
                           autocomplete="new-password"
                         />
                       </el-form-item>
@@ -1468,8 +1460,7 @@
                                   placeholder="认证账号"
                                 /><el-input
                                   v-model="item.authPassword"
-                                  type="password"
-                                  show-password
+                                  v-bind="passwordInputBindings('item.authPassword:' + (item.clientId || index))"
                                   autocomplete="new-password"
                                   placeholder="认证密码"
                                 /><el-input
@@ -1480,8 +1471,7 @@
                                 v-else-if="item.authType === 'BEARER'"
                                 ><el-input
                                   v-model="item.authToken"
-                                  type="password"
-                                  show-password
+                                  v-bind="passwordInputBindings('item.authToken:' + (item.clientId || index))"
                                   autocomplete="new-password"
                                   placeholder="访问令牌（Bearer Token）"
                                 /><el-input
@@ -1504,8 +1494,7 @@
                                   placeholder="密钥名称，例如 X-API-Key"
                                 /><el-input
                                   v-model="item.apiKeyValue"
-                                  type="password"
-                                  show-password
+                                  v-bind="passwordInputBindings('item.apiKeyValue:' + (item.clientId || index))"
                                   autocomplete="new-password"
                                   placeholder="密钥值"
                                 /><el-input
@@ -1524,8 +1513,7 @@
                                   placeholder="客户端 ID"
                                 /><el-input
                                   v-model="item.oauthClientSecret"
-                                  type="password"
-                                  show-password
+                                  v-bind="passwordInputBindings('item.oauthClientSecret:' + (item.clientId || index))"
                                   autocomplete="new-password"
                                   placeholder="客户端密钥"
                                 /><el-input
@@ -2019,8 +2007,7 @@
                       </template>
                       <el-input
                         v-model="connectorForm.kafkaPassword"
-                        type="password"
-                        show-password
+                        v-bind="passwordInputBindings('connectorForm.kafkaPassword')"
                         autocomplete="new-password"
                       />
                     </el-form-item>
@@ -4523,6 +4510,84 @@ const currentDb = computed(() => {
   return dbs.value.find((el) => el.did === currentDid.value) || {};
 });
 const leftList = computed(() => dbs.value);
+
+// PASSWORD_VISIBILITY_START
+// 草稿展示编码不代表已保存；后端主键（含失效记录的原标识）才决定查看方式。
+const hasPersistedDatasource = computed(() => {
+  const source = currentDb.value;
+  return !source.isDraft && !!(source.tid || source.id || source.originalTid);
+});
+const passwordContext = computed(() => [
+  currentDid.value,
+  sourceType.value,
+  accessMode.value,
+  connectionEnabled.value,
+  hasPersistedDatasource.value ? "saved" : "draft",
+].join(":"));
+const passwordPeek = reactive({ active: "", hovered: "", focused: "", control: false });
+const hidePasswordPeek = () => {
+  passwordPeek.active = "";
+  passwordPeek.control = false;
+};
+const resetPasswordPeek = () => {
+  hidePasswordPeek();
+  passwordPeek.hovered = "";
+  passwordPeek.focused = "";
+};
+/** @param {KeyboardEvent} event */
+const handlePasswordControlDown = (event) => {
+  if (event.key !== "Control" || event.repeat || rightPanelLoading.value) return;
+  passwordPeek.control = true;
+  passwordPeek.active = passwordPeek.hovered || passwordPeek.focused;
+};
+/** @param {KeyboardEvent} event */
+const handlePasswordControlUp = (event) => {
+  if (event.key === "Control" || !event.ctrlKey) hidePasswordPeek();
+};
+const handlePasswordVisibilityChange = () => {
+  if (document.hidden) resetPasswordPeek();
+};
+/** @param {string} field */
+const passwordInputBindings = (field) => ({
+  // 切换数据源、连接类型或首次保存后重建输入框，清除组件内部的眼睛开关状态。
+  key: `${passwordContext.value}:${field}`,
+  type: hasPersistedDatasource.value && passwordPeek.control && passwordPeek.active === field
+    ? "text" : "password",
+  showPassword: !hasPersistedDatasource.value,
+  onMouseenter: (event) => {
+    passwordPeek.hovered = field;
+    passwordPeek.active = field;
+    passwordPeek.control = event.ctrlKey;
+  },
+  onMouseleave: () => {
+    if (passwordPeek.hovered === field) passwordPeek.hovered = "";
+    if (passwordPeek.active === field) hidePasswordPeek();
+  },
+  onFocus: () => {
+    passwordPeek.focused = field;
+    passwordPeek.active = field;
+  },
+  onBlur: () => {
+    if (passwordPeek.focused === field) passwordPeek.focused = "";
+    if (passwordPeek.active === field) hidePasswordPeek();
+  },
+});
+watch([passwordContext, rightPanelLoading, registerModalContext.open], resetPasswordPeek);
+onMounted(() => {
+  window.addEventListener("keydown", handlePasswordControlDown);
+  window.addEventListener("keyup", handlePasswordControlUp);
+  window.addEventListener("blur", resetPasswordPeek);
+  document.addEventListener("visibilitychange", handlePasswordVisibilityChange);
+});
+onBeforeUnmount(() => {
+  resetPasswordPeek();
+  window.removeEventListener("keydown", handlePasswordControlDown);
+  window.removeEventListener("keyup", handlePasswordControlUp);
+  window.removeEventListener("blur", resetPasswordPeek);
+  document.removeEventListener("visibilitychange", handlePasswordVisibilityChange);
+});
+// PASSWORD_VISIBILITY_END
+
 // 与后端 NumericId（Snowflake）采用相同的 41 位时间戳 + 12 位序列号数字格式。
 // 它仅用于新建草稿的页面展示，实际保存仍由后端重新分配主键。
 const numericIdEpoch = 1288834974657n;

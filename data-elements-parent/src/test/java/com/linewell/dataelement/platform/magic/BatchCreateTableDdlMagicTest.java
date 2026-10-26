@@ -137,7 +137,7 @@ class BatchCreateTableDdlMagicTest {
         assertEquals(true,((Map<?,?>)managedHive.get("targetSupport")).get("db-1"));
         assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
         f.scope.deniedId="db-19";
-        assertInstanceOf(ExitValue.class,f.run(body));assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
+        assertInstanceOf(Map.class,f.run(body));assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
         f.scope.deniedId=null;f.jdbc.update("update db_datasource_t set tenant_id='other' where tid='db-19'");
         assertInstanceOf(ExitValue.class,f.run(body));assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
         f.jdbc.update("update db_table_t set tenant_id='other' where tid='source'");
@@ -297,7 +297,7 @@ class BatchCreateTableDdlMagicTest {
             }
             assertEquals(1,fixture.counter.reads);assertEquals(0,fixture.counter.writes);
             fixture.scope.deniedId="db-19";
-            assertInstanceOf(ExitValue.class,fixture.run(),"Mixed unauthorized targets must fail as a whole");
+            assertInstanceOf(Map.class,fixture.run(),"Current-tenant targets ignore the metadata menu role");
             assertEquals(1,fixture.counter.reads);assertEquals(0,fixture.counter.writes);
         }
     }
@@ -342,15 +342,15 @@ class BatchCreateTableDdlMagicTest {
     }
 
     @Test
-    void aDeniedDatasourceRejectsTheWholeTwentyTargetBatch() throws Exception {
+    void menuRoleDoesNotRejectTheCurrentTenantTwentyTargetBatch() throws Exception {
         Fixture fixture = new Fixture(20);
         fixture.scope.deniedId = "db-19";
 
-        assertInstanceOf(ExitValue.class, fixture.run());
+        assertInstanceOf(Map.class, fixture.run());
 
         assertEquals(1, fixture.counter.reads);
         assertEquals(0, fixture.counter.writes);
-        assertEquals(0, fixture.ddlGenerator.calls);
+        assertEquals(20, fixture.ddlGenerator.calls);
     }
 
     @Test

@@ -161,7 +161,7 @@ public class TableDetailPreviewTest {
     @Test void scopeAndTenantRejectBeforeHiveAndCrossDatabaseNamesCannotEscape() throws Exception {
         var f=new Fixture();
         assertEquals(500,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","foreign-table"))).code);assertEquals(0,f.hive.queries.size());
-        f.scope.denied=true;assertEquals(403,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table"))).code);assertEquals(0,f.hive.queries.size());
+        f.scope.denied=true;assertDoesNotThrow(()->f.run(Map.of("tableId","table")));assertFalse(f.hive.queries.isEmpty());f.hive.queries.clear();
         f.scope.denied=false;
         f.db.update("UPDATE db_table_t SET table_name='other.demo' WHERE tid='table'");
         assertEquals(400,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table"))).code);assertEquals(0,f.hive.queries.size());
@@ -224,8 +224,8 @@ public class TableDetailPreviewTest {
         assertEquals(240,((List<Map<String,Object>>)response.get("rows")).getFirst().get("id"));
         assertEquals(List.of("id","gender_code"),response.get("columns"));
         f.hive.queries.clear();f.scope.denied=true;
-        assertEquals(403,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table","countMode","none"))).code);
-        assertEquals(0,f.hive.queries.size());f.scope.denied=false;
+        assertDoesNotThrow(()->f.run(Map.of("tableId","table","countMode","none")));
+        assertFalse(f.hive.queries.isEmpty());f.hive.queries.clear();f.scope.denied=false;
         assertEquals(500,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","foreign-table","countMode","none"))).code);
         assertEquals(0,f.hive.queries.size());
         assertEquals(400,assertThrows(PreviewRejected.class,()->f.run(Map.of("tableId","table","countMode","unbounded"))).code);

@@ -21,18 +21,18 @@ class BatchAnnotationRegistrationTest {
         Map<?,?> result=(Map<?,?>) run(f,scope,index,rows,false);
         assertThat(((Number)result.get("affected")).intValue()).isEqualTo(count);
         assertThat(counter.reads).isEqualTo(3); // sources, requested tables, all old columns
-        assertThat(scope.calls).isEqualTo(1);
+        assertThat(scope.calls).isZero();
         assertThat(index.calls).isEqualTo(1);
         assertThat(f.status()).isEqualTo(1);
         assertThat(f.jdbc.queryForObject("select count(*) from db_table_column_t",Integer.class)).isEqualTo(count);
         assertThat(f.jdbc.queryForObject("select count(*) from db_table_t where asset_status=0",Integer.class)).isEqualTo(count);
     }
-    @Test void deniedAndForeignSourcesAndOversizedBatchesNeverWrite() throws Exception {
+    @Test void roleIndependentPreviewAndInvalidBatchesNeverWrite() throws Exception {
         var f=fixture(20);
         var scope=new DatasourceCompletionMagicTest.ScopeRuntime();
         var index=new IndexRuntime();
         scope.denied=true;
-        assertThat(run(f,scope,index,rows(20),false)).isInstanceOf(ExitValue.class);
+        assertThat(run(f,scope,index,rows(20),true)).isInstanceOf(Map.class);
         scope.denied=false;
         var mixed=new ArrayList<>(rows(20));
         mixed.add(Map.of("propList",Map.of("datasourceId","foreign","tableName","foreign","tableComment","外租户表")));

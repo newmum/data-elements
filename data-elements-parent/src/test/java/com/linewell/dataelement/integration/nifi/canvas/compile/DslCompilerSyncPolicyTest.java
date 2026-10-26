@@ -163,7 +163,11 @@ class DslCompilerSyncPolicyTest {
     @Test
     void dateFetchWithoutTimestampFailsBeforeCreatingAnyNativeGroup() {
         assertThatThrownBy(() -> compiler.compile(flow(Map.of("syncMode", "FULL", "incrementalColumn", ""), target())))
-                .hasMessageContaining("登记时间戳");
+                .isInstanceOfSatisfying(NodeConfigException.class, error -> {
+                    assertThat(error.nodeId()).isEqualTo("source");
+                    assertThat(error.fieldKey()).isEqualTo("incrementalColumn");
+                })
+                .hasMessageContaining("时间戳");
         verifyNoInteractions(nifi);
     }
 

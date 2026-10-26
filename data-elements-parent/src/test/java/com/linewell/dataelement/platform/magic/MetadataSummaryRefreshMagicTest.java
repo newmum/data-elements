@@ -30,14 +30,14 @@ class MetadataSummaryRefreshMagicTest {
             System.out.println("Tables=" + size + ": control SQL=2, one bounded summary query, one current-table count");
         }
     }
-    @Test void tenantRoleAndAssociationAreCheckedBeforeAnyProbe() throws Exception {
+    @Test void tenantAndAssociationRejectWhileMenuRoleDoesNotBlockProbe() throws Exception {
         Fixture f = new Fixture(20);
         assertThat(f.read("other", "db", "table")).isInstanceOf(ExitValue.class);
         assertThat(f.read("ga", "wrong-db", "table")).isInstanceOf(ExitValue.class);
         f.scope.denied = true;
-        assertThat(f.read("ga", "db", "table")).isInstanceOf(ExitValue.class);
-        assertThat(f.probe.pages).isZero();
-        assertThat(f.probe.counts).isZero();
+        assertThat(f.read("ga", "db", "table")).isInstanceOf(Map.class);
+        assertThat(f.probe.pages).isEqualTo(1);
+        assertThat(f.probe.counts).isEqualTo(1);
     }
     @Test void oceanBaseLoginSuffixIsNotAnOracleOwnerAndQualifiedResultsStillMatch() throws Exception {
         Fixture f = new Fixture(20);

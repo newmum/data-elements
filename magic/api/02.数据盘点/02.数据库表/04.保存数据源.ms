@@ -29,7 +29,6 @@ import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import tenantRuntime
 import metadataAsset
-import dataScope
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import cn.hutool.core.util.IdUtil
 import cn.hutool.json.JSONUtil
@@ -73,8 +72,8 @@ var requestedStatus = first(props, ['assetStatus', 'asset_status'])
 if (props.completeOnly == true || ['1', '2'].contains(text(requestedStatus))) {
     var existed = db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
     if (existed == null) { exit 404, '数据源不存在或不属于当前租户' }
-    var visible = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [existed])
-    if (visible == null || visible.size() != 1) { exit 403, '数据源不在当前角色的数据范围内' }
+    var visible = ([existed])
+    if (visible == null || visible.size() != 1) { exit 403, '数据源不存在或已删除' }
     completionReview = metadataAsset.reviewRegistrationStatus(tid)
     if (props.dryRun == true || body?.dryRun == true) { return completionReview }
 }

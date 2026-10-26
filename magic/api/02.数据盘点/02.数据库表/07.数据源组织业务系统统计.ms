@@ -29,7 +29,6 @@ import tenantEs
 import tenantRuntime
 var tenantId = tenantRuntime.id()
 import '@/common/configData' as configData
-import dataScope
 
 /*
  * 数据源组织树统计。
@@ -99,7 +98,6 @@ var datasourceById = {}
 if (candidateIds.size() > 0) {
     var datasourceRows = db.table('db_datasource_t').where()
         .in('tid', candidateIds).eq('tenant_id', tenantId).eq('is_del', 0).select()
-    datasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', datasourceRows)
     for (datasource in datasourceRows) {
         var datasourceId = datasource?.tid
         if (!blank(datasourceId)) {

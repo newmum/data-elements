@@ -31,7 +31,6 @@ import jsons
 import log
 import metadataAsset
 import tenantRuntime
-import dataScope
 import '@post:/dst/maintenance/batchRefresh' as refreshAssetIndex
 
 /*
@@ -140,11 +139,11 @@ for (prepared in preparedItems) {
 }
 var sources = db.table('db_datasource_t').where().in('tid', batchSourceIds)
     .eq('tenant_id', tenantId).eq('is_del', 0).select()
-var visibleSources = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', sources)
+var visibleSources = (sources)
 var visibleSourceIds = []
 for (source in visibleSources) { visibleSourceIds.add(textOf(rowValue(source, ['tid']))) }
 for (sourceId in batchSourceIds) {
-    if (!visibleSourceIds.contains(sourceId)) { exit 403, '数据源不存在或不在当前租户和角色范围内' }
+    if (!visibleSourceIds.contains(sourceId)) { exit 403, '数据源不存在或不在当前租户内' }
 }
 if (requestedTableIds.size() == 0) { requestedTableIds.add('') }
 var existingRows = db.select("""

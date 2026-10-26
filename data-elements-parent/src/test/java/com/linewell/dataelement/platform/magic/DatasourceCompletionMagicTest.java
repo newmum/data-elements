@@ -26,16 +26,16 @@ class DatasourceCompletionMagicTest {
         result = (Map<?,?>) fixture.run(false);
         assertThat(result.get("assetStatus")).isEqualTo(2);
         assertThat(fixture.status()).isEqualTo(2);
-        assertThat(fixture.scope.calls).isEqualTo(2);
+        assertThat(fixture.scope.calls).isZero();
         assertThat(fixture.es.calls).isEqualTo(2);
     }
-    @Test void previewAndDeniedScopeNeverWrite() throws Exception {
+    @Test void previewIgnoresMenuRoleScopeAndNeverWrites() throws Exception {
         Fixture fixture = new Fixture(20);
         Map<?,?> result = (Map<?,?>) fixture.run(true);
         assertThat(result.get("assetStatus")).isEqualTo(1);
         assertThat(fixture.status()).isZero();
         fixture.scope.denied=true;
-        assertThat(fixture.run(false)).isInstanceOf(ExitValue.class);
+        assertThat(fixture.run(true)).isInstanceOf(Map.class);
         assertThat(fixture.status()).isZero();
         assertThat(fixture.es.calls).isZero();
     }

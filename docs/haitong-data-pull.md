@@ -516,6 +516,8 @@ haitong-data-pull/
 
 通用部署模板默认监听 `0.0.0.0:18083`，启用本地 FTP 目标和独立登记配置接收，Kafka 默认停用，不访问元数据平台。先填写 MySQL 主机及账号、文件服务器协议/主机/端口/账号/目录，再配置以下五项。可以直接把引用替换为部署机自己的值；保留引用时须在实际启动进程中提供环境变量。
 
+原生包的 MySQL JDBC URL 引用 `db.host`、`db.port` 和 `db.name`，默认连接超时 5 秒、网络读取超时 30 秒并启用 TCP keepalive。连接池默认 20，每类投递线程默认 1，减少高延迟数据库环境下后台轮询对接口请求连接的争用；MySQL 仍校验证书和主机名。
+
 | 配置项 | 模板引用 |
 | --- | --- |
 | 数据库密码 | `db.password: env:DB_PASSWORD` |
@@ -527,6 +529,8 @@ haitong-data-pull/
 编辑器账号默认为 `admin`，包内不提供默认密码。业务密钥与同步密钥使用不同随机值，至少 24 字符。附件功能还须按真实登记的表和字段配置集合、格式、大小及调用方权限；集合示例不会自动启用或导入业务数据。表批次目的地只取海通自己的 YAML；与平台联调时，ODS 非结构化数据配置指向同一个文件服务器。
 
 Linux 解压后执行 `bash scripts/start-background.sh`，再用 `bash scripts/status.sh` 检查进程和所配置端口的健康状态，停止用 `bash scripts/stop-background.sh`。长期运行可用 `scripts/install-systemd.sh`，提前按服务账号准备 `data/`、`logs/` 的访问权限。Windows 在命令提示符中进入解压目录后执行 `scripts\run.cmd`，保持窗口打开，Ctrl+C 停止。
+
+Linux 启动器依次检查 `HAITONG_JAVA_BIN`、有效的 `JAVA_HOME`、部署目录旁（含上一层）的 `jdk-21*` / `java-21*` 和 PATH，只接受 Java 21。显式指定的路径无效时直接报错；旧版 `JAVA_HOME` 或 PATH 不会遮住旁边可用的 JDK 21。版本检查使用兼容旧版 Java 的 `-version`。例如服务在 `/home/soft/backend/haitong-data-pull`、JDK 在 `/home/soft/backend/jdk-21.0.9` 时，启动前可执行 `export HAITONG_JAVA_BIN=/home/soft/backend/jdk-21.0.9/bin/java`；安装 systemd 则用 `sudo bash scripts/install-systemd.sh --app-dir /home/soft/backend/haitong-data-pull --java-bin /home/soft/backend/jdk-21.0.9/bin/java`，服务文件保存解析后的绝对路径。`scripts/java-env.sh` 是三个 Linux 启动入口共同加载的内部辅助文件，无需单独执行，升级启动脚本时须一起复制。前台和后台启动均固定到部署根目录，保证从 `scripts/` 内执行时数据及日志仍写入部署根目录。
 
 Windows 启动脚本为 Java 21 的 HTTP 回环连接设置短临时目录，默认 `%SystemDrive%\Temp\haitong-uds`；如当前账号无法创建该目录，先把 `HAITONG_UDS_DIR` 指向自己可写的短绝对路径。示例业务时间显式使用北京时间，避免启动器的 UTC 时区影响增量水位。
 
@@ -543,6 +547,8 @@ Windows 启动脚本为 Java 21 的 HTTP 回环连接设置短临时目录，默
 IDE 启动使用主类 `com.haitong.HaitongApplication`、工作目录 `haitong-data-pull`，并在 Program arguments 填写 `--spring.config.location=classpath:/application.yml,file:<仓库外私有YAML的绝对路径>`。这里必须使用当前环境真实路径；不要把数据库口令、访问密钥写到启动参数或版本库。若只使用公开的 `config/application.yml` 模板，则按其配置设置 `DB_PASSWORD`、编辑器密码等环境变量；模板本身不代表已经配置好运行凭据。
 
 日志统一查看根目录 `logs/haitong-data-pull/local-runtime/`；本机私有配置与工程通用模板均使用 18083，启动器会核对实际健康检查地址。
+
+远程 MySQL 的显式 `db.url` 应设置有限的 `connectTimeout` 与 `socketTimeout`，连接池的借用等待超时不能代替网络读取超时。本机私有连接使用 `connectTimeout=5000`、`socketTimeout=30000`（单位毫秒）及 `tcpKeepAlive=true`；连接池为 20，每类投递线程为 1，为编辑器与业务请求保留连接余量。其他环境按网络延迟和负载调整，连接参数及账号仍保存在各自的受限配置中。
 
 <a id="configuration-layout"></a>
 

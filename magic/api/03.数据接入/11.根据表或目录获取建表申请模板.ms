@@ -36,7 +36,6 @@
  */
 import tenantRuntime
 import portableDdl
-import dataScope
 import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.ddl.PortableColumnType
 
@@ -118,9 +117,8 @@ var sourceDatasource = db.table('db_datasource_t').where()
     .eq('tid', first(sourceTable, ['datasourceId', 'datasource_id']))
     .eq('is_del', 0)
     .selectOne()
-if (sourceDatasource == null || dataScope.visibleDataSourcesFor(
-        'MENU:2081000000000000002', [sourceDatasource]).size() != 1) {
-    exit 403, '来源数据源不存在或不在当前角色的数据范围内'
+if (sourceDatasource == null) {
+    exit 403, '来源数据源不存在或已删除'
 }
 var sourceNetworkCode = sourceDatasource == null ? '' : text(first(sourceDatasource, [
     'storageDomain', 'storage_domain', 'SSWL', 'networkDomain', 'network_domain'
@@ -723,8 +721,7 @@ var targetDatasourceRows = targetDatasourceIds.size() == 0 ? [] : db.table('db_d
     .eq('is_del', 0)
     .eq('show_connect', 1)
     .select()
-var visibleTargetDatasources = dataScope.visibleDataSourcesFor(
-    'MENU:2081000000000000002', targetDatasourceRows == null ? [] : targetDatasourceRows)
+var visibleTargetDatasources = (targetDatasourceRows == null ? [] : targetDatasourceRows)
 var targetDatasourceById = {}
 for (visibleTarget in visibleTargetDatasources) {
     targetDatasourceById[text(first(visibleTarget, ['tid']))] = visibleTarget

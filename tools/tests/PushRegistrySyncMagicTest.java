@@ -93,10 +93,10 @@ public class PushRegistrySyncMagicTest {
         for(int count:List.of(20,100)){
             var f=new Fixture(count);Map<?,?> dry=(Map<?,?>)f.call(Map.of("datasourceId","source","dryRun",true));check(dry.get("tableCount").equals(count),"dry count");check(f.reads.get()==2,"dry fixed reads");check(f.relay.calls==0,"preview transport");check(f.jdbc.queryForObject("select count(*) from data_push_schema_t",Integer.class)==0,"preview writes");
             Map<?,?> result=(Map<?,?>)f.call(Map.of("datasourceId","source"));check(Boolean.TRUE.equals(result.get("synced")),"synced");check(f.reads.get()==10,"fixed source+scope snapshot reads: "+f.reads);check(f.relay.calls==1,"one upstream request");check(((List<?>)f.relay.last.get("tables")).size()==count,"all tables");check(f.relay.last.get("sourceSystemName").equals("DEMO SYSTEM"),"system association");check(!f.mapper.writeValueAsString(f.relay.last).contains("must-not-leak"),"credentials excluded");
-            f.scope.denied=true;rejected(f.call(Map.of("datasourceId","source")),403);check(f.relay.calls==1,"denied no transport");f.scope.denied=false;
+            f.scope.denied=true;check(f.call(Map.of("datasourceId","source","dryRun",true)) instanceof Map,"registration ignores metadata-menu role scope");check(f.relay.calls==1,"preview does not transport");f.scope.denied=false;
             rejected(f.call(Map.of("datasourceId","foreign")),403);rejected(f.call(Map.of("datasourceId","source","tenantId","ct")),400);
             f.jdbc.update("update db_datasource_t set pool_cfg='{\"accessMode\":\"upload\"}' where tid='source'");rejected(f.call(Map.of("datasourceId","source")),422);
-            System.out.println(count+" tables: preview=2 reads, sync=10 reads, upstream=1; role/tenant/injected metadata rejected");
+            System.out.println(count+" tables: preview=2 reads, sync=10 reads, upstream=1; role scope absent; foreign tenant and injected metadata rejected");
         }
         try (var upstream = new BatchUpstream()) {
             for(int count:List.of(20,100)) {
@@ -127,7 +127,7 @@ public class PushRegistrySyncMagicTest {
                 check(f.jdbc.queryForObject("select delivery_config from data_push_schema_t where datasource_id='s0'",String.class).contains("20971520"),"attachment limits survive bulk and single synchronization");
                 f.scope.hidden="s0";
                 Map<?,?> scoped=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","dryRun",true));
-                check(scoped.get("datasourceCount").equals(count-1),"per source role scope");
+                check(scoped.get("datasourceCount").equals(count),"current-tenant sources ignore menu role scope");
                 check(((List<?>)upstream.last.get("datasources")).size()==count,"batch contains all authorized sources");
                 upstream.corruptReceipt=true;rejected(f.call(Map.of("all",true,"nodeId","node")),503);upstream.corruptReceipt=false;
                 check("FAILED".equals(f.jdbc.queryForObject("select last_sync_status from push_node_t where tid='node'",String.class)),"incomplete receipt fails whole result");
@@ -136,7 +136,7 @@ public class PushRegistrySyncMagicTest {
                 f.jdbc.update("update db_datasource_t set asset_status=0 where tid='s1'");
                 Map<?,?> skipped=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","dryRun",true));
                 check(((List<?>)skipped.get("skipped")).size()==1,"incomplete source explained");
-                System.out.println(count+" sources: bulk preview="+previewReads+", sync="+(previewReads+1)+" reads, upstream=1; per-source role and foreign node isolation verified");
+                System.out.println(count+" sources: bulk preview="+previewReads+", sync="+(previewReads+1)+" reads, upstream=1; menu-role scope absent; foreign node isolation verified");
             }
         }
         var tooMany=new Fixture(101);rejected(tooMany.call(Map.of("datasourceId","source")),413);check(tooMany.relay.calls==0,"oversize transport");

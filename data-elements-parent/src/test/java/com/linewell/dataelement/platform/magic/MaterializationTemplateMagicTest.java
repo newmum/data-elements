@@ -277,7 +277,7 @@ class MaterializationTemplateMagicTest {
             Fixture fixture = new Fixture(1);
             fixture.jdbc.update("update db_datasource_t set db_type='ftp' where tid='source-db'");
             if (foreignTenant) fixture.jdbc.update("update db_table_t set tenant_id='other' where tid='source-1'");
-            else fixture.scope.deniedId = "source-db";
+            else fixture.jdbc.update("update db_datasource_t set is_del=1 where tid='source-db'");
             assertInstanceOf(ExitValue.class, fixture.runCollection());
             assertEquals(0, fixture.fileProbe.calls);
         }
@@ -559,9 +559,9 @@ class MaterializationTemplateMagicTest {
     }
 
     @Test
-    void hiddenOrForeignSourceIsRejectedBeforeExplicitExternalRefresh() throws Exception {
+    void deletedOrForeignSourceIsRejectedBeforeExplicitExternalRefresh() throws Exception {
         Fixture hidden = new Fixture(2);
-        hidden.scope.deniedId = "source-db";
+        hidden.jdbc.update("update db_datasource_t set is_del=1 where tid='source-db'");
         assertInstanceOf(ExitValue.class, hidden.run(true));
         assertEquals(0, hidden.explorer.calls);
 
@@ -587,12 +587,12 @@ class MaterializationTemplateMagicTest {
     }
 
     @Test
-    void hiddenTargetIsNeverChosenAsDefaultAndForeignColumnsAreIgnored() throws Exception {
+    void currentTenantTargetRemainsSelectableAndForeignColumnsAreIgnored() throws Exception {
         Fixture fixture = new Fixture(2);
         fixture.scope.deniedId = "targetdb-0";
         fixture.jdbc.update("insert into db_table_column_t values('foreign-col','other','source-1','secret','varchar','varchar(32)',32,0,0,0,1,2,0)");
         Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(false));
-        assertEquals("targetdb-1", ((Map<?, ?>) response.get("propList")).get("dbId"));
+        assertEquals("targetdb-0", ((Map<?, ?>) response.get("propList")).get("dbId"));
         assertEquals(4, ((Collection<?>) response.get("tableItems")).size());
         assertEquals(0, fixture.explorer.calls);
     }

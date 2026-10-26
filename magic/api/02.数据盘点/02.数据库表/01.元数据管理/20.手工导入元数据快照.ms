@@ -26,7 +26,6 @@
 // 路由：POST /dst/database/metadata/importSnapshot
 // 业务说明：手工导入元数据快照（POST /dst/database/metadata/importSnapshot）。写入 db_table_t、db_table_column_t 和数据源表数量，不连接物理库；严格校验数据资源名称、表类型、业务类型、字段中文名、字段类型及必填布尔属性，并保存时间戳字段初始配置，使离线导入数据与自动探查数据共用第二步至第五步登记流程。传 dryRun=true 时只校验并返回表/字段数量，不写数据库；使用请求参数 tables、tableRows、fieldMap、dryRun。
 import tenantRuntime
-import dataScope
 import cn.hutool.json.JSONUtil
 import metadataAsset
 import cn.hutool.core.util.IdUtil
@@ -215,7 +214,6 @@ var tenantId = tenantRuntime.id()
 if (blank(tenantId)) { exit 401, '当前登录租户无效，请重新登录后再导入元数据' }
 var datasource = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', dbId).eq('is_del', 0).selectOne()
 if (datasource == null) { exit 404, 'datasource not found' }
-if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [datasource]).size() != 1) { exit 403, '数据源不在当前租户或角色数据范围内' }
 var sourcePool = rowValue(datasource, ['poolCfg', 'pool_cfg'])
 sourcePool = sourcePool instanceof Map ? sourcePool : (blank(sourcePool) ? {} : JSONUtil.parseObj(textOf(sourcePool)))
 var pushSource = ['receive', 'push'].contains(lower(firstValue(sourcePool, ['accessMode', 'access_mode'])))

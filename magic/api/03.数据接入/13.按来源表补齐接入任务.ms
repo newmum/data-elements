@@ -17,7 +17,7 @@
   "headers": [],
   "paths": [],
   "responseBody": "",
-  "description": "按当前租户来源表和所选物化目标表分别补齐独立接入任务。targetTableIds（最多100项）或targetTableId指定目标，省略时处理全部物化目标；首个任务从原来源读取，后续任务从前一个目标表读取；每个任务生成单目标画布及自己的字段映射，重复提交复用已有任务。批量校验租户和角色数据范围，dryRun只返回计划；forceRebuild须明确确认，会替换所选旧任务的画布。返回tasks、createdCount及兼容的首个task/taskId。",
+  "description": "按当前租户来源表和所选物化目标表分别补齐独立接入任务。targetTableIds（最多100项）或targetTableId指定目标，省略时处理全部物化目标；首个任务从原来源读取，后续任务从前一个目标表读取；每个任务生成单目标画布及自己的字段映射，重复提交复用已有任务。批量校验当前租户有效记录和关联关系，dryRun只返回计划；forceRebuild须明确确认，会替换所选旧任务的画布。返回tasks、createdCount及兼容的首个task/taskId。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -31,7 +31,6 @@ import jsons
 import cn.hutool.json.JSONUtil as poolJsons
 import apiPullConfig
 import tenantRuntime
-import dataScope
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService as structuredFileProbe
 import java.util.Map
 import java.util.List
@@ -509,10 +508,7 @@ var resolveOdsPushFtp = (logicalDatasourceId, sourceTableName) => {
     var storage = db.table('db_datasource_t').where()
         .eq('tenant_id', tenantId).eq('tid', storageId).eq('is_del', 0).selectOne()
     if (storage == null) { exit 404, '资源中心 ODS 数据域 fjghcc 绑定的数据源不存在' }
-    if (dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [storage]).size() != 1) {
-        exit 403, 'ODS 非结构化存储不在当前角色数据范围内'
-    }
-    // FTP fields in the tenant-owned datasource row are authoritative.
+        // FTP fields in the tenant-owned datasource row are authoritative.
     var cfg = readCfg(storage)
     if (cfg == null) { cfg = {} }
     var dbType = text(first(storage, ['dbType', 'db_type', 'databaseType', 'database_type'])).trim().toUpperCase()
@@ -940,8 +936,8 @@ if (sourceTable == null) {
 var sourceDbId = text(first(sourceTable, ['datasourceId', 'datasource_id']))
 var sourceDb = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId).eq('tid', sourceDbId).eq('is_del', 0).selectOne()
-if (sourceDb == null || dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [sourceDb]).size() != 1) {
-    exit 403, '来源数据源不在当前租户或角色数据范围内'
+if (sourceDb == null) {
+    exit 403, '来源数据源不存在或已删除'
 }
 var sourceTableStatus = first(sourceTable, ['assetStatus', 'asset_status'])
 var sourceDatasourceStatus = first(sourceDb, ['assetStatus', 'asset_status'])
@@ -1024,8 +1020,7 @@ for (dictionaryTable in dictionaryRowsByName) {
 if (dictionaryDatasourceIds.size() > 200) { exit 400, '单次最多处理200个字典数据源' }
 var dictionaryDatasourceRows = dictionaryDatasourceIds.size() == 0 ? [] : db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId).in('tid', dictionaryDatasourceIds).eq('is_del', 0).select()
-var visibleDictionaryDatasources = dataScope.visibleDataSourcesFor(
-    'MENU:2081000000000000002', dictionaryDatasourceRows)
+var visibleDictionaryDatasources = (dictionaryDatasourceRows)
 for (dictionaryDatasource in visibleDictionaryDatasources) {
     metadataDatasourceById[text(first(dictionaryDatasource, ['tid']))] = dictionaryDatasource
 }
@@ -1034,7 +1029,7 @@ for (dictionaryId in dictionaryTableIds) {
     if (dictionaryTable != null) {
         var dictionaryDbId = text(first(dictionaryTable, ['datasourceId', 'datasource_id']))
         if (metadataDatasourceById[dictionaryDbId] == null) {
-            exit 403, '字典表关联的数据源不在当前租户或角色数据范围内'
+            exit 403, '字典表关联的数据源不存在或已删除'
         }
     }
 }
@@ -1186,18 +1181,17 @@ for (candidateTarget in targetTables) {
 }
 var targetDatasourceRows = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId).in('tid', targetDatasourceIds).eq('is_del', 0).select()
-var visibleTargetDatasources = dataScope.visibleDataSourcesFor(
-    'MENU:2081000000000000002', targetDatasourceRows == null ? [] : targetDatasourceRows)
+var visibleTargetDatasources = (targetDatasourceRows == null ? [] : targetDatasourceRows)
 var targetDatasourceById = {}
 for (visibleTargetDatasource in visibleTargetDatasources) {
     targetDatasourceById[text(first(visibleTargetDatasource, ['tid']))] = visibleTargetDatasource
 }
 for (candidateDbId in targetDatasourceIds) {
     if (targetDatasourceById[candidateDbId] == null) {
-        exit 403, '物化目标数据源不在当前租户或角色数据范围内'
+        exit 403, '物化目标数据源不存在或已删除'
     }
 }
-// ODS 分域是接入链路顺序的权威配置。目标已逐 ID 校验租户、来源关联和角色权限；
+// ODS 分域是接入链路顺序的权威配置。目标已逐 ID 校验租户、有效记录和来源关联；
 // 一次关联查询只给这些已授权目标排序，不能借请求顺序反转汇聚→原始链路。
 // 非 ODS 的分发目标没有分域绑定，保留其显式选择顺序。
 if (targetTables.size() > 1) {

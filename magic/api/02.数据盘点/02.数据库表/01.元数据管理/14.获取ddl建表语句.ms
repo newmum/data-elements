@@ -31,7 +31,6 @@ import jsons
 import cn.hutool.json.JSONUtil as poolJsons
 import tenantRuntime
 import tablePartitions
-import dataScope
 import canvasTableDdl
 import portableDdl
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
@@ -259,10 +258,10 @@ if (body?.partitionProbe == true) {
     var ids = [sourceDbId]
     for (id in targetIds) { if (!ids.contains(textOf(id))) { ids.add(textOf(id)) } }
     var rows = db.table('db_datasource_t').where().eq('tenant_id', probeTenant).eq('is_del', 0).in('tid', ids).select()
-    var visible = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', rows == null ? [] : rows)
+    var visible = (rows == null ? [] : rows)
     var byId = {}
     for (row in visible) { byId[textOf(rowValue(row, ['tid']))] = row }
-    for (id in ids) { if (byId[id] == null) { exit 403, '来源或目标库不在当前租户及角色范围内' } }
+    for (id in ids) { if (byId[id] == null) { exit 403, '来源或目标数据源不存在或已删除' } }
     var support = {}
     for (id in targetIds) {
         var targetType = DatabaseType.fromCode(textOf(firstValue(byId[textOf(id)], ['dbType','db_type'])))
@@ -316,15 +315,14 @@ if (body?.batchGenerate == true) {
     }
     var registeredRows = db.table('db_datasource_t').where()
         .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', batchDbIds).select()
-    var visibleRows = dataScope.visibleDataSourcesFor(
-        'MENU:2081000000000000002', registeredRows == null ? [] : registeredRows)
+    var visibleRows = (registeredRows == null ? [] : registeredRows)
     var registeredById = {}
     for (registeredRow in visibleRows) {
         registeredById[textOf(rowValue(registeredRow, ['tid']))] = registeredRow
     }
     for (batchDbId in batchDbIds) {
         if (registeredById[batchDbId] == null) {
-            exit 403, '目标库不存在，或不在当前租户及角色数据范围内'
+            exit 403, '目标库不存在或已删除'
         }
     }
     var batchTimeType = (databaseType) => {

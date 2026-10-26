@@ -17,6 +17,23 @@ import static org.mockito.Mockito.*;
 class DictionaryConnectionBatchTest {
     private static final String RESOURCE = "MENU:2081000000000000002";
 
+    @Test
+    void otherResourceConsumersKeepTheirExplicitRolePolicy() {
+        var jdbc = mock(JdbcTemplate.class);
+        var scopes = mock(DataScopeAuthorizationService.class);
+        List<Map<String,Object>> rows = List.of(Map.of("tid", "allowed"), Map.of("tid", "other-owner"));
+        when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(rows);
+        when(scopes.visibleDataSources(eq("MENU:quality"), anyCollection())).thenReturn(rows.subList(0, 1));
+        var resolver = new DataSourceConnectionPropertyResolver(jdbc, new ObjectMapper(), scopes);
+        assertThatThrownBy(() -> resolver.resolveBatch("police", List.of("allowed", "other-owner"), "MENU:quality"))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("无访问权限");
+        verify(scopes).visibleDataSources("MENU:quality", rows);
+        clearInvocations(scopes);
+        assertThat(resolver.resolveBatch("police", List.of("allowed", "other-owner"), RESOURCE))
+                .containsOnlyKeys("allowed", "other-owner");
+        verifyNoInteractions(scopes);
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {20, 100})
     void compilingDictionaryFieldsUsesOneConnectionReadAndOneRoleDecision(int count) {
@@ -37,7 +54,7 @@ class DictionaryConnectionBatchTest {
             assertThat(new FieldMappingService(resolver).compilePlan(Map.of("version", "1.0", "mappings", mappings)).lookups()).hasSize(count);
         }
         verify(jdbc, times(1)).queryForList(contains("AND tenant_id = ? AND is_del = 0"), any(Object[].class));
-        verify(scopes, times(1)).visibleDataSources(RESOURCE, rows);
+        verifyNoInteractions(scopes);
     }
 
     @Test
@@ -54,7 +71,9 @@ class DictionaryConnectionBatchTest {
         });
         var resolver = new DataSourceConnectionPropertyResolver(jdbc, new ObjectMapper(), scopes);
         assertThat(resolver.resolveBatch("police", List.of("allowed", "allowed"), RESOURCE)).containsOnlyKeys("allowed");
-        for (String id : List.of("foreign", "denied", "missing")) {
+        assertThat(resolver.resolveBatch("police", List.of("allowed", "denied"), RESOURCE)).containsOnlyKeys("allowed", "denied");
+        verifyNoInteractions(scopes);
+        for (String id : List.of("foreign", "missing")) {
             assertThatThrownBy(() -> resolver.resolveBatch("police", List.of("allowed", id), RESOURCE))
                     .isInstanceOf(IllegalStateException.class).hasMessageContaining("无访问权限");
         }

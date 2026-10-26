@@ -44,6 +44,7 @@ class DatasourceCardTypeCountsMagicTest {
             f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type) values(?,?,?,2,0,'业务表')", id, id.equals("foreign") ? "other" : "ga", id);
         }
         var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
+        f.jdbc.update("update db_datasource_t set is_del=1 where tid='denied'");
         var scope = new Scope(); var es = new Index(count);
         // H2 has no MySQL JSON projection functions. Only replace the unrelated access-mode expression.
         String script = CanonicalMagicSources.byId("datapd_dept_datasources_01")
@@ -57,8 +58,8 @@ class DatasourceCardTypeCountsMagicTest {
         Map<?,?> result = (Map<?,?>)MagicScript.create(script, null).execute(new MagicScriptContext(bindings));
         assertCounts(result, count);
         assertThat(counter.reads).isEqualTo(3); assertThat(es.reads).isEqualTo(2);
-        assertThat(scope.calls).isEqualTo(1);
-        System.out.println("datasource cards=" + count + ": SQL=3, ES=2; foreign/denied/deleted sources excluded");
+        assertThat(scope.calls).isZero();
+        System.out.println("datasource cards=" + count + ": SQL=3, ES=2; foreign/deleted sources excluded; menu role not queried");
         // Historical default-mode callers must not inherit a positive orphan table from ES.
         counter.reads=0; es.reads=0; bindings.put("body", Map.of());
         result=(Map<?,?>)MagicScript.create(script, null).execute(new MagicScriptContext(bindings));

@@ -6,17 +6,25 @@ import com.linewell.dataelement.feature.diagnostics.DiagnosticModels.Evidence;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Best-effort capture must never replace or delay an application's original failure with an AI error. */
 @Component
 public class DiagnosticEvents {
-    private final java.util.concurrent.ExecutorService captures = new java.util.concurrent.ThreadPoolExecutor(1, 2, 30, java.util.concurrent.TimeUnit.SECONDS,
-            new java.util.concurrent.ArrayBlockingQueue<>(16), task -> { Thread t = new Thread(task, "diagnostic-event-capture"); t.setDaemon(true); return t; },
-            new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+    private final ExecutorService captures;
     private final DiagnosticStore store;
     private final DiagnosticProperties properties;
-    public DiagnosticEvents(DiagnosticStore store, DiagnosticProperties properties) { this.store = store; this.properties = properties; }
+    @Autowired
+    public DiagnosticEvents(DiagnosticStore store, DiagnosticProperties properties) {
+        this(store, properties, new java.util.concurrent.ThreadPoolExecutor(1, 2, 30, java.util.concurrent.TimeUnit.SECONDS,
+                new java.util.concurrent.ArrayBlockingQueue<>(16), task -> { Thread t = new Thread(task, "diagnostic-event-capture"); t.setDaemon(true); return t; },
+                new java.util.concurrent.ThreadPoolExecutor.AbortPolicy()));
+    }
+    DiagnosticEvents(DiagnosticStore store, DiagnosticProperties properties, ExecutorService captures) {
+        this.store = store; this.properties = properties; this.captures = captures;
+    }
     public static Actor currentActor() {
         StpUtil.checkLogin();
         if (TenantContext.usesControlDatabase()) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "诊断需要行业应用会话");

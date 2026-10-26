@@ -40,7 +40,7 @@ class SearchServiceErrorIntegrationTest {
             Map<?,?> error = (Map<?,?>) result.get("error");
             assertThat(error.get("code")).isEqualTo("SEARCH-CONNECTION-001");
             assertThat(String.valueOf(error.get("detail"))).contains("ElasticSearchIndex.search");
-            assertThat(String.valueOf(error.get("traceId"))).hasSize(16);
+            assertThat(String.valueOf(error.get("traceId"))).matches("[0-9a-f]{32}");
             String fixture = System.getProperty("search.failure.fixture");
             if (fixture != null) {
                 Path path = Path.of(fixture);

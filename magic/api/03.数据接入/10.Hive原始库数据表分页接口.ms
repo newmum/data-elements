@@ -19,18 +19,17 @@
 import cn.hutool.json.JSONUtil
 // 接口：10.Hive原始库数据表分页接口（分发任务）
 // 路由：POST /ods/hiveTargetPage
-// 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户和角色范围内，数据源与数据表登记状态均大于 0；表清单从 db_table_t 服务端分页，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
+// 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户内，数据源与数据表登记状态均大于 0；表清单从 db_table_t 服务端分页，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
 import tenantEs
 import '@/common/configData' as configData
 import tenantRuntime
-import dataScope
 import taskRuntime
 
 /*
  * 数据汇聚分页
  *
  * 核心口径：
- * 1. 关系库主表限定数据源与数据表登记状态均大于 0，并保留租户、角色范围和业务类型；
+ * 1. 关系库主表限定数据源与数据表登记状态均大于 0，并保留租户归属和业务类型；
  * 2. 数据表清单直接在主表筛选、分页；详情以主表为准，ES 仅辅助补充展示字段；
  * 3. 接入任务及来源/目标信息按当前页表 ID 一次批量读取，展开卡片不再补查；
  * 4. 本接口只读，不创建任务、不物化建表、不修改登记状态。
@@ -134,7 +133,6 @@ if (viewLevel == 'tableDetail') {
     var detailSourceId = first(tableDetailRow, ['datasourceId', 'datasource_id'])
     var detailSources = db.table('db_datasource_t').where().eq('tid', detailSourceId)
         .eq('tenant_id', tenantId).eq('is_del', 0).select()
-    detailSources = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', detailSources)
     if (detailSources.size() != 1) { return { viewLevel: 'tableDetail', detail: null } }
     // 用户单击既有链路的目标详情：未登记的物化目标仍可只读查看，不能扩大主列表或创建资格。
     var detailTableStatus = first(tableDetailRow, ['assetStatus', 'asset_status'])
@@ -278,7 +276,6 @@ if (viewLevel == 'table') {
     var registeredDatasourceRows = db.table('db_datasource_t').where()
         .eq('tenant_id', tenantId).eq('is_del', 0)
         .gt('asset_status', 0).select()
-    registeredDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', registeredDatasourceRows)
     registeredDatasourceRows = registeredDatasourceRows.filter(matchesTaskCategory)
     var registeredDatasourceIds = []
     var registeredDatasourceMap = {}
@@ -333,7 +330,6 @@ if (viewLevel == 'table') {
         // One bounded-depth relational expression covers the same root/ancestor family as the displayed chains.
         var sortTargetSources=db.table('db_datasource_t').columns('tid','org_id','created_by').where()
             .eq('tenant_id',tenantId).eq('is_del',0).select()
-        sortTargetSources=dataScope.visibleDataSourcesFor('MENU:2081000000000000002',sortTargetSources)
         var sortTargetSourceIds=sortTargetSources.map(row=>text(row.tid))
         if(sortTargetSourceIds.size()==0) {sortTargetSourceIds=['__none__']}
         var countJoins=''
@@ -363,10 +359,9 @@ if (viewLevel == 'table') {
         var visibleTaskDatasourceIds = []
         var taskStatusSql = ''
         if (requestedAccessStatus == '0' || requestedAccessStatus == '1') {
-            // 目标库不必是原始库的登记状态；但来源/目标都必须通过角色范围。
+            // 目标库不必是原始库的登记状态；来源和目标均须是当前租户有效数据源。
             var taskDatasourceRows = db.table('db_datasource_t').where()
                 .eq('tenant_id', tenantId).eq('is_del', 0).select()
-            taskDatasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', taskDatasourceRows)
             for (taskDatasource in taskDatasourceRows) { visibleTaskDatasourceIds.add(text(taskDatasource.tid)) }
             var existsSql = """
                 EXISTS (
@@ -629,8 +624,7 @@ if (viewLevel == 'table') {
     if (materializedTargetDatasourceIds.size() > 0) {
         var materializedDatasourceRows = db.table('db_datasource_t').where()
             .eq('tenant_id', tenantId).in('tid', materializedTargetDatasourceIds).eq('is_del', 0).select()
-        var visibleMaterializedDatasources = dataScope.visibleDataSourcesFor('MENU:2081000000000000002',
-            materializedDatasourceRows == null ? [] : materializedDatasourceRows)
+        var visibleMaterializedDatasources = (materializedDatasourceRows == null ? [] : materializedDatasourceRows)
         for (materializedDatasource in visibleMaterializedDatasources) {
             materializedDatasourceMap[text(first(materializedDatasource, ['tid']))] = materializedDatasource
         }
@@ -683,7 +677,7 @@ if (viewLevel == 'table') {
             var actualSourceTable = actualSourceId == selectedTableId ? tableCandidate : null
             for (target in materializedTargetsForSource) { if (text(target.tid) == actualSourceId) { actualSourceTable = target; break } }
             var actualSourceDbId = text(first(actualSourceTable, ['datasourceId', 'datasource_id']))
-            // 新任务候选必须登记；已有下游仅按租户、有效记录、角色授权，不能因数仓库登记状态为 0 隐藏。
+            // 新任务候选必须登记；已有下游仅按租户、有效记录和关联关系，不能因数仓库登记状态为 0 隐藏。
             if (actualSourceTable == null || (actualSourceId != selectedTableId && materializedDatasourceMap[actualSourceDbId] == null)) { continue }
             tasks.add({
                 tid: text(first(rawTask, ['tid'])),
@@ -804,7 +798,7 @@ if (viewLevel == 'table') {
     var tablePage = tableItems
 
     // 所属部门取当前数据源主表的 org_id，不使用表创建人、前端部门或 ES 旧投影。
-    // 数据源已经通过当前租户及角色数据范围校验；仅为当前页最多 100 行补齐部门。
+    // 数据源已经按当前租户读取；仅为当前页最多 100 行补齐部门。
     var pageOrgIds = []
     for (pageTable in tablePage) {
         var pageDatasource = registeredDatasourceMap[text(pageTable.datasourceId)]

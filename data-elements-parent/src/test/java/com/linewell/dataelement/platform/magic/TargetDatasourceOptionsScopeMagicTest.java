@@ -77,12 +77,12 @@ class TargetDatasourceOptionsScopeMagicTest {
                 .replaceAll("(?m)^import [^\\n]*\\n", "");
         Map<?, ?> response = assertInstanceOf(Map.class,
                 MagicScript.create(script, null).execute(new MagicScriptContext(inputs)));
-        assertEquals(size, response.get("total"));
+        assertEquals(size+1, response.get("total"));
         var choices = assertInstanceOf(List.class, response.get("list"));
         assertEquals("visible-db", ((Map<?, ?>) choices.getFirst()).get("value"));
-        assertTrue(choices.stream().allMatch(row -> ((Map<?, ?>) row).get("value").toString().startsWith("visible-db")));
+        assertTrue(choices.stream().allMatch(row -> ((Map<?, ?>) row).get("value").toString().startsWith("visible-db") || ((Map<?,?>)row).get("value").equals("hidden-db")));
         assertEquals(5, counter.queries, "20/100 choices must use five fixed bulk queries");
-        assertEquals(1, scope.calls, "Resolve and apply role scope to all datasource rows once");
+        assertEquals(0, scope.calls, "Datasource options do not invoke metadata-menu scope");
         System.out.println("ODS target options: " + size + " visible choices, " + counter.queries + " SQL reads; role and tenant exclusions verified");
     }
 
@@ -138,18 +138,18 @@ class TargetDatasourceOptionsScopeMagicTest {
                 .replaceAll("(?m)^import [^\\n]*\\n", "");
         Map<?, ?> response = assertInstanceOf(Map.class, MagicScript.create(script, null).execute(new MagicScriptContext(inputs)));
         var choices = assertInstanceOf(List.class, response.get("list"));
-        assertEquals(size + 2, choices.size());
+        assertEquals(size + 3, choices.size());
         assertEquals(2, ((List<?>) response.get("options")).size());
         assertTrue(choices.stream().allMatch(row -> {
             var choice = (Map<?, ?>) row;
             String id = choice.get("value").toString();
-            return id.startsWith("visible-db-") || id.equals("incomplete") || id.equals("no-connection");
+            return id.startsWith("visible-db-") || id.equals("incomplete") || id.equals("no-connection") || id.equals("hidden") || id.equals("hidden-db");
         }));
         assertEquals(2L, choices.stream().filter(row -> Boolean.TRUE.equals(((Map<?, ?>) row).get("disabled"))).count());
         assertTrue(choices.stream().filter(row -> ((Map<?, ?>) row).get("value").toString().startsWith("visible-db-"))
                 .allMatch(row -> "postgresql".equals(((Map<?, ?>) row).get("dbType"))));
         assertEquals(1, counter.queries, "20/100 distribution choices use one bounded join query");
-        assertEquals(1, scope.calls, "Apply the ingestion tree role scope to the whole candidate batch");
+        assertEquals(0, scope.calls, "Current-tenant options do not invoke metadata-menu scope");
         System.out.println("Distribution target options: " + size + " selectable choices, " + counter.queries
                 + " SQL reads; department, ODS bindings, tenant and role exclusions verified");
     }

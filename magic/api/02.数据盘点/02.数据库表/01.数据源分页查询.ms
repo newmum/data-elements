@@ -24,7 +24,6 @@
 ================================
 // Authoritative, scoped and bounded data-source page. Aggregates are sorted before LIMIT.
 import tenantRuntime
-import dataScope
 import tableSort
 import cn.hutool.json.JSONUtil
 import java.util.List
@@ -41,14 +40,7 @@ var fields={dbName:'d.db_name',appName:'a.app_name',dbType:'d.db_type',appId:'d.
     collectedFieldCount:'coalesce(stats.field_count,0)',registerTableNum:'coalesce(stats.registered_count,0)',
     assetStatus:'d.asset_status',flowStatus:'d.flow_status',tid:'d.tid',storageDomain:'d.storage_domain',isEnable:'d.is_enable',connectionStatus:'d.connection_status'}
 var whereSql=' WHERE d.tenant_id=#{tenantId} AND ifnull(d.is_del,0)=0 '
-var scope=dataScope.resource('MENU:2081000000000000002')
-var scopeOrgIds=scope.organizationIds
-var scopeUserId=scope.userId
-if(scope.scope=='OWNER') {whereSql=whereSql+' AND d.created_by=#{scopeUserId}';}
-else if(scope.scope=='ORG') {
-    if(scopeOrgIds.size()==0) {whereSql=whereSql+' AND 1=0';}
-    else {whereSql=whereSql+' AND d.org_id IN (#{scopeOrgIds})';}
-} else if(scope.scope!='ALL') {exit 403,'数据范围无效';}
+// 数据源列表按当前行业库和 tenant_id 查询，不再叠加 OWNER/ORG 角色范围。
 var authorizedWhere=whereSql;
 for(condition in (body?.conditions==null?[]:body.conditions)) {
     if(condition==null || text(condition.value)=='') {continue;}

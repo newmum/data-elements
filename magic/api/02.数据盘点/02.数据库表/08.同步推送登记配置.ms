@@ -17,13 +17,12 @@
   "headers" : [ ],
   "paths" : [ ],
   "responseBody" : "{}",
-  "description" : "将当前租户及角色范围内已完成登记的推送数据源表字段同步到 haitong-data-pull。接受 datasourceId、dryRun 和可选 nodeId；all=true 时批量同步当前租户角色可见全部推送源，最多100源/1000表/10000字段/1MiB，返回跳过原因；指定节点时校验当前租户及启用状态，未指定时保持现有默认目标。dryRun 只读，不发布契约、不调用海通。最多100张已登记表、10000字段、1MiB配置；不签发或轮换业务密钥。",
+  "description" : "将当前租户内已完成登记的推送数据源表字段同步到 haitong-data-pull。接受 datasourceId、dryRun 和可选 nodeId；all=true 时批量同步当前租户全部推送源，最多100源/1000表/10000字段/1MiB，返回跳过原因；指定节点时校验当前租户及启用状态，未指定时保持现有默认目标。dryRun 只读，不发布契约、不调用海通。最多100张已登记表、10000字段、1MiB配置；不签发或轮换业务密钥。",
   "requestBodyDefinition" : null,
   "responseBodyDefinition" : null
 }
 ================================
 import tenantRuntime
-import dataScope
 import cn.hutool.extra.spring.SpringUtil
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -66,7 +65,7 @@ if (body.all == true) {
     var value = (row,camel,snake) => row[camel] == null ? row[snake] : row[camel]
     var sourcePage = db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('is_del',0).page(1001,0)
     if (sourcePage.total > 1000) { exit 413, '租户数据源超过1000项，请先缩小同步范围' }
-    var visible = dataScope.visibleDataSourcesFor('MENU:2081000000000000002',sourcePage.list)
+    var visible = (sourcePage.list)
     var pending = []
     var skipped = []
     for (row in visible) {
@@ -77,7 +76,7 @@ if (body.all == true) {
         var sourceName = str(value(row,'dbName','db_name')) || str(row.tid)
         var reason = ''
         if (![1,2].contains(value(row,'assetStatus','asset_status')::int)) { reason = '数据源登记尚未完成' }
-        else if (cfg.pushDelivery?.enabled == false || cfg.push_delivery?.enabled == false) { reason = '推送功能已停用' }
+        else if (cfg.pushDelivery?.enabled == cfg.push_delivery?.enabled == false) { reason = '推送功能已停用' }
         if (reason != '') { skipped.add({datasourceId:row.tid,datasourceName:sourceName,reason:reason});continue }
         pending.add({row:row,config:cfg,name:sourceName})
     }
@@ -266,8 +265,7 @@ var sources = db.select("""
       LEFT JOIN sym_application_t a ON a.tid=d.app_id AND a.tenant_id=d.tenant_id AND a.is_del=0
      WHERE d.tenant_id=#{tenantId} AND d.tid=#{datasourceId} AND d.is_del=0
 """)
-sources = dataScope.visibleDataSourcesFor('MENU:2081000000000000002',sources)
-if (sources == null || sources.size() != 1) { exit 403, '数据源不存在或不在当前角色范围内' }
+if (sources == null || sources.size() != 1) { exit 403, '数据源不存在或已删除' }
 var source = sources[0]
 var mapper = new ObjectMapper()
 var rawConfig = source.poolCfg || source.pool_cfg
@@ -276,7 +274,7 @@ var mode = (config.accessMode || config.access_mode || config.dataAccessMode || 
 if (!['receive','push'].contains(mode.trim().toLowerCase())) { exit 422, '仅支持接入方式为数据推送的数据源' }
 var sourceStatus = source.assetStatus == null ? source.asset_status : source.assetStatus
 if (sourceStatus == null || ![1,2].contains(sourceStatus::int)) { exit 409, '请先结束数据源登记并完成需要推送的表登记' }
-if (config.pushDelivery?.enabled == false || config.push_delivery?.enabled == false) { exit 409, '该数据源的推送功能已停用' }
+if (config.pushDelivery?.enabled == config.push_delivery?.enabled == false) { exit 409, '该数据源的推送功能已停用' }
 
 // 一次聚合获取规模；不按表读取字段，也不接受客户端省略需要同步的表。
 var counts = db.selectOne("""

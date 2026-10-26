@@ -83,7 +83,7 @@ class RegistrationFieldSyncTest {
             f.counter.reads=0;assertInstanceOf(Map.class,f.fields(String.join(",",ids)));assertEquals(3,f.counter.reads);
             ids.set(count-1,"foreign-table");assertInstanceOf(ExitValue.class,f.fields(String.join(",",ids)));
         }
-        f.scope.denied=true;assertEquals(403,((ExitValue)f.fields("table")).getValues()[0]);assertEquals(403,((ExitValue)f.sync(false)).getValues()[0]);assertEquals(0,f.physical.calls);
+        f.scope.denied=true;assertInstanceOf(List.class,f.fields("table"));assertInstanceOf(List.class,f.sync(false));assertEquals(1,f.physical.calls);
     }
     @Test void dryRunCountsAllFieldsWithoutWritesAndCaseDuplicateDoesNotAddAField()throws Exception{
         var f=new Fixture(260);f.physical.columns.add(f.physical.columns.getFirst());

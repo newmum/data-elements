@@ -38,7 +38,9 @@ def deployment_config() -> dict:
         },
         'db': {'type': 'mysql', 'host': 'REPLACE_WITH_MYSQL_HOST', 'port': 3306,
                'name': 'haitong', 'username': 'REPLACE_WITH_MYSQL_USER',
-               'password': 'env:DB_PASSWORD', 'url': '', 'pool-size': 10, 'init-schema': False},
+               'password': 'env:DB_PASSWORD',
+               'url': 'jdbc:mysql://${db.host}:${db.port}/${db.name}?useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=VERIFY_IDENTITY&connectTimeout=5000&socketTimeout=30000&tcpKeepAlive=true',
+               'pool-size': 20, 'init-schema': False},
         'relay': {
             'work-dir': './data',
             'registration-registry': {'enabled': False, 'base-url': '', 'shared-key': ''},
@@ -69,7 +71,7 @@ def deployment_config() -> dict:
             },
             'actions': {'inspect': {'enabled': False}},
             'gateway': {'public-base-url': ''},
-            'worker': {'enabled': True, 'threads-per-type': 2, 'max-attempts': 10,
+            'worker': {'enabled': True, 'threads-per-type': 1, 'max-attempts': 10,
                        'poll-ms': 500, 'lease-seconds': 300, 'file-batch-size': 100,
                        'payload-retention-days': 0},
             'files': {'enabled': True, 'single-upload-max-bytes': 20971520,
@@ -88,7 +90,8 @@ def config_bytes() -> bytes:
 # 4. 本服务独立运行，不回调元数据平台；FTP/Kafka 目的地只由本文件确定。
 # 5. FTP/SFTP 配置应与元数据平台 ODS 非结构化数据配置一致。
 # 6. 附件集合按真实登记表/字段合并 application-files.yml.example 后重启。
-# 7. db.url 为空时 MySQL 默认校验证书与主机名；自有 CA 需导入 Java 信任库。
+# 7. MySQL URL 引用上方主机/端口/库名并校验证书与主机名；自有 CA 需导入 Java 信任库。
+# 8. MySQL 连接超时 5 秒、读取超时 30 秒；20 个连接与每类 1 个投递线程为业务请求保留余量。
 '''
     return (header + yaml.safe_dump(deployment_config(), allow_unicode=True, sort_keys=False)).encode('utf-8')
 
@@ -100,7 +103,10 @@ def instructions(system: str, version: str) -> bytes:
              'Linux：解压到 /opt/haitong-data-pull 后执行：\n'
              '  cd /opt/haitong-data-pull\n  bash scripts/start-background.sh\n'
              '  bash scripts/status.sh\n  bash scripts/stop-background.sh\n'
-             '前台运行：bash scripts/run.sh；长期服务可安装 scripts/install-systemd.sh。\n')
+             '前台运行：bash scripts/run.sh；长期服务可安装 scripts/install-systemd.sh。\n'
+             'Java 21 优先使用 HAITONG_JAVA_BIN、JAVA_HOME，再检查部署目录旁的 jdk-21* 和 PATH。\n'
+             '示例：export HAITONG_JAVA_BIN=/home/soft/backend/jdk-21.0.9/bin/java\n'
+             'java-env.sh 为内部辅助文件，不单独运行；升级脚本时一起保留。\n')
     text = f'''海通数据推送服务 {version} — {system} 原生部署
 
 运行条件：Java 21、可访问的 MySQL 8、已准备的 FTP/FTPS/SFTP；无需 Maven、源码或 Docker。
@@ -113,6 +119,7 @@ Magic API 资源保存于独立 haitong.ht_magic_api_file，首次启动加载 J
 
 二、编辑 config/application.yml
 填写 db.host / port / name / username / password。
+默认 JDBC URL 引用上方连接项，连接超时5秒、网络读取超时30秒；连接池20、每类投递线程1。
 填写 relay.ftp.protocol / host / port / username / password / output-dir；SFTP 使用 22 端口。
 模板中的 REPLACE_WITH_ 都必须替换。密码和密钥只保存在部署环境，不随包分发。
 以下五项可在 YAML 中直接填写真实值；若保留模板引用，则在启动进程设置同名环境变量：
@@ -197,7 +204,7 @@ def main() -> None:
     for system in ('linux','windows'):
         files = dict(common)
         scripts = ('run.cmd','sync-registry.ps1') if system == 'windows' else (
-            'run.sh','start-background.sh','stop-background.sh','status.sh','install-systemd.sh')
+            'run.sh','start-background.sh','stop-background.sh','status.sh','install-systemd.sh','java-env.sh')
         for script in scripts:
             text = (APP / 'scripts' / script).read_text(encoding='utf-8-sig').replace('\r\n','\n')
             if system == 'windows':

@@ -16,7 +16,7 @@ usage() {
 可选：
   --user USER          运行服务的 Linux 用户，默认 haitong
   --group GROUP        运行服务的 Linux 用户组，默认该用户的主组
-  --java-bin PATH      Java 21 可执行文件，默认从 PATH 查找 java
+  --java-bin PATH      Java 21 可执行文件；未指定时检查环境变量、相邻 JDK 和 PATH
   --service-name NAME  systemd 服务名，默认 haitong-data-pull
   --enable             安装后设为开机自启
   --start              安装后立即启动
@@ -77,12 +77,9 @@ if [[ -z "$SERVICE_GROUP" ]]; then
 fi
 getent group "$SERVICE_GROUP" >/dev/null || die "运行用户组不存在：$SERVICE_GROUP"
 
-if [[ -z "$JAVA_BIN" ]]; then
-  JAVA_BIN="$(command -v java || true)"
-fi
-[[ -n "$JAVA_BIN" && -x "$JAVA_BIN" ]] || die "未找到可执行 Java；请通过 --java-bin 指定 JDK/JRE 21 的 java。"
+source "$APP_DIR/scripts/java-env.sh"
+JAVA_BIN="$(haitong_resolve_java "$APP_DIR" "$JAVA_BIN")"
 JAVA_BIN="$(readlink -f "$JAVA_BIN")"
-"$JAVA_BIN" --version | grep -qE '^(openjdk|java) 21([.[:space:]]|$)' || die "需要 Java 21：$JAVA_BIN"
 
 # The service account owns only mutable runtime state.  Keep the JAR and
 # configuration under the deployment account/root ownership when possible.

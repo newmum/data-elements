@@ -37,6 +37,7 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.update("update db_datasource_t set org_id='denied-org' where tid='denied'");
         f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,table_name,updated_time) values('done','ga','completed',2,0,'字典表','done',current_timestamp),('draft','ga','draft',2,0,'业务表','draft',current_timestamp),('foreign','other','foreign',2,0,'业务表','foreign',current_timestamp),('denied','ga','denied',2,0,'业务表','denied',current_timestamp)");
         f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,table_name,updated_time) values('null-status','ga','db',null,0,'业务表','null-status',current_timestamp),('negative','ga','db',-1,0,'业务表','negative',current_timestamp),('deleted','ga','db',1,1,'业务表','deleted',current_timestamp),('process','ga','db',1,0,'过程表','process',current_timestamp),('foreign-in-db','other','db',1,0,'业务表','foreign-in-db',current_timestamp)");
+        f.jdbc.update("update db_datasource_t set is_del=1 where tid='denied'");
         var counter=new Counter();f.db.setSqlInterceptors(List.of(counter));
         var dialects=new DialectAdapter();dialects.add(new MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});
         f.db.setDialectAdapter(dialects);f.db.setResultProvider(new DefaultResultProvider("status-test"));
@@ -50,7 +51,7 @@ class DataIngestionRegistrationScopeTest {
         assertThat((List<?>)page.get("list")).hasSize(count);
         assertThat((List<?>)page.get("list")).anySatisfy(raw -> assertThat(((Map<?,?>)raw).get("tid")).isEqualTo("table-1"));
         assertThat(counter.reads).isEqualTo(7);
-        assertThat(scope.calls).isEqualTo(2);
+        assertThat(scope.calls).isZero();
         for(Object raw:(List<?>)page.get("list")) {
             Map<?,?> row=(Map<?,?>)raw;
             assertThat(String.valueOf(row.get("datasourceId"))).isIn("db","completed");
@@ -106,6 +107,7 @@ class DataIngestionRegistrationScopeTest {
         // The next hop starts from the ODS table rather than the root table.
         f.jdbc.update("insert into data_access_agg_task_t(tid,source_table_id,target_table_id,pipeline_id,tenant_id,is_del,updated_time) values('chain','ods-0','hive-0','chain-pipe','ga',0,current_timestamp)");
         f.jdbc.update("insert into nifi_pipeline_t(id,tenant_id,is_del,dsl_json) values('chain-pipe','ga',0,'{\"nodes\":[{\"category\":\"sink\",\"config\":{\"targetTableId\":\"hive-0\"}}]}')");
+        f.jdbc.update("update db_datasource_t set is_del=1 where tid='denied'");
         var counter=new Counter();f.db.setSqlInterceptors(List.of(counter));
         var dialects=new DialectAdapter();dialects.add(new MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});
         f.db.setDialectAdapter(dialects);f.db.setResultProvider(new DefaultResultProvider("link-test"));

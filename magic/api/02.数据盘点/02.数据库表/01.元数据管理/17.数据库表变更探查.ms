@@ -33,7 +33,6 @@ import jsons
 import cn.hutool.json.JSONUtil
 import java.util.Map
 import tenantRuntime
-import dataScope
 import metadataDiffView
 var tenantId = tenantRuntime.id()
 
@@ -189,8 +188,7 @@ var normalizeColumnTypeForDiff = (value) => {
 var loadSource = (datasourceId) => {
     // 从 MySQL 业务表读取当前有效数据。
     var source = db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('tid', datasourceId).eq('is_del', 0).selectOne()
-    if (source != null && !dataScope.canReadDataSource(source)) { exit 403,'无权读取此数据源' }
-    if (source == null) {
+        if (source == null) {
         // 返回当前业务分支的标准结果。
         return null
     }

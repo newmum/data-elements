@@ -319,7 +319,7 @@ class CanvasCreateTableBatchValidationMagicTest {
     }
 
     @Test
-    void explicitSingleReuseNeverExecutesCreationAndRespectsRoleScope() throws Exception {
+    void explicitSingleReuseNeverExecutesCreationAndIgnoresMenuRole() throws Exception {
         ColumnInfo column=new ColumnInfo(); column.setColumnName("id"); column.setDataType("string"); column.setNullable(true);
         physical.columns=List.of(column);
         Map<String,Object> request=Map.of("canvas",true,"reuseExistingOnly",true,"dbId","target-db","tableName","ods_existing",
@@ -327,7 +327,7 @@ class CanvasCreateTableBatchValidationMagicTest {
         Map<?,?> result=assertInstanceOf(Map.class,run(request));
         assertEquals(false,result.get("created")); assertEquals(true,result.get("physicalTableReused")); assertEquals(0,counter.writes);
         scope.deniedId="target-db"; physical.calls=0;
-        assertInstanceOf(ExitValue.class,run(request)); assertEquals(0,physical.calls);
+        assertInstanceOf(Map.class,run(request)); assertTrue(physical.calls>0); assertEquals(0,counter.writes);
     }
 
     @Test
@@ -370,9 +370,9 @@ class CanvasCreateTableBatchValidationMagicTest {
     }
 
     @Test
-    void hiddenDatasourceIsRejectedBeforeDdlParsing() throws Exception {
+    void currentTenantDatasourceIsNotRejectedByMenuRole() throws Exception {
         scope.deniedId = "target-db";
-        assertInstanceOf(ExitValue.class, run(request(1)));
+        assertInstanceOf(Map.class, run(request(1)));
         assertEquals(1, counter.queries);
         assertEquals(0, counter.writes);
     }
