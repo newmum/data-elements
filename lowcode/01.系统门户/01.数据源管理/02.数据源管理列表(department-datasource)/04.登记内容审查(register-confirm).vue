@@ -70,20 +70,21 @@
           </el-button>
         </div>
         <div v-else-if="isDataPushSource" class="push-contract-panel">
-          <div class="push-contract-head"><div><strong>数据推送接口规范</strong></div><el-tag :type="pushContractError ? 'danger' : pushContractIsPreview ? 'warning' : 'success'" effect="light">{{ pushContractError ? '规范读取失败' : pushContractIsPreview ? '数据推送规范' : '已发布表规范' }}</el-tag></div>
+          <div class="push-contract-head"><div><strong>{{ pushIsAttachmentMode ? "非结构化数据分片上传规范" : "数据推送接口规范" }}</strong></div><el-tag :type="pushContractError ? 'danger' : pushContractIsPreview ? 'warning' : 'success'" effect="light">{{ pushContractError ? '规范读取失败' : pushContractIsPreview ? '数据推送规范' : '已发布表规范' }}</el-tag></div>
           <LoadingState v-if="pushContractLoading" type="list" compact class="review-section-loading" />
           <div v-else-if="pushContractError" class="push-contract-error"><Icon icon="el-icon-WarningFilled" /><div><strong>正式规范读取失败</strong><p>{{ pushContractError }}</p></div><el-button plain @click="loadPushContract(true)">重试</el-button></div>
           <div class="push-contract-endpoint-grid" role="radiogroup" aria-label="选择推送接口">
             <button v-for="item in pushContractEndpointItems" :key="item.key" type="button" role="radio" :aria-checked="pushInterfaceType === item.key" aria-controls="push-interface-specification" class="push-contract-endpoint" :class="{'is-selected': pushInterfaceType === item.key}" @click="selectPushInterface(item.key)">
               <span class="push-endpoint-label">{{ item.label }}<span class="push-endpoint-selection">{{ pushInterfaceType === item.key ? '已选择' : '点击选择' }}</span></span>
-              <strong><em>{{ item.method }}</em>{{ item.path }}</strong><small>{{ item.description }}</small>
+              <strong><em>{{ item.method }}</em>{{ pushProtocolUrl(item.path) }}</strong><small>{{ item.description }}</small>
             </button>
           </div>
+          <div v-if="pushProtocolNodeError" class="push-contract-error"><Icon icon="el-icon-WarningFilled" /><p>{{ pushProtocolNodeError }}</p></div>
           <div id="push-interface-specification" class="push-interface-specification">
             <section class="push-contract-section">
               <div class="push-contract-section-head"><strong>身份认证与请求头</strong><span>使用当前数据源的业务密钥</span></div>
               <div class="push-contract-auth-grid">
-                <div class="push-auth-header push-content-type-card"><code>Content-Type</code><strong>{{ pushRequestContentType }}</strong><small>{{ pushIsAttachmentMode ? '文件原始字节' : 'JSON 格式的表记录' }}</small></div>
+                <div class="push-auth-header push-content-type-card"><code>Content-Type</code><strong>{{ pushRequestContentType }}</strong><small>{{ pushInterfaceType === 'filePart' ? '当前分片的原始字节' : pushRequestContentType === 'application/json' ? 'JSON 请求体' : '仅使用路径或查询参数' }}</small></div>
                 <div class="push-auth-header push-credential-card">
                   <div class="push-auth-card-heading"><code>X-Api-Key</code><div class="push-credential-actions"><el-button v-if="!pushCredential?.revealed" class="push-key-button" type="primary" size="small" :loading="pushCredentialLoading" :disabled="sourceDetailLoading" @click="issuePushCredential(sourceTid)">获取密钥</el-button><el-button v-if="pushCredential" link type="primary" size="small" :loading="pushCredentialLoading" @click="rotatePushCredential">轮换</el-button></div></div>
                   <strong>{{ pushCredential?.revealed ? '密钥已生成' : pushCredentialError ? '获取失败' : pushCredential ? '密钥已配置' : '当前数据源访问密钥' }}</strong>
@@ -95,7 +96,7 @@
             </section>
             <template v-if="pushContract && !pushContractLoading && !pushContractError">
               <section class="push-contract-section">
-                <div class="push-contract-section-head"><strong>{{ pushIsAttachmentMode ? '附件请求参数' : '请求体参数' }}</strong><span>{{ pushIsAttachmentMode ? '查询参数4项，正文为单个附件' : '一批记录对应一张表；单批最多 10,000 条' }}</span></div>
+                <div class="push-contract-section-head"><strong>{{ pushIsAttachmentMode ? '分片流程请求参数' : '请求体参数' }}</strong><span>{{ pushIsAttachmentMode ? '以下参数对应当前选择的操作' : '一批记录对应一张表；单批最多 10,000 条' }}</span></div>
                 <DataTable :data="pushSelectedParameters" :preview-sort="{name:'text'}" :show-page="false" height="auto" flex-type="flex-[0_1_auto]" :show-overflow-tooltip="false" border size="small">
                   <el-table-column prop="name" label="参数" sortable="custom" min-width="150"><template #default="{ row }"><code>{{ row.name }}</code></template></el-table-column>
                   <el-table-column prop="location" label="位置" width="100" />
@@ -103,29 +104,20 @@
                   <el-table-column prop="description" label="说明" min-width="280" />
                 </DataTable>
                 <div v-if="pushIsAttachmentMode" class="push-attachment-guidance">
-                  <p>默认整文件推送，单个最多20 MB，并同时满足下方字段的大小和格式限制。返回202后查询 statusUrl，等待 READY，再将 fileId 填入对应表字段。</p>
-                  <p>按表名和字段名关联附件；大小与摘要由服务端自动计算。文件名需URL编码，正文不使用JSON、表单或Base64。同一文件重试保持幂等键和内容不变；大文件或断点续传使用 POST /api/v1/file-uploads 分片流程。</p>
+                  <p>默认使用分片上传。先初始化取得 uploadId、partSize 和 partCount，按返回大小切片并从第1片开始上传；中断后分页查询已确认片号，只补传缺失片。</p>
+                  <p>完成上传返回202仅表示开始合并校验。查询状态至 READY 后，调用“提交推送”，再持续核对 deliveryStatus 和 deliveries 中的投递结果；只有 READY 不代表已写入目标。</p>
+                  <p>文件集合由当前节点的海通 YAML 配置：relay.files.collections 下的 datasource-id 要等于本数据源编码，collection-id 填入初始化请求，clients 须包含业务密钥对应的 clientId。无需填写表名、字段名或把 fileId 回填到登记字段；文件大小、格式、目标及元数据规则由该集合配置约束。</p>
+                  <div class="push-contract-table-toolbar"><strong>当前操作请求示例</strong><el-button link type="primary" @click="copyPushChunkSample">复制分片示例</el-button></div>
+                  <div class="push-contract-code"><pre>{{ pushChunkSample }}</pre></div>
                 </div>
               </section>
-              <section class="push-contract-section">
-                <div class="push-contract-section-head"><strong>{{ pushIsAttachmentMode ? '待推送附件' : pushContractIsPreview ? '登记表结构预览' : '已发布数据表' }}</strong><span>{{ pushVisibleTables.length }} 张表<span v-if="pushIsAttachmentMode"> · {{ pushAttachmentFieldCount }} 个附件字段</span></span></div>
-                <LoadingState v-if="pushAttachmentFieldsLoading" type="list" compact />
-                <el-empty v-else-if="!pushVisibleTables.length" :description="pushIsAttachmentMode ? '尚未登记关联附件字段，请在第一步模板中补充' : '尚无可展示的数据表，请先完成表和字段登记'" :image-size="60" />
+              <section v-if="!pushIsAttachmentMode" class="push-contract-section">
+                <div class="push-contract-section-head"><strong>{{ pushContractIsPreview ? '登记表结构预览' : '已发布数据表' }}</strong><span>{{ pushVisibleTables.length }} 张表</span></div>
+                <el-empty v-if="!pushVisibleTables.length" description="尚无可展示的数据表，请先完成表和字段登记" :image-size="60" />
                 <el-collapse v-else v-model="pushContractOpenTables" class="push-contract-tables">
                   <el-collapse-item v-for="table in pushVisibleTables" :key="table.tableId" :name="table.tableId">
-                    <template #title><div class="push-contract-table-title"><strong>{{ table.tableName }}</strong><span>{{ pushContractIsPreview ? '登记字段' : `V${table.schemaVersion}` }} · {{ pushIsAttachmentMode ? `${table.fields.length} 个附件字段` : `${table.fieldCount} 个字段` }}</span></div></template>
-                    <template v-if="pushIsAttachmentMode">
-                      <DataTable :data="table.fields" :preview-sort="{fieldName:'text'}" :show-page="false" border size="small" max-height="260">
-                        <el-table-column prop="fieldName" label="附件字段" sortable="custom" min-width="150" />
-                        <el-table-column label="大小上限" width="110"><template #default="{ row }">{{ pushAttachmentSize(row.attachment) }}</template></el-table-column>
-                        <el-table-column label="文件格式" min-width="130"><template #default="{ row }">{{ (row.attachment.allowedExtensions || []).join('、') }}</template></el-table-column>
-                        <el-table-column label="所属表" min-width="200"><template #default><code class="push-attachment-collection">{{ table.tableName }}</code></template></el-table-column>
-                        <el-table-column label="示例" width="100"><template #default="{ row }"><el-button link type="primary" size="small" :disabled="pushAttachmentFieldFor(table)?.fieldName === row.fieldName" @click="selectPushAttachmentField(table,row)">{{ pushAttachmentFieldFor(table)?.fieldName === row.fieldName ? '当前示例' : '查看示例' }}</el-button></template></el-table-column>
-                      </DataTable>
-                      <div class="push-contract-table-toolbar"><div><strong>附件推送示例 · {{ pushAttachmentFieldFor(table)?.fieldName }}</strong><span>推送就绪后，将返回的 fileId 填入 {{ table.tableName }}.{{ pushAttachmentFieldFor(table)?.fieldName }}。</span></div><el-button link type="primary" @click.stop="copyPushAttachmentSample(table)">复制示例</el-button></div>
-                      <div class="push-contract-code"><pre>{{ pushAttachmentSample(table,pushAttachmentFieldFor(table)) }}</pre></div>
-                    </template>
-                    <template v-else>
+                    <template #title><div class="push-contract-table-title"><strong>{{ table.tableName }}</strong><span>{{ pushContractIsPreview ? '登记字段' : `V${table.schemaVersion}` }} · {{ `${table.fieldCount} 个字段` }}</span></div></template>
+                    <template>
                       <div class="push-contract-table-toolbar"><div><strong>请求示例与字段约束</strong><span>示例使用 deliveryType=FTP；如已配置并获授权的 Kafka 通道，改为 KAFKA。只有下方登记字段可以放入 records。</span></div><div class="push-contract-sample-actions"><el-button link type="primary" @click.stop="copyPushSample(table)">复制示例</el-button></div></div>
                       <div class="push-contract-code"><pre>{{ pushContractSample(table) }}</pre></div>
                       <LoadingState v-if="pushContractFieldsLoading(table)" type="list" compact />
@@ -1791,67 +1783,125 @@ function apiPullTableStatus(item) {
 // Push contract display is read-only until the user explicitly requests a credential.
 const pushDatasourceRegistered = computed(() => [1, 2].includes(Number(source.value?.assetStatus ?? source.value?.asset_status ?? 0)));
 const pushContractIsPreview = computed(() => pushContract.value?.tableSource !== "published");
-const pushInterfaceType = ref("dataPush");
-const pushIsAttachmentMode = computed(() => pushInterfaceType.value === "fileUpload");
-const pushAttachmentFieldSelections = ref({});
-const pushRequestContentType = computed(() => pushIsAttachmentMode.value ? "application/octet-stream" : "application/json");
-const pushContractHeaders = computed(() => [{name:"Idempotency-Key",value:"每次请求唯一 UUID",description:pushIsAttachmentMode.value ? "同一文件重试保持不变" : "同一批次重试保持不变"}]);
-const pushVisibleTables = computed(() => {
-  const all = pushContract.value?.tables || [];
-  if (!pushIsAttachmentMode.value) return all;
-  return all.map(table => ({...table,fields:(table.fields || []).filter(field => Number(field.attachment?.maxFileBytes) > 0)})).filter(table => table.fields.length);
+const pushContentType = computed(() =>
+  ["UNSTRUCTURED", "非结构化数据"].includes(String(source.value?.pushDataType || source.value?.push_data_type || "").trim().toUpperCase())
+    ? "UNSTRUCTURED" : "STRUCTURED");
+const pushIsAttachmentMode = computed(() => pushContentType.value === "UNSTRUCTURED");
+const pushInterfaceSelection = ref("");
+const pushInterfaceType = computed(() => {
+  const available = pushContractEndpointItems.value.map(item => item.key);
+  return available.includes(pushInterfaceSelection.value) ? pushInterfaceSelection.value
+    : pushIsAttachmentMode.value ? "fileInit" : "dataPush";
 });
-const pushAttachmentFieldCount = computed(() => pushVisibleTables.value.reduce((total,table) => total + (table.fields || []).length,0));
-const pushAttachmentFieldsLoading = computed(() => pushIsAttachmentMode.value && (pushContract.value?.tables || []).some(table => pushContractFieldsLoading(table)));
-const pushSelectedParameters = computed(() => pushIsAttachmentMode.value ? [
-  {name:"datasourceId",location:"查询参数",required:true,description:"固定为当前数据源编码"},
-  {name:"tableName",location:"查询参数",required:true,description:"附件所属数据表的英文名，必须为下方已登记的表"},
-  {name:"fieldName",location:"查询参数",required:true,description:"该表中关联附件的字段英文名，必须为下方列出的附件字段"},
-  {name:"fileName",location:"查询参数",required:true,description:"包含扩展名的文件名，需URL编码，格式须符合附件字段规定"},
-  {name:"文件正文",location:"请求体",required:true,description:"单个文件的原始字节流，不封装为JSON、表单或Base64"},
-] : (pushContract.value?.requiredParameters || []).map(item => ({...item,location:"请求体"})));
+const pushProtocolNodes = ref([]);
+const pushProtocolNodesSourceId = ref("");
+const pushProtocolLoadError = ref("");
+const pushNetworkCode = computed(() => {
+  const value = String(source.value?.storageDomain || source.value?.storage_domain || source.value?.SSWL || "").trim();
+  return ({ ZWW:"SPZW", "专网":"SPZW", "公安网":"GAW", "互联网":"HLW" })[value] || value;
+});
+const pushProtocolBaseUrl = computed(() => {
+  const nodes = pushProtocolNodes.value.filter(row => row.networkCode === pushNetworkCode.value);
+  return (nodes.find(row => row.isDefault) || (nodes.length === 1 ? nodes[0] : null))?.baseUrl || "";
+});
+const pushProtocolNodeError = computed(() => pushProtocolLoadError.value ||
+  (pushProtocolNodesSourceId.value === String(sourceTid.value || "").trim() && !pushProtocolBaseUrl.value
+    ? "当前网络未配置唯一可用的推送服务，请到节点管理配置并设置默认节点。" : ""));
+function pushProtocolUrl(path) {
+  return `${pushProtocolBaseUrl.value || "<当前网络默认推送服务地址>"}${path}`;
+}
+async function loadPushProtocolNodes(datasourceId, force = false) {
+  if (!force && pushProtocolNodesSourceId.value === datasourceId) return;
+  pushProtocolLoadError.value = "";
+  try {
+    const response = await $common.post("/ods/nifi-node/page", {nodeType:"push"});
+    if (datasourceId !== String(sourceTid.value || "").trim()) return;
+    const data = response?.data || response || {};
+    pushProtocolNodes.value = (Array.isArray(data.list) ? data.list : []).filter(row => Number(row.enabled) === 1).map(row => {
+      const network = String(row.networkCode || row.network_code || row.networkType || row.network_type || "").trim();
+      return {networkCode:({ZWW:"SPZW","专网":"SPZW","公安网":"GAW","互联网":"HLW"})[network] || network,
+        baseUrl:String(row.baseUrl || row.base_url || "").trim().replace(/\/+$/, ""),isDefault:Number(row.isDefault ?? row.is_default ?? 0) === 1};
+    }).filter(row => row.networkCode && row.baseUrl);
+    pushProtocolNodesSourceId.value = datasourceId;
+  } catch (error) {
+    pushProtocolNodes.value = [];
+    pushProtocolNodesSourceId.value = "";
+    pushProtocolLoadError.value = "推送节点读取失败，请重试读取规范。";
+  }
+}
+const pushFileStages = [
+  {key:"fileInit",label:"1. 初始化上传",method:"POST",path:"/api/v1/file-uploads",description:"创建上传会话，取得 uploadId、partSize 和 partCount。"},
+  {key:"filePart",label:"2. 上传分片",method:"PUT",path:"/api/v1/file-uploads/{id}/parts/{part}",description:"按服务端片大小发送文件原始字节并核验分片摘要。"},
+  {key:"fileParts",label:"3. 断点续传",method:"GET",path:"/api/v1/file-uploads/{id}/parts",description:"分页查询已确认分片，恢复时只上传缺失片。"},
+  {key:"fileComplete",label:"4. 完成上传",method:"POST",path:"/api/v1/file-uploads/{id}/complete",description:"无请求体；异步合并文件并进行完整性校验。"},
+  {key:"fileSubmit",label:"5. 提交推送",method:"POST",path:"/api/v1/file-uploads/{id}/submit",description:"提交业务标识和元数据，触发服务端已配置目标的投递。"},
+  {key:"fileStatus",label:"6. 查询状态",method:"GET",path:"/api/v1/file-uploads/{id}",description:"核对文件 READY、投递结果及后续业务回执。"},
+];
+const pushContractEndpointItems = computed(() => pushIsAttachmentMode.value ? pushFileStages : [
+  {key:"dataPush",label:"数据推送接口",method:pushContract.value?.endpoints?.dataPush?.method || "POST",
+    path:pushContract.value?.endpoints?.dataPush?.path || "/api/v1/data-push",description:"接收业务系统的表数据，按登记规则校验并投递至目标端。"},
+]);
+const pushRequestContentType = computed(() => !pushIsAttachmentMode.value || ["fileInit","fileSubmit"].includes(pushInterfaceType.value)
+  ? "application/json" : pushInterfaceType.value === "filePart" ? "application/octet-stream" : "无需设置（无请求体）");
+const pushContractHeaders = computed(() => pushInterfaceType.value === "filePart" ? [
+  {name:"X-Part-SHA256",value:"本片原始字节的64位SHA-256",description:"必填；每一片单独计算，重试时内容和摘要保持一致"},
+  {name:"Content-Length",value:"当前分片实际字节数",description:"由HTTP客户端按分片正文设置，最后一片可以小于 partSize"},
+] : ["dataPush","fileInit","fileSubmit"].includes(pushInterfaceType.value) ? [
+  {name:"Idempotency-Key",value:"每次逻辑请求唯一 UUID",description:pushIsAttachmentMode.value ? "初始化、提交分别使用稳定的键；同一操作重试保持不变" : "同一批次重试保持不变"},
+] : []);
+const pushVisibleTables = computed(() => pushContract.value?.tables || []);
+const pushSelectedParameters = computed(() => {
+  if (!pushIsAttachmentMode.value) return (pushContract.value?.requiredParameters || []).map(item => ({...item,location:"请求体"}));
+  const id = {name:"id",location:"路径参数",required:true,description:"初始化响应中的 uploadId，同一个文件的后续请求始终使用该值"};
+  if (pushInterfaceType.value === "fileInit") return [
+    {name:"datasourceId",location:"请求体",required:true,description:`当前数据源编码：${sourceTid.value}`},
+    {name:"collectionId",location:"请求体",required:true,description:"当前海通节点 YAML 中 relay.files.collections 下配置的 collection-id；该集合须绑定当前数据源并授权当前 clientId"},
+    {name:"fileName",location:"请求体",required:true,description:"原始文件名，含扩展名；须符合服务端文件集合的格式白名单"},
+    {name:"size",location:"请求体",required:true,description:"整个文件的实际字节数，正整数；不是MB数，也不是分片大小"},
+    {name:"sha256",location:"请求体",required:false,description:"整个文件原始字节的64位SHA-256，可省略；与逐片 X-Part-SHA256 不同"},
+  ];
+  if (pushInterfaceType.value === "filePart") return [id,
+    {name:"part",location:"路径参数",required:true,description:"分片编号从1开始，最大为初始化响应中的 partCount"},
+    {name:"文件分片正文",location:"请求体",required:true,description:"按响应 partSize 切分后的原始字节，不封装成JSON、表单或Base64"}];
+  if (pushInterfaceType.value === "fileParts") return [id,
+    {name:"after",location:"查询参数",required:false,description:"已读分片编号游标，首次为0，后续传本页最后一个片号"},
+    {name:"limit",location:"查询参数",required:false,description:"每页1至100片，默认100；直到返回空列表"}];
+  if (pushInterfaceType.value === "fileSubmit") return [id,
+    {name:"businessKey",location:"请求体",required:true,description:"调用方的文件业务唯一标识；同一次业务推送重试保持一致"},
+    {name:"metadata",location:"请求体",required:false,description:"业务元数据对象，字段与必填规则以海通文件集合配置为准；无字段要求时使用 {}"}];
+  return [id];
+});
 function selectPushInterface(type) {
-  if (!["dataPush","fileUpload"].includes(type) || pushInterfaceType.value === type) return;
-  pushInterfaceType.value = type;
-  pushContractOpenTables.value = pushVisibleTables.value.slice(0,1).map(table => table.tableId);
-}
-function pushAttachmentFieldFor(table) {
-  const name = pushAttachmentFieldSelections.value[table?.tableId || table?.tableName];
-  return (table?.fields || []).find(field => field.fieldName === name && Number(field.attachment?.maxFileBytes) > 0)
-    || (table?.fields || []).find(field => Number(field.attachment?.maxFileBytes) > 0) || null;
-}
-function selectPushAttachmentField(table,field) {
-  if (!(table?.fields || []).some(item => item.fieldName === field?.fieldName && Number(item.attachment?.maxFileBytes) > 0)) return;
-  pushAttachmentFieldSelections.value = {...pushAttachmentFieldSelections.value,[table.tableId || table.tableName]:field.fieldName};
+  if (!pushContractEndpointItems.value.some(item => item.key === type)) return;
+  pushInterfaceSelection.value = type;
 }
 function pushAttachmentSize(attachment) {
   return Number(attachment?.maxFileBytes) > 0 ? `${Number((attachment.maxFileBytes / 1048576).toFixed(3))} MB` : "—";
 }
-let pushCredentialRequestId = 0;
-let pushContractRequestId = 0;
-let pushContractInFlightKey = "";
 function pushAttachmentDescription(attachment) {
   if (!attachment?.maxFileBytes) return "—";
   return `单个≤${Number((attachment.maxFileBytes / 1048576).toFixed(3))} MB · ${(attachment.allowedExtensions || []).join("、")}`;
 }
-function pushAttachmentSample(table,field) {
-  if (!field?.attachment) return "";
-  const extension = field.attachment.allowedExtensions?.[0] || "pdf";
-  return `POST <推送服务地址>/api/v1/file-uploads/single?datasourceId=${encodeURIComponent(pushContract.value?.datasourceId || sourceTid.value || "")}&tableName=${encodeURIComponent(table.tableName)}&fieldName=${encodeURIComponent(field.fieldName)}&fileName=attachment.${extension}\nX-Api-Key: <当前数据源业务密钥>\nIdempotency-Key: <本次附件的唯一UUID>\nContent-Type: application/octet-stream\n\n<文件原始字节>\n\n# 文件就绪后，将返回的fileId填入 ${table.tableName}.${field.fieldName}`;
-}
-async function copyPushAttachmentSample(table) {
-  try { await navigator.clipboard.writeText(pushAttachmentSample(table,pushAttachmentFieldFor(table))); $message.success("附件推送示例已复制"); }
+const pushChunkSample = computed(() => {
+  const stage = pushFileStages.find(item => item.key === pushInterfaceType.value) || pushFileStages[0];
+  const path = stage.path.replace("{id}","<uploadId>").replace("{part}","1");
+  const lines = [`${stage.method} ${pushProtocolUrl(path)}`,"X-Api-Key: <当前数据源且已获文件集合授权的业务密钥>"];
+  if (pushRequestContentType.value.includes("application/")) lines.push(`Content-Type: ${pushRequestContentType.value}`);
+  if (["fileInit","fileSubmit"].includes(stage.key)) lines.push("Idempotency-Key: <本操作固定UUID，重试保持不变>");
+  if (stage.key === "filePart") lines.push("X-Part-SHA256: <本分片原始字节的64位SHA-256>","Content-Length: <本分片实际字节数>");
+  if (stage.key === "fileInit") lines.push("",JSON.stringify({datasourceId:String(sourceTid.value || ""),collectionId:"<海通YAML配置的collection-id>",fileName:"sample.pdf",size:2048},null,2));
+  if (stage.key === "filePart") lines.push("","<当前分片的原始字节>");
+  if (stage.key === "fileParts") lines[0] += "?after=0&limit=100";
+  if (stage.key === "fileSubmit") lines.push("",JSON.stringify({businessKey:"<本文件业务唯一标识>",metadata:{}},null,2));
+  return lines.join("\n");
+});
+async function copyPushChunkSample() {
+  try { await navigator.clipboard.writeText(pushChunkSample.value); $message.success("分片上传示例已复制"); }
   catch (error) { $message.warning("当前浏览器不允许自动复制，请手动复制示例内容"); }
 }
-
-const pushContractEndpointItems = computed(() => {
-  const endpoints = pushContract.value?.endpoints || {};
-  const dataPush = endpoints.dataPush || {};
-  return [
-    { key: "dataPush", label: "数据推送接口", method: dataPush.method || "POST", path: dataPush.path || "/api/v1/data-push", description: "接收业务系统的表数据，按登记规则校验并投递至目标端。" },
-    { key: "fileUpload", label: "附件推送接口", method: "POST", path: "/api/v1/file-uploads/single", description: "接收照片、文档等业务附件，供表数据关联和后续使用。" },
-  ];
-});
+let pushCredentialRequestId = 0;
+let pushContractRequestId = 0;
+let pushContractInFlightKey = "";
 async function togglePushContract() { connectionInfoExpanded.value = !connectionInfoExpanded.value; if (connectionInfoExpanded.value) await loadPushContract(); }
 async function issuePushCredential(datasourceId, rotate = false) {
   const normalizedDatasourceId = String(datasourceId || "").trim();
@@ -1958,7 +2008,7 @@ function pushContractFieldsLoading(contractTable) {
   return Boolean(sourceTable && fieldLoadingFor(sourceTable));
 }
 function loadRegistrationPushContractFields() {
-  if (pushContract.value?.tableSource !== "registration") return;
+  if (pushIsAttachmentMode.value || pushContract.value?.tableSource !== "registration") return;
   tables.value.forEach((table) => {
     if (!fieldsFor(table).length) loadFieldsFor(table);
   });
@@ -1985,6 +2035,7 @@ async function loadPushContract(force = false) {
   pushContractLoading.value = true;
   pushContractError.value = "";
   try {
+    await loadPushProtocolNodes(datasourceId, force);
     let result;
     if (!publishedRead) {
       // Wait for authoritative source details; viewing never issues a key.

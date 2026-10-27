@@ -101,6 +101,8 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，默认整文件、可选分片续传的标准库流式客户端为 [`upload_file.py`](../haitong-data-pull/scripts/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
 
+平台数据源登记现在通过“推送数据类型”区分结构化与非结构化，默认结构化。第一步的地址和第五步规范均取所选网络在节点管理中的启用默认推送节点；非结构化默认展示 `/api/v1/file-uploads` 分片协议，结构化继续展示 `/api/v1/data-push` JSON 协议。数据登记模板不再包含字段附件关联、附件大小、附件格式三列。非结构化分片的 `collectionId` 由部署方在海通 YAML 的 `relay.files.collections.<key>.collection-id` 配置，并匹配 `datasource-id` 和 `clients`，可以独立于表字段关联使用；登记选择类型不会自动创建文件集合或放宽权限。第五步示例明确区分 `complete`、`READY` 与 `submit` 后投递成功。现有整文件兼容 API 及命令行客户端参数仍保留，登记页面统一以分片接口作为非结构化标准。
+
 当前使用单节点持久卷，目录加进程锁；相同本地卷不能同时运行两个文件实例，也不能将各自拥有本地卷的多个实例直接置于随机负载均衡后。正式多实例需完成共享对象存储适配及跨节点校验。普通文件 API 与旧表批次共用 HTTP 服务，分片流量仍会占用该进程的网络和数据库；文件校验池、FILE_LOCAL/FILE_FTP/FILE_KAFKA 投递池分别有界，不承诺物理资源完全隔离。
 
 ### 1. 总体决策与现状依据

@@ -265,6 +265,17 @@ if (accessMode == 'receive') {
     showConnect = 1
     connectionConfig.pushChannelProvided = true
 }
+// 数据内容类型独立于接入方式、数据库协议及历史频率字段，仅影响推送协议展示。
+var pushDataType = first(props, ['pushDataType', 'push_data_type'])
+if (accessMode == 'receive') {
+    if (blank(pushDataType)) { pushDataType = first(oldConnectionConfig, ['pushDataType', 'push_data_type']) }
+    pushDataType = blank(pushDataType) ? 'STRUCTURED' : text(pushDataType).trim().toUpperCase()
+    if (pushDataType == '结构化数据') { pushDataType = 'STRUCTURED' }
+    if (pushDataType == '非结构化数据') { pushDataType = 'UNSTRUCTURED' }
+    if (!['STRUCTURED', 'UNSTRUCTURED'].contains(pushDataType)) { exit 400, '推送数据类型仅支持结构化数据或非结构化数据' }
+    connectionConfig.pushDataType = pushDataType
+}
+
 // 数据推送能力声明是可选配置。提供了值时服务端复核枚举；未选择不阻断保存，
 // 且不会对 JDBC/FTP/Kafka 等其他接入方式写入该配置。
 var receivePayloadSize = first(props, ['receivePayloadSize', 'receive_payload_size'])

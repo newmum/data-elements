@@ -95,13 +95,13 @@
           <div class="connection-guide receive-template-guide">
             <div class="receive-delivery-profile">
               <label class="receive-delivery-field">
-                <span>推送频率</span>
+                <span>推送数据类型</span>
                 <el-select
-                  v-model="receiveDeliveryProfile.dataTimeliness"
-                  placeholder="请选择推送频率"
+                  v-model="receiveDeliveryProfile.pushDataType"
+                  placeholder="请选择推送数据类型"
                 >
                   <el-option
-                    v-for="item in receiveDataTimelinessOptions"
+                    v-for="item in receivePushDataTypeOptions"
                     :key="item.value"
                     :label="item.label"
                     :value="item.value"
@@ -111,7 +111,7 @@
               <div class="receive-push-address">
                 <span class="receive-push-address-label">推送地址</span>
                 <code :title="receivePushAddress">{{ receivePushAddress }}</code>
-                <small>当前所属网络：{{ receiveNetworkName }}</small>
+                <small class="receive-network-tag">{{ receiveNetworkName }}</small>
               </div>
             </div>
             <div
@@ -120,7 +120,7 @@
             >
               <div class="data-upload-result-toolbar">
                 <div class="data-upload-result-heading">
-                  <span class="guide-kicker">数据接收模板导入结果</span>
+                  <span class="guide-kicker">数据登记模板导入结果</span>
                   <strong
                     >已上传 {{ metadataImportState.tableCount }} 项资源、{{
                       metadataImportState.fieldCount
@@ -131,7 +131,7 @@
                     {{
                       metadataImportState.fileName
                         ? `来源：${metadataImportState.fileName}`
-                        : "已加载上次成功导入的数据接收模板"
+                        : "已加载上次成功导入的数据登记模板"
                     }}
                   </p>
                 </div>
@@ -149,7 +149,7 @@
                     {{
                       templateDownloadState.loading
                         ? "正在生成模板"
-                        : "下载数据接收模板"
+                        : "下载数据登记模板"
                     }}
                   </el-button>
                   <el-button
@@ -158,7 +158,7 @@
                     @click="triggerMetadataImport"
                   >
                     <template #icon><Icon icon="el-icon-Upload" /></template>
-                    重新上传数据接收模板
+                    重新上传数据登记模板
                   </el-button>
                   <input
                     ref="metadataImportInput"
@@ -205,10 +205,10 @@
             </div>
             <div v-else class="guide-hero-card">
               <div class="guide-hero-copy">
-                <span class="guide-kicker">数据接收模板</span>
+                <span class="guide-kicker">数据登记模板</span>
                 <strong>下载固定模板，填写后上传审核</strong>
                 <p>
-                  数据接收所需的数据表和字段规范已预先定义，无需在页面中重复填写。下载模板后填写表、字段及关联附件的大小与格式要求，再上传保存。关联附件字段用于保存上传返回的 fileId。
+                  下载数据登记模板，填写数据表和字段定义后上传保存。结构化数据按表记录推送；非结构化数据在第五步查看分片上传规范。
                 </p>
                 <div class="offline-flow-steps">
                   <div class="offline-flow-step">
@@ -241,7 +241,7 @@
                     {{
                       templateDownloadState.loading
                         ? "正在生成模板"
-                        : "下载数据接收模板"
+                        : "下载数据登记模板"
                     }}
                   </el-button>
                   <el-button
@@ -269,7 +269,7 @@
                   <i></i><i></i><i></i>
                 </div>
                 <div class="guide-ill-panel is-active is-receive">
-                  <strong class="guide-ill-heading">数据接收模板</strong>
+                  <strong class="guide-ill-heading">数据登记模板</strong>
                   <div class="guide-ill-row is-strong"></div>
                   <div class="guide-ill-row"></div>
                   <div class="guide-ill-row is-short"></div>
@@ -2719,7 +2719,7 @@ const receivePushNodesState = ref("loading");
 const accessNodeValueAliases = {};
 const normalizeAccessNodeValue = (value) => {
   const text = String(value || "").trim();
-  return accessNodeValueAliases[text] || text;
+  return accessNodeValueAliases[text] || ({ "公安网": "GAW", "互联网": "HLW", "专网": "SPZW", ZWW: "SPZW" })[text] || text;
 };
 const mergeAccessNodeOptions = (remoteOptions = []) => {
   const merged = new Map(
@@ -2757,33 +2757,28 @@ const receiveNetworkName = computed(
   () =>
     accessNetworkOptions.value.find(
       (item) => item.value === receiveAccessNode.value,
-    )?.label || "当前所属网络",
+    )?.label || receiveAccessNode.value || "未选择网络",
 );
 const receivePushAddress = computed(() => {
   if (!receiveAccessNode.value) return "请先选择所属网络";
   if (receivePushNodesState.value === "loading") return "正在加载推送节点…";
   if (receivePushNodesState.value === "error") return "推送节点加载失败，请重新打开登记页面";
   const baseUrl = selectedReceivePushNode.value?.baseUrl;
-  if (baseUrl) return baseUrl + "/api/v1/data-push";
+  if (baseUrl) return baseUrl + (receiveDeliveryProfile.pushDataType === "UNSTRUCTURED" ? "/api/v1/file-uploads" : "/api/v1/data-push");
   return receiveNetworkPushNodes.value.length > 1
     ? "当前网络有多个推送节点，请在节点管理中设置默认节点"
     : "当前网络未配置启用的推送节点";
 });
-const receiveDataTimelinessOptions = [
-  { value: "实时", label: "实时（100KB–10MB）", size: "100KB - 10MB" },
-  { value: "非实时", label: "非实时（10MB–1GB）", size: "10MB - 1GB" },
+const receivePushDataTypeOptions = [
+  { value: "STRUCTURED", label: "结构化数据" },
+  { value: "UNSTRUCTURED", label: "非结构化数据" },
 ];
-const receiveDeliveryProfile = reactive({
-  dataTimeliness: "非实时",
-});
-const receivePushDataSize = computed(() =>
-  receiveDataTimelinessOptions.find(
-    (item) => item.value === receiveDeliveryProfile.dataTimeliness,
-  )?.size || "10MB - 1GB",
-);
+const receiveDeliveryProfile = reactive({ pushDataType: "STRUCTURED" });
+const normalizePushDataType = (value) =>
+  ["UNSTRUCTURED", "非结构化数据"].includes(String(value || "").trim().toUpperCase())
+    ? "UNSTRUCTURED" : "STRUCTURED";
 const syncReceiveDeliveryProfile = (data = {}) => {
-  receiveDeliveryProfile.dataTimeliness =
-    String(data.dataTimeliness || "").trim() === "实时" ? "实时" : "非实时";
+  receiveDeliveryProfile.pushDataType = normalizePushDataType(data.pushDataType || data.push_data_type);
 };
 const loadReceivePushNodes = async () => {
   receivePushNodesState.value = "loading";
@@ -2794,7 +2789,7 @@ const loadReceivePushNodes = async () => {
     receivePushNodes.value = (Array.isArray(payload.list) ? payload.list : [])
       .filter((item) => Number(item.enabled) === 1)
       .map((item) => ({
-        networkCode: String(item.networkCode || item.network_code || "").trim(),
+        networkCode: normalizeAccessNodeValue(item.networkCode || item.network_code || item.networkType || item.network_type || ""),
         baseUrl: String(item.baseUrl || item.base_url || "").trim().replace(/\/+$/, ""),
         isDefault: Number(item.isDefault ?? item.is_default ?? 0) === 1,
       }))
@@ -3181,26 +3176,6 @@ const integrationTemplateTableHeaders = [
   "数据表注释 *",
   "业务类型 *",
 ];
-const pushAttachmentTemplateHeaders = ["是否关联附件", "附件大小上限(MB)", "附件格式"];
-const pushAttachmentExtensions = ["jpg", "jpeg", "png", "pdf", "docx"];
-function templateAttachment(row) {
-  const flag = getCellText(row, ["是否关联附件"]);
-  const size = getCellText(row, ["附件大小上限(MB)", "附件大小上限（MB）"]);
-  const formats = getCellText(row, ["附件格式"]);
-  if (flag && !booleanTemplateOptions.includes(flag)) throw new Error("“是否关联附件”只能填写是或否");
-  if (flag !== "是") {
-    if (size || formats) throw new Error("填写附件大小或格式时，必须将“是否关联附件”设置为是");
-    return null;
-  }
-  if (!/^\d+$/.test(size) || Number(size) < 1 || Number(size) > 1048576) throw new Error("附件大小上限(MB)应为1至1048576的整数");
-  const extensions = [...new Set(formats.toLowerCase().split(/[\s,，、;；]+/).filter(Boolean).map(value => value.replace(/^\./,"")))];
-  if (!extensions.length || extensions.some(value => !pushAttachmentExtensions.includes(value))) throw new Error("附件格式仅支持jpg、jpeg、png、pdf、docx，多种格式用逗号分隔");
-  const type = getCellText(row, ["字段类型"]).toLowerCase();
-  if (!/^(字符串|varchar|nvarchar|char|nchar|text|longtext|string)(\(|$)/.test(type)) throw new Error("关联附件字段须使用字符串类型保存fileId");
-  const length = getCellText(row,["字段长度"]);
-  if (length && Number(length) < 36) throw new Error("关联附件字段长度至少为36，以保存完整fileId");
-  return {enabled:true,maxFileBytes:Number(size)*1048576,allowedExtensions:extensions};
-}
 const integrationTemplateFieldHeaders = [
   "序号",
   "数据表名 *",
@@ -4904,22 +4879,9 @@ const normalizeDatasourceStorageFields = (data = {}) => {
       poolCfg.dataAccessMode,
       poolCfg.data_access_mode,
     ),
-    pushDataSize: firstFilled(
-      data.pushDataSize,
-      data.push_data_size,
-      data.receivePushDataSize,
-      poolCfg.pushDataSize,
-      poolCfg.push_data_size,
-      poolCfg.receivePushDataSize,
-    ),
-    dataTimeliness: firstFilled(
-      data.dataTimeliness,
-      data.data_timeliness,
-      data.receiveDataTimeliness,
-      poolCfg.dataTimeliness,
-      poolCfg.data_timeliness,
-      poolCfg.receiveDataTimeliness,
-    ),
+    pushDataType: normalizePushDataType(firstFilled(
+      data.pushDataType, data.push_data_type, poolCfg.pushDataType, poolCfg.push_data_type,
+    )),
     schema: firstFilled(data.schema, poolCfg.schema),
     dbVersion: firstFilled(
       data.dbVersion,
@@ -6102,8 +6064,7 @@ const save = async () => {
     const receiveDeliveryData =
       accessMode.value === "receive"
         ? {
-            pushDataSize: receivePushDataSize.value,
-            dataTimeliness: receiveDeliveryProfile.dataTimeliness,
+            pushDataType: receiveDeliveryProfile.pushDataType,
           }
         : {};
     const resolvedFormData = await resolveApplicationOrg({
@@ -6518,11 +6479,13 @@ async function downloadIntegrationMetadataTemplate() {
           ? "数据上报：本模板用于登记数据表和字段定义，不用于直接填写实际业务数据。"
           : isDataCapture
             ? "数据抓取：网络不通时用于离线登记数据表和字段定义。"
-            : "数据接收：本模板用于登记待接收的数据表和字段定义。",
+            : "数据推送：本模板只登记数据表和字段定义，不填写实际业务数据。",
       ],
       [
         "完整流程",
-        "1. 下载登记模板；2. 填写数据资源、数据表与字段定义；3. 上传登记模板并完成登记；4. 下载上报模板；5. 填写实际业务数据并上传。",
+        accessMode.value === "receive"
+          ? "1. 选择推送数据类型；2. 填写并上传数据登记模板；3. 完成登记；4. 第五步按结构化数据或分片上传规范调用接口。"
+          : "1. 下载登记模板；2. 填写数据资源、数据表与字段定义；3. 上传登记模板并完成登记；4. 下载上报模板；5. 填写实际业务数据并上传。",
       ],
       [
         "填写顺序",
@@ -6555,7 +6518,7 @@ async function downloadIntegrationMetadataTemplate() {
   const fieldSheet = addTemplateSheet(
     workbook,
     "数据字段",
-    accessMode.value === "receive" ? [...integrationTemplateFieldHeaders, ...pushAttachmentTemplateHeaders] : integrationTemplateFieldHeaders,
+    integrationTemplateFieldHeaders,
     fieldRows,
   );
   const optionRanges = addIntegrationTemplateOptionSheet(workbook);
@@ -6566,15 +6529,6 @@ async function downloadIntegrationMetadataTemplate() {
   applyListValidation(fieldSheet, "统一格式", optionRanges.standardFormats);
   applyListValidation(fieldSheet, "是否业务时间", optionRanges.booleans);
   applyListValidation(fieldSheet, "是否为空", optionRanges.booleans);
-  if (accessMode.value === "receive") {
-    applyListValidation(fieldSheet, "是否关联附件", optionRanges.booleans);
-    const guide = workbook.getWorksheet("填写说明");
-    guide.addRow(["关联附件", "在数据字段中将“是否关联附件”设为是，填写附件大小上限(MB)和附件格式。1MB=1048576字节；多种格式用逗号分隔，例如jpg,png。字段为字符串类型，存放上传完成返回的fileId，字段长度至少36。旧模板未填写附件列时按无附件处理。"]);
-    guide.addRow(["附件示例", "police_case_info.evidence_file_id：字符串、长度64、是否关联附件=是、附件大小上限(MB)=20、附件格式=jpg,png,pdf。模板仅登记限制，不填写实际附件或Base64正文；节点文件集合须配置相应大小、格式和调用方权限。"]);
-    setWorksheetColumnWidth(fieldSheet,"是否关联附件",16);
-    setWorksheetColumnWidth(fieldSheet,"附件大小上限(MB)",22);
-    setWorksheetColumnWidth(fieldSheet,"附件格式",28);
-  }
   markRequiredColumns(tableSheet, requiredIntegrationTemplateTableHeaders);
   markRequiredColumns(fieldSheet, requiredIntegrationTemplateFieldHeaders);
   setWorksheetColumnWidth(tableSheet, "序号", 8);
@@ -6599,7 +6553,7 @@ async function downloadIntegrationMetadataTemplate() {
       ? "代理访问待填写模板.xlsx"
       : isDataCapture
         ? "数据抓取待填写模板.xlsx"
-        : "数据接收待填写模板.xlsx";
+        : "数据登记模板.xlsx";
   link.style.display = "none";
   document.body.appendChild(link);
   link.click();
@@ -7674,9 +7628,6 @@ function validateImportedIntegrationTemplateRows(tableObjects, fieldObjects) {
   const fieldKeys = new Set();
   const tableFieldCount = new Map();
   fieldObjects.forEach((row) => {
-    if (accessMode.value === "receive") {
-      try { templateAttachment(row); } catch (error) { errors.push(`数据字段第 ${row.__rowNumber} 行：${error.message}`); }
-    }
     const tableName = requireTemplateCell(row, "数据表名", "数据字段", errors);
     const fieldName = requireTemplateCell(row, "字段名", "数据字段", errors);
     const fieldDescription = requireTemplateCell(
@@ -8104,7 +8055,6 @@ function normalizeImportedMetadata(tableObjects, fieldObjects, fileName) {
       isTimestamp: parseBooleanText(
         getCellText(row, ["是否时间戳", "是否时间戳字段"]),
       ),
-      attachment: accessMode.value === "receive" ? templateAttachment(row) : null,
       metadataSource: "template",
     });
   });
@@ -8764,13 +8714,13 @@ function validateConnector() {
       throw new Error("请选择有效的抓取时间");
   }
   if (accessMode.value === "receive") {
-    // 推送频率及其对应大小范围属于登记描述，不代替推送节点的实际接收策略。
+    // 推送数据类型决定第五步展示的协议；文件大小与格式由海通集合规范约束。
     const imported = activeMetadataImport();
     if (
       !imported?.metadataImport ||
       !["template", "snapshot"].includes(imported.metadataImport.source)
     ) {
-      throw new Error("请先上传已填写的数据推送模板，再保存并进入后续登记。");
+      throw new Error("请先上传已填写的数据登记模板，再保存并进入后续登记。");
     }
     return;
   }
@@ -9314,7 +9264,7 @@ defineExpose({
 
 .receive-push-address {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px 10px;
   min-width: 0;
@@ -9339,7 +9289,7 @@ defineExpose({
 }
 
 .receive-push-address small {
-  grid-column: 2;
+  grid-column: auto;
   color: #667085;
   font-size: 12px;
   white-space: nowrap;
@@ -9347,7 +9297,7 @@ defineExpose({
 
 .receive-delivery-profile {
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   align-items: start;
   gap: 20px;
   width: min(860px, 100%);
