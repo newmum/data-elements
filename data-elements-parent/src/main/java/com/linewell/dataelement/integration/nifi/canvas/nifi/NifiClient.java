@@ -465,6 +465,9 @@ public class NifiClient {
         if (!props.isEmpty()) {
             config.set("properties", props);
         }
+        if ("org.apache.nifi.processors.groovyx.ExecuteGroovyScript".equals(type) && props.has("ftps.password")) {
+            config.putArray("sensitiveDynamicPropertyNames").add("ftps.password").add("ftps.trustStorePassword");
+        }
         component.set("config", config);
         ObjectNode envelope = mapper.createObjectNode();
         envelope.set("revision", mapper.valueToTree(RevisionDto.initial(clientId)));

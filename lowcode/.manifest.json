@@ -42,7 +42,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
-      "baseSha256": "847dc4dbad313e9b132b719389e9a242699f1ee1ffbf9ccd05e8ce96d38318e0"
+      "baseSha256": "46958590f230563bd19579b889a5f883bea870145f9f31622af185242d14c1de"
     },
     {
       "id": "2016435561264910336",
@@ -52,7 +52,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
-      "baseSha256": "f764a25ce8cf52fd912e97b0745f60806af3c71c0f8c3f5b8f4a6ca403c71e54"
+      "baseSha256": "b189ce18014425c7da038b236cad63376066de66130ac6c1cae010c6bb5e7674"
     },
     {
       "id": "2074806689771094016",
@@ -82,7 +82,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
-      "baseSha256": "8c3eed078233343afd83767447e1249c6f7f48e0c9a8eef1b080e215dcad4ea0"
+      "baseSha256": "212d055eb7b07db6a863a77961f753999191699b1af868d200f199e529449ae4"
     },
     {
       "id": "2008087014782078976",
@@ -522,7 +522,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "02.数据盘点/02.登记流程组件/资产登记组件(asset-register).vue",
-      "baseSha256": "aa1a18af19538b357b37dd6aeebdc4c02928ed88e76573e81353c786fca46889"
+      "baseSha256": "85d95a7b081c1feae5f1f41b49d6de71b287c3832772d7db92877699551cc196"
     },
     {
       "id": "2020739089332518912",
@@ -1227,7 +1227,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "06.数据服务/数据服务(data-serve)/服务组件/api注册(api-register-content).vue",
-      "baseSha256": "75084a8e31e7c76ee4c4af70ca1bea631a0776f038afe312be7db8d3d936f3c5"
+      "baseSha256": "36bc718edf65833b849c009a9ad26c257f2d1f80b177550997991aec09e8e258"
     },
     {
       "id": "2063874447825747968",
@@ -1267,7 +1267,7 @@
       "type": "1",
       "sortOrder": 6,
       "path": "06.数据服务/数据服务(data-serve)/服务组件/服务注册弹窗(api-register-modal).vue",
-      "baseSha256": "d71723ec524334ec3e048b43c25d647334675fa70437c4ec6aa99b3208032b10"
+      "baseSha256": "b7d6f1d637eb60368aa94c4aabe70826e0ab06a0d0583236fa9e6b493918bac8"
     },
     {
       "id": "2014616362783674368",

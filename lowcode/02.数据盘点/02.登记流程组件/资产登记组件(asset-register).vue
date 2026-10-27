@@ -63,7 +63,7 @@ const store = useRegisterStore();
 const { actionRef } = storeToRefs(store);
 
 // 步骤条仅显示未标记 hidden 的步骤，内部步骤仍保留用于渲染完成页等隐藏状态。
-const displaySteps = computed(() => store.state.steps.filter((s: any) => !s.hidden));
+const displaySteps = computed(() => store.state.steps.filter((s: any) => !s.hidden && !s.skipped));
 
 // 当前内部步骤被隐藏时，导航态落在它前面的最后一个可见步骤上。
 const displayCurrentStep = computed(() => {
@@ -71,7 +71,7 @@ const displayCurrentStep = computed(() => {
   const currentStep = Math.min(store.state.currentStep || 0, Math.max(steps.length - 1, 0));
   const visibleBeforeCurrent = steps
     .slice(0, currentStep + 1)
-    .filter((s: any) => !s.hidden).length;
+    .filter((s: any) => !s.hidden && !s.skipped).length;
   return Math.max(0, Math.min(visibleBeforeCurrent - 1, displaySteps.value.length - 1));
 });
 

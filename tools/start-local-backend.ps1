@@ -20,7 +20,7 @@ if (!$taskConfig.argumentLine.Replace('\', '/').ToLowerInvariant().Contains($tas
 }
 foreach ($taskProperty in $taskConfig.environment.PSObject.Properties) {
     if ($taskProperty.Name -notmatch '^(NACOS_|DATA_ELEMENT_|DATA_ELEMENTS_|SPRING_)[A-Z0-9_]+$' -and
-        $taskProperty.Name -notin @('IDAAS_TRANSPORT_KEY', 'IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP')) {
+        $taskProperty.Name -notin @('IDAAS_TRANSPORT_KEY', 'IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP', 'JDBC_DRIVER_DIRECTORY')) {
         throw 'Unexpected runtime environment variable name'
     }
 }

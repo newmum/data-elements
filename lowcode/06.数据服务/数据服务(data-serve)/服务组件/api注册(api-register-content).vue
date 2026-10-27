@@ -27,6 +27,7 @@
       v-if="definitionLoaded"
       ref="formRef"
       bordered
+      responsive
       label-width="144px"
       :rules="formRules"
       :options="formOptions"

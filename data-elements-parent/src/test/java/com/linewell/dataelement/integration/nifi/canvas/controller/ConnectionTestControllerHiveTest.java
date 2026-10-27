@@ -16,6 +16,22 @@ import org.ssssssss.magicapi.core.service.MagicAPIService;
 
 class ConnectionTestControllerHiveTest {
 
+    @Test
+    void openHiveConnectionProbeRetainsHttpTlsAndNoSaslOptions() {
+        String url=ConnectionTestController.buildHiveJdbcUrl(Map.of(
+                "hiveConnectionMode","open-source","host","validation.invalid","database","business",
+                "transportMode","http","httpPath","gateway","ssl",true,"authMode","NOSASL"));
+        assertThat(url).contains(";transportMode=http;httpPath=gateway;ssl=true;auth=noSasl");
+        assertThat(url).doesNotContain("KERBEROS","auth=none");
+    }
+
+    @Test
+    void openHiveNoneDoesNotInheritVendorAuthenticationDefaults() {
+        assertThat(ConnectionTestController.buildHiveJdbcUrl(Map.of(
+                "hiveConnectionMode","open-source","host","validation.invalid","database","business")))
+                .contains(";auth=none").doesNotContain("KERBEROS");
+    }
+
     private final MagicAPIService magic = mock(MagicAPIService.class);
     private final DataSourceConnectionPropertyResolver registered = mock(DataSourceConnectionPropertyResolver.class);
     private final ConnectionTestController controller = new ConnectionTestController(

@@ -107,15 +107,15 @@ export const useRegisterStore = defineStore("register", () => {
   };
 
   const preStep = () => {
-    if (state.value.currentStep > 0) {
-      state.value.currentStep--;
-    }
+    let target = state.value.currentStep - 1;
+    while (target > 0 && state.value.steps[target]?.skipped) target--;
+    if (target >= 0) setCurrentStep(target);
   };
 
   const nextStep = () => {
-    if (state.value.steps.length > 0 && state.value.currentStep < state.value.steps.length - 1) {
-      state.value.currentStep++;
-    }
+    let target = state.value.currentStep + 1;
+    while (target < state.value.steps.length - 1 && state.value.steps[target]?.skipped) target++;
+    if (target < state.value.steps.length) setCurrentStep(target);
   };
 
   // 状态控制方法

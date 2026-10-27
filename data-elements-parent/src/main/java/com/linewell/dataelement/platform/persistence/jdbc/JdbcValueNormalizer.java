@@ -43,6 +43,14 @@ public final class JdbcValueNormalizer {
             return value;
         }
         try {
+            if (value instanceof java.sql.Array array) {
+                try { return normalize(array.getArray()); }
+                finally { array.free(); }
+            }
+            String vendorClass=value.getClass().getName();
+            if (vendorClass.endsWith(".PGobject") && (vendorClass.startsWith("org.postgresql.")
+                    || vendorClass.startsWith("org.opengauss.") || vendorClass.startsWith("com.huawei.opengauss.")))
+                return value.toString();
             if (value instanceof Clob clob) {
                 return read(clob.getCharacterStream());
             }

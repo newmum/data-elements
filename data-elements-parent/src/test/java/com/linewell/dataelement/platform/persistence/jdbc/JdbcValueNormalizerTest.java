@@ -13,6 +13,15 @@ import org.junit.jupiter.api.Test;
 
 class JdbcValueNormalizerTest {
 
+    @Test void normalizesJdbcArrayAndPostgresCompatibleJsonValues() throws Exception {
+        var array=org.mockito.Mockito.mock(java.sql.Array.class);
+        org.mockito.Mockito.when(array.getArray()).thenReturn(new String[]{"第一项","第二项"});
+        assertThat(JdbcValueNormalizer.normalize(array)).isEqualTo(List.of("第一项","第二项"));
+        org.mockito.Mockito.verify(array).free();
+        var json=new org.postgresql.util.PGobject();json.setType("jsonb");json.setValue("{\"业务字段\":1}");
+        assertThat(JdbcValueNormalizer.normalize(json)).isEqualTo("{\"业务字段\":1}");
+    }
+
     @Test
     void readsClobText() throws Exception {
         Clob clob = new SerialClob("jdbc:dm://10.231.176.52:5236/test".toCharArray());

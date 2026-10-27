@@ -93,7 +93,7 @@ const initEffect = () => {
           jdbcUrl = `jdbc:oracle:thin:${host}${port ? ":" + port : ""}${database ? ":" + database : ""}`;
           break;
         case "gbase8a":
-          jdbcUrl = `jdbc:gbase8a://${host}${port ? ":" + port : ""}${database ? "/" + database : ""}${serviceName ? ":GBASEDBTSERVER=" + serviceName : ""}`;
+          jdbcUrl = `jdbc:gbase://${host}${port ? ":" + port : ""}${database ? "/" + database : ""}${serviceName ? ":GBASEDBTSERVER=" + serviceName : ""}`;
           break;
         case "gbase8t":
           jdbcUrl = `jdbc:gbase://${host}${port ? ":" + port : ""}${database ? "/" + database : ""}${serviceName ? ":GBASEDBTSERVER=" + serviceName : ""}`;
@@ -112,9 +112,13 @@ const initEffect = () => {
         case "kingbase8":
           jdbcUrl = `jdbc:kingbase8://${host}${port ? ":" + port : ""}${database ? "/" + database : ""}${username ? "?user=" + username : ""}${password ? "&password=" + password : ""}`;
           break;
-        case "gaussdb":
-          jdbcUrl = `jdbc:gauss200://${host}${port ? ":" + port : ""}${database ? "/" + database : ""}${username ? "?user=" + username : ""}${password ? "&password=" + password : ""}`;
+        case "gaussdb": {
+          const variant = api.getRule("gaussdbVariant")?.value || "legacy-postgresql";
+          const protocol = variant === "gaussdb-jdbc" ? "gaussdb" : variant === "mysql" ? "mysql" : ["gaussdb", "opengauss"].includes(variant) ? "opengauss" : "postgresql";
+          const defaultPort = variant === "mysql" ? "3306" : ["gaussdb", "gaussdb-jdbc", "dws"].includes(variant) ? "8000" : "5432";
+          jdbcUrl = `jdbc:${protocol}://${host}:${port || defaultPort}${database ? "/" + database : ""}`;
           break;
+        }
         case "dameng":
           jdbcUrl = `jdbc:dm://${host}${port ? ":" + port : ""}${database ? "/" + database : ""}${username ? "?user=" + username : ""}${password ? "&password=" + password : ""}`;
           break;

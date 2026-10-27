@@ -16,6 +16,24 @@ import org.ssssssss.script.*;
 import org.ssssssss.script.runtime.ExitValue;
 
 class DatasourceCompletionMagicTest {
+    @Test void basicSaveKeepsOnlyServerOwnedUploadManifestWithoutAConnection() throws Exception {
+        String source = CanonicalMagicSources.byId("datapd_save_update_datasource_01").replace("\r\n", "\n");
+        String persistence = source.substring(source.indexOf("if (showConnect == 0) {\n    datasourceConnectionConfig('save'"), source.indexOf("var savedTid = tid"));
+        for (String mode : List.of("upload", "explore")) {
+            Map<String,Object> manifest = Map.of("revision", "server-revision", "files", List.of("registered-file"));
+            var bindings = new LinkedHashMap<String,Object>();
+            bindings.put("showConnect",0);bindings.put("tid","db");bindings.put("accessMode",mode);
+            bindings.put("oldConnectionConfig",Map.of("reportRegistration",manifest));
+            bindings.put("connectionConfig",Map.of("reportRegistration",Map.of("revision","forged")));
+            bindings.put("receiveProfile",Map.of());
+            String harness = "var calls=[]\nvar blank=v=>v==null||(v+'').trim()==''\nvar datasourceConnectionConfig=(action,id,config,reset)=>calls.add(config)\n";
+            List<?> calls = (List<?>)MagicScript.create(harness+persistence+"return calls",null).execute(new MagicScriptContext(bindings));
+            assertThat(calls).hasSize(2);
+            Map<?,?> saved = (Map<?,?>)calls.getLast();
+            if (mode.equals("upload")) assertThat(saved.get("reportRegistration")).isEqualTo(manifest);
+            else assertThat(saved.containsKey("reportRegistration")).isFalse();
+        }
+    }
     @ParameterizedTest @ValueSource(ints={20,100})
     void finishPersistsOneForPartialAndTwoForAllRegistered(int count) throws Exception {
         Fixture fixture = new Fixture(count);

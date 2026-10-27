@@ -333,6 +333,11 @@ public class DslCompiler {
                         cfg.putIfAbsent("dbType", dbType));
                 normalizeJdbcSourceConfig(cfg);
             }
+            if (Set.of("GAUSSDB", "OPENGAUSS").contains(configText(cfg, "dbType").toUpperCase(Locale.ROOT))
+                    && com.linewell.dataelement.metautil.jdbc.GaussDbVariant.from(cfg)
+                        == com.linewell.dataelement.metautil.jdbc.GaussDbVariant.MYSQL) {
+                cfg.put("dbType", "MYSQL");
+            }
             cfg.remove("_runtimeHiveTargetInput");
             if(hiveInputNodes.contains(n.id()))cfg.put("_runtimeHiveTargetInput",true);
             cfgByNode.put(n.id(), cfg);
@@ -341,8 +346,21 @@ public class DslCompiler {
             // not the HiveServer2 connection pool declared for HiveRecordPut.
             if (spec.controllerServices() != null && !isHiveBatchPutHdfs(m, "put", cfg)) {
                 for (var csSpec : spec.controllerServices()) {
+                    if ("source.hive".equals(m.key()) && "open-source".equals(configText(cfg,"hiveConnectionMode"))
+                            && "kerberos".equals(csSpec.localId())
+                            && !"KERBEROS".equalsIgnoreCase(configText(cfg,"authMode"))) continue;
                     Map<String, String> resolved = resolveProps(csSpec.properties(), cfg, nc.csIds, sharedCs);
                     String serviceType = resolveString(csSpec.type(), cfg, nc.csIds, sharedCs);
+                    if ("source".equals(m.category()) && "dbcp".equals(csSpec.localId())
+                            && "org.apache.nifi.dbcp.DBCPConnectionPool".equals(serviceType)) {
+                        String kerberosService = resolved.get("Kerberos User Service");
+                        resolved = buildSourceDbcpProperties(cfg);
+                        if (kerberosService != null) resolved.put("Kerberos User Service",kerberosService);
+                    }
+                    if ("source.hive".equals(m.key()) && "dbcp".equals(csSpec.localId())
+                            && "open-source".equals(configText(cfg,"hiveConnectionMode"))
+                            && !"KERBEROS".equalsIgnoreCase(configText(cfg,"authMode")))
+                        resolved.remove("Kerberos User Service");
                     appendJdbcDriverProperties(serviceType, cfg, resolved);
                     NifiEntity cs = createOrReuseControllerService(pgId, controllerServiceScopeId,
                             serviceType, n.label() + "/" + csSpec.localId(), resolved);
@@ -705,7 +723,7 @@ public class DslCompiler {
             nifi.createConnection(pgId, previousId, previousType, source.processorIds.get("fetch"), "PROCESSOR",
                     "INPUT_PORT".equals(previousType) ? List.of() : List.of("success"));
         }
-        new FileConsumptionCompiler(nifi).acknowledge(pgId,pipeline,compiled);
+        new FileConsumptionCompiler(nifi).acknowledge(pgId,pipeline,compiled,cfgByNode);
         nifi.finalizeGeneratedProcessGroup(pgId);
         if (periodicSource != null) nifi.finalizeGeneratedProcessGroup(rootPgId);
 
@@ -901,7 +919,15 @@ public class DslCompiler {
         double x = nodeOriginX(nodeLayout);
         double y = nodeOriginY(nodeLayout);
         NifiEntity fetch;
-        if (FileConsumptionCompiler.enabled(cfg)) {
+        if (FtpsSourceCompiler.enabled(cfg)) {
+            String libraries=configText(cfg,"ftpClientLibraries");
+            if (libraries.isBlank() && nifiNodeRuntimeResolver != null)
+                libraries=nifiNodeRuntimeResolver.resolve().jdbcDriverLocation("FTP");
+            if (!libraries.isBlank() && !libraries.toLowerCase(Locale.ROOT).endsWith(".jar"))
+                libraries=libraries.replaceAll("/+$", "")+"/commons-net.jar";
+            cfg.put("_runtimeFtpsLibraries",libraries);
+            fetch=FtpsSourceCompiler.create(nifi,pgId,node.label()+"/FTPS 下载",cfg,libraries,false,x,y);
+        } else if (FileConsumptionCompiler.enabled(cfg)) {
             Map<String,String> connection=new LinkedHashMap<>();
             for(String key:List.of("Hostname","Port","Username","Password"))connection.put(key,fetchProperties.get(key));
             String root=remotePath;while(root.endsWith("/"))root=root.substring(0,root.length()-1);
@@ -1553,6 +1579,10 @@ public class DslCompiler {
         if (hdfsSink && profile.isBlank()) profile = "default";
         String mode = firstNonBlank(stringConfig(cfg, "metadataAccessMode"), stringConfig(cfg, "metadata_access_mode"));
         String connectionMode = firstNonBlank(stringConfig(cfg, "hiveConnectionMode"), stringConfig(cfg, "hive_connection_mode"));
+        if ("open-source".equalsIgnoreCase(connectionMode) && !hdfsSink) {
+            cfg.remove("hiveProfile"); cfg.remove("metadataAccessMode");
+            return;
+        }
         boolean serverManaged = hdfsSink
                 || !profile.isBlank()
                 || "server-managed-mrs".equalsIgnoreCase(mode)
@@ -3139,37 +3169,9 @@ public class DslCompiler {
     }
 
     private String buildSourceJdbcUrl(Map<String, Object> sourceCfg) {
-        String dbType = String.valueOf(sourceCfg.getOrDefault("dbType", "MYSQL")).trim().toUpperCase(Locale.ROOT);
-        Object jdbcUrl = sourceCfg.get("jdbcUrl");
-        if (jdbcUrl != null && !String.valueOf(jdbcUrl).isBlank()) {
-            return normalizeJdbcUrlForDbType(String.valueOf(jdbcUrl), dbType);
-        }
-        String host = String.valueOf(sourceCfg.getOrDefault("host", ""));
-        String port = String.valueOf(sourceCfg.getOrDefault("port", defaultSourcePort(dbType)));
-        if (port.isBlank() || "null".equalsIgnoreCase(port)) {
-            port = defaultSourcePort(dbType);
-        }
-        String database = String.valueOf(sourceCfg.getOrDefault("database", ""));
-        if ("null".equalsIgnoreCase(database)) {
-            database = "";
-        }
-        return switch (dbType) {
-            case "DM", "DAMENG" -> "jdbc:dm://" + host + ":" + port + "/" + database;
-            case "POSTGRESQL", "TDSQL_PG" -> "jdbc:postgresql://" + host + ":" + port + "/" + database;
-            case "GAUSSDB", "OPENGAUSS" -> buildGaussJdbcUrl(host, port, database, sourceCfg);
-            case "ORACLE" -> "jdbc:oracle:thin:@//" + host + ":" + port + "/" + database;
-            case "HIVE" -> buildHiveJdbcUrl(sourceCfg);
-            case "HETU", "TRINO", "PRESTO" -> "jdbc:trino://" + host + ":" + port + "/" + (database.isBlank() ? "hive/default" : database);
-            case "DORIS", "STARROCKS" -> normalizeJdbcUrlForDbType("jdbc:mysql://" + host + ":" + port + "/" + database, dbType);
-            case "CLICKHOUSE" -> "jdbc:clickhouse://" + host + ":" + port + "/" + database + "?compress=1";
-            case "IOTDB" -> "jdbc:iotdb://" + host + ":" + port + "/";
-            case "OCEANBASE" -> "jdbc:oceanbase://" + host + ":" + port + "/" + database
-                    + "?characterEncoding=utf8";
-            case "OCEANBASE_ORACLE", "OCEANBASEORACLE" -> "jdbc:oceanbase:oracle://" + host + ":" + port + "/" + database;
-            case "OCEANBASE_MYSQL", "OCEANBASEMYSQL" -> "jdbc:mysql://" + host + ":" + port + "/" + database;
-            case "SQLSERVER" -> "jdbc:sqlserver://" + host + ":" + port + ";databaseName=" + database;
-            default -> normalizeJdbcUrlForDbType("jdbc:mysql://" + host + ":" + port + "/" + database, dbType);
-        };
+        String type = configText(sourceCfg,"dbType");
+        if (type.isBlank()) type = "MYSQL";
+        return RegisteredDatasourceType.jdbcUrl(type, sourceCfg, Map.of());
     }
 
     private String defaultSourcePort(String dbType) {
@@ -3664,12 +3666,16 @@ public class DslCompiler {
         Object value = config.get("jdbcUrl");
         String jdbcUrl = value == null ? null : String.valueOf(value);
         JdbcDriverSpec resolved = jdbcDriverSpec(dbType, jdbcUrl);
+        boolean gauss = Set.of("GAUSSDB","OPENGAUSS").contains(dbType.toUpperCase(Locale.ROOT));
+        var variant = gauss ? com.linewell.dataelement.metautil.jdbc.GaussDbVariant.from(config) : null;
+        if (gauss) resolved = new JdbcDriverSpec(variant.driverClass(), "", variant == com.linewell.dataelement.metautil.jdbc.GaussDbVariant.MYSQL
+                ? "org.apache.nifi.dbcp.MySQLDatabaseDialectService" : "org.apache.nifi.dbcp.PostgreSQLDatabaseDialectService");
         String configuredLocations = firstNonBlank(
                 stringConfig(config, "driverLocations"),
                 stringConfig(config, "nifiDriverLocations"));
         if (configuredLocations != null) {
             return new JdbcDriverSpec(resolved.driverClass(),
-                    resolveNodeJdbcDriverLocation(dbType, configuredLocations), resolved.dialectServiceType());
+                    productDriverLocation(dbType, configuredLocations, variant), resolved.dialectServiceType());
         }
         // Focused compiler tests do not bootstrap a tenant runtime node. Production compilation
         // always has a resolver and must not silently fall back to a path from the developer host.
@@ -3677,13 +3683,22 @@ public class DslCompiler {
             return resolved;
         }
         NifiNodeRuntimeResolver.RuntimeNode node = nifiNodeRuntimeResolver.resolve();
-        String nodeConfiguredLocation = node.jdbcDriverLocation(dbType);
+        String driverKey="HIVE".equalsIgnoreCase(dbType) && "open-source".equalsIgnoreCase(configText(config,"hiveConnectionMode"))
+                ? "HIVE_OPEN_SOURCE" : variant == null ? dbType : variant.nodeDriverKey();
+        String nodeConfiguredLocation = node.jdbcDriverLocation(driverKey);
+        if (nodeConfiguredLocation.isBlank() && variant != null) nodeConfiguredLocation = node.jdbcDriverLocation(dbType);
         if (nodeConfiguredLocation.isBlank()) {
             throw new IllegalStateException("NiFi 节点“" + node.code()
                     + "”未配置 JDBC 驱动目录；请在【节点管理】编辑该节点后补充实际目录路径。");
         }
         return new JdbcDriverSpec(resolved.driverClass(),
-                resolveNodeJdbcDriverLocation(dbType, nodeConfiguredLocation), resolved.dialectServiceType());
+                productDriverLocation(dbType, nodeConfiguredLocation, variant), resolved.dialectServiceType());
+    }
+
+    private String productDriverLocation(String type, String location, com.linewell.dataelement.metautil.jdbc.GaussDbVariant variant) {
+        if (variant != null && !location.trim().toLowerCase(Locale.ROOT).endsWith(".jar"))
+            return location.replaceAll("/+$", "") + "/" + variant.driverFile();
+        return resolveNodeJdbcDriverLocation(type, location);
     }
 
     /**
@@ -3716,6 +3731,7 @@ public class DslCompiler {
             case "DM", "DAMENG" -> "DmJdbcDriver18-8.1.3.140.jar";
             case "KINGBASE", "KINGBASE8" -> "kingbase8.jar";
             case "GBASE8A" -> "gbase-connector-java.jar";
+            case "VERTICA" -> "vertica-jdbc.jar";
             case "GBASE8S" -> "gbasedbtjdbc.jar";
             case "OCEANBASE_ORACLE", "OCEANBASEORACLE", "OCEANBASE_MYSQL", "OCEANBASEMYSQL" ->
                     "oceanbase-client-2.4.10.jar";
@@ -3776,6 +3792,8 @@ public class DslCompiler {
                 new JdbcDriverSpec("com.kingbase8.Driver", "", "org.apache.nifi.dbcp.GenericDatabaseDialectService");
             case "GBASE8A" ->
                     new JdbcDriverSpec("com.gbase.jdbc.Driver", "", "org.apache.nifi.dbcp.GenericDatabaseDialectService");
+            case "VERTICA" ->
+                    new JdbcDriverSpec("com.vertica.jdbc.Driver", "", "org.apache.nifi.dbcp.GenericDatabaseDialectService");
             case "GBASE8S" ->
                     new JdbcDriverSpec("com.gbasedbt.jdbc.IfxDriver", "", "org.apache.nifi.dbcp.GenericDatabaseDialectService");
             case "OSCAR" ->
@@ -4067,7 +4085,7 @@ public class DslCompiler {
                 || lowerUrl.startsWith("jdbc:mariadb:")
                 || lowerUrl.startsWith("jdbc:oceanbase:");
         if (!mysqlCompatible) return normalizedUrl;
-        String normalized = appendJdbcParamIfMissing(normalizedUrl, "useSSL", "false");
+        String normalized = lowerUrl.contains("sslmode=") ? normalizedUrl : appendJdbcParamIfMissing(normalizedUrl, "useSSL", "false");
         normalized = appendJdbcParamIfMissing(normalized, "serverTimezone", "Asia/Shanghai");
         normalized = appendJdbcParamIfMissing(normalized, "allowPublicKeyRetrieval", "true");
         return normalized;

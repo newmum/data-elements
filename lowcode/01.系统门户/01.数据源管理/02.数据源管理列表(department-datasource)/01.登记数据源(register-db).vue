@@ -18,7 +18,7 @@
 
     <div class="pr-5">
       <el-skeleton class="right" :loading="rightPanelLoading" animated>
-        <JsonForm ref="formRef" bordered :rules="formRules">
+        <JsonForm ref="formRef" bordered responsive :rules="formRules">
           <template #type-u-title="{ rule }">
             <u-title
               v-if="rule.props?.name !== '连接配置'"
@@ -80,8 +80,13 @@
         </section>
 
         <section v-if="accessMode === 'proxy'" class="proxy-service-registration">
-          <u-title name="本部门已登记服务" class="gap-4" style="height: 50px" />
-          <div class="proxy-service-toolbar"><el-input v-model.trim="proxyServiceKeyword" placeholder="搜索服务名称、编码或地址" clearable @clear="proxyServiceTableRef?.refresh?.(true)" @keyup.enter="proxyServiceTableRef?.refresh?.(true)"><template #suffix><el-button link title="查询服务" @click="proxyServiceTableRef?.refresh?.(true)"><Icon icon="search" /></el-button></template></el-input><el-button @click="proxyServiceTableRef?.refresh?.(true)">刷新列表</el-button></div>
+          <div class="proxy-service-toolbar">
+            <u-title name="本部门已登记服务" class="proxy-service-title" />
+            <div class="proxy-service-actions">
+              <el-input v-model.trim="proxyServiceKeyword" placeholder="搜索服务名称、编码或地址" clearable @clear="proxyServiceTableRef?.refresh?.(true)" @keyup.enter="proxyServiceTableRef?.refresh?.(true)"><template #suffix><el-button link title="查询服务" @click="proxyServiceTableRef?.refresh?.(true)"><Icon icon="search" /></el-button></template></el-input>
+              <el-button type="primary" @click="proxyServiceRegistrationVisible = true"><Icon icon="el-icon-Plus" class="mr-1" />登记服务</el-button>
+            </div>
+          </div>
           <DataTable ref="proxyServiceTableRef" :data="fetchDepartmentServices" :columns="[]" :show-search="false" :show-reset="false" :page-sizes="[10,20,50,100]" row-key="tid" show-index class="proxy-service-table">
             <el-table-column prop="serviceName" label="服务名称" min-width="180" sortable="custom" show-overflow-tooltip />
             <el-table-column prop="method" label="请求方式" width="100" />
@@ -114,8 +119,34 @@
                 <small class="receive-network-tag">{{ receiveNetworkName }}</small>
               </div>
             </div>
+            <div v-if="isFilePush" class="guide-hero-card data-upload-result-card file-registration-card">
+              <div class="data-upload-result-toolbar">
+                <div class="data-upload-result-heading">
+                  <span class="guide-kicker">文件登记模板导入结果</span>
+                  <strong>{{ fileRegistrationState.rows.length ? `已登记 ${fileRegistrationState.rows.length} 项文件定义` : "上传文件登记模板" }}</strong>
+                  <p>{{ fileRegistrationState.fileName || "每行登记一类文件，保存后直接进入内容审查" }}</p>
+                  <p v-if="fileRegistrationState.error" class="file-registration-error">{{ fileRegistrationState.error }}</p>
+                  <p v-else-if="fileRegistrationState.dirty">本次导入尚未保存</p>
+                </div>
+                <div class="data-upload-result-actions">
+                  <el-button type="primary" plain @click="downloadFileRegistrationTemplate"><template #icon><Icon icon="el-icon-Download" /></template>下载文件登记模板</el-button>
+                  <el-button type="primary" :loading="metadataImportState.loading || fileRegistrationState.loading" @click="triggerMetadataImport"><template #icon><Icon icon="el-icon-Upload" /></template>{{ fileRegistrationState.rows.length ? "重新上传文件登记模板" : "上传文件登记模板" }}</el-button>
+                  <input ref="metadataImportInput" type="file" accept=".xlsx" class="hidden" @change="handleMetadataTemplateImport" />
+                </div>
+              </div>
+              <p class="file-registration-help">必填：文件名称、文件说明、文件格式、文件大小上限（MB）。关联表和字段选填；仅登记定义，不在 Excel 中上传文件原文。</p>
+              <DataTable v-if="fileRegistrationState.rows.length" :data="fileRegistrationState.rows" :preview-sort="{fileName:'text',maxFileSizeMb:'number'}" :show-page="false" height="260" border size="small">
+                <el-table-column type="index" label="序号" width="65" />
+                <el-table-column prop="fileName" label="文件名称" sortable="custom" min-width="150" />
+                <el-table-column prop="fileDescription" label="文件说明" min-width="200" />
+                <el-table-column prop="fileFormat" label="文件格式" width="110"><template #default="{row}">{{ String(row.fileFormat).toUpperCase() }}</template></el-table-column>
+                <el-table-column prop="maxFileSizeMb" label="大小上限(MB)" sortable="custom" width="145" />
+                <el-table-column prop="relatedTableName" label="关联表（选填）" min-width="150" />
+                <el-table-column prop="relatedFieldName" label="关联字段（选填）" min-width="150" />
+              </DataTable>
+            </div>
             <div
-              v-if="hasMetadataImportResult"
+              v-else-if="hasMetadataImportResult"
               class="guide-hero-card data-upload-result-card receive-template-result-card"
             >
               <div class="data-upload-result-toolbar">
@@ -458,6 +489,24 @@
             >
               <template v-if="isRelationalSource">
                 <div class="link-config-grid">
+                  <el-form-item v-if="sourceType === 'gaussdb'" label="GaussDB 产品" required class="full-row">
+                    <el-select v-model="connectorForm.gaussdbVariant" @change="changeGaussdbVariant">
+                      <el-option label="华为 GaussDB（gaussdbjdbc 原生驱动）" value="gaussdb-jdbc" />
+                      <el-option label="华为 GaussDB（opengaussjdbc 兼容驱动）" value="gaussdb" />
+                      <el-option label="openGauss" value="opengauss" />
+                      <el-option label="GaussDB(DWS)" value="dws" />
+                      <el-option label="GaussDB(for MySQL)／MySQL 兼容模式" value="mysql" />
+                      <el-option v-if="connectorForm.gaussdbVariant === 'legacy-postgresql'" label="历史兼容配置（请选择实际产品）" value="legacy-postgresql" />
+                    </el-select>
+                    <div class="form-help">按实例的实际产品选择，端口以实例连接信息为准。</div>
+                  </el-form-item>
+                  <el-form-item v-if="sourceType === 'gaussdb'" label="TLS 模式">
+                    <el-select v-model="connectorForm.sslMode" @change="refreshJdbcUrl">
+                      <el-option label="优先加密" value="prefer" /><el-option label="要求加密" value="require" />
+                      <el-option label="验证证书" value="verify-ca" /><el-option label="验证证书和主机名" value="verify-full" />
+                      <el-option label="关闭" value="disable" />
+                    </el-select>
+                  </el-form-item>
                   <el-form-item
                     v-if="sourceType === 'hive'"
                     label="Hive 类型"
@@ -483,6 +532,23 @@
                       }}
                     </div>
                   </el-form-item>
+                  <template v-if="sourceType === 'hive' && !isHuaweiMrsHive">
+                    <el-form-item label="传输方式">
+                      <el-select v-model="connectorForm.transportMode" @change="refreshJdbcUrl">
+                        <el-option label="Binary" value="binary" /><el-option label="HTTP" value="http" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item v-if="connectorForm.transportMode === 'http'" label="HTTP 路径">
+                      <el-input v-model="connectorForm.httpPath" placeholder="cliservice" @change="refreshJdbcUrl" />
+                    </el-form-item>
+                    <el-form-item label="认证方式">
+                      <el-select v-model="connectorForm.authMode" @change="refreshJdbcUrl">
+                        <el-option label="无认证" value="none" /><el-option label="用户名密码／LDAP" value="BASIC" />
+                        <el-option label="NoSASL" value="NOSASL" /><el-option label="Kerberos" value="KERBEROS" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="TLS"><el-switch v-model="connectorForm.ssl" @change="refreshJdbcUrl" /></el-form-item>
+                  </template>
                   <el-form-item
                     v-if="sourceType !== 'hive' || !isHuaweiMrsHive"
                     :required="true"
@@ -682,7 +748,7 @@
                         @change="refreshJdbcUrl"
                       />
                     </el-form-item>
-                    <el-form-item label="认证模式" required>
+                    <el-form-item v-if="isHuaweiMrsHive" label="认证模式" required>
                       <el-select
                         v-model="connectorForm.authMode"
                         @change="refreshJdbcUrl"
@@ -1103,6 +1169,15 @@
                       <el-option label="SFTP" value="sftp" />
                     </el-select>
                   </el-form-item>
+                  <template v-if="connectorForm.ftpProtocol === 'ftps'">
+                    <el-form-item label="FTPS 模式"><el-select v-model="connectorForm.ftpsImplicit" @change="connectorForm.ftpPort = connectorForm.ftpsImplicit === 'false' ? '21' : '990'">
+                      <el-option label="按端口识别" value="auto" /><el-option label="显式 TLS（AUTH TLS）" value="false" /><el-option label="隐式 TLS" value="true" />
+                    </el-select></el-form-item>
+                    <el-form-item label="探查端信任库路径"><el-input v-model="connectorForm.trustStorePath" placeholder="使用自签名证书时填写服务端信任库路径" /></el-form-item>
+                    <el-form-item label="接入节点信任库路径"><el-input v-model="connectorForm.nifiTrustStorePath" placeholder="NiFi 节点上的信任库路径" /></el-form-item>
+                    <el-form-item label="信任库密码"><el-input v-model="connectorForm.trustStorePassword" type="password" show-password /></el-form-item>
+                  </template>
+
                   <el-form-item label="主机地址" required>
                     <el-input
                       v-model="connectorForm.ftpHost"
@@ -1369,6 +1444,30 @@
                       >
                       <article class="api-pull-registration-row">
                         <div class="link-config-grid api-pull-config-grid">
+                          <el-form-item label="接口协议" class="full-row">
+                            <el-radio-group v-model="item.apiProtocol" @change="changeApiProtocol(item)">
+                              <el-radio-button value="REST">HTTP / REST</el-radio-button>
+                              <el-radio-button value="SOAP">WebService（SOAP / WSDL）</el-radio-button>
+                            </el-radio-group>
+                          </el-form-item>
+                          <template v-if="item.apiProtocol === 'SOAP'">
+                            <el-form-item label="WSDL定义地址" class="full-row">
+                              <div class="webservice-wsdl-input">
+                                <el-input v-model.trim="item.apiWsdlUrl" placeholder="https://服务地址?wsdl（可选，也可直接填写下方SOAP请求）" clearable />
+                                <el-button :loading="apiPullReadingWsdlItemId === item.clientId" @click="readWebServiceWsdl(item)">读取WSDL</el-button>
+                              </div>
+                            </el-form-item>
+                            <el-form-item label="服务操作">
+                              <el-select v-model="item.apiWsdlOperation" clearable placeholder="读取WSDL后选择操作，也可手动配置" @change="selectWebServiceOperation(item)">
+                                <el-option v-for="(operation, operationIndex) in item.apiWsdlOperations || []" :key="operationIndex" :value="String(operationIndex)" :label="operation.name + '（SOAP ' + operation.version + '）'" />
+                              </el-select>
+                            </el-form-item>
+                            <el-form-item label="SOAP版本">
+                              <el-select v-model="item.apiSoapVersion" @change="syncSoapRequestHeaders(item); clearApiPullResponseExtraction(item)"><el-option label="SOAP 1.1" value="1.1" /><el-option label="SOAP 1.2" value="1.2" /></el-select>
+                            </el-form-item>
+                            <el-form-item label="SOAPAction" class="full-row"><el-input v-model.trim="item.apiSoapAction" placeholder="填写服务操作的SOAPAction；允许空值" @change="syncSoapRequestHeaders(item); clearApiPullResponseExtraction(item)" /></el-form-item>
+                            <el-alert title="读取WSDL仅解析服务定义。请核对服务地址，填写SOAP XML中的实际操作参数后，再执行连通性测试；响应字段按SOAP Body内的元素路径提取。" type="info" :closable="false" class="full-row" />
+                          </template>
                           <el-form-item required
                             ><template #label
                               ><span class="field-label"
@@ -1421,6 +1520,7 @@
                               ><template #prepend
                                 ><el-select
                                   v-model="item.endpointMethod"
+                                  :disabled="item.apiProtocol === 'SOAP'"
                                   class="api-request-method-select"
                                   aria-label="接口请求方式"
                                   ><el-option
@@ -1540,7 +1640,7 @@
                               ><code-editor
                                 :key="item.responsePreview"
                                 :code="item.responsePreview"
-                                lang="json"
+                                :lang="item.apiProtocol === 'SOAP' ? 'xml' : 'json'"
                                 theme="github"
                                 :read-only="true"
                                 height="156px"
@@ -1623,6 +1723,7 @@
                                       icon="el-icon-QuestionFilled" /></el-tooltip></span
                                 ><span class="api-title-actions"
                                   ><el-dropdown
+                                    v-if="item.apiProtocol !== 'SOAP'"
                                     trigger="click"
                                     class="api-body-type-dropdown"
                                     @command="item.requestBodyType = $event"
@@ -1668,11 +1769,11 @@
                               ></template
                             ><code-editor
                               v-if="
-                                ['json', 'text'].includes(item.requestBodyType)
+                                ['json', 'text', 'xml'].includes(item.requestBodyType)
                               "
                               v-model="item.requestTemplateJson"
                               :lang="
-                                item.requestBodyType === 'json'
+                                item.apiProtocol === 'SOAP' ? 'xml' : item.requestBodyType === 'json'
                                   ? 'json'
                                   : 'text'
                               "
@@ -2209,7 +2310,19 @@
           </template>
 
           <div v-else class="connection-guide">
-            <template v-if="connectionEnabled === '0'">
+            <div v-if="accessMode === 'upload'" class="report-registration-panel">
+              <el-alert type="info" :closable="false" show-icon title="数据文件统一在海通数据上报工作台上传、整理规范并提交。保存数据源后点击下一步进入工作台。" />
+              <DataTable v-if="currentDb?.tid" :key="currentDb.tid" :data="fetchReportFileHistory" :page-sizes="[10,20,50,100]" row-key="fileId" size="small" max-height="360">
+                <el-table-column type="index" label="序号" width="60" />
+                <el-table-column prop="fileName" label="数据文件" min-width="200" sortable="custom" />
+                <el-table-column prop="tableCount" label="表数" width="80" sortable="custom" />
+                <el-table-column prop="rowCount" label="数据量" width="100" sortable="custom" />
+                <el-table-column label="状态" width="110"><template #default="{row}"><el-tag :type="row.status === 'success' ? 'success' : row.status === 'failed' ? 'danger' : row.status === 'partial' ? 'warning' : 'info'">{{ row.status === 'success' ? '已上报' : row.status === 'failed' ? '上报失败' : row.status === 'partial' ? '部分已上报' : row.status === 'sending' ? '上报中' : '待上报' }}</el-tag></template></el-table-column>
+                <el-table-column prop="reportedAt" label="最近上报时间" min-width="170" sortable="custom"><template #default="{row}">{{ row.reportedAt ? new Date(row.reportedAt).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',hour12:false}) : '—' }}</template></el-table-column>
+                <template #empty>当前数据源暂无上传文件，点击下一步进入数据上报工作台。</template>
+              </DataTable>
+            </div>
+            <template v-else-if="connectionEnabled === '0'">
               <div
                 v-if="
                   (accessMode === 'upload' ||
@@ -2653,6 +2766,7 @@
       </template>
     </el-dialog>
   </div>
+    <api-register-modal v-model="proxyServiceRegistrationVisible" @close="onProxyServiceRegistrationClosed" />
 </template>
 
 <script setup>
@@ -2694,6 +2808,10 @@ const serviceRouter = useRouter();
 const registerModalContext = useRegisterModal();
 const proxyServiceTableRef = ref();
 const proxyServiceKeyword = ref('');
+const proxyServiceRegistrationVisible = ref(false);
+const onProxyServiceRegistrationClosed = (result) => {
+  if (result === 'success') proxyServiceTableRef.value?.refresh?.(true);
+};
 const proxyNavigating = ref(false);
 const fetchDepartmentServices = async ({ pageNo=1,pageSize=10,sortField,sortDir }={}) => {
   const response = await $common.post('/dws/flowserve/gateway/api/list', {departmentOnly:true,pageNum:pageNo,pageSize,sortField,sortDir,keyword:proxyServiceKeyword.value});
@@ -3697,6 +3815,10 @@ const connectorFieldNames = [
   "dbVersion",
   "jdbcType",
   "serviceName",
+  "gaussdbVariant",
+  "sslMode",
+  "transportMode",
+  "httpPath",
   "hiveConnectionMode",
   "hiveProfile",
   "authMode",
@@ -3731,6 +3853,10 @@ const connectorFieldNames = [
   "minioPrefix",
   "minioFilePattern",
   "minioSingleFile",
+  "ftpsImplicit",
+  "trustStorePath",
+  "trustStorePassword",
+  "nifiTrustStorePath",
   "ftpProtocol",
   "ftpHost",
   "ftpPort",
@@ -3782,6 +3908,7 @@ const isApiPullRegistration = computed(
     connectionEnabled.value === "1",
 );
 const apiPullTestingItemId = ref("");
+const apiPullReadingWsdlItemId = ref("");
 const kv = (seed = {}) => ({
   id: seed.id || Math.random().toString(36).slice(2),
   key: String(seed.key || ""),
@@ -3872,6 +3999,21 @@ const req = (item) => {
         ? JSON.parse(String(item.requestHeadersJson || "{}"))
         : obj(item.requestHeaders, "请求头"),
     raw = String(item.requestTemplateJson || "");
+  if (item.apiProtocol === "SOAP") {
+    if (!raw.trim()) throw Error("请填写SOAP XML请求和操作参数");
+    if (/<!DOCTYPE/i.test(raw)) throw Error("SOAP XML不允许DOCTYPE或外部实体");
+    const document = new DOMParser().parseFromString(raw, "application/xml");
+    const envelope = document.documentElement;
+    const namespace = item.apiSoapVersion === "1.2" ? "http://www.w3.org/2003/05/soap-envelope" : "http://schemas.xmlsoap.org/soap/envelope/";
+    if (document.getElementsByTagName("parsererror").length || envelope.localName !== "Envelope" || envelope.namespaceURI !== namespace || !document.getElementsByTagNameNS(namespace, "Body")[0]?.children.length)
+      throw Error("请填写有效的SOAP Envelope/Body，并确认SOAP版本一致");
+    const action = String(item.apiSoapAction || "");
+    if (/[\r\n\"]/.test(action)) throw Error("SOAPAction格式无效");
+    Object.keys(headers).forEach(key => { if (["content-type", "soapaction"].includes(key.toLowerCase())) delete headers[key]; });
+    headers["Content-Type"] = item.apiSoapVersion === "1.2" ? 'application/soap+xml; charset=UTF-8; action="' + action + '"' : "text/xml; charset=UTF-8";
+    if (item.apiSoapVersion !== "1.2") headers.SOAPAction = '"' + action + '"';
+    return { type: "xml", headers, body: raw, stored: raw };
+  }
   if (type === "none") return { type, headers, body: "", stored: "" };
   if (type === "json") {
     if (raw.trim()) JSON.parse(raw);
@@ -3955,6 +4097,12 @@ const createApiPullItem = (seed = {}) => {
         : {},
     item = {
       clientId: seed.clientId || Math.random().toString(36),
+      apiProtocol: "REST",
+      apiWsdlUrl: "",
+      apiWsdlOperations: [],
+      apiWsdlOperation: "",
+      apiSoapVersion: "1.1",
+      apiSoapAction: "",
       tableName: "",
       tableComment: "",
       serviceName: "",
@@ -4102,6 +4250,8 @@ const apiPullItemsForSave = () =>
       "authToken",
       "apiKeyValue",
       "oauthClientSecret",
+      "apiWsdlOperations",
+      "apiWsdlOperation",
     ].forEach((field) => delete persistedItem[field]);
     return {
       ...persistedItem,
@@ -4117,6 +4267,7 @@ const apiPullItemsForSave = () =>
         cronExpression: apiPullScheduleCronExpression(item),
       },
       requestHeadersJson: JSON.stringify(r.headers),
+      commonHeadersJson: JSON.stringify(r.headers),
       requestTemplateJson: r.stored,
     };
   });
@@ -4146,6 +4297,59 @@ const apiPullTestAuthPayload = (item) => {
       apiOAuthScope: item.oauthScope,
     };
   return { apiAuthType: "none" };
+};
+const apiProtocolDrafts = new WeakMap();
+const syncSoapRequestHeaders = (item) => {
+  if (item.apiProtocol !== "SOAP") return;
+  let headers;
+  try { headers = item.headerInputMode === "json" ? JSON.parse(item.requestHeadersJson || "{}") : obj(item.requestHeaders || [], "请求头"); }
+  catch { return; }
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return;
+  Object.keys(headers).forEach(key => { if (["content-type", "soapaction"].includes(key.toLowerCase())) delete headers[key]; });
+  const action = String(item.apiSoapAction || "");
+  headers["Content-Type"] = item.apiSoapVersion === "1.2" ? 'application/soap+xml; charset=UTF-8; action="' + action + '"' : "text/xml; charset=UTF-8";
+  if (item.apiSoapVersion !== "1.2") headers.SOAPAction = '"' + action + '"';
+  item.requestHeaders = Object.entries(headers).map(([key, value]) => kv({ key, value }));
+  item.requestHeadersJson = JSON.stringify(headers);
+};
+const changeApiProtocol = (item) => {
+  const soap = item.apiProtocol === "SOAP";
+  const drafts = apiProtocolDrafts.get(item) || {};
+  drafts[soap ? "REST" : "SOAP"] = { endpointMethod: item.endpointMethod, requestBodyType: item.requestBodyType, requestTemplateJson: item.requestTemplateJson, requestHeaders: item.requestHeaders, requestHeadersJson: item.requestHeadersJson, headerInputMode: item.headerInputMode };
+  const next = drafts[soap ? "SOAP" : "REST"] || { endpointMethod: soap ? "POST" : "GET", requestBodyType: soap ? "xml" : "json", requestTemplateJson: "" };
+  Object.assign(item, next);
+  syncSoapRequestHeaders(item);
+  apiProtocolDrafts.set(item, drafts);
+  item.responseExtractPath = "";
+  item.responsePreview = "";
+  clearApiPullResponseExtraction(item);
+};
+const selectWebServiceOperation = (item) => {
+  const operation = item.apiWsdlOperations?.[Number(item.apiWsdlOperation)];
+  if (!operation || item.apiWsdlOperation === "") return;
+  const escape = (value) => String(value || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  if (!/^[A-Za-z_][\w.-]*$/.test(operation.name)) return $message.warning("操作名称不能自动生成XML，请手动填写SOAP请求");
+  Object.assign(item, { requestUrl: operation.endpoint, endpointMethod: "POST", requestBodyType: "xml", apiSoapVersion: operation.version, apiSoapAction: operation.action });
+  syncSoapRequestHeaders(item);
+  const namespace = operation.version === "1.2" ? "http://www.w3.org/2003/05/soap-envelope" : "http://schemas.xmlsoap.org/soap/envelope/";
+  item.requestTemplateJson = '<?xml version="1.0" encoding="UTF-8"?>\n<soap:Envelope xmlns:soap="' + namespace + '">\n  <soap:Body>\n    <m:' + operation.name + ' xmlns:m="' + escape(operation.namespace) + '">\n      <!-- 请按服务定义填写实际参数 -->\n    </m:' + operation.name + '>\n  </soap:Body>\n</soap:Envelope>';
+  item.responseExtractPath = "";
+  item.responsePreview = "";
+  clearApiPullResponseExtraction(item);
+};
+const readWebServiceWsdl = async (item) => {
+  if (!/^https?:\/\//i.test(String(item.apiWsdlUrl || ""))) return $message.warning("请填写完整的HTTP或HTTPS WSDL定义地址");
+  apiPullReadingWsdlItemId.value = item.clientId;
+  try {
+    const headers = item.headerInputMode === "json" ? JSON.parse(item.requestHeadersJson || "{}") : obj(item.requestHeaders, "请求头");
+    const result = await $common.post("/dst/database/metadata/test-connection", { dbType: "api", apiProtocol: "SOAP", apiProbeAction: "wsdl", apiWsdlUrl: item.apiWsdlUrl, apiHeaders: JSON.stringify(headers), apiTimeoutSeconds: 30, ...apiPullTestAuthPayload(item) }, {}, 120000);
+    if (!result.success || !result.metadataOnly || !Array.isArray(result.operations)) throw Error(result.error || result.message || "WSDL解析失败");
+    item.apiWsdlOperations = result.operations;
+    item.apiWsdlOperation = "";
+    if (result.operations.length === 1 && !String(item.requestTemplateJson || "").trim()) { item.apiWsdlOperation = "0"; selectWebServiceOperation(item); }
+    $message.success("已读取 " + result.operations.length + " 个服务操作，请填写参数后测试SOAP调用");
+  } catch (error) { $message.warning(error.message || "WSDL读取失败，请检查地址和认证配置"); }
+  finally { apiPullReadingWsdlItemId.value = ""; }
 };
 const apiResponseConfigFromProbe = (table = {}) =>
   JSON.stringify({
@@ -4204,6 +4408,9 @@ const testApiPullItem = async (item, index) => {
     const probePayload = {
       dbType: "api",
       showConnect: "1",
+      apiProtocol: item.apiProtocol || "REST",
+      apiSoapVersion: item.apiSoapVersion,
+      apiSoapAction: item.apiSoapAction,
       apiUrl: item.requestUrl,
       apiMethod: item.endpointMethod,
       apiHeaders: JSON.stringify(r.headers),
@@ -4220,6 +4427,8 @@ const testApiPullItem = async (item, index) => {
       {},
       120000,
     );
+    if (res.connected === false || res.success === false)
+      throw Error(res.error || res.message || "接口连通性测试未通过，请检查请求和认证配置");
     let tables = Array.isArray(res.tables) ? res.tables : [];
     // 部分通用接口先返回外层响应对象，尽管其中实际记录位于 data.list。
     // 未指定路径且首次只得到根对象时，按常见分页集合路径补做定向探查，
@@ -4228,7 +4437,7 @@ const testApiPullItem = async (item, index) => {
       !requestedResponsePath &&
       tables.length === 1 &&
       normalizeApiResponseExtractPath(tables[0]?.sourcePath) === "$";
-    if (onlyRootTable) {
+    if (onlyRootTable && item.apiProtocol !== "SOAP") {
       const preview = String(res.responsePreview || "");
       const candidatePaths = [
         ["$.data.list", /"data"\s*:\s*\{[\s\S]*?"list"\s*:/],
@@ -4302,6 +4511,7 @@ const testApiPullItem = async (item, index) => {
   } catch (e) {
     item.testStatus = "failed";
     item.testMessage = e.message || "连通性测试失败";
+    connectionTestState.status = "failed";
     $message.error(e.message);
   } finally {
     apiPullTestingItemId.value = "";
@@ -4882,6 +5092,10 @@ const normalizeDatasourceStorageFields = (data = {}) => {
     pushDataType: normalizePushDataType(firstFilled(
       data.pushDataType, data.push_data_type, poolCfg.pushDataType, poolCfg.push_data_type,
     )),
+    ftpsImplicit: firstFilled(data.ftpsImplicit,poolCfg.ftpsImplicit,"auto"),
+    trustStorePath: firstFilled(data.trustStorePath,poolCfg.trustStorePath),
+    trustStorePassword: firstFilled(data.trustStorePassword,poolCfg.trustStorePassword),
+    nifiTrustStorePath: firstFilled(data.nifiTrustStorePath,poolCfg.nifiTrustStorePath),
     schema: firstFilled(data.schema, poolCfg.schema),
     dbVersion: firstFilled(
       data.dbVersion,
@@ -4901,6 +5115,11 @@ const normalizeDatasourceStorageFields = (data = {}) => {
       poolCfg.serviceName,
       poolCfg.service_name,
     ),
+    gaussdbVariant: firstFilled(data.gaussdbVariant, data.gaussdb_variant, poolCfg.gaussdbVariant, poolCfg.gaussdb_variant,
+      normalizedType === "gaussdb" ? "legacy-postgresql" : ""),
+    sslMode: firstFilled(data.sslMode,poolCfg.sslMode,"prefer"),
+    transportMode: firstFilled(data.transportMode, poolCfg.transportMode, "binary"),
+    httpPath: firstFilled(data.httpPath, poolCfg.httpPath, "cliservice"),
     hiveConnectionMode: firstFilled(
       data.hiveConnectionMode,
       data.hive_connection_mode,
@@ -5798,6 +6017,101 @@ const saveApi = (data) => {
     propList: data,
   });
 };
+// 文件登记定义单独缓存和保存，结构化表模板继续沿用原有导入路径。
+const isFilePush = computed(() => accessMode.value === "receive" && receiveDeliveryProfile.pushDataType === "UNSTRUCTURED");
+const fileRegistrationBySource = reactive({});
+const emptyFileRegistration = () => ({ rows: [], fileName: "", dirty: false, loaded: false, loading: false, error: "" });
+const fileRegistrationState = computed(() => {
+  const key = String(currentDid.value || "draft");
+  if (!fileRegistrationBySource[key]) fileRegistrationBySource[key] = emptyFileRegistration();
+  return fileRegistrationBySource[key];
+});
+const fileFormatOptions = ["JPG 图片", "JPEG 图片", "PNG 图片", "PDF 文档", "DOCX 文档"];
+const fileRegistrationHeaders = ["序号", "文件名称 *", "文件说明 *", "文件格式 *", "文件大小上限(MB) *", "关联数据表名", "关联字段名"];
+const fileRegistrationRequiredHeaders = ["文件名称", "文件说明", "文件格式", "文件大小上限(MB)"];
+function parseFileRegistrationRows(objects) {
+  if (!objects.length || objects.length > 100) throw new Error("文件登记模板须填写1至100项文件定义");
+  const names = new Set();
+  return objects.map((row, index) => {
+    const fileName = getCellText(row, ["文件名称"]);
+    const fileDescription = getCellText(row, ["文件说明"]);
+    const rawFormat = getCellText(row, ["文件格式"]).trim().toLowerCase();
+    const fileFormat = rawFormat.split(/\s+/)[0].replace(/^\./, "");
+    const sizeText = getCellText(row, ["文件大小上限(MB)"]);
+    const relatedTableName = getCellText(row, ["关联数据表名"]);
+    const relatedFieldName = getCellText(row, ["关联字段名"]);
+    const line = row.__rowNumber || index + 2;
+    if (!fileName || fileName.length > 255 || !fileDescription || fileDescription.length > 2000) throw new Error(`文件登记第${line}行：文件名称、说明必填，分别最多255字、2000字`);
+    if (names.has(fileName.toLowerCase())) throw new Error(`文件登记第${line}行：文件名称重复`);
+    names.add(fileName.toLowerCase());
+    if (!["jpg", "jpeg", "png", "pdf", "docx"].includes(fileFormat)) throw new Error(`文件登记第${line}行：请选择JPG、JPEG、PNG、PDF或DOCX格式`);
+    const maxFileSizeMb = Number(sizeText);
+    if (!/^[0-9]+(\.[0-9]{1,6})?$/.test(sizeText) || maxFileSizeMb <= 0 || maxFileSizeMb > 1048576) throw new Error(`文件登记第${line}行：大小上限须为大于0且不超过1048576的MB数值`);
+    if (relatedFieldName && !relatedTableName) throw new Error(`文件登记第${line}行：填写关联字段时须填写关联表`);
+    return { id: `file-definition-${index}`, fileName, fileDescription, fileFormat, maxFileSizeMb, relatedTableName, relatedFieldName };
+  });
+}
+async function downloadFileRegistrationTemplate() {
+  const WorkbookClass = ExcelJS.Workbook || ExcelJS.default?.Workbook;
+  const workbook = new WorkbookClass();
+  addTemplateSheet(workbook, "填写说明", ["项目", "说明"], [
+    ["用途", "登记非结构化推送的文件定义，不填写实际文件内容。每行代表一类待推送文件；示例可替换或删除。"],
+    ["必填项", "文件名称、文件说明、文件格式、文件大小上限(MB)。"],
+    ["文件名称", "填写业务文件名称，例如现场照片、案件卷宗；实际上传仍须提供含扩展名的fileName。"],
+    ["文件格式", "从下拉列表选择JPG/JPEG/PNG图片或PDF/DOCX文档，每行一种格式。"],
+    ["文件大小", "填写单个文件大小上限，单位MB，1MB=1048576字节；实际接收仍受海通节点文件集合限制。"],
+    ["可选关联", "关联数据表和字段均可不填；填写字段时须同时填写表。关联表须已登记在当前行业，同名表可填写登记表ID。"],
+    ["登记流程", "上传文件登记模板→保存→下一步直接进入登记内容审查，无需探查、字典表及业务表登记。"],
+    ["重复导入", "按文件名称更新同名定义，保留未列出的已有项；模板不删除既有登记或实际文件。"],
+  ]);
+  const examples = [[1,"现场照片","现场采集的业务照片","JPG 图片",20,"",""],[2,"案件卷宗","案件相关PDF文档","PDF 文档",100,"",""],[3,"业务文书","业务办理的Word文档","DOCX 文档",50,"",""]];
+  const sheet = addTemplateSheet(workbook, "文件登记", fileRegistrationHeaders, examples);
+  const options = workbook.addWorksheet("下拉选项", {state:"veryHidden"});
+  options.addRow(["文件格式"]); fileFormatOptions.forEach(value => options.addRow([value]));
+  for (let row = 2; row <= 101; row++) {
+    sheet.getCell(row,4).dataValidation = {type:"list",allowBlank:false,formulae:["'下拉选项'!$A$2:$A$6"],showErrorMessage:true,errorTitle:"文件格式不正确",error:"请从列表选择支持的文件格式"};
+    sheet.getCell(row,5).dataValidation = {type:"decimal",operator:"between",allowBlank:false,formulae:[0.000001,1048576],showErrorMessage:true,errorTitle:"文件大小不正确",error:"请填写大于0且不超过1048576的MB数值"};
+  }
+  markRequiredColumns(sheet,fileRegistrationRequiredHeaders);
+  sheet.columns.forEach((column,index)=>{column.width=[8,24,52,20,24,28,28][index];});
+  const buffer=await workbook.xlsx.writeBuffer();
+  const url=URL.createObjectURL(new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  const link=document.createElement("a");link.href=url;link.download="文件登记模板.xlsx";link.style.display="none";
+  document.body.appendChild(link);link.click();document.body.removeChild(link);window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function loadFileRegistrationRows(force = false) {
+  if (!isFilePush.value || !currentDb.value?.tid) return;
+  // 尚未保存的类型切换不能拿旧的结构化数据源读取文件快照；导入后由显式保存切换。
+  if (normalizePushDataType(currentDb.value.pushDataType) !== "UNSTRUCTURED") return;
+  const sourceId=String(currentDb.value.tid);const key=String(currentDid.value);
+  const state=fileRegistrationState.value;
+  if (state.dirty || state.loading || (state.loaded && !force)) return;
+  state.loading=true;state.error="";
+  try {
+    const result=await $common.post("/dst/database/metadata/fileRegistration",{dbId:sourceId,action:"read"});
+    if (String(currentDid.value)!==key || state.dirty) return;
+    const payload=result?.data || result || {};
+    state.rows=(payload.list || []).map(row=>({...row,id:row.tableId}));state.loaded=true;
+    state.fileName=state.rows.length ? "上次成功保存的文件登记快照" : "";
+  } catch(error) {state.error=error?.message || "读取文件登记快照失败，请重试";}
+  finally {state.loading=false;}
+}
+async function saveFileRegistrationRows(sourceId) {
+  const state=fileRegistrationState.value;
+  if (!state.rows.length) throw new Error("请先上传已填写的文件登记模板");
+  const result=await $common.post("/dst/database/metadata/fileRegistration",{dbId:sourceId,action:"save",files:state.rows});
+  const payload=result?.data || result || {};
+  const saved={rows:(payload.list || []).map(row=>({...row,id:row.tableId})),fileName:state.fileName,loaded:true,dirty:false,loading:false,error:""};
+  fileRegistrationBySource[String(currentDid.value)]=saved;
+  fileRegistrationBySource[String(sourceId)]=saved;
+  return saved.rows;
+}
+watch([currentDid,accessMode,()=>receiveDeliveryProfile.pushDataType],()=>{
+  const fileFlow=isFilePush.value;
+  (store.state.steps || []).forEach((step,index)=>{if (index>=1 && index<=3) step.skipped=fileFlow;});
+  if (fileFlow) void loadFileRegistrationRows();
+},{immediate:true});
+
 const buildImportSnapshotPayload = (dbId, imported) => ({
   dbId,
   dataSourceType:
@@ -5958,6 +6272,7 @@ const markMetadataImportPersisted = (imported) => {
 };
 const loadMetadataImportResult = async (dbId) => {
   if (!dbId) return;
+  if (isFilePush.value) return loadFileRegistrationRows();
   try {
     // 上报模板的导入结果在进入第二步标注前，db_table_t.annotated 仍为 0。
     // 不能使用 paged=true：该分页视图只返回已标注表，会把刚导入的快照误判成空结果。
@@ -6007,6 +6322,21 @@ const detailApi = (tid, silent = false) => {
     silent,
   });
 };
+// 登记页只读取文件结果；上传、规范编辑与提交均由海通工作台负责。
+async function fetchReportFileHistory({pageNo=1,pageSize=20,sortField,sortDir}={}) {
+  const dbId=currentDb.value?.tid;
+  if(!dbId)return {list:[],total:0};
+  return $common.post('/dst/database/metadata/report-registration',{action:'history',dbId,pageNo,pageSize,sortField,sortDir});
+}
+function openReportWorkbench(dbId) {
+  const configured=String(window.__DATA_ELEMENTS_HAITONG_BASE_URL__||'').trim();
+  const local=['localhost','127.0.0.1','[::1]'].includes(window.location.hostname)&&window.location.port==='3000';
+  const target=new URL(configured||(local?`${window.location.protocol}//${window.location.hostname}:3002/`:'/haitong/'),window.location.href);
+  target.search='';target.hash='/report?'+new URLSearchParams({datasourceId:String(dbId)});
+  registerModalContext.open.value=false;
+  window.location.assign(target.href);
+  return {navigationHandled:true};
+}
 const save = async () => {
   if (accessMode.value === "proxy") throw new Error("请点击下一步进入服务登记页，服务无需保存为数据库数据源");
   try {
@@ -6099,8 +6429,9 @@ const save = async () => {
     if (accessMode.value === "capture" && sourceType.value === "api") {
       await $common.post("/ods/api-pull/sync", { datasourceId: savedDbId });
     }
+    const savedFileRegistrations = isFilePush.value ? await saveFileRegistrationRows(savedDbId) : null;
     const importedMetadata = activeMetadataImport();
-    if (shouldPersistImportedMetadataSnapshot(importedMetadata)) {
+    if (accessMode.value !== "upload" && !isFilePush.value && shouldPersistImportedMetadataSnapshot(importedMetadata)) {
       await persistImportedMetadataSnapshot(savedDbId, importedMetadata);
       markMetadataImportPersisted(importedMetadata);
     }
@@ -6112,6 +6443,7 @@ const save = async () => {
       id: savedDbId,
       detailMissing: false,
       originalTid: "",
+      ...(savedFileRegistrations ? { fileRegistrations: savedFileRegistrations } : {}),
     });
     if (currentDb.value?.isDraft) {
       const draftIndex = dbs.value.findIndex((item) => item?.isDraft);
@@ -6154,7 +6486,12 @@ const save = async () => {
     store.state.loadStatus["main"] = false;
   }
 };
-const next = () => {
+const next = async () => {
+  if (accessMode.value === "upload") {
+    const result=await save();
+    return openReportWorkbench(result.data.tid);
+  }
+  if (isFilePush.value && (fileRegistrationState.value.dirty || !fileRegistrationState.value.loaded || !fileRegistrationState.value.rows.length)) throw new Error("请先保存已填写的文件登记模板，再进入内容审查");
   if (accessMode.value === "proxy") return goToServiceRegistration();
   if (!currentDb.value?.tid || currentDb.value?.detailMissing) {
     throw "请保存";
@@ -6457,6 +6794,7 @@ function applyIntegrationTemplateAutoDefaults(
   }
 }
 async function downloadIntegrationMetadataTemplate() {
+  if (isFilePush.value) return downloadFileRegistrationTemplate();
   const WorkbookClass = ExcelJS.Workbook || ExcelJS.default?.Workbook;
   if (!WorkbookClass) throw new Error("Excel 模板组件未正确加载");
   const workbook = new WorkbookClass();
@@ -8105,6 +8443,15 @@ async function handleMetadataTemplateImport(event) {
     if (!WorkbookClass) throw new Error("Excel 模板组件未正确加载");
     const workbook = new WorkbookClass();
     await workbook.xlsx.load(await file.arrayBuffer());
+    if (isFilePush.value) {
+      const sheet=workbook.getWorksheet("文件登记");
+      validateTemplateHeaders(sheet,"文件登记",fileRegistrationRequiredHeaders);
+      const rows=parseFileRegistrationRows(worksheetToObjects(sheet));
+      const state=fileRegistrationState.value;
+      state.rows=rows;state.fileName=file.name;state.dirty=true;state.loaded=true;state.error="";
+      $message.success(`已读取 ${rows.length} 项文件定义，保存后可直接进入内容审查`);
+      return;
+    }
     // 推送、抓取、上报三种入口统一使用同一份表/字段模板格式，但上传记录按入口隔离。
     const isIntegrationTemplate = ["receive", "capture", "upload"].includes(
       accessMode.value,
@@ -8227,7 +8574,7 @@ async function handleMetadataTemplateImport(event) {
 function createConnectorDefaults() {
   return {
     host: "",
-    port: "3306",
+    port: "",
     database: "",
     username: "",
     password: "",
@@ -8236,6 +8583,10 @@ function createConnectorDefaults() {
     dbVersion: "",
     jdbcType: "serviceName",
     serviceName: "",
+    gaussdbVariant: "gaussdb",
+    sslMode: "prefer",
+    transportMode: "binary",
+    httpPath: "cliservice",
     hiveConnectionMode: "open-source",
     hiveProfile: "",
     authMode: "none",
@@ -8246,8 +8597,8 @@ function createConnectorDefaults() {
     jaasConfPath: "",
     clientConfigDir: "",
     zookeeperQuorum: "",
-    zookeeperNamespace: "hiveserver2",
-    serviceDiscoveryMode: "zooKeeper",
+    zookeeperNamespace: "",
+    serviceDiscoveryMode: "",
     saslQop: "auth-conf",
     ssl: false,
     dbMetaType: "mysql",
@@ -8271,6 +8622,10 @@ function createConnectorDefaults() {
     minioFilePattern: "",
     minioSingleFile: false,
     ftpProtocol: "ftp",
+    ftpsImplicit: "auto",
+    trustStorePath: "",
+    trustStorePassword: "",
+    nifiTrustStorePath: "",
     ftpHost: "",
     ftpPort: "21",
     ftpPath: "/",
@@ -8319,6 +8674,10 @@ const databaseConnectionFields = [
   "dbVersion",
   "jdbcType",
   "serviceName",
+  "gaussdbVariant",
+  "sslMode",
+  "transportMode",
+  "httpPath",
   "hiveConnectionMode",
   "hiveProfile",
   "authMode",
@@ -8340,9 +8699,32 @@ const databaseConnectionFields = [
   "dbMetaUser",
   "dbMetaPassword",
 ];
+let lastGaussdbVariant = "gaussdb";
+function gaussdbProduct(variant) {
+  const products = {
+    gaussdb: { protocol: "opengauss", port: "8000" },
+    "gaussdb-jdbc": { protocol: "gaussdb", port: "8000" },
+    opengauss: { protocol: "opengauss", port: "5432" },
+    dws: { protocol: "postgresql", port: "8000" },
+    mysql: { protocol: "mysql", port: "3306" },
+    "legacy-postgresql": { protocol: "postgresql", port: "5432" },
+  };
+  return products[variant] || products.gaussdb;
+}
+function sourceDefaultPort(type) {
+  return type === "gaussdb" ? gaussdbProduct(connectorForm.gaussdbVariant).port : defaultPorts[type];
+}
+function changeGaussdbVariant(value) {
+  if (!connectorForm.port || String(connectorForm.port) === gaussdbProduct(lastGaussdbVariant).port)
+    connectorForm.port = gaussdbProduct(value).port;
+  lastGaussdbVariant = value;
+  connectionTestState.status = "idle";
+  refreshJdbcUrl();
+}
 function changeSourceType(value, defaultProvideConnection = true) {
   const previousType = sourceType.value;
   sourceType.value = normalizeSourceType(value);
+  if (sourceType.value === "gaussdb") lastGaussdbVariant = connectorForm.gaussdbVariant;
   connectionTestState.status = "idle";
   connectionTestState.elapsed = 0;
   connectionTestState.message = "";
@@ -8368,12 +8750,12 @@ function changeSourceType(value, defaultProvideConnection = true) {
     connectionEnabled.value = "1";
   }
   if (isRelationalSource.value) {
-    const previousDefaultPort = defaultPorts[previousType];
+    const previousDefaultPort = sourceDefaultPort(previousType);
     if (
       !connectorForm.port ||
-      connectorForm.port === String(previousDefaultPort)
+      connectorForm.port === String(previousDefaultPort) || (!previousType && connectorForm.port === "3306")
     ) {
-      connectorForm.port = defaultPorts[sourceType.value] || "3306";
+      connectorForm.port = sourceDefaultPort(sourceType.value) || "";
     }
     refreshJdbcUrl();
   }
@@ -8466,6 +8848,7 @@ function switchSourceType() {
   });
 }
 function loadConnectorData(data) {
+  lastGaussdbVariant = data.gaussdbVariant || "legacy-postgresql";
   connectorFieldNames.forEach((field) => {
     if (
       data[field] !== undefined &&
@@ -8573,7 +8956,11 @@ function buildConnectorSaveData() {
     "dbVersion",
     "jdbcType",
     "serviceName",
-    "hiveConnectionMode",
+    "gaussdbVariant",
+  "sslMode",
+  "transportMode",
+  "httpPath",
+  "hiveConnectionMode",
     "hiveProfile",
     "authMode",
     "principal",
@@ -8608,7 +8995,11 @@ function buildConnectorSaveData() {
       "minioSingleFile",
     ],
     ftp: [
-      "ftpProtocol",
+      "ftpsImplicit",
+  "trustStorePath",
+  "trustStorePassword",
+  "nifiTrustStorePath",
+  "ftpProtocol",
       "ftpHost",
       "ftpPort",
       "ftpPath",
@@ -8654,7 +9045,11 @@ function buildConnectorSaveData() {
     activeFields = [...relationalFields];
     if (sourceType.value === "hive") {
       activeFields.push(
-        "hiveConnectionMode",
+        "gaussdbVariant",
+  "sslMode",
+  "transportMode",
+  "httpPath",
+  "hiveConnectionMode",
         "hiveProfile",
         "authMode",
         "principal",
@@ -8701,6 +9096,7 @@ function buildConnectorSaveData() {
   return result;
 }
 function validateConnector() {
+  if (accessMode.value === "upload") return;
   if (accessMode.value === "capture" && sourceType.value !== "api") {
     if (
       captureSchedule.mode === "interval" &&
@@ -8714,6 +9110,11 @@ function validateConnector() {
       throw new Error("请选择有效的抓取时间");
   }
   if (accessMode.value === "receive") {
+    if (isFilePush.value) {
+      if (fileRegistrationState.value.loading || fileRegistrationState.value.error) throw new Error(fileRegistrationState.value.error || "文件登记信息正在读取，请稍后保存");
+      if (!fileRegistrationState.value.rows.length) throw new Error("请先上传已填写的文件登记模板");
+      return;
+    }
     // 推送数据类型决定第五步展示的协议；文件大小与格式由海通集合规范约束。
     const imported = activeMetadataImport();
     if (
@@ -8983,7 +9384,7 @@ function refreshJdbcUrl() {
         ? `jdbc:oracle:thin:@${host}:${port}:${database}`
         : `jdbc:oracle:thin:@//${host}:${port}/${database}`,
     oceanbaseoracle: `jdbc:oceanbase:oracle://${host}:${port}/${database}`,
-    gaussdb: `jdbc:postgresql://${host}:${port}/${database}${schema}`,
+    gaussdb: `jdbc:${gaussdbProduct(connectorForm.gaussdbVariant).protocol}://${host}:${port}/${database}${gaussdbUrlParameters()}`,
     // GBase 8a uses the MySQL-compatible JDBC URL. GBASEDBTSERVER is an 8s-only parameter.
     gbase8a: `jdbc:gbase://${host}:${port}/${database}?characterEncoding=utf8`,
     sqlserver: `jdbc:sqlserver://${host}:${port};databaseName=${database}`,
@@ -8996,6 +9397,17 @@ function refreshJdbcUrl() {
   };
   connectorForm.jdbcURL = urls[sourceType.value] || "";
 }
+function gaussdbUrlParameters() {
+  const params = [];
+  if (connectorForm.gaussdbVariant === "mysql") {
+    const modes = { disable: "DISABLED", prefer: "PREFERRED", require: "REQUIRED", "verify-ca": "VERIFY_CA", "verify-full": "VERIFY_IDENTITY" };
+    if (connectorForm.sslMode) params.push(`sslMode=${modes[connectorForm.sslMode] || "PREFERRED"}`);
+  } else {
+    if (connectorForm.schema) params.push(`currentSchema=${encodeURIComponent(connectorForm.schema)}`);
+    if (connectorForm.sslMode) params.push(`sslmode=${connectorForm.sslMode}`);
+  }
+  return params.length ? `?${params.join("&")}` : "";
+}
 function buildHiveJdbcUrl(host, port, database) {
   const isMrs = connectorForm.hiveConnectionMode === "huawei-mrs";
   const quorum = isMrs
@@ -9003,6 +9415,11 @@ function buildHiveJdbcUrl(host, port, database) {
     : "";
   const endpoint = isMrs ? quorum : `${host}:${port}`;
   const params = [];
+  if (connectorForm.transportMode === "http") {
+    params.push("transportMode=http", `httpPath=${connectorForm.httpPath || "cliservice"}`);
+  }
+  if (connectorForm.ssl && connectorForm.authMode !== "KERBEROS") params.push("ssl=true");
+  if (connectorForm.authMode === "NOSASL") params.push("auth=noSasl");
   if (isMrs) {
     params.push(
       `serviceDiscoveryMode=${connectorForm.serviceDiscoveryMode || "zooKeeper"}`,
@@ -9021,7 +9438,7 @@ function buildHiveJdbcUrl(host, port, database) {
       params.push(`user.principal=${connectorForm.userPrincipal}`);
     if (connectorForm.keytabPath)
       params.push(`user.keytab=${connectorForm.keytabPath}`);
-  } else if (isMrs) {
+  } else if (connectorForm.authMode !== "NOSASL") {
     params.push("auth=none");
   }
   return `jdbc:hive2://${endpoint}/${database}${params.length ? `;${params.join(";")}` : ""}`;
@@ -9042,13 +9459,25 @@ defineExpose({
 }
 .proxy-service-toolbar {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-bottom: 12px;
 }
 .proxy-service-toolbar .el-input {
   width: 320px;
   max-width: 100%;
+}
+.proxy-service-toolbar .proxy-service-title { height: 38px; width: auto; flex: 0 0 auto; min-width: 0; }
+.proxy-service-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; margin-left: auto; }
+.webservice-wsdl-input { display: flex; gap: 8px; width: 100%; min-width: 0; }
+.webservice-wsdl-input .el-input { flex: 1; min-width: 0; }
+@media (max-width: 600px) {
+  .proxy-service-actions { width: 100%; }
+  .proxy-service-actions .el-input { flex: 1; width: auto; min-width: 0; }
+  .webservice-wsdl-input { flex-wrap: wrap; }
+  .webservice-wsdl-input .el-input { flex-basis: 100%; }
 }
 .proxy-service-table {
   min-height: 280px;
@@ -9262,6 +9691,8 @@ defineExpose({
   }
 }
 
+.file-registration-help { margin: 12px 0; color: #667085; font-size: 13px; line-height: 1.7; }
+.file-registration-error { color: #d92d20 !important; }
 .receive-push-address {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -9721,6 +10152,12 @@ defineExpose({
   padding: 20px 22px;
 }
 
+.report-registration-panel { padding: 22px; width: 100%; border: 1px solid #dbe7fa; border-radius: 12px; background: #fff; }
+.report-registration-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.report-registration-toolbar strong { font-size: 18px; color: #172b4d; }
+.report-registration-toolbar p, .report-registration-description { color: #718096; font-size: 13px; line-height: 1.7; margin: 8px 0 14px; }
+.report-registration-table { margin-top: 16px; }
+.report-registration-sheet { display: block; color: #8a98ad; font-size: 12px; margin-top: 3px; }
 .data-upload-result-toolbar {
   display: flex;
   align-items: flex-start;

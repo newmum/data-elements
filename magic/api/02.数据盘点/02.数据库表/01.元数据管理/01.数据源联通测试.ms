@@ -27,6 +27,7 @@
 // 业务说明：数据源联通测试（POST /dst/database/metadata/test-connection）。读取 db_datasource_t 中已保存的连接配置，调用 Java DataSourceConnectionTestService 完成协议适配、连接探测和统一异常诊断，并写入 db_datasource_t.connection_status；该接口是数据源登记页的主连通性测试端点；使用请求参数 tid。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
+import tenantRuntime
 import com.linewell.dataelement.metautil.service.DataSourceConnectionTestService as dataSourceConnectionTestService
 
 var blank = (value) => value == null || (value + '').trim() == ''
@@ -48,19 +49,22 @@ if (body == null) {
  * 未填字段的空串，空串不能覆盖已保存的连接参数，否则会把一次测试变成假失败。
  */
 var source = {}
+var tenantId = tenantRuntime.id()
 var persistedTid = null
 var requestTid = body.tid
 if (!blank(requestTid)) {
     var main = db.table('db_datasource_t')
         .where()
         .eq('tid', requestTid)
+        .eq('tenant_id', tenantId)
         .eq('is_del', 0)
         .selectOne()
     if (main == null) {
         return failure('数据源不存在或已删除，请返回第一步重新选择数据源')
     }
 
-    persistedTid = main.tid    source.putAll(datasourceConnectionConfig('read', main.tid, null, false))
+    persistedTid = main.tid
+    source.putAll(datasourceConnectionConfig('read', main.tid, null, false))
 
     // 主表字段补齐连接扩展属性，保持和详情/探查同一口径。
     source.tid = main.tid
@@ -106,6 +110,9 @@ if (!blank(requestTid)) {
 var overrideKeys = [
     'dbType', 'databaseType', 'dataSourceType', 'dbName', 'database', 'host', 'dbIp',
     'port', 'dbPort', 'username', 'password', 'jdbcURL', 'jdbcUrl', 'schema',
+    'gaussdbVariant', 'hiveConnectionMode', 'hiveProfile', 'metadataAccessMode', 'transportMode', 'httpPath',
+    'authMode', 'principal', 'userPrincipal', 'keytabPath', 'krb5ConfPath', 'ssl', 'ftpsImplicit',
+    'trustStorePath', 'trustStorePassword', 'nifiTrustStorePath',
     'defaultSchema', 'currentSchema', 'dbVersion', 'jdbcType', 'serviceName',
     'dbMetaType', 'dbMetaDbName', 'dbMetaIp', 'dbMetaPort', 'dbMetaUser', 'dbMetaPassword',
     'maxcomputeEndpoint', 'maxcomputeProject', 'maxcomputeAccessKeyId',
@@ -115,6 +122,8 @@ var overrideKeys = [
     'ftpProtocol', 'ftpHost', 'ftpPort', 'ftpPath', 'ftpUsername', 'ftpPassword',
     'ftpPassiveMode', 'ftpFilePattern', 'ftpRecursive', 'ftpCharset', 'ftpDelimiter',
     'apiMethod', 'apiUrl', 'apiAuthType', 'apiUsername', 'apiPassword', 'apiToken',
+    'apiProtocol', 'apiWsdlUrl', 'apiSoapVersion', 'apiSoapAction', 'apiProbeAction',
+    'apiOAuthTokenUrl', 'apiOAuthClientId', 'apiOAuthClientSecret', 'apiOAuthScope',
     'apiKeyName', 'apiKeyValue', 'apiKeyPosition', 'apiHeaders', 'apiBody',
     'apiTimeoutSeconds', 'apiCollectionPaths', 'kafkaBootstrapServers', 'kafkaTopic',
     'kafkaGroupId', 'kafkaSecurityProtocol', 'kafkaSaslMechanism', 'kafkaUsername',
@@ -139,12 +148,13 @@ try {
 }
 
 // 状态记录不参与连接测试结果。写入或历史数据异常时保留测试结果，不能影响前端。
-if (!blank(persistedTid)) {
+if (!blank(persistedTid) && result?.metadataOnly != true) {
     try {
         var status = result != null && result.connected == true ? 'success' : 'failed'
         db.table('db_datasource_t')
             .where()
             .eq('tid', persistedTid)
+            .eq('tenant_id', tenantId)
             .eq('is_del', 0)
             .update({
                 connection_status: status,

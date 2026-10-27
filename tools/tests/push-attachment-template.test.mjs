@@ -16,12 +16,12 @@ const constants=['integrationTemplateTableHeaders','integrationTemplateFieldHead
 const functions=['excelColumnName','getCellText','normalizeTemplateHeader','styleWorksheetHeader','autoFitColumns','setWorksheetColumnWidth','addTemplateSheet','addIntegrationTemplateOptionSheet','applyListValidation','markRequiredColumns','formulaText','applyIntegrationTemplateAutoDefaults','downloadIntegrationMetadataTemplate'];
 function fixture(mode='receive'){
  let buffer;const accessMode={value:mode};
- const state={accessMode,ExcelJS,Blob,URL:{createObjectURL(blob){buffer=blob;return 'blob:test'},revokeObjectURL(){}},document:{createElement(){return {style:{},click(){}}},body:{appendChild(){},removeChild(){}}},window:{setTimeout(fn){fn()}},$message:{success(){}}};
+ const state={accessMode,isFilePush:{value:false},ExcelJS,Blob,URL:{createObjectURL(blob){buffer=blob;return 'blob:test'},revokeObjectURL(){}},document:{createElement(){return {style:{},click(){}}},body:{appendChild(){},removeChild(){}}},window:{setTimeout(fn){fn()}},$message:{success(){}}};
  const api=new Function(...Object.keys(state),constants.map(extract).join('\n')+'\n'+functions.map(extract).join('\n')+'\nreturn {downloadIntegrationMetadataTemplate}')( ...Object.values(state));
  return {...api,async workbook(){await api.downloadIntegrationMetadataTemplate();const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await buffer.arrayBuffer());return workbook;}};
 }
-test('push registration workbook contains only ordinary table/field definitions for both content types',async()=>{
- for(const mode of ['receive','capture','upload']) {
+test('structured push and collection workbook retain ordinary table/field definitions',async()=>{
+ for(const mode of ['receive','capture']) {
   const workbook=await fixture(mode).workbook();const fields=workbook.getWorksheet('数据字段');const header=fields.getRow(1).values;
   assert.equal(header.length-1,11);
   for(const forbidden of ['是否关联附件','附件大小上限(MB)','附件格式'])assert.ok(!header.includes(forbidden));

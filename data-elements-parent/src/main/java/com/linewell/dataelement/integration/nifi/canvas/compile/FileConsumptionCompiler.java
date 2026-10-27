@@ -62,6 +62,11 @@ final class FileConsumptionCompiler {
     }
 
     void acknowledge(String pgId,Pipeline pipeline,Map<String,DslCompiler.NodeCompilation> compiled) {
+        acknowledge(pgId,pipeline,compiled,Map.of());
+    }
+
+    void acknowledge(String pgId,Pipeline pipeline,Map<String,DslCompiler.NodeCompilation> compiled,
+                     Map<String,Map<String,Object>> runtimeConfigs) {
         var source=pipeline.dsl().nodes().stream().filter(n->enabled(n.config())).findFirst().orElse(null);
         if(source==null)return;
         var sink=pipeline.dsl().nodes().stream().filter(n->"sink".equals(n.category())).findFirst().orElseThrow();
@@ -72,6 +77,14 @@ final class FileConsumptionCompiler {
         String root=text(config,"remotePath");while(root.endsWith("/"))root=root.substring(0,root.length()-1);
         var owner=compiled.get(sink.id());String writer=owner.processorIds.get("put");
         if(writer==null)throw new IllegalArgumentException("JDBC 写入节点缺少提交成功出口，无法确认来源文件删除");
+        if (FtpsSourceCompiler.enabled(config)) {
+            Map<String,Object> runtime=runtimeConfigs.getOrDefault(source.id(),config);
+            var acknowledgement=FtpsSourceCompiler.create(nifi,pgId,source.label()+"/FTPS 落库成功确认",runtime,
+                    text(runtime,"_runtimeFtpsLibraries"),true,sink.x()+400,sink.y());
+            owner.processorIds.put("acknowledge-ftps",acknowledgement.id());
+            connect(pgId,writer,acknowledgement.id(),"success");
+            return;
+        }
         var data=delete(pgId,source,connection,root,sftp,false,sink.x()+400,sink.y());
         var marker=delete(pgId,source,connection,root,sftp,true,sink.x()+800,sink.y());
         owner.processorIds.put("ack-delete-data",data.id());owner.processorIds.put("ack-delete-marker",marker.id());

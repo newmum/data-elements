@@ -97,11 +97,13 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 **当前已实现海通服务自身的完整文件链路：服务端集合规范 → 初始化并预留配额 → 分片上传/续传 → 异步合并、SHA-256、格式及可选外部安全检查 → 原有投递台账 → LOCAL/FTP/SFTP 原文投递或 Kafka 引用通知 → 鉴权回读及业务回执。** 默认关闭，通过 `relay.files.enabled=true` 和明确的集合、调用方、目标配置启用；原表批次接口继续共用同一 JAR、认证和投递账本。
 
-按当前开发范围，**数据源登记页面中的文件集合登记、FILE 域规范同步、行业 FILE 资产/不可变版本、目录/超市与 ES、平台 FJGHCC 异步复制及对象存储直传仍待后续实施**。当前 `fileId` 是海通服务内固定内容的文件标识，不等同于行业平台的 `assetVersionId`。第 4 节是已实现的接口规范；涉及平台的其余设计仍表示后续目标，不能据此调用尚未实现的接口。
+按当前开发范围，**FILE 域运行策略同步、行业 FILE 资产/不可变版本、目录/超市与 ES、平台 FJGHCC 异步复制及对象存储直传仍待后续实施**。当前 `fileId` 是海通服务内固定内容的文件标识，不等同于行业平台的 `assetVersionId`。第 4 节是已实现的接口规范；涉及平台的其余设计仍表示后续目标，不能据此调用尚未实现的接口。
 
 可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，默认整文件、可选分片续传的标准库流式客户端为 [`upload_file.py`](../haitong-data-pull/scripts/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
 
-平台数据源登记现在通过“推送数据类型”区分结构化与非结构化，默认结构化。第一步的地址和第五步规范均取所选网络在节点管理中的启用默认推送节点；非结构化默认展示 `/api/v1/file-uploads` 分片协议，结构化继续展示 `/api/v1/data-push` JSON 协议。数据登记模板不再包含字段附件关联、附件大小、附件格式三列。非结构化分片的 `collectionId` 由部署方在海通 YAML 的 `relay.files.collections.<key>.collection-id` 配置，并匹配 `datasource-id` 和 `clients`，可以独立于表字段关联使用；登记选择类型不会自动创建文件集合或放宽权限。第五步示例明确区分 `complete`、`READY` 与 `submit` 后投递成功。现有整文件兼容 API 及命令行客户端参数仍保留，登记页面统一以分片接口作为非结构化标准。
+平台数据源登记通过“推送数据类型”区分结构化与非结构化，默认结构化。第一步的地址和第五步规范均取所选网络在节点管理中的启用默认推送节点。结构化继续使用原表/字段模板、五步流程和 `/api/v1/data-push` JSON 协议。非结构化使用“填写说明＋文件登记”Excel，文件名称、说明、格式、单文件大小上限（MB）必填，可选关联表/字段；保存后跳过中间三步直接进入原第五步内容审查。文件定义复用平台既有表/字段快照，以 `table_type=FILE` 区分，格式/上限/可选关联保存在现有治理配置；不新增登记表，不按结构化表发布合同或物化。第五步突出 `PUT /api/v1/file-uploads/{id}/parts/{part}` 主接口，其他五项操作默认折叠展示，并说明先初始化，再分片上传、合并、等待 READY、提交、确认投递成功。
+
+登记得到的稳定 `collectionId` 须由部署方对应配置到海通 YAML 的 `relay.files.collections.<key>.collection-id`，同时匹配 `datasource-id`、`clients`、格式和大小限制。当前登记只保存平台定义，不会自动创建海通运行集合或放宽权限；FILE 域运行策略同步仍为后续范围。海通目标存储继续仅由自己的 YAML 决定，独立部署不依赖平台在线。现有整文件兼容 API 及命令行客户端参数仍保留，登记页面统一以分片接口作为非结构化标准。
 
 当前使用单节点持久卷，目录加进程锁；相同本地卷不能同时运行两个文件实例，也不能将各自拥有本地卷的多个实例直接置于随机负载均衡后。正式多实例需完成共享对象存储适配及跨节点校验。普通文件 API 与旧表批次共用 HTTP 服务，分片流量仍会占用该进程的网络和数据库；文件校验池、FILE_LOCAL/FILE_FTP/FILE_KAFKA 投递池分别有界，不承诺物理资源完全隔离。
 

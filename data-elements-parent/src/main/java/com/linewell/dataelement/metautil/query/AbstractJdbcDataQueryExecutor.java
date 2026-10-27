@@ -33,6 +33,8 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
     protected enum PaginationStyle {
         LIMIT_OFFSET,
         OFFSET_FETCH,
+        SQLSERVER,
+        HIVE,
         ROWNUM
     }
 
@@ -56,7 +58,7 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
         if (request == null || request.getDataSource() == null) {
             throw new BizException(500, "数据源配置不能为空");
         }
-        DatabaseType databaseType = request.getDataSource().getDatabaseType();
+        DatabaseType databaseType = request.getDataSource().getEffectiveDatabaseType();
         if (!supports(databaseType)) {
             throw new BizException(500, "当前数据库类型暂不支持分页查询: " + databaseType);
         }
@@ -75,6 +77,10 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
             List<String> selectedColumns = resolveSelectedColumns(request.getColumns(), selectableColumns, whitelist);
             SqlFragment whereClause = buildWhereClause(request.getConditions(), whitelist);
             String orderByClause = buildOrderByClause(request.getSorts(), whitelist);
+            if (orderByClause.isEmpty() && paginationStyle == PaginationStyle.SQLSERVER)
+                orderByClause = " ORDER BY (SELECT NULL)";
+            if (orderByClause.isEmpty() && paginationStyle == PaginationStyle.HIVE)
+                orderByClause = " ORDER BY " + quoteIdentifier(selectedColumns.get(0));
             String qualifiedTable = qualifyTable(realTableRef);
 
             String countSql = "SELECT COUNT(1) FROM " + qualifiedTable + whereClause.sql();
@@ -98,7 +104,7 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
         if (request == null || request.getDataSource() == null) {
             throw new BizException(500, "数据源配置不能为空");
         }
-        DatabaseType databaseType = request.getDataSource().getDatabaseType();
+        DatabaseType databaseType = request.getDataSource().getEffectiveDatabaseType();
         if (!supports(databaseType)) {
             throw new BizException(500, "当前数据库类型暂不支持分组查询: " + databaseType);
         }
@@ -342,10 +348,24 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
         int pageSize
     ) {
         int offset = (pageNo - 1) * pageSize;
-        if (paginationStyle == PaginationStyle.OFFSET_FETCH) {
+        if (paginationStyle == PaginationStyle.OFFSET_FETCH || paginationStyle == PaginationStyle.SQLSERVER) {
             params.add(offset);
             params.add(pageSize);
             return baseSql + " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
+        }
+        if (paginationStyle == PaginationStyle.HIVE) {
+            if (offset == 0) {
+                params.add(pageSize);
+                return baseSql + " LIMIT ?";
+            }
+            int orderIndex = baseSql.lastIndexOf(" ORDER BY ");
+            String order = orderIndex < 0 ? "ORDER BY 1" : baseSql.substring(orderIndex + 1);
+            String source = orderIndex < 0 ? baseSql : baseSql.substring(0, orderIndex);
+            params.add(offset);
+            params.add(offset + pageSize);
+            return "SELECT " + joinColumns(selectedColumns) + " FROM (SELECT preview_source.*, ROW_NUMBER() OVER ("
+                    + order + ") AS preview_row_no FROM (" + source
+                    + ") preview_source) preview_page WHERE preview_row_no > ? AND preview_row_no <= ?";
         }
         if (paginationStyle == PaginationStyle.ROWNUM) {
             params.add(offset + pageSize);
@@ -490,10 +510,7 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
         if (usesBareUppercaseIdentifier()) {
             return "\"" + value.toUpperCase(Locale.ROOT).replace("\"", "\"\"") + "\"";
         }
-        String escaped = identifierQuote == '`'
-            ? value.replace("`", "``")
-            : value.replace("\"", "\"\"");
-        return identifierQuote + escaped + identifierQuote;
+        return quoteWithDialect(value);
     }
 
     private String quoteIdentifier(String identifier) {
@@ -509,10 +526,12 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
             String escaped = value.replace("\"", "\"\"");
             return "\"" + escaped + "\"";
         }
-        String escaped = identifierQuote == '`'
-            ? value.replace("`", "``")
-            : value.replace("\"", "\"\"");
-        return identifierQuote + escaped + identifierQuote;
+        return quoteWithDialect(value);
+    }
+
+    private String quoteWithDialect(String value) {
+        char closing = identifierQuote == '[' ? ']' : identifierQuote;
+        return identifierQuote + value.replace(String.valueOf(closing), "" + closing + closing) + closing;
     }
 
     private boolean usesBareUppercaseIdentifier() {
@@ -527,13 +546,13 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
         if (rawTableName.isEmpty()) {
             throw new BizException(500, "tableName不能为空");
         }
-        String catalog = usesCatalog(config.getDatabaseType()) ? blankToNull(config.getDatabase()) : null;
-        String schema = usesSchema(config.getDatabaseType()) ? blankToNull(config.getSchema()) : null;
+        String catalog = usesCatalog(config.getEffectiveDatabaseType()) ? blankToNull(config.getDatabase()) : null;
+        String schema = usesSchema(config.getEffectiveDatabaseType()) ? blankToNull(config.getSchema()) : null;
         String tableName = rawTableName;
 
         String[] parts = rawTableName.split("\\.");
         if (parts.length == 2) {
-            if (usesCatalog(config.getDatabaseType())) {
+            if (usesCatalog(config.getEffectiveDatabaseType())) {
                 catalog = blankToNull(parts[0]);
             } else {
                 schema = blankToNull(parts[0]);
@@ -549,6 +568,7 @@ public abstract class AbstractJdbcDataQueryExecutor extends AbstractMetadataExpl
 
     private boolean usesCatalog(DatabaseType databaseType) {
         return databaseType == DatabaseType.MYSQL
+            || databaseType == DatabaseType.GBASE8A
             || databaseType == DatabaseType.OCEANBASE_MYSQL
             || databaseType == DatabaseType.HIVE;
     }

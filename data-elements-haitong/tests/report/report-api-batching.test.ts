@@ -86,7 +86,7 @@ test('上报工作台按数据源分组和分页读取表，而不是逐个数�
   try {
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
-      value: { location: { href: 'http://report.test/report/', origin: 'http://report.test' } },
+      value: { location: { href: 'http://report.test/report/', origin: 'http://report.test', hash: '#/report', search: '' } },
     });
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
     Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: storage });

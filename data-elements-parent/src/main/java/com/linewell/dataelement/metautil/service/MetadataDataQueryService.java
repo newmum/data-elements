@@ -15,11 +15,11 @@ public class MetadataDataQueryService {
     private final DataQueryExecutorFactory factory;
 
     public PageQueryResult queryPage(PageQueryRequest request) {
-        return factory.getExecutor(request.getDataSource().getDatabaseType()).queryPage(request);
+        return factory.getExecutor(request.getDataSource().getEffectiveDatabaseType()).queryPage(request);
     }
 
     public List<Map<String, Object>> queryGroupedValues(PageQueryRequest request, String groupColumn, String nameColumn) {
-        return factory.getExecutor(request.getDataSource().getDatabaseType())
+        return factory.getExecutor(request.getDataSource().getEffectiveDatabaseType())
             .queryGroupedValues(request, groupColumn, nameColumn);
     }
 }

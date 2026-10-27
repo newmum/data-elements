@@ -296,6 +296,8 @@ var datasourceRows = db.select("""
              nullif(json_unquote(json_extract(if(json_valid(d.pool_cfg), d.pool_cfg, '{}'), '$.dataAccessMode')), ''),
              ''
            ) as accessMode,
+           upper(coalesce(nullif(json_unquote(json_extract(if(json_valid(d.pool_cfg), d.pool_cfg, '{}'), '$.pushDataType')), ''), 'STRUCTURED')) as pushDataType,
+           coalesce(json_length(json_extract(if(json_valid(d.pool_cfg), d.pool_cfg, '{}'), '$.reportRegistration.files')), 0) as reportFileCount,
            d.org_id as orgId,
            d.created_by as createdBy,
            o.name as orgName,
@@ -350,6 +352,8 @@ for (row in datasourceRows) {
                 existingItem.dbType = row.dbtype || existingItem.dbType
                 existingItem.databaseType = row.databasetype || existingItem.databaseType
                 existingItem.accessMode = row.accessmode || existingItem.accessMode
+                existingItem.pushDataType = row.pushdatatype || 'STRUCTURED'
+                existingItem.reportFileCount = numberValue(row.reportfilecount)
                 existingItem.assetStatus = row.assetstatus
                 // ES 可能仍是探查前的连接信息；卡片的接入方式展示以业务主表为准。
                 existingItem.showConnect = row.showconnect
@@ -373,6 +377,8 @@ for (row in datasourceRows) {
         dbType: row.dbtype,
         databaseType: row.databasetype,
         accessMode: row.accessmode,
+        pushDataType: row.pushdatatype || 'STRUCTURED',
+        reportFileCount: numberValue(row.reportfilecount),
         orgId: row.orgid,
         createdBy: row.createdby,
         createdByName: creatorNames[text(row.createdby)] || '',

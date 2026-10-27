@@ -114,6 +114,13 @@ export interface DbDictItem {
   jdbcProperties?: Record<string, string>;
   /** Server-owned Huawei MRS Hive metadata connection marker. */
   metadataAccessMode?: string;
+  ftpsImplicit?: string;
+  trustStorePath?: string;
+  trustStorePassword?: string;
+  nifiTrustStorePath?: string;
+  gaussdbVariant?: string;
+  transportMode?: string;
+  httpPath?: string;
   hiveConnectionMode?: string;
   /** Server-owned MRS profile identifier; it never contains client config or secrets. */
   hiveProfile?: string;
@@ -382,6 +389,13 @@ function normalizeDatabaseItem(input: unknown): DbDictItem | null {
     clusterId: pickString(row.clusterId, row.cluster_id, poolConfig.clusterId, poolConfig.cluster_id),
     jdbcProperties: pickJdbcProperties(row),
     metadataAccessMode: pickString(row.metadataAccessMode, row.metadata_access_mode, poolConfig.metadataAccessMode, poolConfig.metadata_access_mode),
+    ftpsImplicit: pickString(row.ftpsImplicit,poolConfig.ftpsImplicit),
+    trustStorePath: pickString(row.trustStorePath,poolConfig.trustStorePath),
+    trustStorePassword: pickString(row.trustStorePassword,poolConfig.trustStorePassword),
+    nifiTrustStorePath: pickString(row.nifiTrustStorePath,poolConfig.nifiTrustStorePath),
+    gaussdbVariant: pickString(row.gaussdbVariant, row.gaussdb_variant, poolConfig.gaussdbVariant, poolConfig.gaussdb_variant),
+    transportMode: pickString(row.transportMode, poolConfig.transportMode),
+    httpPath: pickString(row.httpPath, poolConfig.httpPath),
     hiveConnectionMode: pickString(row.hiveConnectionMode, row.hive_connection_mode, poolConfig.hiveConnectionMode, poolConfig.hive_connection_mode),
     hiveProfile: pickString(row.hiveProfile, row.hive_profile, poolConfig.hiveProfile, poolConfig.hive_profile),
     authMode: pickString(row.authMode, row.auth_mode, row.auth, poolConfig.authMode, poolConfig.auth_mode, poolConfig.auth),

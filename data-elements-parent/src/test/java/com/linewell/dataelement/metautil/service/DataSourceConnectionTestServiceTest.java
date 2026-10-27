@@ -16,6 +16,17 @@ import org.mockito.ArgumentCaptor;
 
 class DataSourceConnectionTestServiceTest {
 
+    @Test void explicitOpenHiveWinsOverStaleMrsProfile() {
+        var metadata=mock(MetadataExplorerService.class);var controller=mock(ConnectionTestController.class);
+        var probe=mock(StructuredSourceProbeService.class);
+        when(metadata.testConnection(any())).thenReturn(true);
+        var service=new DataSourceConnectionTestService(metadata,controller,probe);
+        var result=service.test(Map.of("dbType","hive","hiveConnectionMode","open-source","hiveProfile","default",
+                "host","validation.invalid","database","business"));
+        assertTrue((Boolean)result.get("connected"));
+        verify(metadata).testConnection(any());org.mockito.Mockito.verifyNoInteractions(controller);
+    }
+
     @Test
     void elasticsearchConnectionUsesRegisteredEndpointAndPort() {
         var controller=mock(ConnectionTestController.class);

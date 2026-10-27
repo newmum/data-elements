@@ -31,7 +31,7 @@ class DataPushSchemaRegistrationStatusTest {
         jdbc = new JdbcTemplate(datasource);
         // Deliberately omit register_status and all workflow columns: the new runtime must not query them.
         jdbc.execute("create table db_datasource_t(tid varchar(32), tenant_id varchar(32), db_name varchar(255), asset_status int, pool_cfg varchar(1000), is_del int)");
-        jdbc.execute("create table db_table_t(tid varchar(32), tenant_id varchar(32), datasource_id varchar(32), table_name varchar(255), table_name_cn varchar(255), table_comment varchar(255), asset_status int, is_del int, field_governance_config clob)");
+        jdbc.execute("create table db_table_t(tid varchar(32), tenant_id varchar(32), datasource_id varchar(32), table_name varchar(255), table_name_cn varchar(255), table_comment varchar(255), asset_status int, is_del int, field_governance_config clob, table_type varchar(64))");
         reads = new AtomicInteger();
         var counting = new DelegatingDataSource(datasource) {
             @Override public Connection getConnection() throws SQLException {
@@ -71,6 +71,16 @@ class DataPushSchemaRegistrationStatusTest {
         assertThat((List<?>)snapshot.get("tables")).isEmpty();
         assertThat(snapshot.get("clientIds")).isEqualTo(List.of("push-source-1"));
         assertThat(jdbc.queryForObject("select asset_status from db_datasource_t", Integer.class)).isZero();
+    }
+
+    @Test
+    void fileRegistrationSnapshotsDoNotPublishAsStructuredTables() {
+        insertSource(2);createPushTables();
+        jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,table_name_cn,table_comment,asset_status,is_del,table_type) values('file-1','tenant-1','source-1','file_collection','文件','','2',0,'FILE')");
+        Map<String,Object> snapshot=service.standaloneSnapshot("tenant-1","source-1","push-source-1");
+        assertThat((List<?>)snapshot.get("tables")).isEmpty();
+        assertThat(snapshot.get("clientIds")).isEqualTo(List.of("push-source-1"));
+        assertThatThrownBy(()->service.publish("tenant-1","source-1")).hasMessage("数据源尚无登记成功的数据表，无法发布推送规范");
     }
 
     @Test

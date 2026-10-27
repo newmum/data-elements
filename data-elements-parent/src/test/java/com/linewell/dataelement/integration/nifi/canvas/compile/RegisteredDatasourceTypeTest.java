@@ -19,7 +19,7 @@ class RegisteredDatasourceTypeTest {
         "tdsql-pg,tdsql-pg,POSTGRESQL,jdbc:postgresql://db-host:5432/business",
         "tdsql_mysql,tdsql-mysql,MYSQL,jdbc:mysql://db-host:3306/business",
         "vastbase,hailiang,POSTGRESQL,jdbc:postgresql://db-host:5432/business",
-        "openGauss,gaussdb,GAUSSDB,jdbc:postgresql://db-host:5432/business",
+        "openGauss,gaussdb,GAUSSDB,jdbc:opengauss://db-host:5432/business",
         "dm,dameng,DAMENG,jdbc:dm://db-host:5236/business",
         "MS SQL 2012+,sqlserver,SQLSERVER,jdbc:sqlserver://db-host:1433;databaseName=business",
         "oracle12+,oracle,ORACLE,jdbc:oracle:thin:@//db-host:1521/business",
@@ -59,12 +59,12 @@ class RegisteredDatasourceTypeTest {
                 count++;
             }
         }
-        assertEquals(31, count);
+        assertEquals(32, count);
     }
 
     @Test
     void everyRegisteredTypeEitherHasARealManifestOrAnExplicitUnsupportedError() {
-        Set<DatabaseType> unsupported = Set.of(DatabaseType.MONGODB, DatabaseType.VERTICA, DatabaseType.MAXCOMPUTE);
+        Set<DatabaseType> unsupported = Set.of(DatabaseType.MONGODB, DatabaseType.MAXCOMPUTE);
         for (DatabaseType type : DatabaseType.values()) {
             if (unsupported.contains(type)) {
                 assertThrows(IllegalArgumentException.class, () -> RegisteredDatasourceType.sourceManifest(type.getCode(), Map.of()));

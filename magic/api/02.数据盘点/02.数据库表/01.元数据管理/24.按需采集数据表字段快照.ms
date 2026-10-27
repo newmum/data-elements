@@ -152,7 +152,7 @@ var datasource = loadDatasource(datasourceId, sourceRow)
 if (datasource == null) { exit 404, "数据源不存在或无访问权限" }
 var sourceType = textOf(firstValue(datasource, ["dbType", "db_type"])).toLowerCase()
 var structured = sourceType == "ftp" || sourceType == "sftp" || sourceType == "api" || sourceType == "kafka"
-var managedHive = sourceType == "hive" && (
+var managedHive = sourceType == "hive" && textOf(firstValue(datasource, ['hiveConnectionMode', 'hive_connection_mode'])).toLowerCase() != 'open-source' && (
     textOf(firstValue(datasource, ["metadataAccessMode", "metadata_access_mode"])) == "server-managed-mrs"
     || !blank(firstValue(datasource, ["hiveProfile", "hive_profile"]))
 )

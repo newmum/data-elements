@@ -44,12 +44,16 @@ class DatasourceCardTypeCountsMagicTest {
             f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type) values(?,?,?,2,0,'业务表')", id, id.equals("foreign") ? "other" : "ga", id);
         }
         var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
+        f.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source-0'", "{\"accessMode\":\"receive\",\"pushDataType\":\"UNSTRUCTURED\"}");
         f.jdbc.update("update db_datasource_t set is_del=1 where tid='denied'");
         var scope = new Scope(); var es = new Index(count);
-        // H2 has no MySQL JSON projection functions. Only replace the unrelated access-mode expression.
+        // H2 has no MySQL JSON projection functions. Simulate these two scalar projections;
+        // the real tenant-scoped reads, DTO merge, counts and ES fallback are executed below.
         String script = CanonicalMagicSources.byId("datapd_dept_datasources_01")
                 .replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "")
-                .replaceAll("(?s)coalesce\\(\\s*nullif\\(json_unquote.*?\\) as accessMode", "'' as accessMode");
+                .replaceAll("(?s)coalesce\\(\\s*nullif\\(json_unquote.*?\\) as accessMode", "'' as accessMode")
+                .replaceAll("(?s)upper\\(coalesce\\(nullif\\(json_unquote.*?\\) as pushDataType", "case when d.tid='source-0' then 'UNSTRUCTURED' else 'STRUCTURED' end as pushDataType")
+                .replaceAll("(?s)coalesce\\(json_length\\(json_extract.*?\\) as reportFileCount", "case when d.tid='source-1' then 2 else 0 end as reportFileCount");
         script = "var me=()=>{orgId:'org',orgName:'部门'}; var configData=()=>{es_dataassets:'assets'};\n" + script;
         Map<String,Object> bindings = new LinkedHashMap<>();
         bindings.put("body", Map.of("mode", "summary")); bindings.put("db", f.db);
@@ -72,6 +76,9 @@ class DatasourceCardTypeCountsMagicTest {
         for (Object raw:rows) {
             Map<?,?> row=(Map<?,?>)raw; String id=String.valueOf(row.get("tid"));
             assertThat(id).startsWith("source-");
+            assertThat(row.get("pushDataType")).isEqualTo(id.equals("source-0") ? "UNSTRUCTURED" : "STRUCTURED");
+            assertThat(((Number)row.get("reportFileCount")).intValue()).isEqualTo(id.equals("source-1")?2:0);
+            assertThat(row.containsKey("poolCfg")).isFalse();
             int expected=id.equals("source-"+(count-1)) ? 0 : 2;
             for (String key:List.of("businessTableNum","dictionaryTableNum","logTableNum"))
                 assertThat(((Number)row.get(key)).intValue()).as(id+" "+key).isEqualTo(expected);

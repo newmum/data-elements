@@ -9,6 +9,6 @@ import org.springframework.stereotype.Component;
 public class MySqlLikeDataQueryExecutor extends AbstractJdbcDataQueryExecutor {
 
     public MySqlLikeDataQueryExecutor() {
-        super(List.of(DatabaseType.MYSQL, DatabaseType.OCEANBASE_MYSQL, DatabaseType.HIVE), '`', PaginationStyle.LIMIT_OFFSET);
+        super(List.of(DatabaseType.MYSQL, DatabaseType.OCEANBASE_MYSQL), '`', PaginationStyle.LIMIT_OFFSET);
     }
 }

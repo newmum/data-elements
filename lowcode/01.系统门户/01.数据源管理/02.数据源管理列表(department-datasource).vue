@@ -231,7 +231,7 @@
                 </div>
               </div>
               <button
-                v-if="canExpand(item)"
+                v-if="canExpand(item) && !isFilePushDatasource(item)"
                 class="source-expand-arrow"
                 type="button"
                 :title="isExpanded(item) ? '收起数据表' : '展开数据表'"
@@ -250,7 +250,7 @@
                   @click.stop="handlePrimaryAction(item)"
                 >
                   <Icon :icon="isRegistrationComplete(item) ? 'el-icon-View' : 'el-icon-Tickets'" />
-                  {{ isRegistrationComplete(item) ? "查看数据源" : "登记数据源" }}
+                  {{ hasReportFiles(item) ? "数据上报" : isRegistrationComplete(item) ? "查看数据源" : "登记数据源" }}
                 </el-button>
                 <el-button class="edit-button" @click.stop="openDatasourceEdit(item)">
                   <Icon icon="el-icon-EditPen" />
@@ -268,7 +268,8 @@
             </div>
           </div>
 
-          <div class="source-metrics">
+          <div v-if="isFilePushDatasource(item)" class="source-metrics"><span>非结构化文件登记</span><span>文件模板 → 内容审查</span></div>
+          <div v-else class="source-metrics">
             <span>数据表 {{ item.tableNum || 0 }} 张</span>
             <span>已标注 {{ item.annotatedTableNum || 0 }} 张</span>
             <span :class="{ danger: normalizeNumber(item.unannotatedTableNum) > 0 }">待标注 {{ item.unannotatedTableNum || 0 }} 张</span>
@@ -938,6 +939,12 @@ const stats = computed(() => {
 });
 
 const isExpanded = (item) => state.expanded.includes(item.tid);
+function isFilePushDatasource(item) {
+  let pool=item?.poolCfg ?? item?.pool_cfg ?? {};
+  if (typeof pool==='string') {try {pool=JSON.parse(pool);} catch {pool={};}}
+  const mode=String(item?.accessMode || pool?.accessMode || '').toLowerCase();
+  return ['receive','push'].includes(mode) && String(item?.pushDataType || pool?.pushDataType || '').toUpperCase()==='UNSTRUCTURED';
+}
 const canExpand = (item) => normalizeNumber(item.tableNum) > 0;
 
 const toggleExpand = (item) => {
@@ -951,6 +958,7 @@ const toggleExpand = (item) => {
 };
 
 const handleCardClick = (item) => {
+  if (hasReportFiles(item)) return openReportWorkbench(item);
   if (!canExpand(item)) return;
   toggleExpand(item);
 };
@@ -1120,6 +1128,14 @@ const isDataReportSource = (item) => {
 // 与登记第一步“数据推送方式”保持一致：Download 表示平台接收外部推送数据。
 const isDataPushSource = (item) => normalizeAccessMode(item?.accessMode) === "receive";
 
+const hasReportFiles = (row) => isDataReportSource(row) && Number(row?.reportFileCount || 0)>0;
+const openReportWorkbench = (row) => {
+  const configured=String(window.__DATA_ELEMENTS_HAITONG_BASE_URL__||'').trim();
+  const local=['localhost','127.0.0.1','[::1]'].includes(window.location.hostname)&&window.location.port==='3000';
+  const target=new URL(configured||(local?`${window.location.protocol}//${window.location.hostname}:3002/`:'/haitong/'),window.location.href);
+  target.search='';target.hash='/report?'+new URLSearchParams({datasourceId:String(row.tid||row.id)});
+  window.location.assign(target.href);
+};
 const sourceTypeIcon = (item) => {
   if (isDataReportSource(item)) return "el-icon-UploadFilled";
   if (isDataPushSource(item)) return "el-icon-Download";
@@ -1334,6 +1350,7 @@ const openDatasourceEdit = (row) => {
 };
 
 const openDatasourceDetail = (row) => {
+  if (hasReportFiles(row)) return openReportWorkbench(row);
   router.push({
     path: "/datasource-manage/detail",
     query: {
@@ -1395,6 +1412,8 @@ const openTableRegister = async (row, currentStep = 1) => {
 };
 
 const handlePrimaryAction = (row) => {
+  if (hasReportFiles(row)) return openReportWorkbench(row);
+  if (isDataReportSource(row)) return openDatasourceEdit(row);
   if (isRegistrationComplete(row)) {
     openTableRegister(row, 4);
     return;

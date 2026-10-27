@@ -87,7 +87,7 @@ if (body.all == true) {
     var schemas = []
     var apps = []
     if (ids.size()>0) {
-        var tp = db.table('db_table_t').where().eq('tenant_id',tenantId).in('datasource_id',ids).eq('asset_status',2).and(w => w.eq('is_del',0).or().isNull('is_del')).orderBy('table_name').orderBy('tid').page(1001,0)
+        var tp = db.table('db_table_t').where().eq('tenant_id',tenantId).in('datasource_id',ids).eq('asset_status',2).and(w => w.ne('table_type','FILE').or().isNull('table_type')).and(w => w.eq('is_del',0).or().isNull('is_del')).orderBy('table_name').orderBy('tid').page(1001,0)
         if (tp.total>1000) { exit 413, '单次全部同步最多1000张表' }
         tables = tp.list
         var tableIds = tables.map(item => item.tid)
@@ -120,7 +120,7 @@ if (body.all == true) {
         var sourcePublications = []
         var count = 0
         var reason = ''
-        if (sourceTables.size()==0) { reason='尚无已完成登记的数据表' }
+        if (sourceTables.size()==0 && str(item.config.pushDataType).toUpperCase()!='UNSTRUCTURED') { reason='尚无已完成登记的数据表' }
         if (sourceTables.size()>100) { reason='数据表超过单数据源100张上限' }
         var seenTables = []
         for (table in sourceTables) {

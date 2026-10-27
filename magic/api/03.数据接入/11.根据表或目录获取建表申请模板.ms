@@ -109,6 +109,9 @@ var sourceTable = db.table('db_table_t').where()
 if (sourceTable == null) {
     exit 404, '来源表不存在'
 }
+if (text(first(sourceTable, ['tableType', 'table_type'])).toUpperCase() == 'FILE') {
+    exit 422, '文件登记项用于非结构化文件上传，不能物化为结构化数据库表'
+}
 
 // 数据源登记第一步保存的 SSWL（所属网络）决定物化建表的默认接入网络。
 // 抽屉前端据此自动选中该网络下已启用的默认数据接入节点。

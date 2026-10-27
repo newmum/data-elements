@@ -12,12 +12,12 @@ import java.util.*;
 public final class PartitionMetadataReader {
     private PartitionMetadataReader() {}
     public static Map<String,Object> read(Connection connection,DataSourceConfig config,String tableName) throws Exception {
-        var family=DdlDialect.family(config.getDatabaseType());
+        var family=DdlDialect.family(config.getEffectiveDatabaseType());
         var names=DdlDialect.names(tableName);var table=names.getLast();
         String owner=names.size()>1?names.get(names.size()-2).value():DdlDialect.scope(config),name=table.value();
         if(!table.quoted()&&family==DdlDialect.Family.ORACLE)name=name.toUpperCase(Locale.ROOT);
         if(family!=DdlDialect.Family.ORACLE)return Map.of("status","unsupported","message","当前来源尚无可自动继承的分区目录适配，可手工配置目标分区");
-        var definition=NativeSourceDefinition.read(connection,config.getDatabaseType(),owner,name);
+        var definition=NativeSourceDefinition.read(connection,config.getEffectiveDatabaseType(),owner,name);
         Map<String,Object> detected;
         try {detected=new LinkedHashMap<>(readCatalog(connection,owner,name));}
         catch(Exception unavailable) {detected=new LinkedHashMap<>(Map.of("status","unknown","message","来源分区目录读取未完成，可手工配置"));}

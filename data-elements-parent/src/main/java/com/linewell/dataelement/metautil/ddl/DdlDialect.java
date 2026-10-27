@@ -41,10 +41,11 @@ public final class DdlDialect {
 
     public static String scope(DataSourceConfig config) {
         if (config.getSchema() != null && !config.getSchema().isBlank()) return single(config.getSchema());
-        return switch (family(config.getDatabaseType())) {
+        if (config.getResolvedSchema() != null && !config.getResolvedSchema().isBlank()) return single(config.getResolvedSchema());
+        return switch (family(config.getEffectiveDatabaseType())) {
             case ORACLE -> {
                 // Dameng registrations historically store the business schema in database.
-                String owner = config.getDatabaseType() == DatabaseType.DAMENG && notBlank(config.getDatabase())
+                String owner = config.getEffectiveDatabaseType() == DatabaseType.DAMENG && notBlank(config.getDatabase())
                         ? config.getDatabase() : config.getUsername();
                 if (!notBlank(owner)) throw new IllegalArgumentException("请配置目标库 Schema");
                 yield single(owner.split("[@#]", 2)[0]).toUpperCase(Locale.ROOT);

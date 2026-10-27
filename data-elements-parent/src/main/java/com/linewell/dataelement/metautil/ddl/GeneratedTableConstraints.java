@@ -24,10 +24,10 @@ final class GeneratedTableConstraints {
     }
 
     static String apply(String ddl,List<Map<String,Object>> source,DataSourceConfig config,Map<String,Object> partitionPlan) {
-        boolean named=DdlDialect.family(config.getDatabaseType())==DdlDialect.Family.ORACLE;
-        if(DdlDialect.family(config.getDatabaseType())==DdlDialect.Family.HIVE)return ddl;
+        boolean named=DdlDialect.family(config.getEffectiveDatabaseType())==DdlDialect.Family.ORACLE;
+        if(DdlDialect.family(config.getEffectiveDatabaseType())==DdlDialect.Family.HIVE)return ddl;
         if(!named&&(source==null||source.isEmpty()))return ddl;
-        var statements=PortableSqlParser.parse(ddl,config.getDatabaseType());
+        var statements=PortableSqlParser.parse(ddl,config.getEffectiveDatabaseType());
         if(statements.isEmpty()||!(statements.getFirst() instanceof SQLCreateTableStatement create))return ddl;
         Map<String,String> fields=new LinkedHashMap<>();
         for(var column:create.getColumnDefinitions())fields.put(SQLUtils.normalize(column.getColumnName()).toLowerCase(Locale.ROOT),column.getColumnName());
@@ -39,7 +39,7 @@ final class GeneratedTableConstraints {
         }
         // The materialization key is a logical row identifier. OB Oracle partition targets use
         // UNIQUE without widening it to include the partition column, even if source probing failed.
-        boolean partitionUnique=config.getDatabaseType()==DatabaseType.OCEANBASE_ORACLE
+        boolean partitionUnique=config.getEffectiveDatabaseType()==DatabaseType.OCEANBASE_ORACLE
                 &&partitionPlan!=null&&Boolean.TRUE.equals(partitionPlan.get("enabled"));
         Set<String> existing=new HashSet<>();
         List<SQLUniqueConstraint> constraints=new ArrayList<>();
@@ -74,7 +74,7 @@ final class GeneratedTableConstraints {
             normalized.forEach(c->unique.addColumn(new SQLIdentifierExpr(fields.get(c))));
             create.getTableElementList().add(unique);
         }
-        return SQLUtils.toSQLString(statements,DdlDialect.parser(config.getDatabaseType()));
+        return SQLUtils.toSQLString(statements,DdlDialect.parser(config.getEffectiveDatabaseType()));
     }
 
     private static String signature(List<String> fields){return fields.stream().sorted().collect(java.util.stream.Collectors.joining("|"));}

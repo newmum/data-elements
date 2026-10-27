@@ -8,6 +8,7 @@ import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.dto.TableInfo;
 import com.linewell.dataelement.metautil.ddl.DdlDialect;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
+import com.linewell.dataelement.metautil.jdbc.GaussDbVariant;
 import com.linewell.dataelement.metautil.model.dto.SampleDataResult;
 import com.linewell.dataelement.metautil.model.dto.SampleRequest;
 import com.linewell.dataelement.metautil.model.dto.SqlValidationResult;
@@ -46,7 +47,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
     @Override
     public List<TableInfo> getTableDirectory(DataSourceConfig config) {
         String scope = DdlDialect.scope(config);
-        boolean catalogScope = switch (DdlDialect.family(config.getDatabaseType())) {
+        boolean catalogScope = switch (DdlDialect.family(config.getEffectiveDatabaseType())) {
             case MYSQL, HIVE, CLICKHOUSE -> true;
             default -> false;
         };
@@ -116,6 +117,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
     );
 
     private static final Set<String> REGISTERED_EXTERNAL_DRIVERS = ConcurrentHashMap.newKeySet();
+    private static final Map<String,Driver> EXTERNAL_DRIVER_INSTANCES = new ConcurrentHashMap<>();
 
     /**
      * 连接池缓存：按数据源配置键复用 HikariDataSource，避免每次新建连接池导致连接耗尽
@@ -193,6 +195,13 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
     private static DataSourceConfig effectiveConfig(DataSourceConfig config) {
         DataSourceConfig c = new DataSourceConfig();
         c.setDatabaseType(config.getDatabaseType());
+        c.setResolvedSchema(config.getResolvedSchema());
+        c.setGaussdbVariant(config.getGaussdbVariant());
+        c.setHiveConnectionMode(config.getHiveConnectionMode());
+        c.setTransportMode(config.getTransportMode());
+        c.setHttpPath(config.getHttpPath());
+        c.setSslMode(config.getSslMode());
+        c.setConnectorProperties(config.getConnectorProperties());
         c.setHost(normalize(config.getHost()));
         c.setPort(config.getPort());
         c.setDatabase(normalize(config.getDatabase()));
@@ -221,7 +230,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         c.setConnectionTimeout(timeout != null ? timeout : DEFAULT_CONNECTION_TIMEOUT_SECONDS);
 
         String schema = normalize(config.getSchema());
-        if (c.getDatabaseType() == DatabaseType.DAMENG) {
+        if (c.getEffectiveDatabaseType() == DatabaseType.DAMENG) {
             // 达梦的 database（服务名）与 Schema 是两个概念。必须优先尊重用户
             // 显式填写的业务 Schema；旧数据未填写时才兼容使用 database/username。
             if (schema.isEmpty()) {
@@ -231,23 +240,22 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
                 schema = c.getUsername().isEmpty() ? "" : c.getUsername().toUpperCase();
             }
         } else if (schema.isEmpty()) {
-            if (c.getDatabaseType() == DatabaseType.POSTGRESQL
-                    || c.getDatabaseType() == DatabaseType.KINGBASE
-                    || c.getDatabaseType() == DatabaseType.GAUSSDB
-                    || c.getDatabaseType() == DatabaseType.VERTICA
-                    || c.getDatabaseType() == DatabaseType.HETU) {
+            if (c.getEffectiveDatabaseType() == DatabaseType.POSTGRESQL
+                    || c.getEffectiveDatabaseType() == DatabaseType.KINGBASE
+                    || c.getEffectiveDatabaseType() == DatabaseType.VERTICA
+                    || c.getEffectiveDatabaseType() == DatabaseType.HETU) {
                 schema = "public";
-            } else if (c.getDatabaseType() == DatabaseType.SQLSERVER) {
+            } else if (c.getEffectiveDatabaseType() == DatabaseType.SQLSERVER) {
                 schema = "dbo";
-            } else if (c.getDatabaseType() == DatabaseType.ORACLE
-                    || c.getDatabaseType() == DatabaseType.OCEANBASE_ORACLE) {
+            } else if (c.getEffectiveDatabaseType() == DatabaseType.ORACLE
+                    || c.getEffectiveDatabaseType() == DatabaseType.OCEANBASE_ORACLE) {
                 schema = c.getUsername().isEmpty() ? "" : c.getUsername().toUpperCase();
             }
         }
         c.setSchema(schema);
 
         String extra = canonicalizeParams(config.getExtraParams());
-        if (extra.isEmpty() && (c.getDatabaseType() == DatabaseType.MYSQL || c.getDatabaseType() == DatabaseType.OCEANBASE_MYSQL)) {
+        if (extra.isEmpty() && (c.getEffectiveDatabaseType() == DatabaseType.MYSQL || c.getEffectiveDatabaseType() == DatabaseType.OCEANBASE_MYSQL)) {
             extra = DEFAULT_MYSQL_PARAMS;
         }
         c.setExtraParams(extra.isEmpty() ? null : extra);
@@ -361,6 +369,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         // their identity in the pool key so different MRS client profiles never
         // reuse one another's authenticated Hive connection pool.
         String securityProfile = sha256Hex(String.join("|",
+                normalize(c.getHiveConnectionMode()),
                 normalize(c.getKrb5ConfPath()),
                 normalize(c.getJaasConfPath()),
                 normalize(c.getClientConfigDir()),
@@ -370,7 +379,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
         return String.join("|",
                 "type=" + c.getDatabaseType().name(),
-                "driver=" + normalize(c.getDatabaseType().getDriverClass()),
+                "driver=" + normalize(c.getJdbcDriverClass()),
                 "url=" + jdbcUrl,
                 "user=" + normalize(c.getUsername()),
                 "timeout=" + String.valueOf(c.getConnectionTimeout() != null ? c.getConnectionTimeout() : DEFAULT_CONNECTION_TIMEOUT_SECONDS),
@@ -404,7 +413,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
                 ? config.getConnectionTimeout()
                 : DEFAULT_CONNECTION_TIMEOUT_SECONDS;
         long connectionTimeoutMillis = connectionTimeoutSeconds * 1000L;
-        String driverClass = config.getDatabaseType().getDriverClass();
+        String driverClass = config.getJdbcDriverClass();
         boolean driverVisible = ensureDriverVisible(config, driverClass);
 
         HikariConfig hikariConfig = new HikariConfig();
@@ -423,7 +432,12 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         hikariConfig.setMaximumPoolSize(10);
         hikariConfig.setMinimumIdle(1);
         hikariConfig.setConnectionTimeout(connectionTimeoutMillis);
-        applyDriverTimeouts(hikariConfig, config.getDatabaseType(), connectionTimeoutSeconds, connectionTimeoutMillis);
+        applyDriverTimeouts(hikariConfig, config.getEffectiveDatabaseType(), connectionTimeoutSeconds, connectionTimeoutMillis);
+        if (!driverVisible) {
+            Driver selected = EXTERNAL_DRIVER_INSTANCES.get(externalDriverKey(config,driverClass));
+            if (selected != null) hikariConfig.setDataSource(new VendorDriverDataSource(selected,config.buildJdbcUrl(),
+                    config.getUsername(),config.getPassword(),hikariConfig.getDataSourceProperties()));
+        }
         hikariConfig.setIdleTimeout(600000L);
         hikariConfig.setMaxLifetime(1800000L);
         HikariDataSource ds = new HikariDataSource(hikariConfig);
@@ -449,24 +463,47 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         // Hadoop/ZooKeeper client set.  When it is supplied locally, prefer that
         // isolated client over the generic Hive dependency packaged with the service.
         // This avoids mixing an MRS 3.x Kerberos client with unrelated Hive libraries.
-        if (requiresHuaweiMrsDriver(config) && findDriverJar(databaseType) != null) {
-            return registerExternalDriver(databaseType, driverClass);
+        if (requiresHuaweiMrsDriver(config) && findDriverJar(config) != null) {
+            return registerExternalDriver(config, driverClass);
+        }
+        if (databaseType == DatabaseType.HIVE && "open-source".equalsIgnoreCase(config.getHiveConnectionMode())) {
+            loadOpenSourceHiveDriver();
+            return false;
         }
         try {
             Class.forName(driverClass);
             return true;
         } catch (ClassNotFoundException ignored) {
-            return registerExternalDriver(databaseType, driverClass);
+            return registerExternalDriver(config, driverClass);
         }
     }
 
-    private static boolean registerExternalDriver(DatabaseType databaseType, String driverClass) {
-        String cacheKey = databaseType.name() + "|" + driverClass;
+    /** Open-source Hive must never fall back to an MRS driver with the same class name. */
+    public static Driver loadOpenSourceHiveDriver() {
+        DataSourceConfig config = new DataSourceConfig();
+        config.setDatabaseType(DatabaseType.HIVE);
+        config.setHiveConnectionMode("open-source");
+        String driverClass = config.getJdbcDriverClass();
+        if (findDriverJar(config) == null) {
+            throw new IllegalArgumentException("未安装开源 Hive JDBC 客户端，请在 JDBC_DRIVER_DIRECTORY/open-source-hive 中安装 Apache Hive JDBC standalone 客户端");
+        }
+        registerExternalDriver(config, driverClass);
+        Driver driver = EXTERNAL_DRIVER_INSTANCES.get(externalDriverKey(config, driverClass));
+        if (driver == null) throw new IllegalStateException("开源 Hive JDBC 客户端加载失败");
+        return driver;
+    }
+
+    private static boolean registerExternalDriver(DataSourceConfig config, String driverClass) {
+        DatabaseType databaseType = config.getDatabaseType();
+        File jar = findDriverJar(config);
+        String cacheKey = externalDriverKey(config,driverClass);
         if (REGISTERED_EXTERNAL_DRIVERS.contains(cacheKey)) {
             return false;
         }
-        File jar = findDriverJar(databaseType);
         if (jar == null) {
+            if (databaseType == DatabaseType.GAUSSDB)
+                throw new IllegalStateException("未安装所选 GaussDB 产品的 JDBC 驱动，请在服务端 JDBC 驱动目录安装 "
+                        + GaussDbVariant.resolve(config.getGaussdbVariant()).driverFile());
             log.warn("未找到 {} 的外部 JDBC 驱动 jar，driverClass={}", databaseType, driverClass);
             return false;
         }
@@ -477,6 +514,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             Class<?> driverType = Class.forName(driverClass, true, classLoader);
             Driver driver = (Driver) driverType.getDeclaredConstructor().newInstance();
             DriverManager.registerDriver(new DriverShim(driver));
+            EXTERNAL_DRIVER_INSTANCES.put(cacheKey,driver);
             REGISTERED_EXTERNAL_DRIVERS.add(cacheKey);
             log.info("已加载外部 JDBC 驱动: type={}, jar={}, class={}", databaseType, jar.getAbsolutePath(), driverClass);
             // Do not set Hikari's driverClassName for a child-loader driver:
@@ -484,28 +522,72 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
             // application class loader to resolve this vendor class again.
             return false;
         } catch (Exception e) {
+            if (databaseType == DatabaseType.GAUSSDB)
+                throw new IllegalStateException("所选 GaussDB 驱动无法加载，请核对产品与驱动版本",e);
             log.warn("加载外部 JDBC 驱动失败: type={}, driverClass={}, jar={}, error={}",
                     databaseType, driverClass, jar.getAbsolutePath(), e.getMessage());
             return false;
         }
     }
 
-    private static File findDriverJar(DatabaseType databaseType) {
-        String[] patterns = DRIVER_JAR_PATTERNS.get(databaseType);
+    private static String externalDriverKey(DataSourceConfig config,String driverClass) {
+        File jar=findDriverJar(config);
+        return config.getDatabaseType().name()+"|"+driverClass+"|"+(jar==null?"":jar.getAbsolutePath());
+    }
+
+    /** Bind the selected vendor instance; two openGauss drivers may accept the same URL. */
+    static final class VendorDriverDataSource implements javax.sql.DataSource {
+        private final Driver driver;
+        private final String url,username,password;
+        private final java.util.Properties properties=new java.util.Properties();
+        VendorDriverDataSource(Driver driver,String url,String username,String password,java.util.Properties properties) {
+            this.driver=driver;this.url=url;this.username=username;this.password=password;
+            properties.forEach((key,value)->this.properties.setProperty(key.toString(),value.toString()));
+        }
+        @Override public Connection getConnection() throws SQLException{return getConnection(username,password);}
+        @Override public Connection getConnection(String user,String credential) throws SQLException {
+            var values=new java.util.Properties();values.putAll(properties);
+            if(user!=null)values.setProperty("user",user);if(credential!=null)values.setProperty("password",credential);
+            Connection connection=driver.connect(url,values);
+            if(connection==null)throw new SQLException("所选 JDBC 驱动不接受当前连接协议");
+            return connection;
+        }
+        @Override public java.io.PrintWriter getLogWriter(){return null;}
+        @Override public void setLogWriter(java.io.PrintWriter writer){}
+        @Override public void setLoginTimeout(int seconds){}
+        @Override public int getLoginTimeout(){return 0;}
+        @Override public java.util.logging.Logger getParentLogger(){return java.util.logging.Logger.getLogger("jdbc");}
+        @Override public <T>T unwrap(Class<T> type)throws SQLException{if(type.isInstance(this))return type.cast(this);throw new SQLException("不支持的 JDBC unwrap");}
+        @Override public boolean isWrapperFor(Class<?> type){return type.isInstance(this);}
+    }
+
+    private static File findDriverJar(DataSourceConfig config) {
+        DatabaseType databaseType = config.getDatabaseType();
+        String[] patterns = databaseType == DatabaseType.GAUSSDB
+                ? new String[]{GaussDbVariant.resolve(config.getGaussdbVariant()).driverFile().replace(".jar", ""), "opengauss"}
+                : databaseType == DatabaseType.HIVE && "open-source".equalsIgnoreCase(config.getHiveConnectionMode())
+                    ? new String[]{"hive-jdbc"}
+                : DRIVER_JAR_PATTERNS.get(databaseType);
         if (patterns == null || patterns.length == 0) {
             return null;
         }
-        File dir = new File(System.getProperty("user.dir"), "deploy/nifi/drivers");
+        String configured = System.getProperty("data-elements.jdbc.driver-directory", System.getenv("JDBC_DRIVER_DIRECTORY"));
+        File dir = configured == null || configured.isBlank()
+                ? new File(System.getProperty("user.dir"), "deploy/nifi/drivers") : new File(configured);
         if (!dir.isDirectory()) {
             dir = new File(System.getProperty("user.dir"), "data-elements/deploy/nifi/drivers");
         }
         // MRS client libraries belong in a dedicated directory so their Hadoop/Hive
         // versions do not get mixed with other vendor drivers.
-        if (databaseType == DatabaseType.HIVE) {
+        if (requiresHuaweiMrsDriver(config)) {
             File mrsDir = new File(dir, "huawei-mrs");
             if (mrsDir.isDirectory()) {
                 dir = mrsDir;
             }
+        } else if(databaseType==DatabaseType.HIVE && "open-source".equalsIgnoreCase(config.getHiveConnectionMode())) {
+            File openHiveDir=new File(dir,"open-source-hive");
+            if (!openHiveDir.isDirectory()) return null;
+            dir=openHiveDir;
         }
         File[] files = dir.isDirectory() ? dir.listFiles((d, name) -> name.toLowerCase(Locale.ROOT).endsWith(".jar")) : null;
         if (files == null) {
@@ -514,7 +596,11 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         for (String pattern : patterns) {
             String lowerPattern = pattern.toLowerCase(Locale.ROOT);
             for (File file : files) {
-                if (file.getName().toLowerCase(Locale.ROOT).contains(lowerPattern)) {
+                if (file.getName().toLowerCase(Locale.ROOT).contains(lowerPattern)
+                        && !(databaseType==DatabaseType.HIVE && "open-source".equalsIgnoreCase(config.getHiveConnectionMode())
+                             && (file.getName().toLowerCase(Locale.ROOT).contains("huawei")
+                                 || file.getName().toLowerCase(Locale.ROOT).contains("mrs")))
+                        && containsDriver(file, config.getJdbcDriverClass())) {
                     return file;
                 }
             }
@@ -522,10 +608,17 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         return null;
     }
 
+    private static boolean containsDriver(File jar, String driverClass) {
+        try (var archive = new java.util.zip.ZipFile(jar)) {
+            return archive.getEntry(driverClass.replace('.', '/') + ".class") != null;
+        } catch (java.io.IOException error) { return false; }
+    }
+
     private static boolean requiresHuaweiMrsDriver(DataSourceConfig config) {
         return config != null
                 && config.getDatabaseType() == DatabaseType.HIVE
-                && "KERBEROS".equalsIgnoreCase(normalize(config.getAuthMode()));
+                && ("huawei-mrs".equalsIgnoreCase(config.getHiveConnectionMode())
+                    || (config.getHiveConnectionMode() == null && "KERBEROS".equalsIgnoreCase(normalize(config.getAuthMode()))));
     }
 
     private static URL[] driverUrls(File driverJar) throws java.net.MalformedURLException {
@@ -691,7 +784,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
 
         DataSourceConfig cfg = config != null ? effectiveConfig(config) : null;
-        DatabaseType dbType = cfg != null ? cfg.getDatabaseType() : null;
+        DatabaseType dbType = cfg != null ? cfg.getEffectiveDatabaseType() : null;
 
         // 兼容：若无 config，退化为无注释的通用 DDL
         if (dbType == null) {
@@ -954,7 +1047,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
         }
 
         String applySql = null;
-        DatabaseType type = config.getDatabaseType();
+        DatabaseType type = config.getEffectiveDatabaseType();
         switch (type) {
             case POSTGRESQL:
             case KINGBASE:
@@ -1203,7 +1296,7 @@ public abstract class AbstractMetadataExplorer implements MetadataExplorer {
      */
     private SqlValidationResult validateDmlSql(Connection conn, DataSourceConfig config,
                                                String sql, String sqlType, String dbTypeName) {
-        DatabaseType dbType = config.getDatabaseType();
+        DatabaseType dbType = config.getEffectiveDatabaseType();
         try {
             switch (dbType) {
                 case MYSQL:

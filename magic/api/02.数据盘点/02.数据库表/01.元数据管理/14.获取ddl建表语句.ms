@@ -221,11 +221,12 @@ var dataSourceOf = (asset) => {
     var dsConfig = new DataSourceConfig()
     dsConfig.setDatabaseType(databaseType)
     dsConfig.setHost(blank(host) ? (hiveZooKeeperDiscovery ? '' : 'virtual') : textOf(host))
-    dsConfig.setPort(blank(port) ? databaseType.getDefaultPort() : port::int)
+    dsConfig.setPort(blank(port) ? null : port::int)
     dsConfig.setDatabase(textOf(databaseName))
     dsConfig.setUsername(blank(username) ? '' : textOf(username))
     dsConfig.setPassword(password == null ? '' : textOf(password))
     // Oracle SID and Service Name use different URL formats; reuse the tested JDBC URL.
+    dsConfig.setConnectorProperties(asset)
     dsConfig.setJdbcUrl(firstValue(asset, ['jdbcURL', 'jdbcUrl', 'jdbc_url']))
     dsConfig.setSchema(schema)
     dsConfig.setCharset(firstValue(asset, ['charset', 'characterSet', 'character_set', 'encoding']))
@@ -447,6 +448,7 @@ if (body.canvas == true) {
     var targetType = DatabaseType.fromCode(textOf(registered.dbType).toLowerCase())
     if (targetType == null) { exit 400, '目标数据源未配置数据库类型' }
     dsConfig.setDatabaseType(targetType)
+    dsConfig.setConnectorProperties(registered)
     dsConfig.setDatabase(firstValue(registered, ['database', 'dbName', 'dbMetaDbName']))
     dsConfig.setUsername(firstValue(registered, ['username', 'user']))
     dsConfig.setSchema(firstValue(registered, ['schema', 'defaultSchema', 'currentSchema', 'schemaName']))
@@ -463,12 +465,14 @@ if (body.canvas == true) {
     // 该校验属于实际建表/连通性测试，若用于预览会把本可生成的 DDL 错误地拦截。
     dsConfig = new DataSourceConfig()
     dsConfig.setDatabaseType(databaseTypeOf(firstValue(dbAsset, ['dbType', 'databaseType', 'dataSourceType'])))
+    dsConfig.setConnectorProperties(dbAsset)
     dsConfig.setDatabase(firstValue(dbAsset, ['database', 'dbName', 'dbMetaDbName']))
     dsConfig.setUsername(firstValue(dbAsset, ['username', 'dbUser', 'user']))
     dsConfig.setSchema(firstValue(dbAsset, ['schema', 'defaultSchema', 'currentSchema', 'schemaName', 'owner', 'dbSchema']))
 } else {
     dsConfig = new DataSourceConfig()
     dsConfig.setDatabaseType(databaseTypeOf(propList == null ? null : propList.dbType))
+    if(propList != null){dsConfig.setConnectorProperties(propList)}
     dsConfig.setHost('localhost')
     dsConfig.setPort(3306)
     dsConfig.setDatabase('test')
@@ -501,7 +505,7 @@ for (item in tableItems) {
     var dataType = firstValue(item, ['dataType', 'type'])
     var columnType = resolvedColumnType(item)
     if (normalizedColumnName == 'ODS_RKSJ' || normalizedColumnName == 'ODS_GXSJ') {
-        dataType = materializationTimeType(dsConfig.getDatabaseType())
+        dataType = materializationTimeType(dsConfig.getEffectiveDatabaseType())
         columnType = dataType
     }
     columnInfo.setColumnName(columnName)
@@ -539,10 +543,10 @@ for (item in tableItems) {
 // 返回当前业务分支的标准结果。
 try {
     var targetTableName = textOf(propList.tableName).trim()
-    if (dsConfig.getDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
+    if (dsConfig.getEffectiveDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
     var converted = portableDdl.prepare(columns, dsConfig)
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
-    var partitionPlan = tablePartitions.normalize(body?.partitionPlan, converted.columns, dsConfig.getDatabaseType())
+    var partitionPlan = tablePartitions.normalize(body?.partitionPlan, converted.columns, dsConfig.getEffectiveDatabaseType())
     ddl = tablePartitions.enrichConstraints(ddl, body?.sourceConstraints, dsConfig, partitionPlan).ddl
     return tablePartitions.apply(ddl, partitionPlan, dsConfig)
 } catch (e) {

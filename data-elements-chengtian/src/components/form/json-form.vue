@@ -3,7 +3,7 @@
 @description 使用文档 https://www.form-create.com/v3/guide/
 -->
 <template>
-  <div class="json-form jf-container" :class="{ 'jf-border': bordered }">
+  <div ref="formHost" class="json-form jf-container" :class="{ 'jf-border': bordered, 'jf-responsive': responsive, 'jf-single-column': singleColumn, 'jf-stacked-labels': stackedLabels }">
     <!--  第一个标题右侧操作区域  -->
     <div class="jf-container__toolbar">
       <slot name="toolbar"></slot>
@@ -32,6 +32,7 @@ const props = withDefaults(
     preview?: boolean;
     options?: Options;
     bordered?: boolean;
+    responsive?: boolean;
     labelPosition?: "left" | "right" | "top";
     labelWidth?: string;
   }>(),
@@ -45,6 +46,17 @@ const emit = defineEmits<{ (event: "change", field: string, value: unknown): voi
 const onChange = (field: string, value: unknown) => emit("change", field, value);
 const fApi = ref<Api>();
 const formRules = ref();
+const formHost = ref<HTMLElement>();
+const availableWidth = ref(0);
+const singleColumn = computed(() => props.responsive && availableWidth.value > 0 && availableWidth.value < 820);
+const stackedLabels = computed(() => props.responsive && availableWidth.value > 0 && availableWidth.value < 480);
+let formObserver: ResizeObserver | undefined;
+onMounted(() => {
+  if (!formHost.value) return;
+  formObserver = new ResizeObserver(([entry]) => { availableWidth.value = entry.contentRect.width; });
+  formObserver.observe(formHost.value);
+});
+onBeforeUnmount(() => formObserver?.disconnect());
 
 watch(
   () => props.data,
@@ -232,6 +244,10 @@ defineExpose({
 <style scoped lang="scss">
 .jf-container {
   position: relative;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   &__toolbar {
     position: absolute;
     top: 8px;
@@ -239,6 +255,22 @@ defineExpose({
     z-index: 1;
   }
   padding-left: 1px;
+}
+.jf-responsive {
+  :deep(.el-row), :deep(.fc-form-col), :deep(.el-form-item__content) { min-width: 0; max-width: 100%; }
+  :deep(.el-form-item__content > .el-input),
+  :deep(.el-form-item__content > .el-select),
+  :deep(.el-form-item__content > .el-textarea),
+  :deep(.el-form-item__content > .el-date-editor) { width: 100%; min-width: 0; max-width: 100%; }
+  :deep(.el-radio-group), :deep(.el-checkbox-group) { display: flex; flex-wrap: wrap; gap: 8px; }
+  :deep(.el-textarea__inner) { max-width: 100%; resize: vertical; }
+  :deep(.el-form-item__label) { flex-shrink: 0; }
+}
+.jf-single-column :deep(.fc-form-col) { flex: 0 0 100% !important; max-width: 100% !important; }
+.jf-stacked-labels {
+  :deep(.fc-form-col .el-form-item) { display: block; height: auto; }
+  :deep(.fc-form-col .el-form-item__label) { float: none; display: flex; justify-content: flex-start; width: 100% !important; height: auto; padding: 8px 10px; line-height: 1.5; }
+  :deep(.fc-form-col .el-form-item__content) { margin-left: 0 !important; width: auto; }
 }
 .jf-border {
   :deep(.fc-form-col) {

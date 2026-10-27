@@ -30,6 +30,10 @@ import cn.hutool.json.JSONUtil
 import metadataAsset
 import cn.hutool.core.util.IdUtil
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations as esOperations
+import org.springframework.data.elasticsearch.core.query.UpdateQuery
+import org.springframework.data.elasticsearch.core.document.Document
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates
 import jsons
 import log
 import java.util.Map
@@ -481,8 +485,14 @@ for (table in tables) {
         metadataSource: 'template',
         action: existing == null ? 'create' : 'update'
     }
-    saveEs(tableId, output)
+    if (body.batchIndex != true) { saveEs(tableId, output) }
     rows.add(output)
+}
+// 工作台批量整理一次构造部分更新并以 upsert 写入，避免逐表 exists/mapping 补查。
+if (body.batchIndex == true && rows.size() > 0) {
+    var physicalIndex = esCommonService.ensureTenantIndexReady('dataassets')
+    var updates = rows.map(row => UpdateQuery.builder(row.tid).withDocument(Document.from(row)).withDocAsUpsert(true).build())
+    esOperations.bulkUpdate(updates, IndexCoordinates.of(physicalIndex))
 }
 metadataAsset.refreshRegistrationStatus(dbId, false)
 var activeTableCount = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('datasource_id', dbId).eq('is_del', 0).count()

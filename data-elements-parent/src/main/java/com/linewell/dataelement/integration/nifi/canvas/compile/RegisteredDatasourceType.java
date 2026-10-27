@@ -40,7 +40,7 @@ public final class RegisteredDatasourceType {
             case FTP -> "sftp".equals(value)
                     || "sftp".equalsIgnoreCase(first(config, "ftpProtocol", "ftp_protocol", "protocol"))
                     ? "source.sftp" : "source.ftp";
-            case VERTICA, MAXCOMPUTE, MONGODB -> throw new IllegalArgumentException(
+            case MAXCOMPUTE, MONGODB -> throw new IllegalArgumentException(
                     "当前画布尚未提供该数据源的来源组件: " + type.getDisplayName());
             default -> "source." + type.getCode();
         };
@@ -53,7 +53,7 @@ public final class RegisteredDatasourceType {
 
     public static String sinkType(String raw, Map<String, Object> config) {
         DatabaseType type = databaseType(raw, config);
-        if (!type.isRelational() || type == DatabaseType.VERTICA || type == DatabaseType.MAXCOMPUTE) {
+        if (!type.isRelational() || type == DatabaseType.MAXCOMPUTE) {
             throw new IllegalArgumentException("物化建表不支持该目标数据源类型: " + type.getDisplayName());
         }
         return switch (type) {
@@ -71,12 +71,18 @@ public final class RegisteredDatasourceType {
         if (!type.isRelational()) return null;
         String explicit = first(config, "jdbcURL", "jdbcUrl", "jdbc_url");
         if (explicit == null) explicit = first(row, "jdbcURL", "jdbcUrl", "jdbc_url");
-        if (explicit != null) return explicit;
+        if (explicit != null) {
+            if (type == DatabaseType.GAUSSDB) com.linewell.dataelement.metautil.jdbc.GaussDbVariant.from(config).validateUrl(explicit);
+            return explicit;
+        }
         String legacyUrl = first(config, "url");
         if (legacyUrl != null && legacyUrl.startsWith("jdbc:")) return legacyUrl;
 
         DataSourceConfig connection = new DataSourceConfig();
         connection.setDatabaseType(type);
+        connection.setConnectorProperties(config);
+        if ("opengauss".equals(key(raw)) && first(config,"gaussdbVariant","gaussdb_variant") == null)
+            connection.setGaussdbVariant("opengauss");
         connection.setHost(or(first(config, "host", "dbMetaIp", "hostname"), first(row, "host", "db_meta_ip"), "127.0.0.1"));
         String port = or(first(config, "port", "dbMetaPort"), first(row, "port", "db_meta_port"));
         if (port != null) connection.setPort(Integer.valueOf(port));
@@ -92,6 +98,9 @@ public final class RegisteredDatasourceType {
         connection.setZookeeperNamespace(first(config, "zookeeperNamespace"));
         connection.setServiceDiscoveryMode(first(config, "serviceDiscoveryMode"));
         connection.setSaslQop(first(config, "saslQop"));
+        if (config.get("ssl") != null) connection.setSsl(Boolean.parseBoolean(config.get("ssl").toString()));
+        connection.setTrustStorePath(first(config,"trustStorePath"));
+        connection.setTrustStorePassword(first(config,"trustStorePassword"));
         if (type == DatabaseType.ORACLE
                 && !"SID".equalsIgnoreCase(first(config, "connectionType", "jdbcType"))) {
             return "jdbc:oracle:thin:@//" + connection.getHost() + ":" + connection.getPortOrDefault()

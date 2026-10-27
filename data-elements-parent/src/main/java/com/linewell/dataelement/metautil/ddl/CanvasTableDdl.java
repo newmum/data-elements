@@ -26,16 +26,16 @@ public class CanvasTableDdl {
         if (ddl == null || ddl.isBlank()) throw new IllegalArgumentException("请填写建表语句");
         if (tableName == null || tableName.isBlank()) throw new IllegalArgumentException("请填写目标表名");
         String name = tableName.trim();
-        if (config.getDatabaseType() == DatabaseType.HIVE) name = name.toLowerCase(Locale.ROOT);
+        if (config.getEffectiveDatabaseType() == DatabaseType.HIVE) name = name.toLowerCase(Locale.ROOT);
         return Map.of("ddl",ddl,"tableName",name,"lookupName",unquote(name),
                 "schemaName",scope(config),"quoted",isQuoted(name),"syntaxChecked",false);
     }
 
     /** Preview stays editable; execution must not send a newly promoted LOB key to Oracle. */
     public static void validateStringKeys(String ddl,DataSourceConfig config) {
-        if(DdlDialect.family(config.getDatabaseType())!=DdlDialect.Family.ORACLE)return;
+        if(DdlDialect.family(config.getEffectiveDatabaseType())!=DdlDialect.Family.ORACLE)return;
         if(!ddl.matches("(?is)^\\s*CREATE\\s+TABLE\\b.*"))return;
-        for(var statement:SQLUtils.parseStatements(ddl,DdlDialect.parser(config.getDatabaseType()))) {
+        for(var statement:SQLUtils.parseStatements(ddl,DdlDialect.parser(config.getEffectiveDatabaseType()))) {
             if(!(statement instanceof SQLCreateTableStatement create))continue;
             var keys=new java.util.HashSet<String>();
             create.getPrimaryKeyNames().forEach(name->keys.add(SQLUtils.normalize(name).toLowerCase(Locale.ROOT)));
@@ -52,8 +52,8 @@ public class CanvasTableDdl {
 
     public Map<String, Object> parse(String ddl, DataSourceConfig config) {
         if (ddl == null || ddl.isBlank()) throw new IllegalArgumentException("请输入 CREATE TABLE 建表语句");
-        DbType dialect = dialect(config.getDatabaseType());
-        var statements = PortableSqlParser.parse(ddl, config.getDatabaseType());
+        DbType dialect = dialect(config.getEffectiveDatabaseType());
+        var statements = PortableSqlParser.parse(ddl, config.getEffectiveDatabaseType());
         if (statements.isEmpty() || !(statements.getFirst() instanceof SQLCreateTableStatement create)
                 || create.isReplace() || create.getType() != null || create.getSelect() != null
                 || create.getColumnDefinitions().isEmpty()) {
@@ -85,7 +85,7 @@ public class CanvasTableDdl {
         validateStringKeys(ddl,config);
         // Strict CREATE makes a concurrent duplicate observable even if the user supplied IF NOT EXISTS.
         create.setIfNotExiists(false);
-        if (config.getDatabaseType() == DatabaseType.HIVE) {
+        if (config.getEffectiveDatabaseType() == DatabaseType.HIVE) {
             // The selected Hive database is applied by the managed execution
             // path. Keep the preview/editable DDL focused on the table name
             // and never add a database qualifier to CREATE TABLE.

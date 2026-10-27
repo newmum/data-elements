@@ -46,6 +46,7 @@ import cn.hutool.core.util.StrUtil
 import log
 import "@post:/sym/user/me" as me
 import '@/common/configData' as configData
+import systemConfig
 import response;
 
 
@@ -61,7 +62,7 @@ import response;
 var tenantId = tenantRuntime.id()
 
 // 下载单个文件
-var fileInfo = db.table("file_upload_t").where().eq("tid", fileId).eq("tenant_id", tenantId).selectOne()
+var fileInfo = db.table("file_upload_t").where().eq("tid", fileId).eq("tenant_id", tenantId).eq("is_del", 0).selectOne()
 //return fileInfo
 if(fileInfo == null){
     // 参数或业务状态不满足要求时立即终止请求。
@@ -70,6 +71,10 @@ if(fileInfo == null){
     fileName = fileInfo.fileName
     bucket =  StrUtil.subBefore(fileInfo.filePath, "/", false)
     relaName = StrUtil.subAfter(fileInfo.filePath, "/", false); 
+    MinioUtils.getMinioClient(configData().minio_url, configData().minio_user, systemConfig.legacyMinioPassword());
+    response.setHeader("Content-Type", "application/octet-stream");
     response.setHeader("Content-disposition", "attachment; filename="+fileName);
     MinioUtils.downloadFile(bucket, relaName, response.getOutputStream());
+    // 二进制响应到此结束，禁止再追加通用 JSON 成功信封。
+    return response.end();
 }

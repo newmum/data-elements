@@ -59,6 +59,11 @@ import "ace-builds/src-noconflict/mode-sql";
 import "ace-builds/src-noconflict/mode-javascript";
 import "ace-builds/src-noconflict/mode-yaml";
 import "ace-builds/src-noconflict/mode-vue";
+import "ace-builds/src-noconflict/mode-xml";
+import "ace-builds/src-noconflict/mode-text";
+import { config as aceConfig } from "ace-builds";
+import xmlWorkerUrl from "ace-builds/src-noconflict/worker-xml?url";
+aceConfig.setModuleUrl("ace/mode/xml_worker", xmlWorkerUrl);
 import "ace-builds/src-noconflict/snippets/javascript";
 // 引入主题（monokai 是深色主题，也可选择 github 等浅色主题）
 import "ace-builds/src-noconflict/theme-monokai";
@@ -77,7 +82,7 @@ const props = withDefaults(
   defineProps<{
     modelValue: string;
     code?: string;
-    lang?: "json" | "javascript" | "yaml" | "sql" | "vue";
+    lang?: "json" | "javascript" | "yaml" | "sql" | "vue" | "xml" | "text";
     theme?: string;
     readOnly?: boolean;
     height?: string;
@@ -131,6 +136,7 @@ const stateProps = reactive({
     wrap: true, // 自动换行
   },
 });
+watch(() => props.lang, value => { stateProps.lang = value; });
 
 // 监听内容变化，解析 JSON
 const handleContentChange = () => {

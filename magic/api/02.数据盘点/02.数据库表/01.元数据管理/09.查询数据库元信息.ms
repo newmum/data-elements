@@ -201,7 +201,7 @@ if (!blank(requestedTableId)) {
 var asset = loadAsset(tid)
 if (asset == null) { exit 404, '数据源资产不存在或无访问权限' }
 var sourceType = textOf(firstValue(asset, ['dbType', 'databaseType', 'dataSourceType'])).toLowerCase()
-var managedHive = sourceType == 'hive' && (
+var managedHive = sourceType == 'hive' && textOf(firstValue(asset, ['hiveConnectionMode', 'hive_connection_mode'])).toLowerCase() != 'open-source' && (
     textOf(firstValue(asset, ['metadataAccessMode', 'metadata_access_mode'])) == 'server-managed-mrs'
     || !blank(firstValue(asset, ['hiveProfile', 'hive_profile']))
 )

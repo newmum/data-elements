@@ -134,6 +134,8 @@ public class StructuredSourceProbeService {
     }
 
     public Map<String, Object> testAndProbe(Map<String, Object> source) {
+        if ("api".equals(sourceType(source)) && WebServiceXmlAdapter.isSoap(source)
+                && "wsdl".equalsIgnoreCase(first(source, "apiProbeAction"))) return describeWebService(source);
         long startedAt = System.currentTimeMillis();
         StructuredProbeResult probe = probe(source, true);
         int fieldCount = probe.getTables().stream().mapToInt(item -> item.getColumns().size()).sum();
@@ -305,7 +307,7 @@ public class StructuredSourceProbeService {
                     if (session.isConnected()) session.disconnect();
                 }
             } else {
-                FTPClient client = "ftps".equals(protocol) ? new FTPSClient(port == 990) : new FTPClient();
+                FTPClient client = "ftps".equals(protocol) ? FtpsClientFactory.create(source, port) : new FTPClient();
                 try {
                     client.setConnectTimeout(10_000); client.setDataTimeout(Duration.ofSeconds(20)); client.connect(host, port);
                     if (!client.login(defaultText(first(source, "ftpUsername", "username"), "anonymous"),
@@ -422,6 +424,7 @@ public class StructuredSourceProbeService {
 
     private StructuredProbeResult probeApi(Map<String, Object> source) {
         String url = required(source, "API request URL cannot be empty", "apiUrl", "url");
+        boolean soap = WebServiceXmlAdapter.isSoap(source);
         String method = defaultText(first(source, "apiMethod", "method"), "GET").toUpperCase(Locale.ROOT);
         URI endpoint = URI.create(applyApiKeyQuery(source, url));
         HttpRequest.Builder request = HttpRequest.newBuilder(endpoint)
@@ -430,22 +433,34 @@ public class StructuredSourceProbeService {
         // whereas the generic structured-source connector uses apiHeaders.
         // Accept both names so field probing invokes the same registered API
         // contract as the actual NiFi processor.
-        Map<String, String> headers = parseStringMap(first(source, "apiHeaders", "headers", "commonHeadersJson"));
+        Map<String, String> headers = new LinkedHashMap<>(parseStringMap(first(source, "apiHeaders", "headers", "commonHeadersJson")));
+        String requestBody = defaultText(first(source, "apiBody", "requestBody"), "");
+        if (soap) {
+            if (!"POST".equals(method)) throw new IllegalArgumentException("SOAP调用必须使用POST请求");
+            String version = defaultText(first(source, "apiSoapVersion"), "1.1");
+            if (!Set.of("1.1", "1.2").contains(version)) throw new IllegalArgumentException("请选择SOAP 1.1或1.2");
+            WebServiceXmlAdapter.validateRequest(requestBody, version);
+            String action = defaultText(first(source, "apiSoapAction"), "");
+            if (action.contains("\r") || action.contains("\n") || action.contains("\"")) throw new IllegalArgumentException("SOAPAction格式无效");
+            headers.keySet().removeIf(name -> "content-type".equalsIgnoreCase(name) || "soapaction".equalsIgnoreCase(name));
+            headers.put("Content-Type", "1.2".equals(version) ? "application/soap+xml; charset=UTF-8; action=\"" + action + "\"" : "text/xml; charset=UTF-8");
+            if (!"1.2".equals(version)) headers.put("SOAPAction", "\"" + action + "\"");
+        }
         headers.forEach(request::header);
         if (!headers.keySet().stream().anyMatch(name -> "content-type".equalsIgnoreCase(name))) {
             request.header("Content-Type", "application/json");
         }
         applyApiAuthorization(source, request);
         applyCurrentSessionToken(source, endpoint, request);
-        String requestBody = defaultText(first(source, "apiBody", "requestBody"), "");
         request.method(method, Set.of("GET", "HEAD").contains(method)
                 ? HttpRequest.BodyPublishers.noBody()
                 : HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8));
         try {
             HttpResponse<byte[]> response = httpClient.send(
                     request.build(),
-                    HttpResponse.BodyHandlers.ofByteArray());
+                    soap ? WebServiceXmlAdapter.boundedResponse() : HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() < 200 || response.statusCode() >= 400) {
+                if (soap && response.statusCode() == 500) WebServiceXmlAdapter.responseTree(response.body(), objectMapper);
                 throw new IllegalStateException("HTTP " + response.statusCode() + ": "
                         + preview(new String(response.body(), StandardCharsets.UTF_8), 2000));
             }
@@ -453,7 +468,7 @@ public class StructuredSourceProbeService {
                 throw new IllegalStateException("API response exceeds 5 MB probe limit");
             }
             String content = new String(response.body(), StandardCharsets.UTF_8);
-            JsonNode root = objectMapper.readTree(content);
+            JsonNode root = soap ? WebServiceXmlAdapter.responseTree(response.body(), objectMapper) : objectMapper.readTree(content);
             Map<String, JsonNode> discovered = discoverCollections(root);
             List<String> selectedPaths = parseStringList(first(source, "apiCollectionPaths", "collectionPaths"));
             if (!selectedPaths.isEmpty()) {
@@ -467,7 +482,7 @@ public class StructuredSourceProbeService {
                 }
                 discovered = selected;
             }
-            StructuredProbeResult result = baseResult("api", "HTTP API", url);
+            StructuredProbeResult result = baseResult("api", soap ? "WebService SOAP" : "HTTP API", url);
             result.setResponsePreview(preview(content, 4000));
             Set<String> names = new HashSet<>();
             for (Map.Entry<String, JsonNode> entry : discovered.entrySet()) {
@@ -485,6 +500,25 @@ public class StructuredSourceProbeService {
         } catch (Exception exception) {
             throw propagate("API request or response parsing failed", exception);
         }
+    }
+
+    private Map<String, Object> describeWebService(Map<String, Object> source) {
+        URI endpoint = URI.create(required(source, "请填写WSDL定义地址", "apiWsdlUrl"));
+        if (!Set.of("http", "https").contains(endpoint.getScheme()) || endpoint.getUserInfo() != null)
+            throw new IllegalArgumentException("WSDL地址必须为HTTP(S)，认证信息请填写在认证配置中");
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(applyApiKeyQuery(source, endpoint.toString())))
+                .timeout(Duration.ofSeconds(apiProbeTimeoutSeconds(source))).GET();
+        parseStringMap(first(source, "apiHeaders", "headers", "commonHeadersJson")).forEach(request::header);
+        applyApiAuthorization(source, request);
+        applyCurrentSessionToken(source, endpoint, request);
+        try {
+            HttpResponse<byte[]> response = httpClient.send(request.build(), WebServiceXmlAdapter.boundedResponse());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IllegalArgumentException("WSDL读取失败：HTTP " + response.statusCode());
+            return WebServiceXmlAdapter.describe(response.body(), endpoint);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("WSDL读取已中断", exception);
+        } catch (Exception exception) { throw propagate("WSDL读取失败", exception); }
     }
 
     StructuredProbeResult probeFtp(Map<String, Object> source) {
@@ -659,7 +693,7 @@ public class StructuredSourceProbeService {
             String path,
             StructuredProbeResult result
     ) throws Exception {
-        FTPClient client = "ftps".equals(protocol) ? new FTPSClient(port == 990) : new FTPClient();
+        FTPClient client = "ftps".equals(protocol) ? FtpsClientFactory.create(source, port) : new FTPClient();
         try {
             client.setConnectTimeout(10_000);
             client.setDataTimeout(Duration.ofSeconds(20));
@@ -1652,6 +1686,9 @@ public class StructuredSourceProbeService {
             connector.put("sourceType", type);
             switch (type) {
                 case "api" -> {
+                    putCacheValue(connector, source, "protocol", "apiProtocol");
+                    putCacheValue(connector, source, "soapVersion", "apiSoapVersion");
+                    putCacheValue(connector, source, "soapAction", "apiSoapAction");
                     putCacheValue(connector, source, "method", "apiMethod", "method");
                     putCacheValue(connector, source, "url", "apiUrl", "url");
                     putCacheValue(connector, source, "headers", "apiHeaders", "headers");

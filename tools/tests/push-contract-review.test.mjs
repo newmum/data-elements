@@ -6,13 +6,17 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const require=createRequire(path.join(root,'data-elements-chengtian/package.json'));
-const {ref,computed}=require('vue');
+const {ref,computed,watch}=require('vue');
 const file='lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue';
 const source=fs.readFileSync(path.join(root,file),'utf8').replace(/\r\n?/g,'\n');
 const start=source.indexOf('// Push contract display is read-only');
 const blockEnd=source.indexOf('function openReportWorkspace()',start);
 assert.ok(start>=0 && blockEnd>start,'push contract source boundaries must exist');
 const block=source.slice(start,blockEnd);
+const resetStart=source.indexOf('watch([sourceTid, isDataPushSource]');
+const resetEnd=source.indexOf('watch([sourceDetailLoading, pushDatasourceRegistered]',resetStart);
+assert.ok(resetStart>=0 && resetEnd>resetStart,'source reset watcher must exist');
+const resetWatcher=source.slice(resetStart,resetEnd);
 const queueStart=source.indexOf('function drainFieldLoadQueue()');
 const queueEnd=source.indexOf('watch(\n  () => [sourceTid.value',queueStart);
 assert.ok(queueStart>=0 && queueEnd>queueStart,'field batch queue source boundaries must exist');
@@ -24,7 +28,7 @@ function fixture({status=0,count=20,remote,loading=false,contentType='STRUCTURED
   const state={source:sourceRef,sourceTid:ref('source'),sourceDetailLoading:ref(loading),tables,connectionInfoExpanded:ref(true),
     pushContract:ref(null),pushContractLoading:ref(false),pushContractError:ref(''),pushContractLoadedDatasourceId:ref(''),pushContractOpenTables:ref([]),
     pushCredential:ref(null),pushCredentialError:ref(''),pushCredentialLoading:ref(false),pushCredentialDatasourceId:ref(''),isDataPushSource:ref(true),
-    computed,ref,governanceConfig:table=>table?.fieldGovernanceConfig||null,catalogFor:()=>null,fieldsFor:table=>table.fields||[],tableFieldKey:table=>table.tableName,fieldLoadingFor:()=>false,
+    isDataUploadSource:ref(false),fileRegistrationRows:ref(Array.from({length:count},(_,i)=>({tableId:'file'+i,collectionId:'file_collection_'+i,fileName:'登记文件'+i,fileDescription:'说明',fileFormat:'pdf',maxFileSizeMb:20,maxFileBytes:20971520,fieldCount:6}))),pushFileSelection:ref(''),store:{state:{steps:[]}},computed,ref,watch,governanceConfig:table=>table?.fieldGovernanceConfig||null,catalogFor:()=>null,fieldsFor:table=>table.fields||[],tableFieldKey:table=>table.tableName,fieldLoadingFor:()=>false,
     $message:{success(){},warning(){}},ElMessageBox:{confirm:async()=>{}},navigator:{clipboard:{writeText:async(text)=>{copied.push(text)}}},
     $common:{post:async(url,body)=>{nodeReads.push({url,body});return {list:nodes || [{networkCode:"GAW",baseUrl:"https://gaw.example.test",enabled:1,isDefault:1},{networkCode:"HLW",baseUrl:"https://internet.example.test",enabled:1,isDefault:1}]};},getSilently:async(url,params)=>{reads.push({url,params});return remote?remote(params):{datasourceId:params.datasourceId,tables:tables.value.map(t=>({tableId:t.tid,tableName:t.tableName,schemaVersion:3,fields:[{fieldName:'id',dataType:'bigint',required:true}],fieldCount:1}))}},postSilently:async(url,body)=>{writes.push({url,body});return {datasourceId:body.datasourceId,clientId:'push-source',revealed:false}}},
   };
@@ -37,7 +41,8 @@ function fixture({status=0,count=20,remote,loading=false,contentType='STRUCTURED
     function requestTableFields(table,key,fields){table.fields=fields;updateFieldLoadState(key,'loaded')}
     ${queue}
     ${block}
-    return {loadPushContract,refreshRegistrationPushContract,issuePushCredential,pushContractIsPreview,pushContractSample,pushContractEndpointItems,pushAttachmentDescription,pushInterfaceType,selectPushInterface,pushIsAttachmentMode,pushVisibleTables,pushSelectedParameters,pushRequestContentType,pushContractHeaders,pushChunkSample,copyPushChunkSample,pushProtocolUrl,pushProtocolBaseUrl,pushProtocolNodeError,queueIdle:()=>!fieldLoadsInFlight&&!fieldBatchScheduled&&!fieldLoadQueue.length};`);
+    ${resetWatcher}
+    return {loadPushContract,refreshRegistrationPushContract,issuePushCredential,pushContractIsPreview,pushContractSample,pushContractEndpointItems,pushAttachmentDescription,pushInterfaceType,selectPushInterface,pushIsAttachmentMode,pushVisibleTables,pushSelectedParameters,pushRequestContentType,pushContractHeaders,pushChunkSample,copyPushChunkSample,pushProtocolUrl,pushProtocolBaseUrl,pushProtocolNodeError,pushPrimaryEndpoints,pushAuxiliaryEndpoints,pushAuxiliaryExpanded,selectedFileRegistration,queueIdle:()=>!fieldLoadsInFlight&&!fieldBatchScheduled&&!fieldLoadQueue.length};`);
   // The real bounded queue uses the ordinary metadata GET; formal contracts use silent GET.
   state.$common.get=async(url,params)=>{const ids=params.tid.split(',');metadata.push(ids);return Object.fromEntries(ids.map(id=>[id,[{columnName:'id',columnType:'bigint',nullable:0,ordinalPosition:1}]]));};
   const api=create(...Object.values(state));
@@ -82,7 +87,9 @@ test('the persisted content type chooses the structured endpoint or a chunked pr
   assert.equal(f.api.pushInterfaceType.value,'dataPush');assert.equal(f.api.pushRequestContentType.value,'application/json');
   assert.deepEqual(f.api.pushContractEndpointItems.value.map(e=>e.path),['/api/v1/data-push']);
   const sample=JSON.parse(f.api.pushContractSample(f.state.pushContract.value.tables[0]));assert.equal(sample.deliveryType,'FTP');assert.ok(Array.isArray(sample.records));
-  f.state.source.value.pushDataType='UNSTRUCTURED';assert.equal(f.api.pushInterfaceType.value,'fileInit');
+  f.state.source.value.pushDataType='UNSTRUCTURED';assert.equal(f.api.pushInterfaceType.value,'filePart');
+  assert.equal(f.api.pushPrimaryEndpoints.value.length,1);assert.equal(f.api.pushAuxiliaryEndpoints.value.length,5);assert.equal(f.api.pushAuxiliaryExpanded.value,false);
+  f.api.selectPushInterface('fileInit');
   assert.equal(f.api.pushContractEndpointItems.value.length,6);assert.equal(f.api.pushRequestContentType.value,'application/json');
   assert.deepEqual(f.api.pushSelectedParameters.value.map(p=>p.name),['datasourceId','collectionId','fileName','size','sha256']);
   assert.ok(!f.api.pushSelectedParameters.value.some(p=>['tableName','fieldName'].includes(p.name)));
@@ -106,7 +113,8 @@ test('the persisted content type chooses the structured endpoint or a chunked pr
 test('unstructured registration preview needs no field associations or per-table metadata reads',async()=>{
  for(const count of [20,100]) {
   const f=fixture({count,contentType:'UNSTRUCTURED',remote:p=>({datasourceId:p.datasourceId,tables:[]})});await f.api.loadPushContract();await f.flush();
-  assert.equal(f.api.pushInterfaceType.value,'fileInit');assert.equal(f.metadata.length,0);assert.equal(f.reads.length,1);assert.equal(f.nodeReads.length,1);assert.equal(f.writes.length,0);
+  assert.equal(f.api.pushInterfaceType.value,'filePart');assert.equal(f.metadata.length,0);assert.equal(f.reads.length,0);assert.equal(f.nodeReads.length,1);assert.equal(f.writes.length,0);
+  f.api.selectPushInterface('fileInit');
   assert.match(f.api.pushSelectedParameters.value.find(p=>p.name==='collectionId').description,/YAML/);
  }
 });

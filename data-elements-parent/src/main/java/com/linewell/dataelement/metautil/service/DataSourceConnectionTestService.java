@@ -211,6 +211,7 @@ public class DataSourceConnectionTestService {
                 String profile = first(source, "hiveProfile", "hive_profile");
                 String accessMode = first(source, "metadataAccessMode", "metadata_access_mode");
                 String hiveMode = first(source, "hiveConnectionMode", "hive_connection_mode");
+                if ("open-source".equalsIgnoreCase(hiveMode)) return null;
                 if (blank(profile)
                         && !"server-managed-mrs".equalsIgnoreCase(accessMode)
                         && !"huawei-mrs".equalsIgnoreCase(hiveMode)) {
@@ -243,9 +244,10 @@ public class DataSourceConnectionTestService {
         DatabaseType databaseType = DatabaseType.fromCode(sourceType);
         DataSourceConfig config = new DataSourceConfig();
         config.setDatabaseType(databaseType);
+        config.setConnectorProperties(new LinkedHashMap<>(source));
         String zookeeperQuorum = first(source, "zookeeperQuorum", "zkQuorum");
         config.setHost(metadataHost(databaseType, source, zookeeperQuorum));
-        config.setPort(integer(first(source, "port", "dbPort"), databaseType.getDefaultPort()));
+        config.setPort(integer(first(source, "port", "dbPort"), null));
         config.setDatabase(required(
                 source,
                 "关系型数据源数据库名称不能为空",

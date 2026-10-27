@@ -948,6 +948,55 @@ NiFi 2.9 的匹配构建：`mvn -Dnifi.version=2.9.0 -Dmapping.output.root=D:/So
 
 <a id="date-fetch-extension"></a>
 
+## 数据源产品与运行驱动
+
+登记、连接测试、元数据、分页预览及接入任务传递同一份产品配置。GaussDB 的主类型仍为 `gaussdb`，具体产品保存为 `pool_cfg.gaussdbVariant`，不靠端口或显示名称猜测产品。Hive 使用 `hiveConnectionMode` 区分开源与华为 MRS，明确开源模式时忽略遗留华为配置集。
+
+| 产品选项 | JDBC 驱动类 | 运行驱动文件约定 | 默认端口提示 |
+| --- | --- | --- | --- |
+| 华为 GaussDB 集中式／分布式 | `com.huawei.opengauss.jdbc.Driver` | `opengaussjdbc.jar` | 8000 |
+| 华为 GaussDB 新版原生驱动 | `com.huawei.gaussdb.jdbc.Driver` | `gaussdbjdbc.jar` | 8000 |
+| openGauss | `org.opengauss.Driver` | `opengauss-jdbc.jar` | 5432 |
+| GaussDB(DWS) | `org.postgresql.Driver` | `postgresql-42.6.0.jar` | 8000 |
+| GaussDB(for MySQL)／MySQL 兼容模式 | `com.mysql.cj.jdbc.Driver` | `mysql-connector-j-8.4.0.jar` | 3306 |
+| 历史 PostgreSQL 兼容配置 | `org.postgresql.Driver` | 原 PostgreSQL 驱动 | 5432 |
+| Vertica | `com.vertica.jdbc.Driver` | `vertica-jdbc.jar` | 5433 |
+
+端口以真实实例为准。华为 GaussDB 应安装其数据库版本配套的官方驱动，不能因为类名或协议相似而替换为普通 PostgreSQL JAR；DWS 允许 PostgreSQL JDBC，具体支持范围见 [GaussDB 驱动说明](https://support.huaweicloud.com/centralized-devg-v10-gaussdb/gaussdb-42-0080.html)、[openGauss JDBC](https://docs.opengauss.org/en/docs/7.0.0/getting_started/java.html) 和 [DWS 驱动说明](https://support.huaweicloud.com/mgtg-dws/dws_01_0032.html)。文件名是部署约定，节点可配置其他版本的完整 JAR 路径。未保存产品的历史记录保留原协议，编辑时选择真实产品；不自动重建运行任务或清空水位。
+
+后端以 `JDBC_DRIVER_DIRECTORY` 或 JVM 参数 `data-elements.jdbc.driver-directory` 定位厂商驱动，加载前核对 JAR 内的实际驱动类。不同 GaussDB 驱动直接绑定到各自连接池，避免多个驱动接受 `jdbc:opengauss` 时由全局 DriverManager 随机选择。开源 Hive 必须在该目录的 `open-source-hive/` 安装 Apache Hive JDBC standalone 客户端，连接测试、表/字段探查和连接池共用同一个隔离驱动实例；缺少客户端时明确报错，不能回退到同名的华为 HiveDriver。华为客户端继续放在隔离的 `huawei-mrs/`，二者不混用 Hadoop/ZooKeeper 依赖。开源连接测试使用与登记、接入相同的 URL 构造器，保留 HTTP、TLS 和 NoSASL 配置，无认证模式显式传入 `auth=none`。
+
+NiFi 驱动独立于后端安装。节点驱动映射支持 `GAUSSDB_NATIVE`（opengaussjdbc 兼容包）、`GAUSSDB_JDBC`（新版 gaussdbjdbc）、`GAUSSDB_OPENGAUSS`、`GAUSSDB_DWS`、`GAUSSDB_MYSQL`、`HIVE_OPEN_SOURCE` 等键；没有独立 GaussDB 映射时兼容现有默认目录／旧 GaussDB 映射。华为新版原生驱动使用 `gaussdbVariant=gaussdb-jdbc` 与 `jdbc:gaussdb:`，原 `gaussdb` 选项保留 `jdbc:opengauss:`，两种驱动均按 JDK 和数据库实例版本选择官方发行包。openGauss Maven 客户端需选择包含 `org.opengauss.Driver` 的 `-og` 版本，不能用同版本号下包含 `org.postgresql.Driver` 的另一个包替代。Hive 开源配置填写 Binary/HTTP、认证方式和必要 TLS/Kerberos 参数；华为模式继续由服务端配置集解析，浏览器不保存华为 keytab 内容。
+
+SQL Server、GBase 8a、Vertica 提供统一分页预览执行器，查询字段与排序字段仍按当前来源的真实字段白名单校验。开源 Hive 首屏使用 LIMIT、后续页使用窗口函数，避免使用不兼容的 MySQL OFFSET 语法。GaussDB 按当前会话解析默认 Schema，批量字段读取使用有界 IN 查询及主键关联，最多200张表，不逐表补查。
+
+FTPS 使用 TLS 控制及数据通道，支持21端口常见的显式 TLS和990端口常见的隐式 TLS，也可显式指定模式。后端及 NiFi 都验证证书链和主机名。画布连接测试与登记探查使用同一 TLS 工厂，在 TLS 协商成功之前不发送账号密码；认证后启用 `PBSZ 0`、`PROT P` 并核对远端目录。私有 CA 可分别配置探查端 `trustStorePath` 与接入节点 `nifiTrustStorePath`，不以关闭验证代替信任配置。NiFi 需安装 ExecuteGroovyScript 及 Commons Net 客户端，节点驱动映射可配置 `FTP=/实际路径/commons-net.jar`；目录配置按该受管文件名解析，版本须支持 Duration 超时接口。
+
+FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发现状态在 FlowFile 持久化提交后更新；状态竞争可能重放，但不得丢弃数据。普通抽取不删除来源。仅显式选择落库后删除策略时，经 JDBC 成功出口核对来源文件大小和修改时间，再确认删除数据及完成标记；失败保留队列和文件，不能在下载成功时提前删除。
+
+登记页数据抽取方式的代码覆盖如下。表中的已有链路表示保留现有实现，不表示所有厂商版本已完成实库认证；接入节点驱动与后端探查驱动分别部署。
+
+| 数据源 | 登记、探查与接入的代码路径 | 部署时的主要条件 |
+| --- | --- | --- |
+| MySQL | 沿用 JDBC 元数据、预览及接入 | 真实实例版本、字符集和增量字段 |
+| Oracle | 沿用 Oracle 元数据、预览及接入 | Service Name／SID、Schema 与驱动版本 |
+| OceanBase MySQL | 沿用 MySQL 兼容分支 | 租户兼容模式与连接账号 |
+| OceanBase Oracle | 沿用 Oracle 兼容分支 | 真实 Oracle 模式与 Schema |
+| GaussDB | 按四类产品选择驱动、协议、Schema 及抽取方言；保留旧配置 | 华为原生与 openGauss 须安装配套官方驱动 |
+| Hive | 开源／华为 MRS 双路径；补齐开源认证、HTTP/TLS 与预览分页 | Hive 客户端依赖、Kerberos／MRS 配置集 |
+| GBase 8a | 沿用元数据与接入，补齐独立分页预览 | 安装 GBase 8a 厂商驱动，不替换为 MySQL 驱动 |
+| SQL Server | 沿用元数据与接入，补齐方括号引用及 OFFSET/FETCH 预览 | 支持 OFFSET/FETCH 的数据库版本 |
+| Vertica | 补齐分页预览、接入来源清单及驱动映射 | 在接入节点安装 Vertica 驱动 |
+| 达梦 | 沿用原生 JDBC 元数据、预览及接入 | 驱动、Schema 与兼容设置 |
+| PostgreSQL | 沿用 JDBC 元数据、预览及接入 | Schema、扩展类型与实例版本 |
+| 人大金仓 | 沿用金仓元数据、预览及接入 | 真实兼容模式与 KingbaseES 驱动 |
+| Elasticsearch | 沿用索引、字段、预览与 Record 接入 | 集群版本、认证与字段映射 |
+| Kafka | 沿用主题、样本字段与消息接入 | SASL/TLS、消费组、起始偏移与消息格式 |
+| MinIO | 沿用对象目录、文件字段与对象接入 | Endpoint、授权、路径与文件格式 |
+| FTP／SFTP／FTPS | 沿用文件链路，补齐 FTPS TLS、敏感配置及持久化水位 | 协议、证书信任库与 NiFi Groovy／Commons Net 客户端 |
+
+新增产品的单元测试和模拟编译验证不能代替对应版本实库验收。首次接入应核对驱动、Schema、字段类型、分页、全量、增量边界和中断恢复；当前时间／水位抽取不等同于日志 CDC，不承诺自动捕获删除。
+
 ## 时间窗口抓取扩展
 
 数据库来源使用现有的 `com.linewell.microservice.processors.database.GenerateDateTableFetch`，完整扩展坐标为 `com.linewell.microservice:datadevs-database-nar:2.9.0`。后端发布前核对该类型及三个坐标字段，创建时显式选择 `2.9.0`；不要求安装其他后缀版本，也不修改已有 NAR 的名字或内容。

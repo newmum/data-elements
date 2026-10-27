@@ -6,7 +6,7 @@ import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from './register
 test('all shipped source manifests can be selected without substituting MySQL', async () => {
   const directory = new URL('../../../../data-elements-parent/src/main/resources/manifests/sources/', import.meta.url);
   const files = (await readdir(directory)).filter((file) => file.endsWith('.json'));
-  assert.equal(files.length, 31);
+  assert.equal(files.length, 32);
   for (const file of files) {
     const manifest = JSON.parse(await readFile(new URL(file, directory), 'utf8'));
     assert.equal(normalizeSourceManifestKey(manifest.key.slice(7)), manifest.key, file);
@@ -41,7 +41,7 @@ test('unknown and non-JDBC types never synthesize MySQL URLs', () => {
   for (const raw of ['unknown-vendor', 'ftp', 'api', 'minio', 'kafka', 'hdfs', 'hbase', 'es']) {
     assert.equal(buildJdbcUrl(raw, 'db', undefined, 'business'), undefined);
   }
-  for (const raw of ['unknown-vendor', 'mongodb', 'vertica', 'maxcompute', '']) {
+  for (const raw of ['unknown-vendor', 'mongodb', 'maxcompute', '']) {
     assert.equal(normalizeSourceManifestKey(raw), undefined);
   }
 });

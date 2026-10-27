@@ -760,6 +760,7 @@ public class TableMetadataCollectionService {
         if (!"HIVE".equalsIgnoreCase(dbType)) return false;
         String accessMode = first(source, "metadataAccessMode", "metadata_access_mode");
         String connectionMode = first(source, "hiveConnectionMode", "hive_connection_mode");
+        if ("open-source".equalsIgnoreCase(connectionMode)) return false;
         return "server-managed-mrs".equalsIgnoreCase(accessMode)
                 || "huawei-mrs".equalsIgnoreCase(connectionMode)
                 || !blank(first(source, "hiveProfile", "hive_profile"));

@@ -193,6 +193,7 @@ function proxyFixture(post, push) {
     "proxyNavigating",
     "currentDb",
     "accessMode",
+    "isFilePush",
     `${declaration("fetchDepartmentServices")}\n${declaration("goToServiceRegistration")}\n${declaration("next")}\nreturn {fetchDepartmentServices,next,goToServiceRegistration};`
   );
   return {
@@ -204,12 +205,75 @@ function proxyFixture(post, push) {
       vue.ref("服务"),
       vue.ref(false),
       vue.ref({}),
-      vue.ref("proxy")
+      vue.ref("proxy"),
+      vue.ref(false)
     ),
     context,
     errors,
   };
 }
+
+function webServiceFixture(post = async () => ({})) {
+  const messages = [], requests = [], cleared = [];
+  const source = ["apiProtocolDrafts", "syncSoapRequestHeaders", "changeApiProtocol", "selectWebServiceOperation", "readWebServiceWsdl", "apiPullTestAuthPayload"].map(declaration).join("\n");
+  const api = new Function("$common", "$message", "apiPullReadingWsdlItemId", "clearApiPullResponseExtraction", "obj", "kv", `${source}\nreturn { changeApiProtocol, selectWebServiceOperation, readWebServiceWsdl };`)(
+    { post: async (...args) => { requests.push(args); return post(...args); } },
+    { warning: value => messages.push(value), success: value => messages.push(value) },
+    vue.ref(""), item => cleared.push(item.clientId), values => Object.fromEntries(values.map(value => [value.key, value.value])), value => ({ ...value })
+  );
+  return { api, messages, requests, cleared };
+}
+
+test("WebService protocol changes preserve separate request drafts and enforce POST/XML", () => {
+  const f = webServiceFixture();
+  const item = { clientId: "validation", apiProtocol: "SOAP", endpointMethod: "GET", requestBodyType: "json", requestTemplateJson: '{"page":1}', responseExtractPath: "data.list" };
+  f.api.changeApiProtocol(item);
+  assert.equal(item.endpointMethod, "POST");
+  assert.equal(item.requestBodyType, "xml");
+  assert.equal(JSON.parse(item.requestHeadersJson)["Content-Type"], "text/xml; charset=UTF-8");
+  assert.equal(item.responseExtractPath, "");
+  item.requestTemplateJson = "<SOAP-request/>";
+  item.apiProtocol = "REST";
+  f.api.changeApiProtocol(item);
+  assert.equal(item.endpointMethod, "GET");
+  assert.equal(item.requestTemplateJson, '{"page":1}');
+  item.apiProtocol = "SOAP";
+  f.api.changeApiProtocol(item);
+  assert.equal(item.requestTemplateJson, "<SOAP-request/>");
+});
+
+test("WSDL metadata makes one request, supplies an XML operation draft and never marks a SOAP call successful", async () => {
+  const operation = { name: "querySummary", namespace: "urn:validation", endpoint: "https://example.test/soap", action: "urn:query", version: "1.2" };
+  const f = webServiceFixture(async () => ({ success: true, connected: false, metadataOnly: true, operations: [operation] }));
+  const item = { clientId: "validation", apiProtocol: "SOAP", apiWsdlUrl: "https://example.test/service?wsdl", headerInputMode: "json", requestHeadersJson: "{}", requestTemplateJson: "", authType: "NONE" };
+  await f.api.readWebServiceWsdl(item);
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests[0][1].apiProbeAction, "wsdl");
+  assert.equal(item.requestUrl, operation.endpoint);
+  assert.equal(item.apiSoapVersion, "1.2");
+  assert.equal(item.apiSoapAction, "urn:query");
+  assert.equal(JSON.parse(item.requestHeadersJson)["Content-Type"], 'application/soap+xml; charset=UTF-8; action="urn:query"');
+  assert.match(item.requestTemplateJson, /http:\/\/www.w3.org\/2003\/05\/soap-envelope/);
+  assert.match(item.requestTemplateJson, /<m:querySummary/);
+  assert.notEqual(item.testStatus, "success");
+  assert.equal(f.cleared.length, 1);
+});
+
+test("a failed SOAP call retains the backend Fault and clears the prior connection success", async () => {
+  const state = { status: "success" }, feedback = [], loading = vue.ref("");
+  const run = new Function("normalizeApiPullRequestAddress", "req", "normalizeApiResponseExtractPath", "apiPullTestingItemId", "$common", "apiPullTestAuthPayload", "connectionTestState", "$message", `${declaration("testApiPullItem")}\nreturn testApiPullItem;`)(
+    item => item, () => ({ headers: {}, body: "<SOAP-request/>" }), value => value || "", loading,
+    { post: async () => ({ connected: false, success: false, error: "SOAP Fault: missing query condition" }) },
+    () => ({ apiAuthType: "none" }), state, { error: value => feedback.push(value) }
+  );
+  const item = { clientId: "validation", apiProtocol: "SOAP", endpointMethod: "POST", requestUrl: "https://example.test/soap", apiSoapVersion: "1.1" };
+  await run(item, 0);
+  assert.equal(item.testStatus, "failed");
+  assert.equal(state.status, "failed");
+  assert.equal(item.testMessage, "SOAP Fault: missing query condition");
+  assert.deepEqual(feedback, ["SOAP Fault: missing query condition"]);
+  assert.equal(loading.value, "");
+});
 for (const count of [20, 100])
   test(`${count} department services use one paged request, then next navigates without creating a database`, async () => {
     const requests = [],

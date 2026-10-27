@@ -1,6 +1,7 @@
 package com.linewell.dataelement.metautil.model.dto;
 
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
+import com.linewell.dataelement.metautil.jdbc.GaussDbVariant;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.LinkedHashMap;
@@ -20,6 +21,44 @@ public class DataSourceConfig {
      * 数据库类型
      */
     private DatabaseType databaseType;
+
+    /** GaussDB product: gaussdb / opengauss / dws / mysql; absent values retain the old PG contract. */
+    private String gaussdbVariant;
+
+    /** Explicit open-source / huawei-mrs choice; absent values retain existing MRS profile behaviour. */
+    private String hiveConnectionMode;
+
+    private String transportMode;
+    private String httpPath;
+    private String sslMode;
+
+    public String getGaussdbVariant() {
+        String value = option(gaussdbVariant, "gaussdbVariant", "gaussdb_variant");
+        if (value == null && "opengauss".equalsIgnoreCase(option(null, "dbType"))) return "opengauss";
+        return value;
+    }
+    public String getHiveConnectionMode() { return option(hiveConnectionMode, "hiveConnectionMode", "hive_connection_mode"); }
+    public String getTransportMode() { return option(transportMode, "transportMode"); }
+    public String getHttpPath() { return option(httpPath, "httpPath"); }
+    public String getSslMode() { return option(sslMode, "sslMode"); }
+    private String option(String configured, String... names) {
+        if (configured != null && !configured.isBlank()) return configured;
+        if (connectorProperties != null) for (String name:names) {
+            Object value=connectorProperties.get(name);
+            if (value != null && !value.toString().isBlank()) return value.toString();
+        }
+        return null;
+    }
+
+    public DatabaseType getEffectiveDatabaseType() {
+        return databaseType == DatabaseType.GAUSSDB && GaussDbVariant.resolve(getGaussdbVariant()) == GaussDbVariant.MYSQL
+                ? DatabaseType.MYSQL : databaseType;
+    }
+
+    public String getJdbcDriverClass() {
+        return databaseType == DatabaseType.GAUSSDB ? GaussDbVariant.resolve(getGaussdbVariant()).driverClass()
+                : databaseType.getDriverClass();
+    }
 
     @NotBlank(message = "主机地址不能为空")
     /**
@@ -42,6 +81,8 @@ public class DataSourceConfig {
      * Schema名称（PostgreSQL/Oracle等）
      */
     private String schema;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private transient String resolvedSchema;
 
     /** Registered database character sets; DDL conversion performs no per-column connection reads. */
     private String charset;
@@ -144,7 +185,8 @@ public class DataSourceConfig {
      * 获取端口，如果未设置则返回默认端口
      */
     public int getPortOrDefault() {
-        return port != null ? port : databaseType.getDefaultPort();
+        return port != null ? port : databaseType == DatabaseType.GAUSSDB
+                ? GaussDbVariant.resolve(getGaussdbVariant()).defaultPort() : databaseType.getDefaultPort();
     }
 
     /**
@@ -152,6 +194,8 @@ public class DataSourceConfig {
      */
     public String buildJdbcUrl() {
         if (jdbcUrl != null && !jdbcUrl.trim().isEmpty()) {
+            if (databaseType == DatabaseType.GAUSSDB && getGaussdbVariant() != null)
+                GaussDbVariant.resolve(getGaussdbVariant()).validateUrl(jdbcUrl.trim());
             return jdbcUrl.trim();
         }
 
@@ -252,13 +296,35 @@ public class DataSourceConfig {
                 break;
 
             case GAUSSDB:
-                // GaussDB（openGauss / PG 兼容）一般使用 PostgreSQL JDBC 协议
-                url.append("jdbc:postgresql://").append(host).append(":").append(getPortOrDefault());
+                GaussDbVariant variant = GaussDbVariant.resolve(getGaussdbVariant());
+                url.append(variant.urlPrefix()).append("//").append(host).append(":").append(getPortOrDefault());
                 if (database != null && !database.isEmpty()) {
                     url.append("/").append(database);
                 }
                 if (extraParams != null && !extraParams.isEmpty()) {
                     url.append("?").append(extraParams);
+                } else if (variant == GaussDbVariant.MYSQL && getSslMode() != null) {
+                    String mode=switch(getSslMode()) {
+                        case "disable" -> "DISABLED";
+                        case "prefer" -> "PREFERRED";
+                        case "require" -> "REQUIRED";
+                        case "verify-ca" -> "VERIFY_CA";
+                        case "verify-full" -> "VERIFY_IDENTITY";
+                        default -> throw new IllegalArgumentException("不支持的 GaussDB SSL 模式");
+                    };
+                    url.append("?sslMode=").append(mode);
+                } else if (variant != GaussDbVariant.MYSQL) {
+                    java.util.List<String> parameters = new java.util.ArrayList<>();
+                    if (schema != null && !schema.isBlank()) parameters.add("currentSchema="
+                            + java.net.URLEncoder.encode(schema, java.nio.charset.StandardCharsets.UTF_8));
+                    String sslMode=getSslMode();
+                    if (sslMode != null) {
+                        if (!java.util.Set.of("disable","allow","prefer","require","verify-ca","verify-full").contains(sslMode))
+                            throw new IllegalArgumentException("不支持的 GaussDB SSL 模式");
+                        parameters.add("sslmode="+sslMode);
+                    }
+                    if (getGaussdbVariant() != null) parameters.add("prepareThreshold=0");
+                    if (!parameters.isEmpty()) url.append("?").append(String.join("&",parameters));
                 }
                 break;
                 
@@ -455,6 +521,14 @@ public class DataSourceConfig {
     private void appendHiveParams(StringBuilder url) {
         boolean kerberos = "KERBEROS".equalsIgnoreCase(authMode);
         StringBuilder params = new StringBuilder();
+        if (getTransportMode() != null && !getTransportMode().equalsIgnoreCase("binary")) {
+            params.append(";transportMode=").append(getTransportMode());
+            params.append(";httpPath=").append(getHttpPath() == null ? "cliservice" : getHttpPath());
+        }
+        if (Boolean.TRUE.equals(ssl) && !kerberos) params.append(";ssl=true");
+        if (Boolean.TRUE.equals(ssl) && trustStorePath != null && !trustStorePath.isBlank())
+            params.append(";sslTrustStore=").append(trustStorePath);
+        if ("NOSASL".equalsIgnoreCase(authMode)) params.append(";auth=noSasl");
         if (serviceDiscoveryMode != null && !serviceDiscoveryMode.isBlank()) {
             params.append(";serviceDiscoveryMode=").append(serviceDiscoveryMode.trim());
         } else if (zookeeperQuorum != null && !zookeeperQuorum.isBlank()) {
@@ -482,7 +556,9 @@ public class DataSourceConfig {
             if (keytabPath != null && !keytabPath.isBlank()) {
                 params.append(";user.keytab=").append(keytabPath.trim());
             }
-        } else if (zookeeperQuorum != null && !zookeeperQuorum.isBlank()) {
+        } else if (!"NOSASL".equalsIgnoreCase(authMode)
+                && ((zookeeperQuorum != null && !zookeeperQuorum.isBlank())
+                    || "open-source".equalsIgnoreCase(getHiveConnectionMode()))) {
             params.append(";auth=none");
         }
         if (extraParams != null && !extraParams.isEmpty()) {

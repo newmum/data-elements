@@ -1,4 +1,4 @@
-import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl } from "./registeredDatasourceType";
+import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl, connectionProductPatch, connectionFieldVisible } from "./registeredDatasourceType";
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip } from 'antd';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
@@ -787,7 +787,7 @@ export default function ConfigDrawer() {
       tableRequestSequence.current++;
     };
   }, [open, node?.id, node?.manifestKey, node?.config.database, node?.config.dbName,
-    node?.config.selectedDatabaseId, node?.config.hiveProfile, node?.config.jdbcUrl,
+    node?.config.selectedDatabaseId, node?.config.hiveProfile, node?.config.gaussdbVariant, node?.config.hiveConnectionMode, node?.config.jdbcUrl,
     node?.config.host, node?.config.port, node?.config.username, node?.config.password]);
 
   useEffect(() => {
@@ -869,6 +869,7 @@ export default function ConfigDrawer() {
       ? (declaredOceanBaseMode === 'ORACLE' || normalizedDbType === 'OCEANBASE_ORACLE' ? 'ORACLE' : 'MYSQL')
       : undefined;
     const isHuaweiMrsHive = normalizedDbType === 'HIVE'
+      && item.hiveConnectionMode !== 'open-source'
       && (String(item.metadataAccessMode || '').toLowerCase() === 'server-managed-mrs'
         || String(item.hiveConnectionMode || '').toLowerCase() === 'huawei-mrs'
         || Boolean(item.hiveProfile)
@@ -882,6 +883,19 @@ export default function ConfigDrawer() {
       // The backend re-loads this record under the active tenant before probing Hive.
       registeredDatasourceId: dbId,
       metadataAccessMode: item.metadataAccessMode,
+      ftpsImplicit: item.ftpsImplicit,
+      trustStorePath: item.trustStorePath,
+      trustStorePassword: item.trustStorePassword,
+      nifiTrustStorePath: item.nifiTrustStorePath,
+      gaussdbVariant: item.gaussdbVariant,
+      transportMode: item.transportMode,
+      httpPath: item.httpPath,
+      authMode: item.authMode,
+      ssl: item.ssl,
+      principal: item.principal,
+      userPrincipal: item.userPrincipal,
+      keytabPath: item.keytabPath,
+      krb5ConfPath: item.krb5ConfPath,
       hiveConnectionMode: item.hiveConnectionMode,
       hiveProfile: item.hiveProfile,
       host,
@@ -1010,7 +1024,7 @@ export default function ConfigDrawer() {
       }
       const jdbcUrl = usesServerManagedHiveProfile ? undefined : (isHuaweiMrsHive
         ? (item.jdbcUrl || item.jdbcURL || buildHuaweiMrsHiveJdbcUrl(item, host, port, database))
-        : (item.jdbcUrl || item.jdbcURL || buildJdbcUrl(dbType, host, port, database, item.connectionType ?? item.jdbcType)));
+        : (item.jdbcUrl || item.jdbcURL || buildJdbcUrl(dbType, host, port, database, item.connectionType ?? item.jdbcType, item.gaussdbVariant)));
       if (jdbcUrl) basePatch.jdbcUrl = jdbcUrl;
       updateConfig(node.id, basePatch);
       message.success(`已选择目标库：${item.label || database || host}`);
@@ -1025,7 +1039,7 @@ export default function ConfigDrawer() {
       basePatch.dbType = normalizedDbType;
       const jdbcUrl = usesServerManagedHiveProfile ? undefined : (isHuaweiMrsHive
         ? (item.jdbcUrl || item.jdbcURL || buildHuaweiMrsHiveJdbcUrl(item, host, port, database))
-        : (item.jdbcUrl || item.jdbcURL || buildJdbcUrl(item.dbType, host, port, database, item.connectionType ?? item.jdbcType)));
+        : (item.jdbcUrl || item.jdbcURL || buildJdbcUrl(item.dbType, host, port, database, item.connectionType ?? item.jdbcType, item.gaussdbVariant)));
       if (jdbcUrl) basePatch.jdbcUrl = jdbcUrl;
     }
     updateConfig(node.id, basePatch);
@@ -1393,7 +1407,7 @@ export default function ConfigDrawer() {
         value={value}
         onChange={(v) => updateConfig(node.id, field.key === 'syncMode'
           ? syncSettingsPatch(node.config, { ...syncSettings(node.config), syncMode: v as ReturnType<typeof syncSettings>['syncMode'], deleteTargetData: false })
-          : { [field.key]: v })}
+          : connectionProductPatch(node.config, field.key, v))}
         disabled={disabled}
       />
     );
@@ -1586,7 +1600,7 @@ export default function ConfigDrawer() {
           // The unified field component exposes its mode beside the rule editor;
           // rendering it as a normal form row wastes a full line of vertical space.
           if (isUnifiedFieldMapping && f.key === 'executionMode') return false;
-          return isVisible(f, node.config) && isIncrementalVisible(f, node.config);
+          return connectionFieldVisible(manifest.key, f.key, node.config) && isVisible(f, node.config) && isIncrementalVisible(f, node.config);
         }).map((field) => (
           <Form.Item
             key={field.key}

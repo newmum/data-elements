@@ -595,6 +595,9 @@ var sourceTable = db.table('db_table_t').where()
 if (sourceTable == null) {
     exit 404, '来源表不存在'
 }
+if (text(first(sourceTable, ['tableType', 'table_type'])).toUpperCase() == 'FILE') {
+    exit 422, '文件登记项用于非结构化文件上传，不能物化为结构化数据库表'
+}
 
 var sourceDatasource = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId)

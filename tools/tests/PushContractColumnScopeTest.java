@@ -21,10 +21,10 @@ public class PushContractColumnScopeTest {
             Map<?,?> result=(Map<?,?>)call(f,ids);
             PushRegistrySyncMagicTest.check(result.size()==count,"all requested tables returned");
             PushRegistrySyncMagicTest.check(f.reads.get()==3,"snapshot reads fixed at three");
-            f.jdbc.update("insert into db_table_t values('foreign-table','ct','foreign','foreign_table','','',2,0)");
+            f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,table_name_cn,table_comment,asset_status,is_del) values('foreign-table','ct','foreign','foreign_table','','',2,0)");
             PushRegistrySyncMagicTest.rejected(call(f,ids+",foreign-table"),count==100?400:404);
             f.jdbc.update("insert into db_datasource_t values('private','ga','PRIVATE',2,'{}',0,'private-org','other','app')");
-            f.jdbc.update("insert into db_table_t values('private-table','ga','private','private_table','','',2,0)");
+            f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,table_name_cn,table_comment,asset_status,is_del) values('private-table','ga','private','private_table','','',2,0)");
             f.scope.hidden="private";
             PushRegistrySyncMagicTest.rejected(call(f,"table_0,private-table"),403);
             System.out.println(count+" table IDs: 3 SQL reads; foreign tenant and mixed unauthorized source IDs rejected as a whole");

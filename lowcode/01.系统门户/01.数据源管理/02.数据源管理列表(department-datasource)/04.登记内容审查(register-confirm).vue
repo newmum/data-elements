@@ -70,10 +70,21 @@
           </el-button>
         </div>
         <div v-else-if="isDataPushSource" class="push-contract-panel">
-          <div class="push-contract-head"><div><strong>{{ pushIsAttachmentMode ? "非结构化数据分片上传规范" : "数据推送接口规范" }}</strong></div><el-tag :type="pushContractError ? 'danger' : pushContractIsPreview ? 'warning' : 'success'" effect="light">{{ pushContractError ? '规范读取失败' : pushContractIsPreview ? '数据推送规范' : '已发布表规范' }}</el-tag></div>
+          <div class="push-contract-head"><div><strong>{{ pushIsAttachmentMode ? "非结构化数据分片上传规范" : "数据推送接口规范" }}</strong></div><el-tag :type="pushContractError ? 'danger' : pushContractIsPreview ? 'warning' : 'success'" effect="light">{{ pushContractError ? '规范读取失败' : pushIsAttachmentMode ? '分片上传规范' : pushContractIsPreview ? '数据推送规范' : '已发布表规范' }}</el-tag></div>
           <LoadingState v-if="pushContractLoading" type="list" compact class="review-section-loading" />
           <div v-else-if="pushContractError" class="push-contract-error"><Icon icon="el-icon-WarningFilled" /><div><strong>正式规范读取失败</strong><p>{{ pushContractError }}</p></div><el-button plain @click="loadPushContract(true)">重试</el-button></div>
-          <div class="push-contract-endpoint-grid" role="radiogroup" aria-label="选择推送接口">
+          <template v-if="pushIsAttachmentMode">
+            <div class="file-main-interface-head"><div><strong>文件上传主接口</strong><p>上传前先初始化取得 uploadId；按返回的分片大小发送文件原始字节。</p></div><el-button plain @click="pushAuxiliaryExpanded = !pushAuxiliaryExpanded">{{ pushAuxiliaryExpanded ? "收起配套接口" : "查看上传配套接口（5项）" }}</el-button></div>
+            <div class="push-contract-endpoint-grid is-file-primary" role="radiogroup" aria-label="选择文件上传主接口">
+              <button v-for="item in pushPrimaryEndpoints" :key="item.key" type="button" role="radio" :aria-checked="pushInterfaceType === item.key" class="push-contract-endpoint" :class="{'is-selected':pushInterfaceType===item.key}" @click="selectPushInterface(item.key)"><span class="push-endpoint-label">文件分片上传<span class="push-endpoint-selection">主接口</span></span><strong><em>{{item.method}}</em>{{pushProtocolUrl(item.path)}}</strong><small>正文为文件分片的原始字节；按 partSize 顺序切片，片号从1开始。</small></button>
+            </div>
+            <div v-if="pushAuxiliaryExpanded" class="file-auxiliary-interfaces">
+              <p>调用顺序：初始化 → 主接口上传各片 → 完成上传 → 状态就绪 → 提交推送。续传查询、状态查询按需调用。</p>
+              <div class="push-contract-endpoint-grid" role="radiogroup" aria-label="选择上传配套接口"><button v-for="item in pushAuxiliaryEndpoints" :key="item.key" type="button" role="radio" :aria-checked="pushInterfaceType===item.key" class="push-contract-endpoint" :class="{'is-selected':pushInterfaceType===item.key}" @click="selectPushInterface(item.key)"><span class="push-endpoint-label">{{item.label}}<span class="push-endpoint-selection">{{pushInterfaceType===item.key?'已选择':'查看规范'}}</span></span><strong><em>{{item.method}}</em>{{pushProtocolUrl(item.path)}}</strong><small>{{item.description}}</small></button></div>
+            </div>
+            <div class="file-selected-definition" v-if="fileRegistrationRows.length"><label>本次推送文件<el-select v-model="pushFileSelection" placeholder="选择已登记文件"><el-option v-for="row in fileRegistrationRows" :key="row.tableId" :value="row.tableId" :label="row.fileName" /></el-select></label><span v-if="selectedFileRegistration">{{selectedFileRegistration.fileFormat.toUpperCase()}} · 单个不超过 {{selectedFileRegistration.maxFileSizeMb}} MB · 集合编码 {{selectedFileRegistration.collectionId}}</span></div>
+          </template>
+          <div v-else class="push-contract-endpoint-grid" role="radiogroup" aria-label="选择推送接口">
             <button v-for="item in pushContractEndpointItems" :key="item.key" type="button" role="radio" :aria-checked="pushInterfaceType === item.key" aria-controls="push-interface-specification" class="push-contract-endpoint" :class="{'is-selected': pushInterfaceType === item.key}" @click="selectPushInterface(item.key)">
               <span class="push-endpoint-label">{{ item.label }}<span class="push-endpoint-selection">{{ pushInterfaceType === item.key ? '已选择' : '点击选择' }}</span></span>
               <strong><em>{{ item.method }}</em>{{ pushProtocolUrl(item.path) }}</strong><small>{{ item.description }}</small>
@@ -86,7 +97,7 @@
               <div class="push-contract-auth-grid">
                 <div class="push-auth-header push-content-type-card"><code>Content-Type</code><strong>{{ pushRequestContentType }}</strong><small>{{ pushInterfaceType === 'filePart' ? '当前分片的原始字节' : pushRequestContentType === 'application/json' ? 'JSON 请求体' : '仅使用路径或查询参数' }}</small></div>
                 <div class="push-auth-header push-credential-card">
-                  <div class="push-auth-card-heading"><code>X-Api-Key</code><div class="push-credential-actions"><el-button v-if="!pushCredential?.revealed" class="push-key-button" type="primary" size="small" :loading="pushCredentialLoading" :disabled="sourceDetailLoading" @click="issuePushCredential(sourceTid)">获取密钥</el-button><el-button v-if="pushCredential" link type="primary" size="small" :loading="pushCredentialLoading" @click="rotatePushCredential">轮换</el-button></div></div>
+                  <div class="push-auth-card-heading"><code>X-Api-Key</code><div class="push-credential-actions"><el-button v-if="!pushCredential?.revealed" class="push-key-button" type="primary" size="small" :loading="pushCredentialLoading" :disabled="sourceDetailLoading || (pushIsAttachmentMode && !fileRegistrationRows.length)" @click="issuePushCredential(sourceTid)">获取密钥</el-button><el-button v-if="pushCredential" link type="primary" size="small" :loading="pushCredentialLoading" @click="rotatePushCredential">轮换</el-button></div></div>
                   <strong>{{ pushCredential?.revealed ? '密钥已生成' : pushCredentialError ? '获取失败' : pushCredential ? '密钥已配置' : '当前数据源访问密钥' }}</strong>
                   <small :class="{'push-credential-error':pushCredentialError}">{{ pushCredentialError || (pushCredential?.revealed ? '明文仅展示一次，请保存。' : pushCredential ? '已有密钥不回显明文。' : '首次获取后请妥善保存。') }}</small>
                   <el-input v-if="pushCredential?.revealed" :model-value="pushCredential.apiKey" readonly size="small" class="push-credential-input" aria-label="当前数据源 X-Api-Key"><template #append><el-button @click="copyPushCredential">复制</el-button></template></el-input>
@@ -105,8 +116,8 @@
                 </DataTable>
                 <div v-if="pushIsAttachmentMode" class="push-attachment-guidance">
                   <p>默认使用分片上传。先初始化取得 uploadId、partSize 和 partCount，按返回大小切片并从第1片开始上传；中断后分页查询已确认片号，只补传缺失片。</p>
-                  <p>完成上传返回202仅表示开始合并校验。查询状态至 READY 后，调用“提交推送”，再持续核对 deliveryStatus 和 deliveries 中的投递结果；只有 READY 不代表已写入目标。</p>
-                  <p>文件集合由当前节点的海通 YAML 配置：relay.files.collections 下的 datasource-id 要等于本数据源编码，collection-id 填入初始化请求，clients 须包含业务密钥对应的 clientId。无需填写表名、字段名或把 fileId 回填到登记字段；文件大小、格式、目标及元数据规则由该集合配置约束。</p>
+                  <p>完成上传返回202仅表示开始合并校验。查询状态至 READY 后，调用“提交推送”，确认 deliveryStatus=SUCCEEDED 并核对 deliveries 中的投递结果；只有 READY 不代表已写入目标。</p>
+                  <p>初始化请求使用下方已登记文件的集合编码；海通节点 YAML 的 relay.files.collections 须配置相同 datasource-id、collection-id，并授权业务密钥对应的 clientId。登记的大小和格式须与节点集合策略一致，投递目标仍由海通自己的 YAML 决定。可选关联表、字段不增加分片接口的必填参数。</p>
                   <div class="push-contract-table-toolbar"><strong>当前操作请求示例</strong><el-button link type="primary" @click="copyPushChunkSample">复制分片示例</el-button></div>
                   <div class="push-contract-code"><pre>{{ pushChunkSample }}</pre></div>
                 </div>
@@ -384,7 +395,16 @@
       </el-collapse-transition>
     </section>
 
-    <section class="registration-overview-card data-source-status-card">
+    <section v-if="pushIsAttachmentMode" class="registration-overview-card file-registration-review">
+      <div class="overview-section-title"><strong>文件登记内容审查</strong><el-tag type="info">复用表与字段快照 · 文件登记</el-tag><el-button v-if="reviewSummaryError" link type="warning" @click="retryReviewSummary">{{reviewSummaryError}} 重新读取</el-button></div>
+      <LoadingState v-if="reviewLoading" type="list" compact />
+      <el-empty v-else-if="!fileRegistrationRows.length" description="尚无文件登记信息，请返回第一步上传文件登记模板并保存" />
+      <template v-else><p>共 {{fileRegistrationRows.length}} 项文件定义。文件名称、说明、格式、大小上限必填，关联表和字段选填；本流程无需数据库表探查、字典或业务表登记。</p>
+      <DataTable :data="fileRegistrationRows" :preview-sort="{fileName:'text',maxFileSizeMb:'number'}" :show-page="false" height="auto" border size="small">
+        <el-table-column type="index" label="序号" width="65" /><el-table-column prop="fileName" label="文件名称" min-width="150" sortable="custom" /><el-table-column prop="fileDescription" label="文件说明" min-width="220" /><el-table-column prop="fileFormat" label="文件格式" width="110"><template #default="{row}">{{row.fileFormat.toUpperCase()}}</template></el-table-column><el-table-column prop="maxFileSizeMb" label="大小上限(MB)" width="145" sortable="custom" /><el-table-column prop="relatedTableName" label="关联表（选填）" min-width="160" /><el-table-column prop="relatedFieldName" label="关联字段（选填）" min-width="160" /><el-table-column label="字段快照" width="110"><template #default="{row}">{{row.fieldCount}} 项属性</template></el-table-column>
+      </DataTable></template>
+    </section>
+    <section v-if="!pushIsAttachmentMode" class="registration-overview-card data-source-status-card">
       <div class="overview-section-title">
         <div>
           <strong>数据源状态</strong>
@@ -573,7 +593,7 @@
       </div>
     </section>
 
-    <section class="review-workbench data-table-workbench">
+    <section v-if="!pushIsAttachmentMode" class="review-workbench data-table-workbench">
       <section class="review-detail-panel data-table-information-card">
       <div class="review-toolbar data-table-toolbar">
           <div>
@@ -1041,6 +1061,15 @@ const sources = computed(() => {
 
 const sourceDetail = ref(null);
 const realtimeTables = ref([]);
+const fileRegistrationRows = ref([]);
+const pushFileSelection = ref("");
+function isUnstructuredPushSource(input) {
+  if (!input) return false;
+  const pool=parseObject(input.poolCfg ?? input.pool_cfg);
+  const mode=String(input.accessMode || input.dataAccessMode || pool.accessMode || pool.dataAccessMode || "").toLowerCase();
+  return ["receive","push"].includes(mode) && String(input.pushDataType || pool.pushDataType || "").toUpperCase()==="UNSTRUCTURED";
+}
+
 // db_table_t 是登记快照，不等于第二步探查到的物理表全量。第五步的总数
 // 和表变更必须分别使用探查汇总及重新探查结果，不能从快照字段推断。
 const physicalTableTotal = ref(0);
@@ -1114,6 +1143,22 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
     reviewSummaryError.value = "";
   }
   try {
+    if (isUnstructuredPushSource(sources.value[0])) {
+      const [detailResult,fileResult]=await Promise.allSettled([
+        requestWithTimeout(()=>$common.post("/dst/database/detail",{tid}),"数据源详情"),
+        requestWithTimeout(()=>$common.post("/dst/database/metadata/fileRegistration",{dbId:tid,action:"read"}),"文件登记快照"),
+      ]);
+      if (requestId!==sourceDetailRequestId || sourceTid.value!==tid) return;
+      if (detailResult.status==="fulfilled") sourceDetail.value=detailResult.value;
+      realtimeTables.value=[];physicalTableTotal.value=0;tableChangeSnapshot.value=null;
+      if (fileResult.status==="fulfilled") {
+        const payload=fileResult.value?.data || fileResult.value || {};
+        fileRegistrationRows.value=(payload.list || []).map(row=>({...row,id:row.tableId}));
+        if (!fileRegistrationRows.value.some(row=>row.tableId===pushFileSelection.value)) pushFileSelection.value=fileRegistrationRows.value[0]?.tableId || "";
+      }
+      reviewSummaryError.value=detailResult.status==="fulfilled" && fileResult.status==="fulfilled" ? "" : "文件登记审查信息未完整读取";
+      return;
+    }
     const [detailResult, tableResult, physicalResult] = await Promise.allSettled([
       requestWithTimeout(() => $common.post("/dst/database/detail", { tid }), "数据源详情"),
       // 完整采集快照包含未标注表；登记完成以治理保存标记为准，不能以资产可用状态代替。
@@ -1334,7 +1379,8 @@ watch(
     physicalTableTotal.value = 0;
     tableChangeSnapshot.value = null;
     tableChangeError.value = "";
-    const cached = readReviewSummaryCache(tid);
+    fileRegistrationRows.value=[];pushFileSelection.value="";
+    const cached = isUnstructuredPushSource(sources.value[0]) ? null : readReviewSummaryCache(tid);
     if (cached) {
       sourceDetail.value = cached.detail || null;
       realtimeTables.value = uniqueTables(cached.tables);
@@ -1791,8 +1837,12 @@ const pushInterfaceSelection = ref("");
 const pushInterfaceType = computed(() => {
   const available = pushContractEndpointItems.value.map(item => item.key);
   return available.includes(pushInterfaceSelection.value) ? pushInterfaceSelection.value
-    : pushIsAttachmentMode.value ? "fileInit" : "dataPush";
+    : pushIsAttachmentMode.value ? "filePart" : "dataPush";
 });
+const pushAuxiliaryExpanded = ref(false);
+const pushPrimaryEndpoints = computed(()=>pushContractEndpointItems.value.filter(item=>item.key==="filePart"));
+const pushAuxiliaryEndpoints = computed(()=>pushContractEndpointItems.value.filter(item=>item.key!=="filePart"));
+const selectedFileRegistration = computed(()=>fileRegistrationRows.value.find(row=>row.tableId===pushFileSelection.value) || fileRegistrationRows.value[0] || null);
 const pushProtocolNodes = ref([]);
 const pushProtocolNodesSourceId = ref("");
 const pushProtocolLoadError = ref("");
@@ -1844,7 +1894,7 @@ const pushContractEndpointItems = computed(() => pushIsAttachmentMode.value ? pu
 const pushRequestContentType = computed(() => !pushIsAttachmentMode.value || ["fileInit","fileSubmit"].includes(pushInterfaceType.value)
   ? "application/json" : pushInterfaceType.value === "filePart" ? "application/octet-stream" : "无需设置（无请求体）");
 const pushContractHeaders = computed(() => pushInterfaceType.value === "filePart" ? [
-  {name:"X-Part-SHA256",value:"本片原始字节的64位SHA-256",description:"必填；每一片单独计算，重试时内容和摘要保持一致"},
+  {name:"X-Part-SHA256",value:"本片SHA-256（64个十六进制字符）",description:"必填；每一片单独计算，重试时内容和摘要保持一致"},
   {name:"Content-Length",value:"当前分片实际字节数",description:"由HTTP客户端按分片正文设置，最后一片可以小于 partSize"},
 ] : ["dataPush","fileInit","fileSubmit"].includes(pushInterfaceType.value) ? [
   {name:"Idempotency-Key",value:"每次逻辑请求唯一 UUID",description:pushIsAttachmentMode.value ? "初始化、提交分别使用稳定的键；同一操作重试保持不变" : "同一批次重试保持不变"},
@@ -1855,10 +1905,10 @@ const pushSelectedParameters = computed(() => {
   const id = {name:"id",location:"路径参数",required:true,description:"初始化响应中的 uploadId，同一个文件的后续请求始终使用该值"};
   if (pushInterfaceType.value === "fileInit") return [
     {name:"datasourceId",location:"请求体",required:true,description:`当前数据源编码：${sourceTid.value}`},
-    {name:"collectionId",location:"请求体",required:true,description:"当前海通节点 YAML 中 relay.files.collections 下配置的 collection-id；该集合须绑定当前数据源并授权当前 clientId"},
+    {name:"collectionId",location:"请求体",required:true,description:selectedFileRegistration.value ? `当前文件集合编码：${selectedFileRegistration.value.collectionId}；海通 YAML 须配置相同编码并授权当前业务密钥` : "请先导入并保存文件登记模板；海通 YAML 配置相同集合编码与调用方授权"},
     {name:"fileName",location:"请求体",required:true,description:"原始文件名，含扩展名；须符合服务端文件集合的格式白名单"},
     {name:"size",location:"请求体",required:true,description:"整个文件的实际字节数，正整数；不是MB数，也不是分片大小"},
-    {name:"sha256",location:"请求体",required:false,description:"整个文件原始字节的64位SHA-256，可省略；与逐片 X-Part-SHA256 不同"},
+    {name:"sha256",location:"请求体",required:false,description:"整个文件原始字节的SHA-256（64个十六进制字符），可省略；与逐片 X-Part-SHA256 不同"},
   ];
   if (pushInterfaceType.value === "filePart") return [id,
     {name:"part",location:"路径参数",required:true,description:"分片编号从1开始，最大为初始化响应中的 partCount"},
@@ -1888,8 +1938,13 @@ const pushChunkSample = computed(() => {
   const lines = [`${stage.method} ${pushProtocolUrl(path)}`,"X-Api-Key: <当前数据源且已获文件集合授权的业务密钥>"];
   if (pushRequestContentType.value.includes("application/")) lines.push(`Content-Type: ${pushRequestContentType.value}`);
   if (["fileInit","fileSubmit"].includes(stage.key)) lines.push("Idempotency-Key: <本操作固定UUID，重试保持不变>");
-  if (stage.key === "filePart") lines.push("X-Part-SHA256: <本分片原始字节的64位SHA-256>","Content-Length: <本分片实际字节数>");
-  if (stage.key === "fileInit") lines.push("",JSON.stringify({datasourceId:String(sourceTid.value || ""),collectionId:"<海通YAML配置的collection-id>",fileName:"sample.pdf",size:2048},null,2));
+  if (stage.key === "filePart") lines.push("X-Part-SHA256: <本分片SHA-256，64个十六进制字符>","Content-Length: <本分片实际字节数>");
+  if (stage.key === "fileInit") {
+    const registered=selectedFileRegistration.value;
+    const extension=registered?.fileFormat || "pdf";
+    const fileName=registered?.fileName || "sample";
+    lines.push("",JSON.stringify({datasourceId:String(sourceTid.value || ""),collectionId:registered?.collectionId || "<已登记文件的集合编码>",fileName:fileName.toLowerCase().endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`,size:2048},null,2));
+  }
   if (stage.key === "filePart") lines.push("","<当前分片的原始字节>");
   if (stage.key === "fileParts") lines[0] += "?after=0&limit=100";
   if (stage.key === "fileSubmit") lines.push("",JSON.stringify({businessKey:"<本文件业务唯一标识>",metadata:{}},null,2));
@@ -2037,7 +2092,9 @@ async function loadPushContract(force = false) {
   try {
     await loadPushProtocolNodes(datasourceId, force);
     let result;
-    if (!publishedRead) {
+    if (pushIsAttachmentMode.value) {
+      result={datasourceId,tables:[],tableSource:"file-registration",fileDefinitions:fileRegistrationRows.value};
+    } else if (!publishedRead) {
       // Wait for authoritative source details; viewing never issues a key.
       result = buildLocalPushContract(datasourceId);
     } else {
@@ -2394,10 +2451,14 @@ watch([sourceTid, isDataPushSource], () => {
   pushContractInFlightKey = "";
   pushContractLoading.value = false;
   pushContract.value = null; pushContractError.value = ""; pushContractLoadedDatasourceId.value = ""; pushContractOpenTables.value = [];
-  pushInterfaceType.value = "dataPush"; pushAttachmentFieldSelections.value = {};
+  pushInterfaceSelection.value = ""; pushAuxiliaryExpanded.value = false;
+  pushProtocolNodes.value = []; pushProtocolNodesSourceId.value = ""; pushProtocolLoadError.value = "";
   ++pushCredentialRequestId; pushCredentialLoading.value = false;
   pushCredential.value = null; pushCredentialError.value = ""; pushCredentialDatasourceId.value = "";
 }, { immediate: true });
+watch([pushIsAttachmentMode,isDataUploadSource],([fileFlow,reportFlow])=>{
+  (store.state.steps || []).forEach((step,index)=>{if(index>=1 && index<=3) step.skipped=fileFlow || reportFlow;});
+},{immediate:true});
 watch([sourceDetailLoading, pushDatasourceRegistered], ([loading]) => {
   if (!loading && isDataPushSource.value && connectionInfoExpanded.value) void loadPushContract(true);
 });
@@ -4629,6 +4690,11 @@ function collapseAll() {
 }
 
 function ensureReady() {
+  if (pushIsAttachmentMode.value) {
+    if (reviewLoading.value || reviewSummaryError.value) throw new Error(reviewSummaryError.value || "文件登记信息正在读取");
+    if (!fileRegistrationRows.value.length || fileRegistrationRows.value.some(row=>!row.fileName || !row.fileDescription || !row.fileFormat || !(Number(row.maxFileBytes)>0) || row.fieldCount<6)) throw new Error("文件登记信息不完整，请返回第一步重新上传并保存");
+    return;
+  }
   if (reviewLoading.value || reviewSummaryError.value) {
     throw new Error(reviewSummaryError.value || "登记审查信息正在读取，请稍后再结束登记。");
   }
@@ -4648,7 +4714,7 @@ async function finish() {
         tid: source.value.tid || source.value.id,
         dbName: source.value.dbName,
         assetType: "db",
-        assetStatus: pendingRegistrationTableCount.value > 0 || uncertainTables.value.length > 0 || !physicalTableCount.value ? 1 : 2,
+        assetStatus: pushIsAttachmentMode.value ? 2 : pendingRegistrationTableCount.value > 0 || uncertainTables.value.length > 0 || !physicalTableCount.value ? 1 : 2,
       }
     : null;
   // 数据表与字段已在第二至四步分别保存。第五步仅需要确认数据源的登记状态；
@@ -4664,10 +4730,9 @@ async function persistCompletion(items) {
     dbName: completedSource.dbName || completedSource.assetName,
     completeOnly: true,
   };
-  const result = await $common.post("/dst/database/saveOrUpdate", {
-    tid: completedSource.tid,
-    propList,
-  });
+  const result = pushIsAttachmentMode.value
+    ? await $common.post("/dst/database/metadata/fileRegistration",{dbId:completedSource.tid,action:"complete"})
+    : await $common.post("/dst/database/saveOrUpdate", {tid:completedSource.tid,propList});
   completedSource.assetStatus = Number(result.assetStatus);
 }
 
@@ -4675,7 +4740,7 @@ async function commit(items) {
   items = items || await finish();
   await persistCompletion(items);
   const completedSource = items.find((item) => item.assetType === "db" && item.tid);
-  if (completedSource && isDataPushSource.value && completedRegistrationTableCount.value > 0) {
+  if (completedSource && isDataPushSource.value && !pushIsAttachmentMode.value && completedRegistrationTableCount.value > 0) {
     await $common.post("/dws/push/schema/publish", { datasourceId: completedSource.tid });
     if (sourceDetail.value) sourceDetail.value = { ...sourceDetail.value, assetStatus: completedSource.assetStatus };
     await loadPushContract(true);
@@ -6661,6 +6726,16 @@ defineExpose({ next, finish, commit });
 
 .push-contract-notice :deep(.el-alert__description) { line-height: 1.7; }
 .push-contract-endpoint > strong { white-space: normal; overflow-wrap: anywhere; }
+.push-contract-endpoint em { flex: none; white-space: nowrap; }
+.is-file-primary { grid-template-columns: minmax(0,1fr); }
+.file-main-interface-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.file-main-interface-head p,.file-auxiliary-interfaces > p,.file-registration-review > p { color:#667085; font-size:13px; line-height:1.7; margin:6px 0; }
+.file-auxiliary-interfaces { padding:12px; border:1px dashed #cfe1ff; border-radius:8px; background:#f8fbff; }
+.file-selected-definition { display:flex; flex-wrap:wrap; align-items:center; gap:12px; color:#667085; font-size:13px; }
+.file-selected-definition label { display:flex; align-items:center; gap:12px; min-width:280px; }
+.file-selected-definition .el-select { width:220px; }
+.file-registration-review { padding:18px; }
+
 .push-contract-header-list small { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
 .push-contract-sample-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .push-contract-sample-actions :deep(.el-select) { width: 150px; }

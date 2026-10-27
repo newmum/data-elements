@@ -46,7 +46,7 @@ public class DataPushSchemaService {
         requirePushSource(source);
         List<Map<String, Object>> tables = jdbc.queryForList("""
                 select tid, table_name, field_governance_config from db_table_t
-                 where tenant_id = ? and datasource_id = ? and asset_status = 2 and (is_del = 0 or is_del is null)
+                 where tenant_id = ? and datasource_id = ? and asset_status = 2 and (table_type is null or table_type <> 'FILE') and (is_del = 0 or is_del is null)
                  order by table_name, tid
                 """, tenantId, datasourceId);
         if (tables.isEmpty()) throw new IllegalStateException("数据源尚无登记成功的数据表，无法发布推送规范");
@@ -90,7 +90,7 @@ public class DataPushSchemaService {
         JdbcTemplate jdbc = jdbc(tenantId);
         Source source = source(jdbc, tenantId, datasourceId);
         requirePushSource(source);
-        List<Map<String, Object>> published = jdbc.queryForObject("select count(*) from db_table_t where tenant_id=? and datasource_id=? and asset_status=2 and (is_del=0 or is_del is null)", Integer.class, tenantId, datasourceId) > 0
+        List<Map<String, Object>> published = jdbc.queryForObject("select count(*) from db_table_t where tenant_id=? and datasource_id=? and asset_status=2 and (table_type is null or table_type <> 'FILE') and (is_del=0 or is_del is null)", Integer.class, tenantId, datasourceId) > 0
                 ? publish(tenantId, datasourceId) : List.of();
         Map<String, Map<String, Object>> schemaByTable = new LinkedHashMap<>();
         for (Map<String, Object> schema : published) schemaByTable.put(text(schema.get("tableId")), schema);
@@ -98,7 +98,7 @@ public class DataPushSchemaService {
                 select t.tid, t.table_name, t.table_name_cn, t.table_comment
                   from db_table_t t
                  where t.tenant_id=? and t.datasource_id=? and t.asset_status=2
-                   and (t.is_del=0 or t.is_del is null)
+                   and (t.table_type is null or t.table_type <> 'FILE') and (t.is_del=0 or t.is_del is null)
                  order by t.table_name, t.tid
                 """, tenantId, datasourceId);
         Map<String,List<Map<String,Object>>> columnsByTable=columnsForTables(jdbc,tenantId,rows.stream().map(row->text(row.get("tid"))).toList());
@@ -168,7 +168,7 @@ public class DataPushSchemaService {
         List<String> candidateIds=candidates.stream().map(item->text(item.get("table_id"))).distinct().toList();
         for(int offset=0;offset<candidateIds.size();offset+=500){List<String> chunk=candidateIds.subList(offset,Math.min(offset+500,candidateIds.size()));List<Object> args=new ArrayList<>();args.add(tenantId);args.add(datasourceId);args.addAll(chunk);
             String marks=String.join(",",Collections.nCopies(chunk.size(),"?"));
-            for(var table:jdbc.queryForList("select tid from db_table_t where tenant_id=? and datasource_id=? and asset_status=2 and (is_del=0 or is_del is null) and tid in ("+marks+")",args.toArray()))activeTableIds.add(text(table.get("tid")));
+            for(var table:jdbc.queryForList("select tid from db_table_t where tenant_id=? and datasource_id=? and asset_status=2 and (table_type is null or table_type <> 'FILE') and (is_del=0 or is_del is null) and tid in ("+marks+")",args.toArray()))activeTableIds.add(text(table.get("tid")));
         }
         List<Map<String,Object>> schemas=candidates.stream().filter(item->activeTableIds.contains(text(item.get("table_id")))).toList();
         if (schemas.isEmpty()) throw new IllegalArgumentException("数据表未完成推送规范发布，请重新完成数据源登记");
@@ -235,7 +235,7 @@ public class DataPushSchemaService {
                      and convert(t.tenant_id using utf8mb4) collate utf8mb4_general_ci
                          = convert(s.tenant_id using utf8mb4) collate utf8mb4_general_ci
                  where s.tenant_id=? and s.datasource_id=? and s.status='PUBLISHED' and s.is_del=0
-                   and t.asset_status=2 and (t.is_del=0 or t.is_del is null)
+                   and t.asset_status=2 and (t.table_type is null or t.table_type <> 'FILE') and (t.is_del=0 or t.is_del is null)
                  order by s.table_name, s.tid
                 """, tenantId, datasourceId);
         List<Map<String, Object>> tables = new ArrayList<>();

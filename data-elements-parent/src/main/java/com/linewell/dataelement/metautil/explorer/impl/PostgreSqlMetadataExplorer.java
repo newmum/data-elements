@@ -22,6 +22,10 @@ import lombok.extern.slf4j.Slf4j;
 public class PostgreSqlMetadataExplorer extends AbstractMetadataExplorer {
 
     private String getSchema(DataSourceConfig config) {
+        return resolveMetadataSchema(config);
+    }
+
+    protected String resolveMetadataSchema(DataSourceConfig config) {
         return config.getSchema() != null ? config.getSchema() : "public";
     }
 

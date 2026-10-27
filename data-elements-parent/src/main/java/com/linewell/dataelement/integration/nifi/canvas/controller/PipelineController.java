@@ -1178,6 +1178,8 @@ public class PipelineController {
             boolean sftp = "source.sftp".equals(sourceNodeType);
             Integer ftpPort = parsePort(sourceDs, "ftpPort", "ftp_port", "port");
             sourceConfig.put("protocol", sftp ? "sftp" : firstNonBlank(sourceDs, "ftpProtocol", "ftp_protocol", "protocol"));
+            for(String option:List.of("ftpsImplicit","trustStorePath","trustStorePassword","nifiTrustStorePath","ftpRecursive","ftpPassiveMode"))
+                copyIfPresent(sourceDs,sourceConfig,option,option);
             sourceConfig.put("hostname", firstNonBlank(sourceDs, "ftpHost", "ftp_host", "hostname", "host"));
             sourceConfig.put("port", ftpPort == null ? (sftp ? 22 : 21) : ftpPort);
             sourceConfig.put("username", firstNonBlank(sourceDs, "ftpUsername", "ftp_username", "username"));
@@ -1304,6 +1306,9 @@ public class PipelineController {
                 "tid", "id", "datasourceId", "dataSourceId", "dbId"));
         sourceConfig.put("metadataAccessMode", firstNonBlank(sourceDs,
                 "metadataAccessMode", "metadata_access_mode"));
+        sourceConfig.put("gaussdbVariant", firstNonBlank(sourceDs,"gaussdbVariant","gaussdb_variant"));
+        sourceConfig.put("transportMode", firstNonBlank(sourceDs,"transportMode"));
+        sourceConfig.put("httpPath", firstNonBlank(sourceDs,"httpPath"));
         sourceConfig.put("hiveConnectionMode", firstNonBlank(sourceDs,
                 "hiveConnectionMode", "hive_connection_mode"));
         sourceConfig.put("hiveProfile", firstNonBlank(sourceDs,
@@ -1571,6 +1576,7 @@ public class PipelineController {
         String database = firstNonBlank(targetDs, "database", "dbName", "dbMetaDbName");
         String normalizedDbType = normalizeSinkDbType(dbType, targetDs);
         sinkConfig.put("dbType", normalizedDbType);
+        sinkConfig.put("gaussdbVariant", firstNonBlank(targetDs,"gaussdbVariant","gaussdb_variant"));
         sinkConfig.put("hiveProfile", firstNonBlank(targetDs, "hiveProfile", "hive_profile"));
         sinkConfig.put("metadataAccessMode", firstNonBlank(targetDs,
                 "metadataAccessMode", "metadata_access_mode"));
@@ -1639,6 +1645,8 @@ public class PipelineController {
      * the canvas. The keytab itself is never read, uploaded or persisted by the canvas.
      */
     private static void copyHuaweiMrsConnectionSettings(Map<String, Object> source, Map<String, Object> target) {
+        copyIfPresent(source, target, "transportMode", "transportMode");
+        copyIfPresent(source, target, "httpPath", "httpPath");
         copyIfPresent(source, target, "authMode", "authMode", "auth_mode", "auth");
         copyIfPresent(source, target, "zookeeperQuorum", "zookeeperQuorum", "zookeeper_quorum", "zkQuorum", "zk_quorum");
         copyIfPresent(source, target, "serviceDiscoveryMode", "serviceDiscoveryMode", "service_discovery_mode");
@@ -1659,6 +1667,7 @@ public class PipelineController {
         String profile = firstNonBlank(config, "hiveProfile", "hive_profile");
         String mode = firstNonBlank(config, "metadataAccessMode", "metadata_access_mode");
         String connectionMode = firstNonBlank(config, "hiveConnectionMode", "hive_connection_mode");
+        if ("open-source".equalsIgnoreCase(connectionMode)) return false;
         return !isBlank(profile)
                 || "server-managed-mrs".equalsIgnoreCase(mode)
                 || "huawei-mrs".equalsIgnoreCase(connectionMode);

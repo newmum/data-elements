@@ -14,7 +14,7 @@ public final class PortableStringCapacity {
     public record Type(String sql,long length,String unit,String reason) {}
 
     public static Type render(DataSourceConfig config,ColumnInfo column,String raw,PortableColumnType.Kind kind) {
-        DatabaseType target=config.getDatabaseType();var family=DdlDialect.family(target);
+        DatabaseType target=config.getEffectiveDatabaseType();var family=DdlDialect.family(target);
         String base=PortableColumnType.base(raw),source=column==null?"":text(column.getSourceDatabaseType());
         String normalizedSource=source.toLowerCase(Locale.ROOT).replaceAll("[\\s_-]+","");
         boolean national=Set.of("NCHAR","NVARCHAR","NVARCHAR2","NATIONAL CHARACTER VARYING").contains(base);

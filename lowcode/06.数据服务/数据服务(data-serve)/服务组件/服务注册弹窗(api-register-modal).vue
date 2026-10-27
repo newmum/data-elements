@@ -3,6 +3,7 @@
     v-model="open"
     title="服务登记"
     fullscreen
+    append-to-body
     destroy-on-close
     :close-on-click-modal="false"
     :before-close="beforeClose"
@@ -458,6 +459,11 @@ onBeforeUnmount(() => {
   flex-direction: column;
   padding: 0;
   overflow: hidden;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  max-width: 100vw;
+  margin: 0;
 }
 .service-registration-dialog .el-dialog__header {
   flex-shrink: 0;
@@ -478,7 +484,9 @@ onBeforeUnmount(() => {
   height: 46px;
 }
 .service-registration-dialog .el-dialog__body {
-  flex: 1;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
   min-height: 0;
   padding: 0;
   overflow: hidden;
@@ -488,6 +496,7 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   gap: 12px;
+  flex-wrap: wrap;
   padding: 10px 24px;
   border-top: 1px solid #ebeef5;
 }
@@ -499,7 +508,9 @@ onBeforeUnmount(() => {
 .service-workspace {
   display: grid;
   grid-template-columns: clamp(224px, 23%, 284px) minmax(0, 1fr);
-  height: 100%;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
   color: #25344b;
 }
@@ -640,6 +651,13 @@ onBeforeUnmount(() => {
 }
 .service-editor-inner {
   padding: 8px 20px 20px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+@media (max-width: 600px) {
+  .service-workspace { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(108px, 30%) minmax(0, 1fr); }
+  .service-workspace-sidebar { border-right: 0; border-bottom: 1px solid #ebeef5; }
+  .service-sidebar-heading { padding: 8px 12px; }
 }
 @media (max-width: 1000px) {
   .service-workspace {

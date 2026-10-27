@@ -135,6 +135,7 @@ if (!blank(props.appId) && preserveSourceOrg != true) {
 
 var connectionNames = [
     'host', 'port', 'database', 'username', 'password', 'jdbcURL', 'schema',
+    'gaussdbVariant', 'transportMode', 'httpPath', 'ftpsImplicit', 'trustStorePath', 'trustStorePassword', 'nifiTrustStorePath',
     'jdbcType', 'serviceName', 'sid', 'currentSchema', 'defaultSchema',
     'authMode', 'auth', 'principal', 'hivePrincipal', 'servicePrincipal', 'userPrincipal', 'clientPrincipal', 'hiveConnectionMode',
     'keytabPath', 'keytab', 'userKeytab', 'krb5ConfPath', 'krb5Conf', 'jaasConfPath', 'jaasConfig',
@@ -188,6 +189,7 @@ var blankOverwriteNamesByType = {
         minioPrefix: true, minioFilePattern: true, minioSingleFile: true
     },
     ftp: {
+        ftpsImplicit: true, trustStorePath: true, trustStorePassword: true, nifiTrustStorePath: true,
         ftpProtocol: true, ftpHost: true, ftpPort: true, ftpPath: true,
         ftpUsername: true, ftpPassword: true, ftpPassiveMode: true,
         ftpFilePattern: true, ftpRecursive: true, ftpSingleFile: true,
@@ -258,6 +260,11 @@ if (blank(accessMode)) {
 }
 if (!blank(accessMode)) {
     connectionConfig.accessMode = accessMode
+}
+// 上传清单由专用登记接口维护，普通基本信息保存只能沿用服务端已有清单。
+// 不提供物理连接时前面会重置 connectionConfig，但不能因此丢失已登记文件及版本。
+if (accessMode == 'upload' && oldConnectionConfig.reportRegistration != null) {
+    connectionConfig.reportRegistration = oldConnectionConfig.reportRegistration
 }
 // 数据推送由平台提供统一接入通道，不依赖调用方填写物理库连接；将其明确记录为已提供，
 // 以便列表状态和登记确认页不会误显示为“未提供连接信息”。
@@ -399,6 +406,10 @@ if (isServerManagedHuaweiMrs) {
 } else if (!blank(hiveConnectionMode)) {
     connectionConfig.hiveConnectionMode = text(hiveConnectionMode).trim()
     connectionConfig.metadataAccessMode = 'jdbc'
+    connectionConfig.hiveProfile = ''
+    connectionConfig.serviceDiscoveryMode = ''
+    connectionConfig.zookeeperQuorum = ''
+    connectionConfig.zookeeperNamespace = ''
 }var assetStatus = oldAssetStatus == null ? 0 : oldAssetStatus
 var flowStatus = oldFlowStatus == null ? 0 : oldFlowStatus
 var changedWhenProvided = (oldValue, inputValue) => !blank(inputValue) && text(oldValue) != text(inputValue)
@@ -406,6 +417,8 @@ var changedWhenProvided = (oldValue, inputValue) => !blank(inputValue) && text(o
 // connector fields otherwise turn an unchanged edit into a false re-registration.
 var connectionChanged = old != null && (
     changedWhenProvided(inferDbType(first(old, ['dbType', 'db_type']), first(old, ['jdbcUrl', 'jdbc_url'])), dbType) ||
+    changedWhenProvided(first(oldConnectionConfig, ['gaussdbVariant']), first(props, ['gaussdbVariant'])) ||
+    changedWhenProvided(first(oldConnectionConfig, ['hiveConnectionMode']), first(props, ['hiveConnectionMode'])) ||
     changedWhenProvided(first(old, ['jdbcUrl', 'jdbc_url']), first(props, ['jdbcURL', 'jdbcUrl', 'jdbc_url'])) ||
     (text(props.showConnect) == '0' && text(oldShowConnect) == '1')
 )
@@ -511,6 +524,9 @@ if (showConnect == 0) {
     var registrationConfig = {}
     if (!blank(accessMode)) {
         registrationConfig.accessMode = accessMode
+    }
+    if (accessMode == 'upload' && oldConnectionConfig.reportRegistration != null) {
+        registrationConfig.reportRegistration = oldConnectionConfig.reportRegistration
     }
     if (accessMode == 'receive') {
         if (!blank(receiveProfile.receivePayloadSize)) {

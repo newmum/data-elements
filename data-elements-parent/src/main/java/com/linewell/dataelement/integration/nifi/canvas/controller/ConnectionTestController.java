@@ -10,6 +10,7 @@ import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
 import com.linewell.dataelement.metautil.jdbc.JdbcMetadataScope;
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService;
+import com.linewell.dataelement.metautil.structured.FtpsClientFactory;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
@@ -120,7 +121,7 @@ public class ConnectionTestController {
             }
             ResolvedJdbc r = resolve(manifestKey, config);
             long t0 = System.currentTimeMillis();
-            Driver driver = loadDriver(r.driverClass, r.driverPath);
+            Driver driver = loadProbeDriver(r, config, manifestKey);
             Properties props = new Properties();
             if (r.username != null) props.setProperty("user", r.username);
             if (r.password != null) props.setProperty("password", r.password);
@@ -215,7 +216,7 @@ public class ConnectionTestController {
                         "error", "缺少表名: table"));
             }
             ResolvedJdbc r = resolve(manifestKey, config);
-            Driver driver = loadDriver(r.driverClass, r.driverPath);
+            Driver driver = loadProbeDriver(r, config, manifestKey);
             Properties props = new Properties();
             if (r.username != null) props.setProperty("user", r.username);
             if (r.password != null) props.setProperty("password", r.password);
@@ -292,7 +293,7 @@ public class ConnectionTestController {
                         "total", page.getTotal()));
             }
             ResolvedJdbc r = resolve(manifestKey, config);
-            Driver driver = loadDriver(r.driverClass, r.driverPath);
+            Driver driver = loadProbeDriver(r, config, manifestKey);
             Properties props = new Properties();
             if (r.username != null) props.setProperty("user", r.username);
             if (r.password != null) props.setProperty("password", r.password);
@@ -815,9 +816,14 @@ public class ConnectionTestController {
         if (host == null || host.isBlank()) {
             throw new IllegalArgumentException("缺少必填字段: hostname");
         }
-        int port = parseInt(config.getOrDefault("port", config.getOrDefault("ftpPort", 21)), 21);
+        int defaultPort = "sftp".equalsIgnoreCase(protocol) ? 22
+                : "ftps".equalsIgnoreCase(protocol) && "true".equalsIgnoreCase(str(config.get("ftpsImplicit"))) ? 990 : 21;
+        int port = parseInt(config.getOrDefault("port", config.getOrDefault("ftpPort", defaultPort)), defaultPort);
         if ("sftp".equalsIgnoreCase(protocol)) {
             return testSftp(config, host, port);
+        }
+        if ("ftps".equalsIgnoreCase(protocol)) {
+            return testFtps(config, host, port);
         }
         long t0 = System.currentTimeMillis();
         try (Socket socket = new Socket()) {
@@ -848,6 +854,31 @@ public class ConnectionTestController {
                     "version", firstNonBlank(reply, welcome, ""),
                     "elapsedMs", elapsed,
                     "error", success ? "" : firstNonBlank(reply, "FTP 连接失败")));
+        }
+    }
+
+    private ResponseEntity<?> testFtps(Map<String, Object> config, String host, int port) throws Exception {
+        String username = firstNonBlank(str(config.get("username")), str(config.get("ftpUsername")));
+        String password = firstNonBlank(str(config.get("password")), str(config.get("ftpPassword")), "");
+        if (username == null) throw new IllegalArgumentException("缺少必填字段: username");
+        var client = FtpsClientFactory.create(config, port);
+        client.setConnectTimeout(8000);
+        client.setDefaultTimeout(8000);
+        long started = System.currentTimeMillis();
+        try {
+            // FTPSClient negotiates and verifies TLS before any USER/PASS command.
+            client.connect(host, port);
+            if (!client.login(username, password)) throw new IllegalArgumentException("FTPS 认证失败");
+            client.execPBSZ(0);
+            client.execPROT("P");
+            String path = firstNonBlank(str(config.get("remotePath")), str(config.get("path")), str(config.get("ftpPath")), "/");
+            if (!client.changeWorkingDirectory(path)) throw new IllegalArgumentException("FTPS 路径不存在或不可访问");
+            client.logout();
+            return ResponseEntity.ok(Map.of("success", true, "url", "ftps://" + host + ":" + port,
+                    "product", "FTPS", "version", "TLS / PROT P", "error", "",
+                    "elapsedMs", System.currentTimeMillis() - started));
+        } finally {
+            if (client.isConnected()) client.disconnect();
         }
     }
 
@@ -945,6 +976,14 @@ public class ConnectionTestController {
         }
     }
 
+    private Driver loadProbeDriver(ResolvedJdbc jdbc, Map<String, Object> config, String manifestKey) throws Exception {
+        if (("source.hive".equals(manifestKey) || "sink.hive".equals(manifestKey))
+                && "open-source".equalsIgnoreCase(str(config.get("hiveConnectionMode")))) {
+            return com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer.loadOpenSourceHiveDriver();
+        }
+        return loadDriver(jdbc.driverClass, jdbc.driverPath);
+    }
+
     private Driver loadDriver(String driverClass, String driverPath) throws Exception {
         if (driverPath == null || driverPath.isBlank()) {
             try {
@@ -984,13 +1023,19 @@ public class ConnectionTestController {
         String fileName = switch (driverClass) {
             case "com.gbase.jdbc.Driver" -> "gbase-connector-java.jar";
             case "com.gbasedbt.jdbc.IfxDriver" -> "gbasedbtjdbc.jar";
+            case "com.huawei.opengauss.jdbc.Driver" -> "opengaussjdbc.jar";
+            case "com.huawei.gaussdb.jdbc.Driver" -> "gaussdbjdbc.jar";
+            case "org.opengauss.Driver" -> "opengauss-jdbc.jar";
+            case "com.vertica.jdbc.Driver" -> "vertica-jdbc.jar";
             default -> null;
         };
         if (fileName == null) {
             return null;
         }
         Path workDir = Path.of(System.getProperty("user.dir"));
+        String configuredDirectory = System.getProperty("data-elements.jdbc.driver-directory", System.getenv("JDBC_DRIVER_DIRECTORY"));
         List<Path> candidates = List.of(
+                Path.of(configuredDirectory == null || configuredDirectory.isBlank() ? workDir.toString() : configuredDirectory).resolve(fileName),
                 workDir.resolve("deploy/nifi/drivers").resolve(fileName),
                 workDir.resolve("data-elements/deploy/nifi/drivers").resolve(fileName));
         return candidates.stream()
@@ -1070,7 +1115,15 @@ public class ConnectionTestController {
                 r.url = "jdbc:oracle:thin:@//" + host + ":" + port + "/" + sid;
                 r.driverClass = "oracle.jdbc.OracleDriver";
             }
-            case "source.postgresql", "source.tdsql-pg", "source.gaussdb", "source.hailiang" -> {
+            case "source.gaussdb" -> {
+                r.url = com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType.jdbcUrl("gaussdb", c, Map.of());
+                r.driverClass = com.linewell.dataelement.metautil.jdbc.GaussDbVariant.from(c).driverClass();
+            }
+            case "source.vertica" -> {
+                r.url = com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType.jdbcUrl("vertica", c, Map.of());
+                r.driverClass = "com.vertica.jdbc.Driver";
+            }
+            case "source.postgresql", "source.tdsql-pg", "source.hailiang" -> {
                 String host = req(c, "host");
                 // GaussDB/openGauss defaults to the PostgreSQL-compatible port.
                 // DWS deployments using 8000 remain supported when explicitly configured.
@@ -1233,7 +1286,10 @@ public class ConnectionTestController {
         return normalized;
     }
 
-    private static String buildHiveJdbcUrl(Map<String, Object> c) {
+    static String buildHiveJdbcUrl(Map<String, Object> c) {
+        if ("open-source".equalsIgnoreCase(str(c.get("hiveConnectionMode")))) {
+            return com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType.jdbcUrl("hive", c, Map.of());
+        }
         String zkQuorum = firstNonBlank(str(c.get("zookeeperQuorum")), str(c.get("zkQuorum")));
         String db = firstNonBlank(str(c.get("database")), "default");
         StringBuilder url = new StringBuilder("jdbc:hive2://");

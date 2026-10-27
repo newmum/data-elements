@@ -198,7 +198,7 @@ public class TablePartitions {
     @SuppressWarnings("unchecked")
     public String apply(String ddl,Map<String,Object> plan,DataSourceConfig config) {
         if(plan==null||!yes(plan.get("enabled")))return ddl;
-        DatabaseType type=config.getDatabaseType();
+        DatabaseType type=config.getEffectiveDatabaseType();
         var statements=PortableSqlParser.parse(ddl,type);
         if(!(statements.getFirst() instanceof SQLCreateTableStatement create))throw new IllegalArgumentException("分区仅支持CREATE TABLE");
         String table=create.getName().toString();
@@ -237,7 +237,7 @@ public class TablePartitions {
     }
     /** Only the exact server-rendered ancillary partition statements may accompany a CREATE. */
     public String validate(String ddl,Map<String,Object> plan,DataSourceConfig config) {
-        var statements=PortableSqlParser.parse(ddl,config.getDatabaseType());
+        var statements=PortableSqlParser.parse(ddl,config.getEffectiveDatabaseType());
         if(plan==null||!yes(plan.get("enabled"))) {
             if(statements.stream().anyMatch(s->s instanceof SQLCreateTableStatement c&&(c.getPartitioning()!=null||!c.getPartitionColumns().isEmpty())))throw new IllegalArgumentException("DDL包含分区定义，请勾选创建分区并确认配置");
             return ddl;
@@ -250,26 +250,26 @@ public class TablePartitions {
             col.setPrimaryKey(c.isPrimaryKey()||primary.contains(col.getColumnName().toLowerCase(Locale.ROOT)));
             col.setUnique(c.getConstraints().stream().anyMatch(SQLColumnUniqueKey.class::isInstance));columns.add(col);
         }
-        var normalized=normalize(plan,columns,config.getDatabaseType());
+        var normalized=normalize(plan,columns,config.getEffectiveDatabaseType());
         // Druid's Hive clone omits row-format delimiters; reparse to preserve the storage contract.
-        var base=(SQLCreateTableStatement)PortableSqlParser.parse(SQLUtils.toSQLString(create,DdlDialect.parser(config.getDatabaseType())),config.getDatabaseType()).getFirst();
+        var base=(SQLCreateTableStatement)PortableSqlParser.parse(SQLUtils.toSQLString(create,DdlDialect.parser(config.getEffectiveDatabaseType())),config.getEffectiveDatabaseType()).getFirst();
         base.setPartitioning(null);base.getPartitionColumns().clear();
-        String baseSql=SQLUtils.toSQLString(base,DdlDialect.parser(config.getDatabaseType()))+";";
+        String baseSql=SQLUtils.toSQLString(base,DdlDialect.parser(config.getEffectiveDatabaseType()))+";";
         String expected=apply(baseSql,normalized,config);
-        var expectedStatements=PortableSqlParser.parse(expected,config.getDatabaseType());
-        List<String> actual=statements.stream().filter(s->!(s instanceof SQLCommentStatement)).map(s->SQLUtils.toSQLString(s,DdlDialect.parser(config.getDatabaseType()))).toList();
-        List<String> rendered=expectedStatements.stream().map(s->SQLUtils.toSQLString(s,DdlDialect.parser(config.getDatabaseType()))).toList();
+        var expectedStatements=PortableSqlParser.parse(expected,config.getEffectiveDatabaseType());
+        List<String> actual=statements.stream().filter(s->!(s instanceof SQLCommentStatement)).map(s->SQLUtils.toSQLString(s,DdlDialect.parser(config.getEffectiveDatabaseType()))).toList();
+        List<String> rendered=expectedStatements.stream().map(s->SQLUtils.toSQLString(s,DdlDialect.parser(config.getEffectiveDatabaseType()))).toList();
         if(!actual.equals(rendered))throw new IllegalArgumentException("建表语句中的分区定义与创建分区配置不一致，请重新生成DDL");
         plan.clear();plan.putAll(normalized);
         // CanvasTableDdl still checks the base CREATE and all COMMENT targets; ancillary SQL is generated above.
         StringBuilder safe=new StringBuilder(baseSql);
-        statements.stream().filter(SQLCommentStatement.class::isInstance).forEach(s->safe.append(SQLUtils.toSQLString(s,DdlDialect.parser(config.getDatabaseType()))).append(';'));
+        statements.stream().filter(SQLCommentStatement.class::isInstance).forEach(s->safe.append(SQLUtils.toSQLString(s,DdlDialect.parser(config.getEffectiveDatabaseType()))).append(';'));
         return safe.toString();
     }
 
     public void validatePrimaryKeys(String ddl,List<Map<String,Object>> items,DataSourceConfig config) {
         if(items==null)throw new IllegalArgumentException("创建分区需要目标字段契约，请重新生成DDL");
-        var create=(SQLCreateTableStatement)PortableSqlParser.parse(ddl,config.getDatabaseType()).getFirst();
+        var create=(SQLCreateTableStatement)PortableSqlParser.parse(ddl,config.getEffectiveDatabaseType()).getFirst();
         Set<String> actual=new HashSet<>(),expected=new HashSet<>();
         create.getPrimaryKeyNames().forEach(k->actual.add(SQLUtils.normalize(k).toLowerCase(Locale.ROOT)));
         create.getColumnDefinitions().stream().filter(SQLColumnDefinition::isPrimaryKey).forEach(c->actual.add(SQLUtils.normalize(c.getColumnName()).toLowerCase(Locale.ROOT)));

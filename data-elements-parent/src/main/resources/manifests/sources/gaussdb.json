@@ -1,43 +1,177 @@
 {
   "key": "source.gaussdb",
   "category": "source",
-  "label": "\u9ad8\u65af GaussDB \u6570\u636e\u6e90",
+  "label": "高斯 GaussDB 数据源",
   "icon": "gaussdb",
-  "description": "openGauss / GaussDB PostgreSQL \u517c\u5bb9\u534f\u8bae\u6570\u636e\u6e90",
+  "description": "按实际产品选择华为 GaussDB、openGauss、GaussDB(DWS) 或 MySQL 兼容产品。",
   "fields": [
-    { "key": "host", "label": "\u4e3b\u673a", "type": "text", "required": true },
-    { "key": "port", "label": "\u7aef\u53e3", "type": "number", "default": 5432, "help": "openGauss/GaussDB \u9ed8\u8ba4 5432\uff0cDWS \u8bf7\u586b\u5199\u5b9e\u9645\u7aef\u53e3\uff08\u4f8b\u5982 8000\uff09" },
-    { "key": "database", "label": "\u6570\u636e\u5e93", "type": "text", "required": true },
-    { "key": "currentSchema", "label": "Schema", "type": "text", "default": "public" },
-    { "key": "username", "label": "\u7528\u6237\u540d", "type": "text", "required": true },
-    { "key": "password", "label": "\u5bc6\u7801", "type": "password", "required": true },
-    { "key": "sslMode", "label": "SSL \u6a21\u5f0f", "type": "select", "default": "disable", "options": [
-      { "label": "\u5173\u95ed", "value": "disable" },
-      { "label": "\u8981\u6c42", "value": "require" },
-      { "label": "\u6821\u9a8c\u8bc1\u4e66", "value": "verify-ca" },
-      { "label": "\u5b8c\u5168\u6821\u9a8c", "value": "verify-full" }
-    ], "group": "advanced" },
-    { "key": "table", "label": "\u8868\u540d", "type": "table-picker", "required": true },
-    { "key": "incrementalColumn", "label": "\u589e\u91cf\u5b57\u6bb5", "type": "text", "help": "\u7559\u7a7a\u5219\u5168\u91cf\u62bd\u53d6" },
-    { "key": "schedulingPeriod", "label": "\u8c03\u5ea6\u5468\u671f", "type": "duration", "default": "60 sec", "group": "schedule" }
+    {
+      "key": "gaussdbVariant",
+      "label": "GaussDB 产品",
+      "type": "select",
+      "required": true,
+      "options": [
+        {
+          "label": "华为 GaussDB（gaussdbjdbc 原生驱动）",
+          "value": "gaussdb-jdbc"
+        },
+        {
+          "label": "华为 GaussDB（opengaussjdbc 兼容驱动）",
+          "value": "gaussdb"
+        },
+        {
+          "label": "openGauss",
+          "value": "opengauss"
+        },
+        {
+          "label": "GaussDB(DWS)",
+          "value": "dws"
+        },
+        {
+          "label": "GaussDB(for MySQL)／MySQL 兼容模式",
+          "value": "mysql"
+        },
+        {
+          "label": "历史 PostgreSQL 兼容配置",
+          "value": "legacy-postgresql"
+        }
+      ]
+    },
+    {
+      "key": "host",
+      "label": "主机",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "port",
+      "label": "端口",
+      "type": "number",
+      "help": "填写实例真实端口：openGauss 常见5432，GaussDB/DWS常见8000，MySQL兼容常见3306。",
+      "required": true
+    },
+    {
+      "key": "database",
+      "label": "数据库",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "currentSchema",
+      "label": "Schema",
+      "type": "text",
+      "help": "留空使用连接用户的默认 Schema；MySQL 兼容模式使用数据库名。"
+    },
+    {
+      "key": "username",
+      "label": "用户名",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "password",
+      "label": "密码",
+      "type": "password",
+      "required": true
+    },
+    {
+      "key": "sslMode",
+      "label": "SSL 模式",
+      "type": "select",
+      "default": "disable",
+      "options": [
+        {
+          "label": "关闭",
+          "value": "disable"
+        },
+        {
+          "label": "要求",
+          "value": "require"
+        },
+        {
+          "label": "校验证书",
+          "value": "verify-ca"
+        },
+        {
+          "label": "完全校验",
+          "value": "verify-full"
+        }
+      ],
+      "group": "advanced"
+    },
+    {
+      "key": "table",
+      "label": "表名",
+      "type": "table-picker",
+      "required": true
+    },
+    {
+      "key": "incrementalColumn",
+      "label": "增量字段",
+      "type": "text",
+      "help": "留空则全量抽取"
+    },
+    {
+      "key": "schedulingPeriod",
+      "label": "调度周期",
+      "type": "duration",
+      "default": "60 sec",
+      "group": "schedule"
+    }
   ],
   "compile": {
-    "controllerServices": [{ "localId": "dbcp", "type": "org.apache.nifi.dbcp.DBCPConnectionPool", "properties": {
-      "Database Connection URL": "jdbc:postgresql://${config.host}:${config.port}/${config.database}?currentSchema=${config.currentSchema}&ApplicationName=data-elements&prepareThreshold=0&sslmode=${config.sslMode}",
-      "Database Driver Class Name": "org.postgresql.Driver",
-      "Database Driver Locations": "${jdbc.driverLocations}/postgresql-42.6.0.jar",
-      "Database User": "${config.username}",
-      "Password": "${config.password}"
-    }}],
+    "controllerServices": [
+      {
+        "localId": "dbcp",
+        "type": "org.apache.nifi.dbcp.DBCPConnectionPool",
+        "properties": {
+          "Database Connection URL": "${jdbc.url}",
+          "Database Driver Class Name": "${jdbc.driverClass}",
+          "Database Driver Locations": "${jdbc.driverLocations}",
+          "Database User": "${config.username}",
+          "Password": "${config.password}"
+        }
+      }
+    ],
     "processors": [
-      { "localId": "fetch", "type": "com.linewell.microservice.processors.database.GenerateDateTableFetch", "schedulingPeriod": "${config.schedulingPeriod}", "schedulingStrategy": "TIMER_DRIVEN", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Table Name": "${config.table}", "Maximum-value Columns": "${config.incrementalColumn}", "gen-table-fetch-partition-size": "10000",
+      {
+        "localId": "fetch",
+        "type": "com.linewell.microservice.processors.database.GenerateDateTableFetch",
+        "schedulingPeriod": "${config.schedulingPeriod}",
+        "schedulingStrategy": "TIMER_DRIVEN",
+        "properties": {
+          "Database Connection Pooling Service": "${cs.dbcp}",
+          "Table Name": "${config.table}",
+          "Maximum-value Columns": "${config.incrementalColumn}",
+          "gen-table-fetch-partition-size": "10000",
           "gen-table-column-for-val-partitioning": "${config.incrementalColumn}",
           "fetch-partition-type": "2",
           "fetch-partition-type-count": "1",
-          "Max Wait Time": "0 seconds" } },
-      { "localId": "execute", "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord", "properties": { "Database Connection Pooling Service": "${cs.dbcp}", "Record Writer": "${cs.jsonWriter}" } }
+          "Max Wait Time": "0 seconds"
+        }
+      },
+      {
+        "localId": "execute",
+        "type": "org.apache.nifi.processors.standard.ExecuteSQLRecord",
+        "properties": {
+          "Database Connection Pooling Service": "${cs.dbcp}",
+          "Record Writer": "${cs.jsonWriter}"
+        }
+      }
     ],
-    "internalConnections": [{ "from": "fetch", "to": "execute", "relationship": "success" }],
-    "outlets": [{ "name": "default", "processorRef": "execute", "relationship": "success" }]
+    "internalConnections": [
+      {
+        "from": "fetch",
+        "to": "execute",
+        "relationship": "success"
+      }
+    ],
+    "outlets": [
+      {
+        "name": "default",
+        "processorRef": "execute",
+        "relationship": "success"
+      }
+    ]
   }
 }

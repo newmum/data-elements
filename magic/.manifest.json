@@ -253,7 +253,7 @@
         "5c1e80431c9b440881fcce698f0b8634"
       ],
       "kind": null,
-      "baseSha256": "e4626f0fed036a91a0088854fd07b1c7539a4fc4b19634217f61cfbf4f1dc94c",
+      "baseSha256": "06941df9610a7521fd0020567db625455551098caaf5c28cf4fc3b608e332890",
       "metadataId": "5c1e80431c9b440881fcce698f0b8634"
     },
     {
@@ -283,7 +283,7 @@
         "metadata_db_info_01"
       ],
       "kind": null,
-      "baseSha256": "1e47591dac21861a131cf464791c49bb359d3f10b275b166c8c2cdee6915814d",
+      "baseSha256": "1c6f99c05156b12e518a5937a5faeb1c4e0a97404f2f5a1a822a5b4ae93fcb5c",
       "metadataId": "metadata_db_info_01"
     },
     {
@@ -313,7 +313,7 @@
         "bc30a3edb1f04bceaeee373ed5952d4a"
       ],
       "kind": null,
-      "baseSha256": "3e06faea66dc5846cc121b08a080b4bce06539e9d4d7305a1d136a5dda1bc28d",
+      "baseSha256": "db605c608e90e06bd7252af3ba57c46f1cd4619d2a17a1e1af54dba9787d1fe3",
       "metadataId": "bc30a3edb1f04bceaeee373ed5952d4a"
     },
     {
@@ -323,7 +323,7 @@
         "8a56e7d664934c1499102cfa508cd58a"
       ],
       "kind": null,
-      "baseSha256": "fba17cd644b70fe369c73d5cc659601ac6ff2d4073d9e1fbe335c22e22870c66",
+      "baseSha256": "51633af74c8dc7661d83c0e57c09a2cc184b612f7971cd4dc206907978d8a612",
       "metadataId": "8a56e7d664934c1499102cfa508cd58a"
     },
     {
@@ -333,7 +333,7 @@
         "a0b5bba38fbf428c8e3646864d83d56b"
       ],
       "kind": null,
-      "baseSha256": "db4f638588f6e3b65b205fc3e0eeafa1a7fc7761c378f6bafb39c20cf3c6927e",
+      "baseSha256": "a75709d361e6fe7cf745cab52c41915c2e84e8cecc9f372dfb15d88c24b98db2",
       "metadataId": "a0b5bba38fbf428c8e3646864d83d56b"
     },
     {
@@ -373,7 +373,7 @@
         "metadata_import_snapshot_01"
       ],
       "kind": null,
-      "baseSha256": "0a1ee89f29e0b5ea793ad2be1b205d65946bad260c478e0c4f1b626811e78b8c",
+      "baseSha256": "c420a3f161b3ca1c6dbdd7a87269a7b5cdaab934200201180e48ba0505b3b150",
       "metadataId": "metadata_import_snapshot_01"
     },
     {
@@ -413,8 +413,38 @@
         null
       ],
       "kind": null,
-      "baseSha256": "75db9bbbea35513dfff3e8b0a7eb84d4c0bcf17a5001adb845a642b6ecf5101d",
+      "baseSha256": "f93f12a1ac4d9a0655e38d475c955ead36178b5ee979e31bcd1b55e72ffa3ede",
       "metadataId": "metadata_columns_collect_24"
+    },
+    {
+      "path": "api/02.数据盘点/02.数据库表/01.元数据管理/25.文件登记快照.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.数据库表/01.元数据管理/25.文件登记快照.ms",
+      "rowIds": [
+        "41e11cc05b88482eae4cabe4a14e1191"
+      ],
+      "kind": "api",
+      "metadataId": "metadata_file_registration_01",
+      "baseSha256": "f5501b2d7e41e9f5961363cb42491e81e6b424a28811bc4d02da5da806e12210"
+    },
+    {
+      "path": "api/02.数据盘点/02.数据库表/01.元数据管理/26.数据上报登记.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.数据库表/01.元数据管理/26.数据上报登记.ms",
+      "rowIds": [
+        "759fc36820a94fc8a9fe307c5e98a6c1"
+      ],
+      "kind": "api",
+      "metadataId": "report_registration_files_01",
+      "baseSha256": "a019848c757b9ea6c1e09461039787077a788609f179f83e12799d41080d6cad"
+    },
+    {
+      "path": "api/02.数据盘点/02.数据库表/01.元数据管理/27.提交上报文件.ms",
+      "databasePath": "/magic-api/api/02.数据盘点/02.数据库表/01.元数据管理/27.提交上报文件.ms",
+      "rowIds": [
+        "0e89b55b790347d18cea0d4f78012f94"
+      ],
+      "kind": "api",
+      "metadataId": "data_report_submit_01",
+      "baseSha256": "1d26339e9d330b4c06737bc71779d96cf10aa136dc005c0a849c521e52a82a15"
     },
     {
       "path": "api/02.数据盘点/02.数据库表/01.元数据管理/group.json",
@@ -532,7 +562,7 @@
         "datapd_save_update_datasource_01"
       ],
       "kind": null,
-      "baseSha256": "0b203519b49cd4a3ab261b84362142728ddbafc2f1f4bbfaf156a6e288c81840",
+      "baseSha256": "fab70669057ee6461417aef01aa7c47ebd2e143fe65173e4ac6da20047f36dd0",
       "metadataId": "datapd_save_update_datasource_01"
     },
     {
@@ -552,7 +582,7 @@
         "datapd_dept_datasources_01"
       ],
       "kind": null,
-      "baseSha256": "06b164be9973b92ed65b11d88180e97103fe4d2d420de4209adc445546a77c48",
+      "baseSha256": "2d0109f747294b1e0b07e081e5e9f2c549fcbab95545a9282c031165cb3ac955",
       "metadataId": "datapd_dept_datasources_01"
     },
     {
@@ -572,7 +602,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "ec149f53fbd6136c873a3f7a05b10c527f9df1cfd7124b1aa3a8a2fa55e6cfc6",
+      "baseSha256": "4c6f9649dfcb02f1e1af82b9d7c88a6b7d7d9947fa03444f26292320d1f3eddf",
       "metadataId": "c78db2b6d3b04a2ba5d0854d8171a106"
     },
     {
@@ -1144,7 +1174,7 @@
         "e3320ec899a24426adf5f77e2dab36f9"
       ],
       "kind": null,
-      "baseSha256": "afa4db9837706ebc1c3c2e150d581bfd21be5996142f831c5eb7442424235177",
+      "baseSha256": "78a2b62aed5480be00bd81527e833443227a0c6fa04202a8e19f2abf70b78129",
       "metadataId": "e3320ec899a24426adf5f77e2dab36f9"
     },
     {
@@ -1538,7 +1568,7 @@
         "f93a8e653ac6413e89660f5d77d45769"
       ],
       "kind": null,
-      "baseSha256": "a4cc22070d864be06887b86d06d47af931359dc5ac72cb4d9678fe690e4541cc",
+      "baseSha256": "e67a4d8e4babcc98fd3d8222d05b223d961f00099550e0262978789732fce240",
       "metadataId": "f93a8e653ac6413e89660f5d77d45769"
     },
     {
@@ -4009,7 +4039,7 @@
         "347c0f505eed4457ac03b77f07eb6896"
       ],
       "kind": null,
-      "baseSha256": "6f81ab1c981ea6946ff174f40067098aa7d9a7e6863525c61d6591bf396e3c14",
+      "baseSha256": "d5abf7d1ac8485b8d2f5de5d3343a5ddfae39aee8d8dbec8a330fea314a8bcc4",
       "metadataId": "347c0f505eed4457ac03b77f07eb6896"
     },
     {

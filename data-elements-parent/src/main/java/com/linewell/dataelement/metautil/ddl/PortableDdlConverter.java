@@ -75,7 +75,7 @@ public class PortableDdlConverter {
     }
 
     public Map<String,Object> prepare(List<ColumnInfo> original, DataSourceConfig config) {
-        DatabaseType target=config.getDatabaseType();
+        DatabaseType target=config.getEffectiveDatabaseType();
         List<ColumnInfo> columns = new ArrayList<>();
         List<Map<String,Object>> warnings = new ArrayList<>();
         for (ColumnInfo source : original) {
@@ -120,7 +120,7 @@ public class PortableDdlConverter {
 
     /** MySQL's row byte budget is shared by columns, not a per-column 65535-character allowance. */
     private static void fitMysqlRow(DataSourceConfig config,List<ColumnInfo> columns,List<Map<String,Object>> warnings) {
-        if(!Set.of(DatabaseType.MYSQL,DatabaseType.MARIADB,DatabaseType.OCEANBASE_MYSQL).contains(config.getDatabaseType()))return;
+        if(!Set.of(DatabaseType.MYSQL,DatabaseType.MARIADB,DatabaseType.OCEANBASE_MYSQL).contains(config.getEffectiveDatabaseType()))return;
         long rowBytes=columns.size()*32L;
         var candidates=new ArrayList<ColumnInfo>();
         for(var column:columns)if(Set.of(PortableColumnType.Kind.CHAR,PortableColumnType.Kind.VARCHAR).contains(PortableColumnType.kind(column.getColumnType()))) {

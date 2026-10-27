@@ -81,7 +81,7 @@ public final class PortableColumnType {
     }
 
     public static String render(DataSourceConfig config, ColumnInfo column, String raw) {
-        DatabaseType target=config.getDatabaseType();
+        DatabaseType target=config.getEffectiveDatabaseType();
         if (raw == null || raw.isBlank()) throw new IllegalArgumentException("字段类型不能为空");
         if(column!=null&&target.getCode().equals(column.getDdlTargetDatabaseType())&&raw.equals(column.getColumnType()))return raw;
         DdlDialect.Family family = DdlDialect.family(target);

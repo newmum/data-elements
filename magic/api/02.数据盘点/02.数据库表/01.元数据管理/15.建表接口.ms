@@ -169,11 +169,12 @@ var dataSourceOf = (asset) => {
     var dsConfig = new DataSourceConfig()
     dsConfig.setDatabaseType(databaseType)
     dsConfig.setHost(blank(host) ? (hiveZooKeeperDiscovery ? '' : 'virtual') : textOf(host))
-    dsConfig.setPort(blank(port) ? databaseType.getDefaultPort() : port::int)
+    dsConfig.setPort(blank(port) ? null : port::int)
     dsConfig.setDatabase(textOf(databaseName))
     dsConfig.setUsername(blank(username) ? '' : textOf(username))
     dsConfig.setPassword(password == null ? '' : textOf(password))
     // Oracle SID and Service Name use different URL formats; reuse the tested JDBC URL.
+    dsConfig.setConnectorProperties(asset)
     dsConfig.setJdbcUrl(firstValue(asset, ['jdbcURL', 'jdbcUrl', 'jdbc_url']))
     dsConfig.setSchema(firstValue(asset, ['schema', 'defaultSchema']))
     dsConfig.setAuthMode(firstValue(asset, ['authMode', 'auth']))
@@ -402,7 +403,7 @@ if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
         if (masterDbType != null) { registered.dbType = masterDbType }
         if (masterUser != null) { registered.username = masterUser }
         if (blank(registered.dbType)) { exit 400, '目标数据源未配置数据库类型' }
-        var managedHive = databaseTypeOf(registered.dbType) == DatabaseType.HIVE
+        var managedHive = databaseTypeOf(registered.dbType) == DatabaseType.HIVE && registered.hiveConnectionMode != 'open-source'
             && (registered.metadataAccessMode == 'server-managed-mrs'
                 || registered.hiveConnectionMode == 'huawei-mrs' || !blank(registered.hiveProfile))
         var config = null
@@ -471,7 +472,7 @@ if (body.canvas == true) {
     var tenantId = tenantRuntime.id()
     var registered = connectionProperties.resolve(tenantId, textOf(dbId))
     if (registered == null || registered.isEmpty()) { exit 404, '当前租户中不存在所选目标数据源' }
-    var managedHive = databaseTypeOf(registered.dbType) == DatabaseType.HIVE
+    var managedHive = databaseTypeOf(registered.dbType) == DatabaseType.HIVE && registered.hiveConnectionMode != 'open-source'
         && (registered.metadataAccessMode == 'server-managed-mrs' || registered.hiveConnectionMode == 'huawei-mrs'
             || !blank(registered.hiveProfile))
     var config = null
