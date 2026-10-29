@@ -1,6 +1,7 @@
 package com.haitong.config;
 
 import com.haitong.core.*;
+import com.haitong.api.PushAccess;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import java.io.*;
@@ -18,7 +19,7 @@ public final class JsonBodyFilter extends OncePerRequestFilter {
     private final RelayProperties properties;private final Json json;
     public JsonBodyFilter(RelayProperties properties,Json json){this.properties=properties;this.json=json;}
     @Override protected boolean shouldNotFilter(HttpServletRequest r){
-        String path=r.getRequestURI();
+        String path=PushAccess.path(r);
         // Dynamic business routes must receive the same bounded, replayable JSON
         // without adding a Java path whitelist whenever the editor adds an API.
         return path.equals("/api/web")||path.startsWith("/api/web/");

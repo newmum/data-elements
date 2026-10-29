@@ -13,7 +13,15 @@
     <div class="service-workspace">
       <aside class="service-workspace-sidebar" aria-label="服务登记列表">
         <div class="service-sidebar-heading">
-          <h3>服务列表</h3>
+          <h3>
+            服务列表
+            <span
+              class="service-list-count"
+              :aria-label="`当前列表 ${displayedServiceCount} 个服务`"
+            >
+              {{ displayedServiceCount }}
+            </span>
+          </h3>
           <el-button type="primary" link :disabled="busy" @click="addDraft">
             <Icon icon="el-icon-Plus" class="mr-1" />
             添加服务
@@ -28,14 +36,22 @@
           @clear="loadServices(1)"
         >
           <template #suffix>
-            <el-button link title="搜索已登记服务" :loading="listLoading" @click="loadServices(1)">
+            <el-button
+              link
+              title="搜索已登记服务"
+              :loading="listLoading"
+              @click="loadServices(1)"
+            >
               <Icon icon="search" />
             </el-button>
           </template>
         </el-input>
         <div class="service-sidebar-items" :aria-busy="listLoading">
-          <p class="service-list-label">本次登记 · {{ entries.length }}</p>
-          <div v-for="entry in entries" :key="entry.key" class="service-list-row">
+          <div
+            v-for="entry in entries"
+            :key="entry.key"
+            class="service-list-row"
+          >
             <button
               type="button"
               class="service-list-item"
@@ -47,9 +63,15 @@
               <Icon icon="el-icon-Connection" class="service-list-icon" />
               <span class="service-item-copy">
                 <strong :title="entry.name">{{ entry.name }}</strong>
-                <small>{{ entry.id ? (entry.dirty ? "未保存修改" : "已保存") : "未保存" }}</small>
+                <small>{{
+                  entry.id ? (entry.dirty ? "未保存修改" : "已保存") : "未保存"
+                }}</small>
               </span>
-              <Icon v-if="entry.id && !entry.dirty" icon="el-icon-CircleCheck" class="is-saved" />
+              <Icon
+                v-if="entry.id && !entry.dirty"
+                icon="el-icon-CircleCheck"
+                class="is-saved"
+              />
             </button>
             <el-button
               v-if="!entry.id"
@@ -63,10 +85,11 @@
               <Icon icon="el-icon-Close" />
             </el-button>
           </div>
-          <p class="service-list-label">已登记服务 · {{ total }}</p>
           <div v-if="listError" class="service-list-feedback" role="alert">
             <span>{{ listError }}</span>
-            <el-button type="primary" link @click="loadServices(page)">重新加载</el-button>
+            <el-button type="primary" link @click="loadServices(page)"
+              >重新加载</el-button
+            >
           </div>
           <template v-else>
             <button
@@ -80,14 +103,20 @@
               <Icon icon="el-icon-Connection" class="service-list-icon" />
               <span class="service-item-copy">
                 <strong :title="service.name">{{ service.name }}</strong>
-                <small>{{ service.method }} · {{ service.code || "未设置编码" }}</small>
+                <small
+                  >{{ service.method }} ·
+                  {{ service.code || "未设置编码" }}</small
+                >
               </span>
             </button>
-            <p v-if="listLoading" class="service-list-feedback" role="status">正在加载服务列表…</p>
-            <p v-else-if="!services.length" class="service-list-feedback">
-              {{
-                keyword ? "没有匹配的服务，请调整搜索条件" : "暂无已登记服务，可添加服务开始登记"
-              }}
+            <p v-if="listLoading" class="service-list-feedback" role="status">
+              正在加载服务列表…
+            </p>
+            <p
+              v-else-if="!services.length && keyword"
+              class="service-list-feedback"
+            >
+              没有匹配的服务，请调整搜索条件
             </p>
           </template>
         </div>
@@ -110,7 +139,7 @@
         @input.capture="scheduleCapture"
         @change.capture="scheduleCapture"
       >
-        <el-scrollbar ref="editorScrollRef">
+        <el-scrollbar ref="editorScrollRef" class="service-editor-scroll">
           <div class="service-editor-inner">
             <ApiRegisterContent
               ref="contentRef"
@@ -143,7 +172,6 @@
         @click="saveCurrent(true)"
       >
         保存并新增
-        <Icon icon="el-icon-Plus" class="ml-1" />
       </el-button>
     </template>
   </el-dialog>
@@ -172,9 +200,12 @@ interface EditorApi {
   handleSave(): Promise<boolean>;
   getPayload(): Promise<RecordValue>;
 }
-const props = withDefaults(defineProps<{ modelValue: boolean; apiDetail?: RecordValue }>(), {
-  apiDetail: () => ({}),
-});
+const props = withDefaults(
+  defineProps<{ modelValue: boolean; apiDetail?: RecordValue }>(),
+  {
+    apiDetail: () => ({}),
+  },
+);
 const emit = defineEmits<{
   (event: "update:modelValue", value: boolean): void;
   (event: "close", result: "cancel" | "success"): void;
@@ -200,11 +231,18 @@ const editorReady = ref(false),
   taskLoading = ref(false);
 const savedAny = ref(false);
 const busy = computed(() => switching.value || taskLoading.value);
-const activeEntry = computed(() => entries.value.find((entry) => entry.key === activeKey.value));
+const activeEntry = computed(() =>
+  entries.value.find((entry) => entry.key === activeKey.value),
+);
 const visibleServices = computed(() => {
-  const opened = new Set(entries.value.map((entry) => entry.id).filter(Boolean));
+  const opened = new Set(
+    entries.value.map((entry) => entry.id).filter(Boolean),
+  );
   return services.value.filter((service) => !opened.has(service.id));
 });
+const displayedServiceCount = computed(
+  () => entries.value.length + visibleServices.value.length,
+);
 let sequence = 0,
   listVersion = 0;
 let captureTimer: ReturnType<typeof setTimeout> | undefined;
@@ -217,7 +255,8 @@ const payloadOf = (response: unknown): RecordValue => {
   const value = recordOf(response);
   return recordOf(value.data ?? value);
 };
-const clone = (value: RecordValue): RecordValue => JSON.parse(JSON.stringify(value));
+const clone = (value: RecordValue): RecordValue =>
+  JSON.parse(JSON.stringify(value));
 const signature = (value: RecordValue): string => JSON.stringify(value);
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "服务列表加载失败，请重试";
@@ -247,7 +286,7 @@ const loadServices = async (nextPage = 1, requestedSize = pageSize) => {
         keyword: keyword.value,
         sortField: "updatedTime",
         sortDir: "desc",
-      })
+      }),
     );
     if (version !== listVersion) return;
     services.value = (Array.isArray(payload.list) ? payload.list : [])
@@ -336,7 +375,7 @@ const selectService = async (service: ServiceItem) => {
     const detail = payloadOf(
       await $common.post("/dws/flowserve/gateway/api/detail", {
         apiId: service.id,
-      })
+      }),
     );
     if (textOf(detail.id || detail.tid) !== service.id)
       throw new Error("服务详情标识不一致，请刷新后重试");
@@ -384,7 +423,7 @@ const removeDraft = async (entry: Entry) => {
           type: "warning",
           confirmButtonText: "移除",
           cancelButtonText: "继续编辑",
-        }
+        },
       );
     } catch {
       return;
@@ -393,7 +432,8 @@ const removeDraft = async (entry: Entry) => {
   const wasActive = activeKey.value === entry.key;
   entries.value = entries.value.filter((item) => item.key !== entry.key);
   if (wasActive) {
-    if (!entries.value.length) entries.value.push(newEntry({ groupId: props.apiDetail.groupId }));
+    if (!entries.value.length)
+      entries.value.push(newEntry({ groupId: props.apiDetail.groupId }));
     activate(entries.value[0]);
   }
 };
@@ -410,7 +450,7 @@ const canClose = async (): Promise<boolean> => {
         type: "warning",
         confirmButtonText: "放弃并关闭",
         cancelButtonText: "继续登记",
-      }
+      },
     );
     return true;
   } catch {
@@ -445,7 +485,7 @@ watch(
       clearTimeout(captureTimer);
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 onBeforeUnmount(() => {
   ++listVersion;
@@ -530,9 +570,27 @@ onBeforeUnmount(() => {
   padding: 14px 16px 10px;
 }
 .service-sidebar-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   font-size: 14px;
   font-weight: 600;
+}
+.service-list-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 .service-sidebar-search {
   width: auto;
@@ -542,13 +600,6 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-}
-.service-list-label {
-  margin: 0;
-  padding: 10px 16px 8px;
-  font-size: 12px;
-  line-height: 18px;
-  color: #758298;
 }
 .service-list-row {
   position: relative;
@@ -646,7 +697,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   overflow: hidden;
 }
-.service-workspace-editor :deep(.el-scrollbar) {
+.service-editor-scroll {
   height: 100%;
 }
 .service-editor-inner {
@@ -655,9 +706,17 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 @media (max-width: 600px) {
-  .service-workspace { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(108px, 30%) minmax(0, 1fr); }
-  .service-workspace-sidebar { border-right: 0; border-bottom: 1px solid #ebeef5; }
-  .service-sidebar-heading { padding: 8px 12px; }
+  .service-workspace {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: minmax(108px, 30%) minmax(0, 1fr);
+  }
+  .service-workspace-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #ebeef5;
+  }
+  .service-sidebar-heading {
+    padding: 8px 12px;
+  }
 }
 @media (max-width: 1000px) {
   .service-workspace {

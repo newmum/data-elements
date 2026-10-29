@@ -477,7 +477,7 @@ function workspaceFixture(post = async () => ({ list: [], total: 0 })) {
     "$common",
     "ElMessage",
     "ElMessageBox",
-    `${js}\nreturn {startWorkspace,loadServices,selectService,selectEntry,addDraft,saveCurrent,onSaved,captureCurrent,onEditorReady,requestClose,removeDraft,canClose,entries,activeKey,editorData,editorReady,contentRef,services,total,listError,listLoading,keyword};`
+    `${js}\nreturn {startWorkspace,loadServices,selectService,selectEntry,addDraft,saveCurrent,onSaved,captureCurrent,onEditorReady,requestClose,removeDraft,canClose,entries,activeKey,editorData,editorReady,contentRef,services,total,listError,listLoading,keyword,displayedServiceCount};`
   )(
     vue.ref,
     vue.computed,
@@ -549,6 +549,18 @@ for (const count of [20, 100])
     assert.equal(f.api.services.value.length, count);
     assert.equal(f.api.total.value, 200);
   });
+
+test("workspace badge counts displayed drafts and services without counting opened services twice", async () => {
+  const f = workspaceFixture(async () => ({ list: [{ id: "saved", serviceName: "已登记服务" }], total: 1 }));
+  f.api.startWorkspace();
+  await f.api.loadServices(1);
+  assert.equal(f.api.displayedServiceCount.value, 2);
+  f.api.onSaved({ id: "saved", name: "已登记服务" });
+  assert.equal(f.api.displayedServiceCount.value, 1);
+  await f.ready();
+  await f.api.addDraft();
+  assert.equal(f.api.displayedServiceCount.value, 2);
+});
 
 test("workspace keeps each service's unsaved fields, parameters and examples while switching", async () => {
   const f = workspaceFixture();

@@ -7,6 +7,14 @@ var batch=input.batch
 var source=_text(batch.datasourceId)
 var table=_text(batch.tableName)
 if(!source.matches('[A-Za-z0-9_-]{1,64}')){_fail(422,'INVALID_BODY','datasourceId 必须是已配置的数据源标识')}
+// 关闭统一推送校验时，只保留路由标识格式和原有请求/幂等/容量约束。
+// 不读取登记镜像，不应用调用方授权、表和字段白名单；目的地仍只取本机 YAML。
+if (!c.p.getSecurity().isPushValidationEnabled()) {
+    if (!source.matches('[A-Za-z0-9][A-Za-z0-9_-]{0,63}') || !table.matches('[A-Za-z0-9][A-Za-z0-9_.-]{0,199}') || table.contains('..')) {
+        _fail(422, 'INVALID_BODY', 'tableName 仅允许安全的表标识，不能包含路径分隔符或连续点号')
+    }
+    return {mode: 'unvalidated', datasourceId: source, tableName: table, recordCount: batch.records.size()}
+}
 var found=c.jdbc.queryForList("""
     SELECT datasource_id,is_enable,is_del FROM ht_standalone_datasource WHERE datasource_id=?
     """,[source].toArray())

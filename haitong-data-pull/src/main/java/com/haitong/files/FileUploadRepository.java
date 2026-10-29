@@ -1,6 +1,7 @@
 package com.haitong.files;
 
 import com.haitong.config.Secrets;
+import com.haitong.api.PushAccess;
 import com.haitong.core.*;
 import com.haitong.store.*;
 import java.util.*;
@@ -30,6 +31,10 @@ public class FileUploadRepository implements InitializingBean {
     private static Optional<Upload> first(List<Map<String,Object>> rows){return rows.isEmpty()?Optional.empty():Optional.of(new Upload(rows.getFirst()));}
     public Optional<Upload> raw(String id,boolean lock){return first(jdbc.queryForList("SELECT * FROM ht_file_upload WHERE upload_id=?"+(lock?" FOR UPDATE":""),id));}
     private String grants(Secrets.Identity caller,List<Object> args,String alias){
+        if(catalog.isUnvalidated()){
+            args.addAll(List.of(PushAccess.TENANT,caller.id()));
+            return "("+alias+"tenant_id=? AND "+alias+"owner=?)";
+        }
         List<String> terms=new ArrayList<>();
         for(var scope:catalog.scopes(caller)){
             var c=scope.contract();
@@ -95,7 +100,7 @@ public class FileUploadRepository implements InitializingBean {
     public void quotaTransition(Upload u,boolean commit,long now){
         String old=u.text("quota_state");if(old.equals("RELEASED")||commit&&old.equals("COMMITTED"))return;
         long reserved=old.equals("RESERVED")?u.size()*2:0, committedDelta=commit?u.size():old.equals("COMMITTED")?-u.size():0;
-        String key=Rules.sha256((u.tenant()+"|"+u.text("datasource_id")+"|"+u.text("collection_id")).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String key=catalog.quotaKey(u.tenant(),u.text("datasource_id"),u.text("collection_id"));
         for(String scope:List.of("GLOBAL",key)){
             int n=jdbc.update("UPDATE ht_storage_quota SET reserved_bytes=reserved_bytes-?,committed_bytes=committed_bytes+?,active_sessions=active_sessions-?,updated_at=? WHERE quota_key=? AND reserved_bytes>=? AND committed_bytes+?>=0 AND active_sessions>=?",reserved,committedDelta,old.equals("RESERVED")?1:0,now,scope,reserved,committedDelta,old.equals("RESERVED")?1:0);
             if(n!=1)throw new IllegalStateException("文件配额账本不一致");

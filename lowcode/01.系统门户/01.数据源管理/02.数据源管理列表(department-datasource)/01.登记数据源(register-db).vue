@@ -2311,7 +2311,6 @@
 
           <div v-else class="connection-guide">
             <div v-if="accessMode === 'upload'" class="report-registration-panel">
-              <el-alert type="info" :closable="false" show-icon title="数据文件统一在海通数据上报工作台上传、整理规范并提交。保存数据源后点击下一步进入工作台。" />
               <DataTable v-if="currentDb?.tid" :key="currentDb.tid" :data="fetchReportFileHistory" :page-sizes="[10,20,50,100]" row-key="fileId" size="small" max-height="360">
                 <el-table-column type="index" label="序号" width="60" />
                 <el-table-column prop="fileName" label="数据文件" min-width="200" sortable="custom" />
@@ -6332,7 +6331,18 @@ function openReportWorkbench(dbId) {
   const configured=String(window.__DATA_ELEMENTS_HAITONG_BASE_URL__||'').trim();
   const local=['localhost','127.0.0.1','[::1]'].includes(window.location.hostname)&&window.location.port==='3000';
   const target=new URL(configured||(local?`${window.location.protocol}//${window.location.hostname}:3002/`:'/haitong/'),window.location.href);
-  target.search='';target.hash='/report?'+new URLSearchParams({datasourceId:String(dbId)});
+  const returnTo = new URL(window.location.href);
+  const withoutCredentials = (params) => {
+    for (const key of [...params.keys()]) if (/^(token|access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|password|secret|credential|ticket|authCode|code)$/i.test(key)) params.delete(key);
+    return params;
+  };
+  returnTo.search = withoutCredentials(returnTo.searchParams).toString();
+  const entryHash = returnTo.hash.slice(1), queryAt = entryHash.indexOf('?');
+  if (queryAt >= 0) {
+    const entryParams = withoutCredentials(new URLSearchParams(entryHash.slice(queryAt + 1)));
+    returnTo.hash = entryHash.slice(0, queryAt) + (entryParams.size ? '?' + entryParams : '');
+  }
+  target.search='';target.hash='/report?'+new URLSearchParams({datasourceId:String(dbId),returnTo:returnTo.href});
   registerModalContext.open.value=false;
   window.location.assign(target.href);
   return {navigationHandled:true};

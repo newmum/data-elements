@@ -1,8 +1,10 @@
-import { useLayoutEffect } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { ConfigProvider, theme, type ThemeConfig } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import ReportWorkbench from './App';
+import { getPortalBaseUrl } from '../services/platformSession';
+import { reportReturnTarget } from './services/reportReturn';
 import './styles.css';
 
 const reportTheme: ThemeConfig = {
@@ -23,7 +25,8 @@ const reportTheme: ThemeConfig = {
 
 /** A full-page reporting route using Haitong's existing session and API client. */
 export default function ReportPage() {
-  const navigate = useNavigate();
+  const location = useLocation();
+  const [returnTo] = useState(() => reportReturnTarget(window.location.href, getPortalBaseUrl().href, location.state, document.referrer));
   useLayoutEffect(() => {
     const previousTitle = document.title;
     document.body.classList.add('ht-report-active');
@@ -36,6 +39,6 @@ export default function ReportPage() {
   // A dedicated prefix also isolates body-mounted dialogs from the host's
   // existing global Ant Design dark-theme overrides.
   return <ConfigProvider prefixCls="report-ant" locale={zhCN} theme={reportTheme}>
-    <ReportWorkbench onReturn={() => navigate('/development/tasks')}/>
+    <ReportWorkbench returnTo={returnTo} onReturn={() => window.location.assign(returnTo)}/>
   </ConfigProvider>;
 }

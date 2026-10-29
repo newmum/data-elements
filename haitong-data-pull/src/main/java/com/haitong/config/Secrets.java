@@ -23,6 +23,9 @@ public final class Secrets {
         root=Path.of(p.getWorkDir()).toAbsolutePath().normalize();
         Files.createDirectories(root.resolve("keys"));
         adminKey=loadOrGenerate(p.getSecurity().getAdminKey(),"admin.key");
+        // Unvalidated push requests use a fixed non-admin identity. Business
+        // keys are neither loaded nor required in this mode; admin remains protected.
+        if (!p.getSecurity().isPushValidationEnabled()) return;
         if(p.getSecurity().getClients().isEmpty() || !p.getSecurity().getApiKey().isBlank()) {
             String key=loadOrGenerate(p.getSecurity().getApiKey(),"client.key");
             clients.add(new Client(key,new Identity("default",false,Set.of("*"),Set.of("*"))));

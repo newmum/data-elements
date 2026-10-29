@@ -28,7 +28,7 @@ class WorkbenchMagicTest {
   public String direction(Map<?,?> body){return "asc".equals(body.get("sortDir"))?"asc":"desc";}
  }
  static class Fixture {
-  final JdbcTemplate jdbc;final SQLModule db;final Scope scope=new Scope();int reads;
+  final JdbcTemplate jdbc;final SQLModule db;final Scope scope=new Scope();int reads;final List<String> statements=new ArrayList<>();
   Fixture(int count) throws Exception {
    var source=new DriverManagerDataSource("jdbc:h2:mem:workbench_"+UUID.randomUUID()+";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");jdbc=new JdbcTemplate(source);
    String ddl=java.nio.file.Files.readString(java.nio.file.Path.of("../db/baseline_ga/init.sql"));
@@ -57,7 +57,7 @@ class WorkbenchMagicTest {
      String statement=sql.getSql();for(Object value:sql.getParameters()) {assertNotNull(value,"missing named SQL binding");int index=statement.indexOf('?');String literal=value instanceof Number?value.toString():"'"+value.toString().replace("'","''")+"'";statement=statement.substring(0,index)+literal+statement.substring(index+1);}
      sql.setSql(statement);sql.setParameters(List.of());
     }
-if(sql.getSql().stripLeading().toLowerCase().matches("(?s)(select|with).*"))reads++;}}));
+if(sql.getSql().stripLeading().toLowerCase().matches("(?s)(select|with).*")){reads++;statements.add(sql.getSql());}}}));
   }
   Object script(String key,Map<String,Object> input,Map<String,Object> extra) throws Exception {
    var paths=Map.of("context","function/01.通用函数/20.工作台数据范围.ms","changes","function/01.通用函数/21.工作台变更查询.ms","overview","api/02.数据盘点/04.盘点统计/01.工作台统计/01.工作台概览.ms","items","api/02.数据盘点/04.盘点统计/01.工作台统计/02.工作台事项分页.ms","export","api/02.数据盘点/04.盘点统计/01.工作台统计/03.工作台导出.ms");
@@ -125,5 +125,37 @@ if(sql.getSql().stripLeading().toLowerCase().matches("(?s)(select|with).*"))read
   f.jdbc.execute("update nifi_pipeline_t set status='STOPPED'");
   var stopped=(Map<?,?>)((Map<?,?>)f.script("overview",Map.of("scope","all"),Map.of())).get("counts");
   assertEquals(0,((Number)stopped.get("accessRunningTasks")).intValue());assertEquals(0,((Number)stopped.get("accessExceptionTasks")).intValue());
+ }
+ @Test void independentSectionsKeepFixedQueriesAndSameAuthorizedResults() throws Exception {
+  var queryCounts=Map.of("registration",3,"governance",3,"health",2,"tasks",2,"changes",1);
+  for(int count:List.of(20,100)) {
+   var f=new Fixture(count);
+   var full=(Map<?,?>)f.script("overview",Map.of("scope","all"),Map.of());
+   for(String section:List.of("registration","governance","health","tasks","changes")) {
+    f.reads=0;f.statements.clear();
+    var result=(Map<?,?>)f.script("overview",Map.of("scope","all","section",section),Map.of());
+    assertEquals(queryCounts.get(section).intValue(),f.reads,section);
+    assertEquals(section,result.get("section"));assertEquals("all",result.get("mode"));
+    assertEquals(true,result.get("canViewAll"));
+    if(section.equals("registration")) {
+     assertEquals(((Map<?,?>)full.get("counts")).get("tables"),((Map<?,?>)result.get("counts")).get("tables"));
+     assertEquals(full.get("types"),result.get("types"));
+    } else {
+     assertTrue(f.statements.stream().noneMatch(sql->sql.contains("t.field_governance_config")),section+" must not parse registration JSON");
+     assertFalse(((Map<?,?>)result.get("counts")).containsKey("tables"));
+    }
+   }
+   f.jdbc.execute("update rm_role_t set code_num='ywjz'");f.scope.value="ORG";
+   var mine=(Map<?,?>)f.script("overview",Map.of("scope","auto","section","registration","tenantId","foreign"),Map.of());
+   assertEquals(count/2,((Number)((Map<?,?>)mine.get("counts")).get("tables")).intValue());
+   for(String section:queryCounts.keySet()) {
+    var scoped=(Map<?,?>)f.script("overview",Map.of("scope","auto","section",section),Map.of());
+    assertEquals("mine",scoped.get("mode"));assertEquals(false,scoped.get("canViewAll"));
+    if(section.equals("health"))assertTrue(((List<?>)scoped.get("health")).stream().allMatch(row->"owned".equals(((Map<?,?>)row).get("id"))));
+   }
+   assertInstanceOf(ExitValue.class,f.script("context",Map.of("scope","all"),Map.of()));
+   f.reads=0;assertInstanceOf(ExitValue.class,f.script("overview",Map.of("section","unknown"),Map.of()));assertEquals(0,f.reads);
+   System.out.println("WORKBENCH sections "+count+": fixed reads="+queryCounts+", same scope, lightweight non-registration SQL");
+  }
  }
 }

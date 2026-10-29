@@ -613,6 +613,11 @@
   {
     "type": "ElTabs",
     "native": true,
+    "class": "registration-examples",
+    "style": {
+      "width": "100%",
+      "minWidth": "0"
+    },
     "props": {
       "modelValue": "request"
     },
@@ -640,7 +645,7 @@
             },
             "style": {
               "width": "100%",
-              "height": "200px",
+              "height": "280px",
               "minWidth": "0",
               "border": "1px solid #e5eaf1",
               "borderRadius": "4px",
@@ -648,7 +653,7 @@
             },
             "props": {
               "lang": "json",
-              "height": "200px"
+              "height": "280px"
             }
           }
         ]
@@ -676,7 +681,7 @@
             },
             "style": {
               "width": "100%",
-              "height": "200px",
+              "height": "280px",
               "minWidth": "0",
               "border": "1px solid #e5eaf1",
               "borderRadius": "4px",
@@ -684,7 +689,7 @@
             },
             "props": {
               "lang": "json",
-              "height": "200px"
+              "height": "280px"
             }
           }
         ]

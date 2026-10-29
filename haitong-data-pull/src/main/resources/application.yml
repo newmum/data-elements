@@ -41,6 +41,9 @@ logging:
     org.apache.kafka: WARN
     org.springframework.kafka: WARN
 relay:
+  security:
+    # true：校验业务密钥及登记契约；false：业务推送无需密钥和预先登记。
+    push-validation-enabled: true
   registration-registry:
     enabled: false
     base-url: ""

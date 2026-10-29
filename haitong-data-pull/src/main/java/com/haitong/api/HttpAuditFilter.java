@@ -15,12 +15,12 @@ import java.util.*;
 public final class HttpAuditFilter extends OncePerRequestFilter {
     private final ExchangeLog ledger;private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(HttpAuditFilter.class);
     public HttpAuditFilter(ExchangeLog ledger){this.ledger=ledger;}
-    @Override protected boolean shouldNotFilter(HttpServletRequest r){return r.getRequestURI().equals("/actuator/health");}
+    @Override protected boolean shouldNotFilter(HttpServletRequest r){return PushAccess.path(r).equals("/actuator/health");}
     @Override protected void doFilterInternal(HttpServletRequest req,HttpServletResponse res,FilterChain chain)throws ServletException,IOException{
         String id=UUID.randomUUID().toString();req.setAttribute("haitong.requestId",id);res.setHeader("X-Request-Id",id);
         long started=System.currentTimeMillis();Map<String,Object> c=new LinkedHashMap<>();c.put("requestId",id);c.put("attemptId",id);c.put("startedAt",started);
         // Only known ASCII path shapes, never a query string or header containing credentials.
-        String path=req.getRequestURI();if(!path.matches("/(api/v1|internal/v1|actuator)/[A-Za-z0-9_./-]{1,200}"))path="[unrecognized-path]";
+        String path=PushAccess.path(req);if(!path.matches("/(api/v1|internal/v1|actuator)/[A-Za-z0-9_./-]{1,200}"))path="[unrecognized-path]";
         c.put("sourceRef",req.getMethod()+" "+path);safe("START","RUNNING",c);
         boolean thrown=false;
         try{chain.doFilter(req,res);}catch(ServletException|IOException|RuntimeException ex){thrown=true;throw ex;}

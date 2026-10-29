@@ -1,6 +1,7 @@
 package com.haitong.files;
 
 import com.haitong.config.*;
+import com.haitong.api.PushAccess;
 import com.haitong.core.*;
 import com.haitong.core.Models.*;
 import java.nio.charset.StandardCharsets;
@@ -28,7 +29,9 @@ public class FileContractCatalog implements InitializingBean {
            p.getScannerTimeoutSeconds()<1 || p.getScannerTimeoutSeconds()>3600 || p.getCollections().size()>100)
             throw new IllegalStateException("文件传输容量或并发配置不合法");
         Map<String,Contract> built=new LinkedHashMap<>(),fields=new LinkedHashMap<>();
-        for(var entry:p.getCollections().entrySet()){
+        if(!p.getScannerCommand().isEmpty()&&!p.getScannerCommand().contains("{file}"))
+            throw new IllegalStateException("scanner-command 必须包含独立的 {file} 参数");
+        if(!isUnvalidated()) for(var entry:p.getCollections().entrySet()){
             var c=entry.getValue();Rules.code(entry.getKey());
             if(c==null || !c.isEnabled())continue;
             for(String id:List.of(c.getTenantId(),c.getDatasourceId(),c.getCollectionId()))Rules.code(id);
@@ -76,15 +79,21 @@ public class FileContractCatalog implements InitializingBean {
         contracts=Collections.unmodifiableMap(built);
         attachmentFields=Collections.unmodifiableMap(fields);
     }
-    public Collection<Contract> all(){return contracts.values();}
+    public boolean isUnvalidated(){return !routes.isPushValidationEnabled();}
+    public Collection<Contract> all(){
+        if(!isUnvalidated())return contracts.values();
+        var result=new ArrayList<>(contracts.values());result.add(unregistered("unregistered","files"));return result;
+    }
     public Contract get(String source,String collection){
+        if(isUnvalidated())return unregistered(source,collection);
         Contract c=contracts.get(source+"\u0000"+collection);if(c==null)throw RelayException.notFound();return c;
     }
     public Contract upload(Secrets.Identity caller,String source,String collection){
-        Contract c=get(source,collection);if(!caller.admin()&&!c.policy().getClients().contains(caller.id()))throw RelayException.notFound();return c;
+        Contract c=get(source,collection);if(!isUnvalidated()&&!caller.admin()&&!c.policy().getClients().contains(caller.id()))throw RelayException.notFound();return c;
     }
     public Contract uploadField(Secrets.Identity caller,String source,String table,String field){
         attachmentName(table);attachmentName(field);
+        if(isUnvalidated())return unregistered(source,table+"."+field);
         Contract c=attachmentFields.get(source+"\u0000"+table+"\u0000"+field);
         if(c==null||!caller.admin()&&!c.policy().getClients().contains(caller.id()))throw RelayException.notFound();
         return c;
@@ -100,9 +109,40 @@ public class FileContractCatalog implements InitializingBean {
         }
         return result;
     }
-    public String quotaKey(Contract c){return Rules.sha256((c.tenantId()+"|"+c.datasourceId()+"|"+c.collectionId()).getBytes(StandardCharsets.UTF_8));}
+    /** A single deployment-owned scope bounds all unregistered uploads. */
+    public String quotaKey(Contract c){return quotaKey(c.tenantId(),c.datasourceId(),c.collectionId());}
+    public String quotaKey(String tenant,String source,String collection){
+        return Rules.sha256((PushAccess.TENANT.equals(tenant)?tenant+"|*|*":tenant+"|"+source+"|"+collection).getBytes(StandardCharsets.UTF_8));
+    }
+    private Contract unregistered(String source,String collection){
+        Rules.code(source);Rules.code(collection);
+        if(!source.matches("[A-Za-z0-9][A-Za-z0-9_-]{0,63}"))throw RelayException.invalid("datasourceId 格式不正确");
+        if(collection.contains(".."))throw RelayException.invalid("文件集合标识不能包含连续点号");
+        var targets=p.getUnregisteredTargets();
+        if(targets.isEmpty()||targets.size()>8||new HashSet<>(targets).size()!=targets.size())
+            throw new IllegalStateException("未登记文件须配置1至8个不重复的 relay.files.unregistered-targets");
+        var policy=new FileTransferProperties.CollectionContract();
+        policy.setTenantId(PushAccess.TENANT);policy.setDatasourceId(source);policy.setCollectionId(collection);
+        policy.setMaxFileBytes(p.getMaxFileBytes());policy.setQuotaBytes(p.getStorageLimitBytes());
+        policy.setMaxActiveUploads(p.getMaxActiveUploads());policy.setTargets(List.copyOf(targets));
+        policy.setRequireMalwareScan(!p.getScannerCommand().isEmpty());
+        List<TargetPlan> plans=new ArrayList<>();
+        for(String code:targets){
+            TargetPlan t=routes.target(code);
+            Kind kind=switch(t.kind()){case FTP->Kind.FILE_FTP;case LOCAL->Kind.FILE_LOCAL;case KAFKA->Kind.FILE_KAFKA;default->throw new IllegalStateException("文件只支持本地配置的FTP、LOCAL或KAFKA目标");};
+            plans.add(new TargetPlan(t.code(),kind,t.topic(),t.directory(),t.kafka(),t.ftp(),null));
+        }
+        var plan=new RoutePlan("file.unregistered","BINARY",List.of(),Map.of(),List.copyOf(plans));
+        return new Contract("unregistered",PushAccess.TENANT,source,collection,1,
+                Rules.sha256(json.bytes(Map.of("policy",policy,"plan",plan))),policy,plan);
+    }
     public Map<String,Object> metadata(Contract c,Object value){
         if(!(value instanceof Map<?,?> values) || json.bytes(values).length>65536)throw RelayException.invalid("metadata 必须为不超过64KiB的对象");
+        if(isUnvalidated()&&PushAccess.TENANT.equals(c.tenantId())){
+            if(values.size()>100)throw RelayException.invalid("metadata 最多100个属性");
+            Map<String,Object> result=new LinkedHashMap<>();
+            values.forEach((k,v)->result.put(Objects.toString(k),v));return result;
+        }
         Map<String,Object> result=new TreeMap<>();
         for(var item:values.entrySet()){
             String key=Objects.toString(item.getKey(),"");String type=c.policy().getMetadataTypes().get(key);Object v=item.getValue();

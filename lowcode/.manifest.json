@@ -32,7 +32,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/01.工作台(my-workbench).vue",
-      "baseSha256": "ebede7168e5d16943392c21033beb20b91f28184f3926421540144f94e52a897"
+      "baseSha256": "38af85e773d5ed4ff18a826ad1f5e2b6ae378ed56498bc04cd418e1df23c7538"
     },
     {
       "id": "deptdatasourceui00000000000001",
@@ -42,7 +42,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
-      "baseSha256": "46958590f230563bd19579b889a5f883bea870145f9f31622af185242d14c1de"
+      "baseSha256": "b5ec3e2749ad11f3d0e58fdd6b7f1c07fedb80f0c82a30b496b57aad5a540ac6"
     },
     {
       "id": "2016435561264910336",
@@ -52,7 +52,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
-      "baseSha256": "b189ce18014425c7da038b236cad63376066de66130ac6c1cae010c6bb5e7674"
+      "baseSha256": "45a6d17bbd263f4caa6c5e2dda70163cc077b34e101e712aa6fdf0e2a896da34"
     },
     {
       "id": "2074806689771094016",
@@ -82,7 +82,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
-      "baseSha256": "212d055eb7b07db6a863a77961f753999191699b1af868d200f199e529449ae4"
+      "baseSha256": "9f20c01854bda0c3283ea1af83c9b7f41ed597312b5faaf0b19cea3fcc5055c8"
     },
     {
       "id": "2008087014782078976",
@@ -1267,7 +1267,7 @@
       "type": "1",
       "sortOrder": 6,
       "path": "06.数据服务/数据服务(data-serve)/服务组件/服务注册弹窗(api-register-modal).vue",
-      "baseSha256": "b7d6f1d637eb60368aa94c4aabe70826e0ab06a0d0583236fa9e6b493918bac8"
+      "baseSha256": "65e51a32d5b148bd2df9e4ae2a7039c67e8acd8a8827c606e930b4210243645a"
     },
     {
       "id": "2014616362783674368",

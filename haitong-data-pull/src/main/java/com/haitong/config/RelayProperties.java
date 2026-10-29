@@ -51,10 +51,13 @@ public class RelayProperties {
     public Map<String, Action> getActions() { return actions; }
     public void setActions(Map<String, Action> value) { this.actions = value; }
     public static class Security {
+        private boolean pushValidationEnabled = true;
         private String apiKey = "";
         private String adminKey = "";
         private int requestsPerMinute = 600;
         private Map<String,Client> clients = new LinkedHashMap<>();
+        public boolean isPushValidationEnabled() { return pushValidationEnabled; }
+        public void setPushValidationEnabled(boolean value) { this.pushValidationEnabled = value; }
         public String getApiKey() { return apiKey; }
         public void setApiKey(String value) { this.apiKey = value; }
         public String getAdminKey() { return adminKey; }

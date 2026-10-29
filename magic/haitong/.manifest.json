@@ -53,7 +53,7 @@
       "path": "magic/haitong/api/04.数据推送调试/03.模板配套推送测试.ms",
       "id": "haitong-push-template-test-03",
       "databasePath": "/magic-api/api/04.数据推送调试/03.模板配套推送测试.ms",
-      "baseSha256": "f8597b7b4f15b92c8ee06b0108a997303cd41baa2aecde01233f29fd51a439a5"
+      "baseSha256": "43a2e8069a506dc02dcdfa05134705e74b3bd32ce70409fba6208d1604108f15"
     },
     {
       "path": "magic/haitong/api/04.数据推送调试/group.json",
@@ -395,7 +395,7 @@
       "path": "magic/haitong/function/01.海通业务/02.表批次登记规范校验.ms",
       "id": "haitong-function-table-contract",
       "databasePath": "/magic-api/function/01.海通业务/02.表批次登记规范校验.ms",
-      "baseSha256": "c9a6f5d003c4bba4ed7b6988e06e4cb300e298cced892563ddce4bd2af771d81"
+      "baseSha256": "999ebbd62190d85ea0b3fe15498f9975c6d7341812612d62855dd2e99ee6c1a6"
     },
     {
       "path": "magic/haitong/function/01.海通业务/03.消息状态与文件统计.ms",

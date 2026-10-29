@@ -16,6 +16,9 @@ public class FileTransferProperties {
     private List<String> scannerCommand=new ArrayList<>();
     private int scannerTimeoutSeconds=300;
     private Map<String,CollectionContract> collections=new LinkedHashMap<>();
+    private List<String> unregisteredTargets=new ArrayList<>(List.of("ftp"));
+    public List<String> getUnregisteredTargets(){return unregisteredTargets;}
+    public void setUnregisteredTargets(List<String> v){unregisteredTargets=v;}
     public boolean isEnabled(){return enabled;} public void setEnabled(boolean v){enabled=v;}
     public long getSingleUploadMaxBytes(){return singleUploadMaxBytes;} public void setSingleUploadMaxBytes(long v){singleUploadMaxBytes=v;}
     public long getPartSizeBytes(){return partSizeBytes;} public void setPartSizeBytes(long v){partSizeBytes=v;}

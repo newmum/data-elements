@@ -15,6 +15,9 @@ magic-api:
     table-name: ht_magic_api_file
     prefix: /magic-api
   security:
+    # false：业务推送无需 X-Api-Key，不校验数据源、表、字段登记；修改后重启。
+    # Magic 编辑器、运维、配置同步/签发仍分别鉴权。省略本项默认 true。
+    push-validation-enabled: true
     username: "${HAITONG_MAGIC_EDITOR_USERNAME:haitong-admin}"
     password: "${HAITONG_MAGIC_EDITOR_PASSWORD}"
 

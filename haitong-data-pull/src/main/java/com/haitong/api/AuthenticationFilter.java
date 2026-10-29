@@ -34,7 +34,7 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
         this.environment = environment;
     }
     @Override protected boolean shouldNotFilter(HttpServletRequest r) {
-        String path=r.getRequestURI();
+        String path=PushAccess.path(r);
         // Magic-API owns its editor session/login protocol below this path.  Do
         // not require a relay X-Api-Key before the editor can present its own
         // authenticated login screen.  Business Magic routes remain protected
@@ -44,10 +44,11 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
     }
     @Override protected void doFilterInternal(HttpServletRequest req,HttpServletResponse res,FilterChain chain) throws ServletException,IOException {
         res.setHeader("Cache-Control","no-store");res.setHeader("X-Content-Type-Options","nosniff");
-        String path=req.getRequestURI();
+        String path=PushAccess.path(req);
         // Paths in this API are ASCII constants/IDs. Reject ambiguous servlet/matrix/encoded paths
         // before deciding whether admin authentication is required.
-        if(path.contains("%") || path.contains(";") || path.contains("\\") || path.contains("//") || path.contains("/../") || path.contains("/./")) {
+        String rawPath=req.getRequestURI();
+        if(rawPath.contains("%") || rawPath.contains(";") || rawPath.contains("\\") || rawPath.contains("//") || rawPath.contains("/../") || rawPath.contains("/./")) {
             error(res,400,"INVALID_PATH","接口路径不能包含编码分隔符或路径参数");return;
         }
         // These are executable HTTP examples for the authenticated editor, not
@@ -61,7 +62,7 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
             chain.doFilter(req,res);
             return;
         }
-        boolean internal=req.getRequestURI().startsWith("/internal/") || req.getRequestURI().startsWith("/actuator/");
+        boolean internal=path.startsWith("/internal/") || path.startsWith("/actuator/");
         Secrets.Identity identity=secrets.admin(req.getHeader("X-Admin-Key"));
         boolean platformCredentialIssue = "/internal/push-credentials/issue".equals(path);
         // The Magic operations endpoint is a controlled alias of the same
@@ -82,6 +83,9 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
             if (!syncKey.isBlank() && Rules.constantEquals(syncKey, req.getHeader("X-Standalone-Registry-Key")))
                 identity = new Secrets.Identity("platform-standalone-registry", false, Set.of("standalone-registry-sync"), Set.of());
         }
+        if (identity == null && !p.getSecurity().isPushValidationEnabled() && PushAccess.endpoint(req.getMethod(), path)) {
+            identity = PushAccess.identity();
+        }
         if(identity==null && !internal) {
             String key=req.getHeader("X-Api-Key");String authorization=req.getHeader("Authorization");
             if((key==null || key.isBlank()) && authorization!=null && authorization.startsWith("Bearer ")) key=authorization.substring(7);
@@ -89,7 +93,7 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
             if(identity==null) identity=pushCredentials.authenticate(key);
         }
         if(identity==null) { error(res,401,"UNAUTHENTICATED","缺少或无效的访问密钥");return; }
-        if(req.getRequestURI().startsWith("/api/") && !p.getGateway().getSharedKey().isBlank() &&
+        if(path.startsWith("/api/") && !p.getGateway().getSharedKey().isBlank() &&
            !Rules.constantEquals(secrets.resolve(p.getGateway().getSharedKey()),req.getHeader("X-Gateway-Key"))) {
             error(res,403,"GATEWAY_REQUIRED","必须通过已授权网关访问");return;
         }
@@ -116,7 +120,7 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
             var resource = resources.file(scriptId);
             if (!(resource instanceof ApiInfo api) || !req.getMethod().equalsIgnoreCase(api.getMethod())) return false;
             String mappedPath = ("/" + resources.getGroupPath(api.getGroupId()) + "/" + api.getPath()).replaceAll("/+", "/");
-            if (!mappedPath.equals(req.getRequestURI())) return false;
+            if (!mappedPath.equals(PushAccess.path(req))) return false;
             req.setAttribute(IDENTITY, new Secrets.Identity("magic-editor:" + user.getUsername(), false, Set.of(), Set.of()));
             return true;
         } catch (Exception invalidEditorSession) {

@@ -14,6 +14,7 @@ public final class RouteCatalog implements InitializingBean {
     private final RelayProperties p;
     private final Secrets secrets;
     public RouteCatalog(RelayProperties p,Secrets secrets) { this.p=p;this.secrets=secrets; }
+    public boolean isPushValidationEnabled() { return p.getSecurity().isPushValidationEnabled(); }
     public RoutePlan route(String code) {
         RelayProperties.Route r=p.getRoutes().get(code);
         if(r==null || !r.isEnabled()) throw RelayException.notFound();
@@ -71,7 +72,7 @@ public final class RouteCatalog implements InitializingBean {
                 throw new IllegalStateException("BINARY 整文件仅允许传往 FTP 或 LOCAL");
             for(var rename:r.renameFields().entrySet()) if(rename.getKey().isBlank() || rename.getValue().isBlank()) throw new IllegalStateException("字段映射名称不能为空");
         }
-        for(var source:p.getStandalone().getDatasources().entrySet()) {
+        if(p.getSecurity().isPushValidationEnabled()) for(var source:p.getStandalone().getDatasources().entrySet()) {
             Rules.code(source.getKey());
             var contract=source.getValue();
             if(contract==null || contract.getTables()==null || contract.getTables().isEmpty())

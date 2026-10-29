@@ -1,9 +1,5 @@
 <template>
-  <div
-    class="asset-workbench"
-    :class="{ 'is-loading': refreshing }"
-    :aria-busy="refreshing"
-  >
+  <div class="asset-workbench">
     <header class="overview-header">
       <div class="header-copy">
         <div class="header-kicker">
@@ -23,7 +19,7 @@
             :key="item.value"
             type="button"
             :class="{ active: activeScope === item.value }"
-            :disabled="refreshing || exporting"
+            :disabled="exporting"
             :aria-pressed="activeScope === item.value"
             @click="switchScope(item.value)"
           >
@@ -61,17 +57,6 @@
       {{ exportError }}
     </div>
 
-    <el-alert
-      v-if="loadError"
-      type="error"
-      :title="loadError"
-      :closable="false"
-      show-icon
-    >
-      <el-button type="primary" link @click="loadOverview()"
-        >重新读取</el-button
-      >
-    </el-alert>
     <section class="metric-grid">
       <article
         v-for="metric in metrics"
@@ -79,17 +64,23 @@
         class="metric-card"
         :class="[
           `tone-${metric.tone}`,
-          { selected: activeMetric === metric.key },
+          {
+            selected: activeMetric === metric.key,
+            'is-loading': metricLoading(metric.key),
+            'has-error': !!metricError(metric.key),
+          },
         ]"
         role="button"
-        :tabindex="refreshing ? -1 : 0"
-        :aria-disabled="refreshing"
+        :tabindex="
+          metricLoading(metric.key) || metricError(metric.key) ? -1 : 0
+        "
+        :aria-disabled="metricLoading(metric.key) || !!metricError(metric.key)"
         @keydown.enter.prevent="selectMetric(metric)"
         @keydown.space.prevent="selectMetric(metric)"
         @click="selectMetric(metric)"
       >
         <div
-          v-if="refreshing"
+          v-if="metricLoading(metric.key)"
           class="card-skeleton metric-skeleton"
           aria-hidden="true"
         >
@@ -97,6 +88,18 @@
           <i class="skeleton-line skeleton-value"></i>
           <i class="skeleton-line"></i>
           <i class="skeleton-line skeleton-short"></i>
+        </div>
+        <div v-if="metricError(metric.key)" class="section-error" role="alert">
+          <strong>{{ metric.label }}读取失败</strong
+          ><span>{{ metricError(metric.key) }}</span>
+          <el-button
+            type="primary"
+            link
+            @click.stop="
+              retrySection(metricSection(metric.key) || 'registration')
+            "
+            >重新读取</el-button
+          >
         </div>
         <div class="metric-topline">
           <span class="metric-label">
@@ -146,9 +149,27 @@
     </section>
 
     <section class="dashboard-grid dashboard-grid--top">
-      <article class="panel registration-panel">
+      <article
+        class="panel registration-panel"
+        :class="{
+          'is-loading': sectionState.registration.loading,
+          'has-error': !!sectionState.registration.error,
+        }"
+        :aria-busy="sectionState.registration.loading"
+      >
         <div
-          v-if="refreshing"
+          v-if="sectionState.registration.error"
+          class="section-error"
+          role="alert"
+        >
+          <strong>{{ sectionLabels.registration }}读取失败</strong
+          ><span>{{ sectionState.registration.error }}</span
+          ><el-button type="primary" link @click="retrySection('registration')"
+            >重新读取</el-button
+          >
+        </div>
+        <div
+          v-if="sectionState.registration.loading"
           class="card-skeleton panel-skeleton"
           aria-hidden="true"
         >
@@ -216,109 +237,178 @@
 
       <article class="panel type-panel">
         <div
-          v-if="refreshing"
-          class="card-skeleton panel-skeleton"
-          aria-hidden="true"
+          class="type-distribution"
+          :class="{
+            'is-loading': sectionState.registration.loading,
+            'has-error': !!sectionState.registration.error,
+          }"
+          :aria-busy="sectionState.registration.loading"
         >
-          <i class="skeleton-line skeleton-heading"></i>
-          <i class="skeleton-line skeleton-subtitle"></i>
-          <div class="skeleton-rows">
-            <div v-for="row in 5" :key="row" class="skeleton-row">
-              <i class="skeleton-dot"></i>
-              <i class="skeleton-line"></i>
-              <i class="skeleton-line skeleton-count"></i>
+          <div
+            v-if="sectionState.registration.error"
+            class="section-error"
+            role="alert"
+          >
+            <strong>{{ sectionLabels.registration }}读取失败</strong
+            ><span>{{ sectionState.registration.error }}</span
+            ><el-button
+              type="primary"
+              link
+              @click="retrySection('registration')"
+              >重新读取</el-button
+            >
+          </div>
+          <div
+            v-if="sectionState.registration.loading"
+            class="card-skeleton panel-skeleton"
+            aria-hidden="true"
+          >
+            <i class="skeleton-line skeleton-heading"></i>
+            <i class="skeleton-line skeleton-subtitle"></i>
+            <div class="skeleton-rows">
+              <div v-for="row in 5" :key="row" class="skeleton-row">
+                <i class="skeleton-dot"></i>
+                <i class="skeleton-line"></i>
+                <i class="skeleton-line skeleton-count"></i>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="panel-header">
-          <div>
-            <h2>业务类型分布</h2>
-            <p>已登记数据表按业务类型分类</p>
+          <div class="panel-header">
+            <div>
+              <h2>业务类型分布</h2>
+              <p>已登记数据表按业务类型分类</p>
+            </div>
+            <div class="mini-legend">
+              <span></span>
+              共 {{ safeCounts.registered }} 张
+            </div>
           </div>
-          <div class="mini-legend">
-            <span></span>
-            共 {{ safeCounts.registered }} 张
+          <div class="type-chart">
+            <button
+              v-for="item in businessTypes"
+              :key="item.name"
+              type="button"
+              class="type-row"
+              @click="openType(item)"
+            >
+              <span class="type-name">
+                <i :style="{ background: item.color }"></i>
+                {{ item.name }}
+              </span>
+              <span class="type-bar">
+                <i
+                  :style="{ width: item.ratio + '%', background: item.color }"
+                ></i>
+              </span>
+              <strong>{{ item.count }}</strong>
+              <small>{{ item.ratio }}%</small>
+            </button>
           </div>
         </div>
-        <div class="type-chart">
-          <button
-            v-for="item in businessTypes"
-            :key="item.name"
-            type="button"
-            class="type-row"
-            @click="openType(item)"
-          >
-            <span class="type-name">
-              <i :style="{ background: item.color }"></i>
-              {{ item.name }}
-            </span>
-            <span class="type-bar">
-              <i
-                :style="{ width: item.ratio + '%', background: item.color }"
-              ></i>
-            </span>
-            <strong>{{ item.count }}</strong>
-            <small>{{ item.ratio }}%</small>
-          </button>
-        </div>
-        <span
-          v-if="!view.governanceAvailable"
-          class="static-indicator governance-reference"
-        >
-          字段治理指标 · 静态参考
-        </span>
         <div
-          class="type-summary"
-          :title="
-            view.governanceAvailable
-              ? '按已保存治理配置统计'
-              : '配置统计暂不可用，以下为静态参考'
-          "
+          class="governance-section"
+          :class="{
+            'is-loading': sectionState.governance.loading,
+            'has-error': !!sectionState.governance.error,
+          }"
+          :aria-busy="sectionState.governance.loading"
         >
-          <div>
-            <span>已统一标准字段</span>
-            <strong>
-              {{
-                view.governanceAvailable
-                  ? view.standardFields.toLocaleString()
-                  : activeScope === "all"
-                    ? "3,862"
-                    : "746"
-              }}
-            </strong>
+          <div
+            v-if="sectionState.governance.error"
+            class="section-error"
+            role="alert"
+          >
+            <strong>{{ sectionLabels.governance }}读取失败</strong
+            ><span>{{ sectionState.governance.error }}</span
+            ><el-button type="primary" link @click="retrySection('governance')"
+              >重新读取</el-button
+            >
           </div>
-          <div>
-            <span>已关联字典字段</span>
-            <strong>
-              {{
-                view.governanceAvailable
-                  ? view.dictionaryFields.toLocaleString()
-                  : activeScope === "all"
-                    ? "1,096"
-                    : "213"
-              }}
-            </strong>
+          <div
+            v-if="sectionState.governance.loading"
+            class="governance-loading"
+            role="status"
+            aria-label="正在读取字段治理"
+          >
+            <i v-for="item in 3" :key="item" class="skeleton-line"></i>
           </div>
-          <div>
-            <span>时间戳已配置</span>
-            <strong>
-              {{
-                view.governanceAvailable
-                  ? view.timestampRate + "%"
-                  : activeScope === "all"
-                    ? "94%"
-                    : "91%"
-              }}
-            </strong>
+          <span
+            v-if="!view.governanceAvailable"
+            class="static-indicator governance-reference"
+          >
+            字段治理指标 · 静态参考
+          </span>
+          <div
+            class="type-summary"
+            :title="
+              view.governanceAvailable
+                ? '按已保存治理配置统计'
+                : '配置统计暂不可用，以下为静态参考'
+            "
+          >
+            <div>
+              <span>已统一标准字段</span>
+              <strong>
+                {{
+                  view.governanceAvailable
+                    ? view.standardFields.toLocaleString()
+                    : activeScope === "all"
+                      ? "3,862"
+                      : "746"
+                }}
+              </strong>
+            </div>
+            <div>
+              <span>已关联字典字段</span>
+              <strong>
+                {{
+                  view.governanceAvailable
+                    ? view.dictionaryFields.toLocaleString()
+                    : activeScope === "all"
+                      ? "1,096"
+                      : "213"
+                }}
+              </strong>
+            </div>
+            <div>
+              <span>时间戳已配置</span>
+              <strong>
+                {{
+                  view.governanceAvailable
+                    ? view.timestampRate + "%"
+                    : activeScope === "all"
+                      ? "94%"
+                      : "91%"
+                }}
+              </strong>
+            </div>
           </div>
         </div>
       </article>
     </section>
 
     <section class="dashboard-grid dashboard-grid--middle">
-      <article class="panel pending-panel">
+      <article
+        class="panel pending-panel"
+        :class="{
+          'is-loading': sectionState.registration.loading,
+          'has-error': !!sectionState.registration.error,
+        }"
+        :aria-busy="sectionState.registration.loading"
+      >
         <div
-          v-if="refreshing"
+          v-if="sectionState.registration.error"
+          class="section-error"
+          role="alert"
+        >
+          <strong>{{ sectionLabels.registration }}读取失败</strong
+          ><span>{{ sectionState.registration.error }}</span
+          ><el-button type="primary" link @click="retrySection('registration')"
+            >重新读取</el-button
+          >
+        </div>
+        <div
+          v-if="sectionState.registration.loading"
           class="card-skeleton panel-skeleton"
           aria-hidden="true"
         >
@@ -344,7 +434,9 @@
             <button
               class="text-button"
               type="button"
-              :disabled="!selectedPending.length || refreshing"
+              :disabled="
+                !selectedPending.length || sectionState.registration.loading
+              "
               @click="queueSelected"
             >
               加入本次处理清单
@@ -375,7 +467,7 @@
                   <button
                     class="pending-sort"
                     type="button"
-                    :disabled="refreshing"
+                    :disabled="sectionState.registration.loading"
                     aria-label="按数据表名称排序"
                     @click="sortPending('displayName')"
                   >
@@ -406,7 +498,7 @@
                   <button
                     class="pending-sort"
                     type="button"
-                    :disabled="refreshing"
+                    :disabled="sectionState.registration.loading"
                     aria-label="按发现时间排序"
                     @click="sortPending('createdTime')"
                   >
@@ -487,9 +579,13 @@
         </button>
       </article>
 
-      <article class="panel issue-panel">
+      <article
+        class="panel issue-panel"
+        :class="{ 'is-loading': staticLoading }"
+        :aria-busy="staticLoading"
+      >
         <div
-          v-if="refreshing"
+          v-if="staticLoading"
           class="card-skeleton panel-skeleton"
           aria-hidden="true"
         >
@@ -535,9 +631,27 @@
     </section>
 
     <section class="dashboard-grid dashboard-grid--bottom">
-      <article class="panel change-panel">
+      <article
+        class="panel change-panel"
+        :class="{
+          'is-loading': sectionState.changes.loading,
+          'has-error': !!sectionState.changes.error,
+        }"
+        :aria-busy="sectionState.changes.loading"
+      >
         <div
-          v-if="refreshing"
+          v-if="sectionState.changes.error"
+          class="section-error"
+          role="alert"
+        >
+          <strong>{{ sectionLabels.changes }}读取失败</strong
+          ><span>{{ sectionState.changes.error }}</span
+          ><el-button type="primary" link @click="retrySection('changes')"
+            >重新读取</el-button
+          >
+        </div>
+        <div
+          v-if="sectionState.changes.loading"
           class="card-skeleton panel-skeleton"
           aria-hidden="true"
         >
@@ -572,7 +686,11 @@
         <div class="change-list">
           <div v-if="view.changeError" class="panel-empty">
             {{ view.changeError }}
-            <button type="button" class="text-button" @click="loadOverview()">
+            <button
+              type="button"
+              class="text-button"
+              @click="retrySection('changes')"
+            >
               重新读取
             </button>
           </div>
@@ -615,9 +733,27 @@
         </div>
       </article>
 
-      <article class="panel health-panel">
+      <article
+        class="panel health-panel"
+        :class="{
+          'is-loading': sectionState.health.loading,
+          'has-error': !!sectionState.health.error,
+        }"
+        :aria-busy="sectionState.health.loading"
+      >
         <div
-          v-if="refreshing"
+          v-if="sectionState.health.error"
+          class="section-error"
+          role="alert"
+        >
+          <strong>{{ sectionLabels.health }}读取失败</strong
+          ><span>{{ sectionState.health.error }}</span
+          ><el-button type="primary" link @click="retrySection('health')"
+            >重新读取</el-button
+          >
+        </div>
+        <div
+          v-if="sectionState.health.loading"
           class="card-skeleton panel-skeleton"
           aria-hidden="true"
         >
@@ -680,9 +816,23 @@
     </section>
 
     <section class="dashboard-grid dashboard-grid--extra">
-      <article class="panel access-panel">
+      <article
+        class="panel access-panel"
+        :class="{
+          'is-loading': sectionState.tasks.loading,
+          'has-error': !!sectionState.tasks.error,
+        }"
+        :aria-busy="sectionState.tasks.loading"
+      >
+        <div v-if="sectionState.tasks.error" class="section-error" role="alert">
+          <strong>{{ sectionLabels.tasks }}读取失败</strong
+          ><span>{{ sectionState.tasks.error }}</span
+          ><el-button type="primary" link @click="retrySection('tasks')"
+            >重新读取</el-button
+          >
+        </div>
         <div
-          v-if="refreshing"
+          v-if="sectionState.tasks.loading"
           class="card-skeleton panel-skeleton"
           aria-hidden="true"
         >
@@ -739,9 +889,13 @@
         </button>
       </article>
 
-      <article class="panel issue-panel">
+      <article
+        class="panel issue-panel"
+        :class="{ 'is-loading': staticLoading }"
+        :aria-busy="staticLoading"
+      >
         <div
-          v-if="refreshing"
+          v-if="staticLoading"
           class="card-skeleton panel-skeleton"
           aria-hidden="true"
         >
@@ -1068,8 +1222,6 @@ const router = useRouter();
 const { openRegisterModal, open: registrationOpen } = useRegisterModal();
 const activeScope = ref<ViewScope>("mine");
 const canViewAll = ref(false);
-const refreshing = ref(true);
-const loadError = ref("");
 const activeMetric = ref("");
 const selectedPending = ref<string[]>([]);
 const pendingSortField = ref("");
@@ -1463,31 +1615,89 @@ const clearRealData = () => {
   view.governanceAvailable = false;
   selectedPending.value = [];
 };
-async function loadOverview(scope: ViewScope | "auto" = activeScope.value) {
-  const version = ++requestVersion;
-  changesVersion++;
-  refreshing.value = true;
-  loadError.value = "";
-  if (scope !== activeScope.value) clearRealData();
-  try {
-    const data = payloadOf(
-      await $common.post("/dst/statistics/workbench/overview", {
-        scope,
-        pendingSortField: pendingSortField.value,
-        pendingSortDir: pendingSortDir.value,
-      }),
+const overviewSections = [
+  "registration",
+  "governance",
+  "health",
+  "tasks",
+  "changes",
+] as const;
+type OverviewSection = (typeof overviewSections)[number];
+const sectionLabels: Record<OverviewSection, string> = {
+  registration: "登记统计",
+  governance: "字段治理",
+  health: "数据源状态",
+  tasks: "接入任务",
+  changes: "数据表变更",
+};
+const sectionState = reactive<
+  Record<OverviewSection, { loading: boolean; error: string }>
+>({
+  registration: { loading: true, error: "" },
+  governance: { loading: true, error: "" },
+  health: { loading: true, error: "" },
+  tasks: { loading: true, error: "" },
+  changes: { loading: true, error: "" },
+});
+const sectionVersions: Record<OverviewSection, number> = {
+  registration: 0,
+  governance: 0,
+  health: 0,
+  tasks: 0,
+  changes: 0,
+};
+const scopeReady = ref(false);
+const refreshing = computed(() =>
+  overviewSections.some((section) => sectionState[section].loading),
+);
+const loadError = computed(() =>
+  overviewSections
+    .filter((section) => sectionState[section].error)
+    .map(
+      (section) => sectionLabels[section] + "：" + sectionState[section].error,
+    )
+    .join("；"),
+);
+const staticLoading = computed(() => !scopeReady.value && refreshing.value);
+const staticError = computed(() =>
+  !scopeReady.value && !refreshing.value ? loadError.value : "",
+);
+const metricSection = (key: string): OverviewSection | null =>
+  (
+    ({
+      markStatus: "registration",
+      tableRegistration: "registration",
+      tableChanges: "changes",
+      accessTasks: "tasks",
+    }) as Record<string, OverviewSection>
+  )[key] || null;
+const metricLoading = (key: string) => {
+  const section = metricSection(key);
+  return section ? sectionState[section].loading : staticLoading.value;
+};
+const metricError = (key: string) => {
+  const section = metricSection(key);
+  return section ? sectionState[section].error : staticError.value;
+};
+
+function applySection(section: OverviewSection, data: JsonRow) {
+  // 每个区域只更新其负责的数据，较慢的治理/变更响应不能清空先完成的卡片。
+  if (
+    section === "registration" ||
+    section === "tasks" ||
+    section === "changes"
+  ) {
+    Object.assign(
+      view.counts,
+      Object.fromEntries(
+        Object.entries(objectOf(data.counts)).map(([key, value]) => [
+          key,
+          Number(value) || 0,
+        ]),
+      ),
     );
-    if (disposed || version !== requestVersion) return;
-    if (!["all", "mine"].includes(String(data.mode)))
-      throw new Error("工作台返回的数据范围无效，请重新登录后重试");
-    canViewAll.value = data.canViewAll === true;
-    activeScope.value = data.mode as ViewScope;
-    view.counts = Object.fromEntries(
-      Object.entries(objectOf(data.counts)).map(([key, value]) => [
-        key,
-        Number(value) || 0,
-      ]),
-    );
+  }
+  if (section === "registration") {
     view.stages = Array.isArray(data.stages)
       ? (data.stages as RegistrationStage[])
       : [];
@@ -1517,8 +1727,11 @@ async function loadOverview(scope: ViewScope | "auto" = activeScope.value) {
       discoveredAt: formatTime(row.discoveredAt),
       level: "high",
     }));
+  } else if (section === "health")
     view.health = rowsOf(data.health).map(decorateHealth);
+  else if (section === "tasks")
     view.tasks = rowsOf(data.tasks).map(decorateTask);
+  else if (section === "changes") {
     const changes = objectOf(data.changes);
     view.changesAvailable = changes.available === true;
     view.modifiedAvailable = changes.modifiedAvailable === true;
@@ -1531,37 +1744,104 @@ async function loadOverview(scope: ViewScope | "auto" = activeScope.value) {
         Number(value) || 0,
       ]),
     );
+    if (!view.modifiedAvailable)
+      view.changeCounts.modified =
+        staticCounts[activeScope.value].changedRegisteredTables;
+    changeType.value = "all";
+  } else if (section === "governance") {
     const governance = objectOf(data.governance);
     view.governanceAvailable = governance.available === true;
     view.standardFields = Number(governance.standardFields) || 0;
     view.dictionaryFields = Number(governance.dictionaryFields) || 0;
     view.timestampRate = Number(governance.timestampRate) || 0;
-    view.unavailable = Array.isArray(data.unavailable)
-      ? (data.unavailable as typeof view.unavailable)
-      : [];
-    view.timeBasis = String(data.timeBasis || "");
-    if (!view.modifiedAvailable)
-      view.changeCounts.modified =
-        staticCounts[activeScope.value].changedRegisteredTables;
-    changeType.value = "all";
+  }
+  view.unavailable = Array.isArray(data.unavailable)
+    ? (data.unavailable as typeof view.unavailable)
+    : [];
+  view.timeBasis = String(data.timeBasis || "");
+}
+
+async function loadSection(
+  section: OverviewSection,
+  version = requestVersion,
+  scope: ViewScope | "auto" = activeScope.value,
+) {
+  const sequence = ++sectionVersions[section];
+  const state = sectionState[section];
+  state.loading = true;
+  state.error = "";
+  if (section === "changes") changesVersion++;
+  try {
+    const data = payloadOf(
+      await $common.post("/dst/statistics/workbench/overview", {
+        scope,
+        section,
+        ...(section === "registration"
+          ? {
+              pendingSortField: pendingSortField.value,
+              pendingSortDir: pendingSortDir.value,
+            }
+          : {}),
+      }),
+    );
+    if (
+      disposed ||
+      version !== requestVersion ||
+      sequence !== sectionVersions[section]
+    )
+      return;
+    if (
+      !["all", "mine"].includes(String(data.mode)) ||
+      data.section !== section
+    )
+      throw new Error("工作台返回的区域或数据范围无效，请重新读取");
+    if (scopeReady.value && activeScope.value !== data.mode)
+      throw new Error("数据范围已变化，请刷新工作台");
+    canViewAll.value = data.canViewAll === true;
+    activeScope.value = data.mode as ViewScope;
+    scopeReady.value = true;
+    applySection(section, data);
   } catch (error: unknown) {
-    if (version === requestVersion) {
-      loadError.value = messageOf(error, "工作台读取失败，请重试");
-      clearRealData();
-    }
+    if (
+      !disposed &&
+      version === requestVersion &&
+      sequence === sectionVersions[section]
+    )
+      state.error = messageOf(
+        error,
+        sectionLabels[section] + "读取失败，请重试",
+      );
   } finally {
-    if (version === requestVersion) refreshing.value = false;
+    if (
+      !disposed &&
+      version === requestVersion &&
+      sequence === sectionVersions[section]
+    )
+      state.loading = false;
   }
 }
+
+async function loadOverview(scope: ViewScope | "auto" = activeScope.value) {
+  const version = ++requestVersion;
+  changesVersion++;
+  scopeReady.value = false;
+  if (scope !== activeScope.value) clearRealData();
+  if (scope !== "auto") activeScope.value = scope;
+  // 固定五个区域并行，各自接收即渲染；不按行请求，也不等待其他区域后统一赋值。
+  await Promise.allSettled(
+    overviewSections.map((section) => loadSection(section, version, scope)),
+  );
+}
+const retrySection = (section: OverviewSection) => loadSection(section);
 const switchScope = (scope: ViewScope) => {
-  if (scope !== activeScope.value && !refreshing.value && !exporting.value) {
+  if (scope !== activeScope.value && !exporting.value) {
     list.visible = false;
     void loadOverview(scope);
   }
 };
 const refreshWorkbench = () => loadOverview();
 const sortPending = (field: string) => {
-  if (refreshing.value) return;
+  if (sectionState.registration.loading || !scopeReady.value) return;
   if (pendingSortField.value !== field || !pendingSortDir.value) {
     pendingSortField.value = field;
     pendingSortDir.value = "asc";
@@ -1570,8 +1850,9 @@ const sortPending = (field: string) => {
     pendingSortField.value = "";
     pendingSortDir.value = "";
   }
-  return loadOverview();
+  return retrySection("registration");
 };
+
 const notify = (message: string) => $message.success(message);
 const goDatasourceManage = () => router.push("/datasource-manage/index");
 const goAccessMonitoring = () => router.push("/jr/access-monitoring");
@@ -1609,7 +1890,8 @@ const queueSelected = () => {
     });
 };
 const selectMetric = (metric: { key: string }) => {
-  if (refreshing.value) return;
+  if (!scopeReady.value || metricLoading(metric.key) || metricError(metric.key))
+    return;
   activeMetric.value = metric.key;
   if (metric.key === "markStatus")
     void router.push({
@@ -1797,6 +2079,7 @@ async function enterRegistration(row: JsonRow) {
   }
 }
 async function updateChangeType(type: string) {
+  if (sectionState.changes.loading) return;
   changeType.value = type;
   if (!view.changesAvailable) return;
   const version = ++changesVersion,
@@ -3543,13 +3826,17 @@ button {
 .panel {
   position: relative;
 }
-.is-loading .metric-card > :not(.card-skeleton),
-.is-loading .panel > :not(.card-skeleton),
-.is-loading .metric-card::after {
+.metric-card.is-loading > :not(.card-skeleton),
+.panel.is-loading > :not(.card-skeleton),
+.type-distribution.is-loading > :not(.card-skeleton),
+.governance-section.is-loading > :not(.governance-loading),
+.metric-card.is-loading::after {
   visibility: hidden;
 }
-.is-loading .metric-card,
-.is-loading .panel {
+.metric-card.is-loading,
+.panel.is-loading,
+.type-distribution.is-loading,
+.governance-section.is-loading {
   pointer-events: none;
 }
 .card-skeleton {
@@ -3633,5 +3920,54 @@ button {
   .refresh-button.spinning :deep(svg) {
     animation: none;
   }
+}
+
+.type-distribution {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.governance-section {
+  position: relative;
+  min-height: 88px;
+}
+.governance-loading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 0;
+}
+.governance-loading .skeleton-line {
+  flex: 1;
+  height: 44px;
+}
+.section-error {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
+  border-radius: inherit;
+  background: #fff;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.section-error strong {
+  color: var(--el-text-color-primary);
+  font-weight: 500;
+}
+.has-error > :not(.section-error) {
+  visibility: hidden;
+}
+.metric-card.has-error::after {
+  visibility: hidden;
 }
 </style>

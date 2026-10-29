@@ -126,5 +126,7 @@ ods_sources AS (
    AND NOT EXISTS(SELECT 1 FROM ods_sources o WHERE o.datasource_id=t.datasource_id)
 )
 """
+// 非登记统计不需要解析每张表的治理配置；保留完全相同的租户、角色和快照去重条件。
+var lightCte=cte.replace('t.field_governance_config',"''")
 return {tenantId:tenantId,userId:userId,scopeOrgIds:scopeOrgIds,scope:effectiveScope,
-    mode:mode,canViewAll:canViewAll,cte:cte}
+    mode:mode,canViewAll:canViewAll,cte:cte,lightCte:lightCte}

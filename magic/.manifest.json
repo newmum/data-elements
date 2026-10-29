@@ -809,7 +809,7 @@
       ],
       "kind": "api",
       "metadataId": "30f59993bf5b43c994b4db87eee9d94d",
-      "baseSha256": "b43a966600b265f03c4aca2372e8ae2ac7b073efd8b91d1c9f3e28a0e533d00c"
+      "baseSha256": "c608ec2ff772576644b1dffece8f2fc192208fa63ee493009cfda1f370aee2c4"
     },
     {
       "path": "api/02.数据盘点/04.盘点统计/01.工作台统计/02.工作台事项分页.ms",
@@ -6036,7 +6036,7 @@
       ],
       "kind": "function",
       "metadataId": "cdba14f35b564766aac8555b06c77417",
-      "baseSha256": "990969c2635fab5a9c0f27eac936ec4423c4019546b48af17c2879680f9ebbae"
+      "baseSha256": "e5271227b601dffaad11b811f8f16128626503e86546833bc20f721dfedd37b0"
     },
     {
       "path": "function/01.通用函数/21.工作台变更查询.ms",

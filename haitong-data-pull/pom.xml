@@ -5,7 +5,7 @@
   <!-- Magic-API 2.2.2 uses the Spring MVC 6.x mapping contract. Keep the
        application on the same Spring Boot 3.3 baseline as data-elements. -->
   <parent><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-parent</artifactId><version>3.3.8</version><relativePath/></parent>
-  <groupId>com.haitong</groupId><artifactId>haitong-data-pull</artifactId><version>1.1.0</version>
+  <groupId>com.haitong</groupId><artifactId>haitong-data-pull</artifactId><version>1.1.1</version>
   <name>海通数据推送服务</name><description>Haitong data push service for HTTP, Kafka and FTP relay</description>
   <properties>
     <java.version>21</java.version>

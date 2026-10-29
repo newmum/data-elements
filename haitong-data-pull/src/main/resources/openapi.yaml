@@ -1,8 +1,13 @@
 openapi: 3.0.3
 info:
   title: haitong 海通数据接入与交换服务
-  version: 1.1.0-rebuilt
-  description: 202=持久化受理，不等于下游完成。主要配置在 config/application.yml。静态密钥不是JWT。
+  version: 1.1.1
+  description: 202=持久化受理，不等于下游完成。主要配置在 config/application.yml。relay.security.push-validation-enabled 默认为 true；设为 false 时标准表/附件推送及对应查询无需 X-Api-Key 或预先登记，仍校验请求格式、幂等、容量与分片完整性。管理、登记同步、签发、业务回执和编辑器分别保留认证，FTP/Kafka 目的地只由本地 YAML 决定。静态密钥不是JWT。
+x-haitong-push-validation:
+  property: relay.security.push-validation-enabled
+  default: true
+  disabled-identity: unvalidated-publisher
+  note: false 模式的匿名调用共享身份，幂等键须全局唯一；不可读取原有已认证调用方的消息和附件。
 servers:
 - url: http://127.0.0.1:18083
 security:
@@ -57,7 +62,7 @@ paths:
   /api/v1/data-push:
     post:
       summary: 统一表批次数据推送
-      description: 请求体 deliveryType 选择 FTP、KAFKA、LOG 或 REGISTRY_SYNC。路由 registration-managed=true 时，FTP 和 KAFKA 使用已完成登记并发布的表级推送规范；registration-managed=false 时，使用海通本地登记镜像表（无镜像记录时才兼容 YAML standalone.datasources）。REGISTRY_SYNC 仅允许数据源平台使用服务间同步密钥，按数据源全量同步本地数据源、表、字段和调用方授权。两种业务投递模式都不允许调用方指定或覆盖实际目的端。
+      description: 请求体 deliveryType 选择 FTP、KAFKA、LOG 或 REGISTRY_SYNC。push-validation-enabled=true 时校验业务密钥和海通本地登记镜像（无镜像才兼容 YAML standalone.datasources）；false 时业务推送无需密钥、不查询登记镜像，仍必填 datasourceId/tableName/records 及 Idempotency-Key。REGISTRY_SYNC 始终需要专用同步凭据。投递连接、FTP 根目录和 Kafka Topic 始终只由本机 YAML 决定。
       operationId: post_api_v1_data_push
       parameters:
       - name: Idempotency-Key
@@ -116,7 +121,7 @@ paths:
     post: &id005
       summary: 表批次写入 FTP/FTPS
       deprecated: true
-      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=FTP。海通先向数据中台校验已完成登记的表级推送规范、字段和版本，再将业务 records 写至“登记 FTP 输出根目录/datasourceId/tableName/messageId.json”，并生成 .done 清单。
+      description: 兼容旧调用方；新接入使用 POST /api/v1/data-push 和 deliveryType=FTP。推送校验开关控制业务密钥及本地登记校验，FTP 根目录来自本机 YAML，业务 records 写入“output-dir/datasourceId/tableName/messageId.json”并生成 .done 清单，不回调元数据平台。
       operationId: post_api_v1_simple_ftp
       parameters:
       - name: Idempotency-Key
@@ -159,7 +164,7 @@ paths:
       <<: *id005
       summary: 表批次写入 Kafka
       deprecated: true
-      description: 兼容旧调用方；新接入请改用 POST /api/v1/data-push，并在请求体设置 deliveryType=KAFKA。Kafka Topic 由数据中台登记的推送规范确定，调用方不可传入或覆盖。
+      description: 兼容旧调用方；新接入使用 POST /api/v1/data-push 和 deliveryType=KAFKA。推送校验开关控制业务密钥及本地登记校验，Kafka Topic 仅由本机 YAML 确定，调用方不能传入或覆盖。
       operationId: post_api_v1_simple_kafka
   /api/v1/simple/log:
     post:

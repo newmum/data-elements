@@ -3,7 +3,7 @@
     <VTable
       ref="tableRef"
       :options="options"
-      :height="height"
+      :height="tableHeight"
       :insert-data="insertData"
       :editable="!locked"
       :show-operation="showOperation && !locked"
@@ -42,6 +42,8 @@ const emit = defineEmits<{
 }>();
 const tableRef = ref<InstanceType<typeof VTable>>();
 const locked = computed(() => props.disabled || props.readonly);
+// VXE 的 auto 表示填满父容器；表单中的 auto 应按全部行自然撑高。
+const tableHeight = computed(() => (props.height === "auto" ? undefined : props.height));
 const rows = () => (tableRef.value?.getData() ?? []) as Row[];
 // VXE edits, imports and row operations all update the same reactive collection.
 // Compare values before echoing them back, so model updates do not reset cell focus.

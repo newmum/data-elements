@@ -11,6 +11,7 @@
 ## 目录
 
 - [Magic API 统一入口与业务实现](#magic-first)
+- [业务推送校验开关](#push-validation-switch)
 - [非结构化数据接入：当前实现与平台扩展设计](#unstructured-design)
 - [工程概览与使用](#overview)
 - [Linux / Windows 原生部署包](#native-release-packages)
@@ -28,6 +29,37 @@
 - [Linux 部署](#linux-deployment)
 - [Windows 独立部署](#windows-deployment)
 - [只读对账查询](#reconciliation-queries)
+
+<a id="push-validation-switch"></a>
+
+## 业务推送校验开关
+
+`relay.security.push-validation-enabled` 同时控制标准业务推送的密钥认证与登记契约校验。省略该项时默认 `true`，保留已有部署行为；原生分发包显式设为 `false`，便于按部署方要求接收未登记数据。修改 YAML 后重启生效，和仅控制编辑器示例执行的 `haitong.validation.enabled` 无关。
+
+```yaml
+relay:
+  security:
+    push-validation-enabled: false
+  files:
+    unregistered-targets: [ftp]
+```
+
+| 状态 | 业务身份 | 数据源、表、字段 | 附件 |
+| --- | --- | --- | --- |
+| `true` | `X-Api-Key` 或 Bearer 验证本地静态调用方/数据库签发凭据，随后校验通道权限 | 海通独立库登记镜像为权威；没有镜像时兼容 YAML 契约，检查有效状态、调用方授权、表白名单、字段白名单及必填值 | 本机 `files.collections` 约束来源、集合、调用方、格式/大小及目标 |
+| `false` | 标准推送可省略或传入任意 `X-Api-Key`，统一使用非管理员身份 `unvalidated-publisher` | 不查询登记镜像、不校验登记状态、表字段白名单和必填字段；`datasourceId/tableName/records` 等基础参数仍须正确 | 不要求预先登记集合；固定本地隔离域 `unvalidated-push`，按 `files.unregistered-targets` 和全局传输配置生成运行契约；不接受请求中的租户或目标地址 |
+
+开关适用于 `/api/v1/data-push`、FTP/Kafka/LOG 兼容入口、`/push-operations` 的推送/状态测试入口，以及分片和兼容整文件上传、完成、提交、取消、状态与内容读取。未认证的请求不能访问历史已认证调用方的消息/文件。关闭时不同匿名发送方共享一个身份，须为每个业务批次使用全局唯一 `Idempotency-Key`；同一键及同一原始正文重试返回原消息，正文改变仍返回冲突。重新开启后，匿名模式创建的对象不会自动转授给其他业务密钥。
+
+Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务间鉴权、下游业务回执和通用动作入口继续单独保护。可选 `X-Gateway-Key` 网关限制、路径格式、请求大小、记录数、幂等、配额、文件签名、SHA-256 和分片状态校验不因开关关闭而取消。未登记附件只支持既有 `jpg/jpeg/png/pdf/docx` 技术格式；若配置了 `scanner-command` 则继续执行扫描，无扫描器时记录 `HEADER_VERIFIED_NOT_SCANNED`。本地 FTP/Kafka 连接和目标仍必须启用并配置正确，接收结构化数据不等于平台已经知道如何物化该表，后续平台接入仍需自己的表结构。
+
+已有环境升级须部署新 JAR 并更新独立库中的表契约 Magic 函数。JAR 启动不会覆盖编辑器已有脚本。原生包提供 `magic-update/` 中的两项选定资源及 `scripts/update-push-resources.py`，在服务根目录执行 `python3 scripts/update-push-resources.py --username <编辑器账号> --apply`（Windows 用 `python`），按提示输入编辑器密码。工具先核对资源身份、已知旧脚本/当前脚本及并发变动，再只更新表契约脚本和模板测试的可选密钥头，通过编辑器保存并回读；自定义脚本冲突时停止并要求人工合并。备份仅保存于部署方受限 `config/secrets/magic-resource-backups/`，不进入 Git 或发布包。无 Python 时可在编辑器手动更新包内同名表契约函数。全新资源库自动加载当前版本。
+
+`PushValidationSwitchTest` 覆盖关闭后的未登记推送、非法密钥忽略、幂等冲突、重新开启后的拒绝、管理和同步边界、匿名/原有身份隔离及未登记分片上传完成投递。20/100 条记录分别为 1 次请求、6 次 SELECT，登记镜像 SELECT 均为 0；既有开启模式的授权和固定查询数由 `MagicBusinessHttpTest` 回归。仅新增配置和逻辑，没有数据库结构升级。
+
+原生包还通过隔离 H2、真实 HTTP 18083 和本地 FTP 的整链路验证：模拟旧 Magic 函数后，经包内更新工具保存并回读，新规范下 50 条未登记记录成功投递且重试复用原消息；160014 字节文件分 3 片上传并成功投递，FTP 原文字节及完成清单核对通过。此结果不代表生产环境网络、账号或 FTP 已验证。
+
+`400/INVALID_PATH` 发生在身份与登记校验之前。现行检查拒绝原始路径中的百分号、分号、反斜杠、重复斜杠及点路径段，URL 末尾的 `%20` 空格、`%0A` 换行可复现该响应。直连默认端口使用 `/api/v1/data-push`；只有实际配置 `server.servlet.context-path: /data`，或代理提供且正确转发该前缀时才使用 `/data/api/v1/data-push`。过滤器现按服务器可信 Servlet context 去掉前缀后识别业务、编辑器及管理路径，仍对原始 URI 检查异常字符；不信任客户端传入的 `X-Forwarded-Prefix` 来扩大匿名接口。仅 `/data` 本身不会导致 `INVALID_PATH`，截图无法证明具体隐藏字符，须通过 Postman Console 或服务器的实际请求 URI 核对；不应靠关闭业务密钥校验来修复路径错误。
 
 <a id="magic-first"></a>
 

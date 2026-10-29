@@ -2141,14 +2141,25 @@ function openReportWorkspace() {
     return;
   }
   // Reporting is a Haitong route and uses its existing exact-origin session
-  // bridge. Only the selected source ID is passed; credentials stay out of URLs.
+  // bridge. The source ID and sanitized return address are passed; credentials stay out of URLs.
   const explicitBase = String(window.__DATA_ELEMENTS_HAITONG_BASE_URL__ || "").trim();
   const localDevelopment = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname) && window.location.port === "3000";
   const localBase = localDevelopment ? `${window.location.protocol}//${window.location.hostname}:3002/` : "/haitong/";
   const base = explicitBase || localBase;
   const target = new URL(base, window.location.href);
   target.search = "";
-  target.hash = `/report?${new URLSearchParams({ datasourceId })}`;
+  const returnTo = new URL(window.location.href);
+  const withoutCredentials = (params) => {
+    for (const key of [...params.keys()]) if (/^(token|access[_-]?token|refresh[_-]?token|id[_-]?token|authorization|password|secret|credential|ticket|authCode|code)$/i.test(key)) params.delete(key);
+    return params;
+  };
+  returnTo.search = withoutCredentials(returnTo.searchParams).toString();
+  const entryHash = returnTo.hash.slice(1), queryAt = entryHash.indexOf('?');
+  if (queryAt >= 0) {
+    const entryParams = withoutCredentials(new URLSearchParams(entryHash.slice(queryAt + 1)));
+    returnTo.hash = entryHash.slice(0, queryAt) + (entryParams.size ? '?' + entryParams : '');
+  }
+  target.hash = `/report?${new URLSearchParams({ datasourceId, returnTo: returnTo.href })}`;
   window.location.assign(target.href);
 }
 const reportFileInput = ref(null);

@@ -12,6 +12,7 @@ import type { Action } from '../domain/engine';
 import { useSessionRevision } from '../nifi/api/bridgeSession';
 import { entryRouteDestination } from './entryRoute';
 import { preloadCanvas } from './preloadCanvas';
+import ReportLoading from '../report/components/ReportLoading';
 const LowcodeLogs=lazy(()=>import('../components/LowcodeLogs'));
 const Overview=lazy(()=>import('../pages/overview/OverviewPage'));
 const Tasks=lazy(()=>import('../pages/development/TaskListPage'));
@@ -36,7 +37,7 @@ function EntryRoute(){
 export default function App(){
  const location=useLocation();
  const sessionRevision=useSessionRevision();
- if(location.pathname==='/report')return <Suspense fallback={<Loading text="正在打开数据上报"/>}><Report key={`report-session-${sessionRevision}`}/></Suspense>;
+ if(location.pathname==='/report')return <Suspense fallback={<ReportLoading phase={-1}/>}><Report key={`report-session-${sessionRevision}`}/></Suspense>;
  const livePaths=new Set(['/','/integration/overview','/overview','/development/tasks','/development/nifi-flows','/development/registry','/development/batch','/development/multi-table','/development/canvas','/ops/ingress','/ops/distribution','/ops/clusters','/ops/cross-network','/reconcile/instant','/reconcile/inventory','/reconcile/statements']);
  const localCanvas=location.pathname==='/development/canvas'&&new URLSearchParams(location.search).has('task');
  if((livePaths.has(location.pathname)||location.pathname.startsWith('/management/logs'))&&!localCanvas)return <LoadedApp key={`platform-session-${sessionRevision}`} state={emptyWorkspace} act={localActionUnavailable} live/>;

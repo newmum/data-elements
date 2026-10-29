@@ -15,9 +15,17 @@ test('20/100 results use one paged request with no per-file reads',async()=>{
  for(const total of [20,100]){let requests=0;const {scope}=fixture(async(_url,body)=>{requests++;assert.equal(body.action,'history');assert.equal(body.dbId,'source');assert.equal(body.pageSize,20);return{list:[],total};});
  assert.equal((await scope.history({pageNo:2,pageSize:20})).total,total);assert.equal(requests,1);}
 });
-test('workbench navigation closes registration and carries only the source identifier',()=>{
+test('workbench navigation closes registration and carries its source and sanitized return address',()=>{
  const {scope,calls}=fixture();assert.equal(scope.open('source').navigationHandled,true);assert.equal(scope.registerModalContext.open.value,false);
- assert.equal(calls[0],'http://localhost:3002/#/report?datasourceId=source');assert.doesNotMatch(calls[0],/token|password/);
+ const target=new URL(calls[0]),params=new URLSearchParams(target.hash.split('?')[1]);
+ assert.equal(target.origin,'http://localhost:3002');assert.equal(params.get('datasourceId'),'source');
+ assert.equal(params.get('returnTo'),'http://localhost:3000/#/datasource-manage/index');assert.doesNotMatch(calls[0],/token|password/);
+});
+test('registration return addresses never carry login credentials',()=>{
+ const {scope,calls}=fixture();scope.window.location.href='http://localhost:3000/?token=fake#'+
+ '/datasource-manage/index?page=2&accessToken=fake&password=fake';scope.open('source');
+ const params=new URLSearchParams(new URL(calls[0]).hash.split('?')[1]);
+ assert.equal(params.get('returnTo'),'http://localhost:3000/#/datasource-manage/index?page=2');
 });
 test('registration keeps five steps and removes upload editing and file requirements',()=>{
  assert.doesNotMatch(source,/reportUploadSkipped|reportRegistrationInput|saveReportRegistration|uploadReportRegistrationFiles/);
@@ -29,10 +37,11 @@ test('registration keeps five steps and removes upload editing and file requirem
  const next=source.slice(source.indexOf('const next = async'),source.indexOf('const finish ='));
  assert.match(next,/await save\(\)/);assert.match(next,/openReportWorkbench/);assert.doesNotMatch(next,/先上传|先保存.*数据表/);
 });
-test('all three workbench steps run after file upload and use real report receipts',()=>{
+test('one reporting page presents upload, normalization and submission in order and keeps real receipts',()=>{
  const app=fs.readFileSync(new URL('../../data-elements-haitong/src/report/App.tsx',import.meta.url),'utf8');
- assert.ok(app.indexOf("title:'上传数据文件'")<app.indexOf("title:'整理数据规范'"));
- assert.ok(app.indexOf("title:'整理数据规范'")<app.indexOf("title:'选择数据并上报'"));
+ const areas=['aria-label="上传数据文件"','aria-label="整理数据规范"','aria-label="选择数据并提交上报"'].map(label=>app.indexOf(label));
+ assert.ok(areas.every(index=>index>=0));assert.ok(areas[0]<areas[1]&&areas[1]<areas[2]);
+ assert.doesNotMatch(app,/step\s*===|setStep\(|<Steps\b/);
  assert.doesNotMatch(app,/downloadReportUploadTemplate|bindResourceToTarget|请选择前面五步/);
  assert.match(app,/submitUploadTable/);assert.match(app,/loadReportReceipts/);
 });

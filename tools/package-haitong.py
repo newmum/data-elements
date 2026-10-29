@@ -44,9 +44,9 @@ def deployment_config() -> dict:
         'relay': {
             'work-dir': './data',
             'registration-registry': {'enabled': False, 'base-url': '', 'shared-key': ''},
-            'standalone-registry': {'sync-enabled': True, 'sync-key': 'env:HAITONG_STANDALONE_REGISTRY_SYNC_KEY'},
+            'standalone-registry': {'sync-enabled': False, 'sync-key': 'env:HAITONG_STANDALONE_REGISTRY_SYNC_KEY'},
             'standalone': {'datasources': {}},
-            'security': {'api-key': '', 'admin-key': '', 'requests-per-minute': 600,
+            'security': {'push-validation-enabled': False, 'api-key': '', 'admin-key': '', 'requests-per-minute': 600,
                          'clients': {'standalone-publisher': {
                              'api-key': 'env:HAITONG_STANDALONE_PUSH_KEY',
                              'channels': ['table-to-ftp'], 'actions': []}}},
@@ -76,7 +76,7 @@ def deployment_config() -> dict:
                        'payload-retention-days': 0},
             'files': {'enabled': True, 'single-upload-max-bytes': 20971520,
                       'part-size-bytes': 16777216, 'max-file-bytes': 10737418240,
-                      'storage-limit-bytes': 107374182400, 'collections': {}},
+                      'storage-limit-bytes': 107374182400, 'unregistered-targets': ['ftp'], 'collections': {}},
         },
         'logging': {'file': {'name': './logs/haitong.log'}, 'level': {'org.ssssssss.magicapi': 'INFO'}},
     }
@@ -92,6 +92,8 @@ def config_bytes() -> bytes:
 # 6. 附件集合按真实登记表/字段合并 application-files.yml.example 后重启。
 # 7. MySQL URL 引用上方主机/端口/库名并校验证书与主机名；自有 CA 需导入 Java 信任库。
 # 8. MySQL 连接超时 5 秒、读取超时 30 秒；20 个连接与每类 1 个投递线程为业务请求保留余量。
+# 9. 本包默认 push-validation-enabled=false：业务推送不需要 X-Api-Key 或事先登记；设为 true 恢复双重校验。
+# 10. 不校验模式的附件按 files.unregistered-targets 投递；同步服务独立开关，默认关闭。
 '''
     return (header + yaml.safe_dump(deployment_config(), allow_unicode=True, sort_keys=False)).encode('utf-8')
 
@@ -122,19 +124,24 @@ Magic API 资源保存于独立 haitong.ht_magic_api_file，首次启动加载 J
 默认 JDBC URL 引用上方连接项，连接超时5秒、网络读取超时30秒；连接池20、每类投递线程1。
 填写 relay.ftp.protocol / host / port / username / password / output-dir；SFTP 使用 22 端口。
 模板中的 REPLACE_WITH_ 都必须替换。密码和密钥只保存在部署环境，不随包分发。
-以下五项可在 YAML 中直接填写真实值；若保留模板引用，则在启动进程设置同名环境变量：
+密码可在 YAML 中直接填写真实值；若保留模板引用，则在启动进程设置同名环境变量：
   DB_PASSWORD                          MySQL 密码
   HAITONG_MAGIC_EDITOR_PASSWORD       Magic API 编辑器密码
   HAITONG_FTP_PASSWORD                文件服务器密码
-  HAITONG_STANDALONE_PUSH_KEY         业务 X-Api-Key，至少 24 字符的独立随机值
-  HAITONG_STANDALONE_REGISTRY_SYNC_KEY 登记配置同步密钥，至少 24 字符，必须与业务密钥不同
+  HAITONG_STANDALONE_PUSH_KEY         仅开启推送校验时需要，至少 24 字符的独立随机值
+  HAITONG_STANDALONE_REGISTRY_SYNC_KEY 仅开启登记同步服务时需要，至少 24 字符
 编辑器默认账号 admin，密码由你在部署环境设置，没有随包默认密码。
 standalone-publisher 是模板内的静态调用方；平台另行签发的数据源密钥按已同步授权校验。
 09.数据推送验证是 Postman 式示例。新环境先替换登记源与返回 ID，按需启用 haitong.validation.enabled，
 并设置 haitong.validation.api-key（支持 env:HAITONG_VALIDATION_API_KEY）。示例默认停用，正常业务接口不受影响。
 如平台签发接口使用独立发行密钥，在 relay.registration-registry.shared-key 配置相同密钥。
-文件传输启用但默认未登记附件集合，需按 config/application-files.yml.example 配置真实集合。
-业务数据推送前，先通过节点管理同步登记配置，或维护本地独立登记契约；表字段与权限须齐全。
+本包默认 relay.security.push-validation-enabled=false：标准业务推送无需 X-Api-Key，不要求登记源/表/字段。
+datasourceId、tableName、records、Idempotency-Key 等路由标识和基本参数仍必填，不能传入任意FTP地址。
+设为 true 并重启后，恢复业务密钥、数据源授权、表字段白名单/必填项校验。
+开启校验时须同步登记快照或维护本地契约；附件还须按 application-files.yml.example 配置真实集合。
+关闭校验时附件不要求登记集合，按 relay.files.unregistered-targets（默认 ftp）和全局大小/格式限制投递。
+关闭时所有匿名请求使用同一调用方，幂等键须在所有发送方之间保持唯一。
+Magic 编辑器、管理、登记同步、密钥签发、下游回执仍保留独立认证；登记同步默认关闭。
 Kafka 默认停用；启用时同时配置 Kafka 连接、目标 Topic、路由及调用方 channels。
 
 三、启动
@@ -143,7 +150,8 @@ Kafka 默认停用；启用时同时配置 Kafka 连接、目标 Topic、路由�
 健康检查：http://服务器IP:18083/actuator/health，成功返回 status=UP。
 Magic API 编辑器：http://服务器IP:18083/api/web/index.html。
 统一表数据推送：POST http://服务器IP:18083/api/v1/data-push。
-单附件入口：POST http://服务器IP:18083/api/v1/file-uploads/single。
+分片初始化：POST http://服务器IP:18083/api/v1/file-uploads。
+主传输接口：PUT http://服务器IP:18083/api/v1/file-uploads/{{id}}/parts/{{part}}。
 
 四、链路与升级
 推送目的地来自本包自己的 YAML。结构化表批次写到 FTP：
@@ -151,6 +159,15 @@ Magic API 编辑器：http://服务器IP:18083/api/web/index.html。
   <output-dir>/<datasourceId>/<tableName>/<messageId>.json.done
 需要后续接入汇聚库/原始库时，元数据平台 ODS 非结构化数据应配置为同一个 FTP。
 升级前停止旧实例，保留并备份已有 config/ 和 data/，替换 JAR 与所需脚本后再启动。
+已有库中的 Magic 资源启动时不会被 JAR 覆盖，本次升级必须同步更新表契约函数。
+从程序根目录运行（需要 Python 3，仅使用标准库，按提示输入 Magic 编辑器密码）：
+  Windows: python scripts\\update-push-resources.py --username 你的编辑器账号 --apply
+  Linux:   python3 scripts/update-push-resources.py --username 你的编辑器账号 --apply
+工具只更新 magic-update/manifest.json 选定的两项资源，通过海通编辑器保存并回读运行脚本。
+检测到自定义脚本或并发修改会停止，不覆盖其他资源；受限备份位于 config/secrets/magic-resource-backups/。
+不具备 Python 时，在海通 Magic 编辑器中将 magic-update/function/.../02.表批次登记规范校验.ms
+分隔线下面的脚本粘贴到同名既有函数并保存；不要删除 ht_magic_api_file，不要清空 Magic 目录。
+全新空库会自动加载当前内置脚本，无须执行该更新工具；已有部署仍须在原配置补入开关。
 部署包不包含当前环境密码、访问密钥、运行数据库、业务登记镜像、业务文件或历史日志。
 完整接口契约见 openapi.yaml；SHA256SUMS.txt 校验包内文件；release.json 记录构建身份。
 '''
@@ -198,7 +215,17 @@ def main() -> None:
         'openapi.yaml': (APP / 'src/main/resources/openapi.yaml').read_bytes(),
         'scripts/upload_file.py': (APP / 'scripts/upload_file.py').read_bytes(),
         'scripts/make_done.py': (APP / 'scripts/make_done.py').read_bytes(),
+        'scripts/update-push-resources.py': (ROOT / 'tools/update-haitong-push-resources.py').read_bytes(),
     }
+    selected_resources = [
+        ('function/01.海通业务/02.表批次登记规范校验.ms','function','haitong-function-table-contract','2317b5f5266f00376209cce6449cd656dceacc797ef39e9865fcdff90ba14dba'),
+        ('api/04.数据推送调试/03.模板配套推送测试.ms','api','haitong-push-template-test-03','8a4a582b15e73c387bb30e3ef488cb91a78b995e7022078fd53a621d40ec09eb'),
+    ]
+    update_manifest = []
+    for relative,kind,identity,previous in selected_resources:
+        common['magic-update/'+relative] = (ROOT / 'magic/haitong' / relative).read_bytes()
+        update_manifest.append({'file':relative,'kind':kind,'id':identity,'previousScriptSha256':previous})
+    common['magic-update/manifest.json'] = (json.dumps(update_manifest,ensure_ascii=False,indent=2)+'\n').encode('utf-8')
     artifacts = []
     root_name = 'haitong-data-pull'
     for system in ('linux','windows'):
