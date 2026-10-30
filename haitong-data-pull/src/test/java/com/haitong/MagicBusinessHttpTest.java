@@ -65,6 +65,28 @@ class MagicBusinessHttpTest {
         jdbc.update("UPDATE ht_standalone_datasource_client SET client_id='another-source-client' WHERE datasource_id='magic-batch-100-0'");
         mvc.perform(post("/api/v1/data-push").header("X-Api-Key",CLIENT).header("Idempotency-Key","magic-denied").contentType("application/json").content(json.bytes(Map.of("deliveryType","FTP","datasourceId","magic-batch-100-0","tableName","demo","records",List.of(Map.of("record_id",1)))))).andExpect(status().isForbidden());
     }
+    @Test void registryStatusIsReadOnlyBoundedAndRestrictedToServiceIdentity()throws Exception{
+        installSqlCounter();
+        for(int size:List.of(20,100)){
+            var sources=new ArrayList<Map<String,Object>>();var refs=new ArrayList<Map<String,Object>>();
+            for(int i=0;i<size;i++){
+                String id="validation-status-"+size+"-"+i;
+                sources.add(Map.of("datasourceId",id,"datasourceName","synthetic","clientIds",List.of("default"),"tables",List.of(Map.of("tableId","table-"+i,"tableName","demo","schemaVersion","1","columns",List.of(Map.of("columnName","record_id","required",true))))));
+                refs.add(Map.of("datasourceId",id,"tableName","demo"));
+            }
+            mvc.perform(post("/api/v1/data-push").header("X-Admin-Key",ADMIN).header("Idempotency-Key","validation-status-seed-"+size).contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","datasources",sources)))).andExpect(status().isCreated());
+            int ledger=jdbc.queryForObject("SELECT COUNT(*) FROM ht_standalone_registry_sync",Integer.class);
+            sqlReads.set(0);
+            mvc.perform(post("/api/v1/data-push").header("X-Standalone-Registry-Key","magic-sync-0123456789abcdef0123456789").contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","registryAction","STATUS","tableRefs",refs))))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.readOnly").value(true)).andExpect(jsonPath("$.tables.length()").value(size)).andExpect(jsonPath("$.tables[0].definitionHash").isString());
+            assertEquals(4,reads(),"Two audit reads and two bounded mirror reads for either 20 or 100 references");
+            assertEquals(ledger,jdbc.queryForObject("SELECT COUNT(*) FROM ht_standalone_registry_sync",Integer.class));
+            System.out.println("registry status "+size+": mirror reads=2; no idempotency or mirror writes");
+        }
+        var query=Map.of("deliveryType","REGISTRY_SYNC","registryAction","STATUS","tableRefs",List.of(Map.of("datasourceId","validation-status-20-0","tableName","demo")));
+        mvc.perform(post("/api/v1/data-push").header("X-Api-Key",CLIENT).contentType("application/json").content(json.bytes(query))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/data-push").header("X-Standalone-Registry-Key","magic-sync-0123456789abcdef0123456789").contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","registryAction","STATUS","tableRefs",Collections.nCopies(1001,Map.of("datasourceId","validation-status-20-0","tableName","demo")))))).andExpect(status().isPayloadTooLarge());
+    }
     @Test void magicOwnsNativeContractsAndAuthentication()throws Exception{
         mvc.perform(get("/internal/v1/overview")).andExpect(status().isUnauthorized());
         mvc.perform(get("/internal/v1/overview").header("X-Admin-Key",ADMIN)).andExpect(status().isOk()).andExpect(jsonPath("$.deliveryCounts").exists());

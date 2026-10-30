@@ -24,6 +24,7 @@
 ================================
 // Authoritative, scoped and bounded data-source page. Aggregates are sorted before LIMIT.
 import tenantRuntime
+import dataScope
 import tableSort
 import cn.hutool.json.JSONUtil
 import java.util.List
@@ -40,7 +41,13 @@ var fields={dbName:'d.db_name',appName:'a.app_name',dbType:'d.db_type',appId:'d.
     collectedFieldCount:'coalesce(stats.field_count,0)',registerTableNum:'coalesce(stats.registered_count,0)',
     assetStatus:'d.asset_status',flowStatus:'d.flow_status',tid:'d.tid',storageDomain:'d.storage_domain',isEnable:'d.is_enable',connectionStatus:'d.connection_status'}
 var whereSql=' WHERE d.tenant_id=#{tenantId} AND ifnull(d.is_del,0)=0 '
-// 数据源列表按当前行业库和 tenant_id 查询，不再叠加 OWNER/ORG 角色范围。
+// 权限先于搜索、聚合及分页，客户端的部门/创建人条件只能进一步缩小结果。
+var scope=dataScope.resource('MENU:2081000000000000002')
+var scopeUserId=scope.userId
+var scopeOrgIds=scope.organizationIds==null?[]:scope.organizationIds
+if(scope.scope=='OWNER') {whereSql=whereSql+' AND d.created_by=#{scopeUserId} '}
+else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0 ':' AND d.org_id IN (#{scopeOrgIds}) ')}
+else if(scope.scope!='ALL') {exit 403,'数据源数据范围无效'}
 var authorizedWhere=whereSql;
 for(condition in (body?.conditions==null?[]:body.conditions)) {
     if(condition==null || text(condition.value)=='') {continue;}

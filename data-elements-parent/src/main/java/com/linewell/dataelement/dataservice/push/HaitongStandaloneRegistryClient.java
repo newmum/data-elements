@@ -2,11 +2,7 @@ package com.linewell.dataelement.dataservice.push;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import com.linewell.dataelement.model.common.BizException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -21,7 +17,7 @@ import org.springframework.stereotype.Component;
 public class HaitongStandaloneRegistryClient {
     private final DataPushRegistryProperties properties;
     private final ObjectMapper json;
-    private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(HaitongStandaloneRegistryClient.class);
 
     public HaitongStandaloneRegistryClient(DataPushRegistryProperties properties, ObjectMapper json) {
         this.properties = properties;
@@ -30,33 +26,32 @@ public class HaitongStandaloneRegistryClient {
 
     public void synchronize(String datasourceId, Map<String, Object> datasourceSnapshot) {
         if (properties.getRelayBaseUrl().isBlank() || properties.getStandaloneSyncKey().isBlank()) {
-            throw new IllegalStateException("推送登记同步服务尚未配置");
+            throw new BizException(503, "推送登记同步服务尚未配置，请检查平台 data-element.push-registry 的 relay-base-url 和 standalone-sync-key");
         }
         try {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("deliveryType", "REGISTRY_SYNC");
             body.put("datasource", datasourceSnapshot);
             String url = properties.getRelayBaseUrl().replaceAll("/+$", "") + "/api/v1/data-push";
-            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                    .timeout(Duration.ofSeconds(Math.max(1, properties.getRelayTimeoutSeconds())))
-                    .header("Content-Type", "application/json")
-                    .header("X-Standalone-Registry-Key", properties.getStandaloneSyncKey())
-                    .header("Idempotency-Key", "registry-sync-" + datasourceId + "-" + UUID.randomUUID())
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body)))
-                    .build();
-            HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            if (response.statusCode() / 100 != 2) {
-                throw new IllegalStateException("推送登记同步服务暂不可用");
+            var response = HaitongRelayHttp.post(url, Map.of(
+                    "X-Standalone-Registry-Key", properties.getStandaloneSyncKey(),
+                    "Idempotency-Key", "registry-sync-" + datasourceId + "-" + UUID.randomUUID()),
+                    json.writeValueAsBytes(body), properties.getRelayTimeoutSeconds());
+            if (response.status() / 100 != 2) {
+                throw new BizException(502, "推送登记同步被海通拒绝（HTTP " + response.status()
+                        + "），请检查海通同步开关及两端登记同步密钥");
             }
             Map<String, Object> payload = json.readValue(response.body(), new TypeReference<LinkedHashMap<String, Object>>() { });
             String returnedSource = String.valueOf(payload.getOrDefault("datasourceId", "")).trim();
             if (!datasourceId.equals(returnedSource)) {
-                throw new IllegalStateException("推送登记同步服务返回数据源不匹配");
+                throw new BizException(502, "推送登记同步服务返回数据源不匹配");
             }
-        } catch (IllegalStateException exception) {
+        } catch (BizException exception) {
             throw exception;
         } catch (Exception exception) {
-            throw new IllegalStateException("推送登记同步服务暂不可用");
+            log.warn("Haitong registration sync transport failed: errorClass={}", exception.getClass().getSimpleName());
+            throw new BizException(502, "无法完成海通登记同步连接，请检查服务地址、端口和平台网络（"
+                    + exception.getClass().getSimpleName() + "）");
         }
     }
 }

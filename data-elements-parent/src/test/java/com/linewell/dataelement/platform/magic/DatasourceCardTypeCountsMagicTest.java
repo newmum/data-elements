@@ -62,8 +62,8 @@ class DatasourceCardTypeCountsMagicTest {
         Map<?,?> result = (Map<?,?>)MagicScript.create(script, null).execute(new MagicScriptContext(bindings));
         assertCounts(result, count);
         assertThat(counter.reads).isEqualTo(3); assertThat(es.reads).isEqualTo(2);
-        assertThat(scope.calls).isZero();
-        System.out.println("datasource cards=" + count + ": SQL=3, ES=2; foreign/deleted sources excluded; menu role not queried");
+        assertThat(scope.calls).isEqualTo(1);
+        System.out.println("datasource cards=" + count + ": SQL=3, ES=2, scope decisions=1; foreign/deleted sources excluded");
         // Historical default-mode callers must not inherit a positive orphan table from ES.
         counter.reads=0; es.reads=0; bindings.put("body", Map.of());
         result=(Map<?,?>)MagicScript.create(script, null).execute(new MagicScriptContext(bindings));
@@ -92,6 +92,7 @@ class DatasourceCardTypeCountsMagicTest {
     public static class Scope {
         int calls;
         public String id(){return "ga";}
+        public Map<String,Object> resource(String resource){calls++;return Map.of("scope","ALL","userId","person-a","organizationIds",List.of());}
         public Map<String,String> names(List<?> ids){return Map.of();}
         public List<Map<String,Object>> visibleDataSourcesFor(String resource,List<Map<String,Object>> rows){
             assertThat(resource).isEqualTo("MENU:2081000000000000002"); calls++;

@@ -42,7 +42,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
-      "baseSha256": "b5ec3e2749ad11f3d0e58fdd6b7f1c07fedb80f0c82a30b496b57aad5a540ac6"
+      "baseSha256": "3c5962e6712f858eab3d50f5431b6d08c585a16c487e37bac6698f42a51641f3"
     },
     {
       "id": "2016435561264910336",
@@ -1397,7 +1397,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "09.系统管理/02.用户与权限/NiFi 节点配置(nifi-node-config).vue",
-      "baseSha256": "548e651900fd3e11cb78df653ad83ee1b96b46fb984972ceb98152ae5f2303b9"
+      "baseSha256": "5f3f7a66804bf5586e7dec8f145ae365ecf8de0cff40a40feca8b38e769cd4d1"
     },
     {
       "id": "178716197774800001",

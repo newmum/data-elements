@@ -407,7 +407,7 @@
       "path": "magic/haitong/function/01.海通业务/04.登记配置同步.ms",
       "id": "haitong-function-registry",
       "databasePath": "/magic-api/function/01.海通业务/04.登记配置同步.ms",
-      "baseSha256": "48f7ba7f7d7bbe508df7c41d8b13c665e32430d0c856c7f2c7655813c06b0285"
+      "baseSha256": "c66689a564bbfc1012ce38e97adc849fb4d230e95fb687b4038a32d9c461980d"
     },
     {
       "path": "magic/haitong/function/01.海通业务/05.业务密钥签发.ms",
@@ -419,7 +419,7 @@
       "path": "magic/haitong/function/01.海通业务/06.数据推送编排.ms",
       "id": "haitong-function-push",
       "databasePath": "/magic-api/function/01.海通业务/06.数据推送编排.ms",
-      "baseSha256": "557c79f85a82cd85ed292c403d2e98875f12e271dc0d0be8184a329961698b6d"
+      "baseSha256": "1b85664bf5e1e0f81dd8922af772f7f67223bb073254525e931d11e61846c530"
     },
     {
       "path": "magic/haitong/function/01.海通业务/07.运维查询与状态处理.ms",

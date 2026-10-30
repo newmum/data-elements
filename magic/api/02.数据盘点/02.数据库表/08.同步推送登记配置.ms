@@ -1,25 +1,25 @@
 {
-  "properties" : { },
-  "id" : "c78db2b6d3b04a2ba5d0854d8171a106",
-  "script" : null,
-  "groupId" : "datapd_database_group_01",
-  "name" : "08.同步推送登记配置",
-  "createTime" : 1792650432292,
-  "updateTime" : null,
-  "lock" : null,
-  "createBy" : null,
-  "updateBy" : null,
-  "path" : "/push/sync",
-  "method" : "POST",
-  "parameters" : [ ],
-  "options" : [ ],
-  "requestBody" : "{\"datasourceId\":\"已登记的数据推送数据源ID\",\"dryRun\":true}",
-  "headers" : [ ],
-  "paths" : [ ],
-  "responseBody" : "{}",
-  "description" : "将当前租户内已完成登记的推送数据源表字段同步到 haitong-data-pull。接受 datasourceId、dryRun 和可选 nodeId；all=true 时批量同步当前租户全部推送源，最多100源/1000表/10000字段/1MiB，返回跳过原因；指定节点时校验当前租户及启用状态，未指定时保持现有默认目标。dryRun 只读，不发布契约、不调用海通。最多100张已登记表、10000字段、1MiB配置；不签发或轮换业务密钥。",
-  "requestBodyDefinition" : null,
-  "responseBodyDefinition" : null
+  "properties": {},
+  "id": "c78db2b6d3b04a2ba5d0854d8171a106",
+  "script": null,
+  "groupId": "datapd_database_group_01",
+  "name": "08.同步推送登记配置",
+  "createTime": 1792650432292,
+  "updateTime": null,
+  "lock": null,
+  "createBy": null,
+  "updateBy": null,
+  "path": "/push/sync",
+  "method": "POST",
+  "parameters": [],
+  "options": [],
+  "requestBody": "{\"all\":true,\"nodeId\":\"当前租户推送节点ID\",\"preview\":true}",
+  "headers": [],
+  "paths": [],
+  "responseBody": "{}",
+  "description": "同步当前可信租户内已完成登记的推送数据源配置。all=true、nodeId、preview=true 返回数据源/表清单、节点镜像状态、planHash 和调用地址；只读预览以服务间密钥调用节点一次 STATUS。确认传同一 planHash，清单变化返回409，成功返回逐表结果。原 dryRun 保持本地只读、不调用节点。上限100源/1000表/10000字段/1MiB；逐ID校验当前租户，不接受外部地址或凭据，不签发业务密钥。",
+  "requestBodyDefinition": null,
+  "responseBodyDefinition": null
 }
 ================================
 import tenantRuntime
@@ -43,10 +43,13 @@ var tenantId = tenantRuntime.id()
 var audit = LoggerFactory.getLogger('data.push.registry.sync')
 if (body == null || !(body instanceof Map)) { exit 400, '请求体必须为对象' }
 for (key in body.keySet()) {
-    if (!['datasourceId','dryRun','nodeId','all'].contains(key)) { exit 400, '只允许提交datasourceId、nodeId、all和dryRun' }
+    if (!['datasourceId','dryRun','nodeId','all','preview','planHash'].contains(key)) { exit 400, '请求包含未支持的同步参数' }
 }
 if (body.all != null && body.all != true && body.all != false) { exit 400, 'all必须为布尔值' }
 if (body.dryRun != null && body.dryRun != true && body.dryRun != false) { exit 400, 'dryRun必须为布尔值' }
+if (body.preview != null && body.preview != true && body.preview != false) { exit 400, 'preview必须为布尔值' }
+if ((body.preview==true || body.planHash!=null) && body.all!=true) { exit 400, '清单预览和校验仅用于全部同步' }
+if(body.planHash!=null && (!(body.planHash instanceof String) || !body.planHash.matches('[a-f0-9]{64}'))){exit 400,'同步清单标识不合法'}
 var nodeId = body.nodeId == null?'':(body.nodeId+'').trim()
 var pushNode = null
 if (nodeId!='') {
@@ -63,7 +66,7 @@ if (body.all == true) {
     var bm = new ObjectMapper()
     var str = value => value == null ? '' : (value+'').trim()
     var value = (row,camel,snake) => row[camel] == null ? row[snake] : row[camel]
-    var sourcePage = db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('is_del',0).page(1001,0)
+    var sourcePage = db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('is_del',0).orderBy('tid').page(1001,0)
     if (sourcePage.total > 1000) { exit 413, '租户数据源超过1000项，请先缩小同步范围' }
     var visible = (sourcePage.list)
     var pending = []
@@ -76,7 +79,7 @@ if (body.all == true) {
         var sourceName = str(value(row,'dbName','db_name')) || str(row.tid)
         var reason = ''
         if (![1,2].contains(value(row,'assetStatus','asset_status')::int)) { reason = '数据源登记尚未完成' }
-        else if (cfg.pushDelivery?.enabled == cfg.push_delivery?.enabled == false) { reason = '推送功能已停用' }
+        else if (cfg.pushDelivery?.enabled == false || cfg.push_delivery?.enabled == false) { reason = '推送功能已停用' }
         if (reason != '') { skipped.add({datasourceId:row.tid,datasourceName:sourceName,reason:reason});continue }
         pending.add({row:row,config:cfg,name:sourceName})
     }
@@ -172,10 +175,37 @@ if (body.all == true) {
         snapshots.add({datasourceId:id,datasourceName:item.name,sourceSystemId:appId,sourceSystemName:appsById[appId] || '',contractVersion:new Date().getTime()+'',enabled:true,clientIds:['push-'+id],tables:normalized})
         publications.addAll(sourcePublications);sourceIds.add(id);totalTables += normalized.size();totalColumns += count
     }
-    var result = {synced:true,all:true,nodeId:nodeId,datasourceCount:snapshots.size(),tableCount:totalTables,columnCount:totalColumns,skipped:skipped}
+    var targetUrl=str(pushNode.baseUrl || pushNode.base_url).replaceAll('/+$','')+'/api/v1/data-push'
+    var planSources=snapshots.map(snapshot=>{datasourceId:snapshot.datasourceId,datasourceName:snapshot.datasourceName,sourceSystemId:snapshot.sourceSystemId,sourceSystemName:snapshot.sourceSystemName,enabled:snapshot.enabled,clientIds:snapshot.clientIds,tables:snapshot.tables})
+    var planHash=DigestUtil.sha256Hex(bm.writeValueAsString({tenantId:tenantId,nodeId:nodeId,targetUrl:targetUrl,datasources:planSources}))
+    if(body.planHash!=null && str(body.planHash)!=planHash){exit 409, '同步清单已变化，请刷新清单后重新确认'}
+    var rows=[]
+    for(snapshot in snapshots){for(table in snapshot.tables){rows.add({datasourceId:snapshot.datasourceId,datasourceName:snapshot.datasourceName,tableId:table.tableId,tableName:table.tableName,tableComment:table.tableComment,columnCount:table.columns.size(),schemaVersion:table.schemaVersion,definitionHash:DigestUtil.sha256Hex(bm.writeValueAsString([table.tableId,table.tableName,table.tableComment,table.schemaVersion,table.enabled,table.columns.map(field=>[field.columnName,field.columnComment,field.dataType,field.ordinal,field.required,field.enabled])])),syncStatus:'UNKNOWN',syncedAt:null})}}
+    var result = {synced:true,all:true,nodeId:nodeId,datasourceCount:snapshots.size(),tableCount:totalTables,columnCount:totalColumns,skipped:skipped,sources:snapshots.map(snapshot=>{datasourceId:snapshot.datasourceId,datasourceName:snapshot.datasourceName,tableCount:snapshot.tables.size()}),rows:rows,planHash:planHash,requestPath:'/dst/database/push/sync',targetUrl:targetUrl}
     var envelope = {deliveryType:'REGISTRY_SYNC',datasources:snapshots}
     var encoded = bm.writeValueAsString(envelope)
     if (bm.writeValueAsBytes(envelope).length>1048576) { exit 413, '全部推送配置超过1MiB，请调整配置规模' }
+    if(body.preview==true){
+        result.synced=false;result.valid=true;result.dryRun=true
+        var statusResponse=null
+        try{
+            if(rows.size()>0){
+                var statusSettings=SpringUtil.getBean('data-element.push-registry-com.linewell.dataelement.dataservice.push.DataPushRegistryProperties')
+                if(statusSettings.getStandaloneSyncKey()==''){throw new IllegalStateException('missing server configuration')}
+                var statusBody=bm.writeValueAsString({deliveryType:'REGISTRY_SYNC',registryAction:'STATUS',tableRefs:rows.map(row=>{datasourceId:row.datasourceId,tableName:row.tableName})})
+                statusResponse=HttpRequest.post(targetUrl).timeout(10000).setFollowRedirects(false).header('Content-Type','application/json').header('X-Standalone-Registry-Key',statusSettings.getStandaloneSyncKey()).body(statusBody).execute()
+                if(statusResponse.getStatus()!=200){throw new IllegalStateException('status unavailable')}
+                var status=bm.readValue(statusResponse.body(),Map)
+                if(status.code!='REGISTRY_STATUS' || status.readOnly!=true || status.tables==null || status.tables.size()>rows.size()){throw new IllegalStateException('status receipt mismatch')}
+                var wanted=rows.map(row=>str(row.datasourceId)+':'+str(row.tableName))
+                var mirrors={}
+                for(mirror in status.tables){var key=str(mirror.datasourceId)+':'+str(mirror.tableName);if(!wanted.contains(key) || mirrors[key]!=null){throw new IllegalStateException('foreign mirror')};mirrors[key]=mirror}
+                for(row in rows){var mirror=mirrors[str(row.datasourceId)+':'+str(row.tableName)];row.syncStatus=mirror==null?'NEW':(mirror.active==true && mirror.definitionHash==row.definitionHash?'SYNCED':'CHANGED');row.syncedAt=mirror==null?null:mirror.syncedAt}
+            }
+            result.statusConfirmed=true
+        }catch(e){result.statusConfirmed=false;result.statusMessage='节点暂未返回同步记录，本次仍将同步清单中的全部有效表'}finally{if(statusResponse!=null){statusResponse.close()}}
+        return result
+    }
     if (body.dryRun == true) { result.synced=false;result.valid=true;result.dryRun=true;return result }
     if (snapshots.size()==0) { return result }
     var settings = SpringUtil.getBean('data-element.push-registry-com.linewell.dataelement.dataservice.push.DataPushRegistryProperties')
@@ -252,6 +282,7 @@ if (body.all == true) {
         audit.warn('批量推送登记配置同步未完成，nodeId={}，errorClass={}',nodeId,e.getClass().getName())
         exit 503, '全部配置未能确认保存到海通，请检查节点服务后重试'
     } finally { if(response!=null){response.close()} }
+    for(row in rows){row.syncStatus='SUCCESS';row.syncedAt=new Date().getTime()}
     return result
 }
 

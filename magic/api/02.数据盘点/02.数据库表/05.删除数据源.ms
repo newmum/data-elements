@@ -33,6 +33,7 @@
  * “数据库已经删除、列表中的 ES 卡片仍然存在”而无法自愈。
  */
 import tenantRuntime
+import dataScope
 import tenantEs
 import '@/common/configData' as configData
 
@@ -76,6 +77,12 @@ var datasource = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId)
     .eq('is_del', 0)
     .selectOne()
+
+// 在读取关联资产及清理 ES 之前校验；未知/跨租户 ID 不得触发幂等清理。
+if (datasourceRow == null) { exit 404, '数据源不存在或无权访问' }
+if (!dataScope.canReadDataSourceFor('MENU:2081000000000000002', datasourceRow)) {
+    exit 403, '数据源不存在或无权删除'
+}
 
 var tableRows = db.table('db_table_t').where()
     .eq('datasource_id', tid)

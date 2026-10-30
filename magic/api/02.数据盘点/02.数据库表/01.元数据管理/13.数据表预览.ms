@@ -283,7 +283,8 @@ var countMode=blank(body?.countMode)?'exact':textOf(body.countMode).toLowerCase(
 if(countMode!='exact'&&countMode!='none'){exit 400,'预览计数方式无效';}
 // hwhive 对应 platform.magic.module.HiveModule，只用于已登记为服务端托管的 MRS 连接。
 // 直接 JDBC Hive 保持自己的连接，不能误查服务端连接池所指向的另一套集群。
-var managedHive=sourceType=='hive' && textOf(firstValue(dbAsset, ['hiveConnectionMode', 'hive_connection_mode'])).toLowerCase() != 'open-source' && (
+var hiveConnectionMode=firstValue(dbAsset, ['hiveConnectionMode', 'hive_connection_mode'])
+var managedHive=sourceType=='hive' && (blank(hiveConnectionMode) || textOf(hiveConnectionMode).toLowerCase() != 'open-source') && (
     textOf(firstValue(dbAsset,['metadataAccessMode','metadata_access_mode']))=='server-managed-mrs'
     || !blank(firstValue(dbAsset,['hiveProfile','hive_profile']))
 )

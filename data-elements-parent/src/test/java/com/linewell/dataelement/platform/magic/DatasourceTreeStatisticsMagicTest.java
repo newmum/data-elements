@@ -46,9 +46,9 @@ class DatasourceTreeStatisticsMagicTest {
         assertThat(((Number) result.get("total")).intValue()).isEqualTo(count);
         assertThat(result.get("orgCounts")).isEqualTo(Map.of("org", count));
         assertThat(counter.reads).isEqualTo(1);
-        assertThat(scope.calls).isZero();
+        assertThat(scope.calls).isEqualTo(1);
         assertThat(index.reads).isEqualTo(1);
-        System.out.println("tree statistics " + count + " candidates: ES=1, SQL=1, role lookups=0; foreign/deleted/stale candidates excluded");
+        System.out.println("tree statistics " + count + " candidates: ES=1, SQL=1, scope decisions=1; foreign/deleted/stale candidates excluded");
     }
 
     public static class Scope {

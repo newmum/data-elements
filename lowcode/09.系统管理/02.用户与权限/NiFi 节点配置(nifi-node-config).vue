@@ -117,6 +117,26 @@
       <template #footer><el-button @click="dialogVisible = false">{{ text.cancel }}</el-button><el-button type="primary" :loading="saving" @click="saveNode">{{ text.save }}</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="pushSyncVisible" :title="pushSyncStage === 'success' ? '推送配置同步结果' : '同步推送配置'" width="min(1060px, calc(100vw - 40px))" class="push-sync-dialog" top="4vh" :close-on-click-modal="false" :close-on-press-escape="!syncingNodeId" :show-close="!syncingNodeId" @closed="closePushSync">
+      <p class="push-sync-question">{{ pushSyncStage === 'success' ? `已将以下配置同步到“${pushSyncNode?.name || ''}”。` : `确认将以下配置同步到“${pushSyncNode?.name || ''}”？` }}</p>
+      <div v-if="pushSyncPreview" class="push-sync-overview"><span>数据源 <b>{{ pushSyncPreview.datasourceCount }}</b> 个</span><span>数据表 <b>{{ pushSyncPreview.tableCount }}</b> 张</span><span>字段 <b>{{ pushSyncPreview.columnCount }}</b> 个</span><span v-if="pushSyncStage !== 'success'">未同步 {{ pushStatusCount('NEW') }} · 待更新 {{ pushStatusCount('CHANGED') }} · 已同步 {{ pushStatusCount('SYNCED') }}<template v-if="pushStatusCount('UNKNOWN')"> · 未确认 {{ pushStatusCount('UNKNOWN') }}</template></span></div>
+      <el-alert v-if="pushSyncError" :title="pushSyncError" type="error" :closable="false" show-icon />
+      <el-alert v-else-if="pushSyncPreview?.statusMessage && pushSyncStage !== 'success'" :title="pushSyncPreview.statusMessage" type="warning" :closable="false" show-icon />
+      <el-table v-loading="pushPreviewLoading" :data="pushSyncPageRows" row-key="rowKey" size="small" border max-height="max(140px, min(330px, calc(100vh - 360px)))" class="push-sync-table">
+        <el-table-column prop="datasourceName" label="数据源" min-width="190" show-overflow-tooltip />
+        <el-table-column label="数据表" min-width="230"><template #default="{row}"><div class="push-sync-table-name"><strong>{{ row.tableComment || row.tableName || '仅数据源配置' }}</strong><code v-if="row.tableName">{{ row.tableName }}</code></div></template></el-table-column>
+        <el-table-column prop="columnCount" label="字段" width="66" align="right" />
+        <el-table-column :label="pushSyncStage === 'success' ? '同步结果' : '节点状态'" width="110"><template #default="{row}"><el-tag v-if="!row.sourceOnly || pushSyncStage === 'success'" size="small" :type="pushStatusType(row.syncStatus)">{{ pushStatusLabel(row.syncStatus) }}</el-tag><span v-else>—</span></template></el-table-column>
+        <el-table-column label="最近同步时间" width="165"><template #default="{row}">{{ pushSyncTime(row.syncedAt) }}</template></el-table-column>
+        <template #empty><el-empty :description="pushPreviewLoading ? '正在读取同步清单' : '没有可同步的配置'" :image-size="55" /></template>
+      </el-table>
+      <el-pagination v-if="pushSyncRows.length > 20" v-model:current-page="pushSyncPage" :total="pushSyncRows.length" :page-size="20" layout="total, prev, pager, next" small class="push-sync-pagination" />
+      <p v-if="pushSyncStage !== 'success' && pushSyncRows.length" class="push-sync-scope">本次同步清单中的全部有效配置，已同步的表也会更新。</p>
+      <div v-if="pushSyncPreview?.skipped?.length" class="push-sync-skipped"><strong>未纳入同步：{{ pushSyncPreview.skipped.length }} 个数据源</strong><el-table :data="pushSyncSkippedPage" size="small" max-height="135"><el-table-column prop="datasourceName" label="数据源" min-width="190" /><el-table-column prop="reason" label="原因" min-width="280" /></el-table><el-pagination v-if="pushSyncPreview.skipped.length > 10" v-model:current-page="pushSkippedPage" :total="pushSyncPreview.skipped.length" :page-size="10" layout="prev, pager, next" small /></div>
+      <div class="push-sync-addresses"><div><span>平台发起</span><code>POST {{ pushSyncPreview?.requestPath || '/dst/database/push/sync' }}</code></div><div><span>节点接收</span><code>POST {{ pushSyncPreview?.targetUrl || `${pushSyncNode?.baseUrl || ''}/api/v1/data-push` }}</code></div></div>
+      <template #footer><el-button :disabled="Boolean(syncingNodeId)" @click="closePushSync">{{ pushSyncStage === 'success' ? '关闭' : '取消' }}</el-button><el-button v-if="pushSyncStage !== 'success'" :disabled="Boolean(syncingNodeId)" :loading="pushPreviewLoading" @click="previewPushSync">刷新清单</el-button><el-button v-if="pushSyncStage !== 'success'" type="primary" :disabled="!pushCanSync" :loading="Boolean(syncingNodeId)" @click="commitPushSync">确认同步</el-button></template>
+    </el-dialog>
+
     <el-dialog v-model="networkIconDialogVisible" :title="text.configureNetworkIcon" width="420px" class="network-icon-dialog" destroy-on-close>
       <el-form label-width="92px">
         <el-form-item :label="text.network"><el-input :model-value="networkIconForm.networkName" disabled /></el-form-item>
@@ -300,25 +320,61 @@ const handleNodeCommand = (action, node, mode) => { if (action === 'edit') openE
 
 
 const syncingNodeId = ref('');
+const pushSyncVisible = ref(false), pushSyncNode = ref(null), pushSyncPreview = ref(null);
+const pushPreviewLoading = ref(false), pushSyncError = ref(''), pushSyncStage = ref('preview');
+const pushSyncPage = ref(1), pushSkippedPage = ref(1);
+let pushPreviewVersion = 0;
+const pushSyncRows = computed(() => {
+  const plan = pushSyncPreview.value;
+  const rows = (plan?.rows || []).map(row => ({...row,rowKey: `${row.datasourceId}:${row.tableId}`}));
+  for (const source of plan?.sources || []) if (!source.tableCount) rows.push({...source,rowKey:`source:${source.datasourceId}`,columnCount:0,sourceOnly:true,syncStatus:pushSyncStage.value === 'success' ? 'SUCCESS' : 'UNKNOWN'});
+  return rows;
+});
+const pushSyncPageRows = computed(() => pushSyncRows.value.slice((pushSyncPage.value - 1) * 20, pushSyncPage.value * 20));
+const pushSyncSkippedPage = computed(() => (pushSyncPreview.value?.skipped || []).slice((pushSkippedPage.value - 1) * 10,pushSkippedPage.value * 10));
+const pushCanSync = computed(() => Boolean(pushSyncPreview.value?.valid && pushSyncPreview.value?.planHash && pushSyncPreview.value.datasourceCount > 0 && !pushPreviewLoading.value && !syncingNodeId.value && pushSyncStage.value === 'preview'));
+const pushStatusCount = status => pushSyncRows.value.filter(row => row.syncStatus === status && !row.sourceOnly).length;
+const pushStatusLabel = status => ({NEW:'未同步',SYNCED:'已同步',CHANGED:'待更新',UNKNOWN:'未确认',SUCCESS:'同步成功'}[status] || '未确认');
+const pushStatusType = status => ({NEW:'info',SYNCED:'success',CHANGED:'warning',UNKNOWN:'info',SUCCESS:'success'}[status] || 'info');
+const pushSyncTime = value => value ? new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) : '—';
+const closePushSync = () => {
+  if (syncingNodeId.value) return;
+  pushPreviewVersion++;pushSyncVisible.value=false;pushPreviewLoading.value=false;
+  pushSyncPreview.value=null;pushSyncNode.value=null;pushSyncError.value='';pushSyncStage.value='preview';
+};
+const previewPushSync = async () => {
+  const node=pushSyncNode.value;if (!node || syncingNodeId.value) return;
+  const version=++pushPreviewVersion;
+  pushPreviewLoading.value=true;pushSyncError.value='';pushSyncPreview.value=null;pushSyncStage.value='preview';pushSyncPage.value=1;pushSkippedPage.value=1;
+  try {
+    const response=await $common.post('/dst/database/push/sync',{all:true,nodeId:node.id,preview:true});
+    if(version!==pushPreviewVersion || !pushSyncVisible.value) return;
+    const payload=response?.data || response || {};
+    if(!payload.valid || !payload.dryRun || payload.nodeId!==node.id || !/^[a-f0-9]{64}$/.test(payload.planHash || '') || !Array.isArray(payload.rows)) throw new Error('同步清单未能确认，请刷新后重试');
+    pushSyncPreview.value=payload;
+  } catch(error){if(version===pushPreviewVersion)pushSyncError.value=error?.message || '读取同步清单失败';}
+  finally{if(version===pushPreviewVersion)pushPreviewLoading.value=false;}
+};
 const openPushSync = async node => {
   if (!node.enabled || syncingNodeId.value) return;
-  try {
-    await ElMessageBox.confirm(`确认将当前租户、当前权限范围内全部数据推送数据源的登记配置同步到“${node.name}”？登记未完成、缺少表字段或已停用的数据源会跳过并说明原因。`, '同步全部推送配置', {
-      confirmButtonText: '确认同步', cancelButtonText: '取消', type: 'warning', closeOnClickModal: false
-    });
-  } catch { return; }
-  syncingNodeId.value = node.id;
-  try {
-    const response = await $common.post('/dst/database/push/sync', { all: true, nodeId: node.id });
-    const payload = response?.data || response || {};
-    if (!payload.synced || payload.nodeId !== node.id) throw new Error('未收到节点保存确认，请检查服务后重试');
+  pushSyncNode.value={id:node.id,name:node.name,baseUrl:node.baseUrl};pushSyncVisible.value=true;
+  await previewPushSync();
+};
+const commitPushSync = async () => {
+  if(!pushCanSync.value)return;
+  const node=pushSyncNode.value,plan=pushSyncPreview.value;
+  syncingNodeId.value=node.id;pushSyncError.value='';
+  try{
+    const response=await $common.post('/dst/database/push/sync',{all:true,nodeId:node.id,planHash:plan.planHash});
+    const payload=response?.data || response || {};
+    const planned=new Set(plan.rows.map(row=>`${row.datasourceId}:${row.tableId}`));
+    const received=(payload.rows || []).map(row=>`${row.datasourceId}:${row.tableId}`);
+    if(!payload.synced || payload.nodeId!==node.id || payload.planHash!==plan.planHash || payload.datasourceCount!==plan.datasourceCount || payload.tableCount!==plan.tableCount || payload.columnCount!==plan.columnCount || received.length!==planned.size || new Set(received).size!==planned.size || received.some(key=>!planned.has(key)))throw new Error('未收到清单的完整保存确认，请刷新清单核对节点状态');
+    pushSyncPreview.value={...payload,rows:payload.rows.map(row=>({...row,syncStatus:'SUCCESS'}))};pushSyncStage.value='success';
+    ElMessage.success(`已同步 ${payload.datasourceCount} 个数据源、${payload.tableCount} 张表、${payload.columnCount} 个字段`);
     await loadNodes('push');
-    const summary = `已同步 ${payload.datasourceCount} 个数据源、${payload.tableCount} 张表、${payload.columnCount} 个字段。`;
-    const skipped = Array.isArray(payload.skipped) ? payload.skipped : [];
-    if (skipped.length) await ElMessageBox.alert(`${summary}\n\n已跳过 ${skipped.length} 个数据源：\n${skipped.map(item => `${item.datasourceName}：${item.reason}`).join('\n')}`, '同步完成', { type: 'warning', confirmButtonText: '知道了', customClass: 'push-sync-result' }).catch(() => {});
-    else ElMessage.success(summary);
-  } catch (error) { ElMessage.error(error?.message || '同步未完成，请检查节点服务后重试'); }
-  finally { syncingNodeId.value = ''; }
+  }catch(error){pushSyncError.value=error?.message || '同步未能确认，请刷新清单后重试';pushSyncStage.value='uncertain';}
+  finally{syncingNodeId.value='';}
 };
 
 onMounted(async () => { await loadNetworkOptions(); await loadNodes('sync'); });
@@ -397,4 +453,10 @@ onMounted(async () => { await loadNetworkOptions(); await loadNodes('sync'); });
 @media (max-width: 600px) { .network-collapse :deep(.el-collapse-item__header) { padding: 0 10px; }.network-collapse :deep(.el-collapse-item__content) { padding: 0 10px 10px; }.network-heading { min-width: 0; }.node-inline-meta { gap: 7px; }.node-inline-meta span:first-child { max-width: 130px; }.node-inline-meta span:nth-of-type(2) { max-width: 100px; }.node-row-side { align-items: flex-start; flex-direction: column; gap: 10px; }.row-actions { align-self: stretch; justify-content: space-between; }.row-actions :deep(.el-button) { margin: 0 !important; } }
 
 .push-editor-note { margin: 4px 0 18px; }
+:global(.push-sync-dialog){max-height:92vh;display:flex;flex-direction:column;margin-bottom:4vh}:global(.push-sync-dialog .el-dialog__body){min-height:0;overflow-y:auto;flex:1}:global(.push-sync-dialog .el-dialog__header),:global(.push-sync-dialog .el-dialog__footer){flex-shrink:0}
+.push-sync-question{margin:0 0 12px;color:#263c5a;font-size:14px;line-height:1.7;overflow-wrap:anywhere}
+.push-sync-overview{display:flex;align-items:center;flex-wrap:wrap;gap:20px;margin-bottom:14px;color:#718097;font-size:12px}.push-sync-overview b{color:#245fa7;font-size:17px;margin:0 3px}
+.push-sync-table{margin-top:12px}.push-sync-table-name{display:flex;flex-direction:column;gap:3px;line-height:1.5}.push-sync-table-name strong{font-weight:500;color:#263c5a}.push-sync-table-name code{font-size:11px;color:#8190a7;overflow-wrap:anywhere}
+.push-sync-pagination{justify-content:flex-end;margin-top:10px}.push-sync-scope{margin:8px 0;color:#8190a7;font-size:12px}.push-sync-skipped{margin-top:14px;padding:10px 12px;background:#fff9f0;border:1px solid #f2e5cd;border-radius:6px}.push-sync-skipped>strong{font-size:12px;color:#9b7537}
+.push-sync-addresses{margin-top:14px;padding:10px 12px;border-radius:6px;background:#f6f8fc;font-size:11px}.push-sync-addresses>div{display:flex;gap:12px;line-height:1.9}.push-sync-addresses span{flex:0 0 52px;color:#8090a7}.push-sync-addresses code{color:#567394;overflow-wrap:anywhere;min-width:0}
 </style>

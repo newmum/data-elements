@@ -397,6 +397,7 @@ const countMap = ref({});
 const SOURCE_BATCH_SIZE = 24;
 
 const state = reactive({
+  dataScope: "",
   loading: false,
   treeLoading: false,
   listError: "",
@@ -719,6 +720,8 @@ const loadSourceOverview = async (generation) => {
     const result = await $common.post("/dst/database/departmentDataSources", { mode: "summary" });
     if (generation !== loadGeneration) return;
     const list = Array.isArray(result?.list) ? result.list : Array.isArray(result) ? result : [];
+    state.dataScope = ["ALL", "ORG", "OWNER"].includes(result?.dataScope) ? result.dataScope : "";
+    treeData.value[0].label = { ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" }[state.dataScope] || "可见数据";
     state.list = list.map(normalizeItem).sort(compareDatasourceUpdated);
     state.expanded = [];
     state.tableLoads = {};
@@ -866,12 +869,12 @@ const selectTreeNode = (node) => {
 const treeNodeIcon = (node) => (node?.data?.type === "app" ? "app" : node?.expanded ? "folder-open" : "folder");
 const treeNodeColor = (node) => (node?.data?.type === "app" ? "#7a5af8" : "#0b8bf9");
 const treeNodeSize = (node) => (node?.data?.type === "app" ? "19" : "23");
-const isSystemAdministratorScope = computed(() => Object.keys(treeStatistics.value.orgCounts || {}).length > 1);
+// 数据条数、部门数量及角色显示名称均不能推断权限，以服务端决定的范围为准。
+const isSystemAdministratorScope = computed(() => state.dataScope === "ALL");
 const currentScopeLabel = computed(() => {
   const selected = state.leftSelectNode;
   if (selected?.value && selected?.label) return selected.label;
-  if (isSystemAdministratorScope.value) return "全部部门";
-  return String($user.orgName || $user.org_name || treeData.value[0]?.children?.[0]?.label || "当前部门");
+  return { ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" }[state.dataScope] || "可见数据";
 });
 const visibleList = computed(() => filteredBeforeOrganization.value.filter(matchesSelectedTreeNode));
 const displayList = computed(() => visibleList.value.slice(0, state.sourceDisplayLimit));

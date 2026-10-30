@@ -483,7 +483,8 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 
 #### Dynamic detail-page completeness and save performance (mandatory)
 
-- 数据源登记、元数据探查与数据接入配置按当前行业库及 `tenantRuntime.id()` 查询有效登记对象，不再叠加“数据源管理”菜单的 `ALL/ORG/OWNER` 数据范围过滤。表列表、字段读取、模板导入、DDL、物化建表、目标库选项、登记配置同步及接入批量预检采用同一规则；探查结果临时视图、登记连接解析、字段映射版本及接入任务链路也不再调用这层数据源菜单角色过滤。Java 连接解析为其他资源代码保留原有范围规则，不修改全局授权模块或角色配置。登录、行业库路由、SQL `tenant_id`、逐 ID 存在性、来源/目标关联、登记状态、ODS 分域资格、画布操作及审批权限仍各按其职责生效。缺失会话不允许回退到客户端或旧记录的租户；这项登记配置规则不改变日志、身份管理、资源审批等其他模块的数据范围。
+- 数据源管理页面及其概要、分页、基础候选、组织树、统计、详情、修改、结束登记和删除接口恢复使用当前角色的 `ALL/ORG/OWNER` 范围：系统管理员看当前租户全部数据，部门管理员看当前账号所属部门的数据，登记人员看 `created_by` 为本人的数据；未配置角色范围按 OWNER 收敛。部门范围按可信账号部门成员关系决定，不包含客户端任意传入的部门。权限条件先于 SQL 分页和聚合；ES 仅是候选投影，必须以当前租户有效主表的部门/创建人为准，禁止用索引中的旧归属扩大范围。概要返回服务端 `dataScope`，页面不再通过部门数量推断权限。表明细和上报表批量读取逐 ID 校验，任一无权、跨租户、缺失或已删除 ID 整批拒绝；详情、更新、结束登记和删除在读取连接配置及执行副作用前校验主记录。系统范围内的搜索、部门和创建人筛选只能缩小权限。
+- 独立元数据探查及已有数据接入配置继续按当前行业库及 `tenantRuntime.id()`、逐 ID 存在性和关联关系校验；本次数据源管理权限恢复不全局改写 Java 连接解析器或其他模块的角色授权。登录、行业库路由、SQL `tenant_id`、来源/目标关联、登记状态、ODS 分域资格、画布操作及审批权限仍各按其职责生效。缺失会话不允许回退到客户端或旧记录的租户。
 
 - For a page rendered through `base-detail` / `json-form` (for example `/register/register-sjkb/detail`), `sym_form.form_json` is the source of truth for every user-visible form element: data fields, display order, sections, titles, labels, required/visible/read-only rules, selector choices, icons, and title-toolbar actions. Do not add page-specific controls or labels in the consuming low-code component merely because a particular detail form currently needs them.
 - Keep shared component code declarative and generic. It may render a `UTitle` rule's configured `props.actions`, dispatch standard editing actions, resolve documented placeholders, and render configured control props; it must not branch on a business title such as `基本信息`, form name, database type, or page route in order to inject business UI.

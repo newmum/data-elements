@@ -27,6 +27,7 @@
 // 业务说明：数据源 03：读取 db_datasource_t 详情；使用请求参数 tid、silent。
 import com.fasterxml.jackson.databind.ObjectMapper
 import tenantRuntime
+import dataScope
 var tenantId = tenantRuntime.id()
 import java.util.Map
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
@@ -116,13 +117,16 @@ if (blank(tid)) {
     exit 400, 'tid不能为空'
 }
 // 从 MySQL 业务表读取当前有效数据。
-var main = db.table('db_datasource_t').where().eq('tid', tid).eq('is_del', 0).selectOne()
+var main = db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
 if (main == null) {
     if (silent) {
         return { found: false, tid: tid, id: tid }
     }
     // 参数或业务状态不满足要求时立即终止请求。
     exit 404, '数据源不存在'
+}
+if (!dataScope.canReadDataSourceFor('MENU:2081000000000000002', main)) {
+    exit 403, '数据源不存在或无权访问'
 }
 var result = {}
 result.found = true

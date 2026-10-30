@@ -17,16 +17,17 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"total\": 1,\n  \"assignedTotal\": 1,\n  \"unassignedTotal\": 0,\n  \"orgCounts\": {\"1351480103971975170\": 1},\n  \"orgApps\": {\"1351480103971975170\": [{\"value\": \"1980105567668809728\", \"label\": \"福建公安出入境人员动态管控系统\", \"count\": 1, \"type\": \"app\", \"datasources\": [{\"value\": \"4b5d9992d89744b9b514f8905dc27998\", \"label\": \"出入境人员动管系统数据库\", \"count\": 1, \"dbType\": \"mysql\", \"type\": \"datasource\"}]}]},\n  \"dbTypes\": {\"mysql\": 1},\n  \"assetStatuses\": {\"completed\": 0,\"pending\": 1}\n}",
-  "description": "数据源组织业务系统统计（POST /dst/database/treeStatistics）。只读页面专用接口；完全从 Elasticsearch dataassets 索引按关键字、数据库类型和登记状态筛选，通过 orgId→appId 嵌套聚合返回组织机构、业务系统及数据源数量，并同时返回数据库类型和登记状态分面；不查询或写入数据库；使用请求参数 keyword、dbType、registrationState、orgIds；涉及 db_datasource_t 等业务表。",
+  "description": "数据源组织业务系统统计（POST /dst/database/treeStatistics）。只读页面专用接口；从 Elasticsearch 筛选候选数据源，一次批量查询当前租户主表，按数据源管理菜单的 ALL/ORG/OWNER 范围校验后返回组织、业务系统、数据源及类型和状态统计；不写入业务数据；请求参数 keyword、dbType、registrationState、orgIds。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：07.数据源组织业务系统统计
 // 路由：POST /dst/database/treeStatistics
-// 业务说明：数据源组织业务系统统计（POST /dst/database/treeStatistics）。只读页面专用接口；完全从 Elasticsearch dataassets 索引按关键字、数据库类型和登记状态筛选，通过 orgId→appId 嵌套聚合返回组织机构、业务系统及数据源数量，并同时返回数据库类型和登记状态分面；不查询或写入数据库；使用请求参数 keyword、dbType、registrationState、orgIds；涉及 db_datasource_t 等业务表。
+// 业务说明：从 ES 筛选候选数据源，一次批量查询当前租户主表，按 ALL/ORG/OWNER 校验后统计组织、业务系统、数据源、类型及状态；不写入业务数据。
 import tenantEs
 import tenantRuntime
+import dataScope
 var tenantId = tenantRuntime.id()
 import '@/common/configData' as configData
 
@@ -98,6 +99,7 @@ var datasourceById = {}
 if (candidateIds.size() > 0) {
     var datasourceRows = db.table('db_datasource_t').where()
         .in('tid', candidateIds).eq('tenant_id', tenantId).eq('is_del', 0).select()
+    datasourceRows = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', datasourceRows)
     for (datasource in datasourceRows) {
         var datasourceId = datasource?.tid
         if (!blank(datasourceId)) {

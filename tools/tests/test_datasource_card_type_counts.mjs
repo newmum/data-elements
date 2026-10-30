@@ -13,21 +13,24 @@ const names = ['normalizeNumber','firstNumber','firstText','isTableAnnotated','i
   'tableHasIssue','tableChangeStatus','tableArrayStats','normalizeItem','datasourceUpdatedAt',
   'compareDatasourceUpdated','loadSourceOverview','filterOptions','hasCompletedRegistrationStatus',
   'hasIncompleteRegistrationStatus','isRegistrationComplete','statusText','matchedFilter',
-  'isMetricSelected','applyMetricFilter','applyIncompleteFilter','clearMetricFilter'];
+  'isMetricSelected','applyMetricFilter','applyIncompleteFilter','clearMetricFilter',
+  'isSystemAdministratorScope','currentScopeLabel'];
 const executable = 'let loadGeneration=1;\n'+names.map(name => {
   const node=ast.program.body.find(n=>n.type==='VariableDeclaration' && n.declarations.some(d=>d.id.name===name));
   assert.ok(node,name);return script.slice(node.start,node.end);
-}).join('\n')+'\nglobalThis.actual={tableArrayStats,normalizeItem,loadSourceOverview,filterOptions,statusText,matchedFilter,hasIncompleteRegistrationStatus,isMetricSelected,applyMetricFilter,applyIncompleteFilter,clearMetricFilter};';
+}).join('\n')+'\nglobalThis.actual={tableArrayStats,normalizeItem,loadSourceOverview,filterOptions,statusText,matchedFilter,hasIncompleteRegistrationStatus,isMetricSelected,applyMetricFilter,applyIncompleteFilter,clearMetricFilter,isSystemAdministratorScope,currentScopeLabel};';
 const tables=[];
 for(const businessType of ['business','业务表','dict','dictionary','字典表','log','日志表']) {
   for(const asset_status of [0,1,2,-1,null,undefined]) tables.push({businessType,asset_status,annotated:1});
 }
 tables.push({businessType:'过程表',assetStatus:2,annotated:1});
-for(const size of [20,100]) {
-  const calls=[],state={};
+for(const policy of ['ALL','ORG','OWNER']) for(const size of [20,100]) {
+  const calls=[],state={orgCounts:policy==='ALL'?{'dept-a':size}:{'dept-a':size,'dept-b':size}};
+  const treeData={value:[{label:'旧范围'}]};
   const context=vm.createContext({console,state,SOURCE_BATCH_SIZE:20,userOrgName:{value:'部门'},
+    treeData,computed:fn=>({get value(){return fn();}}),
     $common:{post:async(route,body)=>{
-      calls.push({route,body});return {list:Array.from({length:size},(_,i)=>({tid:`source-${i}`,tables}))};
+      calls.push({route,body});return {dataScope:policy,list:Array.from({length:size},(_,i)=>({tid:`source-${i}`,tables}))};
     }}});
   vm.runInContext(executable,context);
   const stats=context.actual.tableArrayStats(tables);
@@ -39,6 +42,10 @@ for(const size of [20,100]) {
   for(const key of ['businessTableNum','dictionaryTableNum','logTableNum']) assert.equal(zero[key],0,'Server zero must override fallback tables');
   await context.actual.loadSourceOverview(1);
   assert.equal(state.list.length,size);assert.equal(calls.length,1);
+  const scopeLabel={ALL:'全部部门',ORG:'本部门数据',OWNER:'本人登记数据'}[policy];
+  assert.equal(state.dataScope,policy);assert.equal(treeData.value[0].label,scopeLabel);
+  assert.equal(context.actual.currentScopeLabel.value,scopeLabel);
+  assert.equal(context.actual.isSystemAdministratorScope.value,policy==='ALL','Department count must not determine authority');
   assert.equal(calls[0].route,'/dst/database/departmentDataSources');assert.equal(calls[0].body.mode,'summary');
   for(const row of state.list) assert.equal(row.businessTableNum,4);
   assert.equal(state.loading,false);assert.equal(state.listError,'');

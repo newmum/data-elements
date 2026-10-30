@@ -65,7 +65,7 @@ public class PushRegistrySyncMagicTest {
         Object call(Map<String,Object> body){reads.set(0);writes.set(0);return MagicScript.create(script,null).execute(new MagicScriptContext(Map.of("body",body,"db",db,"tenantRuntime",scope,"dataScope",scope,"log",new Log())));}
     }
     static class BatchUpstream implements AutoCloseable {
-        final java.net.ServerSocket server;final Thread worker;volatile int calls;boolean corruptReceipt;Map<String,Object> last;
+        final java.net.ServerSocket server;final Thread worker;volatile int calls;boolean corruptReceipt,foreignStatus;Map<String,Object> last;final Map<String,Map<String,Object>> mirrors=new LinkedHashMap<>();
         BatchUpstream() throws Exception {
             server=new java.net.ServerSocket(0,10,java.net.InetAddress.getByName("127.0.0.1"));
             worker=Thread.ofPlatform().daemon().start(()->{
@@ -76,8 +76,19 @@ public class PushRegistrySyncMagicTest {
                     String headers=head.toString(java.nio.charset.StandardCharsets.US_ASCII);int length=0;
                     for(String line:headers.split("\r\n"))if(line.toLowerCase().startsWith("content-length:"))length=Integer.parseInt(line.substring(15).trim());
                     var json=new ObjectMapper();last=json.readValue(input.readNBytes(length),Map.class);calls++;
+                    if("STATUS".equals(last.get("registryAction"))){
+                        List<Map<String,Object>> found=new ArrayList<>();
+                        for(Map<String,Object> ref:(List<Map<String,Object>>)last.get("tableRefs")){var mirror=mirrors.get(ref.get("datasourceId")+":"+ref.get("tableName"));if(mirror!=null)found.add(mirror);}
+                        if(foreignStatus)found=List.of(Map.of("datasourceId","foreign","tableName","foreign","active",true,"definitionHash","bad"));
+                        byte[] reply=json.writeValueAsBytes(Map.of("code","REGISTRY_STATUS","readOnly",true,"tables",found));var output=socket.getOutputStream();
+                        output.write(("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "+reply.length+"\r\nConnection: close\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));output.write(reply);output.flush();continue;
+                    }
                     var sources=(List<Map<String,Object>>)last.get("datasources");int tables=0,columns=0;
-                    for(var source:sources)for(var table:(List<Map<String,Object>>)source.get("tables")){tables++;columns+=((List<?>)table.get("columns")).size();}
+                    for(var source:sources)for(var table:(List<Map<String,Object>>)source.get("tables")){tables++;columns+=((List<?>)table.get("columns")).size();
+                        var fields=new ArrayList<List<Object>>();for(Map<String,Object> field:(List<Map<String,Object>>)table.get("columns"))fields.add(Arrays.asList(field.get("columnName"),field.get("columnComment"),field.get("dataType"),field.get("ordinal"),field.get("required"),field.get("enabled")));
+                        String hash=cn.hutool.crypto.digest.DigestUtil.sha256Hex(json.writeValueAsBytes(Arrays.asList(table.get("tableId"),table.get("tableName"),table.get("tableComment"),table.get("schemaVersion"),table.get("enabled"),fields)));
+                        mirrors.put(source.get("datasourceId")+":"+table.get("tableName"),Map.of("datasourceId",source.get("datasourceId"),"tableName",table.get("tableName"),"active",true,"definitionHash",hash,"syncedAt",1000L));
+                    }
                     byte[] reply=json.writeValueAsBytes(Map.of("datasourceIds",corruptReceipt?Collections.nCopies(sources.size(),sources.getFirst().get("datasourceId")):sources.stream().map(r->r.get("datasourceId")).toList(),"tableCount",tables,"columnCount",columns));
                     var output=socket.getOutputStream();output.write(("HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: "+reply.length+"\r\nConnection: close\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));output.write(reply);output.flush();
                 }catch(Exception e){if(!server.isClosed())throw new RuntimeException(e);}
@@ -89,7 +100,31 @@ public class PushRegistrySyncMagicTest {
     static Object invoke(Method method,Object target,Object[] args) throws Throwable {try{return method.invoke(target,args);}catch(InvocationTargetException e){throw e.getCause();}}
     static void check(boolean value,String label){if(!value)throw new AssertionError(label);}
     static void rejected(Object result,int status){check(result instanceof ExitValue,"expected rejection");check(((ExitValue)result).getValues()[0].toString().equals(Integer.toString(status)),"rejection status "+status);}
+    static void verifyRemotePreviewAndPlan(int size)throws Exception{
+        try(BatchUpstream upstream=new BatchUpstream()){
+            Fixture f=new Fixture(size);f.jdbc.update("insert into push_node_t(tid,tenant_id,base_url,enabled,is_del) values('node','ga',?,1,0)",upstream.url());
+            f.jdbc.update("update db_datasource_t set asset_status=2 where tid='source'");
+            Map<?,?> preview=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","preview",true));
+            List<Map<String,Object>> rows=(List<Map<String,Object>>)preview.get("rows");String plan=preview.get("planHash").toString();
+            check(Boolean.TRUE.equals(preview.get("statusConfirmed"))&&rows.size()==size&&rows.stream().allMatch(r->"NEW".equals(r.get("syncStatus"))),"new tables confirmed from empty node mirror: "+preview);
+            int previewReads=f.reads.get();check(f.writes.get()==0&&upstream.calls==1,"preview read only, one upstream call");
+            Map<?,?> again=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","preview",true));check(plan.equals(again.get("planHash")),"plan stable across preview timestamps");
+            Map<?,?> done=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","planHash",plan));
+            check(Boolean.TRUE.equals(done.get("synced"))&&((List<Map<String,Object>>)done.get("rows")).stream().allMatch(r->"SUCCESS".equals(r.get("syncStatus"))),"ACK confirms precise successful rows");
+            preview=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","preview",true));rows=(List<Map<String,Object>>)preview.get("rows");
+            check(rows.stream().allMatch(r->"SYNCED".equals(r.get("syncStatus"))),"actual remote fingerprints match published definitions: "+rows.getFirst());
+            f.jdbc.update("update db_table_column_t set column_comment='changed comment' where tid='column_0'");
+            int calls=upstream.calls;rejected(f.call(Map.of("all",true,"nodeId","node","planHash",plan)),409);check(f.writes.get()==0&&upstream.calls==calls,"stale plan rejected before writes and HTTP");
+            preview=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","preview",true));rows=(List<Map<String,Object>>)preview.get("rows");
+            check(rows.stream().filter(r->"CHANGED".equals(r.get("syncStatus"))).count()==1,"changed definition identifies just one table");
+            upstream.foreignStatus=true;preview=(Map<?,?>)f.call(Map.of("all",true,"nodeId","node","preview",true));
+            check(Boolean.FALSE.equals(preview.get("statusConfirmed"))&&((List<Map<String,Object>>)preview.get("rows")).stream().allMatch(r->"UNKNOWN".equals(r.get("syncStatus"))),"foreign status cannot affect the authorized plan");
+            check(f.reads.get()==previewReads&&f.writes.get()==0,"20/100 remote previews use fixed reads and no writes");
+            System.out.println(size+" tables: preview="+previewReads+" reads + 1 status request; stable plan, stale rejection, exact ACK and foreign-status isolation passed");
+        }
+    }
     public static void main(String[] args) throws Exception {
+        verifyRemotePreviewAndPlan(20);verifyRemotePreviewAndPlan(100);
         for(int count:List.of(20,100)){
             var f=new Fixture(count);Map<?,?> dry=(Map<?,?>)f.call(Map.of("datasourceId","source","dryRun",true));check(dry.get("tableCount").equals(count),"dry count");check(f.reads.get()==2,"dry fixed reads");check(f.relay.calls==0,"preview transport");check(f.jdbc.queryForObject("select count(*) from data_push_schema_t",Integer.class)==0,"preview writes");
             Map<?,?> result=(Map<?,?>)f.call(Map.of("datasourceId","source"));check(Boolean.TRUE.equals(result.get("synced")),"synced");check(f.reads.get()==10,"fixed source+scope snapshot reads: "+f.reads);check(f.relay.calls==1,"one upstream request");check(((List<?>)f.relay.last.get("tables")).size()==count,"all tables");check(f.relay.last.get("sourceSystemName").equals("DEMO SYSTEM"),"system association");check(!f.mapper.writeValueAsString(f.relay.last).contains("must-not-leak"),"credentials excluded");

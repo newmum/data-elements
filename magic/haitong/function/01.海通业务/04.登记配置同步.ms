@@ -1,4 +1,4 @@
-{"id":"haitong-function-registry","groupId":"haitong-business-functions","name":"04.登记配置同步","path":"/registry","parameters":[{"name":"input","dataType":"Object"}],"description":"服务间密钥专用的完整登记快照同步。先验证全批数据源、表、字段和规模，一次查询幂等账本，同一事务批量维护镜像及调用方授权；不发送业务记录。"}
+{"id":"haitong-function-registry","groupId":"haitong-business-functions","name":"04.登记配置同步","path":"/registry","parameters":[{"name":"input","dataType":"Object"}],"description":"服务间密钥专用的完整登记快照同步。验证全批数据源/表/字段后事务维护镜像及授权。registryAction=STATUS 按至多100源/1000表一次读取镜像表和字段并返回实际指纹、启用状态、最近同步时间，不写镜像或幂等账本。"}
 ================================
 // 业务：完整快照覆盖所选数据源的镜像；没有出现在快照中的表/字段/授权逻辑停用。
 // 不以请求中的租户、连接、Topic或路径决定隔离；调用前必须通过服务间认证。
@@ -8,7 +8,40 @@ import org.springframework.dao.DuplicateKeyException
 var c=common();var _fail=c.fail;var _text=c.text;var _integer=c.integer;var _now=c.now;var _list=c.list;var _object=c.object;var _key=c.key;var _hash=c.hash;
 if(!c.p.getStandaloneRegistry().isSyncEnabled()){_fail(503,'STANDALONE_REGISTRY_SYNC_NOT_READY','独立登记配置同步服务尚未启用')}
 if(!input.caller.admin() && input.caller.id()!='platform-standalone-registry'){_fail(403,'FORBIDDEN_REGISTRY_SYNC','仅允许数据源平台同步独立登记配置')}
-var key=_key(input.key);var root=input.body;var hash=_hash(input.raw)
+var root=input.body
+// Read-only mirror inspection shares the service credential and the existing route.
+if(root.registryAction=='STATUS'){
+    var refs=_list(root.tableRefs)
+    if(refs.size()>1000){_fail(413,'PAYLOAD_TOO_LARGE','同步状态每次最多1000张表')}
+    var args=[];var tuples=[];var seenRefs=new HashSet();var sourceIds=new HashSet()
+    for(ref in refs){
+        _object(ref)
+        var sourceId=_text(ref.datasourceId).trim();var tableName=_text(ref.tableName).trim()
+        if(!sourceId.matches('[A-Za-z0-9][A-Za-z0-9_-]{0,63}') || !tableName.matches('[A-Za-z0-9][A-Za-z0-9_-]{0,199}')){_fail(422,'INVALID_BODY','同步状态的源和表标识不合法')}
+        if(!seenRefs.add(sourceId+':'+tableName)){_fail(422,'INVALID_BODY','同步状态表标识不得重复')}
+        sourceIds.add(sourceId);args.add(sourceId);args.add(tableName);tuples.add('(?,?)')
+    }
+    if(sourceIds.size()>100){_fail(413,'PAYLOAD_TOO_LARGE','同步状态每次最多100个数据源')}
+    if(refs.size()==0){return {code:'REGISTRY_STATUS',readOnly:true,tables:[]}}
+    var marks=tuples.join(',')
+    var tables=c.jdbc.queryForList('SELECT t.*,s.is_enable AS source_enabled,s.is_del AS source_deleted FROM ht_standalone_table t JOIN ht_standalone_datasource s ON s.datasource_id=t.datasource_id WHERE (t.datasource_id,t.table_name) IN ('+marks+') ORDER BY t.datasource_id,t.table_name',args.toArray())
+    var fields=c.jdbc.queryForList('SELECT datasource_id,table_name,column_name,column_comment,data_type,ordinal_no,is_required,is_enable FROM ht_standalone_table_column WHERE is_del=0 AND (datasource_id,table_name) IN ('+marks+') ORDER BY datasource_id,table_name,ordinal_no,column_name LIMIT 10001',args.toArray())
+    if(fields.size()>10000){_fail(413,'PAYLOAD_TOO_LARGE','同步状态字段超过10000项')}
+    var byTable={}
+    for(field in fields){
+        var name=field.datasource_id+':'+field.table_name
+        if(byTable[name]==null){byTable[name]=[]}
+        byTable[name].add({columnName:_text(field.column_name),columnComment:_text(field.column_comment),dataType:_text(field.data_type),ordinal:field.ordinal_no::int,required:field.is_required==1,enabled:field.is_enable==1})
+    }
+    var result=[]
+    for(table in tables){
+        var definition={tableId:_text(table.table_id),tableName:_text(table.table_name),tableComment:_text(table.table_comment),schemaVersion:_text(table.schema_version),enabled:table.is_enable==1,columns:byTable[table.datasource_id+':'+table.table_name] || []}
+        result.add({datasourceId:table.datasource_id,tableName:table.table_name,definitionHash:_hash(c.json.bytes([definition.tableId,definition.tableName,definition.tableComment,definition.schemaVersion,definition.enabled,definition.columns.map(field=>[field.columnName,field.columnComment,field.dataType,field.ordinal,field.required,field.enabled])])),active:table.is_enable==1 && table.is_del==0 && table.source_enabled==1 && table.source_deleted==0,syncedAt:table.updated_at})
+    }
+    return {code:'REGISTRY_STATUS',readOnly:true,tables:result}
+}
+
+var key=_key(input.key);var hash=_hash(input.raw)
 if(root.containsKey('datasource') && root.containsKey('datasources')){_fail(422,'INVALID_BODY','datasource 与 datasources 不能同时提交')}
 if(input.raw.length>1048576){_fail(413,'PAYLOAD_TOO_LARGE','登记配置最多1MiB')}
 var batch=root.containsKey('datasources')

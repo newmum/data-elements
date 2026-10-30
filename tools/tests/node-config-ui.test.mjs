@@ -8,7 +8,7 @@ const source = fs.readFileSync(new URL('../../lowcode/09.系统管理/02.用户�
 const script = source.match(/<script setup>([\s\S]*?)<\/script>/)[1].replace(/^import .*;\r?\n/gm, '');
 function fixture(post) {
   const successes = [];
-  const create = new Function('ref', 'reactive', 'computed', 'nextTick', 'onMounted', 'resolveComponent', '$common', 'ElMessage', 'ElMessageBox', `${script}\nreturn {loadNodes,syncNodes,pushNodes,networkOptions,openPushSync,closePushSync,previewPushSync,commitPushSync,pushSourceId,pushSyncPreview,pushSyncError,pushSources,pushPreviewLoading,pushSyncVisible,saveNode,formRef,dialogMode};`);
+  const create = new Function('ref', 'reactive', 'computed', 'nextTick', 'onMounted', 'resolveComponent', '$common', 'ElMessage', 'ElMessageBox', `${script}\nreturn {loadNodes,syncNodes,pushNodes,networkOptions,openPushSync,closePushSync,previewPushSync,commitPushSync,pushSyncNode,pushSyncPage,pushSyncRows,pushSyncPageRows,pushCanSync,pushSyncStage,pushSyncPreview,pushSyncError,pushPreviewLoading,pushSyncVisible,saveNode,formRef,dialogMode};`);
   const ui = create(ref, reactive, computed, nextTick, () => {}, name => name, {post}, {success: value => successes.push(value),error:()=>{}}, {});
   ui.networkOptions.value = [{value:'GAW',label:'公安网'}];
   return {ui,successes};
@@ -18,32 +18,29 @@ for (const count of [20,100]) test(`${count} nodes load in one request with sepa
   const {ui}=fixture(async (url,body)=>{calls.push({url,body});return {list:rows};});
   await ui.loadNodes('push');assert.equal(calls.length,1);assert.equal(calls[0].body.nodeType,'push');assert.equal(ui.pushNodes.value.length,count);assert.equal(ui.syncNodes.value.length,0);
 });
-test('source chooser batches once, excludes unfinished sources, previews before confirmed synchronization', async () => {
-  const calls=[];const {ui,successes}=fixture(async (url,body)=>{
-    calls.push({url,body});
-    if(url.includes('departmentDataSources'))return {list:[{tid:'source',dbName:'已登记',accessMode:'receive',assetStatus:2},{tid:'draft',accessMode:'receive',assetStatus:0},{tid:'upload',accessMode:'upload',assetStatus:2}]};
-    if(url.includes('push/sync'))return {valid:true,dryRun:body.dryRun===true,synced:!body.dryRun,nodeId:body.nodeId,datasourceId:body.datasourceId,tableCount:20,columnCount:100};
-    return {list:[]};
-  });
-  await ui.openPushSync({id:'node'});assert.deepEqual(ui.pushSources.value,[{id:'source',name:'已登记'}]);assert.equal(calls.length,1);
-  ui.pushSourceId.value='source';await ui.previewPushSync();assert.equal(calls[1].body.dryRun,true);assert.equal(successes.length,0);
-  await ui.commitPushSync();assert.deepEqual(calls[2].body,{nodeId:'node',datasourceId:'source'});assert.equal(successes.length,1);assert.equal(ui.pushSyncVisible.value,false);
+const plan = (count=20,nodeId='node') => ({valid:true,dryRun:true,nodeId,planHash:'a'.repeat(64),datasourceCount:1,tableCount:count,columnCount:count,rows:Array.from({length:count},(_,i)=>({datasourceId:'source',datasourceName:'示例源',tableId:`t${i}`,tableName:`table_${i}`,syncStatus:'NEW'}))});
+for(const count of [20,100])test(`${count} tables: one preview request, exact plan commit and fixed node refresh`,async()=>{
+  const calls=[];const {ui,successes}=fixture(async(url,body)=>{calls.push({url,body});return url.endsWith('/page')?{list:[]}:body.preview?plan(count):{...plan(count),dryRun:false,synced:true};});
+  await ui.openPushSync({id:'node',name:'节点',enabled:true});assert.equal(calls.length,1);assert.deepEqual(calls[0].body,{all:true,nodeId:'node',preview:true});
+  assert.equal(ui.pushSyncRows.value.length,count);assert.equal(ui.pushSyncPageRows.value.length,20);
+  ui.pushSyncPage.value=2;assert.equal(calls.length,1);assert.equal(ui.pushSyncPageRows.value.length,count===20?0:20);
+  await Promise.all([ui.commitPushSync(),ui.commitPushSync()]);assert.equal(calls.length,3);assert.deepEqual(calls[1].body,{all:true,nodeId:'node',planHash:'a'.repeat(64)});
+  assert.equal(successes.length,1);assert.equal(ui.pushSyncVisible.value,true);assert.equal(ui.pushSyncStage.value,'success');assert.ok(ui.pushSyncRows.value.every(row=>row.syncStatus==='SUCCESS'));
 });
-test('stale preview cannot overwrite new selection and close clears loading state', async () => {
-  const pending=[];const {ui}=fixture(async (url,body)=>url.includes('departmentDataSources')?{list:[]}:new Promise(resolve=>pending.push({body,resolve})));
-  await ui.openPushSync({id:'node'});ui.pushSourceId.value='old';const old=ui.previewPushSync();ui.pushSourceId.value='new';const latest=ui.previewPushSync();
-  pending[1].resolve({valid:true,dryRun:true,nodeId:'node',datasourceId:'new'});await latest;
-  pending[0].resolve({valid:true,dryRun:true,nodeId:'node',datasourceId:'old'});await old;assert.equal(ui.pushSyncPreview.value.datasourceId,'new');
-  ui.closePushSync();assert.equal(ui.pushSyncPreview.value,null);assert.equal(ui.pushPreviewLoading.value,false);assert.deepEqual(ui.pushSources.value,[]);
+test('stale responses cannot replace the current node or reopen a closed preview',async()=>{
+  const pending={};const {ui}=fixture((url,body)=>new Promise(resolve=>{pending[body.nodeId]=resolve;}));
+  const first=ui.openPushSync({id:'old',enabled:true});const second=ui.openPushSync({id:'new',enabled:true});pending.new(plan(20,'new'));await second;pending.old(plan(20,'old'));await first;
+  assert.equal(ui.pushSyncPreview.value.nodeId,'new');const third=ui.previewPushSync();ui.closePushSync();pending.new(plan(20,'new'));await third;
+  assert.equal(ui.pushSyncVisible.value,false);assert.equal(ui.pushSyncPreview.value,null);assert.equal(ui.pushPreviewLoading.value,false);
 });
-test('upstream failure or mismatched identity never yields success feedback', async () => {
-  const {ui,successes}=fixture(async (url,body)=>url.includes('departmentDataSources')?{list:[]}:{valid:true,dryRun:!!body.dryRun,synced:true,nodeId:'wrong-node',datasourceId:'source'});
-  await ui.openPushSync({id:'node'});ui.pushSourceId.value='source';await ui.previewPushSync();assert.equal(ui.pushSyncPreview.value,null);assert.ok(ui.pushSyncError.value);
-  ui.pushSyncPreview.value={valid:true};await ui.commitPushSync();assert.equal(successes.length,0);assert.equal(ui.pushSyncVisible.value,true);
+test('mismatched receipt keeps the list open and requires a new preview',async()=>{
+  const {ui,successes}=fixture(async(url,body)=>body.preview?plan():{...plan(),dryRun:false,synced:true,rows:plan().rows.map(row=>({...row,tableId:'unexpected'}))});
+  await ui.openPushSync({id:'node',enabled:true});await ui.commitPushSync();assert.equal(successes.length,0);assert.equal(ui.pushSyncStage.value,'uncertain');assert.equal(ui.pushCanSync.value,false);assert.ok(ui.pushSyncError.value);
 });
-test('double click during asynchronous form validation submits only once', async () => {
-  const calls=[];let resolveValidation;const {ui}=fixture(async (url,body)=>{calls.push({url,body});return {list:[]};});
-  ui.dialogMode.value='push';ui.formRef.value={validate:()=>new Promise(resolve=>{resolveValidation=resolve;})};
-  const first=ui.saveNode();const second=ui.saveNode();resolveValidation(true);await Promise.all([first,second]);
-  assert.equal(calls.filter(call=>call.url.endsWith('/saveOrUpdate')).length,1);assert.equal(calls[0].body.nodeType,'push');
+test('disabled node cannot start preview',async()=>{
+  let calls=0;const {ui}=fixture(async()=>{calls++;});await ui.openPushSync({id:'node',enabled:false});assert.equal(calls,0);
+});
+test('double click during asynchronous form validation submits only once',async()=>{
+  const calls=[];let resolveValidation;const {ui}=fixture(async(url,body)=>{calls.push({url,body});return {list:[]};});ui.dialogMode.value='push';ui.formRef.value={validate:()=>new Promise(resolve=>{resolveValidation=resolve;})};
+  const first=ui.saveNode();const second=ui.saveNode();resolveValidation(true);await Promise.all([first,second]);assert.equal(calls.filter(call=>call.url.endsWith('/saveOrUpdate')).length,1);
 });

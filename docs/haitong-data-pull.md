@@ -2153,7 +2153,17 @@ Content-Type: application/json
 }
 ```
 
-这是一个“单数据源完整快照”接口。某个数据源本次快照里未出现的表、字段、调用方授权会被逻辑停用；所以不能用局部数据覆盖完整登记规范。
+同步支持上述单源 `datasource` 和批量 `datasources`，每个来源均是完整快照；某源未出现的表、字段、调用方授权会被逻辑停用，不能把页面勾选的局部表冒充完整快照。批量成功返回实际 `datasourceIds`、`tableCount`、`columnCount`，平台必须核对全批回执后才标记成功。
+
+同一路径还提供只读同步状态查询，仍使用服务间 `X-Standalone-Registry-Key`，不接受业务调用方读取：
+
+```json
+{"deliveryType":"REGISTRY_SYNC","registryAction":"STATUS","tableRefs":[{"datasourceId":"登记源编码","tableName":"demo_table"}]}
+```
+
+该请求不要求 `Idempotency-Key`，HTTP 200 返回 `code=REGISTRY_STATUS`、`readOnly=true` 和 `tables`。每项仅有源编码、表名、实际规范指纹 `definitionHash`、`active`、毫秒 `syncedAt`，不存在的表不返回。指纹按表ID、表名、说明、规范版本、启用状态、规范顺序的字段定义生成；使用有序数组保证两端JSON属性排序不同也能比较。每次至多100源、1000表、10000字段，非法或重复引用整体拒绝。镜像表和字段各一次批量查询，既不修改镜像，也不创建同步幂等账本。`MagicBusinessHttpTest` 对20/100项验证固定2次业务SELECT（另有2次HTTP审计读取）、查询不增加账本，并拒绝普通业务身份和超限查询。
+
+源平台预览入口为 `POST /dst/database/push/sync {all:true,nodeId,preview:true}`；返回清单摘要 `planHash`，确认同步传同一摘要，清单变化时返回409要求重新预览。原本地 `dryRun` 保持不外发。当前本机平台后端为 `http://127.0.0.1:8088`，接收服务为 `http://127.0.0.1:18083/api/v1/data-push`，实际部署由所选节点的保存地址决定。
 
 
 <a id="guide-a25caa3b--magic-api-调试入口"></a>
@@ -2235,6 +2245,8 @@ token: <当前平台登录会话>
 本机已通过真实登录会话及真实 MySQL 验证：1 数据源、1 表、14 字段、1 调用方授权；字段名/类型/顺序逐项匹配，重复调用保持镜像记录数量和业务凭据数量不变。未登录、无权数据源及注入 tenantId 的请求均被拒绝。 全量同步已在本机实际页面与 MySQL 验证3个数据源、7张表、331字段及3条调用方授权，另1个未完成登记的源明确跳过；重复同步约3.4秒，镜像和业务凭据数量均不增加。可维护源为根 `magic/api/02.数据盘点/02.数据库表/08.同步推送登记配置.ms`，已发布到控制库 `baseline` 并完成运行刷新/回读。
 
 平台使用 `data-element.push-registry.relay-base-url`、`standalone-sync-key` 与海通 `relay.standalone-registry.sync-enabled/sync-key` 配对配置。本机目标地址与海通监听统一为 `http://127.0.0.1:18083`，当前租户推送节点也使用相同地址；仍须检查运行时实际绑定，避免旧进程环境覆盖当前配置。连接和密钥配置保存在受限部署配置中，不写入请求示例或 Git。
+
+“获取密钥”依次执行登记快照同步和密钥签发。健康检查正常只说明海通服务可达，不能代替这两步验证。平台调用使用有连接/读取超时、响应大小限制的阻塞 HTTP 传输，保持 HTTPS 证书校验并禁止跟随重定向；避免部分 Windows 网络环境中 JDK `HttpClient` 内部 Selector 建立回环连接失败，导致请求尚未发送就被包装成服务不可用。Java 仅补充这项通用传输能力，登记规范与海通签发规则不变；部署修复需更新平台后端 JAR，海通 JAR 和数据库结构无需因此升级。同步和签发分别返回缺失配置、HTTP 拒绝或连接异常阶段的安全提示，日志仅记录异常类型，不输出密钥、原始响应或业务正文。非结构化源可以用空 TABLE 快照签发源级密钥，但不会因此生成文件集合运行策略；启用推送校验时，仍须在海通 YAML 为已登记文件配置同一数据源、集合编号和 `push-<datasourceId>` 调用方。
 
 后台管理的“节点配置”位于 `#/node-config`。“数据推送节点配置”的“同步配置”直接弹出确认框，确认后提交：
 

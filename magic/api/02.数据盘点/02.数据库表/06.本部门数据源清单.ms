@@ -30,6 +30,7 @@ import tableSort
 import tenantRuntime
 import tenantEs
 import tenantAccounts
+import dataScope
 import '@/common/configData' as configData
 
 /*
@@ -53,6 +54,20 @@ if (blank(tenantId)) {
 var userInfo = me()
 var orgId = userInfo?.orgId
 var scopeResource = 'MENU:2081000000000000002'
+// 每次请求只解析一次服务端角色范围；在分页、统计及批量明细读取之前应用。
+var scopeDecision = dataScope.resource(scopeResource)
+var scopeKind = text(scopeDecision?.scope).trim().toUpperCase()
+var scopeUserId = text(scopeDecision?.userId).trim()
+var scopeOrgIds = scopeDecision?.organizationIds == null ? [] : scopeDecision.organizationIds
+var datasourceScopeSql = ''
+if (scopeKind == 'OWNER') {
+    if (blank(scopeUserId)) { exit 403, '无法识别当前登记人员' }
+    datasourceScopeSql = ' and d.created_by=#{scopeUserId} '
+} else if (scopeKind == 'ORG') {
+    datasourceScopeSql = scopeOrgIds.size() == 0 ? ' and 1=0 ' : ' and d.org_id in (#{scopeOrgIds}) '
+} else if (scopeKind != 'ALL') {
+    exit 403, '数据源数据范围无效'
+}
 
 var requestMode = text(body?.mode).trim()
 if (!blank(requestMode) && !['summary', 'tables', 'reportTables'].contains(requestMode)) { exit 400, '不支持的清单查询模式' }
@@ -76,8 +91,8 @@ if (requestMode == 'reportTables') {
                    nullif(json_unquote(json_extract(if(json_valid(pool_cfg), pool_cfg, '{}'), '$.dataAccessMode')), ''),
                    ''
                ) as accessMode
-          from db_datasource_t
-         where tenant_id=#{tenantId} and is_del=0 and tid in
+          from db_datasource_t d
+         where tenant_id=#{tenantId} and is_del=0 ${datasourceScopeSql} and tid in
                <foreach collection="requestedIds" item="id" open="(" close=")" separator=",">#{id}</foreach>
     """)
     if (allowedSources == null || allowedSources.size() != requestedIds.size()) {
@@ -139,8 +154,11 @@ if (requestMode == 'tables') {
 
     var datasourceId = text(body?.datasourceId).trim()
     if (blank(datasourceId)) { exit 400, '缺少数据源标识' }
-    var sourceRows = db.table('db_datasource_t').where()
-        .eq('tid', datasourceId).eq('tenant_id', tenantId).eq('is_del', 0).select()
+    var sourceRows = db.select("""
+        select d.tid from db_datasource_t d
+         where d.tid=#{datasourceId} and d.tenant_id=#{tenantId} and d.is_del=0
+               ${datasourceScopeSql}
+    """)
     if (sourceRows == null || sourceRows.size() == 0) { exit 404, '数据源不存在或无权访问' }
     var pageNum = body?.pageNum == null ? 1 : body.pageNum::int
     var pageSize = body?.pageSize == null ? 10 : body.pageSize::int
@@ -197,7 +215,7 @@ if (requestMode == 'tables') {
 var summaryOnly = requestMode == 'summary'
 
 
-// 页面只提供关键字搜索；最终数据归属由当前行业库及租户条件限定。
+// 页面关键字只能缩小结果；角色范围始终由服务端会话确定。
 var keywordText = text(body?.keyword).trim()
 var datasourceMust = [
     { term: { assetType: 'db' } }
@@ -320,11 +338,12 @@ var datasourceRows = db.select("""
      where ifnull(d.is_del, 0) = 0
        and d.tenant_id = '${escapedTenantId}'
        and ifnull(d.db_name, '') not like 'validation_%'
+       ${datasourceScopeSql}
        ${keywordSql}
      order by d.updated_time desc
      limit 1000
 """)
-// 当前行业库内按筛选条件查询，不再按角色的全部、本部门或本人范围过滤。
+// SQL 已在 LIMIT 前按全部、本部门或本人范围过滤，ES 不能扩大有效主表集合。
 // 创建人主数据位于控制库；批量解析可见数据源的显示名称，避免逐卡片查询。
 var creatorIds = []
 for (row in datasourceRows) {
@@ -825,4 +844,4 @@ result = result.sort((left, right) => {
 })
 
 var total = result.size()
-return { orgId: orgId, orgName: userInfo?.orgName, total: total, list: result }
+return { orgId: orgId, orgName: userInfo?.orgName, dataScope: scopeKind, total: total, list: result }

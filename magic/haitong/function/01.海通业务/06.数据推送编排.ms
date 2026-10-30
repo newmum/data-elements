@@ -54,7 +54,7 @@ var body=input.body
 var delivery=action=='data-push'?_text(body.deliveryType).trim().toUpperCase():action
 if(delivery=='REGISTRY_SYNC'){
     var synced=registry({caller:caller,key:key,body:body,raw:raw})
-    return {status:synced.duplicate?200:201,body:synced}
+    return {status:synced.readOnly?200:(synced.duplicate?200:201),body:synced}
 }
 var routes={FTP:'table-to-ftp',KAFKA:'table-to-kafka',LOG:'table-to-log'};var channel=routes[delivery]
 if(channel==null){_fail(422,delivery==''?'INVALID_BODY':'UNSUPPORTED_DELIVERY_TYPE','deliveryType仅支持FTP、KAFKA、LOG或REGISTRY_SYNC')}

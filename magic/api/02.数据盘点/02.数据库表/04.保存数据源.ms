@@ -28,6 +28,7 @@
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import tenantRuntime
+import dataScope
 import metadataAsset
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import cn.hutool.core.util.IdUtil
@@ -72,7 +73,7 @@ var requestedStatus = first(props, ['assetStatus', 'asset_status'])
 if (props.completeOnly == true || ['1', '2'].contains(text(requestedStatus))) {
     var existed = db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
     if (existed == null) { exit 404, '数据源不存在或不属于当前租户' }
-    var visible = ([existed])
+    var visible = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [existed])
     if (visible == null || visible.size() != 1) { exit 403, '数据源不存在或已删除' }
     completionReview = metadataAsset.reviewRegistrationStatus(tid)
     if (props.dryRun == true || body?.dryRun == true) { return completionReview }
@@ -162,7 +163,10 @@ var connectionNames = [
     'nodes', 'authMethod', 'apiKey', 'indexName', 'defaultIndex'
 ]
 // Existing values are the source of truth for fields not rendered in step one.
-var old = db.table('db_datasource_t').where().eq('tid', tid).eq('is_del', 0).selectOne()
+var old = db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
+if (old != null && completionReview == null && !dataScope.canReadDataSourceFor('MENU:2081000000000000002', old)) {
+    exit 403, '数据源不存在或无权修改'
+}
 var oldConnectionConfig = old == null ? {} : datasourceConnectionConfig('read', tid, null, false)
 var oldShowConnect = old == null ? null : first(old, ['showConnect', 'show_connect'])
 var connectionConfig = {}
