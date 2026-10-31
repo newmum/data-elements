@@ -1,5 +1,4 @@
 import { h } from "vue";
-import { DiagnosticErrorAction } from "./diagnostics";
 import { ElButton, ElMessage, ElMessageBox } from "element-plus";
 
 export interface ApiErrorInfo {
@@ -7,7 +6,6 @@ export interface ApiErrorInfo {
   message: string;
   detail: string;
   traceId?: string;
-  diagnosticRef?: string;
   type?: string;
   method?: string;
   path?: string;
@@ -127,15 +125,17 @@ function readableJson(value: unknown): string {
  */
 export function createApiRequestError(payload: any, fallback: ApiErrorFallback): ApiRequestError {
   const serverError = payload?.error ?? {};
-  const message =
-    serverError.message || payload?.msg || payload?.message || fallback.message || "请求处理失败";
+  // Magic may wrap a concrete business cause in a generic structured message.
+  const structured = String(serverError.message || "");
+  const generic = /^(接口处理失败|请求处理失败|系统出错|系统异常|服务器内部错误)/.test(structured);
+  const message = (generic ? payload?.msg || payload?.message : structured) ||
+    structured || payload?.msg || payload?.message || fallback.message || "请求处理失败";
   const info: ApiErrorInfo = {
     code: String(serverError.code || fallback.code || "API-UNKNOWN-001"),
     message,
     detail:
       serverError.detail || fallback.detail || (payload == null ? message : readableJson(payload)),
     traceId: serverError.traceId,
-    diagnosticRef: serverError.diagnosticRef,
     type: serverError.type,
     method: serverError.method || fallback.method,
     path: serverError.path || fallback.path,
@@ -175,7 +175,6 @@ function openErrorDetail(info: ApiErrorInfo) {
   void ElMessageBox.alert(
     h("div", { style: "text-align:left;max-height:calc(100dvh - 190px);overflow:auto;" }, [
       ...rows,
-      h(DiagnosticErrorAction, { info }),
       h(
         "div",
         {
@@ -257,7 +256,6 @@ export function showApiError(error: ApiRequestError): void {
           },
           () => "查看详情"
         ),
-        h(DiagnosticErrorAction, { info: error.info }),
       ]
     ),
   });

@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.26";
+    public static final String VERSION="1.1.27";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=8L*1024*1024;
@@ -65,8 +65,10 @@ public final class MappingEngine {
         final Plan plan;final Map<String,Object> original;final Map<String,Object> output=new LinkedHashMap<>();
         final ExecutionContext context;final long index;final Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>> values;
         final Set<String> done=new HashSet<>();final List<Issue> errors=new ArrayList<>();String rule="",step="";Object current,ruleInput;JsonNode diagnosticStep;final Map<String,Object> usedSources=new LinkedHashMap<>();
+        private final SourceFieldNames sourceNames;
         Frame(Plan p,Map<String,Object> row,long index,ExecutionContext context,Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values){
             this.plan=p;this.original=row;this.index=index;this.context=context;this.values=values;
+            sourceNames=new SourceFieldNames(row.keySet(),p.caseSensitive);
             if(p.passthrough)row.forEach((k,v)->{if(!p.excludes.contains(k))output.put(k,v);});
         }
         public Object source(String name){
@@ -77,9 +79,8 @@ public final class MappingEngine {
         }
         public Object target(String name){if(!done.contains(name))throw new TargetWait();return output.get(name);}
         public Object sourceRaw(String name){
-            if(original.containsKey(name))return original.get(name);
-            if(!plan.caseSensitive){Object result=ValueTypes.MISSING;for(var e:original.entrySet())if(e.getKey().equalsIgnoreCase(name)){if(result!=ValueTypes.MISSING)throw new MappingException("AMBIGUOUS_FIELD","大小写不敏感字段引用存在重名");result=e.getValue();}return result;}
-            return ValueTypes.MISSING;
+            String resolved=sourceNames.resolve(name);
+            return resolved==null?ValueTypes.MISSING:original.get(resolved);
         }
         public Object value(){return current;}
         public long rowIndex(){return index;}

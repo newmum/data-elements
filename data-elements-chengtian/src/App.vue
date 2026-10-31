@@ -1,6 +1,5 @@
 <template>
   <el-config-provider v-bind="config">
-    <DiagnosticDrawer />
     <!-- 开启水印 -->
     <el-watermark
       :font="{ color: 'rgba(0, 0, 0, .15)' }"
@@ -14,7 +13,6 @@
 </template>
 
 <script setup lang="ts">
-import DiagnosticDrawer from "@/components/DiagnosticDrawer.vue";
 import { useSettingStore } from "@/store";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 const settingsStore = useSettingStore();

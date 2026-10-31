@@ -34,6 +34,38 @@ import org.ssssssss.script.runtime.ExitValue;
 
 /** Runs the canonical DDL API's batch branch with a real tenant metadata query. */
 class BatchCreateTableDdlMagicTest {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({",receive", "'',receive", "' ',receive", "oracle,receive",
+            ",push", ",upload", ",report", ",capture", ",pull", ",proxy", ",agent", ",explore", ","})
+    void optionalSourceDialectNeverBlocksSnapshotPartitionPreview(String sourceType,String mode) throws Exception {
+        Fixture f=new Fixture(20);
+        f.jdbc.execute("create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),table_name varchar(100),is_del int)");
+        f.jdbc.update("insert into db_table_t values('source','police','source-db','events',0)");
+        f.jdbc.update("insert into db_datasource_t(tid,tenant_id,is_del,db_type,pool_cfg) values('source-db','police',0,?,?)",
+                sourceType,"{\"accessMode\":\""+(mode==null?"":mode)+"\"}");
+        var ids=java.util.stream.IntStream.range(0,20).mapToObj(i->"db-"+i).toList();
+        var body=Map.<String,Object>of("partitionProbe",true,"canvas",true,"sourceTableId","source","targetDbIds",ids);
+        var response=assertInstanceOf(Map.class,f.run(body));
+        assertEquals("unsupported",((Map<?,?>)response.get("source")).get("status"));
+        assertEquals(20,((Map<?,?>)response.get("targetSupport")).size());
+        assertEquals(false,response.get("sideEffectsApplied"));
+        assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);assertEquals(0,f.ddlGenerator.calls);
+        f.jdbc.update("update db_datasource_t set tenant_id='foreign' where tid='db-19'");
+        assertInstanceOf(ExitValue.class,f.run(body));assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
+    }
+
+    @Test void partitionPreviewRequiresAnExplicitTargetDialectButAcceptsPoolConfiguration() throws Exception {
+        Fixture f=new Fixture(2);
+        f.jdbc.execute("create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),table_name varchar(100),is_del int)");
+        f.jdbc.update("insert into db_table_t values('source','police','db-0','events',0)");
+        f.jdbc.update("update db_datasource_t set db_type=null,pool_cfg='{\"accessMode\":\"receive\"}' where tid='db-0'");
+        var body=Map.<String,Object>of("partitionProbe",true,"canvas",true,"sourceTableId","source","targetDbIds",List.of("db-1"));
+        f.jdbc.update("update db_datasource_t set db_type=null where tid='db-1'");
+        assertEquals("400",assertInstanceOf(ExitValue.class,f.run(body)).getValues()[0].toString());
+        f.jdbc.update("update db_datasource_t set pool_cfg='{\"dbType\":\"mysql\"}' where tid='db-1'");
+        assertInstanceOf(Map.class,f.run(body));assertEquals(2,f.counter.reads);assertEquals(0,f.counter.writes);
+    }
+
     @Test
     void partitionErrorsExplainMissingValuesAndUseTheRegisteredDatasourceName() throws Exception {
         Fixture f=new Fixture(1);

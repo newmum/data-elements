@@ -143,8 +143,12 @@ export function prepareValue(v: Value, f: Field, s: Schema, dicts: Dictionary[])
         return null;
     const dict = matchDictionary(v, f, dicts);
     let value: Value = f.dictionary?.output === 'code' && dict ? dict.code : v;
-    if (f.id === s.timestamp || f.id === s.eventTime || f.type === 'date' || f.type === 'datetime')
-        return parseTime(value, f);
+    if (f.id === s.timestamp || f.id === s.eventTime || f.type === 'date' || f.type === 'datetime') {
+        const prepared = parseTime(value, f);
+        if (f.standardField === 'DATE') return String(prepared).slice(0, 10);
+        if (f.standardField === 'DATETIME' && String(prepared).length <= 10) throw new Error('时间 DATETIME 缺少时分秒，请补齐时间或选择日期 DATE');
+        return prepared;
+    }
     if (f.type === 'text')
         return String(value);
     if (f.type === 'boolean') {

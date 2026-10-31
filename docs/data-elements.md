@@ -146,7 +146,7 @@ git diff -- db
 
 本机登记的外部验证来源库 `personaldb` 的完整结构保存在 `db/environments/local/validation-sources/`，连接仍由仓库外受限配置维护。多值翻译验证表使用 `demo_multivalue_gender_20261003`，公安和澄天的登记均引用同一张物理表。此目录不属于行业租户统一结构，不能把该验证表创建到租户业务库，也不能用初始化文件覆盖现有来源库。
 
-四个行业租户统一为以 `baseline_ga` 为权威的 162 张业务表，控制库独立维护。结构变更（含新增表、字段、索引、约束）先同步修改所有行业租户的完整初始化定义并审阅，再按实际方言应用所有行业库；保留各自租户默认值和数据。临时 ALTER 语句与备份放在 `logs/` 或仓库外受限目录，不累计日期增量 SQL。服务器变更后运行 `python tools/check-db.py` 检查表集合、列、主键、索引、外键列及原生自动更新时间机制，再重新只读导出全部数据库，确保完整初始化结构与实际数据库一致。`init.sql` 仅用于新空库；它不包含应用启动所需的业务种子和资源数据，不能直接在现有库执行。更多方言与依赖条件见 [数据库结构基线](#database-schema)。
+四个行业租户以 `baseline_ga` 为权威，统一基线为 161 张业务表，控制库独立维护。结构变更（含新增表、字段、索引、约束）先同步修改所有行业租户的完整初始化定义并审阅，再按实际方言应用所有行业库；保留各自租户默认值和数据。临时 ALTER 语句与备份放在 `logs/` 或仓库外受限目录，不累计日期增量 SQL。服务器变更后运行 `python tools/check-db.py` 检查表集合、列、主键、索引、外键列及原生自动更新时间机制，再重新只读导出全部数据库，确保完整初始化结构与实际数据库一致。`init.sql` 仅用于新空库；它不包含应用启动所需的业务种子和资源数据，不能直接在现有库执行。更多方言与依赖条件见 [数据库结构基线](#database-schema)。
 
 
 <a id="resource-versioning--提交前"></a>
@@ -172,17 +172,17 @@ git diff -- db
 | 角色 | 实际数据库 | 方言 | 表数量 |
 | --- | --- | --- | ---: |
 | 控制库 | `baseline` | MySQL | 55 |
-| 公安 | `baseline_ga` | MySQL | 162 |
-| 澄天 | `chengtian` | MySQL | 162 |
+| 公安 | `baseline_ga` | MySQL | 161 |
+| 澄天 | `chengtian` | MySQL | 161 |
 | 海渔 | `baseline_sea_fishery` | MySQL | 162 |
-| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 162 |
+| 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 161 |
 | 海通数据推送服务（独立工程） | `haitong` | MySQL | 15 |
 
 `haitong-data-pull` 对应的独立库完整结构为 [haitong/init.sql](../db/haitong/init.sql)，已通过真实 MySQL 的 `SHOW CREATE` 导出：15 张表、51 个索引（含主键及唯一索引）、5 个外键，没有视图、触发器、例程或事件。它不属于四行业同构基线。历史工程内 `sql/` 已整合移除，后续只在本目录更新完整定义；对账查询归入[海通推送服务文档](haitong-data-pull.md#reconciliation-queries)。
 
 原有达梦适配定义保存在 [haitong/compatibility/dameng.sql](../db/haitong/compatibility/dameng.sql)，明确标记为未连接实库核验的 9 表模板，缺少 MySQL 中的推送凭据和 Magic 资源表；不能作为当前 15 表结构、完整兼容承诺或已有库升级脚本。应用打包使用的 H2 本地初始化资源继续保留在应用 `src/main/resources/db/h2.sql`，不作为生产 MySQL 基线。
 
-上表为当前本机后端实际绑定数据库的完整读取结果。四行业结构已统一至162张：原140张、字段映射三张版本表、现用布控模块13张表及数据推送节点配置表`push_node_t`，加上日志批次、可靠投递、策略、导出、归档五张辅助表；只补充缺失空结构，不复制其他租户业务记录。登记第五步的接入申请三字段已同步应用到四行业`db_table_t`。`check-db.py`核对完整表集合、列、主键、索引及外键通过，五库完整结构已重新导出。演示环境仍单独维护在`environments/demo/`，其143张结构未因本次本机更新而自动升级。
+上表为当前本机后端实际绑定数据库的完整读取结果。四行业统一基线移除外部应用目录同步专属表及4个同步字段、2个索引后为161张业务表，保留全部应用登记及关联。公安、澄天与广电的表、列、主键、索引及外键比较一致；海渔原本多出`nifi_task_status_t`，因此为162张，该现存差异待另行核对，不能标记四库完全一致。五库完整结构与独立海通结构已重新导出，见`db/schema-manifest.json`。登记第五步的接入申请三字段保留。历史演示环境仍单独维护在`environments/demo/`，其143张实际结构未自动升级。
 
 四个行业租户维护同一套业务表、列、主键、索引和约束，以实际已确认的公安租户库为统一结构权威，不能按旧库名选择发布目标。原共同结构包含公安原 139 张表和以下一张有现用功能依据的公共表；新增版本表在各方言定义中完整维护，新增空表不复制其他租户数据。
 
@@ -484,6 +484,7 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 #### Dynamic detail-page completeness and save performance (mandatory)
 
 - 数据源管理页面及其概要、分页、基础候选、组织树、统计、详情、修改、结束登记和删除接口恢复使用当前角色的 `ALL/ORG/OWNER` 范围：系统管理员看当前租户全部数据，部门管理员看当前账号所属部门的数据，登记人员看 `created_by` 为本人的数据；未配置角色范围按 OWNER 收敛。部门范围按可信账号部门成员关系决定，不包含客户端任意传入的部门。权限条件先于 SQL 分页和聚合；ES 仅是候选投影，必须以当前租户有效主表的部门/创建人为准，禁止用索引中的旧归属扩大范围。概要返回服务端 `dataScope`，页面不再通过部门数量推断权限。表明细和上报表批量读取逐 ID 校验，任一无权、跨租户、缺失或已删除 ID 整批拒绝；详情、更新、结束登记和删除在读取连接配置及执行副作用前校验主记录。系统范围内的搜索、部门和创建人筛选只能缩小权限。
+- 数据源管理组织树在概要返回的服务端权限范围和组织统计均加载完成后设置默认展开状态。ALL 范围展开组织层级至部门，部门下的业务系统默认折叠，用户可手动展开；ORG/OWNER 保留已有默认展开行为。权限范围尚未确定或概要失败时不自动展开业务系统，过期刷新不得改写当前树状态。展开操作仅使用已加载树，不新增接口或逐节点查询。
 - 独立元数据探查及已有数据接入配置继续按当前行业库及 `tenantRuntime.id()`、逐 ID 存在性和关联关系校验；本次数据源管理权限恢复不全局改写 Java 连接解析器或其他模块的角色授权。登录、行业库路由、SQL `tenant_id`、来源/目标关联、登记状态、ODS 分域资格、画布操作及审批权限仍各按其职责生效。缺失会话不允许回退到客户端或旧记录的租户。
 
 - For a page rendered through `base-detail` / `json-form` (for example `/register/register-sjkb/detail`), `sym_form.form_json` is the source of truth for every user-visible form element: data fields, display order, sections, titles, labels, required/visible/read-only rules, selector choices, icons, and title-toolbar actions. Do not add page-specific controls or labels in the consuming low-code component merely because a particular detail form currently needs them.
@@ -669,6 +670,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
   - `字典对标` is now `字典翻译`.
   - `业务对标` is now `统一格式`.
   - `表数据查看` should be `表数据预览`.
+- 物化建表的接入方式由登记快照返回中文名称和独立代码，覆盖抽取 `explore`、推送 `receive`、抓取 `capture`、上报 `upload`、代理 `proxy`，兼容 `extract/extraction`、`push`、`pull`、`report`、`agent` 别名及大小写；字段处理中不能复用中文名称变量保存代码，页面也须兼容历史代码响应。推送、上报等非抽取来源允许没有来源 `db_type` 和连接，读取已登记字段及生成目标 DDL 不得因此失败；分区预览只对抽取或历史未记录方式的受支持数据库探查来源，其他来源返回不支持自动探查并保留手工目标分区。目标库仍必须具有有效数据库类型。来源表与最多20个目标库一次批量验证当前租户有效记录，分区预览固定两次业务查询，不逐目标补查；本契约不新增数据库列。
 - 字段登记的统一格式 `DATE`（日期）/`DATETIME`（时间）必须进入 ODS 物化字段、DDL 与接入映射：日期使用目标库的 `DATE`；时间按目标方言使用 Oracle/达梦/OceanBase Oracle 的 `DATE`、PostgreSQL/人大金仓/Hive 等的 `TIMESTAMP`、MySQL/OceanBase MySQL 的 `DATETIME`、SQL Server 的 `DATETIME2`。多选目标库时分别生成类型，DDL 预览与提交元数据使用同一份目标字段。来源物理字段类型保持不变，字符型日期/时间由生成的字段映射显式转换，空字符串转 NULL；转换规则同时保存在画布 DSL 与字段映射记录中。仅采用已保存的登记配置，尊重显式清空，不从字段名猜测时间格式，也不自动改造已经存在的目标物理表。
 - 物化建表多选 ODS 目标库时，默认勾选、建表预览、物化提交和后台任务创建统一遵循资源中心 ODS 分域的配置顺序（`sym_dict_t.sort_no`，同序号按分域 ID 稳定排序），不能按复选框点击顺序、传入数组顺序或物化表创建时间决定链路。配置为 `huiju` 在 `yuanshi` 前时，生成原来源表→汇聚库、汇聚库→原始库的独立级联任务；管理员调整分域位置后，新建任务采用新的顺序。仅处理所选且已逐 ID 校验租户、角色范围与来源关联的目标，后台一次批量读取有效分域绑定；非 ODS 分发目标保留显式选择顺序。每个任务和画布只包含一个目标库，任务记录的来源表/来源库必须是该跳的真实来源；在原来源表的展开列表汇总全部任务。后续跳直接映射前一跳物化字段，保留 `ODS_UUID`、`ODS_RKSJ`、`ODS_GXSJ` 和翻译结果，不重复生成主键或重复治理。重复提交按真实来源与目标复用任务；历史多目标画布只在明确确认后重建，任一目标校验失败不得留下部分任务。删除任务只影响指定任务；物化表仍被下游任务使用时拒绝物理删除。
 - 新建物化建表的目标数据源默认勾选当前租户、角色可见的 ODS 分域编码 `huiju`、`yuanshi` 对应数据源，并按上述分域配置顺序排列；只存在其中一个时选择该分域，均不存在时留空。不得用名称或选项首项猜测，也不覆盖已有目标表查看时的选择。接入任务外层列表的“数据表”和“接入任务”列不提供排序。
@@ -979,7 +981,7 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 ### 当前实现与发布状态
 
-当前本机已应用控制库和四行业库的结构升级：控制库 55 张表，四行业库各 162 张表，包含五张日志辅助表。MySQL 与达梦的表、列、索引及约束检查无未解释差异；完整结构见 `db/`，演示环境不随本机自动升级。
+当前本机控制库为 55 张表；行业统一基线为 161 张，包含五张日志辅助表。公安、澄天和广电的 MySQL／达梦结构比较一致，海渔另有既存 `nifi_task_status_t` 因而为 162 张；该现存差异需另行核对。完整结构见 `db/`，历史演示环境不随本机自动升级。
 
 本机 8088 已经用户授权换包并正常冷启动；22 个日志 Magic 脚本及唯一低代码页面 `log-management` 已选择性发布到 baseline；原八个入口/统计组件经全库源码、编译内容与 Magic 引用核对后已软删除，编辑器历史保留。本轮另更新平台日志查询脚本，保留各页签独立权限。实际运行源、编译 JavaScript 和 CSS 均已回读核对。行业日志菜单挂到各库当前有效的“后台管理”根节点，不复用已停用的旧菜单。演示与生产环境尚未发布。
 

@@ -27,13 +27,8 @@ public class MagicApiResultProvider implements ResultProvider {
 
     private static final int SUCCESS_CODE = 0;
     private static final int ERROR_CODE = 500;
-    private com.linewell.dataelement.feature.diagnostics.DiagnosticEvents diagnostics;
-
-    public void setDiagnostics(com.linewell.dataelement.feature.diagnostics.DiagnosticEvents diagnostics) { this.diagnostics = diagnostics; }
-
-    private Map<String, Object> diagnosticError(ApiErrorDetails error, RequestEntity request) {
+    private Map<String, Object> errorDetails(ApiErrorDetails error, RequestEntity request) {
         Map<String, Object> value = error.toMap(requestMethod(request), requestPath(request));
-        if (diagnostics != null) diagnostics.attach(value, requestMethod(request), requestPath(request));
         return value;
     }
 
@@ -69,7 +64,7 @@ public class MagicApiResultProvider implements ResultProvider {
                     displayMessage,
                     defaultText(message, "Magic API business error")
             );
-            result.put("error", diagnosticError(error, requestEntity));
+            result.put("error", errorDetails(error, requestEntity));
         }
         return result;
     }
@@ -93,7 +88,7 @@ public class MagicApiResultProvider implements ResultProvider {
         );
 
         Map<String, Object> result = baseResult(ERROR_CODE, error.message(), false, null);
-        result.put("error", diagnosticError(error, requestEntity));
+        result.put("error", errorDetails(error, requestEntity));
         return result;
     }
 

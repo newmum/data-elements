@@ -215,7 +215,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "f98e70b4ba893f495f981606bc290c12b8e93fed1aac0e2d162d45478c59a8ba",
+      "baseSha256": "a7494838527d14bb7efc7f74cfef8402d1178c0ba514c208d98bc47ba4d8c5c7",
       "metadataId": "application_register_options_01"
     },
     {
@@ -313,7 +313,7 @@
         "bc30a3edb1f04bceaeee373ed5952d4a"
       ],
       "kind": null,
-      "baseSha256": "db605c608e90e06bd7252af3ba57c46f1cd4619d2a17a1e1af54dba9787d1fe3",
+      "baseSha256": "ebce615ccd4446148429f8e98ba4e64220eb13531a57ef775ac56d58f16286d2",
       "metadataId": "bc30a3edb1f04bceaeee373ed5952d4a"
     },
     {
@@ -323,7 +323,7 @@
         "8a56e7d664934c1499102cfa508cd58a"
       ],
       "kind": null,
-      "baseSha256": "51633af74c8dc7661d83c0e57c09a2cc184b612f7971cd4dc206907978d8a612",
+      "baseSha256": "72d2c36859168e7ea401e8743494f4103d5d33c9c37b7eb0ff19a2e44a54bb3b",
       "metadataId": "8a56e7d664934c1499102cfa508cd58a"
     },
     {
@@ -333,7 +333,7 @@
         "a0b5bba38fbf428c8e3646864d83d56b"
       ],
       "kind": null,
-      "baseSha256": "a75709d361e6fe7cf745cab52c41915c2e84e8cecc9f372dfb15d88c24b98db2",
+      "baseSha256": "70bd6afa067c273749c205bcbb0b272c26cbcc28795c00989e3f934838e49110",
       "metadataId": "a0b5bba38fbf428c8e3646864d83d56b"
     },
     {
@@ -373,7 +373,7 @@
         "metadata_import_snapshot_01"
       ],
       "kind": null,
-      "baseSha256": "c420a3f161b3ca1c6dbdd7a87269a7b5cdaab934200201180e48ba0505b3b150",
+      "baseSha256": "809daf20317b6bc8e1b284a7021ebc24940873a8040c64f37a1117e1ff5dbffb",
       "metadataId": "metadata_import_snapshot_01"
     },
     {
@@ -434,7 +434,7 @@
       ],
       "kind": "api",
       "metadataId": "report_registration_files_01",
-      "baseSha256": "a019848c757b9ea6c1e09461039787077a788609f179f83e12799d41080d6cad"
+      "baseSha256": "8d588128f1069c8a677d67cddd71fe8b97fbc3922714691753eaecc863c0c02f"
     },
     {
       "path": "api/02.数据盘点/02.数据库表/01.元数据管理/27.提交上报文件.ms",
@@ -444,7 +444,7 @@
       ],
       "kind": "api",
       "metadataId": "data_report_submit_01",
-      "baseSha256": "1d26339e9d330b4c06737bc71779d96cf10aa136dc005c0a849c521e52a82a15"
+      "baseSha256": "c1ddde4478685f68c1ba26a8982dc6cabf549a757e362fd9fb3d4d9c4bde757b"
     },
     {
       "path": "api/02.数据盘点/02.数据库表/01.元数据管理/group.json",
@@ -1568,7 +1568,7 @@
         "f93a8e653ac6413e89660f5d77d45769"
       ],
       "kind": null,
-      "baseSha256": "e67a4d8e4babcc98fd3d8222d05b223d961f00099550e0262978789732fce240",
+      "baseSha256": "a7dae32f6cf37410ee81901697f64ede57110c65469274030a8d02ba7a9ec60b",
       "metadataId": "f93a8e653ac6413e89660f5d77d45769"
     },
     {

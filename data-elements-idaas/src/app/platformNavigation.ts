@@ -22,7 +22,6 @@ export const productGroups = [
     { name: '平台支撑', centers: [
         { id: 'idaas', name: systemName, description: '统一账户、认证与访问管理', mark: '鉴', color: '#5267F5', owner: 'idaas', home: '/console/workforce/overview' },
         { id: 'ops', name: '数据运行智能监控平台', description: '平台运行、指标与告警', mark: '晨', color: '#2F54EB', owner: 'qizhi', home: '/ops/overview' },
-        { id: 'ai', name: '人工智能支撑平台', description: 'AI 编排与智能交互', mark: '星', color: '#531DAB', owner: 'qizhi', home: '/ai/overview' },
     ] },
 ] as const;
 

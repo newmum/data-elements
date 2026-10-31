@@ -39,6 +39,7 @@ var manifest = pool.reportRegistration
 if (manifest == null) { exit 400, '请先上传文件并保存数据规范' }
 var table = (manifest.tables == null ? [] : manifest.tables).find(item => text(item.tid) == text(tableId) && text(item.fileId) == text(fileId))
 if (table == null) { exit 403, '文件和数据表不属于当前数据源的上传清单' }
+if (table.normalized != true || table.normalizationVersion != 1) { exit 409, '请先在第二步保存并通过数据规范，再进行上报' }
 var registered = db.table('db_table_t').where().eq('tid', tableId).eq('datasource_id', datasourceId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
 if (registered == null || text(registered.tableName) != text(table.tableName)) { exit 409, '数据表登记已变化，请重新读取规范后上报' }
 if (file == null || file.isEmpty() || file.getSize() > 10485760) { exit 400, '请选择不超过 10 MB 的非空数据文件' }
@@ -53,6 +54,8 @@ var reservation = db.transaction(() => {
         if (text(existing.fileId) != text(fileId) || text(existing.tableId) != text(tableId)) { throw new IllegalArgumentException('请求标识已用于其他文件或数据表') }
         return { receipt: existing, alreadyExists: true }
     }
+    var active = receipts.find(item => text(item.fileId) == text(fileId) && text(item.tableId) == text(tableId) && ['sending','success'].contains(text(item.status)))
+    if (active != null) { return { receipt: active, alreadyExists: true } }
     if (receipts.size() >= 1000) { throw new IllegalStateException('当前数据源已达到 1000 次上报记录上限，请联系维护人员归档后继续') }
     var row = { id: IdUtil.fastSimpleUUID(), requestId: requestId, fileId: fileId, tableId: tableId,
         tableName: table.tableName, fileName: table.fileName, rowCount: table.recordCount,

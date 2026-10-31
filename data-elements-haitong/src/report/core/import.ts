@@ -63,7 +63,7 @@ export async function parseSource(file: File, encoding = 'utf-8', delimiter = ''
     return { id: uid('file'), filename: file.name, size: file.size, sheets, importedAt: new Date().toISOString() };
 }
 export function defaultRegion(sheet: SourceSheet, index: number): Region { return { id: uid('region'), sheet: index, kind: 'business', startRow: 1, endRow: sheet.rowCount, startCol: 1, endCol: sheet.colCount, header: 'single', dataStart: 2, name: sheet.name, codeCol: 1, labelCol: Math.min(2, sheet.colCount), hiddenConfirmed: false }; }
-export function regionErrors(regions: Region[], book: SourceBook): string[] {
+export function regionErrors(regions: Region[], book: SourceBook, limits = LIMITS): string[] {
     const errors: string[] = [];
     for (const r of regions) {
         const s = book.sheets[r.sheet];
@@ -76,8 +76,8 @@ export function regionErrors(regions: Region[], book: SourceBook): string[] {
         const min = r.startRow + (r.header === 'none' ? 0 : r.header === 'bilingual' ? 2 : 1);
         if (r.dataStart < min || r.dataStart > r.endRow + 1)
             errors.push(`${r.name}：数据起始行必须在表头之后`);
-        if (r.endRow - r.dataStart + 1 > LIMITS.rows || r.endCol - r.startCol + 1 > LIMITS.cols)
-            errors.push(`${r.name}：每个资源最多 10,000 条记录、100 个字段`);
+        if (r.endRow - r.dataStart + 1 > limits.rows || r.endCol - r.startCol + 1 > limits.cols)
+            errors.push(`${r.name}：每个资源最多 ${limits.rows.toLocaleString()} 条记录、${limits.cols} 个字段`);
         if ((s.hidden || s.hiddenRows.some(i => i >= r.startRow - 1 && i < r.endRow) || s.hiddenCols.some(i => i >= r.startCol - 1 && i < r.endCol)) && !r.hiddenConfirmed)
             errors.push(`${r.name}：读取范围包含隐藏内容，请确认`);
         const heads = r.header === 'bilingual' ? 2 : r.header === 'single' ? 1 : 0;

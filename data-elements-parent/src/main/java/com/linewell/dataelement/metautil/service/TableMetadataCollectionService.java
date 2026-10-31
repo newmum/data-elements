@@ -15,6 +15,7 @@ import com.linewell.dataelement.feature.identity.application.DataSourceScopeSql;
 import org.springframework.beans.factory.annotation.Autowired;
 import jakarta.annotation.PreDestroy;
 import java.sql.Timestamp;
+import java.sql.ResultSet;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -345,28 +347,50 @@ public class TableMetadataCollectionService {
         if (count == null || count == 0) throw new IllegalArgumentException("数据源不存在或无访问权限");
     }
 
-    /** Orders the complete selected review scope using persisted metadata, then returns one page of keys. */
+    /** Pages an authorized datasource, or streams an exact editor selection without retaining all rows. */
     public Map<String,Object> reviewOrder(String datasourceId,Map<String,Object> body){
         String tenantId=TenantContext.requireTenantId(),sourceId=requiredDatasourceId(datasourceId);
         requireSavedDatasource(tenantId,sourceId);
-        if(!(body.get("names") instanceof Collection<?> names)||names.size()>10000)
-            throw new IllegalArgumentException("审查范围最多10000张表");
-        var wanted=new LinkedHashSet<String>();
-        for(Object name:names){String key=text(name);if(key.isBlank()||key.length()>256||!wanted.add(key))throw new IllegalArgumentException("数据表名称为空或重复");}
         int page=body.get("pageNo")==null?1:Integer.parseInt(text(body.get("pageNo")));
         int size=body.get("pageSize")==null?20:Integer.parseInt(text(body.get("pageSize")));
         if(page<1||page>100000||size<1||size>100)throw new IllegalArgumentException("分页参数无效，每页最多100张表");
         String order=ServerTableOrder.sql(text(body.get("sortField")),text(body.get("sortDir")),
             Map.of("tableName","t.table_name","name","COALESCE(NULLIF(t.table_name_cn,''),NULLIF(t.table_comment,''),t.table_name)",
                 "fieldCount","t.field_count","createdTime","t.created_time","updatedTime","t.updated_time"),"tableName","asc","t.tid");
-        // The datasource is the bounded review snapshot; no large IN clause or per-table read is issued.
-        var stored=jdbc.queryForList("SELECT t.table_name FROM (SELECT original.*,ROW_NUMBER() OVER(PARTITION BY lower(original.table_name) ORDER BY COALESCE(original.annotated,0) DESC,original.updated_time DESC,original.tid DESC) name_rank FROM db_table_t original WHERE original.tenant_id=? AND original.datasource_id=? AND original.is_del=0) t WHERE t.name_rank=1 ORDER BY "+order+" LIMIT 10001",tenantId,sourceId);
-        if(stored.size()>10000)throw new IllegalArgumentException("数据源超过10000张表，请缩小审查范围");
-        var ordered=new LinkedHashSet<String>();
-        for(var row:stored){String name=text(row.get("table_name"));if(wanted.contains(name))ordered.add(name);}
-        if(ordered.size()!=wanted.size())throw new IllegalArgumentException("审查范围包含不存在或无权访问的数据表，请刷新清单");
-        var keys=new ArrayList<>(ordered);int start=(int)Math.min((long)(page-1)*size,keys.size());
-        return Map.of("keys",keys.subList(start,Math.min(start+size,keys.size())),"total",keys.size());
+        // Rank only the small header projection, never governance JSON or column definitions.
+        String sourceWhere=" WHERE original.tenant_id=? AND original.datasource_id=? AND original.is_del=0 AND original.table_name IS NOT NULL AND TRIM(original.table_name)<>''";
+        String from=" FROM (SELECT original.tid,original.table_name,original.table_name_cn,original.table_comment,original.field_count,original.created_time,original.updated_time,ROW_NUMBER() OVER(PARTITION BY lower(original.table_name) ORDER BY COALESCE(original.annotated,0) DESC,original.updated_time DESC,original.tid DESC) name_rank FROM db_table_t original"+sourceWhere+") t WHERE t.name_rank=1";
+        long start=(long)(page-1)*size,end=start+size;
+        if(Boolean.TRUE.equals(body.get("allTables"))){
+            if(body.containsKey("names"))throw new IllegalArgumentException("完整范围与筛选范围不能同时指定");
+            Long total=jdbc.queryForObject("SELECT COUNT(DISTINCT lower(original.table_name)) FROM db_table_t original"+sourceWhere,Long.class,tenantId,sourceId);
+            var rows=jdbc.queryForList("SELECT table_name FROM (SELECT t.table_name,ROW_NUMBER() OVER(ORDER BY "+order+") page_rank"+from+") reviewed WHERE page_rank>? AND page_rank<=? ORDER BY page_rank",tenantId,sourceId,start,end);
+            return Map.of("keys",rows.stream().map(row->text(row.get("table_name"))).toList(),"total",total==null?0L:total);
+        }
+        if(!(body.get("names") instanceof Collection<?> names))throw new IllegalArgumentException("请选择有效的数据表审查范围");
+        var remaining=new HashSet<String>();
+        for(Object name:names){String key=text(name);if(key.isBlank()||key.length()>256||!remaining.add(key))throw new IllegalArgumentException("数据表名称为空或重复");}
+        if(remaining.isEmpty())return Map.of("keys",List.of(),"total",0);
+        var keys=new ArrayList<String>(size);
+        long[] matched={0};
+        // Issue one cursor query for arbitrary editor filters. Fetch bounded batches and retain
+        // only this page; checking every requested name still rejects missing or foreign entries.
+        jdbc.query(connection->{
+            var statement=connection.prepareStatement("SELECT t.table_name"+from+" ORDER BY "+order,ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY);
+            statement.setString(1,tenantId);statement.setString(2,sourceId);
+            String product=connection.getMetaData().getDatabaseProductName().toLowerCase(Locale.ROOT);
+            statement.setFetchSize(product.contains("mysql")?Integer.MIN_VALUE:512);
+            statement.setQueryTimeout(20);
+            return statement;
+        },(RowCallbackHandler)row->{
+            String name=row.getString("table_name");
+            if(remaining.remove(name)){
+                long position=matched[0]++;
+                if(position>=start && position<end)keys.add(name);
+            }
+        });
+        if(!remaining.isEmpty())throw new IllegalArgumentException("审查范围包含不存在或无权访问的数据表，请刷新清单");
+        return Map.of("keys",keys,"total",names.size());
     }
 
     /**

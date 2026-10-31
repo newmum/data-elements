@@ -2640,19 +2640,6 @@ CREATE TABLE "baseline_beijing_gd"."ods_batch_create_job_t"
 CONSTRAINT "ga_ods_batch_create_job_t_pk_0e9ee51711e4" NOT CLUSTER PRIMARY KEY("job_id"),
 CONSTRAINT "ga_ods_batch_create_job_t_stop_requested_range_a0a9adc0ba95" CHECK("stop_requested" BETWEEN (-128) AND 127)) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
--- TABLE pingao_application_sync_state_t
-CREATE TABLE "baseline_beijing_gd"."pingao_application_sync_state_t"
-(
-"tenant_id" VARCHAR(64) NOT NULL,
-"has_success" SMALLINT DEFAULT 0 NOT NULL,
-"last_status" VARCHAR(16) DEFAULT 'NEVER' NOT NULL,
-"last_attempt_at" TIMESTAMP(6),
-"last_success_at" TIMESTAMP(6),
-"last_fetched_count" BIGINT DEFAULT 0 NOT NULL,
-"last_online_count" BIGINT DEFAULT 0 NOT NULL,
-"updated_time" TIMESTAMP(6) NOT NULL,
-CONSTRAINT "pk_pingao_application_sync_state_t" NOT CLUSTER PRIMARY KEY("tenant_id")) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
 -- TABLE push_node_t
 CREATE TABLE "baseline_beijing_gd"."push_node_t"
 (
@@ -3571,10 +3558,6 @@ CREATE TABLE "baseline_beijing_gd"."sym_application_t"
 "flow_status" INT,
 "flow_order_id" VARCHAR(32),
 "db_total" INT,
-"data_origin" VARCHAR(16) DEFAULT 'LEGACY' NOT NULL,
-"source_key" VARCHAR(64),
-"sync_active" SMALLINT DEFAULT 0 NOT NULL,
-"last_synced_at" TIMESTAMP(6),
 "org_id" VARCHAR(32),
 NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
@@ -4081,8 +4064,6 @@ CREATE OR REPLACE  INDEX "idx_surveillance_snapshot_current" ON "baseline_beijin
 
 CREATE OR REPLACE  INDEX "idx_surveillance_topic_daily_stat_query" ON "baseline_beijing_gd"."surveillance_topic_daily_stat_t"("tenant_id" ASC,"engine_code" ASC,"channel_code" ASC,"stat_date" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
-CREATE OR REPLACE  INDEX "idx_sym_application_pingao_options" ON "baseline_beijing_gd"."sym_application_t"("tenant_id" ASC,"data_origin" ASC,"sync_active" ASC,"is_del" ASC,"app_name" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
 CREATE OR REPLACE  INDEX "idx_sym_config_lookup" ON "baseline_beijing_gd"."sym_config_t"("tenant_id" ASC,"config_group" ASC,"is_use" ASC,"is_del" ASC,"sort_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "INDEX33572321" ON "baseline_beijing_gd"."data_access_multi_group_item_t"("group_id" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -4413,8 +4394,6 @@ CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_snapshot_version" ON "baseline_
 
 CREATE OR REPLACE UNIQUE  INDEX "uk_surveillance_topic_daily_stat" ON "baseline_beijing_gd"."surveillance_topic_daily_stat_t"("tenant_id" ASC,"engine_code" ASC,"resource_code" ASC,"stat_date" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
-CREATE OR REPLACE UNIQUE  INDEX "uk_sym_application_pingao_source" ON "baseline_beijing_gd"."sym_application_t"("tenant_id" ASC,"data_origin" ASC,"source_key" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
-
 CREATE OR REPLACE UNIQUE  INDEX "ux_data_reconcile_bucket_t_fdhbl8" ON "baseline_beijing_gd"."data_reconcile_bucket_t"("tenant_id" ASC,"run_id" ASC,"bucket_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE UNIQUE  INDEX "ux_data_reconcile_diff_t_1vxdyir" ON "baseline_beijing_gd"."data_reconcile_diff_t"("tenant_id" ASC,"run_id" ASC,"diff_hash" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -4574,7 +4553,6 @@ COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_migration_mark_t" IS '数�
 COMMENT ON TABLE "baseline_beijing_gd"."nifi_pipeline_t" IS '数据接入-数据集成管道（NiFi）';
 COMMENT ON TABLE "baseline_beijing_gd"."ods_batch_create_item_t" IS '数据接入-批量创建任务逐项结果';
 COMMENT ON TABLE "baseline_beijing_gd"."ods_batch_create_job_t" IS '数据接入-批量创建任务作业';
-COMMENT ON TABLE "baseline_beijing_gd"."pingao_application_sync_state_t" IS '应用系统同步-平澳应用目录同步状态';
 COMMENT ON TABLE "baseline_beijing_gd"."push_node_t" IS '数据接入-数据推送节点配置';
 COMMENT ON TABLE "baseline_beijing_gd"."res_catalog_publish_request" IS '资源中心-目录发布申请';
 COMMENT ON TABLE "baseline_beijing_gd"."res_logical_model" IS '资源中心-逻辑数据模型';
@@ -6715,14 +6693,6 @@ COMMENT ON COLUMN "baseline_beijing_gd"."ods_batch_create_job_t"."target_db_id" 
 COMMENT ON COLUMN "baseline_beijing_gd"."ods_batch_create_job_t"."tenant_id" IS '当前登录租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."ods_batch_create_job_t"."total_count" IS '创建项总数';
 COMMENT ON COLUMN "baseline_beijing_gd"."ods_batch_create_job_t"."updated_time" IS '作业最近更新时间';
-COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."has_success" IS '已有成功同步记录标志；至少有一次完整的应用目录快照同步成功';
-COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."last_attempt_at" IS '最近尝试时间';
-COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."last_fetched_count" IS '最近拉取数量';
-COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."last_online_count" IS '最近在线数量';
-COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."last_status" IS '最近一次执行状态；可选值为从未运行、成功、失败';
-COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."last_success_at" IS '最近成功时间';
-COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."tenant_id" IS '租户标识';
-COMMENT ON COLUMN "baseline_beijing_gd"."pingao_application_sync_state_t"."updated_time" IS '更新时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."base_url" IS 'haitong-data-pull服务根地址，不含凭据';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."created_time" IS '节点创建时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."push_node_t"."enabled" IS '是否启用：0停用、1启用';
@@ -7397,13 +7367,11 @@ COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."client_id" IS '客�
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."client_secret" IS 'OAuth客户端密钥（加密存储）';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."created_by" IS '创建人标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."created_time" IS '创建时间';
-COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."data_origin" IS 'LEGACY=历史数据，PINGAO=品高同步';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."db_total" IS '数据库总数';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."flow_order_id" IS '流程顺序标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."flow_status" IS '流程状态';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."is_del" IS '删除标志：0正常，1删除';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."is_use" IS '是否使用';
-COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."last_synced_at" IS '最近一次品高同步时间';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."logo" IS '标志图';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."notify_url" IS '通知访问地址';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."org_id" IS '机构标识';
@@ -7416,8 +7384,6 @@ COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."revision" IS '修�
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."scope" IS '范围';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."seq" IS '顺序';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."sort_no" IS '排序编号';
-COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."source_key" IS '品高 fjrbAbility.id';
-COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."sync_active" IS '品高已上线且可在新建下拉中选择';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."tenant_id" IS '租户标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."tid" IS '主键标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."sym_application_t"."updated_by" IS '更新人标识';

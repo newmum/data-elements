@@ -9,7 +9,7 @@ const require=createRequire(path.join(root,'data-elements-chengtian/package.json
 const {ref,computed,watch}=require('vue');
 const file='lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue';
 const source=fs.readFileSync(path.join(root,file),'utf8').replace(/\r\n?/g,'\n');
-const start=source.indexOf('// Push contract display is read-only');
+const start=source.indexOf('// Push contract reads stay bounded');
 const blockEnd=source.indexOf('function openReportWorkspace()',start);
 assert.ok(start>=0 && blockEnd>start,'push contract source boundaries must exist');
 const block=source.slice(start,blockEnd);
@@ -42,7 +42,7 @@ function fixture({status=0,count=20,remote,loading=false,contentType='STRUCTURED
     ${queue}
     ${block}
     ${resetWatcher}
-    return {loadPushContract,refreshRegistrationPushContract,issuePushCredential,pushContractIsPreview,pushContractSample,pushContractEndpointItems,pushAttachmentDescription,pushInterfaceType,selectPushInterface,pushIsAttachmentMode,pushVisibleTables,pushSelectedParameters,pushRequestContentType,pushContractHeaders,pushChunkSample,copyPushChunkSample,pushProtocolUrl,pushProtocolBaseUrl,pushProtocolNodeError,pushPrimaryEndpoints,pushAuxiliaryEndpoints,pushAuxiliaryExpanded,selectedFileRegistration,queueIdle:()=>!fieldLoadsInFlight&&!fieldBatchScheduled&&!fieldLoadQueue.length};`);
+    return {ensurePushCredential,pushErrorMessage,loadPushContract,refreshRegistrationPushContract,issuePushCredential,pushContractIsPreview,pushContractSample,pushContractEndpointItems,pushAttachmentDescription,pushInterfaceType,selectPushInterface,pushIsAttachmentMode,pushVisibleTables,pushSelectedParameters,pushRequestContentType,pushContractHeaders,pushChunkSample,copyPushChunkSample,pushProtocolUrl,pushProtocolBaseUrl,pushProtocolNodeError,pushPrimaryEndpoints,pushAuxiliaryEndpoints,pushAuxiliaryExpanded,selectedFileRegistration,queueIdle:()=>!fieldLoadsInFlight&&!fieldBatchScheduled&&!fieldLoadQueue.length};`);
   // The real bounded queue uses the ordinary metadata GET; formal contracts use silent GET.
   state.$common.get=async(url,params)=>{const ids=params.tid.split(',');metadata.push(ids);return Object.fromEntries(ids.map(id=>[id,[{columnName:'id',columnType:'bigint',nullable:0,ordinalPosition:1}]]));};
   const api=create(...Object.values(state));
@@ -130,4 +130,30 @@ test('the visible guide requires submit after READY and contains no default sing
  assert.ok(!source.includes('/api/v1/file-uploads/single'));assert.ok(!source.includes('尚未登记关联附件字段'));
  assert.match(source,/class="push-key-button" type="primary"/);
  assert.match(source,/<section v-if="!pushIsAttachmentMode" class="push-contract-section">/);
+});
+
+
+test('first fifth-step entry prepares one credential regardless of 20/100 table count and never rotates implicitly',async()=>{
+ for(const count of [20,100]) {
+  const f=fixture({count,status:2});
+  f.api.ensurePushCredential();f.api.ensurePushCredential();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.writes.length,1);assert.equal(f.writes[0].url,'/dws/push/credential/issue');
+  f.api.ensurePushCredential();await new Promise(resolve=>setImmediate(resolve));assert.equal(f.writes.length,1);
+ }
+ const loading=fixture({loading:true});loading.api.ensurePushCredential();assert.equal(loading.writes.length,0);
+ const other=fixture();other.state.isDataPushSource.value=false;other.api.ensurePushCredential();assert.equal(other.writes.length,0);
+});
+test('the concrete server msg survives the generic Magic wrapper',()=>{
+ const f=fixture();const actual='推送登记同步服务尚未配置，请检查平台 data-element.push-registry 的 relay-base-url 和 standalone-sync-key';
+ assert.equal(f.api.pushErrorMessage({message:'接口处理失败，请稍后重试',detail:JSON.stringify({msg:actual,error:{message:'接口处理失败'}})}),actual);
+ assert.equal(f.api.pushErrorMessage({response:{data:{msg:actual}}}),actual);
+});
+test('a pending synchronization keeps its revealed key through retry and shows the precise reason',async()=>{
+ const f=fixture();let count=0;
+ f.state.$common.postSilently=async()=>({datasourceId:'source',clientId:'push-source',ready:++count>1,apiKey:count===1?'validation-only-secret':undefined,revealed:count===1,syncError:count===1?'登记同步未配置':''});
+ await f.api.issuePushCredential('source');assert.equal(f.state.pushCredentialError.value,'登记同步未配置');
+ assert.equal(f.state.pushCredential.value.apiKey,'validation-only-secret');assert.equal(f.state.pushCredential.value.ready,false);
+ await f.api.issuePushCredential('source',false,true);assert.equal(f.state.pushCredential.value.apiKey,'validation-only-secret');
+ assert.equal(f.state.pushCredential.value.ready,true);assert.equal(f.state.pushCredentialError.value,'');
 });

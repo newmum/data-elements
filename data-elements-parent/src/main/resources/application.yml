@@ -29,13 +29,3 @@ spring:
         file-extension: yml
 # All runtime settings, including datasource, Redis, NiFi, and Magic API
 # options, are supplied from Nacos or explicitly injected deployment variables.
-
-# AI diagnostics is opt-in. Gateway credentials stay on the server.
-ai:
-  diagnostics:
-    enabled: ${AI_DIAGNOSTICS_ENABLED:false}
-    base-url: ${AI_DIAGNOSTICS_BASE_URL:}
-    api-key: ${AI_DIAGNOSTICS_API_KEY:}
-    model: ${AI_DIAGNOSTICS_MODEL:}
-    timeout-seconds: ${AI_DIAGNOSTICS_TIMEOUT_SECONDS:120}
-    max-concurrent: ${AI_DIAGNOSTICS_MAX_CONCURRENT:4}

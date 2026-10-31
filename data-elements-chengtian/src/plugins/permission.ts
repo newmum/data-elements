@@ -7,7 +7,6 @@ import type { App } from "vue";
 import { addClass, getUrlKey, isExternal, isInternal, removeClass } from "@/utils";
 import { Storage } from "@/utils/storage";
 import { setupDict } from "@/plugins/dict";
-import { pingaoLoginUrl, pingaoSsoEnabled } from "@/api/pingao-sso-api";
 
 const SSO_PARAMS = ["ticket", "token", "code"] as const; // 权限认证登录标识
 /**
@@ -81,10 +80,6 @@ async function navigateToLogin(
     ? (arg?: any) => void
     : never
 ): Promise<boolean> {
-  if (pingaoSsoEnabled()) {
-    window.location.assign(pingaoLoginUrl());
-    return true;
-  }
   const settingsStore = useSettingStoreHook();
   await settingsStore.loadingSettings(true);
   const loginUrl = settingsStore.loginUrl || "/login";
@@ -114,7 +109,7 @@ function extractSsoParam(
 }
 
 export function setupPermission(app: App<Element>) {
-  const whiteList = ["/login", "/pingao-sso/callback"]; // 无需登录的页面
+  const whiteList = ["/login"]; // 无需登录的页面
 
   // 加载系统设置
   router.beforeEach(async (to, from, next) => {
@@ -133,16 +128,12 @@ export function setupPermission(app: App<Element>) {
 
     try {
       if (whiteList.includes(to.path)) {
-        if (to.path === "/login" && pingaoSsoEnabled()) {
-          window.location.assign(pingaoLoginUrl());
-          return;
-        }
         next();
         return;
       }
 
       // ====== SSO 统一认证拦截 ======
-      const ssoParam = pingaoSsoEnabled() ? null : extractSsoParam(to.query);
+      const ssoParam = extractSsoParam(to.query);
       if (ssoParam) {
         const userStore = useUserStore();
         console.log("[SSO] 检测到认证参数，开始自动登录...", ssoParam.key);

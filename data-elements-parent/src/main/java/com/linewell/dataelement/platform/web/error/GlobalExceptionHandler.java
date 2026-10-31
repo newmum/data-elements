@@ -156,7 +156,7 @@ public class GlobalExceptionHandler {
     private CommonResponse diagnostic(CommonResponse response, Throwable failure) {
         if (java.util.Set.of(401, 403, 100120).contains(response.getCode())) return response;
         var error = com.linewell.dataelement.shared.error.ApiErrorResolver.resolve(failure).toMap("", "");
-        error.put("detail", com.linewell.dataelement.feature.diagnostics.DiagnosticSanitizer.errorText(String.valueOf(error.get("detail"))));
+        error.put("detail", com.linewell.dataelement.shared.error.ErrorDetailSanitizer.errorText(String.valueOf(error.get("detail"))));
         response.setError(error);
         return response;
     }

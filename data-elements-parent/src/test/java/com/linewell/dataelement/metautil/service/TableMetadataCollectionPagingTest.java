@@ -101,10 +101,10 @@ class TableMetadataCollectionPagingTest {
             Map<String,Object> body=new java.util.HashMap<>(Map.of("names",names,"sortField","fieldCount","sortDir","desc","pageSize",20));
             clearInvocations(jdbc);var small=service.reviewOrder("source",body);
             verify(jdbc,times(1)).queryForObject(anyString(),eq(Long.class),any(Object[].class));
-            verify(jdbc,times(1)).queryForList(anyString(),eq("tenant_a"),eq("source"));
+            verify(jdbc,times(1)).query(any(org.springframework.jdbc.core.PreparedStatementCreator.class),any(org.springframework.jdbc.core.RowCallbackHandler.class));
             body.put("pageSize",100);clearInvocations(jdbc);var large=service.reviewOrder("source",body);
             verify(jdbc,times(1)).queryForObject(anyString(),eq(Long.class),any(Object[].class));
-            verify(jdbc,times(1)).queryForList(anyString(),eq("tenant_a"),eq("source"));
+            verify(jdbc,times(1)).query(any(org.springframework.jdbc.core.PreparedStatementCreator.class),any(org.springframework.jdbc.core.RowCallbackHandler.class));
             assertThat(large.get("total")).isEqualTo(120);
             assertThat((List<?>)large.get("keys")).hasSize(100);
             assertThat(small.get("keys")).isEqualTo(((List<?>)large.get("keys")).subList(0,20));
@@ -121,6 +121,57 @@ class TableMetadataCollectionPagingTest {
             assertThatThrownBy(()->service.reviewOrder("source",Map.of("names",names))).isInstanceOf(IllegalArgumentException.class);
             return null;
         });
+    }
+
+    @Test
+    void thirtyThousandTablesHaveDatabasePagesAndExactFilteredPagesWithoutScopeLimits() {
+        jdbc.batchUpdate("insert into db_table_t values (?, 'tenant_a', 'source', 0, ?, ?, '', '', 'TABLE', ?, 0, null, null)",
+                java.util.stream.IntStream.range(0,30_000).mapToObj(i -> {
+                    String name=String.format("validation_table_%05d",i);
+                    return new Object[]{"validation-"+i,name,name,i};
+                }).toList());
+        jdbc.update("insert into db_table_t values ('foreign', 'tenant_b', 'source', 0, 'foreign', 'foreign', '', '', 'TABLE', 999999, 1, null, null)");
+        jdbc.update("insert into db_table_t values ('other-source', 'tenant_a', 'other', 0, 'other', 'other', '', '', 'TABLE', 999999, 1, null, null)");
+        TenantContext.call("tenant_a",()->{
+            for(int size:List.of(20,100)) {
+                clearInvocations(jdbc);
+                var page=service.reviewOrder("source",Map.of("allTables",true,"pageSize",size,"sortField","fieldCount","sortDir","desc"));
+                assertThat(page.get("total")).isEqualTo(30_000L);
+                assertThat((List<?>)page.get("keys")).hasSize(size);
+                assertThat(((List<?>)page.get("keys")).getFirst()).isEqualTo("validation_table_29999");
+                verify(jdbc,times(2)).queryForObject(anyString(),eq(Long.class),any(Object[].class));
+                verify(jdbc,times(1)).queryForList(anyString(),any(Object[].class));
+            }
+            var lastKeys=(List<?>)service.reviewOrder("source",Map.of("allTables",true,"pageNo",1500,"pageSize",20)).get("keys");
+            assertThat(lastKeys).hasSize(20);assertThat(lastKeys.getLast()).isEqualTo("validation_table_29999");
+            var empty=service.reviewOrder("source",Map.of("allTables",true,"pageNo",1501,"pageSize",20));
+            assertThat((List<?>)empty.get("keys")).isEmpty();assertThat(empty.get("total")).isEqualTo(30_000L);
+            var names=java.util.stream.IntStream.range(0,30_000).filter(i->i%2==0).mapToObj(i->String.format("validation_table_%05d",i)).toList();
+            for(int size:List.of(20,100)) {
+                clearInvocations(jdbc);
+                var filtered=service.reviewOrder("source",Map.of("names",names,"pageSize",size,"sortField","fieldCount","sortDir","desc"));
+                assertThat(filtered.get("total")).isEqualTo(15_000);
+                assertThat((List<?>)filtered.get("keys")).hasSize(size);
+                assertThat(((List<?>)filtered.get("keys")).getFirst()).isEqualTo("validation_table_29998");
+                verify(jdbc,times(1)).queryForObject(anyString(),eq(Long.class),any(Object[].class));
+                verify(jdbc,times(1)).query(any(org.springframework.jdbc.core.PreparedStatementCreator.class),any(org.springframework.jdbc.core.RowCallbackHandler.class));
+            }
+            assertThatThrownBy(()->service.reviewOrder("source",Map.of("names",List.of(names.getFirst(),"other"))))
+                .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(()->service.reviewOrder("source",Map.of("names",List.of(names.getFirst(),"foreign"))))
+                .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(()->service.reviewOrder("source",Map.of("allTables",true,"names",names)))
+                .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(()->service.reviewOrder("source",Map.of("allTables",true,"pageSize",101)))
+                .isInstanceOf(IllegalArgumentException.class);
+            jdbc.execute("alter table db_datasource_t add created_by varchar(64)");
+            when(scopes.currentScope(anyString())).thenReturn(new DataScopeAuthorizationService.ScopeDecision("DATA_SOURCE",DataScopeAuthorizationService.Scope.OWNER,"another-user",List.of(),List.of(),true));
+            assertThatThrownBy(()->service.reviewOrder("source",Map.of("allTables",true)))
+                .isInstanceOf(IllegalArgumentException.class);
+            return null;
+        });
+        assertThatThrownBy(()->service.reviewOrder("source",Map.of("allTables",true)))
+            .isInstanceOf(com.linewell.dataelement.platform.tenant.domain.TenantAccessException.class);
     }
 
     @Test

@@ -60,11 +60,6 @@ export const constantRoutes: RouteRecordRaw[] = [
     meta: { hidden: true },
   })),
   {
-    path: "/pingao-sso/callback",
-    component: () => import("@/views/login/pingao-callback.vue"),
-    meta: { hidden: true },
-  },
-  {
     path: "/redirect",
     component: Layout,
     meta: { hidden: true },

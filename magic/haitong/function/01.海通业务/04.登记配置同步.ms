@@ -51,7 +51,7 @@ var id=(value,label,max)=>{var s=_text(value).trim();if(s.length()<1 || s.length
 var limited=(value,max)=>{var s=_text(value).trim();if(s.length()>max){_fail(422,'INVALID_BODY','字段超过长度限制')}return s}
 var flag=(value,fallback)=>value==null?fallback:(value==true || value==1 || value=='true' || value=='1')
 var ids=[];var seen=new HashSet();var tableCount=0;var columnCount=0
-var sourceRows=[];var clientRows=[];var tableRows=[];var fieldRows=[];var now=_now()
+var sourceRows=[];var clientRows=[];var tableRows=[];var fieldRows=[];var credentialRows=[];var now=_now()
 for(source in sources){
     _object(source);var sourceId=id(source.datasourceId,'datasourceId',64)
     if(!seen.add(sourceId)){_fail(422,'INVALID_BODY','datasourceId不得重复')};ids.add(sourceId)
@@ -60,6 +60,13 @@ for(source in sources){
     var clients=_list(source.clientIds);var clientNames=new HashSet()
     if(clients.size()>100){_fail(422,'INVALID_BODY','每源最多100个调用方')}
     for(client in clients){var value=id(client,'clientId',128);if(!clientNames.add(value)){_fail(422,'INVALID_BODY','clientId不得重复')}clientRows.add([sourceId,value,1,0,now,now])}
+    // Only the authenticated registration service may provision a source-scoped digest.
+    if(source.credential!=null){
+        var credential=_object(source.credential)
+        var credentialClient=_text(credential.clientId);var digest=_text(credential.apiKeySha256);var previous=_text(credential.previousSha256)
+        if(credentialClient!='push-'+sourceId || !clientNames.contains(credentialClient) || !digest.matches('[a-f0-9]{64}') || (previous!='' && !previous.matches('[a-f0-9]{64}'))){_fail(422,'INVALID_CREDENTIAL_BINDING','密钥摘要必须绑定当前数据源的专用调用方')}
+        credentialRows.add({clientId:credentialClient,hash:digest,previous:previous})
+    }
     var tables=_list(source.tables);var names=new HashSet()
     if(tables.size()>100){_fail(422,'INVALID_BODY','每数据源最多100张表')}
     for(table in tables){
@@ -78,7 +85,7 @@ for(source in sources){
     }
 }
 if(tableCount>1000 || columnCount>10000){_fail(422,'INVALID_BODY','批量登记配置最多1000表和10000字段')}
-var result={code:'REGISTRY_SYNCED',duplicate:false,tableCount:tableCount,columnCount:columnCount}
+var result={code:'REGISTRY_SYNCED',duplicate:false,tableCount:tableCount,columnCount:columnCount,credentialCount:credentialRows.size()}
 if(batch){result.datasourceIds=ids;result.datasourceCount=ids.size()}else{result.datasourceId=ids[0]}
 // SQL表名和列名完全由脚本固定白名单提供，业务输入只作为绑定参数。
 var upsert=(table,names,keys,rows)=>{
@@ -101,6 +108,21 @@ try{
             return result
         }
         var snapshotId=batch?'batch-'+_hash(c.json.bytes(ids)).substring(0,58):ids[0]
+        if(credentialRows.size()>0){
+            var clientIds=credentialRows.map(row=>row.clientId);var clientMarks=clientIds.map(value=>'?').join(',')
+            var existing=c.jdbc.queryForList('SELECT client_id,api_key_sha256,is_enable,is_del FROM ht_push_api_client WHERE client_id IN ('+clientMarks+') FOR UPDATE',clientIds.toArray())
+            var byClient={};for(row in existing){byClient[row.client_id]=row}
+            for(credential in credentialRows){
+                var old=byClient[credential.clientId]
+                if(old!=null && (old.is_enable::int!=1 || old.is_del::int!=0)){_fail(409,'CREDENTIAL_DISABLED','数据源业务密钥已停用')}
+                if(old!=null && old.api_key_sha256!=credential.hash && old.api_key_sha256!=credential.previous){_fail(409,'CREDENTIAL_CONFLICT','海通已有不同版本的密钥，请核对凭据状态后重试同步')}
+            }
+            for(credential in credentialRows){
+                var old=byClient[credential.clientId]
+                if(old==null){c.jdbc.update('INSERT INTO ht_push_api_client(client_id,api_key_sha256,is_enable,is_del,created_at,updated_at) VALUES (?,?,1,0,?,?)',[credential.clientId,credential.hash,now,now].toArray())}
+                else if(old.api_key_sha256!=credential.hash){c.jdbc.update('UPDATE ht_push_api_client SET api_key_sha256=?,updated_at=? WHERE client_id=?',[credential.hash,now,credential.clientId].toArray())}
+            }
+        }
         c.jdbc.update('INSERT INTO ht_standalone_registry_sync(idempotency_key,payload_sha256,datasource_id,applied_at) VALUES (?,?,?,?)',[key,hash,snapshotId,now].toArray())
         var args=[now];args.addAll(ids);var marks=ids.map(value=>'?').join(',')
         for(table in ['ht_standalone_datasource_client','ht_standalone_table_column','ht_standalone_table']){c.jdbc.update('UPDATE '+table+' SET is_enable=0,is_del=1,updated_at=? WHERE datasource_id IN ('+marks+')',args.toArray())}

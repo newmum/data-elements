@@ -156,7 +156,9 @@ var sourceAccessModeLabels = {
     capture: '数据抓取方式',
     pull: '数据抓取方式',
     upload: '数据上报方式',
-    report: '数据上报方式'
+    report: '数据上报方式',
+    proxy: '代理访问方式',
+    agent: '代理访问方式'
 }
 var sourceAccessMode = sourceAccessModeLabels[lower(sourceAccessModeCode)] || sourceAccessModeCode
 if (blank(sourceAccessMode)) {
@@ -570,8 +572,8 @@ for (registeredField in (registeredFields == null ? [] : registeredFields)) {
 
 var sourceTableName = text(first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])).trim()
 var sourceTypeCode = lower(first(sourceDatasource, ['dbType', 'db_type', 'databaseType', 'database_type'])).trim()
-var sourceAccessMode = lower(first(sourcePoolCfg, ['accessMode', 'access_mode', 'dataAccessMode', 'data_access_mode'])).trim()
-var registeredFileSnapshot = ['receive','push','upload'].contains(sourceAccessMode)
+var registeredSnapshotMode = lower(sourceAccessModeCode).trim()
+var registeredFileSnapshot = ['receive','push','capture','pull','upload','report','proxy','agent'].contains(registeredSnapshotMode)
     || ['receive','push','upload'].contains(sourceTypeCode)
 if (blank(sourceTypeCode)) {
     sourceTypeCode = lower(first(sourcePoolCfg, ['dbType', 'db_type', 'databaseType', 'database_type', 'dataSourceType'])).trim()

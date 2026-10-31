@@ -404,7 +404,7 @@ class CanvasCreateTableBatchValidationMagicTest {
 
     private Object run(Map<String, Object> body) throws Exception {
         String script = CanonicalMagicSources.byId(SOURCE_ID)
-                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.(?:metautil\\.(?:model\\.|jdbc\\.JdbcDriverPropertyResolver)|feature\\.diagnostics\\.DiagnosticSanitizer)|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
+                .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.(?:metautil\\.(?:model\\.|jdbc\\.JdbcDriverPropertyResolver)|shared\\.error\\.ErrorDetailSanitizer)|java\\.util\\.(?:Map|List))[^\\n]*\\n", "");
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put("body", body);
         inputs.put("db", db);

@@ -2909,6 +2909,22 @@ CREATE TABLE `nifi_pipeline_t` (
   KEY `idx_nifi_pipeline_tenant_is_del` (`tenant_id`,`is_del`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-数据集成管道（NiFi）';
 
+-- TABLE nifi_task_status_t
+CREATE TABLE `nifi_task_status_t` (
+  `pipeline_id` varchar(64) COLLATE utf8mb4_general_ci NOT NULL,
+  `process_group_id` varchar(64) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `run_status` varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'IDLE',
+  `point_column` varchar(128) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `point_value` varchar(1024) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `last_trigger_at` bigint DEFAULT NULL,
+  `last_success_at` bigint DEFAULT NULL,
+  `last_duration_ms` bigint DEFAULT NULL,
+  `last_error_msg` varchar(1000) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `trigger_count` bigint NOT NULL DEFAULT '0',
+  `update_time` bigint NOT NULL,
+  PRIMARY KEY (`pipeline_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 -- TABLE ods_batch_create_item_t
 CREATE TABLE `ods_batch_create_item_t` (
   `item_id` varchar(32) COLLATE utf8mb4_general_ci NOT NULL COMMENT '批量创建项标识',
@@ -2955,19 +2971,6 @@ CREATE TABLE `ods_batch_create_job_t` (
   UNIQUE KEY `uk_ods_batch_job_tenant_request` (`tenant_id`,`request_key`),
   KEY `idx_ods_batch_job_tenant_time` (`tenant_id`,`created_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-批量创建任务作业';
-
--- TABLE pingao_application_sync_state_t
-CREATE TABLE `pingao_application_sync_state_t` (
-  `tenant_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '租户标识',
-  `has_success` tinyint NOT NULL DEFAULT '0' COMMENT '已有成功同步记录标志；至少有一次完整的应用目录快照同步成功',
-  `last_status` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'NEVER' COMMENT '最近一次执行状态；可选值为从未运行、成功、失败',
-  `last_attempt_at` datetime DEFAULT NULL COMMENT '最近尝试时间',
-  `last_success_at` datetime DEFAULT NULL COMMENT '最近成功时间',
-  `last_fetched_count` bigint NOT NULL DEFAULT '0' COMMENT '最近拉取数量',
-  `last_online_count` bigint NOT NULL DEFAULT '0' COMMENT '最近在线数量',
-  `updated_time` datetime NOT NULL COMMENT '更新时间',
-  PRIMARY KEY (`tenant_id`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='应用系统同步-平澳应用目录同步状态';
 
 -- TABLE push_node_t
 CREATE TABLE `push_node_t` (
@@ -3968,15 +3971,9 @@ CREATE TABLE `sym_application_t` (
   `flow_status` int DEFAULT NULL COMMENT '流程状态',
   `flow_order_id` varchar(32) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '流程顺序标识',
   `db_total` int DEFAULT NULL COMMENT '数据库总数',
-  `data_origin` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'LEGACY' COMMENT 'LEGACY=历史数据，PINGAO=品高同步',
-  `source_key` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '品高 fjrbAbility.id',
-  `sync_active` tinyint NOT NULL DEFAULT '0' COMMENT '品高已上线且可在新建下拉中选择',
-  `last_synced_at` datetime DEFAULT NULL COMMENT '最近一次品高同步时间',
   PRIMARY KEY (`tid`),
   UNIQUE KEY `INDEX33565331` (`tid`),
-  UNIQUE KEY `uk_sym_application_pingao_source` (`tenant_id`,`data_origin`,`source_key`),
-  KEY `idx_application_tenant` (`tenant_id`,`is_del`,`updated_time`),
-  KEY `idx_sym_application_pingao_options` (`tenant_id`,`data_origin`,`sync_active`,`is_del`,`app_name`)
+  KEY `idx_application_tenant` (`tenant_id`,`is_del`,`updated_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='应用系统管理-业务应用系统';
 
 -- TABLE sym_area_t

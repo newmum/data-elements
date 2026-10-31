@@ -31,6 +31,38 @@ class MagicBusinessHttpTest {
     @Autowired JdbcTemplate jdbc;
     final java.util.concurrent.atomic.AtomicInteger sqlReads=new java.util.concurrent.atomic.AtomicInteger();
     long reads(){return sqlReads.get();}
+    @Test void platformDigestsAreBatchProvisionedAndStaleRotationsCannotOverwriteNewKeys()throws Exception{
+        installSqlCounter();
+        for(int size:List.of(20,100)){
+            var sources=new ArrayList<Map<String,Object>>();
+            for(int i=0;i<size;i++){
+                String id="validation-credential-"+size+"-"+i,client="push-"+id;
+                String hash=com.haitong.core.Rules.sha256(("validation-secret-for-"+id).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                sources.add(Map.of("datasourceId",id,"datasourceName","validation","clientIds",List.of(client),
+                    "credential",Map.of("clientId",client,"apiKeySha256",hash,"previousSha256",""),
+                    "tables",List.of(Map.of("tableName","demo","columns",List.of(Map.of("columnName","record_id","required",true))))));
+            }
+            sqlReads.set(0);
+            mvc.perform(post("/api/v1/data-push").header("X-Admin-Key",ADMIN).header("Idempotency-Key","validation-credential-sync-"+size).contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","datasources",sources))))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.credentialCount").value(size));
+            assertEquals(5,reads(),"One extra batch credential read for either 20 or 100 sources");
+            mvc.perform(post("/api/v1/data-push").header("X-Api-Key","validation-secret-for-validation-credential-"+size+"-0").header("Idempotency-Key","validation-credential-push-"+size).contentType("application/json")
+                .content(json.bytes(Map.of("deliveryType","FTP","datasourceId","validation-credential-"+size+"-0","tableName","demo","records",List.of(Map.of("record_id",1)))))).andExpect(status().isAccepted());
+        }
+        String id="validation-credential-20-0",client="push-"+id;
+        String oldHash=com.haitong.core.Rules.sha256(("validation-secret-for-"+id).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String newHash=com.haitong.core.Rules.sha256("validation-replacement-key-0123456789".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var source=new LinkedHashMap<String,Object>();source.put("datasourceId",id);source.put("datasourceName","validation");source.put("clientIds",List.of(client));source.put("tables",List.of());
+        source.put("credential",Map.of("clientId",client,"apiKeySha256",newHash,"previousSha256",oldHash));
+        mvc.perform(post("/api/v1/data-push").header("X-Admin-Key",ADMIN).header("Idempotency-Key","validation-credential-rotate").contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","datasource",source)))).andExpect(status().isCreated());
+        source.put("credential",Map.of("clientId",client,"apiKeySha256",oldHash,"previousSha256",""));
+        mvc.perform(post("/api/v1/data-push").header("X-Admin-Key",ADMIN).header("Idempotency-Key","validation-credential-stale").contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","datasource",source)))).andExpect(status().isConflict());
+        assertEquals(newHash,jdbc.queryForObject("select api_key_sha256 from ht_push_api_client where client_id=?",String.class,client));
+        mvc.perform(post("/api/v1/data-push").header("X-Api-Key","validation-secret-for-validation-credential-100-0").header("Idempotency-Key","validation-credential-denied").contentType("application/json")
+            .content(json.bytes(Map.of("deliveryType","FTP","datasourceId",id,"tableName","demo","records",List.of(Map.of("record_id",1)))))).andExpect(status().isForbidden());
+        source.put("credential",Map.of("clientId","push-foreign-source","apiKeySha256",oldHash));
+        mvc.perform(post("/api/v1/data-push").header("X-Admin-Key",ADMIN).header("Idempotency-Key","validation-credential-wrong-binding").contentType("application/json").content(json.bytes(Map.of("deliveryType","REGISTRY_SYNC","datasource",source)))).andExpect(status().isUnprocessableEntity());
+    }
     void installSqlCounter(){
         var original=jdbc.getDataSource();
         var counted=new org.springframework.jdbc.datasource.DelegatingDataSource(original){

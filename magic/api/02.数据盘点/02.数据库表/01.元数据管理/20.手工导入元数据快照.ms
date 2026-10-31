@@ -398,14 +398,25 @@ for (table in tables) {
         governanceFields.add({
             columnName: governanceColumnName,
             columnComment: firstValue(governanceColumn, ['columnComment', 'comment', 'fieldComment', 'column_comment']),
-            standardField: '',
-            dictionaryRole: '',
+            standardField: firstValue(governanceColumn, ['standardField']) == null ? '' : firstValue(governanceColumn, ['standardField']),
+            dictionaryRole: firstValue(governanceColumn, ['dictionaryRole']) == null ? '' : firstValue(governanceColumn, ['dictionaryRole']),
             dictionaryCategoryCode: tableName,
             dictionaryCategoryName: '',
             dictionaryCategoryValue: '',
             isTimestampField: governanceTimestamp,
             dictionaryRelation: null
         })
+    }
+    var dictionaryProfile = null
+    if (businessType == '字典表') {
+        var codeColumn = governanceFields.find(field => field.dictionaryRole == 'code')
+        var labelColumn = governanceFields.find(field => field.dictionaryRole == 'label')
+        if (codeColumn != null && labelColumn != null) {
+            dictionaryProfile = { tableName: tableName, tableId: tableId, tableComment: comment,
+                categoryCode: tableName, categoryName: comment, categoryValue: '', categoryField: '',
+                codeField: codeColumn.columnName, labelField: labelColumn.columnName,
+                statusField: '', parentField: '', sortField: '', remarkField: '' }
+        }
     }
     var governanceConfig = {
         version: 2,
@@ -415,8 +426,8 @@ for (table in tables) {
         businessType: businessType,
         dictionaryStructureType: 'single',
         timestampField: timestampField,
-        dictionaryProfile: null,
-        dictionaryProfiles: [],
+        dictionaryProfile: dictionaryProfile,
+        dictionaryProfiles: dictionaryProfile == null ? [] : [dictionaryProfile],
         fields: governanceFields
     }
     var values = {

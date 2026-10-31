@@ -97,9 +97,9 @@
               <div class="push-contract-auth-grid">
                 <div class="push-auth-header push-content-type-card"><code>Content-Type</code><strong>{{ pushRequestContentType }}</strong><small>{{ pushInterfaceType === 'filePart' ? '当前分片的原始字节' : pushRequestContentType === 'application/json' ? 'JSON 请求体' : '仅使用路径或查询参数' }}</small></div>
                 <div class="push-auth-header push-credential-card">
-                  <div class="push-auth-card-heading"><code>X-Api-Key</code><div class="push-credential-actions"><el-button v-if="!pushCredential?.revealed" class="push-key-button" type="primary" size="small" :loading="pushCredentialLoading" :disabled="sourceDetailLoading || (pushIsAttachmentMode && !fileRegistrationRows.length)" @click="issuePushCredential(sourceTid)">获取密钥</el-button><el-button v-if="pushCredential" link type="primary" size="small" :loading="pushCredentialLoading" @click="rotatePushCredential">轮换</el-button></div></div>
-                  <strong>{{ pushCredential?.revealed ? '密钥已生成' : pushCredentialError ? '获取失败' : pushCredential ? '密钥已配置' : '当前数据源访问密钥' }}</strong>
-                  <small :class="{'push-credential-error':pushCredentialError}">{{ pushCredentialError || (pushCredential?.revealed ? '明文仅展示一次，请保存。' : pushCredential ? '已有密钥不回显明文。' : '首次获取后请妥善保存。') }}</small>
+                  <div class="push-auth-card-heading"><code>X-Api-Key</code><div class="push-credential-actions"><el-button v-if="pushCredentialError" class="push-key-button" type="primary" size="small" :loading="pushCredentialLoading" :disabled="sourceDetailLoading" @click="issuePushCredential(sourceTid, false, true)">{{ pushCredential ? '重试同步' : '重试生成' }}</el-button><el-button v-if="pushCredential" link type="primary" size="small" :loading="pushCredentialLoading" @click="rotatePushCredential">轮换</el-button></div></div>
+                  <strong>{{ pushCredentialLoading && !pushCredential ? '正在准备密钥' : pushCredential && !pushCredential.ready ? '密钥待同步' : pushCredential?.revealed ? '密钥已生成并生效' : pushCredentialError ? '密钥准备失败' : pushCredential ? '密钥已配置' : '正在准备密钥' }}</strong>
+                  <small :class="{'push-credential-error':pushCredentialError}">{{ pushCredentialError || (pushCredential?.revealed ? '明文仅展示一次，请妥善保存。' : pushCredential ? '已有密钥继续使用；明文不重复展示。' : '首次进入此步骤时自动生成。') }}</small>
                   <el-input v-if="pushCredential?.revealed" :model-value="pushCredential.apiKey" readonly size="small" class="push-credential-input" aria-label="当前数据源 X-Api-Key"><template #append><el-button @click="copyPushCredential">复制</el-button></template></el-input>
                 </div>
                 <div v-for="header in pushContractHeaders" :key="header.name" class="push-auth-header"><code>{{ header.name }}</code><strong>{{ header.value }}</strong><small>{{ header.description }}</small></div>
@@ -1162,13 +1162,17 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
     const [detailResult, tableResult, physicalResult] = await Promise.allSettled([
       requestWithTimeout(() => $common.post("/dst/database/detail", { tid }), "数据源详情"),
       // 完整采集快照包含未标注表；登记完成以治理保存标记为准，不能以资产可用状态代替。
-      requestWithTimeout(() => $common.get("/dst/database/metadata/tables", { dbId: tid, includeGovernance: true }), "数据表登记信息"),
+      requestWithTimeout(
+        () => $common.get("/dst/database/metadata/tables", { dbId: tid, includeGovernance: true }),
+        "数据表登记信息",
+        30000,
+      ),
       // 与第二步使用同一份采集快照，禁止改用实时 Owner 范围重新计算总数。
-      requestWithTimeout(() => $common.get("/dst/database/metadata/tables/snapshot", {
-        dbId: tid,
-        pageNo: 1,
-        pageSize: 1,
-      }), "数据表采集汇总"),
+      requestWithTimeout(
+        () => $common.get("/dst/database/metadata/tables/snapshot", { dbId: tid, pageNo: 1, pageSize: 1 }),
+        "数据表采集汇总",
+        30000,
+      ),
     ]);
     if (requestId !== sourceDetailRequestId) return;
     const detail = detailResult.status === "fulfilled" ? detailResult.value : null;
@@ -1599,8 +1603,8 @@ function stopRegistrationStream() {
 function registrationVisibility() {
   if (document.hidden) stopRegistrationStream(); else {queueRegistrationRefresh(); void startRegistrationStream();}
 }
-onMounted(() => {registrationRuntimeActive = true; document.addEventListener('visibilitychange',registrationVisibility); void startRegistrationStream();});
-onActivated(() => {registrationRuntimeActive = true; queueRegistrationRefresh(); void startRegistrationStream();});
+onMounted(() => {ensurePushCredential(); registrationRuntimeActive = true; document.addEventListener('visibilitychange',registrationVisibility); void startRegistrationStream();});
+onActivated(() => {ensurePushCredential(); registrationRuntimeActive = true; queueRegistrationRefresh(); void startRegistrationStream();});
 onDeactivated(() => {registrationRuntimeActive = false; stopRegistrationStream();});
 onUnmounted(() => {registrationRuntimeActive = false; ++accessTaskRequestId; stopRegistrationStream(); document.removeEventListener('visibilitychange',registrationVisibility);});
 
@@ -1826,7 +1830,7 @@ function apiPullTableStatus(item) {
   return apiPullTaskTableNames.value.has(tableName) ? "已登记，已创建任务" : "已登记，待创建任务";
 }
 
-// Push contract display is read-only until the user explicitly requests a credential.
+// Push contract reads stay bounded; the first visit prepares one source credential automatically.
 const pushDatasourceRegistered = computed(() => [1, 2].includes(Number(source.value?.assetStatus ?? source.value?.asset_status ?? 0)));
 const pushContractIsPreview = computed(() => pushContract.value?.tableSource !== "published");
 const pushContentType = computed(() =>
@@ -1958,12 +1962,25 @@ let pushCredentialRequestId = 0;
 let pushContractRequestId = 0;
 let pushContractInFlightKey = "";
 async function togglePushContract() { connectionInfoExpanded.value = !connectionInfoExpanded.value; if (connectionInfoExpanded.value) await loadPushContract(); }
-async function issuePushCredential(datasourceId, rotate = false) {
+function pushErrorMessage(error, fallback = "推送密钥准备失败，请重试。") {
+  let payload = error?.response?.data || error?.payload;
+  if (!payload) {
+    try { payload = JSON.parse(error?.detail || error?.info?.detail || "{}"); } catch (_) {}
+  }
+  return String(payload?.msg || payload?.message || error?.msg || error?.message || fallback);
+}
+function ensurePushCredential() {
+  const id = String(sourceTid.value || "").trim();
+  if (!isDataPushSource.value || sourceDetailLoading.value || !id || pushCredentialDatasourceId.value === id) return;
+  void issuePushCredential(id);
+}
+async function issuePushCredential(datasourceId, rotate = false, retry = false) {
   const normalizedDatasourceId = String(datasourceId || "").trim();
-  if (!normalizedDatasourceId || (!rotate && pushCredentialDatasourceId.value === normalizedDatasourceId && pushCredential.value)) return;
+  if (!normalizedDatasourceId || (!rotate && !retry && pushCredentialDatasourceId.value === normalizedDatasourceId && pushCredential.value)) return;
   if (pushCredentialLoading.value || normalizedDatasourceId !== String(sourceTid.value || "").trim()) return;
   const credentialRequestId = ++pushCredentialRequestId;
   pushCredentialLoading.value = true;
+  pushCredentialDatasourceId.value = normalizedDatasourceId;
   pushCredentialError.value = "";
   try {
     const result = await $common.postSilently(rotate ? "/dws/push/credential/rotate" : "/dws/push/credential/issue", { datasourceId: normalizedDatasourceId });
@@ -1972,15 +1989,17 @@ async function issuePushCredential(datasourceId, rotate = false) {
     if (String(payload.datasourceId || "") !== normalizedDatasourceId) throw new Error("密钥响应与当前数据源不一致，请重试。");
     pushCredential.value = {
       clientId: String(payload.clientId || ""),
-      apiKey: String(payload.apiKey || ""),
-      revealed: Boolean(payload.revealed && payload.apiKey),
+      apiKey: String(payload.apiKey || (!rotate ? pushCredential.value?.apiKey : "") || ""),
+      revealed: Boolean((payload.revealed && payload.apiKey) || (!rotate && pushCredential.value?.revealed)),
+      ready: payload.ready !== false,
+      managedBy: String(payload.managedBy || "relay"),
     };
     pushCredentialDatasourceId.value = normalizedDatasourceId;
-    await loadPushContract(true);
+    pushCredentialError.value = String(payload.syncError || "");
+    if (connectionInfoExpanded.value && payload.ready !== false) await loadPushContract(true);
   } catch (error) {
     if (credentialRequestId !== pushCredentialRequestId || normalizedDatasourceId !== String(sourceTid.value || "").trim()) return;
-    pushCredential.value = null;
-    pushCredentialError.value = String(error?.message || error?.msg || "平台暂时无法签发推送密钥，请稍后重试。");
+    pushCredentialError.value = pushErrorMessage(error);
     pushCredentialDatasourceId.value = normalizedDatasourceId;
   } finally {
     if (credentialRequestId === pushCredentialRequestId) pushCredentialLoading.value = false;
@@ -1996,7 +2015,7 @@ async function rotatePushCredential() {
   const datasourceId = String(sourceTid.value || "").trim();
   if (!datasourceId) return;
   try {
-    await ElMessageBox.confirm("重新生成后，原 X-Api-Key 会立即失效；已使用原密钥的调用方需要同步更新。是否继续？", "重新生成推送密钥", { type: "warning", confirmButtonText: "重新生成", cancelButtonText: "取消" });
+    await ElMessageBox.confirm("新密钥同步生效后，原 X-Api-Key 会失效；已使用原密钥的调用方需要同步更新。是否继续？", "重新生成推送密钥", { type: "warning", confirmButtonText: "重新生成", cancelButtonText: "取消" });
     await issuePushCredential(datasourceId, true);
   } catch (error) {
     // 取消确认不提示；签发失败由凭证卡片原位展示并提供重试入口。
@@ -2114,7 +2133,7 @@ async function loadPushContract(force = false) {
     // be silently relabelled as an unpublished preview.
     pushContract.value = null;
     pushContractLoadedDatasourceId.value = "";
-    pushContractError.value = error?.message || "正式规范暂时不可用，请检查登记状态和访问权限后重试。";
+    pushContractError.value = pushErrorMessage(error, "正式规范暂时不可用，请检查登记状态和访问权限后重试。");
   } finally {
     if (requestId === pushContractRequestId) { pushContractLoading.value = false; pushContractInFlightKey = ""; }
   }
@@ -2467,6 +2486,7 @@ watch([sourceTid, isDataPushSource], () => {
   ++pushCredentialRequestId; pushCredentialLoading.value = false;
   pushCredential.value = null; pushCredentialError.value = ""; pushCredentialDatasourceId.value = "";
 }, { immediate: true });
+watch([sourceTid, isDataPushSource, sourceDetailLoading], () => { ensurePushCredential(); }, { flush: "post" });
 watch([pushIsAttachmentMode,isDataUploadSource],([fileFlow,reportFlow])=>{
   (store.state.steps || []).forEach((step,index)=>{if(index>=1 && index<=3) step.skipped=fileFlow || reportFlow;});
 },{immediate:true});
@@ -3822,19 +3842,62 @@ function sortReviewTables({prop,order}) {
   reviewTablePage.value = 1;
 }
 async function loadReviewPage() {
-  const sequence = ++reviewOrderSequence, rows = filteredReviewTables.value;
-  if (!rows.length) {visibleTables.value = []; reviewOrderLoading.value = false; return;}
-  reviewOrderLoading.value = true; reviewOrderError.value = '';
+  const sequence = ++reviewOrderSequence,
+    rows = filteredReviewTables.value;
+  reviewOrderError.value = "";
+  if (tableListLoading.value || !rows.length) {
+    visibleTables.value = [];
+    reviewOrderLoading.value = false;
+    return;
+  }
+  reviewOrderLoading.value = true;
+  reviewOrderError.value = "";
   try {
-    const result = await requestWithTimeout(() => $common.post('/dst/database/metadata/tables/review-order', {dbId:sourceTid.value,names:rows.map(row => row.tableName),pageNo:reviewTablePage.value,pageSize:reviewTablePageSize,...reviewSort.value}), '数据表列表', 20000);
+    // 完整数据源由后端直接分页，翻页不再重复上传几万项表名。筛选范围仍逐项校验归属。
+    const scope =
+      rows.length === tables.value.length
+        ? { allTables: true }
+        : { names: rows.map((row) => row.tableName) };
+    const result = await requestWithTimeout(
+      () =>
+        $common.post("/dst/database/metadata/tables/review-order", {
+          dbId: sourceTid.value,
+          ...scope,
+          pageNo: reviewTablePage.value,
+          pageSize: reviewTablePageSize,
+          ...reviewSort.value,
+        }),
+      "数据表列表",
+      30000,
+    );
     if (sequence !== reviewOrderSequence) return;
-    const byName = new Map(rows.map(row => [row.tableName,row]));
-    if (result.total !== rows.length || !Array.isArray(result.keys) || result.keys.some(key => !byName.has(key)) || new Set(result.keys).size !== result.keys.length) throw new Error('数据表列表不完整，请重试');
-    visibleTables.value = result.keys.map(key => byName.get(key));
-  } catch (error) { if (sequence === reviewOrderSequence) reviewOrderError.value = error?.message || '数据表列表读取失败'; }
-  finally { if (sequence === reviewOrderSequence) reviewOrderLoading.value = false; }
+    const byName = new Map(rows.map((row) => [row.tableName, row]));
+    if (
+      result.total !== rows.length ||
+      !Array.isArray(result.keys) ||
+      result.keys.some((key) => !byName.has(key)) ||
+      new Set(result.keys).size !== result.keys.length
+    )
+      throw new Error("数据表列表不完整，请重试");
+    visibleTables.value = result.keys.map((key) => byName.get(key));
+  } catch (error) {
+    if (sequence === reviewOrderSequence)
+      reviewOrderError.value = error?.message || "数据表列表读取失败";
+  } finally {
+    if (sequence === reviewOrderSequence) reviewOrderLoading.value = false;
+  }
 }
-watch(() => [sourceTid.value,filteredReviewTables.value.map(table => table.tableName).join('\n'),reviewTablePage.value,reviewSort.value], loadReviewPage, {immediate:true});
+watch(
+  () => [
+    tableListLoading.value,
+    sourceTid.value,
+    filteredReviewTables.value.map((table) => table.tableName).join("\n"),
+    reviewTablePage.value,
+    reviewSort.value,
+  ],
+  loadReviewPage,
+  { immediate: true },
+);
 watch(sourceTid, () => {accessDialogVisible.value = false; accessDialogTable.value = null; accessCommandError.value = {taskId:'',message:''};accessTotals.value = {}; visibleTables.value = [];});
 watch(() => [sourceTid.value,visibleTables.value.map(registrationTableId).join(',')], () => {accessTaskRows.value = []; accessTaskLoaded.value = false; void refreshAccessSummary();}, {immediate:true});
 const reviewTableBusy = computed(() => tableListLoading.value || reviewOrderLoading.value || accessTaskLoading.value);

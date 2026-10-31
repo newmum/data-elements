@@ -55,6 +55,8 @@ CREATE TABLE `data_push_relay_client_t` (
   `relay_client_id` varchar(128) NOT NULL COMMENT '中继客户端标识',
   `tenant_id` varchar(32) NOT NULL COMMENT '租户标识',
   `datasource_id` varchar(32) DEFAULT NULL COMMENT '数据源标识；为空时可访问该租户已发布的推送数据源',
+  `api_key_sha256` char(64) DEFAULT NULL COMMENT '平台生成的业务推送密钥SHA-256摘要；为空表示沿用海通历史签发密钥',
+  `previous_api_key_sha256` char(64) DEFAULT NULL COMMENT '上一版业务推送密钥摘要，用于轮换同步的并发检查',
   `is_enable` tinyint NOT NULL DEFAULT '1' COMMENT '启用标志',
   `created_time` datetime(6) NOT NULL COMMENT '创建时间',
   `updated_time` datetime(6) NOT NULL COMMENT '更新时间',

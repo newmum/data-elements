@@ -42,7 +42,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
-      "baseSha256": "3c5962e6712f858eab3d50f5431b6d08c585a16c487e37bac6698f42a51641f3"
+      "baseSha256": "4dd7f20ba8d91d43a84d0368938dfb198fd9cc990847804c47bde03a8a121bae"
     },
     {
       "id": "2016435561264910336",
@@ -82,7 +82,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue",
-      "baseSha256": "9f20c01854bda0c3283ea1af83c9b7f41ed597312b5faaf0b19cea3fcc5055c8"
+      "baseSha256": "18a91cc99c072354d3be692542941b64cc9176faed6ec360e72227260f8e89d0"
     },
     {
       "id": "2008087014782078976",
@@ -622,7 +622,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue",
-      "baseSha256": "bbb96c6b79bb9801e3e38982615992eb64eb6407116c7d7a2411208c265bd2de"
+      "baseSha256": "422b28b0cde4a63bb7ad764f0fcaa189615bed6b6df68e9165a8f6eaae7cf2d2"
     },
     {
       "id": "2046880498703695872",
@@ -1577,7 +1577,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "10.通用组件/全局导航(global-nav).vue",
-      "baseSha256": "38e3c5a07ecc83da0546018bc665316805cc4ebf3caf28c1bf699a9ab421037c"
+      "baseSha256": "70f6f893ee7ae4c5729650e4d2f4bf254e938fd32a57c2a9955575dc3af113dd"
     },
     {
       "id": "ui_log_management_v1",

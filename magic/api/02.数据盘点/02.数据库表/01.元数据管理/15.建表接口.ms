@@ -35,7 +35,7 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
 import java.util.Map
 import java.util.List
-import com.linewell.dataelement.feature.diagnostics.DiagnosticSanitizer
+import com.linewell.dataelement.shared.error.ErrorDetailSanitizer
 import tenantRuntime
 import canvasTableDdl
 import hwhive
@@ -512,7 +512,7 @@ if (body.canvas == true) {
             databaseFailure = databaseFailure.getCause()
             causeDepth = causeDepth + 1
         }
-        exit 500, '目标数据库执行建表语句失败：' + DiagnosticSanitizer.errorText(databaseFailure.getMessage())
+        exit 500, '目标数据库执行建表语句失败：' + ErrorDetailSanitizer.errorText(databaseFailure.getMessage())
     }
     return { status: 'created', created: true, tableName: parsed.tableName, partitionPlan:body?.partitionPlan, message: '物化建表成功' }
 }

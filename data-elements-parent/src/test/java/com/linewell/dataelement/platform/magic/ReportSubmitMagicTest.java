@@ -20,7 +20,7 @@ class ReportSubmitMagicTest {
     static class Fixture {
         final ReportRegistrationMagicTest.Fixture base=new ReportRegistrationMagicTest.Fixture(1);
         final Delivery delivery=new Delivery();
-        Fixture(){base.base.jdbc.update("update db_table_t set table_name='people' where tid='table'");base.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'",JSONUtil.toJsonStr(Map.of("accessMode","upload","reportRegistration",Map.of("revision","v1","files",List.of(Map.of("fileId","file","fileName","data.csv")),"tables",List.of(Map.of("tid","table","fileId","file","tableName","people","fileName","data.csv","recordCount",2))))));}
+        Fixture(){base.base.jdbc.update("update db_table_t set table_name='people' where tid='table'");base.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'",JSONUtil.toJsonStr(Map.of("accessMode","upload","reportRegistration",Map.of("revision","v1","files",List.of(Map.of("fileId","file","fileName","data.csv")),"tables",List.of(Map.of("tid","table","fileId","file","tableName","people","fileName","data.csv","recordCount",2,"normalized",true,"normalizationVersion",1))))));}
         Object run(String source,String table,String request) throws Exception {
             Path root=Path.of(System.getProperty("user.dir")).toAbsolutePath();while(!Files.isDirectory(root.resolve("magic")))root=root.getParent();
             String content=Files.readString(root.resolve("magic/api/02.数据盘点/02.数据库表/01.元数据管理/27.提交上报文件.ms"));
@@ -34,6 +34,7 @@ class ReportSubmitMagicTest {
     @Test void successIsRecordedOnlyAfterDeliveryAndRepeatedRequestDoesNotResend() throws Exception {
         Fixture f=new Fixture();Map<?,?> result=(Map<?,?>)f.run("source","table","request-1");assertEquals("success",result.get("status"));
         assertEquals("success",((Map<?,?>)f.run("source","table","request-1")).get("status"));assertEquals(1,f.delivery.calls);
+        assertEquals("success",((Map<?,?>)f.run("source","table","request-2")).get("status"));assertEquals(1,f.delivery.calls);
         assertTrue(f.base.base.jdbc.queryForObject("select pool_cfg from db_datasource_t where tid='source'",String.class).contains("\"status\":\"success\""));
     }
     @Test void foreignSourceAndUnrelatedTableNeverReachDelivery() throws Exception {
@@ -42,5 +43,11 @@ class ReportSubmitMagicTest {
     @Test void deliveryFailureIsPersistedAsFailure() throws Exception {
         Fixture f=new Fixture();f.delivery.fail=true;assertInstanceOf(ExitValue.class,f.run("source","table","request-1"));
         assertTrue(f.base.base.jdbc.queryForObject("select pool_cfg from db_datasource_t where tid='source'",String.class).contains("\"status\":\"failed\""));
+    }
+    @Test void concurrentNewRequestDoesNotStartAnotherDeliveryForSendingTable() throws Exception {
+        Fixture f=new Fixture();var config=JSONUtil.parseObj(f.base.base.jdbc.queryForObject("select pool_cfg from db_datasource_t where tid='source'",String.class));
+        config.getJSONObject("reportRegistration").set("receipts",List.of(Map.of("requestId","sending-1","tableId","table","fileId","file","status","sending")));
+        f.base.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'",config.toString());
+        assertInstanceOf(ExitValue.class,f.run("source","table","sending-2"));assertEquals(0,f.delivery.calls);
     }
 }

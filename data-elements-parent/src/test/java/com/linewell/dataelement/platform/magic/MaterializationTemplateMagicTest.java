@@ -38,6 +38,23 @@ import org.ssssssss.script.runtime.ExitValue;
 /** The template must stay local-first, bounded and scoped to the current role. */
 class MaterializationTemplateMagicTest {
 
+    @ParameterizedTest
+    @CsvSource({"explore,数据抽取方式", "extract,数据抽取方式", "extraction,数据抽取方式",
+            "receive,数据推送方式", "push,数据推送方式", "capture,数据抓取方式", "pull,数据抓取方式",
+            "upload,数据上报方式", "report,数据上报方式", "proxy,代理访问方式", "agent,代理访问方式",
+            "RECEIVE,数据推送方式"})
+    void everyAccessModeRetainsItsDisplayLabelAfterSnapshotProcessing(String mode,String label) throws Exception {
+        var fixture=new Fixture(1);
+        fixture.jdbc.update("update db_datasource_t set db_type=null,pool_cfg=? where tid='source-db'",
+                "{\"accessMode\":\""+mode+"\"}");
+        var result=assertInstanceOf(Map.class,fixture.run(false));
+        var props=assertInstanceOf(Map.class,result.get("propList"));
+        assertEquals(label,props.get("sourceAccessMode"));
+        assertEquals(mode,props.get("sourceAccessModeCode"));
+        assertFalse(((List<?>)result.get("tableItems")).isEmpty());
+        assertEquals(0,fixture.explorer.calls);assertEquals(0,fixture.connectionConfigCalls);
+    }
+
     @Test
     void manuallyRegisteredPushSnapshotDoesNotWarnAboutAnUnneededSqlDialect() throws Exception {
         var fixture=new Fixture(1);

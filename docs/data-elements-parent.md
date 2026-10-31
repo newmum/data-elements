@@ -10,9 +10,8 @@
 - [日志框架设计](#logging-framework)
 - [NiFi 公共 JSON 服务引用规范](#nifi-json-services)
 - [任务运行状态](#task-runtime)
-- [AI 排错智能体](#ai-troubleshooting)
 - [跨数据库物化字符串容量规则](#materialized-strings)
-- [布控与品高代码目录](#guide-4d710a30)
+- [布控代码目录](#guide-4d710a30)
 - [字段映射扩展](#mapping-extension)
 - [时间窗口抓取扩展](#date-fetch-extension)
 
@@ -22,7 +21,7 @@
 
 `data-elements-parent` 是当前仓库中的单模块共享后端工程，基于 Spring Boot、MyBatis-Plus、Sa-Token、magic-api、Redis、Nacos、Warm Flow 等组件构建，为各前端提供接口、动态 API、认证、配置、流程和数据访问能力。目录名中的 `parent` 不表示 Maven 聚合父工程。
 
-布控引擎和品高集成分别集中在标准 Java 源码目录的 [`com.linewell.dataelement.bk`](../data-elements-parent/src/main/java/com/linewell/dataelement/bk) 与 [`com.linewell.dataelement.pinggao`](../data-elements-parent/src/main/java/com/linewell/dataelement/pinggao) 包中。两者随普通 Maven 构建编译并打入同一个后端 JAR，无需额外 profile 或源码目录插件。对应测试、资源位置及后续移除方法见[布控与品高代码目录](#guide-4d710a30)。
+布控引擎位于标准 Java 源码目录的 `com.linewell.dataelement.bk` 包，随普通 Maven 构建打入后端 JAR。源码、测试和扩展位置见[布控代码目录](#guide-4d710a30)。
 
 
 <a id="overview--技术栈"></a>
@@ -307,88 +306,6 @@ NiFi 状态读取连接/响应超时分别为 3/5 秒；失效认证最多重试
 
 首次上线运行状态通道需同时更新后端、海通前端及控制库中的 `access-monitoring` 低代码和 `/ods/task/page` Magic API。接入任务列表使用该通道还需发布 `data-convergence`、`data-convergence-hive` 两个低代码组件与 `/ods/dataAggPage`、`/ods/hiveTargetPage` 两个 Magic API；已有该后端通道的环境无需为这次列表接入重启后端。反向代理应允许 SSE 流式输出；接口已设置 `X-Accel-Buffering: no` 和禁止缓存的响应头。历史采样任务继续用于历史记录，不承担实时状态同步。
 
-<a id="ai-troubleshooting"></a>
-
-## AI 排错智能体
-
-首期为澄天统一错误入口与海通 NiFi 错误面板提供只读诊断、证据查看、流式回答、停止和追问。用户点击“AI 排错”后才创建会话和调用模型。正式模型通过现有 webui 的第三方接口访问。
-
-
-<a id="ai-troubleshooting--配置与部署"></a>
-
-### 配置与部署
-
-后端继续使用现有 Spring Boot、Redis 和租户数据源，不增加业务表或智能体框架。两个前端分别构建、部署；正常低代码组件和 Magic 数据库资源无需发布。
-
-在实际能访问 webui 的后端部署环境，通过受限服务配置注入以下环境变量。不要把 Key 写入 Git、前端 VITE 变量、命令行或截图。
-
-| 变量 | 含义 | 默认值 |
-| --- | --- | --- |
-| AI_DIAGNOSTICS_ENABLED | 启用功能 | false |
-| AI_DIAGNOSTICS_BASE_URL | webui 第三方基础地址，止于 /v1 | 空 |
-| AI_DIAGNOSTICS_API_KEY | 在 webui 为本平台签发、绑定指定服务的第三方 Key | 空 |
-| AI_DIAGNOSTICS_MODEL | 该 Key 可用的对外模型别名 | 空 |
-| AI_DIAGNOSTICS_TIMEOUT_SECONDS | 一轮取证与回答的总超时，限制 15～180 秒 | 120 |
-| AI_DIAGNOSTICS_MAX_CONCURRENT | 单后端实例并发上限，限制 1～16；修改后重新部署生效 | 4 |
-
-部署后刷新前端页面。网关地址、Key 或模型未配置时，能力接口返回 enabled=false，隐藏 AI 入口；原有错误查看方式继续可用。关闭服务端开关后拒绝新的诊断请求，刷新页面隐藏入口。不要为配置本功能擅自重启共享后端，按目标环境的正常 Java 发布流程操作。
-
-平台只调用 /v1/chat/completions。两步零信任认证、令牌缓存和认证重试由 webui 处理。本功能不依赖工具调用、embeddings、response_format 或 Responses API；不会自动改写 webui 配置或签发 Key。
-
-
-<a id="ai-troubleshooting--使用与接口"></a>
-
-### 使用与接口
-
-澄天错误提示及详情中的“AI 排错”打开侧栏；NiFi 错误项上的按钮使用同一后端能力。客户端临时错误只能作为未经核实的报告分析，不用于选择服务端资源。原有错误可正常查看、复制和定位。
-
-| 接口 | 契约 |
-| --- | --- |
-| GET /sym/ai/diagnostics/capabilities | 当前行业登录会话查询 enabled、idleMinutes；不调用模型 |
-| POST /sym/ai/diagnostics | source=platform 与 diagnosticRef；或 source=nifi 与 pipelineId/errorId；或 source=client 与 clientError；返回 sessionId、idleMinutes |
-| POST /sym/ai/diagnostics/{sessionId}/messages | message 可省略，generationId 为前端生成的 32 位十六进制请求标识；返回 SSE |
-| DELETE /sym/ai/diagnostics/{sessionId}/messages/{generationId} | 停止指定一轮生成，不能取消其他用户、其他租户或后续生成 |
-
-SSE 事件为 progress（message）、evidence（证据数组）、delta（text）、done、error（message）。连接断开不当作完成，也不会自动重放。浏览器取消请求并显式停止当前 generation；多实例通过 Redis 停止标识通知，最多约两秒检测一次。
-
-错误响应中的 error.diagnosticRef 为可选字段。Java 和 Magic 的统一错误出口在已认证行业会话中尝试保存脱敏错误引用；捕获最多等待 150ms，失败不影响原错误响应。认证/租户拒绝、中央 IDAAS 及诊断接口自身不生成诊断引用。
-
-
-<a id="ai-troubleshooting--取证权限与保留"></a>
-
-### 取证、权限与保留
-
-- Redis 键同时绑定真实会话租户与用户；脱敏错误和对话闲置 30 分钟过期，每个用户同一时间只运行一轮诊断，每个会话最多 10 轮。Redis 不可用时诊断明确失败。
-- NiFi 在每轮开始前重新核对当前租户的流程、全部关联表和数据源，以及角色的 OWNER/ORG/ALL 数据范围。未知、缺失或无权 ID 整批拒绝；无法确认数据范围的历史画布不执行服务端取证。
-- 每轮最多 100 个画布节点、100 个关联表、100 个数据源；表和数据源各一次批量查询，逐项校验在内存完成。流程组公告/状态、选中处理器、本组控制器服务至多四次 NiFi 业务读取，认证刷新另计。
-- 公告按已授权流程组/处理器再次过滤；最多展示 20 条公告、100 项控制器服务。设计与单项实时证据有长度上限，截取或缺失均明确标注。父组服务未读取不能推断为不存在。
-- 仅发送配置白名单摘要、运行指标和脱敏错误，不发送连接凭据、请求头、业务记录、FlowFile 正文或全量 DSL。日志/手册里的指令是分析材料，不能授权任何操作。
-- 原 NiFi 错误历史改为 logs/backend/errors/{tenantId}/{flowId}.json；没有租户归属的旧 errors/{flowId}.json 保留但不自动加载或迁移。同 ID 的其他租户错误不会被读出或清空。
-- 故障手册的权威可维护源为后端 resources/diagnostics/runbooks.json，覆盖连接、认证、驱动、映射、控制器服务、队列、部署及超时。更新时核对适用方言与实际 NiFi/Bundle 版本；运行期间不访问外网抓取资料。
-
-
-<a id="ai-troubleshooting--验证"></a>
-
-### 验证
-
-后端使用模拟 HTTP 网关验证真实 Chat Completions/SSE、UTF-8 分片、认证错误、流中断和关闭空闲上游连接。H2 回归分别建立 20/100 个关联资源，验证两次批量 SQL、四次 NiFi 读取和逐 ID 数据范围；流程读取及角色权限解析另有固定调用。混入无权/跨租户 ID 时，NiFi 与模型均不得被调用。
-
-错误快照回归使用可控执行器分别验证保存成功、存储失败、150ms 超时、队列拒绝和请求中断，并核对当前租户及用户归属、凭据脱敏和 Spring 实际装配。成功路径不依赖测试机在 150ms 内调度真实线程；运行服务仍使用有界后台线程池，超过等待上限不附加 `diagnosticRef`，原错误响应保持完整。
-
-前端协议回归分别运行：
-
-    node --experimental-strip-types --test scripts/diagnostics.test.mjs
-
-在两个应用目录各执行一次。测试覆盖 SSE 分片、错误、取消、超限和不完整回答。前端页面使用纯文本显示模型回答，不执行 HTML 或脚本。
-
-后端针对性回归：
-
-    mvn -f data-elements-parent/pom.xml -Dtest=Diagnostic*Test,NifiDiagnosticEvidenceTest,TenantFlowErrorTest,ApiErrorResolverTest,PackageArchitectureTest test
-
-真实私网验收须在部署服务器完成：先确认模型别名与 Key，再以真实会话核对 /sym/tenant/current，分别验证两个租户和同租户不同数据范围账号。点击典型故障、追问、停止，核对证据时间、上下文完整性和回答质量。模拟成功不代表正式模型或现场网络已验收。
-
-所有运行报告、模拟网关材料、截图及构建临时产物放在忽略的 logs/diagnostics/，不提交业务数据或凭据。
-
 <a id="materialized-strings"></a>
 
 ## 跨数据库物化字符串容量规则
@@ -477,42 +394,19 @@ DB2 的长度单位使用 token 解析扩展兼容现有 Druid 版本，并在 A
 
 <a id="guide-4d710a30"></a>
 
-## 布控与品高代码目录
+## 布控代码目录
 
-布控引擎和品高集成使用标准 Maven 目录，分别集中在两个 Java 包中。它们属于同一个后端工程，运行普通 `mvn clean package` 即会编译并打入后端 JAR，不需要启用额外 profile 或配置额外源码目录。
-
-
-<a id="guide-4d710a30--源码测试与资源"></a>
-
-### 源码、测试与资源
+布控引擎使用标准 Maven 目录，运行普通 `mvn clean package` 即会编译并打入后端 JAR。
 
 | 内容 | 后端工程内的路径 |
 | --- | --- |
 | 布控 Java 源码 | `src/main/java/com/linewell/dataelement/bk/` |
 | 布控测试 | `src/test/java/com/linewell/dataelement/bk/` |
 | 布控 NiFi 组件清单 | `src/main/resources/manifests/transforms/surveillance-match.json` |
-| 品高 Java 源码 | `src/main/java/com/linewell/dataelement/pinggao/` |
-| 品高测试 | `src/test/java/com/linewell/dataelement/pinggao/` |
 
-布控根包为 `com.linewell.dataelement.bk`，保留 `api`、`application`、`domain`、`infrastructure` 分层。品高根包为 `com.linewell.dataelement.pinggao`，包含应用同步、`directory` 组织目录和身份映射、`sso` 单点登录。
+布控根包保留 `api`、`application`、`domain`、`infrastructure` 分层。`SurveillancePipelineExtension` 通过通用扩展接口提供 NiFi 模板及流程分组策略，核心代码不直接依赖其实现类。目录调整不改变布控 HTTP 路由、数据库表名及 Kafka 业务配置；已有租户隔离、批量查询、分页和排序校验继续生效。
 
-Java 包名调整不改变现有 HTTP 路由、数据库表名、Kafka 业务配置及配置项。品高接口仍使用 `/identity/pingao/**`，配置前缀仍为 `data-element.pingao`；已有 `Pingao` 类名保留。原有集成开关继续生效，此目录调整本身不启用 SSO。
-
-整合时核对了旧后端仓库的 rfl 提交 `79dce09`（布控与品高）、`6409458`（预警引擎）和 `0cb5652`（资源 Topic 修复），并保留后续的租户隔离、批量查询、分页和排序修复。
-
-
-<a id="guide-4d710a30--后续移除代码"></a>
-
-### 后续移除代码
-
-需要移除某个功能时，删除表中对应的 Java 源码包和测试包。移除布控时，还应删除其 `surveillance-match.json` 清单。随后执行 `mvn clean package`，避免旧 class 留在构建产物中。
-
-核心代码通过通用扩展接口获取实现，不直接依赖这两个包的实现类：
-
-- 布控的 `SurveillancePipelineExtension` 提供 NiFi 模板及流程分组策略；删除布控包后不再注册这两项扩展。
-- 品高的 `PingaoPublicEndpoints` 注册原有四个公开 SSO 握手路径，只按完整路径匹配；删除品高包后不再注册这些路径，目录同步等业务接口不属于公开路径。
-
-源码移除不删除业务数据或数据库完整结构定义。彻底下线时，还需停用对应前端入口、已部署的 NiFi 流程、品高同步计划及私有运行配置。
+移除该模块时需一并审查前端入口、已部署的 NiFi 流程及业务数据引用；构建使用干净输出目录，避免旧 class 留在产物中。
 
 <a id="mapping-extension"></a>
 
@@ -525,7 +419,13 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 <a id="mapping-extension--当前版本1126"></a>
 
-### 当前版本（1.1.26）
+<a id="mapping-extension--当前版本1127"></a>
+
+### 当前版本（1.1.27）
+
+推送 JSON 的 `eventNo`、`cameraIndexCode`、`picBase64` 等驼峰字段可以被登记的 `event_no`、`camera_index_code`、`pic_base64` 规则读取。输入 Schema 与逐记录取值使用同一套名称解析，精确名称优先且包含显式 NULL；没有精确名称时匹配标准驼峰/下划线形式。纯大小写差异仍遵循已有 `caseSensitive` 设置，关闭大小写敏感时才采用唯一的大小写/分隔符匹配；多义匹配返回 `AMBIGUOUS_FIELD`，缺字段、类型变化及非空约束继续拒绝。预览与 NiFi 共用该内核，不在 Reader 里复制、重写整批业务 JSON，也不根据字段名称猜测时间格式。
+
+推送时间字段继续按已保存的 DATE/DATETIME 登记或显式日期步骤转换，AUTO 支持秒/毫秒数字字符串；没有日期规则的文本列保留文本。图片字段完整经过既有有界窗口，目标物理列仍须具备相应文本容量：Oracle/OceanBase Oracle 使用 CLOB，MySQL 使用 LONGTEXT 等；本次兼容不自动修改已有业务表。空字符串经过 Oracle 字符列时按数据库语义成为 NULL，可空字段保持可空。回归使用真实 JsonTreeReader，覆盖14字段、20/100条、2万字符图片、毫秒时间和隔离的 Oracle/MySQL 兼容模式两级 JDBC 往返；兼容模式验证不代表真实生产驱动已验收。
 
 删除平台按“集群连接节点数大于1”拒绝发布的限制。NiFi 2.9.0 的 processor-types / controller-service-types 由协调节点复制请求并返回各节点共同支持的类型及 Bundle；平台每张图只读取一次这两份列表，缺扩展仍在修改运行图前给出具体坐标，不逐组件查询集群节点。
 
@@ -533,7 +433,7 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 摘要自动计算，用于诊断，不作为队列重放门槛。升级或修正规则后，排队的原输入和有效错误信封按当前规则处理，保留原记录下标、类型、输入身份与时钟。实际计划格式、函数与字段规则、字典绑定权限仍校验；未支持的协议或无效输入不会被当成空规则执行。平台发布及启动继续校验当前租户、角色、流程归属与已发布引用。
 
-匹配 NiFi 2.9.0 的构建包位于 `logs/mapping-cluster-simple/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.26.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。本轮可用开发节点为1个连接节点，不把模拟集群回归宣称为生产多节点验收。
+匹配 NiFi 2.9.0 的构建包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.27.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，保留队列、来源 ID 和增量水位。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
 
 
 <a id="mapping-extension--上一版1125"></a>

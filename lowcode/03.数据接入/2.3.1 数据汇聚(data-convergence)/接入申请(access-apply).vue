@@ -1318,6 +1318,18 @@ const cancelPendingInit = () => {
   loadPending.value = { datasource: false, node: false, source: false };
 };
 
+const sourceAccessModeLabel = (value: any) => {
+  const text = String(value || "").trim();
+  const labels = {
+    explore: "数据抽取方式", extract: "数据抽取方式", extraction: "数据抽取方式",
+    receive: "数据推送方式", push: "数据推送方式",
+    capture: "数据抓取方式", pull: "数据抓取方式",
+    upload: "数据上报方式", report: "数据上报方式",
+    proxy: "代理访问方式", agent: "代理访问方式",
+  };
+  return labels[text.toLowerCase()] || text || "未记录";
+};
+
 const init = async () => {
   const runId = ++initRun;
   partitionPlans.value = {};
@@ -1396,13 +1408,15 @@ const init = async () => {
         || rawPropList.dbName
         || ""
       ).trim(),
-      sourceAccessMode: String(
+      sourceAccessMode: sourceAccessModeLabel(
         rawPropList.sourceAccessMode
         || rawPropList.sourceAccessModeName
         || rawPropList.accessModeName
+        || rawPropList.sourceAccessModeCode
         || rawPropList.accessMode
+        || rawPropList.dataAccessMode
         || ""
-      ).trim(),
+      ),
     };
     sourceTableName.value = String(propList.sourceTableName || propList.tableName || "").trim();
     if (props.type === "add") {

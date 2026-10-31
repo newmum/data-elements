@@ -1,4 +1,4 @@
-import type { DataType, Resource, SourceBook } from '../core/model';
+import type { DataType, Resource, SourceBook,TimeFormat } from '../core/model';
 import { clone } from '../core/model';
 import { resourceFromRegion } from '../core/import';
 import { prepareValue } from '../core/engine';
@@ -6,12 +6,15 @@ import { platformApi, platformSessionToken } from './platformApi';
 import { getSessionRevision } from '../../nifi/api/bridgeSession';
 import type { ReportContext } from './reportApi';
 
-export interface UploadField { columnName: string; columnComment: string; columnType: string; columnLength?: number; primaryKey: boolean; nullable: boolean; isTimestamp: boolean }
+export interface UploadField { columnName: string; columnComment: string; columnType: string; columnLength?: number; primaryKey: boolean; nullable: boolean; isTimestamp: boolean; standardField?: ''|'DATE'|'DATETIME'; dictionaryRole?: ''|'code'|'label';timeFormat?:TimeFormat;timezone?:string }
 export interface UploadTable {
   key: string; tid?: string; fileId: string; fileName: string; sheetName?: string;
   tableName: string; tableNameCn: string; fieldCount: number; recordCount: number;
   fields: UploadField[]; status: 'success' | 'failed'; error?: string;
   startRow?: number; endRow?: number; startColumn?: number; endColumn?: number; legacy?: boolean;
+  headerMode?: 'single'|'bilingual'|'none'; dataStartRow?: number;
+  parseEncoding?:string; parseDelimiter?:string;
+  businessType?: string; normalized?: boolean; normalizationVersion?: number;
 }
 export interface ReportReceipt { id: string; fileId: string; tableId: string; tableName: string; fileName: string; status: string; rowCount: number; reportedAt: string; message?: string }
 export interface UploadManifest { revision: string; files: Array<{fileId: string; fileName: string}>; tables: UploadTable[]; failedTables?: UploadTable[]; receipts?: ReportReceipt[] }
@@ -39,7 +42,7 @@ export async function uploadOriginal(file:File):Promise<string>{
   const result=await platformApi<{tid:string}>('/data/file?action=upload',{method:'POST',body:form});
   if(!result.tid)throw new Error('上传未返回文件编号');return result.tid;
 }
-export const saveUploadManifest=(dbId:string,manifest:UploadManifest,removedTableIds:string[]=[],configureFields=false)=>platformApi<UploadManifest>(endpoint,{method:'POST',body:{...manifest,action:'save',dbId,removedTableIds,configureFields}});
+export const saveUploadManifest=(dbId:string,manifest:UploadManifest,removedTableIds:string[]=[],normalizedTableKeys:string[]=[])=>platformApi<UploadManifest>(endpoint,{method:'POST',body:{...manifest,action:'save',dbId,removedTableIds,workflowVersion:2,normalizedTableKeys}});
 export async function readUploadedOriginal(fileId:string,fileName:string):Promise<File>{
   const token=await platformSessionToken(),revision=getSessionRevision();
   const base=import.meta.env.VITE_DATA_ELEMENTS_API_BASE_URL||(import.meta.env.DEV?'/dev-api':'/prod-api');
@@ -54,11 +57,19 @@ export function tableResource(book:SourceBook,table:UploadTable):Resource{
   const sheet=book.sheets.findIndex(item=>item.name===table.sheetName);
   if(sheet<0||!table.startRow||!table.endRow)throw new Error('该历史记录没有数据区域，请重新上传原文件');
   const resource=resourceFromRegion(book,{id:table.key,sheet,kind:'business',startRow:table.startRow,endRow:table.endRow,
-    startCol:table.startColumn||1,endCol:table.endColumn||table.fields.length,header:'single',dataStart:table.startRow+1,
+    startCol:table.startColumn||1,endCol:table.endColumn||table.fields.length,header:table.headerMode||'single',dataStart:table.dataStartRow??table.startRow+(table.headerMode==='none'?0:table.headerMode==='bilingual'?2:1),
     name:table.tableNameCn,codeCol:1,labelCol:2,hiddenConfirmed:true});
   resource.id=table.key;resource.source.fileId=table.fileId;resource.schema.name=table.tableNameCn;resource.schema.englishName=table.tableName;
+  return applyTableSchema(resource,table);
+}
+export function applyTableSchema(original:Resource,table:UploadTable):Resource{
+  const resource=clone(original);resource.schema.name=table.tableNameCn;resource.schema.englishName=table.tableName;
+  if(resource.schema.fields.length!==table.fields.length)throw new Error('数据区域与字段数量不一致，请重新设置解析');
   resource.schema.fields=resource.schema.fields.map((field,index)=>({...field,en:table.fields[index].columnName,zh:table.fields[index].columnComment,
-    type:fieldType(table.fields[index].columnType),nullable:table.fields[index].nullable?'allow':'forbid',confirmed:true}));
+    type:table.fields[index].standardField==='DATE'?'date':table.fields[index].standardField==='DATETIME'?'datetime':fieldType(table.fields[index].columnType),
+    nullable:table.fields[index].nullable?'allow':'forbid',pk:table.fields[index].primaryKey,confirmed:true,standardField:table.fields[index].standardField,
+    time:{format:table.fields[index].timeFormat||(table.fields[index].standardField==='DATE'||fieldType(table.fields[index].columnType)==='date'?'ymd':'iso'),timezone:table.fields[index].timezone||'Asia/Shanghai'}}));
+  resource.schema.timestamp=resource.schema.fields[table.fields.findIndex(field=>field.isTimestamp)]?.id||'';
   resource.savedSchema=clone(resource.schema);return resource;
 }
 export function fieldType(type:string):DataType{
@@ -68,11 +79,15 @@ export function fieldType(type:string):DataType{
 export function normalizedReportFile(resource:Resource):File{
   const quote=(value:unknown)=>'"'+String(value??'').replace(/"/g,'""')+'"';
   const fields=resource.schema.fields;
-  const rows=resource.rows.map(row=>fields.map(field=>{
-    const value=prepareValue(row.values[field.id],field,resource.schema,[]);
-    if(value===null&&field.nullable==='forbid')throw new Error(`第${row.sourceRow}行 ${field.zh||field.en} 不允许为空`);
-    return quote(value);
-  }).join(','));
+  const keys=new Set<string>();const primary=fields.flatMap((field,index)=>field.pk?[index]:[]);
+  const rows=resource.rows.map(row=>{
+    const values=fields.map(field=>{try{
+      const value=prepareValue(row.values[field.id],field,resource.schema,[]);
+      if(value===null&&(field.nullable==='forbid'||field.pk))throw new Error('不允许为空');return value;
+    }catch(cause){throw new Error(`第${row.sourceRow}行 ${field.zh||field.en}：${(cause as Error).message}`);}});
+    if(primary.length){const key=JSON.stringify(primary.map(index=>values[index]));if(keys.has(key))throw new Error(`第${row.sourceRow}行 主键重复，请修正数据或调整主键`);keys.add(key);}
+    return values.map(quote).join(',');
+  });
   if(!rows.length)throw new Error('当前数据表没有可上报的数据');
   const file=new File(['\uFEFF'+[fields.map(field=>quote(field.en)).join(','),...rows].join('\r\n')],resource.schema.englishName+'.csv',{type:'text/csv;charset=utf-8'});
   if(file.size>10*1024*1024)throw new Error('规范化CSV超过10 MB，请拆分数据后上报');

@@ -17,7 +17,7 @@ const names = [
   'normalizeDbId', 'normalizeDbIds', 'syncDbTypeByDatasource', 'buildTargetTableName',
   'sameStringList', 'normalizeTargetTableName', 'targetDatasourceIds', 'targetTableNameInput',
   'syncTargetDatasourceSelection', 'syncTargetTableNameInput', 'normalizeFormPayload',
-  'isCurrentInit', 'trackLoad', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
+  'isCurrentInit', 'trackLoad', 'sourceAccessModeLabel', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
   'isHiveTarget',
   'partitionPlans', 'ddlPartitionPlans', 'partitionSupport', 'partitionProbeMessage', 'sourceDefinitionMessage', 'sourcePartitionDetected',
@@ -101,7 +101,8 @@ function fixture(size = 2) {
       if (route.endsWith('/getCreateTableDDL') && body.partitionProbe) return {data:{source:{status:'unsupported'},targetSupport:{}}};
       if (route === '/ods/getTableTempalte' || route === '/ods/queryTargetTableInfo') return { data: {
         propList: { sourceTableName: context.sourceTableName.value, tableName: 'ODS_SAVED_CUSTOM', dbId: [['ODS', 'db-0']],
-          sourceFileConfig: context.ftpTemplate || null },
+          sourceFileConfig: context.ftpTemplate || null,
+          sourceAccessMode: context.sourceMode, sourceAccessModeCode: context.sourceModeCode },
         tableItems: columns,
       } };
       if (route.endsWith('/getCreateTableDDL')) return { data: { batchGenerate: true,
@@ -140,6 +141,25 @@ function fixture(size = 2) {
   vm.runInContext(executable + expose, context);
   return { context, form, calls, notices, emitted, timers, actual: context.actual };
 }
+
+for (const [mode,label] of [
+  ['explore','数据抽取方式'],['extract','数据抽取方式'],['extraction','数据抽取方式'],
+  ['receive','数据推送方式'],['push','数据推送方式'],[' RECEIVE ','数据推送方式'],
+  ['capture','数据抓取方式'],['pull','数据抓取方式'],['upload','数据上报方式'],['report','数据上报方式'],
+  ['proxy','代理访问方式'],['agent','代理访问方式'],['数据推送方式','数据推送方式'],['','未记录'],
+]) for (const fields of [20,100]) {
+  const f=fixture(1);f.context.sourceMode=mode;
+  await f.actual.init();
+  assert.equal(f.context.formData.value.sourceAccessMode,label);
+  assert.equal(f.form.sourceAccessMode,label);
+  f.context.tableRef.value.setData(Array.from({length:fields},(_,i)=>({columnName:`f_${i}`,dataType:'varchar',length:32})));
+  assert.equal(f.calls.length,3,'Mode labels use the template response without per-field reads');
+}
+{
+  const f=fixture(1);f.context.sourceModeCode='receive';await f.actual.init();
+  assert.equal(f.form.sourceAccessMode,'数据推送方式','Historical code-only responses must display the registered mode');
+}
+console.log('Five access modes, aliases, Chinese labels and code-only responses: 20/100 fields use three initialization requests.');
 
 const defaults = [
   ['TC_RKXT.T_SJYCC_CKB', 'ODS_T_SJYCC_CKB'], ['public.education', 'ODS_education'],

@@ -44,39 +44,49 @@ public class DataPushRegistryController {
         return ok(schemas.contract(TenantContext.requireTenantId(), required(datasourceId, "datasourceId")));
     }
 
-    /**
-     * Issues one data-source-level credential.  The plaintext key is delivered
-     * only to the authenticated registration view on the first issue; the
-     * platform stores just the caller-to-source authorization relationship.
-     */
+    /** Generates locally, then provisions only its digest with the registration snapshot. */
     @PostMapping("/credential/issue")
     public Map<String, Object> issueCredential(@RequestBody Map<String, Object> body) {
-        String tenantId = TenantContext.requireTenantId();
-        String datasourceId = required(body.get("datasourceId"), "datasourceId");
-        schemas.requirePushDatasource(tenantId, datasourceId);
-        String clientId = "push-" + datasourceId;
-        standaloneRegistry.synchronize(datasourceId, schemas.standaloneSnapshot(tenantId, datasourceId, clientId));
-        HaitongPushCredentialClient.IssuedCredential issued = credentials.issue(clientId, false);
-        clients.bindDatasource(clientId, tenantId, datasourceId);
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("clientId", issued.clientId());
-        result.put("datasourceId", datasourceId);
-        result.put("revealed", issued.revealed());
-        if (issued.revealed()) result.put("apiKey", issued.apiKey());
-        return ok(result);
+        return prepareCredential(body, false);
     }
 
-    /** Explicit key rotation; the former plaintext key becomes invalid immediately. */
+    /** Explicit rotation; the former key expires when the relay confirms synchronization. */
     @PostMapping("/credential/rotate")
     public Map<String, Object> rotateCredential(@RequestBody Map<String, Object> body) {
+        return prepareCredential(body, true);
+    }
+
+    private Map<String, Object> prepareCredential(Map<String, Object> body, boolean rotate) {
         String tenantId = TenantContext.requireTenantId();
         String datasourceId = required(body.get("datasourceId"), "datasourceId");
         schemas.requirePushDatasource(tenantId, datasourceId);
         String clientId = "push-" + datasourceId;
-        standaloneRegistry.synchronize(datasourceId, schemas.standaloneSnapshot(tenantId, datasourceId, clientId));
-        HaitongPushCredentialClient.IssuedCredential issued = credentials.issue(clientId, true);
-        clients.bindDatasource(clientId, tenantId, datasourceId);
-        return ok(Map.of("clientId", issued.clientId(), "datasourceId", datasourceId, "revealed", true, "apiKey", issued.apiKey()));
+        var credential = clients.prepareCredential(clientId, tenantId, datasourceId, rotate);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("clientId", clientId);
+        result.put("datasourceId", datasourceId);
+        result.put("revealed", credential.revealed());
+        result.put("managedBy", credential.hash().isBlank() ? "relay" : "platform");
+        result.put("ready", false);
+        if (credential.revealed()) result.put("apiKey", credential.apiKey());
+        try {
+            var snapshot = schemas.standaloneSnapshot(tenantId, datasourceId, clientId);
+            if (!credential.hash().isBlank()) snapshot.put("credential", Map.of(
+                    "clientId", clientId, "apiKeySha256", credential.hash(),
+                    "previousSha256", credential.previousHash()));
+            standaloneRegistry.synchronize(datasourceId, snapshot);
+            if (rotate && credential.hash().isBlank()) {
+                var legacy = credentials.issue(clientId, true);
+                result.put("revealed", legacy.revealed());
+                if (legacy.revealed()) result.put("apiKey", legacy.apiKey());
+            }
+            result.put("ready", true);
+        } catch (com.linewell.dataelement.model.common.BizException exception) {
+            result.put("syncError", exception.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            result.put("syncError", exception.getMessage());
+        }
+        return ok(result);
     }
 
     @PostMapping("/internal/validate")

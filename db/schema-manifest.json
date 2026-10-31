@@ -18,7 +18,7 @@
         "functions": 0,
         "events": 0
       },
-      "sha256": "a3e0bcc4c5671c386cd3a0887596b01e78def330b3543623a25166134b6cc757",
+      "sha256": "760d300c20efa825b18fc3e3806922291e3409b9981c0cb577474d3b84c2f5af",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -31,17 +31,17 @@
       "dialect": "dameng",
       "file": "baseline_beijing_gd/init.sql",
       "objects": {
-        "tables": 162,
+        "tables": 161,
         "views": 5,
-        "indexes": 660,
-        "explicitIndexes": 331,
+        "indexes": 656,
+        "explicitIndexes": 329,
         "foreignKeys": 2,
         "triggers": 20,
         "procedures": 0,
         "functions": 0,
         "sequences": 0
       },
-      "sha256": "2d18187edbb11f4518182f635bf6e7d346a647512fd8b8b79d9d2946de7ad6ca",
+      "sha256": "bc849ca39ce61df0dc3fe181e64f372ff0bc36a2a3fade27f88d9d59278a7dfa",
       "exportNotes": {
         "definitions": "DBMS_METADATA.GET_DDL",
         "comments": "DBA_TAB_COMMENTS/DBA_COL_COMMENTS",
@@ -54,16 +54,16 @@
       "dialect": "mysql",
       "file": "chengtian/init.sql",
       "objects": {
-        "tables": 162,
+        "tables": 161,
         "views": 0,
-        "indexes": 577,
+        "indexes": 574,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "0700e768b0b3e47274d2e9575164f2cf99fcd2f03096f53e211d156f97c99024",
+      "sha256": "f93d4fe6082e668a321e95cff2c8cdfc68eb77b086931bc1a33a84ff2b475d46",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -76,16 +76,16 @@
       "dialect": "mysql",
       "file": "baseline_ga/init.sql",
       "objects": {
-        "tables": 162,
+        "tables": 161,
         "views": 5,
-        "indexes": 577,
+        "indexes": 574,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "ae90967ea370ef3d563074bf60337fe1deb616b42432ced5229dbff90518bb34",
+      "sha256": "814f2c8555f31ff4dd9dc2b4c56a4a4a33241f58446c2583e11b42985ad3030d",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -100,14 +100,14 @@
       "objects": {
         "tables": 162,
         "views": 5,
-        "indexes": 577,
+        "indexes": 575,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "a78d2f50d4b8c17342037886d1945aab46f0ca1e84ae9d4c55d52014ea93189d",
+      "sha256": "765cf161644c804608297b7c4984315b30dd8ac5718be544fb3e501b8ba42280",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

@@ -46,6 +46,9 @@ public class HaitongStandaloneRegistryClient {
             if (!datasourceId.equals(returnedSource)) {
                 throw new BizException(502, "推送登记同步服务返回数据源不匹配");
             }
+            if (datasourceSnapshot.containsKey("credential") && !Integer.valueOf(1).equals(payload.get("credentialCount"))) {
+                throw new BizException(502, "海通尚未确认平台密钥摘要，请更新海通登记同步脚本后重试同步");
+            }
         } catch (BizException exception) {
             throw exception;
         } catch (Exception exception) {

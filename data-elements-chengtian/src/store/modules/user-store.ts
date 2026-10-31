@@ -9,7 +9,6 @@ import { usePermissionStoreHook } from "@/store/modules/permission-store";
 import { useDictStoreHook } from "@/store/modules/dict-store";
 import { useSettingStoreHook, useTagsViewStore } from "@/store";
 import { cleanupWebSocket } from "@/plugins/websocket";
-import { PingaoSsoAPI } from "@/api/pingao-sso-api";
 
 export type UserType = UserInfo & {
   isAdmin: boolean; // 是否管理员
@@ -114,12 +113,6 @@ export const useUserStore = defineStore("user", () => {
    * 登出
    */
   function logout() {
-    if (sessionStorage.getItem("pingao-sso-session") === "1") {
-      return PingaoSsoAPI.logout().then(async ({ logoutUrl }) => {
-        await resetAllState();
-        window.location.assign(logoutUrl);
-      });
-    }
     return new Promise<any>((resolve, reject) => {
       AuthAPI.logout()
         .then((res) => {
@@ -165,7 +158,6 @@ export const useUserStore = defineStore("user", () => {
   function resetUserState() {
     // 清除用户凭证
     AuthStorage.clearAuth();
-    sessionStorage.removeItem("pingao-sso-session");
     // 重置用户信息
     userInfo.value = {} as UserType;
   }

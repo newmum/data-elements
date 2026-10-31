@@ -24,7 +24,8 @@ for (const width of [1920, 1440, 1360, 390]) test(`系统切换菜单可读、�
     await trigger.press('Enter');
     const menu = page.locator('.iam-center-popover .ant-dropdown-menu');
     await expect(menu).toBeVisible();
-    await expect(menu.getByRole('menuitem')).toHaveCount(13);
+    await expect(menu.getByRole('menuitem')).toHaveCount(12);
+    await expect(menu).not.toContainText('人工智能');
     await expect(menu.getByText('平台支撑', { exact: true })).toBeVisible();
     await menu.getByText('统一身份管理平台', { exact: true }).scrollIntoViewIfNeeded();
     await expect(menu.locator('.iam-center-item.current')).toContainText('当前');

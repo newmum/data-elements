@@ -160,9 +160,12 @@ public class HaitongTransformRecord extends AbstractProcessor {
         return session.putAllAttributes(file,Map.of(MappingErrorRecords.ATTEMPT,Integer.toString(attempt),MappingErrorRecords.NEXT,Long.toString(System.currentTimeMillis()+delay),MappingErrorRecords.RELATIONSHIP,relationship.getName()));
     }
     private static RecordSchema outputSchema(MappingEngine.Plan plan,RecordSchema input){
+        var sourceNames=new SourceFieldNames(input.getFieldNames(),plan.document().path("policies").path("caseSensitive").asBoolean(true));
+        var origins=plan.outputOrigins();
         LinkedHashMap<String,RecordField>fields=new LinkedHashMap<>();if(plan.passthrough())input.getFields().forEach(f->{if(!plan.excludes().contains(f.getFieldName()))fields.put(f.getFieldName(),f);});
         plan.outputContracts().forEach((name,contract)->{String type=contract.logicalType();
-            var old=input.getField(plan.outputOrigins().getOrDefault(name,name));org.apache.nifi.serialization.record.DataType value=switch(type){case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(Math.max(1,Math.max(contract.scale(),contract.precision()-Math.min(0,contract.scale()))),Math.max(0,contract.scale()));case "DATE"->RecordFieldType.DATE.getDataType();case "TIME"->RecordFieldType.TIME.getDataType();case "DATETIME","INSTANT"->RecordFieldType.TIMESTAMP.getDataType();case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());case "ANY"->old.map(RecordField::getDataType).orElse(RecordFieldType.STRING.getDataType());default->RecordFieldType.STRING.getDataType();};
+            String origin=origins.getOrDefault(name,name),physical=sourceNames.resolve(origin);
+            var old=physical==null?Optional.<RecordField>empty():input.getField(physical);org.apache.nifi.serialization.record.DataType value=switch(type){case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(Math.max(1,Math.max(contract.scale(),contract.precision()-Math.min(0,contract.scale()))),Math.max(0,contract.scale()));case "DATE"->RecordFieldType.DATE.getDataType();case "TIME"->RecordFieldType.TIME.getDataType();case "DATETIME","INSTANT"->RecordFieldType.TIMESTAMP.getDataType();case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());case "ANY"->old.map(RecordField::getDataType).orElse(RecordFieldType.STRING.getDataType());default->RecordFieldType.STRING.getDataType();};
             // Avro/NiFi require a nonnegative scale <= precision, while SQL
             // NUMBER(p,s) can have negative s or s > p. The engine validates
             // the SQL contract; this carrier only holds the validated value.
@@ -171,11 +174,15 @@ public class HaitongTransformRecord extends AbstractProcessor {
     }
     private static int integer(String value){try{return value==null?0:Math.max(0,Integer.parseInt(value));}catch(Exception ex){return 0;}}
     private static List<SchemaContract.Field> inputContract(RecordSchema schema,MappingEngine.Plan plan){
+        var document=plan.document();var sourceNames=new SourceFieldNames(schema.getFieldNames(),document.path("policies").path("caseSensitive").asBoolean(true));
         Map<String,String> jdbcDates=new HashMap<>();
-        for(var declared:plan.document().path("schemaContract").path("source")) {
+        for(var declared:document.path("schemaContract").path("source")) {
             String logical=declared.path("logicalType").asText();
             if(declared.path("dateContainsTime").asBoolean()&&declared.path("physicalType").asText().equalsIgnoreCase("DATE")
-                    &&Set.of("DATE","DATETIME","INSTANT").contains(logical))jdbcDates.put(declared.path("name").asText(),logical);
+                    &&Set.of("DATE","DATETIME","INSTANT").contains(logical)){
+                String physical=sourceNames.resolve(declared.path("name").asText());
+                if(physical!=null)jdbcDates.put(physical,logical);
+            }
         }
         List<SchemaContract.Field> result=new ArrayList<>();for(RecordField field:schema.getFields()){
             var type=field.getDataType();if(type instanceof org.apache.nifi.serialization.record.type.ChoiceDataType choice){

@@ -29,7 +29,6 @@ const routes = {
   "数据服务中心": "/services/catalog",
   "知识服务中心": "/graph/datasets",
   "数据可视化中心": "/visualization/screens",
-  "人工智能中心": "/ai/robots",
   "数据运行监控中心": "/ops/health",
   "数据安全中心": "/security/discovery/models",
 };
@@ -41,7 +40,7 @@ let checks = 0;
 const groups = [...descriptor.template.content.matchAll(/<div class="grid">([\s\S]*?)<\/div>\s*<\/div>/g)];
 const expectedGroups = [
   ["大数据能力产品", ["数据集成中心", "数据资源中心", "数据计算中心", "数据治理中心", "数据资产中心", "数据服务中心"]],
-  ["数据应用产品", ["智能搜索中心", "知识服务中心", "数据可视化中心", "人工智能中心"]],
+  ["数据应用产品", ["智能搜索中心", "知识服务中心", "数据可视化中心"]],
   ["数据安全产品", ["统一身份管理中心", "数据安全中心", "数据运行监控中心"]],
 ];
 assert.equal(groups.length, expectedGroups.length);
@@ -120,7 +119,7 @@ function visit(value) {
   } else Object.entries(value).forEach(([key, item]) => visit(key === "default" && typeof item === "function" ? item() : item));
 }
 visit(tree);
-assert.equal(clicks.size, 13);
+assert.equal(clicks.size, 12);
 for (const [name, route] of Object.entries(routes)) {
   clicks.get(name)();
   assert.equal(context.navigated.at(-1), `http://localhost:${devPorts[owner(route)]}/#${route}`);
@@ -225,7 +224,7 @@ for (const [href, configured, expected] of [
       assign: value => { target = value; },
     } }, $message: { warning: () => assert.fail("A selected source must navigate") } };
   vm.runInNewContext(`${reportHandler};openReportWorkspace();`, entry);
-  assert.equal(target, expected);
+  assert.equal(target, `${expected}&returnTo=${encodeURIComponent(href)}`);
   checks++;
 }
 console.log(`Capability navigation: ${checks} checks passed (all menu handlers, dev/production URLs, overrides and shared authentication addresses).`);

@@ -7,7 +7,7 @@ export const routes:Array<{path:string;title:string;group:string;icon:IconName;a
  {path:'/development/registry',title:'任务登记',group:'任务开发',icon:'registry',art:'registry',description:'登记真实 NiFi 画布流程的外部标识，支持导入原生 Canvas DSL 草稿。',highlights:['DSL 预检','外部流程标识','防重复登记']},
  {path:'/development/batch',title:'批量创建任务',group:'任务开发',icon:'batch',art:'batch',description:'批量匹配并保存待创建队列，按项主动创建和追踪结果。',highlights:['表名匹配','持久队列','逐项创建']},
  {path:'/development/multi-table',title:'多表同步任务',group:'任务开发',icon:'multi',art:'multi',description:'将多个独立单表接入任务编组管理，逐表查看任务与运行状态。',highlights:['租户级编组','独立画布','逐表状态']},
- {path:'/report',title:'数据上报',group:'任务开发',icon:'upload',art:'tasks',description:'选择当前部门已登记的数据表，下载模板、校验文件并上报原始数据。',highlights:['登记表选择','文件校验','上报记录']},
+ {path:'/report',title:'数据上报',group:'任务开发',icon:'upload',art:'tasks',description:'选择数据源，上传并规范数据文件，确认后上报。',highlights:['上传文件','规范数据','数据上报']},
  {path:'/ops/ingress',title:'接入任务监控',group:'任务运维',icon:'ingress',art:'ingress',description:'把握接入与同步进度，沿执行记录定位未完成的环节。',highlights:['运行阶段','表级计数','异常日志']},
  {path:'/ops/distribution',title:'分发任务监控',group:'任务运维',icon:'distribution',art:'distribution',description:'查看已保存的分发任务及状态；实际流程运行关联需要分发执行服务提供。',highlights:['任务分页','状态详情','运行关联待接入']},
  {path:'/ops/clusters',title:'集群监控',group:'任务运维',icon:'clusters',art:'clusters',description:'查看已登记 NiFi 节点的连通性与系统诊断。',highlights:['节点概况','连通检测','JVM 诊断']},

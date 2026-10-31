@@ -265,11 +265,16 @@ if (body?.partitionProbe == true) {
     for (id in ids) { if (byId[id] == null) { exit 403, '来源或目标数据源不存在或已删除' } }
     var support = {}
     for (id in targetIds) {
-        var targetType = DatabaseType.fromCode(textOf(firstValue(byId[textOf(id)], ['dbType','db_type'])))
+        var targetPoolRaw = rowValue(byId[textOf(id)], ['poolCfg','pool_cfg'])
+        var targetPool = blank(targetPoolRaw) ? {} : (targetPoolRaw instanceof Map ? targetPoolRaw : poolJsons.parse(textOf(targetPoolRaw)))
+        var targetCode = firstValue(byId[textOf(id)], ['dbType','db_type']) || firstValue(targetPool, ['dbType','databaseType'])
+        if (blank(targetCode)) { exit 400, '目标库未配置数据库类型，请先补全目标数据源连接信息' }
+        var targetType
+        try { targetType = DatabaseType.fromCode(textOf(targetCode).trim().toLowerCase()) }
+        catch (invalidTargetType) { exit 400, '目标库数据库类型不受支持，请检查目标数据源配置' }
+        if (targetType == null) { exit 400, '目标库未配置数据库类型，请先补全目标数据源连接信息' }
         var allowed = targetType != null && tablePartitions.supported(targetType)
         if (targetType == DatabaseType.HIVE) {
-            var targetPoolRaw = rowValue(byId[textOf(id)], ['poolCfg','pool_cfg'])
-            var targetPool = blank(targetPoolRaw) ? {} : (targetPoolRaw instanceof Map ? targetPoolRaw : poolJsons.parse(textOf(targetPoolRaw)))
             allowed = !blank(firstValue(targetPool,['hiveProfile','hive_profile']))
                 || textOf(firstValue(targetPool,['hiveConnectionMode','hive_connection_mode']) || '').toLowerCase() == 'huawei-mrs'
                 || ['true','1'].contains(textOf(firstValue(targetPool,['usePlatformHiveConfig','use_platform_hive_config']) || '').toLowerCase())
@@ -278,11 +283,17 @@ if (body?.partitionProbe == true) {
         support[textOf(id)] = allowed
     }
     var sourceRow = byId[sourceDbId]
-    var sourceCode = textOf(firstValue(sourceRow, ['dbType','db_type'])).toLowerCase()
+    var rawPool = rowValue(sourceRow, ['poolCfg','pool_cfg'])
+    var pool = blank(rawPool) ? {} : (rawPool instanceof Map ? rawPool : poolJsons.parse(textOf(rawPool)))
+    var sourceCode = textOf(firstValue(sourceRow, ['dbType','db_type','databaseType','database_type'])
+        || firstValue(pool, ['dbType','db_type','databaseType','database_type']) || '').trim().toLowerCase()
+    var sourceMode = textOf(firstValue(sourceRow, ['accessMode','access_mode','dataAccessMode','data_access_mode'])
+        || firstValue(pool, ['accessMode','access_mode','dataAccessMode','data_access_mode']) || '').trim().toLowerCase()
+    // 推送、上报、接口抓取等来源使用登记快照，不要求来源具备 SQL 方言或连接。
+    // 空接入方式兼容历史数据库登记；显式非抽取方式不执行来源物理分区探查。
+    var canProbeSource = blank(sourceMode) || ['explore','extract','extraction'].contains(sourceMode)
     var detected = {status:'unsupported', message:'当前来源不自动探查分区，可手工配置目标分区'}
-    if (['oracle','oceanbaseoracle','oceanbase_oracle','dameng'].contains(sourceCode)) {
-        var rawPool = rowValue(sourceRow, ['poolCfg','pool_cfg'])
-        var pool = blank(rawPool) ? {} : (rawPool instanceof Map ? rawPool : poolJsons.parse(textOf(rawPool)))
+    if (canProbeSource && ['oracle','oceanbaseoracle','oceanbase_oracle','dameng'].contains(sourceCode)) {
         var connection = connectionProperties.resolve(probeTenant, sourceDbId)
         connection.dbType = sourceCode
         try { detected = metadataExplorerService.getPartitionInfo(dataSourceOf(connection), firstValue(source,['tableName','table_name'])) }

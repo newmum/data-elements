@@ -24,6 +24,7 @@ class ReportRegistrationMagicTest {
     }
     static class Fixture {
         final TableDetailFieldSaveMagicTest.Fixture base;
+        final Map<String,Object> captured = new HashMap<>();
         Fixture(int count) {
             base = new TableDetailFieldSaveMagicTest.Fixture(count);
             base.jdbc.execute("alter table db_datasource_t add pool_cfg clob");
@@ -37,12 +38,15 @@ class ReportRegistrationMagicTest {
             base.jdbc.execute("create table file_upload_t(tid varchar(64),tenant_id varchar(64),created_by varchar(64),is_del int)");
         }
         Object run(Map<String,Object> body) throws Exception {
+            return run(body,false);
+        }
+        Object run(Map<String,Object> body,boolean captureImport) throws Exception {
             String script = source().replaceAll("(?m)^import (?!java\\.|cn\\.hutool\\.|cn\\.dev33\\.|org\\.apache\\.poi\\.|com\\.linewell\\.)[^\\r\\n]*\\r?\\n", "");
-            script = "var importSnapshot=()=>{throw new IllegalStateException('existing tables must not be reimported')}\nvar configData=()=>{throw new IllegalStateException('storage must not be reached')}\n" + script;
+            script = (captureImport?"var importSnapshot=()=>{captured.payload=body;return {rows:body.tables.map(row=>{tableName:row.tableName,tid:row.tableName=='registered_table'?'table':row.tableName.replace('_','-')})}}\n":"var importSnapshot=()=>{throw new IllegalStateException('existing tables must not be reimported')}\n")+"var configData=()=>{throw new IllegalStateException('storage must not be reached')}\n" + script;
             base.reads = 0;
             try (var login = mockStatic(StpUtil.class)) {
                 login.when(StpUtil::getLoginIdAsString).thenReturn("validation-user");
-                return MagicScript.create(script, null).execute(new MagicScriptContext(Map.of("body",body,"db",base.db,"tenantRuntime",base.scope,"metadataAsset",new Metadata(),"jsons",new TableDetailFieldSaveMagicTest.Jsons())));
+                return MagicScript.create(script, null).execute(new MagicScriptContext(Map.of("body",body,"db",base.db,"tenantRuntime",base.scope,"metadataAsset",new Metadata(),"jsons",new TableDetailFieldSaveMagicTest.Jsons(),"captured",captured)));
             }
         }
     }

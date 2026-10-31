@@ -4,9 +4,6 @@ import { CopyOutlined, AimOutlined, ClearOutlined, ReloadOutlined, CloseOutlined
 import { useErrorPanelStore } from '@/stores/errorPanelStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { getNifiOverlayContainer } from './overlayContainer';
-import DiagnosticDrawer from './DiagnosticDrawer';
-import { diagnosticJson, type DiagnosticSelection } from '../api/diagnostics';
-import { useSessionRevision, useTokenReady } from '../api/bridgeSession';
 import { mergeFlowErrors } from '../utils/flowActionFailure';
 import {
   useFlowErrors,
@@ -53,17 +50,6 @@ export default function ErrorPanel() {
   const { message } = AntdApp.useApp();
   const [filter, setFilter] = useState<FilterValue>('ALL');
   const [height, setHeight] = useState(420);
-  const [diagnostic, setDiagnostic] = useState<DiagnosticSelection | null>(null);
-  const [aiEnabled, setAiEnabled] = useState(false);
-  const revision = useSessionRevision(), ready = useTokenReady();
-  useEffect(() => {
-    setAiEnabled(false); setDiagnostic(null);
-    if (!ready) return;
-    const controller = new AbortController();
-    void diagnosticJson("/capabilities", "GET", undefined, controller.signal).then(result => { if (!controller.signal.aborted) setAiEnabled(result.enabled === true); }).catch(() => {});
-    return () => controller.abort();
-  }, [revision, ready]);
-  useEffect(() => setDiagnostic(null), [pipelineId]);
 
   const errorsQuery = useFlowErrors(pipelineId);
   const clearMut = useClearFlowErrors();
@@ -250,13 +236,6 @@ export default function ErrorPanel() {
                     <Button size="small" icon={<CopyOutlined />} onClick={() => handleCopy(e)}>
                       复制错误
                     </Button>
-                    {aiEnabled && (
-                      <Button size="small" type="primary" ghost onClick={() => setDiagnostic(
-                        pipelineId && errorsQuery.data?.some(row => row.id === e.id)
-                          ? { source: "nifi", pipelineId, errorId: e.id }
-                          : { source: "client", clientError: [e.phase, e.message, e.detail].filter(Boolean).join("\n").slice(0, 8000) }
-                      )}>AI 排错</Button>
-                    )}
                     {e.nodeId && (
                       <Button size="small" type="link" icon={<AimOutlined />} onClick={() => handleLocate(e)}>
                         定位到节点
@@ -270,7 +249,6 @@ export default function ErrorPanel() {
         )}
       </div>
     </Drawer>
-    <DiagnosticDrawer selection={diagnostic} onClose={() => setDiagnostic(null)} />
     </>
   );
 }

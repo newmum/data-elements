@@ -762,7 +762,12 @@ const loadData = () => {
   for (const [key, cache] of Object.entries(state.tableLoads)) {
     if (cache.loading) state.tableLoads[key] = { ...cache, loading: false, requestId: undefined, error: "加载已取消，请重试。" };
   }
-  return Promise.allSettled([loadSourceOverview(generation), loadOrganizationTree(generation)]);
+  return Promise.allSettled([loadSourceOverview(generation), loadOrganizationTree(generation)])
+    .then(async (results) => {
+      // 组织树和权限范围并行返回，二者就绪后再应用默认展开，不能受请求先后顺序影响。
+      if (generation === loadGeneration) await applyDefaultTreeState(generation);
+      return results;
+    });
 };
 
 const sourceTodoCount = (item) =>
@@ -822,8 +827,9 @@ const appendApplicationNodes = (nodes) =>
     return { ...node, type: "org", children: [...orgChildren, ...apps] };
   });
 
-const applyDefaultTreeState = () => {
-  nextTick(() => nextTick(() => {
+const applyDefaultTreeState = (generation = loadGeneration) => {
+  return nextTick(() => nextTick(() => {
+    if (generation !== loadGeneration) return;
     const tree = treeRef.value?.getTree?.();
     if (!tree) return;
     const expandOrganizations = (nodes) => {
@@ -831,7 +837,7 @@ const applyDefaultTreeState = () => {
         const orgChildren = (item.children || []).filter((child) => child.type !== "app");
         const treeNode = tree.getNode(item.value);
         if (treeNode) {
-          treeNode.expanded = isSystemAdministratorScope.value
+          treeNode.expanded = isSystemAdministratorScope.value || !state.dataScope
             ? orgChildren.length > 0
             : (item.children || []).length > 0;
         }
@@ -845,7 +851,6 @@ const applyDefaultTreeState = () => {
 
 const rebuildTree = () => {
   treeData.value[0].children = appendApplicationNodes(filterZeroNodes(orgTreeSource.value));
-  applyDefaultTreeState();
 };
 
 const collectTreeNodeOrgIds = (node) => {

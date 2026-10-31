@@ -8,7 +8,8 @@ db:
   init-schema: true
 
 # 本机数据中台通过服务间密钥调用海通的内部签发接口；该密钥不是对外 X-Api-Key。
-# 真实 X-Api-Key 仅由海通生成，平台只保存客户端绑定关系，不保存密钥明文。
+# 新数据源 X-Api-Key 由平台生成，摘要随登记配置同步；历史海通密钥继续兼容。
+# 两端均不保存业务密钥明文。
 relay:
   registration-registry:
     # Legacy inbound properties only; business delivery never calls the platform.

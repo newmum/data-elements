@@ -28,6 +28,10 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class DataPushSchemaService {
+    private com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService scopes;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void configureScopes(com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService value) { scopes = value; }
     private static final TypeReference<LinkedHashMap<String, Object>> MAP = new TypeReference<>() { };
     private final TenantDataSourceRegistry tenants;
     private final ObjectMapper json;
@@ -77,6 +81,10 @@ public class DataPushSchemaService {
 
     /** Validates that a tenant-owned source is eligible to receive a data-source API key. */
     public void requirePushDatasource(String tenantId, String datasourceId) {
+        if (scopes == null) throw new IllegalStateException("数据源权限服务尚未就绪");
+        var rows = jdbc(tenantId).queryForList("select tid,org_id,created_by from db_datasource_t where tid=? and tenant_id=? and (is_del=0 or is_del is null)", datasourceId, tenantId);
+        if (scopes.visibleDataSources("MENU:2081000000000000002", rows).isEmpty())
+            throw new com.linewell.dataelement.model.common.BizException(403, "登记数据源不存在或无权访问");
         requirePushAccessMode(source(jdbc(tenantId), tenantId, datasourceId));
     }
 

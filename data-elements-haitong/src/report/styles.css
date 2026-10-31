@@ -257,4 +257,19 @@ body.ht-report-active .report-file-read{display:flex;align-items:center;justify-
 body.ht-report-active .report-file-pagination{justify-content:flex-end;margin:18px 0}
 body.ht-report-active .report-row-editor{display:block;margin:18px 0;color:#3f5778;font-size:13px}
 body.ht-report-active .report-row-editor>small{display:block;margin:4px 0 8px;font-size:11px;color:#8899af}
+body.ht-report-active .report-step-source{margin:18px 0 14px;padding:0;border:0;background:transparent;align-items:flex-start;flex-direction:column;gap:10px}
+body.ht-report-active .report-step-source>div{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+body.ht-report-active .report-step-source .report-ant-select{min-width:260px;max-width:460px}
+body.ht-report-active .report-step-source>span{font-size:13px;color:#63758e}
+body.ht-report-active .report-normalize-heading h2,body.ht-report-active .report-final-step h2{font-size:19px;margin:0;color:#253e60}
+body.ht-report-active .report-normalize-heading h2 small{font-size:12px;font-weight:400;color:#7d8fa7;margin-left:10px}
+body.ht-report-active .report-schema-state{width:25px;height:25px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+body.ht-report-active .report-schema-state.valid{color:#16835c;background:#e8f7ef}
+body.ht-report-active .report-schema-state.invalid{color:#c44040;background:#fff0ee}
+body.ht-report-active .report-data-flow{display:flex;align-items:center;justify-content:space-between;gap:16px}
+body.ht-report-active .report-parse-controls{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
+body.ht-report-active .report-parse-controls label{display:flex;align-items:center;gap:8px;color:#52647d}
+body.ht-report-active .report-parse-controls .report-ant-select{min-width:125px}
+body.ht-report-active .report-target-table .report-ant-select{width:100%}
+@media(max-width:760px){body.ht-report-active .report-step-source .report-ant-select{min-width:170px}body.ht-report-active .report-data-flow{align-items:flex-start;flex-direction:column}body.ht-report-active .report-parse-controls label{width:calc(50% - 8px)}}
 @media(max-width:800px){body.ht-report-active .report-source-context{flex-wrap:wrap}body.ht-report-active .report-source-context>div{flex-wrap:wrap;width:100%}body.ht-report-active .report-source-context .report-ant-select{min-width:0;flex:1}body.ht-report-active .report-normalize-heading{align-items:flex-start}body.ht-report-active .report-file-read{flex-direction:column;padding:20px}body.ht-report-active .report-normalize-section{padding:15px}}

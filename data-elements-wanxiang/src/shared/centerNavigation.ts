@@ -14,7 +14,6 @@ export const centers=[
  {key:'search',name:'智能搜索中心',description:'信息检索与知识发现',url:new URL(base(import.meta.env.VITE_SEARCH_APP_URL,'http://localhost:3300/','/search/'),location.href).href},
  {key:'visualization',name:'数据可视化中心',description:'云图大屏与 BI 分析',url:link(qizhi,'/visualization/screens')},
  {key:'ops',name:'数据运行智能监控平台',description:'平台运行、指标与告警',url:link(qizhi,'/ops/overview')},
- {key:'ai',name:'人工智能支撑平台',description:'AI 编排与智能交互',url:link(qizhi,'/ai/overview')},
  {key:'identity',name:'统一身份管理平台',description:'统一账户、认证与访问管理',url:link(base(import.meta.env.VITE_IDAAS_CENTER_URL,'http://localhost:3005/','/idaas/'),'/console/workforce/overview')},
 ];
 /** Original center grouping, with the verified new deployment addresses retained. */
@@ -23,6 +22,6 @@ export const centerGroups: Array<[string, string[]]> = [
  ['治理与管控',['governance','security']],
  ['运营与交付',['asset','service']],
  ['分析与应用',['visualization','knowledge','search']],
- ['平台支撑',['identity','ops','ai']],
+ ['平台支撑',['identity','ops']],
 ];
-export const centerMarks:Record<string,[string,string]>={resource:['磐','#1677FF'],integration:['海','#08979C'],compute:['风','#2F54EB'],governance:['万','#531DAB'],security:['盾','#389E0D'],asset:['皓','#D48806'],service:['梯','#5B8C00'],visualization:['图','#D46B08'],knowledge:['启','#722ED1'],search:['搜','#08979C'],identity:['鉴','#5267F5'],ops:['晨','#2F54EB'],ai:['星','#531DAB']};
+export const centerMarks:Record<string,[string,string]>={resource:['磐','#1677FF'],integration:['海','#08979C'],compute:['风','#2F54EB'],governance:['万','#531DAB'],security:['盾','#389E0D'],asset:['皓','#D48806'],service:['梯','#5B8C00'],visualization:['图','#D46B08'],knowledge:['启','#722ED1'],search:['搜','#08979C'],identity:['鉴','#5267F5'],ops:['晨','#2F54EB']};

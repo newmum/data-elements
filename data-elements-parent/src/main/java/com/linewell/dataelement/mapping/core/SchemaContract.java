@@ -57,6 +57,18 @@ public final class SchemaContract {
         List<Field> expected = read(contract.path("source")); Set<String> optional = new HashSet<>();
         for (JsonNode rule : plan.document().path("rules")) if (rule.path("sourceOptional").asBoolean() && rule.path("input").path("kind").asText().equals("FIELD")) optional.add(rule.path("input").path("name").asText());
         if (expected.isEmpty()) return;
+        // Reader schema and record evaluation must resolve the same physical JSON field.
+        var names=new SourceFieldNames(actual.stream().map(Field::name).toList(),plan.document().path("policies").path("caseSensitive").asBoolean(true));
+        Set<String> declaredNames=new HashSet<>();expected.forEach(field->declaredNames.add(field.name()));
+        Map<String,String> renamed=new HashMap<>();
+        for(Field field:expected){
+            String physical=names.resolve(field.name());
+            if(physical!=null&&!physical.equals(field.name())&&!declaredNames.contains(physical)){
+                String previous=renamed.putIfAbsent(physical,field.name());
+                if(previous!=null&&!previous.equals(field.name()))throw new MappingException("AMBIGUOUS_FIELD","Reader字段同时匹配多个已声明来源字段");
+            }
+        }
+        actual=actual.stream().map(field->new Field(renamed.getOrDefault(field.name(),field.name()),field.logicalType(),field.nullable(),field.length(),field.precision(),field.scale())).toList();
         Map<String,String> declaredTypes=new HashMap<>();expected.forEach(field->declaredTypes.put(field.name(),field.logicalType()));
         Set<String> jdbcMillisFields=new HashSet<>();
         for(JsonNode field:contract.path("source"))if(field.path("dateContainsTime").asBoolean()

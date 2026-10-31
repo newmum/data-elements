@@ -25,13 +25,19 @@ class ReportSnapshotBatchMagicTest {
    f.base.jdbc.execute("alter table db_datasource_t add table_num int");f.base.jdbc.execute("alter table db_datasource_t add updated_time timestamp");
    f.base.jdbc.execute("update db_table_t set table_name='validation_0' where tid='table'");
    var tables=new ArrayList<Map<String,Object>>();var fieldMap=new HashMap<String,Object>();
-   for(int i=0;i<count;i++){String name="validation_"+i;tables.add(Map.of("tableName",name,"tableComment","上报验证表","tableType","数据表","businessType","业务表","annotated",true));fieldMap.put(name,List.of(Map.of("columnName","record_id","columnComment","记录编号","columnType","varchar","columnLength",64,"primaryKey",false,"nullable",true,"isTimestamp",false)));}
+   for(int i=0;i<count;i++){String name="validation_"+i;tables.add(Map.of("tableName",name,"tableComment","上报验证表","tableType","数据表","businessType","字典表","annotated",true));fieldMap.put(name,List.of(
+     Map.of("columnName","record_id","columnComment","记录编号","columnType","varchar","columnLength",64,"primaryKey",false,"nullable",true,"isTimestamp",false,"dictionaryRole","code"),
+     Map.of("columnName","record_name","columnComment","记录名称","columnType","varchar","columnLength",64,"primaryKey",false,"nullable",true,"isTimestamp",false,"dictionaryRole","label"),
+     Map.of("columnName","occurred_at","columnComment","发生时间","columnType","varchar","columnLength",64,"primaryKey",false,"nullable",true,"isTimestamp",true,"standardField","DATETIME")));}
    Es es=new Es();ElasticsearchOperations operations=mock(ElasticsearchOperations.class);final int[] bulk={0};
    doAnswer(invocation->{List<UpdateQuery> queries=invocation.getArgument(0);assertEquals(count,queries.size());for(UpdateQuery query:queries)assertEquals(Boolean.TRUE,query.getDocAsUpsert());bulk[0]++;return null;}).when(operations).bulkUpdate(anyList(),any(IndexCoordinates.class));
    Path root=Path.of(System.getProperty("user.dir")).toAbsolutePath();while(!Files.isDirectory(root.resolve("magic")))root=root.getParent();String content=Files.readString(root.resolve("magic/api/02.数据盘点/02.数据库表/01.元数据管理/20.手工导入元数据快照.ms"));
    String script=content.substring(content.indexOf("================================")+32).replaceAll("(?m)^import (?!cn\\.hutool\\.|java\\.|org\\.springframework\\.data\\.elasticsearch\\.core\\.(query|document|mapping))[^\\r\\n]*\\r?\\n","");
    var bindings=new HashMap<String,Object>(Map.of("body",Map.of("dbId","source","dataSourceType","mysql","batchIndex",true,"tables",tables,"fieldMap",fieldMap),"db",f.base.db,"tenantRuntime",f.base.scope,"jsons",new TableDetailFieldSaveMagicTest.Jsons(),"metadataAsset",new ReportRegistrationMagicTest.Metadata(),"esCommonService",es,"esOperations",operations));
    f.base.reads=0;assertInstanceOf(Map.class,MagicScript.create(script,null).execute(new MagicScriptContext(bindings)));assertEquals(4,f.base.reads);assertEquals(1,es.preparations);assertEquals(1,bulk[0]);
+   var governance=cn.hutool.json.JSONUtil.parseObj(f.base.jdbc.queryForObject("select field_governance_config from db_table_t where tid='table'",String.class));
+   assertEquals("record_id",governance.getJSONObject("dictionaryProfile").getStr("codeField"));assertEquals("record_name",governance.getJSONObject("dictionaryProfile").getStr("labelField"));
+   assertEquals("occurred_at",governance.getStr("timestampField"));assertTrue(governance.getJSONArray("fields").toString().contains("DATETIME"));
    System.out.println("Report snapshots="+count+": SQL=4, ES preparation=1, partial bulk upsert=1, per-table exists=0");
   }
  }

@@ -27,6 +27,7 @@ export interface Field {
     ambiguous?: boolean;
     pk: boolean;
     time: TimeRule;
+    standardField?: '' | 'DATE' | 'DATETIME';
     dictionary?: DictionaryLink;
 }
 export interface Schema {
