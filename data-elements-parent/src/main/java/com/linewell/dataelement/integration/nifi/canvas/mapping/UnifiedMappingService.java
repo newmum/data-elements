@@ -84,7 +84,7 @@ public class UnifiedMappingService {
         result.put("nifiComponentConfig",Map.of("processorType","com.linewell.dataelement.nifi.HaitongTransformRecord","planHash",plan.hash()));return result;
     }
     public FieldMappingService.PreviewResponse preview(JsonNode raw,List<Map<String,Object>> sample){
-        if(sample==null)sample=List.of();if(sample.size()>100||ValueTypes.bytes(sample,0)>2_097_152)throw new MappingException("BUDGET_EXCEEDED","预览最多100行且不超过2MiB");var compiled=compile(raw);var plan=compiled.plan();JsonNode policies=plan.document().path("policies");
+        if(sample==null)sample=List.of();if(sample.size()>100)throw new MappingException("BUDGET_EXCEEDED","预览最多100行");RecordBudget.window(sample);var compiled=compile(raw);var plan=compiled.plan();JsonNode policies=plan.document().path("policies");
         ExecutionContext context=new ExecutionContext(Instant.now(),ZoneId.of(policies.path("zoneId").asText("Asia/Shanghai")),Locale.forLanguageTag(policies.path("locale").asText("zh-CN")),"preview:"+plan.hash());
         try(var reader=new BatchDictionaryReader(id->pool(id,compiled.connections()).getConnection())){
             var provider=new DictionaryPolicyProvider(reader,plan.document().path("dictionaryBindings"),compiled.snapshots(),cache,com.linewell.dataelement.platform.tenant.domain.TenantContext.requireTenantId());

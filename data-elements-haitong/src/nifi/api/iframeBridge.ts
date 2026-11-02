@@ -11,6 +11,7 @@
 
 import { apiClient } from './client';
 import { getBridgeToken, onNifiSessionChange, setBridgeToken, signalCanvasSelectionChange } from './bridgeSession';
+import {sourcePlatformBaseUrl} from '../../services/platformLocation';
 
 // ---- 独立模式检测 ----
 
@@ -255,8 +256,7 @@ function handleMessage(event: MessageEvent) {
  */
 function parseAllowedOrigins(): string[] {
   const origins = new Set<string>([window.location.origin]);
-  const platformUrl = import.meta.env.VITE_SOURCE_PLATFORM_HOME_URL?.trim() ||
-    (import.meta.env.DEV ? 'http://localhost:3000/' : '/wanxiang/');
+  const platformUrl = sourcePlatformBaseUrl(window.location.href,import.meta.env.VITE_SOURCE_PLATFORM_HOME_URL,import.meta.env.DEV).href;
   const meta = document.querySelector('meta[name="iframe-allowed-origins"]');
   const configured = [platformUrl,
     ...(meta?.getAttribute('content') ?? '').split(','),

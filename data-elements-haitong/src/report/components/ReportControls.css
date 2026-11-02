@@ -1,0 +1,61 @@
+/* Ant Design controls fit the existing report layout and visual proportions. */
+body.ht-report-active .report-select-control {max-width:100%;min-width:0;height:36px;font-size:13px;vertical-align:middle;}
+body.ht-report-active .report-select-control .report-ant-select-selector {color:#42546f;border-color:#dce3ec;border-radius:6px;}
+body.ht-report-active .report-select-control:not(.report-ant-select-disabled):hover .report-ant-select-selector {border-color:#8bb5ff;}
+body.ht-report-active .report-upload-source>.report-select-control,
+body.ht-report-active label>.report-select-control,
+body.ht-report-active .inline-fields .report-select-control {width:100%;}
+body.ht-report-active .report-registration-tools>.report-select-control,
+body.ht-report-active .report-delivery-tools>.report-select-control {width:130px;flex:0 0 130px;}
+body.ht-report-active .report-select-dropdown {max-width:calc(100vw - 24px);}
+body.ht-report-active .report-select-dropdown .report-ant-select-item-option-content {white-space:normal;}
+body.ht-report-active .report-select-dropdown .report-standard-format-option {display:flex;align-items:center;justify-content:space-between;gap:14px;}
+body.ht-report-active .report-select-dropdown .report-standard-format-option small {color:#8997ad;font-size:11px;}
+body.ht-report-active .portal-header-actions>.report-profile-trigger {
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;flex:none;
+  height:40px;padding:5px 10px;border:1px solid transparent;border-radius:6px;
+  background:transparent;color:#e0e9fc;font-size:13px;box-shadow:none;
+}
+body.ht-report-active .portal-header-actions>.report-profile-trigger:hover,
+body.ht-report-active .portal-header-actions>.report-profile-trigger:focus-visible,
+body.ht-report-active .portal-header-actions>.report-profile-trigger.report-ant-dropdown-open {color:#fff;background:#ffffff14;border-color:#ffffff20;}
+body.ht-report-active .report-profile-trigger .report-ant-avatar {flex:none;background:#ffffff18;color:#fff;border:1px solid #ffffff28;}
+body.ht-report-active .report-profile-name {display:inline-block;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+body.ht-report-active .report-profile-arrow {font-size:10px;color:#c6d7ef;}
+body.ht-report-active .report-profile-dropdown {min-width:150px;}
+body.ht-report-active .report-profile-dropdown .report-ant-dropdown-menu {padding:5px;border:1px solid #e2eaf5;border-radius:8px;box-shadow:0 8px 24px #17365b24;}
+body.ht-report-active .report-profile-dropdown .report-ant-dropdown-menu-item {min-height:34px;padding:7px 12px;color:#506886;font-size:13px;border-radius:5px;}
+body.ht-report-active .report-popup-anchor {display:inline-flex;align-items:center;max-width:100%;vertical-align:middle;}
+body.ht-report-active .report-native-popup {
+  position:fixed;z-index:12010;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);
+  overflow:auto;padding:14px;border:1px solid #dce5f2;border-radius:8px;
+  color:#344b68;background:#fff;box-shadow:0 8px 28px rgba(24,56,95,.2);
+  pointer-events:auto;transform:none;animation:none;transition:none;
+}
+body.ht-report-active .report-native-popup-title {display:block;margin-bottom:12px;font-size:14px;}
+body.ht-report-active .report-native-popup .column-options {max-width:300px;}
+body.ht-report-active .report-native-segmented {display:inline-flex;align-items:center;flex-shrink:0;gap:2px;padding:3px;border-radius:6px;background:#f1f3f6;}
+body.ht-report-active .report-native-segmented>button {border:0;border-radius:4px;background:transparent;color:#7b8da5;padding:6px 10px;white-space:nowrap;font-size:13px;}
+body.ht-report-active .report-native-segmented>button.is-active {background:#fff;color:#344b68;box-shadow:0 1px 4px #18385f18;}
+body.ht-report-active .report-native-button {border:1px solid #dce3ec;border-radius:6px;background:#fff;color:#344b68;padding:7px 15px;}
+body.ht-report-active .report-native-button.is-danger {background:#c53b32;color:#fff;border-color:#c53b32;}
+body.ht-report-active .report-file-upload-button {
+  position:relative;display:inline-flex;align-items:center;justify-content:center;gap:9px;flex-shrink:0;
+  height:38px;padding:0 16px;border:1px solid #246bfd;border-radius:6px;
+  color:#fff;background:#246bfd;cursor:pointer;font-size:14px;overflow:hidden;
+}
+body.ht-report-active .report-file-upload-button:hover {background:#427fff;}
+body.ht-report-active .report-file-upload-button:focus-within {outline:2px solid #bad3ff;outline-offset:2px;}
+body.ht-report-active .report-file-upload-button>input[type=file] {
+  position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1;
+}
+body.ht-report-active .report-file-upload-button.is-disabled {background:#f0f3f8;border-color:#dce3ec;color:#99a6b8;cursor:not-allowed;}
+body.ht-report-active .report-file-upload-button.is-disabled>input {cursor:not-allowed;}
+/* Decorations cannot cover the source selector or the file input. */
+body.ht-report-active .report-upload-panel>.upload-visual {pointer-events:none;}
+@media(max-width:760px) {
+  body.ht-report-active .report-native-segmented {flex-wrap:wrap;}
+  body.ht-report-active .report-delivery-tools>.report-select-control {flex:0 1 130px;}
+  body.ht-report-active .portal-header-actions>.report-profile-trigger {height:36px;padding:4px 7px;gap:6px;font-size:12px;}
+  body.ht-report-active .report-profile-name {max-width:80px;}
+}

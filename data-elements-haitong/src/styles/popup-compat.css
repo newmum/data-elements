@@ -8,7 +8,12 @@
 .ant-popover,
 .ant-tooltip,
 .ant-picker-dropdown,
-.ant-mentions-dropdown {
+.ant-mentions-dropdown,
+.report-ant-select-dropdown,
+.report-ant-dropdown {
   transition-property: none !important;
   transition-duration: 0s !important;
 }
+
+/* Keep Ant Design's em-sized icons independent of the host responsive SVG reset. */
+.anticon > svg {max-width:none;}

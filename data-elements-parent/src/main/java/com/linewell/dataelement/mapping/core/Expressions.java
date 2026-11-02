@@ -46,10 +46,10 @@ public final class Expressions {
             else if(ref.equals("value"))expr=Scope::value;
             else if(ref.equals("row.index"))expr=Scope::rowIndex;
             else throw new MappingException("EXPRESSION_UNSUPPORTED","不支持的表达式引用");
-            refs.put(name,expr);m.appendReplacement(sql,name);
+            refs.put(name,s->{Object value=expr.evaluate(s);RecordBudget.transform(value,"表达式引用");return value;});m.appendReplacement(sql,name);
         }
         m.appendTail(sql);
-        try{Expr evaluator=compileAst(CCJSqlParserUtil.parseExpression(sql.toString()),refs,0);return s->{try{return evaluator.evaluate(s);}catch(ArithmeticException|java.time.DateTimeException ex){throw new MappingException("TYPE_MISMATCH","表达式数值或时间计算失败");}};}
+        try{Expr evaluator=compileAst(CCJSqlParserUtil.parseExpression(sql.toString()),refs,0);return s->{try{Object value=evaluator.evaluate(s);RecordBudget.transform(value,"表达式结果");return value;}catch(ArithmeticException|java.time.DateTimeException ex){throw new MappingException("TYPE_MISMATCH","表达式数值或时间计算失败");}};}
         catch(MappingException ex){throw ex;}catch(Exception ex){throw new MappingException("EXPRESSION_UNSUPPORTED","表达式无法解析为支持的规则AST");}
     }
     private record LegacyIdFormat(boolean milliseconds,int randomBase,int randomRange) {}
@@ -82,7 +82,7 @@ public final class Expressions {
             String name=f.getName().toLowerCase(Locale.ROOT);
             if(name.equals("coalesce")||name.equals("nvl"))return s->{for(Expr p:params){Object v=p.evaluate(s);if(v!=null&&v!=ValueTypes.MISSING)return v;}return null;};
             if(name.equals("nullif")){if(params.size()!=2)throw unsupported();return s->{Object a=params.get(0).evaluate(s),b=params.get(1).evaluate(s);return Objects.equals(ValueTypes.canonical(a),ValueTypes.canonical(b))?null:a;};}
-            if(name.equals("concat")){return s->{StringBuilder out=new StringBuilder();for(Expr p:params){Object v=p.evaluate(s);if(v!=null&&v!=ValueTypes.MISSING)out.append(v);}return out.toString();};}
+            if(name.equals("concat")){return s->{StringBuilder out=new StringBuilder();for(Expr p:params){Object v=p.evaluate(s);if(v!=null&&v!=ValueTypes.MISSING){RecordBudget.transform(v,"表达式拼接输入");if((long)out.length()+v.toString().length()>RecordBudget.TRANSFORM_BYTES)throw new MappingException("BUDGET_EXCEEDED","表达式拼接结果超过256KiB");out.append(v);RecordBudget.transform(out,"表达式拼接结果");}}return out.toString();};}
             if(params.size()!=1||!Set.of("upper","lower","trim","ltrim","rtrim","abs").contains(name))throw unsupported();
             var call=FunctionRegistry.bind(name,JSON.createArrayNode());return s->call.apply(params.getFirst().evaluate(s),s.context());}
         if(e instanceof SignedExpression sign){Expr child=compileAst(sign.getExpression(),refs,depth+1);return s->sign.getSign()=='-'?ValueTypes.decimal(child.evaluate(s)).negate():child.evaluate(s);}
@@ -93,7 +93,7 @@ public final class Expressions {
         if(e instanceof BinaryExpression b){Expr left=compileAst(b.getLeftExpression(),refs,depth+1),right=compileAst(b.getRightExpression(),refs,depth+1);
             if(e instanceof AndExpression)return s->and(left.evaluate(s),right.evaluate(s));
             if(e instanceof OrExpression)return s->or(left.evaluate(s),right.evaluate(s));
-            if(e instanceof Concat)return s->{Object a=left.evaluate(s),v=right.evaluate(s);return a==null||v==null?null:a.toString()+v;};
+            if(e instanceof Concat)return s->{Object a=left.evaluate(s),v=right.evaluate(s);if(a==null||v==null)return null;RecordBudget.transform(a,"表达式拼接输入");RecordBudget.transform(v,"表达式拼接输入");if((long)a.toString().length()+v.toString().length()>RecordBudget.TRANSFORM_BYTES)throw new MappingException("BUDGET_EXCEEDED","表达式拼接结果超过256KiB");String value=a.toString()+v;RecordBudget.transform(value,"表达式拼接结果");return value;};
             if(e instanceof Addition||e instanceof Subtraction||e instanceof Multiplication||e instanceof Division)return s->{Object a=left.evaluate(s),v=right.evaluate(s);if(a==null||v==null)return null;BigDecimal x=ValueTypes.decimal(a),y=ValueTypes.decimal(v);return e instanceof Addition?x.add(y):e instanceof Subtraction?x.subtract(y):e instanceof Multiplication?x.multiply(y):x.divide(y,10,RoundingMode.HALF_UP);};
             if(e instanceof EqualsTo||e instanceof NotEqualsTo||e instanceof GreaterThan||e instanceof GreaterThanEquals||e instanceof MinorThan||e instanceof MinorThanEquals)return s->{Object a=left.evaluate(s),v=right.evaluate(s);if(a==null||v==null||a==ValueTypes.MISSING||v==ValueTypes.MISSING)return null;int cmp=compare(a,v);return e instanceof EqualsTo?cmp==0:e instanceof NotEqualsTo?cmp!=0:e instanceof GreaterThan?cmp>0:e instanceof GreaterThanEquals?cmp>=0:e instanceof MinorThan?cmp<0:cmp<=0;};
         }

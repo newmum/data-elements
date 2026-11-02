@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 
-function loadTypeScript(file, dependencies) {
+function loadTypeScript(file, dependencies, environment={ DEV:true }) {
   const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const compiled = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -12,11 +12,24 @@ function loadTypeScript(file, dependencies) {
   const result = { exports: {} };
   const localRequire = (name) => {
     if (Object.hasOwn(dependencies, name)) return dependencies[name];
+    if(name.endsWith('/platformLocation'))return loadTypeScript('src/services/platformLocation.ts',{},environment);
     throw new Error(`Unexpected dependency in session test: ${name}`);
   };
-  new Function('require', 'module', 'exports', 'viteEnv', compiled)(localRequire, result, result.exports, { DEV: true });
+  new Function('require', 'module', 'exports', 'viteEnv', compiled)(localRequire, result, result.exports, environment);
   return result.exports;
 }
+
+test('production platform adapter returns root home and keeps a configured source application prefix',()=>{
+  const previousWindow=global.window;
+  global.window={location:{href:'http://validation-platform.test:82/haitong/#/overview'}};
+  try{
+    const dependencies={'../nifi/api/bridgeSession':{}};
+    const root=loadTypeScript('src/services/platformSession.ts',dependencies,{DEV:false});
+    assert.equal(root.getPlatformHomeUrl(),'http://validation-platform.test:82/#/');
+    const prefixed=loadTypeScript('src/services/platformSession.ts',dependencies,{DEV:false,VITE_SOURCE_PLATFORM_HOME_URL:'/source-platform/#/home'});
+    assert.equal(prefixed.getPlatformHomeUrl(),'http://validation-platform.test:82/source-platform/#/');
+  }finally{global.window=previousWindow;}
+});
 
 test('tenant credential rotation clears NiFi and platform query data but retains local workspace data', () => {
   const session = loadTypeScript('src/nifi/api/bridgeSession.ts', {
@@ -169,10 +182,13 @@ test('expired platform session redirects once to the existing login and preserve
 
 test('platform API recognizes HTTP-200 user_no_login as authentication expiry', async () => {
   const previousFetch = global.fetch;
+  const previousWindow=global.window;
+  global.window={location:{hash:'#/overview'}};
   let redirects = 0;
   const api = loadTypeScript('src/api/platformApi.ts', {
     '../services/platformSession': {
       getPlatformSessionToken: async () => 'current-token',
+      reconcilePlatformSessionToken: () => true,
       redirectToPlatformLogin: () => { redirects += 1; return true; },
     },
     '../nifi/api/bridgeSession': {
@@ -191,17 +207,21 @@ test('platform API recognizes HTTP-200 user_no_login as authentication expiry', 
     assert.equal(redirects, 1);
   } finally {
     global.fetch = previousFetch;
+    global.window=previousWindow;
   }
 });
 
 test('report uploads retain the native multipart body and discard results after tenant rotation', async () => {
   const previousFetch = global.fetch;
+  const previousWindow=global.window;
+  global.window={location:{hash:'#/report'}};
   let revision = 4;
   let request;
   let finish;
   const api = loadTypeScript('src/api/platformApi.ts', {
     '../services/platformSession': {
       getPlatformSessionToken: async () => 'current-token',
+      reconcilePlatformSessionToken: () => true,
       redirectToPlatformLogin: () => { throw new Error('A tenant rotation must not log out the new tenant'); },
     },
     '../nifi/api/bridgeSession': {
@@ -228,6 +248,7 @@ test('report uploads retain the native multipart body and discard results after 
     await assert.rejects(pending, /旧请求结果已丢弃/);
   } finally {
     global.fetch = previousFetch;
+    global.window=previousWindow;
   }
 });
 

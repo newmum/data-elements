@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Button, Checkbox, Input, Popconfirm, Popover, Select, Table, Tooltip } from 'antd';
+import {Button,Checkbox,Input,Table} from 'antd';
+import {Popconfirm,Popover,Select,Tooltip} from './ReportControls';
 import type { Dictionary, Resource, DataRow, Value } from '../core/model';
 import { display, colName, SYNC_LABEL } from '../core/model';
 import { prepareValue, matchDictionary } from '../core/engine';
@@ -64,8 +65,9 @@ export default function PreviewPanel({ resource: r, dictionaries, onEdit, onDele
     return <div className={`preview-panel${compact?' preview-panel--compact':''}${worksheet?' preview-panel--sheet':''}`}>
   <div className="preview-toolbar">{showDeliveryStatus&&<div className="preview-delivery-summary">{stateCounts.map(({state,count})=><span key={state} className={`preview-state-count is-${state}`}><i/>{statusLabels[state as keyof typeof statusLabels]} <b>{count.toLocaleString()}</b></span>)}</div>}{!compact&&<strong className="preview-view-title">{raw?'原始样例':'规范后数据'}</strong>}<Input allowClear prefix={<Icon name="search" size={16}/>} aria-label="搜索数据" placeholder={compact&&raw?'搜索样例':'搜索数据'} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} className="data-search"/>
     {!compact&&<span className="preview-record-count">当前数据表共 <strong>{r.rows.length}</strong> 条{filtered.length!==r.rows.length&&<> · 筛选 {filtered.length} 条</>}</span>}
+    {!compact&&<Select aria-label="每页条数" value={pageSize} options={[5,10,20,50,100].map(value=>({value,label:`${value} 条/页`}))} onChange={value=>{setPageSize(value);setPage(1);}}/>}
     {(!readOnly||showDeliveryStatus)&&<Select aria-label={showDeliveryStatus?'上报结果筛选':'同步状态筛选'} value={status} style={{ width: 132 }} options={[{ value: 'all', label: showDeliveryStatus?'全部上报结果':'全部同步状态' }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]} onChange={v => { setStatus(v); setPage(1); }}/>}<Popover trigger="click" placement="bottomRight" content={<div className="column-options"><strong>显示字段</strong><p>仅改变显示，不改变整表上报字段范围</p>{r.schema.fields.map(f => <Checkbox key={f.id} checked={!hiddenCols.includes(f.id)} onChange={e => setHiddenCols(e.target.checked ? hiddenCols.filter(x => x !== f.id) : [...hiddenCols, f.id])}>{f.zh || f.headers.join(' / ')}</Checkbox>)}</div>}><Button aria-label="列显示设置" icon={<Icon name="columns" size={17}/>}>列设置</Button></Popover></div>
-  <div className="preview-table"><Table<DataRow> rowKey="id" size={compact?'small':'middle'} dataSource={visibleRows} columns={displayColumns} scroll={{ x: 'max-content', ...(!compact&&pageSize > 10 ? { y: 460 } : {}) }} pagination={compact?false:{ current: page, pageSize, onChange: (p, s) => { setPage(p); setPageSize(s); }, showSizeChanger: true, pageSizeOptions: [5, 10, 20, 50, 100], showTotal: total => `共 ${total} 条`, size: 'small' }} locale={{ emptyText: raw?'样例中没有符合条件的数据':'没有符合条件的数据，请调整筛选条件' }}/></div>
+  <div className="preview-table"><Table<DataRow> rowKey="id" size={compact?'small':'middle'} dataSource={visibleRows} columns={displayColumns} scroll={{ x: 'max-content', ...(!compact&&pageSize > 10 ? { y: 460 } : {}) }} pagination={compact?false:{ current: page, pageSize, onChange: (p, s) => { setPage(p); setPageSize(s); }, showSizeChanger: false, pageSizeOptions: [5, 10, 20, 50, 100], showTotal: total => `共 ${total} 条`, size: 'small' }} locale={{ emptyText: raw?'样例中没有符合条件的数据':'没有符合条件的数据，请调整筛选条件' }}/></div>
   {raw&&!compact&&<div className="preview-caption"><Icon name="info" size={13}/>当前显示原始表头及原始值；源文件内容只读。</div>}
  </div>;
 }

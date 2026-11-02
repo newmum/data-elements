@@ -37,10 +37,9 @@ class PushedAlarmJdbcTest {
                 var source=(com.fasterxml.jackson.databind.node.ObjectNode)rule.path("input");source.put("name",source.path("name").asText().toUpperCase(Locale.ROOT));
             }
             var plan=MappingEngine.compile(specification);
-            var converted=MappingEngine.execute(plan,sourceRows,0,new ExecutionContext(Instant.EPOCH,ZoneId.of("Asia/Shanghai"),Locale.ROOT,"validation-jdbc"),(dictionary,keys)->{fail("No dictionary lookup is needed");return Map.of();});
-            assertEquals(0,converted.dictionaryBatches());
+            var converted=convertWindows(plan,sourceRows);
             var output=PushedAlarmCompatibilityTest.JSON.createArrayNode();
-            for(var row:converted.rows()){
+            for(var row:converted){
                 assertTrue(row.success(),"汇聚库读取后的字段应能再次转换");
                 var value=output.addObject();row.output().forEach((key,item)->value.set(key,PushedAlarmCompatibilityTest.JSON.valueToTree(NifiTemporalValues.writerValue(item,ZoneId.of("Asia/Shanghai")))));
             }
@@ -55,6 +54,17 @@ class PushedAlarmJdbcTest {
                 else assertTrue(Objects.equals(expected.isNull()?null:expected.asText(),actual),"两级写入应保持字段全文："+field);
             }
         }catch(SQLException error){throw new AssertionError("隔离JDBC验证失败，SQLState="+error.getSQLState()+"，code="+error.getErrorCode());}
+    }
+    private static List<MappingEngine.Row> convertWindows(MappingEngine.Plan plan,List<Map<String,Object>> source){
+        var rows=new ArrayList<MappingEngine.Row>();var window=new ArrayList<Map<String,Object>>();long bytes=0,memory=0,offset=0;
+        var context=new ExecutionContext(Instant.EPOCH,ZoneId.of("Asia/Shanghai"),Locale.ROOT,"validation-jdbc");
+        DictionarySpec.Provider provider=(dictionary,keys)->{fail("No dictionary lookup is needed");return Map.of();};
+        for(var row:source){var size=RecordBudget.record(row,"验证输入");
+            if(!window.isEmpty()&&(window.size()>=MappingEngine.WINDOW_RECORDS||bytes+size.utf8()>RecordBudget.WINDOW_BYTES||memory+size.memory()>RecordBudget.MEMORY_BYTES)){
+                var result=MappingEngine.execute(plan,window,offset,context,provider);assertEquals(0,result.dictionaryBatches());rows.addAll(result.rows());offset+=window.size();window.clear();bytes=0;memory=0;
+            }window.add(row);bytes+=size.utf8();memory+=size.memory();
+        }
+        if(!window.isEmpty()){var result=MappingEngine.execute(plan,window,offset,context,provider);assertEquals(0,result.dictionaryBatches());rows.addAll(result.rows());}return rows;
     }
     private static void create(Connection connection,String textType)throws SQLException {
         var columns=new ArrayList<String>();

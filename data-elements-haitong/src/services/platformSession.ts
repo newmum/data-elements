@@ -1,4 +1,5 @@
 import { getBridgeToken,getSessionRevision,setBridgeToken } from '../nifi/api/bridgeSession';
+import {sourcePlatformBaseUrl,sourcePlatformHomeUrl,sourcePlatformLoginUrl} from './platformLocation';
 
 /** A trusted platform credential changed: stop this request and rebuild the standalone workspace. */
 export function reconcilePlatformSessionToken(token:string,expectedRevision=getSessionRevision()):boolean {
@@ -15,32 +16,17 @@ export function reconcilePlatformSessionToken(token:string,expectedRevision=getS
 /** The platform owns login and tenant selection. HaiTong never persists a second credential. */
 export function getPortalBaseUrl(): URL {
   const portalEnv = import.meta.env ?? {};
-  const configured = portalEnv.VITE_SOURCE_PLATFORM_HOME_URL?.trim();
-  const fallback = portalEnv.DEV ? 'http://localhost:3000/#/home' : '/wanxiang/#/home';
-  return new URL(configured || fallback, window.location.href);
+  return sourcePlatformBaseUrl(window.location.href,portalEnv.VITE_SOURCE_PLATFORM_HOME_URL,portalEnv.DEV);
 }
 
 /** Let the platform root resolve the first menu available to the current user. */
 export function getPlatformHomeUrl(): string {
-  const portal = getPortalBaseUrl();
-  portal.hash = '/';
-  return portal.href;
+  return sourcePlatformHomeUrl(getPortalBaseUrl().href);
 }
 
 /** The platform validates this return address against its configured capability centres. */
 export function getPlatformLoginUrl(): string {
-  const portal = getPortalBaseUrl();
-  const destination = new URL(window.location.href);
-  for (const key of ['token', 'accessToken']) destination.searchParams.delete(key);
-  const hash = destination.hash.slice(1);
-  const queryStart = hash.indexOf('?');
-  if (queryStart >= 0) {
-    const params = new URLSearchParams(hash.slice(queryStart + 1));
-    for (const key of ['token', 'accessToken']) params.delete(key);
-    destination.hash = `${hash.slice(0, queryStart)}${params.size ? `?${params}` : ''}`;
-  }
-  portal.hash = `/login?redirect=${encodeURIComponent(destination.href)}`;
-  return portal.href;
+  return sourcePlatformLoginUrl(window.location.href,getPortalBaseUrl().href);
 }
 
 const LOGIN_REDIRECT_KEY = 'haitong:platform-login-redirect';

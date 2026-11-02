@@ -1,3 +1,4 @@
+import {reportRandomId} from '../core/browserId';
 import type { DataType, Resource, SourceBook,TimeFormat,StandardField,TimeRole } from '../core/model';
 import { clone } from '../core/model';
 import { resourceFromRegion } from '../core/import';
@@ -142,7 +143,7 @@ export function normalizedReportFile(resource:Resource):File{
 export async function submitUploadTable(datasourceId:string,table:UploadTable,resource:Resource):Promise<ReportReceipt>{
   if(!table.tid)throw new Error('请先完成第二步并保存数据规范');
   const form=new FormData();form.append('datasourceId',datasourceId);form.append('tableId',table.tid);form.append('fileId',table.fileId);
-  form.append('requestId',crypto.randomUUID());form.append('file',normalizedReportFile(resource));
+  form.append('requestId',reportRandomId());form.append('file',normalizedReportFile(resource));
   const result=await platformApi<ReportReceipt>('/dst/database/metadata/report-submit',{method:'POST',body:form});
   if(result.status!=='success')throw new Error(result.message||'上报尚未成功，请查看记录');return result;
 }

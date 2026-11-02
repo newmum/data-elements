@@ -18,7 +18,8 @@ public final class PreviewMasking {
         List<Map<String,Object>> result = new ArrayList<>();
         for (var row : rows) {
             Map<String,Object> safe = new LinkedHashMap<>();
-            row.forEach((name,value)->safe.put(name,value==null?null:allFields || sensitive.contains(name) || SECRET.matcher(name).matches() ? "***" : value));
+            row.forEach((name,value)->safe.put(name,value==null?null:allFields || sensitive.contains(name) || SECRET.matcher(name).matches() ? "***" :
+                    value instanceof String text&&text.length()>4096?"（大文本已省略，共"+text.length()+"字符；处理链路保留全文）":value));
             result.add(safe);
         }
         return result;

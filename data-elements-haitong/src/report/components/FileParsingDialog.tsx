@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
-import {Alert,Button,Checkbox,InputNumber,Select,Spin,Table,Tooltip} from 'antd';
+import {Alert,Button,Checkbox,InputNumber,Spin,Table} from 'antd';
+import {Select,Tooltip} from './ReportControls';
 import type {Region,SourceBook} from '../core/model';
 import {colName} from '../core/model';
 import {defaultRegion} from '../core/import';

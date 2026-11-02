@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react';
-import {Button,Empty,Tooltip} from 'antd';
+import {Button,Empty} from 'antd';
+import {Tooltip} from './ReportControls';
 import type {RegistrationFileGroup,UploadField,UploadManifest,UploadTable} from '../services/uploadWorkbench';
 import {hasReportSuccess,isReportReady} from '../services/reportSchema';
 import {fileParsingLocked} from '../services/reportFiles';

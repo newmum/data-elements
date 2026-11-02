@@ -78,6 +78,7 @@ public final class MappingDiagnostics {
     private static Value snapshot(Object value) {
         if (value == ValueTypes.MISSING) return new Value("（字段缺失或输入尚未生成）", false);
         if (value == null || value instanceof Boolean || value instanceof Number && value.toString().length() <= VALUE_LIMIT) return new Value(value, false);
+        if(value instanceof CharSequence text&&text.length()>4096)return new Value("（大文本已省略，共"+text.length()+"字符，完整原值见record）",true);
         String text;
         try { text = value instanceof Map<?,?> || value instanceof Collection<?> || value.getClass().isArray() ? JSON.writeValueAsString(value) : value.toString(); }
         catch (Exception ignored) { text = "（无法显示的值类型：" + value.getClass().getSimpleName() + "）"; }

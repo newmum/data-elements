@@ -1,4 +1,5 @@
-import {Button,Table,Tag,Tooltip} from 'antd';
+import {Button,Table,Tag} from 'antd';
+import {Tooltip} from './ReportControls';
 import type {ReportReceipt,UploadManifest,UploadTable} from '../services/uploadWorkbench';
 import {hasReportSuccess,isReportReady} from '../services/reportSchema';
 

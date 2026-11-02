@@ -4,7 +4,7 @@
 
 | 应用 | 工程目录 | 技术栈 | 本地端口 | 生产静态资源前缀 | 安装与启动 |
 | --- | --- | --- | ---: | --- | --- |
-| 澄天数据中台 | [`data-elements-chengtian/`](docs/data-elements-chengtian.md#overview) | Vue 3 / Vite | 3000 | `/wanxiang/` | `pnpm install --frozen-lockfile`、`pnpm run dev` |
+| 澄天数据中台 | [`data-elements-chengtian/`](docs/data-elements-chengtian.md#overview) | Vue 3 / Vite | 3000 | `/`（当前生产）；`/wanxiang/`（示范环境） | `pnpm install --frozen-lockfile`、`pnpm run dev` |
 | 海通数据集成中心 | [`data-elements-haitong/`](docs/data-elements-haitong.md#overview) | React 18 / Vite | 3002 | `/haitong/` | `pnpm install --frozen-lockfile`、`pnpm run dev` |
 | 统一身份管理平台 | [`data-elements-idaas/`](docs/data-elements-idaas.md#identity-boundaries) | React 19 / Vite | 3005 | `/idaas/` | `pnpm install --frozen-lockfile`、`pnpm run dev` |
 | 万象数据治理中心 | [`data-elements-wanxiang/`](docs/data-elements-wanxiang.md#overview) | React 19 / Vite | 3010 | `/wanxiang-governance/` | `npm ci`、`npm run dev` |

@@ -1,4 +1,5 @@
-import {Alert,Button,Input,Select,Tooltip} from 'antd';
+import {Alert,Button,Input} from 'antd';
+import {Select,Tooltip} from './ReportControls';
 import type {UploadField,UploadTable} from '../services/uploadWorkbench';
 import {reportSchemaIssues,REPORT_BUSINESS_TYPES} from '../services/reportSchema';
 import FieldGovernanceTable from './FieldGovernanceTable';

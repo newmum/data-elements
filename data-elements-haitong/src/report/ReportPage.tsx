@@ -7,6 +7,8 @@ import { getPortalBaseUrl } from '../services/platformSession';
 import { reportReturnTarget,reportSourceLocation } from './services/reportReturn';
 import {useSessionRevision} from '../nifi/api/bridgeSession';
 import './styles.css';
+import './components/ReportControls.css';
+import {reportControlTheme} from './controlTheme';
 
 const reportTheme: ThemeConfig = {
   inherit: false,
@@ -16,11 +18,13 @@ const reportTheme: ThemeConfig = {
     colorError: '#C53B32', colorText: '#1F2937', colorTextSecondary: '#68768A',
     colorBorder: '#DCE3EC', borderRadius: 6, fontSize: 14, controlHeight: 36,
     fontFamily: '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif',
+    motion:false,
   },
   components: {
     Table: { headerBg: '#F5F7FA', headerColor: '#5E6C80', rowSelectedBg: '#EAF2FF', cellPaddingBlock: 10 },
     Button: { primaryShadow: 'none' }, Modal: { titleFontSize: 18 },
     Tabs: { titleFontSize: 16, horizontalItemGutter: 32 },
+    ...reportControlTheme,
   },
 };
 
@@ -31,6 +35,13 @@ export default function ReportPage() {
   const navigate = useNavigate();
   const datasourceId = new URLSearchParams(location.search).get('datasourceId') || '';
   const [returnTo] = useState(() => reportReturnTarget(window.location.href, getPortalBaseUrl().href, location.state, document.referrer));
+  useLayoutEffect(()=>{
+    const params=new URLSearchParams(location.search);
+    if(params.get('returnTo')!==returnTo){
+      params.set('returnTo',returnTo);
+      navigate({pathname:location.pathname,search:params.toString()},{replace:true,state:location.state});
+    }
+  },[returnTo,location.pathname,location.search,location.state,navigate]);
   useLayoutEffect(() => {
     const previousTitle = document.title;
     document.body.classList.add('ht-report-active');

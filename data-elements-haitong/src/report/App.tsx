@@ -1,5 +1,8 @@
+import {reportRandomId} from './core/browserId';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Checkbox, Input, Select, Segmented, Spin, Table, Tag, message } from 'antd';
+import {Alert,Avatar,Button,Checkbox,Dropdown,Input,Spin,Table,Tag,message} from 'antd';
+import {DownOutlined,QuestionCircleOutlined,SettingOutlined,UserOutlined} from '@ant-design/icons';
+import {Select,Segmented} from './components/ReportControls';
 import type { DataRow, Resource, SourceBook } from './core/model';
 import { clone } from './core/model';
 import { readFile } from './services/parser';
@@ -20,8 +23,9 @@ import ProgressOverlay from './components/ProgressOverlay';
 import {defaultTableType,withDefaultTableTypes,reportStepCompletion} from './services/reportProgress';
 import {useRegistrationFilesPage,useReportTablesPage} from './services/useRegistrationPage';
 import LegacyDialog from './components/LegacyDialog';
-import { PortalMenu as Dropdown, PortalEmpty as Empty } from './components/PortalUI';
+import { PortalEmpty as Empty } from './components/PortalUI';
 import ReportLoading from './components/ReportLoading';
+import ReportFileUpload from './components/ReportFileUpload';
 import { getSessionRevision } from '../nifi/api/bridgeSession';
 import FileParsingDialog from './components/FileParsingDialog';
 import { hasReportSuccess,isReportReady,reportSchemaIssues,REPORT_BUSINESS_TYPES } from './services/reportSchema';
@@ -46,7 +50,7 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
   const [deliveryKey,setDeliveryKey]=useState(''),[deliveryResources,setDeliveryResources]=useState<Record<string,Resource>>({});
   const [editing,setEditing]=useState<DataRow>(),[historyOpen,setHistoryOpen]=useState(false);
   const [history,setHistory]=useState<{list:import('./services/uploadWorkbench').ReportReceipt[];total:number}>({list:[],total:0}),[historyPage,setHistoryPage]=useState(1);
-  const input=useRef<HTMLInputElement>(null),books=useRef(new Map<string,SourceBook>()),removed=useRef<string[]>([]),locked=useRef(false);
+  const books=useRef(new Map<string,SourceBook>()),removed=useRef<string[]>([]),locked=useRef(false);
   const originals=useRef(new Map<string,File>());
   const sessionRevision=useRef(getSessionRevision());
   function assertSession(){if(sessionRevision.current!==getSessionRevision())throw new Error('登录身份已变化，请重新打开工作台');}
@@ -89,7 +93,7 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
         setPreviewTableKey('');setFileSearch('');setSchemaSearch('');setSchemaSearchInput('');setReportSearchInput('');setRegistrationFocus('');reporting.setQuery(current=>({...current,pageNo:1}));setReportFilter('all');
         setParsing(undefined);setDataReviewOpen(false);setConfirmSync(false);setEditing(undefined);
         setRemoveId('');setHistoryOpen(false);setHistory({list:[],total:0});setHistoryPage(1);
-        if(input.current)input.current.value='';onDatasourceChange(loaded.source.id);
+        onDatasourceChange(loaded.source.id);
       });
       if(!success&&revision===workspaceRevision.current&&sessionRevision.current===getSessionRevision())onDatasourceChange(context.context.datasourceId);
     }finally{setSwitchingId('');}
@@ -108,7 +112,7 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
     for(const file of files){try{
       if(!/\.(csv|xlsx|xls|txt|json)$/i.test(file.name)||!file.size||file.size>10*1024*1024)throw new Error('支持 10 MB 以内的 CSV、Excel、TXT、JSON 数据文件');
       assertSession();const id=await uploadOriginal(file);originals.current.set(id,file);ids.push(id);next.files.push({fileId:id,fileName:file.name});
-    }catch(cause){next.failedTables!.push({key:crypto.randomUUID(),fileId:'',fileName:file.name,tableName:'',tableNameCn:file.name,fields:[],fieldCount:0,recordCount:0,status:'failed',error:(cause as Error).message});}finally{setUploadStage({phase:0,completed:++completed,total:files.length});}}
+    }catch(cause){next.failedTables!.push({key:reportRandomId(),fileId:'',fileName:file.name,tableName:'',tableNameCn:file.name,fields:[],fieldCount:0,recordCount:0,status:'failed',error:(cause as Error).message});}finally{setUploadStage({phase:0,completed:++completed,total:files.length});}}
     if(ids.length){setUploadStage({phase:1,completed:files.length,total:files.length});const result=await parseUploadedFiles(ids);const names=new Set(next.tables.map(entry=>entry.tableName.toLowerCase()));
       for(const file of result.files)for(const parsed of file.tables){const row={...parsed,fileId:file.fileId,fileName:file.fileName};
         if(row.status==='failed'){next.failedTables!.push(row);continue;}
@@ -239,7 +243,7 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
     <header className="portal-header"><div className="portal-header-inner">
       <div className="portal-brand"><span className="portal-emblem"><img src={POLICE_TENANT_LOGO} alt="公安租户"/></span><div><h1>数据上报工作台</h1><p>当前部门：{context.context.user.orgName || '未设置所属部门'}</p></div></div>
       <div className="portal-header-actions"><button onClick={requestReturn}><Icon name="arrow" style={{transform:'rotate(180deg)'}}/>返回</button><button onClick={() => { setHistoryPage(1); setHistoryOpen(true); }}><Icon name="history"/>上报记录</button>
-        <Dropdown menu={{items:[{key:'help',label:'使用帮助'},{key:'settings',label:'系统设置'}],onClick:({key})=>key==='help'?setHelpOpen(true):setSettingsOpen(true)}}><button aria-label="用户菜单"><span className="portal-avatar"><Icon name="user" size={17}/></span>{context.context.user.realName || context.context.user.userName || '当前用户'}<Icon name="down" size={12}/></button></Dropdown>
+        <Dropdown trigger={['click']} placement="bottomRight" overlayClassName="report-profile-dropdown" menu={{style:{minWidth:140},items:[{key:'help',icon:<QuestionCircleOutlined/>,label:'使用帮助'},{key:'settings',icon:<SettingOutlined/>,label:'系统设置'}],onClick:({key})=>key==='help'?setHelpOpen(true):setSettingsOpen(true)}}><Button type="text" className="report-profile-trigger" aria-label="用户菜单"><Avatar size={28} icon={<UserOutlined/>}/><span className="report-profile-name">{context.context.user.realName || context.context.user.userName || '当前用户'}</span><DownOutlined className="report-profile-arrow"/></Button></Dropdown>
       </div>
     </div></header>
     <main className="portal-main">
@@ -249,7 +253,7 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
       <section className={`portal-upload report-upload-panel ${uploadStage?'is-uploading':''}`} aria-label="选择数据源并上传文件" aria-busy={!!uploadStage}>
         <div className="report-upload-content">
           <div className="report-step-copy"><span className={`report-target-step ${completedSteps.uploaded?'is-complete':'is-active'}`}>第 1 步</span><h2>选择数据源并上传文件</h2><small id="report-upload-file-requirements" className="report-upload-formats">CSV / Excel / TXT / JSON · 单文件 10 MB</small></div>
-          <div className="report-upload-source-row"><div className="report-upload-source"><Select aria-label="选择上报数据源" disabled={!!busy} loading={!!switchingId} value={context.context.datasourceId} options={context.sources.map(source=>({value:source.id,label:source.name}))} onChange={id=>void switchDatasource(id)}/></div><Button type="primary" size="large" disabled={!!busy} aria-describedby="report-upload-file-requirements" icon={<Icon name="upload" size={18}/>} onClick={()=>input.current?.click()}>{manifest.files.length?'继续上传数据文件':'上传数据文件'}</Button></div>
+          <div className="report-upload-source-row"><div className="report-upload-source"><Select aria-label="选择上报数据源" disabled={!!busy} loading={!!switchingId} value={context.context.datasourceId} options={context.sources.map(source=>({value:source.id,label:source.name}))} onChange={id=>void switchDatasource(id)}/></div><ReportFileUpload disabled={!!busy} hasFiles={manifest.files.length>0} onFiles={files=>void upload(files)}/></div>
           <div className="report-upload-metrics">
             <div><span><Icon name="file" size={14}/>已上传文件</span><strong>{manifest.files.length}<small>份</small></strong></div>
             <div><span><Icon name="table" size={14}/>数据表</span><strong>{manifest.tables.length}<small>张</small></strong></div>
@@ -257,7 +261,6 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
           </div>
         </div>
         <div className="upload-visual" aria-hidden="true"><div className="upload-tagline"><span>让数据多跑路</span><span>让民警少跑腿</span><div className="tagline-lines"/></div><div className="upload-illustration"><div className="paper-back"/><div className="paper-front"><i/><i/><i/><span><Icon name="upload" size={27}/></span></div></div></div>
-        <input ref={input} hidden type="file" multiple accept=".csv,.xlsx,.xls,.txt,.json" onChange={event=>{const files=Array.from(event.target.files||[]);event.target.value='';if(files.length)void upload(files);}}/>
         {uploadStage&&<UploadProgress stage={uploadStage}/>}
       </section>
       <section id="report-registration" className="report-target-selector report-normalize-section" aria-label="规范数据表登记信息" aria-busy={normalizationLoading}>
@@ -290,7 +293,7 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
     </LegacyDialog>
     <FileParsingDialog key={parsing?.fileId||'closed'} file={parsing} tables={manifest.tables.filter(entry=>entry.fileId===parsing?.fileId)} loadBook={(encoding,delimiter)=>loadBook(entryForFile(parsing!),encoding,delimiter,true)} onSave={saveParsed} onClose={()=>setParsing(undefined)}/>
     <ReportTableDetails key={dataReviewOpen?table?.key:'closed'} entry={dataReviewOpen?table:undefined} original={reviewOriginal} error={previewError} onClose={()=>setDataReviewOpen(false)}/>
-    <LegacyDialog title={<span className="dialog-title"><Icon name="history"/>上报记录</span>} ariaLabel="上报记录" open={historyOpen} onClose={()=>setHistoryOpen(false)} className="report-dialog--wide" footer={<Button onClick={()=>setHistoryOpen(false)}>关闭</Button>}><Table rowKey="id" dataSource={history.list} pagination={{current:historyPage,pageSize:10,total:history.total,onChange:setHistoryPage}} columns={[
+    <LegacyDialog title={<span className="dialog-title"><Icon name="history"/>上报记录</span>} ariaLabel="上报记录" open={historyOpen} onClose={()=>setHistoryOpen(false)} className="report-dialog--wide" footer={<Button onClick={()=>setHistoryOpen(false)}>关闭</Button>}><Table rowKey="id" dataSource={history.list} pagination={{showSizeChanger:false,current:historyPage,pageSize:10,total:history.total,onChange:setHistoryPage}} columns={[
       {title:'原始文件',dataIndex:'fileName'},{title:'数据表',dataIndex:'tableName'},{title:'状态',dataIndex:'status',render:value=><Tag color={value==='success'?'success':value==='sending'?'processing':'error'}>{value==='success'?'上报成功':value==='sending'?'处理中':'上报失败'}</Tag>},
       {title:'时间',dataIndex:'reportedAt',render:value=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—'},{title:'说明',dataIndex:'message'},
     ]}/></LegacyDialog>

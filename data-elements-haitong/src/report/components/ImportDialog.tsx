@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Alert, Button, Checkbox, Input, InputNumber, Modal, Select, Table } from 'antd';
+import {Alert,Button,Checkbox,Input,InputNumber,Table} from 'antd';
+import {Modal,Select} from './ReportControls';
 import type { SourceBook, Region, Resource, Dictionary } from '../core/model';
 import { colName, display, LIMITS } from '../core/model';
 import { defaultRegion, regionErrors, resourceFromRegion, dictionaryFromRegion } from '../core/import';
@@ -199,19 +200,10 @@ function NativeFilePicker({ disabled, onPick, children }: {
     onPick: (file: File) => void;
     children: ReactNode;
 }) {
-    const inputRef = useRef<HTMLInputElement | null>(null);
     return <label
       className={`native-file-picker${disabled ? ' is-disabled' : ''}`}
-      tabIndex={disabled ? -1 : 0}
       aria-disabled={disabled}
       aria-label="选择 Excel、CSV、TXT 或 JSON 数据文件"
-      onKeyDown={event => {
-          if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              if (!disabled)
-                  inputRef.current?.click();
-          }
-      }}
       onDragOver={event => {
           if (!disabled)
               event.preventDefault();
@@ -226,12 +218,10 @@ function NativeFilePicker({ disabled, onPick, children }: {
       }}
     >
       <input
-        ref={inputRef}
         className="native-file-picker-input"
         type="file"
         accept=".xlsx,.xls,.csv,.txt,.json"
         disabled={disabled}
-        tabIndex={-1}
         aria-label="选择 Excel、CSV、TXT 或 JSON 数据文件"
         onChange={event => {
           const file = event.currentTarget.files?.[0];

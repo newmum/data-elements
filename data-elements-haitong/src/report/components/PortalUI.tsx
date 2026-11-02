@@ -1,5 +1,5 @@
-import { useId, useState, type ReactNode } from 'react';
-import { Popover } from 'antd';
+import { useId, useState, type ReactNode, type ReactElement } from 'react';
+import {Popover} from './ReportControls';
 import Icon from './Icon';
 
 /** Two accessible view tabs; inactive views stay mounted to preserve filter and page state. */
@@ -24,7 +24,7 @@ export function PortalTabs({ activeKey, onChange, items, className = '', tabBarE
 }
 
 /** Small contextual menu, rendered by the same Ant Design Popover in both builds. */
-export function PortalMenu({ menu, children }: { menu: { items: { key: string; label: string; danger?: boolean }[]; onClick: (info: { key: string }) => void }; children: ReactNode; trigger?: string[] }) {
+export function PortalMenu({ menu, children }: { menu: { items: { key: string; label: string; danger?: boolean }[]; onClick: (info: { key: string }) => void }; children: ReactElement; trigger?: string[] }) {
     const [open, setOpen] = useState(false);
     return <Popover trigger="click" placement="bottomRight" open={open} onOpenChange={setOpen} content={<div className="portal-context-menu" role="menu">
         {menu.items.map(item => <button role="menuitem" type="button" key={item.key} className={item.danger ? 'danger' : ''} onClick={() => { menu.onClick({ key: item.key }); setOpen(false); }}>{item.label}</button>)}

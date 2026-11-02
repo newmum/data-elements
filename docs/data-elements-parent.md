@@ -425,7 +425,15 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 <a id="mapping-extension--当前版本1127"></a>
 
-### 当前版本（1.1.27）
+<a id="mapping-extension--当前版本1128"></a>
+
+### 当前版本（1.1.28）
+
+大文本直通与普通字段转换采用分开的预算。来源字段直接映射到 STRING/ANY 目标、DIRECT 步骤及已经是字符串的恒等 CAST 保留原值，不根据 `base64`、`pic` 等字段名推断规则，也不自动解码、重编码或探查图片内容。必填、类型、登记长度、Schema 及目标列容量继续校验。会改变内容的函数、表达式、拼接、字典等转换，其输入和步骤结果继续限制为256KiB；大文本应使用明确的来源字段直通。表达式引用与拼接在扩容前检查，不能借表达式绕过普通转换预算。
+
+共享内核与 NiFi 统一使用规范记录 JSON 的 UTF-8 字节预算，计入字段名、结构、转义及二进制的Base64载体；补充字符按默认Jackson UTF-8生成器的代理对转义计量，JDBC/Java时间值按保守文本载体计量，不等于FTP整个文件或HTTP信封的字节数。单条输入/输出记录上限8MiB，单窗口最多512行且记录字节合计不超过8MiB；输入、输出窗口各有独立32MiB保守内存估算上限。记录读取按字节或内存先到达的窗口边界处理；输出预算计入未映射直通字段、键名、替换和错误回退值，扩张超限保留原输入。窗口许可最多两个执行任务，首次上线大图片流程建议Concurrent Tasks=1；Reader、Writer与驱动仍有自身内存开销，窗口预算不代表JVM总堆上限。
+
+预览最多100行，使用相同8MiB记录/窗口及32MiB内存预算；大于4096个字符的文本只返回长度说明，敏感字段继续脱敏，执行输出和错误队列中的原文保持完整。错误摘要同样不截取大图片前缀。升级不修改业务表；Oracle/OceanBase Oracle的图片列应使用足够容量的CLOB，MySQL使用MEDIUMTEXT/LONGTEXT。nginx及海通接收应用的HTTP请求限制仍须按部署链路单独配置。
 
 推送 JSON 的 `eventNo`、`cameraIndexCode`、`picBase64` 等驼峰字段可以被登记的 `event_no`、`camera_index_code`、`pic_base64` 规则读取。输入 Schema 与逐记录取值使用同一套名称解析，精确名称优先且包含显式 NULL；没有精确名称时匹配标准驼峰/下划线形式。纯大小写差异仍遵循已有 `caseSensitive` 设置，关闭大小写敏感时才采用唯一的大小写/分隔符匹配；多义匹配返回 `AMBIGUOUS_FIELD`，缺字段、类型变化及非空约束继续拒绝。预览与 NiFi 共用该内核，不在 Reader 里复制、重写整批业务 JSON，也不根据字段名称猜测时间格式。
 
@@ -437,7 +445,7 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 摘要自动计算，用于诊断，不作为队列重放门槛。升级或修正规则后，排队的原输入和有效错误信封按当前规则处理，保留原记录下标、类型、输入身份与时钟。实际计划格式、函数与字段规则、字典绑定权限仍校验；未支持的协议或无效输入不会被当成空规则执行。平台发布及启动继续校验当前租户、角色、流程归属与已发布引用。
 
-匹配 NiFi 2.9.0 的构建包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.27.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，保留队列、来源 ID 和增量水位。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
+匹配 NiFi 2.9.0 的构建包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.28.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，保留队列、来源 ID 和增量水位。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
 
 
 <a id="mapping-extension--上一版1125"></a>
@@ -678,7 +686,7 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 - `HaitongTransformRecord`：Record Reader、可选的类型化 Reader、Record Writer和执行计划；摘要自动计算，平台引用及稳定上下文自动嵌入计划，旧元数据属性可选兼容。需要外部字典时绑定批量字典服务。输入具有 avro.schema 时使用类型化 Reader；计划绑定来源 schemaContract 时检查实际 Reader Schema，输出保留 Writer 的 Schema 属性。
 - `JdbcHaitongDictionaryService`：发布时的已授权字典定义，以及 datasourceId 对应的 DBCP Controller Service。运行时再次比对表、schema、键、键类型、取值列、过滤条件和重复键策略，之后才执行读取、缓存或快照查找。连接凭据只进入敏感 DBCP 属性；完整固定快照仅进入敏感的 `snapshot-payloads` 属性。
 - relationships：success、invalid、failure、retry。平台将 failure、retry 合并为本组件的一条自环，invalid 单独连接保留 Funnel；三个异常出口均不自动终止。error-loop-delay 默认30秒，failure 重复异常指数退避至最多5分钟；瞬时字典故障的 retry 次数上限为5，之后进入保留原文的 failure 回环。永久脏数据仍需处理原因，自环本身不会修复数据。
-- 每个窗口最多 512 行、约 8 MiB；单行 1 MiB、单字段结果 256 KiB；最多 32 个字典、8 个数据源、16 个依赖阶段、20,000 个查询键。两个窗口许可限制单处理器内并发。不同 FlowFile 分别拥有执行上下文。
+- 每个窗口最多512行、规范记录UTF-8字节合计8MiB；单行输入/输出8MiB，输入与输出窗口分别限制32MiB内存估算；普通转换输入/步骤结果256KiB，大文本通过明确字段映射直通。最多1,000个字典、8个数据源、16个依赖阶段、20,000个查询键。两个窗口许可限制单处理器内并发，不同FlowFile分别拥有执行上下文。
 - 一份输入的全部窗口在同一个 ProcessSession 中提交。FAIL_FLOWFILE 在任何窗口失败时删除全部候选输出、保留原输入；ROUTE_INVALID 在同一 Session 内提交成功记录及错误信封。
 - `ht.input.identity`、`ht.execution.clock` 固定重放身份与时钟。编译器将稳定画布 node.id 写入 `context-node-id`，计划摘要保存在 `ht.plan.hash.<context-node-id>`，生成器使用“输入身份 + 稳定节点身份”；更换原生 Processor UUID 后仍能保持该上下文。手工组件没有此属性时回退到处理器 ID，不能宣称跨替换确定性。1.1.26起同节点历史摘要仅作诊断，不阻止按当前规则重放；输入身份与时钟继续保留。
 - `ht.dictionary.sql.count` 为当前输入的字典读取 SQL 数，不含目标写入、授权预取或快照预先构建。输入身份、时钟稳定不等于 LIVE/TTL 字典值稳定，也不等于目标 exactly-once。

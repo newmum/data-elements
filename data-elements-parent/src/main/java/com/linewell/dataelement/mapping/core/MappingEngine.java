@@ -11,10 +11,10 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.27";
+    public static final String VERSION="1.1.28";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
-    public static final long WINDOW_BYTES=8L*1024*1024;
+    public static final long WINDOW_BYTES=RecordBudget.WINDOW_BYTES;
     public static final int MAX_DICTIONARIES=1000;
     public static final int MAX_DICTIONARY_DATASOURCES=8;
     private static final ObjectMapper JSON=new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
@@ -68,10 +68,12 @@ public final class MappingEngine {
         final ExecutionContext context;final long index;final Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>> values;
         final Set<String> done=new HashSet<>();final List<Issue> errors=new ArrayList<>();String rule="",step="";Object current,ruleInput;JsonNode diagnosticStep;final Map<String,Object> usedSources=new LinkedHashMap<>();
         private final SourceFieldNames sourceNames;
-        Frame(Plan p,Map<String,Object> row,long index,ExecutionContext context,Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values){
+        private final RecordBudget.Output outputBudget;
+        Frame(Plan p,Map<String,Object> row,long index,ExecutionContext context,Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values,RecordBudget.OutputWindow outputWindow){
             this.plan=p;this.original=row;this.index=index;this.context=context;this.values=values;
             sourceNames=new SourceFieldNames(row.keySet(),p.caseSensitive);
             if(p.passthrough)row.forEach((k,v)->{if(!p.excludes.contains(k))output.put(k,v);});
+            outputBudget=new RecordBudget.Output(output,outputWindow);
         }
         public Object source(String name){
             Object value=sourceRaw(name);usedSources.put(name,value);
@@ -151,7 +153,7 @@ public final class MappingEngine {
             switch(operator){
                 case "DIRECT" -> eval=f->f.current;
                 case "SYSTEM_VALUE" -> {String generator=args.path("generator").asText();eval=generator.equals("UUID")?f->f.context.generatedId(f.index,f.rule):generator.equals("UUID32")?f->f.context.compactGeneratedId(f.index,f.rule):generator.equals("NOW")?f->java.time.LocalDateTime.ofInstant(f.context.clock(),f.context.zone()):null;if(eval==null)throw new MappingException("UNKNOWN_FUNCTION","系统生成器无效");}
-                case "CONCAT" -> {List<Expressions.Expr>inputs=new ArrayList<>();args.path("inputs").forEach(n->inputs.add(Expressions.ast(n,deps,fields,0)));ArrayNode options=JSON.createArrayNode().add(args.path("separator").asText("")).add(args.path("nullElementPolicy").asText("EMPTY"));var fn=FunctionRegistry.bind("concat",options);eval=f->{List<Object> values=new ArrayList<>();inputs.forEach(e->values.add(e.evaluate(f)));return fn.apply(values,f.context);};}
+                case "CONCAT" -> {List<Expressions.Expr>inputs=new ArrayList<>();args.path("inputs").forEach(n->inputs.add(Expressions.ast(n,deps,fields,0)));ArrayNode options=JSON.createArrayNode().add(args.path("separator").asText("")).add(args.path("nullElementPolicy").asText("EMPTY"));var fn=FunctionRegistry.bind("concat",options);eval=f->{List<Object> values=new ArrayList<>();for(var expression:inputs){Object value=expression.evaluate(f);RecordBudget.transform(value,"拼接输入");values.add(value);}RecordBudget.transform(values,"拼接输入合计");return fn.apply(values,f.context);};}
                 case "STRING_OP","NUMBER_OP","FUNCTION" -> {String name=args.path("function").asText();var fn=FunctionRegistry.bind(name,args.path("parameters").isArray()?args.path("parameters"):JSON.createArrayNode());eval=f->fn.apply(f.current,f.context);}
                 case "CAST" -> {String type=ValueTypes.requireType(args.path("logicalType").asText("STRING"));int p=args.path("precision").asInt(38),s=args.path("scale").asInt(10);RoundingMode rounding=RoundingMode.valueOf(args.path("roundingMode").asText("UNNECESSARY"));eval=f->ValueTypes.cast(f.current,type,p,s,rounding,f.context.zone());}
                 case "DATE_PARSE","DATE_FORMAT" -> {ArrayNode params=JSON.createArrayNode().add(args.path("pattern").asText()).add(args.path("logicalType").asText("DATE"));if(operator.equals("DATE_PARSE")){var options=JSON.createObjectNode();if(args.hasNonNull("defaultDate"))options.set("defaultDate",args.get("defaultDate"));params.add(options);}var fn=FunctionRegistry.bind(operator.equals("DATE_PARSE")?"parseDate":"formatDate",params);eval=f->fn.apply(f.current,f.context);}
@@ -168,7 +170,14 @@ public final class MappingEngine {
                 default -> throw new MappingException("UNKNOWN_FUNCTION","未支持的规则算子: "+operator);
             }
             Eval actual=eval;String fallback=step.path("onError").asText("ERROR");validateFallback(fallback);Object defaultValue=JSON.convertValue(step.get("defaultValue"),Object.class);
-            steps.add(f->{f.step=stepId;f.diagnosticStep=step;Object before=f.current;try{Object value;try{value=actual.eval(f);}catch(ArithmeticException | java.time.DateTimeException ex){throw new MappingException("TYPE_MISMATCH","表达式数值或时间计算失败");}if(ValueTypes.bytes(value,0)>262144)throw new MappingException("BUDGET_EXCEEDED","字段结果超过256KiB");return value;}catch(MappingException ex){if(ex.code().equals("BUDGET_EXCEEDED"))throw ex;return switch(fallback){case "NULL"->null;case "KEEP_SOURCE","KEEP_ORIGINAL"->f.ruleInput;case "KEEP_INPUT"->before;case "DEFAULT_VALUE"->defaultValue;default->throw ex;};}});
+            boolean direct=operator.equals("DIRECT"),stringCast=operator.equals("CAST")&&ValueTypes.type(args.path("logicalType").asText("STRING")).equals("STRING");
+            steps.add(f->{f.step=stepId;f.diagnosticStep=step;Object before=f.current;try{
+                boolean passthrough=direct||stringCast&&before instanceof String;
+                if(!passthrough)RecordBudget.transform(before,"转换输入");
+                Object value;try{value=actual.eval(f);}catch(ArithmeticException | java.time.DateTimeException ex){throw new MappingException("TYPE_MISMATCH","表达式数值或时间计算失败");}
+                if(passthrough&&value==before)RecordBudget.record(value,"直通字段");else RecordBudget.transform(value,"转换结果");
+                return value;
+            }catch(MappingException ex){if(ex.code().equals("BUDGET_EXCEEDED"))throw ex;return switch(fallback){case "NULL"->null;case "KEEP_SOURCE","KEEP_ORIGINAL"->f.ruleInput;case "KEEP_INPUT"->before;case "DEFAULT_VALUE"->defaultValue;default->throw ex;};}});
         }
         return f->{f.step="input";f.diagnosticStep=null;f.current=ValueTypes.MISSING;f.current=input.evaluate(f);f.ruleInput=f.current;
             if(numericTemporalParser!=null&&TemporalParser.numericCarrier(f.current))f.current=numericTemporalParser.parse(f.current,f.context.zone(),f.context.locale());
@@ -204,7 +213,7 @@ public final class MappingEngine {
         Set<DictionarySpec.Key> waiting=new LinkedHashSet<>();
         for(Object token:tokens){f.current=token;DictionarySpec.LookupValue found;
             if(inline!=null){String key=token.toString();found=new DictionarySpec.LookupValue(inline.containsKey(key),inline.get(key));}
-            else {if(bindings.size()!=dict.keyColumns().size())throw new MappingException("INVALID_DICTIONARY","字典键绑定数量不匹配");List<Object>keys=new ArrayList<>();for(int i=0;i<bindings.size();i++){Object key=bindings.get(i).evaluate(f);if(key==null){keys.add(null);continue;}keys.add(DictionarySpec.keyValue(key,dict.keyTypes().get(i),f.context.zone()));}try{found=f.lookup(id,new DictionarySpec.Key(keys));}catch(Wait w){waiting.addAll(w.keys);continue;}}
+            else {if(bindings.size()!=dict.keyColumns().size())throw new MappingException("INVALID_DICTIONARY","字典键绑定数量不匹配");List<Object>keys=new ArrayList<>();for(int i=0;i<bindings.size();i++){Object key=bindings.get(i).evaluate(f);RecordBudget.transform(key,"字典键绑定");if(key==null){keys.add(null);continue;}keys.add(DictionarySpec.keyValue(key,dict.keyTypes().get(i),f.context.zone()));}try{found=f.lookup(id,new DictionarySpec.Key(keys));}catch(Wait w){waiting.addAll(w.keys);continue;}}
             boolean usable=found.found()&&!(found.value()==null&&args.path("nullLabelPolicy").asText("PRESERVE").equals("AS_MISSING"))&&!(Objects.equals(found.value(),"")&&args.path("emptyLabelPolicy").asText("PRESERVE").equals("AS_MISSING"));
             if(usable){any=true;result.add(found.value());}else if(!multi)result.add(miss(args.path("missPolicy").asText("NULL"),raw,f.ruleInput,args.get("defaultValue")));else {
                 String policy=args.path("partialMissingPolicy").asText("KEEP_TOKEN");if(policy.equals("KEEP_TOKEN"))result.add(token);else if(policy.equals("EMPTY_SLOT"))result.add("");else if(policy.equals("ERROR"))throw new MappingException("DICT_MISSING","多值字典编码未匹配");else if(!policy.equals("DROP_TOKEN"))throw new MappingException("INVALID_POLICY","多值未命中策略未支持");}
@@ -222,15 +231,16 @@ public final class MappingEngine {
     /** Sparse original row identities survive isolation/re-entry without splitting batched dictionary reads. */
     public static Result executeIndexed(Plan plan,List<Map<String,Object>> input,List<Long> indices,ExecutionContext context,DictionarySpec.Provider provider){
         if(indices.size()!=input.size()||indices.stream().anyMatch(index->index==null||index<0)||new HashSet<>(indices).size()!=indices.size())throw new MappingException("INVALID_ROW_INDEX","重放记录行号无效或重复");
-        if(input.size()>WINDOW_RECORDS)throw new MappingException("BUDGET_EXCEEDED","记录窗口超过512条");long bytes=0;for(var row:input){long size=ValueTypes.bytes(row,0);if(size>1_048_576)throw new MappingException("BUDGET_EXCEEDED","单记录超过1MiB");bytes+=size;}if(bytes>WINDOW_BYTES)throw new MappingException("BUDGET_EXCEEDED","窗口超过8MiB");
-        Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values=new HashMap<>();List<Frame>frames=new ArrayList<>();for(int i=0;i<input.size();i++)frames.add(new Frame(plan,input.get(i),indices.get(i),context,values));int batches=0,stage=0;long resultBytes=0,outputBytes=0;
+        if(input.size()>WINDOW_RECORDS)throw new MappingException("BUDGET_EXCEEDED","记录窗口超过512条");RecordBudget.window(input);
+        var outputWindow=new RecordBudget.OutputWindow();
+        Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values=new HashMap<>();List<Frame>frames=new ArrayList<>();for(int i=0;i<input.size();i++)frames.add(new Frame(plan,input.get(i),indices.get(i),context,values,outputWindow));int batches=0,stage=0;long resultBytes=0;
         while(true){Map<String,Set<DictionarySpec.Key>>pending=new LinkedHashMap<>();boolean unfinished=false;
             for(Frame frame:frames){if(!frame.errors.isEmpty())continue;for(Rule rule:plan.rules){if(frame.done.contains(rule.target))continue;frame.rule=rule.id;frame.step="input";frame.diagnosticStep=null;frame.ruleInput=ValueTypes.MISSING;frame.current=ValueTypes.MISSING;frame.usedSources.clear();
-                try{Object value=rule.value.eval(frame);frame.step="target";frame.diagnosticStep=null;frame.current=value;if(rule.enforceType)value=ValueTypes.cast(value,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());frame.current=value;if(!rule.nullable&&value==null)throw new MappingException("REQUIRED_FIELD","目标字段不允许NULL");if(rule.length>0&&value!=null&&value.toString().codePointCount(0,value.toString().length())>rule.length)throw new MappingException("LENGTH_EXCEEDED","目标字段长度"+value.toString().codePointCount(0,value.toString().length())+"字符，超过允许的"+rule.length+"字符");outputBytes+=ValueTypes.bytes(value,0);if(outputBytes>WINDOW_BYTES)throw new MappingException("BUDGET_EXCEEDED","窗口输出累计超过8MiB，请减小窗口/规则输出");frame.output.put(rule.target,value);frame.done.add(rule.target);}
+                try{Object value=rule.value.eval(frame);frame.step="target";frame.diagnosticStep=null;frame.current=value;if(rule.enforceType)value=ValueTypes.cast(value,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());frame.current=value;if(!rule.nullable&&value==null)throw new MappingException("REQUIRED_FIELD","目标字段不允许NULL");if(rule.length>0&&value!=null&&value.toString().codePointCount(0,value.toString().length())>rule.length)throw new MappingException("LENGTH_EXCEEDED","目标字段长度"+value.toString().codePointCount(0,value.toString().length())+"字符，超过允许的"+rule.length+"字符");frame.outputBudget.put(rule.target,value);frame.done.add(rule.target);}
                 catch(Wait w){pending.computeIfAbsent(w.dictionary,k->new LinkedHashSet<>()).addAll(w.keys);unfinished=true;}
                 catch(TargetWait w){unfinished=true;}
                 catch(MappingException ex){if(ex.code().equals("BUDGET_EXCEEDED"))throw ex;Object fallback=null;boolean recover=switch(rule.onError){case "NULL"->true;case "KEEP_SOURCE","KEEP_ORIGINAL"->{fallback=frame.ruleInput==ValueTypes.MISSING?null:frame.ruleInput;yield true;}case "DEFAULT_VALUE"->{fallback=rule.defaultValue;yield true;}default->false;};
-                    if(recover){try{if(rule.enforceType)fallback=ValueTypes.cast(fallback,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());if(!rule.nullable&&fallback==null)throw ex;if(rule.length>0&&fallback!=null&&fallback.toString().codePointCount(0,fallback.toString().length())>rule.length)throw ex;outputBytes+=ValueTypes.bytes(fallback,0);if(outputBytes>WINDOW_BYTES)throw new MappingException("BUDGET_EXCEEDED","窗口回退输出累计超过8MiB");frame.output.put(rule.target,fallback);frame.done.add(rule.target);continue;}catch(MappingException recoveryError){if(recoveryError.code().equals("BUDGET_EXCEEDED"))throw recoveryError;}}
+                    if(recover){try{if(rule.enforceType)fallback=ValueTypes.cast(fallback,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());if(!rule.nullable&&fallback==null)throw ex;if(rule.length>0&&fallback!=null&&fallback.toString().codePointCount(0,fallback.toString().length())>rule.length)throw ex;frame.outputBudget.put(rule.target,fallback);frame.done.add(rule.target);continue;}catch(MappingException recoveryError){if(recoveryError.code().equals("BUDGET_EXCEEDED"))throw recoveryError;}}
                     Object problem=frame.current;
                     if(problem==ValueTypes.MISSING&&frame.usedSources.size()==1)problem=frame.usedSources.values().iterator().next();
                     frame.errors.add(MappingDiagnostics.issue(plan.diagnostics,plan.recordMode,frame.index,rule.id,frame.step,frame.diagnosticStep,rule.target,rule.type,rule.length,rule.precision,rule.scale,rule.nullable,frame.usedSources,frame.ruleInput,problem,ex));break;}

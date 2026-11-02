@@ -1,3 +1,4 @@
+import {reportRandomId} from '../core/browserId';
 import type {Region,SourceBook} from '../core/model';
 import {defaultRegion,regionErrors,resourceFromRegion} from '../core/import';
 import type {UploadFile,UploadManifest,UploadTable} from './uploadWorkbench';
@@ -17,7 +18,7 @@ export function parsedFileTables(file:UploadFile,book:SourceBook,regions:Region[
     const prior=existing.find(table=>table.key===region.id),resource=resourceFromRegion(book,region);
     if(!resource.rows.length)throw new Error(`${region.name}：该区域没有有效数据行`);
     const unchanged=prior&&prior.sheetName===book.sheets[region.sheet].name&&prior.startRow===region.startRow&&prior.endRow===region.endRow&&(prior.startColumn||1)===region.startCol&&(prior.endColumn||prior.fields.length)===region.endCol&&(prior.headerMode||'single')===region.header&&(prior.parseEncoding||'utf-8')===encoding&&(prior.parseDelimiter||'')===delimiter;
-    const name=prior?.tableName||`report_${crypto.randomUUID().replace(/-/g,'').slice(0,12)}`;
+    const name=prior?.tableName||`report_${reportRandomId().replace(/-/g,'').slice(0,12)}`;
     return defaultTableType({...prior,key:region.id,fileId:file.fileId,fileName:file.fileName,status:'success',error:undefined,normalized:false,normalizationVersion:undefined,tableName:name,tableNameCn:prior?.tableNameCn||region.name||file.fileName,
       sheetName:book.sheets[region.sheet].name,startRow:region.startRow,endRow:region.endRow,startColumn:region.startCol,endColumn:region.endCol,headerMode:region.header,dataStartRow:region.dataStart,parseEncoding:encoding,parseDelimiter:delimiter,
       recordCount:resource.rows.length,fieldCount:resource.schema.fields.length,fields:unchanged&&prior.fields.length===resource.schema.fields.length?prior.fields:resource.schema.fields.map((field,index)=>({columnName:field.en||`field_${index+1}`,columnComment:field.zh||`字段 ${field.en||index+1}`,columnType:codes[field.type],columnLength:field.type==='text'?4000:undefined,primaryKey:false,nullable:true,isTimestamp:false,standardField:''}))});
