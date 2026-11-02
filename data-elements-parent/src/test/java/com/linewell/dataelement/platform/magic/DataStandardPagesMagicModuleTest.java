@@ -16,7 +16,7 @@ class DataStandardPagesMagicModuleTest {
     @Test void twentyAndHundredUseTwoReadsEachAndOnlyTheSessionTenant(){
         JdbcTemplate jdbc=mock(JdbcTemplate.class);
         NamedParameterJdbcTemplate named=mock(NamedParameterJdbcTemplate.class);
-        when(jdbc.execute(any(ConnectionCallback.class))).thenReturn(false);
+        when(jdbc.execute(org.mockito.ArgumentMatchers.<ConnectionCallback<Object>>any())).thenReturn(false);
         when(named.queryForObject(anyString(),anyMap(),eq(Number.class))).thenReturn(500L);
         when(named.queryForList(anyString(),anyMap())).thenReturn(List.of(Map.of("tid","standard","dictionary_count",9)));
         var module=new DataStandardPagesMagicModule(jdbc,named);
@@ -28,7 +28,7 @@ class DataStandardPagesMagicModuleTest {
             }
         });
         ArgumentCaptor<String> sql=ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Map<String,?>> args=ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String,?>> args=ArgumentCaptor.captor();
         verify(named,times(2)).queryForObject(anyString(),anyMap(),eq(Number.class));
         verify(named,times(2)).queryForList(sql.capture(),args.capture());
         assertThat(sql.getAllValues()).allSatisfy(s->{assertThat(s).contains("original.tenant_id=:tenantId","c.tenant_id=:tenantId","ORDER BY CASE WHEN coalesce(counts.dictionary_count,0)","desc, m.tid ASC LIMIT :size OFFSET :offset");});
@@ -43,7 +43,7 @@ class DataStandardPagesMagicModuleTest {
     }
     @Test void codeStatisticsAreAggregatedBeforePaginationWithTwoReadsForTwentyAndHundred(){
         var jdbc=mock(JdbcTemplate.class);var named=mock(NamedParameterJdbcTemplate.class);
-        when(jdbc.execute(any(ConnectionCallback.class))).thenReturn(false);
+        when(jdbc.execute(org.mockito.ArgumentMatchers.<ConnectionCallback<Object>>any())).thenReturn(false);
         when(named.queryForObject(anyString(),anyMap(),eq(Number.class))).thenReturn(150L);
         when(named.queryForList(anyString(),anyMap())).thenReturn(List.of(Map.of("tid","code-a","item_count",45,"reference_count",80)));
         var module=new DataStandardPagesMagicModule(jdbc,named);
@@ -54,7 +54,7 @@ class DataStandardPagesMagicModuleTest {
                 assertThat((List<?>)result.get("list")).hasSize(1);
             }
         });
-        ArgumentCaptor<String> sql=ArgumentCaptor.forClass(String.class);ArgumentCaptor<Map<String,?>> args=ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<String> sql=ArgumentCaptor.forClass(String.class);ArgumentCaptor<Map<String,?>> args=ArgumentCaptor.captor();
         verify(named,times(2)).queryForObject(anyString(),anyMap(),eq(Number.class));
         verify(named,times(2)).queryForList(sql.capture(),args.capture());
         assertThat(sql.getAllValues()).allSatisfy(s->assertThat(s).contains("c.tenant_id=:tenantId","original.tenant_id=:tenantId","codes.tenant_id=:tenantId","ranked._rank=1","ORDER BY CASE WHEN coalesce(refs.reference_count,0)","desc, c.tid ASC LIMIT :size OFFSET :offset"));
@@ -63,7 +63,7 @@ class DataStandardPagesMagicModuleTest {
     }
     @Test void encodingFilterIsAppliedToCountAndRowsBeforePagination(){
         var jdbc=mock(JdbcTemplate.class);var named=mock(NamedParameterJdbcTemplate.class);
-        when(jdbc.execute(any(ConnectionCallback.class))).thenReturn(false);
+        when(jdbc.execute(org.mockito.ArgumentMatchers.<ConnectionCallback<Object>>any())).thenReturn(false);
         when(named.queryForObject(anyString(),anyMap(),eq(Number.class))).thenReturn(0L);
         when(named.queryForList(anyString(),anyMap())).thenReturn(List.of());
         var module=new DataStandardPagesMagicModule(jdbc,named);

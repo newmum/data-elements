@@ -1,11 +1,19 @@
 <template>
-  <div class="left-title">
-    <h4 class="list-title">{{ title }}</h4>
+  <div class="left-title" :class="{ 'is-embedded': embedded }">
+    <slot name="header">
+      <h4 class="list-title">{{ title }}</h4>
+    </slot>
     <div class="asset-list" @scroll.passive="loadMoreOnScroll">
       <template v-for="item in visibleList" :key="item.did">
         <div
           class="asset-list-item"
-          :class="{ 'asset-list-item-selected': currentDid === item.did }"
+          :class="{ 'asset-list-item-selected': currentDid === item.did, 'is-disabled': disabled }"
+          role="button"
+          :tabindex="disabled ? -1 : 0"
+          :aria-pressed="currentDid === item.did"
+          :aria-disabled="disabled"
+          @keydown.enter.self.prevent="handleSelect(item)"
+          @keydown.space.self.prevent="handleSelect(item)"
           @click="handleSelect(item)"
         >
           <div class="asset-list-item-title flex-y-center gap-2">
@@ -26,7 +34,7 @@
             </el-text>
           </div>
           <template v-if="true">
-            <el-dropdown trigger="hover">
+            <el-dropdown v-if="showDelete" trigger="hover">
               <div class="flex items-center" @click.stop>
                 <template v-if="showTip">
                   <ElIcon v-if="!item.tid" class="mr-2 text-red-6" :size="16">
@@ -45,33 +53,50 @@
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
+            <ElIcon
+              v-else-if="showTip"
+              class="mr-2"
+              :class="item.tid ? 'text-green-6' : 'text-red-6'"
+              :size="16"
+              :aria-label="item.tid ? '已保存' : '未保存'"
+            >
+              <CircleCheckFilled v-if="item.tid" />
+              <WarningFilled v-else />
+            </ElIcon>
           </template>
+          <slot name="actions" :item="item"></slot>
         </div>
       </template>
-      <div v-if="loadingMore" class="asset-list-loading" aria-label="正在加载更多数据源">
-        <el-skeleton animated>
-          <template #template>
-            <div v-for="index in 3" :key="index" class="asset-list-loading-item">
-              <el-skeleton-item variant="circle" class="asset-list-loading-icon" />
-              <el-skeleton-item variant="text" class="asset-list-loading-text" />
-              <el-skeleton-item variant="circle" class="asset-list-loading-status" />
-            </div>
-          </template>
-        </el-skeleton>
+      <slot name="feedback">
+        <div v-if="loadingMore" class="asset-list-loading" aria-label="正在加载更多数据源">
+          <el-skeleton animated>
+            <template #template>
+              <div v-for="index in 3" :key="index" class="asset-list-loading-item">
+                <el-skeleton-item variant="circle" class="asset-list-loading-icon" />
+                <el-skeleton-item variant="text" class="asset-list-loading-text" />
+                <el-skeleton-item variant="circle" class="asset-list-loading-status" />
+              </div>
+            </template>
+          </el-skeleton>
+        </div>
+        <template v-if="!list?.length && !loadingMore">
+          <empty
+            :type="icon"
+            compact
+            :title="`暂无${title || '数据'}`"
+            description="当前还没有可选择的业务数据，可点击下方按钮新增。"
+          />
+        </template>
+        <div v-if="hasMore" class="asset-list-more">
+          继续向下滚动加载更多（已显示 {{ visibleList.length }} / {{ list.length }}）
+        </div>
+      </slot>
+    </div>
+    <slot name="footer">
+      <div v-if="showAdd" class="list-btn">
+        <el-button type="primary" plain icon="Plus" @click="add">添加</el-button>
       </div>
-      <template v-if="!list?.length && !loadingMore">
-        <empty
-          :type="icon"
-          compact
-          :title="`暂无${title || '数据'}`"
-          description="当前还没有可选择的业务数据，可点击下方按钮新增。"
-        />
-      </template>
-      <div v-if="hasMore" class="asset-list-more">继续向下滚动加载更多（已显示 {{ visibleList.length }} / {{ list.length }}）</div>
-    </div>
-    <div v-if="showAdd" class="list-btn">
-      <el-button type="primary" plain icon="Plus" @click="add">添加</el-button>
-    </div>
+    </slot>
   </div>
 </template>
 
@@ -90,6 +115,10 @@ const props = defineProps({
     default: "category",
   },
   currentId: String,
+  embedded: Boolean,
+  disabled: Boolean,
+  // 分页工作区由父组件保留选中和未保存上下文，列表变化时不自动切换。
+  autoSelect: { type: Boolean, default: true },
   list: {
     type: [] as PropType<Record<string, any>[]>,
     default: [],
@@ -142,6 +171,7 @@ const loadMoreOnScroll = (event: Event) => {
 
 // methods
 const handleSelect = (item: any) => {
+  if (props.disabled) return;
   currentDid.value = item.did;
   emit("select", item);
 };
@@ -163,7 +193,11 @@ const add = () => {
 watch(
   () => props.list,
   (newList) => {
-    renderLimit.value = Math.max(PAGE_SIZE, Math.min(renderLimit.value, newList?.length || PAGE_SIZE));
+    renderLimit.value = Math.max(
+      PAGE_SIZE,
+      Math.min(renderLimit.value, newList?.length || PAGE_SIZE)
+    );
+    if (props.autoSelect === false) return;
     if (newList?.length > 0 && !newList.some((el) => el.did === currentDid.value)) {
       handleSelect(newList[0]);
     }
@@ -186,10 +220,17 @@ defineExpose({
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   padding: 0 0 10px 0;
   margin-right: 16px;
   overflow: hidden;
   border-right: 1px solid #ebeef5;
+
+  &.is-embedded {
+    margin-right: 0;
+    padding-bottom: 0;
+    border-right: 0;
+  }
 
   &:empty {
     display: none;
@@ -200,8 +241,11 @@ defineExpose({
   }
 
   .asset-list {
+    flex: 1;
+    min-height: 0;
     padding: 8px 0;
     overflow-y: auto;
+    scrollbar-gutter: stable;
 
     .asset-list-item {
       display: flex;
@@ -214,7 +258,16 @@ defineExpose({
       cursor: pointer;
       border-bottom: 1px solid #f0f0f0;
       border-radius: 0;
-      transition: all 0.3s;
+      transition: background-color 150ms;
+
+      &:focus-visible {
+        outline: 2px solid var(--el-color-primary);
+        outline-offset: -2px;
+      }
+      &.is-disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
 
       &:hover {
         background-color: #f8f8f8;

@@ -24,11 +24,11 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue','2.3.1 Hive元数
       {revision:'v2',fresh:true,observedAt:130,message:'中文状态变更'}];
     const bytes=new TextEncoder().encode(events.map(e=>'event:runtime\r\ndata:'+JSON.stringify(e)+'\r\n\r\n').join(''));
     const ctx=vm.createContext({ref,computed:get=>({get value(){return get();}}),console,AbortController,TextDecoder,setTimeout,clearTimeout,
-      document:{hidden:false},state:{loading:false,accessStatus:'all'},treeData:ref([{children:[]}]),$message:{error:assert.fail},
+      document:{hidden:false},state:{loading:false,accessStatus:'all',datasourceType:'mysql',keyword:'physical',leftSelectNode:{type:'datasource',value:'source'}},treeData:ref([{children:[]}]),$message:{error:assert.fail},
       tableRef:ref({refresh:async reset=>{refreshes.push(reset);refreshedPage=await ctx.actual.fetchSources({pageSize:count});}}),
-      $common:{post:async(url,body)=>{listRequests++;assert.ok(['/ods/dataAggPage','/ods/hiveTargetPage'].includes(url));assert.equal(body.pageSize,count);
+      $common:{post:async(url,body)=>{listRequests++;assert.ok(['/ods/dataAggPage','/ods/hiveTargetPage'].includes(url));assert.equal(body.pageSize,count);assert.equal(body.datasourceType,"mysql");assert.equal(body.keyword,"physical");assert.equal(body.includeDatasourceTypeStatistics,true);assert.equal(body.scopeId,"source");
         const updated=structuredClone(rows);if(listRequests>1)for(const row of updated)Object.assign(row.tasks[1],{runtimeState:'RUNNING',runtimeLabel:'运行中'});
-        return {list:updated,total:count,runtimeRevision:listRequests>1?'v2':'v1',runtimeFresh:true,runtimeObservedAt:listRequests>1?131:1};}},
+        return {datasourceTypeStatistics:{complete:true,total:10001,typeCounts:{mysql:9999,hive:2}},list:updated,total:count,runtimeRevision:listRequests>1?'v2':'v1',runtimeFresh:true,runtimeObservedAt:listRequests>1?131:1};}},
       $request:{getUri:()=>'/dev-api/nifi/api/task-runtime/events',get:async(url,config)=>{streamRequests++;assert.equal(url,'/nifi/api/task-runtime/events');return config.adapter({...config,headers:{toJSON:()=>({token:'synthetic-session'})}});}},
       fetch:async(url,options)=>{assert.ok(!url.includes('synthetic-session'));assert.equal(options.headers.token,'synthetic-session');let offset=0;
         return {ok:true,status:200,headers:{get:()=>'text/event-stream'},body:{getReader:()=>({read:async()=>offset>=bytes.length?{done:true}:{done:false,value:bytes.slice(offset,(offset+=7))},releaseLock(){}})}};},
@@ -44,6 +44,7 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue','2.3.1 Hive元数
       assert.equal(ctx.actual.accessStatusType(initial.list[1]),'success');
       assert.ok(!source.includes('驳回修改'));
     }
+    assert.equal(ctx.state.datasourceTypeStatistics.total,10001);assert.equal(ctx.state.datasourceTypeError,"");
     await ctx.actual.startRuntimeStream();await new Promise(resolve=>setTimeout(resolve,190));ctx.actual.stopRuntimeStream();
     assert.equal(streamRequests,1);assert.equal(listRequests,2);assert.deepEqual(refreshes,[false]);
     assert.ok(refreshedPage.list.every(row=>row.tasks.every(task=>ctx.actual.taskLinkStatus(task).text==='运行中')));
@@ -51,6 +52,15 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue','2.3.1 Hive元数
     ctx.actual.acceptRuntimeEvent({revision:'offline',fresh:false,observedAt:131,message:'连接失败'});
     assert.ok(refreshedPage.list.every(row=>row.tasks.every(task=>ctx.actual.taskLinkStatus(task).text==='状态待确认')));
     ctx.actual.stopRuntimeStream();
+    const pending=[];
+    ctx.$common.post=()=>new Promise(resolve=>pending.push(resolve));
+    const old=ctx.actual.fetchSources({pageSize:count}),latest=ctx.actual.fetchSources({pageSize:count});
+    pending[1]({list:[],total:0,datasourceTypeStatistics:{complete:true,total:99,typeCounts:{hive:99}}});await latest;
+    pending[0]({list:[],total:0,datasourceTypeStatistics:{complete:true,total:1,typeCounts:{mysql:1}}});await old;
+    assert.equal(ctx.state.datasourceTypeStatistics.total,99);assert.equal(ctx.state.loading,false);
+    ctx.$message.error=()=>{};ctx.console={...console,error(){}};
+    ctx.$common.post=async()=>{throw new Error("offline")};await ctx.actual.fetchSources({pageSize:count});
+    assert.equal(ctx.state.datasourceTypeStatistics,null);assert.ok(ctx.state.datasourceTypeError);assert.equal(ctx.state.loading,false);
     console.log(`${file}: rows=${count}; initial page=1, SSE=1, 120 unchanged events=0 reads, revision change=1 page read; both hops updated, offline unconfirmed`);
   }
   assert.ok(source.includes('onDeactivated(() => { runtimeActive = false; stopRuntimeStream(); })'));

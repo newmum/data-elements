@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
@@ -184,7 +186,7 @@ class BatchCreateTableDdlMagicTest {
             for(int i=0;i<count;i++)fields.add(Map.of("columnName","f"+i,"dataType","varchar","sourceDatabaseType","postgresql","sourceColumnType","VARCHAR(50)","length",50));
             for(int i=0;i<f.targets.size();i++){var target=new LinkedHashMap<>(f.targets.get(i));target.put("tableItems",fields);f.targets.set(i,target);}
             var result=(Map<?,?>)f.run();
-            for(var item:(List<Map<String,Object>>)result.get("results"))assertEquals(count,item.get("ddl").toString().split("50 CHAR",-1).length-1);
+            for(var item:StructuredValues.objectRows(result.get("results")))assertEquals(count,item.get("ddl").toString().split("50 CHAR",-1).length-1);
             assertEquals(1,f.counter.reads);assertEquals(0,f.counter.writes);assertEquals(20,f.ddlGenerator.calls);
         }
     }
@@ -536,7 +538,7 @@ class BatchCreateTableDdlMagicTest {
             for (int index = 0; index < targets.size(); index++) {
                 var target = new LinkedHashMap<>(targets.get(index));
                 @SuppressWarnings("unchecked")
-                var props = new LinkedHashMap<>((Map<String, Object>) target.get("propList"));
+                var props = new LinkedHashMap<>(StructuredValues.objectMap(target.get("propList")));
                 props.put("tableName", name);
                 target.put("propList", props);
                 targets.set(index, target);

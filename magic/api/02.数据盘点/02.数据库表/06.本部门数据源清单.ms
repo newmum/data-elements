@@ -448,6 +448,46 @@ for (item in result) {
 result = activeResult
 datasourceIds = activeDatasourceIds
 
+// 代理访问服务数量一次聚合；父数据源已逐 ID 通过当前租户及菜单范围过滤。
+// 主表 LIMIT 1000 同时限定本次关联数量，禁止按卡片逐项读取服务列表。
+var proxyDatasourceIds = []
+for (item in result) {
+    item.serviceCount = 0
+    if (text(item.accessMode).trim().toLowerCase() == 'proxy') {
+        proxyDatasourceIds.add(text(item.tid))
+    }
+}
+if (proxyDatasourceIds.size() > 0) {
+    // 服务使用与服务列表相同的 DATA_SOURCE 角色范围，不能继承更宽的菜单范围。
+    var cardServiceScope = dataScope.dataSource()
+    var cardServiceUserId = text(cardServiceScope?.userId).trim()
+    var cardServiceOrgIds = cardServiceScope?.organizationIds == null ? [] : cardServiceScope.organizationIds
+    var cardServiceScopeSql = ''
+    if (cardServiceScope.scope == 'OWNER') {
+        if (blank(cardServiceUserId)) { exit 403, '无法识别当前服务登记人员' }
+        cardServiceScopeSql = ' and s.created_by=#{cardServiceUserId}'
+    } else if (cardServiceScope.scope == 'ORG') {
+        cardServiceScopeSql = cardServiceOrgIds.size() == 0 ? ' and 1=0' : ' and s.org_id in (#{cardServiceOrgIds})'
+    } else if (cardServiceScope.scope != 'ALL') {
+        exit 403, '数据服务范围无效'
+    }
+    var serviceCounts = db.select("""
+        select s.datasource_id, count(*) as service_count
+          from api_info_t s
+         where s.tenant_id=#{tenantId} and s.is_del=0
+           and s.datasource_id in (#{proxyDatasourceIds})
+           ${cardServiceScopeSql}
+         group by s.datasource_id
+    """)
+    var serviceCountBySource = {}
+    for (serviceCount in serviceCounts) {
+        serviceCountBySource[text(serviceCount.datasourceId || serviceCount.datasource_id)] = numberValue(serviceCount.serviceCount || serviceCount.service_count)
+    }
+    for (item in result) {
+        item.serviceCount = numberValue(serviceCountBySource[text(item.tid)])
+    }
+}
+
 // 旧调用者保留兼容；管理首屏跳过所有表文档读取及全量表循环。
 if (!summaryOnly) {
 var tableGroups = {}

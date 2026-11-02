@@ -86,6 +86,12 @@
       "baseSha256": "685fdbba57b2c949ce2996a3f3ccd0d0531541f86170b23708e4c626e593cb89"
     },
     {
+      "path": "magic/haitong/api/05.数据接收入口/05.文件一次推送.ms",
+      "id": "haitong-file-push-single",
+      "databasePath": "/magic-api/api/05.数据接收入口/05.文件一次推送.ms",
+      "baseSha256": "0a4fe205c24cd91b9eb31a8d2a815eea4d4cf66770997628a5116f0fa66c6d5f"
+    },
+    {
       "path": "magic/haitong/api/05.数据接收入口/05.通道数据接收.ms",
       "id": "haitong-public-5",
       "databasePath": "/magic-api/api/05.数据接收入口/05.通道数据接收.ms",
@@ -96,6 +102,18 @@
       "id": "haitong-public-6",
       "databasePath": "/magic-api/api/05.数据接收入口/06.业务操作执行.ms",
       "baseSha256": "47b3c9a0ccd3d03ad9914bf474934a61ae7e49786de28806d9d0bcb564b67f83"
+    },
+    {
+      "path": "magic/haitong/api/05.数据接收入口/06.文件single别名.ms",
+      "id": "haitong-file-push-single-alias",
+      "databasePath": "/magic-api/api/05.数据接收入口/06.文件single别名.ms",
+      "baseSha256": "85da14d893eb73ae965403d275ef62351d2b00f1d3ac4f432941860f684ee94e"
+    },
+    {
+      "path": "magic/haitong/api/05.数据接收入口/07.初始化文件推送.ms",
+      "id": "haitong-file-push-init",
+      "databasePath": "/magic-api/api/05.数据接收入口/07.初始化文件推送.ms",
+      "baseSha256": "322971c502a2cc6820de92536b52a125ae793e2723870b8403145edebd1cf4cb"
     },
     {
       "path": "magic/haitong/api/05.数据接收入口/07.消息状态.ms",
@@ -110,10 +128,34 @@
       "baseSha256": "0b47ae09f6977ea5ef0c4037330e914f61bd3b03e9fbaba112459c4b9738c3a3"
     },
     {
+      "path": "magic/haitong/api/05.数据接收入口/08.推送文件分片.ms",
+      "id": "haitong-file-push-part",
+      "databasePath": "/magic-api/api/05.数据接收入口/08.推送文件分片.ms",
+      "baseSha256": "6321b8c84742d8b41ec17383fa9214db88f47801294d0471c03ff2452d1d6ada"
+    },
+    {
       "path": "magic/haitong/api/05.数据接收入口/09.导入文件状态.ms",
       "id": "haitong-public-9",
       "databasePath": "/magic-api/api/05.数据接收入口/09.导入文件状态.ms",
       "baseSha256": "a6cef31d1c47595843cf5e17f66620ae834e60abe6cfbed78b812b6271ae763d"
+    },
+    {
+      "path": "magic/haitong/api/05.数据接收入口/09.推送分片续传.ms",
+      "id": "haitong-file-push-parts",
+      "databasePath": "/magic-api/api/05.数据接收入口/09.推送分片续传.ms",
+      "baseSha256": "e9be13a36c14d9bedec2f5db76c1964b5558fa6ea13b8bed06f7e71c93397ad8"
+    },
+    {
+      "path": "magic/haitong/api/05.数据接收入口/10.完成并提交文件推送.ms",
+      "id": "haitong-file-push-complete",
+      "databasePath": "/magic-api/api/05.数据接收入口/10.完成并提交文件推送.ms",
+      "baseSha256": "a852db895fee282154d93b96d655150abef8d0cfa4d79b3f9c9514699d91a28d"
+    },
+    {
+      "path": "magic/haitong/api/05.数据接收入口/11.文件推送结果.ms",
+      "id": "haitong-file-push-status",
+      "databasePath": "/magic-api/api/05.数据接收入口/11.文件推送结果.ms",
+      "baseSha256": "c666c6aa1a8d162e0275f008e49021a06c89877a3756b99c7490f92f13686d66"
     },
     {
       "path": "magic/haitong/api/05.数据接收入口/group.json",
@@ -437,7 +479,7 @@
       "path": "magic/haitong/function/01.海通业务/09.附件请求与传输编排.ms",
       "id": "haitong-function-files",
       "databasePath": "/magic-api/function/01.海通业务/09.附件请求与传输编排.ms",
-      "baseSha256": "219d32bcd9fd5ef635d9225e301f75d36f9f9cdd1f4683de0d032fa15796cf0e"
+      "baseSha256": "046d16e1b5d2a907ca581227a0bc9fbf446f3d72fa22e4a8cc8cc53f58378739"
     },
     {
       "path": "magic/haitong/function/01.海通业务/group.json",

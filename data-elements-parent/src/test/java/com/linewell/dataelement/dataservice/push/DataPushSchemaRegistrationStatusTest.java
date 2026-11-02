@@ -4,8 +4,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService;
+import com.linewell.dataelement.model.common.BizException;
 import com.linewell.dataelement.platform.tenant.infrastructure.datasource.TenantDataSourceRegistry;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +27,7 @@ class DataPushSchemaRegistrationStatusTest {
     private JdbcTemplate jdbc;
     private DataPushSchemaService service;
     private AtomicInteger reads;
+    private DataScopeAuthorizationService scopes;
 
     @BeforeEach
     void setUp() {
@@ -30,7 +35,7 @@ class DataPushSchemaRegistrationStatusTest {
         datasource.setURL("jdbc:h2:mem:push_status_" + System.nanoTime() + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
         jdbc = new JdbcTemplate(datasource);
         // Deliberately omit register_status and all workflow columns: the new runtime must not query them.
-        jdbc.execute("create table db_datasource_t(tid varchar(32), tenant_id varchar(32), db_name varchar(255), asset_status int, pool_cfg varchar(1000), is_del int)");
+        jdbc.execute("create table db_datasource_t(tid varchar(32), tenant_id varchar(32), db_name varchar(255), asset_status int, pool_cfg varchar(1000), is_del int, org_id varchar(32), created_by varchar(32))");
         jdbc.execute("create table db_table_t(tid varchar(32), tenant_id varchar(32), datasource_id varchar(32), table_name varchar(255), table_name_cn varchar(255), table_comment varchar(255), asset_status int, is_del int, field_governance_config clob, table_type varchar(64))");
         reads = new AtomicInteger();
         var counting = new DelegatingDataSource(datasource) {
@@ -46,6 +51,10 @@ class DataPushSchemaRegistrationStatusTest {
         TenantDataSourceRegistry tenants = mock(TenantDataSourceRegistry.class);
         when(tenants.dataSourceForTenant("tenant-1")).thenReturn(counting);
         service = new DataPushSchemaService(tenants, new ObjectMapper(), mock(DataPushFjghccDeliveryService.class));
+        scopes = mock(DataScopeAuthorizationService.class);
+        when(scopes.visibleDataSources(eq("MENU:2081000000000000002"), anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+        service.configureScopes(scopes);
     }
 
     @Test
@@ -87,16 +96,24 @@ class DataPushSchemaRegistrationStatusTest {
     void unfinishedSourceStillRequiresOwnershipAndEnabledPushMode() {
         insertSource(0);
         assertThatThrownBy(() -> service.requirePushDatasource("tenant-1", "foreign-source"))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BizException.class).extracting("code").isEqualTo(403);
         jdbc.update("update db_datasource_t set tenant_id='other'");
         assertThatThrownBy(() -> service.requirePushDatasource("tenant-1", "source-1"))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(BizException.class).extracting("code").isEqualTo(403);
         jdbc.update("update db_datasource_t set tenant_id='tenant-1',pool_cfg='{\"accessMode\":\"direct\"}'");
         assertThatThrownBy(() -> service.requirePushDatasource("tenant-1", "source-1"))
                 .isInstanceOf(IllegalArgumentException.class);
         jdbc.update("update db_datasource_t set pool_cfg='{\"accessMode\":\"receive\",\"pushDelivery\":{\"enabled\":false}}'");
         assertThatThrownBy(() -> service.requirePushDatasource("tenant-1", "source-1"))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void tenantOwnedSourceStillRequiresRoleDataScope() {
+        insertSource(0);
+        when(scopes.visibleDataSources(eq("MENU:2081000000000000002"), anyList())).thenReturn(List.of());
+        assertThatThrownBy(() -> service.requirePushDatasource("tenant-1", "source-1"))
+                .isInstanceOf(BizException.class).extracting("code").isEqualTo(403);
     }
 
     @Test
@@ -176,6 +193,6 @@ class DataPushSchemaRegistrationStatusTest {
     }
 
     private void insertSource(int status) {
-        jdbc.update("insert into db_datasource_t values(?,?,?,?,?,0)", "source-1", "tenant-1", "source", status, "{\"accessMode\":\"receive\"}");
+        jdbc.update("insert into db_datasource_t(tid,tenant_id,db_name,asset_status,pool_cfg,is_del) values(?,?,?,?,?,0)", "source-1", "tenant-1", "source", status, "{\"accessMode\":\"receive\"}");
     }
 }

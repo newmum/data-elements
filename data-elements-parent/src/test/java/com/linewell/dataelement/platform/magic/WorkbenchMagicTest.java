@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -63,7 +65,7 @@ if(sql.getSql().stripLeading().toLowerCase().matches("(?s)(select|with).*")){rea
    var paths=Map.of("context","function/01.通用函数/20.工作台数据范围.ms","changes","function/01.通用函数/21.工作台变更查询.ms","overview","api/02.数据盘点/04.盘点统计/01.工作台统计/01.工作台概览.ms","items","api/02.数据盘点/04.盘点统计/01.工作台统计/02.工作台事项分页.ms","export","api/02.数据盘点/04.盘点统计/01.工作台统计/03.工作台导出.ms");
    String source=java.nio.file.Files.readString(java.nio.file.Path.of("../magic/"+paths.get(key))).split("================================",2)[1].replaceAll("(?m)^import[^\\n]*\\n","");
    var vars=new HashMap<String,Object>();vars.put("payload",input);vars.put("body",input);vars.put("tenantRuntime",scope);vars.put("tenantAccounts",scope);vars.put("dataScope",scope);vars.put("db",db);vars.put("tableSort",new Sort());
-   vars.put("workbenchData",(java.util.function.Function<Object[],Object>) args->{try{return script("context",(Map<String,Object>)args[0],Map.of());}catch(Exception e){throw new RuntimeException(e);}});
+   vars.put("workbenchData",(java.util.function.Function<Object[],Object>) args->{try{return script("context",StructuredValues.objectMap(args[0]),Map.of());}catch(Exception e){throw new RuntimeException(e);}});
    vars.put("workbenchChanges",(java.util.function.Function<Object[],Object>)args->Map.of("available",true,"list",List.of(),"counts",Map.of("added",0,"modified",0,"deleted",0)));
    vars.putAll(extra);return MagicScript.create("import java.util.Map\nimport java.util.List\nimport cn.hutool.json.JSONUtil\n"+source,null).execute(new MagicScriptContext(vars));
   }

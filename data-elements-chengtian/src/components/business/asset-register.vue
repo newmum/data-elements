@@ -64,13 +64,13 @@ const store = useRegisterStore();
 const { actionRef } = storeToRefs(store);
 
 // 步骤条仅显示未标记 hidden 的步骤，内部步骤仍保留用于渲染完成页等隐藏状态。
-const visibleSteps = computed(() => store.state.steps.filter((s: any) => !s.hidden && !s.skipped));
+const visibleSteps = computed(() => store.state.steps.filter((s: any) => !s.hidden));
 
 // 当前内部步骤被隐藏时，导航态落在它前面的最后一个可见步骤上。
 const displayCurrentStep = computed(() => {
   const steps = store.state.steps || [];
   const currentStep = Math.min(store.state.currentStep || 0, Math.max(steps.length - 1, 0));
-  const visibleBeforeCurrent = steps.slice(0, currentStep + 1).filter((s: any) => !s.hidden && !s.skipped).length;
+  const visibleBeforeCurrent = steps.slice(0, currentStep + 1).filter((s: any) => !s.hidden).length;
   return Math.max(0, Math.min(visibleBeforeCurrent - 1, visibleSteps.value.length - 1));
 });
 
@@ -78,7 +78,7 @@ const displayCurrentStep = computed(() => {
 const displaySteps = computed(() =>
   visibleSteps.value.map((step: any, visibleIndex: number) => ({
     ...step,
-    clickable: visibleIndex < displayCurrentStep.value,
+    clickable: !step.skipped && visibleIndex < displayCurrentStep.value,
   }))
 );
 
@@ -86,6 +86,7 @@ const goToCompletedStep = (visibleIndex: number): void => {
   if (visibleIndex < 0 || visibleIndex >= displayCurrentStep.value) return;
 
   const targetStep = visibleSteps.value[visibleIndex];
+  if (targetStep?.skipped) return;
   const internalIndex = store.state.steps.findIndex((step: any) => step === targetStep);
   if (internalIndex >= 0) {
     store.setCurrentStep(internalIndex);

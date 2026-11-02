@@ -1,4 +1,5 @@
-import { Button, Space, Typography } from 'antd';
+import OrchestrationState from '@/components/OrchestrationState';
+import { ApiClientError } from '@/services/client';
 import { useEffect, useState, type ReactNode } from 'react';
 import { queryClient } from './queryClient';
 import { requestToken, resolveParentOrigin, setEmbeddedToken } from '@/services/embeddedSession';
@@ -55,13 +56,9 @@ export default function EmbeddedSession({ children }: { children: ReactNode }) {
   }, [context]);
 
   if (ready && !error) return children;
-  return <div style={{ height: '100vh', display: 'grid', placeItems: 'center', background: '#f5f7fa' }}>
-    <Space orientation="vertical" align="center" size={16} role={error ? 'alert' : 'status'}>
-      <Typography.Text strong>{error ? '画布暂时无法加载' : '正在连接主平台登录会话…'}</Typography.Text>
-      {error && <Typography.Text type="secondary">{error}</Typography.Text>}
-      {error && context.origin && <Button onClick={() => {
-        if (context.origin) window.parent.postMessage({ type: 'YUNTI_APP_CLOSE' }, context.origin);
-      }}>返回数据服务</Button>}
-    </Space>
-  </div>;
+  return <OrchestrationState error={error ? new ApiClientError(401, error) : undefined}
+    onRetry={error ? () => window.location.reload() : undefined}
+    onReturn={context.origin ? () => {
+      if (context.origin) window.parent.postMessage({ type: 'YUNTI_APP_CLOSE' }, context.origin);
+    } : undefined} />;
 }

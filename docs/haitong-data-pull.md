@@ -133,9 +133,9 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 
 可维护配置示例为 [`application-files.yml.example`](../haitong-data-pull/config/application-files.yml.example)，默认整文件、可选分片续传的标准库流式客户端为 [`upload_file.py`](../haitong-data-pull/scripts/upload_file.py)，机器接口定义在 [`openapi.yaml`](../haitong-data-pull/src/main/resources/openapi.yaml)。配置只声明服务端可信租户、集合和目标，API 请求不接受 tenantId、路径、Topic、存储地址或回调 URL。
 
-平台数据源登记通过“推送数据类型”区分结构化与非结构化，默认结构化。第一步的地址和第五步规范均取所选网络在节点管理中的启用默认推送节点。结构化继续使用原表/字段模板、五步流程和 `/api/v1/data-push` JSON 协议。非结构化使用“填写说明＋文件登记”Excel，文件名称、说明、格式、单文件大小上限（MB）必填，可选关联表/字段；保存后跳过中间三步直接进入原第五步内容审查。文件定义复用平台既有表/字段快照，以 `table_type=FILE` 区分，格式/上限/可选关联保存在现有治理配置；不新增登记表，不按结构化表发布合同或物化。第五步突出 `PUT /api/v1/file-uploads/{id}/parts/{part}` 主接口，其他五项操作默认折叠展示，并说明先初始化，再分片上传、合并、等待 READY、提交、确认投递成功。
+平台结构化推送继续使用POST /api/v1/data-push和application/json；非结构化使用PUT同一路径、multipart/form-data，普通文件默认single模式一次上传并提交，再查询响应statusUrl确认投递。/api/v1/data-push/single是同一普通模式的别名。multipart包含datasourceId、fileCode、businessKey、file及可选JSON文本metadata，文件名取file部分，实际大小及SHA-256由服务端流式计算；默认20MiB并受类别上限约束，临时文件落运行目录并受Servlet上限约束。新模板增加文件英文名，其他名称、说明、格式、大小及可选关联保留，旧模板兼容；FILE定义复用现有表/治理JSON，无物理结构变化。
 
-登记得到的稳定 `collectionId` 须由部署方对应配置到海通 YAML 的 `relay.files.collections.<key>.collection-id`，同时匹配 `datasource-id`、`clients`、格式和大小限制。当前登记只保存平台定义，不会自动创建海通运行集合或放宽权限；FILE 域运行策略同步仍为后续范围。海通目标存储继续仅由自己的 YAML 决定，独立部署不依赖平台在线。现有整文件兼容 API 及命令行客户端参数仍保留，登记页面统一以分片接口作为非结构化标准。
+新调用使用datasourceId＋fileCode定位文件类别，YAML的relay.files.collections.<key>.file-code可映射到既有collection-id，省略时沿用collection-id。同源英文名和集合编码不得冲突，调用方授权、租户及目标仍由服务端决定。登记不自动创建海通运行策略；部署方须匹配来源、英文名、集合编码、格式和大小。原始file-uploads、表/附件字段single、旧CLI参数均保持兼容。客户端推荐 --file-code scene_photo，默认统一single；加--chunked则使用新分片协议。
 
 当前使用单节点持久卷，目录加进程锁；相同本地卷不能同时运行两个文件实例，也不能将各自拥有本地卷的多个实例直接置于随机负载均衡后。正式多实例需完成共享对象存储适配及跨节点校验。普通文件 API 与旧表批次共用 HTTP 服务，分片流量仍会占用该进程的网络和数据库；文件校验池、FILE_LOCAL/FILE_FTP/FILE_KAFKA 投递池分别有界，不承诺物理资源完全隔离。
 
@@ -215,6 +215,10 @@ flowchart LR
 源数据管理平台第一步模板可声明字段关联附件、大小上限和格式；第五步在表数据推送接口旁统一展示非结构化上传地址、规范及字段附件限制，已移除独立照片文档页签。先上传附件并校验就绪，业务表的关联字段保存返回的fileId。平台字段限制已纳入登记规范版本，但文件集合仍须在推送服务配置相应大小、格式、目标及调用方权限；现有表配置同步不会自动维护FILE集合，页面接入说明不代表节点已启用文件功能。
 
 以下接口已在根目录 `magic/haitong/api/08.附件传输/` 定义，统一使用 `X-Api-Key`。初始化、业务提交和回执各自需要 `Idempotency-Key`，仅提供 `uploadId` 不代表有权访问。创建会话时按服务端集合确定租户、目标、内容格式和规范快照，快照不含连接凭据。
+
+平台结构化与非结构化页面的标题统一为“数据推送接口规范”，已发布时显示“已发布接口规范”；这项展示统一不改变下表的路径、方法或正文。非结构化顶部同样展示 Idempotency-Key：初始化与业务提交分别使用稳定的键，同一操作重试保持不变；分片 PUT 以 uploadId、片号和实际摘要核对重复请求，complete 根据会话状态幂等，GET 查询无需额外幂等键。
+
+`POST /api/v1/data-push` 当前只接受 application/json，业务分支为 FTP/KAFKA/LOG 表批次及服务间 REGISTRY_SYNC，要求对应的表和 records 契约；当前不接受独立文件原始字节，也没有 FILE 分支。若扩展统一 POST 入口，可以让新的文件提交类型携带已上传会话/文件引用、businessKey 和 metadata，复用 FileUploadService.submit、现有授权及投递账本；文件字节仍可经现有分片接口传输。若要求单次 POST 同时上传文件，则需增加明确的流式原始字节或 multipart 契约，复用配额、大小/格式、摘要、安全校验和幂等逻辑，并核验代理正文限制、断线重试及权限边界。上述属于后续接口扩展方案，尚未实现；不能只修改页面 URL 或把 PUT 字样改成 POST。已有 `/file-uploads/single` 是绑定表字段的附件入口，仍要求 tableName/fieldName，不能直接替代关联字段可为空的独立文件集合协议。
 
 | 已实现接口 | 行为与边界 |
 | --- | --- |
@@ -578,7 +582,7 @@ Windows 启动脚本为 Java 21 的 HTTP 回环连接设置短临时目录，默
 
 在仓库根目录直接运行 `com.haitong.HaitongApplication` 时，Spring Boot 不会自动读取子工程的 `haitong-data-pull/config/`。未指定数据库配置会使用 `127.0.0.1:3306/haitong` 默认值；`Connection refused` 表示该地址没有可连接的数据库服务，随后出现的 Tomcat、认证过滤器和连接池错误是同一失败的上层依赖链。
 
-本机入口为根目录 `start-haitong-data-pull.cmd`，实现位于 `tools/start-local-haitong.ps1`，默认加载用户目录 `.codex/private/data-elements/haitong-registry-service.yml`。可以通过 `-ConfigPath` 指定另一份仓库外配置，通过 `-JavaPath` 指定 Java 21；端口从该 YAML 的 `server.port` 读取，表达式端口可用 `-Port` 指定健康检查端口，不覆盖应用端口。入口复用已有数据库、密钥及工作目录，不初始化生产结构、不停止其他进程；只有健康检查返回 `UP` 才报告成功。
+本机入口为 `haitong-data-pull/start-haitong-data-pull.cmd`，实现位于仓库根目录的 `tools/start-local-haitong.ps1`。在子工程目录执行 `.\start-haitong-data-pull.cmd`；在仓库根目录执行 `.\haitong-data-pull\start-haitong-data-pull.cmd`。入口按自身文件位置解析上一级 `tools`，不依赖当前命令行工作目录，也不需要在子工程中复制一份 PowerShell 脚本。默认加载用户目录 `.codex/private/data-elements/haitong-registry-service.yml`。可以通过 `-ConfigPath` 指定另一份仓库外配置，通过 `-JavaPath` 指定 Java 21；端口从该 YAML 的 `server.port` 读取，表达式端口可用 `-Port` 指定健康检查端口，不覆盖应用端口。入口复用已有数据库、密钥及工作目录，不初始化生产结构、不停止其他进程；只有健康检查返回 `UP` 才报告成功。
 
 IDE 启动使用主类 `com.haitong.HaitongApplication`、工作目录 `haitong-data-pull`，并在 Program arguments 填写 `--spring.config.location=classpath:/application.yml,file:<仓库外私有YAML的绝对路径>`。这里必须使用当前环境真实路径；不要把数据库口令、访问密钥写到启动参数或版本库。若只使用公开的 `config/application.yml` 模板，则按其配置设置 `DB_PASSWORD`、编辑器密码等环境变量；模板本身不代表已经配置好运行凭据。
 

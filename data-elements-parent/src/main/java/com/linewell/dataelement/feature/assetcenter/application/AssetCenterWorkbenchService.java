@@ -107,7 +107,7 @@ public class AssetCenterWorkbenchService {
         var resources=db.array(sub.get("resources"));
         if(resources.size()>1000)throw error(413,"INVALID_ARGUMENT","申请资源超过1000项，请拆分申请");
         List<Map<String,Object>> candidates=new ArrayList<>();
-        for(var original:resources){var row=new LinkedHashMap<String,Object>(original);row.put("_count",db.array(row.get("itemIds")).size());row.put("_identity",text(row,"catalogId")+":"+text(row,"attachmentId"));candidates.add(row);}
+        for(var original:resources){var row=new LinkedHashMap<String,Object>(original);List<?> itemIds=row.get("itemIds") instanceof List<?> values?values:db.array(row.get("itemIds"));row.put("_count",itemIds.size());row.put("_identity",text(row,"catalogId")+":"+text(row,"attachmentId"));candidates.add(row);}
         Map<String,Object> request=map("sortField",q.getOrDefault("resourceSortField","catalogId"),"sortDir",q.getOrDefault("resourceSortDir","asc"));
         var sorted=new com.linewell.dataelement.platform.magic.TableSortMagicModule().rows(candidates,request,Map.of("catalogId","catalogId","itemCount","_count"),"catalogId","_identity");
         int page=Math.max(1,number(q.get("resourcePage"),1)),size=Math.min(100,Math.max(1,number(q.get("resourceSize"),20)));

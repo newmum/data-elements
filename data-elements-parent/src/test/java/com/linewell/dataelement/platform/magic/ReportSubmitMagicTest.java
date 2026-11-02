@@ -32,7 +32,7 @@ class ReportSubmitMagicTest {
         }
     }
     @Test void successIsRecordedOnlyAfterDeliveryAndRepeatedRequestDoesNotResend() throws Exception {
-        Fixture f=new Fixture();Map<?,?> result=(Map<?,?>)f.run("source","table","request-1");assertEquals("success",result.get("status"));
+        Fixture f=new Fixture();Map<?,?> result=(Map<?,?>)f.run("source","table","request-1");assertEquals("success",result.get("status"));assertEquals("people",((Map<?,?>)result.get("registrationSnapshot")).get("tableName"));
         assertEquals("success",((Map<?,?>)f.run("source","table","request-1")).get("status"));assertEquals(1,f.delivery.calls);
         assertEquals("success",((Map<?,?>)f.run("source","table","request-2")).get("status"));assertEquals(1,f.delivery.calls);
         assertTrue(f.base.base.jdbc.queryForObject("select pool_cfg from db_datasource_t where tid='source'",String.class).contains("\"status\":\"success\""));

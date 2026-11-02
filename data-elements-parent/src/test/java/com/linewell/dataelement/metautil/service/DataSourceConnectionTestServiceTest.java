@@ -34,7 +34,7 @@ class DataSourceConnectionTestServiceTest {
         org.mockito.Mockito.doReturn(org.springframework.http.ResponseEntity.ok(Map.of("success",true))).when(controller).test(any());
         var service=new DataSourceConnectionTestService(mock(MetadataExplorerService.class),controller,probe);
         service.test(Map.of("dbType","es","host","127.0.0.1","port",9200,"jdbcURL","http://127.0.0.1:19200"));
-        ArgumentCaptor<Map> request=ArgumentCaptor.forClass(Map.class);verify(controller).test(request.capture());
+        ArgumentCaptor<Map<String, Object>> request=ArgumentCaptor.captor();verify(controller).test(request.capture());
         assertEquals("http://127.0.0.1:19200",((Map<?,?>)request.getValue().get("config")).get("nodes"));
     }
 

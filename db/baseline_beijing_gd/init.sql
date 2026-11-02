@@ -47,6 +47,7 @@ CREATE TABLE "baseline_beijing_gd"."api_info_t"
 "updated_by" VARCHAR(32),
 "updated_time" TIMESTAMP(6),
 "is_del" SMALLINT,
+"datasource_id" VARCHAR(32),
 CONSTRAINT "pk_api_info_t" NOT CLUSTER PRIMARY KEY("tid")) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 -- TABLE api_oauth_client_t
@@ -3976,6 +3977,8 @@ CREATE OR REPLACE  INDEX "ga_sec_scan_result_idx_sec_scan_result_asset_9753972a6
 
 CREATE OR REPLACE  INDEX "ga_sec_scan_result_idx_sec_scan_result_task_54474c50d472" ON "baseline_beijing_gd"."sec_scan_result"("tenant_id" ASC,"task_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE OR REPLACE  INDEX "idx_api_source_page" ON "baseline_beijing_gd"."api_info_t"("tenant_id" ASC,"datasource_id" ASC,"is_del" ASC,"updated_time" ASC,"tid" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
+
 CREATE OR REPLACE  INDEX "idx_da_metadata_code_set_active" ON "baseline_beijing_gd"."da_metadata_code_t"("tenant_id" ASC,"code_set" ASC,"status" ASC,"is_del" ASC,"sort_no" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "idx_da_metadata_standard_active" ON "baseline_beijing_gd"."da_metadata_t"("tenant_id" ASC,"publish_status" ASC,"is_del" ASC,"meta_code" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
@@ -4617,6 +4620,7 @@ COMMENT ON COLUMN "baseline_beijing_gd"."api_info_t"."created_time" IS '创建�
 COMMENT ON COLUMN "baseline_beijing_gd"."api_info_t"."data_category" IS '数据分类';
 COMMENT ON COLUMN "baseline_beijing_gd"."api_info_t"."data_domain" IS '数据领域';
 COMMENT ON COLUMN "baseline_beijing_gd"."api_info_t"."data_level" IS '数据级别';
+COMMENT ON COLUMN "baseline_beijing_gd"."api_info_t"."datasource_id" IS '数据服务-所属代理访问数据源标识，关联db_datasource_t.tid';
 COMMENT ON COLUMN "baseline_beijing_gd"."api_info_t"."flow_id" IS '流程标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."api_info_t"."group_id" IS '分组标识';
 COMMENT ON COLUMN "baseline_beijing_gd"."api_info_t"."is_del" IS '删除标志：0正常，1删除';

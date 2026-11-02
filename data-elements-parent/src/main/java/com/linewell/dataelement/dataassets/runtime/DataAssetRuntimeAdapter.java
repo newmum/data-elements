@@ -1,5 +1,7 @@
 package com.linewell.dataelement.dataassets.runtime;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -75,7 +77,7 @@ public class DataAssetRuntimeAdapter {
                 .eq(DaAssetT::getIsDel, 0), false);
         Map<String, Object> result = asset == null
                 ? new LinkedHashMap<>()
-                : objectMapper.convertValue(asset, LinkedHashMap.class);
+                : objectMapper.convertValue(asset, new TypeReference<LinkedHashMap<String, Object>>() {});
         for (DataPropT prop : activeProps(tid)) {
             if (prop.getPropName() != null) {
                 result.put(prop.getPropName(), prop.getPropValue());

@@ -31,19 +31,19 @@ public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     @ExceptionHandler(SecurityException.class)
-    public CommonResponse handleSecurityException(SecurityException error){return CommonResponse.fail(403,error.getMessage(),"ACCESS_DENIED");}
+    public CommonResponse<?> handleSecurityException(SecurityException error){return CommonResponse.fail(403,error.getMessage(),"ACCESS_DENIED");}
 
     /**
      * 处理自定义业务异常
      */
     @ExceptionHandler(BizException.class)
-    public CommonResponse handleBizException(BizException e) {
+    public CommonResponse<?> handleBizException(BizException e) {
         logger.error("业务异常: {}", e.getMessage(), e);
         return diagnostic(CommonResponse.fail(e.getCode(), e.getMsg(), e.getDesc()), e);
     }
 
     @ExceptionHandler(TenantAccessException.class)
-    public CommonResponse handleTenantAccessException(TenantAccessException e) {
+    public CommonResponse<?> handleTenantAccessException(TenantAccessException e) {
         logger.warn("Tenant access rejected, code={}, message={}", e.getCode(), e.getMessage());
         return CommonResponse.fail(403, e.getMessage(), e.getCode());
     }
@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
      * 处理参数验证异常(MethodArgumentNotValidException)
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public CommonResponse handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
+    public CommonResponse<?> handleMethodArgumentNotValidException(MethodArgumentNotValidException e) {
         logger.error("参数验证异常: {}", e.getMessage(), e);
         BindingResult bindingResult = e.getBindingResult();
         String errorMsg = bindingResult.getFieldErrors().stream()
@@ -65,7 +65,7 @@ public class GlobalExceptionHandler {
      * 处理参数验证异常(BindException)
      */
     @ExceptionHandler(BindException.class)
-    public CommonResponse handleBindException(BindException e) {
+    public CommonResponse<?> handleBindException(BindException e) {
         logger.error("参数绑定异常: {}", e.getMessage(), e);
         BindingResult bindingResult = e.getBindingResult();
         String errorMsg = bindingResult.getFieldErrors().stream()
@@ -80,7 +80,7 @@ public class GlobalExceptionHandler {
      * 处理参数类型不匹配异常
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public CommonResponse handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException e) {
+    public CommonResponse<?> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException e) {
         logger.error("参数类型不匹配异常: {}", e.getMessage(), e);
         return CommonResponse.fail(StatusCodeEnum.PARAMS_UNVALID.getCode(),
             "参数[" + e.getName() + "]类型错误，期望类型: " + e.getRequiredType().getSimpleName(),
@@ -91,7 +91,7 @@ public class GlobalExceptionHandler {
      * 处理缺失请求参数异常
      */
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public CommonResponse handleMissingServletRequestParameterException(MissingServletRequestParameterException e) {
+    public CommonResponse<?> handleMissingServletRequestParameterException(MissingServletRequestParameterException e) {
         logger.error("缺失请求参数异常: {}", e.getMessage(), e);
         return CommonResponse.fail(StatusCodeEnum.PARAMS_NOT_FOUND.getCode(),
             "缺少必要参数: " + e.getParameterName(),
@@ -102,7 +102,7 @@ public class GlobalExceptionHandler {
      * 处理重复键异常
      */
     @ExceptionHandler(DuplicateKeyException.class)
-    public CommonResponse handleDuplicateKeyException(DuplicateKeyException e) {
+    public CommonResponse<?> handleDuplicateKeyException(DuplicateKeyException e) {
         logger.error("数据库重复键异常: {}", e.getMessage(), e);
         return CommonResponse.fail(StatusCodeEnum.BUSI_EXCEPTION.getCode(), "数据已存在", "重复键异常");
     }
@@ -111,7 +111,7 @@ public class GlobalExceptionHandler {
      * 处理HTTP请求方法不支持异常
      */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public CommonResponse handleHttpRequestMethodNotSupportedException(HttpRequestMethodNotSupportedException e) {
+    public CommonResponse<?> handleHttpRequestMethodNotSupportedException(HttpRequestMethodNotSupportedException e) {
         logger.error("HTTP请求方法不支持异常: {}", e.getMessage(), e);
         return CommonResponse.fail(StatusCodeEnum.HTTP_METHOD_NOT_SUPPORTED_EXCEPTION.getCode(),
             "请求方法[" + e.getMethod() + "]不被支持",
@@ -122,7 +122,7 @@ public class GlobalExceptionHandler {
      * 处理404异常
      */
     @ExceptionHandler(NoHandlerFoundException.class)
-    public CommonResponse handleNoHandlerFoundException(NoHandlerFoundException e, HttpServletRequest request) {
+    public CommonResponse<?> handleNoHandlerFoundException(NoHandlerFoundException e, HttpServletRequest request) {
         logger.error("404异常: 请求路径 {} 不存在", request.getRequestURL(), e);
         return CommonResponse.fail(StatusCodeEnum.NOT_FOUND.getCode(), "请求的资源不存在", "404错误");
     }
@@ -131,7 +131,7 @@ public class GlobalExceptionHandler {
      * 处理SaToken相关异常
      */
     @ExceptionHandler(cn.dev33.satoken.exception.NotLoginException.class)
-    public CommonResponse handleNotLoginException(cn.dev33.satoken.exception.NotLoginException e) {
+    public CommonResponse<?> handleNotLoginException(cn.dev33.satoken.exception.NotLoginException e) {
         logger.error("未登录异常: {}", e.getMessage(), e);
         return CommonResponse.fail(401, "凭证已过期", "未登录异常");
     }
@@ -140,7 +140,7 @@ public class GlobalExceptionHandler {
      * 处理SaToken权限异常
      */
     @ExceptionHandler(cn.dev33.satoken.exception.NotPermissionException.class)
-    public CommonResponse handleNotPermissionException(cn.dev33.satoken.exception.NotPermissionException e) {
+    public CommonResponse<?> handleNotPermissionException(cn.dev33.satoken.exception.NotPermissionException e) {
         logger.error("权限不足异常: {}", e.getMessage(), e);
         return CommonResponse.fail(403, "权限不足", "权限不足");
     }
@@ -149,11 +149,11 @@ public class GlobalExceptionHandler {
      * 处理其他所有异常
      */
     @ExceptionHandler(Exception.class)
-    public CommonResponse handleException(Exception e) {
+    public CommonResponse<?> handleException(Exception e) {
         logger.error("系统异常: {}", e.getMessage(), e);
         return diagnostic(CommonResponse.fail(StatusCodeEnum.ERROR, e.getMessage()), e);
     }
-    private CommonResponse diagnostic(CommonResponse response, Throwable failure) {
+    private <T> CommonResponse<T> diagnostic(CommonResponse<T> response, Throwable failure) {
         if (java.util.Set.of(401, 403, 100120).contains(response.getCode())) return response;
         var error = com.linewell.dataelement.shared.error.ApiErrorResolver.resolve(failure).toMap("", "");
         error.put("detail", com.linewell.dataelement.shared.error.ErrorDetailSanitizer.errorText(String.valueOf(error.get("detail"))));

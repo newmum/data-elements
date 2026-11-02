@@ -6,7 +6,9 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const require=createRequire(path.join(root,'data-elements-chengtian/package.json'));
-const {ref,computed,watch}=require('vue');
+const Vue=require('vue');
+const {ref,computed,watch}=Vue;
+const {renderToString}=require('vue/server-renderer');
 const file='lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/04.登记内容审查(register-confirm).vue';
 const source=fs.readFileSync(path.join(root,file),'utf8').replace(/\r\n?/g,'\n');
 const start=source.indexOf('// Push contract reads stay bounded');
@@ -25,10 +27,10 @@ function fixture({status=0,count=20,remote,loading=false,contentType='STRUCTURED
   const reads=[],writes=[],metadata=[],copied=[],nodeReads=[];
   const tables=ref(Array.from({length:count},(_,i)=>({tid:'t'+i,tableName:'table_'+i,fields:[]})));
   const sourceRef=ref({tid:'source',dbName:'测试推送源',assetStatus:status,pushDataType:contentType,storageDomain:'GAW'});
-  const state={source:sourceRef,sourceTid:ref('source'),sourceDetailLoading:ref(loading),tables,connectionInfoExpanded:ref(true),
+  const state={isProxyAccess:ref(false),source:sourceRef,sourceTid:ref('source'),sourceDetailLoading:ref(loading),tables,connectionInfoExpanded:ref(true),
     pushContract:ref(null),pushContractLoading:ref(false),pushContractError:ref(''),pushContractLoadedDatasourceId:ref(''),pushContractOpenTables:ref([]),
     pushCredential:ref(null),pushCredentialError:ref(''),pushCredentialLoading:ref(false),pushCredentialDatasourceId:ref(''),isDataPushSource:ref(true),
-    isDataUploadSource:ref(false),fileRegistrationRows:ref(Array.from({length:count},(_,i)=>({tableId:'file'+i,collectionId:'file_collection_'+i,fileName:'登记文件'+i,fileDescription:'说明',fileFormat:'pdf',maxFileSizeMb:20,maxFileBytes:20971520,fieldCount:6}))),pushFileSelection:ref(''),store:{state:{steps:[]}},computed,ref,watch,governanceConfig:table=>table?.fieldGovernanceConfig||null,catalogFor:()=>null,fieldsFor:table=>table.fields||[],tableFieldKey:table=>table.tableName,fieldLoadingFor:()=>false,
+    isDataUploadSource:ref(false),fileRegistrationRows:ref(Array.from({length:count},(_,i)=>({tableId:'file'+i,collectionId:'file_collection_'+i,fileName:'登记文件'+i,fileDescription:'说明',fileFormat:'pdf',maxFileSizeMb:20,maxFileBytes:20971520,fieldCount:6}))),store:{state:{steps:[]}},computed,ref,watch,governanceConfig:table=>table?.fieldGovernanceConfig||null,catalogFor:()=>null,fieldsFor:table=>table.fields||[],tableFieldKey:table=>table.tableName,fieldLoadingFor:()=>false,
     $message:{success(){},warning(){}},ElMessageBox:{confirm:async()=>{}},navigator:{clipboard:{writeText:async(text)=>{copied.push(text)}}},
     $common:{post:async(url,body)=>{nodeReads.push({url,body});return {list:nodes || [{networkCode:"GAW",baseUrl:"https://gaw.example.test",enabled:1,isDefault:1},{networkCode:"HLW",baseUrl:"https://internet.example.test",enabled:1,isDefault:1}]};},getSilently:async(url,params)=>{reads.push({url,params});return remote?remote(params):{datasourceId:params.datasourceId,tables:tables.value.map(t=>({tableId:t.tid,tableName:t.tableName,schemaVersion:3,fields:[{fieldName:'id',dataType:'bigint',required:true}],fieldCount:1}))}},postSilently:async(url,body)=>{writes.push({url,body});return {datasourceId:body.datasourceId,clientId:'push-source',revealed:false}}},
   };
@@ -42,7 +44,7 @@ function fixture({status=0,count=20,remote,loading=false,contentType='STRUCTURED
     ${queue}
     ${block}
     ${resetWatcher}
-    return {ensurePushCredential,pushErrorMessage,loadPushContract,refreshRegistrationPushContract,issuePushCredential,pushContractIsPreview,pushContractSample,pushContractEndpointItems,pushAttachmentDescription,pushInterfaceType,selectPushInterface,pushIsAttachmentMode,pushVisibleTables,pushSelectedParameters,pushRequestContentType,pushContractHeaders,pushChunkSample,copyPushChunkSample,pushProtocolUrl,pushProtocolBaseUrl,pushProtocolNodeError,pushPrimaryEndpoints,pushAuxiliaryEndpoints,pushAuxiliaryExpanded,selectedFileRegistration,queueIdle:()=>!fieldLoadsInFlight&&!fieldBatchScheduled&&!fieldLoadQueue.length};`);
+    return {ensurePushCredential,pushErrorMessage,loadPushContract,refreshRegistrationPushContract,issuePushCredential,pushContractIsPreview,pushContractSample,pushContractEndpointItems,pushAttachmentDescription,pushInterfaceType,selectPushInterface,pushIsAttachmentMode,pushVisibleTables,pushSelectedParameters,pushRequestContentType,pushContractHeaders,pushFileWorkflow,copyPushFileStageSample,pushProtocolUrl,pushProtocolBaseUrl,pushProtocolNodeError,pushFileMode,queueIdle:()=>!fieldLoadsInFlight&&!fieldBatchScheduled&&!fieldLoadQueue.length};`);
   // The real bounded queue uses the ordinary metadata GET; formal contracts use silent GET.
   state.$common.get=async(url,params)=>{const ids=params.tid.split(',');metadata.push(ids);return Object.fromEntries(ids.map(id=>[id,[{columnName:'id',columnType:'bigint',nullable:0,ordinalPosition:1}]]));};
   const api=create(...Object.values(state));
@@ -68,6 +70,30 @@ test('registered sources read one authoritative contract for 20/100 tables and k
     await f.api.issuePushCredential('source');assert.equal(f.writes.length,1);
   }
 });
+
+test('expanded table contract renders its JSON sample outside inert HTML template elements',async()=>{
+  const f=fixture({status:2,count:1});await f.api.loadPushContract();
+  const begin=source.indexOf('<el-collapse v-else v-model="pushContractOpenTables"');
+  const end=source.indexOf('</el-collapse>',begin)+'</el-collapse>'.length;
+  const template=source.slice(begin,end).replace('v-else ','');
+  const app=Vue.createSSRApp({
+    data:()=>({pushContractOpenTables:['t0'],pushVisibleTables:f.state.pushContract.value.tables,
+      pushContractIsPreview:false,pushContractSample:f.api.pushContractSample,
+      pushContractFieldsLoading:()=>false,copyPushSample:()=>{},pushAttachmentSize:()=>''}),
+    render:Vue.compile(template),
+  });
+  const passthrough={setup:(_, {slots})=>()=>Vue.h('div',slots.default?.())};
+  for(const name of ['ElCollapse','ElCollapseItem','ElButton','DataTable'])app.component(name,passthrough);
+  app.component('ElTableColumn',{render:()=>null});
+  app.component('LoadingState',{render:()=>null});
+  app.component('ElEmpty',{render:()=>null});
+  const html=await renderToString(app);
+  const visibleHtml=html.replace(/<template(?:\s[^>]*)?>[\s\S]*?<\/template>/g,'');
+  assert.match(visibleHtml,/<pre>/);
+  assert.match(visibleHtml,/records/);
+  assert.match(visibleHtml,/deliveryType/);
+  assert.match(visibleHtml,/table_0/);
+});
 test('permission, network and mismatched datasource failures stay visible inline without masquerading as a preview',async()=>{
   for(const remote of [()=>{throw new Error('无权访问')},()=>{throw new Error('网络连接失败')},()=>({datasourceId:'foreign',tables:[]})]){
     const f=fixture({status:2,remote});await f.api.loadPushContract();assert.equal(f.state.pushContract.value,null);assert.ok(f.state.pushContractError.value);assert.equal(f.metadata.length,0);assert.equal(f.writes.length,0);
@@ -81,41 +107,42 @@ test('late formal responses cannot replace a different datasource and duplicate 
   let resolve;const promise=new Promise(r=>resolve=r);const f=fixture({status:2,remote:()=>promise});
   const pending=f.api.loadPushContract();await f.api.loadPushContract();await new Promise(resolve=>setImmediate(resolve));assert.equal(f.reads.length,1);f.state.sourceTid.value='other';resolve({datasourceId:'source',tables:[]});await pending;assert.equal(f.state.pushContract.value,null);
 });
-test('the persisted content type chooses the structured endpoint or a chunked protocol without new reads for 20/100 tables',async()=>{
+test('20/100 file definitions default to two single endpoints and switch to bounded resumable workflow without reads',async()=>{
  for(const count of [20,100]) {
   const f=fixture({count,status:2});await f.api.loadPushContract();
-  assert.equal(f.api.pushInterfaceType.value,'dataPush');assert.equal(f.api.pushRequestContentType.value,'application/json');
+  assert.equal(f.api.pushInterfaceType.value,'dataPush');
   assert.deepEqual(f.api.pushContractEndpointItems.value.map(e=>e.path),['/api/v1/data-push']);
-  const sample=JSON.parse(f.api.pushContractSample(f.state.pushContract.value.tables[0]));assert.equal(sample.deliveryType,'FTP');assert.ok(Array.isArray(sample.records));
-  f.state.source.value.pushDataType='UNSTRUCTURED';assert.equal(f.api.pushInterfaceType.value,'filePart');
-  assert.equal(f.api.pushPrimaryEndpoints.value.length,1);assert.equal(f.api.pushAuxiliaryEndpoints.value.length,5);assert.equal(f.api.pushAuxiliaryExpanded.value,false);
-  f.api.selectPushInterface('fileInit');
-  assert.equal(f.api.pushContractEndpointItems.value.length,6);assert.equal(f.api.pushRequestContentType.value,'application/json');
-  assert.deepEqual(f.api.pushSelectedParameters.value.map(p=>p.name),['datasourceId','collectionId','fileName','size','sha256']);
-  assert.ok(!f.api.pushSelectedParameters.value.some(p=>['tableName','fieldName'].includes(p.name)));
-  assert.match(f.api.pushChunkSample.value,/https:\/\/gaw.example.test\/api\/v1\/file-uploads/);
-  assert.match(f.api.pushChunkSample.value,/"datasourceId": "source"/);
-  for(let i=0;i<5;i++) {
-   f.api.selectPushInterface('filePart');assert.equal(f.api.pushRequestContentType.value,'application/octet-stream');
-   assert.deepEqual(f.api.pushContractHeaders.value.map(h=>h.name),['X-Part-SHA256','Content-Length']);
-   assert.match(f.api.pushChunkSample.value,/parts\/1/);assert.match(f.api.pushChunkSample.value,/X-Part-SHA256/);
-   f.api.selectPushInterface('fileParts');assert.match(f.api.pushChunkSample.value,/after=0&limit=100/);
-   f.api.selectPushInterface('fileComplete');assert.equal(f.api.pushContractHeaders.value.length,0);assert.match(f.api.pushChunkSample.value,/\/complete/);
-   f.api.selectPushInterface('fileSubmit');assert.match(f.api.pushChunkSample.value,/businessKey/);assert.equal(f.api.pushContractHeaders.value[0].name,'Idempotency-Key');
-   f.api.selectPushInterface('fileStatus');assert.match(f.api.pushChunkSample.value,/^GET /);
-   f.api.selectPushInterface('invalid');assert.equal(f.api.pushInterfaceType.value,'fileStatus');
-  }
-  await f.api.copyPushChunkSample();assert.equal(f.copied.length,1);
+  f.state.source.value.pushDataType='UNSTRUCTURED';
+  assert.equal(f.api.pushInterfaceType.value,'fileSingle');assert.equal(f.api.pushRequestContentType.value,'multipart/form-data');
+  let stages=Object.fromEntries(f.api.pushFileWorkflow.value.map(s=>[s.key,s]));
+  assert.deepEqual(Object.keys(stages),['fileSingle','fileStatus']);
+  assert.deepEqual(stages.fileSingle.parameters.map(p=>p.name),['datasourceId','fileCode','businessKey','file','metadata']);
+  assert.ok(stages.fileSingle.parameters.every(p=>p.location==='请求体'));
+  assert.match(stages.fileSingle.sample,/^PUT https:\/\/gaw.example.test\/api\/v1\/data-push\r?\n/);
+  const multipart = stages.fileSingle.sample;
+  const form = await new Request('https://validation.invalid/',{method:'PUT',headers:{'Content-Type':multipart.match(/^Content-Type: ([^\r\n]+)/m)[1]},body:multipart.slice(multipart.indexOf('\r\n\r\n')+4)}).formData();
+  assert.equal(form.get('datasourceId'),'source');assert.equal(form.get('fileCode'),'<已登记的文件英文名>');
+  assert.equal(form.get('file').name,'sample.pdf');assert.ok(form.get('file').size>0);assert.deepEqual(JSON.parse(form.get('metadata')),{});
+  assert.ok(!stages.fileSingle.sample.includes('file_collection_0'));
+  f.api.pushFileMode.value='chunked';stages=Object.fromEntries(f.api.pushFileWorkflow.value.map(s=>[s.key,s]));
+  assert.deepEqual(Object.keys(stages),['fileInit','filePart','fileComplete','fileStatus','fileParts']);
+  assert.deepEqual(stages.fileInit.parameters.map(p=>p.name),['datasourceId','fileCode','fileName','size','sha256']);
+  assert.equal(stages.fileInit.parameters.find(p=>p.name==='sha256').required,false);
+  assert.ok(Object.values(stages).every(s=>s.parameters.every(p=>p.location!=='请求头')));
+  assert.match(stages.filePart.sample,/X-Part-SHA256:/);assert.match(stages.filePart.sample,/Content-Length:/);
+  assert.match(stages.fileParts.sample,/after=0&limit=100/);assert.equal(stages.fileParts.optional,true);
+  assert.deepEqual(stages.fileComplete.parameters.map(p=>p.name),['id','businessKey','metadata']);
+  assert.match(stages.fileComplete.sample,/businessKey/);assert.match(stages.fileComplete.sample,/Idempotency-Key:/);
+  assert.match(stages.fileInit.sample,/"fileCode":/);assert.ok(!stages.fileInit.sample.includes('collectionId'));
+  await f.api.copyPushFileStageSample(stages.filePart);assert.deepEqual(f.copied,[stages.filePart.sample]);
   assert.equal(f.reads.length,1);assert.equal(f.nodeReads.length,1);assert.equal(f.metadata.length,0);assert.equal(f.writes.length,0);
-  f.state.source.value.pushDataType='STRUCTURED';assert.equal(f.api.pushInterfaceType.value,'dataPush');
  }
 });
 test('unstructured registration preview needs no field associations or per-table metadata reads',async()=>{
  for(const count of [20,100]) {
   const f=fixture({count,contentType:'UNSTRUCTURED',remote:p=>({datasourceId:p.datasourceId,tables:[]})});await f.api.loadPushContract();await f.flush();
-  assert.equal(f.api.pushInterfaceType.value,'filePart');assert.equal(f.metadata.length,0);assert.equal(f.reads.length,0);assert.equal(f.nodeReads.length,1);assert.equal(f.writes.length,0);
-  f.api.selectPushInterface('fileInit');
-  assert.match(f.api.pushSelectedParameters.value.find(p=>p.name==='collectionId').description,/YAML/);
+  assert.equal(f.api.pushInterfaceType.value,'fileSingle');assert.equal(f.metadata.length,0);assert.equal(f.reads.length,0);assert.equal(f.nodeReads.length,1);assert.equal(f.writes.length,0);
+  assert.match(f.api.pushFileWorkflow.value[0].parameters.find(p=>p.name==='fileCode').description,/授权当前业务密钥/);
  }
 });
 test('step five uses the matching network default and never falls back to another network',async()=>{
@@ -125,13 +152,15 @@ test('step five uses the matching network default and never falls back to anothe
  f.state.source.value.storageDomain='SPZW';assert.equal(f.api.pushProtocolBaseUrl.value,'');assert.match(f.api.pushProtocolUrl('/api/v1/file-uploads'),/^<当前网络/);
  assert.equal(f.nodeReads.length,1);
 });
-test('the visible guide requires submit after READY and contains no default single-file protocol',()=>{
- assert.match(source,/默认使用分片上传/);assert.match(source,/调用“提交推送”/);assert.match(source,/只有 READY 不代表已写入目标/);
+test('file workflow distinguishes acceptance, file readiness and confirmed delivery',()=>{
+ const f=fixture({contentType:'UNSTRUCTURED'});f.api.pushFileMode.value='chunked';
+ const stages=Object.fromEntries(f.api.pushFileWorkflow.value.map(s=>[s.key,s]));
+ assert.match(stages.fileComplete.description,/202.*WAITING_FILE/);assert.match(stages.fileComplete.description,/另调submit/);
+ assert.match(stages.fileStatus.description,/deliveryStatus=SUCCEEDED/);assert.match(stages.fileStatus.description,/READY 只表示文件可用/);
  assert.ok(!source.includes('/api/v1/file-uploads/single'));assert.ok(!source.includes('尚未登记关联附件字段'));
  assert.match(source,/class="push-key-button" type="primary"/);
  assert.match(source,/<section v-if="!pushIsAttachmentMode" class="push-contract-section">/);
 });
-
 
 test('first fifth-step entry prepares one credential regardless of 20/100 table count and never rotates implicitly',async()=>{
  for(const count of [20,100]) {

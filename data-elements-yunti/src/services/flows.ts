@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { request } from './client';
+import { request, ApiClientError } from './client';
 import type { FlowDetail, FlowSummary, FlowVersion, DebugResult, PublishResult } from './types';
 import type { Flow } from '@/domain/flow-dsl';
 import type { CompileResult } from '@/compiler';
@@ -20,6 +20,7 @@ export function useFlow(id: string | undefined) {
     queryKey: flowKeys.detail(id ?? ''),
     queryFn: () => request<FlowDetail>('GET', `/flows/${id}`),
     enabled: !!id,
+    retry: (attempt, error) => attempt < 1 && (!(error instanceof ApiClientError) || error.code === 0 || error.code === 408 || error.code === 429 || error.code >= 500),
   });
 }
 

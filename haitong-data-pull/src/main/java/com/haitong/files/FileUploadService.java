@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class FileUploadService {
     public record Init(String datasourceId,String collectionId,String fileName,long size,String sha256) {}
     public record Single(String datasourceId,String tableName,String fieldName,String fileName) {}
+    public record Push(String datasourceId,String fileCode,String businessKey,Map<String,Object> metadata) {}
     public record Submission(String businessKey,Map<String,Object> metadata) {}
     public record Receipt(String deliveryId,String sha256,String status,String businessRef) {}
     private record PartClaim(Upload upload,String token,long size,Map<String,Object> previous) {}
@@ -56,7 +57,37 @@ public class FileUploadService {
     /** One raw HTTP body, bounded memory, same ledger and asynchronous validation as resumable uploads. */
     public Map<String,Object> single(Secrets.Identity caller,String key,Single input,long contentLength,InputStream body) throws IOException {
         Rules.key(key);var c=catalog.uploadField(caller,input.datasourceId(),input.tableName(),input.fieldName());
-        String name=Rules.fileName(input.fileName());
+        return receiveSingle(caller,key,c,input.fileName(),contentLength,body);
+    }
+    public Map<String,Object> singlePush(Secrets.Identity caller,String key,Push input,String fileName,long size,InputStream body) throws IOException {
+        Rules.key(key);Rules.key(input.businessKey());
+        var c=catalog.uploadCode(caller,input.datasourceId(),input.fileCode());
+        var metadata=catalog.metadata(c,input.metadata());
+        String initKey=Rules.sha256(("file-push:init:"+key).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String submitKey=Rules.sha256(("file-push:submit:"+key).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        var result=receiveSingle(caller,initKey,c,fileName,size,body);
+        result.putAll(submit(caller,result.get("uploadId").toString(),submitKey,new Submission(input.businessKey(),metadata)));
+        result.put("fileCode",c.policy().getFileCode());
+        return pushReply(result);
+    }
+    public Map<String,Object> initializePush(Secrets.Identity caller,String key,Init input) throws IOException {
+        var c=catalog.uploadCode(caller,input.datasourceId(),input.collectionId());
+        return pushReply(initialize(caller,key,new Init(c.datasourceId(),c.collectionId(),input.fileName(),input.size(),input.sha256())));
+    }
+    public Map<String,Object> completePush(Secrets.Identity caller,String id,String key,Submission input){
+        Rules.key(key);Rules.key(input.businessKey());
+        catalog.metadata(snapshot(owned(caller,id,false)),input.metadata());
+        var result=complete(caller,id);
+        result.putAll(submit(caller,id,key,input));
+        return pushReply(result);
+    }
+    public Map<String,Object> pushReply(Map<String,Object> result){
+        var out=new LinkedHashMap<String,Object>(result);
+        out.put("statusUrl","/api/v1/data-push/uploads/"+out.get("uploadId"));
+        return out;
+    }
+    private Map<String,Object> receiveSingle(Secrets.Identity caller,String key,FileContractCatalog.Contract c,String fileName,long contentLength,InputStream body) throws IOException {
+        String name=Rules.fileName(fileName);
         if(!c.policy().getAllowedExtensions().contains(Rules.extension(name).substring(1).toLowerCase(Locale.ROOT)))throw RelayException.invalid("文件格式不在附件字段白名单内");
         long limit=Math.min(p.getSingleUploadMaxBytes(),c.policy().getMaxFileBytes());
         if(contentLength>limit)throw new RelayException(413,"SINGLE_UPLOAD_TOO_LARGE","文件超过字段或整文件上传上限，请核对规范或使用分片上传");
@@ -177,6 +208,7 @@ public class FileUploadService {
     public Map<String,Object> parts(Secrets.Identity caller,String id,int after,int limit){readable(caller,id);if(after<0||limit<1||limit>100)throw RelayException.invalid("分片分页参数不正确");return Map.of("uploadId",id,"parts",repo.partPage(id,after,limit));}
     private Map<String,Object> basic(Upload u){Map<String,Object> out=new LinkedHashMap<>();
         out.put("uploadId",u.id());out.put("fileId",u.id());out.put("datasourceId",u.text("datasource_id"));out.put("collectionId",u.text("collection_id"));
+        out.put("fileCode",snapshot(u).policy().getFileCode());
         out.put("fileName",u.text("file_name"));out.put("size",u.size());out.put("mediaType",u.text("media_type"));out.put("sha256",u.text("final_sha256"));
         out.put("partSize",u.number("part_size"));out.put("partCount",u.number("part_count"));out.put("state",u.state());out.put("securityState",u.text("security_state"));
         out.put("contractVersion",u.number("contract_version"));out.put("messageId",u.text("message_id"));out.put("errorCode",u.text("error_code"));out.put("expiresAt",u.number("expires_at"));

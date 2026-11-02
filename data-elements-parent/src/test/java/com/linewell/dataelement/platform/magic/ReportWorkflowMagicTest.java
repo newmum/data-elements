@@ -58,20 +58,56 @@ class ReportWorkflowMagicTest {
         f.base.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'",config.toString());
         assertInstanceOf(ExitValue.class,f.run("source","table","validation-request"));assertEquals(0,f.delivery.calls);
     }
-    @Test void historicSuccessfulTablesRemainReadOnlyAcrossDraftSavesAndKeepSuccessVisible() throws Exception {
-        var f=fixture(0);var row=table("historic","table","registered_table");
-        var original=Map.of("revision","v1","files",List.of(Map.of("fileId","file","fileName","validation.csv")),"tables",List.of(row),"receipts",List.of(Map.of("tableId","table","fileId","file","status","success"),Map.of("tableId","table","fileId","file","status","failed")));
+    @Test void successfulTablesRemainEditableWhileReceiptKeepsTheOriginalRegistrationSnapshot() throws Exception {
+        var f=fixture(0);var row=table("historic","table","registered_table");row.put("normalized",true);row.put("normalizationVersion",1);
+        var receipt=new LinkedHashMap<String,Object>(Map.of("tableId","table","fileId","file","status","success","reportedAt","2026-11-01T14:47:00Z","tableName","registered_table"));
+        var original=Map.of("revision","v1","files",List.of(Map.of("fileId","file","fileName","validation.csv")),"tables",List.of(row),"receipts",List.of(receipt));
         f.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'",JSONUtil.toJsonStr(Map.of("accessMode","upload","reportRegistration",original)));
-        var request=body(List.of(row),List.of());request.put("revision","v1");
-        var saved=(Map<?,?>)f.run(request);assertEquals("success",((Map<?,?>)((Collection<?>)saved.get("receipts")).iterator().next()).get("status"));
-        request.put("revision",saved.get("revision"));var second=(Map<?,?>)f.run(request);
-        request.put("revision",second.get("revision"));row.put("tableNameCn","变更历史结构");
-        assertInstanceOf(ExitValue.class,f.run(request));
+        row.put("tableNameCn","修改后的登记名称");row.put("normalized",false);
+        var request=body(List.of(row),List.of("historic"));request.put("revision","v1");
+        var saved=(Map<?,?>)f.run(request,true);
+        assertEquals("修改后的登记名称",((Map<?,?>)((List<?>)saved.get("tables")).getFirst()).get("tableNameCn"));
+        var history=(Map<?,?>)((Collection<?>)saved.get("receipts")).iterator().next();
+        assertEquals("success",history.get("status"));assertEquals("2026-11-01T14:47:00Z",history.get("reportedAt"));
+        var snapshot=(Map<?,?>)history.get("registrationSnapshot");assertEquals("上报验证表",snapshot.get("tableNameCn"));
+        row.put("tableNameCn","再次编辑登记名称");request.put("revision",saved.get("revision"));
+        var second=(Map<?,?>)f.run(request,true);
+        var retained=(Map<?,?>)((Map<?,?>)((Collection<?>)second.get("receipts")).iterator().next()).get("registrationSnapshot");
+        assertEquals("上报验证表",retained.get("tableNameCn"));
+        var remove=body(List.of(),List.of());remove.put("revision",second.get("revision"));assertInstanceOf(ExitValue.class,f.run(remove,true));
+    }
+    @Test void inFlightDeliveryAndUnauthorizedRoleStillRejectRegistrationWrites() throws Exception {
+        var f=fixture(0);var row=table("validation","table","registered_table");row.put("normalized",true);row.put("normalizationVersion",1);
+        var original=Map.of("revision","v1","files",List.of(Map.of("fileId","file","fileName","validation.csv")),"tables",List.of(row),"receipts",List.of(Map.of("tableId","table","fileId","file","status","sending")));
+        f.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'",JSONUtil.toJsonStr(Map.of("accessMode","upload","reportRegistration",original)));
+        row.put("tableNameCn","并发修改登记");var request=body(List.of(row),List.of("validation"));request.put("revision","v1");
+        assertInstanceOf(ExitValue.class,f.run(request,true));
+        f.base.scope.denied=true;assertInstanceOf(ExitValue.class,f.run(request,true));assertNull(f.captured.get("payload"));
     }
     @Test void invalidRegionsAndDictionaryDefinitionsCannotBeApproved() throws Exception {
         var f=fixture(0);var row=table("invalid","table","registered_table");
         row.remove("startRow");assertInstanceOf(ExitValue.class,f.run(body(List.of(row),List.of("invalid")),true));
         row.put("startRow",1);row.put("businessType","字典表");assertInstanceOf(ExitValue.class,f.run(body(List.of(row),List.of("invalid")),true));
         assertNull(f.captured.get("payload"));
+    }
+    @Test void canonicalFormatsAndTimeRolesRoundTripAndRejectConflictingAssignments() throws Exception {
+        for(String format:List.of("LXDH","SFZH","DATE","DATETIME")){
+            var f=fixture(0);var row=table("validation","table","registered_table");
+            var column=(Map<String,Object>)((List<?>)row.get("fields")).getFirst();
+            column.put("standardField",format);column.put("isTimestamp",false);
+            var roles=List.of("DATE","DATETIME").contains(format)?List.of("timestamp","business","occurrence"):List.of();
+            column.put("timeRoles",roles);
+            var saved=(Map<?,?>)f.run(body(List.of(row),List.of("validation")),true);
+            var savedColumn=(Map<?,?>)((List<?>)((Map<?,?>)((List<?>)saved.get("tables")).getFirst()).get("fields")).getFirst();
+            assertEquals(format,savedColumn.get("standardField"));assertEquals(roles,savedColumn.get("timeRoles"));assertEquals(!roles.isEmpty(),savedColumn.get("isTimestamp"));
+        }
+        var f=fixture(0);var row=table("validation","table","registered_table");
+        var first=new LinkedHashMap<String,Object>((Map<String,Object>)((List<?>)row.get("fields")).getFirst());first.put("timeRoles",List.of("business"));first.put("isTimestamp",false);
+        var second=new LinkedHashMap<>(first);second.put("columnName","other_time");row.put("fields",List.of(first,second));row.put("endColumn",2);
+        assertInstanceOf(ExitValue.class,f.run(body(List.of(row),List.of("validation")),true));assertNull(f.captured.get("payload"));
+        row.put("fields",List.of(first));row.put("endColumn",1);first.put("timeRoles",List.of("unknown"));
+        assertInstanceOf(ExitValue.class,f.run(body(List.of(row),List.of("validation")),true));
+        first.put("timeRoles",List.of("timestamp"));first.put("standardField","SFZH");
+        assertInstanceOf(ExitValue.class,f.run(body(List.of(row),List.of("validation")),true));
     }
 }

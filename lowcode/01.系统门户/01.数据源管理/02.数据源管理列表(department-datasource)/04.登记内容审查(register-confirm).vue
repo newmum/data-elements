@@ -4,14 +4,14 @@
     :aria-busy="reviewLoading || undefined"
   >
     <section :class="['source-profile-card', 'source-information-card', sourceDetailLoading ? 'is-loading' : '']">
-      <div :class="['source-profile-main', { 'is-data-upload': isDataUploadSource, 'is-data-push': isDataPushSource, 'is-api-pull': isDataPullSource }]">
+      <div :class="['source-profile-main', { 'is-data-upload': isDataUploadSource, 'is-data-push': isDataPushSource, 'is-api-pull': isDataPullSource || isProxyAccess }]">
         <el-text
           type="primary"
-          :class="['source-profile-icon', { 'is-elasticsearch': dataSourceTypeIcon === 'elasticsearch', 'is-data-upload': isDataUploadSource, 'is-data-push': isDataPushSource, 'is-api-pull': isDataPullSource }]"
-          :title="sourceIconTip"
+          :class="['source-profile-icon', { 'is-elasticsearch': dataSourceTypeIcon === 'elasticsearch', 'is-data-upload': isDataUploadSource, 'is-data-push': isDataPushSource, 'is-api-pull': isDataPullSource || isProxyAccess }]"
+          :title="isProxyAccess ? '代理访问' : sourceIconTip"
         >
-          <Icon :icon="isDataUploadSource ? 'el-icon-UploadFilled' : (isDataPushSource ? 'el-icon-Download' : (isDataPullSource ? 'el-icon-Connection' : dataSourceTypeIcon))" />
-          <i :class="['source-connection-status', `is-${sourceConnectionStatus}`]">
+          <Icon :icon="isProxyAccess ? 'el-icon-Connection' : isDataUploadSource ? 'el-icon-UploadFilled' : (isDataPushSource ? 'el-icon-Download' : (isDataPullSource ? 'el-icon-Connection' : dataSourceTypeIcon))" />
+          <i v-if="!isProxyAccess" :class="['source-connection-status', `is-${sourceConnectionStatus}`]">
             <Icon :icon="sourceConnectionStatusIcon" />
           </i>
         </el-text>
@@ -27,6 +27,7 @@
             接入方式：<strong>{{ sourceAccessMode.label }}</strong>
           </span>
           <el-button
+            v-if="!isProxyAccess"
             :type="isDataUploadSource ? 'primary' : ''"
             :plain="!isDataUploadSource"
             @click="isDataUploadSource ? openReportWorkspace() : (isDataPushSource ? togglePushContract() : (isDataPullSource ? togglePullInterfaceInformation() : (connectionInfoExpanded = !connectionInfoExpanded)))"
@@ -43,7 +44,7 @@
               : (isDataPushSource ? (connectionInfoExpanded ? "收起推送规范" : "查看推送规范") : (isDataPullSource ? (connectionInfoExpanded ? "收起接口信息" : "查看接口信息") : (connectionInfoExpanded ? "收起连接信息" : "查看连接信息"))) }}
           </el-button>
           <el-button
-            v-if="hasConnectionInfo && !isDataPushSource && !isDataPullSource"
+            v-if="hasConnectionInfo && !isDataPushSource && !isDataPullSource && !isProxyAccess"
             type="primary"
             plain
             :loading="connectionTesting"
@@ -57,7 +58,7 @@
           </el-button>
         </div>
       </div>
-      <el-collapse-transition>
+      <el-collapse-transition v-if="!isProxyAccess">
       <div v-show="connectionInfoExpanded" class="source-information-body">
         <div v-if="isDataUploadSource" class="report-workspace-handoff">
           <div>
@@ -70,19 +71,13 @@
           </el-button>
         </div>
         <div v-else-if="isDataPushSource" class="push-contract-panel">
-          <div class="push-contract-head"><div><strong>{{ pushIsAttachmentMode ? "非结构化数据分片上传规范" : "数据推送接口规范" }}</strong></div><el-tag :type="pushContractError ? 'danger' : pushContractIsPreview ? 'warning' : 'success'" effect="light">{{ pushContractError ? '规范读取失败' : pushIsAttachmentMode ? '分片上传规范' : pushContractIsPreview ? '数据推送规范' : '已发布表规范' }}</el-tag></div>
+          <div class="push-contract-head"><div><strong>数据推送接口规范</strong></div><el-tag :type="pushInterfaceSpecStatus.type" effect="light">{{pushInterfaceSpecStatus.text}}</el-tag></div>
           <LoadingState v-if="pushContractLoading" type="list" compact class="review-section-loading" />
           <div v-else-if="pushContractError" class="push-contract-error"><Icon icon="el-icon-WarningFilled" /><div><strong>正式规范读取失败</strong><p>{{ pushContractError }}</p></div><el-button plain @click="loadPushContract(true)">重试</el-button></div>
           <template v-if="pushIsAttachmentMode">
-            <div class="file-main-interface-head"><div><strong>文件上传主接口</strong><p>上传前先初始化取得 uploadId；按返回的分片大小发送文件原始字节。</p></div><el-button plain @click="pushAuxiliaryExpanded = !pushAuxiliaryExpanded">{{ pushAuxiliaryExpanded ? "收起配套接口" : "查看上传配套接口（5项）" }}</el-button></div>
-            <div class="push-contract-endpoint-grid is-file-primary" role="radiogroup" aria-label="选择文件上传主接口">
-              <button v-for="item in pushPrimaryEndpoints" :key="item.key" type="button" role="radio" :aria-checked="pushInterfaceType === item.key" class="push-contract-endpoint" :class="{'is-selected':pushInterfaceType===item.key}" @click="selectPushInterface(item.key)"><span class="push-endpoint-label">文件分片上传<span class="push-endpoint-selection">主接口</span></span><strong><em>{{item.method}}</em>{{pushProtocolUrl(item.path)}}</strong><small>正文为文件分片的原始字节；按 partSize 顺序切片，片号从1开始。</small></button>
+            <div class="push-contract-endpoint-grid">
+              <div class="push-contract-endpoint is-selected"><span class="push-endpoint-label">文件推送接口<span class="push-endpoint-selection">已选择</span></span><strong><em>PUT</em>{{pushProtocolUrl('/api/v1/data-push')}}</strong><small>普通文件可一次上传并提交；大文件支持分片续传。</small></div>
             </div>
-            <div v-if="pushAuxiliaryExpanded" class="file-auxiliary-interfaces">
-              <p>调用顺序：初始化 → 主接口上传各片 → 完成上传 → 状态就绪 → 提交推送。续传查询、状态查询按需调用。</p>
-              <div class="push-contract-endpoint-grid" role="radiogroup" aria-label="选择上传配套接口"><button v-for="item in pushAuxiliaryEndpoints" :key="item.key" type="button" role="radio" :aria-checked="pushInterfaceType===item.key" class="push-contract-endpoint" :class="{'is-selected':pushInterfaceType===item.key}" @click="selectPushInterface(item.key)"><span class="push-endpoint-label">{{item.label}}<span class="push-endpoint-selection">{{pushInterfaceType===item.key?'已选择':'查看规范'}}</span></span><strong><em>{{item.method}}</em>{{pushProtocolUrl(item.path)}}</strong><small>{{item.description}}</small></button></div>
-            </div>
-            <div class="file-selected-definition" v-if="fileRegistrationRows.length"><label>本次推送文件<el-select v-model="pushFileSelection" placeholder="选择已登记文件"><el-option v-for="row in fileRegistrationRows" :key="row.tableId" :value="row.tableId" :label="row.fileName" /></el-select></label><span v-if="selectedFileRegistration">{{selectedFileRegistration.fileFormat.toUpperCase()}} · 单个不超过 {{selectedFileRegistration.maxFileSizeMb}} MB · 集合编码 {{selectedFileRegistration.collectionId}}</span></div>
           </template>
           <div v-else class="push-contract-endpoint-grid" role="radiogroup" aria-label="选择推送接口">
             <button v-for="item in pushContractEndpointItems" :key="item.key" type="button" role="radio" :aria-checked="pushInterfaceType === item.key" aria-controls="push-interface-specification" class="push-contract-endpoint" :class="{'is-selected': pushInterfaceType === item.key}" @click="selectPushInterface(item.key)">
@@ -95,7 +90,7 @@
             <section class="push-contract-section">
               <div class="push-contract-section-head"><strong>身份认证与请求头</strong><span>使用当前数据源的业务密钥</span></div>
               <div class="push-contract-auth-grid">
-                <div class="push-auth-header push-content-type-card"><code>Content-Type</code><strong>{{ pushRequestContentType }}</strong><small>{{ pushInterfaceType === 'filePart' ? '当前分片的原始字节' : pushRequestContentType === 'application/json' ? 'JSON 请求体' : '仅使用路径或查询参数' }}</small></div>
+                <div class="push-auth-header push-content-type-card"><code>Content-Type</code><strong>{{ pushRequestContentType }}</strong><small>{{ pushIsAttachmentMode ? (pushFileMode === 'single' ? '由HTTP客户端自动生成含boundary的multipart请求头，无需手动设置' : '初始化、完成并提交：application/json；分片：application/octet-stream') : 'JSON 请求体' }}</small></div>
                 <div class="push-auth-header push-credential-card">
                   <div class="push-auth-card-heading"><code>X-Api-Key</code><div class="push-credential-actions"><el-button v-if="pushCredentialError" class="push-key-button" type="primary" size="small" :loading="pushCredentialLoading" :disabled="sourceDetailLoading" @click="issuePushCredential(sourceTid, false, true)">{{ pushCredential ? '重试同步' : '重试生成' }}</el-button><el-button v-if="pushCredential" link type="primary" size="small" :loading="pushCredentialLoading" @click="rotatePushCredential">轮换</el-button></div></div>
                   <strong>{{ pushCredentialLoading && !pushCredential ? '正在准备密钥' : pushCredential && !pushCredential.ready ? '密钥待同步' : pushCredential?.revealed ? '密钥已生成并生效' : pushCredentialError ? '密钥准备失败' : pushCredential ? '密钥已配置' : '正在准备密钥' }}</strong>
@@ -106,21 +101,39 @@
               </div>
             </section>
             <template v-if="pushContract && !pushContractLoading && !pushContractError">
-              <section class="push-contract-section">
-                <div class="push-contract-section-head"><strong>{{ pushIsAttachmentMode ? '分片流程请求参数' : '请求体参数' }}</strong><span>{{ pushIsAttachmentMode ? '以下参数对应当前选择的操作' : '一批记录对应一张表；单批最多 10,000 条' }}</span></div>
+
+
+    <section v-if="pushIsAttachmentMode" class="push-contract-section file-upload-workflow">
+                <div class="push-contract-section-head"><strong>文件推送步骤与请求参数</strong><span class="file-upload-mode-description">{{pushFileMode === 'single' ? '一次性上传并提交 → 查询投递结果。默认整文件上限20MiB，并受文件类别限制；超过节点接收上限时请使用分片模式。' : '初始化 → 上传分片 → 完成并提交 → 查询投递结果。中断后按需查询已确认分片，仅补传缺失部分；服务端校验通过后自动投递。'}}</span></div>
+                <div class="file-upload-modes">
+                  <el-segmented v-model="pushFileMode" :options="[{label:'普通文件',value:'single'},{label:'大文件（分片续传）',value:'chunked'}]" aria-label="文件推送方式" class="file-upload-mode-switch" />
+                </div>
+                <article v-for="(stage, index) in pushFileWorkflow" :key="stage.key" class="file-upload-stage">
+                  <div class="file-upload-stage-heading"><span class="file-upload-stage-number">{{index + 1}}</span><strong>{{stage.label}}</strong><el-tag v-if="stage.optional" type="info" size="small">中断后按需调用</el-tag></div>
+                  <div class="file-upload-stage-endpoint"><em>{{stage.method}}</em><code>{{pushProtocolUrl(stage.path)}}</code></div>
+                  <p class="file-upload-stage-description">{{stage.description}}</p>
+                  <DataTable :data="stage.parameters" :preview-sort="{name:'text'}" :show-page="false" height="auto" flex-type="flex-[0_1_auto]" :show-overflow-tooltip="false" border size="small">
+                    <el-table-column prop="name" label="参数" sortable="custom" min-width="165"><template #default="{row}"><code>{{row.name}}</code></template></el-table-column>
+                    <el-table-column prop="location" label="位置" width="100" />
+                    <el-table-column label="是否必填" width="90" align="center"><template #default="{row}"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{row.required ? '必填' : '可选'}}</el-tag></template></el-table-column>
+                    <el-table-column prop="description" label="说明" min-width="280"><template #default="{row}"><span>{{row.description}}</span><ul v-if="row.name === 'fileCode' && fileRegistrationRows.length" class="file-collection-options"><li v-for="file in fileRegistrationRows" :key="file.tableId"><strong>{{file.fileName}}</strong><code>{{file.fileCode || file.collectionId}}</code><span>{{file.fileFormat.toUpperCase()}} · ≤ {{file.maxFileSizeMb}} MB</span></li></ul></template></el-table-column>
+                  </DataTable>
+                  <div class="file-upload-stage-example"><div class="push-request-example-head"><span class="push-request-example-label">请求示例</span><el-button link type="primary" @click="copyPushFileStageSample(stage)">复制请求示例</el-button></div><div class="push-contract-code"><pre>{{stage.sample}}</pre></div></div>
+                  <details v-if="stage.key === 'fileInit'" class="file-upload-hash-help"><summary>如何获取 SHA-256</summary><p class="file-upload-stage-description">对准备上传的原始文件计算，只复制输出中的64位十六进制摘要；不要对文件名、JSON或Base64计算。填写后，服务端会在合并时比对；不填也会计算摘要并检查各分片。</p><div class="push-contract-code"><pre>Linux:
+sha256sum /path/to/sample.pdf
+
+Windows PowerShell:
+(Get-FileHash -LiteralPath 'D:\files\sample.pdf' -Algorithm SHA256).Hash</pre></div></details>
+                </article>
+              </section>
+              <section v-else class="push-contract-section">
+                <div class="push-contract-section-head"><strong>请求体参数</strong><span>一批记录对应一张表；单批最多 10,000 条</span></div>
                 <DataTable :data="pushSelectedParameters" :preview-sort="{name:'text'}" :show-page="false" height="auto" flex-type="flex-[0_1_auto]" :show-overflow-tooltip="false" border size="small">
                   <el-table-column prop="name" label="参数" sortable="custom" min-width="150"><template #default="{ row }"><code>{{ row.name }}</code></template></el-table-column>
                   <el-table-column prop="location" label="位置" width="100" />
                   <el-table-column label="是否必填" width="90" align="center"><template #default="{ row }"><el-tag :type="row.required ? 'danger' : 'info'" size="small" effect="light">{{ row.required ? '必填' : '可选' }}</el-tag></template></el-table-column>
                   <el-table-column prop="description" label="说明" min-width="280" />
                 </DataTable>
-                <div v-if="pushIsAttachmentMode" class="push-attachment-guidance">
-                  <p>默认使用分片上传。先初始化取得 uploadId、partSize 和 partCount，按返回大小切片并从第1片开始上传；中断后分页查询已确认片号，只补传缺失片。</p>
-                  <p>完成上传返回202仅表示开始合并校验。查询状态至 READY 后，调用“提交推送”，确认 deliveryStatus=SUCCEEDED 并核对 deliveries 中的投递结果；只有 READY 不代表已写入目标。</p>
-                  <p>初始化请求使用下方已登记文件的集合编码；海通节点 YAML 的 relay.files.collections 须配置相同 datasource-id、collection-id，并授权业务密钥对应的 clientId。登记的大小和格式须与节点集合策略一致，投递目标仍由海通自己的 YAML 决定。可选关联表、字段不增加分片接口的必填参数。</p>
-                  <div class="push-contract-table-toolbar"><strong>当前操作请求示例</strong><el-button link type="primary" @click="copyPushChunkSample">复制分片示例</el-button></div>
-                  <div class="push-contract-code"><pre>{{ pushChunkSample }}</pre></div>
-                </div>
               </section>
               <section v-if="!pushIsAttachmentMode" class="push-contract-section">
                 <div class="push-contract-section-head"><strong>{{ pushContractIsPreview ? '登记表结构预览' : '已发布数据表' }}</strong><span>{{ pushVisibleTables.length }} 张表</span></div>
@@ -128,8 +141,9 @@
                 <el-collapse v-else v-model="pushContractOpenTables" class="push-contract-tables">
                   <el-collapse-item v-for="table in pushVisibleTables" :key="table.tableId" :name="table.tableId">
                     <template #title><div class="push-contract-table-title"><strong>{{ table.tableName }}</strong><span>{{ pushContractIsPreview ? '登记字段' : `V${table.schemaVersion}` }} · {{ `${table.fieldCount} 个字段` }}</span></div></template>
-                    <template>
-                      <div class="push-contract-table-toolbar"><div><strong>请求示例与字段约束</strong><span>示例使用 deliveryType=FTP；如已配置并获授权的 Kafka 通道，改为 KAFKA。只有下方登记字段可以放入 records。</span></div><div class="push-contract-sample-actions"><el-button link type="primary" @click.stop="copyPushSample(table)">复制示例</el-button></div></div>
+                    <div class="push-contract-table-content">
+                      <div class="push-request-example-head"><span class="push-request-example-label">请求示例</span><el-button link type="primary" @click.stop="copyPushSample(table)">复制请求示例</el-button></div>
+                      <p class="push-contract-sample-description">示例使用 deliveryType=FTP；如已配置并获授权的 Kafka 通道，改为 KAFKA。只有下方登记字段可以放入 records。</p>
                       <div class="push-contract-code"><pre>{{ pushContractSample(table) }}</pre></div>
                       <LoadingState v-if="pushContractFieldsLoading(table)" type="list" compact />
                       <DataTable v-else-if="(table.fields || []).length" :data="table.fields || []" :preview-sort="{fieldName:'text'}" :show-page="false" border size="small" max-height="260">
@@ -137,7 +151,7 @@
                         <el-table-column label="关联附件" min-width="230"><template #default="{ row }"><div v-if="Number(row.attachment?.maxFileBytes) > 0" class="push-attachment-policy"><strong>单个附件 ≤ {{ pushAttachmentSize(row.attachment) }}</strong><span>格式：{{ (row.attachment.allowedExtensions || []).join('、').toUpperCase() }}</span></div><span v-else>—</span></template></el-table-column>
                       </DataTable>
                       <el-empty v-else description="尚未读取到字段，请核对字段登记" :image-size="48" />
-                    </template>
+                    </div>
                   </el-collapse-item>
                 </el-collapse>
               </section>
@@ -395,16 +409,43 @@
       </el-collapse-transition>
     </section>
 
-    <section v-if="pushIsAttachmentMode" class="registration-overview-card file-registration-review">
-      <div class="overview-section-title"><strong>文件登记内容审查</strong><el-tag type="info">复用表与字段快照 · 文件登记</el-tag><el-button v-if="reviewSummaryError" link type="warning" @click="retryReviewSummary">{{reviewSummaryError}} 重新读取</el-button></div>
-      <LoadingState v-if="reviewLoading" type="list" compact />
-      <el-empty v-else-if="!fileRegistrationRows.length" description="尚无文件登记信息，请返回第一步上传文件登记模板并保存" />
-      <template v-else><p>共 {{fileRegistrationRows.length}} 项文件定义。文件名称、说明、格式、大小上限必填，关联表和字段选填；本流程无需数据库表探查、字典或业务表登记。</p>
-      <DataTable :data="fileRegistrationRows" :preview-sort="{fileName:'text',maxFileSizeMb:'number'}" :show-page="false" height="auto" border size="small">
-        <el-table-column type="index" label="序号" width="65" /><el-table-column prop="fileName" label="文件名称" min-width="150" sortable="custom" /><el-table-column prop="fileDescription" label="文件说明" min-width="220" /><el-table-column prop="fileFormat" label="文件格式" width="110"><template #default="{row}">{{row.fileFormat.toUpperCase()}}</template></el-table-column><el-table-column prop="maxFileSizeMb" label="大小上限(MB)" width="145" sortable="custom" /><el-table-column prop="relatedTableName" label="关联表（选填）" min-width="160" /><el-table-column prop="relatedFieldName" label="关联字段（选填）" min-width="160" /><el-table-column label="字段快照" width="110"><template #default="{row}">{{row.fieldCount}} 项属性</template></el-table-column>
-      </DataTable></template>
+    <section v-if="isProxyAccess" class="review-workbench data-table-workbench">
+      <section class="review-detail-panel data-table-information-card">
+        <div class="review-toolbar data-table-toolbar proxy-review-toolbar">
+          <strong>已登记数据服务</strong>
+          <el-input v-model.trim="proxyServiceKeyword" class="proxy-review-search" placeholder="搜索服务名称、编码或地址" clearable @clear="proxyServicesRef?.refresh?.(true)" @keyup.enter="proxyServicesRef?.refresh?.(true)">
+            <template #suffix><el-button link type="primary" title="查询服务" @click="proxyServicesRef?.refresh?.(true)"><Icon icon="search" /></el-button></template>
+          </el-input>
+        </div>
+        <div class="section-content data-table-section-content">
+          <LoadingState v-if="sourceDetailLoading" type="table" compact />
+          <div v-else-if="reviewSummaryError" class="proxy-review-empty" role="alert">{{ reviewSummaryError }}<el-button link type="primary" @click="retryReviewSummary">重新读取</el-button></div>
+          <DataTable v-else :key="sourceTid" ref="proxyServicesRef" height="auto" flex-type="flex-[0_1_auto]" :data="fetchProxyServices" :columns="[]" :show-search="false" :show-reset="false" :page-sizes="[20,50,100]" row-key="tid" show-index class="review-table">
+            <el-table-column prop="serviceName" label="服务名称" min-width="200" sortable="custom" show-overflow-tooltip />
+            <el-table-column prop="method" label="请求方式" width="110" />
+            <el-table-column prop="publishAddressFull" label="服务地址" min-width="260" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="100"><template #default="{row}"><el-tag :type="row.status === 'published' ? 'success' : 'info'" size="small">{{ ({draft:'草稿',published:'已发布',offline:'已停用'})[row.status] || row.status || '草稿' }}</el-tag></template></el-table-column>
+            <el-table-column prop="updatedTime" label="更新时间" width="170" sortable="custom" />
+            <template #empty><div class="proxy-review-empty" :role="proxyServiceError ? 'alert' : 'status'">{{ proxyServiceError || (proxyServiceKeyword ? '没有匹配的数据服务' : '尚未登记服务，请返回第一步登记服务。') }}<el-button v-if="proxyServiceError" link type="primary" @click="proxyServicesRef?.refresh?.(true)">重新读取</el-button></div></template>
+          </DataTable>
+        </div>
+      </section>
     </section>
-    <section v-if="!pushIsAttachmentMode" class="registration-overview-card data-source-status-card">
+
+    <section v-if="pushIsAttachmentMode" class="review-workbench data-table-workbench">
+      <section class="review-detail-panel data-table-information-card file-registration-review">
+      <div class="review-toolbar data-table-toolbar"><div><strong>文件登记内容审查</strong></div><el-button v-if="reviewSummaryError" link type="warning" @click="retryReviewSummary">{{reviewSummaryError}} 重新读取</el-button></div>
+      <div class="section-content data-table-section-content">
+      <LoadingState v-if="reviewLoading" type="table" compact />
+      <el-empty v-else-if="!fileRegistrationRows.length" description="尚无文件登记信息，请返回第一步上传文件登记模板并保存" />
+      <template v-else>
+      <DataTable :data="fileRegistrationRows" class="review-table" :preview-sort="{fileName:'text',maxFileSizeMb:'number'}" :show-page="false" height="auto" flex-type="flex-[0_1_auto]" border stripe size="small">
+        <el-table-column type="index" label="序号" width="65" /><el-table-column prop="fileCode" label="文件英文名" min-width="150" /><el-table-column prop="fileName" label="文件名称" min-width="140" sortable="custom" /><el-table-column prop="fileDescription" label="文件说明" min-width="200" /><el-table-column prop="fileFormat" label="文件格式" width="110"><template #default="{row}">{{row.fileFormat.toUpperCase()}}</template></el-table-column><el-table-column prop="maxFileSizeMb" label="大小上限(MB)" width="145" sortable="custom" /><el-table-column prop="relatedTableName" label="关联表（选填）" min-width="160" /><el-table-column prop="relatedFieldName" label="关联字段（选填）" min-width="160" />
+      </DataTable></template>
+      </div>
+      </section>
+    </section>
+    <section v-if="!pushIsAttachmentMode && !isProxyAccess" class="registration-overview-card data-source-status-card">
       <div class="overview-section-title">
         <div>
           <strong>数据源状态</strong>
@@ -593,7 +634,7 @@
       </div>
     </section>
 
-    <section v-if="!pushIsAttachmentMode" class="review-workbench data-table-workbench">
+    <section v-if="!pushIsAttachmentMode && !isProxyAccess" class="review-workbench data-table-workbench">
       <section class="review-detail-panel data-table-information-card">
       <div class="review-toolbar data-table-toolbar">
           <div>
@@ -616,9 +657,7 @@
       </div>
       <div class="section-content data-table-section-content">
           <div v-if="reviewTableBusy && !visibleTables.length" class="registration-table-skeleton" role="status" aria-live="polite" aria-busy="true">
-            <div class="registration-loading-caption"><span class="registration-loading-dot"></span><strong>{{ reviewTableLoadingPhase }}</strong><span>登记信息、接入进度与同步记录将一并展示</span></div>
-            <div class="registration-skeleton-head"><span>序号</span><span>数据表</span><span>类型 / 字段</span><span>登记检查</span><span>数据是否接入</span><span>数据同步情况</span><span>操作</span></div>
-            <div v-for="n in 6" :key="n" class="registration-skeleton-row"><span class="skeleton-bar is-number"></span><div><span class="skeleton-bar is-name"></span><span class="skeleton-bar is-subtitle"></span></div><div><span class="skeleton-bar is-pill"></span><span class="skeleton-bar is-short"></span></div><span class="skeleton-bar is-pill"></span><div><span class="skeleton-bar is-pill"></span><span class="skeleton-bar is-short"></span></div><div><span v-for="line in 3" :key="line" class="skeleton-bar is-time"></span></div><div><span class="skeleton-bar is-short"></span><span class="skeleton-bar is-short"></span></div></div>
+            <LoadingState type="table" :title="reviewTableLoadingPhase" compact />
           </div>
           <div v-if="reviewOrderError || accessTaskError" class="registration-table-alert" role="alert"><span>{{ reviewOrderError || accessTaskError }}</span><el-button type="primary" link @click="reviewOrderError ? loadReviewPage() : refreshAccessSummary()">重新读取</el-button></div>
           <div v-if="reviewTableBusy && visibleTables.length" class="registration-updating" role="status"><span class="registration-loading-dot"></span>{{ reviewTableLoadingPhase }}，当前内容保留</div>
@@ -627,93 +666,37 @@
             <strong>{{ tables.length ? '没有匹配的数据表' : '还没有进入检查的数据表' }}</strong>
             <p>{{ tables.length ? '请调整搜索条件。' : '请返回“探查数据表”步骤选择需要登记的数据表。' }}</p>
           </div>
-          <el-table
+          <DataTable
             v-if="visibleTables.length"
-            ref="reviewTableRef"
             :data="visibleTables"
             row-key="tableName"
-            :expand-row-keys="activeTableDetails"
             class="review-table"
             :aria-busy="reviewTableBusy"
-            @expand-change="syncTableDetailExpansion"
+            :show-page="visibleTableTotal > reviewTablePageSize"
+            :init-page-size="reviewTablePageSize"
+            :hide-pagination-on-single-page="false"
+            height="auto"
+            flex-type="flex-[0_1_auto]"
+            border
+            stripe
+            size="small"
             @sort-change="sortReviewTables"
           >
-            <el-table-column
-              type="expand"
-              width="1"
-              class-name="review-expand-control-column"
-              header-cell-class-name="review-expand-control-column"
-            >
-              <template #default="{ row: table }">
-                <section class="table-task-detail-panel">
-                  <div class="table-task-detail-head">
-                    <strong>数据同步情况</strong>
-                    <el-tag size="small" :type="tableTaskSummary(table).execution.type" effect="light">
-                      {{ tableTaskSummary(table).execution.label }}
-                    </el-tag>
-                  </div>
-                  <div class="table-task-detail-grid">
-                    <div>
-                      <span>接入数据量</span>
-                      <strong>{{ tableTaskSummary(table).dataVolume }}</strong>
-                    </div>
-                    <div>
-                      <span>最后同步时间</span>
-                      <strong>{{ tableTaskSummary(table).lastExecutedAt || "暂无记录" }}</strong>
-                    </div>
-                    <div>
-                      <span>最后业务时间</span>
-                      <strong>{{ tableTaskSummary(table).lastBusinessTime || "暂无记录" }}</strong>
-                    </div>
-                    <div>
-                      <span>数据更新时间</span>
-                      <strong>{{ tableTaskSummary(table).lastDataUpdatedAt || "暂无记录" }}</strong>
-                    </div>
-                  </div>
-                </section>
-              </template>
-            </el-table-column>
             <el-table-column label="序号" width="62" align="center">
               <template #default="{ $index }">{{ reviewTableRowNumber($index) }}</template>
             </el-table-column>
-            <el-table-column prop="name" sortable="custom" label="数据表" min-width="230" show-overflow-tooltip>
-              <template #default="{ row: table }">
-                <div class="review-table-name">
-                  <span
-                    :class="['table-type-icon', table.tableType === '视图' ? 'is-view' : 'is-table']"
-                    :title="table.tableType === '视图' ? '视图' : '数据表'"
-                  >
-                    <Icon :icon="table.tableType === '视图' ? 'el-icon-View' : 'table'" />
-                  </span>
-                  <div>
-                    <button
-                      type="button"
-                      class="review-table-expand-trigger"
-                      :aria-expanded="activeTableDetails.includes(table.tableName)"
-                      :title="activeTableDetails.includes(table.tableName) ? '收起字段明细' : '展开字段明细'"
-                      @click.stop="toggleTableDetail(table)"
-                    >
-                      <strong :class="{ 'is-name-missing': !tableChineseName(table) }">
-                        {{ tableChineseName(table) || "未填写中文名" }}
-                      </strong>
-                      <Icon :icon="activeTableDetails.includes(table.tableName) ? 'el-icon-CaretTop' : 'el-icon-CaretBottom'" />
-                    </button>
-                    <small>{{ table.tableName }}</small>
-                  </div>
-                </div>
-              </template>
+            <el-table-column prop="name" sortable="custom" label="中文名称" min-width="160" show-overflow-tooltip>
+              <template #default="{row: table}">{{ tableChineseName(table) || '未填写中文名' }}</template>
             </el-table-column>
-            <el-table-column prop="fieldCount" sortable="custom" label="类型 / 字段" min-width="142">
-              <template #default="{ row: table }">
-                <div class="review-table-stacked">
-                  <el-tag size="small" effect="light" :class="['business-tag', businessClass(table.businessType)]">
-                    {{ businessLabel(table.businessType) }}
-                  </el-tag>
-                  <button type="button" class="review-table-field-link" @click.stop="openTablePreview(table)">
-                    {{ table.fieldCount || fieldsFor(table).length }} 个字段
-                  </button>
-                </div>
-              </template>
+            <el-table-column prop="tableName" sortable="custom" label="英文表名" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="tableType" label="对象类型" width="90">
+              <template #default="{row: table}">{{table.tableType === '视图' ? '视图' : '数据表'}}</template>
+            </el-table-column>
+            <el-table-column prop="businessType" label="业务类型" width="90">
+              <template #default="{row: table}">{{businessLabel(table.businessType)}}</template>
+            </el-table-column>
+            <el-table-column prop="fieldCount" sortable="custom" label="字段数" width="80" align="right">
+              <template #default="{row: table}"><el-button type="primary" link size="small" @click.stop="openTablePreview(table)">{{table.fieldCount || fieldsFor(table).length}}</el-button></template>
             </el-table-column>
             <el-table-column label="登记检查" min-width="185">
               <template #default="{ row: table }">
@@ -750,44 +733,34 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="数据是否接入" min-width="138">
-              <template #default="{ row: table }">
-                <div class="review-table-stacked">
-                  <el-tag size="small" :type="tableTaskSummary(table).execution.type" effect="plain">
-                    {{ tableTaskSummary(table).execution.label }}
-                  </el-tag>
-                  <small>频率：{{ tableTaskSummary(table).frequency }}</small>
-                </div>
+            <el-table-column label="接入状态" min-width="120">
+              <template #default="{row: table}"><el-tag size="small" :type="tableTaskSummary(table).execution.type" effect="plain">{{tableTaskSummary(table).execution.label}}</el-tag></template>
+            </el-table-column>
+            <el-table-column label="同步频率" min-width="150" show-overflow-tooltip>
+              <template #default="{row: table}">{{tableTaskSummary(table).frequency}}</template>
+            </el-table-column>
+            <el-table-column label="接入数据量" min-width="110" align="right">
+              <template #default="{row: table}">{{tableTaskSummary(table).dataVolume}}</template>
+            </el-table-column>
+            <el-table-column label="最后同步时间" min-width="170" show-overflow-tooltip>
+              <template #default="{row: table}">{{tableTaskSummary(table).lastExecutedAt}}</template>
+            </el-table-column>
+            <el-table-column label="最后业务时间" min-width="170" show-overflow-tooltip>
+              <template #default="{row: table}">{{tableTaskSummary(table).lastBusinessTime}}</template>
+            </el-table-column>
+            <el-table-column label="数据更新时间" min-width="170" show-overflow-tooltip>
+              <template #default="{row: table}">{{tableTaskSummary(table).lastDataUpdatedAt}}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="172" fixed="right" align="center">
+              <template #default="{row: table}">
+                <el-button type="primary" link size="small" @click.stop="goToStep(table.businessType === '字典表' ? 2 : 3, table.tableName)">返回编辑</el-button>
+                <el-button class="registration-access-action" type="primary" link size="small" :disabled="accessTaskLoading || !!accessTaskError || !findTableAccessTaskRow(table) || (!findTableAccessTaskRow(table)?.taskCount && !findTableAccessTaskRow(table)?.canApply && findTableAccessTaskRow(table)?.accessStatus !== '2')" @click.stop="openRegistrationAccess(table)">{{registrationAction(table)}}</el-button>
               </template>
             </el-table-column>
-            <el-table-column label="数据同步情况" min-width="258">
-              <template #default="{ row: table }">
-                <div class="review-table-times">
-                  <span>最后同步时间：{{ tableTaskSummary(table).lastExecutedAt }}</span>
-                  <span>最后业务时间：{{ tableTaskSummary(table).lastBusinessTime }}</span>
-                  <span>数据更新时间：{{ tableTaskSummary(table).lastDataUpdatedAt }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="126" fixed="right" align="center">
-              <template #default="{ row: table }">
-                <el-button type="primary" link size="small" @click.stop="goToStep(table.businessType === '字典表' ? 2 : 3, table.tableName)">
-                  返回编辑
-                </el-button>
-                <el-button class="registration-access-action" type="primary" link size="small" :disabled="accessTaskLoading || !!accessTaskError || !findTableAccessTaskRow(table) || (!findTableAccessTaskRow(table)?.taskCount && !findTableAccessTaskRow(table)?.canApply && findTableAccessTaskRow(table)?.accessStatus !== '2')" @click.stop="openRegistrationAccess(table)">{{ registrationAction(table) }}</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-pagination
-            v-if="visibleTableTotal > reviewTablePageSize"
-            v-model:current-page="reviewTablePage"
-            class="review-table-pagination"
-            small
-            background
-            layout="prev, pager, next"
-            :page-size="reviewTablePageSize"
-            :total="visibleTableTotal"
-          />
+            <template #pagination>
+              <el-pagination v-model:current-page="reviewTablePage" class="review-table-pagination" small background layout="prev, pager, next" :page-size="reviewTablePageSize" :total="visibleTableTotal" />
+            </template>
+          </DataTable>
       </div>
       </section>
     </section>
@@ -898,8 +871,6 @@ import { useRegisterStore } from "@/store";
 import { ElMessageBox } from "element-plus";
 
 const store = useRegisterStore();
-const activeTableDetails = ref([]);
-const reviewTableRef = ref(null);
 const onlyIssues = ref(false);
 const tableKeyword = ref("");
 const reviewTablePage = ref(1);
@@ -1062,7 +1033,12 @@ const sources = computed(() => {
 const sourceDetail = ref(null);
 const realtimeTables = ref([]);
 const fileRegistrationRows = ref([]);
-const pushFileSelection = ref("");
+function isProxyAccessSource(input) {
+  if (!input) return false;
+  let pool = input.poolCfg || input.pool_cfg || {};
+  if (typeof pool === "string") { try { pool = JSON.parse(pool); } catch { pool = {}; } }
+  return ["proxy", "agent"].includes(String(input.accessMode || input.access_mode || pool.accessMode || "").toLowerCase());
+}
 function isUnstructuredPushSource(input) {
   if (!input) return false;
   const pool=parseObject(input.poolCfg ?? input.pool_cfg);
@@ -1143,6 +1119,17 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
     reviewSummaryError.value = "";
   }
   try {
+    if (isProxyAccessSource(sources.value[0])) {
+      const response = await requestWithTimeout(() => $common.post("/dst/database/detail", { tid }), "数据源详情");
+      if (requestId !== sourceDetailRequestId || sourceTid.value !== tid) return;
+      const detail = response?.data || response || {};
+      if (detail.found === false || !detail.tid) throw new Error("数据源不存在或不在当前数据范围内");
+      if (!isProxyAccessSource(detail)) throw new Error("数据源接入方式已变化，请重新打开登记页面");
+      sourceDetail.value = detail;
+      realtimeTables.value = []; physicalTableTotal.value = 0; tableChangeSnapshot.value = null;
+      reviewSummaryError.value = "";
+      return;
+    }
     if (isUnstructuredPushSource(sources.value[0])) {
       const [detailResult,fileResult]=await Promise.allSettled([
         requestWithTimeout(()=>$common.post("/dst/database/detail",{tid}),"数据源详情"),
@@ -1154,7 +1141,6 @@ async function refreshReviewSummary(tid, requestId, showLoading) {
       if (fileResult.status==="fulfilled") {
         const payload=fileResult.value?.data || fileResult.value || {};
         fileRegistrationRows.value=(payload.list || []).map(row=>({...row,id:row.tableId}));
-        if (!fileRegistrationRows.value.some(row=>row.tableId===pushFileSelection.value)) pushFileSelection.value=fileRegistrationRows.value[0]?.tableId || "";
       }
       reviewSummaryError.value=detailResult.status==="fulfilled" && fileResult.status==="fulfilled" ? "" : "文件登记审查信息未完整读取";
       return;
@@ -1383,8 +1369,8 @@ watch(
     physicalTableTotal.value = 0;
     tableChangeSnapshot.value = null;
     tableChangeError.value = "";
-    fileRegistrationRows.value=[];pushFileSelection.value="";
-    const cached = isUnstructuredPushSource(sources.value[0]) ? null : readReviewSummaryCache(tid);
+    fileRegistrationRows.value=[];
+    const cached = isUnstructuredPushSource(sources.value[0]) || isProxyAccessSource(sources.value[0]) ? null : readReviewSummaryCache(tid);
     if (cached) {
       sourceDetail.value = cached.detail || null;
       realtimeTables.value = uniqueTables(cached.tables);
@@ -1424,10 +1410,11 @@ const accessModeLabels = {
   receive: "数据推送方式",
   capture: "数据拉取方式",
   upload: "数据上报方式",
+  proxy: "代理访问",
 };
 const normalizeAccessMode = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
-  const aliases = { extract: "explore", extraction: "explore", push: "receive", pull: "capture", report: "upload" };
+  const aliases = { extract: "explore", extraction: "explore", push: "receive", pull: "capture", report: "upload", agent: "proxy" };
   const mode = aliases[normalized] || normalized;
   return accessModeLabels[mode] ? mode : "";
 };
@@ -1669,6 +1656,32 @@ const sourceConnectionStatus = computed(() => {
 const isDataUploadSource = computed(() => sourceAccessMode.value.value === "upload");
 const isDataPushSource = computed(() => sourceAccessMode.value.value === "receive");
 const isDataPullSource = computed(() => sourceAccessMode.value.value === "capture");
+const isProxyAccess = computed(() => isProxyAccessSource(source.value));
+const proxyServicesRef = ref();
+const proxyServiceKeyword = ref("");
+const proxyServiceTotal = ref(0);
+const proxyServiceError = ref("");
+let proxyServiceRequestVersion = 0;
+async function fetchProxyServices({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}) {
+  const datasourceId = sourceTid.value;
+  const requestVersion = ++proxyServiceRequestVersion;
+  if (!datasourceId || !isProxyAccess.value) return { list: [], total: 0 };
+  proxyServiceError.value = "";
+  try {
+    const result = await $common.post("/dws/flowserve/gateway/api/list", { datasourceId, pageNum: pageNo, pageSize, sortField, sortDir, keyword: proxyServiceKeyword.value });
+    if (requestVersion !== proxyServiceRequestVersion || datasourceId !== sourceTid.value) return { list: [], total: 0 };
+    const payload = result?.data || result || {};
+    proxyServiceTotal.value = Number(payload.total || 0);
+    return { list: payload.list || [], total: proxyServiceTotal.value };
+  } catch (error) {
+    if (requestVersion === proxyServiceRequestVersion && datasourceId === sourceTid.value) {
+      proxyServiceTotal.value = 0;
+      proxyServiceError.value = error?.message || "服务清单读取失败，请重新读取";
+    }
+    return { list: [], total: 0 };
+  }
+}
+
 const apiPullInformationOpenItems = ref([]);
 
 function parseApiPullJson(value) {
@@ -1837,16 +1850,21 @@ const pushContentType = computed(() =>
   ["UNSTRUCTURED", "非结构化数据"].includes(String(source.value?.pushDataType || source.value?.push_data_type || "").trim().toUpperCase())
     ? "UNSTRUCTURED" : "STRUCTURED");
 const pushIsAttachmentMode = computed(() => pushContentType.value === "UNSTRUCTURED");
+const pushInterfaceSpecStatus = computed(() => {
+  if (pushContractError.value) return {type:"danger",text:"规范读取失败"};
+  if (pushContractLoading.value || !pushContract.value) return {type:"info",text:"正在读取接口规范"};
+  const published = pushIsAttachmentMode.value
+    ? pushDatasourceRegistered.value && fileRegistrationRows.value.length > 0
+    : !pushContractIsPreview.value;
+  return published ? {type:"success",text:"已发布接口规范"} : {type:"warning",text:"接口规范预览"};
+});
+const pushFileMode = ref("single");
 const pushInterfaceSelection = ref("");
 const pushInterfaceType = computed(() => {
   const available = pushContractEndpointItems.value.map(item => item.key);
   return available.includes(pushInterfaceSelection.value) ? pushInterfaceSelection.value
-    : pushIsAttachmentMode.value ? "filePart" : "dataPush";
+    : pushIsAttachmentMode.value ? (pushFileMode.value === "single" ? "fileSingle" : "filePart") : "dataPush";
 });
-const pushAuxiliaryExpanded = ref(false);
-const pushPrimaryEndpoints = computed(()=>pushContractEndpointItems.value.filter(item=>item.key==="filePart"));
-const pushAuxiliaryEndpoints = computed(()=>pushContractEndpointItems.value.filter(item=>item.key!=="filePart"));
-const selectedFileRegistration = computed(()=>fileRegistrationRows.value.find(row=>row.tableId===pushFileSelection.value) || fileRegistrationRows.value[0] || null);
 const pushProtocolNodes = ref([]);
 const pushProtocolNodesSourceId = ref("");
 const pushProtocolLoadError = ref("");
@@ -1884,47 +1902,50 @@ async function loadPushProtocolNodes(datasourceId, force = false) {
   }
 }
 const pushFileStages = [
-  {key:"fileInit",label:"1. 初始化上传",method:"POST",path:"/api/v1/file-uploads",description:"创建上传会话，取得 uploadId、partSize 和 partCount。"},
-  {key:"filePart",label:"2. 上传分片",method:"PUT",path:"/api/v1/file-uploads/{id}/parts/{part}",description:"按服务端片大小发送文件原始字节并核验分片摘要。"},
-  {key:"fileParts",label:"3. 断点续传",method:"GET",path:"/api/v1/file-uploads/{id}/parts",description:"分页查询已确认分片，恢复时只上传缺失片。"},
-  {key:"fileComplete",label:"4. 完成上传",method:"POST",path:"/api/v1/file-uploads/{id}/complete",description:"无请求体；异步合并文件并进行完整性校验。"},
-  {key:"fileSubmit",label:"5. 提交推送",method:"POST",path:"/api/v1/file-uploads/{id}/submit",description:"提交业务标识和元数据，触发服务端已配置目标的投递。"},
-  {key:"fileStatus",label:"6. 查询状态",method:"GET",path:"/api/v1/file-uploads/{id}",description:"核对文件 READY、投递结果及后续业务回执。"},
+  {key:"fileSingle",label:"一次性上传并提交",method:"PUT",path:"/api/v1/data-push",description:"multipart请求体同时发送文件及业务参数，服务端计算大小与摘要，完成接收并自动提交。返回202表示已受理，随后查询最终投递结果；也支持 /api/v1/data-push/single 别名。"},
+  {key:"fileInit",label:"初始化上传",method:"POST",path:"/api/v1/data-push/uploads",description:"选择已登记的文件英文名，创建上传会话并取得 uploadId、partSize、partCount。文件格式和大小须符合该类别限制。"},
+  {key:"filePart",label:"上传分片",method:"PUT",path:"/api/v1/data-push/uploads/{id}/parts/{part}",description:"按初始化返回的 partSize 切分原文件，从第1片开始上传，正文为当前片原始字节。额外请求头 X-Part-SHA256 必填，填写当前片的64位摘要；Content-Length 由HTTP客户端按当前片实际字节数设置。同一片重试保持内容和摘要一致。"},
+  {key:"fileComplete",label:"完成并提交",method:"POST",path:"/api/v1/data-push/uploads/{id}/complete",description:"全部分片上传后一次完成合并请求和业务提交。返回202及WAITING_FILE表示已受理；服务端校验通过、文件READY后自动投递，无需先轮询等待READY或另调submit接口。"},
+  {key:"fileStatus",label:"查询投递结果",method:"GET",path:"/api/v1/data-push/uploads/{id}",description:"无请求体。按有界退避策略轮询，确认 deliveryStatus=SUCCEEDED 并核对 deliveries 和业务回执；超时后保留 uploadId 继续查询。READY 只表示文件可用，不代表投递成功。"},
+  {key:"fileParts",label:"断点续传",method:"GET",path:"/api/v1/data-push/uploads/{id}/parts",optional:true,description:"上传中断后分页查询已确认片号，只补传缺失片，再调用完成并提交。该接口无请求体，正常连续上传可跳过。"},
 ];
-const pushContractEndpointItems = computed(() => pushIsAttachmentMode.value ? pushFileStages : [
+const pushContractEndpointItems = computed(() => pushIsAttachmentMode.value ? pushFileStages.filter(stage => pushFileMode.value === "single" ? ["fileSingle","fileStatus"].includes(stage.key) : stage.key !== "fileSingle") : [
   {key:"dataPush",label:"数据推送接口",method:pushContract.value?.endpoints?.dataPush?.method || "POST",
     path:pushContract.value?.endpoints?.dataPush?.path || "/api/v1/data-push",description:"接收业务系统的表数据，按登记规则校验并投递至目标端。"},
 ]);
-const pushRequestContentType = computed(() => !pushIsAttachmentMode.value || ["fileInit","fileSubmit"].includes(pushInterfaceType.value)
-  ? "application/json" : pushInterfaceType.value === "filePart" ? "application/octet-stream" : "无需设置（无请求体）");
-const pushContractHeaders = computed(() => pushInterfaceType.value === "filePart" ? [
-  {name:"X-Part-SHA256",value:"本片SHA-256（64个十六进制字符）",description:"必填；每一片单独计算，重试时内容和摘要保持一致"},
-  {name:"Content-Length",value:"当前分片实际字节数",description:"由HTTP客户端按分片正文设置，最后一片可以小于 partSize"},
-] : ["dataPush","fileInit","fileSubmit"].includes(pushInterfaceType.value) ? [
-  {name:"Idempotency-Key",value:"每次逻辑请求唯一 UUID",description:pushIsAttachmentMode.value ? "初始化、提交分别使用稳定的键；同一操作重试保持不变" : "同一批次重试保持不变"},
-] : []);
+const pushRequestContentType = computed(() => pushIsAttachmentMode.value ? (pushFileMode.value === "single" ? "multipart/form-data" : "JSON / 文件原始字节") : "application/json");
+const pushContractHeaders = computed(() => [
+  {name:"Idempotency-Key",value:"每次逻辑请求唯一 UUID",description:pushIsAttachmentMode.value
+    ? (pushFileMode.value === "single" ? "同一文件及业务提交重试保持不变；不同文件或业务使用新的UUID" : "初始化与完成并提交分别使用固定的键；重试保持不变。分片按上传ID、片号和摘要识别重试")
+    : "同一批次重试保持不变"},
+]);
 const pushVisibleTables = computed(() => pushContract.value?.tables || []);
-const pushSelectedParameters = computed(() => {
-  if (!pushIsAttachmentMode.value) return (pushContract.value?.requiredParameters || []).map(item => ({...item,location:"请求体"}));
+const pushSelectedParameters = computed(() => (pushContract.value?.requiredParameters || []).map(item => ({...item,location:"请求体"})));
+function pushFileStageParameters(type) {
   const id = {name:"id",location:"路径参数",required:true,description:"初始化响应中的 uploadId，同一个文件的后续请求始终使用该值"};
-  if (pushInterfaceType.value === "fileInit") return [
+  const code = {name:"fileCode",location:"请求体",required:true,description:"登记的文件英文名，用于选择文件类别及接收规则。与每次上传的原始文件名分开；节点须配置对应英文名并授权当前业务密钥。"};
+  const business = {name:"businessKey",location:"请求体",required:true,description:"调用方的文件业务唯一标识；同一次业务推送重试保持一致"};
+  const metadata = {name:"metadata",location:"请求体",required:false,description:"业务元数据JSON对象；multipart中填写JSON文本，字段及必填规则以节点类别配置为准，无要求时使用 {}"};
+  if (type === "fileSingle") return [
+    {name:"datasourceId",location:"请求体",required:true,description:`当前数据源编码：${sourceTid.value}`},code,business,
+    {name:"file",location:"请求体",required:true,description:"multipart文件部分，携带原始文件名和文件字节。大小、SHA-256由服务端计算，无需另填fileName、size或sha256"},metadata];
+  if (type === "fileInit") return [
     {name:"datasourceId",location:"请求体",required:true,description:`当前数据源编码：${sourceTid.value}`},
-    {name:"collectionId",location:"请求体",required:true,description:selectedFileRegistration.value ? `当前文件集合编码：${selectedFileRegistration.value.collectionId}；海通 YAML 须配置相同编码并授权当前业务密钥` : "请先导入并保存文件登记模板；海通 YAML 配置相同集合编码与调用方授权"},
-    {name:"fileName",location:"请求体",required:true,description:"原始文件名，含扩展名；须符合服务端文件集合的格式白名单"},
+    code,
+    {name:"fileName",location:"请求体",required:true,description:"本次上传的原始文件名，含扩展名，例如 scene_20261101.jpg；与文件类别标识 fileCode 分开，须符合该类别的格式白名单"},
     {name:"size",location:"请求体",required:true,description:"整个文件的实际字节数，正整数；不是MB数，也不是分片大小"},
-    {name:"sha256",location:"请求体",required:false,description:"整个文件原始字节的SHA-256（64个十六进制字符），可省略；与逐片 X-Part-SHA256 不同"},
+    {name:"sha256",location:"请求体",required:false,description:"整个原始文件的SHA-256内容指纹，64位十六进制字符。可省略；填写后合并时比对，不符则拒绝该文件；不填仍计算整文件摘要并逐片校验。与每片必填的 X-Part-SHA256 不同。"},
   ];
-  if (pushInterfaceType.value === "filePart") return [id,
+  if (type === "filePart") return [
+    id,
     {name:"part",location:"路径参数",required:true,description:"分片编号从1开始，最大为初始化响应中的 partCount"},
     {name:"文件分片正文",location:"请求体",required:true,description:"按响应 partSize 切分后的原始字节，不封装成JSON、表单或Base64"}];
-  if (pushInterfaceType.value === "fileParts") return [id,
+  if (type === "fileParts") return [id,
     {name:"after",location:"查询参数",required:false,description:"已读分片编号游标，首次为0，后续传本页最后一个片号"},
     {name:"limit",location:"查询参数",required:false,description:"每页1至100片，默认100；直到返回空列表"}];
-  if (pushInterfaceType.value === "fileSubmit") return [id,
-    {name:"businessKey",location:"请求体",required:true,description:"调用方的文件业务唯一标识；同一次业务推送重试保持一致"},
-    {name:"metadata",location:"请求体",required:false,description:"业务元数据对象，字段与必填规则以海通文件集合配置为准；无字段要求时使用 {}"}];
+  if (type === "fileComplete") return [id,business,metadata];
   return [id];
-});
+}
 function selectPushInterface(type) {
   if (!pushContractEndpointItems.value.some(item => item.key === type)) return;
   pushInterfaceSelection.value = type;
@@ -1936,26 +1957,43 @@ function pushAttachmentDescription(attachment) {
   if (!attachment?.maxFileBytes) return "—";
   return `单个≤${Number((attachment.maxFileBytes / 1048576).toFixed(3))} MB · ${(attachment.allowedExtensions || []).join("、")}`;
 }
-const pushChunkSample = computed(() => {
-  const stage = pushFileStages.find(item => item.key === pushInterfaceType.value) || pushFileStages[0];
+function pushFileStageSample(type) {
+  const stage = pushFileStages.find(item => item.key === type);
+  if (!stage) return "";
   const path = stage.path.replace("{id}","<uploadId>").replace("{part}","1");
   const lines = [`${stage.method} ${pushProtocolUrl(path)}`,"X-Api-Key: <当前数据源且已获文件集合授权的业务密钥>"];
-  if (pushRequestContentType.value.includes("application/")) lines.push(`Content-Type: ${pushRequestContentType.value}`);
-  if (["fileInit","fileSubmit"].includes(stage.key)) lines.push("Idempotency-Key: <本操作固定UUID，重试保持不变>");
+  if (stage.key === "fileSingle") {
+    const boundary = "FilePushBoundary";
+    lines.push(`Content-Type: multipart/form-data; boundary=${boundary}`,"Idempotency-Key: <同一文件及业务请求固定UUID>","");
+    const parts = [
+      {name:"datasourceId",value:String(sourceTid.value || "")},
+      {name:"fileCode",value:"<已登记的文件英文名>"},
+      {name:"businessKey",value:"<本次业务唯一标识>"},
+      {name:"file",fileName:"sample.pdf",contentType:"application/pdf",value:"<文件原始字节>"},
+      {name:"metadata",value:"{}"}
+    ];
+    for (const part of parts) {
+      lines.push(`--${boundary}`,`Content-Disposition: form-data; name="${part.name}"${part.fileName ? `; filename="${part.fileName}"` : ""}`);
+      if (part.contentType) lines.push(`Content-Type: ${part.contentType}`);
+      lines.push("",part.value);
+    }
+    lines.push(`--${boundary}--`,"");
+    return lines.join("\r\n");
+  }
+  if (["fileInit","fileComplete"].includes(stage.key)) lines.push("Content-Type: application/json","Idempotency-Key: <本操作固定UUID，重试保持不变>");
+  if (stage.key === "filePart") lines.push("Content-Type: application/octet-stream");
   if (stage.key === "filePart") lines.push("X-Part-SHA256: <本分片SHA-256，64个十六进制字符>","Content-Length: <本分片实际字节数>");
   if (stage.key === "fileInit") {
-    const registered=selectedFileRegistration.value;
-    const extension=registered?.fileFormat || "pdf";
-    const fileName=registered?.fileName || "sample";
-    lines.push("",JSON.stringify({datasourceId:String(sourceTid.value || ""),collectionId:registered?.collectionId || "<已登记文件的集合编码>",fileName:fileName.toLowerCase().endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`,size:2048},null,2));
+    lines.push("",JSON.stringify({datasourceId:String(sourceTid.value || ""),fileCode:"<已登记的文件英文名，见 fileCode 参数>",fileName:"<原始文件名，含已登记格式扩展名>",size:2048},null,2));
   }
   if (stage.key === "filePart") lines.push("","<当前分片的原始字节>");
   if (stage.key === "fileParts") lines[0] += "?after=0&limit=100";
-  if (stage.key === "fileSubmit") lines.push("",JSON.stringify({businessKey:"<本文件业务唯一标识>",metadata:{}},null,2));
+  if (stage.key === "fileComplete") lines.push("",JSON.stringify({businessKey:"<本文件业务唯一标识>",metadata:{}},null,2));
   return lines.join("\n");
-});
-async function copyPushChunkSample() {
-  try { await navigator.clipboard.writeText(pushChunkSample.value); $message.success("分片上传示例已复制"); }
+}
+const pushFileWorkflow = computed(() => pushContractEndpointItems.value.map(stage => ({...stage,parameters:pushFileStageParameters(stage.key),sample:pushFileStageSample(stage.key)})));
+async function copyPushFileStageSample(stage) {
+  try { await navigator.clipboard.writeText(stage.sample); $message.success("请求示例已复制"); }
   catch (error) { $message.warning("当前浏览器不允许自动复制，请手动复制示例内容"); }
 }
 let pushCredentialRequestId = 0;
@@ -2481,14 +2519,15 @@ watch([sourceTid, isDataPushSource], () => {
   pushContractInFlightKey = "";
   pushContractLoading.value = false;
   pushContract.value = null; pushContractError.value = ""; pushContractLoadedDatasourceId.value = ""; pushContractOpenTables.value = [];
-  pushInterfaceSelection.value = ""; pushAuxiliaryExpanded.value = false;
+  pushInterfaceSelection.value = "";
+  pushFileMode.value = "single";
   pushProtocolNodes.value = []; pushProtocolNodesSourceId.value = ""; pushProtocolLoadError.value = "";
   ++pushCredentialRequestId; pushCredentialLoading.value = false;
   pushCredential.value = null; pushCredentialError.value = ""; pushCredentialDatasourceId.value = "";
 }, { immediate: true });
 watch([sourceTid, isDataPushSource, sourceDetailLoading], () => { ensurePushCredential(); }, { flush: "post" });
-watch([pushIsAttachmentMode,isDataUploadSource],([fileFlow,reportFlow])=>{
-  (store.state.steps || []).forEach((step,index)=>{if(index>=1 && index<=3) step.skipped=fileFlow || reportFlow;});
+watch([pushIsAttachmentMode,isDataUploadSource,isProxyAccess],([fileFlow,reportFlow,proxyFlow])=>{
+  (store.state.steps || []).forEach((step,index)=>{if(index>=1 && index<=3) step.skipped=fileFlow || reportFlow || proxyFlow;});
 },{immediate:true});
 watch([sourceDetailLoading, pushDatasourceRegistered], ([loading]) => {
   if (!loading && isDataPushSource.value && connectionInfoExpanded.value) void loadPushContract(true);
@@ -3902,14 +3941,8 @@ watch(sourceTid, () => {accessDialogVisible.value = false; accessDialogTable.val
 watch(() => [sourceTid.value,visibleTables.value.map(registrationTableId).join(',')], () => {accessTaskRows.value = []; accessTaskLoaded.value = false; void refreshAccessSummary();}, {immediate:true});
 const reviewTableBusy = computed(() => tableListLoading.value || reviewOrderLoading.value || accessTaskLoading.value);
 const reviewTableLoadingPhase = computed(() => tableListLoading.value ? '正在读取已保存的登记信息' : reviewOrderLoading.value ? '正在整理数据表清单' : '正在核对接入任务与同步状态');
-const allTableDetailsExpanded = computed(() => {
-  const tableNames = visibleTables.value.map((table) => table.tableName).filter(Boolean);
-  return tableNames.length > 0 && tableNames.every((tableName) => activeTableDetails.value.includes(tableName));
-});
-
 watch([onlyIssues, tableKeyword, visibleTableTotal], () => {
   reviewTablePage.value = 1;
-  activeTableDetails.value = [];
 });
 
 function workflowTableRows() {
@@ -4716,22 +4749,6 @@ function goToTableEditor() {
   goToStep(table.businessType === "字典表" ? 2 : 3, table.tableName);
 }
 
-function syncTableDetailExpansion(_row, expandedRows) {
-  activeTableDetails.value = (expandedRows || [])
-    .map((table) => table?.tableName)
-    .filter(Boolean);
-}
-
-function toggleTableDetail(table) {
-  const tableName = String(table?.tableName || "").trim();
-  if (!tableName) return;
-  const expanded = !activeTableDetails.value.includes(tableName);
-  reviewTableRef.value?.toggleRowExpansion?.(table, expanded);
-  activeTableDetails.value = expanded
-    ? [...new Set([...activeTableDetails.value, tableName])]
-    : activeTableDetails.value.filter((name) => name !== tableName);
-}
-
 function focusReviewIssues() {
   if (!issues.value.length) return;
   onlyIssues.value = false;
@@ -4743,8 +4760,6 @@ function focusReviewIssues() {
     goToStep(issues.value[0].step, issues.value[0].target);
     return;
   }
-  activeTableDetails.value = [firstTableIssue.target];
-  loadFieldsFor(tables.value.find((table) => table.tableName === firstTableIssue.target));
   requestAnimationFrame(() => {
     document.querySelector(".data-table-information-card")?.scrollIntoView({
       behavior: "smooth",
@@ -4753,17 +4768,11 @@ function focusReviewIssues() {
   });
 }
 
-function expandAll() {
-  activeTableDetails.value = visibleTables.value.map((table) => table.tableName);
-  // 用户主动展开当前页时复用批量字段队列，避免按可见表逐一请求。
-  visibleTables.value.forEach((table) => loadFieldsFor(table));
-}
-
-function collapseAll() {
-  activeTableDetails.value = [];
-}
-
 function ensureReady() {
+  if (isProxyAccess.value) {
+    if (reviewLoading.value || reviewSummaryError.value) throw new Error(reviewSummaryError.value || "服务审查信息正在读取");
+    return;
+  }
   if (pushIsAttachmentMode.value) {
     if (reviewLoading.value || reviewSummaryError.value) throw new Error(reviewSummaryError.value || "文件登记信息正在读取");
     if (!fileRegistrationRows.value.length || fileRegistrationRows.value.some(row=>!row.fileName || !row.fileDescription || !row.fileFormat || !(Number(row.maxFileBytes)>0) || row.fieldCount<6)) throw new Error("文件登记信息不完整，请返回第一步重新上传并保存");
@@ -4782,13 +4791,21 @@ async function finish() {
   if (!sourceTid.value) throw new Error("缺少数据源信息，请重新打开登记页面。");
   // 最终操作不能信任两分钟缓存或打开审查页面时的旧状态。
   await refreshReviewSummary(sourceTid.value, ++sourceDetailRequestId, true);
+  if (isProxyAccess.value) {
+    // 完成核验独立于表格搜索和请求版本，避免筛选无结果或表格重载影响真实服务数量。
+    const datasourceId = sourceTid.value;
+    const result = await $common.post("/dws/flowserve/gateway/api/list", {datasourceId,pageNum:1,pageSize:1,keyword:""});
+    if (datasourceId !== sourceTid.value) throw new Error("数据源已切换，请重新确认登记信息");
+    const payload = result?.data || result || {};
+    if (!Number(payload.total || 0)) throw new Error("请返回第一步登记至少一项数据服务，再结束登记");
+  }
   ensureReady();
   const completedSource = source.value
     ? {
         tid: source.value.tid || source.value.id,
         dbName: source.value.dbName,
         assetType: "db",
-        assetStatus: pushIsAttachmentMode.value ? 2 : pendingRegistrationTableCount.value > 0 || uncertainTables.value.length > 0 || !physicalTableCount.value ? 1 : 2,
+        assetStatus: isProxyAccess.value || pushIsAttachmentMode.value ? 2 : pendingRegistrationTableCount.value > 0 || uncertainTables.value.length > 0 || !physicalTableCount.value ? 1 : 2,
       }
     : null;
   // 数据表与字段已在第二至四步分别保存。第五步仅需要确认数据源的登记状态；
@@ -6801,14 +6818,31 @@ defineExpose({ next, finish, commit });
 .push-contract-notice :deep(.el-alert__description) { line-height: 1.7; }
 .push-contract-endpoint > strong { white-space: normal; overflow-wrap: anywhere; }
 .push-contract-endpoint em { flex: none; white-space: nowrap; }
-.is-file-primary { grid-template-columns: minmax(0,1fr); }
-.file-main-interface-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
-.file-main-interface-head p,.file-auxiliary-interfaces > p,.file-registration-review > p { color:#667085; font-size:13px; line-height:1.7; margin:6px 0; }
-.file-auxiliary-interfaces { padding:12px; border:1px dashed #cfe1ff; border-radius:8px; background:#f8fbff; }
-.file-selected-definition { display:flex; flex-wrap:wrap; align-items:center; gap:12px; color:#667085; font-size:13px; }
-.file-selected-definition label { display:flex; align-items:center; gap:12px; min-width:280px; }
-.file-selected-definition .el-select { width:220px; }
-.file-registration-review { padding:18px; }
+.file-upload-modes { display:flex; margin:0 0 6px; }
+.file-upload-mode-switch { flex:0 0 auto; }
+.file-upload-workflow > .push-contract-section-head > strong { flex:0 0 auto; }
+.file-upload-mode-description { flex:1; min-width:0; text-align:right; line-height:1.7; }
+@media (max-width:800px) {
+  .file-upload-mode-description { flex:none; text-align:left; }
+}
+.file-upload-stage { padding:18px 0; min-width:0; }
+.file-upload-stage + .file-upload-stage { border-top:1px solid #e4eaf2; }
+.file-upload-stage-heading { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.file-upload-stage-number { display:inline-flex; justify-content:center; align-items:center; width:26px; height:26px; border-radius:50%; background:#eaf2ff; color:#2468e8; font-weight:600; }
+.file-upload-stage-endpoint { display:flex; align-items:baseline; gap:10px; margin:12px 0 8px; overflow-wrap:anywhere; }
+.file-upload-stage-endpoint em { color:#2468e8; font-size:12px; font-style:normal; font-weight:600; }
+.file-upload-stage-endpoint code { min-width:0; white-space:normal; }
+.file-upload-stage-description { color:#667085; font-size:13px; line-height:1.7; margin:0 0 12px; }
+.file-upload-stage-example, .file-upload-hash-help { margin-top:12px; }
+.file-upload-hash-help > summary { color:#2468e8; cursor:pointer; font-size:13px; }
+.push-request-example-head { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:24px; margin-bottom:8px; font-size:14px; }
+.push-request-example-label { color:#667085; font-size:inherit; line-height:20px; cursor:default; }
+.push-request-example-head :deep(.el-button) { font-size:inherit; }
+.push-contract-sample-description { margin:0 0 10px; color:#667085; font-size:12px; line-height:1.7; }
+.file-collection-options { max-height:200px; overflow:auto; margin:8px 0 0; padding-left:18px; }
+.file-collection-options li { padding:3px 0; line-height:1.7; overflow-wrap:anywhere; }
+.file-collection-options code { margin:0 8px; white-space:normal; }
+.file-collection-options span { color:#667085; }
 
 .push-contract-header-list small { white-space: normal; overflow-wrap: anywhere; line-height: 1.6; }
 .push-contract-sample-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -7721,145 +7755,19 @@ defineExpose({ next, finish, commit });
 }
 
 .review-table {
-  width: 100%;
-  border: 1px solid #e4eaf2;
-  border-radius: 8px;
-  overflow: hidden;
-
-  :deep(.el-table__header th) {
-    height: 42px;
-    color: #475467;
-    font-size: 12px;
-    font-weight: 650;
-    background: #f8fafc;
-  }
-
-  :deep(.el-table__row td) {
-    padding: 10px 0;
-  }
-
-  :deep(.el-table__expanded-cell) {
-    padding: 0 16px 16px !important;
-    background: #fcfdff;
-  }
-
-  :deep(.review-expand-control-column) {
-    width: 0 !important;
-    min-width: 0 !important;
-    max-width: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-
-    .cell,
-    .el-table__expand-icon {
-      display: none !important;
-    }
-  }
+  width:100%;
+  min-width:0;
 }
 
-.review-table-name {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-
-  > div {
-    min-width: 0;
-  }
-
-  strong,
-  small {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  strong {
-    color: #1d2939;
-    font-size: 13px;
-    line-height: 20px;
-  }
-
-  strong.is-name-missing,
-  small {
-    color: #98a2b3;
-  }
-
-  small {
-    font-family: Consolas, "Courier New", monospace;
-    font-size: 11px;
-    line-height: 17px;
-  }
-}
-
-.review-table-expand-trigger {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  gap: 4px;
-  padding: 0;
-  border: 0;
-  color: #1d2939;
-  text-align: left;
-  background: transparent;
-  cursor: pointer;
-
-  :deep(.svg-icon),
-  :deep(.el-icon) {
-    flex: 0 0 auto;
-    color: #344054;
-    font-size: 12px;
-    transition: color 0.16s ease, transform 0.16s ease;
-  }
-
-  strong {
-    min-width: 0;
-    transition: color 0.16s ease, text-decoration-color 0.16s ease;
-  }
-
-  &:hover,
-  &:focus-visible {
-    outline: none;
-
-    strong {
-      color: #155eef;
-      text-decoration: underline;
-      text-decoration-thickness: 1px;
-      text-underline-offset: 3px;
-    }
-
-    :deep(.svg-icon),
-    :deep(.el-icon) {
-      color: #155eef;
-    }
-  }
-}
-
-.review-table-stacked,
-.review-table-tags,
-.review-table-times {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-width: 0;
+.review-table :deep(.el-table .cell) {
+  white-space:nowrap;
 }
 
 .review-table-tags {
-  flex-direction: row;
-  flex-wrap: wrap;
-}
-
-.review-table-stacked small,
-.review-table-times span {
-  overflow: hidden;
-  max-width: 100%;
-  color: #667085;
-  font-size: 11px;
-  line-height: 17px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display:flex;
+  align-items:center;
+  flex-wrap:nowrap;
+  gap:8px;
 }
 
 .review-table-field-link {
@@ -8919,7 +8827,7 @@ defineExpose({ next, finish, commit });
 .skeleton-bar.is-number {width:18px;} .skeleton-bar.is-name {width:85%;height:13px;} .skeleton-bar.is-subtitle {width:68%;height:8px;} .skeleton-bar.is-pill {width:58px;height:20px;border-radius:5px;} .skeleton-bar.is-short {width:50px;} .skeleton-bar.is-time {width:88%;height:8px;}
 .registration-table-alert {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;margin-bottom:10px;background:#fff8eb;border-radius:6px;color:#926415;font-size:12px;}
 .registration-updating {display:flex;align-items:center;gap:9px;padding:8px 4px;color:#607a9e;font-size:12px;}
-.registration-access-action.el-button {display:flex;margin:6px auto 0;}
+.registration-access-action.el-button {display:inline-flex;margin:0 0 0 12px;}
 .registration-access-object {display:flex;align-items:center;gap:12px;margin-bottom:10px;}.registration-access-object>div {flex:1;min-width:0;}.registration-access-object strong,.registration-access-object small {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.registration-access-object small {color:#8796aa;margin-top:4px;}
 .registration-access-context {display:flex;flex-wrap:wrap;gap:5px 16px;padding:0 0 10px;font-size:12px;line-height:1.5;color:#7a8a9e;}.registration-access-context strong {font-weight:500;color:#536b8b;}
 .registration-access-explanation {color:#61738e;line-height:1.8;margin:16px 0;}.registration-request-time {color:#8796aa;font-size:12px;}
@@ -8955,7 +8863,7 @@ defineExpose({ next, finish, commit });
 button.push-contract-endpoint { appearance: none; text-align: left; cursor: pointer; font: inherit; transition: border-color .15s, background-color .15s; }
 button.push-contract-endpoint:hover { border-color: #92b8ff; }
 button.push-contract-endpoint:focus-visible { outline: 2px solid #2468f2; outline-offset: 3px; }
-button.push-contract-endpoint.is-selected { border-color: #2468f2; background: #f0f6ff; box-shadow: inset 0 0 0 1px #2468f2; }
+.push-contract-endpoint.is-selected { border-color: #2468f2; background: #f0f6ff; box-shadow: inset 0 0 0 1px #2468f2; }
 .push-contract-endpoint .push-endpoint-label { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-weight: 600; }
 .push-endpoint-selection { flex-shrink: 0; color: #8590a2; font-size: 11px; font-weight: 400; }
 .is-selected .push-endpoint-selection { color: #2468f2; font-weight: 600; }
@@ -8971,8 +8879,9 @@ button.push-contract-endpoint.is-selected { border-color: #2468f2; background: #
 .push-attachment-policy span { color: #667085; font-size: 12px; }
 .push-credential-error { color: #d92d20 !important; }
 .push-contract-auth-grid .push-credential-input { margin-top: 8px; }
-.push-attachment-guidance { margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: #f8fafc; color: #667085; font-size: 12px; line-height: 1.7; }
-.push-attachment-guidance p { margin: 0; overflow-wrap: anywhere; }
-.push-attachment-guidance p + p { margin-top: 5px; }
 .push-contract-tables .push-contract-table-toolbar { margin-top: 12px; }
+.proxy-review-toolbar { flex-wrap: wrap; gap: 12px; }
+.proxy-review-search { width: 300px; max-width: 100%; }
+.proxy-review-empty { padding: 40px 16px; color: var(--el-text-color-secondary); text-align: center; }
+.proxy-review-empty .el-button { margin-left: 8px; }
 </style>

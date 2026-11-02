@@ -62,6 +62,16 @@ if(scope.scope=='OWNER') {whereSql=whereSql+' AND a.created_by=#{scopeUserId}'}
 else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND a.org_id IN (#{scopeOrgIds})')}
 else if(scope.scope!='ALL') {exit 403,'数据范围无效'}
 
+// 按数据源登记的入口必须先核验父数据源；过滤条件不扩大服务自身数据范围。
+var datasourceId=body?.datasourceId==null?'':(body.datasourceId+'').trim()
+if (datasourceId.length()>32) { exit 400,'数据源标识格式不正确' }
+if (body?.containsKey('datasourceId') == true && blank(datasourceId)) { exit 400,'请选择已保存的数据源' }
+if (!blank(datasourceId)) {
+    var source=db.table('db_datasource_t').where().eq('tid',datasourceId).eq('tenant_id',tenantId).eq('is_del',0).selectOne()
+    if (source==null || !dataScope.canReadDataSourceFor('MENU:2081000000000000002',source)) { exit 404,'数据源不存在或不在当前数据范围内' }
+    whereSql+=' AND a.datasource_id=#{datasourceId}'
+}
+
 // 关键字同时命中服务名称、服务编码、服务地址，避免前端多个输入框造成理解成本。
 if (!blank(body?.keyword)) {
     var keyword = body.keyword
@@ -103,6 +113,7 @@ select
   a.service_code as serviceCode,
   a.service_code as code,
   a.resource_id as resourceId,
+  a.datasource_id as datasourceId,
   coalesce(a.group_id, 'api_service_group_default') as groupId,
   a.service_type as serviceType,
   coalesce(a.service_create_type, 'api') as serviceCreateType,
@@ -165,6 +176,7 @@ for (row in list) {
         name: row.serviceName || '',
         serviceCode: row.serviceCode || '',
         code: row.serviceCode || '',
+        datasourceId: row.datasourceId || row.datasourceid || row.datasource_id || '',
         resourceId: row.resourceId || row.resourceid || row.resource_id,
         groupId: row.groupId || gid,
         groupName: row.groupName || '默认分组',

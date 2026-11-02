@@ -36,7 +36,7 @@ class LocalCacheFunctionTest {
 
     @Test
     void returnsCachedValueImmediately() {
-        when(dataPropTService.page(ArgumentMatchers.any(Page.class), ArgumentMatchers.any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(dataPropTService.page(ArgumentMatchers.any(), ArgumentMatchers.any())).thenReturn(null);
         LocalCache.put("cache-hit", "AppName");
         assertEquals("AppName", function.get("cache-hit", "app"));
     }
@@ -55,7 +55,7 @@ class LocalCacheFunctionTest {
         task.setTaskName("任务A");
         Page<DataAccessAggTaskT> page = new Page<>(1, 1);
         page.setRecords(Collections.singletonList(task));
-        when(dataAccessAggTaskTService.page(ArgumentMatchers.any(Page.class), ArgumentMatchers.any(LambdaQueryWrapper.class))).thenReturn(page);
+        when(dataAccessAggTaskTService.page(ArgumentMatchers.any(), ArgumentMatchers.any())).thenReturn(page);
         assertEquals("任务A", function.get("tid-task", "accessTask"));
     }
 }

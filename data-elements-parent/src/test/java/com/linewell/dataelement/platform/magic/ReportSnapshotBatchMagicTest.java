@@ -28,7 +28,7 @@ class ReportSnapshotBatchMagicTest {
    for(int i=0;i<count;i++){String name="validation_"+i;tables.add(Map.of("tableName",name,"tableComment","上报验证表","tableType","数据表","businessType","字典表","annotated",true));fieldMap.put(name,List.of(
      Map.of("columnName","record_id","columnComment","记录编号","columnType","varchar","columnLength",64,"primaryKey",false,"nullable",true,"isTimestamp",false,"dictionaryRole","code"),
      Map.of("columnName","record_name","columnComment","记录名称","columnType","varchar","columnLength",64,"primaryKey",false,"nullable",true,"isTimestamp",false,"dictionaryRole","label"),
-     Map.of("columnName","occurred_at","columnComment","发生时间","columnType","varchar","columnLength",64,"primaryKey",false,"nullable",true,"isTimestamp",true,"standardField","DATETIME")));}
+     Map.of("columnName","occurred_at","columnComment","发生时间","columnType","varchar","columnLength",64,"primaryKey",false,"nullable",true,"isTimestamp",true,"standardField","DATETIME","timeRoles",List.of("timestamp","business","occurrence"))));}
    Es es=new Es();ElasticsearchOperations operations=mock(ElasticsearchOperations.class);final int[] bulk={0};
    doAnswer(invocation->{List<UpdateQuery> queries=invocation.getArgument(0);assertEquals(count,queries.size());for(UpdateQuery query:queries)assertEquals(Boolean.TRUE,query.getDocAsUpsert());bulk[0]++;return null;}).when(operations).bulkUpdate(anyList(),any(IndexCoordinates.class));
    Path root=Path.of(System.getProperty("user.dir")).toAbsolutePath();while(!Files.isDirectory(root.resolve("magic")))root=root.getParent();String content=Files.readString(root.resolve("magic/api/02.数据盘点/02.数据库表/01.元数据管理/20.手工导入元数据快照.ms"));
@@ -38,6 +38,7 @@ class ReportSnapshotBatchMagicTest {
    var governance=cn.hutool.json.JSONUtil.parseObj(f.base.jdbc.queryForObject("select field_governance_config from db_table_t where tid='table'",String.class));
    assertEquals("record_id",governance.getJSONObject("dictionaryProfile").getStr("codeField"));assertEquals("record_name",governance.getJSONObject("dictionaryProfile").getStr("labelField"));
    assertEquals("occurred_at",governance.getStr("timestampField"));assertTrue(governance.getJSONArray("fields").toString().contains("DATETIME"));
+   assertEquals(List.of("timestamp","business","occurrence"),governance.getJSONArray("fields").getJSONObject(2).getJSONArray("timeRoles").toList(String.class));
    System.out.println("Report snapshots="+count+": SQL=4, ES preparation=1, partial bulk upsert=1, per-table exists=0");
   }
  }

@@ -78,7 +78,7 @@ class TargetDatasourceOptionsScopeMagicTest {
         Map<?, ?> response = assertInstanceOf(Map.class,
                 MagicScript.create(script, null).execute(new MagicScriptContext(inputs)));
         assertEquals(size+1, response.get("total"));
-        var choices = assertInstanceOf(List.class, response.get("list"));
+        List<?> choices = assertInstanceOf(List.class, response.get("list"));
         assertEquals("visible-db", ((Map<?, ?>) choices.getFirst()).get("value"));
         assertTrue(choices.stream().allMatch(row -> ((Map<?, ?>) row).get("value").toString().startsWith("visible-db") || ((Map<?,?>)row).get("value").equals("hidden-db")));
         assertEquals(5, counter.queries, "20/100 choices must use five fixed bulk queries");
@@ -137,7 +137,7 @@ class TargetDatasourceOptionsScopeMagicTest {
         String script = CanonicalMagicSources.byId("ods_target_datasource_options_01")
                 .replaceAll("(?m)^import [^\\n]*\\n", "");
         Map<?, ?> response = assertInstanceOf(Map.class, MagicScript.create(script, null).execute(new MagicScriptContext(inputs)));
-        var choices = assertInstanceOf(List.class, response.get("list"));
+        List<?> choices = assertInstanceOf(List.class, response.get("list"));
         assertEquals(size + 3, choices.size());
         assertEquals(2, ((List<?>) response.get("options")).size());
         assertTrue(choices.stream().allMatch(row -> {

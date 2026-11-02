@@ -468,7 +468,7 @@ class CanvasCreateTableBatchValidationMagicTest {
     public static class JsonFixture {
         private final ObjectMapper mapper = new ObjectMapper();
         public Map<String, Object> parse(String source) throws Exception {
-            return mapper.readValue(source, Map.class);
+            return mapper.readValue(source, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
         }
     }
 

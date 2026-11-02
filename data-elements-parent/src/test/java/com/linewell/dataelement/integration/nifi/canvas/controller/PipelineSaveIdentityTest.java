@@ -32,7 +32,7 @@ class PipelineSaveIdentityTest {
             Pipeline current = pipeline("p1", "original-group", PipelineStatus.RUNNING);
             when(jdbc.queryForList(anyString(), eq(String.class), eq("tenant"), eq("catalog1"))).thenReturn(List.of("p1"));
             when(repo.findById("p1")).thenReturn(Optional.of(current));
-            when(repo.update(eq("p1"), any())).thenAnswer(i -> ((UnaryOperator<Pipeline>) i.getArgument(1)).apply(current));
+            when(repo.update(eq("p1"), any())).thenAnswer(i -> i.<UnaryOperator<Pipeline>>getArgument(1).apply(current));
             assertThat(controller.template(new PipelineController.PipelineTemplateRequest("catalog1")).getBody()).isEqualTo(current);
             Pipeline saved = controller.create(pipeline(null, null, PipelineStatus.DRAFT), "catalog1");
             assertThat(saved.id()).isEqualTo("p1");
@@ -47,7 +47,7 @@ class PipelineSaveIdentityTest {
     void savingDesignCannotEraseOrReplaceServerDeploymentState() {
         Pipeline current = pipeline("p1", "original-group", PipelineStatus.RUNNING);
         when(repo.findById("p1")).thenReturn(Optional.of(current));
-        when(repo.update(eq("p1"), any())).thenAnswer(i -> ((UnaryOperator<Pipeline>) i.getArgument(1)).apply(current));
+        when(repo.update(eq("p1"), any())).thenAnswer(i -> i.<UnaryOperator<Pipeline>>getArgument(1).apply(current));
         Pipeline saved = controller.update("p1", pipeline("p1", "foreign-group", PipelineStatus.DRAFT)).getBody();
         assertThat(saved.nifiProcessGroupId()).isEqualTo("original-group");
         assertThat(saved.status()).isEqualTo(PipelineStatus.RUNNING);
@@ -74,7 +74,7 @@ class PipelineSaveIdentityTest {
         controller.setMappingProjections(projection);
         Pipeline current=pipeline("p1","original-group",PipelineStatus.RUNNING);
         when(repo.findById("p1")).thenReturn(Optional.of(current));
-        when(repo.update(eq("p1"),any())).thenAnswer(i->((UnaryOperator<Pipeline>)i.getArgument(1)).apply(current));
+        when(repo.update(eq("p1"),any())).thenAnswer(i->i.<UnaryOperator<Pipeline>>getArgument(1).apply(current));
         org.assertj.core.api.Assertions.assertThatThrownBy(()->controller.update("p1",current,0L)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         verifyNoInteractions(projection);
         assertThat(controller.update("p1",current,1L).getBody().nifiProcessGroupId()).isEqualTo("original-group");

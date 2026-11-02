@@ -45,6 +45,7 @@
       style="min-height: 200px; font-size: 14px; border-radius: 6px"
       :style="{ height }"
       @change="handleContentChange"
+      @focus="emits('focus')"
     />
   </el-scrollbar>
 </template>
@@ -76,6 +77,7 @@ import "ace-builds/src-noconflict/ext-searchbox.js";
 const emits = defineEmits<{
   (e: "update:modelValue", value: string): void;
   (e: "change", value: string): void;
+  (e: "focus"): void;
 }>();
 
 const props = withDefaults(

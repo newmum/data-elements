@@ -1,5 +1,7 @@
 package com.linewell.dataelement.metautil.controller;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import cn.dev33.satoken.stp.StpUtil;
@@ -22,9 +24,9 @@ class MetadataDiffViewControllerTest {
             auth.when(StpUtil::getLoginIdAsString).thenReturn("owner");
             var created=service.store("source",Map.of("added",List.of(),"modified",List.of(),"deleted",List.of(),"unchanged",rows,"summary",Map.of()));
             Map<String,Object> smallBody=new HashMap<>(Map.of("viewId",created.get("viewId"),"pageSize",20,"sortField","fieldCount","sortDir","desc"));
-            clearInvocations(jdbc);var small=(Map<String,Object>)service.page(smallBody).get("data");verify(jdbc,times(1)).queryForList(anyString(),eq("a"),eq("source"));
-            smallBody.put("pageSize",100);clearInvocations(jdbc);var large=(Map<String,Object>)service.page(smallBody).get("data");verify(jdbc,times(1)).queryForList(anyString(),eq("a"),eq("source"));
-            var list=(List<Map<String,Object>>)large.get("list");assertEquals(7177,large.get("total"));assertEquals("Table 7176",list.getFirst().get("tableName"));assertEquals(small.get("list"),list.subList(0,20));
+            clearInvocations(jdbc);var small=StructuredValues.objectMap(service.page(smallBody).get("data"));verify(jdbc,times(1)).queryForList(anyString(),eq("a"),eq("source"));
+            smallBody.put("pageSize",100);clearInvocations(jdbc);var large=StructuredValues.objectMap(service.page(smallBody).get("data"));verify(jdbc,times(1)).queryForList(anyString(),eq("a"),eq("source"));
+            var list=StructuredValues.objectRows(large.get("list"));assertEquals(7177,large.get("total"));assertEquals("Table 7176",list.getFirst().get("tableName"));assertEquals(small.get("list"),list.subList(0,20));
             auth.when(StpUtil::getLoginIdAsString).thenReturn("another");assertThrows(IllegalArgumentException.class,()->service.page(smallBody));
             auth.when(StpUtil::getLoginIdAsString).thenReturn("owner");when(scopes.canReadDataSource(anyMap())).thenReturn(false);assertDoesNotThrow(()->service.page(smallBody));
             verifyNoInteractions(scopes);
@@ -36,7 +38,7 @@ class MetadataDiffViewControllerTest {
     @Test void editsAreAppliedBeforeFilteringWithoutChangingServerRowsAndNullsStayLast(){
         var rows=List.<Map<String,Object>>of(new LinkedHashMap<>(Map.of("tableName","b","fieldCount",2,"businessType","业务表","changeStatus","新增")),new LinkedHashMap<>(Map.of("tableName","a","businessType","业务表","changeStatus","新增")));
         var result=MetadataDiffViewController.ordered(rows,Map.of("sortField","fieldCount","sortDir","desc"));
-        assertEquals("b",((List<Map<String,Object>>)result.get("list")).getFirst().get("tableName"));
+        assertEquals("b",(StructuredValues.objectRows(result.get("list"))).getFirst().get("tableName"));
         result=MetadataDiffViewController.ordered(rows,Map.of("businessType","日志表","overrides",Map.of("b",Map.of("businessType","日志表"))));
         assertEquals(1,result.get("total"));assertEquals("业务表",rows.getFirst().get("businessType"));
     }

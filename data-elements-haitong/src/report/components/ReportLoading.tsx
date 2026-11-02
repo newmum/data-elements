@@ -12,7 +12,7 @@ export default function ReportLoading({ phase = 0, error, onRetry, onReturn }: {
     <div className="report-entry-grid" aria-hidden="true"/>
     <section className="report-entry-card" aria-labelledby="report-entry-title">
       <div className="report-entry-visual" aria-hidden="true">
-        <div className="report-entry-file"><Icon name="file" size={39}/><b>CSV · Excel</b></div>
+        <div className="report-entry-file"><Icon name="file" size={39}/><b>CSV · Excel · TXT · JSON</b></div>
         <div className="report-entry-stream"><i/><i/><i/><Icon name="arrow" size={25}/></div>
         <div className="report-entry-table"><Icon name="table" size={39}/><b>规范数据</b><span className="report-entry-check"><Icon name="check" size={14}/></span></div>
       </div>

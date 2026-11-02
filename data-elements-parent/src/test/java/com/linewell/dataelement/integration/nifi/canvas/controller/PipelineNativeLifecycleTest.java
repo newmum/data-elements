@@ -58,7 +58,7 @@ class PipelineNativeLifecycleTest {
             pipelines.put("two", pipeline("two", 1));
             when(repo.findById(anyString())).thenAnswer(i -> Optional.ofNullable(pipelines.get(i.getArgument(0))));
             when(repo.update(anyString(), any())).thenAnswer(i -> pipelines.compute(i.getArgument(0),
-                    (id, p) -> ((UnaryOperator<Pipeline>) i.getArgument(1)).apply(p)));
+                    (id, p) -> i.<UnaryOperator<Pipeline>>getArgument(1).apply(p)));
             when(repo.updateStatus(anyString(), any())).thenAnswer(i -> pipelines.compute(i.getArgument(0), (id, p) ->
                     new Pipeline(p.id(), p.name(), p.description(), p.createdAt(), p.updatedAt(), p.dsl(),
                             p.nifiProcessGroupId(), i.getArgument(1), p.lastDeployedHash(), p.lastDeployedAt(),

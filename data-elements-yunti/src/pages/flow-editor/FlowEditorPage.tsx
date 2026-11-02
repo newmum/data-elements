@@ -1,3 +1,4 @@
+import OrchestrationState from '@/components/OrchestrationState';
 import {
   ArrowLeftOutlined,
   CloseOutlined,
@@ -17,7 +18,6 @@ import {
   Modal,
   Select,
   Space,
-  Spin,
   Tooltip,
   Typography,
 } from "antd";
@@ -212,32 +212,9 @@ export default function FlowEditorPage() {
   };
 
   if (isError) {
-    return (
-      <div className="fs-editor-loading" role="alert">
-        <Typography.Text strong>服务编排加载失败</Typography.Text>
-        <Typography.Text type="secondary">
-          {error instanceof Error
-            ? error.message
-            : "请检查登录状态和当前服务的访问权限"}
-        </Typography.Text>
-        <Space>
-          <Button onClick={closeEditor}>返回数据服务</Button>
-          <Button type="primary" onClick={() => void refetch()}>
-            重新加载
-          </Button>
-        </Space>
-      </div>
-    );
+    return <OrchestrationState error={error} onRetry={() => void refetch()} onReturn={closeEditor} />;
   }
-
-  if (isLoading || !flow) {
-    return (
-      <div className="fs-editor-loading">
-        <Spin size="large" />
-        <Typography.Text type="secondary">正在加载服务编排…</Typography.Text>
-      </div>
-    );
-  }
+  if (isLoading || !flow || flow.flowId !== data?.flow.flowId) return <OrchestrationState />;
 
   return (
     <div className="fs-editor">

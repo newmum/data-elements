@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.assertj.core.api.Assertions.*;
 import java.nio.file.*;
 import java.util.*;
@@ -71,7 +73,7 @@ class QualityTemplateMagicTest {
             for(int i=0;i<count;i++)rules.add(new LinkedHashMap<>(Map.of("ruleType","SQL_TEMPLATE","parameters",new LinkedHashMap<>(Map.of("templateId",id,"sqlTemplate","tampered","values",Map.of("min",0))))));
             var result=f.run("04.保存任务",new LinkedHashMap<>(Map.of("taskName","模板任务","datasourceId","db","rules",rules)));
             assertThat(result).isInstanceOf(Map.class);assertThat(f.counter.reads).isEqualTo(2);
-            var parameters=(Map<?,?>)((List<Map<String,Object>>)f.task.saved.get("rules")).getFirst().get("parameters");
+            var parameters=(Map<?,?>)(StructuredValues.objectRows(f.task.saved.get("rules"))).getFirst().get("parameters");
             assertThat(parameters.get("sqlTemplate")).isEqualTo("${column}<#{min}");
         }
         f.f.jdbc.update("update data_gov_quality_rule set tenant_id='foreign' where tid=?",id);

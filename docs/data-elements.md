@@ -6,11 +6,12 @@
 
 ## 维护方式
 
-每个工程的说明统一保存在 `docs/<工程名>.md`，共用规范在本文件原位维护，索引见 [根目录文档索引](../README.md#documentation)。新增或变更时更新现有章节，不追加日期、版本、阶段文件。独立海通库使用 `python tools/export-db.py --project haitong-data-pull` 只读更新根 `db/haitong/init.sql` 与结构清单，私有连接配置使用 `project_databases.haitong-data-pull`。已有库的临时差异执行语句和验收产物放忽略的根 `logs/`，不替代完整结构基线。
+每个工程的说明统一保存在 `docs/<工程名>.md`，共用规范在本文件原位维护，索引见 [根目录文档索引](../README.md#documentation)。新增或变更时更新现有章节，不追加日期、版本、阶段文件。独立海通库使用 `python tools/export-db.py --project haitong-data-pull` 只读更新根 `db/haitong/init.sql` 与结构清单，私有连接配置使用 `project_databases.haitong-data-pull`。结构变更同时新增根 `db/increments/` 中可审阅的升级 SQL；实际执行副本、一次性数据修复与验收产物放忽略的根 `logs/`，不替代完整结构基线。
 
 ## 目录
 
 - [本地资源版本管理](#resource-versioning)
+- [Nacos 配置版本管理](#nacos-config-versioning)
 - [数据库结构基线](#database-schema)
 - [统一维护工具](#maintenance-tools)
 - [前后端批量查询与分页规范](#batch-pagination)
@@ -35,6 +36,8 @@ Magic、低代码和数据库结构从本仓库维护，采用“先改本地，
 | `magic/` | 完整 `.ms`、`group.json` 及资源索引 | `baseline.api_file_t`；本地路径去掉 `/magic-api/` 前缀，其他层级保持一致 |
 | `lowcode/` | Vue 源码及组件索引 | `baseline.ui_component_t`；按组件管理器真实 `pid` 树和中文显示名称建目录及 Vue 文件 |
 | `db/` | 平台五库及独立工程数据库各一份完整 `init.sql` 和结构清单 | 表、视图、索引、约束、注释，以及实际存在的其他结构；不含业务数据和账号 |
+| `db/increments/` | 按递增序号、业务含义和方言维护的结构升级 SQL | 与完整结构同一任务更新，供已有库经审查后执行 |
+| `db/data-element*.yml` | 当前 Nacos 基础/开发覆盖配置的脱敏版本 | 保留配置层次和非敏感值，凭据使用环境变量引用 |
 | `tools/` | 可维护的导出、比较、编译、发布工具及其安全测试 | 所有操作入口共用一份实现 |
 | `logs/` | 不提交 Git | 日志、审计报告、截图、编译结果、临时变更 SQL 和运行备份 |
 
@@ -75,6 +78,24 @@ Windows 本地启动使用 `tools/start-local-backend.ps1`，默认读取仓库�
 
 本机接收地址使用 `http://localhost` 时，在该私有配置的 `environment` 中显式设置 `IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP=true`；启动工具会校验并传给后端。它只允许 `localhost` 的 HTTP 开发地址，正式接收地址仍使用 HTTPS。接收端还需要在私有 `SPRING_APPLICATION_JSON` 或当前部署配置的 `idaas.receiver.routes` 中，按已登记密钥标识配置真实 `tenantId`、`appId` 和 `instanceId`；这些值从已核验的应用运行绑定和接收配置取得，不能由下发报文指定或凭应用名称猜测。更换启动入口时须同时保留这两项设置，否则连接测试和立即下发会失败。
 
+
+<a id="nacos-config-versioning"></a>
+
+### Nacos 配置版本管理
+
+当前本机后端从 `192.168.175.86:8848` 的 `data-element` 命名空间、`DEFAULT_GROUP` 读取 `data-element.yml` 和 `data-element-dev.yml`。Git 中的同名文件分别位于根 `db/`，基础与开发覆盖分别维护，不把合并后的有效值冒充某一份在线原文件。其他环境按实际 Data ID、Group 和 Namespace 核对，不能因本机配置正确就宣称生产已更新。
+
+```powershell
+python tools/export-nacos-config.py --data-id data-element.yml --output db/data-element.yml
+python tools/export-nacos-config.py --data-id data-element-dev.yml --output db/data-element-dev.yml
+python -m unittest discover -s tools/tests -p test_nacos_config_export.py
+```
+
+导出工具默认读取仓库外 `~/.codex/private/data-elements/local-runtime.private.json` 的 Nacos 环境配置，也可用 `--runtime-config` 指定已核对的其他私有运行配置。工具只读 Nacos；输出替换密码、账号、token、访问密钥、同步密钥及带凭据 URL，删除秘密环境变量的明文默认值，保留非敏感配置。不要在命令行传入口令，不把在线原文或凭据备份保存到 Git。
+
+Nacos 配置修改后，在同一任务导出并审查对应文件的 Git 差异。Git 中的 `${...}` 引用由部署环境提供，不能直接把脱敏文件整份覆盖到线上，使运行密钥变成占位符或丢失。发布时仅合并已审阅的配置项，保留目标环境的真实凭据，并回读确认；导出本身不会修改 Nacos 或重启服务。
+
+海通登记同步的目标是 `data-element.push-registry.relay-base-url`；本机服务使用 `http://127.0.0.1:18083`。当前基础文件仍保留 `8080` 默认值，由开发文件及本机启动环境覆盖为 `18083`，脱敏文件忠实记录两份原配置。排查 `ConnectException` 时必须核对进程的 `DATA_ELEMENT_PUSH_REGISTRY_RELAY_BASE_URL` 与 `SPRING_APPLICATION_JSON.data-element.push-registry.relay-base-url`，它们可能覆盖 Nacos。修正受限启动配置后重启对应本机后端使进程环境生效，再以真实会话对当前数据源“重试同步”，确认“密钥已配置”。同步使用 `standalone-sync-key`，与调用方业务 `X-Api-Key` 分离；连接失败不应通过轮换业务密钥处理。
 
 <a id="resource-versioning--同步与审查"></a>
 
@@ -204,7 +225,21 @@ git diff -- db
 3. 运行 `python tools/check-db.py`。工具只读比较行业表集合、列定义/注释/默认值、主键、索引语义与外键列，并检查达梦生成列及自动更新时间触发器；发现差异返回非零状态。约束表达式、触发器具体逻辑及部署视图继续结合完整 DDL 审查。
 4. 运行 `python tools/export-db.py`，同步五库完整初始化文件和清单，审查全部 `db/` 差异。不能只更新公安文件，也不能只让表数量相同。
 
-跨库视图依赖的数据库须先存在；控制库与行业库及各自部署视图按实际环境维护。临时增量 SQL、日志、发布包放根 `logs/`；含凭据或业务数据的必要恢复材料保存在仓库外受限目录。Git 只保存最新完整结构与长期维护工具。
+5. 同一任务新增 `db/increments/<六位递增序号>_<业务含义>.<方言>.sql`，与上述完整定义一同审阅。序号从目录当前最大值递增，不按日期另建快照；MySQL、达梦等方言分别维护。文件开头注明适用的旧结构、目标环境/库范围、执行顺序、备份及回退要求，包含执行前检查和执行后核验。增量只包含本次结构差异，不包含凭据、业务记录或 Magic/低代码内容；不能使用 `DROP TABLE` 再重建代替已有库升级。跨行业公共变更覆盖全部实际行业库，生产库名和权限由部署人员核实，不自动把本机绑定当作生产绑定。
+
+跨库视图依赖的数据库须先存在；控制库与行业库及各自部署视图按实际环境维护。完整 `init.sql` 用于空库，增量 SQL 用于满足所述起始结构的已有库，二者分别保存 Git 历史。没有结构变更时不生成空增量文件；不凭当前完整结构猜造已丢失的历史迁移。实际执行副本、日志、发布包放根 `logs/`，含凭据或业务数据的必要恢复材料保存在仓库外受限目录。结构增量中的 DDL 可能隐式提交，须按目标方言准备恢复方案，不能以事务回滚承诺代替验证。
+
+### 环境结构与验证结构目录
+
+| 目录 | 实际用途 | 是否属于生产升级脚本 |
+| --- | --- | --- |
+| `db/environments/demo/` | 演示环境控制库、各行业库的完整结构及清单 | 否，记录该环境实际结构 |
+| `db/environments/demo/ingestion-fixtures/` | 演示接入验证的独立来源库 `demo_ingest_source`、目标库 `demo_ingest_target` 的完整结构 | 否，属于模拟接入验证 |
+| `db/environments/local/validation-sources/` | 本机登记的外部验证库 `personaldb` 的完整结构 | 否，不属于行业租户统一基线 |
+| `db/fixtures/chengtian-police-import/` | 澄天迁入公安接入任务所用实验目标库 `ct_police_copy_targets` 的 25 张表结构，由 `tools/copy-police-resources.py` 导出 | 否，是特定验证场景的完整结构 |
+| `db/increments/` | 按业务与方言维护的结构增量，注明适用旧结构和目标库 | 是，经生产审阅并确认前置条件后执行 |
+
+`fixtures` 表示验证场景所需的结构。以上 SQL 均不应携带验证数据、凭据或账号授权；它们不因目录存在就自动连接或执行，也不加入四行业同构检查。新环境与已有库升级不能互相替代。
 
 ### 达梦原生表示
 
@@ -244,9 +279,11 @@ python tools/export-db.py --project haitong-data-pull
 
 `db_table_t.access_request_status`为0未申请、1待处理、2已受理，默认0；`access_requested_by`保存认证申请人标识，`access_requested_at`保存申请时间。申请字段不替代`asset_status`登记进度或NiFi实时状态。MySQL时间使用DATETIME(6)，达梦使用TIMESTAMP(6)。接口和状态规则见[接入任务状态契约](data-elements-haitong.md#access-task-lifecycle)。
 
-现有部署升级时，必须先在每个实际行业业务库检查这三列，再发布申请相关Magic和页面。控制库`baseline`不是这些列的升级对象。完整初始化结构已经包含三列，但将新程序或Magic资源发布到已有库不会自动执行ALTER；生产缺列时只补缺失列，保留已有申请和任务数据。增量执行材料放在当次`logs/`或受限目录，先保存原表结构并核对目标方言，不能直接重跑`init.sql`。升级后重新检查实际列定义，再验证待审批分页和创建任务后的已受理/待启动流转。
+现有部署升级时，必须先在每个实际行业业务库检查这三列，再发布申请相关Magic和页面。控制库`baseline`不是这些列的升级对象。完整初始化结构已经包含三列，但将新程序或Magic资源发布到已有库不会自动执行ALTER；生产缺列时只补缺失列，保留已有申请和任务数据。经过审阅的结构升级SQL按上述约定保存到`db/increments/`，实际执行副本放在当次`logs/`或受限目录，先保存原表结构并核对目标方言，不能直接重跑`init.sql`。升级后重新检查实际列定义，再验证待审批分页和创建任务后的已受理/待启动流转。
 
 <a id="maintenance-tools"></a>
+
+代理访问的数据源与服务通过行业库 `api_info_t.datasource_id`（可空 `varchar(32)`）关联 `db_datasource_t.tid`，分页索引为 `(tenant_id,datasource_id,is_del,updated_time,tid)`。四行业保持同一列及索引；历史服务不回填归属，`resource_id`继续保留资源标识含义。关联写入与源内分页同时校验父数据源及服务的数据范围，不能只按部门列出所有服务。操作契约见[数据服务登记与代理访问](data-elements-chengtian.md#数据服务登记与代理访问)。
 
 ## 统一维护工具
 
@@ -255,6 +292,7 @@ python tools/export-db.py --project haitong-data-pull
 | 文件 | 用途 |
 | --- | --- |
 | `configure-resources.py` | 从当前 Nacos API 配置定位控制库和租户库，把私有连接配置保存到仓库外 |
+| `export-nacos-config.py` | 只读导出指定 Nacos YAML 到 Git，以环境变量引用替换凭据，不发布在线配置 |
 | `resource-sync.py` | 导出、比较与规划根 `magic/`、`lowcode/` 的资源；在明确目标后发布单个已登记资源 |
 | `compile-lowcode.mjs` | 使用澄天现有编译器编译选定 Vue 组件，校验生成代码语法，结果写入 `logs/lowcode/compiled/` |
 | `package-haitong.py` | 核对已构建 JAR 的独立 Magic 资源和运行依赖，生成不含运行凭据或业务数据的 Linux / Windows 原生部署包 |
@@ -638,10 +676,10 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - Data-source connection options and migration extensions belong in the valid JSON object stored in `db_datasource_t.pool_cfg`. Data-source metadata summaries belong in the physical `db_datasource_t` summary columns; data-source interfaces must not read or write `data_prop_t` for these values.
 - 数据源登记的显式“保存”提交主记录后，对提供连接的数据库刷新一次概览，更新版本、表/视图/过程/用户数量和容量；不隐式全量登记表或逐表补查。远程采集失败保留已完成的保存并提示可重试；未提供连接的手工快照不执行物理探查。详情显式编辑保存遵循同一规则。
 - 数据推送服务与平台分别运行：海通的 FTP/Kafka 投递目标仅来自其本地 YAML，业务请求不回调平台或行业库。平台的推送来源独立解析当前租户 ODS/FJGHCC 绑定的文件存储，目录为 `根目录/登记源ID/表名/`；两侧须由部署配置对齐。手工登记按字段快照物化，不要求来源 SQL 方言。任务预检及生成均将 `receive/push` 解析为该文件来源，并校验文件存储的租户与角色范围。
-- 数据推送登记第一步使用“推送数据类型”，默认结构化数据；`db_datasource_t.pool_cfg.pushDataType` 保存 `STRUCTURED` / `UNSTRUCTURED`，缺失的历史值按结构化显示，不从旧频率推断。推送地址取当前接入网络对应的启用默认推送节点，结构化使用 `/api/v1/data-push`，非结构化使用 `/api/v1/file-uploads`；网络名称仅显示在地址右侧。未配置、停用或多个节点未指定默认时明确提示，不能回退到其他网络。节点配置一次读取，切换类型及网络不逐项请求。
-- 推送方式导出、上传和导入结果统一称“数据登记模板”。结构化保持原有表、字段模板和五步流程，不生成旧的附件关联列。非结构化使用独立文件模板：首个可见页签“填写说明”，第二个“文件登记”；文件名称、文件说明、文件格式、单文件大小上限（MB）必填，关联数据表名/字段名选填，字段必须同时指定表。格式按当前海通接收能力提供 JPG/JPEG/PNG/PDF/DOCX 下拉；最多100项，表和字段关系按当前行业批量校验。导入只更新待保存预览，显式保存后直接进入原第五步内容审查，返回直接回第一步，不执行物理探查、字典或业务表登记。
-- 文件登记复用 `db_table_t` 和 `db_table_column_t`：`table_type=FILE`、`business_type=文件` 区分逻辑文件集合；既有英文名保存稳定 `collectionId`，中文名/注释保存文件名称/说明，`field_governance_config.fileRegistration` 保存格式、大小上限及可选关联ID。六项文件属性使用现有字段快照，未新增文件登记表/列；重复导入保留记录ID，相同定义保留完成状态。读取及保存一次批量获取当前源快照和关联表/字段；混入外行业或无效ID整批拒绝。FILE 记录不得发布成结构化 TABLE 合同或执行 SQL 物化建表。
-- 第五步结构化沿用 JSON 批次；非结构化突出 `PUT /api/v1/file-uploads/{id}/parts/{part}` 主上传接口，其余初始化、续传查询、完成合并、业务提交和状态查询默认折叠为配套接口，明确初始化→按返回片大小/片数上传→complete→READY→submit 的顺序。文件集合接收策略仍来自海通自身 YAML，部署方须将已登记 `collectionId`、数据源、调用方、格式和大小上限配置对应；平台文件登记尚不自动下发 FILE 运行策略。`READY` 仅表示文件就绪，仍须业务提交并确认 `deliveryStatus=SUCCEEDED`；不自动签发密钥或提交数据。
+- 数据推送登记第一步使用“推送数据类型”，默认结构化数据；`db_datasource_t.pool_cfg.pushDataType` 保存 `STRUCTURED` / `UNSTRUCTURED`，缺失的历史值按结构化显示，不从旧频率推断。推送地址取当前接入网络对应的启用默认推送节点，结构化与非结构化统一使用 `/api/v1/data-push`，分别以POST JSON和PUT multipart区分；网络名称仅显示在地址右侧。未配置、停用或多个节点未指定默认时明确提示，不能回退到其他网络。节点配置一次读取，切换类型及网络不逐项请求。
+- 推送方式导出、上传和导入结果统一称“数据登记模板”。结构化保持原有表、字段模板和五步流程，不生成旧的附件关联列。非结构化使用独立文件模板：首个可见页签“填写说明”，第二个“文件登记”；文件英文名、文件名称、文件说明、文件格式、单文件大小上限（MB）必填；旧模板兼容读取，关联数据表名/字段名选填，字段必须同时指定表。格式按当前海通接收能力提供 JPG/JPEG/PNG/PDF/DOCX 下拉；最多100项，表和字段关系按当前行业批量校验。导入只更新待保存预览，显式保存后直接进入原第五步内容审查，返回直接回第一步，不执行物理探查、字典或业务表登记。
+- 文件登记复用 `db_table_t` 和 `db_table_column_t`：`table_type=FILE`、`business_type=文件` 区分逻辑文件集合；既有英文名保存稳定 `collectionId`，中文名/注释保存文件名称/说明，`field_governance_config.fileRegistration` 保存稳定fileCode英文别名、格式、大小上限及可选关联ID。六项文件属性使用现有字段快照，未新增文件登记表/列；重复导入保留记录ID，相同定义保留完成状态。读取及保存一次批量获取当前源快照和关联表/字段；混入外行业或无效ID整批拒绝。FILE 记录不得发布成结构化 TABLE 合同或执行 SQL 物化建表。 fileCode按当前源唯一且须为小写英文标识，已设置的别名不可随意改名；已有collectionId及历史上传身份保留。
+- 第五步结构化使用POST /api/v1/data-push JSON，非结构化默认single模式使用PUT /api/v1/data-push multipart（/single为兼容别名），一次接收并提交，随后GET /api/v1/data-push/uploads/{id}确认投递。大文件使用同体系的初始化、分片、完成并提交和状态查询，续传查询按需调用；原file-uploads协议继续兼容。请求只携带datasourceId、fileCode及业务参数，不指定租户或投递目标。文件策略仍来自海通自身YAML，file-code可映射至已有collection-id；平台FILE策略不自动下发。202和READY均不等于投递成功，不由页面自动上传或提交业务文件。
 - 推送文件接入策略由 Magic 设置 `fileConsumptionPolicy=DELETE_AFTER_DATABASE_COMMIT`。NiFi 编译器以完成标记清单、持久队列及单 JDBC 目标实现该通用协议：仅列举 `.json.done`，下载时保留源文件，数据库成功提交后删除对应 JSON 及标记；失败或隔离记录不触发删除。多目标须拆成接入链路，首个数据库承接可靠落地后继续后续库；普通主动抽取和手工上报不自动启用该删除策略。主键更新用于异常重试幂等，不能把“下载完成”当成“落库成功”。
 - 推送文件的字段处理使用 `FAIL_FLOWFILE`，任意记录失败时保留整份输入，不能仅将部分成功记录写库后删除整份源文件。推送链路后续数据库节点在对应字段存在时继承来源登记的时间戳字段，避免退回只有日期精度的 ODS 水位而漏掉同日新批次；已保存、已发布的流程须显式迁移，保留原生来源组件标识及水位/文件状态，不能清空状态绕过重建保护。
 - 数据抽取类型卡片按 MySQL、Oracle、OceanBase MySQL、OceanBase Oracle、人大金仓、PostgreSQL、达梦、Hive、GaussDB、FTP、Kafka、MinIO、Elasticsearch、GBase 8a、SQL Server、Vertica 排列；MaxCompute 不再作为新建选项，历史登记的类型映射仍保留。
@@ -987,12 +1025,12 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 | 入口 | 页面实现与资源 |
 | --- | --- |
-| 行业后台管理／日志管理 | 单一菜单、单一页面；顶部六页签：登录日志、操作日志、接口日志、安全日志、导出日志、归档日志；同栏右侧为日志策略配置按钮 |
+| 行业后台管理／日志管理 | 单一菜单、单一页面；顶部六页签：登录日志、操作日志、接口日志、安全日志、导出日志、归档日志；同栏右侧用齿轮图标打开策略配置，悬停提示“日志策略” |
 | 统一身份平台／审计日志／日志管理 | 同一个六页签低代码页面及策略弹窗，按当前平台身份域与权限显示；不聚合行业数据库日志 |
 | 唯一页面源码 | `lowcode/09.系统管理/09.日志管理/日志管理(log-management).vue`，复用原共用组件 ID；无独立统计页、顶部标题或指标卡 |
 | 多应用承载 | 澄天使用现有动态组件；海通、万象、IDAAS 仅增加编译组件加载器，页面业务与样式继续由共享低代码资源提供 |
 
-页面仅含顶部页签及右侧日志策略按钮、查询工具栏、滚动表格和分页；序号、人员（姓名/账号）、时间、功能路径及具体操作优先，其余列随后。导出、归档、策略同样保存管理人员快照；不按行补查当前人员姓名。旧行业子菜单转换为按钮资源，保留原代码和角色范围，单个 `logs:group` 菜单承载页面；按钮权限不会展示成菜单，页签由服务端 capabilities 过滤。
+页面仅含顶部页签及右侧日志策略按钮、查询工具栏、滚动表格和分页；序号、人员（姓名/账号）、操作时间和具体操作优先，其余列随后。登录日志不展示功能路径，改为展示从当时 `user_agent` 解析的浏览器／客户端名称、版本与操作系统；详情保留完整限长 User-Agent，其他事件详情同样可查看终端信息。无法识别的 UA 显示“其他客户端”，历史未采集时显示“历史未记录”，不使用当前浏览器回填过去记录。操作时间表示事件发生时刻，各事件页签保留；耗时仅接口日志展示，直接读取已有 `AuditWebInterceptor`／`AuditRecorder` 采集的 `duration_ms`，本次不新增计时器、切面或二次请求，空值不伪装成 0。导出、归档、策略同样保存管理人员快照；不按行补查当前人员姓名。旧行业子菜单转换为按钮资源，保留原代码和角色范围，单个 `logs:group` 菜单承载页面；按钮权限不会展示成菜单，页签由服务端 capabilities 过滤。
 
 澄天直接复用已注册的 DataTable、Pagination，表格仅呈现接口返回的当前页（关闭组件内部分页），保留服务端排序及外部分页控制；只注册 Element Plus 的其他宿主保持原生组件兼容渲染，不引入跨工程构建依赖。节点配置与日志页使用同一 Element Plus 页签及系统主题，日志页不单独覆盖字号、行高和表头。列表不显示用途、默认日期范围等辅助说明。
 
@@ -1006,7 +1044,7 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 #### 已实现的后端契约
 
-行业路由为 `/sym/logs`：`GET /capabilities`、`GET /components?kind=…`；`GET /{kind}`、`/{kind}/statistics`、`/{kind}/{id}`、`/{kind}/{id}/items`，以及 `POST /{kind}/batch`。事件类型仅允许 `auth/operations/requests/security`。列表接收 `page/size/keyword/result/startTime/endTime/sortField/sortDir`，单页最多 100 条、时间窗口最多 90 天，时间必须带时区。旧记录以创建时间按部署时区换算为 UTC 后与新事件一起排序，升降序及导出均在分页前处理。总数、统计、详情、批量明细与导出均保留当前租户、同角色分配中的功能与部门范围条件；客户端参数不能覆盖这些条件。
+行业路由为 `/sym/logs`：`GET /capabilities`、`GET /components?kind=…`；`GET /{kind}`、`/{kind}/statistics`、`/{kind}/{id}`、`/{kind}/{id}/items`，以及 `POST /{kind}/batch`。事件类型仅允许 `auth/operations/requests/security`。列表接收 `page/size/keyword/result/startTime/endTime/sortField/sortDir`，单页最多 100 条、时间窗口最多 90 天，时间必须带时区。关键字匹配当时保存的姓名、账号、部门、操作编码、操作对象、链路号、菜单完整路径、功能／接口名称、接口标识、页面路由及请求路由；查询、统计、导出共用同一选择条件，使用绑定参数并转义 LIKE 通配符。历史缺失菜单／接口名称的事件不按当前目录伪造快照，可按既存账号、编码或路由检索。旧记录以创建时间按部署时区换算为 UTC 后与新事件一起排序，升降序及导出均在分页前处理。总数、统计、详情、批量明细与导出均保留当前租户、同角色分配中的功能与部门范围条件；客户端参数不能覆盖这些条件。
 
 行业辅助管理使用 `GET /exports|archives|policies`、`POST /exports|archives`、`PUT/POST /policies`、`GET /exports/{id}/download`。归档的冻结、解除、回读查询、清理预览及确认清理为 `POST /archives/{id}`，动作分别是 `hold/release/browse/purge-plan/purge`。清理必须提供预览返回的版本及归档标识确认值；同事务检查冻结、范围和精确归档 ID，保留未归档及迟到事件，不按时间区间直接删除。
 

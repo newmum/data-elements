@@ -111,7 +111,7 @@ public final class PartitionMetadataReader {
     private static String displayStrategy(Map<String,Object> plan) {
         if("LIST".equals(plan.get("strategy"))) {
             var values=((List<?>)plan.get("partitions")).stream().map(p->((Map<?,?>)p).get("values"))
-                    .filter(List.class::isInstance).map(List.class::cast).flatMap(List::stream).map(value->Objects.toString(value,"<NULL>")).toList();
+                    .filter(List.class::isInstance).map(value -> (List<?>) value).flatMap(List::stream).map(value->Objects.toString(value,"<NULL>")).toList();
             return !values.isEmpty()&&values.stream().allMatch(TablePartitions.REGION_CODES::contains)?"REGION":"LIST";
         }
         if(!"TIME".equals(plan.get("kind")))return "RANGE";

@@ -1,5 +1,7 @@
 package com.linewell.dataelement.feature.assetcenter.application;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import cn.dev33.satoken.stp.StpUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -92,8 +94,8 @@ public class AssetCenterStore {
         return payload.get("response");
     }
     public String encode(Object v) {try{return json.writeValueAsString(v);}catch(Exception e){throw error(400,"INVALID_ARGUMENT","数据格式不正确");}}
-    public Map<String,Object> object(Object v) { if(v instanceof Map<?,?> m) return (Map<String,Object>)m; try{return v==null?new LinkedHashMap<>():json.readValue(String.valueOf(v),new TypeReference<>(){});}catch(Exception e){return new LinkedHashMap<>();} }
-    public List<Map<String,Object>> array(Object v) {if(v instanceof List<?> l)return (List<Map<String,Object>>)l;try{return v==null?List.of():json.readValue(String.valueOf(v),new TypeReference<>(){});}catch(Exception e){return List.of();}}
+    public Map<String,Object> object(Object v) { if(v instanceof Map<?,?> m) return StructuredValues.objectMap(m); try{return v==null?new LinkedHashMap<>():json.readValue(String.valueOf(v),new TypeReference<>(){});}catch(Exception e){return new LinkedHashMap<>();} }
+    public List<Map<String,Object>> array(Object v) {if(v instanceof List<?> l)return StructuredValues.objectRows(l);try{return v==null?List.of():json.readValue(String.valueOf(v),new TypeReference<>(){});}catch(Exception e){return List.of();}}
     public static String required(Map<String,Object> v,String key,int max) {String s=text(v,key);if(s.isBlank()||s.length()>max)throw error(400,"INVALID_ARGUMENT",key+"不能为空且不能超过"+max+"字");return s;}
     public static String text(Map<String,Object> v,String k){Object x=v.get(k);return x==null?"":String.valueOf(x);}
     public static int number(Object v,int fallback){try{return Integer.parseInt(String.valueOf(v));}catch(Exception e){return fallback;}}

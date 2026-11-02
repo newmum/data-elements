@@ -193,7 +193,7 @@ public class GatewayUtils {
     }
 
 
-    public HashMap getAppInfo(String userId){
+    public HashMap<String, Object> getAppInfo(String userId){
         if (StringUtils.isEmpty(userId)) {
             throw new IllegalArgumentException("userId不能为空");
         }
@@ -215,7 +215,7 @@ public class GatewayUtils {
             // 2. 关联关系不存在，调用创建应用（V2）接口
             Map<String, Object> createBody = new LinkedHashMap<>();
             createBody.put("application_name", user.getRealName() + "-" + userId);
-            HashMap createResponse = callGatewayApi("V2CreateApplicationInfo", createBody);
+            HashMap<String, Object> createResponse = callGatewayApi("V2CreateApplicationInfo", createBody);
             String errorMessage = (String) createResponse.getOrDefault("error_message", "");
             if (StringUtils.isNotEmpty(errorMessage)) {
                 throw new RuntimeException("创建网关应用失败: " + errorMessage);
@@ -244,10 +244,10 @@ public class GatewayUtils {
         queryBody.put("application_id", appId);
         queryBody.put("application_name", user.getRealName() + "-" + userId);
 
-        HashMap queryResponse = callGatewayApi("V2QueryApplicationInfo", queryBody);
+        HashMap<String, Object> queryResponse = callGatewayApi("V2QueryApplicationInfo", queryBody);
         String queryError = queryResponse.getOrDefault("error_message", "").toString();
         if (StringUtils.isNotEmpty(queryError)) {
-            return new HashMap();
+            return new HashMap<>();
         }
 
         return queryResponse;
@@ -319,7 +319,7 @@ public class GatewayUtils {
      * @param requestBody 请求 Body Map
      * @return 网关返回的响应 HashMap
      */
-    public HashMap callGatewayApi(String action, Map<String, Object> requestBody) {
+    public HashMap<String, Object> callGatewayApi(String action, Map<String, Object> requestBody) {
         String response = doCallGatewayApiRaw(action, requestBody);
         log.info("callGatewayApi-response:{}",response);
         if (isAccessTokenInvalid(response)) {
@@ -327,7 +327,7 @@ public class GatewayUtils {
             clearTokenCache();
             response = doCallGatewayApiRaw(action, requestBody);
         }
-        return JSONUtil.toBean(response, HashMap.class);
+        return JSONUtil.toBean(response, new cn.hutool.core.lang.TypeReference<HashMap<String, Object>>() {}, false);
     }
 
     /**
@@ -369,7 +369,7 @@ public class GatewayUtils {
         if (response.startsWith("[")) {
             return JSONUtil.toList(response, Object.class);
         } else {
-            return JSONUtil.toBean(response, HashMap.class);
+            return JSONUtil.toBean(response, new cn.hutool.core.lang.TypeReference<HashMap<String, Object>>() {}, false);
         }
     }
 }

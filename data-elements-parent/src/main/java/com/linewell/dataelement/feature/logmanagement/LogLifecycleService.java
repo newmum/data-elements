@@ -1,5 +1,7 @@
 package com.linewell.dataelement.feature.logmanagement;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.platform.audit.*;
 import com.linewell.dataelement.platform.persistence.jdbc.JdbcValueNormalizer;
@@ -145,7 +147,7 @@ public class LogLifecycleService {
         try {
             LogScope original=mapper.readValue(String.valueOf(row.get("scope_snapshot_json")),LogScope.class);
             if(!Objects.equals(original.domain(),scope.domain()))throw new SecurityException("导出身份域不匹配");
-            LogScope now=access.refresh(original,kind(mapper.readValue(String.valueOf(row.get("query_json")),Map.class)));
+            LogScope now=access.refresh(original,kind(mapper.readValue(String.valueOf(row.get("query_json")),new TypeReference<Map<String,Object>>() {})));
             // A narrower scope requires a fresh export; previously generated broader files are never served.
             if(!sameRange(access.intersect(original,now),original))throw new SecurityException("数据范围已变更，请重新导出");
             if(!"SUCCESS".equals(row.get("status"))||row.get("expires_at")==null||LogTimes.instant(row.get("expires_at")).isBefore(Instant.now()))throw new IllegalStateException("导出文件未完成或已失效");

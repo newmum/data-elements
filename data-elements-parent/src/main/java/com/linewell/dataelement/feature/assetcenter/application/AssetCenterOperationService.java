@@ -1,5 +1,7 @@
 package com.linewell.dataelement.feature.assetcenter.application;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static com.linewell.dataelement.feature.assetcenter.application.AssetCenterStore.*;
 
 import com.linewell.dataelement.feature.dataaccess.infrastructure.jdbc.RegisteredJdbcDataSourceResolver;
@@ -158,7 +160,7 @@ public class AssetCenterOperationService {
             if(Boolean.TRUE.equals(input.get("createSubscriptionDraft"))) {
                 var first=candidates.get(0);var demandPayload=db.object(form.get("asset_payload_json"));
                 var draft=workbench.draft(map("expectedRevision","0","title","由需求「"+text(form,"apply_name")+"」创建的资源订阅","actingDepartmentId",text(form,"apply_org_id"),"requestType","CATALOG_SUBSCRIPTION","businessScenario",demandPayload.get("scenario"),"recommendedCatalogId",first.get("catalogId"),"recommendedVersionId",first.get("versionId"),"resources",List.of()),key+":subscription",false);
-                draftId=text((Map<String,Object>)draft,"id");
+                draftId=text(StructuredValues.objectMap(draft),"id");
             }
             return map("demand",workbench.demand(demandId),"subscriptionDraftId",draftId);
         });

@@ -1,5 +1,7 @@
 package com.linewell.dataelement.mapping.core;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.node.*;
 import java.math.RoundingMode;
@@ -198,7 +200,7 @@ public final class MappingEngine {
         List<Object> tokens;
         if(multi){tokens=new ArrayList<>();if(raw instanceof Collection<?> array)tokens.addAll(array);else Collections.addAll(tokens,raw.toString().split(java.util.regex.Pattern.quote(separator),-1));tokens.replaceAll(v->v==null?"":v.toString().trim());tokens.removeIf(v->v.toString().isEmpty());if(tokens.size()>1000)throw new MappingException("BUDGET_EXCEEDED","单字段多值编码超过1000");}
         else tokens=List.of(raw);
-        List<Object> result=new ArrayList<>();boolean any=false;Map<String,Object> inline=args.path("values").isObject()?JSON.convertValue(args.path("values"),Map.class):null;
+        List<Object> result=new ArrayList<>();boolean any=false;Map<String,Object> inline=args.path("values").isObject()?JSON.convertValue(args.path("values"),new TypeReference<Map<String,Object>>() {}):null;
         Set<DictionarySpec.Key> waiting=new LinkedHashSet<>();
         for(Object token:tokens){f.current=token;DictionarySpec.LookupValue found;
             if(inline!=null){String key=token.toString();found=new DictionarySpec.LookupValue(inline.containsKey(key),inline.get(key));}

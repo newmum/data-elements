@@ -28,7 +28,7 @@ public class SurveillanceRuleSnapshotRepository {
     public void save(String tenantId, SurveillanceRuleSnapshot snapshot) {
         try {
             String rulesJson = mapper.writeValueAsString(new SnapshotPayload(
-                    snapshot.ruleDefinitions(), snapshot.controlItems(), snapshot.rules()));
+                    snapshot.ruleDefinitions(), snapshot.controlItems(), snapshot.rulesForCompatibility()));
             Instant now = Instant.now();
             String snapshotTid = UUID.randomUUID().toString().replace("-", "");
             jdbc.update("""
@@ -114,12 +114,13 @@ public class SurveillanceRuleSnapshotRepository {
         return rows.stream().findFirst();
     }
 
+    @SuppressWarnings("deprecation") // Reads the persisted historical rules[] JSON format.
     private List<SurveillanceRuleSnapshot.Rule> readStoredRules(String json) {
         try {
             SnapshotPayload payload = mapper.readValue(json, SnapshotPayload.class);
             if (payload.ruleDefinitions() != null && !payload.ruleDefinitions().isEmpty()) {
                 return new SurveillanceRuleSnapshot("", "", 1, null, null, null, null, null,
-                        "ACTIVE", payload.ruleDefinitions(), payload.controlItems()).rules();
+                        "ACTIVE", payload.ruleDefinitions(), payload.controlItems()).rulesForCompatibility();
             }
             return payload.rules() == null ? List.of() : payload.rules();
         } catch (Exception exception) {
@@ -131,6 +132,7 @@ public class SurveillanceRuleSnapshotRepository {
         }
     }
 
+    @SuppressWarnings("deprecation") // Historical JSON remains readable during normalized-model migration.
     private record SnapshotPayload(
             List<SurveillanceRuleSnapshot.RuleDefinition> ruleDefinitions,
             List<SurveillanceRuleSnapshot.ControlItem> controlItems,

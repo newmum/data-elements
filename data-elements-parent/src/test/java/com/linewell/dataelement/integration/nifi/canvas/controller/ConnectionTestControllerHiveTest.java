@@ -1,5 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.controller;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -65,9 +67,9 @@ class ConnectionTestControllerHiveTest {
         assertThat(first.get("nullable")).isNull();
         assertThat(((Map<?, ?>) columns.getLast()).get("columnName")).isEqualTo("field_81");
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, Object>> context = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, Object>> context = ArgumentCaptor.captor();
         verify(magic).call(eq("POST"), eq("/dst/database/metadata/huaweiMrsHiveJdbcDebug"), context.capture());
-        assertThat((Map<String, Object>) context.getValue().get("body"))
+        assertThat(StructuredValues.objectMap(context.getValue().get("body")))
                 .containsEntry("action", "columns").containsEntry("contract", "gateway")
                 .containsEntry("database", "analytics").containsEntry("table", "EVENT_LOG");
     }

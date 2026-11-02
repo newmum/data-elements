@@ -59,7 +59,7 @@ var reservation = db.transaction(() => {
     if (receipts.size() >= 1000) { throw new IllegalStateException('当前数据源已达到 1000 次上报记录上限，请联系维护人员归档后继续') }
     var row = { id: IdUtil.fastSimpleUUID(), requestId: requestId, fileId: fileId, tableId: tableId,
         tableName: table.tableName, fileName: table.fileName, rowCount: table.recordCount,
-        status: 'sending', createdAt: Instant.now().toString(), createdBy: actorId, reportedAt: '' }
+        status: 'sending', createdAt: Instant.now().toString(), createdBy: actorId, reportedAt: '', registrationSnapshot: JSONUtil.parseObj(jsons.toJSONStr(table)) }
     receipts.add(row); config.reportRegistration.receipts = receipts
     db.table('db_datasource_t').where().eq('tid', datasourceId).eq('tenant_id', tenantId).eq('is_del', 0).update({ pool_cfg: jsons.toJSONStr(config) })
     return { receipt: row, alreadyExists: false }

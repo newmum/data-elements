@@ -1,5 +1,7 @@
 package com.linewell.dataelement.feature.dataquality.infrastructure.jdbc;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.feature.dataaccess.infrastructure.jdbc.RegisteredJdbcDataSourceResolver;
 import com.linewell.dataelement.feature.dataquality.config.DataQualityProperties;
@@ -283,7 +285,7 @@ public class JdbcDataQualityEngine {
             case "TIMELINESS" -> timelinessPredicate(column, parameters);
             case "REFERENCE" -> referencePredicate(context, parameters);
             case "SQL_TEMPLATE" -> {
-                var values=parameters.get("values") instanceof Map<?,?> raw ? (Map<String,Object>)raw : Map.<String,Object>of();
+                var values=parameters.get("values") instanceof Map<?,?> raw ? StructuredValues.objectMap(raw) : Map.<String,Object>of();
                 var condition=QualitySqlTemplate.compile(required(parameters,"sqlTemplate"), values, column,
                         blank(rule.relatedColumn())?null:context.column(rule.relatedColumn()));
                 yield new Predicate(condition.sql(),condition.arguments());

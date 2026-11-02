@@ -169,12 +169,12 @@ export default function ImportDialog({ open, onClose, onImport, existingCells, e
     </LegacyDialog>;
     return <Modal title={<span className="dialog-title"><Icon name="upload"/>上传数据文件</span>} open={open} onCancel={() => { controller.current?.abort(); setBusy(false); onClose(); }} width={1000} footer={<div className="dialog-footer"><span className="muted">只在本机读取，不上传服务器</span><div><Button onClick={() => { controller.current?.abort(); setBusy(false); onClose(); }}>取消</Button> <Button type="primary" disabled={!queue.some(x => x.book && !x.error) || busy} onClick={finish}>确认读取，生成资源 <Icon name="arrow" size={15}/></Button></div></div>} destroyOnClose>
   <div className="import-steps">{['选择文件', '确认工作表与读取范围', '生成资源草稿'].map((s, i) => <div className={i === step ? 'active' : i < step ? 'done' : ''} key={s}><b>{i < step ? <Icon name="check" size={13}/> : i + 1}</b>{s}{i < 2 && <span className="step-line"/>}</div>)}</div>
-  <NativeFilePicker disabled={busy} onPick={enqueue}><div className="upload-drop"><span className="upload-symbol"><Icon name="upload" size={27}/></span><div><strong>{busy ? '正在本地读取文件…' : '上传 Excel 或 CSV 文件'}</strong><p>一次一份文件、一张业务数据表 · 单个文件不超过 10 MiB</p></div></div></NativeFilePicker>
-  {window.__OFFLINE_PREVIEW__ && <p className="inline-note">独立离线体验版支持 XLSX / CSV；旧版 XLS 请在源文件中另存为 XLSX。</p>}
+  <NativeFilePicker disabled={busy} onPick={enqueue}><div className="upload-drop"><span className="upload-symbol"><Icon name="upload" size={27}/></span><div><strong>{busy ? '正在本地读取文件…' : '上传 Excel、CSV、TXT 或 JSON 文件'}</strong><p>一次一份文件、一张业务数据表 · 单个文件不超过 10 MiB</p></div></div></NativeFilePicker>
+  {window.__OFFLINE_PREVIEW__ && <p className="inline-note">独立离线体验版支持 XLSX / CSV / TXT / JSON；旧版 XLS 请在源文件中另存为 XLSX。</p>}
   {error && <Alert type="error" showIcon message={error} style={{ marginTop: 12 }}/>}
   {q && <div className="import-workspace"><div className="import-files">{queue.map((item, i) => <button key={i} className={`import-file ${active === i ? 'selected' : ''}`} disabled={busy} onClick={() => { setActive(i); setRegionIndex(0); }}><Icon name="file"/><div><strong>{item.file.name}</strong><small>{item.error ? '读取失败' : `${item.book?.sheets.length || 0} 张工作表 · ${item.regions.length} 个区域`}</small>{existingNames.includes(item.file.name) && <small className="warn-text">同名文件将另建资源，不覆盖</small>}</div></button>)}</div><div className="import-settings">
-   {q.file.name.toLowerCase().endsWith('.csv') && <div className="inline-fields"><label>文件编码<Select aria-label="文件编码" value={q.encoding} options={[{ value: 'utf-8', label: 'UTF-8' }, { value: 'gb18030', label: 'GB18030 / GBK' }]} onChange={v => void reparse(v, q.delimiter)}/></label><label>分隔符<Select aria-label="分隔符" value={q.delimiter} options={[{ value: '', label: '自动识别' }, { value: ',', label: '逗号' }, { value: ';', label: '分号' }, { value: '\t', label: '制表符' }]} onChange={v => void reparse(q.encoding, v)}/></label></div>}
-   {q.error ? <Alert type="error" message={q.error} description="CSV 可先尝试切换编码或分隔符。其他文件仍可导入；必要时整理源文件后重选。"/> : <>
+   {/\.(csv|txt)$/i.test(q.file.name) && <div className="inline-fields"><label>文件编码<Select aria-label="文件编码" value={q.encoding} options={[{ value: 'utf-8', label: 'UTF-8' }, { value: 'gb18030', label: 'GB18030 / GBK' }]} onChange={v => void reparse(v, q.delimiter)}/></label><label>分隔符<Select aria-label="分隔符" value={q.delimiter} options={[{ value: '', label: '自动识别' }, { value: ',', label: '逗号' }, { value: ';', label: '分号' }, { value: '|', label: '竖线' }, { value: '\t', label: '制表符' }]} onChange={v => void reparse(q.encoding, v)}/></label></div>}
+   {q.error ? <Alert type="error" message={q.error} description="CSV、TXT 可切换编码或分隔符；JSON 请使用 UTF-8 编码的普通对象记录。修正后可重新选择文件。"/> : <>
      <div className="section-mini"><strong>工作表与数据区域</strong><Select aria-label="选择工作表" placeholder="选择需要读取的工作表" value={undefined} style={{ width: 240 }} options={q.book?.sheets.map((s, i) => ({ value: i, label: `${s.name}${s.hidden ? '（隐藏）' : ''} · ${s.rowCount} 行` }))} onChange={i => { if (i === undefined || !q.book) return; if (q.regions.length) { patchQueue({ regions: [defaultRegion(q.book.sheets[i], i)] }); setRegionIndex(0); return; } const reg = defaultRegion(q.book.sheets[i], i); if (q.regions.some(r => r.sheet === i))
                 reg.name += ' · 区域' + (q.regions.filter(r => r.sheet === i).length + 1); patchQueue({ regions: [...q.regions, reg] }); setRegionIndex(q.regions.length); }}/></div>
     <div className="region-chips">{q.regions.map((r, i) => <button key={r.id} className={regionIndex === i ? 'active' : ''} onClick={() => setRegionIndex(i)}>{r.name}<span role="button" aria-label={`移除区域${r.name}`} tabIndex={0} onClick={e => { e.stopPropagation(); patchQueue({ regions: q.regions.filter((_, n) => n !== i) }); setRegionIndex(0); }}><Icon name="close" size={12}/></span></button>)}</div>
@@ -204,7 +204,7 @@ function NativeFilePicker({ disabled, onPick, children }: {
       className={`native-file-picker${disabled ? ' is-disabled' : ''}`}
       tabIndex={disabled ? -1 : 0}
       aria-disabled={disabled}
-      aria-label="选择 Excel 或 CSV 数据文件"
+      aria-label="选择 Excel、CSV、TXT 或 JSON 数据文件"
       onKeyDown={event => {
           if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
@@ -229,10 +229,10 @@ function NativeFilePicker({ disabled, onPick, children }: {
         ref={inputRef}
         className="native-file-picker-input"
         type="file"
-        accept=".xlsx,.xls,.csv"
+        accept=".xlsx,.xls,.csv,.txt,.json"
         disabled={disabled}
         tabIndex={-1}
-        aria-label="选择 Excel 或 CSV 数据文件"
+        aria-label="选择 Excel、CSV、TXT 或 JSON 数据文件"
         onChange={event => {
           const file = event.currentTarget.files?.[0];
           // Reset first so selecting the same corrected file again still

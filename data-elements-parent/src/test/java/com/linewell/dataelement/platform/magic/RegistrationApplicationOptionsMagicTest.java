@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -39,7 +41,7 @@ class RegistrationApplicationOptionsMagicTest {
             for(Scope roleScope:List.of(Scope.OWNER,Scope.ORG,Scope.ALL)) {
                 doReturn(new ScopeDecision("MENU:2081000000000000002",roleScope,"user",List.of("own-org"),List.of("role"),true)).when(scope).currentScope(anyString());
                 int before=counter.reads;
-                var rows=(List<Map<String,Object>>)MagicScript.create(script,null).execute(new MagicScriptContext(bindings));
+                var rows=StructuredValues.objectRows(MagicScript.create(script,null).execute(new MagicScriptContext(bindings)));
                 assertThat(counter.reads-before).isEqualTo(1);
                 assertThat(rows).hasSize(roleScope==Scope.ALL?count+1:count);
                 assertThat(rows).extracting(row->row.get("value")).doesNotContain("foreign","deleted");

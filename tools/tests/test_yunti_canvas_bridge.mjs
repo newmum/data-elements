@@ -7,7 +7,7 @@ const source = fs.readFileSync(new URL('../../lowcode/06.数据服务/数据服�
 const block = source.slice(source.indexOf('const getToken ='), source.indexOf('const handleDelete ='));
 
 function setup(options = {}) {
-  const calls = [], sent = [], timers = new Map();
+  const calls = [], sent = [], writes = [], timers = new Map();
   let timer = 0;
   const child = { postMessage: (data, origin) => sent.push({ data, origin }), location: { href: 'http://localhost:3030/editor/flow-a' } };
   const ref = value => ({ value });
@@ -16,7 +16,13 @@ function setup(options = {}) {
     localStorage: { getItem: key => ({ remember_me: 'true', token: 'current-session', ...options.local })[key] ?? null },
     sessionStorage: { getItem: key => options.session?.[key] ?? null }, $user: { orgId: 'org-a' },
     ElMessage: { warning: () => {} }, orchestrationAttempt: 0, orchestrationProbeController: null, orchestrationLoadTimer: null,
-    orchestrationVisible: ref(false), orchestrationLoading: ref(false), orchestrationError: ref(''), orchestrationUrl: ref(''), orchestrationRow: ref(null), orchestrationTitle: ref(''), orchestrationIframeRef: ref({ contentWindow: child }),
+    orchestrationVisible: ref(false), orchestrationLoading: ref(false), orchestrationError: ref(''), orchestrationErrorCode: ref(0), orchestrationUrl: ref(''), orchestrationRow: ref(null), orchestrationTitle: ref(''), orchestrationIframeRef: ref({ contentWindow: child }),
+    extractPayload: value => value?.data ?? value,
+    $common: { postSilently: async (url, body) => {
+      writes.push({url, body});
+      if (options.openError) throw options.openError;
+      return {flowId: body.apiId.replace(/^api-/, 'flow-')};
+    } },
     fetch: async (url, init) => {
       calls.push({ url, init });
       return options.fetch ? options.fetch(url, init) : { ok: true, type: 'cors', text: async () => '<meta name="application-name" content="data-elements-yunti">' };
@@ -24,7 +30,7 @@ function setup(options = {}) {
   };
   vm.createContext(context);
   vm.runInContext(block + '\nglobalThis.api = { token: getToken, candidates: getYuntiCandidates, url: buildOrchestrationUrl, reachable: isYuntiReachable, open: openOrchestration, close: closeOrchestration, message: handleOrchestrationMessage, loaded: onOrchestrationLoad };', context);
-  return { context, api: context.api, child, calls, sent, timers };
+  return { context, api: context.api, child, calls, sent, timers, writes };
 }
 
 test('20/100 list rows add no automatic probe; one user click probes current port once', async () => {
@@ -32,8 +38,11 @@ test('20/100 list rows add no automatic probe; one user click probes current por
     const s = setup();
     const rows = Array.from({ length: count }, (_, i) => ({ id: `api-${i}`, flowId: `flow-${i}` }));
     assert.equal(s.calls.length, 0);
+    assert.equal(s.writes.length, 0);
     await s.api.open(rows[0]);
     assert.equal(s.calls.length, 1);
+    assert.equal(s.writes.length, 1);
+    assert.equal(s.writes[0].body.apiId, rows[0].id);
     assert.match(s.calls[0].url, /^http:\/\/localhost:3030\//);
     assert.equal(s.calls[0].init.mode, 'cors');
     assert.equal(s.api.candidates().length, 11);
@@ -78,6 +87,10 @@ test('INIT targets the exact verified origin; unrelated sources/origins cannot i
   assert.equal(s.sent[0].data.payload.token, 'current-session');
   assert.equal(s.context.orchestrationLoading.value, true);
   s.api.message({ source: s.child, origin: 'http://localhost:3030', data: { type: 'YUNTI_SESSION_READY' } });
+  assert.equal(s.context.orchestrationLoading.value, true);
+  s.api.message({ source: s.child, origin: 'http://localhost:3030', data: { type: 'YUNTI_EDITOR_READY', payload: {entryId: 'stale'} } });
+  assert.equal(s.context.orchestrationLoading.value, true);
+  s.api.message({ source: s.child, origin: 'http://localhost:3030', data: { type: 'YUNTI_EDITOR_READY', payload: {entryId: String(s.context.orchestrationAttempt)} } });
   assert.equal(s.context.orchestrationLoading.value, false);
   assert.equal(s.timers.size, 0);
   s.api.close();
@@ -101,4 +114,19 @@ test('initialization timeout stops loading and gives a concrete retry message', 
   assert.equal(s.context.orchestrationLoading.value, false);
   assert.match(s.context.orchestrationError.value, /初始化超时/);
   s.api.close();
+});
+
+test('backend failures stay in the same branded surface and do not open an invalid iframe', async () => {
+  const s = setup({openError: {info: {code: 'MAGIC-BUSINESS-404', message: '服务不在当前数据范围内'}}});
+  await s.api.open({id:'api-a'});
+  assert.equal(s.context.orchestrationLoading.value,false);
+  assert.equal(s.context.orchestrationErrorCode.value,404);
+  assert.equal(s.context.orchestrationUrl.value,'');
+});
+test('only the current iframe attempt may surface a flow error; details redact credentials', async () => {
+  const s=setup();await s.api.open({id:'api-a'});
+  s.api.message({source:s.child,origin:'http://localhost:3030',data:{type:'YUNTI_EDITOR_ERROR',payload:{entryId:String(s.context.orchestrationAttempt),code:404,message:'request failed token=private-fixture'}}});
+  assert.equal(s.context.orchestrationErrorCode.value,404);
+  assert.equal(s.context.orchestrationLoading.value,false);
+  assert.doesNotMatch(s.context.orchestrationError.value,/private-fixture/);
 });

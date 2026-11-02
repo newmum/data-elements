@@ -1,5 +1,7 @@
 package com.linewell.dataelement.bk.infrastructure;
 
+import com.linewell.dataelement.support.TestValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,11 +22,11 @@ class SurveillanceControlItemPagingTest {
         var repository=new SurveillanceControlItemRepository(jdbc,new ObjectMapper());
         clearInvocations(jdbc);var small=repository.page("a","engine",null,null,1,20,"effectiveAt","desc");
         verify(jdbc,times(1)).queryForMap(anyString(),any(Object[].class));
-        verify(jdbc,times(1)).query(anyString(),any(RowMapper.class),any(Object[].class));
+        verify(jdbc,times(1)).query(anyString(),org.mockito.ArgumentMatchers.<RowMapper<SurveillanceControlItem>>any(),any(Object[].class));
         clearInvocations(jdbc);var large=repository.page("a","engine",null,null,1,100,"effectiveAt","desc");
         verify(jdbc,times(1)).queryForMap(anyString(),any(Object[].class));
-        verify(jdbc,times(1)).query(anyString(),any(RowMapper.class),any(Object[].class));
-        var rows=(List<SurveillanceControlItem>)large.get("list");
+        verify(jdbc,times(1)).query(anyString(),org.mockito.ArgumentMatchers.<RowMapper<SurveillanceControlItem>>any(),any(Object[].class));
+        var rows=TestValues.list(large.get("list"), SurveillanceControlItem.class);
         assertEquals(120L,large.get("total"));assertEquals(100,rows.size());assertEquals(small.get("list"),rows.subList(0,20));
         assertTrue(rows.stream().allMatch(r->r.tenantId().equals("a")));
         assertEquals(1L,repository.page("b","engine",null,null,1,20,null,null).get("total"));

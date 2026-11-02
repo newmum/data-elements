@@ -1,5 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.runtime;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
 import java.util.*;
@@ -16,7 +18,7 @@ public class TaskRuntimeMagicModule {
             String pg = Objects.toString(row.get("runtimeProcessGroupId"), "");
             row.putAll(service.describe(snapshot, pg, Objects.toString(row.get("lifecycleStatus"), "")));
             Object tables = row.get("syncTables");
-            if (tables instanceof List<?> list) for (Object item : list) if (item instanceof Map map) { map.put("syncStatus", row.get("taskStatus")); map.put("syncStatusText", row.get("runtimeLabel")); }
+            if (tables instanceof List<?> list) for (Object item : list) if (item instanceof Map<?, ?>) { var map = StructuredValues.objectMap(item); map.put("syncStatus", row.get("taskStatus")); map.put("syncStatusText", row.get("runtimeLabel")); }
         }
     }
 }

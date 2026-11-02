@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -94,7 +96,7 @@ public class TableDetailPreviewTest {
             context.put("log",org.slf4j.LoggerFactory.getLogger(TableDetailPreviewTest.class));
             var result=MagicScript.create("var datasourceConnectionConfig=(a,b,c,d)=>connections.read(b)\n"+script,null).execute(new MagicScriptContext(context));
             if(result instanceof ExitValue exit)throw new PreviewRejected(exit);
-            return (Map<String,Object>)result;
+            return StructuredValues.objectMap(result);
         }
     }
     @Test void twentyAndOneHundredRowsUseFixedQueriesAndPreserveChineseLabels() throws Exception {
@@ -103,7 +105,7 @@ public class TableDetailPreviewTest {
             f.counter.count=0;f.hive.queries.clear();
             var result=f.run(Map.of("tableId","table","pageNo",2,"pageSize",size,"sortField","id","sortDir","desc"));
             assertEquals(5,f.counter.count);assertEquals(3,f.hive.queries.size());
-            var rows=(List<Map<String,Object>>)result.get("rows");
+            var rows=StructuredValues.objectRows(result.get("rows"));
             assertEquals(size,rows.size());assertEquals(240-size,rows.getFirst().get("id"));
             assertEquals(240L,((Number)result.get("total")).longValue());
             assertEquals(Map.of("id","编号","gender_code","性别代码"),result.get("columnLabels"));
@@ -147,7 +149,7 @@ public class TableDetailPreviewTest {
         var first = f.run(Map.of("tableId","table","pageSize",20));
         assertEquals(20, ((List<?>)first.get("rows")).size());
         var next = f.run(Map.of("tableId","table","pageNo",2,"pageSize",100));
-        assertEquals(101, ((List<Map<String,Object>>)next.get("rows")).getFirst().get("id"));
+        assertEquals(101, (StructuredValues.objectRows(next.get("rows"))).getFirst().get("id"));
         assertEquals(240L, ((Number)next.get("total")).longValue());
         assertTrue(f.hive.queries.getLast().contains("ROW_NUMBER() OVER"));
     }
@@ -169,7 +171,7 @@ public class TableDetailPreviewTest {
     @Test void groupedDictionaryReadsKeepTheExistingValueNameCountContract() throws Exception {
         var f=new Fixture();
         var result=f.run(Map.of("tableId","table","groupByColumn","gender_code"));
-        var values=(List<Map<String,Object>>)result.get("groupedValues");
+        var values=StructuredValues.objectRows(result.get("groupedValues"));
         assertEquals(2,values.size());assertEquals("F",values.getFirst().get("value"));assertNull(values.getFirst().get("name"));assertEquals(120L,((Number)values.getFirst().get("count")).longValue());
         assertEquals(2,f.hive.queries.size());
     }
@@ -177,10 +179,10 @@ public class TableDetailPreviewTest {
         var f=new Fixture();f.db.update("UPDATE preview.demo SET gender_code=NULL WHERE id=1");
         var small=f.run(Map.of("tableId","table","pageSize",20,"sortField","gender_code","sortDir","asc"));
         var large=f.run(Map.of("tableId","table","pageSize",100,"sortField","gender_code","sortDir","asc"));
-        var rows=(List<Map<String,Object>>)large.get("rows");assertEquals(small.get("rows"),rows.subList(0,20));assertEquals(2,rows.getFirst().get("id"));
+        var rows=StructuredValues.objectRows(large.get("rows"));assertEquals(small.get("rows"),rows.subList(0,20));assertEquals(2,rows.getFirst().get("id"));
         var next=f.run(Map.of("tableId","table","pageNo",2,"pageSize",20,"sortField","gender_code","sortDir","asc"));assertEquals(rows.subList(20,40),next.get("rows"));
         var end=f.run(Map.of("tableId","table","pageNo",3,"pageSize",100,"sortField","gender_code","sortDir","asc"));
-        assertEquals(1,((List<Map<String,Object>>)end.get("rows")).getLast().get("id"));
+        assertEquals(1,(StructuredValues.objectRows(end.get("rows"))).getLast().get("id"));
     }
     @Test void missingServerProfileHasAnActionableErrorWithoutLeakingItsPath() throws Exception {
         var f=new Fixture();f.hive.failure="Hive conf file not found: hiveclient.properties (dir=/private/hive)";
@@ -210,7 +212,7 @@ public class TableDetailPreviewTest {
             assertEquals(size,((List<?>)first.get("rows")).size());assertEquals(2,f.hive.queries.size());assertEquals(5,f.counter.count);
             assertTrue(f.hive.queries.getLast().endsWith("LIMIT "+(size+1)));
             var next=f.run(Map.of("tableId","table","pageNo",2,"pageSize",size,"countMode","none"));
-            assertEquals(size+1,((List<Map<String,Object>>)next.get("rows")).getFirst().get("id"));
+            assertEquals(size+1,(StructuredValues.objectRows(next.get("rows"))).getFirst().get("id"));
             assertTrue(f.hive.queries.stream().noneMatch(sql->sql.startsWith("SELECT COUNT(*)")));
         }
         var last=f.run(Map.of("tableId","table","pageNo",12,"pageSize",20,"countMode","none"));
@@ -221,7 +223,7 @@ public class TableDetailPreviewTest {
     @Test void countFreePreviewKeepsFiltersSortAndScopeValidation() throws Exception {
         var f=new Fixture();
         var response=f.run(Map.of("tableId","table","countMode","none","sortField","id","sortDir","desc","conditions",Map.of("gender_code","F")));
-        assertEquals(240,((List<Map<String,Object>>)response.get("rows")).getFirst().get("id"));
+        assertEquals(240,(StructuredValues.objectRows(response.get("rows"))).getFirst().get("id"));
         assertEquals(List.of("id","gender_code"),response.get("columns"));
         f.hive.queries.clear();f.scope.denied=true;
         assertDoesNotThrow(()->f.run(Map.of("tableId","table","countMode","none")));

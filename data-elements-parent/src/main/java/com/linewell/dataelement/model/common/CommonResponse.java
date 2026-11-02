@@ -73,19 +73,19 @@ public class CommonResponse<T> {
         exception.printStackTrace();
     }
 
-    public static CommonResponse success(Object data) {
-        return new CommonResponse(data);
+    public static <T> CommonResponse<T> success(T data) {
+        return new CommonResponse<>(data);
     }
 
-    public static CommonResponse success(Integer code, Object data) {
-        CommonResponse response = new CommonResponse(data);
+    public static <T> CommonResponse<T> success(Integer code, T data) {
+        CommonResponse<T> response = new CommonResponse<>(data);
         response.setCode(code);
         response.setSuccess(true);
         return response;
     }
 
-    public static CommonResponse success(Integer code, String msg, String desc, Object data) {
-        CommonResponse response = new CommonResponse(data);
+    public static <T> CommonResponse<T> success(Integer code, String msg, String desc, T data) {
+        CommonResponse<T> response = new CommonResponse<>(data);
         response.setCode(code);
         response.setMsg(msg);
         //response.setDesc(desc);
@@ -93,8 +93,8 @@ public class CommonResponse<T> {
         return response;
     }
 
-    public static CommonResponse fail(Integer code, String msg, String desc) {
-        CommonResponse response = new CommonResponse();
+    public static <T> CommonResponse<T> fail(Integer code, String msg, String desc) {
+        CommonResponse<T> response = new CommonResponse<>();
         response.setCode(code);
         response.setMsg(msg);
         //response.setDesc(desc);
@@ -102,12 +102,12 @@ public class CommonResponse<T> {
         return response;
     }
 
-    public static CommonResponse fail(StatusCodeEnum statusCodeEnum) {
+    public static <T> CommonResponse<T> fail(StatusCodeEnum statusCodeEnum) {
         return fail(statusCodeEnum, null);
     }
 
-    public static CommonResponse fail(StatusCodeEnum statusCodeEnum, String desc) {
-        CommonResponse response = new CommonResponse();
+    public static <T> CommonResponse<T> fail(StatusCodeEnum statusCodeEnum, String desc) {
+        CommonResponse<T> response = new CommonResponse<>();
         response.setCode(statusCodeEnum.getCode());
         response.setMsg(StringUtils.isNotBlank(desc) ? desc:statusCodeEnum.getMsg());
         //response.setDesc(ObjectUtil.isEmpty(desc)? statusCodeEnum.getDesc():desc);

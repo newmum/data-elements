@@ -62,6 +62,19 @@ var publishAddress=text(body.publishAddress || publish.publishAddress || uri).tr
 if (blank(uri) || uri.length()>1000 || publishAddress.length()>1000) { exit 400,'请填写1000个字符以内的服务地址和发布地址' }
 if (!uri.matches('^(?i)https?://[^\\s]+$') && !uri.startsWith('/')) { exit 400,'服务地址须为HTTP(S)地址或已有服务相对路径' }
 var orgId=creating?userOrgId:text(old.orgId || old.org_id)
+// 数据源关联独立于服务资源标识；既有服务不能经普通编辑静默转移数据源。
+var oldDatasourceId=text(old?.datasourceId || old?.datasource_id).trim()
+var datasourceId=body.containsKey('datasourceId')?text(body.datasourceId).trim():oldDatasourceId
+if (datasourceId.length()>32) { exit 400,'数据源标识格式不正确' }
+if (!creating && datasourceId!=oldDatasourceId) { exit 409,'服务的数据源关联不能通过编辑更改，请从原数据源登记入口操作' }
+if (!blank(datasourceId)) {
+    var source=db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('tid',datasourceId).eq('is_del',0).selectOne()
+    if (source==null || !dataScope.canReadDataSourceFor('MENU:2081000000000000002',source)) { exit 404,'数据源不存在或不在当前数据范围内' }
+    var config=source.poolCfg || source.pool_cfg
+    var pool=blank(config)?{}:JSONUtil.parseObj(config)
+    if (pool.accessMode!='proxy') { exit 400,'只有代理访问数据源可以在此登记服务' }
+    if (creating) { orgId=text(source.orgId || source.org_id) }
+}
 var now=new Date()
 var groupId=text(body.groupId || ext.groupId || old?.groupId || old?.group_id || 'api_service_group_default')
 if (groupId!='api_service_group_default' && db.table('sym_dict_t').where().eq('tenant_id',tenantId).eq('tid',groupId).eq('biz_type','apiServiceGroup').eq('is_del',0).selectOne()==null) { exit 400,'服务分组不存在或无权使用' }
@@ -78,7 +91,7 @@ for (item in params) {
 var oldProps=creating?[]:db.table('da_prop_t').where().eq('tenant_id',tenantId).eq('parent_id',apiId).eq('data_type','api').eq('is_del',0).select()
 var propsByName={}
 for (prop in oldProps) { propsByName[text(prop.propName || prop.prop_name)]=prop }
-var row={tid:apiId,resource_id:body.resourceId || old?.resourceId || old?.resource_id || apiId,
+var row={tid:apiId,datasource_id:blank(datasourceId)?null:datasourceId,resource_id:body.resourceId || old?.resourceId || old?.resource_id || apiId,
     service_name:name,service_code:body.serviceCode || body.code || old?.serviceCode || old?.service_code || apiId,
     service_type:body.serviceType || body.type || old?.serviceType || old?.service_type || '数据服务',
     service_desc:body.serviceDesc || body.description || ext.apiDescription || '',uri:uri,method:method,
@@ -107,10 +120,10 @@ db.transaction(()=>{
     for (index,item in params) {
         db.table('api_param_t').primary('tid').insert({tid:IdUtil.getSnowflakeNextIdStr(),api_id:apiId,
             param_name:item.paramName || item.param_name,param_desc:item.description || item.paramDesc || '',param_type:item.paramType || item.param_type || '',
-            param_position:item.paramPosition || item.param_position || '',required_flag:item.required==true || text(item.required)=='1'?'1':'0',
+            param_position:item.paramPosition || item.param_position || '',required_flag:['1','true','是','必填'].contains(text(item.required).trim().toLowerCase())?'1':'0',
             default_value:item.defaultValue || '',showcase_value:item.showcaseValue || '',param_scope:item.res==1 || item.paramScope=='response'?'response':'request',
             sort_no:index+1,created_time:now,tenant_id:tenantId,updated_time:now,is_del:0})
     }
 })
 if (!blank(body.apiFileId)) { magicResourceLink.link(text(body.apiFileId),apiId) }
-return {id:apiId,tid:apiId,orgId:orgId,status:row.status,message:'服务登记已保存'}
+return {id:apiId,tid:apiId,datasourceId:datasourceId,orgId:orgId,status:row.status,message:'服务登记已保存'}

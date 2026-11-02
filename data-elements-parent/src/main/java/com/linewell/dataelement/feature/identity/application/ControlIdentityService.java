@@ -146,9 +146,9 @@ public class ControlIdentityService {
         Map<String, String> result = new LinkedHashMap<>();
         jdbcTemplate.query(
                 "select id, real_name from rm_user_t where deleted = 0 and id in (" + placeholders + ")",
-                ids.toArray(),
                 (org.springframework.jdbc.core.RowCallbackHandler) rs ->
-                        result.put(rs.getString("id"), rs.getString("real_name"))
+                        result.put(rs.getString("id"), rs.getString("real_name")),
+                ids.toArray()
         );
         return result;
     }

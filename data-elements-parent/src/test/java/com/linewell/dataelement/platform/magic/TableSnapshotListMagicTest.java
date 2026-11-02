@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -77,14 +79,14 @@ class TableSnapshotListMagicTest {
    assertEquals(count,((Number)all.get("total")).intValue());
    assertEquals(count,((List<?>)all.get("rows")).size());
    assertEquals(count,((Number)all.get("snapshotTotal")).intValue());
-   var rows=(List<Map<String,Object>>)all.get("rows");
+   var rows=StructuredValues.objectRows(all.get("rows"));
    assertTrue(rows.stream().anyMatch(r->((Number)r.get("annotated")).intValue()==0));
    assertTrue(rows.stream().anyMatch(r->((Number)r.get("annotated")).intValue()==1));
    assertFalse(rows.stream().anyMatch(r->"secret".equals(r.get("tableName"))));
    assertEquals("preferred",rows.stream().filter(r->"table_0".equals(r.get("tableName"))).findFirst().orElseThrow().get("tid"));
    assertTrue(rows.stream().noneMatch(r->r.containsKey("fieldGovernanceConfig")));
    var sorted=(Map<?,?>)f.read(true,count,"","source","fieldCount","desc");
-   assertEquals("preferred",((List<Map<?,?>>)sorted.get("rows")).get(0).get("tid"));
+   assertEquals("preferred",com.linewell.dataelement.utils.StructuredValues.objectRows(sorted.get("rows")).get(0).get("tid"));
    assertEquals(4,f.reads);
    var injection=(Map<?,?>)f.read(true,count,"","source","fieldCount; drop table db_table_t","desc");
    assertEquals(count,((Number)injection.get("total")).intValue());

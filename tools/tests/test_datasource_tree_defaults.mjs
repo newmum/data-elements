@@ -19,13 +19,14 @@ function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve
 function fixture(size){
   const calls=[],nodes=new Map();
   const departments=Array.from({length:size},(_,i)=>({value:`department-${i}`,label:`部门${i}`,children:[]}));
-  const scope={dataScope:'',tableLoads:{},list:[]};
+  const scope={dataScope:'',tableLoads:{},list:[],keyword:'',filter:'all'};
   const treeData={value:[{value:'',type:'org',label:'全部部门',children:[]}]};
   const tree={getNode:id=>{if(!nodes.has(id))nodes.set(id,{expanded:false});return nodes.get(id);},setCurrentNode:node=>{tree.current=node;}};
   const context=vm.createContext({state:scope,treeData,treeRef:{value:{getTree:()=>tree}},
     orgTreeSource:{value:[]},treeStatistics:{value:{}},countMap:{value:{}},SOURCE_BATCH_SIZE:24,
     computed:fn=>({get value(){return fn();}}),nextTick:callback=>Promise.resolve().then(callback),
     normalizeItem:row=>row,compareDatasourceUpdated:()=>0,$user:{orgRootId:'root'},console:{error:()=>{}},
+    typeStatisticsPayload:()=>({mode:'facets'}),applyTypeStatistics:()=>{},scheduleTypeStatistics:()=>{},
     $common:{post:(route,body)=>{const request=deferred();calls.push({route,body,...request});return request.promise;}},
   });
   vm.runInContext(executable,context);

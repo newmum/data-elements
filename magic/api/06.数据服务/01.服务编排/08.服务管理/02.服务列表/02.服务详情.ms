@@ -61,6 +61,14 @@ if (blank(apiId)) {
     exit 400, 'apiId不能为空'
 }
 
+var datasourceId=body?.datasourceId==null?'':(body.datasourceId+'').trim()
+if (datasourceId.length()>32) { exit 400,'数据源标识格式不正确' }
+if (!blank(datasourceId)) {
+    var source=db.table('db_datasource_t').where().eq('tid',datasourceId).eq('tenant_id',tenantId).eq('is_del',0).selectOne()
+    if (source==null || !dataScope.canReadDataSourceFor('MENU:2081000000000000002',source)) { exit 404,'数据源不存在或不在当前数据范围内' }
+    scopeSql+=' AND datasource_id=#{datasourceId}'
+}
+
 // 基础信息来自服务主表，兼容早期迁移数据中 method/status 为空的情况。
 var rows = db.select("""
 select
@@ -69,6 +77,7 @@ select
   service_name as serviceName,
   service_code as serviceCode,
   resource_id as resourceId,
+  datasource_id as datasourceId,
   coalesce(group_id, 'api_service_group_default') as groupId,
   service_type as serviceType,
   coalesce(service_create_type, 'api') as serviceCreateType,
@@ -192,6 +201,7 @@ return {
     serviceName: row.serviceName || row.servicename || '',
     serviceCode: row.serviceCode || row.servicecode || '',
     code: row.serviceCode || row.servicecode || '',
+    datasourceId: row.datasourceId || row.datasourceid || row.datasource_id || '',
     resourceId: row.resourceId || row.resourceid,
     groupId: row.groupId || row.groupid || 'api_service_group_default',
     groupName: groupRows == null || groupRows.size() == 0 ? '默认分组' : groupRows[0].name,

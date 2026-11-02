@@ -9,6 +9,7 @@ SET FOREIGN_KEY_CHECKS=0;
 CREATE TABLE `api_info_t` (
   `tid` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '主键标识',
   `resource_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '资源标识',
+  `datasource_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '数据服务-所属代理访问数据源标识，关联db_datasource_t.tid',
   `service_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '服务名称',
   `is_use` tinyint DEFAULT NULL COMMENT '是否使用',
   `status` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '状态',
@@ -51,7 +52,8 @@ CREATE TABLE `api_info_t` (
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565272` (`tid`) USING BTREE,
   KEY `idx_api_info_tenant_is_del_group_id` (`tenant_id`,`is_del`,`group_id`) USING BTREE,
-  KEY `idx_api_info_tenant_is_del_updated_created` (`tenant_id`,`is_del`,`updated_time`,`created_time`) USING BTREE
+  KEY `idx_api_info_tenant_is_del_updated_created` (`tenant_id`,`is_del`,`updated_time`,`created_time`) USING BTREE,
+  KEY `idx_api_source_page` (`tenant_id`,`datasource_id`,`is_del`,`updated_time`,`tid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据服务-数据服务接口';
 
 -- TABLE api_oauth_client_t

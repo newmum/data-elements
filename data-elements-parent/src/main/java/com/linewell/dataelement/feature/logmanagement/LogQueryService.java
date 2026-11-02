@@ -54,7 +54,7 @@ public class LogQueryService {
         String keyword=text(input.get("keyword"),100);
         if(!keyword.isBlank()) {
             params.put("keyword","%"+keyword.replace("!","!!").replace("%","!%").replace("_","!_")+"%");
-            where+=" and ("+String.join(" or ",List.of(v.account(),v.name(),v.orgName(),v.action(),"target_name","trace_id","menu_path","operation_name").stream().map(c->c+" like :keyword escape '!' ").toList())+")";
+            where+=" and ("+String.join(" or ",List.of(v.account(),v.name(),v.orgName(),v.action(),"target_name","trace_id","menu_path","operation_name","function_code","page_route",v.path()).stream().distinct().map(c->c+" like :keyword escape '!' ").toList())+")";
         }
         Instant end=parseTime(input.get("endTime"),Instant.now().plusSeconds(1));
         Instant start=parseTime(input.get("startTime"),end.minus(Duration.ofDays(7)));
@@ -84,7 +84,7 @@ public class LogQueryService {
     }
     private String projection(View v,boolean detail) {
         boolean platform=v.table().equals("iam_audit_event_t");
-        return "tid,event_time,created_time,category,actor_kind,menu_id,menu_path,page_route,operation_name,function_code,"+v.actor()+" actor_id,"+v.account()+" actor_account,"+v.name()+" actor_name,"+v.org()+" actor_org_id,"+v.orgName()+" actor_org_name,"+v.action()+" action_code,"+(platform?"object_type target_type,object_id target_id,":"target_type,target_id,")+"target_name,result,reason_code,ip,duration_ms,trace_id,request_id,session_ref,http_status,business_code,total_count,success_count,failure_count,source_app,batch_id,task_id,"+v.path()+" route_path"+(detail?","+v.detail()+" details":"");
+        return "tid,event_time,created_time,category,actor_kind,menu_id,menu_path,page_route,operation_name,function_code,"+v.actor()+" actor_id,"+v.account()+" actor_account,"+v.name()+" actor_name,"+v.org()+" actor_org_id,"+v.orgName()+" actor_org_name,"+v.action()+" action_code,"+(platform?"object_type target_type,object_id target_id,":"target_type,target_id,")+"target_name,result,reason_code,ip,user_agent,duration_ms,trace_id,request_id,session_ref,http_status,business_code,total_count,success_count,failure_count,source_app,batch_id,task_id,"+v.path()+" route_path"+(detail?","+v.detail()+" details":"");
     }
     private Map<String,Object> normalize(Map<String,Object> input,boolean detail) {
         Map<String,Object> row=AuditStore.lower(JdbcValueNormalizer.map(input));

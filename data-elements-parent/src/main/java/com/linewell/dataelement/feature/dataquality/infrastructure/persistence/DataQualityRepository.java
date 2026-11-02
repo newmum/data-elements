@@ -1,5 +1,7 @@
 package com.linewell.dataelement.feature.dataquality.infrastructure.persistence;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import com.linewell.dataelement.platform.persistence.id.NumericId;
 import com.linewell.dataelement.platform.persistence.ServerTableOrder;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -129,7 +131,7 @@ public class DataQualityRepository {
         String sourceId=text(body.get("datasourceId")),tableId=text(body.get("tableId"));
         if(rules.size()>64)throw new IllegalArgumentException("最多配置 64 条规则或探查字段");
         Set<String> targetIds=new LinkedHashSet<>();
-        for(var rule:rules)if("REFERENCE".equals(rule.get("ruleType"))){Map<String,Object> parameters=rule.get("parameters") instanceof Map<?,?> raw?(Map<String,Object>)raw:Map.of();targetIds.add(requiredText(parameters,"targetTableId","请选择引用目标表"));}
+        for(var rule:rules)if("REFERENCE".equals(rule.get("ruleType"))){Map<String,Object> parameters=rule.get("parameters") instanceof Map<?,?> raw?StructuredValues.objectMap(raw):Map.of();targetIds.add(requiredText(parameters,"targetTableId","请选择引用目标表"));}
         if(!targetIds.isEmpty()&&!Set.copyOf(mapper.selectValidTableIds(tenantId,sourceId,List.copyOf(targetIds))).containsAll(targetIds))
             throw new TenantAccessException("REGISTERED-JDBC-ENDPOINT-NOT-FOUND","数据源或数据表不存在，或者不属于当前租户");
         Set<String> requiredTables=new LinkedHashSet<>();requiredTables.add(tableId);requiredTables.addAll(targetIds);
@@ -139,13 +141,13 @@ public class DataQualityRepository {
         if(profile&&(integer(body.get("shardCount"),1)!=1||rules.stream().anyMatch(r->!"PROFILE".equals(r.get("ruleType")))))throw new IllegalArgumentException("字段探查须使用单分片且不能混入评分规则");
         for(var rule:rules) {
             if(!ownedColumns.contains(text(rule.get("columnName"))))throw new IllegalArgumentException("校验字段不存在于当前数据表");
-            Map<String,Object> p=rule.get("parameters") instanceof Map<?,?> raw?new LinkedHashMap<>((Map<String,Object>)raw):new LinkedHashMap<>();
+            Map<String,Object> p=rule.get("parameters") instanceof Map<?,?> raw?new LinkedHashMap<>(StructuredValues.objectMap(raw)):new LinkedHashMap<>();
             p.remove("resolvedTargetTable");p.remove("evaluationTime");
             if("SQL_TEMPLATE".equals(rule.get("ruleType"))) {
                 if(rule.get("relatedColumn")!=null && !String.valueOf(rule.get("relatedColumn")).isBlank()
                         && !ownedColumns.contains(text(rule.get("relatedColumn")))) throw new IllegalArgumentException("关联字段不存在于当前数据表");
                 new com.linewell.dataelement.feature.dataquality.infrastructure.jdbc.QualitySqlTemplate().validate(
-                        text(p.get("sqlTemplate")),p.get("values") instanceof Map<?,?> valuesMap?(Map<String,Object>)valuesMap:Map.of());
+                        text(p.get("sqlTemplate")),p.get("values") instanceof Map<?,?> valuesMap?StructuredValues.objectMap(valuesMap):Map.of());
             }
             for(String key:List.of("columns","sourceColumns")) if(p.containsKey(key)) {
                 List<String> names=columnList(p.get(key));

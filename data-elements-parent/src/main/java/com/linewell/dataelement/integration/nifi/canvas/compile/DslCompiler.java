@@ -1,5 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.compile;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import com.linewell.dataelement.integration.nifi.canvas.manifest.ComponentManifest;
 import com.linewell.dataelement.integration.nifi.canvas.manifest.CompileSpec;
 import com.linewell.dataelement.integration.nifi.canvas.manifest.ManifestRegistry;
@@ -3474,7 +3476,7 @@ public class DslCompiler {
                     physicalColumns.add(name);
                 }
                 Map<String, Object> plan = new com.linewell.dataelement.metautil.ddl.TablePartitions().normalize(
-                        MAPPER.convertValue(cfg.get("partitionPlan"), Map.class), columns, DatabaseType.HIVE);
+                        MAPPER.convertValue(cfg.get("partitionPlan"), new TypeReference<Map<String, Object>>() {}), columns, DatabaseType.HIVE);
                 plan.put("inputField", firstNonBlank(stringConfig(cfg, "partitionInputField"), String.valueOf(plan.get("field"))));
                 String database = firstNonBlankStatic(configText(cfg, "database"), "default");
                 String table = configText(cfg, "table");

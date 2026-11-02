@@ -1,6 +1,7 @@
 import test,{type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
-import {loadUploadContext,normalizedReportFile,tableResource,type UploadTable} from '../../src/report/services/uploadWorkbench';
+import {loadUploadContext,loadRegistrationPage,normalizedReportFile,parseUploadedFiles,tableResource,type UploadTable} from '../../src/report/services/uploadWorkbench';
+import {createReportSourceLoader} from '../../src/report/services/reportSource';
 import type {SourceBook} from '../../src/report/core/model';
 
 function sample(){
@@ -30,3 +31,40 @@ test('20/100 datasource choices need three reads and allow a first upload withou
  for(const count of[20,100])await t.test(String(count),async child=>{const calls=contextFixture(child,count);const result=await loadUploadContext('source-0');assert.equal(result.sources.length,count);assert.equal(result.context.tables.length,0);assert.equal(result.context.datasourceId,'source-0');assert.equal(calls.length,3);});
 });
 test('untrusted URL datasource cannot fall back to another source',async t=>{contextFixture(t,20);await assert.rejects(loadUploadContext('foreign-source'),/不存在|不是/);});
+
+test('a 20-file parse keeps one batch request and permits the bounded storage reads to finish',async t=>{
+ contextFixture(t,20);const originalTimeout=AbortSignal.timeout,deadlines:number[]=[];
+ AbortSignal.timeout=milliseconds=>{deadlines.push(milliseconds);return new AbortController().signal;};
+ t.after(()=>{AbortSignal.timeout=originalTimeout;});
+ for(const count of[1,20]){
+  let reads=0;const ids=Array.from({length:count},(_,i)=>'validation-file-'+i);
+  globalThis.fetch=async(_input,init)=>{reads++;const body=JSON.parse(String(init?.body));assert.equal(body.action,'parse');assert.deepEqual(body.fileIds,ids);return new Response(JSON.stringify({code:0,data:{files:[]}}));};
+  await parseUploadedFiles(ids);assert.equal(reads,1);assert.ok(deadlines.at(-1)!>=count*20_000+10_000);
+ }
+});
+
+test('20/100 registration rows use one page request and reject unexpected table keys',async t=>{
+ for(const count of[20,100])await t.test(String(count),async child=>{
+  contextFixture(child,count);let requests=0,foreign=false;
+  const tables=Array.from({length:count},(_,i)=>({...sampleTable(),key:'table-'+i}));
+  globalThis.fetch=async(_input,init)=>{requests++;const body=JSON.parse(String(init?.body));assert.equal(body.action,'table-page');assert.equal(body.sortField,'updatedAt');assert.equal(body.sortDir,'desc');
+   return new Response(JSON.stringify({code:0,data:{revision:'v1',total:count,list:tables.map(table=>({key:foreign?'foreign-key':table.key,updatedAt:'2026-11-01T00:00:00Z'}))}}));};
+  const manifest={revision:'v1',files:[],tables};const query={pageNo:1,pageSize:count,search:'',sortField:'updatedAt',sortDir:'desc' as const};
+  assert.equal((await loadRegistrationPage('source',manifest,query)).list.length,count);assert.equal(requests,1);
+  foreign=true;await assert.rejects(loadRegistrationPage('source',manifest,query),/不属于当前数据源/);
+ });
+});
+function sampleTable():UploadTable{return{key:'table',fileId:'file',fileName:'data.csv',tableName:'data_table',tableNameCn:'数据表',fields:[],fieldCount:0,recordCount:1,status:'success'};}
+test('changing source uses one request without reloading user, tenant or candidate sources',async t=>{
+ for(const count of [20,100])await t.test(String(count),async child=>{
+  const calls=contextFixture(child,count),context=await loadUploadContext('source-0');calls.length=0;
+  const previousFetch=globalThis.fetch;globalThis.fetch=async(input,init)=>{
+   const path=String(input);if(path.includes('/report-registration')){
+    calls.push('/dst/database/metadata/report-registration');assert.equal(JSON.parse(String(init?.body)).dbId,'source-'+(count-1));
+    return new Response(JSON.stringify({code:0,data:{revision:'selected',files:[],tables:[],receipts:[]}}));
+   }return previousFetch(input,init);
+  };
+  const loaded=await createReportSourceLoader().load('source-'+(count-1),context.sources);assert.equal(loaded?.manifest.revision,'selected');
+  assert.deepEqual(calls,['/dst/database/metadata/report-registration']);
+ });
+});

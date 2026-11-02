@@ -69,19 +69,49 @@ if (blank(tenantId)) {
 }
 // 结束登记允许部分表未完成；状态由当前租户有效表的 asset_status 聚合决定。
 var completionReview = null
+var isProxyCompletion = false
+var proxyCompletionWhere = ""
 var requestedStatus = first(props, ['assetStatus', 'asset_status'])
 if (props.completeOnly == true || ['1', '2'].contains(text(requestedStatus))) {
     var existed = db.table('db_datasource_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
     if (existed == null) { exit 404, '数据源不存在或不属于当前租户' }
     var visible = dataScope.visibleDataSourcesFor('MENU:2081000000000000002', [existed])
     if (visible == null || visible.size() != 1) { exit 403, '数据源不存在或已删除' }
-    completionReview = metadataAsset.reviewRegistrationStatus(tid)
+    var completionPool = first(existed, ['poolCfg', 'pool_cfg'])
+    if (completionPool == null) { completionPool = {} }
+    if (completionPool instanceof String) {
+        try { completionPool = JSONUtil.parseObj(completionPool) } catch (e) { completionPool = {} }
+    }
+    var completionMode = first(existed, ['accessMode', 'access_mode'])
+    if (blank(completionMode)) { completionMode = completionPool.accessMode }
+    isProxyCompletion = ['proxy', 'agent'].contains(blank(completionMode) ? '' : text(completionMode).toLowerCase())
+    if (isProxyCompletion) {
+        // 与服务列表使用同一角色范围；按父源一次聚合，不读取每个服务的详情。
+        var completionScope = dataScope.dataSource()
+        var completionUserId = completionScope.userId
+        var completionOrgIds = completionScope.organizationIds
+        proxyCompletionWhere = 'a.is_del=0 AND a.tenant_id=#{tenantId} AND a.datasource_id=#{tid}'
+        if (completionScope.scope == 'OWNER') { proxyCompletionWhere = proxyCompletionWhere + ' AND a.created_by=#{completionUserId}' }
+        else if (completionScope.scope == 'ORG') { proxyCompletionWhere = proxyCompletionWhere + (completionOrgIds.size()==0 ? ' AND 1=0' : ' AND a.org_id IN (#{completionOrgIds})') }
+        else if (completionScope.scope != 'ALL') { exit 403, '数据范围无效' }
+        var completionServiceCount = db.selectInt('select count(*) from api_info_t a where ' + proxyCompletionWhere)
+        completionReview = {tid:tid,assetStatus:completionServiceCount>0?2:1,completionEligible:completionServiceCount>0,tableReviewReady:completionServiceCount>0,serviceCount:completionServiceCount,tableCount:0,registeredTableCount:0,pendingTableCount:0}
+    } else {
+        completionReview = metadataAsset.reviewRegistrationStatus(tid)
+    }
     if (props.dryRun == true || body?.dryRun == true) { return completionReview }
 }
 var completionAssetStatus = completionReview == null ? 0 : completionReview.assetStatus
 if (props.completeOnly == true) {
-    completionReview = metadataAsset.refreshRegistrationStatus(tid, true)
-    completionAssetStatus = completionReview.assetStatus
+    if (isProxyCompletion) {
+        if (completionReview.completionEligible != true) { exit 400, '请先登记至少一项当前数据范围内的数据服务，再结束登记' }
+        // 服务在审查后可能变化；持久化时再次以同一 SQL 条件原子校验，不接受前端完成标记。
+        var completedRows = db.update('update db_datasource_t set asset_status=#{completionAssetStatus},flow_status=2,updated_time=#{nowTime} where tid=#{tid} AND tenant_id=#{tenantId} AND is_del=0 AND EXISTS (select 1 from api_info_t a where ' + proxyCompletionWhere + ')')
+        if (completedRows < 1) { exit 409, '服务清单已变化，请重新确认后结束登记' }
+    } else {
+        completionReview = metadataAsset.refreshRegistrationStatus(tid, true)
+        completionAssetStatus = completionReview.assetStatus
+    }
     var completionIndexFields = {
         assetStatus: completionAssetStatus,
         flowStatus: 2,
@@ -251,7 +281,7 @@ var normalizeAccessMode = (value) => {
     if (aliases[normalized] != null) {
         normalized = aliases[normalized]
     }
-    var validModes = { explore: true, receive: true, capture: true, upload: true }
+    var validModes = { explore: true, receive: true, capture: true, upload: true, proxy: true }
     return validModes[normalized] == true ? normalized : null
 }
 var accessMode = normalizeAccessMode(first(props, [
@@ -396,6 +426,7 @@ var dbType = inferDbType(first(props, ['dbType', 'db_type', 'databaseType', 'dat
 if (blank(dbType) && old != null) {
     dbType = inferDbType(first(old, ['dbType', 'db_type']), first(old, ['jdbcUrl', 'jdbc_url']))
 }
+if (accessMode == 'proxy') { dbType=null }
 // 华为 MRS Hive 的元数据仅由服务端 hwhive 模块访问。登记时只持久化模式标记，
 // 供登记后续步骤和 NiFi 重新加载当前租户的数据源，不信任浏览器提交的 JDBC/Kerberos 参数。
 var hiveConnectionMode = first(props, ['hiveConnectionMode', 'hive_connection_mode'])

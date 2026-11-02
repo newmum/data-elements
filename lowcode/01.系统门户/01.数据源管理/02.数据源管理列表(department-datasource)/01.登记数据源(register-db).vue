@@ -81,18 +81,25 @@
 
         <section v-if="accessMode === 'proxy'" class="proxy-service-registration">
           <div class="proxy-service-toolbar">
-            <u-title name="本部门已登记服务" class="proxy-service-title" />
+            <u-title name="当前数据源已登记服务" class="proxy-service-title" />
             <div class="proxy-service-actions">
               <el-input v-model.trim="proxyServiceKeyword" placeholder="搜索服务名称、编码或地址" clearable @clear="proxyServiceTableRef?.refresh?.(true)" @keyup.enter="proxyServiceTableRef?.refresh?.(true)"><template #suffix><el-button link title="查询服务" @click="proxyServiceTableRef?.refresh?.(true)"><Icon icon="search" /></el-button></template></el-input>
-              <el-button type="primary" @click="proxyServiceRegistrationVisible = true"><Icon icon="el-icon-Plus" class="mr-1" />登记服务</el-button>
+              <el-button type="primary" :disabled="!proxyDatasourceId" @click="goToServiceRegistration"><Icon icon="el-icon-Plus" class="mr-1" />登记服务</el-button>
             </div>
           </div>
-          <DataTable ref="proxyServiceTableRef" :data="fetchDepartmentServices" :columns="[]" :show-search="false" :show-reset="false" :page-sizes="[10,20,50,100]" row-key="tid" show-index class="proxy-service-table">
+          <DataTable :key="proxyDatasourceId || 'new-proxy-source'" ref="proxyServiceTableRef" height="auto" flex-type="flex-[0_1_auto]" :data="fetchDepartmentServices" :columns="[]" :show-search="false" :show-reset="false" :page-sizes="[10,20,50,100]" row-key="tid" show-index class="proxy-service-table">
             <el-table-column prop="serviceName" label="服务名称" min-width="180" sortable="custom" show-overflow-tooltip />
             <el-table-column prop="method" label="请求方式" width="100" />
             <el-table-column prop="publishAddressFull" label="服务地址" min-width="230" show-overflow-tooltip />
             <el-table-column prop="status" label="状态" width="105"><template #default="{row}"><el-tag :type="row.status==='published'?'success':'info'" size="small">{{ row.status==='published'?'已发布':row.status==='offline'?'已停用':'草稿' }}</el-tag></template></el-table-column>
             <el-table-column prop="updatedTime" label="更新时间" width="170" sortable="custom" />
+            <template #empty>
+              <div class="proxy-service-no-results" role="status">
+                {{ proxyServiceKeyword
+                  ? "没有匹配的服务，请调整搜索关键词。"
+                  : proxyDatasourceId ? "暂无已登记服务" : "保存数据源后，可登记服务。" }}
+              </div>
+            </template>
           </DataTable>
         </section>
 
@@ -114,39 +121,76 @@
                 </el-select>
               </label>
               <div class="receive-push-address">
-                <span class="receive-push-address-label">推送地址</span>
+                <span class="receive-push-address-label">推送数据地址</span>
                 <code :title="receivePushAddress">{{ receivePushAddress }}</code>
                 <small class="receive-network-tag">{{ receiveNetworkName }}</small>
               </div>
             </div>
-            <div v-if="isFilePush" class="guide-hero-card data-upload-result-card file-registration-card">
-              <div class="data-upload-result-toolbar">
-                <div class="data-upload-result-heading">
-                  <span class="guide-kicker">文件登记模板导入结果</span>
-                  <strong>{{ fileRegistrationState.rows.length ? `已登记 ${fileRegistrationState.rows.length} 项文件定义` : "上传文件登记模板" }}</strong>
-                  <p>{{ fileRegistrationState.fileName || "每行登记一类文件，保存后直接进入内容审查" }}</p>
-                  <p v-if="fileRegistrationState.error" class="file-registration-error">{{ fileRegistrationState.error }}</p>
-                  <p v-else-if="fileRegistrationState.dirty">本次导入尚未保存</p>
-                </div>
-                <div class="data-upload-result-actions">
+            <template v-if="isFilePush">
+              <AccessOnboarding
+                title="通过三步完成文件数据推送"
+                :steps="filePushGuideSteps"
+              >
                   <el-button type="primary" plain @click="downloadFileRegistrationTemplate"><template #icon><Icon icon="el-icon-Download" /></template>下载文件登记模板</el-button>
                   <el-button type="primary" :loading="metadataImportState.loading || fileRegistrationState.loading" @click="triggerMetadataImport"><template #icon><Icon icon="el-icon-Upload" /></template>{{ fileRegistrationState.rows.length ? "重新上传文件登记模板" : "上传文件登记模板" }}</el-button>
                   <input ref="metadataImportInput" type="file" accept=".xlsx" class="hidden" @change="handleMetadataTemplateImport" />
+                <template v-if="fileRegistrationState.error || fileRegistrationState.dirty" #status>
+                  <p v-if="fileRegistrationState.error" class="file-registration-error">{{ fileRegistrationState.error }}</p>
+                  <p v-else-if="fileRegistrationState.dirty">本次导入尚未保存</p>
+                </template>
+              </AccessOnboarding>
+              <div v-if="fileRegistrationState.rows.length" class="guide-hero-card data-upload-result-card file-registration-card">
+                <div class="data-upload-result-toolbar">
+                  <div class="data-upload-result-heading">
+                    <strong>已登记 {{ fileRegistrationState.rows.length }} 项文件定义</strong>
+                  </div>
                 </div>
-              </div>
-              <p class="file-registration-help">必填：文件名称、文件说明、文件格式、文件大小上限（MB）。关联表和字段选填；仅登记定义，不在 Excel 中上传文件原文。</p>
-              <DataTable v-if="fileRegistrationState.rows.length" :data="fileRegistrationState.rows" :preview-sort="{fileName:'text',maxFileSizeMb:'number'}" :show-page="false" height="260" border size="small">
-                <el-table-column type="index" label="序号" width="65" />
-                <el-table-column prop="fileName" label="文件名称" sortable="custom" min-width="150" />
-                <el-table-column prop="fileDescription" label="文件说明" min-width="200" />
-                <el-table-column prop="fileFormat" label="文件格式" width="110"><template #default="{row}">{{ String(row.fileFormat).toUpperCase() }}</template></el-table-column>
-                <el-table-column prop="maxFileSizeMb" label="大小上限(MB)" sortable="custom" width="145" />
-                <el-table-column prop="relatedTableName" label="关联表（选填）" min-width="150" />
-                <el-table-column prop="relatedFieldName" label="关联字段（选填）" min-width="150" />
+              <DataTable v-if="fileRegistrationState.rows.length" :data="fileRegistrationState.rows" :preview-sort="{fileName:'text',maxFileSizeMb:'number'}" :show-page="false" :show-overflow-tooltip="false" height="auto" flex-type="flex-[0_0_auto]" border size="small">
+                <el-table-column type="index" label="序号" width="48" />
+                <el-table-column prop="fileCode" label="文件英文名" min-width="120" />
+                <el-table-column prop="fileName" label="文件名称" sortable="custom" min-width="80" />
+                <el-table-column prop="fileDescription" label="文件说明" min-width="140" />
+                <el-table-column prop="fileFormat" label="文件格式" min-width="60"><template #default="{row}">{{ String(row.fileFormat).toUpperCase() }}</template></el-table-column>
+                <el-table-column prop="maxFileSizeMb" label="大小上限(MB)" sortable="custom" min-width="90" />
+                <el-table-column prop="relatedTableName" label="关联表（选填）" min-width="85" />
+                <el-table-column prop="relatedFieldName" label="关联字段（选填）" min-width="85" />
               </DataTable>
-            </div>
+              </div>
+            </template>
+            <template v-else>
+            <AccessOnboarding title="通过三步完成结构化数据推送" :steps="receiveGuideSteps">
+                  <el-button
+                    type="primary"
+                    plain
+                    :loading="templateDownloadState.loading"
+                    :disabled="templateDownloadState.loading"
+                    @click="downloadCurrentMetadataTemplate"
+                  >
+                    <template #icon><Icon icon="el-icon-Download" /></template>
+                    {{
+                      templateDownloadState.loading
+                        ? "正在生成模板"
+                        : "下载数据登记模板"
+                    }}
+                  </el-button>
+                  <el-button
+                    type="primary"
+                    :loading="metadataImportState.loading"
+                    @click="triggerMetadataImport"
+                  >
+                    <template #icon><Icon icon="el-icon-Upload" /></template>
+                    {{ hasMetadataImportResult ? "重新上传数据登记模板" : "上传已填写模板" }}
+                  </el-button>
+                  <input
+                    ref="metadataImportInput"
+                    class="metadata-import-input"
+                    type="file"
+                    accept=".xlsx"
+                    @change="handleMetadataTemplateImport"
+                  />
+                </AccessOnboarding>
             <div
-              v-else-if="hasMetadataImportResult"
+              v-if="hasMetadataImportResult"
               class="guide-hero-card data-upload-result-card receive-template-result-card"
             >
               <div class="data-upload-result-toolbar">
@@ -166,58 +210,24 @@
                     }}
                   </p>
                 </div>
-                <div
-                  class="guide-actions data-upload-guide-actions data-upload-result-actions"
-                >
-                  <el-button
-                    type="primary"
-                    plain
-                    :loading="templateDownloadState.loading"
-                    :disabled="templateDownloadState.loading"
-                    @click="downloadCurrentMetadataTemplate"
-                  >
-                    <template #icon><Icon icon="el-icon-Download" /></template>
-                    {{
-                      templateDownloadState.loading
-                        ? "正在生成模板"
-                        : "下载数据登记模板"
-                    }}
-                  </el-button>
-                  <el-button
-                    type="primary"
-                    :loading="metadataImportState.loading"
-                    @click="triggerMetadataImport"
-                  >
-                    <template #icon><Icon icon="el-icon-Upload" /></template>
-                    重新上传数据登记模板
-                  </el-button>
-                  <input
-                    ref="metadataImportInput"
-                    class="metadata-import-input"
-                    type="file"
-                    accept=".xlsx"
-                    @change="handleMetadataTemplateImport"
-                  />
-                </div>
               </div>
               <DataTable
                 :data="metadataImportRows" :preview-sort="{tableName:'text',tableNameCn:'text',fieldCount:'number'}" :show-page="false"
                 size="small"
                 class="data-upload-result-table"
-                max-height="260"
+                height="auto"
+                flex-type="flex-[0_0_auto]"
               >
-                <el-table-column type="index" label="序号" width="68" />
+                <el-table-column type="index" label="序号" width="48" />
                 <el-table-column
                   prop="tableName" sortable="custom"
                   label="数据表名称"
-                  min-width="220"
-                  show-overflow-tooltip
+                  min-width="100"
                 />
                 <el-table-column
                   prop="tableNameCn" sortable="custom"
                   label="数据表中文名"
-                  min-width="220"
-                  show-overflow-tooltip
+                  min-width="100"
                 />
                 <el-table-column
                   prop="fieldCount" sortable="custom"
@@ -225,7 +235,7 @@
                   width="94"
                   align="center"
                 />
-                <el-table-column label="导入状态" width="118" align="center">
+                <el-table-column label="导入状态" width="94" align="center">
                   <template #default
                     ><el-tag size="small" type="success"
                       >上传成功</el-tag
@@ -234,80 +244,7 @@
                 </el-table-column>
               </DataTable>
             </div>
-            <div v-else class="guide-hero-card">
-              <div class="guide-hero-copy">
-                <span class="guide-kicker">数据登记模板</span>
-                <strong>下载固定模板，填写后上传审核</strong>
-                <p>
-                  下载数据登记模板，填写数据表和字段定义后上传保存。结构化数据按表记录推送；非结构化数据在第五步查看分片上传规范。
-                </p>
-                <div class="offline-flow-steps">
-                  <div class="offline-flow-step">
-                    <span><Icon icon="el-icon-Download" /></span>
-                    <strong>下载模板</strong>
-                    <small>使用预设<br />接收规范</small>
-                  </div>
-                  <i class="offline-flow-arrow">→</i>
-                  <div class="offline-flow-step">
-                    <span><Icon icon="el-icon-EditPen" /></span>
-                    <strong>填写内容</strong>
-                    <small>按模板补充<br />接收数据</small>
-                  </div>
-                  <i class="offline-flow-arrow">→</i>
-                  <div class="offline-flow-step">
-                    <span><Icon icon="el-icon-UploadFilled" /></span>
-                    <strong>上传审核</strong>
-                    <small>审核通过后<br />按规范推送</small>
-                  </div>
-                </div>
-                <div class="guide-actions receive-guide-actions">
-                  <el-button
-                    type="primary"
-                    plain
-                    :loading="templateDownloadState.loading"
-                    :disabled="templateDownloadState.loading"
-                    @click="downloadCurrentMetadataTemplate"
-                  >
-                    <template #icon><Icon icon="el-icon-Download" /></template>
-                    {{
-                      templateDownloadState.loading
-                        ? "正在生成模板"
-                        : "下载数据登记模板"
-                    }}
-                  </el-button>
-                  <el-button
-                    type="primary"
-                    :loading="metadataImportState.loading"
-                    @click="triggerMetadataImport"
-                  >
-                    <template #icon><Icon icon="el-icon-Upload" /></template>
-                    上传已填写模板
-                  </el-button>
-                  <input
-                    ref="metadataImportInput"
-                    class="metadata-import-input"
-                    type="file"
-                    accept=".xlsx"
-                    @change="handleMetadataTemplateImport"
-                  />
-                </div>
-              </div>
-              <div class="guide-illustration is-receive" aria-hidden="true">
-                <div class="guide-ill-source is-receive">
-                  <Icon icon="el-icon-Document" /><span>数据表</span>
-                </div>
-                <div class="guide-flow-line is-active is-receive">
-                  <i></i><i></i><i></i>
-                </div>
-                <div class="guide-ill-panel is-active is-receive">
-                  <strong class="guide-ill-heading">数据登记模板</strong>
-                  <div class="guide-ill-row is-strong"></div>
-                  <div class="guide-ill-row"></div>
-                  <div class="guide-ill-row is-short"></div>
-                  <div class="guide-ill-tag is-receive">审核推送</div>
-                </div>
-              </div>
-            </div>
+            </template>
           </div>
         </section>
 
@@ -447,37 +384,82 @@
           />
 
           <div v-if="!isForcedConnectionMode" class="connection-confirm-row">
-            <div
-              class="connection-choice"
-              role="radiogroup"
-              aria-label="是否提供连接信息"
-            >
-              <button
-                type="button"
-                :class="{ 'is-active': connectionEnabled === '1' }"
-                @click="setConnectionChoice('1')"
+            <div class="connection-confirm-controls">
+              <div
+                class="connection-choice"
+                role="radiogroup"
+                aria-label="是否提供连接信息"
               >
-                <Icon icon="el-icon-Link" />
-                提供连接信息
-              </button>
-              <button
-                type="button"
-                :class="{ 'is-active': connectionEnabled === '0' }"
-                @click="setConnectionChoice('0')"
+                <button
+                  type="button"
+                  :class="{ 'is-active': connectionEnabled === '1' }"
+                  @click="setConnectionChoice('1')"
+                >
+                  <Icon icon="el-icon-Link" />
+                  提供连接信息
+                </button>
+                <button
+                  type="button"
+                  :class="{ 'is-active': connectionEnabled === '0' }"
+                  @click="setConnectionChoice('0')"
+                >
+                  暂不提供
+                </button>
+              </div>
+              <el-button
+                class="switch-source-type-button"
+                text
+                type="primary"
+                size="small"
+                @click="switchSourceType"
               >
-                暂不提供
-              </button>
+                <template #icon><Icon icon="el-icon-Switch" /></template>
+                切换其他类型
+              </el-button>
             </div>
-            <el-button
-              class="switch-source-type-button"
-              text
-              type="primary"
-              size="small"
-              @click="switchSourceType"
+            <div
+              v-if="accessMode === 'explore' && connectionEnabled === '0'"
+              class="connection-onboarding-actions"
             >
-              <template #icon><Icon icon="el-icon-Switch" /></template>
-              切换其他类型
-            </el-button>
+              <el-button
+                type="primary"
+                plain
+                :loading="templateDownloadState.loading"
+                :disabled="templateDownloadState.loading"
+                @click="downloadCurrentMetadataTemplate"
+              >
+                <template #icon><Icon icon="el-icon-Download" /></template>
+                {{
+                  templateDownloadState.loading
+                    ? "正在生成模板"
+                    : `下载${sourceTypeLabels[sourceType] || "数据源"}模板`
+                }}
+              </el-button>
+              <el-button
+                type="primary"
+                plain
+                :loading="metadataImportState.loading"
+                @click="triggerMetadataImport"
+              >
+                <template #icon><Icon icon="el-icon-Upload" /></template>
+                导入已填写模板
+              </el-button>
+              <el-button
+                type="primary"
+                :loading="metadataImportState.loading"
+                @click="openDdlImportDialog"
+              >
+                <template #icon><Icon icon="el-icon-Document" /></template>
+                导入 DDL 语句
+              </el-button>
+              <input
+                ref="metadataImportInput"
+                class="metadata-import-input"
+                type="file"
+                accept=".xlsx"
+                @change="handleMetadataTemplateImport"
+              />
+            </div>
           </div>
 
           <template v-if="connectionEnabled === '1'">
@@ -1385,13 +1367,7 @@
                       >新增抓取 API</el-button
                     >
                   </div>
-                  <el-empty
-                    v-if="!apiPullItems.length"
-                    description="暂未添加抓取 API"
-                    :image-size="64"
-                  />
                   <el-collapse
-                    v-else
                     v-model="apiPullOpenItems"
                     class="api-pull-registration-list"
                     ><el-collapse-item
@@ -2309,17 +2285,21 @@
             </div>
           </template>
 
-          <div v-else class="connection-guide">
+          <div v-else class="connection-guide" :class="{ 'is-report-guide': accessMode === 'upload' }">
             <div v-if="accessMode === 'upload'" class="report-registration-panel">
-              <DataTable v-if="currentDb?.tid" :key="currentDb.tid" :data="fetchReportFileHistory" :page-sizes="[10,20,50,100]" row-key="fileId" size="small" max-height="360">
-                <el-table-column type="index" label="序号" width="60" />
-                <el-table-column prop="fileName" label="数据文件" min-width="200" sortable="custom" />
-                <el-table-column prop="tableCount" label="表数" width="80" sortable="custom" />
-                <el-table-column prop="rowCount" label="数据量" width="100" sortable="custom" />
+              <AccessOnboarding title="通过三步完成数据上报" badge="CSV / Excel / TXT / JSON" :steps="reportGuideSteps" hint="点击下方「下一步」，保存数据源并进入上报工作台" />
+              <div v-if="reportHistory.error" class="report-history-error" role="alert"><span>上传记录读取失败，请重试</span><el-button link type="primary" @click="reportHistoryTableRef?.refresh?.()">重新读取</el-button></div>
+              <div v-if="reportHistorySourceId" v-show="reportHistory.total > 0" class="report-uploaded-files">
+                <div class="report-uploaded-heading"><strong>已上传数据文件</strong><span>共 {{ reportHistory.total }} 份</span></div>
+              <DataTable ref="reportHistoryTableRef" :key="reportHistorySourceId" :data="fetchReportFileHistory" :columns="[]" :page-sizes="[10,20,50,100]" :show-index="true" :index-fixed="false" row-key="fileId" size="small" flex-type="flex-[0_1_auto]" height="auto" class="report-registration-table">
+                <el-table-column prop="fileName" label="数据文件名称" min-width="210" sortable="custom" />
+                <el-table-column prop="fieldCount" label="字段数" width="95" sortable="custom" />
+                <el-table-column prop="rowCount" label="数据量" width="100" sortable="custom"><template #default="{row}">{{ row.rowCount || 0 }} 条</template></el-table-column>
                 <el-table-column label="状态" width="110"><template #default="{row}"><el-tag :type="row.status === 'success' ? 'success' : row.status === 'failed' ? 'danger' : row.status === 'partial' ? 'warning' : 'info'">{{ row.status === 'success' ? '已上报' : row.status === 'failed' ? '上报失败' : row.status === 'partial' ? '部分已上报' : row.status === 'sending' ? '上报中' : '待上报' }}</el-tag></template></el-table-column>
                 <el-table-column prop="reportedAt" label="最近上报时间" min-width="170" sortable="custom"><template #default="{row}">{{ row.reportedAt ? new Date(row.reportedAt).toLocaleString('zh-CN', {timeZone:'Asia/Shanghai',hour12:false}) : '—' }}</template></el-table-column>
                 <template #empty>当前数据源暂无上传文件，点击下一步进入数据上报工作台。</template>
               </DataTable>
+              </div>
             </div>
             <template v-else-if="connectionEnabled === '0'">
               <div
@@ -2420,66 +2400,7 @@
                   </el-table-column>
                 </DataTable>
               </div>
-              <div
-                v-else-if="accessMode === 'upload' || accessMode === 'capture' || accessMode === 'proxy'"
-                class="guide-hero-card data-upload-guide"
-              >
-                <div class="guide-hero-copy">
-                  <span class="guide-kicker">{{
-                    accessMode === "capture"
-                      ? "数据抓取模板"
-                      : accessMode === "proxy"
-                        ? "代理访问流程"
-                        : "数据上报流程"
-                  }}</span>
-                  <strong>{{
-                    accessMode === "capture"
-                      ? "网络不通时，下载固定模板并填写后上传登记"
-                      : accessMode === "proxy"
-                        ? "先完成跨网数据登记，再由服务总线授权代理访问"
-                        : "先完成资源登记，再下载模板填报并上传实际数据"
-                  }}</strong>
-                  <p>
-                    {{
-                      accessMode === "capture"
-                        ? "无法提供接口连接时，请下载与数据推送方式一致的登记模板，线下填写数据表和字段后上传。模板审核通过后即可进入后续标注、目录和审查流程。"
-                        : accessMode === "proxy"
-                          ? "此方式不配置源端数据库连接、不创建拉取或推送任务。请下载登记模板并上传资源、数据表和字段定义；登记完成后发布至服务总线，由服务总线按授权策略提供跨网代理访问。"
-                          : "先下载登记模板，填写数据资源、数据表和字段定义后上传完成登记；平台完成探查、标注和配置后生成上报模板。下载上报模板后，按已确认字段填报实际业务数据并上传，由平台接收、处理并接入。"
-                    }}
-                  </p>
-                  <div class="offline-flow-steps is-five-steps">
-                    <div class="offline-flow-step">
-                      <span><Icon icon="el-icon-Download" /></span>
-                      <strong>下载登记模板</strong>
-                      <small>获取资源定义表</small>
-                    </div>
-                    <i class="offline-flow-arrow">→</i>
-                    <div class="offline-flow-step">
-                      <span><Icon icon="el-icon-EditPen" /></span>
-                      <strong>填报登记信息</strong>
-                      <small>填写资源、表和字段</small>
-                    </div>
-                    <i class="offline-flow-arrow">→</i>
-                    <div class="offline-flow-step">
-                      <span><Icon icon="el-icon-Grid" /></span>
-                      <strong>上传并完成登记</strong>
-                      <small>探查、标注、配置</small>
-                    </div>
-                    <i class="offline-flow-arrow">→</i>
-                    <div class="offline-flow-step">
-                      <span><Icon icon="el-icon-DocumentChecked" /></span>
-                      <strong>下载上报模板</strong>
-                      <small>登记完成后生成</small>
-                    </div>
-                    <i class="offline-flow-arrow">→</i>
-                    <div class="offline-flow-step">
-                      <span><Icon icon="el-icon-Upload" /></span>
-                      <strong>填报并上传数据</strong>
-                      <small>平台接收、处理并接入</small>
-                    </div>
-                  </div>
-                  <div class="guide-actions data-upload-guide-actions">
+              <div v-else-if="accessMode === 'capture'" class="guide-actions offline-template-actions">
                     <el-button
                       type="primary"
                       plain
@@ -2512,95 +2433,14 @@
                       @change="handleMetadataTemplateImport"
                     />
                   </div>
-                  <div
-                    v-if="metadataImportState.fileName"
-                    class="guide-import-result"
-                  >
-                    <Icon icon="el-icon-SuccessFilled" />
-                    <span
-                      >已导入 {{ metadataImportState.fileName }}，共
-                      {{ metadataImportState.tableCount }} 项数据、{{
-                        metadataImportState.fieldCount
-                      }}
-                      个字段，等待审核。</span
-                    >
-                  </div>
-                </div>
-              </div>
-              <div v-else class="guide-hero-card">
-                <div class="guide-hero-copy">
-                  <span class="guide-kicker">离线模板登记</span>
-                  <strong>连接不可用时，通过模板完成元数据登记</strong>
-                  <p>
-                    当数据源暂时连不上、账号未开通或不能提供连接信息时，请下载当前类型的登记模板，线下填写数据表和数据项，再导入系统进入后续审查。
-                  </p>
-                  <div class="offline-flow-steps">
-                    <div class="offline-flow-step">
-                      <span><Icon icon="el-icon-Download" /></span>
-                      <strong>下载模板</strong>
-                      <small>按当前数据源类型生成</small>
-                    </div>
-                    <i class="offline-flow-arrow">→</i>
-                    <div class="offline-flow-step">
-                      <span><Icon icon="el-icon-EditPen" /></span>
-                      <strong>线下填写</strong>
-                      <small>补齐数据表和数据项</small>
-                    </div>
-                    <i class="offline-flow-arrow">→</i>
-                    <div class="offline-flow-step">
-                      <span><Icon icon="el-icon-UploadFilled" /></span>
-                      <strong>导入审查</strong>
-                      <small>进入后续登记确认</small>
-                    </div>
-                  </div>
-                  <div class="guide-actions">
-                    <el-button
-                      type="primary"
-                      :loading="metadataImportState.loading"
-                      @click="openDdlImportDialog"
-                    >
-                      <template #icon
-                        ><Icon icon="el-icon-Document"
-                      /></template>
-                      导入 DDL 语句
-                    </el-button>
-                    <el-button
-                      type="primary"
-                      plain
-                      :loading="templateDownloadState.loading"
-                      :disabled="templateDownloadState.loading"
-                      @click="downloadCurrentMetadataTemplate"
-                    >
-                      <template #icon
-                        ><Icon icon="el-icon-Download"
-                      /></template>
-                      {{
-                        templateDownloadState.loading
-                          ? "正在生成模板"
-                          : `下载${sourceTypeLabels[sourceType] || "数据源"}模板`
-                      }}
-                    </el-button>
-                    <el-button
-                      type="primary"
-                      plain
-                      :loading="metadataImportState.loading"
-                      @click="triggerMetadataImport"
-                    >
-                      <template #icon><Icon icon="el-icon-Upload" /></template>
-                      导入已填写模板
-                    </el-button>
-                    <input
-                      ref="metadataImportInput"
-                      class="metadata-import-input"
-                      type="file"
-                      accept=".xlsx"
-                      @change="handleMetadataTemplateImport"
-                    />
-                  </div>
-                  <div
-                    v-if="metadataImportState.fileName"
-                    class="guide-import-result"
-                  >
+              <AccessOnboarding
+                v-else-if="accessMode === 'explore'"
+                title="通过三步完成离线元数据登记"
+                :steps="offlineGuideSteps"
+                badge="DDL / Excel 模板"
+              >
+                <template v-if="metadataImportState.fileName" #status>
+                  <div class="guide-import-result">
                     <Icon icon="el-icon-SuccessFilled" />
                     <span>
                       已导入 {{ metadataImportState.fileName }}，
@@ -2608,54 +2448,8 @@
                       {{ metadataImportState.fieldCount }} 个字段
                     </span>
                   </div>
-                </div>
-                <div class="guide-illustration" aria-hidden="true">
-                  <div class="guide-ill-source">
-                    <Icon icon="el-icon-FolderOpened" />
-                    <span>登记模板</span>
-                  </div>
-                  <div class="guide-flow-line"><i></i><i></i><i></i></div>
-                  <div class="guide-ill-panel">
-                    <div class="guide-ill-row is-strong"></div>
-                    <div class="guide-ill-row"></div>
-                    <div class="guide-ill-row is-short"></div>
-                    <div class="guide-ill-tag">导入审查</div>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <template v-else>
-              <div class="guide-hero-card">
-                <div class="guide-hero-copy">
-                  <span class="guide-kicker">连接信息确认</span>
-                  <strong>选择一种登记方式继续</strong>
-                  <p>
-                    提供连接信息后可进行连通测试、自动探查数据表、读取字段结构；暂不提供则只创建数据源档案。
-                  </p>
-                  <div class="guide-bullets">
-                    <span><Icon icon="el-icon-Connection" /> 连通测试</span>
-                    <span><Icon icon="el-icon-Grid" /> 探查数据表</span>
-                    <span
-                      ><Icon icon="el-icon-DataAnalysis" /> 读取字段结构</span
-                    >
-                  </div>
-                </div>
-                <div class="guide-illustration" aria-hidden="true">
-                  <div class="guide-ill-source is-blue">
-                    <Icon icon="el-icon-Cpu" />
-                    <span>数据源</span>
-                  </div>
-                  <div class="guide-flow-line is-active">
-                    <i></i><i></i><i></i>
-                  </div>
-                  <div class="guide-ill-panel is-active">
-                    <div class="guide-ill-row is-strong"></div>
-                    <div class="guide-ill-row"></div>
-                    <div class="guide-ill-row is-short"></div>
-                    <div class="guide-ill-tag">自动探查</div>
-                  </div>
-                </div>
-              </div>
+                </template>
+              </AccessOnboarding>
             </template>
           </div>
         </section>
@@ -2765,7 +2559,7 @@
       </template>
     </el-dialog>
   </div>
-    <api-register-modal v-model="proxyServiceRegistrationVisible" @close="onProxyServiceRegistrationClosed" />
+    <api-register-modal v-model="proxyServiceRegistrationVisible" :datasource-id="proxyDatasourceId" :datasource-name="currentDb?.dbName || ''" @close="onProxyServiceRegistrationClosed" />
 </template>
 
 <script setup>
@@ -2778,7 +2572,6 @@ import {
   ref,
   watch,
 } from "vue";
-import { useRouter } from "vue-router";
 import { useRegisterModal } from "@/composables";
 import { useRegisterStore } from "@/store";
 import { get, set } from "lodash-es";
@@ -2803,7 +2596,6 @@ const currentDid = ref("");
 const loadedDatasourceDid = ref("");
 const store = useRegisterStore();
 const accessMode = ref("explore");
-const serviceRouter = useRouter();
 const registerModalContext = useRegisterModal();
 const proxyServiceTableRef = ref();
 const proxyServiceKeyword = ref('');
@@ -2811,21 +2603,18 @@ const proxyServiceRegistrationVisible = ref(false);
 const onProxyServiceRegistrationClosed = (result) => {
   if (result === 'success') proxyServiceTableRef.value?.refresh?.(true);
 };
-const proxyNavigating = ref(false);
+const proxyDatasourceId = computed(() => currentDb.value?.isDraft || currentDb.value?.detailMissing ? '' : String(currentDb.value?.tid || currentDb.value?.id || '').trim());
 const fetchDepartmentServices = async ({ pageNo=1,pageSize=10,sortField,sortDir }={}) => {
-  const response = await $common.post('/dws/flowserve/gateway/api/list', {departmentOnly:true,pageNum:pageNo,pageSize,sortField,sortDir,keyword:proxyServiceKeyword.value});
+  const datasourceId = proxyDatasourceId.value;
+  if (!datasourceId) return {list:[],total:0};
+  const response = await $common.post('/dws/flowserve/gateway/api/list', {datasourceId,pageNum:pageNo,pageSize,sortField,sortDir,keyword:proxyServiceKeyword.value});
   const payload = response?.data || response || {};
-  return {list:payload.list || [],total:Number(payload.total || 0)};
+  return datasourceId === proxyDatasourceId.value ? {list:payload.list || [],total:Number(payload.total || 0)} : {list:[],total:0};
 };
 const goToServiceRegistration = async () => {
-  if (proxyNavigating.value) return { navigationHandled: true };
-  proxyNavigating.value=true;
-  try {
-    await serviceRouter.push({path:'/deal/data-server/list',query:{register:'1'}});
-    registerModalContext.open.value=false;
-    return { navigationHandled: true };
-  }
-  finally { proxyNavigating.value=false; }
+  if (!proxyDatasourceId.value) throw new Error('请先保存当前数据源，再为它登记服务');
+  proxyServiceRegistrationVisible.value=true;
+  return {navigationHandled:true};
 };
 const sourceType = ref("");
 const connectionEnabled = ref("");
@@ -2881,7 +2670,7 @@ const receivePushAddress = computed(() => {
   if (receivePushNodesState.value === "loading") return "正在加载推送节点…";
   if (receivePushNodesState.value === "error") return "推送节点加载失败，请重新打开登记页面";
   const baseUrl = selectedReceivePushNode.value?.baseUrl;
-  if (baseUrl) return baseUrl + (receiveDeliveryProfile.pushDataType === "UNSTRUCTURED" ? "/api/v1/file-uploads" : "/api/v1/data-push");
+  if (baseUrl) return baseUrl + "/api/v1/data-push";
   return receiveNetworkPushNodes.value.length > 1
     ? "当前网络有多个推送节点，请在节点管理中设置默认节点"
     : "当前网络未配置启用的推送节点";
@@ -4193,6 +3982,14 @@ const addApiPullItem = () => {
       return [];
     }
   };
+// 抓取登记直接提供可填写的首条配置；已有接口清单继续使用原记录。
+watch(
+  [isApiPullRegistration, () => apiPullItems.value.length],
+  ([enabled, count]) => {
+    if (enabled && count === 0) addApiPullItem();
+  },
+  { flush: "post" },
+);
 const legacyApiAuthType = (value) =>
   ({
     basic: "BASIC",
@@ -4884,7 +4681,12 @@ const ensureInitialDatasource = () => {
   return selected;
 };
 const loadAccessibleDatasources = async () => {
-  const result = await $common.post("/dst/database/departmentDataSources", {});
+  // 复用外层已授权的摘要清单；弹窗不重复读取包含大量元数据的完整清单。
+  // 其他登记入口未提供摘要时仍从服务端获取，选中详情与保存继续逐对象鉴权。
+  const supplied = store.data?.datasourceOptions;
+  const result = Array.isArray(supplied)
+    ? { list: supplied }
+    : await $common.post("/dst/database/departmentDataSources", { mode: "summary" });
   const list = Array.isArray(result?.list)
     ? result.list
     : Array.isArray(result)
@@ -6026,12 +5828,14 @@ const fileRegistrationState = computed(() => {
   return fileRegistrationBySource[key];
 });
 const fileFormatOptions = ["JPG 图片", "JPEG 图片", "PNG 图片", "PDF 文档", "DOCX 文档"];
-const fileRegistrationHeaders = ["序号", "文件名称 *", "文件说明 *", "文件格式 *", "文件大小上限(MB) *", "关联数据表名", "关联字段名"];
-const fileRegistrationRequiredHeaders = ["文件名称", "文件说明", "文件格式", "文件大小上限(MB)"];
+const fileRegistrationHeaders = ["序号", "文件英文名 *", "文件名称 *", "文件说明 *", "文件格式 *", "文件大小上限(MB) *", "关联数据表名", "关联字段名"];
+const fileRegistrationRequiredHeaders = ["文件英文名", "文件名称", "文件说明", "文件格式", "文件大小上限(MB)"];
 function parseFileRegistrationRows(objects) {
   if (!objects.length || objects.length > 100) throw new Error("文件登记模板须填写1至100项文件定义");
   const names = new Set();
+  const codes = new Set();
   return objects.map((row, index) => {
+    const fileCode = getCellText(row, ["文件英文名"]);
     const fileName = getCellText(row, ["文件名称"]);
     const fileDescription = getCellText(row, ["文件说明"]);
     const rawFormat = getCellText(row, ["文件格式"]).trim().toLowerCase();
@@ -6040,6 +5844,9 @@ function parseFileRegistrationRows(objects) {
     const relatedTableName = getCellText(row, ["关联数据表名"]);
     const relatedFieldName = getCellText(row, ["关联字段名"]);
     const line = row.__rowNumber || index + 2;
+    if ((Object.hasOwn(row,"文件英文名") && !fileCode) || (fileCode && !/^[a-z][a-z0-9_]{0,79}$/.test(fileCode))) throw new Error(`文件登记第${line}行：文件英文名须以小写字母开头，仅含小写字母、数字和下划线，最多80位`);
+    if (fileCode && codes.has(fileCode)) throw new Error(`文件登记第${line}行：文件英文名重复`);
+    if (fileCode) codes.add(fileCode);
     if (!fileName || fileName.length > 255 || !fileDescription || fileDescription.length > 2000) throw new Error(`文件登记第${line}行：文件名称、说明必填，分别最多255字、2000字`);
     if (names.has(fileName.toLowerCase())) throw new Error(`文件登记第${line}行：文件名称重复`);
     names.add(fileName.toLowerCase());
@@ -6047,7 +5854,7 @@ function parseFileRegistrationRows(objects) {
     const maxFileSizeMb = Number(sizeText);
     if (!/^[0-9]+(\.[0-9]{1,6})?$/.test(sizeText) || maxFileSizeMb <= 0 || maxFileSizeMb > 1048576) throw new Error(`文件登记第${line}行：大小上限须为大于0且不超过1048576的MB数值`);
     if (relatedFieldName && !relatedTableName) throw new Error(`文件登记第${line}行：填写关联字段时须填写关联表`);
-    return { id: `file-definition-${index}`, fileName, fileDescription, fileFormat, maxFileSizeMb, relatedTableName, relatedFieldName };
+    return { id: `file-definition-${index}`, fileCode, fileName, fileDescription, fileFormat, maxFileSizeMb, relatedTableName, relatedFieldName };
   });
 }
 async function downloadFileRegistrationTemplate() {
@@ -6055,24 +5862,25 @@ async function downloadFileRegistrationTemplate() {
   const workbook = new WorkbookClass();
   addTemplateSheet(workbook, "填写说明", ["项目", "说明"], [
     ["用途", "登记非结构化推送的文件定义，不填写实际文件内容。每行代表一类待推送文件；示例可替换或删除。"],
-    ["必填项", "文件名称、文件说明、文件格式、文件大小上限(MB)。"],
+    ["必填项", "文件英文名、文件名称、文件说明、文件格式、文件大小上限(MB)。"],
+    ["文件英文名", "稳定的文件类别标识，例如scene_photo；同一数据源内唯一，仅含小写字母、数字和下划线且以字母开头，最多80位。接口使用fileCode，实际文件名由上传文件提供。"],
     ["文件名称", "填写业务文件名称，例如现场照片、案件卷宗；实际上传仍须提供含扩展名的fileName。"],
     ["文件格式", "从下拉列表选择JPG/JPEG/PNG图片或PDF/DOCX文档，每行一种格式。"],
     ["文件大小", "填写单个文件大小上限，单位MB，1MB=1048576字节；实际接收仍受海通节点文件集合限制。"],
     ["可选关联", "关联数据表和字段均可不填；填写字段时须同时填写表。关联表须已登记在当前行业，同名表可填写登记表ID。"],
     ["登记流程", "上传文件登记模板→保存→下一步直接进入登记内容审查，无需探查、字典表及业务表登记。"],
-    ["重复导入", "按文件名称更新同名定义，保留未列出的已有项；模板不删除既有登记或实际文件。"],
+    ["重复导入", "优先按文件英文名更新同类定义，旧模板按文件名称匹配。已有集合编码保留，已设置的英文名不可随意修改；模板不删除既有登记或实际文件。"],
   ]);
-  const examples = [[1,"现场照片","现场采集的业务照片","JPG 图片",20,"",""],[2,"案件卷宗","案件相关PDF文档","PDF 文档",100,"",""],[3,"业务文书","业务办理的Word文档","DOCX 文档",50,"",""]];
+  const examples = [[1,"scene_photo","现场照片","现场采集的业务照片","JPG 图片",20,"",""],[2,"case_document","案件卷宗","案件相关PDF文档","PDF 文档",100,"",""],[3,"business_document","业务文书","业务办理的Word文档","DOCX 文档",50,"",""]];
   const sheet = addTemplateSheet(workbook, "文件登记", fileRegistrationHeaders, examples);
   const options = workbook.addWorksheet("下拉选项", {state:"veryHidden"});
   options.addRow(["文件格式"]); fileFormatOptions.forEach(value => options.addRow([value]));
   for (let row = 2; row <= 101; row++) {
-    sheet.getCell(row,4).dataValidation = {type:"list",allowBlank:false,formulae:["'下拉选项'!$A$2:$A$6"],showErrorMessage:true,errorTitle:"文件格式不正确",error:"请从列表选择支持的文件格式"};
-    sheet.getCell(row,5).dataValidation = {type:"decimal",operator:"between",allowBlank:false,formulae:[0.000001,1048576],showErrorMessage:true,errorTitle:"文件大小不正确",error:"请填写大于0且不超过1048576的MB数值"};
+    sheet.getCell(row,5).dataValidation = {type:"list",allowBlank:false,formulae:["'下拉选项'!$A$2:$A$6"],showErrorMessage:true,errorTitle:"文件格式不正确",error:"请从列表选择支持的文件格式"};
+    sheet.getCell(row,6).dataValidation = {type:"decimal",operator:"between",allowBlank:false,formulae:[0.000001,1048576],showErrorMessage:true,errorTitle:"文件大小不正确",error:"请填写大于0且不超过1048576的MB数值"};
   }
   markRequiredColumns(sheet,fileRegistrationRequiredHeaders);
-  sheet.columns.forEach((column,index)=>{column.width=[8,24,52,20,24,28,28][index];});
+  sheet.columns.forEach((column,index)=>{column.width=[8,26,24,52,20,24,28,28][index];});
   const buffer=await workbook.xlsx.writeBuffer();
   const url=URL.createObjectURL(new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
   const link=document.createElement("a");link.href=url;link.download="文件登记模板.xlsx";link.style.display="none";
@@ -6107,7 +5915,7 @@ async function saveFileRegistrationRows(sourceId) {
 }
 watch([currentDid,accessMode,()=>receiveDeliveryProfile.pushDataType],()=>{
   const fileFlow=isFilePush.value;
-  (store.state.steps || []).forEach((step,index)=>{if (index>=1 && index<=3) step.skipped=fileFlow;});
+  (store.state.steps || []).forEach((step,index)=>{if (index>=1 && index<=3) step.skipped=fileFlow || accessMode.value === "proxy";});
   if (fileFlow) void loadFileRegistrationRows();
 },{immediate:true});
 
@@ -6270,7 +6078,7 @@ const markMetadataImportPersisted = (imported) => {
   };
 };
 const loadMetadataImportResult = async (dbId) => {
-  if (!dbId) return;
+  if (!dbId || accessMode.value === "proxy") return;
   if (isFilePush.value) return loadFileRegistrationRows();
   try {
     // 上报模板的导入结果在进入第二步标注前，db_table_t.annotated 仍为 0。
@@ -6322,10 +6130,42 @@ const detailApi = (tid, silent = false) => {
   });
 };
 // 登记页只读取文件结果；上传、规范编辑与提交均由海通工作台负责。
+const reportHistoryTableRef = ref();
+const reportHistorySourceId = computed(()=>hasPersistedDatasource.value ? String(currentDb.value?.tid || currentDb.value?.id || currentDb.value?.originalTid || '') : '');
+const reportHistory = reactive({ total: 0, error: '' });
+let reportHistoryVersion = 0;
+const reportGuideSteps = [
+  {title:'选择数据源并上传文件',description:'上传文件，自动识别数据表。',paths:['M17 7h21l10 10v32H17z','M38 7v12h10','M25 28h15M25 34h10','M48 56V34m-8 8 8-8 8 8','M36 51v7h24v-7']},
+  {title:'规范数据表登记信息',description:'规范表名、字段和时间格式。',paths:['M8 11h46v38H8z','M8 22h46M21 22v27M8 33h46','M38 49a11 11 0 1 0 22 0 11 11 0 0 0-22 0','m43 49 4 4 8-9']},
+  {title:'选择数据表并上报数据',description:'选择数据表，确认上报。',paths:['m8 25 49-16-16 47-10-20z','m31 36 26-27','M7 42h10M3 49h17M9 56h13']},
+];
+const receiveGuideSteps = [
+  { title: "登记数据信息", description: "上传填写好的数据登记模板，完成数据表和字段登记。", paths: ["M12 7h24l10 10v32H12z", "M36 7v12h10", "M20 27h17M20 34h11", "M48 30v24m-8-8 8 8 8-8", "M38 54v6h20v-6"] },
+  { title: "查看推送规范", description: "进入登记内容审查，查看接口地址、字段约束和认证要求。", paths: ["M12 7h30v48H12z", "M20 18h14M20 27h14M20 36h8", "M36 43a10 10 0 1 0 20 0 10 10 0 0 0-20 0", "m41 43 4 4 7-8"] },
+  { title: "推送业务数据", description: "按接口规范组织数据，完成认证后提交数据推送。", paths: ["M17 43h-3a10 10 0 0 1-1-20 16 16 0 0 1 30-6 11 11 0 0 1 9 19", "M29 49V26m-8 8 8-8 8 8", "M38 49a11 11 0 1 0 22 0 11 11 0 0 0-22 0", "m44 49 4 4 7-8"] },
+];
+const filePushGuideSteps = [
+  { title: "登记文件信息", description: "下载并填写文件登记模板，上传后核对文件定义。", paths: ["M17 7h21l10 10v32H17z", "M38 7v12h10", "M25 28h15M25 34h10", "M48 56V34m-8 8 8-8 8 8", "M36 51v7h24v-7"] },
+  { title: "查看推送规范", description: "进入登记内容审查，查看文件集合、分片上传与认证要求。", paths: ["M12 7h30v48H12z", "M20 18h14M20 27h14M20 36h8", "M36 43a10 10 0 1 0 20 0 10 10 0 0 0-20 0", "m41 43 4 4 7-8"] },
+  { title: "推送文件数据", description: "按规范上传文件分片，完成合并并提交文件数据推送。", paths: ["M17 43h-3a10 10 0 0 1-1-20 16 16 0 0 1 30-6 11 11 0 0 1 9 19", "M29 49V26m-8 8 8-8 8 8", "M38 49a11 11 0 1 0 22 0 11 11 0 0 0-22 0", "m44 49 4 4 7-8"] },
+];
+const offlineGuideSteps = computed(() => [
+  { title: accessMode.value === "explore" ? "准备结构定义" : "下载登记模板", description: accessMode.value === "explore" ? "准备 DDL 语句，或下载对应数据源的登记模板。" : "下载对应资源的模板，查看必填字段与规范。", icon: "el-icon-Document" },
+  { title: "导入元数据", description: accessMode.value === "explore" ? "导入 DDL 或已填写模板，识别数据表与字段。" : "上传已填写模板，识别数据表与字段。", icon: "el-icon-Upload" },
+  { title: "核对并继续登记", description: "检查导入结果，继续标注、配置和内容审查。", icon: "el-icon-DocumentChecked" },
+]);
+watch([reportHistorySourceId,accessMode],()=>{reportHistoryVersion++;reportHistory.total=0;reportHistory.error='';},{flush:'sync'});
+onBeforeUnmount(()=>{reportHistoryVersion++;});
 async function fetchReportFileHistory({pageNo=1,pageSize=20,sortField,sortDir}={}) {
-  const dbId=currentDb.value?.tid;
+  const dbId=reportHistorySourceId.value;
   if(!dbId)return {list:[],total:0};
-  return $common.post('/dst/database/metadata/report-registration',{action:'history',dbId,pageNo,pageSize,sortField,sortDir});
+  const version=reportHistoryVersion;
+  const current=()=>version===reportHistoryVersion&&dbId===reportHistorySourceId.value&&accessMode.value==='upload';
+  try {
+    const result=await $common.post('/dst/database/metadata/report-registration',{action:'history',dbId,pageNo,pageSize,sortField,sortDir});
+    if(!current())return {list:[],total:0};
+    reportHistory.total=Number(result?.total)||0;reportHistory.error='';return result;
+  } catch(error) {if(!current())return {list:[],total:0};reportHistory.error='failed';throw error;}
 }
 function openReportWorkbench(dbId) {
   const configured=String(window.__DATA_ELEMENTS_HAITONG_BASE_URL__||'').trim();
@@ -6348,7 +6188,6 @@ function openReportWorkbench(dbId) {
   return {navigationHandled:true};
 }
 const save = async () => {
-  if (accessMode.value === "proxy") throw new Error("请点击下一步进入服务登记页，服务无需保存为数据库数据源");
   try {
     store.state.loadStatus["main"] = true;
     await validate();
@@ -6441,11 +6280,11 @@ const save = async () => {
     }
     const savedFileRegistrations = isFilePush.value ? await saveFileRegistrationRows(savedDbId) : null;
     const importedMetadata = activeMetadataImport();
-    if (accessMode.value !== "upload" && !isFilePush.value && shouldPersistImportedMetadataSnapshot(importedMetadata)) {
+    if (!["upload", "proxy"].includes(accessMode.value) && !isFilePush.value && shouldPersistImportedMetadataSnapshot(importedMetadata)) {
       await persistImportedMetadataSnapshot(savedDbId, importedMetadata);
       markMetadataImportPersisted(importedMetadata);
     }
-    const metadataRefresh = await refreshSavedDatasourceMetadata(savedDbId, formData);
+    const metadataRefresh = accessMode.value === "proxy" ? {metadata:{},warning:false} : await refreshSavedDatasourceMetadata(savedDbId, formData);
     // 新增成功后始终保留首项“新建数据源”草稿，并把已保存的数据源放入可编辑列表。
     // 修改已有数据源则只更新当前项；工作流状态始终只保留当前选中项。
     const newObj = Object.assign({}, formData, data, metadataRefresh.metadata, {
@@ -6502,7 +6341,7 @@ const next = async () => {
     return openReportWorkbench(result.data.tid);
   }
   if (isFilePush.value && (fileRegistrationState.value.dirty || !fileRegistrationState.value.loaded || !fileRegistrationState.value.rows.length)) throw new Error("请先保存已填写的文件登记模板，再进入内容审查");
-  if (accessMode.value === "proxy") return goToServiceRegistration();
+  if (accessMode.value === "proxy" && !proxyDatasourceId.value) throw new Error("请先保存当前数据源，再进入内容审查");
   if (!currentDb.value?.tid || currentDb.value?.detailMissing) {
     throw "请保存";
   }
@@ -8455,7 +8294,7 @@ async function handleMetadataTemplateImport(event) {
     await workbook.xlsx.load(await file.arrayBuffer());
     if (isFilePush.value) {
       const sheet=workbook.getWorksheet("文件登记");
-      validateTemplateHeaders(sheet,"文件登记",fileRegistrationRequiredHeaders);
+      validateTemplateHeaders(sheet,"文件登记",fileRegistrationRequiredHeaders.filter(name=>name!=="文件英文名"));
       const rows=parseFileRegistrationRows(worksheetToObjects(sheet));
       const state=fileRegistrationState.value;
       state.rows=rows;state.fileName=file.name;state.dirty=true;state.loaded=true;state.error="";
@@ -8806,13 +8645,17 @@ function selectCaptureSourceType(value) {
     return;
   selectSourceType(value);
   connectionEnabled.value = "1";
-  if (value === "api" && !apiPullItems.value.length) addApiPullItem();
 }
 function selectAccessMode(value) {
   if (!accessModeOptions.some((item) => item.value === value)) return;
   accessMode.value = value;
-  // 代理访问登记的是服务，不设置数据库类型，也不激活离线表格模板。
-  if (value === "proxy") return;
+  // 代理访问只保存数据源基本信息，不沿用其它方式的连接和模板。
+  if (value === "proxy") {
+    sourceType.value = "";
+    connectionEnabled.value = "0";
+    formRef.value?.setValue({dbType:"",showConnect:"0"});
+    return;
+  }
   // 每种接入方式仅显示自己的模板上传结果，切换方式时不复用其它方式的成功提示。
   activateMetadataImportForMode();
   if (value === "receive") nextTick(() => syncReceiveAccessNode());
@@ -8828,7 +8671,6 @@ function selectAccessMode(value) {
     formRef.value?.setValue({ dbType: "api" });
     changeSourceType("api", true);
     connectionEnabled.value = "1";
-    if (!apiPullItems.value.length) addApiPullItem();
     return;
   }
   if (value === "upload") {
@@ -9106,7 +8948,7 @@ function buildConnectorSaveData() {
   return result;
 }
 function validateConnector() {
-  if (accessMode.value === "upload") return;
+  if (["upload", "proxy"].includes(accessMode.value)) return;
   if (accessMode.value === "capture" && sourceType.value !== "api") {
     if (
       captureSchedule.mode === "interval" &&
@@ -9504,13 +9346,32 @@ defineExpose({
 
 .connection-confirm-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 12px 16px;
   margin-bottom: 15px;
-  // min-height: 62px;
-  // border-bottom: 1px solid #ebedf0;
+  padding: 0;
 }
+
+.connection-confirm-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  min-width: 0;
+}
+.connection-confirm-controls .switch-source-type-button { flex-shrink: 0; }
+.connection-onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  max-width: 100%;
+  margin-left: auto;
+}
+.connection-onboarding-actions :deep(.el-button + .el-button) { margin-left: 0; }
 
 .switch-source-type-button {
   margin-left: 0;
@@ -9701,7 +9562,14 @@ defineExpose({
   }
 }
 
-.file-registration-help { margin: 12px 0; color: #667085; font-size: 13px; line-height: 1.7; }
+.receive-template-guide .file-registration-card,
+.receive-template-guide .receive-template-result-card { margin-top: 20px; }
+.file-registration-card :deep(.el-table .cell),
+.receive-template-result-card :deep(.el-table .cell) {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
 .file-registration-error { color: #d92d20 !important; }
 .receive-push-address {
   display: grid;
@@ -9719,6 +9587,9 @@ defineExpose({
 }
 
 .receive-push-address code {
+  width: 100%;
+  max-width: 360px;
+  box-sizing: border-box;
   overflow: hidden;
   padding: 7px 10px;
   border-radius: 6px;
@@ -10162,12 +10033,33 @@ defineExpose({
   padding: 20px 22px;
 }
 
-.report-registration-panel { padding: 22px; width: 100%; border: 1px solid #dbe7fa; border-radius: 12px; background: #fff; }
-.report-registration-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.report-registration-toolbar strong { font-size: 18px; color: #172b4d; }
-.report-registration-toolbar p, .report-registration-description { color: #718096; font-size: 13px; line-height: 1.7; margin: 8px 0 14px; }
-.report-registration-table { margin-top: 16px; }
-.report-registration-sheet { display: block; color: #8a98ad; font-size: 12px; margin-top: 3px; }
+.connection-guide.is-report-guide { min-height: 0; justify-content: flex-start; padding: 22px 24px; }
+.report-registration-panel { width: 100%; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.report-uploaded-files { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e1e9f5; }
+.report-uploaded-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.report-uploaded-heading strong { color: #334b68; font-size: 14px; font-weight: 600; }
+.report-uploaded-heading span { color: #8997aa; font-size: 12px; }
+.report-registration-table { width: 100%; }
+.report-history-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; color: #a06b30; font-size: 12px; }
+@media(max-width:760px) { .connection-guide.is-report-guide { padding: 18px; }      }
 .data-upload-result-toolbar {
   display: flex;
   align-items: flex-start;
@@ -10774,7 +10666,7 @@ defineExpose({
   .api-pull-registration-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 16px;
     margin-bottom: 12px;
     strong {
@@ -10869,12 +10761,6 @@ defineExpose({
     .full-row {
       grid-column: auto;
     }
-  }
-
-  .connection-confirm-row {
-    align-items: flex-start;
-    flex-direction: column;
-    padding: 14px 0;
   }
 
   .source-card-grid {
@@ -11317,4 +11203,30 @@ defineExpose({
   .offline-flow-steps.is-six-steps .offline-flow-step strong,
   .offline-flow-steps.is-six-steps .offline-flow-step small { white-space: normal; }
 }
+
+.connection-guide:has(> .access-onboarding),
+.connection-guide.is-report-guide {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.proxy-service-table :deep(.el-table__empty-text) { width: 100%; line-height: normal; }
+.proxy-service-table :deep(.el-table__empty-block) { padding: 0; align-items: stretch; }
+.proxy-service-no-results { padding: 40px 16px; color: var(--el-text-color-secondary); }
+.offline-template-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+
+
+/* Keep access-method names readable before decorative order numbers and icons. */
+@media (max-width: 1440px) {
+  .access-method-card { grid-template-columns: minmax(0, 1fr) 36px; }
+  .access-method-order { display: none; }
+}
+@media (max-width: 1100px) {
+  .access-method-card { grid-template-columns: minmax(0, 1fr); }
+  .access-method-icon { display: none; }
+}
+
+
 </style>

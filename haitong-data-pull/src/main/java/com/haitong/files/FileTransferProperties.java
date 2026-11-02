@@ -34,7 +34,7 @@ public class FileTransferProperties {
     public Map<String,CollectionContract> getCollections(){return collections;} public void setCollections(Map<String,CollectionContract> v){collections=v;}
 
     public static class CollectionContract {
-        private String tenantId="",datasourceId="",collectionId="",tableName="",fieldName="";
+        private String tenantId="",datasourceId="",collectionId="",fileCode="",tableName="",fieldName="";
         private long version=1, maxFileBytes=10L*1024*1024*1024,quotaBytes=50L*1024*1024*1024;
         private int maxActiveUploads=8;
         private boolean enabled=true,requireMalwareScan=true;
@@ -44,6 +44,7 @@ public class FileTransferProperties {
         public String getTenantId(){return tenantId;} public void setTenantId(String v){tenantId=v;}
         public String getDatasourceId(){return datasourceId;} public void setDatasourceId(String v){datasourceId=v;}
         public String getCollectionId(){return collectionId;} public void setCollectionId(String v){collectionId=v;}
+        public String getFileCode(){return fileCode.isBlank()?collectionId:fileCode;} public void setFileCode(String v){fileCode=v==null?"":v;}
         public String getTableName(){return tableName;} public void setTableName(String v){tableName=v;}
         public String getFieldName(){return fieldName;} public void setFieldName(String v){fieldName=v;}
         public long getVersion(){return version;} public void setVersion(long v){version=v;}

@@ -1,24 +1,35 @@
 import type { SourceBook, SourceSheet, Region, Resource, Field, Schema, Dictionary, SourceCell, Value } from './model';
 import { LIMITS, uid, clone, colName, isBlank } from './model';
 import { suggestNames, inferType } from './names';
+import { detectTextDelimiter, parseJsonRecords, validateTextMatrix } from './textFormats';
 export async function parseSource(file: File, encoding = 'utf-8', delimiter = ''): Promise<SourceBook> {
     const extension = file.name.split('.').pop()?.toLowerCase();
-    if (!['xlsx', 'xls', 'csv'].includes(extension || ''))
-        throw new Error('仅支持 .xlsx、.xls、.csv 文件');
+    if (!['xlsx', 'xls', 'csv', 'txt', 'json'].includes(extension || ''))
+        throw new Error('仅支持 Excel、CSV、TXT、JSON 文件');
+    if (!file.size) throw new Error('文件为空，请补充表头和数据后上传');
     if (file.size > LIMITS.bytes)
         throw new Error('文件超过 10 MiB，请拆分后导入');
     const data = await file.arrayBuffer();
     let sheets: SourceSheet[] = [];
-    if (extension === 'csv') {
+    if (extension === 'json') {
+        let text: string;
+        try { text = new TextDecoder('utf-8', { fatal: true }).decode(data); }
+        catch { throw new Error('JSON 文件需使用 UTF-8 编码，请转换编码后重新上传'); }
+        const matrix = parseJsonRecords(text);
+        const cells = matrix.map(row => row.map(v => ({ v })));
+        sheets = [{ name: file.name.replace(/\.json$/i, ''), cells, rowCount: cells.length, colCount: matrix[0].length, hidden: false, hiddenRows: [], hiddenCols: [], merges: [], notes: [] }];
+    }
+    else if (extension === 'csv' || extension === 'txt') {
         const Papa = (await import('papaparse')).default;
         const text = new TextDecoder(encoding, { fatal: true }).decode(data).replace(/^\uFEFF/, '');
-        const result = Papa.parse<string[]>(text, { header: false, dynamicTyping: false, delimiter, skipEmptyLines: false });
+        const result = Papa.parse<string[]>(text, { header: false, dynamicTyping: false, delimiter: delimiter || detectTextDelimiter(text), skipEmptyLines: false });
         const fatal = result.errors.filter(e => e.code !== 'UndetectableDelimiter');
         if (fatal.length)
-            throw new Error(`CSV 解析失败：${fatal[0].message}（逻辑记录 ${(fatal[0].row ?? 0) + 1}）`);
+            throw new Error(`${extension.toUpperCase()} 解析失败：${fatal[0].message}（逻辑记录 ${(fatal[0].row ?? 0) + 1}）`);
+        validateTextMatrix(result.data);
         const cells = result.data.map(row => row.map(v => ({ v })));
         const colCount = Math.max(0, ...cells.map(r => r.length));
-        sheets = [{ name: file.name.replace(/\.csv$/i, ''), cells, rowCount: cells.length, colCount, hidden: false, hiddenRows: [], hiddenCols: [], merges: [], notes: result.errors.length ? ['分隔符无法可靠识别，请核对预览并手动选择。'] : [] }];
+        sheets = [{ name: file.name.replace(/\.(csv|txt)$/i, ''), cells, rowCount: cells.length, colCount, hidden: false, hiddenRows: [], hiddenCols: [], merges: [], notes: [] }];
     }
     else if (typeof window !== 'undefined' && window.__OFFLINE_PREVIEW__ && window.__nativeReadWorkbook) {
         if (extension === 'xls')
@@ -92,17 +103,18 @@ export function regionErrors(regions: Region[], book: SourceBook, limits = LIMIT
         }
     return [...new Set(errors)];
 }
-export function resourceFromRegion(book: SourceBook, region: Region, demo = false): Resource {
+export function resourceFromRegion(book: SourceBook, region: Region, demo = false, rowLimit = Infinity): Resource {
     const sheet = book.sheets[region.sheet], fields: Field[] = [], rows: Resource['rows'] = [], id = uid('resource');
     for (let c = region.startCol - 1; c < region.endCol; c++) {
         const headers = region.header === 'none' ? [] : [String(sheet.cells[region.startRow - 1]?.[c]?.v ?? ''), ...(region.header === 'bilingual' ? [String(sheet.cells[region.startRow]?.[c]?.v ?? '')] : [])];
         const names = suggestNames(headers);
-        const samples = sheet.cells.slice(region.dataStart - 1, region.endRow).map(r => r[c]?.v ?? null);
+        const samples = sheet.cells.slice(region.dataStart - 1, Math.min(region.endRow,region.dataStart-1+rowLimit)).map(r => r[c]?.v ?? null);
         const type = inferType(samples, headers.join(' '));
         fields.push({ id: uid('field'), column: c, headers, ...names, type, pk: false, nullable: 'unset', time: { format: type === 'date' ? 'ymd' : type === 'datetime' ? 'iso' : '', timezone: '' } });
     }
     let skipped = 0;
     for (let r = region.dataStart - 1; r < region.endRow; r++) {
+        if(rows.length>=rowLimit)break;
         const source = sheet.cells[r] || [];
         if (fields.every(f => isBlank(source[f.column]?.v))) {
             skipped++;

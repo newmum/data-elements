@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, computed } from "vue";
+import { onMounted, computed, ref } from "vue";
 import { useDetailStore, usePermissionStore } from "@/store";
 import { storeToRefs } from "pinia";
 import { useRoute, useRouter, onBeforeRouteUpdate, onBeforeRouteLeave } from "vue-router";
@@ -392,4 +392,8 @@ onBeforeRouteLeave((to, from, next) => {
     }
   }
 }
+</style>
+
+<style scoped>
+
 </style>

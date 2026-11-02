@@ -15,7 +15,7 @@ import org.apache.http.util.EntityUtils;
 import org.elasticsearch.client.Request;
 import org.elasticsearch.client.Response;
 import org.elasticsearch.client.ResponseException;
-import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.client.RestClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
@@ -39,11 +39,11 @@ public class SearchProjectionEsMagicModule {
             Pattern.compile("jcc-search-[a-z0-9][a-z0-9._-]{0,240}");
     private static final Pattern DOCUMENT_ID = Pattern.compile("[A-Za-z0-9._:-]{1,512}");
 
-    private final RestHighLevelClient client;
+    private final RestClient client;
     private final ObjectMapper objectMapper;
 
     public SearchProjectionEsMagicModule(
-            @Qualifier("highLevelClient") RestHighLevelClient client,
+            @Qualifier("searchProjectionRestClient") RestClient client,
             ObjectMapper objectMapper) {
         this.client = client;
         this.objectMapper = objectMapper;
@@ -201,7 +201,7 @@ public class SearchProjectionEsMagicModule {
     }
 
     private Map<String, Object> perform(Request request) throws IOException {
-        Response response = client.getLowLevelClient().performRequest(request);
+        Response response = client.performRequest(request);
         if (response.getEntity() == null) {
             return new LinkedHashMap<>();
         }

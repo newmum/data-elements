@@ -35,7 +35,7 @@ test('20/100 node configurations use one read and switches select the matching n
   for(const [network,label,address] of [['GAW','公安网','gaw'],['HLW','互联网','internet'],['SPZW','专网','special']]) {
    f.syncReceiveAccessNode(network);assert.equal(f.receiveNetworkName.value,label);
    assert.equal(f.receivePushAddress.value,`https://${address}.example.test/api/v1/data-push`);
-   f.syncReceiveDeliveryProfile({pushDataType:'UNSTRUCTURED'});assert.equal(f.receivePushAddress.value,`https://${address}.example.test/api/v1/file-uploads`);
+   f.syncReceiveDeliveryProfile({pushDataType:'UNSTRUCTURED'});assert.equal(f.receivePushAddress.value,`https://${address}.example.test/api/v1/data-push`);
    f.syncReceiveDeliveryProfile({});
   }
   f.syncReceiveAccessNode('ZWW');assert.equal(f.receiveNetworkName.value,'专网');

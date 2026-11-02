@@ -1,4 +1,16 @@
-import { setBridgeToken } from '../nifi/api/bridgeSession';
+import { getBridgeToken,getSessionRevision,setBridgeToken } from '../nifi/api/bridgeSession';
+
+/** A trusted platform credential changed: stop this request and rebuild the standalone workspace. */
+export function reconcilePlatformSessionToken(token:string,expectedRevision=getSessionRevision()):boolean {
+  if(expectedRevision!==getSessionRevision())return false;
+  const current=getBridgeToken();
+  if(current&&current!==token){
+    // Embedded integrations retain their explicit parent INIT/SET_TOKEN identity.
+    if(window.parent===window)setBridgeToken(token||null);
+    return false;
+  }
+  return true;
+}
 
 /** The platform owns login and tenant selection. HaiTong never persists a second credential. */
 export function getPortalBaseUrl(): URL {

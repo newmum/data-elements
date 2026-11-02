@@ -273,6 +273,24 @@ for (binding in (warehouseBindings == null ? [] : warehouseBindings)) {
         warehouseDatasourceIds.add(bindingDatasourceId)
     }
 }
+// 与数据源管理相同的身份：接入方式优先，兼容历史驱动别名和无连接 API。
+var taskDatasourceType = (row) => {
+    var raw = text(first(row,['dbType','db_type'])).trim().toLowerCase().replaceAll('\\s|_|-','')
+    var aliases = {pg:'postgresql',postgres:'postgresql',mssql:'sqlserver',dm:'dameng',kingbase:'kingbase8',kingbasees:'kingbase8',es:'elasticsearch',elastic:'elasticsearch'}
+    var key = aliases[raw] || (blank(raw) ? 'other' : raw)
+    var pool = {}
+    try { var value=first(row,['poolCfg','pool_cfg']); if (!blank(value)) { pool=JSONUtil.parseObj(value) } } catch (ignored) { }
+    var mode=text(pool.accessMode || pool.dataAccessMode).trim().toLowerCase()
+    var noConnection=['0','false','no','off'].contains(text(first(row,['showConnect','show_connect'])).trim().toLowerCase())
+    if(mode=='proxy') {return 'mode:proxy'}
+    if(['upload','report'].contains(mode) || (key=='api' && noConnection)) {return 'mode:upload'}
+    if(['receive','push'].contains(mode)) {return 'mode:receive'}
+    return key
+}
+var requestedDatasourceType=text(body?.datasourceType).trim().toLowerCase()
+if(requestedDatasourceType.length()>80) {exit 400,'数据源类型过长'}
+var datasourceTypeStatistics={unit:'table',complete:body?.includeDatasourceTypeStatistics==true,total:0,typeCounts:{},dbTypes:{}}
+
 var matchesTaskCategory = (datasource) => distributionView == warehouseDatasourceIds.contains(text(first(datasource, ['tid', 'id'])))
 
 if (viewLevel == 'table') {
@@ -306,11 +324,12 @@ if (viewLevel == 'table') {
                 scopedDatasourceIds.add(requestedDatasourceIdText)
             }
         }
-    } else {
+    } else if (!['org','app','datasource'].contains(text(body?.scopeType))) {
         scopedDatasourceIds = registeredDatasourceIds
     }
     if (scopedDatasourceIds.size() == 0) {
         return {
+            datasourceTypeStatistics: datasourceTypeStatistics,
             viewLevel: 'table',
             scopeType: text(body?.scopeType),
             scopeId: text(body?.scopeId),
@@ -435,18 +454,40 @@ if (viewLevel == 'table') {
     // 同值以表ID稳定排序，空值始终排末尾；全部、搜索和状态页签复用同一分页顺序。
     var tableOrderExpression = sortField=='taskCount' ? 'ordered_table.sort_task_count' : sortField=='updatedTime' ? 'ordered_table.access_modified_time' : 'ordered_table.'+sortColumn
     var tableNullOrderSql = sortField=='taskCount' ? '' : 'CASE WHEN '+tableOrderExpression+' IS NULL THEN 1 ELSE 0 END ASC,'
-    var tablePageSql = """
-        SELECT t.*
-    """+',task_sort.task_modified_time'+(sortField=='taskCount' ? ',COALESCE(task_sort.sort_task_count,0) AS sort_task_count' : '')+"""
-          FROM db_table_t t
-        LEFT JOIN task_sort ON task_sort.root_table_id=t.tid
-         WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.asset_status>0
+    var tableWhereSql="""
+WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.asset_status>0
            AND t.datasource_id IN <foreach collection="scopedDatasourceIds" item="sourceDb" open="(" close=")" separator=",">#{sourceDb}</foreach>
            AND t.business_type IN ('业务表','日志表','字典表')
            AND (#{tableKeyword}='' OR LOWER(t.table_name) LIKE #{keywordPattern} ESCAPE '!'
                 OR LOWER(t.table_name_cn) LIKE #{keywordPattern} ESCAPE '!'
                 OR LOWER(t.table_comment) LIKE #{keywordPattern} ESCAPE '!')
     """ + taskStatusSql
+    // 按数据源一次聚合匹配表数，再归入类型；角标与分页使用同一记录口径。
+    if(body?.includeDatasourceTypeStatistics==true) {
+        var facetSources=db.select('SELECT t.datasource_id AS datasourceId, COUNT(*) AS tableCount FROM db_table_t t '+tableWhereSql+' GROUP BY t.datasource_id')
+        for(facet in facetSources) {
+            var id=text(first(facet,['datasourceId','datasourceid','datasource_id']))
+            var source=registeredDatasourceMap[id]
+            if(source==null) {continue}
+            var tableCount=first(facet,['tableCount','tablecount','table_count']) || 0
+            var key=taskDatasourceType(source)
+            var raw=text(first(source,['dbType','db_type']))
+            datasourceTypeStatistics.total+=tableCount
+            datasourceTypeStatistics.typeCounts[key]=(datasourceTypeStatistics.typeCounts[key] || 0)+tableCount
+            if(!blank(raw)) {datasourceTypeStatistics.dbTypes[raw]=(datasourceTypeStatistics.dbTypes[raw] || 0)+tableCount}
+        }
+    }
+    // 统计忽略自身类型条件，列表再应用类型；其余查询条件完全共用。
+    if(!blank(requestedDatasourceType)) {
+        scopedDatasourceIds=scopedDatasourceIds.filter(id=>taskDatasourceType(registeredDatasourceMap[text(id)])==requestedDatasourceType)
+        if(scopedDatasourceIds.size()==0) {return {viewLevel:'table',pageNum:pageNum,pageSize:pageSize,total:0,list:[],datasourceTypeStatistics:datasourceTypeStatistics}}
+    }
+    var tablePageSql = """
+        SELECT t.*
+    """+',task_sort.task_modified_time'+(sortField=='taskCount' ? ',COALESCE(task_sort.sort_task_count,0) AS sort_task_count' : '')+"""
+          FROM db_table_t t
+        LEFT JOIN task_sort ON task_sort.root_table_id=t.tid
+    """ + tableWhereSql
     tablePageSql='SELECT modified_table.*,CASE WHEN modified_table.updated_time IS NULL OR modified_table.task_modified_time>modified_table.updated_time THEN modified_table.task_modified_time ELSE modified_table.updated_time END AS access_modified_time FROM ('+tablePageSql+') modified_table'
     tablePageSql=taskSortCteSql+'SELECT ordered_table.* FROM ('+tablePageSql+') ordered_table ORDER BY '+tableNullOrderSql+tableOrderExpression+' '+sortDir+',ordered_table.tid ASC'
     var registeredTablePage = db.page(tablePageSql, pageSize, (pageNum - 1) * pageSize)
@@ -874,6 +915,7 @@ if (viewLevel == 'table') {
         pageTable.accessStatusText = ownRunning ? '已接入' : ownTasks.size() == 0 ? pendingApproval ? '待审批' : '待接入' : ownUnconfirmed ? '状态待确认' : '待启动'
     }
     return {
+        datasourceTypeStatistics: datasourceTypeStatistics,
         runtimeRevision: live.revision,
         runtimeFresh: live.fresh,
         runtimeObservedAt: live.observedAt,

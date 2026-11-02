@@ -118,7 +118,7 @@ class DslCompilerHiveMetadataTest {
         verify(nifi).createConnection("pg", "processor-2", "PROCESSOR", "processor-3", "PROCESSOR", List.of("success"));
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, String>> convertProperties = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, String>> convertProperties = ArgumentCaptor.captor();
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.ConvertRecord"),
                 eq("Hive/convert"), anyDouble(), anyDouble(), convertProperties.capture(),
                 nullable(String.class), nullable(String.class));
@@ -130,7 +130,7 @@ class DslCompilerHiveMetadataTest {
                 nullable(String.class), nullable(String.class));
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.captor();
         verify(nifi).createProcessor(eq("pg"), eq("com.linewell.microservice.processor.hadoop.PutHwHDFS"),
                 eq("Hive/put"), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
         String expectedDatabase = database.isBlank() ? "default" : database;
@@ -225,7 +225,7 @@ class DslCompilerHiveMetadataTest {
         new DslCompiler(nifi, registry, mock(FieldMappingService.class), hive).compile(pipeline);
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.captor();
         verify(nifi).createProcessor(eq("pg"), eq("com.linewell.microservice.processor.hadoop.PutHwHDFS"),
                 eq("Hive/put"), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
         assertThat(properties.getValue()).containsEntry("Directory", "/warehouse/custom/event_log");
@@ -259,7 +259,7 @@ class DslCompilerHiveMetadataTest {
         new DslCompiler(nifi, registry, mock(FieldMappingService.class), hive).compile(pipeline);
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.captor();
         verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.hadoop.PutHDFS"),
                 eq("Hive/put"), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
         assertThat(properties.getValue()).containsEntry("Conflict Resolution Strategy", "replace")
@@ -393,7 +393,7 @@ class DslCompilerHiveMetadataTest {
             verify(hive).partitionLayout("analytics", "events");
             verify(hive).partitionLocations("analytics", "events", buckets);
             verify(nifi).listControllerServices("root");
-            var properties = ArgumentCaptor.forClass(Map.class);
+            ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.captor();
             verify(nifi, atLeastOnce()).createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
                     properties.capture(), nullable(String.class), nullable(String.class));
             String script = properties.getAllValues().stream().map(props -> props.get("Script Body"))

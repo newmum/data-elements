@@ -95,9 +95,9 @@ public class NumberModule {
         }
         //小于一个亿 展示 100万 1000.34万条
         if (value.compareTo(new BigDecimal(10000 * 10000)) < 0) {
-            return value.divide(new BigDecimal(10000),2, BigDecimal.ROUND_HALF_UP) + "万";
+            return value.divide(new BigDecimal(10000),2, java.math.RoundingMode.HALF_UP) + "万";
         }
         //大于一个亿 展示多少个亿  100.3亿条
-        return value.divide(new BigDecimal(10000 * 10000),2, BigDecimal.ROUND_HALF_UP) + "亿";
+        return value.divide(new BigDecimal(10000 * 10000),2, java.math.RoundingMode.HALF_UP) + "亿";
     }
 }

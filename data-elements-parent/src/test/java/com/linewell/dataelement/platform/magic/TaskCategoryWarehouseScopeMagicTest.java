@@ -1,6 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -426,6 +427,62 @@ class TaskCategoryWarehouseScopeMagicTest {
         var counter = new Counter(); f.db.setSqlInterceptors(List.of(counter));
         assertThat(runValue(f, INGEST_PAGE, Map.of("viewLevel", "table", "datasourceIds", List.of("db")))).isInstanceOf(ExitValue.class);
         assertThat(counter.sql.stream().filter(sql -> !sql.contains("task_ancestry")).toList()).noneSatisfy(sql -> assertThat(sql).contains("data_access_agg_task_t"));
+    }
+
+    @Test
+    void taskTypeFacetsCountFilteredTablesWithFixedSqlFor20And100Rows() throws Exception {
+        Integer ingestionReads=null, distributionReads=null;
+        for(int size:List.of(20,100)) {
+            var f=fixture(size);
+            f.jdbc.execute("alter table db_datasource_t add column if not exists pool_cfg varchar(1000)");
+            f.jdbc.execute("alter table db_datasource_t add column if not exists show_connect int default 1");
+            f.jdbc.update("update db_datasource_t set db_type='pg' where tid='raw'");
+            f.jdbc.update("update db_datasource_t set pool_cfg='{\"accessMode\":\"receive\"}' where tid='files'");
+            var counter=new Counter(); f.db.setSqlInterceptors(List.of(counter));
+            var body=new LinkedHashMap<String,Object>();
+            body.put("viewLevel","table");body.put("pageNum",1);body.put("pageSize",size);
+            body.put("includeDatasourceTypeStatistics",true);
+            body.put("datasourceIds",List.of("db","business-hive","warehouse","foreign","warehouse-draft"));
+            var result=run(f,INGEST_PAGE,body);
+            var facet=(Map<?,?>)result.get("datasourceTypeStatistics");
+            assertEquals(size+1,((Number)facet.get("total")).intValue());
+            assertEquals(1,((Number)((Map<?,?>)facet.get("typeCounts")).get("hive")).intValue());
+            assertEquals(size+1,((Number)result.get("total")).intValue());
+            assertEquals("table",facet.get("unit"));
+            assertEquals(size,((Number)((Map<?,?>)facet.get("typeCounts")).get("mysql")).intValue());
+            assertEquals(((Map<?,?>)facet.get("typeCounts")).values().stream().mapToInt(v->((Number)v).intValue()).sum(),((Number)result.get("total")).intValue());
+            if(ingestionReads==null)ingestionReads=counter.reads;else assertEquals(ingestionReads,counter.reads);
+            assertEquals(1,counter.sql.stream().filter(sql->sql.toLowerCase().contains("group by t.datasource_id")).count());
+            body.put("datasourceType","hive");
+            result=run(f,INGEST_PAGE,body);
+            assertEquals(1,((Number)result.get("total")).intValue());
+            assertEquals(size+1,((Number)((Map<?,?>)result.get("datasourceTypeStatistics")).get("total")).intValue());
+            body.put("keyword","no_matching_table");
+            assertEquals(0,((Number)((Map<?,?>)run(f,INGEST_PAGE,body).get("datasourceTypeStatistics")).get("total")).intValue());
+            body.remove("keyword");body.remove("datasourceType");body.put("datasourceIds",List.of());body.put("scopeType","org");
+            assertEquals(0,((Number)run(f,INGEST_PAGE,body).get("total")).intValue());
+            body.put("scopeType","all");body.put("datasourceIds",List.of("warehouse","raw","files","foreign","warehouse-draft","db"));
+            int before=counter.reads;
+            result=run(f,DISTRIBUTE_PAGE,body);facet=(Map<?,?>)result.get("datasourceTypeStatistics");
+            assertEquals(3*size,((Number)facet.get("total")).intValue());
+            assertEquals(size,((Number)((Map<?,?>)facet.get("typeCounts")).get("postgresql")).intValue());
+            assertEquals(size,((Number)((Map<?,?>)facet.get("typeCounts")).get("mode:receive")).intValue());
+            int reads=counter.reads-before;
+            if(distributionReads==null)distributionReads=reads;else assertEquals(distributionReads,reads);
+            body.put("datasourceType","mode:receive");
+            result=run(f,DISTRIBUTE_PAGE,body);
+            assertEquals(size,((Number)result.get("total")).intValue());
+            assertEquals(3*size,((Number)((Map<?,?>)result.get("datasourceTypeStatistics")).get("total")).intValue());
+            body.put("accessStatus","1");
+            assertEquals(0,((Number)((Map<?,?>)run(f,DISTRIBUTE_PAGE,body).get("datasourceTypeStatistics")).get("total")).intValue());
+            body.remove("accessStatus");body.put("datasourceType","mode:upload");
+            f.jdbc.update("update db_datasource_t set db_type='api',pool_cfg='{}',show_connect=0 where tid='files'");
+            assertEquals(size,((Number)run(f,DISTRIBUTE_PAGE,body).get("total")).intValue());
+            body.put("datasourceType","mode:proxy");
+            f.jdbc.update("update db_datasource_t set pool_cfg='{\"accessMode\":\"proxy\"}' where tid='files'");
+            assertEquals(size,((Number)run(f,DISTRIBUTE_PAGE,body).get("total")).intValue());
+        }
+        System.out.println("task type facets SQL reads: ingestion="+ingestionReads+", distribution="+distributionReads+" for both 20/100 rows");
     }
 
     private static DatasourceCompletionMagicTest.Fixture fixture(int count) {

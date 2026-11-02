@@ -1,0 +1,28 @@
+# Nacos 配置版本源（脱敏）；不要直接发布占位符覆盖运行密钥。
+# Data ID: data-element-dev.yml; Group: DEFAULT_GROUP; Namespace: data-element
+# 部署时由受限环境提供 ${...} 变量；修改后核对运行配置的覆盖项。
+server:
+  port: 8088
+spring:
+  redis:
+    host: 192.168.175.86
+    port: 6379
+    database: 13
+    timeout: 2000ms
+    password: ${NACOS_SPRING_REDIS_PASSWORD}
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+upload:
+  dir: /upload/magic-api/mb/
+example:
+  property: 111211
+  number: 666
+data-element:
+  push-registry:
+    relay-base-url: http://127.0.0.1:18083
+    shared-key: ${NACOS_DATA_ELEMENT_PUSH_REGISTRY_SHARED_KEY}
+    standalone-sync-key: ${NACOS_DATA_ELEMENT_PUSH_REGISTRY_STANDALONE_SYNC_KEY}

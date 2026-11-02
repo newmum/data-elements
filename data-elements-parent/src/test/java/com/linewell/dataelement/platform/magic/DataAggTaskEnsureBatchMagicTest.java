@@ -756,8 +756,9 @@ class DataAggTaskEnsureBatchMagicTest {
             var service=new com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeStatusService(resolver,nifi);
             try(var tenant=com.linewell.dataelement.platform.tenant.domain.TenantContext.use("police")) {
             String canonical = CanonicalMagicSources.byId("76fd211790f54164947f276824d19c1d").replace("\r\n", "\n");
-            String aggregation = canonical.substring(canonical.indexOf("    var tableWorkflowMap ="),canonical.indexOf("    var tableTotal = registeredTableTotal"));
-            String runtime=canonical.substring(canonical.indexOf("    // 只装饰当前已授权、可达任务"),canonical.indexOf("    return {\n        runtimeRevision:"));
+            String aggregation = canonicalSection(canonical,"    var tableWorkflowMap =","    var tableTotal = registeredTableTotal");
+            // Return fields can be added/reordered without changing the runtime decoration under test.
+            String runtime=canonicalSection(canonical,"    // 只装饰当前已授权、可达任务","\n    return {");
             aggregation+="\nvar tablePage=tableItems;\n"+runtime;
             String helpers = """
                     import cn.hutool.json.JSONUtil
@@ -799,6 +800,14 @@ class DataAggTaskEnsureBatchMagicTest {
             } finally { service.close(); }
         }
         assertEquals(readCounts.get(0),readCounts.get(1));
+    }
+
+    private static String canonicalSection(String source,String startMarker,String endMarker) {
+        int start=source.indexOf(startMarker);
+        assertTrue(start>=0,"Canonical aggregation script is missing section start: "+startMarker);
+        int end=source.indexOf(endMarker,start+startMarker.length());
+        assertTrue(end>start,"Canonical aggregation script is missing section end after start: "+endMarker);
+        return source.substring(start,end);
     }
 
     @Test

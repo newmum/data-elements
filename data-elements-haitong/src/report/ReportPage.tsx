@@ -1,10 +1,11 @@
 import { useLayoutEffect, useState } from 'react';
 import { ConfigProvider, theme, type ThemeConfig } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import { useLocation } from 'react-router-dom';
+import { useLocation,useNavigate } from 'react-router-dom';
 import ReportWorkbench from './App';
 import { getPortalBaseUrl } from '../services/platformSession';
-import { reportReturnTarget } from './services/reportReturn';
+import { reportReturnTarget,reportSourceLocation } from './services/reportReturn';
+import {useSessionRevision} from '../nifi/api/bridgeSession';
 import './styles.css';
 
 const reportTheme: ThemeConfig = {
@@ -25,7 +26,10 @@ const reportTheme: ThemeConfig = {
 
 /** A full-page reporting route using Haitong's existing session and API client. */
 export default function ReportPage() {
+  const sessionRevision=useSessionRevision();
   const location = useLocation();
+  const navigate = useNavigate();
+  const datasourceId = new URLSearchParams(location.search).get('datasourceId') || '';
   const [returnTo] = useState(() => reportReturnTarget(window.location.href, getPortalBaseUrl().href, location.state, document.referrer));
   useLayoutEffect(() => {
     const previousTitle = document.title;
@@ -39,6 +43,6 @@ export default function ReportPage() {
   // A dedicated prefix also isolates body-mounted dialogs from the host's
   // existing global Ant Design dark-theme overrides.
   return <ConfigProvider prefixCls="report-ant" locale={zhCN} theme={reportTheme}>
-    <ReportWorkbench returnTo={returnTo} onReturn={() => window.location.assign(returnTo)}/>
+    <ReportWorkbench key={sessionRevision} datasourceId={datasourceId} onDatasourceChange={id=>navigate(new URL(reportSourceLocation(window.location.href,id,returnTo)).hash.slice(1),{replace:true})} onReturn={() => window.location.assign(returnTo)}/>
   </ConfigProvider>;
 }

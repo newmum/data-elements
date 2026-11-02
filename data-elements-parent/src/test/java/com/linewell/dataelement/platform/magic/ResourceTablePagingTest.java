@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -29,7 +31,7 @@ class ResourceTablePagingTest {
         for(String field:List.of("name","updatedAt","itemCount")) {
             f.counter.count=0;var a=f.catalog(20,field);assertEquals(3,f.counter.count);
             f.counter.count=0;var b=f.catalog(100,field);assertEquals(3,f.counter.count);
-            var large=(List<Map<String,Object>>)b.get("list");
+            var large=StructuredValues.objectRows(b.get("list"));
             assertEquals(120,((Number)b.get("total")).intValue());assertEquals(100,large.size());
             assertEquals(a.get("list"),large.subList(0,20));
             assertTrue(large.stream().allMatch(row->row.get("id").toString().startsWith("cat-")));
@@ -41,7 +43,7 @@ class ResourceTablePagingTest {
         var f=new Fixture();
         f.counter.count=0;var small=f.command(Map.of("table","modelLogs","page",1,"size",20,"sortField","modelName","sortDir","asc"));assertEquals(3,f.counter.count);
         f.counter.count=0;var large=f.command(Map.of("table","modelLogs","page",1,"size",100,"sortField","modelName","sortDir","asc"));assertEquals(3,f.counter.count);
-        var rows=(List<Map<String,Object>>)large.get("list");assertEquals(120,((Number)large.get("total")).intValue());
+        var rows=StructuredValues.objectRows(large.get("list"));assertEquals(120,((Number)large.get("total")).intValue());
         assertEquals(small.get("list"),rows.subList(0,20));assertEquals(100,rows.size());
         assertTrue(rows.stream().allMatch(row->"Authorized actor".equals(row.get("actorName"))));
         assertTrue(rows.stream().allMatch(row->row.get("id").toString().startsWith("log-")));
@@ -49,7 +51,7 @@ class ResourceTablePagingTest {
     }
     @Test void boundedModelConfigurationValidatesEveryRequestedIdBeforeOrdering() throws Exception {
         var f=new Fixture();f.counter.count=0;var models=f.models();assertEquals(4,f.counter.count);
-        var ids=((List<Map<String,Object>>)models.get("models")).stream().map(row->row.get("id")).toList();
+        var ids=(StructuredValues.objectRows(models.get("models"))).stream().map(row->row.get("id")).toList();
         f.counter.count=0;var small=f.commandWithModels(Map.of("table","models","ids",ids,"sortField","entityCount","sortDir","desc","size",20),models);
         var large=f.commandWithModels(Map.of("table","models","ids",ids,"sortField","entityCount","sortDir","desc","size",100),models);
         assertEquals(0,f.counter.count);assertEquals(small.get("keys"),((List<?>)large.get("keys")).subList(0,20));
@@ -70,7 +72,7 @@ class ResourceTablePagingTest {
         for(String field:List.of("colName","colLength")) {
             f.counter.count=0;var small=f.execute(source,Map.of("body",Map.of("catalogId","cat-119","pageNo",1,"pageSize",20,"sortField",field,"sortDir","desc"),"dataScope",new Scope()));assertEquals(3,f.counter.count);
             f.counter.count=0;var large=f.execute(source,Map.of("body",Map.of("catalogId","cat-119","pageNo",1,"pageSize",100,"sortField",field,"sortDir","desc"),"dataScope",new Scope()));assertEquals(3,f.counter.count);
-            var rows=(List<Map<String,Object>>)large.get("list");assertEquals(120,((Number)large.get("total")).intValue());assertEquals(small.get("list"),rows.subList(0,20));assertEquals(119,((Number)rows.getFirst().get("colLength")).intValue());
+            var rows=StructuredValues.objectRows(large.get("list"));assertEquals(120,((Number)large.get("total")).intValue());assertEquals(small.get("list"),rows.subList(0,20));assertEquals(119,((Number)rows.getFirst().get("colLength")).intValue());
         }
         assertThrows(Exception.class,()->f.execute(source,Map.of("body",Map.of("catalogId","hidden-119","pageNo",1),"dataScope",new Scope())));
     }
@@ -83,7 +85,7 @@ class ResourceTablePagingTest {
             for(int i=size==20?0:20;i<size;i++)f.database.update("INSERT INTO sym_dict_t VALUES(?,'tenant-a',?,?,'root.child','root',?,3,0,NULL,NULL)","dict-"+i,"code-"+i,String.format("Name %03d",i),100-i);
             f.counter.count=0;
             var context=new HashMap<String,Object>();context.put("db",f.sql);context.put("tenantRuntime",new Tenant());context.put("tableSort",new TableSortMagicModule());context.put("query",Map.of());context.put("body",Map.of("dictCode","type","showRow",true,"sortField","dictName","sortDir","asc"));
-            var rows=(List<Map<String,Object>>)MagicScript.create(source,null).execute(new MagicScriptContext(context));
+            var rows=StructuredValues.objectRows(MagicScript.create(source,null).execute(new MagicScriptContext(context)));
             assertEquals(2,f.counter.count);assertEquals(size,rows.size());assertEquals("Name 000",rows.getFirst().get("dictName"));assertEquals("Name "+String.format("%03d",size-1),rows.getLast().get("dictName"));
             assertTrue(rows.stream().allMatch(r->r.get("tid").toString().startsWith("dict-")));
         }
@@ -149,7 +151,7 @@ class ResourceTablePagingTest {
         }
         Map<String,Object> execute(String source,Map<String,Object> extra) throws Exception {
             var context=new HashMap<String,Object>(extra);context.put("db",sql);context.put("tenantRuntime",new Tenant());context.put("tableSort",new TableSortMagicModule());
-            return (Map<String,Object>)MagicScript.create(source,null).execute(new MagicScriptContext(context));
+            return StructuredValues.objectMap(MagicScript.create(source,null).execute(new MagicScriptContext(context)));
         }
     }
 }

@@ -131,7 +131,7 @@ class StructuredSourceProbeServiceTest {
                 """;
         when(response.statusCode()).thenReturn(200);
         when(response.body()).thenReturn(body.getBytes(StandardCharsets.UTF_8));
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+        when(httpClient.send(any(HttpRequest.class), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<byte[]>>any()))
                 .thenAnswer(invocation -> {
                     requestCount.incrementAndGet();
                     return response;

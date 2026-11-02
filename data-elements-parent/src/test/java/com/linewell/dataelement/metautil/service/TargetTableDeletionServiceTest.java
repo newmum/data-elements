@@ -34,7 +34,7 @@ class TargetTableDeletionServiceTest {
             config.setJdbcProperties(Map.of("customProperty","registered-value"));
             var table = new TableInfo(); table.setTableName("人员.明细"); table.setSchemaName("ods");
             var explorer = mock(MetadataExplorerService.class);
-            when(explorer.getTableDirectory(any())).thenReturn(List.of(table),List.of());
+            when(explorer.getTableDirectory(any())).thenReturn(List.of(table)).thenReturn(List.of());
             var result = new TargetTableDeletionService(explorer,mock(HiveModule.class)).drop(config,"\"人员.明细\"");
             var copied = ArgumentCaptor.forClass(DataSourceConfig.class);
             verify(explorer).createTable(copied.capture(),org.mockito.ArgumentMatchers.eq("DROP TABLE "
@@ -126,7 +126,7 @@ class TargetTableDeletionServiceTest {
         TableInfo physical = new TableInfo();
         physical.setTableName("ODS_PERSON");
         physical.setSchemaName("FJHYJ");
-        when(explorer.getTableDirectory(any())).thenReturn(List.of(physical), List.of());
+        when(explorer.getTableDirectory(any())).thenReturn(List.of(physical)).thenReturn(List.of());
         TargetTableDeletionService service = new TargetTableDeletionService(explorer, mock(HiveModule.class));
 
         Map<String, Object> result = service.drop(oceanBaseOracle(), "FJHYJ.ods_person");
@@ -194,7 +194,7 @@ class TargetTableDeletionServiceTest {
         TableInfo physical = new TableInfo();
         physical.setTableName("ODS_PERSON");
         physical.setSchemaName("FJHYJ");
-        when(explorer.getTableDirectory(any())).thenReturn(List.of(physical), List.of());
+        when(explorer.getTableDirectory(any())).thenReturn(List.of(physical)).thenReturn(List.of());
         org.mockito.Mockito.doThrow(new RuntimeException("无效的表或视图名"))
                 .when(explorer).createTable(any(), any());
         TargetTableDeletionService service = new TargetTableDeletionService(explorer, mock(HiveModule.class));

@@ -390,6 +390,10 @@ for (table in tables) {
     for (governanceColumn in columns) {
         var governanceColumnName = firstValue(governanceColumn, ['columnName', 'name', 'fieldName', 'column_name'])
         var governanceTimestamp = boolValue(firstValue(governanceColumn, ['isTimestamp', 'isTimestampField']), false)
+        var governanceRoles = firstValue(governanceColumn, ['timeRoles'])
+        if (!(governanceRoles instanceof List)) { governanceRoles = governanceTimestamp ? ['timestamp'] : [] }
+        governanceRoles = ['timestamp','business','occurrence'].filter(role => governanceRoles.contains(role))
+        governanceTimestamp = governanceRoles.contains('timestamp')
         if (governanceTimestamp) { timestampField = governanceColumnName }
         var attachment = rowValue(governanceColumn, ['attachment'])
         if (attachment != null && attachment.enabled == true) {
@@ -404,6 +408,8 @@ for (table in tables) {
             dictionaryCategoryName: '',
             dictionaryCategoryValue: '',
             isTimestampField: governanceTimestamp,
+            timeRoles: governanceRoles,
+            timeRole: governanceRoles.size() == 0 ? '' : governanceRoles[0],
             dictionaryRelation: null
         })
     }

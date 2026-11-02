@@ -6,6 +6,16 @@
         <span class="topbar-scope">{{ currentScopeLabel }}</span>
       </div>
       <div class="topbar-actions">
+        <datasource-type-filter
+          v-model="state.datasourceType"
+          :options="datasourceTypeOptions"
+          :total="Number(state.typeStatistics?.total || 0)"
+          :loading="state.loading"
+          :disabled="state.loading || !!state.listError"
+          :statistics-loading="state.typeStatisticsLoading"
+          :statistics-error="state.typeStatisticsError"
+          @retry="loadTypeStatistics()"
+        />
         <el-input
           v-model.trim="state.keywordInput"
           class="search-input"
@@ -114,7 +124,7 @@
           <div>
             <strong>组织机构</strong>
           </div>
-          <el-tag size="small" effect="light">{{ stats.datasourceTotal }} 个</el-tag>
+          <el-tag size="small" effect="light">{{ treeStatistics.total }} 个</el-tag>
         </div>
         <UTree
           v-if="treeData.length"
@@ -198,6 +208,7 @@
               <el-tooltip :content="sourceIconTip(item)" placement="top" :show-after="300">
                 <span
                   class="source-icon"
+                  :style="{ color: sourceTypeColor(item) }"
                   :class="{
                     'is-elasticsearch': sourceTypeIcon(item) === 'elasticsearch',
                     'is-data-report': isDataReportSource(item),
@@ -205,7 +216,7 @@
                   }"
                 >
                   <Icon :icon="sourceTypeIcon(item)" />
-                  <i class="source-connection-status" :class="connectionStatusClass(item)">
+                  <i v-if="!isProxyDatasource(item)" class="source-connection-status" :class="connectionStatusClass(item)">
                     <Icon :icon="connectionStatusIcon(item)" />
                   </i>
                 </span>
@@ -231,7 +242,7 @@
                 </div>
               </div>
               <button
-                v-if="canExpand(item) && !isFilePushDatasource(item)"
+                v-if="canExpand(item) && !isFilePushDatasource(item) && !isProxyDatasource(item)"
                 class="source-expand-arrow"
                 type="button"
                 :title="isExpanded(item) ? '收起数据表' : '展开数据表'"
@@ -246,29 +257,29 @@
                 <el-button
                   class="register-button"
                   type="primary"
+                  :icon="isRegistrationComplete(item) ? 'View' : 'Tickets'"
                   :loading="isOpeningRegistration(item)"
                   @click.stop="handlePrimaryAction(item)"
                 >
-                  <Icon :icon="isRegistrationComplete(item) ? 'el-icon-View' : 'el-icon-Tickets'" />
-                  {{ hasReportFiles(item) ? "数据上报" : isRegistrationComplete(item) ? "查看数据源" : "登记数据源" }}
+                  {{ isProxyDatasource(item) ? "登记服务" : hasReportFiles(item) ? "数据上报" : isRegistrationComplete(item) ? "查看数据源" : "登记数据源" }}
                 </el-button>
-                <el-button class="edit-button" @click.stop="openDatasourceEdit(item)">
-                  <Icon icon="el-icon-EditPen" />
+                <el-button class="edit-button" icon="EditPen" @click.stop="openDatasourceEdit(item)">
                   编辑
                 </el-button>
                 <el-button
                   class="delete-button"
+                  icon="Delete"
                   :loading="state.deletedIds.includes(item.tid)"
                   @click.stop="deleteDatasource(item)"
                 >
-                  <Icon icon="el-icon-Delete" />
                   删除
                 </el-button>
               </div>
             </div>
           </div>
 
-          <div v-if="isFilePushDatasource(item)" class="source-metrics"><span>非结构化文件登记</span><span>文件模板 → 内容审查</span></div>
+          <div v-if="isProxyDatasource(item)" class="source-metrics"><span>数据服务 {{ item.serviceCount }} 个</span><span>接入方式：代理访问</span></div>
+          <div v-else-if="isFilePushDatasource(item)" class="source-metrics"><span>非结构化文件登记</span><span>文件模板 → 内容审查</span></div>
           <div v-else class="source-metrics">
             <span>数据表 {{ item.tableNum || 0 }} 张</span>
             <span>已标注 {{ item.annotatedTableNum || 0 }} 张</span>
@@ -379,7 +390,7 @@
 </template>
 
 <script setup>
-import { reactive, computed, nextTick, onMounted, ref, watch } from "vue";
+import { reactive, computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRouter, useRoute } from "vue-router";
 import { useRegisterModal } from "@/composables";
@@ -405,6 +416,10 @@ const state = reactive({
   tableLoads: {},
   keyword: "",
   keywordInput: "",
+  datasourceType: "",
+  typeStatistics: null,
+  typeStatisticsLoading: true,
+  typeStatisticsError: "",
   filter: "all",
   metricFilter: "",
   sourceDisplayLimit: SOURCE_BATCH_SIZE,
@@ -674,6 +689,7 @@ const normalizeItem = (item) => {
     ),
     issueTableNum: firstNumber(item.issueTableNum, item.issue_table_num, fallbackStats.issueTableNum),
     problemTableNum: firstNumber(item.problemTableNum, item.problem_table_num, fallbackStats.problemTableNum),
+    serviceCount: firstNumber(item.serviceCount, item.service_count, 0),
     changedTableNum: firstNumber(item.changedTableNum, item.changed_table_num, fallbackStats.changedTableNum),
     addedTableNum: firstNumber(item.addedTableNum, item.added_table_num, fallbackStats.addedTableNum),
     modifiedTableNum: firstNumber(item.modifiedTableNum, item.modified_table_num, fallbackStats.modifiedTableNum),
@@ -740,7 +756,7 @@ const loadOrganizationTree = async (generation) => {
   try {
     const [orgTree, statistics] = await Promise.all([
       $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
-      $common.post("/dst/database/treeStatistics", { keyword: "", dbType: "", registrationState: "", orgIds: [] }),
+      $common.post("/dst/database/treeStatistics", { mode: "facets", keyword: "", filter: "all", orgIds: [], appId: "" }),
     ]);
     if (generation !== loadGeneration) return;
     orgTreeSource.value = Array.isArray(orgTree) ? orgTree : [];
@@ -748,16 +764,24 @@ const loadOrganizationTree = async (generation) => {
     countMap.value = { org: treeStatistics.value.orgCounts };
     rebuildTree();
     state.leftSelectNode = treeData.value[0];
+    if (!state.keyword && state.filter === "all") applyTypeStatistics(statistics, JSON.stringify(typeStatisticsPayload()));
   } catch (error) {
     if (generation !== loadGeneration) return;
     console.error("加载组织机构失败:", error);
     state.treeError = "组织机构加载失败，数据源列表仍可使用。";
+    state.typeStatisticsError = "类型数量读取失败";
+    state.typeStatisticsLoading = false;
   } finally {
-    if (generation === loadGeneration) state.treeLoading = false;
+    if (generation === loadGeneration) {
+      state.treeLoading = false;
+      if (!state.treeError && (state.keyword || state.filter !== "all")) scheduleTypeStatistics();
+    }
   }
 };
 const loadData = () => {
   const generation = ++loadGeneration;
+  state.typeStatisticsLoading = true;
+  state.typeStatisticsError = "";
   // 即使概要刷新失败，也不能让已作废的展开请求永久停在 loading。
   for (const [key, cache] of Object.entries(state.tableLoads)) {
     if (cache.loading) state.tableLoads[key] = { ...cache, loading: false, requestId: undefined, error: "加载已取消，请重试。" };
@@ -858,6 +882,48 @@ const collectTreeNodeOrgIds = (node) => {
   return [node.value, ...(node.children || []).flatMap((child) => collectTreeNodeOrgIds(child))].filter(Boolean);
 };
 
+// 全量角标独立于概要及卡片页；类型自身不进入请求，其他条件合并为一次统计。
+let typeStatisticsGeneration = 0;
+let typeStatisticsTimer;
+let typeStatisticsKey = "";
+const typeStatisticsPayload = () => {
+  const node = state.leftSelectNode;
+  return { mode: "facets", keyword: state.keyword, filter: state.filter,
+    orgIds: node?.value && node.type !== "app" ? collectTreeNodeOrgIds(node) : [],
+    appId: node?.type === "app" ? node.value : "" };
+};
+const applyTypeStatistics = (result, key) => {
+  if (result?.complete !== true || !result.typeCounts) throw new Error("未返回完整类型统计");
+  state.typeStatistics = result;
+  state.typeStatisticsError = "";
+  state.typeStatisticsLoading = false;
+  typeStatisticsKey = key;
+};
+const loadTypeStatistics = async () => {
+  if (state.treeLoading) return;
+  const request = ++typeStatisticsGeneration;
+  const generation = loadGeneration;
+  const payload = typeStatisticsPayload();
+  state.typeStatisticsLoading = true;
+  state.typeStatisticsError = "";
+  try {
+    const result = await $common.post("/dst/database/treeStatistics", payload);
+    if (request !== typeStatisticsGeneration || generation !== loadGeneration) return;
+    applyTypeStatistics(result, JSON.stringify(payload));
+  } catch {
+    if (request !== typeStatisticsGeneration || generation !== loadGeneration) return;
+    state.typeStatisticsError = "类型数量读取失败";
+  } finally {
+    if (request === typeStatisticsGeneration && generation === loadGeneration) state.typeStatisticsLoading = false;
+  }
+};
+const scheduleTypeStatistics = () => {
+  clearTimeout(typeStatisticsTimer);
+  ++typeStatisticsGeneration;
+  state.typeStatisticsLoading = true;
+  typeStatisticsTimer = setTimeout(() => loadTypeStatistics(), 150);
+};
+
 const matchesSelectedTreeNode = (item) => {
   const node = state.leftSelectNode;
   if (!node || !node.value) return true;
@@ -881,7 +947,11 @@ const currentScopeLabel = computed(() => {
   if (selected?.value && selected?.label) return selected.label;
   return { ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" }[state.dataScope] || "可见数据";
 });
-const visibleList = computed(() => filteredBeforeOrganization.value.filter(matchesSelectedTreeNode));
+// 类型角标按其余条件统计，类型自身只裁剪列表，避免选中后其他选项都变为零。
+const sourcesBeforeType = computed(() => filteredBeforeOrganization.value.filter(matchesSelectedTreeNode));
+const visibleList = computed(() => sourcesBeforeType.value.filter((item) =>
+  !state.datasourceType || datasourceTypeKey(item) === state.datasourceType
+));
 const displayList = computed(() => visibleList.value.slice(0, state.sourceDisplayLimit));
 const canLoadMoreSources = computed(() => displayList.value.length < visibleList.value.length);
 const nextSourceLoadCount = computed(() => Math.min(SOURCE_BATCH_SIZE, visibleList.value.length - displayList.value.length));
@@ -966,6 +1036,7 @@ const toggleExpand = (item) => {
 };
 
 const handleCardClick = (item) => {
+  if (isProxyDatasource(item)) return openDatasourceDetail(item);
   if (hasReportFiles(item)) return openReportWorkbench(item);
   if (!canExpand(item)) return;
   toggleExpand(item);
@@ -1023,7 +1094,7 @@ const hasIncompleteRegistrationStatus = (item) =>
 
 const isRegistrationComplete = (item) => hasCompletedRegistrationStatus(item);
 
-const isConnectionUnavailable = (item) => connectionStatusOf(item) !== "success";
+const isConnectionUnavailable = (item) => !isProxyDatasource(item) && connectionStatusOf(item) !== "success";
 
 const statusText = (item) => ["待登记", "未完成", "已完成"][normalizeNumber(item.assetStatus ?? item.asset_status)] || "待登记";
 
@@ -1156,16 +1227,19 @@ const openReportWorkbench = (row) => {
   window.location.assign(target.href);
 };
 const sourceTypeIcon = (item) => {
+  if (isProxyDatasource(item)) return "el-icon-Connection";
   if (isDataReportSource(item)) return "el-icon-UploadFilled";
   if (isDataPushSource(item)) return "el-icon-Download";
   const type = normalizeDatasourceType(item.dbType);
   return supportedDatasourceTypes.includes(type) ? type : "database-network";
 };
+const sourceTypeColor = (item) => isProxyDatasource(item) ? "#1677ff" : isDataReportSource(item) ? "#7c3aed" : isDataPushSource(item) ? "#079669" : "#1677ff";
 
 const sourceTypeName = (item) => {
+  if (isProxyDatasource(item)) return "代理访问方式";
   if (isDataReportSource(item)) return "数据上报方式";
   if (isDataPushSource(item)) return "数据推送方式";
-  const type = String(item.dbType || "").toLowerCase().replace(/[\s_-]/g, "");
+  const type = normalizeDatasourceType(item.dbType);
   const names = {
     mysql: "MySQL",
     oracle: "Oracle",
@@ -1190,7 +1264,42 @@ const sourceTypeName = (item) => {
   return names[type] || item.dbType || "其他类型数据源";
 };
 
+// 与卡片共用身份、名称和图标：推送、上报、代理的接入方式优先于历史 dbType。
+const datasourceTypeKey = (item) => {
+  if (isProxyDatasource(item)) return "mode:proxy";
+  if (isDataReportSource(item)) return "mode:upload";
+  if (isDataPushSource(item)) return "mode:receive";
+  return normalizeDatasourceType(item.dbType) || "other";
+};
+const datasourceTypeCatalog = computed(() => {
+  const catalog = new Map(supportedDatasourceTypes.map((dbType) => [dbType, { dbType }]));
+  for (const accessMode of ["receive", "upload", "proxy"]) {
+    catalog.set(`mode:${accessMode}`, { accessMode });
+  }
+  catalog.set("other", { dbType: "other" });
+  // 动态选项以服务端已归类的统计桶为准，原始 db_type 只补充真正未知类型的名称。
+  // receive 等内部接入标识已归入 mode:receive，不能从原始类型再次创建一个零计数选项。
+  const rawTypes = Object.keys(state.typeStatistics?.dbTypes || {});
+  for (const key of Object.keys(state.typeStatistics?.typeCounts || {})) {
+    if (!catalog.has(key)) {
+      const dbType = rawTypes.find((raw) => normalizeDatasourceType(raw) === key) || key;
+      catalog.set(key, { dbType });
+    }
+  }
+  // 保留真实存在的历史/新增类型，不丢弃或误归为 MySQL。
+  for (const item of state.list) {
+    const key = datasourceTypeKey(item);
+    if (!catalog.has(key)) catalog.set(key, item);
+  }
+  return [...catalog].map(([value, item]) => ({ value, label: sourceTypeName(item), icon: sourceTypeIcon(item), color: sourceTypeColor(item) }));
+});
+const datasourceTypeCounts = computed(() => new Map(Object.entries(state.typeStatistics?.typeCounts || {})));
+const datasourceTypeOptions = computed(() => datasourceTypeCatalog.value.map((option) => ({
+  ...option, count: datasourceTypeCounts.value.get(option.value) || 0,
+})));
+
 const sourceIconTip = (item) => {
+  if (isProxyDatasource(item)) return "代理访问：通过已登记的数据服务访问，无需直连数据库";
   const connectionText = connectionStatusText(item);
   const schema = schemaText(item);
   return [sourceTypeName(item), connectionText, schema ? `库名/Schema：${schema}` : ""]
@@ -1332,6 +1441,7 @@ const openDatasourceRegister = () => {
   };
   const registerData = {
     db: [newDb],
+    datasourceOptions: state.list,
     departmentOnly: true,
     defaultOrgId: $user?.orgId,
     defaultOrgName: $user?.orgName,
@@ -1349,8 +1459,9 @@ const openDatasourceRegister = () => {
   });
 };
 
+const isProxyDatasource = (row) => String(row?.accessMode || row?.poolCfg?.accessMode || parsePoolCfg(row?.poolCfg || row?.pool_cfg)?.accessMode || "").toLowerCase() === "proxy";
 const openDatasourceEdit = (row) => {
-  const typeSupported = isSupportedDatasourceType(row.dbType || row.db_type || row.databaseType);
+  const typeSupported = isProxyDatasource(row) || isSupportedDatasourceType(row.dbType || row.db_type || row.databaseType);
   const editRow = typeSupported
     ? row
     : {
@@ -1364,12 +1475,19 @@ const openDatasourceEdit = (row) => {
       };
   openRegisterModal({
     registerClass: "db",
-    registerData: { db: [editRow], departmentOnly: true, forceChooseType: !typeSupported },
+    registerData: { db: [editRow], datasourceOptions: state.list, departmentOnly: true, forceChooseType: !typeSupported },
   });
 };
 
 const openDatasourceDetail = (row) => {
   if (hasReportFiles(row)) return openReportWorkbench(row);
+  if (isProxyDatasource(row)) {
+    openRegisterModal({
+      registerClass: "db",
+      registerData: { db: [row], currentStep: 4, datasourceOptions: state.list, departmentOnly: true },
+    });
+    return;
+  }
   router.push({
     path: "/datasource-manage/detail",
     query: {
@@ -1431,6 +1549,7 @@ const openTableRegister = async (row, currentStep = 1) => {
 };
 
 const handlePrimaryAction = (row) => {
+  if (isProxyDatasource(row)) return openDatasourceEdit(row);
   if (hasReportFiles(row)) return openReportWorkbench(row);
   if (isDataReportSource(row)) return openDatasourceEdit(row);
   if (isRegistrationComplete(row)) {
@@ -1453,8 +1572,12 @@ const deleteDatasource = (row) => {
 };
 
 watch(completedVersion, () => loadData());
+watch(() => JSON.stringify(typeStatisticsPayload()), (key) => {
+  if (!state.treeLoading && key !== typeStatisticsKey) scheduleTypeStatistics();
+});
+onBeforeUnmount(() => { clearTimeout(typeStatisticsTimer); ++typeStatisticsGeneration; ++loadGeneration; });
 watch(
-  [() => state.keyword, () => state.filter, () => state.metricFilter],
+  [() => state.keyword, () => state.filter, () => state.metricFilter, () => state.datasourceType],
   () => {
     state.sourceDisplayLimit = SOURCE_BATCH_SIZE;
     state.expanded = [];
@@ -1553,6 +1676,11 @@ onMounted(loadData);
 .search-input {
   width: 320px;
 }
+
+.datasource-type-filter {
+  width: 230px;
+}
+.type-statistics-error { color: #d92d20; font-size: 12px; }
 
 .search-icon-button {
   display: inline-flex;
@@ -2444,7 +2572,16 @@ onMounted(loadData);
   :deep(svg) {
     width: 14px;
     height: 14px;
-    margin-right: 4px;
+    margin: 0;
+    display: block;
+  }
+
+  :deep(.el-button > .el-icon) {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 14px;
+    font-size: 14px;
+    transform-origin: center;
   }
 
   :deep(.register-button.el-button--primary) {
@@ -2753,7 +2890,8 @@ onMounted(loadData);
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .search-input {
+  .search-input,
+  .datasource-type-filter {
     width: 100%;
   }
 

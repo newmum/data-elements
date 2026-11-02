@@ -25,6 +25,21 @@ var decorate=rows=>{
     return result
 }
 var key=req.getHeader('Idempotency-Key')
+if(action=='pushSingle'){
+    var parts=c.http.multipart(req,_bean('fileTransferProperties').getSingleUploadMaxBytes(),['datasourceId','fileCode','businessKey','metadata'])
+    var metadata=parts.metadata==null || parts.metadata.trim()=='' ? {} : _bean('json').object(parts.metadata.getBytes('UTF-8'))
+    var file=parts.file;var stream=file.getInputStream()
+    try{return c.http.reply(202,service.singlePush(caller,key,new FileUploadService.Push(_required(parts.datasourceId,'datasourceId'),_required(parts.fileCode,'fileCode'),_required(parts.businessKey,'businessKey'),metadata),file.getSubmittedFileName(),file.getSize(),stream))}finally{stream.close()}
+}
+if(action=='pushInit'){
+    _media(req,'application/json');var body=c.http.object(req,65536);_unknown(body,['datasourceId','fileCode','fileName','size','sha256'])
+    return c.http.reply(202,service.initializePush(caller,key,new FileUploadService.Init(_required(body.datasourceId,'datasourceId'),_required(body.fileCode,'fileCode'),_required(body.fileName,'fileName'),_integer(body.size,-1),optional(body,'sha256'))))
+}
+if(action=='pushComplete'){
+    _media(req,'application/json');var body=c.http.object(req,65536);_unknown(body,['businessKey','metadata'])
+    return c.http.reply(202,service.completePush(caller,input.id,key,new FileUploadService.Submission(_required(body.businessKey,'businessKey'),_object(body.metadata))))
+}
+if(action=='pushStatus'){return c.http.reply(200,service.pushReply(service.status(caller,input.id)))}
 if(action=='content'){
     var u=service.readable(caller,input.id)
     if(u.state()!='READY'){_fail(409,'FILE_NOT_READY','文件尚未就绪')}

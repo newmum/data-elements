@@ -22,22 +22,24 @@ function fixture(){
  const api=new Function(...Object.keys(state),constants.map(extract).join('\n')+'\n'+functions.map(extract).join('\n')+'\nreturn {parseFileRegistrationRows,worksheetToObjects,validateTemplateHeaders,downloadFileRegistrationTemplate};')(...Object.values(state));
  return {...api,async workbook(){await api.downloadFileRegistrationTemplate();const w=new ExcelJS.Workbook();await w.xlsx.load(await blob.arrayBuffer());return {workbook:w,filename};}};
 }
-test('file registration workbook has instructions and file definitions, four required columns, format choices and size validation',async()=>{
+test('file registration workbook has instructions and file definitions, five required columns, format choices and size validation',async()=>{
  const f=fixture();const {workbook:w,filename}=await f.workbook();
  assert.equal(filename,'文件登记模板.xlsx');
  assert.deepEqual(w.worksheets.filter(s=>s.state==='visible').map(s=>s.name),['填写说明','文件登记']);
  assert.equal(w.getWorksheet('数据字段'),undefined);
  const sheet=w.getWorksheet('文件登记');
- assert.equal(sheet.getRow(1).values.filter(v=>String(v).includes('*')).length,4);
- assert.equal(sheet.getCell('D2').dataValidation.type,'list');
- assert.equal(sheet.getCell('E2').dataValidation.type,'decimal');
+ assert.equal(sheet.getRow(1).values.filter(v=>String(v).includes('*')).length,5);
+ assert.equal(sheet.getCell('E2').dataValidation.type,'list');
+ assert.equal(sheet.getCell('F2').dataValidation.type,'decimal');
  const rows=f.parseFileRegistrationRows(f.worksheetToObjects(sheet));
- assert.equal(rows.length,3);assert.deepEqual(rows.map(r=>r.fileFormat),['jpg','pdf','docx']);
+ assert.deepEqual(rows.map(r=>r.fileCode),['scene_photo','case_document','business_document']);assert.equal(rows.length,3);assert.deepEqual(rows.map(r=>r.fileFormat),['jpg','pdf','docx']);
  assert.ok(rows.every(r=>!r.relatedTableName&&!r.relatedFieldName));
  assert.match(JSON.stringify(w.getWorksheet('填写说明').getSheetValues()),/直接进入登记内容审查/);
 });
 test('file import validates required values, names, formats, bounds and optional association pair without accepting the structured workbook',()=>{
  const f=fixture();const valid={'文件名称':'现场照片','文件说明':'采集照片','文件格式':'JPG 图片','文件大小上限(MB)':'20','关联数据表名':'','关联字段名':''};
+ for(const code of ['', '中文','UPPER','has-dash','1bad'])assert.throws(()=>f.parseFileRegistrationRows([{...valid,'文件英文名':code}]));
+ assert.throws(()=>f.parseFileRegistrationRows([{...valid,'文件英文名':'same_code'},{...valid,'文件名称':'第二项','文件英文名':'same_code'}]));
  for(const column of ['文件名称','文件说明','文件格式','文件大小上限(MB)'])assert.throws(()=>f.parseFileRegistrationRows([{...valid,[column]:''}]));
  for(const value of ['0','-1','1048577','NaN','1e2'])assert.throws(()=>f.parseFileRegistrationRows([{...valid,'文件大小上限(MB)':value}]));
  assert.throws(()=>f.parseFileRegistrationRows([{...valid,'文件格式':'exe'}]));
@@ -54,4 +56,27 @@ test('conditional flow skips only the three table steps and restores normal forw
  const {preStep,nextStep}=new Function('state',methods.replace('(step: number)','(step)')+'\nreturn {preStep,nextStep};')(state);
  nextStep();assert.equal(state.value.currentStep,4);preStep();assert.equal(state.value.currentStep,0);
  state.value.steps.forEach(s=>s.skipped=false);nextStep();assert.equal(state.value.currentStep,1);preStep();assert.equal(state.value.currentStep,0);
+});
+
+test('skipped table steps remain in the five-step header without becoming return targets',()=>{
+ const ts=require('typescript');
+ const component=fs.readFileSync(path.join(root,'data-elements-chengtian/src/components/business/asset-register.vue'),'utf8');
+ const body=component.match(/<script setup[^>]*>([\s\S]*?)<\/script>/)[1];
+ const ast=ts.createSourceFile('asset-register.ts',body,ts.ScriptTarget.Latest,true);
+ const names=['visibleSteps','displayCurrentStep','displaySteps','goToCompletedStep'];
+ const declarations=ast.statements.filter(n=>ts.isVariableStatement(n)&&n.declarationList.declarations.some(d=>names.includes(d.name.getText(ast)))).map(n=>n.getText(ast)).join('\n');
+ const js=ts.transpileModule(declarations,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+ const store={state:{currentStep:0,steps:Array.from({length:6},(_,index)=>({title:String(index+1),skipped:index>=1&&index<=3,hidden:index===5}))},setCurrentStep(index){this.state.currentStep=index;}};
+ const computed=get=>({get value(){return get();}});
+ const nav=new Function('store','computed',js+'\nreturn {visibleSteps,displayCurrentStep,displaySteps,goToCompletedStep};')(store,computed);
+ assert.equal(nav.visibleSteps.value.length,5);
+ assert.equal(nav.displayCurrentStep.value,0);
+ store.state.currentStep=4;
+ assert.equal(nav.displayCurrentStep.value,4);
+ assert.deepEqual(nav.displaySteps.value.map(s=>s.clickable),[true,false,false,false,false]);
+ nav.goToCompletedStep(1);assert.equal(store.state.currentStep,4);
+ nav.goToCompletedStep(0);assert.equal(store.state.currentStep,0);
+ store.state.steps.forEach(s=>s.skipped=false);store.state.currentStep=3;
+ nav.goToCompletedStep(1);assert.equal(store.state.currentStep,1);
+ store.state.currentStep=5;assert.equal(nav.displayCurrentStep.value,4);
 });

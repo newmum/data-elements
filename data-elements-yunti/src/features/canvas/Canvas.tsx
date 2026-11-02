@@ -1,3 +1,4 @@
+import { notifyEditorState } from '@/components/OrchestrationState';
 import {
   AimOutlined,
   AppstoreOutlined,
@@ -45,8 +46,13 @@ export function Canvas() {
         graph.resize(container.clientWidth, container.clientHeight);
         graph.zoomToFit({ padding: 64, maxScale: 1, minScale: 0.1 });
         fittedFlow.current = flow.flowId;
+        notifyEditorState('YUNTI_EDITOR_READY');
       });
       return () => cancelAnimationFrame(frame);
+    }
+    if (fittedFlow.current !== flow.flowId) {
+      fittedFlow.current = flow.flowId;
+      notifyEditorState('YUNTI_EDITOR_READY');
     }
   }, [flow, graphRef, containerRef, ready]);
   useEffect(() => {

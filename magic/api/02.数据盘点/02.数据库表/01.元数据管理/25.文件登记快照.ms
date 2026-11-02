@@ -13,6 +13,7 @@
 // 文件登记复用表/字段快照。FILE 是逻辑文件登记项，不是可执行 SQL 的物理表。
 // 格式和大小上限保存为治理规则，不能冒充实际存储量；一次最多100项，关联批量校验。
 import tenantRuntime
+import dataScope
 import cn.hutool.core.util.IdUtil
 import cn.hutool.json.JSONUtil
 import java.util.List
@@ -35,7 +36,17 @@ var sourceId = text(body?.dbId)
 var action = text(body?.action)
 if (action=='') { action='read' }
 if (!['read','save','complete'].contains(action) || sourceId=='') { exit 400, '请提供有效的数据源及文件登记操作' }
-var source = db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('tid',sourceId).eq('is_del',0).selectOne()
+var scope=dataScope.resource('MENU:2081000000000000002')
+var sourceQuery=db.table('db_datasource_t').where().eq('tenant_id',tenantId).eq('tid',sourceId).eq('is_del',0)
+if (scope?.scope=='OWNER') {
+    if (text(scope.userId)=='') { exit 403, '当前账号缺少有效的数据范围' }
+    sourceQuery.eq('created_by',text(scope.userId))
+} else if (scope?.scope=='ORG') {
+    var organizations=scope.organizationIds || []
+    if (organizations.size()==0) { exit 404, '数据源不存在或无权访问' }
+    sourceQuery.in('org_id',organizations)
+} else if (scope?.scope!='ALL') { exit 403, '当前账号缺少有效的数据范围' }
+var source = sourceQuery.selectOne()
 if (source==null) { exit 404, '数据源不存在或不属于当前行业' }
 var sourceConfig = object(value(source,'pool_cfg','poolCfg'))
 if (!['receive','push'].contains(text(sourceConfig.accessMode)) || text(sourceConfig.pushDataType).toUpperCase()!='UNSTRUCTURED') {
@@ -45,7 +56,7 @@ var oldTables = db.table('db_table_t').where().eq('tenant_id',tenantId).eq('data
 if (oldTables.size()>100) { exit 422, '文件登记项超过100项，请先整理现有清单' }
 var oldIds = oldTables.map(row => text(row.tid))
 var oldColumns = oldIds.size()==0 ? [] : db.table('db_table_column_t').where().eq('tenant_id',tenantId).in('table_id',oldIds).eq('is_del',0).select()
-var byId = {}; var byName = {}; var columnByKey = {}; var fieldNamesById = {}
+var byId = {}; var byName = {}; var byCode = {}; var columnByKey = {}; var fieldNamesById = {}
 for (column in oldColumns) {
     var tableId=text(value(column,'table_id','tableId'))
     var name=text(value(column,'column_name','columnName'))
@@ -59,6 +70,7 @@ for (table in oldTables) {
     var policy=object(value(table,'field_governance_config','fieldGovernanceConfig')).fileRegistration || {}
     var row={
         tableId:id, collectionId:text(value(table,'table_name','tableName')),
+        fileCode:text(policy.fileCode || value(table,'table_name','tableName')),
         fileName:text(value(table,'table_name_cn','tableNameCn')),
         fileDescription:text(value(table,'table_comment','tableComment')),
         fileFormat:text(policy.fileFormat), maxFileBytes:policy.maxFileBytes,
@@ -68,7 +80,7 @@ for (table in oldTables) {
         registered:(value(table,'asset_status','assetStatus')+'')=='2',
         fieldCount:(fieldNamesById[id] || []).size()
     }
-    rows.add(row);byId[id]=row;byName[row.fileName.toLowerCase()]=row
+    rows.add(row);byId[id]=row;byName[row.fileName.toLowerCase()]=row;byCode[row.fileCode.toLowerCase()]=row
 }
 if (action=='read') { return {datasourceId:sourceId,list:rows,total:rows.size(),resourceKind:'FILE'} }
 var incoming=action=='complete' ? rows : body.files
@@ -76,6 +88,7 @@ if (!(incoming instanceof List) || incoming.size()==0 || incoming.size()>100) { 
 var normalized=[];var names=new HashSet();var requestedIds=new HashSet();var relatedNames=new HashSet();var relatedFields=new HashSet()
 for (item in incoming) {
     var name=text(item.fileName);var description=text(item.fileDescription)
+    var fileCode=text(item.fileCode)
     var format=text(item.fileFormat).toLowerCase().replace('.','')
     if (name=='' || name.length()>255 || description=='' || description.length()>2000) { exit 422, '文件名称、文件说明必填，名称最多255字，说明最多2000字' }
     if (!names.add(name.toLowerCase())) { exit 422, '同次导入的文件名称不能重复' }
@@ -86,23 +99,33 @@ for (item in incoming) {
     if (bytes<1 || bytes>1099511627776L) { exit 422, '文件大小上限须大于0且不超过1048576MB，实际还受海通节点限制' }
     var id=text(item.tableId)
     if (id!='' && byId[id]==null) { exit 404, '文件登记ID不存在或不属于当前数据源' }
-    var old=id=='' ? byName[name.toLowerCase()] : byId[id]
+    var old=id=='' ? (fileCode=='' ? byName[name.toLowerCase()] : (byCode[fileCode.toLowerCase()] || byName[name.toLowerCase()])) : byId[id]
+    if (fileCode!='' && !fileCode.matches('[a-z][a-z0-9_]{0,79}') && !(old!=null && fileCode==old.fileCode)) { exit 422, '文件英文名须以小写字母开头，仅含小写字母、数字和下划线，最多80位' }
     if (old!=null) { id=old.tableId }
     if (id=='') { id=IdUtil.getSnowflakeNextIdStr() }
+    if (fileCode=='') { fileCode=old==null ? 'file_'+id : old.fileCode }
+    if (old!=null && (old.fileCode!=old.collectionId || !old.fileCode.matches('file_[0-9]+')) && fileCode!=old.fileCode) { exit 409, '文件英文名已作为调用标识使用，不能修改；请新增文件类别' }
+    if (byCode[fileCode.toLowerCase()]!=null && byCode[fileCode.toLowerCase()].tableId!=id) { exit 422, '同一数据源的文件英文名不能重复' }
+    for (other in rows) { if (other.collectionId==fileCode && other.tableId!=id) { exit 422, '文件英文名与已有文件集合编码冲突' } }
+    byCode[fileCode.toLowerCase()]={tableId:id}
     if (!requestedIds.add(id)) { exit 422, '同次导入不能重复引用同一文件登记项' }
     var relatedTable=text(action=='complete' && text(item.relatedTableId)!='' ? item.relatedTableId : item.relatedTableName)
     var relatedField=text(action=='complete' && text(item.relatedFieldId)!='' ? item.relatedFieldId : item.relatedFieldName)
     if (relatedTable.length()>255 || relatedField.length()>255 || (relatedTable=='' && relatedField!='')) { exit 422, '填写关联字段时须同时填写关联表，名称最多255字' }
     if (relatedTable!='') { relatedNames.add(relatedTable) }
     if (relatedField!='') { relatedFields.add(relatedField) }
-    normalized.add({tableId:id,collectionId:old==null ? 'file_'+id : old.collectionId,fileName:name,fileDescription:description,fileFormat:format,maxFileBytes:bytes,maxFileSizeMb:sizeText::double,relatedTableName:relatedTable,relatedFieldName:relatedField,registered:action=='complete'})
+    normalized.add({tableId:id,collectionId:old==null ? fileCode : old.collectionId,fileCode:fileCode,fileName:name,fileDescription:description,fileFormat:format,maxFileBytes:bytes,maxFileSizeMb:sizeText::double,relatedTableName:relatedTable,relatedFieldName:relatedField,registered:action=='complete'})
 }
 var totalIds=new HashSet(oldIds);totalIds.addAll(requestedIds)
 if (totalIds.size()>100) { exit 422, '同一数据源最多100项文件定义；重复导入按名称或登记ID更新，不删除未列出的已有项' }
 // 所有关联记录一次批量读取，先验证全部归属再写入；不根据输入切换行业数据库。
 var relatedByKey={};var relatedIds=[]
 if (relatedNames.size()>0) {
-    var matches=db.select('SELECT tid,table_name,table_type FROM db_table_t WHERE tenant_id=#{tenantId} AND is_del=0 AND (tid IN (#{relatedNames}) OR table_name IN (#{relatedNames}))',{tenantId:tenantId,relatedNames:relatedNames.toArray()})
+    var associationScope=''
+    var associationOwner=text(scope.userId);var associationOrganizations=scope.organizationIds || []
+    if (scope.scope=='OWNER') { associationScope=' AND d.created_by=#{associationOwner}' }
+    else if (scope.scope=='ORG') { associationScope=' AND d.org_id IN (#{associationOrganizations})' }
+    var matches=db.select('SELECT t.tid,t.table_name,t.table_type FROM db_table_t t JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=#{tenantId} AND d.is_del=0 WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND (t.tid IN (#{relatedNames}) OR t.table_name IN (#{relatedNames}))'+associationScope,{tenantId:tenantId,relatedNames:relatedNames.toArray(),associationOwner:associationOwner,associationOrganizations:associationOrganizations})
     for (table in matches) {
         var id=text(table.tid);var name=text(value(table,'table_name','tableName'))
         relatedByKey[id]=[table]
@@ -134,7 +157,7 @@ for (row in normalized) {
 var merged={};for (id,row in byId) { merged[id]=row }
 for (row in normalized) {
     var old=byId[row.tableId]
-    var unchanged=old!=null && old.fileName==row.fileName && old.fileDescription==row.fileDescription && old.fileFormat==row.fileFormat && old.maxFileBytes==row.maxFileBytes && old.relatedTableName==row.relatedTableName && old.relatedFieldName==row.relatedFieldName && text(old.relatedTableId)==text(row.relatedTableId) && text(old.relatedFieldId)==text(row.relatedFieldId)
+    var unchanged=old!=null && old.fileCode==row.fileCode && old.fileName==row.fileName && old.fileDescription==row.fileDescription && old.fileFormat==row.fileFormat && old.maxFileBytes==row.maxFileBytes && old.relatedTableName==row.relatedTableName && old.relatedFieldName==row.relatedFieldName && text(old.relatedTableId)==text(row.relatedTableId) && text(old.relatedFieldId)==text(row.relatedFieldId)
     row.registered=action=='complete' || (unchanged && old.registered==true)
     merged[row.tableId]=row
 }
@@ -168,7 +191,7 @@ db.transaction(() => {
     }
     var insertTables=[];var updateTables=[];var insertColumns=[];var updateColumns=[]
     for (row in normalized) {
-        var config=JSONUtil.toJsonStr({resourceKind:'FILE',fileRegistration:{fileFormat:row.fileFormat,maxFileBytes:row.maxFileBytes,maxFileSizeMb:row.maxFileSizeMb,relatedTableName:row.relatedTableName,relatedTableId:row.relatedTableId,relatedFieldName:row.relatedFieldName,relatedFieldId:row.relatedFieldId}})
+        var config=JSONUtil.toJsonStr({resourceKind:'FILE',fileRegistration:{fileCode:row.fileCode,fileFormat:row.fileFormat,maxFileBytes:row.maxFileBytes,maxFileSizeMb:row.maxFileSizeMb,relatedTableName:row.relatedTableName,relatedTableId:row.relatedTableId,relatedFieldName:row.relatedFieldName,relatedFieldId:row.relatedFieldId}})
         if (byId[row.tableId]==null) {
             insertTables.add({tid:row.tableId,datasource_id:sourceId,table_name:row.collectionId,table_name_cn:row.fileName,table_comment:row.fileDescription,table_type:'FILE',business_type:'文件',annotated:1,field_count:6,field_governance_config:config,tenant_id:tenantId,org_id:value(source,'org_id','orgId'),asset_status:0,flow_status:0,is_del:0,created_time:now,updated_time:now,reg_time:now})
         } else {

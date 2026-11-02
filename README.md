@@ -18,7 +18,7 @@
 
 共享资源采用本地修改、审查差异、再发布的工作方式，详见 [本地资源版本管理](docs/data-elements.md#resource-versioning)。根 `magic/` 对应 Magic 在线目录，`lowcode/` 对应数据库低代码组件目录，`db/` 保存控制库、四个当前租户库和独立 `haitong` 库的完整结构初始化文件。普通前端 `src/` 中的 Vue 文件继续属于各自应用。
 
-运行日志、测试报告、编译与发布临时产物统一放在根 `logs/`，该目录不提交 Git。历史增量 SQL、脚本备份与导出发布包不再作为工程的版本源。长期有用的说明保留在 `docs/`。运行凭据只应从环境或受限配置注入，不要写入前端 `VITE_*` 变量或提交到 Git。
+数据库结构变更同时维护 `db/<库名>/init.sql` 完整定义和 `db/increments/` 中按序号维护的增量升级 SQL，方便 Git 比较及生产按需升级；使用方法见[数据库结构](docs/data-elements.md#database-schema)。Nacos 基础与开发配置分别维护为 `db/data-element.yml`、`db/data-element-dev.yml` 的脱敏版本，导出方法见[配置版本管理](docs/data-elements.md#nacos-config-versioning)。运行日志、测试报告、实际执行副本、脚本备份与发布临时产物统一放在根 `logs/`，该目录不提交 Git。长期有用的说明保留在 `docs/`。运行凭据只应从环境或受限配置注入，不要写入前端 `VITE_*` 变量或提交到 Git。
 
 <a id="documentation"></a>
 
@@ -41,4 +41,4 @@
 
 海通数据推送服务采用 Java 21 / Maven，默认端口 18083，实际端口以部署配置为准。在 `haitong-data-pull/` 执行 `scripts\build.cmd` / `scripts\run.cmd`（Windows）或 `bash scripts/build.sh` / `bash scripts/run.sh`（Linux）；生产服务管理使用 `scripts/install-systemd.sh`。外置 `config/` 用于部署参数，`src/main/resources/` 用于随 JAR 打包的默认资源；两者职责不同。`data/` 保存运行数据库、密钥、待处理文件，不能作为无用目录清理。有效测试统一在 `src/test/`，脚本统一在 `scripts/`；运行产物和测试报告不提交 Git。
 
-本机已配置的海通环境从根目录执行 `start-haitong-data-pull.cmd`：它明确加载仓库外私有 YAML，等待健康检查成功后才报告启动完成，日志写入根 `logs/haitong-data-pull/local-runtime/`。从 IDE 直接运行 main 时，工作目录和私有配置参数见[本地启动配置](docs/haitong-data-pull.md#local-startup)。
+本机已配置的海通环境从仓库根目录执行 `haitong-data-pull\start-haitong-data-pull.cmd`，或进入 `haitong-data-pull` 后执行 `.\start-haitong-data-pull.cmd`：它明确加载仓库外私有 YAML，等待健康检查成功后才报告启动完成，日志写入根 `logs/haitong-data-pull/local-runtime/`。从 IDE 直接运行 main 时，工作目录和私有配置参数见[本地启动配置](docs/haitong-data-pull.md#local-startup)。

@@ -83,7 +83,7 @@ class UnifiedMappingDeploymentTest {
     @Test void hivePartitionWithoutMappingUsesCandidatePublicationAndCleansFailedPartialGraph() {
         partitionFixture();
         when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
-            ((java.util.function.Consumer<String>) call.getArgument(1)).accept("candidate");
+            call.<java.util.function.Consumer<String>>getArgument(1).accept("candidate");
             throw new IllegalStateException("分区组件创建失败");
         });
         var response = controller.deploy("p", null);
@@ -98,7 +98,7 @@ class UnifiedMappingDeploymentTest {
     @Test void hivePartitionNativeValidationFailureCannotBePublishedAsStoppedSuccess() {
         partitionFixture();
         when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
-            ((java.util.function.Consumer<String>) call.getArgument(1)).accept("candidate");
+            call.<java.util.function.Consumer<String>>getArgument(1).accept("candidate");
             return new DslCompiler.CompileResult("candidate", Map.of(), Map.of(), Map.of());
         });
         doThrow(new IllegalStateException("Hive分区/partition：Relationship success未连接")).when(nifi).requireValidGeneratedProcessGroup("candidate");
@@ -112,7 +112,7 @@ class UnifiedMappingDeploymentTest {
     @Test void completeHivePartitionCandidateIsValidatedBeforeOldGraphIsStopped() {
         partitionFixture();
         when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
-            ((java.util.function.Consumer<String>) call.getArgument(1)).accept("candidate");
+            call.<java.util.function.Consumer<String>>getArgument(1).accept("candidate");
             return new DslCompiler.CompileResult("candidate", Map.of(), Map.of(), Map.of());
         });
         var response = controller.deploy("p", null);

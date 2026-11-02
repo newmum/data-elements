@@ -21,6 +21,7 @@ relay:
         tenant-id: police-demo
         datasource-id: case-source
         collection-id: case-documents
+        file-code: case_document
         # Single endpoint resolves these server-owned table/field names.
         table-name: police_case_record
         field-name: document_file_id

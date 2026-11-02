@@ -35,7 +35,7 @@ class ResourceDeliveryServiceBatchLookupTest {
         ApiInfoDeliveryView api = new ApiInfoDeliveryView();
         api.setTid("api-1");
         api.setServiceName("服务一");
-        when(apiMapper.selectList(any(Wrapper.class))).thenReturn(List.of(api));
+        when(apiMapper.selectList(org.mockito.ArgumentMatchers.any())).thenReturn(List.of(api));
 
         var authorizations = List.of(auth("auth-1", "api-1"), auth("auth-2", "api-1"),
                 auth("auth-3", "missing-api"));
@@ -48,7 +48,7 @@ class ResourceDeliveryServiceBatchLookupTest {
         assertEquals("服务一", rows.get(1).get("serviceName"));
         assertEquals("missing-api", rows.get(2).get("serviceName"));
         assertNull(rows.get(2).get("serviceCode"));
-        verify(apiMapper).selectList(any(Wrapper.class));
+        verify(apiMapper).selectList(org.mockito.ArgumentMatchers.any());
         verify(apiMapper, never()).selectById(any());
     }
 

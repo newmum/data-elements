@@ -373,7 +373,7 @@
         "metadata_import_snapshot_01"
       ],
       "kind": null,
-      "baseSha256": "809daf20317b6bc8e1b284a7021ebc24940873a8040c64f37a1117e1ff5dbffb",
+      "baseSha256": "84f1b550f457e95c2618deaad3916e311dafca810cf6bb60aa23b7cf96a500e0",
       "metadataId": "metadata_import_snapshot_01"
     },
     {
@@ -424,7 +424,7 @@
       ],
       "kind": "api",
       "metadataId": "metadata_file_registration_01",
-      "baseSha256": "f5501b2d7e41e9f5961363cb42491e81e6b424a28811bc4d02da5da806e12210"
+      "baseSha256": "1f8a28274e195a6d0219a17d6b0763d51cf91cb03108ae786c54a30a90edaa68"
     },
     {
       "path": "api/02.数据盘点/02.数据库表/01.元数据管理/26.数据上报登记.ms",
@@ -434,7 +434,7 @@
       ],
       "kind": "api",
       "metadataId": "report_registration_files_01",
-      "baseSha256": "8d588128f1069c8a677d67cddd71fe8b97fbc3922714691753eaecc863c0c02f"
+      "baseSha256": "b3f9cadeda7dd707bc367150aaf380a0af49191c0845fa826bbef38c820ec838"
     },
     {
       "path": "api/02.数据盘点/02.数据库表/01.元数据管理/27.提交上报文件.ms",
@@ -444,7 +444,7 @@
       ],
       "kind": "api",
       "metadataId": "data_report_submit_01",
-      "baseSha256": "c1ddde4478685f68c1ba26a8982dc6cabf549a757e362fd9fb3d4d9c4bde757b"
+      "baseSha256": "cf7183172517ea66a1ae919a52018e1e580c9a469fba6c35285056b9b7040d5a"
     },
     {
       "path": "api/02.数据盘点/02.数据库表/01.元数据管理/group.json",
@@ -562,7 +562,7 @@
         "datapd_save_update_datasource_01"
       ],
       "kind": null,
-      "baseSha256": "84d3a80a4aecd3ae95bb28bca90248efbbd5b0f0073084722cf62384cfdeb95b",
+      "baseSha256": "a821fd0fdd9ccffbeaaf832eeb26d10fc9c006103a75ad8350a879f4d80e5e74",
       "metadataId": "datapd_save_update_datasource_01"
     },
     {
@@ -582,7 +582,7 @@
         "datapd_dept_datasources_01"
       ],
       "kind": null,
-      "baseSha256": "7bc472242093197cf16cb5c976d3083de99495fc6580b502c0c720d937ba5c9b",
+      "baseSha256": "1a2d7727d48b1f172d5958fb8adc121ec68a5ded64d5c73928924a10cb8597b7",
       "metadataId": "datapd_dept_datasources_01"
     },
     {
@@ -592,7 +592,7 @@
         "datapd_db_tree_stats_20260723"
       ],
       "kind": null,
-      "baseSha256": "47cac07475dd18b7499c1ee10abbfea3a4373fbbf8cf923625845c67dcbf41da",
+      "baseSha256": "a265b3c54e430283c0689630c9994ed5c4ab5bace56b71b6e1b04a40e15c4fa1",
       "metadataId": "datapd_database_tree_statistics_01"
     },
     {
@@ -1449,7 +1449,7 @@
         "76fd211790f54164947f276824d19c1d"
       ],
       "kind": null,
-      "baseSha256": "28ebf75df07892be9152b1b4c820d8e236b036842695c05aa1f45ec335ba4a63",
+      "baseSha256": "08bb7f1ecd8e1cc9e1275a527cfc294eb3996131ab64605403c583423bed8ebf",
       "metadataId": "76fd211790f54164947f276824d19c1d"
     },
     {
@@ -1558,7 +1558,7 @@
         "1f475a245fda4ba4a885b3ac4f8e2d59"
       ],
       "kind": "api",
-      "baseSha256": "4870cf1965f1e88b5d7bcc07866e84d415991ca714ca6754b92c084c9f73ebf9",
+      "baseSha256": "dd3dca523e356f3887045d46320cda5065e7cffbe72f08fc0fc6efc633767ae1",
       "metadataId": "1f475a245fda4ba4a885b3ac4f8e2d59"
     },
     {
@@ -2643,7 +2643,7 @@
         "510fe82cba4a42248abd1faefc515441"
       ],
       "kind": null,
-      "baseSha256": "e8e0c4cde220cd6d2d9a07a226c06eea6e969db3b0ecba1e19dbd6e5a16545ff",
+      "baseSha256": "722ecdf7ab0aa5b7e84c8882db3d85bbe97fa08851fee29586d6d7f34efc9045",
       "metadataId": "510fe82cba4a42248abd1faefc515441"
     },
     {
@@ -2653,7 +2653,7 @@
         "1cc3266227a24804b9ba7c3a9e00d724"
       ],
       "kind": "api",
-      "baseSha256": "0f190159d165c1bf32492a775d4ce808bba487c034a1c6e4582c48d9bafacde9",
+      "baseSha256": "a870abdd63290196fa223b9255f85d5727a89cf27f59dcdfedaa8ac2bcadbc1a",
       "metadataId": "1cc3266227a24804b9ba7c3a9e00d724"
     },
     {
@@ -2673,8 +2673,18 @@
         "d5a7019f5e4a4a92a34543c1f5290005"
       ],
       "kind": null,
-      "baseSha256": "8daaa11aac451b7c46a1ac4989e43f77564cf21595a4523081f0615d66060689",
+      "baseSha256": "29c64db544e0989581da36bf9acac729c8e487e09d7e7b184393b36d0a1c7001",
       "metadataId": "d5a7019f5e4a4a92a34543c1f5290005"
+    },
+    {
+      "path": "api/06.数据服务/01.服务编排/08.服务管理/06.打开服务编排.ms",
+      "databasePath": "/magic-api/api/06.数据服务/01.服务编排/08.服务管理/06.打开服务编排.ms",
+      "rowIds": [
+        "9deeb20063894101b5e3f1157fefd6bf"
+      ],
+      "kind": "api",
+      "metadataId": "ad50e98d5f5e40ed861e767c0426d770",
+      "baseSha256": "22a9cbc4d5f92d17a0f0b04ca11a2a85b09ea4d87e56a8798be5959ad5cc8333"
     },
     {
       "path": "api/06.数据服务/01.服务编排/08.服务管理/group.json",

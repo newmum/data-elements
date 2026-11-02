@@ -1,5 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.controller;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -13,10 +15,10 @@ class ProcessorStatusPageTest {
         var first=ProcessorStatusPage.page(snapshot,"flowFilesIn","asc",1,20);
         var hundred=ProcessorStatusPage.page(snapshot,"flowFilesIn","asc",1,100);
         assertThat(first.get("total")).isEqualTo(150);
-        var small=(List<Map<String,Object>>)first.get("list");var large=(List<Map<String,Object>>)hundred.get("list");
+        var small=StructuredValues.objectRows(first.get("list"));var large=StructuredValues.objectRows(hundred.get("list"));
         assertThat(small).isEqualTo(large.subList(0,20));assertThat(small.getFirst().get("key")).isEqualTo("p0");
-        assertThat(((List<Map<String,Object>>)ProcessorStatusPage.page(snapshot,"name","desc",2,20).get("list")).getFirst().get("key")).isEqualTo("p129");
-        assertThat(((List<Map<String,Object>>)ProcessorStatusPage.page(snapshot,"bytesIn","desc",1,20).get("list")).getFirst().get("key")).isEqualTo("p0");
+        assertThat((StructuredValues.objectRows(ProcessorStatusPage.page(snapshot,"name","desc",2,20).get("list"))).getFirst().get("key")).isEqualTo("p129");
+        assertThat((StructuredValues.objectRows(ProcessorStatusPage.page(snapshot,"bytesIn","desc",1,20).get("list"))).getFirst().get("key")).isEqualTo("p0");
         assertThatThrownBy(()->ProcessorStatusPage.page(snapshot,"name;delete", "asc",1,20)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(()->ProcessorStatusPage.page(snapshot,"name", "asc",1,101)).isInstanceOf(IllegalArgumentException.class);
     }

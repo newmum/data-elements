@@ -23,7 +23,7 @@ public class EsPageInfo<T>{
         this.list = list;
     }
 
-    public static EsPageInfo empty(int pageNum, int pageSize){
+    public static <T> EsPageInfo<T> empty(int pageNum, int pageSize){
         return new EsPageInfo<>(pageNum, pageSize, 0, new ArrayList<>());
     }
 

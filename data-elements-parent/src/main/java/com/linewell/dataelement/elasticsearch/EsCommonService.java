@@ -1,5 +1,7 @@
 package com.linewell.dataelement.elasticsearch;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketException;
@@ -722,7 +724,8 @@ public class EsCommonService {
      * @return 文档内容，不存在返回 null
      */
     public Map<String, Object> getDocument(String indexName, String id) {
-        return operations.get(id, Map.class, index(indexName));
+        var document = operations.get(id, Map.class, index(indexName));
+        return document == null ? null : StructuredValues.objectMap(document);
     }
 
     /**
@@ -1368,7 +1371,7 @@ public class EsCommonService {
      */
     public List<Map> list(String index, Map<String, Object> conditions) {
         EsPageInfo<Map> pageInfo = list(index, conditions, 1, 10000, "createdTime", "asc");
-        return pageInfo == null ? new ArrayList() : pageInfo.getList();
+        return pageInfo == null ? new ArrayList<>() : pageInfo.getList();
     }
 
     /**

@@ -64,15 +64,9 @@
     <main class="serve-main right-panel pl-4">
       <div class="list-toolbar source-toolbar">
         <div class="list-toolbar__primary">
-          <el-button type="primary" icon="plus" @click="openRegister">登记服务</el-button>
+          <el-button type="primary" icon="plus" @click="openRegister">登记数据服务</el-button>
         </div>
         <div class="list-filters toolbar-filters">
-          <el-select class="filter-select" v-model="filters.method" clearable placeholder="请求方式" @change="queryFirstPage">
-            <el-option label="GET" value="GET" />
-            <el-option label="POST" value="POST" />
-            <el-option label="PUT" value="PUT" />
-            <el-option label="DELETE" value="DELETE" />
-          </el-select>
           <el-select class="filter-select filter-select--status" v-model="filters.status" clearable placeholder="服务状态" @change="queryFirstPage">
             <el-option label="草稿" value="draft" />
             <el-option label="已发布" value="published" />
@@ -80,7 +74,7 @@
           </el-select>
           <el-input
             v-model.trim="filters.keyword"
-            placeholder="请输入服务名称/服务编码/请求地址"
+            placeholder="搜索服务名称、编码或地址"
             clearable
             class="keyword-input"
             @clear="queryFirstPage"
@@ -109,38 +103,22 @@
         stripe
         class="serve-table"
       >
-        <el-table-column prop="serviceName" sortable="custom" label="服务名称" min-width="190" align="left" header-align="left" show-overflow-tooltip>
+        <el-table-column prop="serviceName" sortable="custom" label="服务名称" min-width="220" align="left" header-align="left" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-link class="serve-link" type="primary" :underline="false" @click="handleDetailClick(row)">
-              {{ row.serviceName || "-" }}
-            </el-link>
+            <div class="service-identity">
+              <el-link class="serve-link" type="primary" :underline="false" @click="handleDetailClick(row)">{{ row.serviceName || "—" }}</el-link>
+              <span v-if="row.serviceCode" class="service-code" :title="row.serviceCode">{{ row.serviceCode }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="serviceCode" label="服务编码" min-width="150" align="left" header-align="left" show-overflow-tooltip />
-        <el-table-column v-if="!isCompactTable" label="请求方式" width="110" align="center" header-align="center">
-          <template #default="{ row }">
-            <span class="method-tag" :class="'is-' + upper(row.method || 'GET')">
-              {{ upper(row.method || "GET") }}
-            </span>
-          </template>
+        <el-table-column label="请求方式" width="100" align="left" header-align="left">
+          <template #default="{ row }">{{ upper(row.method) || "—" }}</template>
         </el-table-column>
-        <el-table-column v-if="!isCompactTable" label="接口地址" min-width="240" align="left" header-align="left" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span>{{ row.publishAddressFull || row.publishAddress || row.uri || "-" }}</span>
-          </template>
+        <el-table-column prop="publishAddressFull" label="服务地址" min-width="240" align="left" header-align="left" show-overflow-tooltip />
+        <el-table-column label="状态" width="100" align="center" header-align="center">
+          <template #default="{ row }"><el-tag size="small" :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag></template>
         </el-table-column>
-        <el-table-column v-if="!isCompactTable" prop="groupName" label="服务分组" width="130" align="left" header-align="left" show-overflow-tooltip />
-        <el-table-column v-if="!isCompactTable" label="服务类型" width="120" align="center" header-align="center">
-          <template #default="{ row }">
-            {{ row.serviceCreateType === "apiBuild" ? "服务构建" : "服务登记" }}
-          </template>
-        </el-table-column>
-        <el-table-column v-if="!isCompactTable" label="状态" width="110" align="center" header-align="center">
-          <template #default="{ row }">
-            <el-tag size="small" :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column v-if="!isCompactTable" prop="updatedTime" sortable="custom" label="更新时间" width="170" align="left" header-align="left" show-overflow-tooltip />
+        <el-table-column prop="updatedTime" sortable="custom" label="更新时间" width="170" align="left" header-align="left" show-overflow-tooltip />
         <el-table-column
           label="操作"
           width="158"
@@ -168,26 +146,40 @@
     <teleport to="body">
       <div v-if="orchestrationVisible" class="orchestration-designer">
       <div class="orchestration-frame-wrap">
-        <div v-if="orchestrationError" class="orchestration-error">
-          <div class="orchestration-error-card">
-            <div class="orchestration-error-icon">!</div>
-            <h3>服务编排画布暂时无法打开</h3>
-            <p>{{ orchestrationError }}</p>
-            <div class="orchestration-error-actions">
-              <el-button type="primary" @click="openOrchestration(orchestrationRow)">重新检测</el-button>
-              <el-button @click="closeOrchestration">关闭</el-button>
-            </div>
+        <section v-if="orchestrationLoading || orchestrationError" class="flow-entry" :class="{'flow-entry--error': orchestrationError}"
+          :role="orchestrationError ? 'alert' : 'status'" aria-live="polite" :aria-busy="!orchestrationError">
+          <div class="flow-entry__card">
+            <div class="flow-entry__eyebrow"><i />云梯 · 服务编排</div>
+      <div class="flow-entry__visual" aria-hidden="true">
+        <div class="flow-entry__guide" />
+        <div class="flow-entry__wire flow-entry__wire--first"><i /></div>
+        <div class="flow-entry__wire flow-entry__wire--second"><i /></div>
+        <div class="flow-entry__node flow-entry__node--input"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5zM9 9l3 3-3 3m5-3h2" /></svg><span>请求</span></div>
+        <div class="flow-entry__node flow-entry__node--core"><svg viewBox="0 0 24 24"><path d="M5 7h14M5 17h14M8 4v6m8 4v6M5 12h14m-3-3v6" /></svg><span>编排</span></div>
+        <div class="flow-entry__node flow-entry__node--output"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 12l3 3 5-6" /></svg><span>响应</span></div>
+        <span v-if="orchestrationError" class="flow-entry__notice">!</span>
+      </div>
+            <h1>{{ orchestrationError ? entryFailure().title : '正在打开服务编排' }}</h1>
+            <p class="flow-entry__description">{{ orchestrationError ? entryFailure().description : '连接服务节点，准备你的编排画布' }}</p>
+            <template v-if="orchestrationError">
+              <div class="flow-entry__actions">
+                <button class="flow-entry__button flow-entry__button--primary" @click="openOrchestration(orchestrationRow)">重新加载</button>
+                <button class="flow-entry__button" @click="closeOrchestration">返回数据服务</button>
+              </div>
+              <details class="flow-entry__details"><summary>查看错误详情</summary><pre>{{ orchestrationError }}</pre></details>
+            </template>
+            <div v-else class="flow-entry__progress" aria-hidden="true"><i /><i /><i /></div>
+            <div class="flow-entry__footer">连接数据，让服务有序流转</div>
           </div>
-        </div>
-        <div v-else-if="orchestrationLoading" class="orchestration-loading">
-          <el-icon class="is-loading" :size="30" color="#1677ff"><el-icon-loading /></el-icon>
-          <span>正在打开服务编排画布...</span>
-        </div>
+        </section>
         <iframe
           v-if="orchestrationUrl && !orchestrationError"
           ref="orchestrationIframeRef"
           :src="orchestrationUrl"
           class="orchestration-iframe"
+          :class="{'orchestration-iframe--pending': orchestrationLoading}"
+          :aria-hidden="orchestrationLoading"
+          title="云梯服务编排画布"
           frameborder="0"
           allowfullscreen
           @load="onOrchestrationLoad"
@@ -237,6 +229,7 @@ const groupDialogVisible = ref(false);
 const orchestrationVisible = ref(false);
 const orchestrationLoading = ref(false);
 const orchestrationError = ref("");
+const orchestrationErrorCode = ref(0);
 const orchestrationUrl = ref("");
 const orchestrationTitle = ref("");
 const orchestrationRow = ref(null);
@@ -248,11 +241,9 @@ const currentGroup = ref({ id: "", name: "全部" });
 const apiDetail = ref({});
 const groupTree = ref([{ id: "", name: "全部", count: 0, children: [] }]);
 const groupForm = reactive({ id: "", name: "", code: "", sortNo: 1 });
-const isCompactTable = ref(false);
 
 const filters = reactive({
   keyword: "",
-  method: "",
   status: "",
 });
 
@@ -334,7 +325,6 @@ const fetchServices = async ({ pageNo = 1, pageSize = 20, sortField = undefined,
     pageNum: pageNo,
     pageSize,sortField,sortDir,
     keyword: filters.keyword,
-    method: filters.method,
     status: filters.status,
     groupId: currentGroup.value?.id || "",
   });
@@ -446,6 +436,16 @@ const getToken = () => {
     return stored;
   }
 };
+const entryFailure = () => {
+  const code = Number(orchestrationErrorCode.value);
+  if (code === 404) return {title: '暂时无法访问这个流程', description: '流程可能已移除，或不在当前账号的数据范围内。请返回数据服务重新选择。'};
+  if ([401, 403, 100120].includes(code)) return {title: '请重新确认登录状态', description: '当前登录已失效或没有访问权限，请返回数据服务重新登录后打开。'};
+  if (code === 409) return {title: '编排内容需要检查', description: '当前服务的流程关联或编排内容存在冲突，请返回数据服务检查后重试。'};
+  return {title: '服务编排暂时无法打开', description: '连接暂时中断或服务未能及时响应。请稍后重试，或返回数据服务。'};
+};
+const entryErrorText = (value) => String(value || '服务暂时无法响应').slice(0, 2000)
+  .replace(/(Bearer\s+)[\w.\-]+/gi, '$1[已隐藏]')
+  .replace(/((?:token|password|secret|api[_-]?key)\s*[:=]\s*)[^\s&,;]+/gi, '$1[已隐藏]');
 const normalizeBaseUrl = (url) => String(url || "").replace(/\/+$/, "");
 const getYuntiCandidates = () => {
   const { protocol, hostname, origin } = window.location;
@@ -494,9 +494,11 @@ const isYuntiReachable = async (baseUrl, parentSignal) => {
   }
 };
 const buildOrchestrationUrl = (baseUrl, row) => {
-  const flowId = row?.flowId || row?.flow_id || row?.id || row?.tid;
+  const flowId = row?.flowId || row?.flow_id;
+  if (!flowId) throw new Error("服务尚未关联有效流程");
   const params = new URLSearchParams({
     communication: "postMessage",
+    entryId: String(orchestrationAttempt),
     parentOrigin: window.location.origin,
     apiId: row?.id || row?.tid || "",
     flowId,
@@ -551,6 +553,7 @@ const closeOrchestration = () => {
   orchestrationVisible.value = false;
   orchestrationUrl.value = "";
   orchestrationError.value = "";
+  orchestrationErrorCode.value = 0;
   orchestrationLoading.value = false;
   orchestrationRow.value = null;
 };
@@ -558,9 +561,9 @@ const openOrchestration = async (row) => {
   window.clearTimeout(orchestrationLoadTimer);
   const target = row || orchestrationRow.value;
   if (!target) return;
-  const flowId = target.flowId || target.flow_id || target.id || target.tid;
-  if (!flowId) {
-    ElMessage.warning("当前服务没有关联编排流程");
+  const apiId = target.id || target.tid;
+  if (!apiId) {
+    ElMessage.warning("请选择有效的数据服务");
     return;
   }
   orchestrationRow.value = target;
@@ -568,6 +571,7 @@ const openOrchestration = async (row) => {
   orchestrationVisible.value = true;
   orchestrationLoading.value = true;
   orchestrationError.value = "";
+  orchestrationErrorCode.value = 0;
   orchestrationUrl.value = "";
   orchestrationProbeController?.abort();
   orchestrationProbeController = new AbortController();
@@ -589,12 +593,26 @@ const openOrchestration = async (row) => {
       "未检测到云梯画布应用。本地开发默认地址为 http://localhost:3030，端口占用时会顺延；请检查服务启动终端中的地址。生产环境请确认 /yunti 静态资源已发布。";
     return;
   }
-  orchestrationUrl.value = buildOrchestrationUrl(baseUrl, target);
+  // The explicit user action creates at most one authorized draft; listing rows never does.
+  try {
+    const response = await $common.postSilently('/dws/flowserve/gateway/orchestration/open', {apiId}, {}, 20000);
+    if (currentAttempt !== orchestrationAttempt || !orchestrationVisible.value) return;
+    const opened = extractPayload(response);
+    if (!opened.flowId) throw new Error('未能读取当前服务的编排流程，请重新加载');
+    orchestrationRow.value = {...target, flowId: opened.flowId};
+    orchestrationUrl.value = buildOrchestrationUrl(baseUrl, orchestrationRow.value);
+  } catch (error) {
+    if (currentAttempt !== orchestrationAttempt || !orchestrationVisible.value) return;
+    orchestrationLoading.value = false;
+    orchestrationErrorCode.value = Number(error?.info?.status || String(error?.info?.code || '').match(/(?:^|-)(401|403|404|409|100120)$/)?.[1] || error?.response?.status || error?.code) || 0;
+    orchestrationError.value = entryErrorText(error?.info?.message || error?.message);
+    return;
+  }
   orchestrationLoadTimer = window.setTimeout(() => {
     if (currentAttempt !== orchestrationAttempt || !orchestrationVisible.value) return;
     orchestrationLoading.value = false;
     orchestrationError.value = "已连接云梯服务，但画布初始化超时。请重新检测；若仍无法打开，请检查云梯页面是否完整加载。";
-  }, 15000);
+  }, 45000);
 };
 const handleOrchestrationMessage = (event) => {
   if (event.source !== orchestrationIframeRef.value?.contentWindow) return;
@@ -606,9 +624,15 @@ const handleOrchestrationMessage = (event) => {
   if (event.data?.type === "YUNTI_APP_READY" || event.data?.type === "FLOWSERVE_APP_READY") {
     sendOrchestrationInitMessage();
   }
-  if (event.data?.type === "YUNTI_SESSION_READY") {
+  // Session readiness is only an intermediate step. Keep the same surface until the graph is fitted.
+  if (["YUNTI_EDITOR_READY", "YUNTI_EDITOR_ERROR"].includes(event.data?.type)) {
+    if (event.data?.payload?.entryId !== String(orchestrationAttempt)) return;
     window.clearTimeout(orchestrationLoadTimer);
     orchestrationLoading.value = false;
+    if (event.data.type === "YUNTI_EDITOR_ERROR") {
+      orchestrationErrorCode.value = Number(event.data.payload?.code) || 0;
+      orchestrationError.value = entryErrorText(event.data.payload?.message);
+    }
   }
 };
 const handleDelete = async (row) => {
@@ -632,10 +656,6 @@ const onModalClose = async (result) => {
     Promise.all([loadGroups(), tableRef.value?.refresh?.()]);
   }
 };
-const refreshTableDensity = () => {
-  // 侧栏占用空间后，窄工作区只保留定位服务所需的核心列，避免主区域产生横向滚动条。
-  isCompactTable.value = window.innerWidth < 1480;
-};
 
 // 代理登记返回的页面可能仍在缓存中，路由意图不能仅在首次挂载时处理。
 watch(() => [route.path, route.query.register], ([path, register]) => {
@@ -644,14 +664,11 @@ watch(() => [route.path, route.query.register], ([path, register]) => {
 }, { immediate: true });
 
 onMounted(async () => {
-  refreshTableDensity();
-  window.addEventListener("resize", refreshTableDensity);
   window.addEventListener("message", handleOrchestrationMessage);
   await loadGroups();
 });
 onUnmounted(() => {
   closeOrchestration();
-  window.removeEventListener("resize", refreshTableDensity);
   window.removeEventListener("message", handleOrchestrationMessage);
 });
 </script>
@@ -768,10 +785,11 @@ onUnmounted(() => {
   flex-shrink: 0;
   gap: 2px;
   padding-left: 4px;
-  background: #fff;
+  background: transparent;
 }
 
-.group-node:hover .group-actions {
+.group-node:hover .group-actions,
+.group-node:focus-within .group-actions {
   display: inline-flex;
 }
 
@@ -880,8 +898,9 @@ onUnmounted(() => {
 
 .table-actions {
   display: inline-flex;
+  width: 100%;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
   white-space: nowrap;
 
@@ -965,34 +984,16 @@ onUnmounted(() => {
   }
 }
 
-.method-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 48px;
-  height: 22px;
-  line-height: 22px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #fff;
-  background: #1677ff;
-}
-
-.method-tag.is-GET {
-  background: #18a058;
-}
-
-.method-tag.is-POST {
-  background: #1677ff;
-}
-
-.method-tag.is-PUT {
-  background: #fa8c16;
-}
-
-.method-tag.is-DELETE {
-  background: #f56c6c;
+.service-identity { min-width: 0; }
+.service-code {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .orchestration-designer {
@@ -1020,62 +1021,51 @@ onUnmounted(() => {
   background: #fff;
 }
 
-.orchestration-loading,
-.orchestration-error {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f6f9ff;
+.orchestration-iframe--pending { visibility: hidden; pointer-events: none; }
+
+.flow-entry {
+  position: absolute; inset: 0; z-index: 8; min-height: 100%; display: grid; place-items: center;
+  overflow: auto; padding: 28px 20px; color: #263c58; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  background: radial-gradient(ellipse at 50% 40%, #fff 0%, #f4f8fd 50%, #edf3fb 100%);
+  background-color: #f4f8fd; box-sizing: border-box;
 }
+.flow-entry::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5; background-image: radial-gradient(#c1d2e5 .7px, transparent .7px); background-size: 22px 22px; mask-image: radial-gradient(ellipse at center, transparent 20%, #000 90%); }
+.flow-entry__card { position: relative; width: min(520px, 100%); box-sizing: border-box; padding: 28px 38px 22px; text-align: center; border: 1px solid #fff; border-radius: 22px; background: #ffffffdb; box-shadow: 0 22px 70px #234e7c09, 0 2px 6px #234e7c03; }
+.flow-entry__eyebrow { display: flex; justify-content: center; align-items: center; gap: 8px; color: #71849c; font-size: 12px; letter-spacing: 1px; }
+.flow-entry__eyebrow i { width: 6px; height: 6px; border-radius: 2px; background: #5a89d5; transform: rotate(45deg); }
+.flow-entry__visual { position: relative; width: 310px; max-width: 100%; height: 132px; margin: 20px auto 12px; }
+.flow-entry__guide { position: absolute; inset: 0 25%; border-radius: 50%; background: radial-gradient(ellipse, #e9f2ff 0%, transparent 70%); }
+.flow-entry__node { position: absolute; top: 39px; width: 52px; height: 52px; display: grid; place-items: center; box-sizing: border-box; background: #fff; border: 1px solid #dce6f2; border-radius: 13px; box-shadow: 0 6px 18px #355d880b; }
+.flow-entry__node svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.flow-entry__node span { position: absolute; top: 61px; width: 80px; color: #8391a4; font-size: 11px; letter-spacing: 2px; }
+.flow-entry__node--input { left: 4px; color: #5b9f95; }
+.flow-entry__node--core { left: calc(50% - 31px); top: 34px; width: 62px; height: 62px; color: #4f7fc9; border-color: #bed2ef; background: #f5f9ff; box-shadow: 0 0 0 6px #edf4ff, 0 8px 22px #3c76c414; animation: flow-entry-breathe 2.4s ease-in-out infinite; }
+.flow-entry__node--core span { top: 66px; }
+.flow-entry__node--output { right: 4px; color: #8c95bd; }
+.flow-entry__wire { position: absolute; top: 65px; height: 1px; width: calc(50% - 87px); overflow: hidden; background: #d6e3f4; }
+.flow-entry__wire--first { left: 56px; }
+.flow-entry__wire--second { left: calc(50% + 31px); }
+.flow-entry__wire i { position: absolute; top: -1px; width: 20px; height: 3px; border-radius: 3px; background: #6e9bdb; animation: flow-entry-travel 2.4s linear infinite; }
+.flow-entry__wire--second i { animation-delay: 1.2s; }
+.flow-entry h1 { margin: 0; color: #263c58; font-size: 21px; font-weight: 600; line-height: 1.5; letter-spacing: .2px; }
+.flow-entry__description { max-width: 390px; margin: 10px auto 0; color: #8390a3; font-size: 13px; line-height: 1.85; text-wrap: pretty; }
+.flow-entry__progress { display: flex; justify-content: center; gap: 6px; margin: 22px 0; }
+.flow-entry__progress i { width: 4px; height: 4px; border-radius: 50%; background: #80a4d7; animation: flow-entry-dot 1.4s ease-in-out infinite; }
+.flow-entry__progress i:nth-child(2) { animation-delay: .18s; }.flow-entry__progress i:nth-child(3) { animation-delay: .36s; }
+.flow-entry__footer { margin-top: 22px; padding-top: 17px; border-top: 1px solid #edf1f7; color: #a0abbb; font-size: 11px; letter-spacing: 1px; }
+.flow-entry__notice { position: absolute; top: 23px; left: calc(50% + 18px); width: 22px; height: 22px; border: 3px solid #fff; border-radius: 50%; color: #b17b37; background: #fff0d9; font-size: 13px; font-weight: 600; line-height: 22px; }
+.flow-entry--error .flow-entry__node--core { color: #bd9155; border-color: #e5d8c6; background: #fffbf5; box-shadow: 0 0 0 6px #fcf6ee; animation: none; }
+.flow-entry--error .flow-entry__wire { background: repeating-linear-gradient(90deg, #d6dfeb 0 4px, transparent 4px 8px); }.flow-entry--error .flow-entry__wire i { display: none; }
+.flow-entry__actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 23px; }
+.flow-entry__button { min-height: 36px; padding: 7px 18px; border: 1px solid #dbe4ef; border-radius: 7px; background: #fff; color: #57718f; font: inherit; font-size: 13px; cursor: pointer; transition: background .15s, box-shadow .15s; }
+.flow-entry__button:hover { background: #f4f8fd; }.flow-entry__button:focus-visible { outline: 3px solid #b4cef5; outline-offset: 3px; }
+.flow-entry__button--primary { color: #fff; border-color: #4a7ed0; background: #4a7ed0; box-shadow: 0 3px 8px #4a7ed025; }.flow-entry__button--primary:hover { background: #3d70c2; }
+.flow-entry__details { margin-top: 17px; text-align: center; color: #94a0b1; font-size: 11px; }.flow-entry__details summary { cursor: pointer; }.flow-entry__details pre { max-height: 110px; padding: 10px; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-word; background: #f6f8fb; color: #748297; border-radius: 6px; }
+@keyframes flow-entry-travel { from { left: -20px; } to { left: 100%; } }
+@keyframes flow-entry-breathe { 50% { box-shadow: 0 0 0 9px #edf4ff70, 0 8px 22px #3c76c414; } }
+@keyframes flow-entry-dot { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+@media (max-width: 480px) { .flow-entry { padding: 18px 14px; }.flow-entry__card { padding: 24px 22px 20px; border-radius: 18px; }.flow-entry h1 { font-size: 19px; }.flow-entry__visual { width: 280px; margin-top: 15px; } }
+@media (max-height: 480px) { .flow-entry { padding: 16px; }.flow-entry__card { padding-top: 18px; padding-bottom: 14px; }.flow-entry__visual { height: 114px; margin-top: 8px; margin-bottom: 6px; }.flow-entry__footer { margin-top: 16px; padding-top: 12px; } }
+@media (prefers-reduced-motion: reduce) { .flow-entry *, .flow-entry *::before { animation: none !important; transition: none !important; } }
 
-.orchestration-loading {
-  gap: 10px;
-  font-size: 14px;
-  color: #4e5d78;
-}
-
-.orchestration-error-card {
-  width: 420px;
-  padding: 28px 30px;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 18px 48px rgba(22, 55, 120, 0.14);
-  text-align: center;
-
-  h3 {
-    margin: 12px 0 8px;
-    font-size: 18px;
-    color: #1f2d3d;
-  }
-
-  p {
-    margin: 0;
-    line-height: 1.7;
-    color: #5e6c84;
-  }
-}
-
-.orchestration-error-icon {
-  width: 42px;
-  height: 42px;
-  margin: 0 auto;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fff1f0;
-  color: #ff4d4f;
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.orchestration-error-actions {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 18px;
-}
 </style>

@@ -143,6 +143,13 @@ export function prepareValue(v: Value, f: Field, s: Schema, dicts: Dictionary[])
         return null;
     const dict = matchDictionary(v, f, dicts);
     let value: Value = f.dictionary?.output === 'code' && dict ? dict.code : v;
+    if (f.standardField === 'LXDH' || f.standardField === 'SFZH') {
+        if(typeof value==='number'&&!Number.isSafeInteger(value))throw new Error('号码超出安全精度，请使用原始文本');
+        const text=String(value).trim().toUpperCase();
+        if(f.standardField==='LXDH'&&!/^\d{11}$/.test(text))throw new Error('手机号码须为11位数字');
+        if(f.standardField==='SFZH'&&!/^\d{17}[\dX]$/.test(text))throw new Error('身份证须为18位，末位可为X');
+        return text;
+    }
     if (f.id === s.timestamp || f.id === s.eventTime || f.type === 'date' || f.type === 'datetime') {
         const prepared = parseTime(value, f);
         if (f.standardField === 'DATE') return String(prepared).slice(0, 10);

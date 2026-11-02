@@ -35,7 +35,7 @@ final class PortableSqlParser {
         Db2Expressions(Lexer lexer) { super(lexer); }
 
         @Override public SQLDataType parseDataType(boolean restrict) {
-            var saved = lexer.mark();
+            var saved = lexer.markOut();
             String name = lexer.stringVal();
             if (name != null && Set.of("CHAR", "CHARACTER", "VARCHAR").contains(name.toUpperCase(Locale.ROOT))) {
                 name = name.toUpperCase(Locale.ROOT);

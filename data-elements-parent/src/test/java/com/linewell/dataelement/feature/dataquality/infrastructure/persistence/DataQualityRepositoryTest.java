@@ -1,4 +1,6 @@
 package com.linewell.dataelement.feature.dataquality.infrastructure.persistence;
+
+import com.linewell.dataelement.utils.StructuredValues;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +19,7 @@ class DataQualityRepositoryTest {
    var rows=new java.util.ArrayList<Map<String,Object>>();for(int i=0;i<size;i++)rows.add(new LinkedHashMap<>(Map.of("tid","metric-"+i,"rule_name","Name "+i,"checked_count",size,"profile_json","{\"scannedRows\":"+i+"}")));
    when(mapper.selectRunMetrics("tenant-a","run")).thenReturn(rows);when(mapper.selectRunShards("tenant-a","run")).thenReturn(List.of());
    var repository=new DataQualityRepository(mapper,null,new DataQualityProperties(),new ObjectMapper());
-   var result=(List<Map<String,Object>>)repository.runDetail("tenant-a","run",Map.of("metricSortField","scannedRows","metricSortDir","desc")).get("metrics");
+   var result=StructuredValues.objectRows(repository.runDetail("tenant-a","run",Map.of("metricSortField","scannedRows","metricSortDir","desc")).get("metrics"));
    assertThat(result.getFirst()).containsEntry("scannedRows",size-1);verify(mapper).selectRun("tenant-a","run");verify(mapper).selectRunMetrics("tenant-a","run");verify(mapper).selectRunShards("tenant-a","run");verifyNoMoreInteractions(mapper);
   }
  }
@@ -26,7 +28,7 @@ class DataQualityRepositoryTest {
   when(mapper.selectRunMetrics("tenant","run")).thenReturn(java.util.List.of(new java.util.LinkedHashMap<>(Map.of("checked_count",0,"pass_rate",0,"score",0))));
   when(mapper.selectRunShards("tenant","run")).thenReturn(java.util.List.of());
   var repository=new DataQualityRepository(mapper,null,new DataQualityProperties(),new ObjectMapper());
-  var metrics=(java.util.List<Map<String,Object>>)repository.runDetail("tenant","run").get("metrics");
+  var metrics=StructuredValues.objectRows(repository.runDetail("tenant","run").get("metrics"));
   assertThat(metrics.get(0)).containsEntry("pass_rate",null).containsEntry("score",null);
  }
  @Test void cancelledEvaluationDoesNotWriteMetricsOrSamples() {

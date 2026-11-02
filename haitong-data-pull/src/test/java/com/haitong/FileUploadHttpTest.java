@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
     "relay.security.api-key=file-producer-0123456789abcdef0123456789","relay.security.admin-key=file-admin-0123456789abcdef0123456789",
     "relay.security.clients.receiver.api-key=file-receiver-0123456789abcdef0123456789",
     "relay.files.max-streams=1","relay.files.enabled=true","relay.files.collections.cases.tenant-id=ga","relay.files.collections.cases.datasource-id=police",
-    "relay.files.collections.cases.table-name=case_record","relay.files.collections.cases.field-name=document_id",
+    "relay.files.collections.cases.table-name=case_record","relay.files.collections.cases.field-name=document_id","relay.files.collections.cases.file-code=case_document",
     "relay.files.collections.cases.collection-id=case-files","relay.files.collections.cases.clients[0]=default","relay.files.collections.cases.read-clients[0]=receiver",
     "relay.files.collections.cases.targets[0]=local","relay.files.collections.cases.receipt-clients.local=receiver","relay.files.collections.cases.require-malware-scan=false",
     "relay.files.collections.cases.metadata-types.caseNo=STRING","relay.files.collections.cases.required-metadata[0]=caseNo"
@@ -94,6 +94,37 @@ class FileUploadHttpTest {
         for(String obsolete:List.of("size=1","sha256="+Rules.sha256(content),"collectionId=case-files"))assertEquals(422,call("POST",endpoint+"&"+obsolete,PRODUCER,key,content,Map.of("Content-Type","application/octet-stream")).statusCode());
         assertEquals(422,call("POST",endpoint+"&fieldName=outside",PRODUCER,key,content,Map.of("Content-Type","application/octet-stream")).statusCode());
         assertEquals(422,call("POST",endpoint+"&tenantId=other",PRODUCER,key,content,Map.of("Content-Type","application/octet-stream")).statusCode());
+    }
+    byte[] multipart(String boundary,Map<String,String> fields,byte[] content) throws IOException {
+        var out=new ByteArrayOutputStream();
+        for(var entry:fields.entrySet())out.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\""+entry.getKey()+"\"\r\n\r\n"+entry.getValue()+"\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        out.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\"验证案卷.pdf\"\r\nContent-Type: application/pdf\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        out.write(content);out.write(("\r\n--"+boundary+"--\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));return out.toByteArray();
+    }
+    @Test void unifiedMultipartSingleSubmitsAndSupportsAliasWithoutBreakingJsonPost() throws Exception {
+        String boundary="validation-file-push-boundary",key="validation-single-"+UUID.randomUUID();
+        byte[] content="%PDF-1.7\nvalidation single push\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        var fields=Map.of("datasourceId","police","fileCode","case_document","businessKey","validation-single","metadata","{\"caseNo\":\"VALIDATION-1\"}");
+        byte[] body=multipart(boundary,fields,content);var headers=Map.of("Content-Type","multipart/form-data; boundary="+boundary);
+        assertEquals(401,call("PUT","/api/v1/data-push","invalid",key,body,headers).statusCode());
+        assertEquals(404,call("PUT","/api/v1/data-push",RECEIVER,key,body,headers).statusCode());
+        var accepted=object(call("PUT","/api/v1/data-push",PRODUCER,key,body,headers),202);String id=accepted.get("uploadId").toString();
+        assertEquals("case_document",accepted.get("fileCode"));assertEquals("验证案卷.pdf",accepted.get("fileName"));
+        assertEquals("/api/v1/data-push/uploads/"+id,accepted.get("statusUrl"));
+        assertEquals(id,object(call("PUT","/api/v1/data-push/single",PRODUCER,key,body,headers),202).get("uploadId"));
+        awaitReady(id);assertTrue(worker.runOne(Kind.FILE_LOCAL));
+        assertEquals("SUCCEEDED",object(call("GET","/api/v1/data-push/uploads/"+id,PRODUCER,null,null,Map.of()),200).get("deliveryStatus"));
+        assertEquals(422,call("POST","/api/v1/data-push",PRODUCER,"validation-json",json.bytes(Map.of()),Map.of("Content-Type","application/json")).statusCode());
+        assertEquals(422,call("PUT","/api/v1/data-push",PRODUCER,"validation-unknown",multipart(boundary,Map.of("datasourceId","police","fileCode","case_document","tenantId","other"),content),headers).statusCode());
+    }
+    @Test void unifiedChunksCombineCompletionAndSubmission() throws Exception {
+        byte[] data="%PDF-1.7\nvalidation chunk push\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        var init=post("/api/v1/data-push/uploads","validation-init-"+UUID.randomUUID(),Map.of("datasourceId","police","fileCode","case_document","fileName","large.pdf","size",data.length));
+        String path="/api/v1/data-push/uploads/"+init.get("uploadId");
+        assertEquals(200,call("PUT",path+"/parts/1",PRODUCER,null,data,Map.of("Content-Type","application/octet-stream","X-Part-SHA256",Rules.sha256(data))).statusCode());
+        post(path+"/complete","validation-complete-"+UUID.randomUUID(),Map.of("businessKey","validation-chunk","metadata",Map.of("caseNo","VALIDATION-2")));
+        awaitReady(init.get("uploadId").toString());assertTrue(worker.runOne(Kind.FILE_LOCAL));
+        assertEquals("SUCCEEDED",object(call("GET",path,PRODUCER,null,null,Map.of()),200).get("deliveryStatus"));
     }
     @Test @EnabledIfSystemProperty(named="haitong.large-file.tests",matches="true") void threeGiBFileStreamsThroughRealHttpAndLocalDelivery() throws Exception {
         long size=3L*1024*1024*1024;Path source=WORK.resolve("three-gib.pdf");Files.createDirectories(WORK);

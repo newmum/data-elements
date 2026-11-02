@@ -69,7 +69,7 @@ public final class AuthenticationFilter extends OncePerRequestFilter {
         // REGISTRY_SYNC service flow, so it accepts the same service-to-service
         // credential. It cannot use that credential to publish business data:
         // The Magic push function checks route/channel permissions after JSON parsing.
-        boolean standaloneRegistrySync = ("/api/v1/data-push".equals(path) || "/push-operations/data-push".equals(path))
+        boolean standaloneRegistrySync = req.getMethod().equals("POST") && ("/api/v1/data-push".equals(path) || "/push-operations/data-push".equals(path))
                 && p.getStandaloneRegistry().isSyncEnabled();
         if (identity == null && platformCredentialIssue && p.getStandaloneRegistry().isSyncEnabled()) {
             // Compatibility for an optional inbound issuer key; no URL or platform lookup is used.

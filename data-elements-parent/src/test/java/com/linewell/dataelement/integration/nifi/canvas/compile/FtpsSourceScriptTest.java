@@ -54,7 +54,8 @@ class FtpsSourceScriptTest {
         String source;try(var input=getClass().getResourceAsStream("/nifi/ftps-source.groovy")) {
             source=new String(Objects.requireNonNull(input).readAllBytes(),StandardCharsets.UTF_8);
         }
-        var script=(Script)loader.parseClass(source).getDeclaredConstructor().newInstance();
+        Class<?> scriptType = loader.parseClass(source);
+        var script = Script.class.cast(scriptType.getDeclaredConstructor().newInstance());
         script.setBinding(new Binding(Map.of("context",context,"session",session,"REL_SUCCESS","success","log",new Log())));
         return script;
     }

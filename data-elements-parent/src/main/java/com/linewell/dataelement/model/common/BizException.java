@@ -2,6 +2,7 @@ package com.linewell.dataelement.model.common;
 
 import cn.hutool.core.util.ObjectUtil;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * @Description: 数据资产平台 业务异常
@@ -10,6 +11,7 @@ import lombok.Data;
  * @Copyright: Fujian Linewell Software Co., Ltd. All rights reserved.
  */
 @Data
+@EqualsAndHashCode(callSuper = false)
 public class BizException extends RuntimeException {
     static final long serialVersionUID = 1L;
     private Integer code;

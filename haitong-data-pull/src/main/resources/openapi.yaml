@@ -117,6 +117,50 @@ paths:
         '200':
           description: 同幂等键且请求体一致的重复提交
         default: *id002
+    put:
+      summary: single模式：一次接收文件并提交业务推送
+      tags:
+      - 非结构化文件
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - datasourceId
+              - fileCode
+              - businessKey
+              - file
+              properties:
+                datasourceId:
+                  type: string
+                fileCode:
+                  type: string
+                  description: 登记的文件英文名；旧集合编码可作兼容值
+                businessKey:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+                metadata:
+                  type: string
+                  description: 业务元数据JSON文本
+                  example: '{}'
+      responses:
+        '202':
+          description: 已接收并提交，查询statusUrl直到deliveryStatus=SUCCEEDED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
   /api/v1/simple/ftp:
     post: &id005
       summary: 表批次写入 FTP/FTPS
@@ -647,6 +691,257 @@ paths:
           description: 时间或分页参数不合法
         '401':
           description: 未认证
+  /api/v1/data-push/single:
+    put:
+      summary: single模式：一次接收文件并提交业务推送
+      tags:
+      - 非结构化文件
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - datasourceId
+              - fileCode
+              - businessKey
+              - file
+              properties:
+                datasourceId:
+                  type: string
+                fileCode:
+                  type: string
+                  description: 登记的文件英文名；旧集合编码可作兼容值
+                businessKey:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+                metadata:
+                  type: string
+                  description: 业务元数据JSON文本
+                  example: '{}'
+      responses:
+        '202':
+          description: 已接收并提交，查询statusUrl直到deliveryStatus=SUCCEEDED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+  /api/v1/data-push/uploads:
+    post:
+      summary: 初始化大文件推送
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - datasourceId
+              - fileCode
+              - fileName
+              - size
+              properties:
+                datasourceId:
+                  type: string
+                fileCode:
+                  type: string
+                fileName:
+                  type: string
+                size:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                sha256:
+                  type: string
+                  pattern: ^[a-fA-F0-9]{64}$
+      responses:
+        '202':
+          description: 已接收并提交，查询statusUrl直到deliveryStatus=SUCCEEDED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+  /api/v1/data-push/uploads/{id}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: 文件校验、投递和业务回执状态
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/data-push/uploads/{id}/parts:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: 按片号游标查询已确认片
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uploadId:
+                    type: string
+                  parts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FilePart'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+  /api/v1/data-push/uploads/{id}/parts/{part}:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: part
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 10000
+    put:
+      summary: 流式写单片并验证实际长度和SHA-256
+      tags:
+      - 非结构化文件
+      responses:
+        '200':
+          description: 当前结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FilePart'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-Part-SHA256
+        in: header
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-fA-F0-9]{64}$
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+  /api/v1/data-push/uploads/{id}/complete:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      summary: 完成上传并提交推送，服务端校验通过后自动投递
+      tags:
+      - 非结构化文件
+      responses:
+        '202':
+          description: 202仅证明受理，不等于文件就绪或下游完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadStatus'
+        default:
+          description: 认证、范围、状态、幂等、容量或存储失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - businessKey
+              properties:
+                businessKey:
+                  type: string
+                metadata:
+                  type: object
   /api/v1/file-uploads/single:
     post:
       summary: 默认整文件上传，一次请求发送原始文件
@@ -1171,6 +1466,9 @@ components:
     FileUploadStatus:
       type: object
       properties:
+        fileCode:
+          type: string
+          description: 稳定的登记文件英文名；保留collectionId用于旧调用兼容
         uploadId:
           type: string
         fileId:

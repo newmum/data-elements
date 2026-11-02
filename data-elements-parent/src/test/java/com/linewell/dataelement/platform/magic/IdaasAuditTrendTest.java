@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import java.time.*;
 import java.util.*;
@@ -20,7 +22,7 @@ class IdaasAuditTrendTest {
         String helpers="import java.time.LocalDate;import java.time.ZoneOffset;var apiCall=(callback)=>callback();var guard=(permission,appId,domain)=>{if(domain!='public'){throw new java.lang.IllegalArgumentException('Wrong domain');}return {};};\n";
         var db=new Database();var query=Map.of("mode","trend","domain","public","days","14","sortField","count","sortDir","desc");
         var result=(Map<?,?>)MagicScript.create(helpers+source,null).execute(new MagicScriptContext(Map.of("db",db,"request",new IdaasProvisionPagingTest.Request(query),"identityRuntime",new IdaasProvisionPagingTest.Runtime(),"tableSort",new TableSortMagicModule())));
-        var rows=(List<Map<String,Object>>)result.get("list");assertEquals(14,rows.size());assertEquals(1,db.reads);
+        var rows=StructuredValues.objectRows(result.get("list"));assertEquals(14,rows.size());assertEquals(1,db.reads);
         assertEquals(12,rows.getFirst().get("count"));assertEquals(4,rows.getFirst().get("people"));
         assertTrue(rows.subList(1,14).stream().allMatch(row->((Number)row.get("count")).intValue()==0));
     }

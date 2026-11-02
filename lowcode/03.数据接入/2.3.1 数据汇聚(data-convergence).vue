@@ -5,6 +5,7 @@
         <div class="left-panel">
           <div class="panel-header">
           <h3>接入任务</h3>
+          <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
           </div>
 
           <div class="tree-container">
@@ -72,7 +73,20 @@
               <el-segmented v-model="state.accessStatus" :options="tabs" @change="handleSearch" />
             </div>
             <div class="list-filters">
-              <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
+              <datasource-type-filter
+                v-model="state.datasourceType"
+                :counts="state.datasourceTypeStatistics?.typeCounts || {}"
+                :db-types="state.datasourceTypeStatistics?.dbTypes || {}"
+                :total="Number(state.datasourceTypeStatistics?.total || 0)"
+                :loading="state.loading"
+                :statistics-loading="state.loading"
+                :statistics-error="state.datasourceTypeError"
+                :disabled="!state.leftSelectNode"
+                style="--datasource-type-filter-width: 164px"
+                @change="handleSearch"
+                @retry="handleSearch"
+              />
+
               <el-input
                 v-model.trim="state.keyword"
                 class="keyword-input"
@@ -466,6 +480,9 @@ const state = reactive({
   loading: false,
   leftLoading: false,
   keyword: "",
+  datasourceType: "",
+  datasourceTypeStatistics: null,
+  datasourceTypeError: "",
   accessStatus: "all",
   leftSelectNode: treeData.value[0],
   sortField: "updatedTime",
@@ -844,6 +861,8 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
   try {
     const result = await $common.post("/ods/dataAggPage", {
       viewLevel: "table",
+      datasourceType: state.datasourceType,
+      includeDatasourceTypeStatistics: true,
       scopeType: selectedNode.type || "all",
       scopeId: selectedNode.value || "",
       datasourceId: selectedNode.type === "datasource" ? selectedNode.value : "",
@@ -857,6 +876,10 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
       conditions: buildConditions(),
     });
     const page = result?.list ? result : result?.data || {};
+    if (sequence === taskFetchSequence) {
+      state.datasourceTypeStatistics = page.datasourceTypeStatistics?.complete === true ? page.datasourceTypeStatistics : null;
+      state.datasourceTypeError = state.datasourceTypeStatistics ? "" : "类型统计暂不可用";
+    }
     if (sequence === taskFetchSequence && page.runtimeRevision) {
       if (runtimeReadAt.value > Number(page.runtimeObservedAt || 0) && runtimeRevision !== page.runtimeRevision) {
         refreshRuntimePage();
@@ -873,11 +896,12 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
     }));
     return { list, total: Number(page.total || 0) };
   } catch (error) {
+    if (sequence === taskFetchSequence) { state.datasourceTypeStatistics = null; state.datasourceTypeError = "类型统计加载失败"; }
     console.error("加载数据列表失败", error);
     $message.error("数据表列表加载失败，请稍后重试");
     return { list: [], total: 0 };
   } finally {
-    state.loading = false;
+    if (sequence === taskFetchSequence) state.loading = false;
   }
 };
 
@@ -905,8 +929,6 @@ const handleSourceSortChange = ({ prop, order }) => {
 const handleNodeClick = (node) => {
   state.leftSelectNode = node || null;
   expandedRows.value = [];
-  state.keyword = "";
-  state.accessStatus = "all";
   handleSearch();
 };
 
@@ -1469,6 +1491,10 @@ onUnmounted(() => {
     overflow: hidden;
 
     .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
       flex: 0 0 auto;
       border-bottom: 1px solid rgba(5, 5, 5, 0.06);
       padding-bottom: 10px;
@@ -1524,8 +1550,8 @@ onUnmounted(() => {
 .list-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
   flex-wrap: wrap;
   flex: 0 0 auto;
   margin-bottom: 16px;
@@ -1586,11 +1612,11 @@ onUnmounted(() => {
 .list-filters {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 10px;
-  flex: 0 1 auto;
+  flex: 1 1 374px;
   min-width: 0;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .keyword-input {

@@ -88,7 +88,7 @@ const nextApi = (): Promise<void> =>
       "next",
       "进入下一步"
     );
-    // 代理访问已转到独立服务登记页，保留原底部按钮，但不再推进数据库探查步骤。
+    // 独立工作台可接管导航；其余方式按登记步骤的跳过标记继续推进。
     if (result?.navigationHandled) return false;
   });
 

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import time
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -20,6 +21,32 @@ class Slice:
         data = self.stream.read(min(size if size >= 0 else 65536, self.remaining))
         self.remaining -= len(data)
         return data
+
+
+class Multipart:
+    """Bounded streaming multipart body; never materializes the file in memory."""
+    def __init__(self, stream, size, name, fields):
+        if any(char in name for char in '\r\n'):
+            raise ValueError('文件名不能包含换行')
+        self.stream, self.size = stream, size
+        self.boundary = 'file-push-' + uuid.uuid4().hex
+        prefix = ''.join('--' + self.boundary + '\r\nContent-Disposition: form-data; name="' + key + '"\r\n\r\n' + value + '\r\n' for key, value in fields.items())
+        escaped = name.replace('\\', '\\\\').replace('"', '\\"')
+        prefix += '--' + self.boundary + '\r\nContent-Disposition: form-data; name="file"; filename="' + escaped + '"\r\nContent-Type: application/octet-stream\r\n\r\n'
+        self.prefix = prefix.encode('utf-8')
+        self.suffix = ('\r\n--' + self.boundary + '--\r\n').encode('ascii')
+        self.length = len(self.prefix) + size + len(self.suffix)
+
+    def __iter__(self):
+        yield self.prefix
+        remaining = self.size
+        while remaining:
+            part = self.stream.read(min(65536, remaining))
+            if not part:
+                raise ValueError('文件在上传期间变短')
+            remaining -= len(part)
+            yield part
+        yield self.suffix
 
 
 def digest(stream, length=None):
@@ -42,6 +69,7 @@ def main():
     parser.add_argument("file", type=Path)
     parser.add_argument("--base-url", default="http://127.0.0.1:18083")
     parser.add_argument("--datasource", required=True)
+    parser.add_argument("--file-code", help="已登记的文件英文名；使用统一data-push文件协议")
     parser.add_argument("--table", help="附件所属表的英文名，整文件上传必填")
     parser.add_argument("--field", help="关联附件字段的英文名，整文件上传必填")
     parser.add_argument("--collection", help="仅分片协议使用的服务端集合编号")
@@ -53,9 +81,11 @@ def main():
     parser.add_argument("--chunked", action="store_true", help="大文件使用分片上传与断点续传")
     parser.add_argument("--wait-seconds", type=int, default=300)
     args = parser.parse_args()
-    if not args.chunked and (not args.table or not args.field or args.collection):
+    if args.file_code and (args.table or args.field or args.collection):
+        parser.error("--file-code 与旧的 --table/--field/--collection 不同时使用")
+    if not args.file_code and not args.chunked and (not args.table or not args.field or args.collection):
         parser.error("整文件上传使用 --table 和 --field，不使用 --collection")
-    if args.chunked and not args.collection:
+    if args.chunked and not (args.collection or args.file_code):
         parser.error("分片上传需要 --collection 指定已登记的文件集合")
     key = os.environ.get("HAITONG_API_KEY")
     if not key:
@@ -91,7 +121,13 @@ def main():
 
     with args.file.open("rb") as source:
         size = os.fstat(source.fileno()).st_size
-        if not args.chunked:
+        if not args.chunked and args.file_code:
+            body = Multipart(source, size, args.file.name, {"datasourceId": args.datasource, "fileCode": args.file_code,
+                "businessKey": args.business_key, "metadata": json.dumps(metadata, ensure_ascii=False)})
+            upload = request("PUT", "/api/v1/data-push", body, args.idempotency_key,
+                {"Content-Type": "multipart/form-data; boundary=" + body.boundary, "Content-Length": str(body.length)})
+            prefix = "/api/v1/data-push/uploads/" + upload["uploadId"]
+        elif not args.chunked:
             source.seek(0)
             query = urllib.parse.urlencode({"datasourceId": args.datasource, "tableName": args.table, "fieldName": args.field,
                 "fileName": args.file.name})
@@ -100,11 +136,11 @@ def main():
             prefix = "/api/v1/file-uploads/" + upload["uploadId"]
         else:
             sha256 = digest(source)
-            upload = request("POST", "/api/v1/file-uploads", {
-                "datasourceId": args.datasource, "collectionId": args.collection,
+            upload = request("POST", "/api/v1/data-push/uploads" if args.file_code else "/api/v1/file-uploads", {
+                "datasourceId": args.datasource, ("fileCode" if args.file_code else "collectionId"): args.file_code or args.collection,
                 "fileName": args.file.name, "size": size, "sha256": sha256,
             }, args.idempotency_key)
-            prefix = "/api/v1/file-uploads/" + upload["uploadId"]
+            prefix = ("/api/v1/data-push/uploads/" if args.file_code else "/api/v1/file-uploads/") + upload["uploadId"]
             # Server pages are authoritative. Reading each page is not a per-file detail request.
             complete, after = set(), 0
             if upload["state"] in ("CREATED", "UPLOADING"):
@@ -129,10 +165,15 @@ def main():
                         "Content-Type": "application/octet-stream", "Content-Length": str(length), "X-Part-SHA256": checksum,
                     })
                     print(f"已确认分片 {number}/{upload['partCount']}", file=sys.stderr)
-                request("POST", prefix + "/complete")
+                if not args.file_code:
+                    request("POST", prefix + "/complete")
             elif upload["state"] not in ("FINALIZING", "READY"):
                 raise ValueError("该会话已取消、拒绝或过期，请检查文件后使用新的幂等键")
-        accepted = request("POST", prefix + "/submit", {"businessKey": args.business_key, "metadata": metadata}, args.idempotency_key)
+        if args.file_code:
+            complete_key = hashlib.sha256(("file-push:complete:" + args.idempotency_key).encode('utf-8')).hexdigest()
+            accepted = request("POST", prefix + "/complete", {"businessKey": args.business_key, "metadata": metadata}, complete_key) if args.chunked else upload
+        else:
+            accepted = request("POST", prefix + "/submit", {"businessKey": args.business_key, "metadata": metadata}, args.idempotency_key)
         deadline = time.monotonic() + max(0, args.wait_seconds)
         delay = 0.5
         while True:

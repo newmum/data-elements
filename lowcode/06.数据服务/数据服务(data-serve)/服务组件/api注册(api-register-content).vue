@@ -31,7 +31,7 @@
       label-width="144px"
       :rules="formRules"
       :options="formOptions"
-      @change="emit('change')"
+      @change="onFormChange"
     />
     </div>
   </div>
@@ -41,7 +41,7 @@
 import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import type { FormRule } from "@form-create/element-ui";
 import { cloneDeep } from "lodash-es";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 
 type RecordValue = Record<string, unknown>;
 interface FormApi {
@@ -59,11 +59,13 @@ interface ServiceParameter {
   showcaseValue: string;
   paramScope: string;
 }
+type ExampleScope = "request" | "response";
 interface Snapshot {
   form: RecordValue;
   params: ServiceParameter[];
   request: string;
   response: string;
+  exampleInitialization: Record<ExampleScope, boolean>;
 }
 const props = withDefaults(defineProps<{ context?: "modal" | "detail"; data?: RecordValue }>(), {
   context: "modal",
@@ -102,6 +104,7 @@ const saveLoading = ref(false),
   initializing = ref(true),
   initializationError = ref("");
 const formRules = ref<FormRule[]>([]);
+const activeExample = ref<ExampleScope>("request");
 const definitionLoaded = ref(false);
 const formOptions = computed(() => ({
   form: {
@@ -137,14 +140,21 @@ const loadDefinition = () =>
       if (!definition.rules.length)
         throw new Error("登记API服务的表单规则为空，请在表单配置中完善");
       collectDefaults(definition.rules);
-      formRules.value = cloneDeep(definition.rules);
+      const rules = cloneDeep(definition.rules);
+      bindExampleActions(rules);
+      formRules.value = rules;
       definitionLoaded.value = true;
     })
     .catch((error: unknown) => {
       definitionRequest = undefined;
       throw error;
     }));
-let snapshot: Snapshot = { form: {}, params: [], request: "", response: "" };
+let exampleInitialized: Record<ExampleScope, boolean> = { request: false, response: false };
+const generating = new Set<ExampleScope>();
+let snapshot: Snapshot = {
+  form: {}, params: [], request: "", response: "",
+  exampleInitialization: { request: false, response: false },
+};
 let initializationVersion = 0;
 let userRequest: Promise<RecordValue> | undefined;
 const currentUser = (): Promise<RecordValue> =>
@@ -167,15 +177,17 @@ const normalizeParams = (values: unknown): ServiceParameter[] => {
   }
   return (Array.isArray(rows) ? rows : []).map((value) => {
     const row = record(value);
+    const scope = text(row.paramScope || row.param_scope).trim();
     return {
       paramName: text(row.paramName || row.param_name),
       description: text(row.description || row.paramDesc),
       paramType: text(row.paramType || row.param_type),
       paramPosition: text(row.paramPosition || row.param_position),
-      required: row.required === true || text(row.required) === "1" ? "1" : "0",
+      required: ["1", "true", "是", "必填"].includes(text(row.required).trim().toLowerCase()) ? "1" : "0",
       defaultValue: text(row.defaultValue),
       showcaseValue: text(row.showcaseValue),
-      paramScope: row.paramScope === "response" || row.res === 1 ? "response" : "request",
+      paramScope: scope === "出参" ? "response" : scope === "入参" ? "request" :
+        scope || (text(row.res) === "1" ? "response" : "request"),
     };
   });
 };
@@ -186,6 +198,92 @@ const formValues = async (): Promise<RecordValue> => ({
   id: snapshot.form.id,
   orgId: snapshot.form.orgId,
 });
+const exampleValue = (row: ServiceParameter): unknown => {
+  const supplied = row.showcaseValue.trim() || row.defaultValue.trim();
+  const type = row.paramType.toLowerCase();
+  const numeric = ["number", "int", "integer", "long", "float", "double", "decimal", "short"];
+  if (supplied) {
+    if (numeric.includes(type) && Number.isFinite(Number(supplied))) return Number(supplied);
+    if (type === "boolean" || type === "bool") {
+      if (["true", "1"].includes(supplied.toLowerCase())) return true;
+      if (["false", "0"].includes(supplied.toLowerCase())) return false;
+    }
+    if (["object", "array", "json"].includes(type)) {
+      try { return JSON.parse(supplied); } catch { /* 保留用户提供的示例或占位值。 */ }
+    }
+    return supplied;
+  }
+  if (numeric.includes(type)) return 0;
+  if (type === "boolean" || type === "bool") return false;
+  if (type === "array") return [];
+  if (type === "object" || type === "json") return {};
+  if (type === "date") return "2026-01-01";
+  if (type === "datetime") return "2026-01-01 00:00:00";
+  return "";
+};
+const createExample = (rows: ServiceParameter[], scope: ExampleScope): string =>
+  JSON.stringify(Object.fromEntries(rows.filter((row) => row.paramScope === scope && row.paramName.trim())
+    .map((row) => [row.paramName.trim(), exampleValue(row)])), null, 2);
+const canEditExamples = () => currentMode.value === "edit";
+const generateExample = async (scope: ExampleScope, explicit = true): Promise<boolean> => {
+  if (initializing.value || !canEditExamples() || saveLoading.value || generating.has(scope)) return false;
+  if (!explicit && exampleInitialized[scope]) return false;
+  const version = initializationVersion;
+  const field = `${scope}Example`;
+  generating.add(scope);
+  try {
+    const form = await formValues();
+    const previous = text(form[field]);
+    if (!explicit && previous.trim()) { exampleInitialized[scope] = true; return false; }
+    const generated = createExample(normalizeParams(form.publishParams), scope);
+    if (explicit && previous.trim() && previous !== generated) {
+      try {
+        await ElMessageBox.confirm(
+          `将根据当前${scope === "request" ? "入参" : "出参"}重新生成${scope === "request" ? "请求" : "响应"}示例，并替换现有内容。`,
+          "重新生成示例", { confirmButtonText: "生成并替换", cancelButtonText: "保留现有内容", type: "warning" }
+        );
+      } catch { return false; }
+    }
+    if (version !== initializationVersion) return false;
+    const latest = await formValues();
+    // 异步确认期间切换服务、进入只读或继续编辑时，不覆盖新的内容。
+    if (version !== initializationVersion || !canEditExamples() || text(latest[field]) !== previous) return false;
+    exampleInitialized[scope] = true;
+    formRef.value?.setValue({ ...latest, [field]: generated });
+    emit("change");
+    return true;
+  } catch (error) {
+    ElMessage.error(messageOf(error, "示例未生成，请重新打开服务后重试"));
+    return false;
+  } finally { generating.delete(scope); }
+};
+const onFormChange = (field: string) => {
+  if (!initializing.value && field === "requestExample") exampleInitialized.request = true;
+  if (!initializing.value && field === "responseExample") exampleInitialized.response = true;
+  emit("change");
+};
+// 标题、按钮及位置由租户表单配置持有，登记组件只连接对应业务行为。
+const bindExampleActions = (rules: unknown[]) => {
+  for (const value of rules) {
+    const rule = record(value);
+    if (rule.name === "generateActiveExample")
+      rule.on = { ...record(rule.on), click: () => generateExample(activeExample.value) };
+    for (const scope of ["request", "response"] as const) {
+      if (rule.name === `generate${scope === "request" ? "Request" : "Response"}Example`)
+        rule.on = { ...record(rule.on), click: () => { void generateExample(scope); } };
+      if (rule.field === `${scope}Example`)
+        rule.on = { ...record(rule.on), focus: () => { void generateExample(scope, false); } };
+    }
+    if (rule.name === "serviceExamples")
+      rule.on = { ...record(rule.on), tabChange: (name: string) => {
+        if (name === "request" || name === "response") {
+          activeExample.value = name;
+          return generateExample(name, false);
+        }
+      } };
+    if (Array.isArray(rule.children)) bindExampleActions(rule.children);
+  }
+};
 const buildPayload = (form: RecordValue, rows: ServiceParameter[]): RecordValue => ({
   id: text(snapshot.form.id),
   name: text(form.name).trim(),
@@ -197,6 +295,7 @@ const buildPayload = (form: RecordValue, rows: ServiceParameter[]): RecordValue 
   status: props.data.status || "draft",
   serviceCreateType: "api",
   resourceId: props.data.resourceId,
+  datasourceId: props.data.datasourceId,
   providerConfig: {
     ...record(props.data.providerConfig),
     protocol: form.protocol,
@@ -206,7 +305,8 @@ const buildPayload = (form: RecordValue, rows: ServiceParameter[]): RecordValue 
   publishConfig: {
     ...record(props.data.publishConfig),
     publishProtocol: form.protocol,
-    publishAddress: text(form.publishAddress).trim(),
+    // 新登记沿用服务地址；已有服务保留其历史发布路径。
+    publishAddress: text(form.publishAddress || form.address).trim(),
     publishMethod: form.httpMethod,
   },
   publishParams: rows.map((row, index) => ({
@@ -226,9 +326,11 @@ const buildPayload = (form: RecordValue, rows: ServiceParameter[]): RecordValue 
     apiDescription: text(form.apiDescription),
     requestExample: text(form.requestExample),
     responseExample: text(form.responseExample),
+    exampleInitialization: { ...exampleInitialized },
   },
 });
 const restore = async () => {
+  exampleInitialized = { ...snapshot.exampleInitialization };
   await nextTick();
   formRef.value?.setValue({
     ...snapshot.form,
@@ -280,12 +382,18 @@ const setFormData = async (data: RecordValue = {}) => {
           form[field] = cloneDeep(value);
       }
     }
-    snapshot = {
-      form,
-      params: normalizeParams(data.publishParams || data.paramList),
-      request: text(ext.requestExample || data.requestExample),
-      response: text(ext.responseExample || data.responseExample),
-    };
+    const params = normalizeParams(data.publishParams || data.paramList);
+    const previousInitialization = record(ext.exampleInitialization);
+    const examples = { request: text(ext.requestExample ?? data.requestExample), response: text(ext.responseExample ?? data.responseExample) };
+    const initialized = { request: previousInitialization.request === true || !!examples.request.trim(),
+      response: previousInitialization.response === true || !!examples.response.trim() };
+    for (const scope of ["request", "response"] as const) {
+      if (!initialized[scope] && params.some((row) => row.paramScope === scope && row.paramName.trim())) {
+        examples[scope] = createExample(params, scope);
+        initialized[scope] = true;
+      }
+    }
+    snapshot = { form, params, ...examples, exampleInitialization: initialized };
     await restore();
   } catch (error) {
     if (version === initializationVersion)
@@ -338,6 +446,7 @@ const handleSave = async (): Promise<boolean> => {
       params: rows,
       request: text(form.requestExample),
       response: text(form.responseExample),
+      exampleInitialization: { ...exampleInitialized },
     };
     if (props.context === "detail") {
       isEditing.value = false;
@@ -371,6 +480,7 @@ watch(
 );
 defineExpose({
   handleSave,
+  generateExample,
   validate,
   setFormData,
   reset: () => setFormData(props.data),
@@ -404,8 +514,39 @@ onBeforeUnmount(() => { initializationVersion++; });
   --el-disabled-text-color: var(--el-text-color-regular);
   --el-disabled-bg-color: #fafbfc;
 }
+.api-register-content.is-readonly :deep(.registration-parameters-heading) {
+  position: static !important;
+}
 .api-register-content :deep(.el-form-item__content) {
   min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+.api-register-content :deep(.el-form-item__error) {
+  position: static;
+  align-self: flex-start;
+  padding: 4px 0 0;
+  line-height: 18px;
+}
+.api-register-content :deep(.registration-parameter-field) {
+  border: 0;
+  margin: 0;
+}
+.api-register-content :deep(.registration-parameter-field > .el-form-item > .el-form-item__content) {
+  padding: 0;
+}
+.api-register-content :deep(.registration-parameters-section .vxe-button--item-wrapper) {
+  justify-content: flex-end;
+}
+.api-register-content :deep(.registration-parameters-section .vxe-toolbar) {
+  min-height: 40px;
+  padding: 0;
+}
+@container (max-width: 480px) {
+  .api-register-content :deep(.registration-parameters-heading) {
+    position: static !important;
+  }
 }
 @media (max-width: 760px) {
   .api-register-content :deep(.el-col-12) {

@@ -18,6 +18,7 @@ public class FileContractCatalog implements InitializingBean {
     public record Scope(Contract contract,boolean readAll) {}
     private final FileTransferProperties p;private final RouteCatalog routes;private final Json json;
     private Map<String,Contract> contracts=Map.of();
+    private Map<String,Contract> fileCodes=Map.of();
     private Map<String,Contract> attachmentFields=Map.of();
     public FileContractCatalog(FileTransferProperties p,RouteCatalog routes,Json json){this.p=p;this.routes=routes;this.json=json;}
     @Override public void afterPropertiesSet(){
@@ -28,7 +29,7 @@ public class FileContractCatalog implements InitializingBean {
            p.getSessionHours()<1 || p.getSessionHours()>168 || p.getLeaseSeconds()<60 || p.getMaxActiveUploads()<1 ||
            p.getScannerTimeoutSeconds()<1 || p.getScannerTimeoutSeconds()>3600 || p.getCollections().size()>100)
             throw new IllegalStateException("文件传输容量或并发配置不合法");
-        Map<String,Contract> built=new LinkedHashMap<>(),fields=new LinkedHashMap<>();
+        Map<String,Contract> built=new LinkedHashMap<>(),fields=new LinkedHashMap<>(),codes=new LinkedHashMap<>();
         if(!p.getScannerCommand().isEmpty()&&!p.getScannerCommand().contains("{file}"))
             throw new IllegalStateException("scanner-command 必须包含独立的 {file} 参数");
         if(!isUnvalidated()) for(var entry:p.getCollections().entrySet()){
@@ -64,6 +65,9 @@ public class FileContractCatalog implements InitializingBean {
             Contract contract=new Contract(entry.getKey(),c.getTenantId(),c.getDatasourceId(),c.getCollectionId(),c.getVersion(),hash,c,plan);
             if(built.put(lookup,contract)!=null)
                 throw new IllegalStateException("数据源和文件集合必须唯一，不能由请求选择租户");
+            Rules.code(c.getFileCode());
+            if(codes.put(c.getDatasourceId()+"\u0000"+c.getFileCode(),contract)!=null)
+                throw new IllegalStateException("同一数据源的文件英文名必须唯一");
             String table=c.getTableName(),field=c.getFieldName();
             // Existing explicitly configured table.field collections remain usable without changing their ledger identity.
             if(table.isEmpty()&&field.isEmpty()){
@@ -77,6 +81,9 @@ public class FileContractCatalog implements InitializingBean {
             }
         }
         contracts=Collections.unmodifiableMap(built);
+        for(var item:codes.entrySet())if(built.containsKey(item.getKey())&&!built.get(item.getKey()).collectionId().equals(item.getValue().collectionId()))
+            throw new IllegalStateException("文件英文名与其他集合编码冲突");
+        fileCodes=Collections.unmodifiableMap(codes);
         attachmentFields=Collections.unmodifiableMap(fields);
     }
     public boolean isUnvalidated(){return !routes.isPushValidationEnabled();}
@@ -90,6 +97,14 @@ public class FileContractCatalog implements InitializingBean {
     }
     public Contract upload(Secrets.Identity caller,String source,String collection){
         Contract c=get(source,collection);if(!isUnvalidated()&&!caller.admin()&&!c.policy().getClients().contains(caller.id()))throw RelayException.notFound();return c;
+    }
+    public Contract uploadCode(Secrets.Identity caller,String source,String fileCode){
+        Rules.code(fileCode);
+        if(isUnvalidated())return unregistered(source,fileCode);
+        Contract c=fileCodes.get(source+"\u0000"+fileCode);
+        if(c==null)c=contracts.get(source+"\u0000"+fileCode);
+        if(c==null||!caller.admin()&&!c.policy().getClients().contains(caller.id()))throw RelayException.notFound();
+        return c;
     }
     public Contract uploadField(Secrets.Identity caller,String source,String table,String field){
         attachmentName(table);attachmentName(field);

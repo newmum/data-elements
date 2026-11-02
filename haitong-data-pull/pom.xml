@@ -9,6 +9,7 @@
   <name>海通数据推送服务</name><description>Haitong data push service for HTTP, Kafka and FTP relay</description>
   <properties>
     <java.version>21</java.version>
+    <haitong.build.directory>${project.basedir}/target</haitong.build.directory>
     <commons-net.version>3.13.0</commons-net.version>
     <jsch.version>0.2.25</jsch.version>
     <magic-api.version>2.2.2</magic-api.version>
@@ -30,7 +31,7 @@
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
     <dependency><groupId>org.apache.ftpserver</groupId><artifactId>ftpserver-core</artifactId><version>1.2.1</version><scope>test</scope></dependency>
   </dependencies>
-  <build><finalName>haitong-data-pull</finalName>
+  <build><directory>${haitong.build.directory}</directory><finalName>haitong-data-pull</finalName>
     <resources>
       <resource><directory>src/main/resources</directory></resource>
       <resource><directory>../magic/haitong</directory><targetPath>magic-api-bootstrap</targetPath><excludes><exclude>.manifest.json</exclude></excludes></resource>

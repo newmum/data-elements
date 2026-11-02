@@ -10,7 +10,6 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -89,15 +88,8 @@ public class SurveillanceRuleService {
         SurveillanceRuleSnapshot channelSnapshot = loaded.channelCode().equalsIgnoreCase("all")
                 ? filterChannel(loaded, channelCode)
                 : loaded;
-        SurveillanceRuleSnapshot normalized = channelSnapshot.usesNormalizedModel()
-                ? new SurveillanceRuleSnapshot(
-                engineCode, channelCode, channelSnapshot.version(), channelSnapshot.generatedAt(),
-                channelSnapshot.expiresAt(), channelSnapshot.digest(), normalize(sourceType).toUpperCase(Locale.ROOT), sourceRef,
-                channelSnapshot.status(), channelSnapshot.ruleDefinitions(), channelSnapshot.controlItems())
-                : new SurveillanceRuleSnapshot(
-                engineCode, channelCode, channelSnapshot.version(), channelSnapshot.generatedAt(),
-                channelSnapshot.expiresAt(), channelSnapshot.digest(), normalize(sourceType).toUpperCase(Locale.ROOT), sourceRef,
-                channelSnapshot.status(), channelSnapshot.rules());
+        SurveillanceRuleSnapshot normalized = channelSnapshot.withSource(
+                engineCode, channelCode, normalize(sourceType).toUpperCase(Locale.ROOT), sourceRef);
         return put(tenantId, normalized);
     }
 
@@ -135,12 +127,13 @@ public class SurveillanceRuleService {
         }
 
         Instant now = Instant.now();
+        List<SurveillanceRuleSnapshot.MatchRule> matchingRules = snapshot.matchingRules();
         List<MatchResult> results = new ArrayList<>();
         for (Event event : request.events()) {
-            List<MatchHit> matches = snapshot.rules().stream()
-                    .filter(rule -> active(rule, now))
+            List<MatchHit> matches = matchingRules.stream()
+                    .filter(rule -> active(rule.status(), rule.effectiveFrom(), rule.effectiveTo(), now))
                     .filter(rule -> matches(event.data(), rule.match(), request.mappings()))
-                    .sorted(Comparator.comparingInt(SurveillanceRuleSnapshot.Rule::priority).reversed())
+                    .sorted((left, right) -> Integer.compare(right.priority(), left.priority()))
                     .map(rule -> new MatchHit(rule.controlItemId(), rule.ruleCode(), rule.subjectType(),
                             snapshot.version(), rule.metadata()))
                     .toList();
@@ -199,10 +192,10 @@ public class SurveillanceRuleService {
                 request.resourceCode(), request.inputTopic(), request.batchId());
     }
 
-    private boolean active(SurveillanceRuleSnapshot.Rule rule, Instant now) {
-        return "ACTIVE".equalsIgnoreCase(rule.status())
-                && (rule.effectiveFrom() == null || !now.isBefore(rule.effectiveFrom()))
-                && (rule.effectiveTo() == null || now.isBefore(rule.effectiveTo()));
+    private boolean active(String status, Instant effectiveFrom, Instant effectiveTo, Instant now) {
+        return "ACTIVE".equalsIgnoreCase(status)
+                && (effectiveFrom == null || !now.isBefore(effectiveFrom))
+                && (effectiveTo == null || now.isBefore(effectiveTo));
     }
 
     private boolean matches(Map<String, Object> event, Map<String, Object> rule,
@@ -253,7 +246,7 @@ public class SurveillanceRuleService {
                 }
             });
         }
-        snapshot.rules().forEach(rule -> requireText(rule.ruleId(), "ruleId"));
+        snapshot.matchingRules().forEach(rule -> requireText(rule.ruleId(), "ruleId"));
     }
 
     private String normalize(String value) {

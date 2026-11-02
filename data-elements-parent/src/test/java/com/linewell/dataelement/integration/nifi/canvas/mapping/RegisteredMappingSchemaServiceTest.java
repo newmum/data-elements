@@ -1,5 +1,7 @@
 package com.linewell.dataelement.integration.nifi.canvas.mapping;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -60,7 +62,7 @@ class RegisteredMappingSchemaServiceTest {
             when(f.physical.getSchema()).thenThrow(new SQLFeatureNotSupportedException());
             var context=mock(PreparedStatement.class);var current=mock(ResultSet.class);
             when(f.physical.prepareStatement("SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA') FROM DUAL")).thenReturn(context);
-            when(context.executeQuery()).thenReturn(current);when(current.next()).thenReturn(true,false);when(current.getString(1)).thenReturn("BUSINESS");
+            when(context.executeQuery()).thenReturn(current);when(current.next()).thenReturn(true).thenReturn(false);when(current.getString(1)).thenReturn("BUSINESS");
             var fields=new ArrayList<Map<String,Object>>();for(int i=0;i<count;i++)fields.add(jdbcColumn("catalog","BUSINESS","table_"+i,"id"));
             when(f.metadata.getColumns(any(),any(),any(),any())).thenAnswer(call->rows(fields));
             try(var tenant=TenantContext.use("tenant-A")){assertEquals(count,f.service.physicalBatch(f.service.resolve(f.references)).size());}
@@ -315,7 +317,7 @@ class RegisteredMappingSchemaServiceTest {
         when(fixture.jdbc.queryForList(contains("FROM db_datasource_t"),any(Object[].class))).thenReturn(List.of(
                 Map.of("tid","db","jdbc_url","jdbc:mysql://test/allowed"),Map.of("tid","denied-db","jdbc_url","jdbc:mysql://test/denied")));
         when(scopes.visibleDataSources(eq("MENU:2081000000000000002"),anyList())).thenAnswer(invocation->
-                ((List<Map<String,Object>>)invocation.getArgument(1)).stream().filter(row->row.get("tid").equals("db")).toList());
+                (StructuredValues.objectRows(invocation.getArgument(1))).stream().filter(row->row.get("tid").equals("db")).toList());
         ((com.fasterxml.jackson.databind.node.ObjectNode)fixture.references.get("ref-99")).put("datasourceId","denied-db");
         try (var ignored=TenantContext.use("tenant-A")) { assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->service.resolve(fixture.references)).code()); }
         verifyNoInteractions(scopes);
@@ -465,7 +467,7 @@ class RegisteredMappingSchemaServiceTest {
         Fixture(int count)throws Exception {
             Connection platform=mock(Connection.class);DatabaseMetaData platformMetadata=mock(DatabaseMetaData.class);
             when(platform.getMetaData()).thenReturn(platformMetadata);when(platformMetadata.getURL()).thenReturn("jdbc:mysql://test/platform");when(platformMetadata.getIdentifierQuoteString()).thenReturn("`");
-            when(jdbc.execute(any(ConnectionCallback.class))).thenAnswer(invocation->((ConnectionCallback<?>)invocation.getArgument(0)).doInConnection(platform));
+            when(jdbc.execute(org.mockito.ArgumentMatchers.<ConnectionCallback<Object>>any())).thenAnswer(invocation->((ConnectionCallback<?>)invocation.getArgument(0)).doInConnection(platform));
             when(sources.resolveBatch(anyString(),anyCollection(),anyString())).thenAnswer(ignored->config);
             when(jdbc.queryForList(contains("FROM db_table_t"),any(Object[].class))).thenAnswer(ignored->tables);
             when(jdbc.queryForList(contains("db_table_column_t"),any(Object[].class))).thenAnswer(ignored->columns);

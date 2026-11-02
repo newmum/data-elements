@@ -82,7 +82,7 @@ class DslCompilerHiveTemporalWriterTest {
         var unified=mock(UnifiedMappingService.class);
         when(unified.compileBatch(anyMap())).thenAnswer(call -> {
             Map<String, UnifiedMappingService.Compiled> plans = new LinkedHashMap<>();
-            ((Map<String, ?>)call.getArgument(0)).keySet().forEach(id -> plans.put(id, prepared()));
+            call.<Map<String, ?>>getArgument(0).keySet().forEach(id -> plans.put(id, prepared()));
             return plans;
         });
         compiler.setUnifiedMappingService(unified);

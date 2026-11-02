@@ -1,5 +1,5 @@
-import { getPlatformSessionToken, redirectToPlatformLogin } from '../services/platformSession';
-import { getBridgeToken, getSessionRevision } from '../nifi/api/bridgeSession';
+import { getPlatformSessionToken, redirectToPlatformLogin,reconcilePlatformSessionToken } from '../services/platformSession';
+import { getSessionRevision } from '../nifi/api/bridgeSession';
 
 const platformEnv = import.meta.env ?? {};
 const baseUrl = (platformEnv.VITE_DATA_ELEMENTS_API_BASE_URL
@@ -37,13 +37,14 @@ function unwrap<T>(response: unknown, path: string): T {
 /** Shared platform contract. Tenant identity comes only from the backend token session. */
 export async function platformApi<T>(path: string, body?: unknown, options: { method?: 'GET' | 'POST' | 'PUT'; timeoutMs?: number } = {}): Promise<T> {
   if (!path.startsWith('/') || path.startsWith('//')) throw new PlatformApiError(path, '接口路径无效');
+  const sessionRevision = getSessionRevision();
   const token = await getPlatformSessionToken();
+  if(getSessionRevision()!==sessionRevision)throw new PlatformApiError(path,'登录会话已切换，旧请求结果已丢弃',401);
   if (!token) {
     redirectToPlatformLogin();
     throw new PlatformApiError(path, '数据中台登录已失效，正在前往登录页', 401);
   }
-  const sessionRevision = getSessionRevision();
-  if (getBridgeToken() && getBridgeToken() !== token) throw new PlatformApiError(path, '登录会话已切换，请重试', 401);
+  if (!reconcilePlatformSessionToken(token,sessionRevision)) throw new PlatformApiError(path, '登录会话已切换，请重试', 401);
   const assertCurrentSession = () => {
     if (getSessionRevision() !== sessionRevision) throw new PlatformApiError(path, '登录会话已切换，旧请求结果已丢弃', 401);
   };

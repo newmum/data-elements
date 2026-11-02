@@ -18,6 +18,27 @@ class SurveillanceRuleServiceTest {
     private static final String TENANT = "tenant-a";
 
     @Test
+    @SuppressWarnings("deprecation") // The old JSON contract must remain readable and writable.
+    void routingCopyPreservesLegacySnapshotWireFormatAndMatchingFields() throws Exception {
+        var rule = new SurveillanceRuleSnapshot.Rule("legacy-rule", "vehicle", 10, "ACTIVE", null, null,
+                Map.of("plateNo", "闽A12345"), Map.of("reason", "validation"));
+        var snapshot = new SurveillanceRuleSnapshot("original", "all", 12, null, null,
+                "digest-12", "TABLE", "registered-source", "ACTIVE", List.of(rule));
+        var routed = snapshot.withSource("target", "vehicle", "API", "target-source");
+        assertEquals("target", routed.engineCode());
+        assertEquals("vehicle", routed.channelCode());
+        assertEquals("API", routed.sourceType());
+        assertEquals("target-source", routed.sourceRef());
+        assertEquals(snapshot.version(), routed.version());
+        assertEquals(snapshot.digest(), routed.digest());
+        assertEquals(snapshot.rules(), routed.rules());
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var json = mapper.valueToTree(routed);
+        assertEquals("闽A12345", json.path("rules").get(0).path("match").path("plateNo").asText());
+        assertEquals(routed, mapper.treeToValue(json, SurveillanceRuleSnapshot.class));
+    }
+
+    @Test
     void batchRequestHasExplicitTenThousandEventLimit() {
         SurveillanceRuleService.Event event = new SurveillanceRuleService.Event("event", null, Map.of());
         assertEquals(10000, new SurveillanceRuleService.BatchMatchRequest("engine", "person",
@@ -29,6 +50,7 @@ class SurveillanceRuleServiceTest {
     }
 
     @Test
+    @SuppressWarnings("deprecation") // Verifies the supported historical rules[] contract.
     void matchesAllMappedFieldsAndReturnsOneResultWithMultipleRules() {
         SurveillanceRuleService service = new SurveillanceRuleService(List.of());
         service.put(TENANT, new SurveillanceRuleSnapshot(
@@ -57,6 +79,7 @@ class SurveillanceRuleServiceTest {
     }
 
     @Test
+    @SuppressWarnings("deprecation") // Verifies the supported historical rules[] contract.
     void ignoresDisabledAndOutOfWindowRulesAndDoesNotTreatFailureAsUnmatched() {
         SurveillanceRuleService service = new SurveillanceRuleService(List.of());
         service.put(TENANT, new SurveillanceRuleSnapshot(

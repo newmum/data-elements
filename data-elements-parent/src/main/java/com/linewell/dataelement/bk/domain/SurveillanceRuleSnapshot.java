@@ -22,7 +22,7 @@ public record SurveillanceRuleSnapshot(
         String status,
         List<RuleDefinition> ruleDefinitions,
         List<ControlItem> controlItems,
-        @Deprecated List<Rule> rules
+        List<Rule> rules
 ) {
     public SurveillanceRuleSnapshot {
         status = status == null || status.isBlank() ? "ACTIVE" : status;
@@ -60,6 +60,36 @@ public record SurveillanceRuleSnapshot(
 
     public boolean usesNormalizedModel() {
         return !ruleDefinitions.isEmpty() || !controlItems.isEmpty();
+    }
+
+    /** @deprecated New consumers should use ruleDefinitions and controlItems. */
+    @Deprecated
+    public List<Rule> rules() {
+        return rules;
+    }
+
+    /** Explicit boundary for the supported historical snapshot contract. */
+    public List<Rule> rulesForCompatibility() {
+        return rules;
+    }
+
+    /** Read-only matching view; consumers need not depend on the deprecated wire DTO. */
+    public List<MatchRule> matchingRules() {
+        return rules.stream().map(rule -> new MatchRule(rule.ruleId(), rule.ruleCode(), rule.controlItemId(),
+                rule.subjectType(), rule.priority(), rule.status(), rule.effectiveFrom(), rule.effectiveTo(),
+                rule.match(), rule.metadata())).toList();
+    }
+
+    public record MatchRule(String ruleId, String ruleCode, String controlItemId, String subjectType,
+                            int priority, String status, Instant effectiveFrom, Instant effectiveTo,
+                            Map<String, Object> match, Map<String, Object> metadata) {}
+
+    public SurveillanceRuleSnapshot withSource(String engine, String channel, String type, String ref) {
+        return usesNormalizedModel()
+                ? new SurveillanceRuleSnapshot(engine, channel, version, generatedAt, expiresAt, digest,
+                type, ref, status, ruleDefinitions, controlItems)
+                : new SurveillanceRuleSnapshot(engine, channel, version, generatedAt, expiresAt, digest,
+                type, ref, status, rules);
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

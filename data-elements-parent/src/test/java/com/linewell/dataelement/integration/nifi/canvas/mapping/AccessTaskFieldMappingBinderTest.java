@@ -48,7 +48,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-1")).thenReturn(new DataAccessAggTaskT().setTid("task-1"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(new DataAccessFieldMapping()
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(new DataAccessFieldMapping()
                 .setSourceField("APPLY_FLAG").setTargetField("APPLY_FLAG_cn").setSourceDataType("NUMBER(10,0)")
                 .setFuncEnable(1).setFuncCode("ENUM_MAP").setFuncValue("{\"values\":{\"0\":\"审核中\",\"1\":\"审核通过\"}}")));
         var original = pipelineWithLegacyDirectMappings();
@@ -69,7 +69,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-1")).thenReturn(new DataAccessAggTaskT().setTid("task-1"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(new DataAccessFieldMapping()
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(new DataAccessFieldMapping()
                 .setSourceField("source_certificate_type").setTargetField("source_certificate_type_cn").setSourceDataType("int")
                 .setFuncEnable(1).setFuncCode("ENUM_MAP").setFuncValue("{\"values\":{\"111\":\"身份证\",\"414\":\"护照\"}}")));
         var spec = mappingsSpec(new AccessTaskFieldMappingBinder(tasks, mappings).bind(pipelineWithLegacyDirectMappings()));
@@ -84,7 +84,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         DataAccessAggTaskT task = new DataAccessAggTaskT().setTid("task-1");
         when(tasks.findByPipelineId("pipeline-1")).thenReturn(task);
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(
                 dictionaryMarkerRule(), mandatoryCertificateRule(), systemUpdateRule()));
 
         Pipeline pipeline = pipelineWithLegacyDirectMappings();
@@ -113,7 +113,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         DataAccessAggTaskT task = new DataAccessAggTaskT().setTid("task-2");
         when(tasks.findByPipelineId("pipeline-2")).thenReturn(task);
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(
                 registeredDictionaryRule(), registeredMandatoryStandardRule()));
 
         Pipeline.Node mapping = new Pipeline.Node("mapping", "transform.field-enrichment", "字段增强", "transform",
@@ -145,7 +145,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-manual")).thenReturn(new DataAccessAggTaskT().setTid("task-multi"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(new DataAccessFieldMapping()
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(new DataAccessFieldMapping()
                 .setSourceField("gender_code").setTargetField("gender_code_cn")
                 .setFuncCode("ENUM_MAP").setFuncEnable(1).setIsDel(0)
                 .setFuncValue("""
@@ -173,7 +173,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-3")).thenReturn(new DataAccessAggTaskT().setTid("task-3"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(
                 rawDictionaryCodePassThroughRule(), registeredDictionaryRule()));
 
         Pipeline.Node mapping = new Pipeline.Node("mapping", "transform.field-enrichment", "字段增强", "transform",
@@ -204,7 +204,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-4")).thenReturn(new DataAccessAggTaskT().setTid("task-4"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(
                 numericCertificateRule(), numericMaritalRule()));
 
         Pipeline.Node mapping = new Pipeline.Node("mapping", "transform.field-enrichment", "字段增强", "transform",
@@ -236,7 +236,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-manual")).thenReturn(new DataAccessAggTaskT().setTid("task-manual"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(
                 new DataAccessFieldMapping().setSourceField("label").setTargetField("label").setIsDel(0),
                 systemUpdateRule()));
         Pipeline pipeline = manualPipeline("""
@@ -266,7 +266,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-manual")).thenReturn(new DataAccessAggTaskT().setTid("task-manual"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(
                 new DataAccessFieldMapping().setSourceField("label").setTargetField("label").setIsDel(0),
                 registeredDictionaryRule(), systemUpdateRule()));
         Pipeline pipeline = manualPipeline("""
@@ -286,7 +286,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-manual")).thenReturn(new DataAccessAggTaskT().setTid("task-manual"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(systemUpdateRule()));
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(systemUpdateRule()));
         Pipeline original = manualPipeline("{bad-json");
         assertThrows(IllegalStateException.class, () -> new AccessTaskFieldMappingBinder(tasks, mappings).bind(original));
         assertEquals("{bad-json", original.dsl().nodes().get(0).config().get("mappings"));
@@ -297,7 +297,7 @@ class AccessTaskFieldMappingBinderTest {
         IDataAccessAggTaskTService tasks = mock(IDataAccessAggTaskTService.class);
         IDataAccessFieldMappingService mappings = mock(IDataAccessFieldMappingService.class);
         when(tasks.findByPipelineId("pipeline-manual")).thenReturn(new DataAccessAggTaskT().setTid("task-manual"));
-        when(mappings.list(any(Wrapper.class))).thenReturn(List.of(
+        when(mappings.list(org.mockito.ArgumentMatchers.<Wrapper<DataAccessFieldMapping>>any())).thenReturn(List.of(
                 new DataAccessFieldMapping().setSourceField("label").setTargetField("label").setIsDel(0),
                 systemUpdateRule()));
         JsonNode spec = mappingsSpec(new AccessTaskFieldMappingBinder(tasks, mappings).bind(manualPipeline("")));

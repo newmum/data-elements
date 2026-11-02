@@ -1,0 +1,22 @@
+{
+  "accessProtocol": {
+    "name": "接入协议",
+    "items": [
+      { "code": "HTTP", "name": "HTTP" },
+      { "code": "HTTPS", "name": "HTTPS" }
+    ],
+    "preserveExisting": true
+  },
+  "returnType": {
+    "name": "返回类型",
+    "items": [
+      { "code": "JSON", "name": "JSON" },
+      { "code": "XML", "name": "XML" },
+      { "code": "TEXT", "name": "纯文本（TEXT）" },
+      { "code": "HTML", "name": "HTML" },
+      { "code": "CSV", "name": "CSV" },
+      { "code": "BINARY", "name": "文件（二进制）" }
+    ],
+    "preserveExisting": true
+  }
+}

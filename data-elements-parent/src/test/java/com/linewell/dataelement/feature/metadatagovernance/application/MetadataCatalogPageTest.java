@@ -1,5 +1,7 @@
 package com.linewell.dataelement.feature.metadatagovernance.application;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
@@ -76,7 +78,7 @@ class MetadataCatalogPageTest {
             for(int size:List.of(20,100)) {
                 clearInvocations(jdbc);
                 var result=service.catalogTablesPage(List.of("s1"),null,"",1,size,null,"fieldCount","desc");
-                var rows=(List<Map<String,Object>>)result.get("rows");
+                var rows=StructuredValues.objectRows(result.get("rows"));
                 assertThat(rows).hasSize(size);
                 assertThat(rows.getFirst().get("field_count")).isEqualTo(100);
                 verify(jdbc,times(2)).queryForList(anyString(),any(Object[].class));
@@ -137,7 +139,7 @@ class MetadataCatalogPageTest {
             for(int size:List.of(20,100)){
                 clearInvocations(jdbc);var result=service.catalogServices("cat1",1,size,"count","desc");
                 assertThat(result.get("total")).isEqualTo(120L);
-                var list=(java.util.List<Map<String,Object>>)result.get("list");
+                var list=StructuredValues.objectRows(result.get("list"));
                 assertThat(list).hasSize(size);assertThat(list.getFirst().get("id")).isEqualTo("api-100");assertThat(list.getFirst().get("count")).isEqualTo(2L);
                 if(small==null)small=list;else assertThat(list.subList(0,20)).isEqualTo(small);
                 verify(jdbc,times(2)).queryForList(anyString(),any(Object[].class));

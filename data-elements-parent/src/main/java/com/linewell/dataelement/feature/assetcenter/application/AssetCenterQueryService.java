@@ -1,5 +1,7 @@
 package com.linewell.dataelement.feature.assetcenter.application;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static com.linewell.dataelement.feature.assetcenter.application.AssetCenterStore.*;
 import java.util.*;
 import com.linewell.dataelement.platform.persistence.ServerTableOrder;
@@ -160,7 +162,7 @@ public class AssetCenterQueryService {
                 details.put("parameterPage",page(parameterPage,parameterSize,parameterTotal,query.getOrDefault("parameterSortField","ordinal"),query.getOrDefault("parameterSortDir","asc")));details.putAll(map("serviceCode",text(row,"service_code"),"version",text(row,"version"),"method",text(row,"method").toUpperCase(Locale.ROOT),"publicEndpoint",safeEndpoint(text(row,"publish_address_full")),"parameters",params,"statisticsAvailable",row.get("call_count")!=null,"calls",row.get("call_count")));}
         }
         String description=switch(kind){case "APPLICATION"->text(row,"app_desc");case "DATASOURCE"->text(row,"remark");case "TABLE"->text(row,"table_comment");case "CATALOG"->text(row,"asset_desc");default->text(row,"service_desc");};
-        var relatedResult=relatedPage(kind,id,row,query);related=(List<Map<String,Object>>)relatedResult.get("items");details.put("relatedPage",relatedResult.get("page"));
+        var relatedResult=relatedPage(kind,id,row,query);related=StructuredValues.objectRows(relatedResult.get("items"));details.put("relatedPage",relatedResult.get("page"));
         return map("summary",summary,"revision",row.get("revision")==null?"0":String.valueOf(row.get("revision")),"ownerUserId",text(row,"created_by"),"description",description,"details",details,"relatedObjects",related,"relationsHasMore",db.object(relatedResult.get("page")).get("hasMore"));
     }
     public Map<String,Object> summaryRow(String kind,Map<String,Object> row){
@@ -170,7 +172,7 @@ public class AssetCenterQueryService {
         String name=switch(kind){case "APPLICATION"->text(row,"app_name");case "DATASOURCE"->text(row,"db_name");case "TABLE"->text(row,"table_name_cn").isBlank()?text(row,"table_name"):text(row,"table_name_cn");case "CATALOG"->text(row,"catalog_name");default->text(row,"service_name");};
         return map("id",text(row,"tid"),"kind",kind,"name",name,"code",text(row,CODES.get(kind)),"department_id",row.get("org_id"),"application_id",row.get("app_id"),"topic_code",row.get("business_type"),"created_by",row.get("created_by"),"updated_time",row.get("updated_time"));
     }
-    public Map<String,Object> ref(String kind,String id){return (Map<String,Object>)summaryRow(kind,db.owned(table(kind),id,false)).get("object");}
+    public Map<String,Object> ref(String kind,String id){return StructuredValues.objectMap(summaryRow(kind,db.owned(table(kind),id,false)).get("object"));}
     Map<String,Map<String,Object>> references(List<Map<String,Object>> selections){
         Map<String,Set<String>> idsByKind=new LinkedHashMap<>();
         for(var selection:selections){String kind=text(selection,"asset_type"),assetId=text(selection,"asset_id");if(TABLES.containsKey(kind)&&!assetId.isBlank())idsByKind.computeIfAbsent(kind,ignored->new LinkedHashSet<>()).add(assetId);}
@@ -181,7 +183,7 @@ public class AssetCenterQueryService {
         return result;
     }
     private void addRef(List<Map<String,Object>> list,String kind,String id){if(id.isBlank())return;try{list.add(ref(kind,id));}catch(AssetCenterException e){if(e.status()!=404)throw e;}}
-    private List<Map<String,Object>> refs(String kind,String column,String id){var inputs=db.rows("SELECT * FROM "+table(kind)+" WHERE tenant_id=? AND "+column+"=? AND COALESCE(is_del,0)=0 ORDER BY updated_time DESC,tid LIMIT 100",db.tenant(),id).stream().map(r->summaryInput(kind,r)).toList();return summaries(inputs,false).stream().map(r->(Map<String,Object>)r.get("object")).toList();}
+    private List<Map<String,Object>> refs(String kind,String column,String id){var inputs=db.rows("SELECT * FROM "+table(kind)+" WHERE tenant_id=? AND "+column+"=? AND COALESCE(is_del,0)=0 ORDER BY updated_time DESC,tid LIMIT 100",db.tenant(),id).stream().map(r->summaryInput(kind,r)).toList();return summaries(inputs,false).stream().map(r->StructuredValues.objectMap(r.get("object"))).toList();}
     public long count(String table,String column,String id){return db.jdbc.queryForObject("SELECT COUNT(*) FROM "+table+" WHERE tenant_id=? AND "+column+"=? AND COALESCE(is_del,0)=0",Long.class,db.tenant(),id);}
     private Map<String,Object> relatedPage(String kind,String id,Map<String,Object> row,Map<String,String> q) {
         List<String> kinds=new ArrayList<>(),columns=new ArrayList<>(),values=new ArrayList<>();
@@ -264,9 +266,9 @@ public class AssetCenterQueryService {
     public Map<String,Object> mapGraph(Map<String,String> query){
         String kind=query.getOrDefault("rootKind",query.getOrDefault("kind","CATALOG")),id=query.getOrDefault("rootId",query.getOrDefault("id",""));
         if(id.isBlank())throw error(400,"INVALID_ARGUMENT","请选择地图中心资产");
-        var detail=object(kind,id,Map.of("relatedSize","100"));var summary=(Map<String,Object>)detail.get("summary");var root=(Map<String,Object>)summary.get("object");
+        var detail=object(kind,id,Map.of("relatedSize","100"));var summary=StructuredValues.objectMap(detail.get("summary"));var root=StructuredValues.objectMap(summary.get("object"));
         List<Map<String,Object>> nodes=new ArrayList<>();nodes.add(root);
-        List<Map<String,Object>> edges=new ArrayList<>();int i=0;for(var related:(List<Map<String,Object>>)detail.get("relatedObjects")){nodes.add(related);String edgeKind="CONTAINS";if(kind.equals("CATALOG"))edgeKind="ATTACHED_TO";edges.add(map("id",id+"-"+(++i),"source",root,"target",related,"kind",edgeKind,"evidenceType",kind.equals("CATALOG")?"CATALOG_ATTACHMENT":"MASTER_RELATION","label",kind.equals("CATALOG")?"挂接":"归属"));}
+        List<Map<String,Object>> edges=new ArrayList<>();int i=0;for(var related:StructuredValues.objectRows(detail.get("relatedObjects"))){nodes.add(related);String edgeKind="CONTAINS";if(kind.equals("CATALOG"))edgeKind="ATTACHED_TO";edges.add(map("id",id+"-"+(++i),"source",root,"target",related,"kind",edgeKind,"evidenceType",kind.equals("CATALOG")?"CATALOG_ATTACHMENT":"MASTER_RELATION","label",kind.equals("CATALOG")?"挂接":"归属"));}
         if(kind.equals("CATALOG"))for(var attachment:attachments(id)){var related=db.object(attachment.get("resource"));if(nodes.stream().noneMatch(n->Objects.equals(n.get("id"),related.get("id"))&&Objects.equals(n.get("kind"),related.get("kind")))){nodes.add(related);edges.add(map("id",id+"-attachment-"+(++i),"source",root,"target",related,"kind","ATTACHED_TO","evidenceType","CATALOG_ATTACHMENT","evidenceId",attachment.get("id"),"label","挂接资源"));}}
         return map("nodes",nodes,"edges",edges,"hasMore",detail.get("relationsHasMore"),"asOf",iso(now()));
     }

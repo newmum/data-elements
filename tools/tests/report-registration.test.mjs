@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import fs from 'node:fs';
 const source=fs.readFileSync(new URL('../../lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue',import.meta.url),'utf8');
 function fixture(post){
- const calls=[];const scope={currentDb:{value:{tid:'source'}},$common:{post},URL,URLSearchParams,
+ const calls=[];const scope={currentDb:{value:{tid:'source'}},reportHistorySourceId:{value:'source'},accessMode:{value:'upload'},reportHistoryVersion:0,reportHistory:{total:0,error:''},$common:{post},URL,URLSearchParams,
  window:{location:{hostname:'localhost',port:'3000',protocol:'http:',href:'http://localhost:3000/#/datasource-manage/index',assign(url){calls.push(url);}}},
  registerModalContext:{open:{value:true}}};vm.createContext(scope);
  const start=source.indexOf('async function fetchReportFileHistory('),end=source.indexOf('const save = async',start);
@@ -21,6 +21,15 @@ test('workbench navigation closes registration and carries its source and saniti
  assert.equal(target.origin,'http://localhost:3002');assert.equal(params.get('datasourceId'),'source');
  assert.equal(params.get('returnTo'),'http://localhost:3000/#/datasource-manage/index');assert.doesNotMatch(calls[0],/token|password/);
 });
+test('history total controls visibility and stale source results never replace it',async()=>{
+ let resolve;const pending=new Promise(done=>resolve=done);const {scope}=fixture(()=>pending);
+ const result=scope.history();scope.currentDb.value.tid='another-source';scope.reportHistorySourceId.value='another-source';scope.reportHistoryVersion++;scope.reportHistory.total=7;
+ resolve({list:[{fileId:'old-file'}],total:100});assert.equal((await result).total,0);assert.equal(scope.reportHistory.total,7);
+});
+test('an unsaved datasource does not request history using its draft display ID',async()=>{
+ let requests=0;const {scope}=fixture(async()=>{requests++;});scope.reportHistorySourceId.value='';
+ assert.equal((await scope.history()).total,0);assert.equal(requests,0);
+});
 test('registration return addresses never carry login credentials',()=>{
  const {scope,calls}=fixture();scope.window.location.href='http://localhost:3000/?token=fake#'+
  '/datasource-manage/index?page=2&accessToken=fake&password=fake';scope.open('source');
@@ -34,12 +43,15 @@ test('registration keeps five steps and removes upload editing and file requirem
  const panel=source.slice(start,source.indexOf('<template v-else-if',start));
  assert.ok(panel.includes('fetchReportFileHistory'));assert.doesNotMatch(panel,/<input|update:model-value|removeReport|下载.*模板/);
  assert.match(panel,/:data="fetchReportFileHistory"/);
+ assert.match(panel,/<AccessOnboarding[^>]+:steps="reportGuideSteps"/);assert.match(panel,/v-show="reportHistory.total > 0"/);
+ assert.match(panel,/label="数据文件名称"/);assert.match(panel,/prop="fieldCount" label="字段数"/);
+ assert.match(panel,/height="auto"/);assert.doesNotMatch(panel,/max-height=|label="表数"/);
  const next=source.slice(source.indexOf('const next = async'),source.indexOf('const finish ='));
  assert.match(next,/await save\(\)/);assert.match(next,/openReportWorkbench/);assert.doesNotMatch(next,/先上传|先保存.*数据表/);
 });
 test('one reporting page presents upload, normalization and submission in order and keeps real receipts',()=>{
  const app=fs.readFileSync(new URL('../../data-elements-haitong/src/report/App.tsx',import.meta.url),'utf8');
- const areas=['aria-label="上传数据文件"','aria-label="整理数据规范"','aria-label="选择数据并提交上报"'].map(label=>app.indexOf(label));
+ const areas=['aria-label="选择数据源并上传文件"','aria-label="规范数据表登记信息"','aria-label="选择数据表并上报数据"'].map(label=>app.indexOf(label));
  assert.ok(areas.every(index=>index>=0));assert.ok(areas[0]<areas[1]&&areas[1]<areas[2]);
  assert.doesNotMatch(app,/step\s*===|setStep\(|<Steps\b/);
  assert.doesNotMatch(app,/downloadReportUploadTemplate|bindResourceToTarget|请选择前面五步/);

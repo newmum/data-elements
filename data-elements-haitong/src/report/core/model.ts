@@ -3,6 +3,8 @@ export type DataType = 'text' | 'integer' | 'decimal' | 'date' | 'datetime' | 'b
 export type Nullable = 'unset' | 'allow' | 'forbid';
 export type SyncState = 'idle' | 'sending' | 'waiting' | 'success' | 'failed' | 'unknown';
 export type TimeFormat = '' | 'iso' | 'ymd' | 'dmy' | 'mdy' | 'unix-s' | 'unix-ms';
+export type StandardField = '' | 'LXDH' | 'SFZH' | 'DATE' | 'DATETIME';
+export type TimeRole = 'timestamp' | 'business' | 'occurrence';
 export interface TimeRule {
     format: TimeFormat;
     timezone: string;
@@ -27,7 +29,7 @@ export interface Field {
     ambiguous?: boolean;
     pk: boolean;
     time: TimeRule;
-    standardField?: '' | 'DATE' | 'DATETIME';
+    standardField?: StandardField;
     dictionary?: DictionaryLink;
 }
 export interface Schema {

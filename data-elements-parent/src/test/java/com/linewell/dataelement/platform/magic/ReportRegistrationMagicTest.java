@@ -41,12 +41,12 @@ class ReportRegistrationMagicTest {
             return run(body,false);
         }
         Object run(Map<String,Object> body,boolean captureImport) throws Exception {
-            String script = source().replaceAll("(?m)^import (?!java\\.|cn\\.hutool\\.|cn\\.dev33\\.|org\\.apache\\.poi\\.|com\\.linewell\\.)[^\\r\\n]*\\r?\\n", "");
+            String script = source().replaceAll("(?m)^import (?!java\\.|cn\\.hutool\\.|cn\\.dev33\\.|org\\.apache\\.poi\\.|com\\.linewell\\.|com\\.fasterxml\\.jackson\\.)[^\\r\\n]*\\r?\\n", "");
             script = (captureImport?"var importSnapshot=()=>{captured.payload=body;return {rows:body.tables.map(row=>{tableName:row.tableName,tid:row.tableName=='registered_table'?'table':row.tableName.replace('_','-')})}}\n":"var importSnapshot=()=>{throw new IllegalStateException('existing tables must not be reimported')}\n")+"var configData=()=>{throw new IllegalStateException('storage must not be reached')}\n" + script;
             base.reads = 0;
             try (var login = mockStatic(StpUtil.class)) {
                 login.when(StpUtil::getLoginIdAsString).thenReturn("validation-user");
-                return MagicScript.create(script, null).execute(new MagicScriptContext(Map.of("body",body,"db",base.db,"tenantRuntime",base.scope,"metadataAsset",new Metadata(),"jsons",new TableDetailFieldSaveMagicTest.Jsons(),"captured",captured)));
+                return MagicScript.create(script, null).execute(new MagicScriptContext(Map.of("body",body,"db",base.db,"tenantRuntime",base.scope,"dataScope",base.scope,"metadataAsset",new Metadata(),"jsons",new TableDetailFieldSaveMagicTest.Jsons(),"captured",captured)));
             }
         }
     }
@@ -97,10 +97,22 @@ class ReportRegistrationMagicTest {
         for(int count:List.of(20,100)) {
             Fixture f=new Fixture(1);
             var files=new ArrayList<Map<String,Object>>();var tables=new ArrayList<Map<String,Object>>();
-            for(int i=0;i<count;i++){files.add(Map.of("fileId","file-"+i,"fileName","data-"+i+".csv"));tables.add(Map.of("fileId","file-"+i,"recordCount",2));}
+            for(int i=0;i<count;i++){
+                files.add(Map.of("fileId","file-"+i,"fileName","data-"+i+".csv"));
+                tables.add(Map.of("fileId","file-"+i,"recordCount",2,"fieldCount",999,"fields",List.of(Map.of("columnName","id"),Map.of("columnName","name"))));
+            }
+            tables.add(Map.of("fileId","file-0","recordCount",5,"fields",List.of(Map.of("columnName","code"),Map.of("columnName","label"),Map.of("columnName","time"))));
             f.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'",cn.hutool.json.JSONUtil.toJsonStr(Map.of("accessMode","upload","reportRegistration",Map.of("revision","v1","files",files,"tables",tables))));
             Map<?,?> page=(Map<?,?>)f.run(Map.of("action","history","dbId","source","pageNo",1,"pageSize",20,"sortField","fileName","sortDir","asc"));
             assertEquals(count,((Number)page.get("total")).intValue());assertEquals(20,((List<?>)page.get("list")).size());assertEquals(1,f.base.reads);
+            var first=(Map<?,?>)((List<?>)page.get("list")).getFirst();assertEquals(5,((Number)first.get("fieldCount")).intValue());assertEquals(2,((Number)first.get("tableCount")).intValue());assertEquals(7,((Number)first.get("rowCount")).intValue());
+            var byFields=(Map<?,?>)f.run(Map.of("action","history","dbId","source","pageNo",1,"pageSize",20,"sortField","fieldCount","sortDir","desc"));
+            assertEquals("file-0",((Map<?,?>)((List<?>)byFields.get("list")).getFirst()).get("fileId"));assertEquals(1,f.base.reads);
+            var lastPage=(Map<?,?>)f.run(Map.of("action","history","dbId","source","pageNo",count/20,"pageSize",20,"sortField","fieldCount","sortDir","asc"));
+            assertEquals("file-0",((Map<?,?>)((List<?>)lastPage.get("list")).getLast()).get("fileId"));assertEquals(1,f.base.reads);
+            assertInstanceOf(ExitValue.class,f.run(Map.of("action","history","dbId","source","sortField","unknown","sortDir","asc")));
+            f.base.jdbc.update("insert into db_datasource_t(tid,tenant_id,is_del,pool_cfg) values('foreign-history','other',0,?)","{\"accessMode\":\"upload\"}");
+            assertInstanceOf(ExitValue.class,f.run(Map.of("action","history","dbId","foreign-history","tenantId","other")));
             System.out.println("Report file history: files="+count+", SQL=1, tenant constrained, pageSize=20");
         }
     }
@@ -110,10 +122,21 @@ class ReportRegistrationMagicTest {
         Map<?,?> result=(Map<?,?>)f.run(Map.of("action","list","dbId","source"));
         assertEquals(0,((List<?>)result.get("tables")).size());assertEquals(1,((List<?>)result.get("files")).size());assertEquals(1,((List<?>)result.get("failedTables")).size());assertEquals(1,f.base.reads);
     }
+    @Test void historyDateSortKeepsMissingDatesLastAndLegacyFieldCountsRemainUsable() throws Exception {
+        var f=new Fixture(1);
+        var files=List.of(Map.of("fileId","empty","fileName","empty.csv"),Map.of("fileId","older","fileName","same.csv"),Map.of("fileId","newer","fileName","same.csv"));
+        var manifest=Map.of("files",files,"tables",List.of(Map.of("fileId","older","fieldCount",3,"recordCount",2)),"receipts",List.of(Map.of("fileId","older","tableId","old","status","success","reportedAt","2026-10-01T00:00:00Z"),Map.of("fileId","newer","tableId","new","status","success","reportedAt","2026-10-02T00:00:00Z")));
+        f.base.jdbc.update("update db_datasource_t set pool_cfg=? where tid='source'",cn.hutool.json.JSONUtil.toJsonStr(Map.of("accessMode","upload","reportRegistration",manifest)));
+        for(String direction:List.of("asc","desc")){
+            var page=(Map<?,?>)f.run(Map.of("action","history","dbId","source","sortField","reportedAt","sortDir",direction));var rows=(List<?>)page.get("list");
+            assertEquals("empty",((Map<?,?>)rows.getLast()).get("fileId"));assertEquals(direction.equals("asc")?"older":"newer",((Map<?,?>)rows.getFirst()).get("fileId"));assertEquals(1,f.base.reads);
+            var older=rows.stream().map(row->(Map<?,?>)row).filter(row->"older".equals(row.get("fileId"))).findFirst().orElseThrow();assertEquals(3,((Number)older.get("fieldCount")).intValue());
+        }
+    }
     @Test void parserRecognizesQuotedCsvSeparateRegionsAndRejectsMissingData() throws Exception {
         String script = source();
         String helpers = script.substring(script.indexOf("var positions ="),script.indexOf("if (action == 'parse')"));
-        String imports = "import cn.hutool.core.util.IdUtil\nimport java.nio.charset.Charset\nimport java.nio.charset.CodingErrorAction\nimport java.nio.ByteBuffer\nimport java.util.stream.IntStream\nimport java.lang.StringBuilder\nvar text=value=>value==null?'':(value+'').trim()\n";
+        String imports = "import cn.hutool.core.text.csv.CsvBaseReader\nimport cn.hutool.core.text.csv.CsvReadConfig\nimport java.util.regex.Pattern\nimport cn.hutool.core.util.IdUtil\nimport java.nio.charset.Charset\nimport java.nio.charset.CodingErrorAction\nimport java.nio.ByteBuffer\nimport java.util.stream.IntStream\nimport java.lang.StringBuilder\nvar text=value=>value==null?'':(value+'').trim()\n";
         List<?> rows = assertInstanceOf(List.class,MagicScript.create(imports+helpers+"return regions(csvRows(payload),'测试表','数据.csv')",null)
                 .execute(new MagicScriptContext(Map.of("payload","\uFEFF姓名,说明\r\n张三,\"包含,逗号\"\r\n\r\n编号,状态\nA1,正常\n\n只有表头\n".getBytes(java.nio.charset.StandardCharsets.UTF_8)))));
         assertEquals(3,rows.size());

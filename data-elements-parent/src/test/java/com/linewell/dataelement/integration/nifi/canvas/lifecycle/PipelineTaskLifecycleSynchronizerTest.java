@@ -91,7 +91,7 @@ class PipelineTaskLifecycleSynchronizerTest {
     void deletionClearsOnlyTheCatalogLinkOwnedByTheDeletedTask() {
         var task = new com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessAggTaskT()
                 .setTid("task-1").setDataCatalogId("catalog-1");
-        when(taskService.list(any(com.baomidou.mybatisplus.core.conditions.Wrapper.class))).thenReturn(List.of(task));
+        when(taskService.list(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.core.conditions.Wrapper<com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.DataAccessAggTaskT>>any())).thenReturn(List.of(task));
         when(dataAssetRuntimeAdapter.queryById(any())).thenReturn(Map.of("accessTaskId", "task-1"));
         var synchronizer = new PipelineTaskLifecycleSynchronizer(taskService, dataAssetRuntimeAdapter);
         synchronizer.unlinkCatalogTasks("pipeline-1");

@@ -114,12 +114,7 @@ public class SurveillanceController {
                                                 @PathVariable String channelCode,
                                                 @RequestBody SurveillanceRuleSnapshot body) {
         try {
-            SurveillanceRuleSnapshot normalized = body.usesNormalizedModel()
-                    ? new SurveillanceRuleSnapshot(engineCode, channelCode, body.version(), body.generatedAt(),
-                    body.expiresAt(), body.digest(), body.sourceType(), body.sourceRef(), body.status(),
-                    body.ruleDefinitions(), body.controlItems())
-                    : new SurveillanceRuleSnapshot(engineCode, channelCode, body.version(), body.generatedAt(),
-                    body.expiresAt(), body.digest(), body.sourceType(), body.sourceRef(), body.status(), body.rules());
+            SurveillanceRuleSnapshot normalized = body.withSource(engineCode, channelCode, body.sourceType(), body.sourceRef());
             return service.put(TenantContext.requireTenantId(), normalized);
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);

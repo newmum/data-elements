@@ -8,9 +8,13 @@
           :name="tab.key"
           :label="tab.label"
       /></el-tabs>
-      <el-button
+      <el-tooltip
         v-if="capabilities.includes('policies')"
+        content="日志策略"
+        placement="bottom"
+      ><el-button
         class="log-policy-button"
+        aria-label="日志策略"
         @click="openPolicies"
         ><el-icon
           ><svg
@@ -22,8 +26,7 @@
               fill="currentColor"
               d="M600.704 64a32 32 0 0 1 30.464 22.208l35.2 109.376c14.784 7.232 28.928 15.36 42.432 24.512l112.384-24.192a32 32 0 0 1 34.432 15.36L944.32 364.8a32 32 0 0 1-4.032 37.504l-77.12 85.12a357 357 0 0 1 0 49.024l77.12 85.248a32 32 0 0 1 4.032 37.504l-88.704 153.6a32 32 0 0 1-34.432 15.296L708.8 803.904c-13.44 9.088-27.648 17.28-42.368 24.512l-35.264 109.376A32 32 0 0 1 600.704 960H423.296a32 32 0 0 1-30.464-22.208L357.696 828.48a352 352 0 0 1-42.56-24.64l-112.32 24.256a32 32 0 0 1-34.432-15.36L79.68 659.2a32 32 0 0 1 4.032-37.504l77.12-85.248a357 357 0 0 1 0-48.896l-77.12-85.248A32 32 0 0 1 79.68 364.8l88.704-153.6a32 32 0 0 1 34.432-15.296l112.32 24.256c13.568-9.152 27.776-17.408 42.56-24.64l35.2-109.312A32 32 0 0 1 423.232 64H600.64zm-23.424 64H446.72l-36.352 113.088-24.512 11.968a294 294 0 0 0-34.816 20.096l-22.656 15.36-116.224-25.088-65.28 113.152 79.68 88.192-1.92 27.136a293 293 0 0 0 0 40.192l1.92 27.136-79.808 88.192 65.344 113.152 116.224-25.024 22.656 15.296a294 294 0 0 0 34.816 20.096l24.512 11.968L446.72 896h130.688l36.48-113.152 24.448-11.904a288 288 0 0 0 34.752-20.096l22.592-15.296 116.288 25.024 65.28-113.152-79.744-88.192 1.92-27.136a293 293 0 0 0 0-40.256l-1.92-27.136 79.808-88.128-65.344-113.152-116.288 24.96-22.592-15.232a288 288 0 0 0-34.752-20.096l-24.448-11.904L577.344 128zM512 320a192 192 0 1 1 0 384 192 192 0 0 1 0-384m0 64a128 128 0 1 0 0 256 128 128 0 0 0 0-256"
             ></path></svg></el-icon
-        ><span>日志策略</span></el-button
-      >
+        ></el-button></el-tooltip>
     </header>
     <el-empty
       v-if="!tabs.length && initialized && !initialFailure"
@@ -108,13 +111,7 @@
             v-model="keyword"
             clearable
             :aria-label="'搜索' + activeLabel"
-            :placeholder="
-              eventMode
-                ? '搜索人员、账号或操作'
-                : kind === 'exports'
-                  ? '搜索人员、格式或记录标识'
-                  : '搜索人员、类别或记录标识'
-            "
+            :placeholder="searchPlaceholder"
             class="log-search"
             @clear="searchNow"
             @keydown.enter="searchNow"
@@ -234,6 +231,7 @@
             ></el-table-column
           >
           <el-table-column
+            v-if="kind !== 'auth'"
             prop="menu_path"
             label="功能路径"
             min-width="210"
@@ -241,6 +239,18 @@
             ><template #default="{ row }">{{
               row.menu_path || (row.legacy ? "历史未记录" : "—")
             }}</template></el-table-column
+          >
+          <el-table-column
+            v-if="kind === 'auth'"
+            prop="user_agent"
+            label="浏览器 / 客户端"
+            min-width="190"
+            show-overflow-tooltip
+            ><template #default="{ row }"
+              ><span>{{ browserLabel(row.user_agent) }}</span
+              ><small class="secondary">{{ clientOS(row.user_agent) }}</small
+              ></template
+            ></el-table-column
           >
           <el-table-column
             prop="operation_name"
@@ -294,6 +304,7 @@
             show-overflow-tooltip
           />
           <el-table-column
+            v-if="kind === 'requests'"
             prop="duration_ms"
             label="耗时"
             width="110"
@@ -302,7 +313,7 @@
               row.duration_ms == null ? "—" : row.duration_ms + " ms"
             }}</template></el-table-column
           >
-          <el-table-column label="操作" width="85" fixed="right"
+          <el-table-column label="操作" width="60" align="center" class-name="log-detail-action" fixed="right"
             ><template #default="{ row }"
               ><el-button link type="primary" @click="showDetail(row)"
                 >详情</el-button
@@ -471,13 +482,7 @@
               <template v-for="field in group.fields" :key="field[0]"
                 ><dt>{{ field[1] }}</dt>
                 <dd>
-                  {{
-                    field[0] === "event_time"
-                      ? time(detail.event_time || detail.created_time)
-                      : field[0] === "result"
-                        ? results[detail.result || ""] || detail.result
-                        : (detail[field[0]] ?? "历史未记录")
-                  }}
+                  {{ detailFieldText(field[0]) }}
                 </dd></template
               >
             </dl>
@@ -752,6 +757,7 @@ type LogRow = Partial<
     | "result"
     | "reason_code"
     | "ip"
+    | "user_agent"
     | "route_path"
     | "request_id"
     | "trace_id"
@@ -1084,7 +1090,51 @@ const archiveBrowseOpen = ref(false),
   archivePage = ref(1),
   archiveId = ref(""),
   archiveSorting = ref<Record<string, string>>({});
-const detailGroups = [
+const searchPlaceholder = computed(() =>
+  kind.value === "auth"
+    ? "搜索人员、账号或登录操作"
+    : eventMode.value
+      ? "搜索人员、菜单、功能或接口"
+      : kind.value === "exports"
+        ? "搜索人员、格式或记录标识"
+        : "搜索人员、类别或记录标识",
+);
+// Describe the stored request header without reading other services or guessing absent history.
+function browserLabel(userAgent?: string): string {
+  if (!userAgent?.trim()) return "历史未记录";
+  const browsers: [RegExp, string][] = [
+    [/Edg(?:e|A|iOS)?\/([\d.]+)/, "Edge"],
+    [/(?:OPR|Opera)\/([\d.]+)/, "Opera"],
+    [/SamsungBrowser\/([\d.]+)/, "Samsung Internet"],
+    [/MicroMessenger\/([\d.]+)/, "微信内置浏览器"],
+    [/(?:Firefox|FxiOS)\/([\d.]+)/, "Firefox"],
+    [/(?:Chrome|CriOS)\/([\d.]+)/, "Chrome"],
+    [/Version\/([\d.]+).*Safari\//, "Safari"],
+    [/MSIE ([\d.]+)/, "Internet Explorer"],
+    [/Trident\/.*rv:([\d.]+)/, "Internet Explorer"],
+    [/PostmanRuntime\/([\d.]+)/, "Postman"],
+    [/curl\/([\d.]+)/, "curl"],
+  ];
+  for (const [pattern, name] of browsers) {
+    const match = userAgent.match(pattern);
+    if (match) return `${name} ${match[1]}`;
+  }
+  return "其他客户端";
+}
+function clientOS(userAgent?: string): string {
+  if (!userAgent?.trim()) return "";
+  if (/Windows NT 10\.0/.test(userAgent)) return "Windows 10 / 11";
+  if (/Windows/.test(userAgent)) return "Windows";
+  const ios = userAgent.match(/(?:iPhone OS|CPU OS) ([\d_]+)/);
+  if (ios) return `iOS ${ios[1].replaceAll("_", ".")}`;
+  const android = userAgent.match(/Android ([\d.]+)/);
+  if (android) return `Android ${android[1]}`;
+  const mac = userAgent.match(/Mac OS X ([\d_\.]+)/);
+  if (mac) return `macOS ${mac[1].replaceAll("_", ".")}`;
+  if (/Linux/.test(userAgent)) return "Linux";
+  return "";
+}
+const detailGroups = computed(() => [
   {
     title: "人员与部门",
     fields: [
@@ -1098,7 +1148,7 @@ const detailGroups = [
     title: "操作与结果",
     fields: [
       ["event_time", "发生时间"],
-      ["menu_path", "功能路径"],
+      ...(kind.value === "auth" ? [] : [["menu_path", "功能路径"]]),
       ["operation_name", "具体操作"],
       ["function_code", "接口标识"],
       ["action_code", "操作编码"],
@@ -1111,7 +1161,11 @@ const detailGroups = [
     title: "请求与链路",
     fields: [
       ["ip", "来源IP"],
+      ["browser", "浏览器 / 客户端"],
+      ["client_os", "操作系统"],
+      ["user_agent", "User-Agent"],
       ["route_path", "请求路由"],
+      ...(kind.value === "requests" ? [["duration_ms", "接口耗时"]] : []),
       ["http_status", "HTTP状态"],
       ["business_code", "业务编码"],
       ["request_id", "请求号"],
@@ -1119,7 +1173,17 @@ const detailGroups = [
       ["session_ref", "会话引用"],
     ],
   },
-];
+]);
+function detailFieldText(field: string): string | number {
+  const row = detail.value;
+  if (!row) return "历史未记录";
+  if (field === "event_time") return time(row.event_time || row.created_time);
+  if (field === "result") return results[row.result || ""] || row.result || "历史未记录";
+  if (field === "browser") return browserLabel(row.user_agent);
+  if (field === "client_os") return clientOS(row.user_agent) || "历史未记录";
+  if (field === "duration_ms") return row.duration_ms == null ? "历史未记录" : `${row.duration_ms} ms`;
+  return row[field] == null || row[field] === "" ? "历史未记录" : String(row[field]);
+}
 let revision = 0,
   policyRevision = 0;
 const client = () =>
@@ -1529,7 +1593,7 @@ onBeforeUnmount(() => {
   min-height: 420px;
   min-width: 0;
   box-sizing: border-box;
-  padding: 12px 20px 16px;
+  padding: 12px 20px 8px;
   display: flex;
   flex-direction: column;
   color: var(--el-text-color-regular);
@@ -1572,8 +1636,12 @@ onBeforeUnmount(() => {
   flex: none;
   margin-top: 4px;
   margin-left: auto;
+  width: 32px;
+  padding: 0;
 }
-.log-policy-button .el-icon,
+.log-policy-button .el-icon {
+  margin: 0;
+}
 .log-toolbar-actions .el-icon {
   margin-right: 6px;
 }
@@ -1617,10 +1685,10 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 .log-search {
-  flex: 0 1 200px;
-  width: 200px;
-  min-width: 160px;
-  max-width: 200px;
+  flex: 0 1 280px;
+  width: 280px;
+  min-width: 220px;
+  max-width: 280px;
 }
 .log-toolbar :deep(.el-range-editor) {
   width: 345px;
@@ -1657,6 +1725,9 @@ onBeforeUnmount(() => {
   width: 100%;
   overflow: hidden;
 }
+.log-table :deep(.log-detail-action > .cell) {
+  width: 100% !important;
+}
 .secondary,
 .legacy {
   display: block;
@@ -1683,7 +1754,7 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 850px) {
   .log-page {
-    padding: 12px 14px 16px;
+    padding: 12px 14px 8px;
     height: calc(100dvh - 90px);
     min-height: 520px;
   }
@@ -1712,14 +1783,14 @@ onBeforeUnmount(() => {
     max-width: 100%;
     row-gap: 8px;
   }
-  .log-policy-button {
-    padding-right: 10px;
-    padding-left: 10px;
-  }
   .policy-retention {
     grid-template-columns: 1fr;
     gap: 0;
   }
+}
+.app-main .log-page {
+  height: 100%;
+  min-height: 0;
 }
 @media (prefers-reduced-motion: reduce) {
   .log-page *,

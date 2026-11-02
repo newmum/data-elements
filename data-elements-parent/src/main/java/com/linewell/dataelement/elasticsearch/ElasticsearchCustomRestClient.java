@@ -138,8 +138,16 @@ public class ElasticsearchCustomRestClient {
 
 
     @Bean(name = "highLevelClient")
+    // Magic API 2.2.2 still requires the ES 7 client; keep that dependency at this boundary.
+    @SuppressWarnings("deprecation")
     public RestHighLevelClient highLevelClient(@Qualifier("esRestClientBuilder") RestClientBuilder restClientBuilder) {
         return new RestHighLevelClient(restClientBuilder);
+    }
+
+    @Bean(name = "searchProjectionRestClient", destroyMethod = "")
+    @SuppressWarnings("deprecation") // The owning high-level bean closes this shared HTTP client.
+    public RestClient searchProjectionRestClient(@Qualifier("highLevelClient") RestHighLevelClient client) {
+        return client.getLowLevelClient();
     }
 
     /**

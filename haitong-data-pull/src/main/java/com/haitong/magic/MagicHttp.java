@@ -34,6 +34,37 @@ public final class MagicHttp {
         return bytes;
     }
     public Map<String,Object> object(HttpServletRequest request,long limit) throws IOException { return json.object(raw(request,limit)); }
+    public Map<String,Object> multipart(HttpServletRequest request,long fileLimit,List<String> fields) throws IOException {
+        String type=request.getContentType();
+        boolean valid=false;
+        try{valid=type!=null&&MediaType.MULTIPART_FORM_DATA.isCompatibleWith(MediaType.parseMediaType(type));}catch(IllegalArgumentException ignored){}
+        if(!valid)
+            throw new RelayException(415,"UNSUPPORTED_MEDIA_TYPE","文件推送使用 multipart/form-data");
+        if(request.getQueryString()!=null&&!request.getQueryString().isBlank())throw RelayException.invalid("文件推送参数应放在multipart请求体中");
+        if(request.getContentLengthLong()>fileLimit+65536)throw new RelayException(413,"SINGLE_UPLOAD_TOO_LARGE","请求超过整文件上传上限，请使用分片上传");
+        String encoding=request.getHeader("Content-Encoding");
+        if(encoding!=null&&!encoding.equalsIgnoreCase("identity"))throw new RelayException(415,"ENCODING_NOT_ALLOWED","本接口不接收压缩请求体");
+        Map<String,Object> result=new LinkedHashMap<>();
+        try {
+            var parts=request.getParts();
+            if(parts.size()>fields.size()+1)throw RelayException.invalid("multipart包含重复或未定义参数");
+            for(var part:parts){
+                String name=part.getName();
+                if((!name.equals("file")&&!fields.contains(name))||result.containsKey(name))throw RelayException.invalid("multipart包含重复或未定义参数");
+                if(name.equals("file")){
+                    if(part.getSubmittedFileName()==null||part.getSize()<1)throw RelayException.invalid("请上传一个有效文件");
+                    if(part.getSize()>fileLimit)throw new RelayException(413,"SINGLE_UPLOAD_TOO_LARGE","文件超过整文件上传上限，请使用分片上传");
+                    result.put(name,part);
+                } else {
+                    if(part.getSubmittedFileName()!=null||part.getSize()>65536)throw RelayException.invalid("业务参数必须为不超过64KiB的文本");
+                    try(var stream=part.getInputStream()){result.put(name,new String(PayloadFiles.readLimited(stream,65536),java.nio.charset.StandardCharsets.UTF_8));}
+                }
+            }
+        } catch(jakarta.servlet.ServletException e){throw RelayException.invalid("multipart请求格式不正确");}
+        catch(IllegalStateException e){throw new RelayException(413,"SINGLE_UPLOAD_TOO_LARGE","multipart请求超过接收上限");}
+        if(!result.containsKey("file"))throw RelayException.invalid("缺少file文件参数");
+        return result;
+    }
     public ResponseEntity<?> reply(int status,Object value) { return ResponseEntity.status(status).body(value); }
     public ResponseEntity<?> located(int status,Object value,String location) {
         return ResponseEntity.status(status).header("Location",location).body(value);

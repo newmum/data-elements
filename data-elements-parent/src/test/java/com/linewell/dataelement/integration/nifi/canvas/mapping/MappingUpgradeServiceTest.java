@@ -29,7 +29,7 @@ class MappingUpgradeServiceTest {
         plan=MappingEngine.compile(json.readTree("{\"schemaVersion\":\"2.0\",\"rules\":[]}"));
         pipeline=new Pipeline("p","flow","",1L,2L,new Pipeline.Dsl(1,List.of(new Pipeline.Node("m","transform.field-mapping","映射","transform",0,0,Map.of("mappings",plan.document()))),List.of(new Pipeline.Edge("in","s","m",null),new Pipeline.Edge("out","m","t",null))),"group",PipelineStatus.RUNNING,"old-hash",1L,null,new NifiNodeMapping(Map.of("s","source","m","old-map","t","target"),Map.of("source","s","old-map","m","target","t"),Map.of("in",new NifiNodeMapping.EdgeEndpoint("source","old-map","c-in"),"out",new NifiNodeMapping.EdgeEndpoint("old-map","target","c-out"))),0L);
         when(versions.requirePipeline("p")).thenReturn(pipeline);when(engine.compile(any())).thenReturn(new UnifiedMappingService.Compiled(plan,Map.of()));when(transactions.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
-        when(pipelines.update(eq("p"),any())).thenAnswer(call->{persisted=((java.util.function.UnaryOperator<Pipeline>)call.getArgument(1)).apply(pipeline);return persisted;});when(pipelines.updateStatus(eq("p"),any())).thenReturn(pipeline);
+        when(pipelines.update(eq("p"),any())).thenAnswer(call->{persisted=call.<java.util.function.UnaryOperator<Pipeline>>getArgument(1).apply(pipeline);return persisted;});when(pipelines.updateStatus(eq("p"),any())).thenReturn(pipeline);
         when(nifi.getProcessGroup("group")).thenReturn(json.readTree("{\"component\":{\"comments\":\"data-elements:v1:tenant:pipeline:p\"}}"));
         when(nifi.get("/processors/old-map",JsonNode.class)).thenReturn(json.readTree("{\"component\":{\"parentGroupId\":\"group\",\"config\":{\"properties\":{\"Record Reader\":\"reader\"}}}}"));
         when(nifi.get(contains("/controller-services?"),eq(JsonNode.class))).thenReturn(json.readTree("{\"controllerServices\":[{\"id\":\"reader\",\"component\":{\"type\":\"org.apache.nifi.json.JsonTreeReader\"}},{\"id\":\"writer\",\"component\":{\"type\":\"org.apache.nifi.json.JsonRecordSetWriter\"}}]}"));
@@ -66,9 +66,7 @@ class MappingUpgradeServiceTest {
     }
     @Test void queueGrowingDuringStopLeavesOriginalTopologyAndPersistsStoppedState()throws Exception{
         fixture("RUNNING");
-        when(nifi.getProcessGroupStatus("group")).thenReturn(
-            json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":0}}}"),
-            json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":1}}}"));
+        when(nifi.getProcessGroupStatus("group")).thenReturn(json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":0}}}")).thenReturn(json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":1}}}"));
         try(var tenant=TenantContext.use("tenant")){assertEquals("MAPPING_UPGRADE_FAILED",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,plan.hash(),true)).code());}
         assertEquals(PipelineStatus.STOPPED,persisted.status());assertEquals(pipeline.nodeMapping(),persisted.nodeMapping());
         verifyPreflightOnly();verify(nifi,never()).delete(anyString());verify(nifi,never()).setProcessorRunStatus(anyString(),anyString());
@@ -94,11 +92,9 @@ class MappingUpgradeServiceTest {
     }
     @Test void recoveryNeverOverwritesConcurrentRuntimeIdentity()throws Exception{
         fixture("RUNNING");
-        when(nifi.getProcessGroupStatus("group")).thenReturn(
-            json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":0}}}"),
-            json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":1}}}"));
+        when(nifi.getProcessGroupStatus("group")).thenReturn(json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":0}}}")).thenReturn(json.readTree("{\"processGroupStatus\":{\"aggregateSnapshot\":{\"flowFilesQueued\":1}}}"));
         Pipeline newer=new Pipeline(pipeline.id(),pipeline.name(),pipeline.description(),pipeline.createdAt(),3L,pipeline.dsl(),pipeline.nifiProcessGroupId(),pipeline.status(),pipeline.lastDeployedHash(),pipeline.lastDeployedAt(),pipeline.lastStoppedAt(),pipeline.nodeMapping(),pipeline.lastBulletinId());
-        when(pipelines.update(eq("p"),any())).thenAnswer(call->((java.util.function.UnaryOperator<Pipeline>)call.getArgument(1)).apply(newer));
+        when(pipelines.update(eq("p"),any())).thenAnswer(call->call.<java.util.function.UnaryOperator<Pipeline>>getArgument(1).apply(newer));
         try(var tenant=TenantContext.use("tenant")){assertEquals("MAPPING_UPGRADE_RECOVERY_REQUIRED",assertThrows(MappingException.class,()->service().upgrade("p","m",2L,plan.hash(),true)).code());}
         assertNull(persisted);verifyPreflightOnly();verify(nifi,never()).delete(anyString());
     }

@@ -234,7 +234,7 @@ public class ResourceDeliveryService {
             Map<String, Object> request = new LinkedHashMap<>();
             request.put("applicationIds", List.of(applicationId));
             request.put("serviceIds", apiIds);
-            HashMap response = gatewayUtils.callGatewayApi("V2CreateAuthorization", request);
+            HashMap<String, Object> response = gatewayUtils.callGatewayApi("V2CreateAuthorization", request);
             String error = String.valueOf(response.getOrDefault("error_message", ""));
             if (StringUtils.isNotBlank(error)) {
                 throw new IllegalStateException(error);

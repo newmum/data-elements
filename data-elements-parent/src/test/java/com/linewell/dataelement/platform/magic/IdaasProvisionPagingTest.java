@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import java.sql.Timestamp;
 import java.util.*;
@@ -28,7 +30,7 @@ public class IdaasProvisionPagingTest {
         var fixture=new Fixture();
         var small=fixture.read(Map.of("paged","true","page","1","size","20","sortField","successCount","sortDir","desc"));assertEquals(2,fixture.counter.count);
         fixture.counter.count=0;var large=fixture.read(Map.of("paged","true","page","1","size","100","sortField","successCount","sortDir","desc"));assertEquals(2,fixture.counter.count);
-        var rows=(List<Map<String,Object>>)large.get("list");assertEquals(100,rows.size());assertEquals(120,((Number)large.get("total")).intValue());
+        var rows=StructuredValues.objectRows(large.get("list"));assertEquals(100,rows.size());assertEquals(120,((Number)large.get("total")).intValue());
         assertEquals(((List<?>)small.get("list")),rows.subList(0,20));
         assertTrue(rows.stream().allMatch(r->"app-a".equals(r.get("appId")) && ((List<?>)r.get("items")).isEmpty()));
         for(int i=1;i<rows.size();i++)assertTrue(((Number)rows.get(i-1).get("successCount")).intValue()>=((Number)rows.get(i).get("successCount")).intValue());
@@ -70,7 +72,7 @@ public class IdaasProvisionPagingTest {
             db.update("INSERT INTO iam_sync_item_t VALUES('hidden-item','hidden-task','person','SUBJECT',1,99,'FAILED',0,NULL)");
         }
         Map<String,Object> read(Map<String,String> query) throws Exception {
-            return (Map<String,Object>)assertInstanceOf(Map.class,readRaw(query));
+            return StructuredValues.objectMap(assertInstanceOf(Map.class,readRaw(query)));
         }
         Object readRaw(Map<String,String> query) throws Exception {
             String source=CanonicalMagicSources.byId("d3584c2bbce4543ca25ffbc5654a8c46").replaceAll("(?m)^import [^\\r\\n]+;\\r?\\n","");

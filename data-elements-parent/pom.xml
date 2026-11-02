@@ -79,6 +79,12 @@
 
 	<dependencyManagement>
 		<dependencies>
+			<!-- Resolve annotation metadata against the same Huawei MRS Hadoop version as runtime. -->
+			<dependency>
+				<groupId>org.apache.hadoop</groupId>
+				<artifactId>hadoop-annotations</artifactId>
+				<version>${hadoop.version}</version>
+			</dependency>
 			<dependency>
 				<groupId>com.alibaba.cloud</groupId>
 				<artifactId>spring-cloud-alibaba-dependencies</artifactId>
@@ -679,6 +685,8 @@
 					<showWarnings>true</showWarnings>
 					<compilerArgs>
 						<arg>-Xlint:unchecked</arg>
+						<arg>-Xmaxwarns</arg>
+						<arg>1000</arg>
 					</compilerArgs>
 					<!-- 如果使用了 annotationProcessorPaths，也要确保里面的 lombok 版本正确 -->
 					<annotationProcessorPaths>

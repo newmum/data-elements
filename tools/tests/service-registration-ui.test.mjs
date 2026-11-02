@@ -25,12 +25,12 @@ const definitionSource = fs.readFileSync(
 );
 const definitionRules = () =>
   vm.runInNewContext(definitionSource, { $dict: { getDictItems: () => [] } });
-function contentFixture(post, loadDefinition = async () => ({ rules: definitionRules() })) {
+function contentFixture(post, loadDefinition = async () => ({ rules: definitionRules() }), confirm = async () => {}) {
   let refIndex = 0,
     model = {};
   const feedback = [],
     events = [];
-  let api;
+  let api, rulesRef;
   const form = {
     validate: async () => true,
     getFormData: async () => ({ ...model }),
@@ -40,7 +40,11 @@ function contentFixture(post, loadDefinition = async () => ({ rules: definitionR
   };
   const runtime = {
     ...vue,
-    ref: (value) => (value === undefined && refIndex++ === 0 ? vue.ref(form) : vue.ref(value)),
+    ref: (value) => {
+      const result = value === undefined && refIndex++ === 0 ? vue.ref(form) : vue.ref(value);
+      if (Array.isArray(value)) rulesRef = result;
+      return result;
+    },
   };
   const messages = {
     success: (value) => feedback.push(value),
@@ -49,7 +53,7 @@ function contentFixture(post, loadDefinition = async () => ({ rules: definitionR
   };
   const libraries = {
     vue: runtime,
-    "element-plus": { ElMessage: messages },
+    "element-plus": { ElMessage: messages, ElMessageBox: { confirm } },
     "@/store": { useDictStore: () => ({ getDictItems: () => [] }) },
     "lodash-es": { cloneDeep: (value) => structuredClone(value) },
   };
@@ -68,6 +72,7 @@ function contentFixture(post, loadDefinition = async () => ({ rules: definitionR
     }
   );
   return {
+    get rules() { return rulesRef.value; },
     get api() {
       return api;
     },
@@ -116,6 +121,22 @@ test("registration uses current department, preserves examples and retains retur
   assert.equal(requests.filter((request) => request.url === "/sym/user/me").length, 1);
   assert.equal((await f.api.getFormData()).id, "saved-service");
 });
+test("simplified registration derives a new publish path and retains hidden legacy values", async () => {
+  const f = contentFixture(async () => ({ orgId: "org", orgName: "部门" }));
+  await f.api.setFormData({});
+  f.setFields({ address: "https://example.test/service" });
+  assert.equal((await f.api.getPayload()).publishConfig.publishAddress, "https://example.test/service");
+  await f.api.setFormData({ id: "existing", publishConfig: { publishAddress: "/published" },
+    extendInfo: { dataDomain: "domain", dataCategory: "category", dataLevel: "level",
+      shareType: "shared", dataUpdateFreq: "daily", apiDescription: "legacy" } });
+  f.setFields({ address: "https://example.test/updated" });
+  const payload = await f.api.getPayload();
+  assert.equal(payload.publishConfig.publishAddress, "/published");
+  for (const [key, value] of Object.entries({ dataDomain: "domain", dataCategory: "category",
+    dataLevel: "level", shareType: "shared", dataUpdateFreq: "daily", apiDescription: "legacy" }))
+    assert.equal(payload.extendInfo[key], value);
+});
+
 test("validation and upstream failure never report a completed registration", async () => {
   const f = contentFixture(async (url) =>
     url === "/sym/user/me"
@@ -174,44 +195,36 @@ test("selecting proxy access does not activate database or spreadsheet metadata 
   const select = new Function(
     "accessModeOptions",
     "accessMode",
-    "activateMetadataImportForMode",
+    "activateMetadataImportForMode", "sourceType", "connectionEnabled", "formRef",
     `${selection}\nreturn selectAccessMode;`
-  )([{ value: "proxy" }], accessMode, () => metadataReads++);
+  )([{ value: "proxy" }], accessMode, () => metadataReads++, vue.ref("mysql"), vue.ref("1"), vue.ref());
   select("proxy");
   assert.equal(accessMode.value, "proxy");
   assert.equal(metadataReads, 0);
 });
-function proxyFixture(post, push) {
-  const context = { open: vue.ref(true) },
-    errors = [];
-  const create = new Function(
-    "$common",
-    "serviceRouter",
-    "registerModalContext",
-    "$message",
-    "proxyServiceKeyword",
-    "proxyNavigating",
-    "currentDb",
-    "accessMode",
-    "isFilePush",
-    `${declaration("fetchDepartmentServices")}\n${declaration("goToServiceRegistration")}\n${declaration("next")}\nreturn {fetchDepartmentServices,next,goToServiceRegistration};`
-  );
-  return {
-    api: create(
-      { post },
-      { push },
-      context,
-      { error: (value) => errors.push(value) },
-      vue.ref("服务"),
-      vue.ref(false),
-      vue.ref({}),
-      vue.ref("proxy"),
-      vue.ref(false)
-    ),
-    context,
-    errors,
-  };
+function proxyFixture(post, id = "source-a") {
+  const context={open:vue.ref(true)},visible=vue.ref(false),sourceId=vue.ref(id);
+  const api=new Function("$common","proxyServiceKeyword","proxyDatasourceId","proxyServiceRegistrationVisible",`${declaration("fetchDepartmentServices")}\n${declaration("goToServiceRegistration")}\nreturn {fetchDepartmentServices,goToServiceRegistration};`)({post},vue.ref("服务"),sourceId,visible);
+  return {api,context,visible,sourceId};
 }
+test("proxy datasource restoration never loads physical table metadata",async()=>{
+  let reads=0;
+  const restore=new Function("accessMode","$common",`${declaration("loadMetadataImportResult")}\nreturn loadMetadataImportResult;`)(vue.ref("proxy"),{get:()=>reads++});
+  await restore("source-a");assert.equal(reads,0);
+});
+for(const count of [20,100])test(`registration reuses ${count} authorized datasource summaries without a duplicate full-list request`,async()=>{
+  let reads=0;const dbs=vue.ref([{did:'new',isDraft:true}]),currentDid=vue.ref('new');
+  const run=new Function('store','$common','dbs','currentDid','createDatasourceDraft','datasourceKey','toDatasourceItem','syncCurrentDatasourceToStore',`${declaration('loadAccessibleDatasources')}\nreturn loadAccessibleDatasources;`)(
+    {data:{datasourceOptions:Array.from({length:count},(_,i)=>({tid:'source-'+i}))}},
+    {post:async()=>{reads++;return {list:[]};}},dbs,currentDid,()=>({did:'new',isDraft:true}),row=>row.tid||row.id,row=>({...row,did:row.tid}),()=>{});
+  await run();assert.equal(reads,0);assert.equal(dbs.value.length,count+1);assert.equal(currentDid.value,'new');
+});
+test("registration entries without supplied summaries use the existing lightweight summary contract",async()=>{
+  const requests=[],dbs=vue.ref([{did:'new',isDraft:true}]);
+  const run=new Function('store','$common','dbs','currentDid','createDatasourceDraft','datasourceKey','toDatasourceItem','syncCurrentDatasourceToStore',`${declaration('loadAccessibleDatasources')}\nreturn loadAccessibleDatasources;`)(
+    {data:{}},{post:async(url,body)=>{requests.push({url,body});return {list:[]};}},dbs,vue.ref('new'),()=>({did:'new',isDraft:true}),row=>row.tid||row.id,row=>({...row,did:row.tid}),()=>{});
+  await run();assert.deepEqual(requests,[{url:'/dst/database/departmentDataSources',body:{mode:'summary'}}]);
+});
 
 function webServiceFixture(post = async () => ({})) {
   const messages = [], requests = [], cleared = [];
@@ -274,47 +287,24 @@ test("a failed SOAP call retains the backend Fault and clears the prior connecti
   assert.deepEqual(feedback, ["SOAP Fault: missing query condition"]);
   assert.equal(loading.value, "");
 });
-for (const count of [20, 100])
-  test(`${count} department services use one paged request, then next navigates without creating a database`, async () => {
-    const requests = [],
-      routes = [];
-    const f = proxyFixture(
-      async (url, body) => {
-        requests.push({ url, body });
-        return {
-          list: Array.from({ length: count }, (_, i) => ({ tid: `s${i}` })),
-          total: 150,
-        };
-      },
-      async (route) => {
-        routes.push(route);
-      }
-    );
-    const result = await f.api.fetchDepartmentServices({
-      pageNo: 2,
-      pageSize: count,
-      sortField: "serviceName",
-      sortDir: "asc",
-    });
-    assert.equal(result.list.length, count);
-    assert.equal(result.total, 150);
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0].body.departmentOnly, true);
-    assert.equal(requests[0].body.pageNum, 2);
-    assert.equal((await f.api.next()).navigationHandled, true);
-    assert.deepEqual(routes, [{ path: "/deal/data-server/list", query: { register: "1" } }]);
-    assert.equal(f.context.open.value, false);
-    assert.equal(requests.length, 1);
-  });
-test("failed navigation preserves registration context", async () => {
-  const f = proxyFixture(
-    async () => ({}),
-    async () => {
-      throw new Error("路由暂不可用");
-    }
-  );
-  await assert.rejects(f.api.next(), /路由暂不可用/);
-  assert.equal(f.context.open.value, true);
+for (const count of [20,100]) test(`${count} datasource services use one scoped page request and registration retains its parent`,async()=>{
+  const requests=[];
+  const f=proxyFixture(async(url,body)=>{requests.push({url,body});return {list:Array.from({length:count},(_,i)=>({tid:`s${i}`})),total:150};});
+  const result=await f.api.fetchDepartmentServices({pageNo:2,pageSize:count,sortField:"serviceName",sortDir:"asc"});
+  assert.equal(result.list.length,count);assert.equal(result.total,150);assert.equal(requests.length,1);
+  assert.equal(requests[0].body.datasourceId,"source-a");assert.equal(requests[0].body.pageNum,2);
+  assert.equal((await f.api.goToServiceRegistration()).navigationHandled,true);assert.equal(f.visible.value,true);
+  assert.equal(f.context.open.value,true);assert.equal(requests.length,1);
+});
+test("an unsaved new datasource stays empty without any global service request",async()=>{
+  let requests=0;const f=proxyFixture(async()=>{requests++;},"");
+  assert.deepEqual(await f.api.fetchDepartmentServices(),{list:[],total:0});
+  await assert.rejects(f.api.goToServiceRegistration(),/先保存/);assert.equal(requests,0);assert.equal(f.visible.value,false);
+});
+test("late service responses from a previous datasource are ignored",async()=>{
+  let resolve;const f=proxyFixture(()=>new Promise(r=>resolve=r));
+  const pending=f.api.fetchDepartmentServices();f.sourceId.value="source-b";
+  resolve({list:[{tid:"old-service"}],total:1});assert.deepEqual(await pending,{list:[],total:0});
 });
 
 function footerFixture(next) {
@@ -443,7 +433,7 @@ test("registration route stays intact until the dialog closes, preserving a page
   assert.deepEqual(routes, [{ path: route.path, query: { keyword: "保留上下文" } }]);
 });
 
-function workspaceFixture(post = async () => ({ list: [], total: 0 })) {
+function workspaceFixture(post = async () => ({ list: [], total: 0 }), datasourceId = "") {
   const script = fs
     .readFileSync(
       path.join(
@@ -483,7 +473,7 @@ function workspaceFixture(post = async () => ({ list: [], total: 0 })) {
     vue.computed,
     () => {},
     () => {},
-    () => ({ modelValue: true, apiDetail: { groupId: "group" } }),
+    () => ({ modelValue: true, apiDetail: { groupId: "group" }, datasourceId, datasourceName: datasourceId ? "验证数据源" : "" }),
     (value) => value,
     () =>
       (...args) =>
@@ -915,6 +905,157 @@ for (const count of [20, 100])
     assert.equal(f.data.value[0].paramName, "other draft");
     assert.equal(f.events.filter((e) => e === "update:modelValue").length, 3);
   });
+
+test("parameter imports normalize request/response labels, retain valid values and default missing legacy direction", async () => {
+  const f = formTableFixture();
+  const flatten = (rules) => rules.flatMap((rule) => [rule, ...flatten(rule.children || [])]);
+  const { props } = flatten(definitionRules()).find((rule) => rule.field === "publishParams");
+  Object.assign(f.props, props);
+  await f.flush();
+  f.data.value = [
+    { paramName: "page", paramScope: "入参", paramType: "number" },
+    { paramName: "total", paramScope: "出参", paramType: "number" },
+    { paramName: "legacy", paramType: "string" },
+    { paramName: "data", paramScope: "response", paramType: "array" },
+    { paramName: "invalid", paramScope: "unknown", paramType: "string" },
+    { paramName: "old Chinese header", paramScope: "number" },
+  ];
+  await f.flush();
+  assert.deepEqual(f.props.modelValue.map((row) => row.paramScope), ["request", "response", "request", "response", "unknown", "request"]);
+  assert.deepEqual(f.data.value.map((row) => row.paramScope), ["request", "response", "request", "response", "unknown", "request"]);
+  assert.equal(f.props.modelValue[5].paramType, "number");
+  assert.equal(props.options.columns[1].field, "paramScope");
+  assert.equal(props.options.columns.find((column) => column.field === "paramType").title, "数据类型");
+});
+
+test("CSV parameter import preserves quoted JSON, leading zeros and line breaks without interpreting markup", () => {
+  const source = fs.readFileSync(path.join(root, "data-elements-chengtian/src/components/_utils/csv-import.ts"), "utf8");
+  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
+  const exports = {};
+  vm.runInNewContext(outputText, { exports });
+  const json = JSON.stringify(Array.from({ length: 20 }, (_, i) => ({ id: `00${i}`, name: "示例数据" })));
+  const quote = (value) => '"' + value.replaceAll('"', '""') + '"';
+  const result = exports.csvToTableHtml('\uFEFF参数类型,参数名称,示例值\r\n出参,data,' + quote(json) + '\r\n入参,name,' + quote('001\r\n<img src=x onerror=alert(1)>'));
+  assert.ok(result.includes(json.replaceAll('"', '&quot;')));
+  assert.ok(result.includes('001&#13;&#10;&lt;img src=x onerror=alert(1)&gt;'));
+  assert.doesNotMatch(result, /<img|#\d+@\d+/);
+  assert.throws(() => exports.csvToTableHtml('参数名称,示例值\na,"missing'), /未闭合/);
+  assert.throws(() => exports.csvToTableHtml('参数名称\na,b'), /超过表头/);
+});
+
+test("required values normalize boolean and legacy dictionary codes to the persisted binary contract", async () => {
+  const values = [true, false, "true", "false", "1", "0", 1, 0, "是", "否", "必填", "可选"];
+  const expected = values.map((_, index) => index % 2 === 0 ? "1" : "0");
+  const f = contentFixture(async () => ({ orgId: "org" }));
+  await f.api.setFormData({ publishParams: values.map((required, i) => ({ paramName: `p${i}`, paramType: "string", required })) });
+  assert.deepEqual((await f.api.getParamsData()).map((row) => row.required), expected);
+  const table = formTableFixture();
+  const flatten = (rules) => rules.flatMap((rule) => [rule, ...flatten(rule.children || [])]);
+  Object.assign(table.props, flatten(definitionRules()).find((rule) => rule.field === "publishParams").props);
+  await table.flush();
+  table.data.value = values.map((required, i) => ({ paramName: `p${i}`, paramType: "string", required }));
+  await table.flush();
+  assert.deepEqual(table.props.modelValue.map((row) => row.required), expected);
+});
+
+test("one configured generation action follows the active tab and leaves the other example intact", async () => {
+  const f = contentFixture(async () => ({ orgId: "org" }));
+  await f.api.setFormData({ publishParams: [
+    { paramName: "q", paramScope: "request", paramType: "string", showcaseValue: "search" },
+    { paramName: "total", paramScope: "response", paramType: "number", showcaseValue: "12" },
+  ], extendInfo: { requestExample: "manual request", responseExample: "manual response" } });
+  const flatten = (rules) => rules.flatMap((rule) => [rule, ...flatten(rule.children || [])]);
+  const rules = flatten(f.rules);
+  const actions = rules.filter((rule) => rule.name === "generateActiveExample");
+  assert.equal(actions.length, 1);
+  assert.equal(rules.filter((rule) => /generate(Request|Response)Example/.test(rule.name || "")).length, 0);
+  await actions[0].on.click();
+  assert.deepEqual(JSON.parse(await f.api.getRequestExample()), { q: "search" });
+  assert.equal(await f.api.getResponseExample(), "manual response");
+  await rules.find((rule) => rule.name === "serviceExamples").on.tabChange("response");
+  await actions[0].on.click();
+  assert.deepEqual(JSON.parse(await f.api.getResponseExample()), { total: 12 });
+  assert.deepEqual(JSON.parse(await f.api.getRequestExample()), { q: "search" });
+});
+
+test("initial examples use only their own direction and preserve numeric, boolean, structured and string values", async () => {
+  const f = contentFixture(async () => ({ orgId: "org" }));
+  await f.api.setFormData({ publishParams: [
+    { paramName: "page", paramScope: "request", paramType: "number", defaultValue: "20" },
+    { paramName: "id", paramScope: "request", paramType: "string", showcaseValue: "001" },
+    { paramName: "ok", paramScope: "response", paramType: "boolean", showcaseValue: "false" },
+    { paramName: "items", paramScope: "response", paramType: "array", showcaseValue: '[{"id":1}]' },
+    { paramName: "meta", paramScope: "response", paramType: "object" },
+  ] });
+  assert.deepEqual(JSON.parse(await f.api.getRequestExample()), { page: 20, id: "001" });
+  assert.deepEqual(JSON.parse(await f.api.getResponseExample()), { ok: false, items: [{ id: 1 }], meta: {} });
+  const original = await f.api.getRequestExample();
+  f.setFields({ publishParams: [{ paramName: "changed", paramScope: "request", paramType: "number" }] });
+  assert.equal(await f.api.generateExample("request", false), false);
+  assert.equal(await f.api.getRequestExample(), original);
+});
+
+test("explicit generation confirms replacement, updates only the chosen example and keeps other fields", async () => {
+  let allow = false, confirms = 0;
+  const f = contentFixture(async () => ({ orgId: "org" }), undefined, async () => {
+    confirms++; if (!allow) throw "cancel";
+  });
+  await f.api.setFormData({ name: "保留服务名", publishParams: [
+    { paramName: "count", paramScope: "response", paramType: "number", showcaseValue: "12" },
+  ], extendInfo: { requestExample: "manual request", responseExample: "manual response" } });
+  assert.equal(await f.api.generateExample("response"), false);
+  assert.equal(await f.api.getResponseExample(), "manual response");
+  allow = true;
+  assert.equal(await f.api.generateExample("response"), true);
+  assert.deepEqual(JSON.parse(await f.api.getResponseExample()), { count: 12 });
+  assert.equal(await f.api.getRequestExample(), "manual request");
+  assert.equal((await f.api.getFormData()).name, "保留服务名");
+  assert.equal(confirms, 2);
+});
+
+test("first editor visit generates once, and a deliberately cleared saved example stays empty on reload", async () => {
+  const f = contentFixture(async () => ({ orgId: "org" }));
+  await f.api.setFormData({});
+  f.setFields({ publishParams: [{ paramName: "q", paramScope: "request", paramType: "string", showcaseValue: "search" }] });
+  assert.equal(await f.api.generateExample("request", false), true);
+  assert.deepEqual(JSON.parse(await f.api.getRequestExample()), { q: "search" });
+  f.setFields({ requestExample: "" });
+  const saved = await f.api.getPayload();
+  saved.extendInfo.exampleInitialization = JSON.stringify(saved.extendInfo.exampleInitialization);
+  await f.api.setFormData(saved);
+  assert.equal(await f.api.getRequestExample(), "");
+  assert.equal(await f.api.generateExample("request", false), false);
+});
+
+test("a generation confirmation cannot overwrite a newly selected service", async () => {
+  let release;
+  const f = contentFixture(async () => ({ orgId: "org" }), undefined, () => new Promise((resolve) => { release = resolve; }));
+  await f.api.setFormData({ id: "a", extendInfo: { requestExample: "manual A" } });
+  const pending = f.api.generateExample("request");
+  await vue.nextTick();
+  await f.api.setFormData({ id: "b", extendInfo: { requestExample: "manual B" } });
+  release();
+  assert.equal(await pending, false);
+  assert.equal(await f.api.getRequestExample(), "manual B");
+});
+
+for (const count of [20, 100]) test(`${count} mixed parameter rows save with one write request and no per-row reads`, async () => {
+  const requests = [];
+  const f = contentFixture(async (url, body) => {
+    requests.push({ url, body });
+    return url === "/sym/user/me" ? { orgId: "org" } : { id: "saved" };
+  });
+  await f.api.setFormData({ publishParams: Array.from({ length: count }, (_, i) => ({
+    paramName: `p${i}`, paramType: "string", paramScope: i % 2 ? "response" : "request",
+  })) });
+  f.setFields({ name: "参数验证", address: "/validation/parameters" });
+  assert.equal(await f.api.handleSave(), true);
+  assert.equal(requests.length, 2);
+  const saved = requests[1].body.publishParams;
+  assert.equal(saved.length, count);
+  assert.equal(saved.filter((row) => row.res === 1).length, count / 2);
+  assert.equal(saved.filter((row) => row.res === 0).length, count / 2);
+});
 function formEditorFixture() {
   const source = fs
     .readFileSync(path.join(root, "lowcode/09.系统管理/1.3 表单配置页(form-config).vue"), "utf8")
@@ -1050,4 +1191,12 @@ test("creating a configuration selects the new record ID before subsequent editi
   const save = f.requests.filter((r) => r.url.endsWith("action=save")).at(-1);
   assert.equal(save.payload.tid, "new-form");
   assert.match(f.rows[1].formJson, /新增后编辑/);
+});
+
+for(const count of [20,100])test(`datasource workspace ${count} rows preserve the source for list, detail and every new draft`,async()=>{
+  const f=workspaceFixture(async(url,body)=>url.endsWith('/detail')?{id:body.apiId,datasourceId:'source-a',name:'已登记服务'}:{list:Array.from({length:count},(_,i)=>({id:'s'+i,serviceName:'服务'+i})),total:count},'source-a');
+  await f.api.loadServices(1,count);assert.equal(f.requests.length,1);assert.equal(f.requests[0].payload.datasourceId,'source-a');assert.equal(f.requests[0].payload.departmentOnly,false);
+  f.api.startWorkspace();await f.ready();assert.equal(f.api.editorData.value.datasourceId,'source-a');
+  await f.api.addDraft();assert.equal(f.api.editorData.value.datasourceId,'source-a');
+  await f.api.selectService({id:'s0'});assert.equal(f.requests.filter(r=>r.url.endsWith('/detail')).length,1);assert.equal(f.requests.find(r=>r.url.endsWith('/detail')).payload.datasourceId,'source-a');
 });

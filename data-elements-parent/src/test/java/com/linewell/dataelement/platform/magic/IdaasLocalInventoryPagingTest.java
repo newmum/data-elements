@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -18,7 +20,7 @@ class IdaasLocalInventoryPagingTest {
         var fixture=new Fixture();
         var small=fixture.read("users",20,"name");assertEquals(5,fixture.counter.count);
         fixture.counter.count=0;var large=fixture.read("users",100,"name");assertEquals(5,fixture.counter.count);
-        var rows=(List<Map<String,Object>>)large.get("list");
+        var rows=StructuredValues.objectRows(large.get("list"));
         assertEquals(100,rows.size());assertEquals(120,((Number)large.get("total")).intValue());
         assertEquals(((List<?>)small.get("list")),rows.subList(0,20));
         assertTrue(rows.stream().allMatch(r->String.valueOf(r.get("id")).startsWith("person-")));
@@ -70,7 +72,7 @@ class IdaasLocalInventoryPagingTest {
             String source=CanonicalMagicSources.byId("ddfd5d8289e95bbc85e62d8708f45b6d").replaceAll("(?m)^import [^\\r\\n]+;\\r?\\n","");
             String guard="var guard=(permission,appId,domain)=>{if(!allowed){throw new java.lang.IllegalArgumentException('Denied');}};\n";
             Object value=MagicScript.create(guard+source,null).execute(new MagicScriptContext(Map.of("db",sql,"identityRuntime",new Runtime(),"tableSort",new TableSortMagicModule(),"operation","page","allowed",allowed,"payload",Map.of("appId","app","domain","workforce","tenantId","tenant-b","kind",kind,"page",1,"size",size,"sortField",field,"sortDir","asc"))));
-            return (Map<String,Object>)assertInstanceOf(Map.class,value);
+            return StructuredValues.objectMap(assertInstanceOf(Map.class,value));
         }
     }
 }

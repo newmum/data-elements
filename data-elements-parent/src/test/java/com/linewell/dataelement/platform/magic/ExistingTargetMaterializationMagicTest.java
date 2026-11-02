@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
 import static org.junit.jupiter.api.Assertions.*;
 import com.linewell.dataelement.platform.magic.module.JsonModule;
 import java.util.*;
@@ -130,7 +132,7 @@ class ExistingTargetMaterializationMagicTest {
         public Map<String,Object> physical(Map<String,Object> request) {
             if(Boolean.TRUE.equals(request.get("validateOnly"))) return Map.of("valid",true);
             assertEquals(true,request.get("reuseExistingOnly"),"Existing table path must never request creation"); physicalCalls++;
-            var items=(List<Map<String,Object>>)request.get("tableItems");
+            var items=StructuredValues.objectRows(request.get("tableItems"));
             return Map.of("created",false,"physicalTableReused",true,"tableItems",items);
         }
         public Object getDocument(String index,String id) { return null; }

@@ -1,4 +1,5 @@
 import type { ReportReceipt,UploadField,UploadTable } from './uploadWorkbench';
+import {isTimeRoleCandidate,timeRolesFor,TIME_ROLE_OPTIONS,STANDARD_FORMAT_OPTIONS} from './fieldGovernance';
 
 // Same table categories and DATE/DATETIME contracts as datasource registration.
 export const REPORT_BUSINESS_TYPES=['业务表','日志表','字典表','过程表','备份表'];
@@ -8,8 +9,9 @@ export function reportFieldIssues(field:UploadField,fields:UploadField[]):string
   if(!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(field.columnName)||fields.filter(row=>row.columnName.toLowerCase()===field.columnName.toLowerCase()).length>1)issues.push('字段英文名无效或重复');
   if(!/[\u4e00-\u9fff]/.test(field.columnComment||''))issues.push('中文名须包含中文');
   if(!['varchar','char','text','int','bigint','decimal','float','double','date','datetime','timestamp','boolean'].includes(field.columnType.toLowerCase()))issues.push('重新选择字段数据类型');
-  if(field.isTimestamp&&!/^(date|datetime|timestamp)$/i.test(field.columnType)&&!field.standardField)issues.push('时间戳须选择日期/时间类型或统一格式');
-  if(field.standardField&&!['DATE','DATETIME'].includes(field.standardField))issues.push('统一格式无效');
+  if(timeRolesFor(field).length&&!isTimeRoleCandidate(field))issues.push('时间戳/时间属性须选择日期/时间类型或日期/时间统一格式');
+  if(field.timeRoles&&(!Array.isArray(field.timeRoles)||field.timeRoles.some(role=>!TIME_ROLE_OPTIONS.some(option=>option.value===role))||new Set(field.timeRoles).size!==field.timeRoles.length))issues.push('时间属性无效或重复');
+  if(field.standardField&&!STANDARD_FORMAT_OPTIONS.some(option=>option.value===field.standardField))issues.push('统一格式无效');
   if(field.timeFormat&&!['iso','ymd','dmy','mdy','unix-s','unix-ms'].includes(field.timeFormat))issues.push('日期时间来源格式无效');
   if(field.timezone&&!['Asia/Shanghai','Asia/Tokyo','UTC','source'].includes(field.timezone))issues.push('来源时区无效');
   return issues;
@@ -30,6 +32,7 @@ export function reportSchemaIssues(table:UploadTable,tables:UploadTable[]=[table
   });
   const timestamps=table.fields.filter(field=>field.isTimestamp).length;
   if(timestamps>1)issues.push('仅能设置一个时间戳字段');
+  for(const role of TIME_ROLE_OPTIONS)if(role.value!=='timestamp'&&table.fields.filter(field=>timeRolesFor(field).includes(role.value)).length>1)issues.push(`仅能设置一个${role.label}字段`);
   if(table.businessType==='字典表'&&(table.fields.filter(f=>f.dictionaryRole==='code').length!==1||table.fields.filter(f=>f.dictionaryRole==='label').length!==1))issues.push('分别指定一个字典代码列和名称列');
   return [...new Set(issues)];
 }

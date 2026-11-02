@@ -2,9 +2,11 @@ package com.linewell.dataelement.model.common;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.RequiredArgsConstructor;
 
 @Data
+@EqualsAndHashCode(callSuper = false)
 @Builder
 @RequiredArgsConstructor
 public class BaseBusinessException extends RuntimeException {

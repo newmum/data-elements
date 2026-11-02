@@ -19,6 +19,13 @@ public final class PushAccess {
                 Set.of("table-to-ftp", "table-to-kafka", "table-to-log"), Set.of());
     }
     public static boolean endpoint(String method, String path) {
+        String uploads="/api/v1/data-push/uploads";
+        if(method.equals("PUT")&&Set.of("/api/v1/data-push","/api/v1/data-push/single").contains(path))return true;
+        if(path.equals(uploads))return method.equals("POST");
+        if(path.matches(uploads+"/[a-fA-F0-9-]{36}"))return method.equals("GET");
+        if(path.matches(uploads+"/[a-fA-F0-9-]{36}/parts"))return method.equals("GET");
+        if(path.matches(uploads+"/[a-fA-F0-9-]{36}/parts/[0-9]+"))return method.equals("PUT");
+        if(path.matches(uploads+"/[a-fA-F0-9-]{36}/complete"))return method.equals("POST");
         if (method.equals("POST") && Set.of("/api/v1/data-push", "/api/v1/simple/ftp",
                 "/api/v1/simple/kafka", "/api/v1/simple/log", "/push-operations/data-push",
                 "/push-operations/template-test", "/push-operations/message-status").contains(path)) return true;

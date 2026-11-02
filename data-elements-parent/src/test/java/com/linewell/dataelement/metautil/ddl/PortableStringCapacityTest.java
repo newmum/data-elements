@@ -1,5 +1,9 @@
 package com.linewell.dataelement.metautil.ddl;
 
+import com.linewell.dataelement.utils.StructuredValues;
+
+import com.linewell.dataelement.support.TestValues;
+
 import com.fasterxml.jackson.databind.*;
 import com.linewell.dataelement.metautil.explorer.impl.MySqlMetadataExplorer;
 import com.linewell.dataelement.metautil.model.dto.*;
@@ -51,15 +55,15 @@ class PortableStringCapacityTest {
         c.setLength(200L);assertEquals("VARCHAR2(200 CHAR)",PortableColumnType.render(DatabaseType.OCEANBASE_ORACLE,c,c.getColumnType()),"Editing length must override the source's old byte capacity");
         for(var target:List.of(DatabaseType.ORACLE,DatabaseType.OCEANBASE_ORACLE,DatabaseType.DAMENG,DatabaseType.SQLSERVER,DatabaseType.DB2)) {
             var cfg=config(target);var original=column("postgresql","VARCHAR(50)",50);
-            var first=(List<ColumnInfo>)converter.prepare(List.of(original),cfg).get("columns");
-            var second=(List<ColumnInfo>)converter.prepare(first,cfg).get("columns");
+            var first=TestValues.list(converter.prepare(List.of(original),cfg).get("columns"), ColumnInfo.class);
+            var second=TestValues.list(converter.prepare(first,cfg).get("columns"), ColumnInfo.class);
             assertEquals(first.getFirst().getColumnType(),second.getFirst().getColumnType());
             String ddl=new MySqlMetadataExplorer().generateCreateTableDdl(cfg,"ODS_STRING",first,"");
             assertThat(ddl).contains(first.getFirst().getColumnType());
             var mapper=new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
             var row=((List<?>)converter.items(first)).getFirst();
             var roundtrip=mapper.convertValue(row,ColumnInfo.class);
-            assertEquals(first.getFirst().getColumnType(),((List<ColumnInfo>)converter.prepare(List.of(roundtrip),cfg).get("columns")).getFirst().getColumnType(),target.toString());
+            assertEquals(first.getFirst().getColumnType(),(TestValues.list(converter.prepare(List.of(roundtrip),cfg).get("columns"), ColumnInfo.class)).getFirst().getColumnType(),target.toString());
             assertEquals("VARCHAR(50)",original.getColumnType());assertEquals(50,original.getLength());
         }
     }
@@ -75,26 +79,26 @@ class PortableStringCapacityTest {
         assertEquals("CLOB",PortableColumnType.render(cfg,column("postgresql","VARCHAR(2000)",2000),"VARCHAR(2000)"));
         cfg.setCharset("WE8ISO8859P1");
         var result=converter.prepare(List.of(column("postgresql","VARCHAR(2000)",2000)),cfg);
-        assertEquals("VARCHAR2(2000 CHAR)",((List<ColumnInfo>)result.get("columns")).getFirst().getColumnType());
-        assertTrue(((List<Map<String,Object>>)result.get("warnings")).stream().anyMatch(w->Boolean.TRUE.equals(w.get("requiresEdit"))));
+        assertEquals("VARCHAR2(2000 CHAR)",(TestValues.list(result.get("columns"), ColumnInfo.class)).getFirst().getColumnType());
+        assertTrue((StructuredValues.objectRows(result.get("warnings"))).stream().anyMatch(w->Boolean.TRUE.equals(w.get("requiresEdit"))));
         cfg.setCharset("UTF8");assertEquals("VARCHAR2(1000 CHAR)",PortableColumnType.render(cfg,column("postgresql","VARCHAR(500)",500),"VARCHAR(500)"));
         cfg.setNationalCharset("AL16UTF16");assertEquals("NVARCHAR2(2000)",PortableColumnType.render(cfg,column("sqlserver","NVARCHAR(2000)",2000),"NVARCHAR(2000)"));
     }
     @Test void mysqlAccountsForTheWholeRowAndNeverChangesAKeyToLobSilently() {
         var columns=new ArrayList<ColumnInfo>();var key=column("postgresql","VARCHAR(32)",32);key.setColumnName("id");key.setPrimaryKey(true);columns.add(key);
         for(int i=0;i<100;i++){var c=column("postgresql","VARCHAR(255)",255);c.setColumnName("f"+i);columns.add(c);}
-        var prepared=converter.prepare(columns,DatabaseType.MYSQL);var output=(List<ColumnInfo>)prepared.get("columns");
+        var prepared=converter.prepare(columns,DatabaseType.MYSQL);var output=TestValues.list(prepared.get("columns"), ColumnInfo.class);
         assertEquals("VARCHAR(32)",output.getFirst().getColumnType());assertTrue(output.stream().anyMatch(c->c.getColumnType().equals("LONGTEXT")));
         assertEquals("VARCHAR(255)",columns.getLast().getColumnType());
         var defaultText=column("postgresql","TEXT",0);defaultText.setDefaultValue("'unchanged'");
-        assertTrue(((List<Map<String,Object>>)converter.prepare(List.of(defaultText),DatabaseType.MYSQL).get("warnings")).stream().anyMatch(w->Boolean.TRUE.equals(w.get("requiresEdit"))));
+        assertTrue((StructuredValues.objectRows(converter.prepare(List.of(defaultText),DatabaseType.MYSQL).get("warnings"))).stream().anyMatch(w->Boolean.TRUE.equals(w.get("requiresEdit"))));
         var huge=column("postgresql","VARCHAR(1001)",1001);huge.setPrimaryKey(true);
-        assertTrue(((List<Map<String,Object>>)converter.prepare(List.of(huge),DatabaseType.ORACLE).get("warnings")).stream().anyMatch(w->Boolean.TRUE.equals(w.get("requiresEdit"))));
+        assertTrue((StructuredValues.objectRows(converter.prepare(List.of(huge),DatabaseType.ORACLE).get("warnings"))).stream().anyMatch(w->Boolean.TRUE.equals(w.get("requiresEdit"))));
     }
     @Test void generatedDdlAndExecutionParserPreserveCharUnitsForTwentyAndHundredColumns() {
         for(int count:List.of(20,100))for(var target:List.of(DatabaseType.ORACLE,DatabaseType.OCEANBASE_ORACLE,DatabaseType.DAMENG,DatabaseType.SQLSERVER,DatabaseType.DB2,DatabaseType.MYSQL)) {
             var original=new ArrayList<ColumnInfo>();for(int i=0;i<count;i++){var c=column("postgresql","VARCHAR(50)",50);c.setColumnName("f"+i);original.add(c);}
-            var cfg=config(target);var columns=(List<ColumnInfo>)converter.prepare(original,cfg).get("columns");
+            var cfg=config(target);var columns=TestValues.list(converter.prepare(original,cfg).get("columns"), ColumnInfo.class);
             String ddl=new MySqlMetadataExplorer().generateCreateTableDdl(cfg,"ODS_STRING",columns,"");
             String executed=new CanvasTableDdl().parse(ddl,cfg).get("ddl").toString();
             String fragment=switch(target){case SQLSERVER->"NVARCHAR(100)";case DB2->"VARCHAR(200OCTETS)";case MYSQL->"VARCHAR(50)";default->"50CHAR";};
@@ -122,7 +126,7 @@ class PortableStringCapacityTest {
         String ddl="CREATE TABLE ODS.TEST_UNITS (a VARCHAR(200 OCTETS) DEFAULT 'VARCHAR(9 OCTETS)', b CHAR(50 CODEUNITS32), c DECIMAL(12,2), d CHARACTER VARYING(25 OCTETS))";
         var parsed=new CanvasTableDdl().parse(ddl,config(DatabaseType.DB2));
         assertThat(parsed.get("ddl").toString()).contains("VARCHAR(200 OCTETS)","CHAR(50 CODEUNITS32)","'VARCHAR(9 OCTETS)'","DECIMAL(12, 2)","VARCHAR(25 OCTETS)");
-        var columns=(List<ColumnInfo>)converter.read(ddl,"db2").get("columns");
+        var columns=TestValues.list(converter.read(ddl,"db2").get("columns"), ColumnInfo.class);
         assertEquals(200L,columns.getFirst().getLength());
         assertEquals("VARCHAR(200 OCTETS)",columns.getFirst().getColumnType());
         var ast=(com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement)PortableSqlParser.parse(ddl,DatabaseType.DB2).getFirst();

@@ -147,7 +147,7 @@ class HuaweiHiveTargetDeletionMagicTest {
         configureNonHive();
         var table = new com.linewell.dataelement.metautil.model.dto.TableInfo();
         table.setTableName("ods_person");
-        when(explorer.getTableDirectory(any())).thenReturn(List.of(table), List.of(table), List.of());
+        when(explorer.getTableDirectory(any())).thenReturn(List.of(table)).thenReturn(List.of(table)).thenReturn(List.of());
         Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
         assertEquals(true, result.get("targetPhysicalDeleted"));
         assertEquals(false, result.get("targetHivePhysicalRetained"));
@@ -435,7 +435,7 @@ class HuaweiHiveTargetDeletionMagicTest {
     @Test
     void confirmedUnlinkedTargetDeleteLeavesOtherSourceTasksUntouched() throws Exception {
         prepareUnlinkedTargetWithAnotherActiveTask();
-        when(hive.showTables("target_db")).thenReturn(List.of("ods_person"), List.of("ods_person"), List.of());
+        when(hive.showTables("target_db")).thenReturn(List.of("ods_person")).thenReturn(List.of("ods_person")).thenReturn(List.of());
         Map<String, Object> request = request();
         request.put("confirmUnlinkedTarget", true);
 
