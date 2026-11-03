@@ -1819,12 +1819,30 @@ for (targetIndex, targetCandidate in [targetTable]) {
             updateKeys: candidateTargetPrimaryKeys
         }
     }
+    // Persist topology on the sink: each independently saved hop has only one sink.
+    // Top-level accessChain alone is not retained by the Java DSL model/editor.
+    candidateSinkConfig.accessChain = {
+        downstreamHive: !firstHop && normalizeSinkType(candidateTargetDbType, candidateTargetCfg) == 'HIVE',
+        rootSourceTableId: rootSourceTableId,
+        sourceTableId: sourceTableId,
+        targetTableId: candidateTargetId,
+        targetCount: targetTableIds.size(),
+        targetDatasourceCount: targetDatasourceIds.size(),
+        targetIndex: targetTableIds.indexOf(candidateTargetId)
+    }
+    var downstreamRawHive = !firstHop && normalizeSinkType(candidateTargetDbType, candidateTargetCfg) == 'HIVE'
+    if (downstreamRawHive) {
+        // Store the actual executable topology, rather than relying on a newer
+        // editor/compiler to hide a generated governance node after creation.
+        dslNodes = [dslNodes[0]]
+        dslEdges = []
+    }
     var partitionGovernance = governanceConfigOf(targetCandidate)
     if (partitionGovernance?.partitionPlan?.enabled == true) {
         candidateSinkConfig.partitionPlan = partitionGovernance.partitionPlan
         if (candidateIsHuaweiMrsHive) {
             candidateSinkConfig.partitionInputField = partitionGovernance.partitionPlan.field
-            for (partitionTargetColumn in (candidateTargetColumns == null ? [] : candidateTargetColumns)) {
+            for (partitionTargetColumn in (downstreamRawHive && candidateTargetColumns != null ? candidateTargetColumns : [])) {
                 if (text(colName(partitionTargetColumn)).toLowerCase() != text(partitionGovernance.partitionPlan.field).toLowerCase()) { continue }
                 var matchedPartitionSource = sourceColumnMap[text(colName(partitionTargetColumn)).toLowerCase()]
                 if (matchedPartitionSource != null) { candidateSinkConfig.partitionInputField = colName(matchedPartitionSource) }
@@ -1840,7 +1858,7 @@ for (targetIndex, targetCandidate in [targetTable]) {
         y: 120 + targetIndex * 300,
         config: candidateSinkConfig
     })
-    dslEdges.add({ id: 'edge-map-sink-' + candidateTargetId, source: mapNodeId, target: candidateSinkId, outlet: null })
+    dslEdges.add({ id: 'edge-map-sink-' + candidateTargetId, source: downstreamRawHive ? sourceNodeId : mapNodeId, target: candidateSinkId, outlet: null })
     targetSummaries.add({
         targetTableId: candidateTargetId,
         targetTableName: candidateTargetTableName,

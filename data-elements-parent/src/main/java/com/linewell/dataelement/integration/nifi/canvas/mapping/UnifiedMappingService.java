@@ -51,9 +51,47 @@ public class UnifiedMappingService {
             ObjectNode draft=entry.getValue();ArrayNode rules=byNode.getOrDefault(entry.getKey(),JSON.createArrayNode());draft.set("rules",rules);Set<String> used=new HashSet<>();dictionaryReferences(rules,used);ObjectNode bindings=JSON.createObjectNode();
             resolved.path("dictionaryBindings").fields().forEachRemaining(binding->{if(used.contains(binding.getKey())||specifications.size()==1&&rules.isEmpty())bindings.set(binding.getKey(),binding.getValue());});draft.set("dictionaryBindings",bindings);
             applyRegisteredTemporalInputs(draft);
-            var plan=MappingEngine.compile(draft);Map<String,Map<String,Object>>localConnections=new LinkedHashMap<>();plan.dictionaries().values().forEach(dictionary->localConnections.put(dictionary.datasourceId(),connections.get(dictionary.datasourceId())));ObjectNode localSnapshots=JSON.createObjectNode();bindings.forEach(binding->{String id=binding.path("snapshotId").asText();if(snapshots.has(id))localSnapshots.set(id,snapshots.get(id));});compiled.put(entry.getKey(),new Compiled(plan,localConnections,localSnapshots));contracts.put(entry.getKey(),plan.document().path("schemaContract"));
+            applyOdsTimestampTargets(draft);
+            MappingEngine.Plan plan;
+            try{plan=MappingEngine.compile(draft);}catch(MappingException error){throw describeTargetTypeMismatch(draft,error);}
+            Map<String,Map<String,Object>>localConnections=new LinkedHashMap<>();plan.dictionaries().values().forEach(dictionary->localConnections.put(dictionary.datasourceId(),connections.get(dictionary.datasourceId())));ObjectNode localSnapshots=JSON.createObjectNode();bindings.forEach(binding->{String id=binding.path("snapshotId").asText();if(snapshots.has(id))localSnapshots.set(id,snapshots.get(id));});compiled.put(entry.getKey(),new Compiled(plan,localConnections,localSnapshots));contracts.put(entry.getKey(),plan.document().path("schemaContract"));
         }
         return compiled;
+    }
+    /** Old materialization templates called timestamp audit columns DATE. Repair only their
+     * untouched clock generators, after the existing batch schema/authorization check above.
+     * The emitted plan is ordinary DATETIME and runs on the existing NiFi mapping engine. */
+    static void applyOdsTimestampTargets(ObjectNode draft) {
+        Map<String,JsonNode> targets=new HashMap<>();
+        draft.path("schemaContract").path("target").forEach(field->targets.put(field.path("name").asText(),field));
+        for(JsonNode rule:draft.path("rules")) {
+            JsonNode output=rule.path("target");String name=output.path("name").asText();JsonNode physical=targets.get(name);
+            if(!(output instanceof ObjectNode target)||physical==null
+                    ||!Set.of("ODS_RKSJ","ODS_GXSJ").contains(name.toUpperCase(Locale.ROOT))
+                    ||!ValueTypes.type(output.path("logicalType").asText()).equals("DATE")
+                    ||!ValueTypes.type(physical.path("logicalType").asText()).equals("DATETIME")
+                    ||physical.path("registeredFormat").asText().equals("DATE")
+                    ||rule.hasNonNull("when")||!rule.path("steps").isArray()||!rule.path("steps").isEmpty())continue;
+            JsonNode input=rule.path("input");String kind=input.path("kind").asText();
+            boolean clock=kind.equals("SYSTEM")&&input.path("generator").asText().equals("NOW")
+                    ||kind.equals("EXPRESSION")&&Set.of("LOCALTIMESTAMP","CURRENT_TIMESTAMP").contains(input.path("expression").asText().trim().toUpperCase(Locale.ROOT));
+            if(clock)target.put("logicalType","DATETIME");
+        }
+    }
+    private static MappingException describeTargetTypeMismatch(ObjectNode draft,MappingException error) {
+        if(!error.code().equals("TARGET_TYPE_MISMATCH"))return error;
+        for(JsonNode rule:draft.path("rules")) {
+            String name=rule.path("target").path("name").asText();
+            if(name.isBlank()||!error.getMessage().endsWith("："+name))continue;
+            for(JsonNode physical:draft.path("schemaContract").path("target"))if(physical.path("name").asText().equals(name)) {
+                String expected=ValueTypes.type(physical.path("logicalType").asText());
+                return new MappingException(error.code(),error.getMessage()+"（规则输出："
+                        +ValueTypes.type(rule.path("target").path("logicalType").asText())+"；目标物理列："
+                        +physical.path("physicalType").asText(expected)+"，逻辑类型："+expected
+                        +"）。请核对规则输出类型；需要转换时请显式配置转换步骤。",error);
+            }
+        }
+        return error;
     }
     private static final java.util.regex.Pattern REGISTERED_TEMPORAL_CAST=java.util.regex.Pattern.compile(
             "CAST\\(NULLIF\\(TRIM\\(CAST\\(\\$\\{field:([^}]+)}ASVARCHAR\\)\\),''\\)AS(?:DATE|TIMESTAMP)\\)",java.util.regex.Pattern.CASE_INSENSITIVE);

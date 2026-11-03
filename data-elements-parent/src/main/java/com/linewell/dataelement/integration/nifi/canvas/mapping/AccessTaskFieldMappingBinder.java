@@ -69,6 +69,10 @@ public class AccessTaskFieldMappingBinder {
         if (task == null || isBlank(task.getTid())) {
             return pipeline;
         }
+        pipeline = bindLegacyDownstreamHive(pipeline, task);
+        activeMappings=com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forPublication(pipeline).dsl().nodes().stream()
+                .filter(this::isFieldMappingNode).map(Pipeline.Node::id).collect(java.util.stream.Collectors.toSet());
+        if(activeMappings.isEmpty())return com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forPublication(pipeline);
         List<DataAccessFieldMapping> rules = fieldMappingService.list(
                 new LambdaQueryWrapper<DataAccessFieldMapping>()
                         .eq(DataAccessFieldMapping::getTaskId, task.getTid())
@@ -115,6 +119,26 @@ public class AccessTaskFieldMappingBinder {
                 pipeline.updatedAt(), new Pipeline.Dsl(pipeline.dsl().version(), List.copyOf(nodes), pipeline.dsl().edges()),
                 pipeline.nifiProcessGroupId(), pipeline.status(), pipeline.lastDeployedHash(),
                 pipeline.lastDeployedAt(), pipeline.lastStoppedAt(), pipeline.nodeMapping(), pipeline.lastBulletinId());
+    }
+    /** Explicit deploy/start compatibility for tasks whose editor once dropped all chain metadata.
+     * One bounded upstream query covers every Hive node; no query is issued per node or field. */
+    private Pipeline bindLegacyDownstreamHive(Pipeline pipeline,DataAccessAggTaskT task) {
+        if(isBlank(task.getSourceTableId())||isBlank(task.getTargetTableId())||isBlank(task.getSourceDbId())
+                ||pipeline.dsl().nodes().stream().noneMatch(node->
+                    com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.isHiveSink(node)
+                    &&node.config()!=null&&task.getTargetTableId().equals(String.valueOf(node.config().get("targetTableId")))))return pipeline;
+        String tenant=com.linewell.dataelement.platform.tenant.domain.TenantContext.requireTenantId();
+        if(!tenant.equals(task.getTenantId()))throw new IllegalStateException("接入任务不属于当前租户");
+        var page=taskService.page(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<DataAccessAggTaskT>(1,2,false),
+                new LambdaQueryWrapper<DataAccessAggTaskT>().eq(DataAccessAggTaskT::getTenantId,tenant)
+                        .eq(DataAccessAggTaskT::getIsDel,0).eq(DataAccessAggTaskT::getTargetTableId,task.getSourceTableId())
+                        .eq(DataAccessAggTaskT::getTargetDbId,task.getSourceDbId()).ne(DataAccessAggTaskT::getTid,task.getTid()));
+        if(page==null||page.getRecords().size()!=1)return pipeline;
+        var upstream=page.getRecords().getFirst();
+        if(!tenant.equals(upstream.getTenantId())||!task.getSourceTableId().equals(upstream.getTargetTableId())
+                ||!task.getSourceDbId().equals(upstream.getTargetDbId())||isBlank(upstream.getSourceTableId())
+                ||upstream.getSourceTableId().equals(task.getSourceTableId()))return pipeline;
+        return com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.downstreamTask(pipeline,task.getSourceTableId(),task.getTargetTableId());
     }
 
     private boolean needsBinding(JsonNode mappings, List<DataAccessFieldMapping> rules,

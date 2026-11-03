@@ -248,6 +248,9 @@ export default function EditorPage() {
       <Toolbar />
       {chain?.readOnly && chain.selectedPipelineId === currentPipelineId && <Alert type="warning" showIcon message="已打开当前任务保存的画布（只读）"
         description={`${chain.warnings?.join('；') || '任务关联需要核对'}。当前仅展示已保存的节点与连线，不允许保存、部署或启动。`} />}
+      {chain?.relationshipUnavailable && !chain.readOnly && chain.selectedPipelineId === currentPipelineId && <Alert type="warning" showIcon
+        message="关联链路未能完整加载，当前仅显示所选任务"
+        description={`${chain.warnings?.join('；') || '任务关联需要核对'}。下游任务可能仍然存在；请核对关联后重新打开画布。当前任务仍可编辑。`} />}
       <div className="canvas-workarea">
         <div className="canvas-workarea__graph"><Canvas /></div>
         <Suspense fallback={null}>{drawerNodeId && <ConfigDrawer />}</Suspense>

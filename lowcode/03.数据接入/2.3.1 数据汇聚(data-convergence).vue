@@ -221,7 +221,7 @@
                 <el-tag :type="accessStatusType(row)" size="small">{{ row.accessStatusText || '状态待确认' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" fixed="right" width="104" align="center" header-align="center">
+            <el-table-column label="操作" fixed="right" width="98" align="center" header-align="center">
               <template #default="{ row }">
                 <el-button
                   v-if="!row.taskCount"
@@ -1612,11 +1612,12 @@ onUnmounted(() => {
 .list-filters {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
+  text-align: left;
   gap: 10px;
-  flex: 1 1 374px;
+  flex: 0 1 auto;
   min-width: 0;
-  margin-left: 0;
+  margin-left: auto;
 }
 
 .keyword-input {

@@ -23,6 +23,33 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class AccessTaskFieldMappingBinderTest {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints={20,100})
+    void legacyDownstreamHiveWithoutAnyMetadataUsesOneBoundedTaskQueryAndNoFieldRuleRead(int count) {
+        var tasks=mock(IDataAccessAggTaskTService.class);var mappings=mock(IDataAccessFieldMappingService.class);
+        var current=new DataAccessAggTaskT().setTid("downstream").setTenantId("ga").setSourceTableId("staging").setSourceDbId("ods-db").setTargetTableId("raw");
+        when(tasks.findByPipelineId("p")).thenReturn(current);
+        var upstream=new DataAccessAggTaskT().setTid("upstream").setTenantId("ga").setSourceTableId("business").setTargetTableId("staging").setTargetDbId("ods-db");
+        var page=new com.baomidou.mybatisplus.extension.plugins.pagination.Page<DataAccessAggTaskT>(1,2,false);page.setRecords(List.of(upstream));
+        when(tasks.page(org.mockito.ArgumentMatchers.<com.baomidou.mybatisplus.extension.plugins.pagination.Page<DataAccessAggTaskT>>any(),any())).thenReturn(page);
+        var nodes=new java.util.ArrayList<Pipeline.Node>();var edges=new java.util.ArrayList<Pipeline.Edge>();
+        nodes.add(new Pipeline.Node("s","source.mysql","s","source",0,0,Map.of("sourceTableId","staging")));
+        String previous="s";
+        for(int i=0;i<count;i++){String id="m"+i;nodes.add(new Pipeline.Node(id,"transform.field-enrichment",id,"transform",0,0,Map.of()));edges.add(new Pipeline.Edge("e"+i,previous,id,"default"));previous=id;}
+        nodes.add(new Pipeline.Node("h","sink.hive","h","sink",0,0,Map.of("targetTableId","raw")));edges.add(new Pipeline.Edge("last",previous,"h","default"));
+        var pipeline=new Pipeline("p","p",null,1L,1L,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null);
+        try(var tenant=com.linewell.dataelement.platform.tenant.domain.TenantContext.use("ga")) {
+            var result=new AccessTaskFieldMappingBinder(tasks,mappings).bind(pipeline);
+            assertEquals(List.of("s","h"),result.dsl().nodes().stream().map(Pipeline.Node::id).toList());
+            assertEquals(1,result.dsl().edges().size());
+        }
+        org.mockito.Mockito.verify(tasks,org.mockito.Mockito.times(1)).page(any(),any());
+        org.mockito.Mockito.verifyNoInteractions(mappings);
+        upstream.setTenantId("other");
+        try(var tenant=com.linewell.dataelement.platform.tenant.domain.TenantContext.use("ga")) {
+            assertSame(pipeline,new AccessTaskFieldMappingBinder(tasks,mappings).bind(pipeline),"A foreign upstream can never establish downstream identity");
+        }
+    }
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -32,7 +59,7 @@ class AccessTaskFieldMappingBinderTest {
         var tasks=mock(IDataAccessAggTaskTService.class);var mappings=mock(IDataAccessFieldMappingService.class);
         var nodes=new java.util.ArrayList<Pipeline.Node>();var edges=new java.util.ArrayList<Pipeline.Edge>();
         nodes.add(new Pipeline.Node("source","source.mysql","source","source",0,0,Map.of()));
-        nodes.add(new Pipeline.Node("hive","sink.hive","hive","sink",0,0,Map.of()));
+        nodes.add(com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveDownstreamFixtures.rawTarget(new Pipeline.Node("hive","sink.hive","hive","sink",0,0,Map.of())));
         for(int i=0;i<count;i++) {
             nodes.add(new Pipeline.Node("mapping"+i,"transform.field-enrichment","mapping","transform",0,0,Map.of()));
             edges.add(new Pipeline.Edge("in"+i,i==0?"source":"mapping"+(i-1),"mapping"+i,"default"));

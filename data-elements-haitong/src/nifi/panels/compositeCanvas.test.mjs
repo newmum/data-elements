@@ -24,6 +24,33 @@ test('two task designs are visible together but only selected design retains exe
   assert.deepEqual(Object.keys(result.edges).filter(key => !result.edges[key].readonly), ['edge']);
 });
 
+test('downstream Hive bypass removes only its governance node while both task lanes and their table link survive', () => {
+  const context = chain(2), first = context.items[0].pipeline.dsl, downstream = context.items[1].pipeline.dsl;
+  for (const graph of [first, downstream]) {
+    graph.nodes.splice(1, 0, { id: 'mapping', category: 'transform', label: '字段治理', manifestKey: 'transform.field-enrichment', x: 250, y: 120, config: {} });
+    graph.edges = [{ id: 'read-map', source: 'source', target: 'mapping' }, { id: 'map-write', source: 'mapping', target: 'target' }];
+  }
+  first.nodes[2].manifestKey = 'sink.jdbc';
+  first.nodes[2].config = { targetTableId: 'staging' };
+  downstream.nodes[0].config = { sourceTableId: 'staging' };
+  downstream.nodes[2].config = { targetTableId: 'raw', accessChain: {
+    rootSourceTableId: 'business', sourceTableId: 'staging', targetTableId: 'raw',
+    targetCount: 2, targetDatasourceCount: 2, targetIndex: 1,
+  } };
+  context.links = [{ fromTaskId: 'task0', toTaskId: 'task1', tableId: 'staging' }];
+  const original = structuredClone(context);
+  for (const selected of ['p0', 'p1']) {
+    const current = context.items.find(item => item.pipeline.id === selected).pipeline.dsl;
+    const display = buildCompositeCanvas(context, selected, current);
+    const lanes = Object.values(display.nodes);
+    assert.equal(lanes.filter(node => node.pipelineId === 'p0').length, 3);
+    assert.equal(lanes.filter(node => node.pipelineId === 'p1').length, 2);
+    assert.ok(lanes.some(node => node.pipelineId === 'p1' && node.node.manifestKey === 'sink.hive'));
+    assert.equal(display.edges['chain-link:task0:task1'].relationship, true);
+  }
+  assert.deepEqual(context, original, 'Display projection never deletes or rewrites either saved task');
+});
+
 test('moving selected display nodes maps back to the original coordinates and contextual drafts are preserved', () => {
   const context = chain(2), draft = dsl(); draft.nodes[0].config.table = 'edited';
   const result = buildCompositeCanvas(context, 'p1', draft, { p0: draft });

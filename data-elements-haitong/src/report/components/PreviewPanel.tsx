@@ -50,7 +50,7 @@ export default function PreviewPanel({ resource: r, dictionaries, onEdit, onDele
                 return <Tooltip title={display(value)}><span tabIndex={0} className={`data-cell ${changed ? 'changed-cell' : ''}`}><span>{display(value)}</span>{label && <small className="dictionary-label">{label}</small>}</span></Tooltip>;
             },
         })),
-        ...(!readOnly||showDeliveryStatus?[{ title: showDeliveryStatus?<Tooltip title="按整份上报文件的真实投递回执展示；目标系统尚未回传逐行入库结果">上报结果</Tooltip>:'同步状态', key: 'sync', width: 120, fixed: 'right' as const, render: (_: unknown, row: DataRow) => {
+        ...(!readOnly||showDeliveryStatus?[{ title: showDeliveryStatus?<Tooltip title="按整份上报文件的真实投递回执展示；目标系统尚未回传逐行入库结果">上报结果</Tooltip>:'同步状态', key: 'sync', width: showDeliveryStatus ? 108 : 120, align: 'center' as const, fixed: 'right' as const, render: (_: unknown, row: DataRow) => {
             const state = r.sync[row.id] || 'idle';
             return <span className={`status-pill ${state === 'success' ? 'success' : state === 'failed' ? 'error' : state === 'idle' ? 'neutral' : 'blue'}`}><i />{statusLabels[state]}</span>;
         } }]:[]),

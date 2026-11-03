@@ -34,6 +34,41 @@ import org.ssssssss.script.runtime.ExitValue;
 class DataAggTaskEnsureBatchMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_task_ensure_01";
 
+    @ParameterizedTest @CsvSource({"1,0,false","2,0,false","2,1,true"})
+    void materializedHiveUsesGovernanceOnlyOnTheFirstOrSingleTarget(int count,int targetIndex,boolean raw) throws Exception {
+        var f=new Fixture(count);f.prepareCreation();
+        f.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg=? where tid like 'target-db-%'",
+                "{\"hiveProfile\":\"default\",\"database\":\"ods\"}");
+        assertInstanceOf(Map.class,f.run());
+        String saved=f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id=?",String.class,"target-"+targetIndex);
+        var json=new com.fasterxml.jackson.databind.ObjectMapper().configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,false);
+        var dsl=json.readValue(saved,com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline.Dsl.class);
+        var sink=dsl.nodes().stream().filter(n->n.category().equals("sink")).findFirst().orElseThrow();
+        assertEquals(!raw,dsl.nodes().stream().anyMatch(n->n.manifestKey().equals("transform.field-enrichment")),"The persisted DSL itself must omit governance for downstream Hive");
+        if(raw) {
+            assertEquals(2,dsl.nodes().size());assertEquals(1,dsl.edges().size());
+            assertEquals(dsl.nodes().getFirst().id(),dsl.edges().getFirst().source());
+            assertEquals(sink.id(),dsl.edges().getFirst().target());
+        }
+        assertEquals(raw,com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.bypassesGovernance(sink));
+        var projected=com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forPublication(dsl);
+        assertEquals(!raw,projected.nodes().stream().anyMatch(n->n.manifestKey().equals("transform.field-enrichment")));
+        assertEquals(targetIndex,((Map<?,?>)sink.config().get("accessChain")).get("targetIndex"));
+    }
+
+    @Test void hiveChainContextUsesFixedReadCountForTwentyAndHundredTargets() throws Exception {
+        var reads=new ArrayList<Integer>();
+        for(int count:List.of(20,100)) {
+            var f=new Fixture(count);f.prepareCreation();
+            f.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg=? where tid like 'target-db-%'",
+                    "{\"hiveProfile\":\"default\",\"database\":\"ods\"}");
+            assertInstanceOf(Map.class,f.run());reads.add(f.counter.queries);
+            assertEquals(count,f.jdbc.queryForObject("select count(*) from nifi_pipeline_t",Integer.class));
+        }
+        assertEquals(reads.getFirst(),reads.getLast());
+        System.out.println("Hive chain 20/100 targets: SQL reads="+reads);
+    }
+
     @Test
     void creatingTaskAcceptsPendingApplicationButDryRunDoesNot() throws Exception {
         var f = new Fixture(1); f.prepareCreation();
@@ -254,6 +289,10 @@ class DataAggTaskEnsureBatchMagicTest {
             var config=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'",String.class)).getJSONArray("nodes").getJSONObject(0).getJSONObject("config");
             assertEquals("DELETE_AFTER_DATABASE_COMMIT",config.getStr("fileConsumptionPolicy"));
             assertEquals("/incoming/source-db/person/",config.getStr("remotePath"));
+            assertEquals("source-db",config.getStr("sourceDbId"));
+            assertEquals("source-db",config.getStr("logicalSourceDatasourceId"));
+            assertEquals("files",config.getStr("registeredDatasourceId"));
+            assertEquals("source-db",f.jdbc.queryForObject("select source_db_id from data_access_agg_task_t where target_table_id='target-0'",String.class));
             var last=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id=?",String.class,"target-"+(size-1)));
             assertEquals("updated_at",last.getJSONArray("nodes").getJSONObject(0).getJSONObject("config").getStr("incrementalColumn"));
             var first=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'",String.class));

@@ -11,7 +11,7 @@ import java.util.Set;
 /** Registration is optional; explicit registered resources still require authorization. */
 public final class PipelineResourceReferences {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final List<String> SOURCES = List.of("registeredDatasourceId", "selectedDatabaseId", "sourceDbId",
+    private static final List<String> SOURCES = List.of("registeredDatasourceId", "logicalSourceDatasourceId", "selectedDatabaseId", "sourceDbId",
             "targetDbId", "dbId", "datasourceId", "dataSourceId", "source_db_id", "target_db_id", "datasource_id");
     private static final List<String> TABLES = List.of("sourceTableId", "targetTableId", "registeredTableId",
             "tableId", "source_table_id", "target_table_id", "table_id");

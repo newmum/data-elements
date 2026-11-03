@@ -577,3 +577,18 @@ body.ht-report-active .preview-panel--sheet .data-cell:focus-visible{outline:2px
 body.ht-report-active .restored-report .portal-main{padding-bottom:16px;}
 
 body.ht-report-active .preview-toolbar>.preview-delivery-summary{margin:0;flex:0 1 auto;min-width:0;align-self:center;}
+
+/* Compact preview tools and table share the dialog's single content gutter. */
+body.ht-report-active .preview-panel--compact .preview-table{margin:0;}
+body.ht-report-active .report-time-source-settings{border-top:1px solid #e8edf5;padding-top:10px;}
+body.ht-report-active .report-time-source-settings summary{cursor:pointer;color:#6c809c;font-size:12px;}
+body.ht-report-active .report-time-source-settings summary:focus-visible{outline:2px solid #1d4ed8;outline-offset:3px;}
+body.ht-report-active .report-time-source-settings label{display:flex;flex-direction:column;gap:6px;margin-top:12px;font-size:12px;color:#6c809c;}
+body.ht-report-active .report-row-progress{width:100%;text-align:left;}
+body.ht-report-active .report-row-progress>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;line-height:20px;font-variant-numeric:tabular-nums;white-space:nowrap;}
+body.ht-report-active .report-row-progress .report-ant-progress{margin:0;line-height:1;}
+body.ht-report-active .report-row-progress .report-ant-spin-dot{font-size:12px;}
+body.ht-report-active .report-row-progress-track{height:4px;background:#edf2f9;border-radius:2px;overflow:hidden;margin-top:4px;}
+body.ht-report-active .report-row-progress-track i{display:block;width:35%;height:100%;background:#2d70ed;animation:report-delivery-wait 1.2s linear infinite;}
+@keyframes report-delivery-wait{from{transform:translateX(-110%);}to{transform:translateX(390%);}}
+@media(prefers-reduced-motion:reduce){body.ht-report-active .report-row-progress-track i{animation:none;transform:translateX(95%);}}

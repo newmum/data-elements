@@ -7,7 +7,7 @@ import type { DataRow, Resource, SourceBook } from './core/model';
 import { clone } from './core/model';
 import { readFile } from './services/parser';
 import { reportDatasourceIdFromLocation } from './services/reportApi';
-import { applyTableSchema, loadUploadContext, loadUploadManifest, loadReportReceipts, normalizedReportFile, parseUploadedFiles, readUploadedOriginal,
+import { applyTableSchema, loadUploadContext, loadUploadManifest, loadReportReceipts, prepareReportFile, parseUploadedFiles, readUploadedOriginal,
   saveUploadManifest, submitUploadTable, tableResource, tableSample, uploadOriginal,
   type UploadContext, type UploadField, type UploadFile, type UploadManifest, type UploadTable } from './services/uploadWorkbench';
 import PreviewPanel from './components/PreviewPanel';
@@ -15,6 +15,7 @@ import Icon from './components/Icon';
 import ReportTableDetails from './components/ReportTableDetails';
 import RegistrationWorkspace from './components/RegistrationWorkspace';
 import ReportDeliveryTable from './components/ReportDeliveryTable';
+import type {ReportDeliveryProgress} from './components/DeliveryProgress';
 import {updateReportField} from './services/fieldGovernance';
 import {deliveryManifest,hasRegistrationDraft,rebaseRegistrationDraft,savedDeliveryTable,resourceWithDeliveryReceipt} from './services/reportDelivery';
 import {applyParsedFile,fileParsingLocked} from './services/reportFiles';
@@ -48,6 +49,9 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
   const [confirmSync,setConfirmSync]=useState(false),[removeId,setRemoveId]=useState('');
   const [selected,setSelected]=useState(''),[resources,setResources]=useState<Record<string,Resource>>({});
   const [deliveryKey,setDeliveryKey]=useState(''),[deliveryResources,setDeliveryResources]=useState<Record<string,Resource>>({});
+  const [deliveryProgress,setDeliveryProgress]=useState<ReportDeliveryProgress>();
+  const deliveryAbort=useRef<AbortController|undefined>(undefined);
+  const deliveryPageSnapshot=useRef<{rows:UploadTable[];summary:{all:number;pending:number;reported:number}}|undefined>(undefined);
   const [editing,setEditing]=useState<DataRow>(),[historyOpen,setHistoryOpen]=useState(false);
   const [history,setHistory]=useState<{list:import('./services/uploadWorkbench').ReportReceipt[];total:number}>({list:[],total:0}),[historyPage,setHistoryPage]=useState(1);
   const books=useRef(new Map<string,SourceBook>()),removed=useRef<string[]>([]),locked=useRef(false);
@@ -62,6 +66,8 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
   const [schemaSearchInput,setSchemaSearchInput]=useState(''),[savingSchema,setSavingSchema]=useState(false);
   const registration=useRegistrationFilesPage(context?.context.datasourceId||'',manifest,schemaSearch);
   const reporting=useReportTablesPage(context?.context.datasourceId||'',savedManifest,fileSearch,reportFilter);
+  // A manifest revision refresh must not remove the in-flight row or reset its counts.
+  const deliveryPage=busy==='正在提交上报'&&deliveryPageSnapshot.current?deliveryPageSnapshot.current:reporting;
   const normalizationLoading=registration.loading||!!switchingId||savingSchema;
   function submitRegistrationSearch(){
     if(busy||normalizationLoading)return;
@@ -78,7 +84,7 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
     if(!active)return;setLoadPhase(1);const saved=await loadUploadManifest(loaded.context.datasourceId);if(!active)return;
     saved.failedTables||=[];saved.receipts||=[];setLoadPhase(2);sessionRevision.current=getSessionRevision();setContext(loaded);const prepared=withDefaultTableTypes(saved);setManifest(prepared);setSavedManifest(prepared);setSelected(saved.tables[0]?.key||'');
   }).catch(cause=>{if(active)setError(cause.message);});return()=>{active=false;};},[loadAttempt]);
-  useEffect(()=>()=>{sourceLoader.cancel();workspaceRevision.current++;},[sourceLoader]);
+  useEffect(()=>()=>{sourceLoader.cancel();deliveryAbort.current?.abort();workspaceRevision.current++;},[sourceLoader]);
   async function switchDatasource(id:string){
     if(!context||locked.current||id===context.context.datasourceId)return;
     const revision=workspaceRevision.current;
@@ -149,21 +155,30 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
     const target=manifest.tables.find(entry=>entry.key===key);if(!target)throw new Error('请选择待规范的数据表');if(frozen(target))throw new Error('该表正在上报，请完成后保存规范');
     const issues=reportSchemaIssues(target,savedManifest.tables);if(issues.length)throw new Error(issues.slice(0,3).join('；'));
     const reviewed=resources[target.key]?applyTableSchema(resources[target.key],target):tableResource(await loadBook(target),target);
-    normalizedReportFile(reviewed);
+    await prepareReportFile(reviewed);
     await persist({...savedManifest,tables:savedManifest.tables.map(entry=>entry.key===target.key?{...target,recordCount:reviewed.rows.length}:entry)},[target.key],{preserveDrafts:true});
     setResources(current=>({...current,[target.key]:reviewed}));setDataReviewOpen(false);setSelected(target.key);void notice.success('规范已通过，可在第三步上报');
   });}finally{setSavingSchema(false);}}
-  async function submit(){if(!deliveryTable||!deliveryResource||!context)return;
+  async function submit(){if(!deliveryTable||!deliveryResource||!context||locked.current)return;
     const target=deliveryTable,prepared=deliveryResource;
-    await operate('正在提交上报',async()=>{
+    deliveryPageSnapshot.current={rows:reporting.rows.map(row=>row.key===target.key?{...row,recordCount:prepared.rows.length}:row),summary:reporting.summary};
+    const controller=new AbortController();deliveryAbort.current=controller;
+    try{await operate('正在提交上报',async()=>{
       if(!isReportReady(target,savedManifest.tables))throw new Error('该表尚未保存通过规范');
-      normalizedReportFile(prepared);
+      const file=await prepareReportFile(prepared,value=>{
+        if(!controller.signal.aborted)setDeliveryProgress({tableKey:target.key,phase:'preparing',...value});
+      },controller.signal);
+      setDeliveryProgress({tableKey:target.key,phase:'saving',completed:0});
       const saved=await persist(deliveryManifest(savedManifest,target.key,prepared.rows.length),[],{preserveDrafts:true});
       const current=savedDeliveryTable(saved,target.key);
       setDeliveryResources(current=>({...current,[target.key]:prepared}));
       assertSession();let result;
-      try{result=await submitUploadTable(context.context.datasourceId,current,prepared);}
+      setDeliveryProgress({tableKey:target.key,phase:'uploading',completed:0,total:file.size});
+      try{result=await submitUploadTable(context.context.datasourceId,current,prepared,{file,signal:controller.signal,onUploadProgress:value=>{
+        if(!controller.signal.aborted)setDeliveryProgress({tableKey:target.key,phase:value.complete?'waiting':'uploading',completed:value.loaded,total:value.total});
+      }});}
       catch(cause){
+        if(controller.signal.aborted)throw cause;
         try{
           const latest=withDefaultTableTypes(await loadUploadManifest(context.context.datasourceId));assertSession();
           const draft=rebaseRegistrationDraft(savedManifest,manifest,latest);
@@ -178,8 +193,21 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
       setDeliveryResources(current=>({...current,[target.key]:{...prepared,locked:true,sync:Object.fromEntries(prepared.rows.map(row=>[row.id,'success' as const]))}}));
       registration.retry();reporting.retry();
       reporting.setQuery(current=>({...current,pageNo:1}));void notice.success('所选数据表已成功上报');
-    });
+    });}finally{
+      if(deliveryAbort.current===controller)deliveryAbort.current=undefined;
+      if(!controller.signal.aborted)setDeliveryProgress(undefined);
+    }
   }
+  async function refreshDeliveryReceipts(){if(!context)return;await operate('正在读取上报回执',async()=>{
+    const latest=withDefaultTableTypes(await loadUploadManifest(context.context.datasourceId));assertSession();
+    const draft=rebaseRegistrationDraft(savedManifest,manifest,latest);
+    setSavedManifest(latest);setManifest(draft);setDirty(hasRegistrationDraft(latest,draft));
+    setDeliveryResources(cache=>Object.fromEntries(Object.entries(cache).map(([key,resource])=>{
+      const table=latest.tables.find(row=>row.key===key);return [key,table?resourceWithDeliveryReceipt(resource,table,latest.receipts||[]):resource];
+    })));
+    registration.retry();reporting.retry();
+  });}
+
   function entryForFile(file:UploadFile):UploadTable{return manifest.tables.find(entry=>entry.fileId===file.fileId)||{key:file.fileId,fileId:file.fileId,fileName:file.fileName,tableName:'',tableNameCn:file.fileName,fields:[],fieldCount:0,recordCount:0,status:'failed'};}
   async function saveParsed(file:UploadFile,tables:UploadTable[],book:SourceBook){
     const saved=await operate('正在保存文件解析',async()=>{
@@ -277,13 +305,12 @@ export default function App({onReturn,datasourceId,onDatasourceChange}:{onReturn
         {normalizationLoading&&!uploadStage&&<ProgressOverlay title={savingSchema?'正在保存登记信息':switchingId?'正在切换数据源':'正在加载登记信息'} description={savingSchema?'保存完成后自动更新数据表':'请稍候，正在读取数据表'} icon={savingSchema?'save':'table'} keepVisible/>}
       </section>
 
-      <section className="portal-data-section report-table-delivery" aria-label="选择数据表并上报数据" aria-busy={reporting.loading||busy==='正在提交上报'}>
+      <section className="portal-data-section report-table-delivery" aria-label="选择数据表并上报数据" aria-busy={reporting.loading&&busy!=='正在提交上报'}>
         <div className="report-data-flow"><div className="report-final-step"><span className={`report-target-step ${completedSteps.reported?'is-complete':'is-active'}`}>第 3 步</span><h2>选择数据表并上报数据</h2></div>
-          <div className="report-delivery-tools"><Segmented aria-label="上报状态" value={reportFilter} options={[{label:`全部 ${reporting.summary.all}`,value:'all'},{label:`待上报 ${reporting.summary.pending}`,value:'pending'},{label:`已上报 ${reporting.summary.reported}`,value:'reported'}]} onChange={value=>setReportFilter(value)}/><Select aria-label="上报表排序" disabled={!!busy||reporting.loading} value={`${reporting.query.sortField}:${reporting.query.sortDir}`} options={[{value:'updatedAt:desc',label:'最近更新'},{value:'updatedAt:asc',label:'最早更新'},{value:'tableNameCn:asc',label:'表名升序'},{value:'tableNameCn:desc',label:'表名降序'},{value:'recordCount:desc',label:'数据量降序'}]} onChange={value=>{const [sortField,sortDir]=value.split(':');reporting.setQuery(current=>({...current,pageNo:1,sortField,sortDir:sortDir as 'asc'|'desc'}));}}/>
+          <div className="report-delivery-tools"><Segmented aria-label="上报状态" value={reportFilter} options={[{label:`全部 ${deliveryPage.summary.all}`,value:'all'},{label:`待上报 ${deliveryPage.summary.pending}`,value:'pending'},{label:`已上报 ${deliveryPage.summary.reported}`,value:'reported'}]} onChange={value=>setReportFilter(value)}/><Select aria-label="上报表排序" disabled={!!busy||reporting.loading} value={`${reporting.query.sortField}:${reporting.query.sortDir}`} options={[{value:'updatedAt:desc',label:'最近更新'},{value:'updatedAt:asc',label:'最早更新'},{value:'tableNameCn:asc',label:'表名升序'},{value:'tableNameCn:desc',label:'表名降序'},{value:'recordCount:desc',label:'数据量降序'}]} onChange={value=>{const [sortField,sortDir]=value.split(':');reporting.setQuery(current=>({...current,pageNo:1,sortField,sortDir:sortDir as 'asc'|'desc'}));}}/>
           <Input allowClear aria-label="搜索规范数据表" placeholder="搜索表名或来源文件" value={reportSearchInput} disabled={!!busy||reporting.loading} onChange={event=>{setReportSearchInput(event.target.value);if(!event.target.value&&fileSearch)setFileSearch('');}} onPressEnter={event=>{if(!event.nativeEvent.isComposing)submitReportSearch();}} suffix={<Button type="text" size="small" className="report-registration-search-button" aria-label="搜索规范数据表" icon={<Icon name="search" size={16}/>} disabled={!!busy||reporting.loading} onClick={submitReportSearch}/>}/></div></div>
         {reporting.error&&<Alert type="error" showIcon message={reporting.error} action={<Button onClick={reporting.retry}>重试</Button>}/>}
-        <ReportDeliveryTable rows={reporting.rows} manifest={savedManifest} busy={!!busy||reporting.loading} submittingKey={busy==='正在提交上报'?deliveryKey:undefined} onReport={entry=>void prepareReport(entry)} onPreview={openTablePreview}/>
-        {busy==='正在提交上报'&&<ProgressOverlay title="正在上报数据" description="正在投递文件到 ODS 非结构化存储，完成后自动更新回执" icon="upload" keepVisible/>}
+        <ReportDeliveryTable rows={deliveryPage.rows} manifest={savedManifest} busy={!!busy||reporting.loading} submittingKey={busy==='正在提交上报'?deliveryKey:undefined} onReport={entry=>void prepareReport(entry)} onPreview={openTablePreview} progress={deliveryProgress} onRefresh={()=>void refreshDeliveryReceipts()}/>
         {reporting.loading&&busy!=='正在提交上报'&&<ProgressOverlay title="正在加载规范数据表" description="请稍候，正在核对上报状态" keepVisible/>}
       </section>
     </main>

@@ -72,14 +72,15 @@ test('missing registration links allow saving the manually replaced source and o
   assert.deepEqual(requests, ['/pipelines/selected', '/pipelines/selected/stop']);
 });
 
-test('the actual editor opens an editable saved task without a persistent banner and retains the read-only warning', () => {
+test('the actual editor shows a relationship failure reason while ordinary editable canvases remain free of a banner', () => {
   const ts = compiler(), localRequire = createRequire(import.meta.url);
   const source = fs.readFileSync(new URL('../pages/EditorPage.tsx', import.meta.url), 'utf8');
   const compiled = ts.transpileModule(source, { compilerOptions: {
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText;
   for (const readOnly of [true, false]) {
-  const chain = { readOnly, relationshipUnavailable: !readOnly, selectedPipelineId: 'selected', warnings: ['来源库已更换，任务关联需核对'] };
+  for (const relationshipUnavailable of [true, false]) {
+  const chain = { readOnly, relationshipUnavailable, selectedPipelineId: 'selected', warnings: ['来源库已更换，任务关联需核对'] };
   for (const currentPipelineId of ['selected', 'other']) {
     const exports = {};
     vm.runInNewContext(compiled, { exports, require(id) {
@@ -99,8 +100,10 @@ test('the actual editor opens an editable saved task without a persistent banner
     const markup = renderToStaticMarkup(React.createElement(exports.default));
     assert.match(markup, /data-testid="saved-canvas"/);
     assert.equal(markup.includes('已打开当前任务保存的画布（只读）'), readOnly && currentPipelineId === 'selected');
-    assert.equal(markup.includes('来源库已更换，任务关联需核对'), readOnly && currentPipelineId === 'selected');
+    assert.equal(markup.includes('来源库已更换，任务关联需核对'), (readOnly || relationshipUnavailable) && currentPipelineId === 'selected');
+    assert.equal(markup.includes('关联链路未能完整加载，当前仅显示所选任务'), !readOnly && relationshipUnavailable && currentPipelineId === 'selected');
     assert.equal(markup.includes('已打开当前任务保存的画布，可继续编辑'), false);
+  }
   }
   }
 });

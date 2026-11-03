@@ -245,8 +245,8 @@ class DslCompilerHiveTemporalWriterTest {
     }
 
     @ParameterizedTest @ValueSource(strings={"mysql","oracle","oceanbase"})
-    void hiveTargetUsesRawSourceAndNamedCodecsRegardlessOfSourceDatabase(String sourceDatabase) {
-        compiler.compile(hiveTargetFlow(List.of(source("source",sourceDatabase,Map.of()),mapping(),hiveSink("sink")),
+    void downstreamHiveUsesRawSourceAndNamedCodecsRegardlessOfSourceDatabase(String sourceDatabase) {
+        compiler.compile(hiveTargetFlow(List.of(source("source",sourceDatabase,Map.of()),mapping(),com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveDownstreamFixtures.rawTarget(hiveSink("sink"))),
                 List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("mh","mapping","sink","default"))));
         assertThat(processors).noneMatch(p->p.type().endsWith(".HaitongTransformRecord")||p.type().endsWith(".MergeRecord")||p.type().endsWith(".QueryRecord"));
         Created execute=namedProcessor("source/execute"),convert=namedProcessor("sink/convert");
@@ -306,10 +306,21 @@ class DslCompilerHiveTemporalWriterTest {
     }
     @Test void sharedMappingUpgradeReusesItsResolvedWriterWithoutCreatingDuplicatePublicService() {
         var jdbc=new Pipeline.Node("jdbc","sink.jdbc","jdbc","sink",0,0,Map.of());
-        var pipeline=hiveTargetFlow(List.of(source("source","mysql",Map.of()),mapping(),hiveSink("h"),jdbc),List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("mh","mapping","h","default"),new Pipeline.Edge("mj","mapping","jdbc","default")));
+        var pipeline=hiveTargetFlow(List.of(source("source","mysql",Map.of()),mapping(),com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveDownstreamFixtures.rawTarget(hiveSink("h")),jdbc),List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("mh","mapping","h","default"),new Pipeline.Edge("mj","mapping","jdbc","default")));
         compiler.createMappingReplacement(pipeline,mapping(),"existing-group","reader","typed","global-json-writer",prepared());
         assertThat(services).isEmpty();
         assertThat(namedProcessor("字段映射").properties()).containsEntry("record-writer","global-json-writer");
+        verify(nifi,times(1)).listControllerServices("root");
+    }
+    @ParameterizedTest @ValueSource(strings={"mysql","oracle","oceanbase"})
+    void directHiveTargetRetainsJavaGovernanceAndItsFailureRoutes(String sourceDatabase) {
+        compiler.compile(hiveTargetFlow(List.of(source("source",sourceDatabase,Map.of()),mapping(),hiveSink("sink")),
+                List.of(new Pipeline.Edge("sm","source","mapping","default"),new Pipeline.Edge("mh","mapping","sink","default"))));
+        Created mapped=namedProcessor("字段映射"),convert=namedProcessor("sink/convert");
+        assertThat(mapped.type()).endsWith(".HaitongTransformRecord");
+        verify(nifi).createConnection("pg",mapped.id(),"PROCESSOR",convert.id(),"PROCESSOR",List.of("success"));
+        assertErrorRoutes(mapped);
+        assertThat(convert.properties()).containsEntry("Record Reader","global-json-reader").containsEntry("Record Writer","csv-service-id");
         verify(nifi,times(1)).listControllerServices("root");
     }
     private static Pipeline.Node hiveSink(String id){return new Pipeline.Node(id,"sink.hive",id,"sink",600,0,Map.of("table","EVENT_LOG","database","default"));}

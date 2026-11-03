@@ -33,9 +33,11 @@ test('20/100 datasource choices need three reads and allow a first upload withou
 test('untrusted URL datasource cannot fall back to another source',async t=>{contextFixture(t,20);await assert.rejects(loadUploadContext('foreign-source'),/不存在|不是/);});
 
 test('a 20-file parse keeps one batch request and permits the bounded storage reads to finish',async t=>{
- contextFixture(t,20);const originalTimeout=AbortSignal.timeout,deadlines:number[]=[];
- AbortSignal.timeout=milliseconds=>{deadlines.push(milliseconds);return new AbortController().signal;};
- t.after(()=>{AbortSignal.timeout=originalTimeout;});
+ contextFixture(t,20);const originalTimeout=globalThis.setTimeout,deadlines:number[]=[];
+ globalThis.setTimeout=((handler:TimerHandler,milliseconds?:number,...args:unknown[])=>{
+   deadlines.push(Number(milliseconds));return originalTimeout(handler,milliseconds,...args);
+ }) as typeof setTimeout;
+ t.after(()=>{globalThis.setTimeout=originalTimeout;});
  for(const count of[1,20]){
   let reads=0;const ids=Array.from({length:count},(_,i)=>'validation-file-'+i);
   globalThis.fetch=async(_input,init)=>{reads++;const body=JSON.parse(String(init?.body));assert.equal(body.action,'parse');assert.deepEqual(body.fileIds,ids);return new Response(JSON.stringify({code:0,data:{files:[]}}));};

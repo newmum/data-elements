@@ -35,6 +35,108 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.web.server.ResponseStatusException;
 
 class AccessTaskChainServiceTest {
+    @Test
+    void verifiedTaskLinkRepairsHiveDisplayEvenWhenAllOldChainMetadataWasLostWithoutWriting() throws Exception {
+        Fixture fixture=new Fixture();fixture.task("first","root","ods","source","target");fixture.task("second","ods","raw","target","target");
+        var old=new Pipeline.Dsl(1,List.of(
+                new Pipeline.Node("s","source.mysql","s","source",0,0,Map.of("sourceTableId","ods","sourceDbId","target")),
+                new Pipeline.Node("m","transform.field-enrichment","m","transform",400,0,Map.of()),
+                new Pipeline.Node("h","sink.hive","h","sink",800,0,Map.of("targetTableId","raw","targetDbId","target"))),
+                List.of(new Pipeline.Edge("sm","s","m","default"),new Pipeline.Edge("mh","m","h","default")));
+        String saved=fixture.json.writeValueAsString(old);
+        fixture.jdbc.update("update nifi_pipeline_t set dsl_json=? where id='p-second'",saved);clearInvocations(fixture.jdbc);
+        try(var tenant=TenantContext.use("ga")) {
+            var graph=fixture.service.byTask("first");assertThat(items(graph)).hasSize(2);
+            var downstream=(Pipeline)items(graph).get(1).get("pipeline");
+            assertThat(downstream.dsl().nodes()).extracting(Pipeline.Node::id).containsExactly("s","h");
+            assertThat(downstream.dsl().edges()).singleElement().satisfies(edge->{assertThat(edge.source()).isEqualTo("s");assertThat(edge.target()).isEqualTo("h");});
+        }
+        verify(fixture.jdbc,times(5)).query(any(PreparedStatementCreator.class),any(ColumnMapRowMapper.class));
+        assertThat(fixture.jdbc.queryForObject("select dsl_json from nifi_pipeline_t where id='p-second'",String.class)).isEqualTo(saved);
+        verifyNoInteractions(fixture.nifi);
+    }
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
+    void pushStorageBridgeKeepsEveryDownstreamHiveTaskWithFiveBatchedReads(int count) throws Exception {
+        for (String taskSource : List.of("physical", "source")) {
+            Fixture fixture = new Fixture(); fixture.datasource("physical"); fixture.datasource("hive");
+            fixture.task("first", "root", "ods", taskSource, "target");
+            Pipeline.Dsl first = pushStorageDsl("source.sftp", "source", "physical", "fjghcc", "source");
+            fixture.jdbc.update("update nifi_pipeline_t set dsl_json=? where id='p-first'", fixture.json.writeValueAsString(first));
+            for (int i = 1; i < count; i++) {
+                fixture.task("hive" + i, "ods", "raw" + i, "target", "hive");
+                var hive = new Pipeline.Dsl(1, List.of(
+                        new Pipeline.Node("read", "source.jdbc", "汇聚库", "source", 0, 0,
+                                Map.of("registeredDatasourceId", "target", "sourceTableId", "ods")),
+                        new Pipeline.Node("write", "sink.hive", "Hive", "sink", 400, 0,
+                                Map.of("targetDbId", "hive", "targetTableId", "raw" + i))),
+                        List.of(new Pipeline.Edge("edge", "read", "write", "success")));
+                fixture.jdbc.update("update nifi_pipeline_t set dsl_json=? where id=?", fixture.json.writeValueAsString(hive), "p-hive" + i);
+            }
+            clearInvocations(fixture.jdbc, fixture.scopes);
+            try (var tenant = TenantContext.use("ga")) {
+                var graph = fixture.service.byTask("first");
+                assertThat(items(graph)).hasSize(count);
+                assertThat(graph).doesNotContainKey("relationshipUnavailable");
+                assertThat((List<?>) graph.get("links")).hasSize(count - 1);
+                assertThat(((Pipeline) items(graph).getFirst().get("pipeline")).dsl()).isEqualTo(first);
+                assertThat(items(graph).subList(1, count)).allSatisfy(item ->
+                        assertThat(((Pipeline) item.get("pipeline")).dsl().nodes()).anyMatch(node -> node.manifestKey().equals("sink.hive")));
+            }
+            verify(fixture.jdbc, times(5)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
+            assertThat(org.mockito.Mockito.mockingDetails(fixture.jdbc).getInvocations())
+                    .noneMatch(invocation -> Set.of("update", "execute", "batchUpdate").contains(invocation.getMethod().getName()));
+            verifyNoInteractions(fixture.nifi);
+        }
+    }
+
+    @Test
+    void pushBridgeCannotAuthorizeUnknownOrForeignStorageAndLogicalIds() throws Exception {
+        for (boolean foreignLogical : List.of(false, true)) {
+            Fixture fixture = new Fixture(); fixture.datasource("physical");
+            fixture.task("first", "root", "ods", "physical", "target");
+            fixture.task("second", "ods", "raw", "target", "target");
+            var dsl = pushStorageDsl("source.ftp", foreignLogical ? "foreign" : "source",
+                    foreignLogical ? "physical" : "foreign", "fjghcc", "source");
+            fixture.jdbc.update("update nifi_pipeline_t set dsl_json=? where id='p-first'", fixture.json.writeValueAsString(dsl));
+            fixture.jdbc.update("insert into db_datasource_t values('foreign','other','foreign','user','org',0)");
+            try (var tenant = TenantContext.use("ga")) {
+                assertThatThrownBy(() -> fixture.service.byTask("first")).isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+            }
+        }
+    }
+
+    @Test
+    void arbitraryJdbcOrIncompleteStorageMarkersStillCannotJoinTheChain() throws Exception {
+        for (var invalid : List.of(
+                pushStorageDsl("source.jdbc", "source", "physical", "fjghcc", "source"),
+                pushStorageDsl("source.ftp", "source", "physical", "other-domain", "source"),
+                pushStorageDsl("source.sftp", "source", "physical", "fjghcc", "target"))) {
+            Fixture fixture = new Fixture(); fixture.datasource("physical");
+            fixture.task("first", "root", "ods", "physical", "target");
+            fixture.task("second", "ods", "raw", "target", "target");
+            fixture.jdbc.update("update nifi_pipeline_t set dsl_json=? where id='p-first'", fixture.json.writeValueAsString(invalid));
+            try (var tenant = TenantContext.use("ga")) {
+                var graph = fixture.service.byTask("first");
+                assertThat(graph).containsEntry("relationshipUnavailable", true);
+                assertThat(items(graph)).hasSize(1);
+                assertThat((List<?>) graph.get("warnings")).isNotEmpty();
+            }
+        }
+    }
+
+    private static Pipeline.Dsl pushStorageDsl(String manifest, String logical, String physical, String domain, String sourceDb) {
+        return new Pipeline.Dsl(1, List.of(
+                new Pipeline.Node("source", manifest, "推送落地文件", "source", 0, 0,
+                        Map.of("sourceTableId", "root", "sourceDbId", sourceDb, "registeredDatasourceId", physical,
+                                "logicalSourceDatasourceId", logical, "pushStorageDomain", domain)),
+                new Pipeline.Node("governance", "transform.field-enrichment", "字段治理", "transform", 400, 0, Map.of()),
+                new Pipeline.Node("sink", "sink.jdbc", "汇聚库", "sink", 800, 0,
+                        Map.of("targetDbId", "target", "targetTableId", "ods"))),
+                List.of(new Pipeline.Edge("first", "source", "governance", "success"),
+                        new Pipeline.Edge("second", "governance", "sink", "success")));
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {20, 100})
     void standaloneTasksOpenEditableSavedCanvasWithoutRegistrationWarningsWithThreeReads(int count) throws Exception {
@@ -293,9 +395,11 @@ class AccessTaskChainServiceTest {
             Pipeline saved = (Pipeline) items(graph).getFirst().get("pipeline");
             assertThat(fixture.json.writeValueAsString(saved.dsl())).isEqualTo(original);
             assertThat(saved.dsl().nodes().getFirst().config()).containsEntry("registeredDatasourceId", "source");
-            assertThat(graph.get("warnings").toString()).contains("任务来源或目标关联不完整");
+            assertThat(graph.get("warnings").toString()).contains("任务来源库与登记表不一致");
         }
-        verify(fixture.jdbc, times(6)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
+        // One additional batched pipeline read distinguishes a valid push storage bridge
+        // from a changed registration before falling back to the selected saved design.
+        verify(fixture.jdbc, times(7)).query(any(PreparedStatementCreator.class), any(ColumnMapRowMapper.class));
         verifyNoInteractions(fixture.scopes);
         assertThat(org.mockito.Mockito.mockingDetails(fixture.jdbc).getInvocations())
                 .noneMatch(invocation -> Set.of("update", "execute", "batchUpdate").contains(invocation.getMethod().getName()));

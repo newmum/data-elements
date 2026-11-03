@@ -2,7 +2,9 @@ import {reportRandomId} from '../core/browserId';
 import type { DataType, Resource, SourceBook,TimeFormat,StandardField,TimeRole } from '../core/model';
 import { clone } from '../core/model';
 import { resourceFromRegion } from '../core/import';
-import { prepareValue } from '../core/engine';
+import { prepareReportFile } from './reportCsv';
+import type {PlatformUploadProgress} from '../../api/platformApi';
+export {normalizedReportFile,prepareReportFile} from './reportCsv';
 import { platformApi, platformSessionToken } from './platformApi';
 import { getSessionRevision } from '../../nifi/api/bridgeSession';
 import type { ReportContext } from './reportApi';
@@ -123,27 +125,10 @@ export function fieldType(type:string):DataType{
   if(/timestamp|datetime/.test(type))return 'datetime';if(/^date$/.test(type))return 'date';
   if(/int/.test(type))return 'integer';if(/decimal|float|double|numeric/.test(type))return 'decimal';if(/bool/.test(type))return 'boolean';return 'text';
 }
-export function normalizedReportFile(resource:Resource):File{
-  const quote=(value:unknown)=>'"'+String(value??'').replace(/"/g,'""')+'"';
-  const fields=resource.schema.fields;
-  const keys=new Set<string>();const primary=fields.flatMap((field,index)=>field.pk?[index]:[]);
-  const rows=resource.rows.map(row=>{
-    const values=fields.map(field=>{try{
-      const value=prepareValue(row.values[field.id],field,resource.schema,[]);
-      if(value===null&&(field.nullable==='forbid'||field.pk))throw new Error('不允许为空');return value;
-    }catch(cause){throw new Error(`第${row.sourceRow}行 ${field.zh||field.en}：${(cause as Error).message}`);}});
-    if(primary.length){const key=JSON.stringify(primary.map(index=>values[index]));if(keys.has(key))throw new Error(`第${row.sourceRow}行 主键重复，请修正数据或调整主键`);keys.add(key);}
-    return values.map(quote).join(',');
-  });
-  if(!rows.length)throw new Error('当前数据表没有可上报的数据');
-  const file=new File(['\uFEFF'+[fields.map(field=>quote(field.en)).join(','),...rows].join('\r\n')],resource.schema.englishName+'.csv',{type:'text/csv;charset=utf-8'});
-  if(file.size>10*1024*1024)throw new Error('规范化CSV超过10 MB，请拆分数据后上报');
-  return file;
-}
-export async function submitUploadTable(datasourceId:string,table:UploadTable,resource:Resource):Promise<ReportReceipt>{
+export async function submitUploadTable(datasourceId:string,table:UploadTable,resource:Resource,options:{file?:File;signal?:AbortSignal;onUploadProgress?:(progress:PlatformUploadProgress)=>void}={}):Promise<ReportReceipt>{
   if(!table.tid)throw new Error('请先完成第二步并保存数据规范');
   const form=new FormData();form.append('datasourceId',datasourceId);form.append('tableId',table.tid);form.append('fileId',table.fileId);
-  form.append('requestId',reportRandomId());form.append('file',normalizedReportFile(resource));
-  const result=await platformApi<ReportReceipt>('/dst/database/metadata/report-submit',{method:'POST',body:form});
+  form.append('requestId',reportRandomId());form.append('file',options.file||await prepareReportFile(resource,undefined,options.signal));
+  const result=await platformApi<ReportReceipt>('/dst/database/metadata/report-submit',{method:'POST',body:form,timeoutMs:120_000,signal:options.signal,onUploadProgress:options.onUploadProgress});
   if(result.status!=='success')throw new Error(result.message||'上报尚未成功，请查看记录');return result;
 }

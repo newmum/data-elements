@@ -105,7 +105,7 @@ public class AccessTaskChainService {
         item.put("sourceDbName", text(sources.get(text(task, "source_db_id")), "db_name"));
         item.put("targetDbName", text(sources.get(text(task, "target_db_id")), "db_name"));
         item.put("sourceTableName", text(task, "source_table_name")); item.put("targetTableName", text(task, "target_table_name"));
-        item.put("pipelineId", id); item.put("pipeline", pipeline);
+        item.put("pipelineId", id); item.put("pipeline", com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(pipeline));
         if (standalone && nativeReady(pipeline)) {
             item.put("processGroupId", pipeline.nifiProcessGroupId());
             item.put("nativeUrl", "/nifi-ui/#/process-groups/" + pipeline.nifiProcessGroupId());
@@ -188,9 +188,13 @@ public class AccessTaskChainService {
             String sourceDb = text(row, "actual_source_db_id");
             String targetDb = text(row, "actual_target_db_id");
             if (sourceDb.isBlank() || targetDb.isBlank()
-                    || !sourceDb.equals(text(row, "source_db_id")) || !targetDb.equals(text(row, "target_db_id")))
+                    || text(row, "source_db_id").isBlank() || !targetDb.equals(text(row, "target_db_id")))
                 throw failure(HttpStatus.CONFLICT, "任务来源或目标关联不完整，请检查登记记录");
             datasourceIds.add(sourceDb); datasourceIds.add(targetDb);
+            // Historical push tasks can identify the physical FTP storage here.
+            // Validate its explicit logical/physical bridge against the saved DSL below,
+            // and authorize both identities in the same batch before returning any task.
+            datasourceIds.add(text(row, "source_db_id"));
             for (int i = 1; i <= MAX_DEPTH; i++) {
                 String ancestorDatasource = text(row, "ancestor_datasource_" + i);
                 if (!ancestorDatasource.isBlank()) datasourceIds.add(ancestorDatasource);
@@ -201,12 +205,13 @@ public class AccessTaskChainService {
         if (tasks.stream().noneMatch(row -> text(row, "task_id").equals(text(selected, "task_id"))))
             throw failure(HttpStatus.CONFLICT, "选定任务不在来源链路中");
         Map<String, Pipeline> pipelines = pipelines(tenant, pipelineIds);
+        for (Map<String, Object> row : tasks) validateTaskSource(row, pipelines.get(text(row, "pipeline_id")));
         Set<String> dslTableIds = new LinkedHashSet<>();
         for (Pipeline pipeline : pipelines.values()) {
             if (pipeline.dsl() == null || pipeline.dsl().nodes() == null) continue;
             for (Pipeline.Node node : pipeline.dsl().nodes()) {
                 if (node == null || node.config() == null) continue;
-                for (String key : List.of("registeredDatasourceId", "selectedDatabaseId", "sourceDbId", "targetDbId", "dbId", "datasourceId", "dataSourceId")) {
+                for (String key : List.of("registeredDatasourceId", "logicalSourceDatasourceId", "selectedDatabaseId", "sourceDbId", "targetDbId", "dbId", "datasourceId", "dataSourceId")) {
                     String value = text(node.config(), key); if (!value.isBlank()) datasourceIds.add(value);
                 }
                 for (String key : List.of("sourceTableId", "targetTableId", "registeredTableId")) {
@@ -231,7 +236,6 @@ public class AccessTaskChainService {
             String id = text(row, "pipeline_id");
             Pipeline pipeline = pipelines.get(id);
             if (pipeline == null) throw failure(HttpStatus.CONFLICT, "接入任务的画布不存在或已删除");
-            validateTaskSource(row, pipeline);
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("taskId", text(row, "task_id")); item.put("taskName", text(row, "task_name"));
             item.put("sourceTableId", text(row, "source_table_id")); item.put("targetTableId", text(row, "target_table_id"));
@@ -256,6 +260,15 @@ public class AccessTaskChainService {
             }
         }
         Map<String, Object> result = new LinkedHashMap<>();
+        Set<String> downstreamTasks = new LinkedHashSet<>();
+        links.forEach(link -> downstreamTasks.add(link.get("toTaskId")));
+        for (Map<String,Object> item : items) {
+            Pipeline design = (Pipeline)item.get("pipeline");
+            if (downstreamTasks.contains(String.valueOf(item.get("taskId"))))
+                design = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.downstreamTask(
+                        design,String.valueOf(item.get("sourceTableId")),String.valueOf(item.get("targetTableId")));
+            item.put("pipeline",com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(design));
+        }
         result.put("rootSourceTableId", root); result.put("selectedPipelineId", text(selected, "pipeline_id"));
         result.put("selectedTaskId", text(selected, "task_id")); result.put("items", items); result.put("links", links);
         result.put("nativeCanvas", nativeSelection(items, "各任务保留独立的NiFi流程组，可选择任务打开原生画布"));
@@ -365,17 +378,30 @@ public class AccessTaskChainService {
 
     private static void validateTaskSource(Map<String, Object> task, Pipeline pipeline) {
         if (pipeline.dsl() == null || pipeline.dsl().nodes() == null) return;
+        String actualSource = text(task, "actual_source_db_id"), taskSource = text(task, "source_db_id");
+        boolean matchedSource = actualSource.equals(taskSource);
         for (Pipeline.Node node : pipeline.dsl().nodes()) {
             if (!"source".equals(node.category()) || node.config() == null) continue;
             String table = text(node.config(), "sourceTableId");
             if (!table.isBlank() && !table.equals(text(task, "source_table_id")))
                 throw failure(HttpStatus.CONFLICT, "任务来源表与保存的画布不一致，请检查任务关联");
-            for (String key : List.of("registeredDatasourceId", "sourceDbId", "selectedDatabaseId")) {
+            String physical = text(node.config(), "registeredDatasourceId");
+            boolean pushStorage = Set.of("source.ftp", "source.sftp").contains(node.manifestKey())
+                    && table.equals(text(task, "source_table_id")) && !table.isBlank()
+                    && actualSource.equals(text(node.config(), "logicalSourceDatasourceId"))
+                    && "fjghcc".equals(text(node.config(), "pushStorageDomain"))
+                    && !physical.isBlank() && !physical.equals(actualSource)
+                    && (taskSource.equals(actualSource) || taskSource.equals(physical));
+            if (pushStorage) matchedSource = true;
+            for (String key : List.of("registeredDatasourceId", "sourceDbId", "selectedDatabaseId", "logicalSourceDatasourceId")) {
                 String database = text(node.config(), key);
-                if (!database.isBlank() && !database.equals(text(task, "source_db_id")))
+                if (!database.isBlank() && !(pushStorage
+                        ? database.equals(actualSource) || database.equals(physical)
+                        : database.equals(taskSource)))
                     throw failure(HttpStatus.CONFLICT, "任务来源库与保存的画布不一致，请检查任务关联");
             }
         }
+        if (!matchedSource) throw failure(HttpStatus.CONFLICT, "任务来源库与登记表不一致，请检查任务关联");
     }
 
     private static boolean nativeReady(Pipeline pipeline) {

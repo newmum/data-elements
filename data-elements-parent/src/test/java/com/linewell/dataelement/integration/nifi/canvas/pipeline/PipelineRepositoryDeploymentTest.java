@@ -54,8 +54,9 @@ class PipelineRepositoryDeploymentTest {
                     null,null,null,null,null,null,null));
             session.clearCache();
             var hiveSaved=repo.findById("hive-pipeline").orElseThrow().dsl();
-            assertThat(hiveSaved.nodes()).containsExactly(source,hive);
-            assertThat(hiveSaved.edges()).singleElement().satisfies(e->{assertThat(e.source()).isEqualTo("s");assertThat(e.target()).isEqualTo("h");});
+            assertThat(hiveSaved.nodes()).containsExactly(source,mapping,hive);
+            assertThat(hiveSaved.edges()).hasSize(2);
+            assertThat(hiveSaved.edges()).anyMatch(e->e.source().equals("m")&&e.target().equals("h"));
         }
     }
 }

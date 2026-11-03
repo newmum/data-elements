@@ -31,7 +31,7 @@ class PipelineControllerReadOnlyDetailTest {
             var repository=mock(PipelineRepository.class);
             var source=new Pipeline.Node("s","source.mysql","source","source",0,0,Map.of());
             var mapping=new Pipeline.Node("m","transform.field-enrichment","mapping","transform",300,0,Map.of());
-            var hive=new Pipeline.Node("h","sink.hive","hive","sink",600,0,Map.of());
+            var hive=com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveDownstreamFixtures.rawTarget(new Pipeline.Node("h","sink.hive","hive","sink",600,0,Map.of()));
             var saved=new Pipeline("p","saved",null,10L,20L,new Pipeline.Dsl(1,List.of(source,hive),List.of()),null,null,null,null,null,null,null);
             var edited=new Pipeline("p","edited",null,null,null,new Pipeline.Dsl(1,List.of(source,mapping,hive),List.of(new Pipeline.Edge("sm","s","m","default"),new Pipeline.Edge("mh","m","h","default"))),null,null,null,null,null,null,null);
             when(repository.findById("p")).thenReturn(Optional.of(saved));

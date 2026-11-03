@@ -1266,7 +1266,7 @@ public class DslCompiler {
     /** Field-only upgrade: resolve public JSON codecs; keep source processors and their state. */
     public MappingReplacement createMappingReplacement(Pipeline pipeline,Pipeline.Node node,String group,String reader,String typedReader,String writer,UnifiedMappingService.Compiled prepared){
         if(HiveSinkPublicationPolicy.forPublication(pipeline).dsl().nodes().stream().noneMatch(candidate->candidate.id().equals(node.id())))
-            throw new IllegalStateException("Hive目标原始写入不发布字段对标组件，请重新发布整个任务以更新连接关系");
+            throw new IllegalStateException("多目标链路的下游 Hive 原始写入分支不发布字段治理组件，请重新发布整个任务以更新连接关系");
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi,pipeline);
         NodeCompilation compiled=new NodeCompilation();compiled.csIds.put("typed-json-reader",globalJson.readerId());compiled.csIds.put("typed-json-writer",globalJson.writerForNode(node.id()));compiled.csIds.put("jsonReader",globalJson.readerId());
         Map<String,String> ids=mappingVersions.archive(pipeline,Map.of(node.id(),prepared.plan()));List<NifiEntity> created=new ArrayList<>();

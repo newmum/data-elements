@@ -20,7 +20,7 @@ export default function FieldConfigurationDialog({open,table,tables,readOnly,bus
   </div>;
   const fields=table&&<>{error&&<Alert type="error" message={error} showIcon style={{marginBottom:12}}/>}<FieldGovernanceTable table={table} disabled={disabled} onChange={onFieldChange}/></>;
   if(inline)return <section className="report-registration-editor" aria-label="数据表规范编辑">
-    <header className="report-editor-heading report-editor-metadata-heading">{metadata}<div className="report-editor-actions">{onPreview&&<Button disabled={busy||!table} icon={<Icon name="eye" size={16}/>} onClick={onPreview}>数据预览</Button>}{saveButton}</div></header>
+    <header className="report-editor-heading report-editor-metadata-heading">{metadata}<div className="report-editor-actions">{onPreview&&<Button disabled={busy||!table} onClick={onPreview}>数据预览</Button>}{saveButton}</div></header>
     {fields}
   </section>;
   return <LegacyDialog open={open} onClose={onClose} busy={busy} className="report-dialog--wide report-field-dialog" ariaLabel="字段规范" title={<span className="dialog-title"><Icon name="table"/>字段规范 · {table?.tableNameCn||'数据表'}</span>} footer={<><Button onClick={onClose} disabled={busy}>关闭</Button>{saveButton}</>}>{metadata}{fields}</LegacyDialog>;

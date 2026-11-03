@@ -8,10 +8,58 @@ import static org.assertj.core.api.Assertions.*;
 class HiveSinkPublicationPolicyTest {
     private Pipeline.Node node(String id,String key){return new Pipeline.Node(id,key,id,key.startsWith("sink")?"sink":"transform",0,0,Map.of());}
     private Pipeline.Edge edge(String source,String target){return new Pipeline.Edge(source+"-"+target,source,target,"default");}
-    private final Pipeline.Node source=node("source","source.mysql"),hive=node("hive","sink.hive"),jdbc=node("jdbc","sink.jdbc"),
+    private final Pipeline.Node source=node("source","source.mysql"),hive=HiveDownstreamFixtures.rawTarget(node("hive","sink.hive")),jdbc=node("jdbc","sink.jdbc"),
             a=node("a","transform.field-enrichment"),b=node("b","transform.field-mapping");
 
-    @Test void targetHiveBypassesBothMappingVariantsAndPreservesSavedCanvas() {
+    @Test void singleHiveTargetAndParallelFirstHopHiveKeepGovernance() {
+        var direct=node("direct","sink.hive");
+        for(var targets:List.of(List.of(direct),List.of(direct,jdbc))) {
+            var nodes=new java.util.ArrayList<>(List.of(source,a,b));nodes.addAll(targets);
+            var edges=new java.util.ArrayList<>(List.of(edge("source","a"),edge("a","b")));
+            targets.forEach(target->edges.add(edge("b",target.id())));
+            var original=new Pipeline.Dsl(1,nodes,edges);
+            assertThat(HiveSinkPublicationPolicy.forPublication(original)).isSameAs(original);
+        }
+    }
+    @Test void firstHopAndInvalidOrMissingChainContextNeverBypass() {
+        var valid=(Map<String,Object>)hive.config().get("accessChain");
+        for(var patch:List.<Map<String,Object>>of(Map.of("targetIndex",0),Map.of("targetCount",1),Map.of("targetDatasourceCount",0),
+                Map.of("targetTableId","another-table"),Map.of("sourceTableId","root-source"),Map.of("targetIndex",2),
+                Map.of("targetCount",101),Map.of("targetCount","2"),Map.of("targetIndex",1.5))) {
+            var chain=new java.util.LinkedHashMap<>(valid);chain.putAll(patch);
+            var target=new Pipeline.Node(hive.id(),hive.manifestKey(),hive.label(),hive.category(),0,0,Map.of("targetTableId",hive.id(),"accessChain",chain));
+            var original=new Pipeline.Dsl(1,List.of(source,a,target),List.of(edge("source","a"),edge("a","hive")));
+            assertThat(HiveSinkPublicationPolicy.forPublication(original)).as("context %s",patch).isSameAs(original);
+        }
+    }
+    @Test void oldTopLevelSerialContextIsRetainedAcrossJacksonAndOrdinarySave() throws Exception {
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        for(String input:List.of("root","staging")) {
+            var sourceNode=new Pipeline.Node("s","source.mysql","s","source",0,0,Map.of("sourceTableId",input));
+            var target=new Pipeline.Node("h","sink.hive","h","sink",0,0,Map.of("targetTableId",input.equals("root")?"staging":"raw"));
+            var body=json.valueToTree(new Pipeline.Dsl(1,List.of(sourceNode,a,target),List.of(edge("s","a"),edge("a","h"))));
+            ((com.fasterxml.jackson.databind.node.ObjectNode)body).set("accessChain",json.valueToTree(Map.of("rootSourceTableId","root","targetTableIds",List.of("staging","raw"))));
+            var read=json.treeToValue(body,Pipeline.Dsl.class);
+            var projected=HiveSinkPublicationPolicy.forPublication(read);
+            assertThat(projected.nodes()).hasSize(input.equals("root")?3:2);
+            assertThat(HiveSinkPublicationPolicy.forPublication(json.readValue(json.writeValueAsString(read),Pipeline.Dsl.class))).isEqualTo(projected);
+        }
+    }
+    @Test void downstreamMarkerNeedsMatchingTargetAndARealDifferentSourceTable() {
+        var dsl=new Pipeline.Dsl(1,List.of(new Pipeline.Node("s","source.mysql","s","source",0,0,Map.of("sourceTableId","staging")),a,
+                new Pipeline.Node("h","sink.hive","h","sink",0,0,Map.of("targetTableId","raw"))),List.of(edge("s","a"),edge("a","h")));
+        assertThat(HiveSinkPublicationPolicy.forPublication(HiveSinkPublicationPolicy.downstreamTask(dsl,"staging","raw")).nodes()).hasSize(2);
+        assertThat(HiveSinkPublicationPolicy.downstreamTask(dsl,"different","raw")).isSameAs(dsl);
+        assertThat(HiveSinkPublicationPolicy.downstreamTask(dsl,"staging","staging")).isSameAs(dsl);
+    }
+    @Test void sinkContextSurvivesJsonSaveAndRead() throws Exception {
+        var json=new com.fasterxml.jackson.databind.ObjectMapper();
+        var saved=new Pipeline.Dsl(1,List.of(source,a,hive),List.of(edge("source","a"),edge("a","hive")));
+        var read=json.readValue(json.writeValueAsBytes(saved),Pipeline.Dsl.class);
+        assertThat(HiveSinkPublicationPolicy.forPublication(read).nodes()).containsExactly(source,hive);
+    }
+
+    @Test void downstreamHiveBypassesBothMappingVariantsAndPreservesSavedCanvas() {
         var saved=new Pipeline.Dsl(1,List.of(source,a,b,hive),List.of(edge("source","a"),edge("a","b"),edge("b","hive")));
         var result=HiveSinkPublicationPolicy.forPublication(saved);
         assertThat(result.nodes()).containsExactly(source,hive);

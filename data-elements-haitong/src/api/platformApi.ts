@@ -34,8 +34,41 @@ function unwrap<T>(response: unknown, path: string): T {
   return ('data' in body ? body.data : response) as T;
 }
 
+export interface PlatformUploadProgress { loaded: number; total?: number; complete: boolean }
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'PUT';
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  onUploadProgress?: (progress: PlatformUploadProgress) => void;
+}
+
+/** Native upload byte events; completion of upload is distinct from server delivery. */
+function uploadRequest(url: string, body: FormData, headers: Record<string, string>, options: RequestOptions, current: () => boolean): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const cleanup = () => options.signal?.removeEventListener('abort', abort);
+    const fail = (error: Error) => { cleanup(); reject(error); };
+    const abort = () => xhr.abort();
+    xhr.open(options.method || 'POST', url);
+    xhr.timeout = options.timeoutMs ?? 20000;
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+    const progress = (event: ProgressEvent, complete: boolean) => {
+      if (current() && !options.signal?.aborted) options.onUploadProgress?.({ loaded: event.loaded, total: event.lengthComputable ? event.total : undefined, complete });
+    };
+    xhr.upload.onprogress = event => progress(event, false);
+    xhr.upload.onload = event => progress(event, true);
+    xhr.onload = () => { cleanup(); resolve(new Response(xhr.responseText || null, { status: xhr.status })); };
+    xhr.onerror = () => fail(new TypeError('Network request failed'));
+    xhr.ontimeout = () => fail(new DOMException('Upload timed out', 'TimeoutError'));
+    xhr.onabort = () => fail(new DOMException('Upload aborted', 'AbortError'));
+    if (options.signal?.aborted) { fail(new DOMException('Upload aborted', 'AbortError')); return; }
+    options.signal?.addEventListener('abort', abort, { once: true });
+    xhr.send(body);
+  });
+}
+
 /** Shared platform contract. Tenant identity comes only from the backend token session. */
-export async function platformApi<T>(path: string, body?: unknown, options: { method?: 'GET' | 'POST' | 'PUT'; timeoutMs?: number } = {}): Promise<T> {
+export async function platformApi<T>(path: string, body?: unknown, options: RequestOptions = {}): Promise<T> {
   if (!path.startsWith('/') || path.startsWith('//')) throw new PlatformApiError(path, '接口路径无效');
   const sessionRevision = getSessionRevision();
   const token = await getPlatformSessionToken();
@@ -50,31 +83,46 @@ export async function platformApi<T>(path: string, body?: unknown, options: { me
   };
   let response: Response;
   const multipart = body instanceof FormData;
+  // AbortController + a timer also works on the supported Chrome 100 baseline.
+  const requestAbort = new AbortController();
+  let fetchTimedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cancel = () => requestAbort.abort();
+  if (!multipart || !options.onUploadProgress) {
+    timer = setTimeout(() => { fetchTimedOut = true; requestAbort.abort(); }, options.timeoutMs ?? 20000);
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    if (options.signal?.aborted) requestAbort.abort();
+  }
+  const cleanup = () => { clearTimeout(timer); options.signal?.removeEventListener('abort', cancel); };
   try {
-    response = await fetch(`${baseUrl}${path}`, {
-      method: options.method ?? (body === undefined ? 'GET' : 'POST'),
-      headers: { 'X-Audit-Route':window.location.hash.slice(1).split('?')[0], token, ...(body === undefined || multipart ? {} : { 'Content-Type': 'application/json' }) },
-      body: body === undefined ? undefined : multipart ? body as FormData : JSON.stringify(body),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(options.timeoutMs ?? 20000),
-    });
+    const headers = { 'X-Audit-Route': window.location.hash.slice(1).split('?')[0], token, ...(body === undefined || multipart ? {} : { 'Content-Type': 'application/json' }) };
+    response = multipart && options.onUploadProgress
+      ? await uploadRequest(`${baseUrl}${path}`, body as FormData, headers, options, () => getSessionRevision() === sessionRevision)
+      : await fetch(`${baseUrl}${path}`, {
+        method: options.method ?? (body === undefined ? 'GET' : 'POST'), headers,
+        body: body === undefined ? undefined : multipart ? body as FormData : JSON.stringify(body),
+        cache: 'no-store',
+        signal: requestAbort.signal,
+      });
   } catch (cause) {
+    cleanup();
     assertCurrentSession();
-    const timedOut = cause instanceof DOMException && cause.name === 'TimeoutError';
+    const timedOut = fetchTimedOut || (cause instanceof DOMException && cause.name === 'TimeoutError');
     throw new PlatformApiError(path, timedOut ? '请求超时，请稍后重试' : '无法连接数据中台，请检查网络或服务状态');
   }
-  assertCurrentSession();
-  if (!response.ok) {
-    if (response.status === 401) redirectToPlatformLogin();
-    throw new PlatformApiError(path, response.status === 401 ? '数据中台登录已失效，正在前往登录页' : `接口请求失败（${response.status}）`, response.status);
-  }
   try {
-    const data: unknown = await response.json();
     assertCurrentSession();
-    return unwrap<T>(data, path);
-  }
-  catch (cause) {
-    if (cause instanceof PlatformApiError) throw cause;
-    throw new PlatformApiError(path, '接口返回格式无法识别');
-  }
+    if (!response.ok) {
+      if (response.status === 401) redirectToPlatformLogin();
+      throw new PlatformApiError(path, response.status === 401 ? '数据中台登录已失效，正在前往登录页' : `接口请求失败（${response.status}）`, response.status);
+    }
+    try {
+      const data: unknown = await response.json();
+      assertCurrentSession();
+      return unwrap<T>(data, path);
+    } catch (cause) {
+      if (cause instanceof PlatformApiError) throw cause;
+      throw new PlatformApiError(path, fetchTimedOut ? '请求超时，请稍后重试' : '接口返回格式无法识别');
+    }
+  } finally { cleanup(); }
 }

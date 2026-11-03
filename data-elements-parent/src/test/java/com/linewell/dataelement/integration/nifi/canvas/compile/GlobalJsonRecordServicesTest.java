@@ -86,7 +86,7 @@ class GlobalJsonRecordServicesTest {
         when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.codecs());
         var nodes=List.of(source("source","source.mysql",Map.of()),
                 new Pipeline.Node("mapping","transform.field-mapping","mapping","transform",0,0,Map.of()),
-                new Pipeline.Node("hive","sink.hive","Hive","sink",0,0,Map.of()),
+                com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveDownstreamFixtures.rawTarget(new Pipeline.Node("hive","sink.hive","Hive","sink",0,0,Map.of())),
                 new Pipeline.Node("oracle","sink.jdbc","Oracle","sink",0,0,Map.of("dbType","ORACLE")));
         var edges=List.of(new Pipeline.Edge("a","source","mapping","default"),new Pipeline.Edge("b","mapping","hive","default"),new Pipeline.Edge("c","mapping","oracle","default"));
         var result=GlobalJsonRecordServices.resolve(nifi,flow(nodes,edges));

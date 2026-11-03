@@ -267,6 +267,7 @@ public class PipelineController {
                 // chained task the catalog identifies the root business source,
                 // while this pipeline's source is the previous materialized hop.
                 // Registration-rule binding remains an explicit deploy/start action.
+                .map(com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy::forCanvas)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

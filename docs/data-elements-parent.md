@@ -782,6 +782,8 @@ ODS_UUID默认使用32位UUID，保留完整有效位并绑定流程、节点、
 
 登记“时间”对应DATETIME并保留时分秒，“日期”对应DATE。已选择时间目标时，日期解析默认使用日期时间；仅日期解析隐式补零点会被编译拒绝。DATE转换支持JDBC时间对象和JSON日期时间文本。来源逻辑类型、完整Schema、时间Writer和类型化Reader配套使用；Hive仍显示PUBLIC-WRITER-JSON-TIME_FORMAT。中间TIMESTAMP使用时间点语义，按计划时区还原，不能仅比较UTC中间字符串和本地数据库时间。
 
+旧物化模板的 ODS 入库/更新时间可能以 DATE 规则写入真实 TIMESTAMP 目标，导致编辑器编译报 `TARGET_TYPE_MISMATCH`。`UnifiedMappingService` 在批量授权与物理 Schema 校验后，仅纠正 `ODS_RKSJ` / `ODS_GXSJ` 未附加步骤的系统时钟规则，将陈旧 DATE 输出变为目标 DATETIME；显式登记 DATE、物理 DATE、自定义表达式和业务字段保留原义。其他类型冲突提供规则类型与目标物理/逻辑类型明细，继续严格拒绝。该兼容输出普通 DATETIME 计划，无需修改 NiFi NAR；不新增 SQL、数据库字段或自动改写已有运行任务。详见[字段治理加载错误](data-elements-haitong.md#field-mapping--281-getschema-加载错误的判断和处理)。
+
 构建使用：
 
 ```powershell
@@ -852,7 +854,7 @@ Oracle/OceanBase Oracle的DATE保留时分秒，在读取投影中转换为TIMES
 
 `CHARACTER VARYING`（含长度、大小写和多空格）、CHAR/NCHAR VARYING、NATIONAL CHARACTER VARYING、NCLOB、LONGNVARCHAR、BPCHAR 等统一为 STRING。显式 CAST 与函数 cast 在编译时归一化，未知 CAST 类型提前拒绝；不为字段转换生成 SQL。
 
-Hive 作为目标时，平台加载、合成展示、保存及 NiFi 发布统一旁路该分支紧邻的字段映射链。共享 JDBC 分支保留必要映射；Hive 作为来源不触发旁路。不完整草稿可继续保存编辑，发布仍严格检查断链和循环。全局 JSON 服务不存在时仍明确拒绝发布，不创建同名任务级替代服务。
+Hive 字段治理的现行规则见海通主文档第27章：只有多目标数据源串联中的下游 Hive 才在加载、合成展示、保存及 NiFi 发布时旁路紧邻映射链；单目标直写 Hive、多目标首站 Hive 及缺少链路上下文的画布保留字段治理。共享 JDBC 分支保留必要映射；Hive 作为来源不触发旁路。不完整草稿可继续保存编辑，发布仍严格检查断链和循环。全局 JSON 服务不存在时仍明确拒绝发布，不创建同名任务级替代服务。
 
 NiFi 2.9 的匹配构建：`mvn -Dnifi.version=2.9.0 -Dmapping.output.root=D:/Sourcecode/data-elements/logs/field-mapping-extension/nifi-2.9.0 clean package`。产物位于该目录下的 `haitong-mapping-nar/haitong-mapping-nar-1.1.13.nar`。2.9 完成匹配 SDK 构建和组件测试，真实原生运行验证在演示2.11完成；使用时须按现场 NiFi SDK选择对应包。不能同时安装同一扩展版本的两个 SDK 构建。
 
@@ -879,6 +881,12 @@ NiFi 2.9 的匹配构建：`mvn -Dnifi.version=2.9.0 -Dmapping.output.root=D:/So
 后端以 `JDBC_DRIVER_DIRECTORY` 或 JVM 参数 `data-elements.jdbc.driver-directory` 定位厂商驱动，加载前核对 JAR 内的实际驱动类。不同 GaussDB 驱动直接绑定到各自连接池，避免多个驱动接受 `jdbc:opengauss` 时由全局 DriverManager 随机选择。开源 Hive 必须在该目录的 `open-source-hive/` 安装 Apache Hive JDBC standalone 客户端，连接测试、表/字段探查和连接池共用同一个隔离驱动实例；缺少客户端时明确报错，不能回退到同名的华为 HiveDriver。华为客户端继续放在隔离的 `huawei-mrs/`，二者不混用 Hadoop/ZooKeeper 依赖。开源连接测试使用与登记、接入相同的 URL 构造器，保留 HTTP、TLS 和 NoSASL 配置，无认证模式显式传入 `auth=none`。
 
 NiFi 驱动独立于后端安装。节点驱动映射支持 `GAUSSDB_NATIVE`（opengaussjdbc 兼容包）、`GAUSSDB_JDBC`（新版 gaussdbjdbc）、`GAUSSDB_OPENGAUSS`、`GAUSSDB_DWS`、`GAUSSDB_MYSQL`、`HIVE_OPEN_SOURCE` 等键；没有独立 GaussDB 映射时兼容现有默认目录／旧 GaussDB 映射。华为新版原生驱动使用 `gaussdbVariant=gaussdb-jdbc` 与 `jdbc:gaussdb:`，原 `gaussdb` 选项保留 `jdbc:opengauss:`，两种驱动均按 JDK 和数据库实例版本选择官方发行包。openGauss Maven 客户端需选择包含 `org.opengauss.Driver` 的 `-og` 版本，不能用同版本号下包含 `org.postgresql.Driver` 的另一个包替代。Hive 开源配置填写 Binary/HTTP、认证方式和必要 TLS/Kerberos 参数；华为模式继续由服务端配置集解析，浏览器不保存华为 keytab 内容。
+
+当前华为 GaussDB 原生驱动采用用户确认的 `Distributed-UnionTech20_arm_64.zip`，包内 VERSION 为 `GaussDB-Kernel_505.2.1.SPC0800 / 5.0.0.4.15`，Maven 元数据为 `5.0.0-htrunk4.csi.gaussdb_kernel.opengaussjdbc.r15`。后端外部驱动目录中安装原件 `gaussdbjdbc.jar` 与 `opengaussjdbc.jar`，分别匹配上表两种华为产品入口，JAR 字节码为 Java 8，当前 JDK 21 可加载；驱动接口自报的版本号 42.0 不能当成数据库发行版本。保留独立开源 openGauss 的 `opengauss-jdbc.jar`，不把华为 `opengaussjdbc.jar` 改名覆盖它。
+
+受控安装入口为根目录 `tools/install-gaussdb-drivers.py`，默认只读；`--archive <附件ZIP> --driver-directory <后端JDBC目录>` 先核对 JAR 摘要、实际驱动类及 SPI 声明，再用 `--apply --backup-directory <logs或受限备份目录>` 安装。工具只替换上述两个明确文件，原文件在活动驱动目录外备份；每个文件采用原子替换，第二个文件失败时回退已替换项，拒绝未知包摘要与并发覆盖。JAR 与备份属于部署产物，不提交 Git。本机目录由受限启动配置的 `JDBC_DRIVER_DIRECTORY` 确定，不能猜测为 Maven 依赖或 NiFi 目录。若 JVM 此前已加载旧驱动，需在授权范围重启后端再验证；驱动类尚未加载时，新建连接会按同一路径读取已替换文件。
+
+附件的 `gsjdbc4.jar` 包含 `org.postgresql.Driver`，与普通 PostgreSQL 同名；`gsjdbc200.jar` 包含 `com.huawei.gauss200.jdbc.Driver` 且使用 `jdbc:gaussdb:`；`gaussdbjdbc-JRE7.jar` 是旧 JRE 备用版本。它们保留在交付包的独立兼容目录，不能同时混入共享 classpath 或改名冒充另一产品。NiFi 使用独立 JVM 和节点文件系统，需将同一对已校验 JAR 部署到实际节点驱动目录，保留 `GAUSSDB_NATIVE`／`GAUSSDB_JDBC` 映射及既有任务状态；只更新本地后端目录不表示远端 NiFi 已更新。离线类加载、协议接受及摘要一致验证不能替代现场数据库连接、认证、探查和真实抽取验证。
 
 SQL Server、GBase 8a、Vertica 提供统一分页预览执行器，查询字段与排序字段仍按当前来源的真实字段白名单校验。开源 Hive 首屏使用 LIMIT、后续页使用窗口函数，避免使用不兼容的 MySQL OFFSET 语法。GaussDB 按当前会话解析默认 Schema，批量字段读取使用有界 IN 查询及主键关联，最多200张表，不逐表补查。
 

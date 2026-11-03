@@ -19,8 +19,8 @@
 单值码表：base QueryRecord → SplitRecord(1)
         → EvaluateJsonPath → UpdateAttribute → ExecuteSQLRecord → final QueryRecord
 多值翻译：base QueryRecord → ExecuteGroovyScript → final QueryRecord</pre><p>旧链存在按记录查字典的路径，其请求数随行数增长。旧代码仍在仓库是兼容现状，不应被解读为满足现行批量规范的推荐实现。升级必须检查队列、版本和来源水位，不能直接清空重建任务。</p></article>
-<article class="route" id="route-hive" role="tabpanel" hidden><h3>Hive 目标 · 原始采集分支绕过字段治理</h3><pre>保存的画布：来源 → 字段映射 → Hive sink
-发布的该分支：来源 ─────────→ Hive sink</pre><p><code>HiveSinkPublicationPolicy.forPublication</code> 在发布图上绕过字段映射/字段增强，保留保存的 DSL；如果同一字段节点还被 JDBC 等其他分支使用，它仍会部署供其他分支消费。因而“Hive 入湖慢”不能先归因于字段映射：这个分支可能根本不执行它。仅升级字段节点也会对被移除节点明确拒绝。</p></article>
+<article class="route" id="route-hive" role="tabpanel" hidden><h3>Hive 目标 · 仅多目标链路下游绕过字段治理</h3><pre>单目标 / 多目标首站：来源 → 字段治理 → Hive sink
+多目标链路下游：上游已落地表 ─────────→ Hive sink</pre><p><code>HiveSinkPublicationPolicy.forPublication</code> 仅在目标节点具有明确多数据源下游链路上下文时，在发布图上绕过字段映射/字段增强；单目标、首站及上下文缺失时保留字段治理；如果同一字段节点还被 JDBC 等其他分支使用，它仍会部署供其他分支消费。因而“Hive 入湖慢”不能先归因于字段映射：这个分支可能根本不执行它。仅升级字段节点也会对被移除节点明确拒绝。</p></article>
 <a class="ref" href="#src-compiler">源码 ↗</a><a class="ref" href="#src-hive">源码 ↗</a>
 <h3>用这四项识别真正运行版本</h3><ul><li><b>Processor 类型：</b><code>com.linewell.dataelement.nifi.HaitongTransformRecord</code> 还是 QueryRecord / SplitRecord / Groovy。</li><li><b>Bundle 与版本：</b>NiFi 所有可能执行该流程的节点必须装有匹配 NAR；仓库 POM 版本不能证明服务器已装。</li><li><b>执行计划：</b>Processor 的 <code>execution-plan</code>、<code>plan-hash</code>、<code>plan-id</code> 与本次编译及已发布版本相对应。</li><li><b>结果属性：</b><code>ht.engine.version</code>、<code>ht.plan.hash</code>、<code>ht.window.count</code>、<code>ht.dictionary.sql.count</code> 可解释本次执行。</li></ul>
 </section><section id="rules"><div class="section-kicker">IMPLEMENTATION NOTES</div><h2>04 · 规则协议：不是把文本拼成任意脚本</h2>
@@ -761,7 +761,7 @@ BUILD SUCCESS</code></pre>
 1170:     /** Field-only upgrade: Reader/Writer and every source component remain in their existing scope. */
 1171:     public MappingReplacement createMappingReplacement(Pipeline pipeline,Pipeline.Node node,String group,String reader,String typedReader,String writer,UnifiedMappingService.Compiled prepared){
 1172:         if(HiveSinkPublicationPolicy.forPublication(pipeline).dsl().nodes().stream().noneMatch(candidate-&gt;candidate.id().equals(node.id())))
-1173:             throw new IllegalStateException(&quot;Hive目标原始写入不发布字段对标组件，请重新发布整个任务以更新连接关系&quot;);
+1173:             throw new IllegalStateException(&quot;多目标链路的下游 Hive 原始写入分支不发布字段治理组件，请重新发布整个任务以更新连接关系&quot;);
 1174:         NodeCompilation compiled=new NodeCompilation();compiled.csIds.put(&quot;typed-json-reader&quot;,typedReader==null?reader:typedReader);compiled.csIds.put(&quot;typed-json-writer&quot;,writer);compiled.csIds.put(&quot;jsonReader&quot;,reader);
 1175:         Map&lt;String,String&gt; ids=mappingVersions.archive(pipeline,Map.of(node.id(),prepared.plan()));List&lt;NifiEntity&gt; created=new ArrayList&lt;&gt;();
 1176:         if(!pipeline.dsl().nodes().stream().anyMatch(HiveSinkPublicationPolicy::isHiveSink)) {

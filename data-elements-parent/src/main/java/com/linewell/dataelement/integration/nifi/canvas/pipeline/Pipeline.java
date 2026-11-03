@@ -40,7 +40,15 @@ public record Pipeline(
         if (status == null) status = PipelineStatus.DRAFT;
     }
 
-    public record Dsl(int version, List<Node> nodes, List<Edge> edges) {}
+    public record Dsl(int version, List<Node> nodes, List<Edge> edges) {
+        @com.fasterxml.jackson.annotation.JsonCreator
+        public static Dsl read(@com.fasterxml.jackson.annotation.JsonProperty("version") int version,
+                @com.fasterxml.jackson.annotation.JsonProperty("nodes") List<Node> nodes,
+                @com.fasterxml.jackson.annotation.JsonProperty("edges") List<Edge> edges,
+                @com.fasterxml.jackson.annotation.JsonProperty("accessChain") Map<String,Object> legacyChain) {
+            return HiveSinkPublicationPolicy.legacyContext(new Dsl(version,nodes,edges),legacyChain);
+        }
+    }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Node(
