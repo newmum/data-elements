@@ -168,12 +168,11 @@ public class RegisteredMappingSchemaService {
                 if (mysql) readMysqlColumns(connection,byTable,totalFields,mysqlIgnoreCase,temporalConfig);
                 else {
                     String registeredType=Objects.toString(temporalConfig.getOrDefault("dbType",temporalConfig.get("databaseType")),"").toLowerCase(Locale.ROOT).replaceAll("[\\s_-]","");
-                    String mode=Objects.toString(temporalConfig.getOrDefault("compatibleMode",temporalConfig.get("mode")),"");
-                    String dialectProduct=product.contains("oceanbase")&&(registeredType.contains("oracle")||mode.equalsIgnoreCase("oracle"))?"oracle":product;
-                    String sql=com.linewell.dataelement.metautil.jdbc.JdbcColumnBatchQuery.sql(jdbcUrl(metadata,temporalConfig),dialectProduct,byTable.size());
-                    if(sql!=null)readCatalogColumns(connection,sql,byTable,totalFields,temporalConfig);
-                    else readJdbcColumns(metadata,catalog,byTable,totalFields,temporalConfig);
-                    if(JdbcTemporalTypes.oracleDateHasTime(temporalConfig)||product.equals("dm")||product.contains("dameng"))
+                    boolean oracle=product.contains("oracle")||product.contains("oceanbase")&&(registeredType.contains("oracle")||JdbcTemporalTypes.oracleDateHasTime(temporalConfig));
+                    String dialectProduct=oracle?"oracle":product;
+                    if(oracle)temporalConfig.put("dbType","ORACLE");
+                    readPhysicalColumns(connection,metadata,catalog,byTable,totalFields,temporalConfig,dialectProduct);
+                    if(oracle||product.equals("dm")||product.contains("dameng"))
                         readFoldedColumns(connection,metadata,catalog,byTable,aliases,group.getValue(),totalFields,temporalConfig,dialectProduct);
                 }
                 // Do not expose a partial batch when any requested physical table disappeared.
@@ -208,14 +207,24 @@ public class RegisteredMappingSchemaService {
             if(!candidate.equals(original)){folded.put(original,candidate);batch.computeIfAbsent(candidate,ignored->JSON.createArrayNode());}
         });
         if(batch.isEmpty())return;
-        String sql=com.linewell.dataelement.metautil.jdbc.JdbcColumnBatchQuery.sql(jdbcUrl(metadata,config),product,batch.size());
-        if(sql!=null)readCatalogColumns(connection,sql,batch,totalFields,config);else readJdbcColumns(metadata,catalog,batch,totalFields,config);
+        readPhysicalColumns(connection,metadata,catalog,batch,totalFields,config,product);
         folded.forEach((original,candidate)->tables.get(original).addAll(batch.get(candidate)));
     }
     private static String jdbcUrl(DatabaseMetaData metadata,Map<String,Object> config)throws SQLException {
         String value;
         try{value=metadata.getURL();}catch(SQLFeatureNotSupportedException|AbstractMethodError|UnsupportedOperationException error){value=null;}
         return value==null||value.isBlank()?Objects.toString(config.getOrDefault("jdbcURL",config.get("jdbcUrl")),""):value;
+    }
+    private static void readPhysicalColumns(Connection connection,DatabaseMetaData metadata,String catalog,Map<TableIdentity,ArrayNode> tables,int[] totalFields,Map<String,Object> config,String product)throws SQLException {
+        String sql=com.linewell.dataelement.metautil.jdbc.JdbcColumnBatchQuery.sql(jdbcUrl(metadata,config),product,tables.size());
+        if(sql!=null){
+            try{readCatalogColumns(connection,sql,tables,totalFields,config);return;}
+            catch(SQLFeatureNotSupportedException unsupported){
+                // Old drivers may support getColumns but not prepared catalog SQL; never mask connection/permission errors.
+                if(tables.values().stream().anyMatch(fields->!fields.isEmpty()))throw unsupported;
+            }
+        }
+        readJdbcColumns(metadata,catalog,tables,totalFields,config);
     }
     private static TableIdentity tableIdentity(String schema,String table,boolean ignoreCase){
         return new TableIdentity(ignoreCase?schema.toLowerCase(Locale.ROOT):schema,ignoreCase?table.toLowerCase(Locale.ROOT):table);

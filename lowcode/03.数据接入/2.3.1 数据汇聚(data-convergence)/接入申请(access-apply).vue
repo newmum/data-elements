@@ -287,7 +287,7 @@ const registeredColTypeOptions = dictStore.getDictItems("tableColType");
 // 原生类型映射可返回这些通用类型，旧租户字典没有时仍须正确回显和编辑。
 const colTypeOptions = [
   ...registeredColTypeOptions,
-  ...["varbinary", "float", "double"].filter((value) =>
+  ...["clob", "varbinary", "float", "double"].filter((value) =>
     !registeredColTypeOptions.some((item: any) => String(item.value).toLowerCase() === value)
   ).map((value) => ({ label: value.toUpperCase(), value })),
 ];

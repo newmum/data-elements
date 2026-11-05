@@ -107,8 +107,8 @@ class OdsTimestampTargetCompatibilityTest {
             var preview=service.preview(batch.values().iterator().next(),Collections.nCopies(count,Map.of()));
             assertEquals(count,preview.resultRows().size());assertEquals(0L,((Number)preview.stats().get("dictionarySqlCount")).longValue());
         }
-        // One batched authorization/schema pass for compilation and one for the explicit preview.
-        verify(dictionaries,times(2)).bind(any());verify(schemas,times(2)).checkContracts(any());
+        // Publication checks physical metadata; the explicit editor preview only checks authorized registration.
+        verify(dictionaries,times(2)).bind(any());verify(schemas,times(1)).checkContracts(any());verify(schemas,times(1)).checkRegisteredContracts(any());
         verifyNoMoreInteractions(dictionaries,schemas);
     }
 }

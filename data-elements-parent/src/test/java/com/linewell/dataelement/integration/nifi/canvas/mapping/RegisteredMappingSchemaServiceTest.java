@@ -52,7 +52,7 @@ class RegisteredMappingSchemaServiceTest {
             verify(f.sources,times(1)).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
             verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.engine,times(1)).openRegistered(anyString(),anyMap());
             verify(f.physical,times(1)).getSchema();verify(f.metadata,times(1)).getColumns(eq("catalog"),eq("APP"),eq("%"),eq("%"));
-            verify(f.physical,times(1)).prepareStatement(anyString());
+            verify(f.physical,times(config.containsKey("jdbcURL")?2:1)).prepareStatement(anyString());
         }
     }
     @Test void oldOracleDriverResolvesTheActualSessionSchemaBeforeTheLoginOwner()throws Exception {
@@ -473,8 +473,8 @@ class RegisteredMappingSchemaServiceTest {
         }
     }
     @Test void oceanbaseOracleUnquotedMixedCaseTablesUseOneBoundedUppercaseRetryForTwentyAndHundred()throws Exception {
-        for(int count:List.of(20,100)){
-            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","OCEANBASE_ORACLE","jdbcURL","jdbc:oceanbase:oracle://validation/service"));
+        for(String modeKey:List.of("compatibleMode","compatibilityMode","compatibility","mode"))for(int count:List.of(20,100)){
+            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","OCEANBASE",modeKey,"ORACLE","jdbcURL","jdbc:oceanbase://validation/service"));
             var actual=new ArrayList<Map<String,Object>>();
             for(int i=0;i<count;i++){
                 f.tables.set(i,table("table-"+i,"db","LINEWELL_ODS.ODS_alarm_info_cmcc_"+i));

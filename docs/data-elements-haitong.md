@@ -2097,7 +2097,7 @@ Oracle的 `DATE` 存储年月日及时、分、秒，OceanBase Oracle模式具�
 
 读取端也必须修正：Oracle DATE列在GenerateTableFetch及QueryDatabaseTableRecord的 `Columns to Return` 中投影为 `CAST("字段" AS TIMESTAMP) AS "字段"`，其它列保持原列名。使用已探查字段、验证标识符、保留原别名，不改过滤条件、排序字段或水位列。否则JDBC/Record读取端可能已经把时分秒丢掉，后面的Writer或映射无法恢复。两条来源发布路径的属性名均按NiFi真实契约校验；[GenerateTableFetch属性说明](https://nifi.apache.org/components/org.apache.nifi.processors.standard.GenerateTableFetch/)与[QueryDatabaseTableRecord属性说明](https://nifi.apache.org/components/org.apache.nifi.processors.standard.QueryDatabaseTableRecord/)可供核对。
 
-已有锁定Schema只修复经当前租户批量授权和物理元数据证实的Oracle DATE语义，其它类型、长度、精度和非空漂移继续拒绝。明确的日期截取步骤保留原意，日期解析误用于时间目标继续报错。旧未锁定规则在发布时结合目标Oracle DATE元数据修复推断类型；首次打开已登记来源/目标的旧规则时，前端一次取得整份物理Schema后编译，不按190个字段逐项读取。
+已有锁定Schema只修复经当前租户批量授权和物理元数据证实的Oracle DATE语义，其它类型、长度、精度和非空漂移继续拒绝。明确的日期截取步骤保留原意，日期解析误用于时间目标继续报错。旧未锁定规则在发布时结合目标Oracle DATE元数据修复推断类型；首次打开已登记来源/目标的旧规则时，前端一次取得整份已授权登记Schema后编译，不按190个字段逐项读取；编辑、提供样本预览不依赖物理探查。显式锁定与发布再独立核验JDBC目标，FTP/FTPS/SFTP来源使用登记字段。
 
 仅升级字段节点不会自动改写旧来源处理器。已有流程若读取端已经输出仅日期，需要同时受控调整来源的投影和配套Reader/Writer，并保留来源组件ID与state；不能通过清空水位、删除队列或重建业务表修正。
 
@@ -2536,6 +2536,8 @@ NiFi2.9原生AvroReader/ConvertRecord对异构联合类型仍存在隐式转换�
 <a id="field-mapping--32-字段探查与字段治理共用schema解析"></a>
 
 ### 32. 字段探查与字段治理共用Schema解析
+
+FTP 来源的逻辑登记表不要求存在对应 JDBC 物理表。编辑阶段保留登记引用授权，跳过物理连接；发布时只对实际数据库连接做物理核验，不能通过客户端参数跳过。OceanBase Oracle 模式下，登记如 `ODS_alarm_info_cmcc` 而实际未加引号表为 `ODS_ALARM_INFO_CMCC` 时，精确查询为空后按同一批次补一次大写查询；显式加引号的表名保持大小写。20/100 个目标保持同一数据源最多两次元数据读取、一次连接，不退回逐表查询。原有 BLOB/CLOB 实际目标核验继续生效。
 
 生产打开字段治理时出现的 HTTP 422 / `SCHEMA_SCOPE_REQUIRED` 发生在读取字段前的Schema定位阶段，不代表数据库缺少业务列，也与NiFi NAR的时间转换无关。原字段治理只按驱动产品名称识别Oracle/达梦，未完整使用登记的数据库类型、OceanBase兼容模式和用户名；与独立字段探查的规则不一致。原 `getOrDefault` 嵌套还会让存在但为空的defaultSchema挡住其他有效属性，并可能将Java null转成字符串"null"。
 
