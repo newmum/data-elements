@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="data:,">
+  <title>低代码页面预览</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus@2.14.4/dist/index.css" integrity="sha384-1T6fuGcM/Y7Ux3gtmyWUS8HJoCmBEhi7rBFvf0jhlECNqiwS6J7Wq32wwW+dH0Qs" crossorigin="anonymous">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #303d51; background: #f1f4f9; font: 14px/1.5 system-ui, sans-serif; }
+    .preview-heading { height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 24px; background: white; border-bottom: 1px solid #e9edf4; }
+    .preview-heading span { color: #7a879c; font-size: 12px; }
+    main { height: calc(100dvh - 52px); padding: 24px; min-width: 0; }
+    #app { height: 100%; min-width: 0; }
+    #status { position: fixed; inset: 52px 0 0; display: grid; place-items: center; background: #f1f4f9; color: #7a879c; }
+    #status[hidden] { display: none; }
+    @media (max-width: 650px) { main { padding: 12px; }.preview-heading { padding: 0 12px; gap: 10px; } }
+  </style>
+</head>
+<body>
+  <header class="preview-heading"><strong id="page-name">页面预览</strong><span>交互预览 · 组件内现有示例数据</span></header>
+  <main><div id="app"></div></main>
+  <div id="status" role="status">正在加载页面…</div>
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.5.41/dist/vue.global.prod.js" integrity="sha384-arPHRzOKPl8g3Rbe/cQBWYPnq4HcxfPFSFWD3qvI/hc2XQf+4GkVqkOlWgjN5mD3" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/element-plus@2.14.4/dist/index.full.min.js" integrity="sha384-y2v2CpR8KijNcUFl7zbmHjw0DhJdJY3cyRxkMEOpQCEjtQzP5cXeYHE44AkV1jm0" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/element-plus@2.14.4/dist/locale/zh-cn.min.js" integrity="sha384-JyVhUS7Ud87c75xnwVOEtzkqDqGYNIfUNc5rTBoeysqlEMvT3SuTsZpMN98ff4AI" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@element-plus/icons-vue@2.3.2/dist/index.iife.min.js" integrity="sha384-bLgrEQDTNrrtIKTkIPREPFYJWcfXTr6QIzFm0ZO7+qLA+fR0THoa1iwfh3/A0+mO" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vue3-sfc-loader@0.9.5/dist/vue3-sfc-loader.js" integrity="sha384-PZ/5Vu0PL2YXIi4MMqK0IC4MAQmOqYCJcT1COTIPapsnHFYqN3GW+pQdW7uVFCSm" crossorigin="anonymous"></script>
+  <script type="module">
+    const status = document.getElementById('status');
+    try {
+      const root = new URL('../../lowcode/', location.href);
+      const manifestResponse = await fetch(new URL('.manifest.json', root));
+      if (!manifestResponse.ok) throw new Error('Cannot read the component registry');
+      const manifest = await manifestResponse.json();
+      const path = new URLSearchParams(location.search).get('component') || '03.数据接入/异常任务(exception-tasks).vue';
+      const entry = manifest.resources.find(item => item.path === path && item.type !== '0' && !item.publicationBlocked);
+      if (!entry) throw new Error('This component is not available for public preview');
+      const source = new URL(entry.path.split('/').map(encodeURIComponent).join('/'), root);
+      const component = await window['vue3-sfc-loader'].loadModule(source.href, {
+        moduleCache: { vue: Vue, 'element-plus': ElementPlus },
+        async getFile(url) {
+          const target = new URL(url);
+          if (target.origin !== root.origin || !target.pathname.startsWith(root.pathname)) {
+            throw new Error('Component imports must remain inside the canonical lowcode directory');
+          }
+          const response = await fetch(target);
+          if (!response.ok) throw new Error('Cannot load component source');
+          return { getContentData: binary => binary ? response.arrayBuffer() : response.text() };
+        },
+        addStyle(css) {
+          const style = document.createElement('style');
+          style.textContent = css;
+          document.head.appendChild(style);
+        },
+      });
+      const app = Vue.createApp(component);
+      app.use(ElementPlus, { locale: ElementPlusLocaleZhCn });
+      app.component('Icon', {
+        props: { icon: String, size: [String, Number] },
+        setup(props) {
+          return () => {
+            const name = (props.icon || '').replace(/^el-icon-/, '');
+            const icon = ElementPlusIconsVue[name] || ElementPlusIconsVue.Document;
+            return Vue.h(ElementPlus.ElIcon, { size: props.size || 16 }, { default: () => Vue.h(icon) });
+          };
+        },
+      });
+      app.mount('#app');
+      document.getElementById('page-name').textContent = entry.displayName || entry.name;
+      document.title = (entry.displayName || entry.name) + ' · 交互预览';
+      status.hidden = true;
+    } catch (error) {
+      console.error(error);
+      status.setAttribute('role', 'alert');
+      status.textContent = '页面加载失败，请检查网络后刷新重试。';
+    }
+  </script>
+</body>
+</html>
