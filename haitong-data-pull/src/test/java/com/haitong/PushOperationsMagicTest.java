@@ -25,7 +25,13 @@ class PushOperationsMagicTest {
                 if(route.contains(" /api/v1/")||route.contains(" /internal/"))migrated++;
             }
         }}
-        assertEquals(37,migrated);
+        // The seven unified data-push file routes extend the 37 legacy mappings.
+        assertEquals(44,migrated);
+        assertTrue(routes.containsAll(Set.of(
+            "PUT /api/v1/data-push", "PUT /api/v1/data-push/single",
+            "POST /api/v1/data-push/uploads", "PUT /api/v1/data-push/uploads/{id}/parts/{part}",
+            "POST /api/v1/data-push/uploads/{id}/complete", "GET /api/v1/data-push/uploads/{id}",
+            "GET /api/v1/data-push/uploads/{id}/parts")));
         try(var paths=Files.walk(Path.of("src/main/java"))){for(Path path:paths.filter(p->p.toString().endsWith(".java")).toList()){
             assertFalse(Files.readString(path).contains("@RestController\n"),path.toString());
         }}

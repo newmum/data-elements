@@ -439,6 +439,87 @@ class RegisteredMappingSchemaServiceTest {
             verify(fixture.statement,times(1)).executeQuery();
         }
     }
+    @Test void binaryRegistrationUsesAuthoritativeTargetClobInOneBatchWithoutRelaxingOtherDrift()throws Exception {
+        for(boolean declared:List.of(false,true))for(int count:List.of(20,100)){
+            Fixture fixture=new Fixture(count);
+            fixture.columns.replaceAll(column->{var copy=new HashMap<>(column);copy.put("data_type","BLOB");copy.put("length",0);return copy;});
+            fixture.physicalRows.replaceAll(column->{var copy=new HashMap<>(column);copy.put("TYPE_NAME","clob");copy.put("COLUMN_SIZE",0);return copy;});
+            var contracts=new LinkedHashMap<String,JsonNode>();
+            fixture.references.forEach((key,reference)->{var contract=JSON.createObjectNode();contract.set("targetRef",reference);if(declared)contract.putArray("target").addObject().put("name","id").put("logicalType","BLOB").put("physicalType","BLOB");contracts.put(key,contract);});
+            try(var tenant=TenantContext.use("tenant-A")){fixture.service.checkContracts(contracts);}
+            contracts.values().forEach(contract->{assertEquals("STRING",contract.path("target").get(0).path("logicalType").asText());assertEquals("clob",contract.path("target").get(0).path("physicalType").asText());});
+            verify(fixture.jdbc,times(2)).queryForList(anyString(),any(Object[].class));
+            verify(fixture.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(fixture.statement,times(1)).executeQuery();
+            var contract=contracts.values().iterator().next();((com.fasterxml.jackson.databind.node.ObjectNode)contract.path("target").get(0)).put("logicalType","INT");
+            try(var tenant=TenantContext.use("tenant-A")){assertEquals("SCHEMA_DRIFT",assertThrows(MappingException.class,()->fixture.service.checkContracts(contracts)).code());}
+        }
+    }
+    @Test void binaryToTextRepairNeverAppliesToSourceContracts()throws Exception {
+        Fixture fixture=new Fixture(1);fixture.physicalRows.replaceAll(column->{var copy=new HashMap<>(column);copy.put("TYPE_NAME","clob");return copy;});
+        var contract=JSON.createObjectNode();contract.set("sourceRef",fixture.references.get("ref-0"));contract.putArray("source").addObject().put("name","id").put("logicalType","BLOB");
+        try(var tenant=TenantContext.use("tenant-A")){assertEquals("SCHEMA_DRIFT",assertThrows(MappingException.class,()->fixture.service.checkContracts(Map.of("node",contract))).code());}
+    }
+    @Test void generatedLowercaseTargetsBindUniqueUppercasePhysicalLobColumns()throws Exception {
+        Fixture fixture=new Fixture(1);fixture.columns=List.of(Map.of("table_id","table-0","column_name","pic_byte","data_type","BLOB","nullable",1));
+        fixture.physicalRows=List.of(mysqlColumn("registered","table_0","PIC_BYTE"));
+        fixture.physicalRows=fixture.physicalRows.stream().map(column->{var copy=new HashMap<String,Object>(column);copy.put("TYPE_NAME","clob");copy.put("COLUMN_SIZE",0);return (Map<String,Object>)copy;}).toList();
+        var contract=JSON.createObjectNode();contract.set("targetRef",fixture.references.get("ref-0"));contract.putArray("targetNameAliases").add("pic_byte");
+        try(var tenant=TenantContext.use("tenant-A")){
+            fixture.service.checkContracts(Map.of("node",contract));
+            assertEquals("pic_byte",contract.path("target").get(0).path("name").asText());assertEquals("PIC_BYTE",contract.path("target").get(0).path("physicalName").asText());
+            assertEquals("STRING",contract.path("target").get(0).path("logicalType").asText());
+            fixture.service.checkContracts(Map.of("node",contract));
+        }
+    }
+    @Test void oceanbaseOracleUnquotedMixedCaseTablesUseOneBoundedUppercaseRetryForTwentyAndHundred()throws Exception {
+        for(int count:List.of(20,100)){
+            Fixture f=new Fixture(count);f.config=Map.of("db",Map.of("dbType","OCEANBASE_ORACLE","jdbcURL","jdbc:oceanbase:oracle://validation/service"));
+            var actual=new ArrayList<Map<String,Object>>();
+            for(int i=0;i<count;i++){
+                f.tables.set(i,table("table-"+i,"db","LINEWELL_ODS.ODS_alarm_info_cmcc_"+i));
+                actual.add(jdbcColumn("catalog","LINEWELL_ODS","ODS_ALARM_INFO_CMCC_"+i,"id"));
+            }
+            when(f.metadata.getDatabaseProductName()).thenReturn("OceanBase");AtomicInteger reads=new AtomicInteger();
+            when(f.statement.executeQuery()).thenAnswer(call->rows(reads.getAndIncrement()==0?List.of():actual));
+            try(var tenant=TenantContext.use("tenant-A")){
+                var result=f.service.physicalBatch(f.service.resolve(f.references));assertEquals(count,result.size());assertTrue(result.values().stream().allMatch(fields->fields.size()==1));
+            }
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());
+            verify(f.engine).openRegistered(eq("db"),anyMap());verify(f.statement,times(2)).executeQuery();verify(f.metadata,never()).getColumns(any(),any(),any(),any());
+            verify(f.statement).setString(2,"ODS_alarm_info_cmcc_0");verify(f.statement).setString(2,"ODS_ALARM_INFO_CMCC_0");
+        }
+    }
+    @Test void explicitlyQuotedOracleTablesNeverFallBackToAnotherCase()throws Exception {
+        Fixture f=new Fixture(1);f.config=Map.of("db",Map.of("dbType","OCEANBASE_ORACLE","jdbcURL","jdbc:oceanbase:oracle://validation/service"));
+        f.tables=List.of(table("table-0","db","\"LINEWELL_ODS\".\"ODS_alarm_info_cmcc\""));when(f.metadata.getDatabaseProductName()).thenReturn("OceanBase");
+        when(f.statement.executeQuery()).thenAnswer(call->rows(List.of()));
+        try(var tenant=TenantContext.use("tenant-A")){assertEquals("SCHEMA_UNAVAILABLE",assertThrows(MappingException.class,()->f.service.physicalBatch(f.service.resolve(f.references))).code());}
+        verify(f.statement,times(1)).executeQuery();verify(f.statement,never()).setString(anyInt(),eq("ODS_ALARM_INFO_CMCC"));
+    }
+    @Test void ftpSourcesUseRegistrationWhileOnlyTheOceanbaseTargetOpensJdbc()throws Exception {
+        Fixture f=new Fixture(2);f.config=Map.of("ftp",Map.of("dbType","FTP","host","validation-ftp"),"db",Map.of("dbType","OCEANBASE_ORACLE","jdbcURL","jdbc:oceanbase:oracle://validation/service"));
+        f.tables=List.of(table("table-0","ftp","alarm_info_cmcc"),table("table-1","db","LINEWELL_ODS.ODS_alarm_info_cmcc"));
+        ((com.fasterxml.jackson.databind.node.ObjectNode)f.references.get("ref-0")).put("datasourceId","ftp");
+        when(f.metadata.getDatabaseProductName()).thenReturn("OceanBase");AtomicInteger reads=new AtomicInteger();
+        when(f.statement.executeQuery()).thenAnswer(call->rows(reads.getAndIncrement()==0?List.of():List.of(jdbcColumn("catalog","LINEWELL_ODS","ODS_ALARM_INFO_CMCC","id"))));
+        var contract=JSON.createObjectNode();contract.set("sourceRef",f.references.get("ref-0"));contract.set("targetRef",f.references.get("ref-1"));
+        try(var tenant=TenantContext.use("tenant-A")){f.service.checkContracts(Map.of("mapping",contract));assertEquals(1,contract.path("source").size());assertEquals(1,contract.path("target").size());}
+        verify(f.engine,never()).openRegistered(eq("ftp"),anyMap());verify(f.engine).openRegistered(eq("db"),anyMap());
+        verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.sources).resolveBatch(eq("tenant-A"),eq(Set.of("ftp","db")),anyString());verify(f.statement,times(2)).executeQuery();
+    }
+    @Test void editorAuthorizesTwentyAndHundredReferencesWithoutAnyPhysicalConnection()throws Exception {
+        for(int count:List.of(20,100)){
+            Fixture f=new Fixture(count);Map<String,JsonNode> contracts=new LinkedHashMap<>();
+            f.references.forEach((key,ref)->{var contract=JSON.createObjectNode();contract.set("sourceRef",ref);contract.set("targetRef",ref);contract.set("source",schema());contract.set("target",schema());contracts.put(key,contract);});
+            try(var tenant=TenantContext.use("tenant-A")){f.service.checkRegisteredContracts(contracts);}
+            verify(f.jdbc,times(2)).queryForList(anyString(),any(Object[].class));verify(f.sources).resolveBatch(eq("tenant-A"),eq(Set.of("db")),anyString());verify(f.engine,never()).openRegistered(anyString(),anyMap());
+        }
+        Fixture denied=new Fixture(2);denied.tables=List.of(table("table-0","db","table_0"));
+        Map<String,JsonNode> contracts=new LinkedHashMap<>();denied.references.forEach((key,ref)->{var contract=JSON.createObjectNode();contract.set("targetRef",ref);contracts.put(key,contract);});
+        try(var tenant=TenantContext.use("tenant-A")){assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->denied.service.checkRegisteredContracts(contracts)).code());}
+        verify(denied.engine,never()).openRegistered(anyString(),anyMap());
+    }
     private static Map<String,Object> table(String id,String datasource,String name){return Map.of("tid",id,"datasource_id",datasource,"table_name",name);}
     private static Map<String,Object> column(String table,String name){return Map.of("table_id",table,"column_name",name,"data_type","VARCHAR","length",64,"nullable",1);}
     private static Map<String,Object> mysqlColumn(String schema,String table,String name){return Map.of("TABLE_SCHEMA",schema,"TABLE_NAME",table,"COLUMN_NAME",name,"TYPE_NAME","varchar","COLUMN_SIZE",64,"IS_NULLABLE","YES","EXTRA","");}

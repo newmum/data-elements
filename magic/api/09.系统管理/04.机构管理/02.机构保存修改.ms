@@ -17,31 +17,31 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "校验请求资料后执行机构保存修改，返回保存或配置结果；使用请求参数 id、name、parentId、shortName、creditCode、standard、nature、status；涉及 rm_org_t 等业务表。",
+  "description": "在当前租户内新增、编辑、移动及启停机构；一次有界预取校验上级、重名及循环关系，同步子孙路径与状态，保留未提交字段并记录操作者。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：02.机构保存修改
 // 路由：POST /sym/org/saveOrUpdate
-// 业务说明：校验请求资料后执行机构保存修改，返回保存或配置结果；使用请求参数 id、name、parentId、shortName、creditCode、standard、nature、status；涉及 rm_org_t 等业务表。
+// 业务说明：当前租户内新增、编辑、移动及启停机构；有界预取并校验子树，保留未提交资料。
 // 组织机构保存/更新接口
 // 路径: /api/org/saveOrUpdate
 // 方法: POST
-// 数据源: sso (192.168.175.86:3306)
+// 数据源: 当前会话绑定的行业租户库
 // 参数: id(可选,有则更新无则新增), name, parentId, shortName, creditCode, standard, nature,
 //       nationalCode, nationalName, regionCode, nodeType, label, leaderOrgId
 
 import '@/common/audit-operation' as auditOperation;
 import tenantRuntime;
 import cn.hutool.core.util.IdUtil
-import "@post:/sym/user/me" as me
+import cn.dev33.satoken.stp.StpUtil;
 
 var now = new Date();
 
 // 获取入参
 var id            = body?.id || '';
-var name          = body?.name || '';
+var name          = body?.name == null ? '' : (body.name + '').trim();
 var parentId      = body?.parentId || '';
 var shortName     = body?.shortName || '';
 var creditCode    = body?.creditCode || '';
@@ -59,15 +59,19 @@ var regionCode    = body?.regionCode || '';
 var nodeType      = body?.nodeType || '';
 var label         = body?.label || '';
 var leaderOrgId   = body?.leaderOrgId || '';
-var createId      = me().createId;
-var updateId      = body?.updateId || '';
+var createId      = StpUtil.getLoginId() + '';
+var updateId      = createId;
 
 
 var tenantId=tenantRuntime.id();
-var sql=db.normal();
+var sql=db.camel();
+if(body?.status!=null && !['0','1'].contains(body.status+'')){exit 400,'机构状态无效，请选择启用或禁用';}
+if(body?.nature!=null && !['1','2','3'].contains(body.nature+'')){exit 400,'机构类型无效';}
+if(id=='ROOT'){exit 400,'全部机构为系统根节点，不能修改';}
 try {
  return sql.transaction(()=>{
-    var orgRows=sql.table('rm_org_t').where().eq('tenantId',tenantId).eq('deleted',0).limit(5001).select();
+    // 当前运行版 Where 提供 page(size, offset)，不提供 limit；一次有界预取用于整棵子树校验。
+    var orgRows=sql.table('rm_org_t').where().eq('tenant_id',tenantId).eq('deleted',0).page(5001,0).list;
     if(orgRows.size()>5000){exit 400,'机构范围过大，请分级维护';}
     var orgById={};for(org in orgRows){orgById[org.id]=org;}
     // 构建字段数据（驼峰，与数据库字段一致）
@@ -94,8 +98,7 @@ try {
 
     if (id != null && id != '') {
         // ========== 更新逻辑 ==========
-        var exist = sql.table("rm_org_t")
-            .where().eq("id", id).eq("deleted", 0).selectOne();
+        var exist = orgById[id];
 
         if (exist == null) {
             // 参数或业务状态不满足要求时立即终止请求。
@@ -145,8 +148,7 @@ try {
                 exit 400, '不能将机构设置为自身的上级机构';
             }
 
-            var parent = sql.table("rm_org_t")
-                .where().eq("id", targetParentId).eq("deleted", 0).selectOne();
+            var parent = orgById[targetParentId];
             if (parent == null) {
                 exit 404, '上级机构不存在: ' + targetParentId;
             }
@@ -169,24 +171,21 @@ try {
                 ancestorId = ancestor.parentId;
             }
 
-            var siblings = sql.table("rm_org_t")
-                .where().eq("parentId", targetParentId).eq("deleted", 0).select();
+            var siblings = orgRows.filter(org=>org.parentId==targetParentId);
             var nextNum = siblings.size() + 1;
             var nextNumStr = nextNum < 10 ? ('000' + nextNum) : (nextNum < 100 ? ('00' + nextNum) : (nextNum < 1000 ? ('0' + nextNum) : ('' + nextNum)));
             newSerialNumber = (parent.serialNumber || '') + nextNumStr;
             newOrgPath = (parent.orgPath || '') != '' ? (parent.orgPath + '/' + data.name) : data.name;
         } else if (nameChanged) {
-            var currentParent = sql.table("rm_org_t")
-                .where().eq("id", targetParentId).eq("deleted", 0).selectOne();
+            var currentParent = orgById[targetParentId];
             newOrgPath = currentParent != null && (currentParent.orgPath || '') != ''
                 ? currentParent.orgPath + '/' + data.name
                 : data.name;
         }
 
         if (parentChanged || nameChanged) {
-            var duplicate = sql.table("rm_org_t")
-                .where().eq("parentId", targetParentId).eq("name", data.name).eq("deleted", 0).ne("id", id).selectOne();
-            if (duplicate != null) {
+            var duplicates = orgRows.filter(org=>org.parentId==targetParentId && org.name==data.name && org.id!=id);
+            if (duplicates.size()>0) {
                 exit 400, '上级机构下已存在同名机构: ' + data.name;
             }
             data.orgPath = newOrgPath;
@@ -195,7 +194,7 @@ try {
 
         // 先持久化当前机构，再重写全部子孙的路径前缀，保证父级修改后树路径保持一致。
         sql.table("rm_org_t").withBlank()
-            .where().eq("id", id)
+            .where().eq("tenant_id",tenantId).eq("id", id)
             .update(data);
 
         if ((parentChanged || nameChanged) && oldOrgPath != '' && newOrgPath != oldOrgPath) {
@@ -220,7 +219,7 @@ try {
                 if (parentChanged && oldSerialNumber != '' && descendantSerial.startsWith(oldSerialNumber)) {
                     descendantData.serialNumber = newSerialNumber + descendantSerial.substring(oldSerialNumber.length());
                 }
-                sql.table("rm_org_t").where().eq("id", descendant.id).update(descendantData);
+                sql.table("rm_org_t").where().eq("tenant_id",tenantId).eq("id", descendant.id).update(descendantData);
             }
         }
 
@@ -244,7 +243,7 @@ try {
             if (allIds.size() > 1) {
                 // 从 MySQL 业务表读取当前有效数据。
                 sql.table("rm_org_t")
-                    .where().in("id", allIds).ne("id", id)
+                    .where().eq("tenant_id",tenantId).in("id", allIds).ne("id", id)
                     .update({ status: status, updateId: updateId, updateTime: now });
             }
         }
@@ -265,9 +264,8 @@ try {
         parentId = parentId || "ROOT"
 
         // 同级下同名校验
-        var sameName = sql.table("rm_org_t")
-            .where().eq("parentId", parentId).eq("name", name).eq("deleted", 0).selectOne();
-        if (sameName != null) {
+        var sameName = orgRows.filter(org=>org.parentId==parentId && org.name==name);
+        if (sameName.size()>0) {
             // 参数或业务状态不满足要求时立即终止请求。
             exit 400, '同级下已存在同名机构: ' + name;
         }
@@ -277,10 +275,10 @@ try {
         // 若未传sortNum，查同级最大值+1
         if (!sortNum) {
             // 从 MySQL 业务表读取当前有效数据。
-            var maxSortRow = sql.table("rm_org_t")
-                .where().eq("parentId", parentId != '' ? parentId : 'ROOT').eq("deleted", 0)
-                .orderBy("sortNum", "desc").selectOne();
-            sortNum = maxSortRow != null ? (maxSortRow.sortNum + 1) : 1;
+            sortNum = 1;
+            for(sibling in orgRows.filter(org=>org.parentId==parentId)) {
+                sortNum = Math.max(sortNum, (sibling.sortNum || 0) + 1);
+            }
         }
 
         // 计算orgPath和serialNumber
@@ -288,8 +286,7 @@ try {
         var serialNumberNew = '';
 
         // 从 MySQL 业务表读取当前有效数据。
-        var parent = sql.table("rm_org_t")
-                .where().eq("id", parentId).eq("deleted", 0).selectOne();
+        var parent = orgById[parentId];
 
         if (!parent) {
             // 参数或业务状态不满足要求时立即终止请求。
@@ -301,8 +298,7 @@ try {
 
         var parentSerial = parent.serialNumber || '';
         // 从 MySQL 业务表读取当前有效数据。
-        var siblingCount = sql.table("rm_org_t")
-            .where().eq("parentId", parentId).eq("deleted", 0).select();
+        var siblingCount = orgRows.filter(org=>org.parentId==parentId);
         var nextNum = siblingCount.size() + 1;
         // 4位补零格式：0001、0021、0102
         var nextNumStr = nextNum < 10 ? ('000' + nextNum) : (nextNum < 100 ? ('00' + nextNum) : (nextNum < 1000 ? ('0' + nextNum) : ('' + nextNum)));
@@ -318,6 +314,7 @@ try {
         data.updateId = createId;
         data.updateTime = now;
         data.deleted = 0;
+        data.tenant_id = tenantId;
 
         // 将校验后的业务数据写入 MySQL 主表。
         sql.table("rm_org_t").insert(data);

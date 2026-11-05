@@ -20,7 +20,8 @@ final class FtpsSourceCompiler {
                              String libraries,boolean acknowledge,double x,double y) {
         Map<String,String> properties=properties(config,libraries,acknowledge);
         var processor=nifi.createProcessor(pgId,TYPE,label,x,y,properties,
-                acknowledge?"0 sec":text(config,"schedulingPeriod","60 sec"),"TIMER_DRIVEN");
+                acknowledge?"0 sec":text(config,"schedulingPeriod","60 sec"),
+                acknowledge?"TIMER_DRIVEN":text(config,"schedulingStrategy","TIMER_DRIVEN"));
         if (!acknowledge) nifi.executeOnPrimaryNode(processor.id());
         return processor;
     }

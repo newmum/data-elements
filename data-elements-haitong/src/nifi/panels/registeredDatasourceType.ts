@@ -62,6 +62,8 @@ export function buildJdbcUrl(raw?: string, host?: string, port?: string, databas
   if (type === 'SQLSERVER') return `jdbc:sqlserver://${host}:${p};databaseName=${database};encrypt=true;trustServerCertificate=false`;
   if (type === 'IOTDB') return `jdbc:iotdb://${host}:${p}/`;
   const url = `jdbc:${protocol}://${host}:${p}/${database}`;
+  if (type === 'GAUSSDB' && ['gaussdb', 'gaussdb-jdbc'].includes(String(gaussdbVariant || '').toLowerCase()))
+    return `${url}?autoBalance=true`;
   return protocol === 'mysql' ? `${url}?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true` : url;
 }
 

@@ -53,6 +53,30 @@ class MappingFieldLabelsTest {
             assertFalse(chained.enrich("second",spec).path("mappings").get(0).has("sourceTemporalUnit"));
         }
     }
+    @Test void generatedBinaryTasksAcquireTargetIdentityAndEncodeClobWithoutOpeningTheEditor()throws Exception {
+        var source=node("ftp","source",Map.of("sourceColumns",List.of(Map.of("columnName","pic_byte","dataType","BLOB"))));
+        var mapping=node("m","transform",Map.of());
+        var sink=new Pipeline.Node("db","sink.jdbc","validation target","sink",0,0,Map.of("targetDbId","db-id","targetTableId","table-id"));
+        var labels=new MappingFieldLabels(flow(List.of(source,mapping,sink),List.of(new Pipeline.Edge("in","ftp","m","default"),new Pipeline.Edge("out","m","db","success"))));
+        for(String targetType:List.of("BLOB","CLOB")){
+            var original=JSON.readTree("{\"version\":\"1.0\",\"mappings\":[{\"from\":\"pic_byte\",\"to\":\"pic_byte\",\"targetType\":\""+targetType+"\"}]}");
+            var enriched=labels.enrich("m",original);
+            assertFalse(original.has("schemaContract"));assertEquals("table-id",enriched.path("schemaContract").path("targetRef").path("tableId").asText());
+            assertEquals("BINARY",enriched.path("mappings").get(0).path("sourceType").asText());
+            // The authorized batch physical reader supplies this schema, never the canvas snapshot.
+            ((com.fasterxml.jackson.databind.node.ObjectNode)enriched.path("schemaContract")).putArray("target").addObject().put("name","pic_byte").put("logicalType","STRING").put("physicalType","CLOB");
+            var plan=com.linewell.dataelement.mapping.core.MappingEngine.compile(enriched);
+            assertEquals("BASE64",plan.document().path("rules").get(0).path("target").path("binaryEncoding").asText());
+            var result=com.linewell.dataelement.mapping.core.MappingEngine.execute(plan,List.of(Map.of("pic_byte",List.of(-1,-40,-1))),0,new com.linewell.dataelement.mapping.core.ExecutionContext(java.time.Instant.EPOCH,java.time.ZoneId.of("Asia/Shanghai"),Locale.ROOT,"validation"),null);
+            assertTrue(result.rows().getFirst().success());assertEquals("/9j/",result.rows().getFirst().output().get("pic_byte"));
+        }
+    }
+    @Test void binaryPublicationRejectsMismatchedTargetReferences()throws Exception {
+        var mapping=node("m","transform",Map.of());var sink=new Pipeline.Node("db","sink.jdbc","target","sink",0,0,Map.of("targetDbId","allowed-db","targetTableId","allowed-table"));
+        var labels=new MappingFieldLabels(flow(List.of(mapping,sink),List.of(new Pipeline.Edge("out","m","db","success"))));
+        var spec=JSON.readTree("{\"version\":\"1.0\",\"schemaContract\":{\"targetRef\":{\"datasourceId\":\"other-db\",\"tableId\":\"other-table\"}},\"mappings\":[{\"from\":\"pic_byte\",\"to\":\"pic_byte\",\"targetType\":\"BLOB\"}]}");
+        assertEquals("TARGET_REFERENCE_MISMATCH",assertThrows(com.linewell.dataelement.mapping.core.MappingException.class,()->labels.enrich("m",spec)).code());
+    }
     private static Pipeline.Node node(String id,String category,Map<String,Object> config){return new Pipeline.Node(id,category+".test",id,category,0,0,config);}
     private static Pipeline flow(List<Pipeline.Node> nodes,List<Pipeline.Edge> edges){return new Pipeline("labels","labels",null,null,null,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null);}
 }

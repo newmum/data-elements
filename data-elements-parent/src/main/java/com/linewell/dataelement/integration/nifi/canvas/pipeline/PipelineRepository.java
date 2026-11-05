@@ -119,7 +119,7 @@ public class PipelineRepository {
                 p.description(),
                 createdAt,
                 now,
-                p.dsl(),
+                BatchSchedulePolicy.normalize(p.dsl(), existing.map(Pipeline::dsl).orElse(null), TenantContext.requireTenantId(), id),
                 p.nifiProcessGroupId() != null
                         ? p.nifiProcessGroupId()
                         : existing.map(Pipeline::nifiProcessGroupId).orElse(null),
@@ -153,7 +153,8 @@ public class PipelineRepository {
         if (next == null) throw new IllegalStateException("Mutator returned null for pipeline " + id);
         Pipeline stamped = new Pipeline(
                 next.id(), next.name(), next.description(), next.createdAt(),
-                Math.max(System.currentTimeMillis(),cur.updatedAt()==null?0:cur.updatedAt()+1), next.dsl(),
+                Math.max(System.currentTimeMillis(),cur.updatedAt()==null?0:cur.updatedAt()+1),
+                BatchSchedulePolicy.normalize(next.dsl(),cur.dsl(),TenantContext.requireTenantId(),id),
                 next.nifiProcessGroupId(), next.status(),
                 next.lastDeployedHash(), next.lastDeployedAt(), next.lastStoppedAt(),
                 next.nodeMapping(), next.lastBulletinId());

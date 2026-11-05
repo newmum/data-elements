@@ -70,7 +70,7 @@ public class FieldMappingController {
     public FieldMappingService.ValidationResponse validate(@RequestBody ValidateRequest request) {
         if(unified!=null){
             com.linewell.dataelement.mapping.core.MappingEngine.Plan plan;
-            try{plan=unified.compile(request.spec()).plan();}
+            try{plan=unified.compileForEditing(request.spec()).plan();}
             catch(MappingException exception){return new FieldMappingService.ValidationResponse(false,List.of(new FieldMappingService.MappingIssue("spec",null,exception.getMessage(),"ERROR",exception.code(),List.of())),List.of(),new FieldMappingService.SchemaCompare(request.sourceSchema()==null?List.of():request.sourceSchema(),request.targetSchema()==null?List.of():request.targetSchema()));}
             // The engine owns conditional/target-reference validation. Keep schema diagnostics only.
             return unified.validateSchemas(plan,request.sourceSchema(),request.targetSchema());

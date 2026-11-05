@@ -28,10 +28,12 @@
 // 组织机构详情接口
 // 路径: /api/org/detail
 // 方法: POST
-// 数据源: sso (192.168.175.86:3306)
+// 数据源: 当前会话绑定的行业租户库
 // 参数: id (必填,机构ID)
 
 // 获取入参
+import tenantRuntime;
+var tenantId=tenantRuntime.id();
 var id = body?.id || '';
 
 // 参数校验
@@ -43,7 +45,7 @@ if (id == null || id == '') {
 try {
     // 从 MySQL 业务表读取当前有效数据。
     var record = db.table("rm_org_t")
-        .where().eq("id", id).eq("deleted", 0).selectOne();
+        .where().eq('tenant_id',tenantId).eq("id", id).eq("deleted", 0).selectOne();
 
     if (record == null) {
         // 参数或业务状态不满足要求时立即终止请求。

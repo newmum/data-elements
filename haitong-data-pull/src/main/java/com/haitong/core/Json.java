@@ -3,13 +3,25 @@ package com.haitong.core;
 import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.core.*;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.core.exc.StreamConstraintsException;
+import com.haitong.config.RelayProperties;
 import java.util.*;
 
 @Component
 public final class Json {
-    private final JsonMapper mapper = JsonMapper.builder(JsonFactory.builder()
-        .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(64).maxStringLength(1048576).maxNumberLength(200).build())
-        .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build()).build();
+    private final JsonMapper mapper;
+    private final int maxStringLength;
+    public Json() { this(new RelayProperties()); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public Json(RelayProperties properties) {
+        // UTF-8 characters cannot outgrow the bounded request bytes. Avoid a second,
+        // hidden 1 MiB field limit rejecting an otherwise permitted Base64 record.
+        maxStringLength=properties.getLimits().getMaxMessageBytes();
+        mapper=JsonMapper.builder(JsonFactory.builder()
+            .streamReadConstraints(StreamReadConstraints.builder().maxNestingDepth(64).maxStringLength(maxStringLength).maxNumberLength(200).build())
+            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build())
+            .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
+    }
     public String write(Object value) {
         try { return mapper.writeValueAsString(value); }
         catch (JsonProcessingException e) { throw new IllegalStateException("JSON 序列化失败", e); }
@@ -30,7 +42,9 @@ public final class Json {
             if(!(parsed instanceof Map<?,?> m)) throw RelayException.invalid("请求体必须是一个 JSON 对象");
             return new LinkedHashMap<>((Map<String,Object>)m);
         } catch(RelayException e) { throw e; }
-        catch(Exception e) { throw RelayException.invalid("JSON 格式、嵌套深度或字段长度不合法"); }
+        catch(StreamConstraintsException e) { throw new RelayException(422,"JSON_LIMIT_EXCEEDED",
+            "JSON超过解析限制：单字段最多"+maxStringLength+"字符、嵌套最多64层、数字最多200字符"); }
+        catch(Exception e) { throw RelayException.invalid("JSON语法不合法，请检查括号、引号、逗号或重复字段"); }
     }
     public void require(Map<String,Object> object,List<String> fields) {
         for(String path:fields) {

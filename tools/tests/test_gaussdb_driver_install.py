@@ -2,6 +2,7 @@ import importlib.util
 import io
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -12,6 +13,31 @@ spec.loader.exec_module(installer)
 
 
 class GaussDbDriverInstallTest(unittest.TestCase):
+    def test_maven_install_verifies_both_payloads_before_invocation_and_uses_vendor_coordinates(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            archive, approved, contents = self.fixture(root)
+            jdbc = root / 'jdbc'
+            installer.install(archive, jdbc, True, root / 'backup', approved)
+            calls = []
+            def run(command, **kwargs):
+                calls.append(command)
+                self.assertNotIn('-Dmaven.repo.local', ' '.join(command))
+                self.assertEqual((root / 'reports').resolve(), kwargs['cwd'])
+                return SimpleNamespace(returncode=0)
+            with patch.object(installer, 'APPROVED', approved), patch.object(installer.shutil, 'which', return_value='mvn'):
+                installed = installer.install_to_maven(jdbc, root / 'reports', run)
+                self.assertEqual(2, len(calls))
+                self.assertIn('com.huawei.gaussdb:gaussdbjdbc:' + installer.MAVEN_VERSION, installed)
+                self.assertIn('org.opengauss:opengauss-jdbc:' + installer.MAVEN_VERSION, installed)
+                (jdbc / 'opengaussjdbc.jar').write_bytes(b'unreviewed')
+                with self.assertRaisesRegex(ValueError, 'reviewed attachment'):
+                    installer.install_to_maven(jdbc, root / 'reports', run)
+                self.assertEqual(2, len(calls))
+                (jdbc / 'opengaussjdbc.jar').write_bytes(contents['opengaussjdbc.jar'])
+                with self.assertRaisesRegex(RuntimeError, 'Maven vendor installation failed'):
+                    installer.install_to_maven(jdbc, root / 'reports', lambda *a, **kw: SimpleNamespace(returncode=1))
+
     def fixture(self, root):
         archive = root / 'approved.zip'
         contents, approved = {}, {}

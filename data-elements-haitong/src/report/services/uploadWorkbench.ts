@@ -4,6 +4,7 @@ import { clone } from '../core/model';
 import { resourceFromRegion } from '../core/import';
 import { prepareReportFile } from './reportCsv';
 import type {PlatformUploadProgress} from '../../api/platformApi';
+import {PlatformApiError} from '../../api/platformApi';
 export {normalizedReportFile,prepareReportFile} from './reportCsv';
 import { platformApi, platformSessionToken } from './platformApi';
 import { getSessionRevision } from '../../nifi/api/bridgeSession';
@@ -82,6 +83,26 @@ export async function uploadOriginal(file:File):Promise<string>{
   const form=new FormData();form.append('file',file);
   const result=await platformApi<{tid:string}>('/data/file?action=upload',{method:'POST',body:form});
   if(!result.tid)throw new Error('上传未返回文件编号');return result.tid;
+}
+export interface OriginalUploadFailure {fileName:string;cause:unknown}
+/** Each file upload is a user-requested write; parsing remains one batch request. */
+export async function uploadOriginalFiles(files:File[],onProgress:(completed:number)=>void,assertSession:()=>void):Promise<{
+  uploaded:Array<{file:File;fileId:string}>;failures:OriginalUploadFailure[];
+}>{
+  const uploaded:Array<{file:File;fileId:string}>=[],failures:OriginalUploadFailure[]=[];
+  for(const [index,file] of files.entries()){
+    assertSession();
+    try{
+      if(!/\.(csv|xlsx|xls|txt|json)$/i.test(file.name)||!file.size||file.size>10*1024*1024)throw new Error('支持 10 MB 以内的 CSV、Excel、TXT、JSON 数据文件');
+      const fileId=await uploadOriginal(file);assertSession();uploaded.push({file,fileId});
+    }catch(cause){
+      // A changed/expired session stops the batch instead of uploading remaining files.
+      assertSession();
+      if(cause instanceof PlatformApiError&&cause.status===401)throw cause;
+      failures.push({fileName:file.name,cause});
+    }finally{onProgress(index+1);}
+  }
+  return {uploaded,failures};
 }
 export const saveUploadManifest=(dbId:string,manifest:UploadManifest,removedTableIds:string[]=[],normalizedTableKeys:string[]=[])=>platformApi<UploadManifest>(endpoint,{method:'POST',body:{...manifest,action:'save',dbId,removedTableIds,workflowVersion:2,normalizedTableKeys}});
 export async function readUploadedOriginal(fileId:string,fileName:string):Promise<File>{

@@ -13,6 +13,7 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.model.nifi.NifiEntity;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -123,6 +124,30 @@ public class DslCompiler {
     public void preflightSources(Pipeline pipeline) {
         if (validateDateFetchConfigurations(pipeline)) nifi.requireDateFetchExtension();
         preflightScriptProcesses(pipeline);
+    }
+
+    /** All auto schedules are already persisted. Read the selected runtime timezone once per graph. */
+    public void preflightSchedules(Pipeline pipeline) {
+        boolean automatic = false;
+        for (var node : pipeline.dsl().nodes()) {
+            if (!BatchSchedulePolicy.isBatchSource(node.manifestKey()) || !BatchSchedulePolicy.automatic(node.config())) continue;
+            if (!"CRON_DRIVEN".equals(configText(node.config(), "schedulingStrategy"))
+                    || !configText(node.config(), "schedulingPeriod").matches("\\d{1,2} \\d{1,2} \\d{1,2} \\* \\* \\?"))
+                throw new IllegalStateException("每天错峰调度尚未分配，请先保存任务");
+            automatic = true;
+        }
+        if (automatic) nifi.requireDailyScheduleZone();
+    }
+
+    /** Validate the selected writer bundle once for the whole graph before replacing any old group. */
+    public void preflightWriters(Pipeline pipeline) {
+        boolean linewell = false;
+        for (Pipeline.Node node : pipeline.dsl().nodes()) {
+            if (!"sink.jdbc".equals(node.manifestKey())) continue;
+            Map<String, Object> config = node.config() == null ? Map.of() : node.config();
+            linewell |= LINEWELL_DATABASE_RECORD_MODE.equals(effectiveJdbcWriterType(config));
+        }
+        if (linewell) nifi.requireLinewellDatabaseRecordExtension();
     }
 
     private void preflightScriptProcesses(Pipeline pipeline) {
@@ -244,6 +269,8 @@ public class DslCompiler {
     private CompileResult compileValidated(Pipeline pipeline, Consumer<String> processGroupCreatedCallback,
             com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer.Layout layout,
             Pipeline.Node periodicSource) {
+        preflightSchedules(pipeline);
+        preflightWriters(pipeline);
         preflightScriptProcesses(pipeline);
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
@@ -938,7 +965,7 @@ public class DslCompiler {
             fetch=nifi.createProcessor(pgId,
                     sftp ? "org.apache.nifi.processors.standard.GetSFTP" : "org.apache.nifi.processors.standard.GetFTP",
                     node.label() + "/fetch", x, y,
-                    fetchProperties, schedulingPeriod, "TIMER_DRIVEN");
+                    fetchProperties, schedulingPeriod, firstNonBlankStatic(configText(cfg, "schedulingStrategy"), "TIMER_DRIVEN"));
         }
         nc.processorIds.put("fetch", fetch.id());
 
@@ -1028,7 +1055,7 @@ public class DslCompiler {
         double y = nodeOriginY(nodeLayout);
         NifiEntity list = nifi.createProcessor(pgId, "org.apache.nifi.processors.aws.s3.ListS3",
                 node.label() + "/列出对象", x, y,
-                listProperties, schedulingPeriod, "TIMER_DRIVEN");
+                listProperties, schedulingPeriod, firstNonBlankStatic(configText(cfg, "schedulingStrategy"), "TIMER_DRIVEN"));
         nc.processorIds.put("list", list.id());
 
         Map<String, String> fetchProperties = minioS3Properties(endpoint, bucket, nc.csIds.get("minioCredentials"));

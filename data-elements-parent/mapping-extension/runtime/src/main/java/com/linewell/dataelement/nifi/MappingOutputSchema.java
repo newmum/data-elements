@@ -39,6 +39,7 @@ final class MappingOutputSchema {
         return scalars.size()==1?scalars.iterator().next():RecordFieldType.CHOICE.getChoiceDataType(new ArrayList<>(scalars));
     }
     private static DataType scalar(Object value){
+        if(value instanceof byte[]||value instanceof java.nio.ByteBuffer)return RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.BYTE.getDataType());
         if(value instanceof Boolean)return RecordFieldType.BOOLEAN.getDataType();
         if(value instanceof Byte||value instanceof Short||value instanceof Integer)return RecordFieldType.INT.getDataType();
         if(value instanceof Long)return RecordFieldType.LONG.getDataType();

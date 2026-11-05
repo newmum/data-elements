@@ -61,7 +61,8 @@ if(channel==null){_fail(422,delivery==''?'INVALID_BODY':'UNSUPPORTED_DELIVERY_TY
 if(!caller.channel(channel)){_fail(403,'FORBIDDEN_CHANNEL','没有此数据通道的权限')}
 var config=c.p.getRoutes().get(channel)
 if(config==null || !config.isEnabled()){_fail(503,'SCENE_NOT_READY',delivery+'场景尚未配置完成')}
-if(body.containsKey('schemaVersion') || body.containsKey('occurredAt')){_fail(422,'INVALID_BODY','schemaVersion和occurredAt已取消，请从表批次请求移除')}
+// 兼容旧调用方的附加元数据；登记规范仍由服务端决定，不信任请求中的版本或时间。
+// 保留原始正文参与幂等摘要和投递，不因这些非必填字段拒绝有效记录。
 if(!(body.tableName instanceof String) || body.tableName.trim()=='' || body.tableName.length()>200){_fail(422,'INVALID_BODY','tableName必须是1至200字符的表名')}
 var push=delivery!='LOG'
 if(push && (!(body.datasourceId instanceof String) || !body.datasourceId.matches('[A-Za-z0-9_-]{1,64}'))){_fail(422,'INVALID_BODY','datasourceId必须是已登记数据源标识')}

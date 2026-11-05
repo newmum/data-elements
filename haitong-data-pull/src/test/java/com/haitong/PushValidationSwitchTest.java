@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties={"spring.config.location=classpath:/application.yml","db.type=h2","db.init-schema=true","db.username=sa","db.password=",
     "db.url=jdbc:h2:mem:push-validation;MODE=MySQL;DB_CLOSE_DELAY=-1","relay.worker.enabled=false","relay.limits.min-free-disk-bytes=0",
-    "relay.security.push-validation-enabled=false","relay.security.api-key=123","relay.security.clients.unused.api-key=env:UNSET_UNUSED_PUSH_KEY",
+    "relay.security.push-validation-enabled=false","relay.limits.max-message-bytes=2097152","relay.security.api-key=123","relay.security.clients.unused.api-key=env:UNSET_UNUSED_PUSH_KEY",
     "relay.security.admin-key=validation-admin-0123456789abcdef0123456789","relay.standalone-registry.sync-enabled=true",
     "relay.standalone-registry.sync-key=validation-sync-0123456789abcdef0123456789",
     "relay.routes.table-to-ftp.targets[0]=local","relay.files.enabled=true","relay.files.unregistered-targets[0]=local"})
@@ -123,7 +123,23 @@ class PushValidationSwitchTest {
             Map.of("deliveryType","FTP","datasourceId","ok","tableName","ok","records",List.of())))
             mvc.perform(post("/api/v1/data-push").header("Idempotency-Key",UUID.randomUUID().toString()).contentType("application/json").content(json.bytes(invalid))).andExpect(status().isUnprocessableEntity());
         mvc.perform(post("/api/v1/data-push").contentType("application/json").content(json.bytes(batch(1)))).andExpect(status().isBadRequest());
-        mvc.perform(post("/api/v1/data-push").header("Idempotency-Key","oversized").contentType("application/json").content(" ".repeat(1048577))).andExpect(status().isPayloadTooLarge());
+        mvc.perform(post("/api/v1/data-push").header("Idempotency-Key","oversized").contentType("application/json").content(" ".repeat(properties.getLimits().getMaxMessageBytes()+1))).andExpect(status().isPayloadTooLarge());
+    }
+
+    @Test void base64ImageAndLegacyMetadataAreAcceptedWithinTheConfiguredBodyLimit()throws Exception {
+        var body=new LinkedHashMap<String,Object>(batch(1));
+        String picture="A".repeat(1_594_000);
+        body.put("records",List.of(Map.of("pic_byte",picture,"event_no","validation-alarm-001")));
+        body.put("occurredAt","2026-11-05T04:19:12.985Z");body.put("schemaVersion","legacy-client-v1");
+        byte[] raw=json.bytes(body);
+        assertTrue(raw.length>1_048_576);assertTrue(raw.length<properties.getLimits().getMaxMessageBytes());
+        String key="validation-large-photo";
+        var accepted=response(mvc.perform(post("/api/v1/data-push").header("Idempotency-Key",key)
+            .contentType("application/json").content(raw)).andExpect(status().isAccepted()).andReturn());
+        mvc.perform(post("/api/v1/data-push").header("Idempotency-Key",key).contentType("application/json").content(raw))
+            .andExpect(status().isAccepted()).andExpect(jsonPath("$.duplicate").value(true))
+            .andExpect(jsonPath("$.messageId").value(accepted.get("messageId")));
+        assertEquals(picture,((Map<?,?>)((List<?>)json.object(raw).get("records")).getFirst()).get("pic_byte"));
     }
     @Test void unregisteredMultipartFileCompletesAndDeliversWithoutAKey()throws Exception{
         byte[] data="%PDF-1.7\nUnregistered validation file\n%%EOF".getBytes(java.nio.charset.StandardCharsets.US_ASCII);

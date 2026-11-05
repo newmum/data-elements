@@ -52,7 +52,10 @@ class UnifiedMappingDeploymentTest {
         verify(errors).add(eq("p"), argThat(error -> error.detail().contains("extension unavailable") && error.phase()==FlowError.ErrorPhase.DEPLOYMENT));
         assertTrue(((Map<?,?>)response.getBody()).containsKey("flowError"));
         verify(repo).updateStatus("p",PipelineStatus.STOPPED);
-        verifyNoInteractions(nifi);
+        // Binding selects the trusted tenant/node for the read-only extension preflight.
+        // No native flow mutation is allowed when that preflight fails.
+        verify(nifi).bindRuntimeNode();
+        verifyNoMoreInteractions(nifi);
         verify(compiler,never()).compile(any(),any(),any());
     }
 

@@ -39,14 +39,8 @@ try {
 }
 
 var filters = body || {}
-
-// 组织关系属于租户库，先换算成允许查询的本地用户ID。
-if (body?.orgId != null && (body.orgId + '').trim() != '') {
-    var orgUsers = db.table("rm_user_org_rela_t").where()
-        .eq("org_id", body.orgId)
-        .select()
-    filters.ids = orgUsers == null ? [] : orgUsers.map(item => item.userId)
-}
+var tenantId=tenantRuntime.id();
+// 机构筛选在用户分页 SQL 中使用 EXISTS，不先加载机构的全部用户ID。
 
 var userPage = localUsers('page',filters)
 if (userPage.list == null || userPage.list.size() == 0) {
@@ -55,12 +49,14 @@ if (userPage.list == null || userPage.list.size() == 0) {
 
 var userIds = userPage.list.map(item => item.id)
 var roleRelations = db.table("rm_user_role_rela_t").where()
+    .eq('tenant_id',tenantId)
     .in("user_id", userIds)
     .select()
 var roleNames = {}
 if (roleRelations != null && roleRelations.size() > 0) {
     var roleIds = roleRelations.map(item => item.roleId)
     var roles = db.table("rm_role_t").where()
+        .eq('tenant_id',tenantId)
         .in("id", roleIds)
         .eq("deleted", 0)
         .select()
@@ -79,6 +75,7 @@ if (roleRelations != null && roleRelations.size() > 0) {
 }
 
 var orgRelations = db.table("rm_user_org_rela_t").where()
+    .eq('tenant_id',tenantId).eq('job_type','1')
     .in("user_id", userIds)
     .select()
 var orgIds = {}

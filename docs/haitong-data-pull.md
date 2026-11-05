@@ -865,7 +865,9 @@ Kafka ACK、FTP文件核验、HTTP响应不是对方业务成功回执。原表�
 | --- | --- | --- | --- |
 | 独立运行模式 | `registration-managed: false`，显式配置本地 `targets` | 海通库登记镜像及调用方授权；没有数据库记录时才使用 `relay.standalone.datasources` | 否；校验和投递均不调用平台，FTP/Kafka 连接及目标只来自本地 YAML |
 
-业务表推送请求已取消 `schemaVersion` 和 `occurredAt`。对外参数为 deliveryType、datasourceId、tableName、可选batchId、records；带已取消参数的新请求返回422并提示移除。登记同步快照、内部审计及投递清单中的规范版本由服务端维护，与调用方请求参数分开。
+业务表推送的必需参数不包含 `schemaVersion` 和 `occurredAt`。对外参数为 deliveryType、datasourceId、tableName、可选batchId、records；兼容旧调用方继续携带这两个附加字段，保留原始正文参与幂等和投递，但不以它们选择登记规范或决定服务端审计时间。登记同步快照、内部审计及投递清单中的规范版本仍由服务端维护。
+
+JSON 单字符串上限与 `relay.limits.max-message-bytes` 使用同一配置，不再另外固定为 1MiB；例如整包上限设为 `16777216`（16MiB）后，1.59MB 的图片 Base64 字段可在整包容量内正常解析，不截断原值。默认整包仍为 1MiB，可配置范围为1024～16777216字节；已有部署须按实际报文设置，并核对 Nginx 请求体上限和 Kafka 目标消息限制。超整包容量返回413 `PAYLOAD_TOO_LARGE`；JSON语法、重复字段或多段正文返回422 `INVALID_BODY`；嵌套超过64层、数字超过200字符或其他解析预算超限返回422 `JSON_LIMIT_EXCEEDED`。响应不回显记录内容或 Base64。该容量设置不关闭认证、通道权限、幂等或登记字段校验。
 
 海通与源数据平台可分别部署在互不连通的网络。旧 `registration-managed: true` 已停止支持，启动时明确拒绝，不保留平台反向校验或代写 FTP 的业务分支。节点同步是可选的配置准备通道；也可在隔离网络导入等效登记快照，不构成运行时依赖。具体配置请参阅 [独立运行模式](#guide-985aca91)。
 

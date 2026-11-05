@@ -16,6 +16,58 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class GaussDbMetadataExplorer extends PostgreSqlMetadataExplorer {
 
+    /** Registration collects summaries in one scoped query, without per-table statistics reads. */
+    @Override
+    public java.util.List<TableInfo> getTables(DataSourceConfig config) {
+        String schema = resolveMetadataSchema(config);
+        String sql = """
+                SELECT t.table_name, t.table_type, obj_description(cls.oid) AS table_comment,
+                       COALESCE(cls.reltuples::bigint, 0) AS estimate_rows,
+                       pg_total_relation_size(cls.oid) AS total_size,
+                       pg_relation_size(cls.oid) AS data_size,
+                       pg_indexes_size(cls.oid) AS index_size,
+                       COALESCE(cols.column_count, 0) AS column_count
+                  FROM information_schema.tables t
+                  LEFT JOIN pg_namespace ns ON ns.nspname = t.table_schema
+                  LEFT JOIN pg_class cls ON cls.relnamespace = ns.oid AND cls.relname = t.table_name
+                  LEFT JOIN (
+                      SELECT table_schema, table_name, COUNT(*) AS column_count
+                        FROM information_schema.columns WHERE table_schema = ?
+                       GROUP BY table_schema, table_name
+                  ) cols ON cols.table_schema = t.table_schema AND cols.table_name = t.table_name
+                 WHERE t.table_schema = ? AND t.table_type IN ('BASE TABLE', 'VIEW')
+                 ORDER BY t.table_name
+                """;
+        var tables = new java.util.ArrayList<TableInfo>();
+        try (Connection connection = getConnection(config);
+             var statement = connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(30);
+            statement.setString(1, schema);
+            statement.setString(2, schema);
+            try (var rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    var table = new TableInfo();
+                    table.setTableName(rows.getString("table_name"));
+                    table.setTableComment(rows.getString("table_comment"));
+                    table.setTableType(rows.getString("table_type"));
+                    table.setSchemaName(schema);
+                    table.setRowCount(Math.max(0, rows.getLong("estimate_rows")));
+                    table.setColumnCount(rows.getInt("column_count"));
+                    table.setTotalSizeBytes(rows.getLong("total_size"));
+                    table.setDataSizeBytes(rows.getLong("data_size"));
+                    table.setIndexSizeBytes(rows.getLong("index_size"));
+                    table.setTotalSizeFormatted(formatBytes(table.getTotalSizeBytes()));
+                    table.setDataSizeFormatted(formatBytes(table.getDataSizeBytes()));
+                    table.setIndexSizeFormatted(formatBytes(table.getIndexSizeBytes()));
+                    tables.add(table);
+                }
+            }
+            return tables;
+        } catch (Exception failure) {
+            throw new IllegalStateException("GaussDB 表目录采集失败，请核对 Schema 和元数据权限", failure);
+        }
+    }
+
     @Override
     protected String resolveMetadataSchema(DataSourceConfig config) {
         if(config.getSchema()!=null&&!config.getSchema().isBlank())return config.getSchema();

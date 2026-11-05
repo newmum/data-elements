@@ -27,7 +27,9 @@ public class RegisteredMappingSchemaService {
     private final UnifiedMappingService engine;
     private final com.linewell.dataelement.platform.persistence.TenantIdentifierSql identifiers;
     public RegisteredMappingSchemaService(JdbcTemplate jdbc,DataSourceConnectionPropertyResolver sources,UnifiedMappingService engine){this.jdbc=jdbc;this.sources=sources;this.engine=engine;identifiers=new com.linewell.dataelement.platform.persistence.TenantIdentifierSql(jdbc);}
-    public record Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections) {}
+    public record Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections,boolean schemaQuoted,boolean tableQuoted) {
+        public Resolved(String datasourceId,String tableId,String schema,String table,JsonNode fields,Map<String,Map<String,Object>> connections){this(datasourceId,tableId,schema,table,fields,connections,false,false);}
+    }
     public Map<String,Object> dictionaryTables(String datasourceId,String search,int page,int size) {
         String tenant=TenantContext.requireTenantId();
         if(datasourceId==null||datasourceId.isBlank())throw new MappingException("RESOURCE_FORBIDDEN","请选择当前授权数据源");
@@ -66,9 +68,9 @@ public class RegisteredMappingSchemaService {
         Map<String,String> tableSources=new HashMap<>();matched.values().forEach(row->tableSources.put(String.valueOf(row.get("tid")),String.valueOf(row.get("datasource_id"))));
         for(var column:columns){String tableId=String.valueOf(column.get("table_id"));var tableFields=fields.computeIfAbsent(tableId,ignored->JSON.createArrayNode());if(tableFields.size()>=MAX_FIELDS_PER_TABLE)throw new MappingException("BUDGET_EXCEEDED","登记Schema单表字段超过2000个");String physicalType=String.valueOf(column.get("data_type"));String logical=JdbcTemporalTypes.logicalType(physicalType,connections.get(tableSources.get(tableId)));var field=tableFields.addObject();field.put("name",String.valueOf(column.get("column_name"))).put("comment",Objects.toString(column.get("column_comment"),"")).put("logicalType",logical).put("physicalType",physicalType).put("dateContainsTime",ValueTypes.type(physicalType).equals("DATE")&&logical.equals("DATETIME")).put("nullable",number(column.get("nullable"))!=0).put("length",number(column.get("length"))).put("precision",number(column.get("precision_length"))).put("scale",number(column.get("scale"))).put("sensitive",number(column.get("is_masking"))!=0);}
         applyRegisteredFormats(matched.values(),columns,fields);
-        Map<String,Resolved> result=new LinkedHashMap<>();matched.forEach((key,row)->{String source=String.valueOf(row.get("datasource_id")),tableId=String.valueOf(row.get("tid"));var names=DdlDialect.names(String.valueOf(row.get("table_name")));if(names.size()>2)throw new MappingException("INVALID_SCHEMA","登记表须明确schema和表名");String schema=names.size()==2?names.getFirst().value():"";String table=names.getLast().value();if(schema.isBlank()){schema=Objects.toString(JdbcMetadataScope.configuredSchema(connections.get(source)),"");}
+        Map<String,Resolved> result=new LinkedHashMap<>();matched.forEach((key,row)->{String source=String.valueOf(row.get("datasource_id")),tableId=String.valueOf(row.get("tid"));var names=DdlDialect.names(String.valueOf(row.get("table_name")));if(names.size()>2)throw new MappingException("INVALID_SCHEMA","登记表须明确schema和表名");String schema=names.size()==2?names.getFirst().value():"";String table=names.getLast().value();boolean schemaQuoted=names.size()==2?names.getFirst().quoted():configuredSchemaQuoted(connections.get(source));if(schema.isBlank()){schema=Objects.toString(JdbcMetadataScope.configuredSchema(connections.get(source)),"");}
             if(schema.isBlank()){String url=String.valueOf(connections.get(source).getOrDefault("jdbcURL",connections.get(source).getOrDefault("jdbcUrl","")));var database=java.util.regex.Pattern.compile("^jdbc:(?:mysql|mariadb)://[^/]+/([^?;]+)").matcher(url);if(database.find())schema=database.group(1);}
-            JsonNode declared=fields.getOrDefault(tableId,JSON.createArrayNode());if(declared.isEmpty())throw new MappingException("INVALID_SCHEMA","登记字段缺失");result.put(key,new Resolved(source,tableId,schema,table,declared,connections));});if(result.values().stream().mapToInt(value->value.fields().size()).sum()>MAX_TOTAL_FIELDS)throw new MappingException("BUDGET_EXCEEDED","登记Schema响应字段总数超过20000个");return result;
+            JsonNode declared=fields.getOrDefault(tableId,JSON.createArrayNode());if(declared.isEmpty())throw new MappingException("INVALID_SCHEMA","登记字段缺失");result.put(key,new Resolved(source,tableId,schema,table,declared,connections,schemaQuoted,names.getLast().quoted()));});if(result.values().stream().mapToInt(value->value.fields().size()).sum()>MAX_TOTAL_FIELDS)throw new MappingException("BUDGET_EXCEEDED","登记Schema响应字段总数超过20000个");return result;
     }
     /** Governance changes output precision, never the physical input type or a field-name heuristic. */
     private static void applyRegisteredFormats(Collection<Map<String,Object>> tables,List<Map<String,Object>> columns,Map<String,ArrayNode> fields) {
@@ -99,6 +101,15 @@ public class RegisteredMappingSchemaService {
     public ArrayNode physical(Resolved resolved){
         return physicalBatch(Map.of("table",resolved)).get("table");
     }
+    public boolean registrationOnly(Resolved table){
+        Map<String,Object> config=table.connections().get(table.datasourceId());
+        String type=Objects.toString(config.getOrDefault("dbType",config.getOrDefault("databaseType",config.get("protocol"))),"").toUpperCase(Locale.ROOT).replaceAll("[\\s_-]","");
+        return Set.of("FTP","FTPS","SFTP").contains(type);
+    }
+    private static boolean configuredSchemaQuoted(Map<String,Object> config){
+        for(String key:List.of("schema","defaultSchema","currentSchema")){Object raw=config.get(key);if(raw!=null&&!raw.toString().isBlank())return DdlDialect.names(raw.toString()).getFirst().quoted();}
+        return true; // A schema obtained from the JDBC session already has its physical spelling.
+    }
 
     /**
      * Reads all already-authorized tables with one connection and one column read per datasource.
@@ -111,7 +122,7 @@ public class RegisteredMappingSchemaService {
         if (resolved.isEmpty()) return Map.of();
         TenantContext.requireTenantId();
         if (resolved.size()>MAX_REFERENCES) throw new MappingException("BUDGET_EXCEEDED","Schema引用超过100个");
-        Map<String,Map<String,Resolved>> groups=new LinkedHashMap<>();
+        Map<String,Map<String,Resolved>> groups=new LinkedHashMap<>();Map<String,ArrayNode> result=new LinkedHashMap<>();int fileFields=0;Set<String> datasourceIds=new HashSet<>();
         for (var entry:resolved.entrySet()) {
             Resolved value=entry.getValue();
             if (value==null || value.datasourceId()==null || value.datasourceId().isBlank()
@@ -119,12 +130,17 @@ public class RegisteredMappingSchemaService {
                     || value.connections()==null || !value.connections().containsKey(value.datasourceId())) {
                 throw new MappingException("RESOURCE_FORBIDDEN","物理Schema须先完成整批登记与权限校验");
             }
+            datasourceIds.add(value.datasourceId());if(datasourceIds.size()>MAX_DATASOURCES)throw new MappingException("BUDGET_EXCEEDED","Schema数据源超过8个");
+            if(registrationOnly(value)){
+                fileFields+=value.fields().size();
+                if(value.fields().size()>MAX_FIELDS_PER_TABLE||fileFields>MAX_TOTAL_FIELDS)throw new MappingException("BUDGET_EXCEEDED","文件登记字段总数超过预算");
+                result.put(entry.getKey(),(ArrayNode)value.fields().deepCopy());continue;
+            }
             groups.computeIfAbsent(value.datasourceId(),ignored->new LinkedHashMap<>()).put(entry.getKey(),value);
         }
         if (groups.size()>MAX_DATASOURCES) throw new MappingException("BUDGET_EXCEEDED","Schema数据源超过8个");
-        Map<String,ArrayNode> result=new LinkedHashMap<>();
         int[] totalFields={0};
-        int responseFields=0;
+        int responseFields=fileFields;
         for (var group:groups.entrySet()) {
             Resolved first=group.getValue().values().iterator().next();
             try (Connection connection=engine.openRegistered(group.getKey(),first.connections())) {
@@ -154,9 +170,11 @@ public class RegisteredMappingSchemaService {
                     String registeredType=Objects.toString(temporalConfig.getOrDefault("dbType",temporalConfig.get("databaseType")),"").toLowerCase(Locale.ROOT).replaceAll("[\\s_-]","");
                     String mode=Objects.toString(temporalConfig.getOrDefault("compatibleMode",temporalConfig.get("mode")),"");
                     String dialectProduct=product.contains("oceanbase")&&(registeredType.contains("oracle")||mode.equalsIgnoreCase("oracle"))?"oracle":product;
-                    String sql=com.linewell.dataelement.metautil.jdbc.JdbcColumnBatchQuery.sql(metadata.getURL(),dialectProduct,byTable.size());
+                    String sql=com.linewell.dataelement.metautil.jdbc.JdbcColumnBatchQuery.sql(jdbcUrl(metadata,temporalConfig),dialectProduct,byTable.size());
                     if(sql!=null)readCatalogColumns(connection,sql,byTable,totalFields,temporalConfig);
                     else readJdbcColumns(metadata,catalog,byTable,totalFields,temporalConfig);
+                    if(JdbcTemporalTypes.oracleDateHasTime(temporalConfig)||product.equals("dm")||product.contains("dameng"))
+                        readFoldedColumns(connection,metadata,catalog,byTable,aliases,group.getValue(),totalFields,temporalConfig,dialectProduct);
                 }
                 // Do not expose a partial batch when any requested physical table disappeared.
                 for (var identity:byTable.keySet()) {
@@ -181,6 +199,24 @@ public class RegisteredMappingSchemaService {
     }
 
     private record TableIdentity(String schema,String table) {}
+    /** One additional bounded query for all misses, preserving explicitly quoted names. */
+    private static void readFoldedColumns(Connection connection,DatabaseMetaData metadata,String catalog,Map<TableIdentity,ArrayNode> tables,
+            Map<String,TableIdentity> aliases,Map<String,Resolved> requested,int[] totalFields,Map<String,Object> config,String product)throws SQLException {
+        Map<TableIdentity,TableIdentity> folded=new LinkedHashMap<>();Map<TableIdentity,ArrayNode> batch=new LinkedHashMap<>();
+        requested.forEach((key,table)->{TableIdentity original=aliases.get(key);if(!tables.get(original).isEmpty())return;
+            TableIdentity candidate=new TableIdentity(table.schemaQuoted()?original.schema():original.schema().toUpperCase(Locale.ROOT),table.tableQuoted()?original.table():original.table().toUpperCase(Locale.ROOT));
+            if(!candidate.equals(original)){folded.put(original,candidate);batch.computeIfAbsent(candidate,ignored->JSON.createArrayNode());}
+        });
+        if(batch.isEmpty())return;
+        String sql=com.linewell.dataelement.metautil.jdbc.JdbcColumnBatchQuery.sql(jdbcUrl(metadata,config),product,batch.size());
+        if(sql!=null)readCatalogColumns(connection,sql,batch,totalFields,config);else readJdbcColumns(metadata,catalog,batch,totalFields,config);
+        folded.forEach((original,candidate)->tables.get(original).addAll(batch.get(candidate)));
+    }
+    private static String jdbcUrl(DatabaseMetaData metadata,Map<String,Object> config)throws SQLException {
+        String value;
+        try{value=metadata.getURL();}catch(SQLFeatureNotSupportedException|AbstractMethodError|UnsupportedOperationException error){value=null;}
+        return value==null||value.isBlank()?Objects.toString(config.getOrDefault("jdbcURL",config.get("jdbcUrl")),""):value;
+    }
     private static TableIdentity tableIdentity(String schema,String table,boolean ignoreCase){
         return new TableIdentity(ignoreCase?schema.toLowerCase(Locale.ROOT):schema,ignoreCase?table.toLowerCase(Locale.ROOT):table);
     }
@@ -274,22 +310,73 @@ public class RegisteredMappingSchemaService {
     public void checkContract(JsonNode contract){
         checkContracts(Map.of("node",contract));
     }
+    /** Editor validation authorizes every reference and field without requiring a live JDBC source/target. */
+    public void checkRegisteredContracts(Map<String,JsonNode> contracts){
+        Map<String,JsonNode> refs=references(contracts);var registered=resolve(refs);
+        for(JsonNode contract:contracts.values())for(String side:List.of("source","target")){
+            JsonNode reference=contract.path(side+"Ref");if(!reference.isObject())continue;
+            JsonNode fields=registered.get(MappingEngine.hash(reference)).fields();
+            if(side.equals("target"))fields=targetAliases(fields,contract.path("targetNameAliases"));
+            if(!contract.path(side).isArray()&&contract instanceof ObjectNode object)object.set(side,fields.deepCopy());
+            Map<String,JsonNode> exact=new HashMap<>();Map<String,List<JsonNode>> folded=new HashMap<>();
+            fields.forEach(field->{String name=field.path("name").asText();exact.put(name,field);folded.computeIfAbsent(name.toLowerCase(Locale.ROOT),key->new ArrayList<>()).add(field);});
+            for(JsonNode field:contract.path(side)){
+                String name=field.path("name").asText();JsonNode found=exact.get(name);
+                if(found==null){var matches=folded.getOrDefault(name.toLowerCase(Locale.ROOT),List.of());if(matches.size()==1)found=matches.getFirst();}
+                if(found==null)throw new MappingException("SCHEMA_FIELD_MISSING","字段不属于当前授权登记表或名称有歧义："+name);
+                if(field instanceof ObjectNode object){
+                    object.put("comment",found.path("comment").asText());
+                    if(found.has("registeredFormat"))object.set("registeredFormat",found.get("registeredFormat"));else object.remove("registeredFormat");
+                    if(!object.hasNonNull("physicalType"))object.set("physicalType",found.path("physicalType"));
+                    if(found.path("dateContainsTime").asBoolean()){
+                        object.put("dateContainsTime",true);
+                        if(ValueTypes.type(object.path("logicalType").asText()).equals("DATE"))object.put("logicalType","DATETIME");
+                    }
+                }
+            }
+            if(contract instanceof ObjectNode object)object.put(side+"Hash",MappingEngine.hash(contract.path(side)));
+        }
+    }
+    private static Map<String,JsonNode> references(Map<String,JsonNode> contracts){
+        Map<String,JsonNode> refs=new LinkedHashMap<>();for(JsonNode contract:contracts.values())for(String side:List.of("source","target"))if(contract.path(side+"Ref").isObject()){JsonNode ref=contract.path(side+"Ref");refs.put(MappingEngine.hash(ref),ref);}return refs;
+    }
     public void checkContracts(Map<String,JsonNode> contracts){
-        Map<String,JsonNode> refs=new LinkedHashMap<>();for(JsonNode contract:contracts.values())for(String side:List.of("source","target"))if(contract.path(side+"Ref").isObject()){JsonNode ref=contract.path(side+"Ref");refs.put(MappingEngine.hash(ref),ref);}
+        Map<String,JsonNode> refs=references(contracts);
         var registered=resolve(refs);var observed=physicalBatch(registered);
         for(var contract:contracts.entrySet())for(String side:List.of("source","target")){JsonNode reference=contract.getValue().path(side+"Ref");if(!reference.isObject())continue;JsonNode actual=observed.get(MappingEngine.hash(reference));
+            if(side.equals("target"))actual=targetAliases(actual,contract.getValue().path("targetNameAliases"));
+            if(!contract.getValue().path(side).isArray()&&contract.getValue() instanceof ObjectNode object)object.set(side,actual.deepCopy());
             Map<String,JsonNode> physical=new HashMap<>();actual.forEach(field->physical.put(field.path("name").asText(),field));
-            // Repair only the known Oracle DATE semantic bug, after authoritative batch authorization.
+            // Repair known transport metadata only after authoritative batch authorization.
             // Other type/length/nullability drift continues to fail below.
             for(JsonNode field:contract.getValue().path(side)){JsonNode found=physical.get(field.path("name").asText());if(field instanceof ObjectNode object&&found!=null){
                 object.put("comment",found.path("comment").asText());
                 if(found.has("registeredFormat"))object.set("registeredFormat",found.get("registeredFormat"));else object.remove("registeredFormat");
+                if(side.equals("target")&&ValueTypes.type(field.path("logicalType").asText()).equals("BINARY")
+                        &&BinaryValues.largeText(found.path("physicalType").asText()))
+                    object.put("logicalType","STRING").put("physicalType",found.path("physicalType").asText());
                 if(found.path("dateContainsTime").asBoolean()){
                 if(ValueTypes.type(field.path("logicalType").asText()).equals("DATE"))object.put("logicalType","DATETIME");
                 object.put("dateContainsTime",true).put("physicalType",found.path("physicalType").asText());
             }}}
             if(contract.getValue() instanceof ObjectNode object)object.put(side+"Hash",MappingEngine.hash(contract.getValue().path(side)));
             var differences=SchemaContract.compare(SchemaContract.read(contract.getValue().path(side)),SchemaContract.read(actual),side.equals("source")&&contract.getValue().path("allowAdditionalSourceFields").asBoolean(true),Set.of());if(!differences.isEmpty())throw new MappingException("SCHEMA_DRIFT",contract.getKey()+" / "+side+" / "+differences.getFirst().code()+" / "+differences.getFirst().field());}
+    }
+    /** JDBC sinks already match unquoted field names ignoring case; retain that carrier spelling only when unique. */
+    private static JsonNode targetAliases(JsonNode actual,JsonNode aliases){
+        if(!aliases.isArray()||aliases.isEmpty())return actual;
+        if(aliases.size()>MAX_FIELDS_PER_TABLE)throw new MappingException("BUDGET_EXCEEDED","目标字段别名超过2000个");
+        Map<String,List<String>> folded=new HashMap<>(),physical=new HashMap<>();Set<String> exact=new HashSet<>();
+        for(JsonNode field:actual){String name=field.path("name").asText();exact.add(name);physical.computeIfAbsent(name.toLowerCase(Locale.ROOT),key->new ArrayList<>()).add(name);}
+        for(JsonNode alias:aliases){String name=ValueTypes.field(alias.asText());folded.computeIfAbsent(name.toLowerCase(Locale.ROOT),key->new ArrayList<>()).add(name);}
+        var result=actual.deepCopy();
+        for(JsonNode field:result){String name=field.path("name").asText();var candidates=folded.getOrDefault(name.toLowerCase(Locale.ROOT),List.of());
+            if(candidates.contains(name))continue;
+            var wanted=candidates.stream().filter(alias->!exact.contains(alias)).distinct().toList();
+            if(wanted.isEmpty())continue;
+            if(wanted.size()!=1||physical.get(name.toLowerCase(Locale.ROOT)).size()!=1)throw new MappingException("AMBIGUOUS_FIELD","目标物理字段大小写存在歧义，不能自动绑定");
+            ((ObjectNode)field).put("physicalName",name).put("name",wanted.getFirst());
+        }return result;
     }
     public List<Map<String,Object>> sample(Resolved resolved,int limit){
         limit=Math.max(1,Math.min(100,limit));try(Connection connection=engine.openRegistered(resolved.datasourceId(),resolved.connections())){

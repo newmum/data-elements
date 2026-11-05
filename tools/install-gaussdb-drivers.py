@@ -10,6 +10,8 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import zipfile
 
@@ -22,6 +24,12 @@ APPROVED = {
         'sha256': '2fb069dc0e6ab5d727738d810f126ab040ae96f8010c56b0c400e1fbe86bc711',
         'driver': 'com.huawei.opengauss.jdbc.Driver',
     },
+}
+
+MAVEN_VERSION = '5.0.0-htrunk4.csi.gaussdb_kernel.opengaussjdbc.r15'
+MAVEN_ARTIFACTS = {
+    'gaussdbjdbc.jar': ('com.huawei.gaussdb', 'gaussdbjdbc'),
+    'opengaussjdbc.jar': ('org.opengauss', 'opengauss-jdbc'),
 }
 
 
@@ -108,14 +116,48 @@ def install(archive, directory, apply=False, backup_directory=None, approved=Non
     return {'status': 'installed-and-verified', 'directory': str(directory), 'drivers': report}
 
 
+def install_to_maven(directory, report_directory, runner=None):
+    """Install the exact reviewed bytes using Maven's configured local repository."""
+    directory, report_directory = Path(directory).resolve(), Path(report_directory).resolve()
+    maven = shutil.which('mvn')
+    if maven is None:
+        raise ValueError('Maven is unavailable; put mvn on PATH before installing vendor artifacts')
+    if os.name == 'nt' and any(c in str(directory) + str(report_directory) for c in '&|<>^%!'):
+        raise ValueError('Use a Maven installation path without Windows command metacharacters')
+    for name, rule in APPROVED.items():
+        if digest((directory / name).read_bytes()) != rule['sha256']:
+            raise ValueError('Installed driver differs from the reviewed attachment: ' + name)
+    report_directory.mkdir(parents=True, exist_ok=True)
+    invoke = subprocess.run if runner is None else runner
+    artifacts = []
+    for name, (group, artifact) in MAVEN_ARTIFACTS.items():
+        command = [maven, 'org.apache.maven.plugins:maven-install-plugin:3.1.3:install-file',
+                   '-Dfile=' + str(directory / name), '-DgroupId=' + group,
+                   '-DartifactId=' + artifact, '-Dversion=' + MAVEN_VERSION,
+                   '-Dpackaging=jar', '-DgeneratePom=true']
+        with (report_directory / (name + '.maven-install.log')).open('wb') as stream:
+            result = invoke(command, cwd=report_directory, stdout=stream, stderr=subprocess.STDOUT)
+        if result.returncode != 0:
+            raise RuntimeError('Maven vendor installation failed; inspect ' + name + '.maven-install.log')
+        artifacts.append(group + ':' + artifact + ':' + MAVEN_VERSION)
+    return artifacts
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--archive', type=Path, required=True)
     parser.add_argument('--driver-directory', type=Path, required=True)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--backup-directory', type=Path)
+    parser.add_argument('--install-to-maven', action='store_true',
+                        help='With --apply, install the approved vendor pair into Maven for ordinary mvn install builds')
     args = parser.parse_args()
-    print(json.dumps(install(args.archive, args.driver_directory, args.apply, args.backup_directory), ensure_ascii=False, indent=2))
+    if args.install_to_maven and not args.apply:
+        parser.error('--install-to-maven requires --apply')
+    report = install(args.archive, args.driver_directory, args.apply, args.backup_directory)
+    if args.install_to_maven:
+        report['mavenArtifacts'] = install_to_maven(args.driver_directory, Path(__file__).resolve().parents[1] / 'logs/gaussdb-driver-install')
+    print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
 if __name__ == '__main__':

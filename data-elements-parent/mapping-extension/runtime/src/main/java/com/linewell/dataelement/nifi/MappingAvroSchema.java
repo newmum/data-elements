@@ -31,7 +31,9 @@ final class MappingAvroSchema {
             case TIME->JSON.createObjectNode().put("type","int").put("logicalType","time-millis");
             case TIMESTAMP->JSON.createObjectNode().put("type","long").put("logicalType","timestamp-millis");
             case DECIMAL->{var decimal=(DecimalDataType)data;yield JSON.createObjectNode().put("type","bytes").put("logicalType","decimal").put("precision",decimal.getPrecision()).put("scale",decimal.getScale());}
-            case ARRAY->JSON.createObjectNode().put("type","array").set("items",nullable(type(((ArrayDataType)data).getElementType(),names)));
+            case ARRAY->((ArrayDataType)data).getElementType().getFieldType()==RecordFieldType.BYTE
+                    ?JSON.getNodeFactory().textNode("bytes")
+                    :JSON.createObjectNode().put("type","array").set("items",nullable(type(((ArrayDataType)data).getElementType(),names)));
             case MAP->JSON.createObjectNode().put("type","map").set("values",nullable(type(((MapDataType)data).getValueType(),names)));
             case RECORD->record(((RecordDataType)data).getChildSchema(),names);
             case CHOICE->{ArrayNode options=JSON.createArrayNode();Set<String>seen=new HashSet<>();for(DataType option:((ChoiceDataType)data).getPossibleSubTypes()){

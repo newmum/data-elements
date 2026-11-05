@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { normalizeCanvasDsl, type CanvasDsl, type CanvasEdge, type CanvasMode, type CanvasNode } from '@/types/dsl';
 import type { ComponentManifest } from '@/types/manifest';
 import { reconcileDeployedDsl } from '../utils/pipelineVersion';
+import { dailyScheduleDefaults, isBatchSource } from '../utils/batchSchedule';
 
 export const FIELD_MAPPING_DEFAULT = JSON.stringify({
   version: '1.0',
@@ -76,7 +77,7 @@ function defaultsFromManifest(m: ComponentManifest): Record<string, unknown> {
     out.deleteTargetData = false;
     out.fullSyncStrategy = 'UPSERT';
   }
-  return out;
+  return m.category === 'source' && isBatchSource(m.key) ? dailyScheduleDefaults(out) : out;
 }
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({

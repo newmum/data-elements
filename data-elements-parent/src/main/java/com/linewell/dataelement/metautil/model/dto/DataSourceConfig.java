@@ -297,12 +297,16 @@ public class DataSourceConfig {
 
             case GAUSSDB:
                 GaussDbVariant variant = GaussDbVariant.resolve(getGaussdbVariant());
+                boolean nativeGauss = variant == GaussDbVariant.GAUSSDB || variant == GaussDbVariant.GAUSSDB_JDBC;
                 url.append(variant.urlPrefix()).append("//").append(host).append(":").append(getPortOrDefault());
                 if (database != null && !database.isEmpty()) {
                     url.append("/").append(database);
                 }
                 if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
+                    url.append("?");
+                    if (nativeGauss && !java.util.regex.Pattern.compile("(?i)(?:^|&)autoBalance=").matcher(extraParams).find())
+                        url.append("autoBalance=true&");
+                    url.append(extraParams);
                 } else if (variant == GaussDbVariant.MYSQL && getSslMode() != null) {
                     String mode=switch(getSslMode()) {
                         case "disable" -> "DISABLED";
@@ -315,15 +319,16 @@ public class DataSourceConfig {
                     url.append("?sslMode=").append(mode);
                 } else if (variant != GaussDbVariant.MYSQL) {
                     java.util.List<String> parameters = new java.util.ArrayList<>();
+                    if (nativeGauss) parameters.add("autoBalance=true");
                     if (schema != null && !schema.isBlank()) parameters.add("currentSchema="
                             + java.net.URLEncoder.encode(schema, java.nio.charset.StandardCharsets.UTF_8));
                     String sslMode=getSslMode();
                     if (sslMode != null) {
                         if (!java.util.Set.of("disable","allow","prefer","require","verify-ca","verify-full").contains(sslMode))
                             throw new IllegalArgumentException("不支持的 GaussDB SSL 模式");
-                        parameters.add("sslmode="+sslMode);
+                        if (!(nativeGauss && "prefer".equals(sslMode))) parameters.add("sslmode="+sslMode);
                     }
-                    if (getGaussdbVariant() != null) parameters.add("prepareThreshold=0");
+                    if (!nativeGauss && getGaussdbVariant() != null) parameters.add("prepareThreshold=0");
                     if (!parameters.isEmpty()) url.append("?").append(String.join("&",parameters));
                 }
                 break;

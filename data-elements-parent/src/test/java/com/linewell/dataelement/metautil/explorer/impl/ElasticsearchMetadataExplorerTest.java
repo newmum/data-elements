@@ -24,6 +24,9 @@ class ElasticsearchMetadataExplorerTest {
     private HttpServer server;
     private DataSourceConfig config;
     private JsonNode search;
+    private int major = 7;
+    private int errorStatus;
+    private boolean conflictingLegacyTypes;
     private final ElasticsearchMetadataExplorer explorer = new ElasticsearchMetadataExplorer();
 
     @BeforeEach void start() throws Exception {
@@ -31,6 +34,10 @@ class ElasticsearchMetadataExplorerTest {
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath(); paths.add(path);
             auth.add(exchange.getRequestHeaders().getFirst("Authorization"));
+            if (errorStatus != 0 && path.startsWith("/_cat/indices")) {
+                byte[] bytes = "{\"error\":{\"type\":\"security_exception\",\"reason\":\"action [indices:monitor/stats] is unauthorized\"},\"status\":403}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(errorStatus, bytes.length);exchange.getResponseBody().write(bytes);exchange.close();return;
+            }
             Object response;
             if (path.startsWith("/_cat/indices")) {
                 var indices = new ArrayList<Map<String,Object>>();
@@ -40,18 +47,22 @@ class ElasticsearchMetadataExplorerTest {
             } else if (path.endsWith("/_mapping")) {
                 var mappings = new LinkedHashMap<String,Object>();
                 for (String index : path.substring(1,path.length()-9).split(",")) {
-                    mappings.put(index,Map.of("mappings",Map.of("properties",Map.of(
+                    var fields = Map.of("properties",Map.of(
                             "name",Map.of("type","text","fields",Map.of("keyword",Map.of("type","keyword"))),
                             "time",Map.of("type","date"),"location",Map.of("properties",Map.of("city",Map.of("type","keyword"))),
-                            "users",Map.of("type","nested","properties",Map.of("name",Map.of("type","keyword")))))));
+                            "users",Map.of("type","nested","properties",Map.of("name",Map.of("type","keyword")))));
+                    Object mapping = major == 6 ? Map.of("legacy_type", fields) : fields;
+                    if (conflictingLegacyTypes) mapping = Map.of("one", fields, "two", Map.of("properties", Map.of("name", Map.of("type", "long"))));
+                    mappings.put(index, Map.of("mappings", mapping));
                 }
                 response=mappings;
             } else if (path.endsWith("/_search")) {
                 search=json.readTree(exchange.getRequestBody());
                 var hits=new ArrayList<Map<String,Object>>();
                 for(int i=0;i<search.path("size").asInt();i++) hits.add(Map.of("_id","doc-"+i,"_source",Map.of("name","中文名称","time","2026-10-01","location",Map.of("city","福州"),"users",List.of(Map.of("name","甲"),Map.of("name","乙")))));
-                response=Map.of("hits",Map.of("total",Map.of("value",20001,"relation","eq"),"hits",hits));
-            } else response=Map.of("version",Map.of("number","7.16.2"));
+                Object total = major == 6 ? 20001 : Map.of("value",20001,"relation","eq");
+                response=Map.of("hits",Map.of("total",total,"hits",hits));
+            } else response=Map.of("version",Map.of("number",major + ".0.0"));
             byte[] bytes=json.writeValueAsBytes(response);
             exchange.getResponseHeaders().set("Content-Type","application/json");
             exchange.sendResponseHeaders(200,bytes.length);exchange.getResponseBody().write(bytes);exchange.close();
@@ -61,6 +72,43 @@ class ElasticsearchMetadataExplorerTest {
         config.setJdbcUrl("http://127.0.0.1:"+server.getAddress().getPort());config.setDatabase("visible-*");
     }
     @AfterEach void stop(){server.stop(0);}
+
+    @ParameterizedTest @ValueSource(ints={6,8})
+    void legacyAndModernClustersSupportConnectionCollectionMappingsAndPreview(int version) {
+        major = version;
+        assertThat(explorer.testConnection(config)).isTrue();
+        assertThat(explorer.getTables(config)).hasSize(650);
+        assertThat(explorer.getColumns(config,"visible-001")).hasSize(6);
+        var request = new PageQueryRequest();request.setDataSource(config);request.setTableName("visible-001");
+        request.setPageSize(20);request.setColumns(List.of("name", "users.name"));
+        var result=explorer.queryPage(request);
+        assertThat(result.getTotal()).isEqualTo(20001);
+        assertThat(result.getRows().getFirst()).containsEntry("name","中文名称");
+        assertThat(search.has("track_total_hits")).isEqualTo(version != 6);
+        var sample=new SampleRequest();sample.setDataSource(config);sample.setTableName("visible-001");sample.setSampleSize(10);
+        assertThat(explorer.sampleData(sample).getTotalCount()).isEqualTo(20001);
+        assertThat(search.has("track_total_hits")).isEqualTo(version != 6);
+        for(int size:List.of(20,100)) {
+            paths.clear();
+            var page=explorer.getTablesPage(config,1,size,null);
+            assertThat(page.getRows()).hasSize(size).allSatisfy(row -> assertThat(row.getColumnCount()).isEqualTo(6));
+            assertThat(paths).hasSize(2);
+        }
+        paths.clear();
+        assertThatThrownBy(()->explorer.getColumnsByTables(config,List.of("visible-001","foreign-index"))).hasMessageContaining("范围");
+        assertThat(paths).isEmpty();
+    }
+
+    @Test void forbiddenCollectionRemainsAnErrorRatherThanAnEmptySuccessfulCollection() {
+        errorStatus=403;
+        assertThatThrownBy(()->explorer.getTables(config)).hasMessageContaining("HTTP 403");
+        assertThat(paths).hasSize(1);
+    }
+
+    @Test void ambiguousLegacyMappingsAreRejectedInsteadOfSilentlyLosingFields() {
+        major=6;conflictingLegacyTypes=true;
+        assertThatThrownBy(()->explorer.getColumns(config,"visible-001")).hasMessageContaining("冲突字段");
+    }
 
     @ParameterizedTest @ValueSource(ints={20,100})
     void tablePageReadsOnlyCurrentPageMappingsInOneBatch(int size) {

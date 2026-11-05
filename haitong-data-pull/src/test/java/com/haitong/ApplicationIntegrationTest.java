@@ -13,6 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import java.io.*;
 import java.net.*;
 import java.net.http.*;
@@ -28,8 +30,6 @@ import static org.junit.jupiter.api.Assertions.*;
     "spring.config.location=classpath:/application.yml",
     "db.type=h2", "db.init-schema=true", "db.username=sa", "db.password=",
     "db.url=jdbc:h2:mem:relaytests;MODE=MySQL;DB_CLOSE_DELAY=-1",
-    "relay.work-dir=./target/test-data",
-    "magic-api.resource.location=./target/test-data/magic-api",
     "relay.worker.enabled=false",
     "relay.limits.min-free-disk-bytes=0",
     "relay.security.api-key=test-client-0123456789abcdef0123456789",
@@ -64,6 +64,12 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfSystemProperty(named="haitong.loopback.tests",matches="true")
 @TestMethodOrder(MethodOrderer.MethodName.class)
 class ApplicationIntegrationTest {
+    private static final Path WORK=Path.of("../logs/haitong-data-pull/http-integration-"+UUID.randomUUID()).toAbsolutePath();
+    @DynamicPropertySource static void isolatedRuntime(DynamicPropertyRegistry properties) {
+        properties.add("relay.work-dir",WORK::toString);
+        properties.add("magic-api.resource.location",()->WORK.resolve("magic-api").toString());
+        properties.add("logging.file.name",()->WORK.resolve("service.log").toString());
+    }
     private static final String KEY="test-client-0123456789abcdef0123456789";
     private static final String OTHER="test-other-0123456789abcdef0123456789";
     private final HttpClient http=HttpClient.newHttpClient();
@@ -133,7 +139,7 @@ class ApplicationIntegrationTest {
         for(String removed:List.of("schemaVersion","occurredAt")) {
             var batch=new LinkedHashMap<String,Object>(Map.of("deliveryType","FTP","datasourceId","source-001","tableName","customer","records",List.of(Map.of("id","C007","name","Demo"))));
             batch.put(removed,"obsolete");
-            assertEquals(422,request("POST","/api/v1/data-push",KEY,"removed-"+removed,new Json().write(batch)).statusCode());
+            assertEquals(202,request("POST","/api/v1/data-push",KEY,"removed-"+removed,new Json().write(batch)).statusCode());
         }
     }
     @Test void invalidJsonAndUnsupportedEnvelopeAreRejected() throws Exception {

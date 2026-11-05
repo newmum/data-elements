@@ -22,6 +22,26 @@ import org.junit.jupiter.api.Test;
 class DslCompilerJdbcWriterTest {
 
     @Test
+    void writerPreflightChecksTwentyAndHundredTargetsOnceAndSkipsExplicitNativeWriters() {
+        for (int size : List.of(20, 100)) {
+            var nifi = mock(NifiClient.class);
+            var compiler = new DslCompiler(nifi, mock(ManifestRegistry.class), mock(FieldMappingService.class), mock(HiveModule.class));
+            var nodes = java.util.stream.IntStream.range(0, size).mapToObj(i -> new Pipeline.Node(
+                    "validation-sink-" + i, "sink.jdbc", "验证目标", "sink", 0, 0, Map.<String,Object>of("dbType", "Oracle"))).toList();
+            compiler.preflightWriters(new Pipeline("validation", "验证流程", null, null, null,
+                    new Pipeline.Dsl(1, nodes, List.of()), null, null, null, null, null, null, null));
+            verify(nifi, times(1)).requireLinewellDatabaseRecordExtension();
+            verifyNoMoreInteractions(nifi);
+            clearInvocations(nifi);
+            var nativeNodes = nodes.stream().map(node -> new Pipeline.Node(node.id(), node.manifestKey(), node.label(),
+                    node.category(), node.x(), node.y(), Map.<String,Object>of("dbType", "Oracle", "writerType", "NIFI_PUT_DATABASE_RECORD"))).toList();
+            compiler.preflightWriters(new Pipeline("validation", "验证流程", null, null, null,
+                    new Pipeline.Dsl(1, nativeNodes, List.of()), null, null, null, null, null, null, null));
+            verifyNoInteractions(nifi);
+        }
+    }
+
+    @Test
     void jdbcSinkAcceptsExistingRecordBatchesWithoutAnotherMergeProcessor() throws Exception {
         NifiClient nifi = mockNifi();
 

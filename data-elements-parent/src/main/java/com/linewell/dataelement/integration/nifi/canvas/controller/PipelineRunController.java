@@ -547,11 +547,24 @@ public class PipelineRunController {
                 return ResponseEntity.ok(Map.of("pipeline", restored, "processGroupId", p.nifiProcessGroupId(),
                         "started", p.status() == PipelineStatus.RUNNING, "mode", "reuse"));
             }
+            try (var runtime = nifi.bindRuntimeNode()) {
+            try { compiler.preflightSchedules(p); }
+            catch (RuntimeException ex) {
+                repo.updateStatus(p.id(), p.status());
+                return deploymentFailure(p.id(), 422, "SCHEDULE_PREFLIGHT_FAILED", "调度配置发布前检查失败", ex,
+                        "请先保存任务，并核对 NiFi 时区；旧流程已保留。", Map.of());
+            }
             try { compiler.preflightSources(p); }
             catch (RuntimeException ex) {
                 repo.updateStatus(p.id(), p.status());
                 return deploymentFailure(p.id(), 422, "SOURCE_FETCH_PREFLIGHT_FAILED", "来源时间分片发布前检查失败", ex,
                         "请核对登记时间戳字段与 GenerateDateTableFetch 扩展；旧流程已保留。", Map.of());
+            }
+            try { compiler.preflightWriters(p); }
+            catch (RuntimeException ex) {
+                repo.updateStatus(p.id(), p.status());
+                return deploymentFailure(p.id(), 422, "JDBC_WRITER_PREFLIGHT_FAILED", "目标表写入组件发布前检查失败", ex,
+                        "请核对各 NiFi 节点已安装的 LinewellPutDatabaseRecord 扩展；系统自动选择最高已注册版本，旧流程已保留。", Map.of());
             }
             if (DslHasher.usesJavaMapping(p.dsl())) {
                 // Reused graphs retain their existing bundle. Only a new unified
@@ -639,6 +652,7 @@ public class PipelineRunController {
                 taskLifecycle.statusOnly(p.id(), 0);
             }
             return ResponseEntity.ok(body);
+            }
         } catch (IllegalStateException ise) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
             taskLifecycle.statusOnly(p.id(), 2);

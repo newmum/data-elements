@@ -5,13 +5,14 @@ export function functionParameterSlots(schema:FunctionParameterSchema,parameters
   return [...schema,...Array.from({length:Math.max(0,parameters.length-schema.length)},(_,offset)=>({index:schema.length+offset,name:'候选默认值 '+(schema.length+offset+1),type:'JSON',required:true,defaultValue:null,choices:[]}))];
 }
 
-export const RULE_TYPES = ['ANY','STRING','INT','LONG','DECIMAL','DOUBLE','BOOLEAN','DATE','TIME','DATETIME','INSTANT','ARRAY'];
-export const TYPE_LABELS:Record<string,string> = {ANY:'保留类型',STRING:'文本',INT:'整数',LONG:'长整数',DECIMAL:'精确小数',DOUBLE:'浮点数',BOOLEAN:'布尔值',DATE:'日期',TIME:'时分秒',DATETIME:'日期时间',INSTANT:'绝对时间',ARRAY:'数组'};
+export const RULE_TYPES = ['ANY','STRING','INT','LONG','DECIMAL','DOUBLE','BOOLEAN','DATE','TIME','DATETIME','INSTANT','ARRAY','BINARY'];
+export const TYPE_LABELS:Record<string,string> = {ANY:'保留类型',STRING:'文本',INT:'整数',LONG:'长整数',DECIMAL:'精确小数',DOUBLE:'浮点数',BOOLEAN:'布尔值',DATE:'日期',TIME:'时分秒',DATETIME:'日期时间',INSTANT:'绝对时间',ARRAY:'数组',BINARY:'二进制'};
 export function logicalFieldType(field:FieldMeta):string {
   let type=(field.logicalType??field.type??'ANY').toUpperCase().replace(/\([^)]*\)/g,'').trim().replace(/\s+/g,' ');
   if(['INT UNSIGNED','INTEGER UNSIGNED'].includes(type))return 'LONG';
   if(type==='BIGINT UNSIGNED')return 'DECIMAL';
   type=type.replace(/\s+UNSIGNED$/,'');
+  if(['BLOB','TINYBLOB','MEDIUMBLOB','LONGBLOB','VARBINARY','LONGVARBINARY','LONG VARBINARY','RAW','LONG RAW','BYTEA','IMAGE','BYTES'].includes(type))return 'BINARY';
   const aliases:Record<string,string>={VARCHAR:'STRING',VARCHAR2:'STRING',NVARCHAR:'STRING',NVARCHAR2:'STRING',CHAR:'STRING',NCHAR:'STRING',TEXT:'STRING',CLOB:'STRING',LONGVARCHAR:'STRING',TINYINT:'INT',SMALLINT:'INT',INTEGER:'INT',INT2:'INT',INT4:'INT',BIGINT:'LONG',INT8:'LONG',NUMERIC:'DECIMAL',NUMBER:'DECIMAL',DEC:'DECIMAL',FLOAT:'DOUBLE',REAL:'DOUBLE','DOUBLE PRECISION':'DOUBLE',BOOL:'BOOLEAN',BIT:'BOOLEAN',TIMESTAMP:'DATETIME',DATETIME2:'DATETIME',SMALLDATETIME:'DATETIME',DATETIME64:'DATETIME',DATETIMEOFFSET:'INSTANT','TIMESTAMP WITH TIME ZONE':'INSTANT',TIMESTAMPTZ:'INSTANT','TIMESTAMP WITHOUT TIME ZONE':'DATETIME','TIMESTAMP WITH LOCAL TIME ZONE':'INSTANT','TIME WITHOUT TIME ZONE':'TIME'};
   if(['CHARACTER VARYING','CHAR VARYING','NCHAR VARYING','NATIONAL CHARACTER VARYING','NATIONAL CHAR VARYING','CHARACTER','NATIONAL CHARACTER','NATIONAL CHAR','LONGNVARCHAR','NCLOB','NTEXT','BPCHAR','TINYTEXT','MEDIUMTEXT','LONGTEXT','VARCHAR_IGNORECASE','VARCHAR_CASESENSITIVE'].includes(type))return 'STRING';
   if(type==='MEDIUMINT')return 'INT';

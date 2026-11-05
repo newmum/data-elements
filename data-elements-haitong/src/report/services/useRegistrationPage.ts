@@ -1,11 +1,13 @@
 import {useEffect,useState} from 'react';
 import {getSessionRevision} from '../../nifi/api/bridgeSession';
+import {platformErrorInfo} from '../../api/platformError';
 import {loadRegistrationFilesPage,loadReportTablesPage,type RegistrationPageQuery,type RegistrationFilePage,type ReportTablePage,type UploadManifest} from './uploadWorkbench';
 
 type Page={revision:string;total:number;list:Array<{key:string}>};
 function usePage<T extends Page>(dbId:string,manifest:UploadManifest,search:string,read:(id:string,m:UploadManifest,q:RegistrationPageQuery,filter:string)=>Promise<T>,filter=''){
   const [query,setQuery]=useState<RegistrationPageQuery>({pageNo:1,pageSize:100,search:'',sortField:'updatedAt',sortDir:'desc'});
-  const [result,setResult]=useState<T>(),[loading,setLoading]=useState(false),[error,setError]=useState(''),[attempt,retry]=useState(0);
+  const [result,setResult]=useState<T>(),[loading,setLoading]=useState(false),[errorCause,setError]=useState<unknown>(''),[attempt,retry]=useState(0);
+  const error=errorCause?platformErrorInfo(errorCause).message:'';
   useEffect(()=>{setQuery(current=>({...current,pageNo:1,search}));},[search,dbId,filter]);
   useEffect(()=>{
     if(!dbId)return;
@@ -15,11 +17,11 @@ function usePage<T extends Page>(dbId:string,manifest:UploadManifest,search:stri
       const last=Math.max(1,Math.ceil(page.total/query.pageSize));
       if(query.pageNo>last){setQuery(current=>({...current,pageNo:last}));return;}
       setResult(page);
-    }).catch(cause=>{if(active&&session===getSessionRevision()){setResult(undefined);setError(cause.message);}})
+    }).catch(cause=>{if(active&&session===getSessionRevision()){setResult(undefined);setError(cause);}})
       .finally(()=>{if(active)setLoading(false);});},180);
     return()=>{active=false;clearTimeout(timer);};
   },[dbId,manifest.revision,query,attempt,filter,read]);
-  return {result:result?.revision===manifest.revision?result:undefined,total:result?.revision===manifest.revision?result.total:0,loading,error,query,setQuery,retry:()=>retry(value=>value+1)};
+  return {result:result?.revision===manifest.revision?result:undefined,total:result?.revision===manifest.revision?result.total:0,loading,error,errorCause,query,setQuery,retry:()=>retry(value=>value+1)};
 }
 export function useRegistrationFilesPage(dbId:string,manifest:UploadManifest,search:string){
   const page=usePage<RegistrationFilePage>(dbId,manifest,search,loadRegistrationFilesPage);

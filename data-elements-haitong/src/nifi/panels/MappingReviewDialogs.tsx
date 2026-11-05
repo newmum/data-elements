@@ -48,7 +48,7 @@ export function MappingInspectionDialog({ kind, draft, sourceSchema, targetSchem
     let active = true; setLoading(true); setError('');
     const request = kind === 'validate' ? validateFieldMapping(draft, sourceSchema, targetSchema).then(data => ({ kind, data } as const))
       : kind === 'compile' ? compileFieldMapping(draft, sourceSchema, targetSchema).then(data => ({ kind, data } as const))
-      : mappingVersions.schema(JSON.parse(references).sourceRef, JSON.parse(references).targetRef).then(data => ({ kind, data } as const));
+      : mappingVersions.schema(JSON.parse(references).sourceRef, JSON.parse(references).targetRef, true).then(data => ({ kind, data } as const));
     request.then(value => { if (active) setResult(value); }).catch(cause => { if (active) setError(mappingErrorText(cause)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [kind, draft, sourceSchema, targetSchema, references, revision]);

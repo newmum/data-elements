@@ -101,7 +101,7 @@ const configMap = {
       { title: "数据表字段", component: "table-col", props: { tableId: id } },
       { title: "数据预览", component: "table-preview", props: { tableId: id } },
       { title: "资产图谱", component: "table-tupu" },
-      { title: "血缘分析", component: "table-blood" },
+      { title: "数据血缘", component: "table-blood", props: { tableId: id } },
     ],
   },
   catalog: {
@@ -279,7 +279,8 @@ onMounted(async () => {
     });
   }
   if (route.query.tab) {
-    detailStore.currentTab = (route.query.tab as string) || "";
+    const requestedTab = (route.query.tab as string) || "";
+    detailStore.currentTab = requestedTab === "血缘分析" ? "数据血缘" : requestedTab;
   } else {
     detailStore.initTab();
   }

@@ -52,9 +52,16 @@ var text=value=>value==null?'':(value+'').trim();
 if(operation=='page' || operation=='list') {
  var page=Math.max(1,p.pageNum||1);var size=Math.min(200,Math.max(1,p.pageSize||200));var offset=(page-1)*size;
  var ids=p.ids;var account='%'+text(p.userName)+'%';var name='%'+text(p.realName)+'%';
+ if(ids!=null && ids.size()>200){exit 400,'一次最多查询200个用户';}
  if(ids!=null && ids.size()==0) {return operation=='list'?[]:{list:[],total:0};}
  var where=`from rm_user_t u where u.tenant_id=#{tenantId} and u.deleted=0 and u.user_name like #{account} and u.real_name like #{name}`;
  if(ids!=null) {where=where+` and u.id in (#{ids})`;}
+ var orgId=text(p.orgId);
+ if(orgId!='') {where=where+"""
+     and exists (select 1 from rm_user_org_rela_t r
+         join rm_org_t o on o.id=r.org_id and o.tenant_id=#{tenantId} and o.deleted=0
+         where r.tenant_id=#{tenantId} and r.user_id=u.id and r.org_id=#{orgId})
+ """;}
  var sortColumn=tableSort.field(p,{userName:'u.user_name',realName:'u.real_name',createTime:'u.create_time',updateTime:'u.update_time'},'createTime');var sortDirection=tableSort.direction(p);
  var total=sql.selectOne('select count(*) as total '+where).total;
  var rows=sql.select("""
@@ -70,7 +77,11 @@ var id=text(p.id);var creating=id=='';if(creating) {id=IdUtil.getSnowflakeNextId
 var password=text(p.password);var passwordChanged=password!='' && password!='******';
 var result=sql.transaction(()=>{
  var old=sql.selectOne("""
-select id,password as "password",status,app_file_id as "appFileId"
+select id,password as "password",status,app_file_id as "appFileId",
+       real_name as "realName",user_name as "userName",phone,gender,
+       id_card as "idCard",date_birth as "dateBirth",nation,
+       office_address as "officeAddress",job_number as "jobNumber",
+       authorized_strength as "authorizedStrength",origin_position as "originPosition",origin_rank as "originRank"
 from rm_user_t
 where tenant_id=#{tenantId}
     and id=#{id}
@@ -98,7 +109,8 @@ from rm_user_role_rela_t
 where tenant_id=#{tenantId}
     and user_id=#{id}
 """);
-  if(old.appFileId!=null && old.appFileId!='') {sql.update("""
+  // 部分行业使用文件服务而不建旧版照片表；不能因历史照片引用阻断用户归档。
+  if(old.appFileId!=null && old.appFileId!='' && identityRuntime.hasTable('sym_file_t')) {sql.update("""
 update sym_file_t
 set deleted=1,update_id=#{actor},update_time=current_timestamp
 where tenant_id=#{tenantId}
@@ -109,9 +121,17 @@ where tenant_id=#{tenantId}
  }
  if(operation!='save') {exit 400,'不支持的用户操作';}
  if(!creating && old==null) {exit 404,'用户不存在或不属于当前租户';}
- var realName=text(p.realName);var account=text(p.userName);var phone=text(p.phone);var orgId=text(p.orgId);var statusText=text(p.status);
+ // 启停等局部维护只提交变化字段；未提交的资料和密码均保持原值。
+ var realName=text(p.containsKey('realName')?p.realName:old?.realName);
+ var account=text(p.containsKey('userName')?p.userName:old?.userName);
+ var phone=text(p.containsKey('phone')?p.phone:old?.phone);
+ var orgId=text(p.orgId);var statusText=text(p.containsKey('status')?p.status:old?.status);
+ if(!creating && !p.containsKey('orgId')){
+  var primaryOrg=sql.selectOne("select org_id as \"orgId\" from rm_user_org_rela_t where tenant_id=#{tenantId} and user_id=#{id} and job_type='1'");
+  orgId=text(primaryOrg?.orgId);
+ }
  if(realName=='' || realName.length()>50) {exit 400,'请填写姓名，长度不超过50个字符';}
- if(!account.matches('[A-Za-z][A-Za-z0-9_.-]{2,49}')) {exit 400,'账号须以字母开头，长度3至50位，可包含数字、下划线、点和短横线';}
+ if(account=='' || account.length()>50) {exit 400,'请填写用户账号，长度不超过50个字符';}
  if(phone=='' || phone.length()>128) {exit 400,'请填写手机号，长度不超过128个字符';}
  if(!['0','1'].contains(statusText)) {exit 400,'账号状态无效，请选择启用或禁用';}
  var status=statusText::int;
@@ -159,8 +179,13 @@ where tenant_id=#{tenantId}
   hash=PwdRuleUtil.encryptPwdBySalt(digest);
  }
  // 保持现有用户表单字段和照片引用；不接受客户端指定租户或来源字段。
- var gender=p.gender;var idCard=p.idCard;var dateBirth=text(p.dateBirth)==''?null:text(p.dateBirth).substring(0,10);var nation=p.nation;
- var office=p.officeAddress;var job=p.jobNumber;var strength=p.authorizedStrength;var position=p.originPosition;var rank=p.originRank;var file=p.appFileId;
+ var gender=p.containsKey('gender')?p.gender:old?.gender;var idCard=p.containsKey('idCard')?p.idCard:old?.idCard;
+ var birth=p.containsKey('dateBirth')?p.dateBirth:old?.dateBirth;
+ var dateBirth=text(birth)==''?null:text(birth).substring(0,10);var nation=p.containsKey('nation')?p.nation:old?.nation;
+ var office=p.containsKey('officeAddress')?p.officeAddress:old?.officeAddress;var job=p.containsKey('jobNumber')?p.jobNumber:old?.jobNumber;
+ var strength=p.containsKey('authorizedStrength')?p.authorizedStrength:old?.authorizedStrength;
+ var position=p.containsKey('originPosition')?p.originPosition:old?.originPosition;var rank=p.containsKey('originRank')?p.originRank:old?.originRank;
+ var file=p.containsKey('appFileId')?p.appFileId:old?.appFileId;
  if(creating) {sql.update("""
 insert into rm_user_t(tenant_id,
                 id, real_name, user_name, phone, password, status, deleted, create_id, update_id, create_time,

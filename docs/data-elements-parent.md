@@ -130,6 +130,8 @@ mvn package
 
 从仓库根目录构建时使用 `mvn -f data-elements-parent/pom.xml install`。测试报告默认在根目录 `logs/backend/surefire/`。`logs/` 下的临时 POM 属于当次运行材料，不作为日常构建入口。
 
+如果编译错误路径指向 `logs/code-integration/resolved/backend/src/main/java/`，并集中提示 `DslCompiler` 的 `manifest`、`mapping`、`nifi` 等同工程包不存在，应先纠正 Maven 入口：该目录是代码合并时保留的局部源码材料，仅有一个 Java 文件，并非完整后端工程。此类临时 POM 应改名为 `pom.xml.reference` 保留参考；IDE 中取消关联该临时工程，重新导入正式的 `data-elements-parent/pom.xml`，再执行 `mvn -f data-elements-parent/pom.xml clean install`。VS Code 的 `maven.excludedFolders` 和 `java.import.exclusions` 应排除 `logs/` 与 `.runtime/`，防止自动扫描把运行材料识别为独立工程。依赖于同工程源码的类无须另加 Maven 依赖。
+
 编译继续启用过时 API 和未经检查的类型转换检查，并完整输出最多 1000 条警告，不能通过关闭检查掩盖问题。统一响应和 ES 分页工厂保留泛型；异构对象进入类型化业务代码前由 `StructuredValues` 校验字符串字段名和列表元素，保留原对象的可修改性及空值约定。标量 ID 列表按 `List<?>` 读取，不能当成对象列表校验。测试使用类型化的 Mockito 匹配器、捕获器及连续返回值，避免原始类型和泛型可变参数数组警告。
 
 布控历史 `rules[]` 仍支持读写，旧 DTO 保留弃用提示；匹配逻辑使用独立只读视图，旧格式反序列化集中在兼容边界。Magic API 2.2.2 所需的 ES 7 高级客户端仅保留在配置适配层，搜索投影桥复用其底层 REST 客户端，不新增连接池，也不改变原有 HTTP 请求协议。必要的弃用抑制仅用于这些明确的兼容入口。
@@ -263,6 +265,16 @@ VITE_APP_API_URL=http://localhost:8088
 <a id="task-runtime"></a>
 
 ## 任务运行状态
+
+### 新建批处理任务的默认调度
+
+新建批处理来源（数据库、FTP/SFTP/FTPS、MinIO、Elasticsearch、API 拉取等）默认每天一次、自动错峰。Kafka 保留实时消费配置；已有任务和明确选择的自定义周期/Cron 不自动迁移。登记补齐、画布新增来源及后端模板使用同一 `BatchSchedulePolicy`，API 已明确配置的 Cron 保持不变。
+
+首次保存按可信租户 ID、流程 ID、来源节点 ID 的 SHA-256 分配一天内的固定秒位，写入现有 DSL 的 `batchSchedulePolicy=DAILY_STAGGERED`、`batchScheduleTime`、`batchScheduleZone=Asia/Shanghai`、`schedulingStrategy=CRON_DRIVEN` 和六段 `schedulingPeriod`。后续保存、重启和部署读取已存值；复制为新流程时使用新流程 ID 重新分配。分配是纯内存计算，20/100 个节点不增加逐项 SQL 或 HTTP 读取；沿用当前租户路由和保存权限，不使用请求体中的租户值。
+
+这属于均匀散列错峰，不能保证绝对无碰撞，也不表示已实现按任务时长或节点负载分配。此次不批量迁移历史任务、不增加全局并发限流或补跑机制。停止状态下错过当天时刻后，按 NiFi 原有 Cron 语义等待后续触发。
+
+Cron 作用于来源触发器/文件清单处理器，下游转换、下载和写入仍及时消费已有队列。发布前每张图读取一次当前 NiFi `/flow/about` 的时区；遇到有歧义的 `CST` 缩写，再共享读取一次 `/flow/config` 的 `timeOffset` 确认 UTC+8，读取次数不随节点数增加。配置未保存或时区不符时，在替换旧流程前返回 `SCHEDULE_PREFLIGHT_FAILED`。无需新增数据库字段或 Nacos 配置。
 
 任务监控、接入任务列表（含 Hive 元数据库）与海通画布的当前状态来自 `TaskRuntimeStatusService`，以 NiFi 当前调度状态为准。任务表中的 `task_status` 和流水线生命周期状态保留给业务操作、历史兼容与部署记录；读取状态不再回写任务表，也不清除部署关联。
 
@@ -427,9 +439,15 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 <a id="mapping-extension--当前版本1128"></a>
 
-### 当前版本（1.1.28）
+<a id="mapping-extension--当前版本1129"></a>
 
-大文本直通与普通字段转换采用分开的预算。来源字段直接映射到 STRING/ANY 目标、DIRECT 步骤及已经是字符串的恒等 CAST 保留原值，不根据 `base64`、`pic` 等字段名推断规则，也不自动解码、重编码或探查图片内容。必填、类型、登记长度、Schema 及目标列容量继续校验。会改变内容的函数、表达式、拼接、字典等转换，其输入和步骤结果继续限制为256KiB；大文本应使用明确的来源字段直通。表达式引用与拼接在扩容前检查，不能借表达式绕过普通转换预算。
+### 当前版本（1.1.29）
+
+大文本直通与普通字段转换采用分开的预算。普通 STRING/ANY 来源直通、DIRECT 步骤及已经是字符串的恒等 CAST 保留原值，不根据 `base64`、`pic` 等字段名推断规则或探查图片内容。明确登记为二进制的字段采用下述无损载体规则。必填、类型、登记长度、Schema 及目标列容量继续校验。会改变内容的函数、表达式、拼接、字典等转换，其输入和步骤结果继续限制为256KiB；大文本应使用明确的来源字段直通。表达式引用与拼接在扩容前检查，不能借表达式绕过普通转换预算。
+
+`BLOB`、`VARBINARY`、`RAW`、`BYTEA` 等物理类型归一为 `BINARY`。二进制输入支持 `byte[]`、ByteBuffer、JDBC Blob、Base64，以及 JSON 有符号字节/无符号八位整数数组；数组元素须为 -128 至 255 的整数，拒绝 NULL、文本、非整数及越界值。目标为 BLOB 时输出 NiFi ARRAY<BYTE>/Avro bytes，交由原生 PutDatabaseRecord 写入真实字节；目标为 CLOB/NCLOB/TEXT 且为直接二进制字段映射时，编译计划显式标记 Base64 编码，写入可还原的文本，不能用数组的 toString() 或错误字符集转换图片。普通 CLOB 文本原样通过，已有 Base64 载体在二进制语义下核验后保持相同字节，不进行双重编码。不跳过空值、字段容量或记录预算，不跳过整个字段治理组件。
+
+登记目标仍写 BLOB、物理列实际为 CLOB 的旧任务，在当前租户与逐 ID 数据范围校验后的同一批物理 Schema 查询中修正目标载体契约；其他类型、长度、非空漂移继续拒绝，不将源端的 BLOB→CLOB 漂移自动放行。自动生成或旧画布未保存目标契约时，从直接 JDBC 目标绑定已登记数据源/表引用，在发布阶段统一批量取得实际物理列；不要求手工打开治理编辑器。直接来源登记的二进制类型作为输入提示，目标 CLOB 仍以物理核验为准。Oracle等驱动返回的大写列与规则的小写输出只在名称唯一时绑定，存在歧义或目标引用不一致则拒绝；不修改物理字段名称。该修正不执行 ALTER TABLE、不修改来源登记。直接二进制到文本的编码使用单记录/窗口预算，常规函数仍受256KiB转换预算。8MiB上限计入 Base64 膨胀、字段名与整行结构，不能理解为允许8MiB原始图片；整数数组输入同时受32MiB保守内存预算保护，特别大的图片宜由发送端直接提供 Base64 或改为对象存储引用。
 
 共享内核与 NiFi 统一使用规范记录 JSON 的 UTF-8 字节预算，计入字段名、结构、转义及二进制的Base64载体；补充字符按默认Jackson UTF-8生成器的代理对转义计量，JDBC/Java时间值按保守文本载体计量，不等于FTP整个文件或HTTP信封的字节数。单条输入/输出记录上限8MiB，单窗口最多512行且记录字节合计不超过8MiB；输入、输出窗口各有独立32MiB保守内存估算上限。记录读取按字节或内存先到达的窗口边界处理；输出预算计入未映射直通字段、键名、替换和错误回退值，扩张超限保留原输入。窗口许可最多两个执行任务，首次上线大图片流程建议Concurrent Tasks=1；Reader、Writer与驱动仍有自身内存开销，窗口预算不代表JVM总堆上限。
 
@@ -445,7 +463,7 @@ Hive 作为目标库时的原始写入发布规则见[详细设计第27章](data
 
 摘要自动计算，用于诊断，不作为队列重放门槛。升级或修正规则后，排队的原输入和有效错误信封按当前规则处理，保留原记录下标、类型、输入身份与时钟。实际计划格式、函数与字段规则、字典绑定权限仍校验；未支持的协议或无效输入不会被当成空规则执行。平台发布及启动继续校验当前租户、角色、流程归属与已发布引用。
 
-匹配 NiFi 2.9.0 的构建包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.28.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，保留队列、来源 ID 和增量水位。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
+匹配 NiFi 2.9.0 的构建包位于 `logs/field-mapping-extension/nifi-2.9.0/haitong-mapping-nar/haitong-mapping-nar-1.1.29.nar`，生产各节点安装相同包。新后端与 NAR 同步更新；既有组件的 Bundle 使用 NiFi 原位切换或平台字段节点升级入口调整，并重新编译具有权威目标 Schema 的计划，保留队列、来源 ID 和增量水位。仅安装 NAR 不能从旧的无契约 BLOB 计划推断 JDBC 目标实际为 CLOB；禁止通过清队列或重建业务表规避该步骤。NiFi 自身及 GenerateDateTableFetch 继续使用2.9.0。多节点请求语义依据 [NiFi 2.9.0 FlowResource](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework/nifi-web/nifi-web-api/src/main/java/org/apache/nifi/web/api/FlowResource.java) 与 [DocumentedTypesMerger](https://github.com/apache/nifi/blob/rel/nifi-2.9.0/nifi-framework-bundle/nifi-framework-cluster/src/main/java/org/apache/nifi/cluster/manager/DocumentedTypesMerger.java)。生产尚未安装此包，不能把本地 SDK/隔离 JDBC 回归宣称为生产多节点或最终落库验收。
 
 
 <a id="mapping-extension--上一版1125"></a>
@@ -862,6 +880,8 @@ NiFi 2.9 的匹配构建：`mvn -Dnifi.version=2.9.0 -Dmapping.output.root=D:/So
 
 <a id="date-fetch-extension"></a>
 
+<a id="datasource-adapters"></a>
+
 ## 数据源产品与运行驱动
 
 登记、连接测试、元数据、分页预览及接入任务传递同一份产品配置。GaussDB 的主类型仍为 `gaussdb`，具体产品保存为 `pool_cfg.gaussdbVariant`，不靠端口或显示名称猜测产品。Hive 使用 `hiveConnectionMode` 区分开源与华为 MRS，明确开源模式时忽略遗留华为配置集。
@@ -878,17 +898,32 @@ NiFi 2.9 的匹配构建：`mvn -Dnifi.version=2.9.0 -Dmapping.output.root=D:/So
 
 端口以真实实例为准。华为 GaussDB 应安装其数据库版本配套的官方驱动，不能因为类名或协议相似而替换为普通 PostgreSQL JAR；DWS 允许 PostgreSQL JDBC，具体支持范围见 [GaussDB 驱动说明](https://support.huaweicloud.com/centralized-devg-v10-gaussdb/gaussdb-42-0080.html)、[openGauss JDBC](https://docs.opengauss.org/en/docs/7.0.0/getting_started/java.html) 和 [DWS 驱动说明](https://support.huaweicloud.com/mgtg-dws/dws_01_0032.html)。文件名是部署约定，节点可配置其他版本的完整 JAR 路径。未保存产品的历史记录保留原协议，编辑时选择真实产品；不自动重建运行任务或清空水位。
 
-后端以 `JDBC_DRIVER_DIRECTORY` 或 JVM 参数 `data-elements.jdbc.driver-directory` 定位厂商驱动，加载前核对 JAR 内的实际驱动类。不同 GaussDB 驱动直接绑定到各自连接池，避免多个驱动接受 `jdbc:opengauss` 时由全局 DriverManager 随机选择。开源 Hive 必须在该目录的 `open-source-hive/` 安装 Apache Hive JDBC standalone 客户端，连接测试、表/字段探查和连接池共用同一个隔离驱动实例；缺少客户端时明确报错，不能回退到同名的华为 HiveDriver。华为客户端继续放在隔离的 `huawei-mrs/`，二者不混用 Hadoop/ZooKeeper 依赖。开源连接测试使用与登记、接入相同的 URL 构造器，保留 HTTP、TLS 和 NoSASL 配置，无认证模式显式传入 `auth=none`。
+后端优先使用应用 classpath 中所选产品的驱动；外置厂商驱动以 `JDBC_DRIVER_DIRECTORY` 或 JVM 参数 `data-elements.jdbc.driver-directory` 定位，加载前核对 JAR 内的实际驱动类。不同 GaussDB 驱动直接绑定到各自连接池，避免多个驱动接受 `jdbc:opengauss` 时由全局 DriverManager 随机选择。开源 Hive 必须在该目录的 `open-source-hive/` 安装 Apache Hive JDBC standalone 客户端，连接测试、表/字段探查和连接池共用同一个隔离驱动实例；缺少客户端时明确报错，不能回退到同名的华为 HiveDriver。华为客户端继续放在隔离的 `huawei-mrs/`，二者不混用 Hadoop/ZooKeeper 依赖。开源连接测试使用与登记、接入相同的 URL 构造器，保留 HTTP、TLS 和 NoSASL 配置，无认证模式显式传入 `auth=none`。
 
 NiFi 驱动独立于后端安装。节点驱动映射支持 `GAUSSDB_NATIVE`（opengaussjdbc 兼容包）、`GAUSSDB_JDBC`（新版 gaussdbjdbc）、`GAUSSDB_OPENGAUSS`、`GAUSSDB_DWS`、`GAUSSDB_MYSQL`、`HIVE_OPEN_SOURCE` 等键；没有独立 GaussDB 映射时兼容现有默认目录／旧 GaussDB 映射。华为新版原生驱动使用 `gaussdbVariant=gaussdb-jdbc` 与 `jdbc:gaussdb:`，原 `gaussdb` 选项保留 `jdbc:opengauss:`，两种驱动均按 JDK 和数据库实例版本选择官方发行包。openGauss Maven 客户端需选择包含 `org.opengauss.Driver` 的 `-og` 版本，不能用同版本号下包含 `org.postgresql.Driver` 的另一个包替代。Hive 开源配置填写 Binary/HTTP、认证方式和必要 TLS/Kerberos 参数；华为模式继续由服务端配置集解析，浏览器不保存华为 keytab 内容。
 
-当前华为 GaussDB 原生驱动采用用户确认的 `Distributed-UnionTech20_arm_64.zip`，包内 VERSION 为 `GaussDB-Kernel_505.2.1.SPC0800 / 5.0.0.4.15`，Maven 元数据为 `5.0.0-htrunk4.csi.gaussdb_kernel.opengaussjdbc.r15`。后端外部驱动目录中安装原件 `gaussdbjdbc.jar` 与 `opengaussjdbc.jar`，分别匹配上表两种华为产品入口，JAR 字节码为 Java 8，当前 JDK 21 可加载；驱动接口自报的版本号 42.0 不能当成数据库发行版本。保留独立开源 openGauss 的 `opengauss-jdbc.jar`，不把华为 `opengaussjdbc.jar` 改名覆盖它。
+当前华为 GaussDB 原生驱动采用用户确认的 `Distributed-UnionTech20_arm_64.zip`，包内 VERSION 为 `GaussDB-Kernel_505.2.1.SPC0800 / 5.0.0.4.15`，Maven 元数据为 `5.0.0-htrunk4.csi.gaussdb_kernel.opengaussjdbc.r15`。发布 JAR 内置原件 `gaussdbjdbc.jar` 与 `opengaussjdbc.jar`，分别匹配上表两种华为产品入口；外置部署时也使用这两个原文件名。JAR 字节码为 Java 8，当前 JDK 21 可加载；驱动接口自报的版本号 42.0 不能当成数据库发行版本。保留独立开源 openGauss 的 `opengauss-jdbc.jar`，不把华为 `opengaussjdbc.jar` 改名覆盖它。
+
+后端 POM 将这两个已确认版本声明为正式运行时依赖：`com.huawei.gaussdb:gaussdbjdbc` 与 `org.opengauss:opengauss-jdbc`，版本均为上述厂商 Maven 版本。每台新的构建机器首次使用时，执行 `python tools/install-gaussdb-drivers.py --archive <已确认驱动ZIP> --driver-directory <受管JDBC目录> --apply --backup-directory <logs或受限备份目录> --install-to-maven`，先验证原件再安装到 Maven 实际配置的本地仓库；也可由团队受控 Maven 仓库分发同坐标、同摘要的原件。此后直接运行 `mvn install -f data-elements-parent/pom.xml`，Spring Boot 自动将两个带版本号的 JAR 打入 `BOOT-INF/lib/`，无需额外后处理。构建测试核对原件摘要与驱动协议；缺少依赖或版本不符时构建失败，不能生成缺驱动而看似成功的包。受限厂商二进制不提交 Git。
+
+旧产物的补包工具 `tools/package-backend-with-gaussdb.py` 继续支持已审阅的增量打包；它识别 Maven 已内置且摘要正确的带版本号驱动，不重复加入同类驱动。新增嵌套 JAR 保持不压缩，逐项验证业务类与配置内容未改变，拒绝覆盖运行 JAR、错误版本及重复类遮蔽。部署标准 Maven 包后，两种华为 GaussDB 入口直接从后端 classpath 加载；其他外置驱动继续按原目录配置。生产替换 JAR 时保留原启动参数和受限环境变量，NiFi 执行节点仍须独立安装同一对驱动，外置文件名仍为 `gaussdbjdbc.jar` 和 `opengaussjdbc.jar`。
+
+华为两种原生入口自动生成 `?autoBalance=true`。默认模式且 TLS 为“优先加密”时，`gaussdb-jdbc` 生成 `jdbc:gaussdb://主机:端口/数据库?autoBalance=true`；兼容原生入口使用 `jdbc:opengauss:`。显式 Schema、其他 TLS 模式及手工填写的完整 JDBC 地址继续保留；后端额外参数已指定 `autoBalance=false` 时不覆盖。该参数不套用到 openGauss、DWS 或 MySQL 兼容产品。
 
 受控安装入口为根目录 `tools/install-gaussdb-drivers.py`，默认只读；`--archive <附件ZIP> --driver-directory <后端JDBC目录>` 先核对 JAR 摘要、实际驱动类及 SPI 声明，再用 `--apply --backup-directory <logs或受限备份目录>` 安装。工具只替换上述两个明确文件，原文件在活动驱动目录外备份；每个文件采用原子替换，第二个文件失败时回退已替换项，拒绝未知包摘要与并发覆盖。JAR 与备份属于部署产物，不提交 Git。本机目录由受限启动配置的 `JDBC_DRIVER_DIRECTORY` 确定，不能猜测为 Maven 依赖或 NiFi 目录。若 JVM 此前已加载旧驱动，需在授权范围重启后端再验证；驱动类尚未加载时，新建连接会按同一路径读取已替换文件。
 
 附件的 `gsjdbc4.jar` 包含 `org.postgresql.Driver`，与普通 PostgreSQL 同名；`gsjdbc200.jar` 包含 `com.huawei.gauss200.jdbc.Driver` 且使用 `jdbc:gaussdb:`；`gaussdbjdbc-JRE7.jar` 是旧 JRE 备用版本。它们保留在交付包的独立兼容目录，不能同时混入共享 classpath 或改名冒充另一产品。NiFi 使用独立 JVM 和节点文件系统，需将同一对已校验 JAR 部署到实际节点驱动目录，保留 `GAUSSDB_NATIVE`／`GAUSSDB_JDBC` 映射及既有任务状态；只更新本地后端目录不表示远端 NiFi 已更新。离线类加载、协议接受及摘要一致验证不能替代现场数据库连接、认证、探查和真实抽取验证。
 
-SQL Server、GBase 8a、Vertica 提供统一分页预览执行器，查询字段与排序字段仍按当前来源的真实字段白名单校验。开源 Hive 首屏使用 LIMIT、后续页使用窗口函数，避免使用不兼容的 MySQL OFFSET 语法。GaussDB 按当前会话解析默认 Schema，批量字段读取使用有界 IN 查询及主键关联，最多200张表，不逐表补查。
+NiFi 华为 GaussDB 专用交付包只包含后端同源的 `gaussdbjdbc.jar`、`opengaussjdbc.jar` 及摘要清单，不混入其他兼容驱动。节点配置为 JDBC 目录时，编译器按所选产品补齐下表文件名；配置为映射时优先使用对应产品键。将两个文件按原名复制到 NiFi 实际运行节点的受管驱动目录，集群各执行节点都需可读；不要把本机 Windows 路径填写到远端节点。目录示例 `/opt/nifi/drivers` 仅供说明，必须换成实际部署目录。
+
+| 登记和接入产品选项 | 连接协议 | NiFi 驱动类 | 节点映射及文件名 |
+| --- | --- | --- | --- |
+| 华为 GaussDB（gaussdbjdbc 原生驱动） | `jdbc:gaussdb:` | `com.huawei.gaussdb.jdbc.Driver` | `GAUSSDB_JDBC=/opt/nifi/drivers/gaussdbjdbc.jar` |
+| 华为 GaussDB（opengaussjdbc 兼容驱动） | `jdbc:opengauss:` | `com.huawei.opengauss.jdbc.Driver` | `GAUSSDB_NATIVE=/opt/nifi/drivers/opengaussjdbc.jar` |
+
+既有任务或单个组件显式设置的 `driverLocations`／`nifiDriverLocations` 优先于节点目录；更换节点驱动目录后，须检查对应 DBCP 服务的 `Database Driver Class Name`、`Database Driver Locations` 和 `Database Connection URL` 三项实际值，不能只检查上传的文件。已加载旧驱动的执行进程需在维护窗口重新加载驱动后再使用；仅覆盖文件不能证明在用连接池已切换版本。完成环境验收须用实际账号依次验证连接、Schema、表目录、字段及主键和样例预览，并执行明确测试对象的 NiFi 抽取，离线测试不得记为这些步骤已经成功。
+
+SQL Server、GBase 8a、Vertica 提供统一分页预览执行器，查询字段与排序字段仍按当前来源的真实字段白名单校验。开源 Hive 首屏使用 LIMIT、后续页使用窗口函数，避免使用不兼容的 MySQL OFFSET 语法。GaussDB 按当前会话解析默认 Schema，登记后台的表目录、行数估计、字段数及空间统计使用同一 Schema 内的一次关联查询，不逐表读取统计；批量字段读取使用有界 IN 查询及主键关联，最多200张表，不逐表补查。两种采集入口均由当前租户和数据源角色权限校验后的连接配置发起，批量表名不能改变数据源或 Schema 范围。
 
 FTPS 使用 TLS 控制及数据通道，支持21端口常见的显式 TLS和990端口常见的隐式 TLS，也可显式指定模式。后端及 NiFi 都验证证书链和主机名。画布连接测试与登记探查使用同一 TLS 工厂，在 TLS 协商成功之前不发送账号密码；认证后启用 `PBSZ 0`、`PROT P` 并核对远端目录。私有 CA 可分别配置探查端 `trustStorePath` 与接入节点 `nifiTrustStorePath`，不以关闭验证代替信任配置。NiFi 需安装 ExecuteGroovyScript 及 Commons Net 客户端，节点驱动映射可配置 `FTP=/实际路径/commons-net.jar`；目录配置按该受管文件名解析，版本须支持 Duration 超时接口。
 
@@ -910,7 +945,7 @@ FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发
 | 达梦 | 沿用原生 JDBC 元数据、预览及接入 | 驱动、Schema 与兼容设置 |
 | PostgreSQL | 沿用 JDBC 元数据、预览及接入 | Schema、扩展类型与实例版本 |
 | 人大金仓 | 沿用金仓元数据、预览及接入 | 真实兼容模式与 KingbaseES 驱动 |
-| Elasticsearch | 沿用索引、字段、预览与 Record 接入 | 集群版本、认证与字段映射 |
+| Elasticsearch | ES 6 的带类型 mapping、整数命中数与 ES 7/8 的无类型 mapping、对象命中数均兼容；连接、索引采集、批量字段和 DSL 预览 | HTTP 协议回归覆盖 ES 6/8 响应；真实集群认证、TLS、权限及 NiFi 执行需按部署环境验收 |
 | Kafka | 沿用主题、样本字段与消息接入 | SASL/TLS、消费组、起始偏移与消息格式 |
 | MinIO | 沿用对象目录、文件字段与对象接入 | Endpoint、授权、路径与文件格式 |
 | FTP／SFTP／FTPS | 沿用文件链路，补齐 FTPS TLS、敏感配置及持久化水位 | 协议、证书信任库与 NiFi Groovy／Commons Net 客户端 |
@@ -937,6 +972,18 @@ FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发
 原生画布可见该类型但发布仍报错时，应核对平台实际连接的 NiFi 返回的完整坐标。发布前错误区分“类型未注册”和“类型已注册但版本/坐标不匹配”，列出要求坐标和实际坐标；同一类型同时存在其他版本时仍明确选择 2.9.0。响应中附加的非坐标元数据不影响匹配。旧流程在预检查失败时保留。
 
 此前独立后缀版本的实验源码、构建工具和测试产物已退回忽略的运行材料目录，不属于当前发布依赖，不用于替换现有 2.9.0。
+
+## Linewell 数据库写入组件的 Bundle 选择
+
+`LinewellPutDatabaseRecord` 自动从当前租户绑定的 NiFi 扩展清单中，选择 `com.linewell.microservice:datadevs-database-nar` 的最高已注册版本；创建处理器时显式发送选中的 `component.bundle.group/artifact/version`，解决多版本共存时仅传类名产生的 HTTP 409。该版本指处理器的 NAR 版本，与 NiFi 服务端、字段治理内核版本分别维护。只考虑当前 NiFi 已注册的扩展，不联网获取或安装 NAR。
+
+无需配置 Nacos 版本号；原 `nifi.linewell-database-record` 固定坐标配置已停用，历史残留值不影响自动选择，Git 配置版本源中也不再包含这些项。后端更新后须重启加载新代码；在 NiFi 安装并加载新扩展后，下一次新建或重建流程会重新读取清单并选择最新版本。
+
+版本排序采用 Maven `ComparableVersion`，数字段按数值比较，例如 `2.10.0` 高于 `2.9.0`，同一基础版本的 RC、SNAPSHOT 排在正式版之前。比较范围包含已注册的预发布版本，例如已安装的 `3.0.0-SNAPSHOT` 高于 `2.9.0`；同义版本号如 `2.10` / `2.10.0` 按原版本字符串确定固定顺序，并发送真实坐标。其他 group/artifact 的同名组件不参与选择，空白、非文本或无效版本不作为候选。
+
+新建或强制重建流程在旧处理组停止、清理之前核验写入组件。未注册可用的扩展或最高版本的同一坐标出现不同处理器类型时，返回 `JDBC_WRITER_PREFLIGHT_FAILED`，包含选择范围及实际注册坐标，保留原流程与状态。直接调用编译器也在新建处理组前执行相同检查，创建请求使用已核验的最新坐标；若 NiFi 节点创建失败，保留原始错误供检查，不自动降级版本。原生 `PutDatabaseRecord` 不使用这些自定义坐标；普通启动与无需重建的部署复用保持已有 Bundle。
+
+一次部署按可信租户绑定 NiFi 节点；来源、写入、字段治理预检查和编译共享该范围内的扩展清单，20/100 个目标均只读取一次 `processor-types`，节点绑定只解析一次（不含此前组织目录定位的固定开销）。嵌套编译范围可复用清单，部署结束即释放，不跨租户或后续部署缓存。
 
 <a id="logging-framework"></a>
 

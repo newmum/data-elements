@@ -3,6 +3,7 @@ import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl, connectionProduct
 import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip } from 'antd';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import { incrementalFieldVisible } from '../utils/incrementalFields';
+import { DAILY_STAGGERED, automaticSchedule, dailyScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule';
 import { governanceNodeLabel } from '../utils/fieldGovernancePresentation';
 import {
   DatabaseOutlined,
@@ -654,6 +655,10 @@ export default function ConfigDrawer() {
 
   const enhancedFields = useMemo(() => {
     const fields = (manifest?.fields ?? []).flatMap(expandIncrementalField);
+    if (manifest?.category === 'source' && isBatchSource(manifest.key) && fields.some(f => f.key === 'schedulingPeriod')) {
+      fields.unshift({ key: 'batchSchedulePolicy', label: '执行方式', type: 'select', group: 'schedule',
+        options: [{ label: '每天一次（自动错峰）', value: DAILY_STAGGERED }, { label: '自定义调度', value: 'CUSTOM' }] });
+    }
     if (manifest?.category !== 'source' || !manifest.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch') || p.type.endsWith('.GenerateDateTableFetch'))) return fields;
     return [
       { key: 'syncMode', label: '同步方式', type: 'select', required: true, group: 'sync', options: syncModes.map(item => ({ value: item.value, label: item.label })), help: '修改后请点击保存；启动使用已部署版本的同步方式。' },
@@ -671,6 +676,7 @@ export default function ConfigDrawer() {
       patch.syncMode = syncSettings(node.config).syncMode;
     }
     enhancedFields.forEach((field) => {
+      if (!scheduleFieldVisible(field.key, node.config)) return;
       if (field.default === undefined || node.config[field.key] !== undefined) return;
       // schedulingPeriod 在 Timer/Cron 下共用同一 config key，展开成两个字段。
       // 仅对当前可见的那个套用默认值，避免 Cron 的默认把 Timer 的「一天」覆盖掉。
@@ -1375,6 +1381,17 @@ export default function ConfigDrawer() {
     // 调度策略切换：在 Timer / Cron 之间切换时，把共用的 schedulingPeriod 值
     // 在「周期（一天）」与「每天 Cron 表达式」之间自动转换，避免出现 1day 这种非法 Cron。
     const isScheduleStrategyField = field.key === 'schedulingStrategy' && field.group === 'schedule';
+    if (field.key === 'batchSchedulePolicy') {
+      return <Space direction="vertical" style={{ width: '100%' }}>
+        <Select style={{ width: '100%' }} value={automaticSchedule(node.config) ? DAILY_STAGGERED : 'CUSTOM'} options={field.options} disabled={disabled}
+          onChange={v => updateConfig(node.id, v === DAILY_STAGGERED ? dailyScheduleDefaults(node.config)
+            : { batchSchedulePolicy: 'CUSTOM', schedulingPeriod: node.config.schedulingPeriod || '0 0 0 * * ?' })} />
+        {automaticSchedule(node.config) && <div role="status">
+          <div>{node.config.batchScheduleTime ? `每天 ${String(node.config.batchScheduleTime)}（北京时间）` : '首次保存时自动分配执行时间'}</div>
+          <div className="ant-form-item-extra">分配后固定保存，编辑、重启和重新部署沿用同一时刻。</div>
+        </div>}
+      </Space>;
+    }
     if (isScheduleStrategyField) {
       const timerPeriodField = enhancedFields.find(
         (f) => f.key === 'schedulingPeriod' && f.type !== 'text',
@@ -1534,6 +1551,7 @@ export default function ConfigDrawer() {
     const missing: string[] = [];
     enhancedFields.forEach((field) => {
       if (!field.required) return;
+      if (!scheduleFieldVisible(field.key, node.config)) return;
       // 跳过不可见字段。
       if (!isVisible(field, node.config)) return;
       if (!isIncrementalVisible(field, node.config)) return;
@@ -1596,6 +1614,7 @@ export default function ConfigDrawer() {
     return (
       <Form layout="vertical" size="middle">
         {fields.filter((f) => {
+          if (!scheduleFieldVisible(f.key, node.config)) return false;
           if (manifest.key === 'transform.sql' && f.key === 'executionMode') return false;
           // The unified field component exposes its mode beside the rule editor;
           // rendering it as a normal form row wastes a full line of vertical space.

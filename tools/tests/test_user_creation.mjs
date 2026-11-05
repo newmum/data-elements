@@ -9,7 +9,7 @@ const script = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/)[1];
 const babel = {};
 vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/babel.min.js', root), 'utf8'), babel);
 const ast = babel.Babel.transform(script, { ast: true, code: false, parserOpts: { sourceType: 'module', plugins: ['typescript'] } }).ast;
-const names = ['pinyinCache', 'nameToPinyin', 'formRules', 'handleSave'];
+const names = ['pinyinCache', 'nameToPinyin', 'formRules', 'handleSave', 'handleStatusClick'];
 const selected = names.map(name => {
   const declaration = ast.program.body.find(n => n.type === 'VariableDeclaration' && n.declarations.some(d => d.id.name === name));
   assert.ok(declaration, name);
@@ -32,7 +32,7 @@ const context = vm.createContext({
   $common: { regexps: { phone: /^1[3-9]\d{9}$/ }, post: async (route, payload) => calls.push({ route, payload }) },
 });
 vm.runInContext(code + '\nglobalThis.actual = {' + names.join(',') + '};', context);
-const { nameToPinyin, formRules, handleSave } = context.actual;
+const { nameToPinyin, formRules, handleSave, handleStatusClick } = context.actual;
 for (const name of ['叶华', '张三', '吕', '李四', '123测试', 'A'.repeat(70)]) {
   assert.ok(nameToPinyin(name).length > 0 && nameToPinyin(name).length <= 50);
 }
@@ -44,6 +44,8 @@ change(inject, '张三');assert.equal(form.userName, 'zhangsan');
 form.userName = 'manual_account';change(inject, '李四');assert.equal(form.userName, 'manual_account');
 context.drawerType.value = 'detail';change(inject, '王五');assert.equal(form.userName, 'manual_account');
 const accountRule = formRules.find(r => r.field === 'userName');
+const orgRule = formRules.find(r => r.field === 'orgId');
+assert.equal(orgRule.$dict, undefined, 'Organization options must use the current page tree instead of a stale shared dictionary');
 assert.equal(accountRule.validate, undefined, 'The account must not have a format validator');
 assert.equal(accountRule.$required, true);
 assert.equal(accountRule.props.placeholder, '请输入用户账号');
@@ -55,3 +57,10 @@ for (const account of ['中', '中文账号', '0', '123456', 'yh', 'a@b+测试',
   form.userName = account;await handleSave();assert.equal(calls.at(-1).payload.userName, account);
 }
 console.log('PASS: unrestricted account characters, short/numeric/Chinese/special accounts, manual/edit account preservation, and one normalized request per save');
+const statusRow = { id: 'validation-member', status: 0, realName: '保留资料', appFileId: 'preserved-avatar' };
+await handleStatusClick(statusRow);
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))), { route: '/sym/user/saveOrUpdate', payload: { id: 'validation-member', status: 1 } });
+assert.equal(statusRow.status, 1);
+assert.equal(statusRow.appFileId, 'preserved-avatar');
+assert.equal(statusRow._statusLoading, false);
+console.log('PASS: status toggle sends one ID/status request and preserves profile fields');

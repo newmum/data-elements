@@ -10,7 +10,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 public final class ValueTypes {
-    private static final Set<String> LOGICAL_TYPES = Set.of("ANY", "STRING", "INT", "LONG", "DECIMAL", "DOUBLE", "BOOLEAN", "DATE", "DATETIME", "TIME", "INSTANT", "ARRAY");
+    private static final Set<String> LOGICAL_TYPES = Set.of("ANY", "STRING", "INT", "LONG", "DECIMAL", "DOUBLE", "BOOLEAN", "DATE", "DATETIME", "TIME", "INSTANT", "ARRAY", "BINARY");
     private static final Pattern DIMENSIONS = Pattern.compile("\\([^)]*\\)");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final Pattern UNSIGNED = Pattern.compile("\\s+UNSIGNED$");
@@ -33,6 +33,7 @@ public final class ValueTypes {
         if(value.equals("BIGINT UNSIGNED"))return "DECIMAL";
         value=UNSIGNED.matcher(value).replaceAll("");
         return switch (value) {
+            case "BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "VARBINARY", "LONGVARBINARY", "LONG VARBINARY", "RAW", "LONG RAW", "BYTEA", "IMAGE", "BYTES" -> "BINARY";
             case "VARCHAR", "VARCHAR2", "NVARCHAR", "NVARCHAR2", "CHAR", "NCHAR", "TEXT", "CLOB", "LONGVARCHAR",
                  "CHARACTER VARYING", "CHAR VARYING", "NCHAR VARYING", "NATIONAL CHARACTER VARYING", "NATIONAL CHAR VARYING",
                  "CHARACTER", "NATIONAL CHARACTER", "NATIONAL CHAR", "LONGNVARCHAR", "NCLOB", "NTEXT", "BPCHAR",
@@ -62,7 +63,8 @@ public final class ValueTypes {
         try {
             return switch (type(rawType)) {
                 case "ANY" -> value;
-                case "STRING" -> value.toString();
+                case "STRING" -> BinaryValues.text(value);
+                case "BINARY" -> BinaryValues.bytes(value);
                 case "INT" -> value instanceof Boolean b?(b?1:0):integer(value,"INT",Integer.MIN_VALUE,Integer.MAX_VALUE).intValueExact();
                 case "LONG" -> value instanceof Boolean b?(b?1L:0L):integer(value,"LONG",Long.MIN_VALUE,Long.MAX_VALUE).longValueExact();
                 case "DECIMAL" -> {

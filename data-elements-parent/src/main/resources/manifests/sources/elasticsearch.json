@@ -11,6 +11,7 @@
       { "label": "HTTPS", "value": "https" }
     ] },
     { "key": "version", "label": "版本", "type": "select", "default": "8", "options": [
+      { "label": "6.x", "value": "6" },
       { "label": "7.x", "value": "7" },
       { "label": "8.x", "value": "8" }
     ] },

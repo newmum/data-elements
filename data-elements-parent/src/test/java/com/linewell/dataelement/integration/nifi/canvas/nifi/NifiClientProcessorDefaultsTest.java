@@ -117,6 +117,10 @@ class NifiClientProcessorDefaultsTest {
     }
     @Test void linewellClockIntentsNeverReachNiFiAsDynamicPropertiesAndResolveUsingCreationResponse()throws Exception {
         NifiClient client=spy(new NifiClient(mock(NifiNodeRuntimeResolver.class),mapper));
+        var extensions=mapper.createObjectNode();
+        extensions.putArray("processorTypes").addObject().put("type","com.linewell.nifi.LinewellPutDatabaseRecord")
+                .putObject("bundle").put("group","com.linewell.microservice").put("artifact","datadevs-database-nar").put("version","2.9.0");
+        doReturn(extensions).when(client).get("/flow/processor-types",JsonNode.class);
         JsonNode created=mapper.readTree("""
           {"revision":{"version":0},"component":{"id":"p","config":{"descriptors":{"insert-key":{"displayName":"insert 追加value 值"},"update-key":{"displayName":"update 追加value 值"},"exclude-key":{"displayName":"merge 排除 update"}}}}}
           """);
@@ -127,7 +131,7 @@ class NifiClientProcessorDefaultsTest {
         verify(client).post(eq("/process-groups/group/processors"),initial.capture(),eq(JsonNode.class));verify(client).put(eq("/processors/p"),update.capture(),eq(NifiEntity.class));
         assertThat(initial.getValue().toString()).doesNotContain(LinewellAuditProperties.PREFIX);
         JsonNode props=((JsonNode)update.getValue()).at("/component/config/properties");assertThat(props.path("insert-key").asText()).isEqualTo("ODS_RKSJ=SYSDATE,ODS_GXSJ=SYSDATE");assertThat(props.path("update-key").asText()).isEqualTo("ODS_GXSJ=SYSDATE");assertThat(props.path("exclude-key").asText()).isEqualTo("ODS_RKSJ");
-        org.mockito.Mockito.verify(client,org.mockito.Mockito.never()).get(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.any());
+        verify(client).get("/flow/processor-types",JsonNode.class);
     }
 
     @Test

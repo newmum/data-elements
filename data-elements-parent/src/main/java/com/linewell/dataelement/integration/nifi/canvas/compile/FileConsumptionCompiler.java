@@ -43,7 +43,8 @@ final class FileConsumptionCompiler {
         listing.put("Listing Strategy","timestamps");
         listing.put("File Filter Regex","(?i).*\\.json\\.done$");
         listing.put("Search Recursively","false");
-        var list=nifi.createProcessor(pgId,STANDARD+(sftp?"ListSFTP":"ListFTP"),source.label()+"/已完成文件清单",x,y-400,listing,period,"TIMER_DRIVEN");
+        var list=nifi.createProcessor(pgId,STANDARD+(sftp?"ListSFTP":"ListFTP"),source.label()+"/已完成文件清单",x,y-400,listing,period,
+                Objects.toString(source.config().get("schedulingStrategy"), "TIMER_DRIVEN"));
         nifi.executeOnPrimaryNode(list.id());
         compiled.processorIds.put("list-completed",list.id());
         var attributes=nifi.createProcessor(pgId,"org.apache.nifi.processors.attributes.UpdateAttribute",source.label()+"/文件消费标识",x,y-200,

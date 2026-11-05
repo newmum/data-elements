@@ -16,6 +16,14 @@ test('changing GaussDB product clears stale URL and preserves custom port', () =
   assert.equal(connectionProductPatch({gaussdbVariant:'dws',port:18000},'gaussdbVariant','mysql').port,undefined);
 });
 
+test('native GaussDB generated URLs enable vendor autoBalance by default', () => {
+  assert.equal(buildJdbcUrl('gaussdb','validation.invalid',8000,'business',undefined,'gaussdb-jdbc'),
+    'jdbc:gaussdb://validation.invalid:8000/business?autoBalance=true');
+  assert.equal(buildJdbcUrl('gaussdb','validation.invalid',8000,'business',undefined,'gaussdb'),
+    'jdbc:opengauss://validation.invalid:8000/business?autoBalance=true');
+  assert.ok(!buildJdbcUrl('gaussdb','validation.invalid',5432,'business',undefined,'opengauss').includes('autoBalance'));
+});
+
 test('explicit open Hive clears MRS profile and exposes direct connection fields', () => {
   const patch=connectionProductPatch({hiveProfile:'default'},'hiveConnectionMode','open-source');
   assert.equal(patch.hiveProfile,undefined);

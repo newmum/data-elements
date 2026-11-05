@@ -1190,7 +1190,7 @@ public class PipelineController {
             sourceConfig.put("fileFilterRegex", firstNonBlank(sourceDs, "ftpFilePattern", "ftp_file_pattern", "fileFilterRegex", "filePattern") == null
                     ? ".*" : firstNonBlank(sourceDs, "ftpFilePattern", "ftp_file_pattern", "fileFilterRegex", "filePattern"));
             sourceConfig.put("passiveMode", firstNonBlank(sourceDs, "ftpPassiveMode", "ftp_passive_mode", "passiveMode"));
-            sourceConfig.put("schedulingPeriod", "60 sec");
+            sourceConfig.putAll(com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy.markDefault(sourceConfig));
             sourceConfig.put("sourceColumns", sourceColumns == null ? List.of() : sourceColumns);
             sourceConfig.put("table", firstNonBlank(tableAsset, "tableName", "table", "name", "tableCode", "tableNameCn"));
             String registeredTable = firstNonBlank(sourceConfig, "table");
@@ -1348,7 +1348,7 @@ public class PipelineController {
         if (!isBlank(registeredTimestamp)) {
             sourceConfig.put("incrementalColumn", registeredTimestamp);
         }
-        sourceConfig.put("schedulingPeriod", "60 sec");
+        sourceConfig.putAll(com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy.markDefault(sourceConfig));
         sourceConfig.put("syncMode", "FULL_THEN_INCR");
         sourceConfig.put("initialStrategy", "START_AT_BEGINNING");
         sourceConfig.put("lookbackSeconds", 5);
@@ -1520,9 +1520,14 @@ public class PipelineController {
         if (schedule.isEmpty()) schedule = jsonObject(api.get("capture_schedule"));
         String mode = firstNonBlank(schedule, "mode");
         if (isBlank(mode)) mode = firstNonBlank(api, "scheduleMode", "schedule_mode", "triggerMode", "trigger_mode");
-        mode = isBlank(mode) ? "once" : mode.trim().toLowerCase(Locale.ROOT);
         String cron = firstNonBlank(schedule, "cronExpression", "cron_expression");
         if (isBlank(cron)) cron = firstNonBlank(api, "cronExpression", "cron_expression");
+        if (isBlank(mode) && isBlank(cron)) {
+            config.putAll(com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy.markDefault(config));
+            return;
+        }
+        mode = isBlank(mode) ? "cron" : mode.trim().toLowerCase(Locale.ROOT);
+        config.put("batchSchedulePolicy", "CUSTOM");
         if (!isBlank(cron) || "cron".equals(mode) || "specified".equals(mode)) {
             config.put("schedulingStrategy", "CRON_DRIVEN");
             config.put("schedulingPeriod", isBlank(cron) ? "0 0 9 * * ?" : cron);

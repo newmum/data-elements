@@ -1,16 +1,11 @@
 import { getPlatformSessionToken, redirectToPlatformLogin,reconcilePlatformSessionToken } from '../services/platformSession';
 import { getSessionRevision } from '../nifi/api/bridgeSession';
+import { PlatformApiError, platformResponseError } from './platformError';
+export { PlatformApiError } from './platformError';
 
 const platformEnv = import.meta.env ?? {};
 const baseUrl = (platformEnv.VITE_DATA_ELEMENTS_API_BASE_URL
   || (platformEnv.DEV ? '/dev-api' : '/prod-api')).replace(/\/$/, '');
-
-export class PlatformApiError extends Error {
-  constructor(public readonly path: string, message: string, public readonly status?: number) {
-    super(message);
-    this.name = 'PlatformApiError';
-  }
-}
 
 export function isPlatformAuthenticationFailure(body: unknown, status?: number): boolean {
   if (status === 401) return true;
@@ -21,7 +16,7 @@ export function isPlatformAuthenticationFailure(body: unknown, status?: number):
   return /user_no_login|未登录|登录.{0,8}(?:失效|过期)/i.test(message);
 }
 
-function unwrap<T>(response: unknown, path: string): T {
+function unwrap<T>(response: unknown, path: string, method: string, status: number): T {
   if (!response || typeof response !== 'object' || Array.isArray(response)) return response as T;
   const body = response as Record<string, unknown>;
   if (isPlatformAuthenticationFailure(body)) {
@@ -29,7 +24,7 @@ function unwrap<T>(response: unknown, path: string): T {
     throw new PlatformApiError(path, '数据中台登录已失效，正在前往登录页', 401);
   }
   if (body.success === false || (body.code !== undefined && Number(body.code) !== 0 && Number(body.code) !== 200)) {
-    throw new PlatformApiError(path, String(body.msg || body.message || '接口操作失败'));
+    throw platformResponseError(body, path, '接口操作失败', status, method);
   }
   return ('data' in body ? body.data : response) as T;
 }
@@ -112,17 +107,21 @@ export async function platformApi<T>(path: string, body?: unknown, options: Requ
   }
   try {
     assertCurrentSession();
-    if (!response.ok) {
-      if (response.status === 401) redirectToPlatformLogin();
-      throw new PlatformApiError(path, response.status === 401 ? '数据中台登录已失效，正在前往登录页' : `接口请求失败（${response.status}）`, response.status);
-    }
+    const method = options.method ?? (body === undefined ? 'GET' : 'POST');
+    let data: unknown;
     try {
-      const data: unknown = await response.json();
+      data = await response.json();
       assertCurrentSession();
-      return unwrap<T>(data, path);
     } catch (cause) {
       if (cause instanceof PlatformApiError) throw cause;
-      throw new PlatformApiError(path, fetchTimedOut ? '请求超时，请稍后重试' : '接口返回格式无法识别');
+      if (response.ok) throw new PlatformApiError(path, fetchTimedOut ? '请求超时，请稍后重试' : '接口返回格式无法识别', response.status, { method });
     }
+    if (isPlatformAuthenticationFailure(data, response.status)) {
+      redirectToPlatformLogin();
+      throw platformResponseError(data, path, '数据中台登录已失效，正在前往登录页', 401, method);
+    }
+    if (!response.ok) throw platformResponseError(data, path,
+      response.status === 413 ? '上传文件超过服务端或网关允许的大小，请联系管理员检查上传限制' : `接口请求失败（${response.status}）`, response.status, method);
+    return unwrap<T>(data, path, method, response.status);
   } finally { cleanup(); }
 }

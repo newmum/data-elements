@@ -648,9 +648,9 @@ const fetchOrgDetail = async (id: string) => {
     drawerTab.value = "info";
     orgUsers.value = [];
     drawerVisible.value = true;
-  } catch (error) {
+  } catch (error: any) {
     console.error("获取机构详情失败:", error);
-    $message.error("获取机构详情失败");
+    if (!error?.handled) $message.error(error?.message || "获取机构详情失败");
   }
 };
 
@@ -665,9 +665,9 @@ const handleSave = async () => {
     $message.success("保存成功");
     drawerVisible.value = false;
     refreshWithState();
-  } catch (error) {
+  } catch (error: any) {
     console.error("保存失败:", error);
-    $message.error("保存失败，请检查表单数据");
+    if (!error?.handled) $message.error(error?.message || "请检查必填项和输入格式");
   } finally {
     isLoading.value = false;
   }

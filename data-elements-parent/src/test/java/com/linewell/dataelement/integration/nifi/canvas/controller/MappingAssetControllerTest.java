@@ -159,7 +159,7 @@ class MappingAssetControllerTest {
     }
 
     @Test void schemaContractReadsBothSidesAsOneAuthorizedPhysicalBatch() {
-        ObjectNode body = JSON.createObjectNode();
+        ObjectNode body = JSON.createObjectNode().put("verifyPhysical", true);
         body.putObject("sourceRef").put("datasourceId", "db").put("tableId", "source");
         body.putObject("targetRef").put("datasourceId", "db").put("tableId", "target");
         ArrayNode sourceFields = JSON.createArrayNode().add(JSON.createObjectNode().put("name", "sourceField"));
@@ -174,6 +174,28 @@ class MappingAssetControllerTest {
         verify(schemas, times(1)).resolve(argThat(refs -> refs.size() == 2));
         verify(schemas, times(1)).physicalBatch(bound);
         verify(schemas, never()).physical(any());
+    }
+
+    @Test void openingGovernanceUsesAuthorizedRegistrationWithoutAnyPhysicalProbe() {
+        ObjectNode body=JSON.createObjectNode();body.putObject("targetRef").put("datasourceId","db").put("tableId","target");
+        ArrayNode fields=JSON.createArrayNode().add(JSON.createObjectNode().put("name","event_no").put("logicalType","STRING"));
+        var bound=Map.of("target",new RegisteredMappingSchemaService.Resolved("db","target","LINEWELL_ODS","t_events",fields,Map.of()));
+        when(schemas.resolve(anyMap())).thenReturn(bound);
+        when(schemas.physicalBatch(anyMap())).thenThrow(new MappingException("SCHEMA_UNAVAILABLE","legacy driver metadata is unavailable"));
+        var result=controller.schemaContract(body);
+        assertEquals("REGISTERED",result.path("schemaOrigin").asText());assertEquals(fields,result.path("target"));
+        assertEquals("target",result.path("targetRef").path("tableId").asText());
+        verify(schemas).resolve(anyMap());verify(schemas,never()).physicalBatch(anyMap());
+        body.put("verifyPhysical",true);
+        assertEquals("SCHEMA_UNAVAILABLE",assertThrows(MappingException.class,()->controller.schemaContract(body)).code());
+    }
+
+    @Test void inaccessibleRegistrationCannotFallBackToClientSuppliedFields() {
+        ObjectNode body=JSON.createObjectNode();body.putObject("sourceRef").put("datasourceId","foreign").put("tableId","foreign-table");
+        body.putArray("source").addObject().put("name","forged");
+        when(schemas.resolve(anyMap())).thenThrow(new MappingException("RESOURCE_FORBIDDEN","denied"));
+        assertEquals("RESOURCE_FORBIDDEN",assertThrows(MappingException.class,()->controller.schemaContract(body)).code());
+        verify(schemas,never()).physicalBatch(anyMap());
     }
 
     @Test void publishedStartUsesSharedMutationLockAndPassesExpectedRevisionToLifecycle() throws Exception {

@@ -70,6 +70,10 @@ public final class SchemaContract {
         }
         actual=actual.stream().map(field->new Field(renamed.getOrDefault(field.name(),field.name()),field.logicalType(),field.nullable(),field.length(),field.precision(),field.scale())).toList();
         Map<String,String> declaredTypes=new HashMap<>();expected.forEach(field->declaredTypes.put(field.name(),field.logicalType()));
+        // JSON transports binary values as integer arrays or Base64. Values are still validated on conversion.
+        actual=actual.stream().map(field->"BINARY".equals(declaredTypes.get(field.name()))
+                &&Set.of("ARRAY","STRING").contains(field.logicalType())
+                ?new Field(field.name(),"BINARY",field.nullable(),field.length(),field.precision(),field.scale()):field).toList();
         Set<String> jdbcMillisFields=new HashSet<>();
         for(JsonNode field:contract.path("source"))if(field.path("dateContainsTime").asBoolean()
                 &&ValueTypes.type(field.path("physicalType").asText()).equals("DATE"))jdbcMillisFields.add(field.path("name").asText());
@@ -92,7 +96,20 @@ public final class SchemaContract {
     public static void prepare(ObjectNode specification){
         JsonNode contract=specification.path("schemaContract");List<Field> target=read(contract.path("target"));Map<String,Field> targets=new HashMap<>();target.forEach(field->targets.put(field.name(),field));
         Map<String,String> sourceFormats=formats(contract.path("source")),targetFormats=formats(contract.path("target"));
+        Map<String,JsonNode> sourcesByName=new HashMap<>(),physicalByName=new HashMap<>();
+        contract.path("source").forEach(field->sourcesByName.put(field.path("name").asText(),field));
+        contract.path("target").forEach(field->physicalByName.put(field.path("name").asText(),field));
         for(JsonNode rule:specification.path("rules")){if(!(rule.path("target") instanceof ObjectNode output))continue;String targetName=output.path("name").asText();Field physical=targets.get(targetName);
+            JsonNode source=sourcesByName.get(rule.path("input").path("name").asText()),column=physicalByName.get(targetName);
+            boolean direct=rule.path("input").path("kind").asText().equals("FIELD")&&!rule.hasNonNull("when");
+            for(JsonNode step:rule.path("steps"))if(!step.path("operator").asText().equals("DIRECT"))direct=false;
+            if(direct&&column!=null&&BinaryValues.largeText(column.path("physicalType").asText())
+                    &&("BINARY".equals(ValueTypes.type(output.path("logicalType").asText()))
+                    ||Set.of("STRING","ANY").contains(ValueTypes.type(output.path("logicalType").asText("ANY")))
+                    &&(source!=null&&"BINARY".equals(ValueTypes.type(source.path("logicalType").asText()))
+                    ||"BINARY".equals(ValueTypes.type(rule.path("input").path("logicalType").asText()))))) {
+                output.put("logicalType","STRING").put("binaryEncoding","BASE64");
+            }
             String sourceFormat=rule.path("input").path("kind").asText().equals("FIELD")?sourceFormats.getOrDefault(rule.path("input").path("name").asText(),""):"";
             String targetFormat=targetFormats.getOrDefault(targetName,"");
             if(!sourceFormat.isBlank()&&!targetFormat.isBlank()&&!sourceFormat.equals(targetFormat))throw new MappingException("REGISTERED_FORMAT_CONFLICT","来源与目标登记的统一格式不一致："+targetName);

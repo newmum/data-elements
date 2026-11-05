@@ -52,7 +52,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
-      "baseSha256": "48d20b59c17ad841d5e9e74a02f823ffe6a391743d152e901f08d2b220ee97c5"
+      "baseSha256": "a2d8f72f19020ceaa060ca000bc19e2671390eb1d1ac0972b32e48eb289fc92f"
     },
     {
       "id": "2074806689771094016",
@@ -332,7 +332,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page).vue",
-      "baseSha256": "ae1c815704aab94d76db3b922391a2f8880c7226d981439a073aa6a31d3c5861"
+      "baseSha256": "7b2d0b72b823a0e2ead7bd5d95db2d3fef526200b61033b32add9cec3a5cda53"
     },
     {
       "id": "2018596040552812544",
@@ -442,7 +442,7 @@
       "type": "1",
       "sortOrder": 11,
       "path": "02.数据盘点/02.登记流程组件/详情页面(detail-page)/表3-血缘分析(table-blood).vue",
-      "baseSha256": "8003428a66e390eb1cadeb98bd1da4b017f6b407cdb631b0b1f1d6187790b0ab"
+      "baseSha256": "09af4a78bab6c078f19ca3ab9a78da09221bc03039822934f9d394816f11bc1f"
     },
     {
       "id": "2065275712078180352",
@@ -723,6 +723,16 @@
       "sortOrder": 2,
       "path": "03.数据接入/2.3.2 接入监控(access-monitoring)/异常日志(error-log-panel).vue",
       "baseSha256": "627715101343761c486148aef2ff5daaeee55db6170f306575a93b3f158bbf21"
+    },
+    {
+      "id": "2118128767142031360",
+      "parentId": "2006253181124284416",
+      "name": "exception-tasks",
+      "displayName": "异常任务",
+      "type": "1",
+      "sortOrder": 5,
+      "path": "03.数据接入/异常任务(exception-tasks).vue",
+      "baseSha256": "4eec206df28c997e982c7ab3b131f6f82db8403e4fe3c12e6a18f33cba537d91"
     },
     {
       "id": "2005563673546395648",
@@ -1447,7 +1457,7 @@
       "type": "1",
       "sortOrder": 4,
       "path": "09.系统管理/02.用户与权限/用户管理(user-manage).vue",
-      "baseSha256": "0310d32298f69f95acd0e76e12829703273ddfb1734af75acb303fa76fb697ea"
+      "baseSha256": "fc832796c85276744a22117a782fc0db5e760002443600e83576e0bc733c3ffc"
     },
     {
       "id": "178716197779600002",
@@ -1467,7 +1477,7 @@
       "type": "1",
       "sortOrder": 6,
       "path": "09.系统管理/02.用户与权限/组织机构(org-manage).vue",
-      "baseSha256": "6466320af13f00a26ce7437d5adcd14c19770e986e560d20640471ef73c3ba52"
+      "baseSha256": "3d4fc4a1c9cdbbed73168ee033d37bb626e7b94c6a4430c7f2482b6344794453"
     },
     {
       "id": "2033843620580794368",
@@ -1518,6 +1528,27 @@
       "sortOrder": 3,
       "path": "09.系统管理/08.审批中心/流程设计器(flow-designer).vue",
       "baseSha256": "8999fa6848d878b870467e57900c36255f7bec89d6c5dbbc57bee1a7c845a5cb"
+    },
+    {
+      "id": "ui_log_management_v1",
+      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
+      "name": "09.日志管理",
+      "displayName": "09.日志管理",
+      "type": "0",
+      "sortOrder": 9,
+      "path": "09.系统管理/09.日志管理",
+      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "ui_log_event_list_v1",
+      "parentId": "ui_log_management_v1",
+      "name": "log-management",
+      "displayName": "日志列表",
+      "type": "1",
+      "sortOrder": 1,
+      "path": "09.系统管理/09.日志管理/日志管理(log-management).vue",
+      "baseSha256": "b1433d0cfdc7b9f4d47cf72cf7a27b589c69c5a80966c9e07897b99ee4d43206",
+      "remark": "日志管理"
     },
     {
       "id": "5c0e764b293b4e9ca0b39d4e350f1814",
@@ -1578,27 +1609,6 @@
       "sortOrder": 1,
       "path": "10.通用组件/全局导航(global-nav).vue",
       "baseSha256": "70f6f893ee7ae4c5729650e4d2f4bf254e938fd32a57c2a9955575dc3af113dd"
-    },
-    {
-      "id": "ui_log_management_v1",
-      "parentId": "76d4913e8fd64fa4ba0a71a333ddd955",
-      "name": "09.日志管理",
-      "displayName": "09.日志管理",
-      "type": "0",
-      "sortOrder": 9,
-      "path": "09.系统管理/09.日志管理",
-      "baseSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    },
-    {
-      "id": "ui_log_event_list_v1",
-      "parentId": "ui_log_management_v1",
-      "name": "log-management",
-      "displayName": "日志列表",
-      "type": "1",
-      "sortOrder": 1,
-      "path": "09.系统管理/09.日志管理/日志管理(log-management).vue",
-      "baseSha256": "b1433d0cfdc7b9f4d47cf72cf7a27b589c69c5a80966c9e07897b99ee4d43206",
-      "remark": "日志管理"
     }
   ]
 }

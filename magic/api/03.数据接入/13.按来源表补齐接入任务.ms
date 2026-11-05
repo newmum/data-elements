@@ -36,6 +36,7 @@ import java.util.Map
 import java.util.List
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingStorageGuard as mappingStorage
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType as sourceTypes
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy as batchSchedules
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -1715,6 +1716,7 @@ var canUpsert = !blank(sourcePrimaryKeys) && !blank(targetPrimaryKeys)
 
 // 每个独立任务生成来源、自己的字段治理和唯一目标节点。
 var sourceNodeId = 'source-' + sourceTableId
+sourceNodeConfig = batchSchedules.defaultConfig(tenantId, pipelineId, sourceNodeId, sourceManifestKey, sourceNodeConfig)
 var mapNodeId = 'map-' + taskId
 var dslNodes = [
     {

@@ -44,7 +44,29 @@ public class MappingAssetController {
     }
     @PostMapping("/templates/{id}/import") public JsonNode importTemplate(@PathVariable String id,@RequestBody JsonNode body){ObjectNode template=template(id).deepCopy();JsonNode mapping=body.path("fieldBindings");rebind(template,mapping);template.remove("schemaContract");for(JsonNode rule:template.path("rules"))((ObjectNode)rule).put("ruleId",UUID.randomUUID().toString());if(body.path("dictionaryBindings").isObject())template.set("dictionaryBindings",body.path("dictionaryBindings"));if(body.path("schemaContract").isObject())template.set("schemaContract",body.path("schemaContract"));var compiled=engine.compile(template);ObjectNode result=compiled.plan().document();result.putObject("templateOrigin").put("templateId",id);return result;}
     @PostMapping("/dictionary-snapshots") public JsonNode snapshot(@RequestBody JsonNode body){if(!body.path("definition").isObject())throw new MappingException("INVALID_DICTIONARY","快照须提供结构化字典定义");ObjectNode definition=body.path("definition").deepCopy();definition.remove(List.of("snapshotId","snapshotHash","definitionHash"));definition.put("freshnessMode","LIVE_BATCH");return engine.buildSnapshot(definition,body.path("name").asText());}
-    @PostMapping("/schema-contract") public JsonNode schemaContract(@RequestBody JsonNode body){Map<String,JsonNode> references=new LinkedHashMap<>();for(String side:List.of("source","target"))if(body.path(side+"Ref").isObject())references.put(side,body.path(side+"Ref"));if(references.isEmpty())throw new MappingException("INVALID_SCHEMA","请选择已登记来源或目标表");var bound=schemas.resolve(references);var actuals=schemas.physicalBatch(bound);ObjectNode result=JSON.createObjectNode().put("allowAdditionalSourceFields",body.path("allowAdditionalSourceFields").asBoolean(true));for(var entry:bound.entrySet()){JsonNode actual=actuals.get(entry.getKey());result.set(entry.getKey(),actual);result.put(entry.getKey()+"Hash",MappingEngine.hash(actual));result.putObject(entry.getKey()+"Ref").put("datasourceId",entry.getValue().datasourceId()).put("tableId",entry.getValue().tableId());}return result;}
+    @PostMapping("/schema-contract") public JsonNode schemaContract(@RequestBody JsonNode body) {
+        Map<String,JsonNode> references=new LinkedHashMap<>();
+        for(String side:List.of("source","target"))if(body.path(side+"Ref").isObject())references.put(side,body.path(side+"Ref"));
+        if(references.isEmpty())throw new MappingException("INVALID_SCHEMA","请选择已登记来源或目标表");
+        // Opening an editor needs authorized registered fields, not a live JDBC connection.
+        // Explicit structure locking and deployment still verify the physical schema.
+        var bound=schemas.resolve(references);
+        boolean verifyPhysical=body.path("verifyPhysical").asBoolean(false);
+        Map<String,? extends JsonNode> actuals;
+        if(verifyPhysical)actuals=schemas.physicalBatch(bound);
+        else {
+            Map<String,JsonNode> declared=new LinkedHashMap<>();
+            bound.forEach((side,table)->declared.put(side,table.fields()));
+            actuals=declared;
+        }
+        ObjectNode result=JSON.createObjectNode().put("allowAdditionalSourceFields",body.path("allowAdditionalSourceFields").asBoolean(true))
+                .put("schemaOrigin",verifyPhysical?"PHYSICAL":"REGISTERED");
+        for(var entry:bound.entrySet()) {
+            JsonNode actual=actuals.get(entry.getKey());result.set(entry.getKey(),actual);result.put(entry.getKey()+"Hash",MappingEngine.hash(actual));
+            result.putObject(entry.getKey()+"Ref").put("datasourceId",entry.getValue().datasourceId()).put("tableId",entry.getValue().tableId());
+        }
+        return result;
+    }
     @PostMapping("/sample") public Map<String,Object> sample(@RequestBody JsonNode body){
         var resolved=schemas.resolve(Map.of("source",body.path("sourceRef"))).get("source");int limit=body.path("limit").asInt(20);if(limit<1||limit>100)throw new MappingException("BUDGET_EXCEEDED","样本数量须为1至100");var rows=schemas.sample(resolved,limit);var preview=engine.preview(body.path("spec"),rows);Map<String,Object> stats=new LinkedHashMap<>(preview.stats());stats.put("sampleMode","REGISTERED_SOURCE_MASKED");stats.put("masked",true);return Map.of("sampleRows",PreviewMasking.mask(rows,Set.of(),true),"resultRows",PreviewMasking.mask(preview.resultRows(),Set.of(),true),"rowResults",preview.rowResults(),"stats",stats);
     }

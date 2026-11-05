@@ -27,7 +27,11 @@ public class UnifiedMappingService {
         public Compiled(MappingEngine.Plan plan,Map<String,Map<String,Object>> connections){this(plan,connections,JSON.createObjectNode());}
     }
     public Compiled compile(JsonNode raw){return compileBatch(Collections.singletonMap("node",raw)).get("node");}
+    public Compiled compileForEditing(JsonNode raw){return compileBatch(Collections.singletonMap("node",raw),false).get("node");}
     public Map<String,Compiled> compileBatch(Map<String,JsonNode> specifications){
+        return compileBatch(specifications,true);
+    }
+    private Map<String,Compiled> compileBatch(Map<String,JsonNode> specifications,boolean physical){
         if(specifications.isEmpty())return Map.of();if(specifications.size()>128)throw new MappingException("BUDGET_EXCEEDED","映射节点数量超过128");
         Map<String,ObjectNode> drafts=new LinkedHashMap<>();ObjectNode batch=JSON.createObjectNode().put("schemaVersion","2.0");ArrayNode batchRules=batch.putArray("rules");ObjectNode batchDefinitions=batch.putObject("dictionaryBindings");
         for(var entry:specifications.entrySet()){
@@ -46,7 +50,7 @@ public class UnifiedMappingService {
         Map<String,ArrayNode> byNode=new HashMap<>();for(JsonNode rule:resolved.path("rules")){ObjectNode local=rule.deepCopy();String node=local.path("__mappingNode").asText();local.remove("__mappingNode");byNode.computeIfAbsent(node,ignored->JSON.createArrayNode()).add(local);}
         Map<String,Compiled> compiled=new LinkedHashMap<>();Map<String,JsonNode>contracts=new LinkedHashMap<>();
         drafts.forEach((node,draft)->contracts.put(node,draft.path("schemaContract")));
-        if(schemas!=null)schemas.checkContracts(contracts);
+        if(schemas!=null){if(physical)schemas.checkContracts(contracts);else schemas.checkRegisteredContracts(contracts);}
         for(var entry:drafts.entrySet()){
             ObjectNode draft=entry.getValue();ArrayNode rules=byNode.getOrDefault(entry.getKey(),JSON.createArrayNode());draft.set("rules",rules);Set<String> used=new HashSet<>();dictionaryReferences(rules,used);ObjectNode bindings=JSON.createObjectNode();
             resolved.path("dictionaryBindings").fields().forEachRemaining(binding->{if(used.contains(binding.getKey())||specifications.size()==1&&rules.isEmpty())bindings.set(binding.getKey(),binding.getValue());});draft.set("dictionaryBindings",bindings);
@@ -117,12 +121,12 @@ public class UnifiedMappingService {
     private static void dictionaryReferences(JsonNode node,Set<String> ids){if(node.isArray()){node.forEach(child->dictionaryReferences(child,ids));return;}if(!node.isObject())return;if(node.hasNonNull("dictionaryId"))ids.add(node.path("dictionaryId").asText());if(node.path("definitionRef").isObject())ids.add(node.path("definitionRef").path("id").asText());node.fields().forEachRemaining(entry->dictionaryReferences(entry.getValue(),ids));}
     public JsonNode buildSnapshot(ObjectNode definition,String name){ObjectNode draft=JSON.createObjectNode().put("schemaVersion","2.0");draft.putArray("rules");draft.putObject("dictionaryBindings").set("requested",definition);var compiled=compile(draft);var spec=compiled.plan().dictionaries().values().iterator().next();JsonNode binding=compiled.plan().document().path("dictionaryBindings").path(spec.id());try(var reader=new BatchDictionaryReader(id->pool(id,compiled.connections()).getConnection())){JsonNode payload=reader.snapshot(spec,binding.path("definitionHash").asText());return versions.saveResource("DICTIONARY_SNAPSHOT",name,binding,payload);}}
     public Map<String,Object> compileResponse(JsonNode raw){
-        var plan=compile(raw).plan();Map<String,Object>result=new LinkedHashMap<>();result.put("mode","ENGINE_PLAN");result.put("query",null);result.put("finalQuery",null);result.put("lookups",List.of());result.put("executable",true);
+        var plan=compileForEditing(raw).plan();Map<String,Object>result=new LinkedHashMap<>();result.put("mode","ENGINE_PLAN");result.put("query",null);result.put("finalQuery",null);result.put("lookups",List.of());result.put("executable",true);result.put("schemaVerification","REGISTERED_ONLY");
         result.put("plan",Map.of("planVersion","1.0","engineVersion",MappingEngine.engineVersion(),"functionLibraryVersion",FunctionRegistry.libraryVersion(),"planHash",plan.hash(),"outputFields",plan.outputFields(),"outputTypes",plan.outputTypes(),"dictionaryGroupCount",plan.dictionaries().size(),"executionPlan",plan.document()));
         result.put("nifiComponentConfig",Map.of("processorType","com.linewell.dataelement.nifi.HaitongTransformRecord","planHash",plan.hash()));return result;
     }
     public FieldMappingService.PreviewResponse preview(JsonNode raw,List<Map<String,Object>> sample){
-        if(sample==null)sample=List.of();if(sample.size()>100)throw new MappingException("BUDGET_EXCEEDED","预览最多100行");RecordBudget.window(sample);var compiled=compile(raw);var plan=compiled.plan();JsonNode policies=plan.document().path("policies");
+        if(sample==null)sample=List.of();if(sample.size()>100)throw new MappingException("BUDGET_EXCEEDED","预览最多100行");RecordBudget.window(sample);var compiled=compileForEditing(raw);var plan=compiled.plan();JsonNode policies=plan.document().path("policies");
         ExecutionContext context=new ExecutionContext(Instant.now(),ZoneId.of(policies.path("zoneId").asText("Asia/Shanghai")),Locale.forLanguageTag(policies.path("locale").asText("zh-CN")),"preview:"+plan.hash());
         try(var reader=new BatchDictionaryReader(id->pool(id,compiled.connections()).getConnection())){
             var provider=new DictionaryPolicyProvider(reader,plan.document().path("dictionaryBindings"),compiled.snapshots(),cache,com.linewell.dataelement.platform.tenant.domain.TenantContext.requireTenantId());

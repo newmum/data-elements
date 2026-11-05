@@ -23,10 +23,60 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 class DslCompilerJdbcDriverLocationTest {
+
+    @ParameterizedTest
+    @CsvSource({
+            "source.gaussdb,gaussdb,GAUSSDB_NATIVE,opengaussjdbc.jar,com.huawei.opengauss.jdbc.Driver,opengauss,false",
+            "source.gaussdb,gaussdb-jdbc,GAUSSDB_JDBC,gaussdbjdbc.jar,com.huawei.gaussdb.jdbc.Driver,gaussdb,false",
+            "sink.jdbc,gaussdb,GAUSSDB_NATIVE,opengaussjdbc.jar,com.huawei.opengauss.jdbc.Driver,opengauss,false",
+            "sink.jdbc,gaussdb-jdbc,GAUSSDB_JDBC,gaussdbjdbc.jar,com.huawei.gaussdb.jdbc.Driver,gaussdb,false",
+            "source.gaussdb,gaussdb,GAUSSDB_NATIVE,opengaussjdbc.jar,com.huawei.opengauss.jdbc.Driver,opengauss,true",
+            "source.gaussdb,gaussdb-jdbc,GAUSSDB_JDBC,gaussdbjdbc.jar,com.huawei.gaussdb.jdbc.Driver,gaussdb,true",
+            "sink.jdbc,gaussdb,GAUSSDB_NATIVE,opengaussjdbc.jar,com.huawei.opengauss.jdbc.Driver,opengauss,true",
+            "sink.jdbc,gaussdb-jdbc,GAUSSDB_JDBC,gaussdbjdbc.jar,com.huawei.gaussdb.jdbc.Driver,gaussdb,true"
+    })
+    void nativeGaussSourcesAndTargetsUseTheReviewedDriverNames(
+            String component, String variant, String nodeKey, String filename,
+            String driverClass, String protocol, boolean explicitMapping) throws Exception {
+        NifiClient nifi = configuredNifi();
+        ManifestRegistry registry = mock(ManifestRegistry.class);
+        NifiNodeRuntimeResolver nodeResolver = mock(NifiNodeRuntimeResolver.class);
+        String manifestPath = component.startsWith("source.")
+                ? "/manifests/sources/gaussdb.json" : "/manifests/sinks/jdbc-sink.json";
+        try (var stream = getClass().getResourceAsStream(manifestPath)) {
+            when(registry.get(component)).thenReturn(new ObjectMapper().readValue(stream, ComponentManifest.class));
+        }
+        String expectedPath = "/opt/nifi/drivers/" + filename;
+        when(nodeResolver.resolve()).thenReturn(runtimeNode(explicitMapping
+                ? nodeKey + "=" + expectedPath + ";GAUSSDB=/legacy/other-driver.jar"
+                : "/opt/nifi/drivers/"));
+        String url = "jdbc:" + protocol + "://validation.invalid:8000/business";
+        Map<String, Object> config = Map.of("dbType", "GAUSSDB", "gaussdbVariant", variant,
+                "jdbcUrl", url, "host", "validation.invalid", "port", "8000", "database", "business",
+                "table", "validation_table", "incrementalColumn", "updated_at",
+                "writerType", "NIFI_PUT_DATABASE_RECORD");
+        Pipeline pipeline = new Pipeline("validation", "GaussDB 驱动交付验证", null, null, null,
+                new Pipeline.Dsl(1, List.of(new Pipeline.Node("gauss", component, "GaussDB",
+                        component.startsWith("source.") ? "source" : "sink", 0, 0, config)), List.of()),
+                null, null, null, null, null, null, null);
+
+        new DslCompiler(nifi, nodeResolver, registry, mock(FieldMappingService.class), mock(HiveModule.class), "")
+                .compile(pipeline);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.forClass(Map.class);
+        verify(nifi).createControllerService(eq("pg"), eq("org.apache.nifi.dbcp.DBCPConnectionPool"),
+                eq("GaussDB/dbcp"), properties.capture());
+        assertThat(properties.getValue())
+                .containsEntry("Database Driver Class Name", driverClass)
+                .containsEntry("Database Driver Locations", expectedPath)
+                .containsEntry("Database Connection URL", url);
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"source.oracle", "sink.jdbc"})

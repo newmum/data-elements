@@ -461,7 +461,7 @@
       "path": "magic/haitong/function/01.海通业务/06.数据推送编排.ms",
       "id": "haitong-function-push",
       "databasePath": "/magic-api/function/01.海通业务/06.数据推送编排.ms",
-      "baseSha256": "1b85664bf5e1e0f81dd8922af772f7f67223bb073254525e931d11e61846c530"
+      "baseSha256": "3fb61bf98e5a733d75fe1b2a6f320428a65694698aea0973d5f5784554659c78"
     },
     {
       "path": "magic/haitong/function/01.海通业务/07.运维查询与状态处理.ms",

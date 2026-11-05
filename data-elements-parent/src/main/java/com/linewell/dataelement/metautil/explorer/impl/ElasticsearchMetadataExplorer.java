@@ -340,7 +340,7 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
         for (String name : names) {
             JsonNode indexNode = mappings.path(name);
             if (indexNode.isMissingNode()) throw new IllegalStateException("未读取到索引mapping：" + name);
-            result.put(name.toLowerCase(Locale.ROOT), columns(indexNode.path("mappings").path("properties")));
+            result.put(name.toLowerCase(Locale.ROOT), columns(mappingProperties(indexNode.path("mappings"))));
         }
         return result;
     }
@@ -349,6 +349,27 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
         List<ColumnInfo> columns = new ArrayList<>();
         collectProperties(properties, "", columns);
         return columns;
+    }
+
+    /** ES6 wraps properties in a mapping type; ES7/8 return properties directly. */
+    private JsonNode mappingProperties(JsonNode mappings) {
+        if (mappings.path("properties").isObject()) return mappings.path("properties");
+        var merged = MAPPER.createObjectNode();
+        mappings.fields().forEachRemaining(type -> {
+            JsonNode properties = type.getValue().path("properties");
+            properties.fields().forEachRemaining(field -> {
+                JsonNode previous = merged.get(field.getKey());
+                if (previous != null && !previous.equals(field.getValue())) {
+                    throw new IllegalArgumentException("ES旧版多类型索引存在冲突字段，不能合并登记：" + field.getKey());
+                }
+                merged.set(field.getKey(), field.getValue());
+            });
+        });
+        return merged;
+    }
+
+    private boolean typedMapping(JsonNode mappings) {
+        return !mappings.has("properties") && mappings.elements().hasNext();
     }
 
     private void collectProperties(JsonNode properties, String prefix, List<ColumnInfo> columns) {
@@ -421,8 +442,13 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
     public SampleDataResult sampleData(SampleRequest request) {
         checkIndexScope(request.getDataSource(), request.getTableName());
         int size = request.getSampleSize() == null ? 20 : Math.min(request.getSampleSize(), 200);
+        JsonNode mapping = json(request.getDataSource(), "/" + encodePath(request.getTableName()) + "/_mapping")
+                .path(request.getTableName());
+        if (mapping.isMissingNode()) throw new IllegalStateException("未读取到索引mapping：" + request.getTableName());
+        // ES6 already returns an exact integer total and does not need ES7/8's tracking option.
+        String trackHits = typedMapping(mapping.path("mappings")) ? "" : ",\"track_total_hits\":true";
         JsonNode result = postJson(request.getDataSource(), "/" + encodePath(request.getTableName()) + "/_search",
-                "{\"size\":" + size + ",\"track_total_hits\":true,\"query\":{\"match_all\":{}},\"sort\":[\"_doc\"]}");
+                "{\"size\":" + size + trackHits + ",\"query\":{\"match_all\":{}},\"sort\":[\"_doc\"]}");
         List<Map<String, Object>> rows = new ArrayList<>();
         List<String> columns = new ArrayList<>();
         JsonNode hits = result.path("hits").path("hits");
@@ -443,7 +469,8 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
         sample.setTableName(request.getTableName());
         sample.setSampleSize(size);
         sample.setActualSize(rows.size());
-        sample.setTotalCount(result.path("hits").path("total").path("value").asLong(rows.size()));
+        JsonNode total = result.path("hits").path("total");
+        sample.setTotalCount(total.isNumber() ? total.asLong() : total.path("value").asLong(rows.size()));
         sample.setColumnNames(columns);
         sample.setColumnTypes(Collections.emptyList());
         sample.setData(rows);
@@ -495,7 +522,7 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
         }
         JsonNode mapping = json(config, "/" + encodePath(index) + "/_mapping").path(index);
         if (mapping.isMissingNode()) throw new IllegalStateException("未读取到索引mapping：" + index);
-        JsonNode properties = mapping.path("mappings").path("properties");
+        JsonNode properties = mappingProperties(mapping.path("mappings"));
         Map<String, String> types = new LinkedHashMap<>();
         types.put("_id", "keyword");
         columns(properties).forEach(column -> types.put(column.getColumnName(), column.getDataType()));
@@ -505,7 +532,7 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
         Map<String, Object> query = new LinkedHashMap<>();
         query.put("from", offset);
         query.put("size", size);
-        query.put("track_total_hits", true);
+        if (!typedMapping(mapping.path("mappings"))) query.put("track_total_hits", true);
         query.put("_source", selected.stream().filter(field -> !field.equals("_id")).toList());
         List<Object> filters = new ArrayList<>();
         if (request.getConditions() != null) {

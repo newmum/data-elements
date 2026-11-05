@@ -19,7 +19,7 @@ export function fieldsForPresentation(meta:FieldMeta[],labels:Record<string,stri
  const inferred=names.map(name=>toFieldInfo(name,labels[fieldName(name)]));
  const fields=meta.map(field=>{
   const logical=logicalFieldType(field);
-  const type:FieldType=['INT','LONG','DOUBLE'].includes(logical)?'INT':logical==='BOOLEAN'?'BOOL':logical==='ARRAY'?'JSON':(['STRING','DECIMAL','DATETIME','DATE','JSON','BLOB','GEO'].includes(logical)?logical:'STRING') as FieldType;
+  const type:FieldType=['INT','LONG','DOUBLE'].includes(logical)?'INT':logical==='BINARY'?'BLOB':logical==='BOOLEAN'?'BOOL':logical==='ARRAY'?'JSON':(['STRING','DECIMAL','DATETIME','DATE','JSON','BLOB','GEO'].includes(logical)?logical:'STRING') as FieldType;
   return {...toFieldInfo(field.name,labels[field.name]),type,fullType:field.type??logical,isPk:field.isPk,nullable:field.nullable};
  });
  return mergeFields(mergeFields(mergeFields(inferred,Object.keys(labels).map(name=>toFieldInfo(name,labels[name]))),fields),custom);

@@ -165,7 +165,7 @@ public class HaitongTransformRecord extends AbstractProcessor {
         LinkedHashMap<String,RecordField>fields=new LinkedHashMap<>();if(plan.passthrough())input.getFields().forEach(f->{if(!plan.excludes().contains(f.getFieldName()))fields.put(f.getFieldName(),f);});
         plan.outputContracts().forEach((name,contract)->{String type=contract.logicalType();
             String origin=origins.getOrDefault(name,name),physical=sourceNames.resolve(origin);
-            var old=physical==null?Optional.<RecordField>empty():input.getField(physical);org.apache.nifi.serialization.record.DataType value=switch(type){case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(Math.max(1,Math.max(contract.scale(),contract.precision()-Math.min(0,contract.scale()))),Math.max(0,contract.scale()));case "DATE"->RecordFieldType.DATE.getDataType();case "TIME"->RecordFieldType.TIME.getDataType();case "DATETIME","INSTANT"->RecordFieldType.TIMESTAMP.getDataType();case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());case "ANY"->old.map(RecordField::getDataType).orElse(RecordFieldType.STRING.getDataType());default->RecordFieldType.STRING.getDataType();};
+            var old=physical==null?Optional.<RecordField>empty():input.getField(physical);org.apache.nifi.serialization.record.DataType value=switch(type){case "INT"->RecordFieldType.INT.getDataType();case "LONG"->RecordFieldType.LONG.getDataType();case "DOUBLE"->RecordFieldType.DOUBLE.getDataType();case "BOOLEAN"->RecordFieldType.BOOLEAN.getDataType();case "DECIMAL"->RecordFieldType.DECIMAL.getDecimalDataType(Math.max(1,Math.max(contract.scale(),contract.precision()-Math.min(0,contract.scale()))),Math.max(0,contract.scale()));case "DATE"->RecordFieldType.DATE.getDataType();case "TIME"->RecordFieldType.TIME.getDataType();case "DATETIME","INSTANT"->RecordFieldType.TIMESTAMP.getDataType();case "BINARY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.BYTE.getDataType());case "ARRAY"->RecordFieldType.ARRAY.getArrayDataType(RecordFieldType.STRING.getDataType());case "ANY"->old.map(RecordField::getDataType).orElse(RecordFieldType.STRING.getDataType());default->RecordFieldType.STRING.getDataType();};
             // Avro/NiFi require a nonnegative scale <= precision, while SQL
             // NUMBER(p,s) can have negative s or s > p. The engine validates
             // the SQL contract; this carrier only holds the validated value.
@@ -175,9 +175,10 @@ public class HaitongTransformRecord extends AbstractProcessor {
     private static int integer(String value){try{return value==null?0:Math.max(0,Integer.parseInt(value));}catch(Exception ex){return 0;}}
     private static List<SchemaContract.Field> inputContract(RecordSchema schema,MappingEngine.Plan plan){
         var document=plan.document();var sourceNames=new SourceFieldNames(schema.getFieldNames(),document.path("policies").path("caseSensitive").asBoolean(true));
-        Map<String,String> jdbcDates=new HashMap<>();
+        Map<String,String> jdbcDates=new HashMap<>();Set<String> binaryFields=new HashSet<>();
         for(var declared:document.path("schemaContract").path("source")) {
             String logical=declared.path("logicalType").asText();
+            if(ValueTypes.type(logical).equals("BINARY")){String physical=sourceNames.resolve(declared.path("name").asText());if(physical!=null)binaryFields.add(physical);}
             if(declared.path("dateContainsTime").asBoolean()&&declared.path("physicalType").asText().equalsIgnoreCase("DATE")
                     &&Set.of("DATE","DATETIME","INSTANT").contains(logical)){
                 String physical=sourceNames.resolve(declared.path("name").asText());
@@ -187,6 +188,10 @@ public class HaitongTransformRecord extends AbstractProcessor {
         List<SchemaContract.Field> result=new ArrayList<>();for(RecordField field:schema.getFields()){
             var type=field.getDataType();if(type instanceof org.apache.nifi.serialization.record.type.ChoiceDataType choice){
                 if(choice.getPossibleSubTypes().size()==1)type=choice.getPossibleSubTypes().getFirst();
+                else if(binaryFields.contains(field.getFieldName())&&!choice.getPossibleSubTypes().isEmpty()
+                        &&choice.getPossibleSubTypes().stream().allMatch(HaitongTransformRecord::binaryCarrier)) {
+                    result.add(new SchemaContract.Field(field.getFieldName(),"BINARY",field.isNullable(),0,0,0));continue;
+                }
                 else if(jdbcDates.containsKey(field.getFieldName())&&!choice.getPossibleSubTypes().isEmpty()
                         &&choice.getPossibleSubTypes().stream().allMatch(HaitongTransformRecord::temporalScalarCarrier)) {
                     result.add(new SchemaContract.Field(field.getFieldName(),jdbcDates.get(field.getFieldName()),field.isNullable(),0,0,0));continue;
@@ -201,5 +206,8 @@ public class HaitongTransformRecord extends AbstractProcessor {
         if(type instanceof org.apache.nifi.serialization.record.type.ChoiceDataType choice)
             return !choice.getPossibleSubTypes().isEmpty()&&choice.getPossibleSubTypes().stream().allMatch(HaitongTransformRecord::temporalScalarCarrier);
         return Set.of("BYTE","SHORT","INT","LONG","BIGINT","FLOAT","DOUBLE","DECIMAL","STRING","CHAR","DATE","TIMESTAMP").contains(type.getFieldType().name());
+    }
+    private static boolean binaryCarrier(org.apache.nifi.serialization.record.DataType type){
+        return type.getFieldType()==RecordFieldType.STRING||type.getFieldType()==RecordFieldType.ARRAY;
     }
 }

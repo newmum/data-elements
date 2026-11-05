@@ -11,7 +11,7 @@ import java.util.*;
 
 /** Immutable compiled plans and bounded, staged lookup execution used by both backend and NiFi. */
 public final class MappingEngine {
-    public static final String VERSION="1.1.28";
+    public static final String VERSION="1.1.29";
     public static String engineVersion(){return VERSION;}
     public static final int WINDOW_RECORDS=512;
     public static final long WINDOW_BYTES=RecordBudget.WINDOW_BYTES;
@@ -27,7 +27,7 @@ public final class MappingEngine {
     public record OutputType(String logicalType,int precision,int scale,boolean nullable) {}
     private interface Eval { Object eval(Frame frame); }
     private record Rule(String id,String target,Eval value,Set<String> dependencies,Set<String> sources,
-                        String type,boolean enforceType,boolean nullable,int length,int precision,int scale,String onError,Object defaultValue) {}
+                        String type,boolean enforceType,boolean binaryBase64,boolean nullable,int length,int precision,int scale,String onError,Object defaultValue) {}
     public static final class Plan {
         private final ObjectNode document;
         private final MappingDiagnostics.Catalog diagnostics;
@@ -127,7 +127,7 @@ public final class MappingEngine {
             int precision=t.path("precision").asInt(decimalArgument(node,0,declaredDimensions?38:0)),scale=t.path("scale").asInt(decimalArgument(node,1,precision==0?0:10));
             if(type.equals("DECIMAL"))ValueTypes.requireDecimalDimensions(precision,scale);
             String onError=node.path("onError").asText("ERROR");validateFallback(onError);
-            compiled.add(new Rule(id,target,value,Set.copyOf(deps),Set.copyOf(sources),type,t.hasNonNull("logicalType"),t.path("nullable").asBoolean(true),t.path("length").asInt(0),precision,scale,onError,JSON.convertValue(node.get("defaultValue"),Object.class)));
+            compiled.add(new Rule(id,target,value,Set.copyOf(deps),Set.copyOf(sources),type,t.hasNonNull("logicalType"),t.path("binaryEncoding").asText().equals("BASE64"),t.path("nullable").asBoolean(true),t.path("length").asInt(0),precision,scale,onError,JSON.convertValue(node.get("defaultValue"),Object.class)));
         }
         List<Rule> ordered=new ArrayList<>();Set<String> done=new HashSet<>();
         while(ordered.size()<compiled.size()){boolean progressed=false;for(Rule r:compiled){if(done.contains(r.target))continue;if(!targets.containsAll(r.dependencies))throw new MappingException("MISSING_TARGET","引用的目标规则不存在或已禁用");if(done.containsAll(r.dependencies)){ordered.add(r);done.add(r.target);progressed=true;}}
@@ -236,11 +236,11 @@ public final class MappingEngine {
         Map<String,Map<DictionarySpec.Key,DictionarySpec.LookupValue>>values=new HashMap<>();List<Frame>frames=new ArrayList<>();for(int i=0;i<input.size();i++)frames.add(new Frame(plan,input.get(i),indices.get(i),context,values,outputWindow));int batches=0,stage=0;long resultBytes=0;
         while(true){Map<String,Set<DictionarySpec.Key>>pending=new LinkedHashMap<>();boolean unfinished=false;
             for(Frame frame:frames){if(!frame.errors.isEmpty())continue;for(Rule rule:plan.rules){if(frame.done.contains(rule.target))continue;frame.rule=rule.id;frame.step="input";frame.diagnosticStep=null;frame.ruleInput=ValueTypes.MISSING;frame.current=ValueTypes.MISSING;frame.usedSources.clear();
-                try{Object value=rule.value.eval(frame);frame.step="target";frame.diagnosticStep=null;frame.current=value;if(rule.enforceType)value=ValueTypes.cast(value,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());frame.current=value;if(!rule.nullable&&value==null)throw new MappingException("REQUIRED_FIELD","目标字段不允许NULL");if(rule.length>0&&value!=null&&value.toString().codePointCount(0,value.toString().length())>rule.length)throw new MappingException("LENGTH_EXCEEDED","目标字段长度"+value.toString().codePointCount(0,value.toString().length())+"字符，超过允许的"+rule.length+"字符");frame.outputBudget.put(rule.target,value);frame.done.add(rule.target);}
+                try{Object value=rule.value.eval(frame);frame.step="target";frame.diagnosticStep=null;frame.current=value;if(rule.binaryBase64)value=BinaryValues.base64(value);if(rule.enforceType)value=ValueTypes.cast(value,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());frame.current=value;if(!rule.nullable&&value==null)throw new MappingException("REQUIRED_FIELD","目标字段不允许NULL");if(rule.length>0&&value!=null&&BinaryValues.size(value)>rule.length)throw new MappingException("LENGTH_EXCEEDED","目标字段长度"+BinaryValues.size(value)+(value instanceof byte[]?"字节":"字符")+"，超过允许的"+rule.length);frame.outputBudget.put(rule.target,value);frame.done.add(rule.target);}
                 catch(Wait w){pending.computeIfAbsent(w.dictionary,k->new LinkedHashSet<>()).addAll(w.keys);unfinished=true;}
                 catch(TargetWait w){unfinished=true;}
                 catch(MappingException ex){if(ex.code().equals("BUDGET_EXCEEDED"))throw ex;Object fallback=null;boolean recover=switch(rule.onError){case "NULL"->true;case "KEEP_SOURCE","KEEP_ORIGINAL"->{fallback=frame.ruleInput==ValueTypes.MISSING?null:frame.ruleInput;yield true;}case "DEFAULT_VALUE"->{fallback=rule.defaultValue;yield true;}default->false;};
-                    if(recover){try{if(rule.enforceType)fallback=ValueTypes.cast(fallback,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());if(!rule.nullable&&fallback==null)throw ex;if(rule.length>0&&fallback!=null&&fallback.toString().codePointCount(0,fallback.toString().length())>rule.length)throw ex;frame.outputBudget.put(rule.target,fallback);frame.done.add(rule.target);continue;}catch(MappingException recoveryError){if(recoveryError.code().equals("BUDGET_EXCEEDED"))throw recoveryError;}}
+                    if(recover){try{if(rule.binaryBase64)fallback=BinaryValues.base64(fallback);if(rule.enforceType)fallback=ValueTypes.cast(fallback,rule.type,rule.precision,rule.scale,RoundingMode.UNNECESSARY,frame.context.zone());if(!rule.nullable&&fallback==null)throw ex;if(rule.length>0&&fallback!=null&&BinaryValues.size(fallback)>rule.length)throw ex;frame.outputBudget.put(rule.target,fallback);frame.done.add(rule.target);continue;}catch(MappingException recoveryError){if(recoveryError.code().equals("BUDGET_EXCEEDED"))throw recoveryError;}}
                     Object problem=frame.current;
                     if(problem==ValueTypes.MISSING&&frame.usedSources.size()==1)problem=frame.usedSources.values().iterator().next();
                     frame.errors.add(MappingDiagnostics.issue(plan.diagnostics,plan.recordMode,frame.index,rule.id,frame.step,frame.diagnosticStep,rule.target,rule.type,rule.length,rule.precision,rule.scale,rule.nullable,frame.usedSources,frame.ruleInput,problem,ex));break;}
@@ -298,7 +298,7 @@ public final class MappingEngine {
         ObjectNode rule=JSON.createObjectNode();if(mapping.has("when")){rule.set("when",mapping.get("when"));rule.set("then",legacyRule(mapping.path("then")));if(mapping.has("else"))rule.set("else",legacyRule(mapping.path("else")));return rule;}
         ObjectNode input=rule.putObject("input");if(mapping.has("constant")){input.put("kind","LITERAL");input.set("value",mapping.get("constant"));}
         else if(mapping.hasNonNull("expression")){input.put("kind","EXPRESSION");input.put("expression",mapping.path("expression").asText());}
-        else if(mapping.hasNonNull("from")){input.put("kind","FIELD");input.put("name",ValueTypes.field(mapping.path("from").asText()));if(mapping.hasNonNull("fromLabel"))input.set("comment",mapping.get("fromLabel"));if(mapping.hasNonNull("sourceTemporalUnit"))input.set("numericTemporalUnit",mapping.get("sourceTemporalUnit"));}
+        else if(mapping.hasNonNull("from")){input.put("kind","FIELD");input.put("name",ValueTypes.field(mapping.path("from").asText()));if(mapping.hasNonNull("fromLabel"))input.set("comment",mapping.get("fromLabel"));if(mapping.hasNonNull("sourceType"))input.put("logicalType",ValueTypes.type(mapping.path("sourceType").asText()));if(mapping.hasNonNull("sourceTemporalUnit"))input.set("numericTemporalUnit",mapping.get("sourceTemporalUnit"));}
         else {input.put("kind","LITERAL");input.putNull("value");}
         ArrayNode steps=rule.putArray("steps");JsonNode transform=mapping.path("transform");
         if(mapping.path("fromList").isArray()){ObjectNode step=steps.addObject();step.put("operator","CONCAT");ObjectNode args=step.putObject("args");ArrayNode inputs=args.putArray("inputs");mapping.path("fromList").forEach(n->inputs.addObject().put("kind","FIELD").put("name",ValueTypes.field(n.asText())));args.put("separator",transform.path("args").path(0).asText(""));args.put("nullElementPolicy","EMPTY");}

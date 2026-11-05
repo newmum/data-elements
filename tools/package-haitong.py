@@ -163,10 +163,12 @@ Magic API 编辑器：http://服务器IP:18083/api/web/index.html。
 从程序根目录运行（需要 Python 3，仅使用标准库，按提示输入 Magic 编辑器密码）：
   Windows: python scripts\\update-push-resources.py --username 你的编辑器账号 --apply
   Linux:   python3 scripts/update-push-resources.py --username 你的编辑器账号 --apply
-工具只更新 magic-update/manifest.json 选定的两项资源，通过海通编辑器保存并回读运行脚本。
+工具只更新 magic-update/manifest.json 选定的资源，通过海通编辑器保存并回读运行脚本。
 检测到自定义脚本或并发修改会停止，不覆盖其他资源；受限备份位于 config/secrets/magic-resource-backups/。
-不具备 Python 时，在海通 Magic 编辑器中将 magic-update/function/.../02.表批次登记规范校验.ms
-分隔线下面的脚本粘贴到同名既有函数并保存；不要删除 ht_magic_api_file，不要清空 Magic 目录。
+不具备 Python 时，在海通 Magic 编辑器中按 manifest.json 逐项更新既有函数和接口，
+包括 02.表批次登记规范校验、06.数据推送编排，保存后回读；不要删除 ht_magic_api_file，不要清空 Magic 目录。
+JSON 中含图片 Base64 时，relay.limits.max-message-bytes 按实际整包大小设置，支持 1024 至 16777216 字节。
+单字符串解析上限随该配置对齐；超整包上限返回 413，JSON 格式和嵌套超限分别返回明确错误。
 全新空库会自动加载当前内置脚本，无须执行该更新工具；已有部署仍须在原配置补入开关。
 部署包不包含当前环境密码、访问密钥、运行数据库、业务登记镜像、业务文件或历史日志。
 完整接口契约见 openapi.yaml；SHA256SUMS.txt 校验包内文件；release.json 记录构建身份。
@@ -220,6 +222,7 @@ def main() -> None:
     selected_resources = [
         ('function/01.海通业务/02.表批次登记规范校验.ms','function','haitong-function-table-contract','2317b5f5266f00376209cce6449cd656dceacc797ef39e9865fcdff90ba14dba'),
         ('api/04.数据推送调试/03.模板配套推送测试.ms','api','haitong-push-template-test-03','8a4a582b15e73c387bb30e3ef488cb91a78b995e7022078fd53a621d40ec09eb'),
+        ('function/01.海通业务/06.数据推送编排.ms','function','haitong-function-push','140866a433e47d7017285013e830e316ed0cf88a021074c06c3069e90f107699'),
     ]
     update_manifest = []
     for relative,kind,identity,previous in selected_resources:

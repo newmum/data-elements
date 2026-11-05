@@ -17,7 +17,7 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "组织机构删除接口（支持批量，并递归删除全部子机构）；使用请求参数 ids、id；涉及 rm_org_t 等业务表。",
+  "description": "在当前租户内批量归档机构及子机构；最多1000个入口ID，整批校验归属并拒绝仍有关联用户的子树，成功后记录审计。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
@@ -28,7 +28,7 @@
 // 组织机构删除接口（支持批量，并递归删除全部子机构）
 import '@/common/audit-operation' as auditOperation;
 import tenantRuntime;
-import "@post:/sym/user/me" as me
+import cn.dev33.satoken.stp.StpUtil;
 
 var now = new Date();
 var ids = body?.ids;
@@ -42,12 +42,13 @@ if (ids == null || ids.size() == 0) {
     exit 400, '机构ID不能为空';
 }
 
-var tenantId=tenantRuntime.id();var sql=db.normal();
+var tenantId=tenantRuntime.id();var sql=db.camel();
+if(ids.size()>1000){exit 400,'一次最多删除1000个机构';}
 try {
  return sql.transaction(()=>{
-    var orgRows=sql.table('rm_org_t').where().eq('tenantId',tenantId).eq('deleted',0).limit(5001).select();
+    var orgRows=sql.table('rm_org_t').where().eq('tenant_id',tenantId).eq('deleted',0).page(5001,0).list;
     if(orgRows.size()>5000){exit 400,'机构范围过大，请分级维护';}
-    var updateId = me().create_id;
+    var updateId = StpUtil.getLoginId() + '';
     var rootIds = [];
     for (id in ids) {
         if (id != null && id != '' && !rootIds.contains(id)) {
@@ -62,7 +63,7 @@ try {
         exit 400, '全部机构为系统根节点，不能删除';
     }
 
-    var existList = sql.table('rm_org_t').where().in('id', rootIds).eq('deleted', 0).select();
+    var existList = orgRows.filter(org=>rootIds.contains(org.id));
     var existIds = [];
     for (item in existList) {
         existIds.add(item.id);
@@ -97,7 +98,14 @@ try {
         }
     }
 
-    sql.table('rm_org_t').where().in('id', deleteIds).update({
+    // 删除整棵子树前统一检查有效用户，避免留下无法登录或无法维护的悬空所属机构。
+    var assignedUsers=sql.selectOne("""
+        select count(*) as total from rm_user_org_rela_t r
+        join rm_user_t u on u.id=r.user_id and u.tenant_id=#{tenantId} and u.deleted=0
+        where r.tenant_id=#{tenantId} and r.org_id in (#{deleteIds})
+    """).total;
+    if(assignedUsers>0){exit 409,'机构或下级机构仍有关联用户，请先调整用户所属机构';}
+    sql.table('rm_org_t').where().eq('tenant_id',tenantId).in('id', deleteIds).update({
         deleted: 1,
         updateId: updateId,
         updateTime: now

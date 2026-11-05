@@ -212,6 +212,9 @@ const fetchOrgTree = async () => {
       parentId: $user.orgRootId,
     });
     treeData.value[0].children = res?.data ?? res ?? [];
+    // 机构是实时维护数据；同步已打开表单，避免新增或改名后仍使用旧字典选项。
+    await nextTick();
+    syncOrganizationOptions();
   } catch (e) {
     console.error("获取组织机构树失败:", e);
     treeData.value[0].children = [];
@@ -387,7 +390,7 @@ const handleStatusClick = async (row: any) => {
   row._statusLoading = true;
   try {
     await $common.post("/sym/user/saveOrUpdate", {
-      ...row,
+      id: row.id,
       status: targetStatus,
     });
     row.status = targetStatus;
@@ -414,6 +417,14 @@ const drawerVisible = ref(false);
 const drawerType = ref<"add" | "detail">("add");
 const drawerTab = ref<"detail" | "roles">("detail");
 const jsonFormRef = ref<any>(null);
+const syncOrganizationOptions = () => {
+  const api = jsonFormRef.value?.api;
+  const rule = api?.getRule?.("orgId");
+  if (!rule) return;
+  // Element Plus Cascader 从 props.options 读取候选，不能只写 Select 使用的 rule.options。
+  rule.props = { ...(rule.props || {}), options: treeData.value[0].children };
+  api.refresh();
+};
 const saveLoading = ref(false);
 const roleLoading = ref(false);
 const roleSaving = ref(false);
@@ -480,6 +491,7 @@ const handleAdd = () => {
   uploadedDataUrl.value = "";
   drawerVisible.value = true;
   nextTick(() => {
+    syncOrganizationOptions();
     jsonFormRef.value?.clearValue?.();
     jsonFormRef.value?.setValue?.({ status: 0 });
   });
@@ -494,6 +506,7 @@ const handleDetail = async (row: any) => {
   selectedRoleIds.value = [];
   drawerVisible.value = true;
   await nextTick();
+  syncOrganizationOptions();
   jsonFormRef.value?.clearValue?.();
 
   // 编辑模式：用已有头像文件 id 初始化 ref
@@ -658,9 +671,9 @@ const formRules = FormUtils.fixJson([
     field: "orgId",
     title: "所属机构",
     type: "cascader",
-    $dict: "org",
     $required: true,
     props: {
+      options: [],
       props: {
         // 机构树既可选择叶子部门，也允许把任意上级机构作为用户所属机构。
         // emitPath 保持为 false，后端继续接收单个 orgId，不改变保存接口的数据格式。

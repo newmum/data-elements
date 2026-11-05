@@ -14,6 +14,40 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class GaussMetadataBatchTest {
     @ParameterizedTest @ValueSource(ints={20,100})
+    void registrationTableCollectionReadsScopedSummariesWithOneQuery(int size) throws Exception {
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+        ResultSet rows = mock(ResultSet.class);
+        when(connection.prepareStatement(anyString())).thenReturn(statement);
+        when(statement.executeQuery()).thenReturn(rows);
+        var index = new AtomicInteger();
+        when(rows.next()).thenAnswer(call -> index.getAndIncrement() < size);
+        when(rows.getString("table_name")).thenAnswer(call -> "validation_table_" + index.get());
+        when(rows.getString("table_comment")).thenReturn("登记采集验证表");
+        when(rows.getString("table_type")).thenReturn("BASE TABLE");
+        when(rows.getLong("estimate_rows")).thenReturn(24L);
+        when(rows.getInt("column_count")).thenReturn(3);
+        var explorer = new GaussDbMetadataExplorer() {
+            @Override protected Connection getConnection(DataSourceConfig config) { return connection; }
+        };
+        var config = new DataSourceConfig();
+        config.setDatabaseType(DatabaseType.GAUSSDB);
+        config.setSchema("tenant_owner");
+
+        var result = explorer.getTables(config);
+
+        assertEquals(size, result.size());
+        assertTrue(result.stream().allMatch(table -> "tenant_owner".equals(table.getSchemaName())
+                && table.getRowCount() == 24L && table.getColumnCount() == 3));
+        verify(connection, times(1)).prepareStatement(argThat(sql -> sql.contains("WHERE t.table_schema = ?")
+                && sql.contains("WHERE table_schema = ?") && sql.contains("cls.reltuples")));
+        verify(statement).setString(1, "tenant_owner");
+        verify(statement).setString(2, "tenant_owner");
+        verify(statement, times(1)).executeQuery();
+        verify(connection, never()).createStatement();
+    }
+
+    @ParameterizedTest @ValueSource(ints={20,100})
     void columnBatchUsesOneScopedQueryForTwentyOrHundredTables(int size) throws Exception {
         Connection connection=mock(Connection.class);PreparedStatement statement=mock(PreparedStatement.class);ResultSet rows=mock(ResultSet.class);
         when(connection.prepareStatement(anyString())).thenReturn(statement);when(statement.executeQuery()).thenReturn(rows);

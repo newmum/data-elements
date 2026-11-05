@@ -214,11 +214,11 @@ public class ApiPullConfigurationMagicModule {
         String trigger = text(item.get("triggerMode"), "MANUAL").toUpperCase(Locale.ROOT);
         config.put("triggerMode", trigger);
         if ("CRON".equals(trigger)) {
+            config.put("batchSchedulePolicy", "CUSTOM");
             config.put("schedulingStrategy", "CRON_DRIVEN");
             config.put("schedulingPeriod", required(item, "cronExpression", "定时 API 缺少 Cron 表达式"));
         } else {
-            config.put("schedulingStrategy", "TIMER_DRIVEN");
-            config.put("schedulingPeriod", "60 sec");
+            config.putAll(com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy.markDefault(config));
         }
         return config;
     }

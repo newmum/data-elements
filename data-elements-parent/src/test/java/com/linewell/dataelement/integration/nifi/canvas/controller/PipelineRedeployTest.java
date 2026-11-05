@@ -118,6 +118,20 @@ class PipelineRedeployTest {
         verify(compiler, never()).compile(any(), any(), any());
     }
     @Test
+    void unavailableLinewellBundlePreservesOldGroupBeforeStoppingOrCleanup() {
+        doThrow(new IllegalStateException("当前 NiFi 未注册可用的 LinewellPutDatabaseRecord Bundle；自动选择范围：com.linewell.microservice:datadevs-database-nar 的最高已注册版本"))
+                .when(compiler).preflightWriters(any());
+        var before = stored.get();
+        var response = controller.deploy("p1", null);
+        assertThat(response.getStatusCode().value()).isEqualTo(422);
+        assertThat(response.getBody().toString()).contains("JDBC_WRITER_PREFLIGHT_FAILED").contains("LinewellPutDatabaseRecord").contains("最高已注册版本");
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo(before.nifiProcessGroupId());
+        assertThat(stored.get().status()).isEqualTo(before.status());
+        verify(nifi, never()).requireEmptyQueuesForRedeploy(anyString());
+        verify(nifi, never()).cleanupProcessGroup(anyString());
+        verify(compiler, never()).compile(any(), any(), any());
+    }
+    @Test
     void missingHiveGlobalServicesPreserveExistingGroupBeforeAnyCleanup() {
         var before=stored.get();
         var dsl=new Pipeline.Dsl(1,List.of(new Pipeline.Node("hive","sink.hive","Hive","sink",0,0,Map.of())),List.of());

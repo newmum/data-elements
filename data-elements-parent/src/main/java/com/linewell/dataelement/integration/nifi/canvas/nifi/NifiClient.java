@@ -7,6 +7,7 @@ import com.linewell.dataelement.model.nifi.RevisionDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.maven.artifact.versioning.ComparableVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -41,6 +42,9 @@ public class NifiClient {
     private static final String API_PREFIX = "/nifi-api";
     private static final String EXECUTE_SQL_RECORD_TYPE = "org.apache.nifi.processors.standard.ExecuteSQLRecord";
     private static final String USE_AVRO_LOGICAL_TYPES = "Use Avro Logical Types";
+    private static final String LINEWELL_DATABASE_RECORD = "LinewellPutDatabaseRecord";
+    private static final String LINEWELL_DATABASE_BUNDLE_GROUP = "com.linewell.microservice";
+    private static final String LINEWELL_DATABASE_BUNDLE_ARTIFACT = "datadevs-database-nar";
     private static final Duration TOKEN_TTL = Duration.ofMinutes(10);
     private static final MediaType APPLICATION_JSON_UTF8 =
             new MediaType("application", "json", StandardCharsets.UTF_8);
@@ -56,7 +60,8 @@ public class NifiClient {
     public RuntimeScope bindRuntimeNode() {
         RuntimeBinding previous = runtimeBinding.get();
         RuntimeNode node = selectedRuntimeNode();
-        runtimeBinding.set(new RuntimeBinding(node, com.linewell.dataelement.platform.tenant.domain.TenantContext.getTenantId()));
+        runtimeBinding.set(previous == null ? new RuntimeBinding(node,
+                com.linewell.dataelement.platform.tenant.domain.TenantContext.getTenantId(), new java.util.HashMap<>()) : previous);
         return new RuntimeScope(previous);
     }
 
@@ -68,7 +73,31 @@ public class NifiClient {
         return binding.node();
     }
 
-    private record RuntimeBinding(RuntimeNode node, String tenantId) {}
+    private record RuntimeBinding(RuntimeNode node, String tenantId, Map<String, JsonNode> extensionTypes) {}
+
+    public void requireDailyScheduleZone() {
+        String zone = extensionTypes("/flow/about", "about").path("timezone").asText("");
+        // AboutDTO uses the short display name (CST is also used in North America).
+        if ("CST".equals(zone) && extensionTypes("/flow/config", "flowConfiguration")
+                .path("timeOffset").asInt(Integer.MIN_VALUE) == 8 * 60 * 60 * 1000) return;
+        // NiFi evaluates Cron in its JVM timezone; accept aliases with the same current/future rules.
+        try {
+            var expected = java.time.ZoneId.of("Asia/Shanghai").getRules();
+            var actual = java.time.ZoneId.of(zone, java.time.ZoneId.SHORT_IDS).getRules();
+            var now = java.time.Instant.now();
+            if (expected.getOffset(now).equals(actual.getOffset(now)) && actual.nextTransition(now) == null) return;
+        } catch (java.time.DateTimeException invalid) { /* actionable failure below */ }
+        throw new IllegalStateException("每日错峰使用北京时间，当前 NiFi 时区为 " + (zone.isBlank() ? "未知" : zone)
+                + "；请将 NiFi JVM 时区配置为 Asia/Shanghai 后重试，旧流程已保留");
+    }
+
+    /** Request-scoped capability snapshot; never shared across tenant/node bindings or deployments. */
+    private JsonNode extensionTypes(String path, String field) {
+        RuntimeBinding binding = runtimeBinding.get();
+        if (binding == null) return get(path, JsonNode.class).path(field);
+        selectedRuntimeNode(); // Revalidate the trusted tenant even when the snapshot is already populated.
+        return binding.extensionTypes().computeIfAbsent(path, ignored -> get(path, JsonNode.class).path(field));
+    }
 
     public final class RuntimeScope implements AutoCloseable {
         private final RuntimeBinding previous;
@@ -97,11 +126,60 @@ public class NifiClient {
                 .put("version", com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.BUNDLE_VERSION);
     }
 
+    public void requireLinewellDatabaseRecordExtension() {
+        linewellDatabaseRecordExtension();
+    }
+
+    private static boolean isLinewellDatabaseRecord(String type) {
+        return type != null && (LINEWELL_DATABASE_RECORD.equals(type) || type.endsWith("." + LINEWELL_DATABASE_RECORD));
+    }
+
+    private record DatabaseRecordExtension(String type, ObjectNode bundle) {}
+
+    /** Select the newest installed version in the known NAR family, never a same-name third-party bundle. */
+    private DatabaseRecordExtension linewellDatabaseRecordExtension() {
+        java.util.SortedSet<String> available = new java.util.TreeSet<>();
+        java.util.SortedMap<String, DatabaseRecordExtension> matchingTypes = new java.util.TreeMap<>();
+        ComparableVersion newest = null;
+        String selectedVersion = null;
+        for (JsonNode processor : extensionTypes("/flow/processor-types", "processorTypes")) {
+            String type = processor.path("type").asText();
+            if (!isLinewellDatabaseRecord(type)) continue;
+            JsonNode bundle = processor.path("bundle");
+            available.add(type + " [" + bundleCoordinates(bundle) + "]");
+            if (!LINEWELL_DATABASE_BUNDLE_GROUP.equals(bundle.path("group").asText())
+                    || !LINEWELL_DATABASE_BUNDLE_ARTIFACT.equals(bundle.path("artifact").asText())) continue;
+            String version = bundle.path("version").asText();
+            // Bound external metadata before parsing; do not guess a version for an incomplete coordinate.
+            if (!bundle.path("version").isTextual() || version.length() > 256
+                    || !version.matches("[0-9][0-9A-Za-z._+\\-]*")) continue;
+            ComparableVersion candidate = new ComparableVersion(version);
+            int compared = newest == null ? 1 : candidate.compareTo(newest);
+            // Maven-equivalent spellings (2.10 / 2.10.0) still need an exact, deterministic NiFi coordinate.
+            if (compared > 0 || compared == 0 && version.compareTo(selectedVersion) > 0) {
+                newest = candidate;
+                selectedVersion = version;
+                matchingTypes.clear();
+            }
+            if (version.equals(selectedVersion)) matchingTypes.put(type, new DatabaseRecordExtension(type,
+                    mapper.createObjectNode().put("group", LINEWELL_DATABASE_BUNDLE_GROUP)
+                            .put("artifact", LINEWELL_DATABASE_BUNDLE_ARTIFACT).put("version", version)));
+        }
+        if (matchingTypes.size() == 1) return matchingTypes.get(matchingTypes.firstKey());
+        String reason = available.isEmpty() ? "当前 NiFi 未注册 LinewellPutDatabaseRecord 处理器"
+                : matchingTypes.isEmpty() ? "当前 NiFi 未注册可用的 LinewellPutDatabaseRecord Bundle"
+                : "当前 NiFi 的最新 Bundle 中存在多个 LinewellPutDatabaseRecord 处理器类型";
+        throw new IllegalStateException(reason + "；自动选择范围：" + LINEWELL_DATABASE_BUNDLE_GROUP
+                + ":" + LINEWELL_DATABASE_BUNDLE_ARTIFACT + " 的最高已注册版本"
+                + "；当前 NiFi 已注册：" + (available.isEmpty() ? "无" : String.join("、", available))
+                + "；请核对各 NiFi 节点安装的扩展；旧流程已保留");
+    }
+
     public void requireDateFetchExtension() {
         String processorType = com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.TYPE;
         ObjectNode required = dateFetchBundle();
         java.util.SortedSet<String> available = new java.util.TreeSet<>();
-        JsonNode types = get("/flow/processor-types", JsonNode.class).path("processorTypes");
+        JsonNode types = extensionTypes("/flow/processor-types", "processorTypes");
         for (JsonNode type : types) {
             if (!processorType.equals(type.path("type").asText())) continue;
             JsonNode bundle = type.path("bundle");
@@ -131,8 +209,8 @@ public class NifiClient {
     }
 
     public void requireMappingExtension(){
-        JsonNode processors=get("/flow/processor-types",JsonNode.class).path("processorTypes");
-        JsonNode services=get("/flow/controller-service-types",JsonNode.class).path("controllerServiceTypes");
+        JsonNode processors=extensionTypes("/flow/processor-types","processorTypes");
+        JsonNode services=extensionTypes("/flow/controller-service-types","controllerServiceTypes");
         ObjectNode required=mappingBundle();
         java.util.List<String> mismatches=new java.util.ArrayList<>();
         for(var entry:java.util.List.of(java.util.Map.entry(processors,"com.linewell.dataelement.nifi.HaitongTransformRecord"),java.util.Map.entry(services,"com.linewell.dataelement.nifi.JdbcHaitongDictionaryService"))){
@@ -444,6 +522,11 @@ public class NifiClient {
     public NifiEntity createProcessor(String pgId, String type, String name, double x, double y, Map<String, String> properties, String schedulingPeriod, String schedulingStrategy) {
         ObjectNode component = mapper.createObjectNode();
         component.put("type", type);
+        if (isLinewellDatabaseRecord(type)) {
+            DatabaseRecordExtension selected = linewellDatabaseRecordExtension();
+            if (!selected.type().equals(type)) throw new IllegalStateException("LinewellPutDatabaseRecord 类型与最新 Bundle 不一致：" + type);
+            component.set("bundle", selected.bundle());
+        }
         if(type.equals("com.linewell.dataelement.nifi.HaitongTransformRecord"))component.set("bundle",mappingBundle());
         if(type.equals(com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.TYPE))component.set("bundle",dateFetchBundle());
         component.put("name", name);
@@ -1044,8 +1127,8 @@ public class NifiClient {
         if (simpleTypeName == null || simpleTypeName.isBlank()) {
             return java.util.Optional.empty();
         }
-        JsonNode root = get("/flow/processor-types", JsonNode.class);
-        JsonNode types = root.path("processorTypes");
+        if (isLinewellDatabaseRecord(simpleTypeName)) return java.util.Optional.of(linewellDatabaseRecordExtension().type());
+        JsonNode types = extensionTypes("/flow/processor-types", "processorTypes");
         if (!types.isArray()) {
             return java.util.Optional.empty();
         }

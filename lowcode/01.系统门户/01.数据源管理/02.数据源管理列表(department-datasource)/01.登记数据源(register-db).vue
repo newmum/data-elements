@@ -9251,12 +9251,15 @@ function refreshJdbcUrl() {
 }
 function gaussdbUrlParameters() {
   const params = [];
+  const nativeGauss = ["gaussdb", "gaussdb-jdbc"].includes(connectorForm.gaussdbVariant);
+  if (nativeGauss) params.push("autoBalance=true");
   if (connectorForm.gaussdbVariant === "mysql") {
     const modes = { disable: "DISABLED", prefer: "PREFERRED", require: "REQUIRED", "verify-ca": "VERIFY_CA", "verify-full": "VERIFY_IDENTITY" };
     if (connectorForm.sslMode) params.push(`sslMode=${modes[connectorForm.sslMode] || "PREFERRED"}`);
   } else {
     if (connectorForm.schema) params.push(`currentSchema=${encodeURIComponent(connectorForm.schema)}`);
-    if (connectorForm.sslMode) params.push(`sslmode=${connectorForm.sslMode}`);
+    if (connectorForm.sslMode && !(nativeGauss && connectorForm.sslMode === "prefer"))
+      params.push(`sslmode=${connectorForm.sslMode}`);
   }
   return params.length ? `?${params.join("&")}` : "";
 }
