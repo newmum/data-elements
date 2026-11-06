@@ -19,6 +19,7 @@
       <span v-for="tag in options" :key="JSON.stringify(tag.value)">
         <ElCheckTag
           v-if="!tag.hidden"
+          :title="tag.label"
           :checked="!!checkedMap[JSON.stringify(tag.value)]"
           @change="(checked) => handleChange(tag.value, checked)"
         >
@@ -40,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const emit = defineEmits(["update:modelValue", "change"]);
 type Option = { value: any; label: string; hidden?: boolean };
@@ -94,17 +95,23 @@ watch(
   },
   { immediate: true, deep: true }
 );
-const visible = ref();
+const visible = ref(false);
+let resizeObserver: ResizeObserver | undefined;
 
-watch(
-  () => props.options,
-  () => {
-    nextTick(() => {
-      visible.value = (tagRef.value?.scrollHeight ?? 0) > 40;
-    });
-  },
-  { immediate: true }
-);
+function updateOverflow() {
+  const tags = tagRef.value;
+  if (tags && isFold.value) visible.value = tags.scrollHeight > tags.clientHeight + 1;
+}
+
+onMounted(() => {
+  updateOverflow();
+  if (tagRef.value) {
+    resizeObserver = new ResizeObserver(updateOverflow);
+    resizeObserver.observe(tagRef.value);
+  }
+});
+onBeforeUnmount(() => resizeObserver?.disconnect());
+watch(() => props.options, () => nextTick(updateOverflow));
 
 const handleChange = (value: any, checked: boolean) => {
   if (checked) {
@@ -123,7 +130,7 @@ const handleChange = (value: any, checked: boolean) => {
 
   font-size: 14px;
   display: grid;
-  grid-template-columns: minmax(85px, auto) 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: flex-start;
 
   .check-tags-title {
@@ -141,7 +148,13 @@ const handleChange = (value: any, checked: boolean) => {
     align-items: center;
     gap: 0px 8px;
 
+    > span {
+      max-width: 100%;
+    }
+
     :deep(.el-check-tag) {
+      display: block;
+      max-width: 100%;
       cursor: pointer;
       padding: 9px 15px;
       border-radius: 8px;
@@ -149,7 +162,9 @@ const handleChange = (value: any, checked: boolean) => {
       font-family: "Source Han Sans CN";
       font-weight: 400;
       color: #323643;
-      flex: 1 0 auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       background-color: transparent;
 
       &:hover {
@@ -180,6 +195,21 @@ const handleChange = (value: any, checked: boolean) => {
     // min-width: 60px;
     text-align: center;
     cursor: pointer;
+  }
+}
+
+@media (max-width: 480px) {
+  .check-tags {
+    grid-template-columns: minmax(0, 1fr) auto;
+
+    .check-tags-title {
+      grid-column: 1 / -1;
+      line-height: 28px;
+    }
+
+    .check-tag-items :deep(.el-check-tag) {
+      padding-inline: 10px;
+    }
   }
 }
 </style>

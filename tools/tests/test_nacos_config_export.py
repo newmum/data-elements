@@ -37,6 +37,11 @@ class NacosExportTest(unittest.TestCase):
         self.assertTrue(result["password"].startswith("${NACOS_"))
         self.assertNotIn("example-url-secret", result["endpoint"])
 
+    def test_existing_secret_references_survive_export(self):
+        config = {"username": "${TENANT_CHENGTIAN_DB_USER}",
+                  "password": "${TENANT_CHENGTIAN_DB_PASSWORD}"}
+        self.assertEqual(config, exporter.redact_configuration(config))
+
 
 if __name__ == "__main__":
     unittest.main()

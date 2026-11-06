@@ -27,6 +27,7 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp)");
         f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,updated_at bigint)");
+        createTaskLookupIndexes(f);
         f.jdbc.execute("create table rm_org_t(tenant_id varchar(32),id varchar(64),name varchar(100),deleted int)");
         f.jdbc.update("insert into rm_org_t values('ga','org','来源部门',0),('other','org','其他租户同名ID部门',0),('ga','completed-org','完成库部门',0),('ga','denied-org','无权部门',0)");
         f.jdbc.update("update db_datasource_t set asset_status=1,db_name='partial',org_id='org',app_id='app'");
@@ -90,6 +91,7 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("create table data_access_agg_task_t(tid varchar(64),source_table_id varchar(64),target_table_id varchar(64),pipeline_id varchar(64),tenant_id varchar(32),is_del int,updated_time timestamp,process_group_id varchar(64))");
         f.jdbc.execute("create table nifi_pipeline_t(id varchar(64),tenant_id varchar(32),is_del int,dsl_json clob,status varchar(32),nifi_process_group_id varchar(64),updated_at bigint)");
+        createTaskLookupIndexes(f);
         f.jdbc.update("update db_datasource_t set asset_status=1,db_name='来源库'");
         f.jdbc.update("update db_table_t set asset_status=1,business_type='业务表',table_name=tid,schema_name='public',updated_time=current_timestamp");
         f.jdbc.update("insert into db_datasource_t(tid,tenant_id,asset_status,is_del,db_name) values('target-db','ga',2,0,'汇聚库'),('hive-db','ga',2,0,'Hive库'),('denied','ga',2,0,'无权库')");
@@ -145,6 +147,11 @@ class DataIngestionRegistrationScopeTest {
                 assertThat((List<?>)source.get("tasks")).anySatisfy(raw -> assertThat(((Map<?,?>)raw).get("tid")).isEqualTo("chain"));
             }
         }
+    }
+    static void createTaskLookupIndexes(DatasourceCompletionMagicTest.Fixture f) {
+        // Production has PK lookups; retain non-unique fixture IDs for tenant isolation tests.
+        f.jdbc.execute("create index idx_test_task_identity on data_access_agg_task_t(tid,tenant_id,is_del)");
+        f.jdbc.execute("create index idx_test_pipeline_identity on nifi_pipeline_t(id,tenant_id,is_del)");
     }
     static void createWarehouseConfiguration(DatasourceCompletionMagicTest.Fixture f) {
         f.jdbc.execute("alter table db_table_t add access_request_status int default 0");

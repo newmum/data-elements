@@ -10,6 +10,20 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class DslHasherDeploymentHashTest {
+    @Test
+    void directFileConsumptionInvalidatesOnlyAcknowledgedFileDeployments() throws Exception {
+        String revision = DslHasher.CURRENT_COMPILER_REVISION;
+        for (String key : List.of("source.ftp", "source.sftp")) {
+            var ordinary = singleSink(key, Map.of("remotePath", "/incoming"));
+            assertThat(DslHasher.deploymentHash(ordinary, revision)).isEqualTo(previousDeploymentHash(ordinary,
+                    revision + "|ftp-file-dataset-parser-v2"));
+            var acknowledged = singleSink(key, Map.of("remotePath", "/incoming", "fileConsumptionPolicy", "DELETE_AFTER_DATABASE_COMMIT"));
+            assertThat(DslHasher.deploymentHash(acknowledged, revision)).isNotEqualTo(previousDeploymentHash(acknowledged,
+                    revision + "|ftp-file-dataset-parser-v2"));
+            assertThat(DslHasher.deploymentHash(acknowledged, revision)).isEqualTo(previousDeploymentHash(acknowledged,
+                    revision + "|ftp-file-dataset-parser-v2|file-consumption-direct-list-native-path-v2"));
+        }
+    }
 
     @Test
     void dateFetchUpgradeRequiresRepublishingDatabaseSourcesAndPreservesOtherSourceDeployments() throws Exception {

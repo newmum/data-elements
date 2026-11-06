@@ -15,7 +15,7 @@ class FileConsumptionCompilerTest {
     record Link(String from,String to,List<String> relationships) {}
 
     @ParameterizedTest @ValueSource(booleans={true,false})
-    void readsOnlyCompletedFilesAndDeletesOnlyAfterJdbcSuccess(boolean sftp) {
+    void readsListedDataFilesDirectlyAndDeletesOnlyAfterJdbcSuccess(boolean sftp) {
         var client=mock(NifiClient.class);var processors=new ArrayList<Processor>();var links=new ArrayList<Link>();
         when(client.createProcessor(anyString(),anyString(),anyString(),anyDouble(),anyDouble(),anyMap(),any(),any())).thenAnswer(a->{
             String id="processor-"+processors.size();processors.add(new Processor(id,a.getArgument(1),new LinkedHashMap<>(a.getArgument(5))));return entity(id);
@@ -29,14 +29,22 @@ class FileConsumptionCompilerTest {
         FileConsumptionCompiler.validate(pipeline);var compiler=new FileConsumptionCompiler(client);
         var compiledSource=new DslCompiler.NodeCompilation();var compiledSink=new DslCompiler.NodeCompilation();compiledSink.processorIds.put("put","jdbc-writer");
         compiler.fetch("pg",source,compiledSource,Map.of("Hostname","files.invalid","Port",sftp?"22":"21","Username","validation","Password","test-only"),"/root/source/table","60 sec",sftp,0,0);
-        var initialFetch=processors.get(2);assertEquals("None",initialFetch.properties().get("Completion Strategy"));
-        assertEquals("(?i).*\\.json\\.done$",processors.getFirst().properties().get("File Filter Regex"));
+        assertEquals(2,processors.size());
+        var initialFetch=processors.get(1);assertEquals("None",initialFetch.properties().get("Completion Strategy"));
+        assertEquals("${path}/${filename}",initialFetch.properties().get("Remote File"));
+        assertTrue(processors.getFirst().properties().containsKey("File Filter Regex"));
+        assertNull(processors.getFirst().properties().get("File Filter Regex"));
+        assertTrue(links.stream().anyMatch(l->l.from().equals(processors.getFirst().id())&&l.to().equals(initialFetch.id())&&l.relationships().equals(List.of("success"))));
+        assertFalse(compiledSource.processorIds.containsKey("file-consumption-attributes"));
         assertTrue(links.stream().anyMatch(l->l.to().equals("retained")&&l.relationships().contains("not.found")));
         assertTrue(processors.stream().noneMatch(p->p.type().endsWith("DeleteSFTP")||"Delete File".equals(p.properties().get("Completion Strategy"))));
         compiler.acknowledge("pg",pipeline,Map.of("source",compiledSource,"sink",compiledSink));
-        var data=processors.get(3);var marker=processors.get(4);
+        assertEquals(3,processors.size());var data=processors.get(2);
+        assertFalse(compiledSink.processorIds.containsKey("ack-delete-marker"));
+        if(sftp){assertEquals("${path}",data.properties().get("Directory Path"));assertEquals("${filename}",data.properties().get("Filename"));}
+        else{assertEquals("${path}/${filename}",data.properties().get("Remote File"));assertEquals("Delete File",data.properties().get("Completion Strategy"));}
         assertTrue(links.stream().anyMatch(l->l.from().equals("jdbc-writer")&&l.to().equals(data.id())&&l.relationships().equals(List.of("success"))));
-        assertTrue(links.stream().anyMatch(l->l.from().equals(data.id())&&l.to().equals(marker.id())&&l.relationships().contains(sftp?"not found":"not.found")));
+        assertTrue(processors.stream().noneMatch(p->p.type().endsWith("UpdateAttribute")));
         assertTrue(links.stream().noneMatch(l->l.from().equals("jdbc-writer")&&l.relationships().contains("failure")));
         verify(client).executeOnPrimaryNode(processors.getFirst().id());
     }

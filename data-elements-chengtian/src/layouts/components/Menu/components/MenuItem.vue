@@ -17,7 +17,7 @@
             :size="iconSize"
             class="menu-icon"
           />
-          <span>{{ menu.meta?.title }}</span>
+          <span class="menu-item-label" :data-label="menu.meta?.title">{{ menu.meta?.title }}</span>
         </el-menu-item>
       </AppLink>
     </template>

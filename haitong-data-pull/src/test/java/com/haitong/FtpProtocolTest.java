@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfSystemProperty(named="haitong.loopback.tests",matches="true")
 class FtpProtocolTest {
     @TempDir Path root;
-    FtpServer server;Process pythonServer;FtpConnector connector;FtpAddress address;Path home;
+    FtpServer server;Process pythonServer;FtpConnector connector;FtpAddress address;Path home;RelayProperties properties;
     @BeforeEach void setup() throws Exception {
         home=Files.createDirectories(root.resolve("ftp-home"));int port;
         try(ServerSocket socket=new ServerSocket(0)) {port=socket.getLocalPort();}
@@ -38,6 +38,7 @@ class FtpProtocolTest {
             assertTrue(ready,"Python FTP fixture did not start");
         }
         RelayProperties p=new RelayProperties();p.setWorkDir(root.resolve("work").toString());
+        properties=p;
         p.getSecurity().setApiKey("test-client-0123456789abcdef0123456789");p.getSecurity().setAdminKey("test-admin-0123456789abcdef0123456789");
         p.getFtp().setPassword("test-password");p.getLimits().setMinFreeDiskBytes(0);
         connector=new FtpConnector(p,new Secrets(p),new Json());address=new FtpAddress("FTP","127.0.0.1",port,"relay",true,false,"UTF-8",5);
@@ -51,12 +52,24 @@ class FtpProtocolTest {
                 "table-to-ftp", 0, bytes, null, null,
                 Map.of("datasourceId", "source-123", "tableName", "demo_table", "schemaVersion", 1));
     }
-    @Test void writesVerifiedFileAndManifestAndConvergesOnRetry() throws Exception {
+    @Test void writesVerifiedFileWithoutMarkerByDefaultAndConvergesOnRetry() throws Exception {
         Packet p=packet("{\"records\":[{\"x\":1}]}".getBytes(StandardCharsets.UTF_8));var result=connector.deliver(target(),p);
         Path dir=home.resolve("out/source-123/demo_table");String name=result.get("fileName").toString();
-        assertEquals("[{\"x\":1}]",Files.readString(dir.resolve(name)));assertTrue(Files.exists(dir.resolve(name+".done")));
-        assertEquals(result,connector.deliver(target(),p));assertEquals(1,connector.markers(address,"/out/source-123/demo_table").size());
+        assertEquals("[{\"x\":1}]",Files.readString(dir.resolve(name)));assertFalse(Files.exists(dir.resolve(name+".done")));
+        assertEquals("FILE_VERIFIED",result.get("completion"));assertFalse(result.containsKey("completionMarker"));
+        assertEquals(result,connector.deliver(target(),p));assertTrue(connector.markers(address,"/out/source-123/demo_table").isEmpty());
+        try(var files=Files.list(dir)){assertEquals(List.of(name),files.map(f->f.getFileName().toString()).toList());}
         assertEquals(result.get("sha256"), Rules.sha256(Files.readAllBytes(dir.resolve(name))));
+    }
+    @Test void legacyTableConsumersCanEnableVerifiedCompletionManifest() throws Exception {
+        properties.getFtp().setTableCompletionMarkerEnabled(true);
+        Packet packet=packet("{\"records\":[{\"x\":1}]}".getBytes(StandardCharsets.UTF_8));
+        var result=connector.deliver(target(),packet);
+        Path dir=home.resolve("out/source-123/demo_table");String name=result.get("fileName").toString();
+        var manifest=new Json().object(Files.readAllBytes(dir.resolve(name+".done")));
+        assertEquals("FILE_AND_MARKER_VERIFIED",result.get("completion"));assertEquals(name+".done",result.get("completionMarker"));
+        assertEquals(result.get("sha256"),manifest.get("sha256"));assertEquals("demo_table",manifest.get("tableName"));
+        assertEquals(result,connector.deliver(target(),packet));assertEquals(1,connector.markers(address,"/out/source-123/demo_table").size());
     }
     @Test void changedContentsWithSameIdentityAreNotOverwritten() throws Exception {
         connector.deliver(target(),packet("{\"records\":[{\"x\":1}]}".getBytes(StandardCharsets.UTF_8)));

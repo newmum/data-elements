@@ -86,7 +86,8 @@ public class FtpConnector {
         String sourceId=metadataCode(packet,"datasourceId");
         String tableName=metadataCode(packet,collectionFile?"collectionId":"tableName");
         // Registered table-batch output is deliberately predictable: root / source datasource id / table name.
-        // It contains only business rows; routing metadata remains in the sidecar completion manifest.
+        // Business rows are published by verified temporary upload followed by rename.
+        // File collections still need the sidecar's business metadata; table consumers can opt in.
         String directory=Rules.remoteDirectory(target.directory())+"/"+sourceId+"/"+tableName;
         String name=packet.messageId()+(packet.isFile()?Rules.extension(packet.originalName()):".json");
         byte[] bytes=packet.isFile()?null:recordsJson(packet);
@@ -102,9 +103,9 @@ public class FtpConnector {
             for(String key:List.of("contractVersion","businessKey","metadata","mediaType","securityState","contentUrl"))if(packet.metadata().containsKey(key))manifest.put(key,packet.metadata().get(key));
         }else{manifest.put("tableName",tableName);manifest.put("schemaVersion",packet.metadata().get("schemaVersion"));}
         if(!packet.isFile())manifest.put("recordCount",recordCount(packet));
-        byte[] done=json.bytes(manifest);
+        byte[] done=packet.isFile() || collectionFile || p.getFtp().isTableCompletionMarkerEnabled()?json.bytes(manifest):null;
         FtpTrace trace=new FtpTrace(target.ftp(),directory,path,packet.deliveryId());
-        log.info("FTP delivery begin: deliveryId={}, protocol={}, endpoint={}:{}, username={}, directory={}, remotePath={}, bytes={}, marker={}",packet.deliveryId(),target.ftp().protocol(),target.ftp().host(),target.ftp().port(),safeAccount(target.ftp().username()),directory,path,length,path+".done");
+        log.info("FTP delivery begin: deliveryId={}, protocol={}, endpoint={}:{}, username={}, directory={}, remotePath={}, bytes={}, marker={}",packet.deliveryId(),target.ftp().protocol(),target.ftp().host(),target.ftp().port(),safeAccount(target.ftp().username()),directory,path,length,done==null?"disabled":path+".done");
         if ("SFTP".equals(target.ftp().protocol())) {
             return deliverSftp(target.ftp(), directory, name, path, bytes, file, length, hash, done,packet.deliveryId(),trace);
         }
@@ -133,10 +134,9 @@ public class FtpConnector {
                     else { trace.stage("RENAME_PAYLOAD");if(!ftp.rename(temp,transferPath)) throw new IOException("FTP_RENAME_FAILED");logFtpReply("RENAME_PAYLOAD",trace,ftp); }
                 } finally { try { ftp.deleteFile(temp); } catch(IOException ignored) {} }
             }
-            trace.stage("PUBLISH_MARKER");
-            publishBytes(ftp,transferPath+".done",done,trace);
-            Map<String,Object> result=Map.of("fileName",name,"path",path,"sha256",hash,"bytes",length,"completionMarker",name+".done","completion","FILE_AND_MARKER_VERIFIED");
-            log.info("FTP delivery verified: deliveryId={}, endpoint={}:{}, username={}, configuredRemotePath={}, transferPath={}, pathMode={}, bytes={}, marker={}",packet.deliveryId(),target.ftp().host(),target.ftp().port(),safeAccount(target.ftp().username()),path,transferPath,transferDirectory.mode(),length,path+".done");
+            if(done!=null) { trace.stage("PUBLISH_MARKER");publishBytes(ftp,transferPath+".done",done,trace); }
+            Map<String,Object> result=deliveryResult(name,path,length,hash,done!=null);
+            log.info("FTP delivery verified: deliveryId={}, endpoint={}:{}, username={}, configuredRemotePath={}, transferPath={}, pathMode={}, bytes={}, marker={}",packet.deliveryId(),target.ftp().host(),target.ftp().port(),safeAccount(target.ftp().username()),path,transferPath,transferDirectory.mode(),length,done==null?"disabled":path+".done");
             return result;
         });
     }
@@ -215,12 +215,18 @@ public class FtpConnector {
                     else { trace.stage("RENAME_PAYLOAD");sftp.rename(temp,path); }
                 } finally { try { sftp.rm(temp); } catch(SftpException ignored) {} }
             }
-            trace.stage("PUBLISH_MARKER");
-            publishBytes(sftp,path+".done",done);
-            Map<String,Object> result=Map.of("fileName",name,"path",path,"sha256",hash,"bytes",length,"completionMarker",name+".done","completion","FILE_AND_MARKER_VERIFIED");
-            log.info("SFTP delivery verified: deliveryId={}, remotePath={}, bytes={}, marker={}",deliveryId,path,length,path+".done");
+            if(done!=null) { trace.stage("PUBLISH_MARKER");publishBytes(sftp,path+".done",done); }
+            Map<String,Object> result=deliveryResult(name,path,length,hash,done!=null);
+            log.info("SFTP delivery verified: deliveryId={}, remotePath={}, bytes={}, marker={}",deliveryId,path,length,done==null?"disabled":path+".done");
             return result;
         });
+    }
+    private Map<String,Object> deliveryResult(String name,String path,long length,String hash,boolean marker) {
+        Map<String,Object> result=new LinkedHashMap<>();
+        result.put("fileName",name);result.put("path",path);result.put("sha256",hash);result.put("bytes",length);
+        result.put("completion",marker?"FILE_AND_MARKER_VERIFIED":"FILE_VERIFIED");
+        if(marker)result.put("completionMarker",name+".done");
+        return result;
     }
     private byte[] recordsJson(Packet packet) {
         Map<String,Object> envelope=json.object(packet.bytes());

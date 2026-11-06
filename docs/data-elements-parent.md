@@ -47,7 +47,7 @@
 - Maven：3.8+
 - MySQL：建议 8.x
 - Redis：按环境配置
-- Nacos：当前配置默认从 Nacos 加载 `data-element.yml` 和 `data-element-dev.yml`
+- Nacos：本机受限运行配置单独导入 `data-element_ct.yml`；通用启动分支可按环境导入原基础和开发配置。
 
 
 <a id="overview--本地启动"></a>
@@ -60,7 +60,7 @@
 .\start-data-elements.cmd
 ```
 
-该入口默认读取工程外 `%USERPROFILE%/.codex/private/data-elements/local-runtime.private.json` 的环境变量和 Java 路径，优先运行 `.runtime/data-element-runtime.jar`，保留该配置中的 `NACOS_CONFIG_IMPORTS` 与 `SPRING_APPLICATION_JSON`。当前本机已选择演示 Nacos `14.103.233.56:8848`、命名空间 `data-element`、配置 `data-elements.yml`；地址与凭据仍以受限配置为准。入口不再自动切回旧内网 Nacos，也不会用 `target/` 中的旧包覆盖已验证运行包。配置缺失时会明确报错，可用 `-ConfigPath` 指定另一份工程外配置。
+该入口在工程外 `%USERPROFILE%/.codex/private/data-elements/local-runtime.private.json` 存在且未传显式构建或环境参数时，读取其中的环境变量和 Java 路径，运行 `.runtime/data-element-runtime.jar`，保留 `NACOS_CONFIG_IMPORTS` 与 `SPRING_APPLICATION_JSON`。当前本机从内网 Nacos `192.168.175.86:8848`、命名空间 `data-element` 导入 `data-element_ct.yml`，仅澄天连接 `baseline_ct.public`；其他环境使用各自受限配置。入口不会用 `target/` 中的旧包覆盖已验证运行包。可用 `-RuntimeConfigPath` 指定另一份工程外配置；直接调用 `tools/start-local-backend.ps1` 时参数名为 `-ConfigPath`。
 
 `-Build` 明确要求重新打包并替换运行包；`-JarPath` 明确选择其他包。需要其他环境时可显式传入 `-NacosHost`，并在该进程中提供相应 Nacos 凭据、命名空间和配置导入。直接执行 `java -jar` 或以下 Maven 命令不会自动读取上述受限 JSON，需要先设置同一套环境变量；不要依赖 JAR 的历史环境默认值。
 
@@ -116,8 +116,8 @@ spring:
 ### 构建与打包
 
 ```bash
-# 编译
-mvn -DskipTests compile
+# 编译（此阶段本身不执行测试）
+mvn compile
 
 # 完整测试、打包并安装到本地 Maven 仓库
 mvn install
@@ -129,6 +129,20 @@ mvn package
 打包产物位于 `target/` 目录，最终文件名由 `pom.xml` 中的 `finalName` 控制。
 
 从仓库根目录构建时使用 `mvn -f data-elements-parent/pom.xml install`。测试报告默认在根目录 `logs/backend/surefire/`。`logs/` 下的临时 POM 属于当次运行材料，不作为日常构建入口。
+
+日常构建不必每次加 `clean`，以便复用编译产物；源码删除、包名调整、切换分支后出现旧类残留，或正式交付需要从空输出验证时，再执行 `clean install`。只交付应用 JAR、不需要将当前工程安装到本地 Maven 仓库时，使用 `package` 即可；它仍会完整执行测试，节省的只是最后的本地仓库安装步骤。
+
+只做本地调试、已经明确接受本轮不运行测试时，可使用下面的快速命令。`-DskipTests` 跳过测试执行，但仍编译测试源码，不能把它作为测试通过的证据；正式交付前执行不带该参数的完整构建。它不改变运行依赖或高斯驱动的打包规则。仅改动少量功能时，也可先定向执行相关测试：
+
+```powershell
+# 从仓库根目录快速打包并安装；需要自行安排本轮测试
+mvn -f data-elements-parent/pom.xml -DskipTests install
+
+# 仅验证本轮相关测试，按实际改动替换测试类名
+mvn -f data-elements-parent/pom.xml "-Dtest=ErrorDetailSanitizerTest,VendorDriverIsolationTest" test
+```
+
+依赖已完整下载且版本未变时，快速命令可再加 `-o` 使用本地 Maven 缓存；首次构建、新增依赖或缓存缺失时需恢复联网构建。单工程不能靠增大 `-T` 获得测试方法级并行；当前测试含 JVM 全局驱动属性和脚本上下文，不默认开启测试并行。`spring-boot-starter-test` 仅在 `test` 范围生效，不把仅用于测试的框架带入应用 JAR。性能优化保留 20/100 项、16 层关联和跨租户影子 ID 的回归场景：H2 夹具使用标识查询索引，临时 JDBC 样例仅以 JDK 类路径编译，长文本脱敏在保留敏感内容过滤与截断标记的前提下避免反复扫描长标识。
 
 如果编译错误路径指向 `logs/code-integration/resolved/backend/src/main/java/`，并集中提示 `DslCompiler` 的 `manifest`、`mapping`、`nifi` 等同工程包不存在，应先纠正 Maven 入口：该目录是代码合并时保留的局部源码材料，仅有一个 Java 文件，并非完整后端工程。此类临时 POM 应改名为 `pom.xml.reference` 保留参考；IDE 中取消关联该临时工程，重新导入正式的 `data-elements-parent/pom.xml`，再执行 `mvn -f data-elements-parent/pom.xml clean install`。VS Code 的 `maven.excludedFolders` 和 `java.import.exclusions` 应排除 `logs/` 与 `.runtime/`，防止自动扫描把运行材料识别为独立工程。依赖于同工程源码的类无须另加 Maven 依赖。
 
@@ -268,9 +282,9 @@ VITE_APP_API_URL=http://localhost:8088
 
 ### 新建批处理任务的默认调度
 
-新建批处理来源（数据库、FTP/SFTP/FTPS、MinIO、Elasticsearch、API 拉取等）默认每天一次、自动错峰。Kafka 保留实时消费配置；已有任务和明确选择的自定义周期/Cron 不自动迁移。登记补齐、画布新增来源及后端模板使用同一 `BatchSchedulePolicy`，API 已明确配置的 Cron 保持不变。
+新建批处理来源（数据库、FTP/SFTP/FTPS、MinIO、Elasticsearch、API 拉取等）默认“每天一次（立即执行）”，保存 `batchSchedulePolicy=DAILY_IMMEDIATE`、`schedulingStrategy=TIMER_DRIVEN`、`schedulingPeriod=1 day`，启动后沿用 NiFi 原生立即执行、之后按一天间隔调度的语义，不绑定固定钟点；停止后再次启动仍沿用原生启动行为。Kafka 保留实时消费配置；已有任务和明确选择的自定义周期/Cron 不自动迁移。登记补齐、画布新增来源及后端模板使用同一 `BatchSchedulePolicy`，API 已明确配置的 Cron 保持不变。
 
-首次保存按可信租户 ID、流程 ID、来源节点 ID 的 SHA-256 分配一天内的固定秒位，写入现有 DSL 的 `batchSchedulePolicy=DAILY_STAGGERED`、`batchScheduleTime`、`batchScheduleZone=Asia/Shanghai`、`schedulingStrategy=CRON_DRIVEN` 和六段 `schedulingPeriod`。后续保存、重启和部署读取已存值；复制为新流程时使用新流程 ID 重新分配。分配是纯内存计算，20/100 个节点不增加逐项 SQL 或 HTTP 读取；沿用当前租户路由和保存权限，不使用请求体中的租户值。
+用户仍可选择“每天一次（自动错峰）”：首次保存按可信租户 ID、流程 ID、来源节点 ID 的 SHA-256 分配一天内的固定秒位，写入现有 DSL 的 `batchSchedulePolicy=DAILY_STAGGERED`、`batchScheduleTime`、`batchScheduleZone=Asia/Shanghai`、`schedulingStrategy=CRON_DRIVEN` 和六段 `schedulingPeriod`。后续保存、重启和部署读取已存值；复制为新流程时使用新流程 ID 重新分配。切换到立即执行会清除错峰时刻及其时区；已有错峰任务不会因默认值调整而自动切换。两种预设均为纯内存处理，20/100 个节点不增加逐项 SQL 或 HTTP 读取；沿用当前租户路由和保存权限，不使用请求体中的租户值。
 
 这属于均匀散列错峰，不能保证绝对无碰撞，也不表示已实现按任务时长或节点负载分配。此次不批量迁移历史任务、不增加全局并发限流或补跑机制。停止状态下错过当天时刻后，按 NiFi 原有 Cron 语义等待后续触发。
 
@@ -688,7 +702,7 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 
 ### 组件契约
 
-推送文件的通用传输能力由 `FileConsumptionCompiler` 编译为 NiFi 原生处理器：Magic 指定 `DELETE_AFTER_DATABASE_COMMIT` 后，`ListFTP/ListSFTP` 仅发现 `.json.done`，`FetchFTP/FetchSFTP` 下载时不删除，字段处理按整份输入失败，唯一 JDBC 目标的 `success` 才连接数据文件和完成标记的清理步骤。SFTP 使用 `DeleteSFTP`；当前 NiFi 没有 `DeleteFTP`，FTP 在写库成功后以 `FetchFTP` 的 `Delete File` 完成策略清理。读取和删除中的通信失败保留重试队列，来源不存在的异常保留待核查；不会把 JDBC 失败出口连接到清理步骤。该能力只负责协议图编译，不查询业务表、不决定登记归属或目标库。普通文件抽取仍保留源文件。
+推送文件的通用传输能力由 `FileConsumptionCompiler` 编译为 NiFi 原生处理器：Magic 指定 `DELETE_AFTER_DATABASE_COMMIT` 后，FTP/SFTP 使用 `ListFTP/ListSFTP → FetchFTP/FetchSFTP` 直接发现和读取正式数据文件，列表的 `File Filter Regex` 不设置，读取的 `Remote File` 统一为 `${path}/${filename}`，下载时不删除。画布内的“文件匹配”同步显示为空，历史推送节点打开配置后清除旧过滤值；普通文件抽取仍保留原来的自定义过滤能力。流程不再生成“文件消费标识”和“删除完成标记”两个辅助节点。字段处理按整份输入失败，唯一 JDBC 目标的 `success` 才连接数据文件清理步骤：FTP 使用 `FetchFTP` 的 `Delete File` 完成策略，路径同为 `${path}/${filename}`；SFTP 使用 `DeleteSFTP`，目录 `${path}`、文件名 `${filename}`。通信失败保留重试，来源不存在的异常保留待核查；JDBC 失败不进入清理步骤。结构化推送发送端默认不再生成 `.done`；独立海通兼容开关为 `relay.ftp.table-completion-marker-enabled`，共享平台 FJGHCC 投递兼容开关为 `data-push.ftp.table-completion-marker-enabled`，均默认 `false`，仅旧消费者需要时开启。`.done`、`.tmp` 等非业务后缀由后续文件类型分流排除，不会进入数据库；发送端必须先写临时文件、核验大小和 SHA-256，再重命名为正式文件。关闭标记后的成功结果为 `FILE_VERIFIED`，开启时仍为 `FILE_AND_MARKER_VERIFIED`。该能力只负责协议图编译，不查询业务表、不决定登记归属或目标库。普通文件抽取仍保留源文件。
 
 该策略要求单一文件来源、单 JDBC 目标且无分叉；多个落地库由 Magic 拆为接入链路，首库提交后成为后续链路的可靠来源。文件列表组件在集群主节点运行并保留状态，运行图迁移须保留来源组件 ID、文件/水位状态及队列。后续 JDBC 节点继承已登记的时间戳字段，不能将日期精度不足的审计列当作同日增量水位。业务主键及按主键写入负责异常重试幂等；该机制不将数据库事务和远端文件删除描述为同一原子事务。
 
@@ -929,7 +943,7 @@ SQL Server、GBase 8a、Vertica 提供统一分页预览执行器，查询字段
 
 FTPS 使用 TLS 控制及数据通道，支持21端口常见的显式 TLS和990端口常见的隐式 TLS，也可显式指定模式。后端及 NiFi 都验证证书链和主机名。画布连接测试与登记探查使用同一 TLS 工厂，在 TLS 协商成功之前不发送账号密码；认证后启用 `PBSZ 0`、`PROT P` 并核对远端目录。私有 CA 可分别配置探查端 `trustStorePath` 与接入节点 `nifiTrustStorePath`，不以关闭验证代替信任配置。NiFi 需安装 ExecuteGroovyScript 及 Commons Net 客户端，节点驱动映射可配置 `FTP=/实际路径/commons-net.jar`；目录配置按该受管文件名解析，版本须支持 Duration 超时接口。
 
-FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发现状态在 FlowFile 持久化提交后更新；状态竞争可能重放，但不得丢弃数据。普通抽取不删除来源。仅显式选择落库后删除策略时，经 JDBC 成功出口核对来源文件大小和修改时间，再确认删除数据及完成标记；失败保留队列和文件，不能在下载成功时提前删除。
+FTPS 密码保存在 NiFi 敏感动态属性中，脚本正文不含凭据。发现状态在 FlowFile 持久化提交后更新；状态竞争可能重放，但不得丢弃数据。普通抽取不删除来源。仅显式选择落库后删除策略时，经 JDBC 成功出口核对来源文件大小和修改时间，再确认删除数据文件；失败保留队列和文件，不能在下载成功时提前删除。
 
 登记页数据抽取方式的代码覆盖如下。表中的已有链路表示保留现有实现，不表示所有厂商版本已完成实库认证；接入节点驱动与后端探查驱动分别部署。
 

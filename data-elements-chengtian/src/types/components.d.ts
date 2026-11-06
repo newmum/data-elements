@@ -94,7 +94,6 @@ declare module 'vue' {
     MenuItem: typeof import('./../layouts/components/Menu/components/MenuItem.vue')['default']
     Menus: typeof import('./../layouts/components/Menu/components/Menus.vue')['default']
     MenuSearch: typeof import('./../components/base/menu-search.vue')['default']
-    MixTopMenu: typeof import('./../layouts/components/Menu/MixTopMenu.vue')['default']
     MultiImageUpload: typeof import('./../components/form/multi-image-upload.vue')['default']
     NavbarActions: typeof import('./../layouts/components/NavBar/components/NavbarActions.vue')['default']
     Notification: typeof import('./../components/base/notification.vue')['default']
@@ -114,6 +113,7 @@ declare module 'vue' {
     TagsView: typeof import('./../layouts/components/TagsView/index.vue')['default']
     TextScroll: typeof import('./../components/data/text-scroll.vue')['default']
     TimeLine: typeof import('./../components/data/time-line.vue')['default']
+    TopMenu: typeof import('./../layouts/components/Menu/TopMenu.vue')['default']
     UForm: typeof import('./../components/form/u-form.vue')['default']
     UModal: typeof import('./../components/base/u-modal.vue')['default']
     USearchForm: typeof import('./../components/form/u-search-form.vue')['default']
@@ -125,7 +125,6 @@ declare module 'vue' {
     UTreeNode: typeof import('./../components/data/u-tree-node.vue')['default']
     VTable: typeof import('./../components/data/v-table.vue')['default']
     WangEditor: typeof import('./../components/form/wang-editor.vue')['default']
-    WorkTopMenu: typeof import('./../layouts/components/Menu/WorkTopMenu.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

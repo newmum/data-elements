@@ -288,6 +288,7 @@ class DataAggTaskEnsureBatchMagicTest {
             assertInstanceOf(Map.class,f.run());reads.add(f.counter.queries);
             var config=cn.hutool.json.JSONUtil.parseObj(f.jdbc.queryForObject("select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'",String.class)).getJSONArray("nodes").getJSONObject(0).getJSONObject("config");
             assertEquals("DELETE_AFTER_DATABASE_COMMIT",config.getStr("fileConsumptionPolicy"));
+            assertEquals("",config.getStr("fileFilterRegex"));
             assertEquals("/incoming/source-db/person/",config.getStr("remotePath"));
             assertEquals("source-db",config.getStr("sourceDbId"));
             assertEquals("source-db",config.getStr("logicalSourceDatasourceId"));

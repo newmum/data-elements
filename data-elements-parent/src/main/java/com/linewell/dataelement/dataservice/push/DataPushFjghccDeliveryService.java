@@ -25,6 +25,7 @@ import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPSClient;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -42,11 +43,14 @@ public class DataPushFjghccDeliveryService {
     private final TenantDataSourceRegistry tenants;
     private final DataSourceConnectionPropertyResolver connections;
     private final ObjectMapper json;
+    private final boolean tableCompletionMarkerEnabled;
 
-    public DataPushFjghccDeliveryService(TenantDataSourceRegistry tenants, DataSourceConnectionPropertyResolver connections, ObjectMapper json) {
+    public DataPushFjghccDeliveryService(TenantDataSourceRegistry tenants, DataSourceConnectionPropertyResolver connections, ObjectMapper json,
+                                       @Value("${data-push.ftp.table-completion-marker-enabled:false}") boolean tableCompletionMarkerEnabled) {
         this.tenants = tenants;
         this.connections = connections;
         this.json = json;
+        this.tableCompletionMarkerEnabled = tableCompletionMarkerEnabled;
     }
 
     public void requireTarget(String tenantId) { target(tenantId); }
@@ -62,18 +66,20 @@ public class DataPushFjghccDeliveryService {
         manifest.put("deliveryId", deliveryId); manifest.put("fileName", fileName); manifest.put("format", "JSON");
         manifest.put("size", rows.length); manifest.put("sha256", hash); manifest.put("datasourceId", datasourceId);
         manifest.put("tableName", tableName); manifest.put("schemaVersion", schemaVersion); manifest.put("recordCount", records.size());
+        byte[] marker = tableCompletionMarkerEnabled ? bytes(manifest) : null;
         try {
             if ("sftp".equals(target.protocol())) {
-                deliverSftp(target, directory, fileName, rows, bytes(manifest), hash);
+                deliverSftp(target, directory, fileName, rows, marker, hash);
             } else {
-                deliverFtp(target, directory, fileName, rows, bytes(manifest), hash);
+                deliverFtp(target, directory, fileName, rows, marker, hash);
             }
         } catch (Exception exception) {
             throw new IllegalStateException("数据未能写入 ODS/FJGHCC 关联的文件存储，请检查该数据源连通性、目录权限和可用空间", exception);
         }
         Map<String, Object> answer = new LinkedHashMap<>();
-        answer.put("completion", "FILE_AND_MARKER_VERIFIED"); answer.put("fileName", fileName);
-        answer.put("completionMarker", fileName + ".done"); answer.put("bytes", rows.length); answer.put("sha256", hash);
+        answer.put("completion", tableCompletionMarkerEnabled ? "FILE_AND_MARKER_VERIFIED" : "FILE_VERIFIED"); answer.put("fileName", fileName);
+        if (tableCompletionMarkerEnabled) answer.put("completionMarker", fileName + ".done");
+        answer.put("bytes", rows.length); answer.put("sha256", hash);
         answer.put("targetDomainCode", "FJGHCC"); answer.put("targetDatasourceId", target.id()); answer.put("targetDatasourceName", target.name());
         return answer;
     }
@@ -117,7 +123,8 @@ public class DataPushFjghccDeliveryService {
             session = new JSch().getSession(target.username(), target.host(), target.port());
             session.setPassword(target.password()); session.setConfig("StrictHostKeyChecking", "no"); session.connect(TIMEOUT);
             sftp = (ChannelSftp) session.openChannel("sftp"); sftp.connect(TIMEOUT); ensureSftpDirectory(sftp, dir);
-            String path = join(dir, name); putSftp(sftp, path, rows, hash); putSftp(sftp, path + ".done", marker, sha256(marker));
+            String path = join(dir, name); putSftp(sftp, path, rows, hash);
+            if (marker != null) putSftp(sftp, path + ".done", marker, sha256(marker));
         } finally { if (sftp != null && sftp.isConnected()) sftp.disconnect(); if (session != null && session.isConnected()) session.disconnect(); }
     }
     private void putSftp(ChannelSftp sftp, String path, byte[] content, String hash) throws Exception {
@@ -147,7 +154,8 @@ public class DataPushFjghccDeliveryService {
             // ensureFtpDirectory leaves the session in dir.  This FTP server
             // rejects absolute multi-level path operands, so keep STOR/RNFR
             // relative to that working directory as well.
-            putFtp(ftp, name, rows, hash); putFtp(ftp, name + ".done", marker, sha256(marker));
+            putFtp(ftp, name, rows, hash);
+            if (marker != null) putFtp(ftp, name + ".done", marker, sha256(marker));
         } finally { if (ftp.isConnected()) { try { ftp.logout(); } finally { ftp.disconnect(); } } }
     }
     private void putFtp(FTPClient ftp, String path, byte[] content, String hash) throws Exception { if (ftpExists(ftp, path)) { verifyFtp(ftp, path, content.length, hash); return; }

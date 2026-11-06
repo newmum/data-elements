@@ -17,17 +17,17 @@ class BatchSchedulePolicyTest {
     @Test void assignmentIsDailyStableAndDistributedAcrossDayAndTenant() {
         var times=new HashSet<>(); var hours=new HashSet<>();
         for(int i=0;i<100;i++) {
-            var a=BatchSchedulePolicy.defaultConfig("tenant-a","pipeline-"+i,"source","source.mysql",Map.of());
-            assertThat(a).isEqualTo(BatchSchedulePolicy.defaultConfig("tenant-a","pipeline-"+i,"source","source.mysql",Map.of()));
+            var a=BatchSchedulePolicy.defaultConfig("tenant-a","pipeline-"+i,"source","source.mysql",BatchSchedulePolicy.markStaggered(Map.of()));
+            assertThat(a).isEqualTo(BatchSchedulePolicy.defaultConfig("tenant-a","pipeline-"+i,"source","source.mysql",BatchSchedulePolicy.markStaggered(Map.of())));
             var time=java.time.LocalTime.parse(a.get("batchScheduleTime").toString());
             assertThat(a.get("schedulingPeriod")).isEqualTo(time.getSecond()+" "+time.getMinute()+" "+time.getHour()+" * * ?");
             assertThat(a.get("schedulingStrategy")).isEqualTo("CRON_DRIVEN");
             times.add(time);hours.add(time.getHour());
         }
         assertThat(times.size()).isGreaterThan(95);assertThat(hours.size()).isGreaterThan(20);
-        assertThat(BatchSchedulePolicy.defaultConfig("tenant-a","p","s","source.ftp",Map.of()))
-            .isNotEqualTo(BatchSchedulePolicy.defaultConfig("tenant-b","p","s","source.ftp",Map.of()));
-        assertThatThrownBy(()->BatchSchedulePolicy.defaultConfig("","p","s","source.mysql",Map.of())).isInstanceOf(IllegalArgumentException.class);
+        assertThat(BatchSchedulePolicy.defaultConfig("tenant-a","p","s","source.ftp",BatchSchedulePolicy.markStaggered(Map.of())))
+            .isNotEqualTo(BatchSchedulePolicy.defaultConfig("tenant-b","p","s","source.ftp",BatchSchedulePolicy.markStaggered(Map.of())));
+        assertThatThrownBy(()->BatchSchedulePolicy.defaultConfig("","p","s","source.mysql",BatchSchedulePolicy.markStaggered(Map.of()))).isInstanceOf(IllegalArgumentException.class);
     }
     @Test void existingCustomAndKafkaAreNotMigratedAndCopiesReceiveOwnTime() {
         var legacy=dsl(node("old","source.mysql",Map.of("schedulingPeriod","60 sec")),node("kafka","source.kafka",Map.of("schedulingPeriod","0 sec")));
@@ -35,12 +35,25 @@ class BatchSchedulePolicyTest {
         assertThat(BatchSchedulePolicy.normalize(legacy,null,"tenant","p")).isSameAs(legacy);
         var custom=dsl(node("custom","source.api",Map.of("batchSchedulePolicy","CUSTOM","schedulingStrategy","CRON_DRIVEN","schedulingPeriod","0 0 3 * * ?")));
         assertThat(BatchSchedulePolicy.normalize(custom,null,"tenant","p")).isSameAs(custom);
-        var created=BatchSchedulePolicy.normalize(dsl(node("s","source.sftp",BatchSchedulePolicy.markDefault(Map.of()))),null,"tenant","p");
+        var created=BatchSchedulePolicy.normalize(dsl(node("s","source.sftp",BatchSchedulePolicy.markStaggered(Map.of()))),null,"tenant","p");
         assertThat(BatchSchedulePolicy.normalize(created,created,"tenant","p")).isSameAs(created);
         var copy=BatchSchedulePolicy.normalize(created,null,"tenant","copy");
         assertThat(copy.nodes().getFirst().config()).isNotEqualTo(created.nodes().getFirst().config());
         var pending=dsl(node("old","source.mysql",BatchSchedulePolicy.markDefault(Map.of())));
         assertThat(BatchSchedulePolicy.normalize(pending,legacy,"tenant","p").nodes().getFirst().config().get("schedulingPeriod")).isNotEqualTo("");
+    }
+    @Test void newDefaultsAndExplicitSwitchUseImmediateDailyAndClearTheOldClock() {
+        var oldClock=BatchSchedulePolicy.defaultConfig("tenant","p","s","source.sftp",BatchSchedulePolicy.markStaggered(Map.of()));
+        var selected=BatchSchedulePolicy.markDefault(oldClock);
+        assertThat(selected).containsEntry("batchSchedulePolicy",BatchSchedulePolicy.IMMEDIATE)
+            .containsEntry("schedulingStrategy","TIMER_DRIVEN").containsEntry("schedulingPeriod","1 day")
+            .doesNotContainKeys("batchScheduleTime","batchScheduleZone");
+        var saved=BatchSchedulePolicy.normalize(dsl(node("s","source.sftp",selected)),dsl(node("s","source.sftp",oldClock)),"tenant","p");
+        assertThat(BatchSchedulePolicy.normalize(saved,saved,"tenant","p")).isSameAs(saved);
+        assertThat(BatchSchedulePolicy.normalize(dsl(node("new","source.mysql",Map.of())),null,"tenant","new-flow")
+            .nodes().getFirst().config()).containsEntry("schedulingPeriod","1 day").containsEntry("batchSchedulePolicy",BatchSchedulePolicy.IMMEDIATE);
+        assertThat(BatchSchedulePolicy.defaultConfig("tenant","new-flow","s","source.sftp",Map.of("schedulingPeriod","60 sec")))
+            .containsEntry("schedulingPeriod","1 day").containsEntry("schedulingStrategy","TIMER_DRIVEN");
     }
     @Test void twentyAndHundredSourceGraphsUseSameConstantRepositoryReadsAndTrustedTenant() {
         for(int count:List.of(20,100)) {
@@ -49,7 +62,8 @@ class BatchSchedulePolicyTest {
             var input=new Pipeline("validation","validation",null,null,null,new Pipeline.Dsl(1,nodes,List.of()),null,null,null,null,null,null,null);
             try(var tenant=TenantContext.use("tenant-a")) {
                 var saved=repository.save(input);
-                assertThat(saved.dsl().nodes()).allSatisfy(n->assertThat(n.config().get("schedulingPeriod")).isNotEqualTo(""));
+                assertThat(saved.dsl().nodes()).allSatisfy(n->assertThat(n.config()).containsEntry("schedulingPeriod","1 day")
+                    .containsEntry("batchSchedulePolicy",BatchSchedulePolicy.IMMEDIATE));
                 verify(mapper,times(2)).selectById("validation");verify(mapper).insert(any(com.linewell.dataelement.feature.dataaccess.infrastructure.persistence.entity.NifiPipelineT.class));
                 verifyNoMoreInteractions(mapper);
             }

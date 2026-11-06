@@ -83,11 +83,12 @@ Windows 本地启动使用 `tools/start-local-backend.ps1`，默认读取仓库�
 
 ### Nacos 配置版本管理
 
-当前本机后端从 `192.168.175.86:8848` 的 `data-element` 命名空间、`DEFAULT_GROUP` 读取 `data-element.yml` 和 `data-element-dev.yml`。Git 中的同名文件分别位于根 `db/`，基础与开发覆盖分别维护，不把合并后的有效值冒充某一份在线原文件。其他环境按实际 Data ID、Group 和 Namespace 核对，不能因本机配置正确就宣称生产已更新。
+当前本机后端从 `192.168.175.86:8848` 的 `data-element` 命名空间、`DEFAULT_GROUP` 单独导入澄天金仓专用完整配置 `data-element_ct.yml`。原 `data-element.yml`、`data-element-dev.yml` 仍分别保留基础与开发覆盖，原内容未修改。三份在线 Data ID 分别导出到根 `db/` 同名文件。其他环境按实际 Data ID、Group 和 Namespace 核对，不能因本机配置正确就宣称生产已更新。
 
 ```powershell
 python tools/export-nacos-config.py --data-id data-element.yml --output db/data-element.yml
 python tools/export-nacos-config.py --data-id data-element-dev.yml --output db/data-element-dev.yml
+python tools/export-nacos-config.py --data-id data-element_ct.yml --output db/data-element_ct.yml
 python -m unittest discover -s tools/tests -p test_nacos_config_export.py
 ```
 
@@ -194,7 +195,7 @@ git diff -- db
 | --- | --- | --- | ---: |
 | 控制库 | `baseline` | MySQL | 55 |
 | 公安 | `baseline_ga` | MySQL | 161 |
-| 澄天 | `chengtian` | MySQL | 161 |
+| 澄天 | `baseline_ct`，schema `public` | 人大金仓 KingbaseES | 161 |
 | 海渔 | `baseline_sea_fishery` | MySQL | 162 |
 | 广电 | `baseline_beijing_gd`，运行配置绑定 `BASELINE_BEIJING_GD` | 达梦 | 161 |
 | 海通数据推送服务（独立工程） | `haitong` | MySQL | 15 |
@@ -204,6 +205,8 @@ git diff -- db
 原有达梦适配定义保存在 [haitong/compatibility/dameng.sql](../db/haitong/compatibility/dameng.sql)，明确标记为未连接实库核验的 9 表模板，缺少 MySQL 中的推送凭据和 Magic 资源表；不能作为当前 15 表结构、完整兼容承诺或已有库升级脚本。应用打包使用的 H2 本地初始化资源继续保留在应用 `src/main/resources/db/h2.sql`，不作为生产 MySQL 基线。
 
 上表为当前本机后端实际绑定数据库的完整读取结果。四行业统一基线移除外部应用目录同步专属表及4个同步字段、2个索引后为161张业务表，保留全部应用登记及关联。公安、澄天与广电的表、列、主键、索引及外键比较一致；海渔原本多出`nifi_task_status_t`，因此为162张，该现存差异待另行核对，不能标记四库完全一致。五库完整结构与独立海通结构已重新导出，见`db/schema-manifest.json`。登记第五步的接入申请三字段保留。历史演示环境仍单独维护在`environments/demo/`，其143张实际结构未自动升级。
+
+澄天原 MySQL `chengtian` 保留为切换前恢复来源，其旧完整定义仍在 `db/chengtian/init.sql`，不再代表当前运行绑定。金仓原生结构为 `db/baseline_ct/init.sql`；当前 Nacos 专用 Data ID 为 `data-element_ct.yml`，脱敏版本位于 `db/data-element_ct.yml`。控制库、共享 Magic/低代码及另外三个行业的数据库绑定均保持原位置。切换步骤与恢复边界见[澄天金仓部署](data-elements-chengtian.md#kingbase-runtime)。
 
 四个行业租户维护同一套业务表、列、主键、索引和约束，以实际已确认的公安租户库为统一结构权威，不能按旧库名选择发布目标。原共同结构包含公安原 139 张表和以下一张有现用功能依据的公共表；新增版本表在各方言定义中完整维护，新增空表不复制其他租户数据。
 
@@ -257,6 +260,16 @@ git diff -- db
 
 默认数值按数值语义比较，标识符按实际方言引用。上述表示不要求变更整库兼容模式。类型、生成列与修改限制可查阅 [达梦官方数据定义文档](https://eco.dameng.com/document/dm/zh-cn/pm/definition-statement.html)。
 
+### 人大金仓原生表示
+
+本机澄天使用 KingbaseES V008R006C008B0014 的 Oracle 兼容实例，独立数据库 `baseline_ct` 以 UTF8 创建，表统一放在 `public`，应用标识符统一为小写。数据库与 schema 分别承担租户物理边界和库内对象命名空间，不再额外创建与库同名的 schema。JDBC 使用 `com.kingbase8.Driver`，显式选择 `currentSchema=public`，每条应用连接设置 `ora_input_emptystr_isnull=off`，保留原业务空字符串与 NULL 的区别；不改变服务器全局兼容模式。
+
+原 MySQL JSON 使用金仓原生 JSON；无符号整数使用足够范围的原生整数/NUMERIC，并保留上下界 CHECK；生成列保留实际表达式；20 个自动更新时间规则以原生触发器表达。外键引用的既有唯一索引绑定为原生 UNIQUE 约束，保留原列序及更新/删除行为。原生导出包含 161 张表、575 个索引、2 个外键、20 个触发器和 49 个函数，不导出数据库扩展自身的对象。
+
+`KingbaseSqlFilter` 只装在金仓租户连接池，处理当前业务的反引号标识符、schema 元数据查询、SIGNED 转型、JSON_TABLE 和已审阅的原子 UPSERT；JSON_TABLE 改为原生 LATERAL 查询并保持绑定参数个数。JSON 辅助函数只存在 `baseline_ct.public`。未审阅 UPSERT 表拒绝执行，不能推测唯一键。控制库、MySQL 及达梦连接不安装该过滤器。共享 Magic/低代码源码保持同一份，不复制成金仓专用资源。
+
+金仓检查器按真实原生类型、默认值、生成列、主键/索引/外键及自动更新时间规则进行语义核对。数据库排序规则不会机械替换为 `ci_x_icu`：当前版本的不确定性排序规则不能执行 LIKE。后续新增自定义 SQL、JSON 路径或 UPSERT 必须在目标金仓版本上验证，不能以本次已验证接口推断任意 MySQL SQL 都可执行。
+
 ### 工具与私有连接配置
 
 从仓库根目录运行：
@@ -274,6 +287,8 @@ python tools/export-db.py --project haitong-data-pull
 独立工程清单条目带有 `project` 标识。只配置平台连接的其他开发环境导出五库时，会保留已有独立工程基线及其清单条目，不会误删；保留条目不表示本次已连接验证该工程库。
 
 工具使用 `pymysql`；达梦还使用 `jaydebeapi`、`JPype1` 和现有 JDBC 驱动。可用 `DATA_ELEMENTS_DM_JDBC_JAR` 指定驱动，或从当前用户 Maven 仓库发现。导出移除源账号 `DEFINER` 与随业务变化的表级自增计数，保留列自增属性；五库全部成功读取后才写本地文件。
+
+金仓通过相同的 `jaydebeapi`、`JPype1` 和现有 kingbase8 JDBC 驱动读取原生目录。`configure-resources.py --data-id data-element_ct.yml` 读取专用完整配置；不传 `--data-id` 时仍保留原基础配置加环境覆盖的工具默认行为。重新定位后须保留私有配置中的独立工程 `project_databases`。
 
 ### 登记接入申请字段
 
@@ -298,6 +313,7 @@ python tools/export-db.py --project haitong-data-pull
 | `package-haitong.py` | 核对已构建 JAR 的独立 Magic 资源和运行依赖，生成不含运行凭据或业务数据的 Linux / Windows 原生部署包 |
 | `export-db.py` | 只读导出平台五库及私有配置中独立工程库的完整结构；`--project haitong-data-pull` 只更新独立海通库及其清单条目，不执行数据库变更 |
 | `check-db.py` | 只读校验所有行业租户与 `baseline_ga` 的表集合、列、主键、索引和外键列；按达梦原生语义识别类型、生成列和自动更新时间，差异返回失败 |
+| `kingbase-db.py` | 澄天 MySQL 到 `baseline_ct.public` 的显式迁移：计划、创建空库、流式复制、原生结构完成、类型化内容摘要校验与停机后的目标暂存库增量收敛；恢复数据只保存到仓库外受限目录 |
 | `start-local-backend.ps1` | 从工程外受限配置启动已验证运行包；根目录 `start-data-elements.cmd` 默认也读取同一份 `local-runtime.private.json`，提供前台日志及登录接口就绪检查 |
 | `audit-api.py` | 只读整理 Magic HTTP 接口的静态、有限模板及内部依赖引用；可加入受限的当前编译代码、菜单、表单、服务绑定和运行 Java 上下文，报告只写根 `logs/`，不自动删除 |
 | `tests/test_resource_sync.py` | 检查资源身份、路径、并发修改、凭据脱敏和发布保护 |

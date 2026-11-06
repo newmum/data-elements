@@ -126,7 +126,8 @@ public class EsCommonService {
     /**
      * Resolves the physical tenant index for framework and Magic API callers.
      *
-     * <p>The default tenant intentionally keeps the historical index name so
+     * <p>The configured legacy tenant (or default tenant for older configurations)
+     * intentionally keeps the historical index name so
      * existing installations do not need a destructive reindex. Other tenants
      * receive independent indices and therefore cannot query each other's
      * documents even when a caller supplies an unrestricted DSL query.</p>
@@ -165,8 +166,12 @@ public class EsCommonService {
         if (tenantId == null || tenantId.isBlank()) {
             tenantId = tenantProperties.getDefaultTenantId();
         }
+        String legacyTenantId = tenant.getLegacyTenantId();
+        if (legacyTenantId == null || legacyTenantId.isBlank()) {
+            legacyTenantId = tenantProperties.getDefaultTenantId();
+        }
         if (tenant.isDefaultTenantUsesLegacyIndex()
-                && tenantProperties.getDefaultTenantId().equals(tenantId)) {
+                && legacyTenantId.trim().equals(tenantId)) {
             return baseName;
         }
         String separator = tenant.getSeparator();

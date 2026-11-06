@@ -24,6 +24,7 @@
 ================================
 
 import cn.hutool.json.JSONUtil
+import log
 // 接口：04.数据汇聚分页接口
 // 路由：POST /ods/dataAggPage
 // 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户内，数据源与数据表登记状态均大于 0；表清单默认按本表与已授权关联画布的最新修改时间倒序、表ID升序后服务端分页，空时间排末尾，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword、accessStatus（表视图：0待接入、1已接入、2待审批、3待启动）；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
@@ -372,12 +373,14 @@ if (viewLevel == 'table') {
     var pipelineTimeSql=''
     if(sortDatabaseProduct.contains('mysql') || sortDatabaseProduct.contains('mariadb') || sortDatabaseProduct=='h2') {
         pipelineTimeSql='TIMESTAMPADD(MICROSECOND,MOD(sortPipeline.updated_at,1000)*1000,TIMESTAMPADD(SECOND,FLOOR(sortPipeline.updated_at/1000),CAST(#{taskEpochBase} AS DATETIME(3))))'
+    } else if(sortDatabaseProduct.contains('kingbase')) {
+        pipelineTimeSql="(CAST(#{taskEpochBase} AS TIMESTAMP)+sortPipeline.updated_at*INTERVAL '1 millisecond')"
     } else if(sortDatabaseProduct.contains('dm') || sortDatabaseProduct.contains('oracle')) {
         pipelineTimeSql="(CAST(#{taskEpochBase} AS TIMESTAMP)+NUMTODSINTERVAL(sortPipeline.updated_at/1000.0,'SECOND'))"
     } else { exit 500, '当前业务库尚未适配任务修改时间排序' }
     // 有画布时不采用任务监控更新时间；旧任务才回退任务时间，避免监控刷新让列表反复置顶。
     // 数据库一次展开最多15跳授权祖先并聚合；先聚合再关联候选，避免逐候选重复追溯。
-    // MySQL/H2要求RECURSIVE关键字，达梦/Oracle使用递归WITH，不能直接复用同一前缀。
+    // MySQL、H2 和金仓使用 WITH RECURSIVE，达梦和 Oracle 使用递归 WITH。
     var recursivePrefix=sortDatabaseProduct.contains('dm') || sortDatabaseProduct.contains('oracle') ? 'WITH ' : 'WITH RECURSIVE '
     var taskSortCteSql=recursivePrefix+"""
         task_ancestry(task_id,root_table_id,parent_table_id,modified_time,hop_depth) AS (

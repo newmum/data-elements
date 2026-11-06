@@ -228,6 +228,8 @@ def native_generated_matches(table, column, wanted, found):
 
 
 def compare(source, target, tenant, source_tenant):
+    if target['dialect']=='kingbase':
+        return compare_kingbase(source,target['native'],tenant,source_tenant)
     differences=[]
     def issue(table, kind, column=None):
         differences.append({'table':table,'difference':kind, **({'column':column} if column else {})})
@@ -282,6 +284,96 @@ def compare(source, target, tenant, source_tenant):
             issue(table,'primary-key-columns')
     return differences
 
+def kingbase_module():
+    spec=importlib.util.spec_from_file_location('kingbase_db',Path(__file__).with_name('kingbase-db.py'))
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
+
+def kingbase_metadata(schema,options):
+    module=kingbase_module();cfg=module.normalized_options(options);connection=module.target_connect(cfg)
+    try:
+        meta=module.native_metadata(connection,cfg.get('schema','public'))
+        return {'dialect':'kingbase','native':meta,'tables':{r['table_name']:r['comment'] or '' for r in meta['tables']}}
+    finally:connection.close()
+
+def kingbase_expression(value):
+    value=(value or '').replace("\\'","'")
+    value=re.sub(r'_utf8mb4(?=\')','',value,flags=re.I)
+    value=re.sub(r'::(?:character varying|varchar|text|bpchar)(?:\([^)]*\))?','',value,flags=re.I)
+    value=re.sub(r'\bbtrim\((.*?),\s*true\)',r'trim(\1)',value,flags=re.I|re.S)
+    value=re.sub(r'\bpublic\.','',value,flags=re.I)
+    parts=re.split(r"('(?:''|[^'])*')",value)
+    return ''.join(part if index%2 else re.sub(r'[\s`"()]','',part).lower() for index,part in enumerate(parts))
+
+def kingbase_default(value):
+    if value is None:return None
+    value=re.sub(r'::(?:character varying|varchar|text|bpchar|integer|bigint|smallint|numeric|jsonb?)(?:\([^)]*\))?','',str(value),flags=re.I)
+    while value.startswith('(') and value.endswith(')'):value=value[1:-1].strip()
+    if re.fullmatch(r"CURRENT_TIMESTAMP\s+AT\s+TIME\s+ZONE\s+'UTC'",value,re.I):return 'UTC_TIMESTAMP'
+    if re.fullmatch(r"timezone\('UTC',\s*CURRENT_TIMESTAMP\)",value,re.I):return 'UTC_TIMESTAMP'
+    return default_value(value,True)
+
+def kingbase_index_part(value):
+    value=re.sub(r'::(?:text|varchar|character varying)(?:\([^)]*\))?','',str(value),flags=re.I).replace('"','')
+    direction='D' if re.search(r'\sDESC\b',value,re.I) else 'A'
+    value=re.sub(r'\s+(?:ASC|DESC)(?:\s+NULLS\s+(?:FIRST|LAST))?\s*$','',value,flags=re.I)
+    prefix=re.fullmatch(r'\s*left\(\(*\s*(\w+)\s*\)*,\s*(\d+)\)\s*',value,re.I)
+    if prefix:return prefix[1],int(prefix[2]),direction
+    if not re.fullmatch(r'\w+',value.strip()):raise ValueError('Unreviewed Kingbase index expression')
+    return value.strip(),None,direction
+
+def compare_kingbase(source,meta,tenant,source_tenant):
+    module=kingbase_module();differences=[]
+    def issue(table,kind,column=None):differences.append({'table':table,'difference':kind,**({'column':column} if column else {})})
+    tables={r['table_name']:r['comment'] or '' for r in meta['tables']};columns={}
+    for col in meta['columns']:columns.setdefault(col['table_name'],{})[col['column_name']]=col
+    indexes=collections.defaultdict(set);primary={};foreign=collections.defaultdict(set)
+    for index in meta['indexes']:
+        parts=tuple(kingbase_index_part(p) for p in json.loads(str(index['parts'])))
+        indexes[index['table_name']].add((not bool(index['unique_key']),parts))
+    for constraint in meta['constraints']:
+        names=tuple(json.loads(str(constraint['columns']))) if constraint['columns'] else ()
+        if constraint['kind']=='p':primary[constraint['table_name']]=names
+        if constraint['kind']=='f':
+            referenced=json.loads(str(constraint['referenced_columns']))
+            foreign[constraint['table_name']].add(tuple((name,constraint['referenced_table'],other) for name,other in zip(names,referenced)))
+    triggers={row['table_name']:row for row in meta['triggers'] if row['enabled']!='D'}
+    for table in sorted(set(source['tables'])-set(tables)):issue(table,'missing-table')
+    for table in sorted(set(tables)-set(source['tables'])):issue(table,'extra-table')
+    for table in sorted(set(source['tables'])&set(tables)):
+        if source['tables'][table]!=tables[table]:issue(table,'table-comment')
+        wanted=source['columns'][table];actual=columns[table]
+        for col in sorted(set(wanted)-set(actual)):issue(table,'missing-column',col)
+        for col in sorted(set(actual)-set(wanted)):issue(table,'extra-column',col)
+        for col in sorted(set(wanted)&set(actual)):
+            s,t=wanted[col],actual[col]
+            expected=module.column_type({**s,'DATA_TYPE':re.sub(r'\(.*','',s['COLUMN_TYPE']).replace(' unsigned',''),
+                'CHARACTER_MAXIMUM_LENGTH':int(re.search(r'\((\d+)\)',s['COLUMN_TYPE'])[1]) if s['COLUMN_TYPE'].startswith(('varchar','char')) else None,
+                'DATETIME_PRECISION':int(re.search(r'\((\d+)\)',s['COLUMN_TYPE'])[1]) if s['COLUMN_TYPE'].startswith(('datetime(','timestamp(')) else 0,
+                'NUMERIC_PRECISION':int(re.findall(r'\d+',s['COLUMN_TYPE'])[0]) if s['COLUMN_TYPE'].startswith('decimal') else None,
+                'NUMERIC_SCALE':int(re.findall(r'\d+',s['COLUMN_TYPE'])[1]) if s['COLUMN_TYPE'].startswith('decimal') else None})
+            def type_name(value):
+                value=str(value).lower().replace('character varying','varchar').replace('character(','char(').replace(' char)',')').replace('timestamp without time zone','timestamp(0) without time zone')
+                return re.sub(r'\s+','',value)
+            if type_name(expected)!=type_name(t['native_type']):issue(table,'column-type',col)
+            if (s['IS_NULLABLE']=='NO')!=bool(t['not_null']):issue(table,'column-nullability',col)
+            if s['COLUMN_COMMENT']!=(t['comment'] or ''):issue(table,'column-comment',col)
+            if s['GENERATION_EXPRESSION']:
+                if not t['generated'] or kingbase_expression(s['GENERATION_EXPRESSION'])!=kingbase_expression(t['expression']):issue(table,'generated-expression',col)
+            else:
+                wanted_default=default_value(s['COLUMN_DEFAULT']);found=kingbase_default(t['expression'])
+                if col=='tenant_id' and wanted_default==source_tenant:wanted_default=tenant
+                if s['COLUMN_TYPE'].startswith(('decimal','int','bigint','tinyint','smallint')) and wanted_default is not None and found is not None:
+                    try:wanted_default,found=Decimal(wanted_default),Decimal(found)
+                    except Exception:pass
+                if wanted_default!=found:
+                    if not (table=='nifi_node_t' and col=='insecure_tls' and str(wanted_default) in {'0','1'} and str(found) in {'0','1'}):issue(table,'column-default',col)
+            if 'on update' in s['EXTRA'].lower():
+                if table not in triggers or 'NEW.'+('"'+col+'"') not in str(triggers[table]['function_definition']):issue(table,'missing-native-update-trigger',col)
+        if source['indexes'][table]!=indexes[table]:issue(table,'index-semantics')
+        if source['primaryKeys'].get(table,())!=primary.get(table,()):issue(table,'primary-key-columns')
+        if source['foreignKeys'][table]!=foreign[table]:issue(table,'foreign-key-columns')
+    return differences
+
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -302,7 +394,8 @@ def main():
         return values[0]
     reports=[]
     for key,dialect,schema,options in sources:
-        target=source if schema==args.authority else (mysql_metadata if dialect=='mysql' else dameng_metadata)(schema,options)
+        reader={'mysql':mysql_metadata,'dameng':dameng_metadata,'kingbase':kingbase_metadata}[dialect]
+        target=source if schema==args.authority else reader(schema,options)
         differences=compare(source,target,tenant_id(key),tenant_id(source_cfg[0]))
         reports.append({'schema':schema,'dialect':dialect,'tables':len(target['tables']),'differences':differences})
     print(json.dumps({'authority':args.authority,'scope':'industry tables, columns, indexes and foreign-key columns','schemas':reports},ensure_ascii=False,indent=2))

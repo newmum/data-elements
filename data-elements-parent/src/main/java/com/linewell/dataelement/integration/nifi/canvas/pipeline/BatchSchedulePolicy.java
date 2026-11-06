@@ -12,6 +12,7 @@ import java.util.Map;
 
 /** New batch-source defaults, persisted in the existing DSL; no per-node database reads. */
 public final class BatchSchedulePolicy {
+    public static final String IMMEDIATE = "DAILY_IMMEDIATE";
     public static final String AUTOMATIC = "DAILY_STAGGERED";
     public static final String ZONE = "Asia/Shanghai";
     private BatchSchedulePolicy() {}
@@ -24,7 +25,21 @@ public final class BatchSchedulePolicy {
         return config != null && AUTOMATIC.equals(config.get("batchSchedulePolicy"));
     }
 
+    public static boolean immediate(Map<String, Object> config) {
+        return config != null && IMMEDIATE.equals(config.get("batchSchedulePolicy"));
+    }
+
     public static Map<String, Object> markDefault(Map<String, Object> config) {
+        Map<String, Object> copy = new LinkedHashMap<>(config == null ? Map.of() : config);
+        copy.put("batchSchedulePolicy", IMMEDIATE);
+        copy.put("schedulingStrategy", "TIMER_DRIVEN");
+        copy.put("schedulingPeriod", "1 day");
+        copy.remove("batchScheduleTime");
+        copy.remove("batchScheduleZone");
+        return copy;
+    }
+
+    public static Map<String, Object> markStaggered(Map<String, Object> config) {
         Map<String, Object> copy = new LinkedHashMap<>(config == null ? Map.of() : config);
         copy.put("batchSchedulePolicy", AUTOMATIC);
         copy.put("batchScheduleZone", ZONE);
@@ -38,7 +53,7 @@ public final class BatchSchedulePolicy {
     public static Map<String, Object> defaultConfig(String tenantId, String pipelineId, String nodeId,
                                                    String key, Map<String, Object> config) {
         if (!isBatchSource(key) || "CUSTOM".equals(text(config, "batchSchedulePolicy"))) return config;
-        return assign(tenantId, pipelineId, nodeId, config);
+        return automatic(config) ? assign(tenantId, pipelineId, nodeId, config) : markDefault(config);
     }
 
     private static Map<String, Object> assign(String tenantId, String pipelineId, String nodeId,
@@ -69,6 +84,12 @@ public final class BatchSchedulePolicy {
         List<Pipeline.Node> nodes = dsl.nodes().stream().map(node -> {
             if (!isBatchSource(node.manifestKey()) || !"source".equals(node.category())) return node;
             Map<String, Object> config = node.config() == null ? Map.of() : node.config();
+            if (immediate(config)) {
+                Map<String, Object> daily = markDefault(config);
+                if (daily.equals(config)) return node;
+                changed[0] = true;
+                return new Pipeline.Node(node.id(), node.manifestKey(), node.label(), node.category(), node.x(), node.y(), daily);
+            }
             boolean created = !old.containsKey(node.id());
             boolean pending = automatic(config) && text(config, "schedulingPeriod").isBlank();
             boolean newDefault = created && (automatic(config) || text(config, "schedulingPeriod").isBlank()
@@ -76,7 +97,7 @@ public final class BatchSchedulePolicy {
             if (!newDefault && !pending) return node;
             changed[0] = true;
             return new Pipeline.Node(node.id(), node.manifestKey(), node.label(), node.category(), node.x(), node.y(),
-                    assign(tenantId, pipelineId, node.id(), config));
+                    automatic(config) ? assign(tenantId, pipelineId, node.id(), config) : markDefault(config));
         }).toList();
         return changed[0] ? new Pipeline.Dsl(dsl.version(), nodes, dsl.edges()) : dsl;
     }

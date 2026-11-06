@@ -10,7 +10,7 @@
 
         <!-- 顶部菜单区域 -->
         <div class="layout__header-menu">
-          <WorkTopMenu />
+          <TopMenu />
         </div>
 
         <!-- 右侧操作区域 -->
@@ -76,6 +76,7 @@ import { useUserStore } from "@/store";
 import { useLayout } from "@/layouts/composables/useLayout";
 import { useLayoutMenu } from "@/layouts/composables/useLayoutMenu";
 import BaseLayout from "@/layouts/views/BaseLayout.vue";
+import TopMenu from "@/layouts/components/Menu/TopMenu.vue";
 import NavbarActions from "@/layouts/components/NavBar/components/NavbarActions.vue";
 import AppLogo from "@/layouts/components/AppLogo/index.vue";
 
@@ -173,7 +174,7 @@ onMounted(() => {
       flex-shrink: 0;
       align-items: center;
       height: 100%;
-      padding: 0 1px 0 24px;
+      padding: 0 1px 0 clamp(4px, 1.4vw, 24px);
     }
   }
 

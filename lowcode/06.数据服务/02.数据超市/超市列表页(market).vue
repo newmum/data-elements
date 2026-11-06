@@ -16,6 +16,7 @@
             placeholder="请输入数据目录关键词"
             size="large"
             clearable
+            @keyup.enter="handleAction('search')"
           ></el-input>
           <el-button type="primary" icon="search" @click="handleAction('search')">搜索</el-button>
         </div>
@@ -29,9 +30,21 @@
     </div>
 
     <div class="market__body">
-      <div class="market__sidebar">
+      <div class="market__sidebar" :class="{ 'is-open': categoriesOpen }">
+        <button
+          class="market__categories-toggle"
+          type="button"
+          :aria-expanded="categoriesOpen"
+          aria-controls="market-category-tabs market-category-tree"
+          @click="categoriesOpen = !categoriesOpen"
+        >
+          <Icon icon="el-icon-menu" size="16" />
+          分类筛选
+          <span v-if="state.valueSidebar" class="category-selected">已选分类</span>
+          <Icon :icon="categoriesOpen ? 'el-icon-ArrowUp' : 'el-icon-ArrowDown'" size="14" />
+        </button>
         <!--    侧边页签    -->
-        <div class="sidebar-header">
+        <div id="market-category-tabs" class="sidebar-header">
           <template v-if="sidebarItems.length === 2">
             <div
               class="two-nav"
@@ -60,7 +73,7 @@
         </div>
 
         <!--    侧边树    -->
-        <div class="sidebar-card__list">
+        <div id="market-category-tree" class="sidebar-card__list">
           <template v-for="(tree, ind) in sidebarItems" :key="state.activeTop + tree.title">
             <u-tree
               v-show="state.activeSidebar === tree.title"
@@ -111,8 +124,10 @@
             </div>
             <div class="sort-options">
               <template v-for="item in sorts" :key="item.title">
-                <div
+                <button
                   class="sort-item"
+                  type="button"
+                  :aria-pressed="state.sortField === item.field"
                   :class="{ active: state.sortField === item.field }"
                   @click="handleAction('change-sort', item)"
                 >
@@ -131,7 +146,7 @@
                       active: state.sortField === item.field && state.sortOrder === 'desc',
                     }"
                   />
-                </div>
+                </button>
               </template>
             </div>
           </div>
@@ -178,6 +193,7 @@ import dayjs from "dayjs";
 const { open } = useRegisterModal();
 const router = useRouter();
 const treeRef = ref();
+const categoriesOpen = ref(false);
 const dictDict = useDictStore();
 const state = reactive({
   // 顶部
@@ -1026,22 +1042,25 @@ const config = {
 
 <style scoped lang="scss">
 .market {
+  --market-gutter: clamp(12px, 2vw, 32px);
+
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 100%;
   min-height: 100%;
-  padding-bottom: 16px;
-  padding-top: 88px;
+  padding: calc(var(--navbar-height, 56px) + clamp(20px, 2.5vw, 32px)) var(--market-gutter) 16px;
   background-color: var(--el-bg-color-page);
-  background-size: 100% auto;
+  background-size: max(100%, 1000px) auto;
 }
 
 .market__top {
   display: flex;
   gap: 16px;
-  align-items: flex-end;
-  margin-bottom: 46px;
+  align-items: center;
+  width: min(100%, 900px);
+  margin-bottom: clamp(20px, 3.6vw, 46px);
 
   .market__title {
     margin: 0;
@@ -1049,12 +1068,15 @@ const config = {
       Source Han Sans CN,
       sans-serif !important;
     font-weight: 600;
-    font-size: 32px;
-    height: 46px;
-    letter-spacing: 4px;
+    flex: none;
+    font-size: clamp(24px, 2.5vw, 32px);
+    line-height: 1.3;
+    letter-spacing: 0.12em;
   }
 
   .market__search {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -1064,8 +1086,8 @@ const config = {
       align-items: center;
 
       .market__search-input {
-        flex: 0 0 613px;
-        width: 613px;
+        flex: 1;
+        min-width: 0;
         height: 48px;
 
         :deep(.el-input__wrapper) {
@@ -1077,7 +1099,7 @@ const config = {
       }
 
       :deep(.el-button) {
-        width: 120px;
+        flex: 0 0 clamp(76px, 10vw, 120px);
         height: 48px;
         font-size: 16px;
         border-radius: 0 8px 8px 0;
@@ -1133,16 +1155,26 @@ const config = {
 
 .market__body {
   display: grid;
-  grid-template-columns: 320px 1022px;
-  gap: 24px;
+  grid-template-columns: clamp(210px, 23vw, 320px) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(12px, 1.8vw, 24px);
+  width: min(100%, 1366px);
+}
+
+.market__categories-toggle {
+  display: none;
 }
 
 .market__sidebar {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 1px 4px #00000014;
 
   .sidebar-header {
+    flex-shrink: 0;
     color: #1b1e26;
     margin-bottom: 10px;
 
@@ -1176,6 +1208,7 @@ const config = {
         height: 100%;
         content: "";
         background-image: var(--images-market-tab);
+        background-size: 100% 100%;
         transition: all 0.2s;
       }
     }
@@ -1186,6 +1219,7 @@ const config = {
       z-index: 1;
       justify-content: center;
       width: 50%;
+      margin-left: 0;
       height: 100%;
       cursor: pointer;
       color: #454750;
@@ -1206,8 +1240,12 @@ const config = {
     padding: 0 16px 16px;
   }
   .sidebar-card__list {
-    min-height: 444px;
+    flex: 1;
+    min-height: 0;
     padding: 0 16px;
+    overflow-y: auto;
+    // 由右侧内容决定网格行高，树在剩余空间内滚动。
+    contain: size;
 
     :deep(.el-tree) {
       --el-tree-node-content-height: 100%;
@@ -1251,16 +1289,17 @@ const config = {
 }
 
 .result-card {
-  padding: 16px 24px 24px 24px;
-  margin-top: 24px;
+  padding: 16px clamp(12px, 1.8vw, 24px) 24px;
+  margin-top: clamp(12px, 1.8vw, 24px);
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 1px 4px #00000014;
 
   .result-card__header {
     padding-bottom: 16px;
-    padding-left: 7px;
     display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #edf0f4;
@@ -1282,14 +1321,18 @@ const config = {
 
     .sort-options {
       display: flex;
-      gap: 16px;
+      flex-wrap: wrap;
+      gap: 6px 12px;
 
       .sort-item {
         cursor: pointer;
         display: flex;
         align-items: center;
         position: relative;
-        margin-right: 15px;
+        padding: 4px 18px 4px 0;
+        white-space: nowrap;
+        background: none;
+        border: 0;
         font-size: 14px;
         font-weight: 400;
         color: #686c80;
@@ -1300,7 +1343,7 @@ const config = {
 
         .sort-icon {
           position: absolute;
-          right: -18px;
+          right: 0;
           cursor: pointer;
           color: #c1c5d0;
           &.active {
@@ -1308,10 +1351,10 @@ const config = {
           }
         }
         .icon-top {
-          top: -2px;
+          top: 2px;
         }
         .icon-bottom {
-          top: 5px;
+          top: 9px;
         }
       }
     }
@@ -1331,6 +1374,11 @@ const config = {
       border-radius: 8px;
       display: flex;
       justify-content: center;
+      :deep(.el-pagination) {
+        flex-wrap: wrap;
+        justify-content: center;
+        row-gap: 8px;
+      }
       :deep(.el-pagination).is-background {
         .el-pager li.is-active {
           background-color: transparent;
@@ -1349,6 +1397,59 @@ const config = {
         }
       }
     }
+  }
+}
+
+@media (max-width: 760px) {
+  .market__top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .market__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .market__categories-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 14px;
+    color: var(--el-text-color-primary);
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-radius: inherit;
+    cursor: pointer;
+
+    > :last-child {
+      margin-left: auto;
+    }
+
+    .category-selected {
+      font-size: 12px;
+      color: var(--el-color-primary);
+    }
+  }
+
+  .market__sidebar:not(.is-open) {
+    .sidebar-header,
+    .sidebar-card__list {
+      display: none;
+    }
+  }
+
+  .market__sidebar .sidebar-card__list {
+    flex: none;
+    max-height: clamp(180px, calc(100dvh - 255px), 560px);
+    contain: none;
+  }
+
+  .result-card__body .pagination {
+    padding: 8px 0;
   }
 }
 </style>

@@ -48,6 +48,7 @@ public final class JdbcValueNormalizer {
                 finally { array.free(); }
             }
             String vendorClass=value.getClass().getName();
+            if (vendorClass.equals("com.kingbase8.util.KBobject")) return value.toString();
             if (vendorClass.endsWith(".PGobject") && (vendorClass.startsWith("org.postgresql.")
                     || vendorClass.startsWith("org.opengauss.") || vendorClass.startsWith("com.huawei.opengauss.")))
                 return value.toString();

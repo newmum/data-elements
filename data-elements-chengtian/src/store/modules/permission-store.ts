@@ -35,7 +35,7 @@ export const usePermissionStore = defineStore("permission", () => {
       const dynamicRoutes = parseDynamicRoutes([
         {
           ...rootRoute,
-          children: [...data, ...errorRoutes] as any,
+          children: [...moveLogMenuToSettings(data), ...errorRoutes] as any,
         },
       ]);
 
@@ -88,6 +88,47 @@ export const usePermissionStore = defineStore("permission", () => {
     resetRouter,
   };
 });
+
+// 只移动后端已授权的日志菜单，保留原组件、路由名称和旧链接。
+function moveLogMenuToSettings(routes: RouteVO[]): RouteVO[] {
+  const admin = routes.find((item) => item.path === "/log-admin");
+  const log = admin?.children?.find(
+    (item) => item.path === "/logs" && item.componentName === "log-management"
+  );
+  if (!admin || !log) return routes;
+
+  const settings = routes.find((item) => item.path === "/setting");
+  if (settings?.children?.some((item) => item.path === "/logs")) return routes;
+
+  const settingsMenu: RouteVO = {
+    ...(settings ?? {
+      path: "/setting",
+      component: "Layout",
+      meta: { title: "系统管理", hidden: true },
+    }),
+    children: [...(settings?.children ?? []), log],
+  };
+  const otherAdminPages = admin.children.filter((item) => item !== log);
+  const legacyMenu: RouteVO = {
+    ...admin,
+    meta: {
+      ...admin.meta,
+      hidden:
+        admin.meta?.hidden ||
+        otherAdminPages.every((item) => item.meta?.hidden || item.meta?.type === "group"),
+    },
+    children: [
+      ...otherAdminPages,
+      { path: "/logs", redirect: "/setting/logs", meta: { hidden: true }, children: [] },
+    ],
+  };
+  const result = routes.map((item) => {
+    if (item === admin) return legacyMenu;
+    if (item === settings) return settingsMenu;
+    return item;
+  });
+  return settings ? result : [...result, settingsMenu];
+}
 
 /**
  * 解析后端返回的路由数据并转换为 Vue Router 兼容的路由配置

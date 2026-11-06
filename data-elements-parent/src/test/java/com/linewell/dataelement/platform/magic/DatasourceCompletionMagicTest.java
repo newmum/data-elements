@@ -68,6 +68,9 @@ class DatasourceCompletionMagicTest {
             jdbc=new JdbcTemplate(source);
             jdbc.execute("create table db_datasource_t(tid varchar(64),tenant_id varchar(32),asset_status int,flow_status int,updated_time timestamp,is_del int)");
             jdbc.execute("create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),asset_status int,is_del int)");
+            // Match production identity lookups without forbidding deliberate cross-tenant shadow IDs.
+            jdbc.execute("create index idx_test_source_identity on db_datasource_t(tid,tenant_id,is_del)");
+            jdbc.execute("create index idx_test_table_identity on db_table_t(tid,tenant_id,is_del)");
             jdbc.update("insert into db_datasource_t(tid,tenant_id,asset_status,is_del) values('db','ga',0,0)");
             for(int i=0;i<count;i++) jdbc.update("insert into db_table_t values(?,'ga','db',?,0)","table-"+i,i==0?0:2);
             var dynamic=new MagicDynamicDataSource();dynamic.setDefault(source);

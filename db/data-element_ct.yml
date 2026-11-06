@@ -1,0 +1,320 @@
+# Nacos 配置版本源（脱敏）；不要直接发布占位符覆盖运行密钥。
+# Data ID: data-element_ct.yml; Group: DEFAULT_GROUP; Namespace: data-element
+# 部署时由受限环境提供 ${...} 变量；修改后核对运行配置的覆盖项。
+server:
+  port: 8088
+  compression:
+    enabled: true
+    min-response-size: 128
+spring:
+  main:
+    allow-circular-references: true
+  profiles:
+    include: dev
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://192.168.175.86:3306/baseline?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${NACOS_SPRING_DATASOURCE_USERNAME}
+    password: ${NACOS_SPRING_DATASOURCE_PASSWORD}
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 1000
+      max-wait: 60000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      pool-prepared-statements: true
+      max-pool-prepared-statement-per-connection-size: 20
+      filters: stat,wall
+      use-global-data-source-stat: true
+      stat-view-servlet:
+        enabled: true
+        login-username: ${NACOS_SPRING_DATASOURCE_DRUID_STAT_VIEW_SERVLET_LOGIN_USERNAME}
+        login-password: ${NACOS_SPRING_DATASOURCE_DRUID_STAT_VIEW_SERVLET_LOGIN_PASSWORD}
+        reset-enable: false
+        url-pattern: /druid/*
+        allow: ''
+      web-stat-filter:
+        url-pattern: /*
+        exclusions: '*.js,*.gif,*.jpg,*.png,*.css,*.ico,/druid/*'
+  redis:
+    host: 192.168.175.86
+    port: 6379
+    database: 13
+    timeout: 2000ms
+    password: ${NACOS_SPRING_REDIS_PASSWORD}
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+  elasticsearch:
+    rest:
+      uris: http://192.168.175.86:19200
+      username: ${NACOS_SPRING_ELASTICSEARCH_REST_USERNAME}
+      password: ${NACOS_SPRING_ELASTICSEARCH_REST_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:10.231.176.57:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+      properties:
+        delivery.timeout.ms: 120000
+        request.timeout.ms: 30000
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:data-element-group}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: latest
+      enable-auto-commit: false
+      properties:
+        max.poll.records: 500
+    listener:
+      ack-mode: manual_immediate
+      missing-topics-fatal: false
+management:
+  endpoint:
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: refresh,health,info
+upload:
+  dir: /upload/magic-api/mb/
+magic-api:
+  web: /api/web
+  show-sql: true
+  sql-column-case: camel
+  auto-import-module: db,IdGenerator,jsons,httpx,kafka,flowEs,flowRedis,flowDataSource,flowRuntime,dataScope
+  compile-cache-size: 1000
+  db-sync:
+    enabled: true
+    table-name: api_file_t
+  resource:
+    location: ../magic-api
+    type: database
+    tableName: api_file_t
+  backup:
+    enable: true
+    max-history: 30
+    table-name: api_backup_t
+  page:
+    page: current
+    size: size
+    default-page: 1
+    default-size: 10
+  cache:
+    enable: false
+    ttl: 3600000
+  response-code:
+    success: 200
+    invalid: 400
+    exception: 500
+  crud:
+    logic-delete-column: is_del
+    logic-delete-value: 1
+  editor-config: classpath:./editor.js
+  response: "{\n  code: code,\n  message: message,\n  data\n}"
+sa-token:
+  token-name: token
+  timeout: 86400
+  active-timeout: -1
+  is-concurrent: true
+  is-share: false
+  token-style: uuid
+  is-log: false
+  is-read-cookie: true
+  is-write-cookie: true
+  is-read-header: true
+oss:
+  enable: false
+  endpoint: ''
+  accessKeyId: ''
+  accessKeySecret: ''
+  roleArn: ''
+  roleSessionName: ''
+  bucket: ''
+  bucketDomain: ''
+data-trading-parent:
+  config:
+    checkToken: ${NACOS_DATA_TRADING_PARENT_CONFIG_CHECKTOKEN}
+  whiteList:
+  - /api/v1/runtime/**
+  - /v1/portal/*
+  - /portal/**
+  - /sym/sso/*
+  - /flow/**
+  - /warm-flow-ui/**
+  - /warm-flow/**
+  - /dataassets/workshop/repository/**
+  - /openapi/**
+  - /data/file
+  - /dataassets/scence/**
+  - /gis/**
+elasticsearch:
+  host: 192.168.175.86:19200
+  auth: true
+  max_connect_total: 100
+  max_connect_per_route: 100
+  connect_timeout_millis: 1000
+  socket_timeout_millis: 30000
+  connection_request_timeout_millis: 3000
+es:
+  prefix: elements_
+  tenant:
+    legacy-tenant-id: '2084109831682699264'
+  init:
+    enabled: true
+    indices:
+    - dataassets_apply_form
+id:
+  generator:
+    key-prefix: id:generator
+    default-biz-type: default
+    output-prefix: order_
+    output-length: 18
+metadata:
+  explorer:
+    default-sample-size: 100
+    max-sample-size: 10000
+    connection-timeout: 30
+    query-timeout: 60
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+logging:
+  level:
+    root: info
+    org.mybatis: warn
+    com.baomidou: warn
+    com.linewell.dataelement.integrated.base: error
+warm-flow:
+  ui: true
+  data-source-type: mysql
+  logic_delete: false
+nifi:
+  monitor-enabled: ${NIFI_MONITOR_ENABLED:true}
+  monitor-fixed-delay-ms: ${NIFI_MONITOR_FIXED_DELAY_MS:30000}
+  monitor-batch-size: ${NIFI_MONITOR_BATCH_SIZE:500}
+  monitor-initial-delay-ms: ${NIFI_MONITOR_INITIAL_DELAY_MS:10000}
+  monitor-retention-days: ${NIFI_MONITOR_RETENTION_DAYS:3}
+  monitor-cleanup-cron: ${NIFI_MONITOR_CLEANUP_CRON:0 0 3 * * ?}
+  pipeline-migration:
+    enabled: ${NIFI_PIPELINE_MIGRATION_ENABLED:false}
+storage:
+  root-dir: ./data
+app:
+  kafka:
+    enabled: ${APP_KAFKA_ENABLED:false}
+    topic: ${APP_KAFKA_TOPIC:data-element-topic}
+  magic-compat-prefix: /v1
+flowserve:
+  crypto:
+    secret: ${FLOWSERVE_CRYPTO_SECRET}
+  runtime:
+    public-base-url: ${FLOWSERVE_PUBLIC_BASE_URL:http://127.0.0.1:8088}
+    public-prefix: /dws/flowserve/published
+    deploy-token: ${FLOWSERVE_DEPLOY_TOKEN}
+gateway:
+  openapi:
+    appkey: ${NACOS_GATEWAY_OPENAPI_APPKEY}
+    secretkey: ${NACOS_GATEWAY_OPENAPI_SECRETKEY}
+    url: http://10.231.176.42:9980/api-gateway/openapi/api
+    groupid: 9c94757bb72c4133aacee4226ef28fb4
+  buildapi:
+    url: http://10.231.176.42:9980/service-building/portal/api
+data-element:
+  push-registry:
+    relay-base-url: http://127.0.0.1:18083
+    shared-key: ${NACOS_DATA_ELEMENT_PUSH_REGISTRY_SHARED_KEY}
+    relay-timeout-seconds: 8
+    standalone-sync-key: ${NACOS_DATA_ELEMENT_PUSH_REGISTRY_STANDALONE_SYNC_KEY}
+  tenant:
+    enabled: ${TENANT_ENABLED:true}
+    default-tenant-id: '2084109831682699267'
+    compatibility-auto-bind: ${TENANT_COMPATIBILITY_AUTO_BIND:true}
+    bootstrap-platform-admin-login-ids: ${TENANT_BOOTSTRAP_PLATFORM_ADMIN_IDS:}
+    database:
+      enabled: ${TENANT_DATABASE_ROUTING_ENABLED:true}
+      default-data-source-key: chengtian
+      tenant-bindings:
+        '2084109831682699264': public-security
+        '2084109831682699265': broadcasting
+        '2084109831682699266': sea-fishery
+        '2084109831682699267': chengtian
+      data-sources:
+        public-security:
+          driver-class-name: ${TENANT_PUBLIC_SECURITY_DB_DRIVER:com.mysql.cj.jdbc.Driver}
+          url: ${TENANT_PUBLIC_SECURITY_DB_URL:jdbc:mysql://192.168.175.86:3306/baseline_ga?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+          username: ${TENANT_PUBLIC_SECURITY_DB_USER}
+          password: ${TENANT_PUBLIC_SECURITY_DB_PASSWORD}
+        broadcasting:
+          driver-class-name: ${TENANT_BROADCASTING_DB_DRIVER:dm.jdbc.driver.DmDriver}
+          url: ${TENANT_BROADCASTING_DB_URL:jdbc:dm://10.231.176.52:5236/baseline}
+          username: ${TENANT_BROADCASTING_DB_USER}
+          password: ${TENANT_BROADCASTING_DB_PASSWORD}
+          schema: ${TENANT_BROADCASTING_DB_SCHEMA:BASELINE_BEIJING_GD}
+        sea-fishery:
+          driver-class-name: ${TENANT_SEA_FISHERY_DB_DRIVER:com.mysql.cj.jdbc.Driver}
+          url: ${TENANT_SEA_FISHERY_DB_URL:jdbc:mysql://192.168.175.86:3306/baseline_sea_fishery?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+          username: ${TENANT_SEA_FISHERY_DB_USER}
+          password: ${TENANT_SEA_FISHERY_DB_PASSWORD}
+        chengtian:
+          driver-class-name: com.kingbase8.Driver
+          url: jdbc:kingbase8://192.168.175.32:54321/baseline_ct?currentSchema=public&stringtype=unspecified&options=-c%20ora_input_emptystr_isnull%3Doff
+          username: ${TENANT_CHENGTIAN_DB_USER}
+          password: ${TENANT_CHENGTIAN_DB_PASSWORD}
+          schema: public
+  reconciliation:
+    enabled: ${RECONCILIATION_ENABLED:true}
+    role: ${RECONCILIATION_ROLE:ALL}
+    worker-concurrency: ${RECONCILIATION_WORKER_CONCURRENCY:2}
+    default-fetch-size: ${RECONCILIATION_FETCH_SIZE:2000}
+    max-fetch-size: ${RECONCILIATION_MAX_FETCH_SIZE:10000}
+    max-bucket-count: ${RECONCILIATION_MAX_BUCKETS:256}
+    max-attempts: ${RECONCILIATION_MAX_ATTEMPTS:3}
+    diff-write-batch-size: ${RECONCILIATION_DIFF_BATCH_SIZE:500}
+    connection-timeout: ${RECONCILIATION_CONNECTION_TIMEOUT:20s}
+    worker-poll-interval: ${RECONCILIATION_WORKER_POLL_INTERVAL:2s}
+    schedule-poll-interval: ${RECONCILIATION_SCHEDULE_POLL_INTERVAL:30s}
+  data-quality:
+    enabled: ${DATA_QUALITY_ENABLED:true}
+    role: ${DATA_QUALITY_ROLE:ALL}
+    worker-concurrency: ${DATA_QUALITY_WORKER_CONCURRENCY:2}
+    max-shard-count: ${DATA_QUALITY_MAX_SHARDS:128}
+    max-attempts: ${DATA_QUALITY_MAX_ATTEMPTS:3}
+    max-sample-limit: ${DATA_QUALITY_MAX_SAMPLE_LIMIT:2000}
+    connection-timeout-seconds: ${DATA_QUALITY_CONNECTION_TIMEOUT_SECONDS:20}
+    worker-poll-interval: ${DATA_QUALITY_WORKER_POLL_INTERVAL:3s}
+    schedule-poll-interval: ${DATA_QUALITY_SCHEDULE_POLL_INTERVAL:30s}
+    stale-lease: ${DATA_QUALITY_STALE_LEASE:15m}
+  system-config:
+    cache-enabled: ${SYSTEM_CONFIG_CACHE_ENABLED:true}
+    cache-ttl: ${SYSTEM_CONFIG_CACHE_TTL:30m}
+    redis-key-prefix: ${SYSTEM_CONFIG_REDIS_KEY_PREFIX:data-elements:system-config:v1}
+    global-tenant-id: ${SYSTEM_CONFIG_GLOBAL_TENANT_ID:2084109831678504960}
+    ui-component-cache-enabled: ${UI_COMPONENT_CACHE_ENABLED:true}
+    ui-component-cache-ttl: ${UI_COMPONENT_CACHE_TTL:15m}
+    ui-component-redis-key: ${UI_COMPONENT_REDIS_KEY:data-elements:ui-components:v1:active}
+  legacy-integration:
+    sso-client-secret: ${NACOS_DATA_ELEMENT_LEGACY_INTEGRATION_SSO_CLIENT_SECRET}
+    minio-password: ${NACOS_DATA_ELEMENT_LEGACY_INTEGRATION_MINIO_PASSWORD}
+example:
+  property: 111211
+  number: 666

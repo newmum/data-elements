@@ -1,6 +1,8 @@
 package com.linewell.dataelement.shared.error;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class ErrorDetailSanitizerTest {
@@ -18,6 +20,20 @@ class ErrorDetailSanitizerTest {
                 .doesNotContain("private-person", "private-value", "where x=10").contains("SQLException", "原文已移除");
     }
     @Test void hugeInputHasExplicitTruncationMarker() {
-        assertThat(ErrorDetailSanitizer.text("a".repeat(100000))).hasSizeLessThan(33000).contains("证据不完整");
+        assertTimeout(Duration.ofSeconds(3), () ->
+                assertThat(ErrorDetailSanitizer.text("a".repeat(100000))).hasSizeLessThan(33000).contains("证据不完整"));
+    }
+    @Test void longTokensWithUrlAndEmailDelimitersStayBoundedAndRedacted() {
+        assertTimeout(Duration.ofSeconds(3), () -> {
+            String prefix = "a".repeat(30000);
+            assertThat(ErrorDetailSanitizer.text(prefix + "@example.invalid"))
+                    .isEqualTo("[邮箱已脱敏]");
+            assertThat(ErrorDetailSanitizer.text(prefix + " http://user:secret:with:colons@host/db"))
+                    .doesNotContain("user:secret", "with:colons").contains("http://[已脱敏]@host/db");
+            assertThat(ErrorDetailSanitizer.text(prefix + "://host/path invalid@host"))
+                    .endsWith("://host/path invalid@host");
+            assertThat(ErrorDetailSanitizer.text("jdbc:mysql://user:secret@host/db"))
+                    .isEqualTo("jdbc:mysql://[已脱敏]@host/db");
+        });
     }
 }

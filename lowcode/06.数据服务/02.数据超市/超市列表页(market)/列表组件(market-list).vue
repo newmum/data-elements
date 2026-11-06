@@ -212,12 +212,16 @@ const getApplyTagConfig = (item: any) => {
 
   .asset-header {
     display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 16px;
 
     .header-left {
       display: flex;
+      flex-wrap: wrap;
+      min-width: 0;
       align-items: center;
       gap: 8px;
 
@@ -237,6 +241,7 @@ const getApplyTagConfig = (item: any) => {
         margin-right: 8px;
         cursor: pointer;
         line-height: 20px;
+        overflow-wrap: anywhere;
         font-weight: 600;
         color: #1b1e26;
         &:hover {
@@ -262,14 +267,15 @@ const getApplyTagConfig = (item: any) => {
     color: #686c80;
     .info-row {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       gap: 6px;
       margin-bottom: 6px;
 
       .info-item {
-        flex: 1;
+        flex: 1 1 180px;
         display: flex;
-        width: 33%;
+        min-width: 0;
 
         .field-label {
           min-width: 70px;
@@ -277,6 +283,7 @@ const getApplyTagConfig = (item: any) => {
         }
 
         .field-value {
+          min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -288,13 +295,16 @@ const getApplyTagConfig = (item: any) => {
 
   .asset-actions {
     display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
     justify-content: space-between;
     padding-top: 10px;
     padding-left: 25px;
 
     .action-left {
       display: flex;
-      gap: 16px;
+      flex-wrap: wrap;
+      gap: 8px;
 
       .asset-type {
         background-color: #f9f9fc;
@@ -320,8 +330,14 @@ const getApplyTagConfig = (item: any) => {
 
     .action-right {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       align-items: center;
+      margin-left: auto;
+
+      :deep(.el-button + .el-button) {
+        margin-left: 0;
+      }
 
       button {
         min-width: 100px;
@@ -337,6 +353,17 @@ const getApplyTagConfig = (item: any) => {
         cursor: default;
         border-radius: 4px;
       }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .asset-item {
+    padding-inline: 0;
+
+    .asset-info,
+    .asset-actions {
+      padding-left: 0;
     }
   }
 }

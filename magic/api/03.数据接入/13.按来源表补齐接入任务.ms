@@ -1514,11 +1514,11 @@ if (pushFileSource != null) {
         registeredDatasourceId: pushFileSource.datasourceId,
         logicalSourceDatasourceId: sourceDbId, pushStorageDomain: 'fjghcc'
     }
-    // Push batches are complete only after their sidecar is published; consume them after JDBC commit.
+    // Published data files are listed directly and removed only after JDBC commit.
     if (accessMode != 'upload') {
         sourceNodeConfig.fileConsumptionPolicy = 'DELETE_AFTER_DATABASE_COMMIT'
         sourceNodeConfig.fileFormat = 'json'
-        sourceNodeConfig.fileFilterRegex = '(?i).*\\.json$'
+        sourceNodeConfig.fileFilterRegex = ''
     }
 }
 // API 拉取的请求、分页、增量与调度来自第一步的同一条 API 定义。这里仅在

@@ -41,7 +41,8 @@ def redact_configuration(config):
         if isinstance(value, list):
             return [redact(item, path + (str(index),)) for index, item in enumerate(value)]
         if value is not None and value != "" and path and sensitive_key(path[-1]):
-            if len(str(value)) >= 4:
+            reference = re.fullmatch(r"\$\{[A-Za-z_][A-Za-z0-9_]*(?::.*)?\}", str(value), re.DOTALL)
+            if not reference and len(str(value)) >= 4:
                 secrets.add(str(value))
             default = re.fullmatch(r"\$\{[A-Za-z_][A-Za-z0-9_]*:(.*)\}", str(value), re.DOTALL)
             if default and len(default.group(1)) >= 4:
@@ -61,6 +62,8 @@ def redact_configuration(config):
         if isinstance(value, list):
             return [scrub(item) for item in value]
         if isinstance(value, str):
+            if re.fullmatch(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}", value):
+                return value
             for secret in sorted(secrets, key=len, reverse=True):
                 value = value.replace(secret, "<REDACTED>")
         return value

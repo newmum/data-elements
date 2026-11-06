@@ -1,5 +1,5 @@
 <template>
-  <div class="flex-center ml-24px mr-24px">
+  <div class="app-logo flex-center">
     <div class="logo" :class="[theme === 'dark' ? 'logo-light-text' : 'logo-dark-text']">
       <transition enter-active-class="animate__animated animate__fadeInLeft">
         <span :key="+collapse" class="wh-full flex-center" to="/">
@@ -36,6 +36,10 @@ const settingsStore = useSettingStore();
 </script>
 
 <style lang="scss" scoped>
+.app-logo {
+  margin-inline: clamp(10px, 1.65vw, 24px);
+}
+
 .logo {
   width: 100%;
   height: $navbar-height;
@@ -53,5 +57,15 @@ const settingsStore = useSettingStore();
 }
 .logo-light-text .title {
   color: #fff;
+}
+
+@media (max-width: 540px) {
+  .logo .title {
+    display: none;
+  }
+
+  .logo img {
+    margin-right: 0;
+  }
 }
 </style>

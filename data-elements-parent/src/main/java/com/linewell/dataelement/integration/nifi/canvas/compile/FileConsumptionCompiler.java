@@ -41,21 +41,18 @@ final class FileConsumptionCompiler {
         var listing = new LinkedHashMap<>(connection);
         listing.put("Remote Path",remotePath);
         listing.put("Listing Strategy","timestamps");
-        listing.put("File Filter Regex","(?i).*\\.json\\.done$");
+        // Clear the optional filter instead of matching sidecar marker files.
+        listing.put("File Filter Regex",null);
         listing.put("Search Recursively","false");
-        var list=nifi.createProcessor(pgId,STANDARD+(sftp?"ListSFTP":"ListFTP"),source.label()+"/已完成文件清单",x,y-400,listing,period,
+        var list=nifi.createProcessor(pgId,STANDARD+(sftp?"ListSFTP":"ListFTP"),source.label()+"/文件清单",x,y-200,listing,period,
                 Objects.toString(source.config().get("schedulingStrategy"), "TIMER_DRIVEN"));
         nifi.executeOnPrimaryNode(list.id());
         compiled.processorIds.put("list-completed",list.id());
-        var attributes=nifi.createProcessor(pgId,"org.apache.nifi.processors.attributes.UpdateAttribute",source.label()+"/文件消费标识",x,y-200,
-                Map.of("ingestion.file.name","${filename:substringBeforeLast('.done')}",
-                        "ingestion.file.path",remotePath,"filename","${filename:substringBeforeLast('.done')}"),"0 sec","TIMER_DRIVEN");
-        compiled.processorIds.put("file-consumption-attributes",attributes.id());
         var properties=new LinkedHashMap<>(connection);
-        properties.put("Remote File",remotePath+"/${ingestion.file.name}");
+        properties.put("Remote File","${path}/${filename}");
         properties.put("Completion Strategy","None");
         var fetch=nifi.createProcessor(pgId,STANDARD+(sftp?"FetchSFTP":"FetchFTP"),source.label()+"/fetch",x,y,properties,"0 sec","TIMER_DRIVEN");
-        connect(pgId,list.id(),attributes.id(),"success");connect(pgId,attributes.id(),fetch.id(),"success");
+        connect(pgId,list.id(),fetch.id(),"success");
         nifi.createConnection(pgId,fetch.id(),"PROCESSOR",fetch.id(),"PROCESSOR",List.of("comms.failure","permission.denied"));
         var retained=nifi.createRetentionFunnel(pgId,x+350,y);
         nifi.createConnection(pgId,fetch.id(),"PROCESSOR",retained.id(),"FUNNEL",List.of("not.found"));
@@ -75,7 +72,6 @@ final class FileConsumptionCompiler {
         var connection=new LinkedHashMap<String,String>();
         for(String key:List.of("hostname","port","username","password"))
             connection.put(Map.of("hostname","Hostname","port","Port","username","Username","password","Password").get(key),text(config,key));
-        String root=text(config,"remotePath");while(root.endsWith("/"))root=root.substring(0,root.length()-1);
         var owner=compiled.get(sink.id());String writer=owner.processorIds.get("put");
         if(writer==null)throw new IllegalArgumentException("JDBC 写入节点缺少提交成功出口，无法确认来源文件删除");
         if (FtpsSourceCompiler.enabled(config)) {
@@ -86,20 +82,17 @@ final class FileConsumptionCompiler {
             connect(pgId,writer,acknowledgement.id(),"success");
             return;
         }
-        var data=delete(pgId,source,connection,root,sftp,false,sink.x()+400,sink.y());
-        var marker=delete(pgId,source,connection,root,sftp,true,sink.x()+800,sink.y());
-        owner.processorIds.put("ack-delete-data",data.id());owner.processorIds.put("ack-delete-marker",marker.id());
+        var data=delete(pgId,source,connection,sftp,sink.x()+400,sink.y());
+        owner.processorIds.put("ack-delete-data",data.id());
         connect(pgId,writer,data.id(),"success");
-        nifi.createConnection(pgId,data.id(),"PROCESSOR",marker.id(),"PROCESSOR",List.of("success",sftp?"not found":"not.found"));
     }
 
-    private NifiEntity delete(String pgId,Pipeline.Node source,Map<String,String> connection,String root,
-                              boolean sftp,boolean marker,double x,double y) {
+    private NifiEntity delete(String pgId,Pipeline.Node source,Map<String,String> connection,
+                              boolean sftp,double x,double y) {
         var props=new LinkedHashMap<>(connection);
-        String name=marker?"${ingestion.file.name:append('.done')}":"${ingestion.file.name}";
-        if(sftp){props.put("Removal Strategy","FILE");props.put("Directory Path",root);props.put("Filename",name);}
-        else{props.put("Remote File",root+"/"+name);props.put("Completion Strategy","Delete File");}
-        var processor=nifi.createProcessor(pgId,STANDARD+(sftp?"DeleteSFTP":"FetchFTP"),source.label()+(marker?"/删除完成标记":"/落库成功后删除数据文件"),x,y,props,"0 sec","TIMER_DRIVEN");
+        if(sftp){props.put("Removal Strategy","FILE");props.put("Directory Path","${path}");props.put("Filename","${filename}");}
+        else{props.put("Remote File","${path}/${filename}");props.put("Completion Strategy","Delete File");}
+        var processor=nifi.createProcessor(pgId,STANDARD+(sftp?"DeleteSFTP":"FetchFTP"),source.label()+"/落库成功后删除数据文件",x,y,props,"0 sec","TIMER_DRIVEN");
         if(!sftp)nifi.createConnection(pgId,processor.id(),"PROCESSOR",processor.id(),"PROCESSOR",List.of("comms.failure","permission.denied"));
         // Native SFTP failure is retained/retried by finalizeGeneratedProcessGroup.
         return processor;

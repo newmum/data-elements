@@ -232,7 +232,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "02.数据盘点/02.登记流程组件/登记组件(register-modal)/1. 登记系统(register-app).vue",
-      "baseSha256": "3715aa1928b9a62bc6045e0b3e26e9c75c5dbc333d5dd648db56e0b77465e270"
+      "baseSha256": "671e87150af6ce3cd2e770f8f31f14badc3fbcbdb64ad8898b3ca42612996835"
     },
     {
       "id": "2004521750421377024",
@@ -1112,7 +1112,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "06.数据服务/02.数据超市/超市列表页(market).vue",
-      "baseSha256": "6fd3db0038480503cb9b017378506c4f5c350fc0fe39ea1d597d1c42823e014d"
+      "baseSha256": "97bc36dbfeed1f990a107d73aefa6883bdb2e53710ac8e747934e35ca3ec0217"
     },
     {
       "id": "2015737672091897856",
@@ -1122,7 +1122,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "06.数据服务/02.数据超市/超市列表页(market)/列表组件(market-list).vue",
-      "baseSha256": "ebcb596b7134300ab8324122a77b48d2f36e1fc7739190de28f32f5a24e998da"
+      "baseSha256": "b0d0ad477014617ac98bf61c2a3b45e8c1b48229c4bc7b66743de8db3b90a3a5"
     },
     {
       "id": "2015737443246477312",
@@ -1132,7 +1132,7 @@
       "type": "1",
       "sortOrder": 3,
       "path": "06.数据服务/02.数据超市/超市标签筛选(check-card).vue",
-      "baseSha256": "93546263da0e770da15cc3d9af44529db9880c862b72be11f01f26075b9a53c0"
+      "baseSha256": "2dc8b97ec19717a49645622d137665bcbf54c9617ab362216ac61593168bbaa7"
     },
     {
       "id": "2015737553770582016",
@@ -1142,7 +1142,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "06.数据服务/02.数据超市/超市标签筛选(check-card)/标签筛选组件(check-tags).vue",
-      "baseSha256": "67ebe6337737655ba74b7af7d86efa697a2e62162cfb6ad69c8ec471c9b0ce77"
+      "baseSha256": "9d668f13577b050e9022089af48e15c97085b04471964d78b50aa3cbd580cfe9"
     },
     {
       "id": "2018627213819711488",

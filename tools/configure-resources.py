@@ -62,6 +62,7 @@ def main():
     parser.add_argument('--namespace', default=os.environ.get('NACOS_NAMESPACE', 'data-element'))
     parser.add_argument('--profile', default=os.environ.get('DATA_ELEMENT_PROFILE', 'dev'))
     parser.add_argument('--api-url', default='http://localhost:8088')
+    parser.add_argument('--data-id', action='append', help='Explicit complete Nacos YAML Data ID; repeat for ordered overlays')
     parser.add_argument('--output', type=Path,
                         default=Path.home() / '.codex/private/data-elements/resources.local.json')
     args = parser.parse_args()
@@ -75,7 +76,9 @@ def main():
         {'username': username, 'password': password}).encode('utf-8'))
     token = json.load(urllib.request.urlopen(request, timeout=15))['accessToken']
     config = {}
-    for data_id in ['data-element.yml', 'data-element-' + args.profile + '.yml']:
+    for data_id in (args.data_id or ['data-element.yml', 'data-element-' + args.profile + '.yml']):
+        if not re.fullmatch(r'[A-Za-z0-9_.-]+\.ya?ml', data_id):
+            raise ConfigurationError('Data ID must be a YAML filename')
         query = urllib.parse.urlencode({'dataId': data_id, 'group': 'DEFAULT_GROUP',
                                         'tenant': args.namespace, 'accessToken': token})
         content = urllib.request.urlopen(base + '/v1/cs/configs?' + query, timeout=15).read().decode('utf-8')
@@ -91,8 +94,12 @@ def main():
                     'password': resolve(datasource['password']), 'charset': 'utf8mb4'},
         'nacos_tenant_database': config['data-element']['tenant']['database'],
         'runtime': {'baseUrl': api_url},
-        'origin': {'nacosUrl': base, 'namespace': args.namespace, 'profile': args.profile},
+        'origin': {'nacosUrl': base, 'namespace': args.namespace, 'profile': args.profile,
+                   'dataIds': args.data_id or ['data-element.yml','data-element-'+args.profile+'.yml']},
     }
+    if output.exists():
+        previous=json.loads(output.read_text(encoding='utf-8-sig'))
+        if 'project_databases' in previous:private['project_databases']=previous['project_databases']
     output.parent.mkdir(parents=True, exist_ok=True)
     private_output(output, repo)
     # Temporary files inherit owner-only mode on POSIX; replace avoids following a leaf symlink.

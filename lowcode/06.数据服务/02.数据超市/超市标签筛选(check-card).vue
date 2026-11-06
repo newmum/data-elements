@@ -11,7 +11,7 @@
             disable-transitions
             @close="clearTag(String(key), el)"
           >
-            <span class="tag-label">{{ el.label }}</span>
+            <span class="tag-label" :title="el.label">{{ el.label }}</span>
           </el-tag>
         </template>
       </div>
@@ -113,7 +113,7 @@ defineExpose({ clearTagAll });
 
 <style scoped lang="scss">
 .check-card {
-  padding: 11px 24px;
+  padding: 11px clamp(12px, 1.8vw, 24px);
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -123,10 +123,6 @@ defineExpose({ clearTagAll });
   line-height: 40px;
 
   .filter-row {
-    display: grid;
-    grid-template-columns: minmax(85px, auto) 1fr auto;
-    gap: 0;
-    align-items: center;
     margin-bottom: 2px;
   }
   .filter-title {
@@ -139,8 +135,8 @@ defineExpose({ clearTagAll });
 
 .checked-tags {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 16px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px 12px;
   align-items: center;
   padding-bottom: 12px;
   margin-bottom: 12px;
@@ -158,6 +154,7 @@ defineExpose({ clearTagAll });
     gap: 8px;
 
     :deep(.el-tag) {
+      max-width: 100%;
       height: 30px;
       padding: 4px 10px;
       font-size: 14px;
@@ -165,6 +162,14 @@ defineExpose({ clearTagAll });
       background-color: rgba(240, 245, 255, 1);
       border: none;
       border-radius: 8px;
+    }
+    :deep(.el-tag__content) {
+      min-width: 0;
+    }
+    .tag-label {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     :deep(.el-tag .el-tag__close) {
       margin-left: 6px;
@@ -176,6 +181,17 @@ defineExpose({ clearTagAll });
   }
   :deep(.el-button .el-icon) {
     margin-right: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .checked-tags {
+    grid-template-columns: minmax(0, 1fr) auto;
+
+    .tag-list {
+      grid-row: 2;
+      grid-column: 1 / -1;
+    }
   }
 }
 

@@ -1,6 +1,7 @@
 package com.linewell.dataelement.elasticsearch;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -22,6 +23,7 @@ import org.springframework.data.elasticsearch.core.IndexOperations;
 import org.springframework.data.elasticsearch.core.document.Document;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import com.linewell.dataelement.platform.tenant.config.TenantProperties;
 
 class EsCommonServiceTest {
 
@@ -91,6 +93,45 @@ class EsCommonServiceTest {
 
         verify(indexOperations, times(1)).exists();
         verify(indexOperations, times(1)).create();
+    }
+
+    @Test
+    void changingDefaultTenantDoesNotTransferHistoricalIndexOwnership() {
+        EsProperties properties = new EsProperties();
+        properties.setPrefix("elements_");
+        properties.getTenant().setLegacyTenantId("2084109831682699264");
+        service = new EsCommonService(operations, properties);
+        TenantProperties tenants = new TenantProperties();
+        tenants.setDefaultTenantId("2084109831682699267");
+        service.setTenantProperties(tenants);
+
+        // With no context the new default still resolves to its own index.
+        assertEquals("elements_dataassets__tenant_2084109831682699267",
+                service.resolveTenantIndexName("dataassets"));
+        try (TenantContext.Scope ignored = TenantContext.use("2084109831682699264")) {
+            assertEquals("elements_dataassets", service.resolveTenantIndexName("dataassets"));
+        }
+        try (TenantContext.Scope ignored = TenantContext.use("2084109831682699267")) {
+            assertEquals("elements_dataassets__tenant_2084109831682699267",
+                    service.resolveTenantIndexName("dataassets"));
+        }
+        try (TenantContext.Scope ignored = TenantContext.use("another-tenant")) {
+            assertEquals("elements_dataassets__tenant_another-tenant",
+                    service.resolveTenantIndexName("dataassets"));
+        }
+    }
+
+    @Test
+    void explicitLegacyOwnerStillHonorsDisabledLegacyMode() {
+        EsProperties properties = new EsProperties();
+        properties.setPrefix("elements_");
+        properties.getTenant().setLegacyTenantId("2084109831682699264");
+        properties.getTenant().setDefaultTenantUsesLegacyIndex(false);
+        service = new EsCommonService(operations, properties);
+        try (TenantContext.Scope ignored = TenantContext.use("2084109831682699264")) {
+            assertEquals("elements_dataassets__tenant_2084109831682699264",
+                    service.resolveTenantIndexName("dataassets"));
+        }
     }
 
     @Test

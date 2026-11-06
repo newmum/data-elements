@@ -50,24 +50,24 @@
     },
     {
       "dataSourceKey": "chengtian",
-      "schema": "chengtian",
-      "dialect": "mysql",
-      "file": "chengtian/init.sql",
+      "schema": "baseline_ct",
+      "dialect": "kingbase",
+      "file": "baseline_ct/init.sql",
       "objects": {
         "tables": 161,
         "views": 0,
         "indexes": 575,
         "foreignKeys": 2,
-        "triggers": 0,
+        "triggers": 20,
+        "functions": 49,
         "procedures": 0,
-        "functions": 0,
         "events": 0
       },
-      "sha256": "9a4e987b5c6e1bbca445bb0946062f3b90e33add024d0ac36d49fb15d79bdb59",
+      "sha256": "901962d2719dbd03c8e49a141121b5b99187d419e921e37ac8a19232ffd1b011",
       "exportNotes": {
-        "definitions": "SHOW CREATE",
-        "routineDefiners": "omitted",
-        "autoIncrementCounters": "omitted"
+        "definitions": "Kingbase native catalogs and pg_get_*def",
+        "sqlSchema": "public",
+        "database": "baseline_ct"
       }
     },
     {

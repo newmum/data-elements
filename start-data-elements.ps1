@@ -14,6 +14,10 @@ param(
     # Empty means use the selected Nacos configuration, not a second broker default.
     [string]$KafkaBootstrapServers = "",
     [string]$NacosConfigImports = "",
+    # Default local starts reuse the reviewed private runtime, including the
+    # dedicated CT Nacos import and its environment. Explicit build/profile
+    # arguments continue to use the configurable launcher below.
+    [string]$RuntimeConfigPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/local-runtime.private.json'),
     # The platform address reachable from the NiFi execution network.  API
     # registrations may legitimately use localhost during local testing, but
     # that loopback points at the NiFi node when it executes InvokeHTTP.
@@ -25,6 +29,29 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+$privateRuntimeArguments = @('Restart','NoLiveLog','StartupTimeoutSeconds','RuntimeConfigPath')
+$usesPrivateRuntime = (Test-Path -LiteralPath $RuntimeConfigPath -PathType Leaf) -and
+    @($PSBoundParameters.Keys | Where-Object { $_ -notin $privateRuntimeArguments }).Count -eq 0
+if ($usesPrivateRuntime) {
+    $runtimeResult = & (Join-Path $PSScriptRoot 'tools/start-local-backend.ps1') -ConfigPath $RuntimeConfigPath -Restart:$Restart |
+        ConvertFrom-Json
+    Write-Host "[start-data-elements] Starting reviewed private runtime on port $($runtimeResult.port)."
+    $runtimeDeadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
+    $runtimeReady = $false
+    while ((Get-Date) -lt $runtimeDeadline -and (Get-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue)) {
+        try {
+            $readyResponse = Invoke-RestMethod -Uri "http://localhost:$($runtimeResult.port)/sym/tenant/login-options" -TimeoutSec 3
+            if ($readyResponse.code -eq 0) { $runtimeReady = $true; break }
+        } catch { }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $runtimeReady) { throw 'Private runtime did not become ready; inspect logs/backend/local-runtime' }
+    Write-Host '[start-data-elements] Tenant login routes ready. Runtime logs: logs/backend/local-runtime/stdout.log'
+    if ($NoLiveLog) { Wait-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue }
+    else { Get-Content -LiteralPath (Join-Path $PSScriptRoot 'logs/backend/local-runtime/stdout.log') -Tail 30 -Wait }
+    return
+}
 
 # The local development environment is defined by the control-environment
 # Nacos profile. Set these values explicitly so stale process or user-level

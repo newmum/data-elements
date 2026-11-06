@@ -57,7 +57,7 @@ def deployment_config() -> dict:
                     'port': 21, 'username': 'REPLACE_WITH_FTP_USER',
                     'password': 'env:HAITONG_FTP_PASSWORD', 'passive': True,
                     'implicit-tls': False, 'encoding': 'UTF-8', 'timeout-seconds': 30,
-                    'output-dir': '/haitong-push', 'scan': {'enabled': False}},
+                    'output-dir': '/haitong-push', 'table-completion-marker-enabled': False, 'scan': {'enabled': False}},
             'kafka': {'enabled': False, 'consumer': {'enabled': False}},
             'targets': {'ftp': {'type': 'FTP'}, 'kafka': {'type': 'KAFKA'}},
             'routes': {
@@ -156,7 +156,8 @@ Magic API 编辑器：http://服务器IP:18083/api/web/index.html。
 四、链路与升级
 推送目的地来自本包自己的 YAML。结构化表批次写到 FTP：
   <output-dir>/<datasourceId>/<tableName>/<messageId>.json
-  <output-dir>/<datasourceId>/<tableName>/<messageId>.json.done
+默认不生成 .done；先临时上传并核验，再重命名为正式 JSON。旧消费流程依赖标记时，
+设置 relay.ftp.table-completion-marker-enabled=true；文件集合推送仍保留业务清单。
 需要后续接入汇聚库/原始库时，元数据平台 ODS 非结构化数据应配置为同一个 FTP。
 升级前停止旧实例，保留并备份已有 config/ 和 data/，替换 JAR 与所需脚本后再启动。
 已有库中的 Magic 资源启动时不会被 JAR 覆盖，本次升级必须同步更新表契约函数。

@@ -3,7 +3,7 @@ import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl, connectionProduct
 import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip } from 'antd';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import { incrementalFieldVisible } from '../utils/incrementalFields';
-import { DAILY_STAGGERED, automaticSchedule, dailyScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule';
+import { DAILY_IMMEDIATE, DAILY_STAGGERED, automaticSchedule, dailyScheduleDefaults, staggeredScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule';
 import { governanceNodeLabel } from '../utils/fieldGovernancePresentation';
 import {
   DatabaseOutlined,
@@ -657,7 +657,7 @@ export default function ConfigDrawer() {
     const fields = (manifest?.fields ?? []).flatMap(expandIncrementalField);
     if (manifest?.category === 'source' && isBatchSource(manifest.key) && fields.some(f => f.key === 'schedulingPeriod')) {
       fields.unshift({ key: 'batchSchedulePolicy', label: '执行方式', type: 'select', group: 'schedule',
-        options: [{ label: '每天一次（自动错峰）', value: DAILY_STAGGERED }, { label: '自定义调度', value: 'CUSTOM' }] });
+        options: [{ label: '每天一次（立即执行）', value: DAILY_IMMEDIATE }, { label: '每天一次（自动错峰）', value: DAILY_STAGGERED }, { label: '自定义调度', value: 'CUSTOM' }] });
     }
     if (manifest?.category !== 'source' || !manifest.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch') || p.type.endsWith('.GenerateDateTableFetch'))) return fields;
     return [
@@ -672,12 +672,16 @@ export default function ConfigDrawer() {
   useEffect(() => {
     if (!node || !open || enhancedFields.length === 0) return;
     const patch: Record<string, unknown> = {};
+    if (['source.ftp', 'source.sftp'].includes(node.manifestKey)
+      && node.config.fileConsumptionPolicy === 'DELETE_AFTER_DATABASE_COMMIT'
+      && node.config.fileFilterRegex !== '') patch.fileFilterRegex = '';
     if (node.category === 'source' && enhancedFields.some(field => field.key === 'syncMode') && !node.config.syncMode) {
       patch.syncMode = syncSettings(node.config).syncMode;
     }
     enhancedFields.forEach((field) => {
       if (!scheduleFieldVisible(field.key, node.config)) return;
-      if (field.default === undefined || node.config[field.key] !== undefined) return;
+      if (field.default === undefined || node.config[field.key] !== undefined
+        || field.key === 'fileFilterRegex' && patch.fileFilterRegex === '') return;
       // schedulingPeriod 在 Timer/Cron 下共用同一 config key，展开成两个字段。
       // 仅对当前可见的那个套用默认值，避免 Cron 的默认把 Timer 的「一天」覆盖掉。
       const isSchedulePeriod = field.key === 'schedulingPeriod' && field.group === 'schedule';
@@ -958,7 +962,8 @@ export default function ConfigDrawer() {
     if (isFtpSource) {
       basePatch.hostname = host;
       basePatch.remotePath = item.ftpPath || '/';
-      basePatch.fileFilterRegex = item.ftpFilePattern || '.*';
+      basePatch.fileFilterRegex = node.config.fileConsumptionPolicy === 'DELETE_AFTER_DATABASE_COMMIT'
+        ? '' : item.ftpFilePattern || '.*';
       basePatch.passiveMode = item.ftpPassiveMode ?? true;
         basePatch.protocol = item.ftpProtocol || item.protocol || (sourceManifestKey === 'source.sftp' ? 'sftp' : 'ftp');
       delete basePatch.database;
@@ -1203,6 +1208,11 @@ export default function ConfigDrawer() {
 
   const renderSmartField = (field: FieldSchema) => {
     if (!node || !manifest) return null;
+    if (['source.ftp', 'source.sftp'].includes(manifest.key)
+      && node.config.fileConsumptionPolicy === 'DELETE_AFTER_DATABASE_COMMIT'
+      && field.key === 'fileFilterRegex') {
+      return <Input value="" disabled placeholder="不设置过滤，由文件类型分流处理" />;
+    }
     // Existing saved Hive targets predate hiveWriteMode. Render the manifest
     // default for them so the new default is visible immediately; deployment
     // also applies the same default when the legacy DSL has no explicit value.
@@ -1383,9 +1393,10 @@ export default function ConfigDrawer() {
     const isScheduleStrategyField = field.key === 'schedulingStrategy' && field.group === 'schedule';
     if (field.key === 'batchSchedulePolicy') {
       return <Space direction="vertical" style={{ width: '100%' }}>
-        <Select style={{ width: '100%' }} value={automaticSchedule(node.config) ? DAILY_STAGGERED : 'CUSTOM'} options={field.options} disabled={disabled}
-          onChange={v => updateConfig(node.id, v === DAILY_STAGGERED ? dailyScheduleDefaults(node.config)
+        <Select style={{ width: '100%' }} value={node.config.batchSchedulePolicy === DAILY_IMMEDIATE ? DAILY_IMMEDIATE : automaticSchedule(node.config) ? DAILY_STAGGERED : 'CUSTOM'} options={field.options} disabled={disabled}
+          onChange={v => updateConfig(node.id, v === DAILY_IMMEDIATE ? dailyScheduleDefaults(node.config) : v === DAILY_STAGGERED ? staggeredScheduleDefaults(node.config)
             : { batchSchedulePolicy: 'CUSTOM', schedulingPeriod: node.config.schedulingPeriod || '0 0 0 * * ?' })} />
+        {node.config.batchSchedulePolicy === DAILY_IMMEDIATE && <div role="status" className="ant-form-item-extra">启动后立即执行，之后每隔 1 天调度。</div>}
         {automaticSchedule(node.config) && <div role="status">
           <div>{node.config.batchScheduleTime ? `每天 ${String(node.config.batchScheduleTime)}（北京时间）` : '首次保存时自动分配执行时间'}</div>
           <div className="ant-form-item-extra">分配后固定保存，编辑、重启和重新部署沿用同一时刻。</div>

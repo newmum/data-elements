@@ -10,7 +10,7 @@
 
         <!-- 顶部菜单区域 -->
         <div class="layout__header-menu">
-          <MixTopMenu />
+          <TopMenu dark />
         </div>
 
         <!-- 右侧操作区域 -->
@@ -50,23 +50,25 @@
 import { useLayout } from "../composables/useLayout";
 import BaseLayout from "./BaseLayout.vue";
 import AppLogo from "../components/AppLogo/index.vue";
-import MixTopMenu from "../components/Menu/MixTopMenu.vue";
+import TopMenu from "../components/Menu/TopMenu.vue";
 import NavbarActions from "../components/NavBar/components/NavbarActions.vue";
 import TagsView from "../components/TagsView/index.vue";
 import AppMain from "../components/AppMain/index.vue";
 import SideMenu from "@/layouts/components/Menu/SideMenu.vue";
 import { useSettingStore } from "@/store";
 import { useLayoutMenu } from "@/layouts/composables/useLayoutMenu";
+import { useRoute } from "vue-router";
 
 // 布局相关参数
 const { isShowTagsView } = useLayout();
 const { sideMenuRoutes } = useLayoutMenu();
+const route = useRoute();
 const store = useSettingStore();
 const { sidebarOpen } = storeToRefs(store);
 const showSidebar = computed(
   () =>
     sideMenuRoutes.value.some((el) => !el.meta?.hidden && el.meta?.type !== "group") &&
-    sideMenuRoutes.value.length > 1
+    (sideMenuRoutes.value.length > 1 || route.matched.some((item) => item.path === "/setting"))
 );
 </script>
 
@@ -115,7 +117,7 @@ const showSidebar = computed(
       flex-shrink: 0;
       align-items: center;
       height: 100%;
-      padding: 0 1px 0 24px;
+      padding: 0 1px 0 clamp(4px, 1.4vw, 24px);
     }
   }
 

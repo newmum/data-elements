@@ -57,8 +57,8 @@ class PipelineRepositoryDeploymentTest {
             assertThat(hiveSaved.nodes().subList(1,3)).containsExactly(mapping,hive);
             var scheduledSource=hiveSaved.nodes().getFirst();
             assertThat(scheduledSource.id()).isEqualTo(source.id());
-            assertThat(scheduledSource.config()).containsEntry("batchSchedulePolicy",BatchSchedulePolicy.AUTOMATIC)
-                    .containsEntry("schedulingStrategy","CRON_DRIVEN");
+            assertThat(scheduledSource.config()).containsEntry("batchSchedulePolicy",BatchSchedulePolicy.IMMEDIATE)
+                    .containsEntry("schedulingStrategy","TIMER_DRIVEN").containsEntry("schedulingPeriod","1 day");
             repo.update("hive-pipeline",p->p);
             assertThat(repo.findById("hive-pipeline").orElseThrow().dsl()).isEqualTo(hiveSaved);
             assertThat(hiveSaved.edges()).hasSize(2);

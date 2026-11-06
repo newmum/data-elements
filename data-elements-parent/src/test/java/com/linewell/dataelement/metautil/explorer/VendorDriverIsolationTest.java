@@ -34,7 +34,11 @@ class VendorDriverIsolationTest {
                     public java.util.logging.Logger getParentLogger(){return java.util.logging.Logger.getLogger("validation");}
                 }
                 """);
-        assertEquals(0,javax.tools.ToolProvider.getSystemJavaCompiler().run(null,null,null,"-d",directory.toString(),source.toString()));
+        // This stub only uses JDK APIs; do not scan the application's Hive/Hadoop classpath
+        // or run its annotation processors just to compile a validation driver.
+        assertEquals(0,javax.tools.ToolProvider.getSystemJavaCompiler().run(null,null,null,
+                "-proc:none","-classpath",directory.toString(),"-encoding","UTF-8",
+                "-d",directory.toString(),source.toString()));
         try(var jar=new java.util.jar.JarOutputStream(java.nio.file.Files.newOutputStream(client.resolve("hive-jdbc-validation.jar")))) {
             jar.putNextEntry(new java.util.jar.JarEntry("org/apache/hive/jdbc/HiveDriver.class"));
             java.nio.file.Files.copy(directory.resolve("org/apache/hive/jdbc/HiveDriver.class"),jar);jar.closeEntry();

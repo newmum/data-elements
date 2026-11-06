@@ -17,137 +17,111 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "按请求目标与业务状态执行资源申请分页，返回本次操作结果；使用请求参数 pageNum、pageSize、sortField、sortDir、conditions；涉及 data_apply_form_t 等业务表。",
+  "description": "按当前租户及申请人分页查询资源申请单。支持状态、名称及排序，批量返回申请表单字段、目录摘要和当前流程任务。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：11.资源申请分页
-// 路由：POST /sym/approval/query/applyPage
-// 业务说明：按请求目标与业务状态执行资源申请分页，返回本次操作结果；使用请求参数 pageNum、pageSize、sortField、sortDir、conditions；涉及 data_apply_form_t 等业务表。
-/*
- * 审批中心 - 资源申请分页
- * 本接口属于 /sym/approval 下的独立 Warm-Flow 基础能力。
- * 数据资产登记步骤不会自动调用或自动提交本接口。
- */
-import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
-import com.linewell.dataelement.elasticsearch.EsPageParam
-import com.linewell.dataelement.elasticsearch.ConditionDTO
-import "@post:/sym/user/me" as me;
-import '@/common/localCache' as localCache
-import jsons
-import "@post:/dst/catalog/detail" as queryById
+// 资源申请分页：申请单以关系库主表为准，目录、扩展字段与流程按当前页批量读取。
+import tenantRuntime
+import approvalRuntime
+import tableSort
+import java.util.List
 
-var userInfo = me()
-var orgId = userInfo?.orgId
+var tenantId = tenantRuntime.id()
+var userId = approvalRuntime.principal().userId
+if (tenantId == null || userId == null) { exit 401, '请先登录' }
+var pageNum = Math.max(1, body?.pageNum::int(1))
+var pageSize = Math.min(100, Math.max(1, body?.pageSize::int(20)))
+var conditions = body?.conditions || []
+if (!(conditions instanceof List) || conditions.size() > 2) { exit 400, '申请单筛选条件无效' }
+var status = null
+var keyword = null
+for (condition in conditions) {
+    if (condition == null || condition.value == null || (condition.value+'').trim() == '') { continue }
+    var value = (condition.value+'').trim()
+    if (condition.field == 'flowStatus' && condition.type == 'match' && value.matches('[0-9]{1,3}')) {
+        status = value::int
+    } else if (condition.field == 'applyName' && condition.type == 'like' && value.length() <= 100) {
+        keyword = '%'+value.toLowerCase().replace('!','!!').replace('%','!%').replace('_','!_')+'%'
+    } else { exit 400, '不支持的申请单筛选条件' }
+}
+var orderColumn = tableSort.field(body, {createdTime:'a.created_time',updatedTime:'a.updated_time',applyName:'a.apply_name'}, 'updatedTime')
+var direction = tableSort.direction(body)
+var result = db.page("""
+    SELECT a.* FROM data_apply_form_t a
+    WHERE a.tenant_id=#{tenantId} AND COALESCE(a.is_del,0)=0
+      AND COALESCE(NULLIF(a.apply_user_id,''),a.created_by)=#{userId}
+    <if test="status != null">AND a.flow_status=#{status}</if>
+    <if test="keyword != null">AND LOWER(a.apply_name) LIKE #{keyword} ESCAPE '!'</if>
+"""+' ORDER BY CASE WHEN '+orderColumn+' IS NULL THEN 1 ELSE 0 END,'+orderColumn+' '+direction+',a.tid ASC', pageSize, (pageNum-1)*pageSize)
+var rows = result.list || []
+if (rows.size() == 0) { return {pageNum:pageNum,pageSize:pageSize,total:result.total,list:[]} }
 
-body == null ? body = {}: body
-
-// 从 MySQL 业务表读取当前有效数据。
-count = db.table("data_apply_form_t").count();
-if(count == 0){
-  // 返回当前业务分支的标准结果。
-  return {
-        "pageNum": 1,
-        "pageSize": 20,
-        "total": 0,
-        "list":[]
+var applyIds = rows.map(row => row.tid)
+var catalogIds = []
+var catalogByApply = {}
+for (row in rows) {
+    var references = (row.catalogIds || '').split(',')
+    var firstId = references.size() == 0 ? '' : references[0].trim()
+    if (firstId != '') {
+        catalogByApply[row.tid] = firstId
+        if (!catalogIds.contains(firstId)) { catalogIds.add(firstId) }
     }
 }
-
-EsPageParam es = new EsPageParam();
-es.setIndex("dataassets_apply_form");
-
-// 解析请求体并为可选参数设置默认值。
-var pageNum = body?.pageNum::int(1)
-var pageSize =  body?.pageSize::int(10)
-es.setPageNum(pageNum);
-es.setPageSize(pageSize);
-
-if(body?.sortField != null)
-{
-  es.setSortField(body?.sortField)
-}
-if(body?.sortDir != null)
-{
-  es.setSortDir(body?.sortDir)  
-}
-
-if(body?.conditions != null){
-    var list = new ArrayList();
-    var conditions = body?.conditions;
-    for(item in conditions){
-        var temp = new ConditionDTO()
-        temp.setField(item.field)
-        temp.setType(item.type)
-        temp.setValue(item.value)
-        list.add(temp)
-    }
-    es.setConditions(list)
-}
-
-// 执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致。
-existInxex = esCommonService.indexExists("dataassets_apply_form");
-if(!existInxex){
-    // 返回当前业务分支的标准结果。
-    return {
-        "pageNum": 1,
-        "pageSize": 20,
-        "total": 0,
-        "list":[]
+var catalogs = {}
+if (catalogIds.size() > 0) {
+    var catalogRows = db.table('da_catalog_t').columns('tid','catalog_name','org_id','target_table_id')
+        .where().eq('tenant_id',tenantId).eq('is_del',0).in('tid',catalogIds).select()
+    for (catalog in catalogRows) { catalogs[catalog.tid] = catalog }
+    var catalogProps = db.table('da_prop_t').columns('parent_id','prop_name','prop_value').where()
+        .eq('tenant_id',tenantId).eq('is_del',0).eq('data_type','catalog').in('parent_id',catalogIds)
+        .in('prop_name',['apiId','fileId','dirId','shareType','updateCycle']).select()
+    for (prop in catalogProps) {
+        var catalog = catalogs[prop.parentId]
+        if (catalog != null) { catalog[prop.propName] = prop.propValue }
     }
 }
-
-// 执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致。
-const {total, list} = esCommonService.page(es);
-
-list.forEach(item => {
-   if (item.catalogIds){
-        body = {tid: item.catalogIds}
-
-        var obj = item["detail"] = queryById();  
-
-        if (obj.assetType == "catalog"){
-            var res = []
-            !!obj.targetTableId && res.push("table")
-            !!obj.apiId && res.push("api")
-            !!obj.fileId && res.push("file")
-            !!obj.dirId && res.push("dir")
-            obj["resType"] = res
-            item["detail"]["resType"] = res
-        }
-
-        item.businessId = item.tid
-        // 从 MySQL 业务表读取当前有效数据。
-        var flowInfo = db.selectOne(`
-            SELECT
-              fd.flow_code,
-              fd.flow_name,
-              fi.business_id,
-              fi.id AS instance_id,
-              fi.definition_id AS definition_id,
-              ft.id AS task_id
-            FROM flow_instance fi
-            LEFT JOIN flow_definition fd
-              ON fi.definition_id = fd.id
-            LEFT JOIN flow_task ft
-              ON fi.id = ft.instance_id
-            WHERE
-              fi.business_id = '${item.businessId}'
-              AND fi.del_flag = '0'
-              AND fd.del_flag = '0'
-              AND ft.del_flag = '0'
-              AND ft.node_type = 1
-            ORDER BY ft.create_time DESC
-          `)
-        if (flowInfo){
-          item.taskId = flowInfo.taskId + ""
-          item.approveType = flowInfo.flowCode
-        }
-   }
-})
-
-// 返回当前业务分支的标准结果。
-return {
-  list, total
+var applyProps = db.table('da_prop_t').columns('parent_id','prop_name','prop_value').where()
+    .eq('tenant_id',tenantId).eq('is_del',0).eq('data_type','apply_form').in('parent_id',applyIds).select()
+var byApply = {}
+for (row in rows) { byApply[row.tid] = row }
+for (prop in applyProps) {
+    var row = byApply[prop.parentId]
+    if (row != null && !row.containsKey(prop.propName)) { row[prop.propName] = prop.propValue }
 }
+
+// 当前流程按业务单关联，优先使用已保存的实例标识。旧单据按最近有效流程回读。
+var flowRows = db.select("""
+    SELECT ranked.apply_id,ranked.task_id,ranked.flow_code FROM (
+        SELECT a.tid AS apply_id,t.id AS task_id,d.flow_code,
+               ROW_NUMBER() OVER (PARTITION BY a.tid ORDER BY i.create_time DESC,i.id DESC,t.create_time DESC,t.id DESC) AS row_no
+        FROM data_apply_form_t a
+        JOIN flow_instance i ON i.business_id=a.tid AND i.tenant_id=a.tenant_id AND i.del_flag='0'
+          AND (NULLIF(a.flow_instance_id,'') IS NULL OR TRIM(CAST(i.id AS CHAR(64)))=a.flow_instance_id)
+        JOIN flow_definition d ON d.id=i.definition_id AND d.tenant_id=a.tenant_id AND d.del_flag='0'
+        JOIN flow_task t ON t.instance_id=i.id AND t.tenant_id=a.tenant_id AND t.del_flag='0' AND t.node_type=1
+        WHERE a.tenant_id=#{tenantId} AND COALESCE(a.is_del,0)=0
+          AND COALESCE(NULLIF(a.apply_user_id,''),a.created_by)=#{userId}
+          AND a.tid IN <foreach collection="applyIds" item="applyId" open="(" separator="," close=")">#{applyId}</foreach>
+    ) ranked WHERE ranked.row_no=1
+""")
+var flows = {}
+for (flow in flowRows) { flows[flow.applyId] = flow }
+for (row in rows) {
+    var catalogId = catalogByApply[row.tid]
+    var catalog = catalogs[catalogId] || {tid:catalogId,catalogName:row.applyName}
+    var resourceTypes = []
+    if (catalog.targetTableId) { resourceTypes.add('table') }
+    if (catalog.apiId) { resourceTypes.add('api') }
+    if (catalog.fileId) { resourceTypes.add('file') }
+    if (catalog.dirId) { resourceTypes.add('dir') }
+    catalog.resType = resourceTypes
+    catalog.assetType = 'catalog'
+    row.detail = catalog
+    row.id = row.tid
+    row.businessId = row.tid
+    var flow = flows[row.tid]
+    if (flow != null) { row.taskId = flow.taskId+''; row.approveType = flow.flowCode }
+}
+return {pageNum:pageNum,pageSize:pageSize,total:result.total,list:rows}

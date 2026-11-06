@@ -7,10 +7,11 @@ public final class ErrorDetailSanitizer {
     private static final Pattern PRIVATE_KEY = Pattern.compile("(?s)-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----");
     private static final Pattern SECRET = Pattern.compile("(?i)([\\\"']?(?:password|passwd|pwd|secret|client_secret|access_token|refresh_token|token|api[_-]?key|authorization|cookie|密码|口令)[\\\"']?\\s*[:=]\\s*)(?:\\\"[^\\\"]*\\\"|'[^']*'|[^\\s,;&}]+)");
     private static final Pattern AUTH = Pattern.compile("(?i)\\b(Bearer|Basic)\\s+[A-Za-z0-9._~+/=-]+");
-    private static final Pattern USERINFO = Pattern.compile("(?i)([a-z][a-z0-9+.-]*://)[^\\s/@]+:[^\\s/@]+@");
+    // Start once per scheme token, rather than retrying at every character of long text.
+    private static final Pattern USERINFO = Pattern.compile("(?i)(?<![a-z0-9+.-])([a-z0-9+.-]++://)[^\\s/@:]++:[^\\s/@]++@");
     private static final Pattern QUOTED = Pattern.compile("'[^'\\r\\n]*'");
     private static final Pattern LONG_NUMBER = Pattern.compile("(?<![A-Za-z0-9])\\d{11,}(?![A-Za-z0-9])");
-    private static final Pattern EMAIL = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
+    private static final Pattern EMAIL = Pattern.compile("(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
     private ErrorDetailSanitizer() {}
 
     public static String errorText(String value) {
@@ -27,10 +28,12 @@ public final class ErrorDetailSanitizer {
         String input = value.length() > 32000 ? value.substring(0, 32000) + "\n[内容超限，已截取；证据不完整]" : value;
         input = PRIVATE_KEY.matcher(input).replaceAll("[私钥已移除]");
         input = AUTH.matcher(input).replaceAll("$1 [已脱敏]");
+        if (input.indexOf('@') >= 0 && input.contains("://")) {
+            input = USERINFO.matcher(input).replaceAll("$1[已脱敏]@");
+        }
         input = SECRET.matcher(input).replaceAll("$1[已脱敏]");
-        input = USERINFO.matcher(input).replaceAll("$1[已脱敏]@");
         input = QUOTED.matcher(input).replaceAll("'[值已脱敏]'");
         input = LONG_NUMBER.matcher(input).replaceAll("[长号码已脱敏]");
-        return EMAIL.matcher(input).replaceAll("[邮箱已脱敏]");
+        return input.indexOf('@') < 0 ? input : EMAIL.matcher(input).replaceAll("[邮箱已脱敏]");
     }
 }

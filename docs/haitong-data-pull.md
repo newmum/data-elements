@@ -94,7 +94,7 @@ Magic 编辑器登录、`/internal/**` 运维及签发、`REGISTRY_SYNC` 服务�
 
 配套工作簿的登记工作表为 `数据表信息` 和 `数据字段`，附带 `填写说明`、`业务数据示例`、`附件清单`。附件字段须声明 `是否关联附件`、`附件大小上限(MB)` 和 `附件格式`；示例为三个字符串附件字段、每文件上限 10MB、PNG 格式。六张表共 45 个字段、36 条业务示例、六个实际附件。示例不包含任何密钥；业务密钥从登记第五步获取，节点管理同步当前已完成登记的配置后再测试。
 
-平台接入与海通投递分别配置同一文件通道：海通 `relay.ftp.output-dir` 为业务根目录，平台 ODS/FJGHCC 绑定到相同协议、服务器和根目录，平台任务再拼接 `datasourceId/tableName/`。任务按 `.json.done` 发现已完成批次，数据库成功提交后删除 JSON 和标记；下载或处理失败不删除，字段校验按整份文件失败。后续库通过接入链路读取首个落地库，并继承登记的时间戳字段。`SUCCEEDED` 是海通已投递的历史证据；平台成功接入后源文件会被删除。重放同一幂等键只返回原受理结果，不重新生成文件，验证新数据须更换批次和幂等键。附件原文位于独立集合目录，不由结构化 JSON 接入任务删除。
+平台接入与海通投递分别配置同一文件通道：海通 `relay.ftp.output-dir` 为业务根目录，平台 ODS/FJGHCC 绑定到相同协议、服务器和根目录，平台任务再拼接 `datasourceId/tableName/`。任务直接发现已重命名发布的正式 JSON 文件，数据库成功提交后删除 JSON；下载或处理失败不删除，字段校验按整份文件失败。后续库通过接入链路读取首个落地库，并继承登记的时间戳字段。`SUCCEEDED` 是海通已投递的历史证据；平台成功接入后源文件会被删除。重放同一幂等键只返回原受理结果，不重新生成文件，验证新数据须更换批次和幂等键。附件原文位于独立集合目录，不由结构化 JSON 接入任务删除。
 
 通用 JSON 回放过滤器适用于所有动态业务路由，仅排除 Magic 编辑器资源接口。新增分组不再要求修改 Java 路径白名单；重复读取仍受消息体大小和压缩限制保护，正式接口继续以原始字节核验幂等。Magic 发布工具向编辑器提交统一 LF，并在回读时规范化换行和编辑器补充的空 `properties`，避免 Windows CRLF 被重复扩展；数据库并发摘要校验仍比较实际运行内容。
 
@@ -149,7 +149,7 @@ python tools/resource-sync.py publish --project haitong-data-pull --file "magic/
 | [PayloadFiles](../haitong-data-pull/src/main/java/com/haitong/core/PayloadFiles.java) | 64KiB 缓冲流式写本地持久卷、计算 SHA-256、同步文件并原子改名 | 存储适配器、分片会话、多实例可访问的持久化位置、存储对象与数据库之间的恢复 |
 | [FileService](../haitong-data-pull/src/main/java/com/haitong/core/FileService.java) | JSONL、CSV 与 BINARY；BINARY 只保存文件引用；文件处理 `runOne()` 串行，接收容量检查会 `Files.walk` 全工作目录 | 受控并发文件处理、配额账本、异步整文件校验和隔离检查，去掉每次上传的目录遍历 |
 | [DeliveryWorker](../haitong-data-pull/src/main/java/com/haitong/core/DeliveryWorker.java) | 已按协议建立可配置线程池，带租约、续租、重试及不确定结果处理 | 同一协议内进一步区分大文件和表批次的资源预算；文件目标的就绪条件及远端异步复制状态 |
-| [FtpConnector](../haitong-data-pull/src/main/java/com/haitong/connector/FtpConnector.java) | 文件流上传、临时名、远端读回校验、改名、`.done` 完成清单；FTP、FTPS、SFTP | 大文件的带宽预算、能力明确的续传、固定目标路径和接收端业务回执；读回校验成本不能忽略 |
+| [FtpConnector](../haitong-data-pull/src/main/java/com/haitong/connector/FtpConnector.java) | 文件流上传、临时名、远端读回校验、改名；结构化批次标记可选，文件集合保留 `.done` 清单；FTP、FTPS、SFTP | 大文件的带宽预算、能力明确的续传、固定目标路径和接收端业务回执；读回校验成本不能忽略 |
 | [RouteCatalog](../haitong-data-pull/src/main/java/com/haitong/config/RouteCatalog.java) | 当前 BINARY 只允许 FTP 或 LOCAL；现有 Kafka 发送的是消息字节 | 文件引用通知适配器、存储适配器；不能直接给旧 BINARY 路由增加 Kafka 然后发送整个文件 |
 | 平台 [DataPushSchemaService](../data-elements-parent/src/main/java/com/linewell/dataelement/dataservice/push/DataPushSchemaService.java) | 现有推送发布和校验基于数据表、字段，不能发布无表的文件集合 | 文件集合的独立规范；复用既有发布、客户端绑定及服务间校验入口的组织方式 |
 | [资源目录发布服务](../data-elements-parent/src/main/java/com/linewell/dataelement/feature/assetcenter/application/AssetCenterPublicationService.java) | 已定义 `FILE` 资源类型，但会拒绝没有可锁定版本服务的文件挂接 | 文件版本解析器、固定版本快照、目录与订阅的文件交付；不能只放开类型枚举 |
@@ -1418,7 +1418,7 @@ POST /api/v1/data-push
 
 #### 10.3 推送到 FTP 后看到 `.done` 文件，它是什么？
 
-`.done` 常用于文件落地完成标记：消费者可据此避免读取尚未写完的 JSON 文件。是否生成、命名方式和消费规则由平台文件投递/读取链路控制。调用方不应删除、手工创建或把该标记作为接口受理成功的唯一依据，应以 `/api/v1/messages/{messageId}` 的状态为准。
+`.done` 是文件落地完成清单，通常记录大小、SHA-256、数据源与表等信息，供依赖标记的消费者确认文件已写完。结构化表推送默认不生成：先上传唯一 `.tmp` 文件，核验大小和摘要，再重命名为正式 `.json`，与平台直接读取正式文件的 NiFi 流程配套。旧消费者依赖标记时设置 `relay.ftp.table-completion-marker-enabled: true`，重启后恢复生成。文件集合推送仍需业务清单，FTP 入站扫描也仍按 `.done` 校验读取，不受该开关影响。不要手工创建标记或以它代替最终投递状态；以 `/api/v1/messages/{messageId}` 的 `SUCCEEDED` 及目标结果为准。升级不删除历史 `.done` 文件。
 
 
 <a id="guide-38565d24--104-发生请求超时是否重新生成-idempotency-key-再发送"></a>
@@ -1597,7 +1597,7 @@ FTP credentials loaded: deliveryId=..., username=<username>, password=[REDACTED,
 FTP connection begin: deliveryId=..., protocol=FTP, endpoint=<host>:<port>, ...
 FTP server reply: deliveryId=..., stage=LOGIN, operation=LOGIN, replyCode=230, ...
 FTP connection ready: deliveryId=..., protocol=FTP, endpoint=<host>:<port>, username=<username>, passive=true, ...
-FTP delivery verified: deliveryId=..., remotePath=...json, bytes=..., marker=...json.done
+FTP delivery verified: deliveryId=..., remotePath=...json, bytes=..., marker=disabled
 Delivery succeeded: id=..., target=ftp
 ```
 
@@ -1605,7 +1605,6 @@ Delivery succeeded: id=..., target=ftp
 
 ```text
 <output-dir>/<datasourceId>/<tableName>/<messageId>.json
-<output-dir>/<datasourceId>/<tableName>/<messageId>.json.done
 ```
 
 
@@ -1849,7 +1848,7 @@ HTTP_ACCESS用于所有经过过滤器的请求（健康探测除外），和MES
 
 ### 7. FTP语义
 
-输出先临时文件、上传确认、内容核验、正式文件、.done标记。同名最终文件重试会比对内容，冲突不覆盖。FTP改名行为需按真实服务器测试，不宣称协议天然原子。源文件不自动删除。
+输出先临时文件、上传确认、内容核验、重命名为正式文件。结构化表批次默认不生成 `.done`，旧消费者需要时启用 `relay.ftp.table-completion-marker-enabled`；文件集合输出继续生成业务清单。同名最终文件重试会比对内容，冲突不覆盖。FTP改名行为需按真实服务器测试，不宣称协议天然原子。源文件不自动删除。
 
 输入只读取.done指向且摘要大小正确的文件。JSONL/CSV记录按批次事务写入消息、任务与last_record_no，失败后跳过已提交逻辑记录。实际记录数与清单expected_records不符则标记失败，而不是全部成功。BINARY只是一份文件单元，不推定业务条数。
 
@@ -1993,7 +1992,7 @@ relay:
 /haitong/out/{数据源ID}/{表名}/{消息号}.json
 ```
 
-同时生成同名 `.done` 文件，供下游确认文件完整。不要让对方直接指定 FTP 地址或目录。
+默认只发布正式 JSON 文件；`relay.ftp.table-completion-marker-enabled=true` 时额外生成同名 `.done`，兼容依赖清单的旧消费者。不要让对方直接指定 FTP 地址或目录。
 
 
 <a id="guide-a185e7e4--场景二接口收表数据写入-kafka"></a>
@@ -2189,7 +2188,7 @@ Magic API 保存通道选择、登记授权、字段校验、配置同步、密�
 
 验证顺序为：导入模板并完成表与数据源登记 → 节点管理选择已启用的数据推送节点并“同步配置” → 第五步获取数据源业务密钥 → 如有附件，调用 `POST /api/v1/file-uploads/single` 上传原始字节并查询至 `READY` → 将返回的 `fileId` 填入 `attachment_file_id` → 在 `03.模板配套推送测试` 中发送记录 → 在 `02.消息状态查询` 中核对最终状态。节点同步只下发表字段规范及调用方授权，不发送业务数据、不签发或轮换密钥，也不自动创建文件集合。附件集合及同源调用方须由节点配置显式维护。
 
-返回 `ACCEPTED` 表示已经受理；须继续查询到 `SUCCEEDED` 并核对 `FILE_AND_MARKER_VERIFIED` 才表示FTP文件及完成标记已确认。`relay.worker.enabled=false` 时消息只会等待，不会自动投递；启用前应核查已有待处理队列。相同 `Idempotency-Key` 和正文返回同一消息，修改正文时使用新的幂等键。附件原文使用独立上传幂等键，不能将Base64或文件字节放进表记录。
+返回 `ACCEPTED` 表示已经受理；须继续查询到 `SUCCEEDED` 并核对 `FILE_VERIFIED` 才表示 FTP 文件已核验发布；启用旧标记兼容模式或文件集合推送时，返回 `FILE_AND_MARKER_VERIFIED`。`relay.worker.enabled=false` 时消息只会等待，不会自动投递；启用前应核查已有待处理队列。相同 `Idempotency-Key` 和正文返回同一消息，修改正文时使用新的幂等键。附件原文使用独立上传幂等键，不能将Base64或文件字节放进表记录。
 
 推送及状态查询脚本通过 `request.get().getRequest()` 取得当前认证的原生请求，在 Magic 业务函数内校验并编排，不再转发 Java Controller。`PushOperationsMagicTest` 编译全部实际资源并核对路由。运行资源使用 `haitong.ht_magic_api_file` 数据库存储；编辑器保存后须回读脚本并实际调用，单独修改随包初始化文件不会覆盖已有在线资源。
 
@@ -2458,7 +2457,7 @@ relay:
 | `ht_standalone_table_column.is_required` | 每条 `records` 记录必须提供且不可为空。 |
 | 有效字段镜像 | 每条记录不得出现未被同步且启用的字段。 |
 
-独立 FTP 路由的静态目标会继续以 `datasourceId/tableName/messageId.json` 规划文件路径，并生成 `.done` 完成清单；独立 Kafka 路由的 Topic 从 `relay.targets` / `relay.kafka.producer-topic` 获取。目标连接账号、密码和 Kafka 凭据必须通过环境变量或密钥文件引用，不要写入版本库。
+独立 FTP 路由的静态目标会继续以 `datasourceId/tableName/messageId.json` 规划文件路径，默认不生成 `.done`（旧消费者可启用 `relay.ftp.table-completion-marker-enabled`）；独立 Kafka 路由的 Topic 从 `relay.targets` / `relay.kafka.producer-topic` 获取。目标连接账号、密码和 Kafka 凭据必须通过环境变量或密钥文件引用，不要写入版本库。
 
 
 <a id="guide-985aca91--启动"></a>
@@ -2576,7 +2575,7 @@ $env:HAITONG_STANDALONE_PUSH_KEY = "<长度至少24字符的随机密钥>"
 
 ### 下游投递语义
 
-- FTP：文件正文是业务 `records` 的 JSON 数组，固定写入 `FTP 输出根目录 / datasourceId / tableName / messageId.json`；同名 `.done` 清单包含数据源、表、规范版本、条数、文件大小和 SHA-256。
+- FTP：文件正文是业务 `records` 的 JSON 数组，固定写入 `FTP 输出根目录 / datasourceId / tableName / messageId.json`；默认不生成标记；启用 `relay.ftp.table-completion-marker-enabled` 后，同名 `.done` 清单包含数据源、表、规范版本、条数、文件大小和 SHA-256。
 - Kafka：消息正文保留表批次 JSON；Kafka Headers 补充 `relay-datasource-id`、`relay-table-id`、`relay-schema-version`、消息号和投递号。Topic 只来自登记推送规范。
 - 统一接口均先持久化受理，再异步投递。`202 Accepted` 不代表 FTP 或 Kafka 已完成；调用返回的 `statusUrl` 查询最终状态。
 
@@ -2756,10 +2755,9 @@ curl -fsS http://127.0.0.1:18083/actuator/health
 
 ```text
 <output-dir>/<datasourceId>/<tableName>/<messageId>.json
-<output-dir>/<datasourceId>/<tableName>/<messageId>.json.done
 ```
 
-`.done` 是完成标记文件，下游任务应仅处理已有 `.done` 标记的 JSON 文件。
+默认关闭结构化表批次标记生成，NiFi 直接读取核验后重命名的正式 JSON 文件。旧下游要求完成清单时设置 `relay.ftp.table-completion-marker-enabled: true`，并配套使用依赖标记的消费流程。文件集合推送和海通入站 FTP 扫描仍使用 `.done`。
 
 FTP 账号应具备目录进入/创建、上传、读取校验、重命名与删除临时文件的权限：`CWD`、`LIST`、`MKD`、`STOR`、`RETR`、`RNFR`、`RNTO`、`DELE`。
 
@@ -2908,10 +2906,9 @@ powershell -ExecutionPolicy Bypass -File scripts\sync-registry.ps1 -BaseUrl "htt
 
 ```text
 <output-dir>/<datasourceId>/<tableName>/<messageId>.json
-<output-dir>/<datasourceId>/<tableName>/<messageId>.json.done
 ```
 
-`.done` 是完成标记，供下游确认 JSON 已写完，不要删除。
+默认只有 JSON 文件，投递结果为 `FILE_VERIFIED`。兼容开关开启时才额外发布 `.json.done`，结果为 `FILE_AND_MARKER_VERIFIED`；历史标记不会在升级时自动删除。
 
 <a id="reconciliation-queries"></a>
 

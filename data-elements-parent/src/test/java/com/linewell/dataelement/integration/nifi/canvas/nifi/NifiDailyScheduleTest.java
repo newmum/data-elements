@@ -14,6 +14,16 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 
 class NifiDailyScheduleTest {
+    @Test void immediateDailyUsesSavedTimerAndNeedsNoTimezoneRead() {
+        var client=mock(NifiClient.class);
+        var compiler=new DslCompiler(client,mock(ManifestRegistry.class),null,null);
+        for(int count:List.of(20,100)) {
+            var nodes=java.util.stream.IntStream.range(0,count).mapToObj(i->new Pipeline.Node("s"+i,"source.sftp","来源","source",0,0,
+                    BatchSchedulePolicy.markDefault(Map.of()))).toList();
+            compiler.preflightSchedules(new Pipeline("p","validation",null,null,null,new Pipeline.Dsl(1,nodes,List.of()),null,null,null,null,null,null,null));
+        }
+        verifyNoInteractions(client);
+    }
     @Test void twentyAndHundredSourcesReadTimezoneOnceAndNoNodeFromAnotherTenantIsReused() {
         for(int count:List.of(20,100)) {
             var resolver=mock(NifiNodeRuntimeResolver.class);
@@ -23,7 +33,7 @@ class NifiDailyScheduleTest {
             doReturn(response).when(client).get("/flow/about",JsonNode.class);
             var compiler=new DslCompiler(client,mock(ManifestRegistry.class),null,null);
             var nodes=java.util.stream.IntStream.range(0,count).mapToObj(i->new Pipeline.Node("s"+i,"source.sftp","来源","source",0,0,
-                    BatchSchedulePolicy.defaultConfig("tenant-a","p","s"+i,"source.sftp",Map.of()))).toList();
+                    BatchSchedulePolicy.defaultConfig("tenant-a","p","s"+i,"source.sftp",BatchSchedulePolicy.markStaggered(Map.of())))).toList();
             var pipeline=new Pipeline("p","validation",null,null,null,new Pipeline.Dsl(1,nodes,List.of()),null,null,null,null,null,null,null);
             try(var tenant=TenantContext.use("tenant-a");var scope=client.bindRuntimeNode()) {
                 compiler.preflightSchedules(pipeline);compiler.preflightSchedules(pipeline);

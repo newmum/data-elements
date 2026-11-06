@@ -34,6 +34,7 @@ public final class DslHasher {
             + com.linewell.dataelement.mapping.core.FunctionRegistry.libraryVersion()
             + "-failure-retry-self-loop-invalid-retained-v2";
     private static final String FILE_TRANSFER_COMPILER_REVISION = "ftp-file-dataset-parser-v2";
+    private static final String FILE_CONSUMPTION_COMPILER_REVISION = "file-consumption-direct-list-native-path-v2";
 
     private static final ObjectMapper SORTED = new ObjectMapper()
             .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
@@ -77,6 +78,12 @@ public final class DslHasher {
         if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(node -> node != null
                 && ("source.ftp".equals(node.manifestKey()) || "source.sftp".equals(node.manifestKey())))) {
             effectiveRevision += "|" + FILE_TRANSFER_COMPILER_REVISION;
+        }
+        if (dsl.nodes() != null && dsl.nodes().stream().anyMatch(node -> node != null
+                && List.of("source.ftp", "source.sftp").contains(node.manifestKey())
+                && node.config() != null
+                && "DELETE_AFTER_DATABASE_COMMIT".equals(node.config().get("fileConsumptionPolicy")))) {
+            effectiveRevision += "|" + FILE_CONSUMPTION_COMPILER_REVISION;
         }
         try {
             return sha256((baseHash + "|" + effectiveRevision)

@@ -8,11 +8,8 @@
     </div>
 
     <!-- 超市购物车 -->
-    <div
-      v-if="settingStore.showShoppingCar || route.path.startsWith('/market')"
-      class="navbar-actions__item mr-4"
-    >
-      <shopping-car />
+    <div class="navbar-actions__item navbar-actions__cart">
+      <shopping-car v-if="settingStore.showShoppingCar || route.path.startsWith('/market')" />
     </div>
 
     <!-- 全屏 -->
@@ -28,10 +25,10 @@
 
     <!-- 用户菜单 -->
     <div class="navbar-actions__item">
-      <el-dropdown trigger="hover" popper-class="-mt-2 w-137px" :show-arrow="false">
-        <div class="user-profile">
-          <img class="user-profile__avatar mr-4" src="@/assets/touxiang.png" />
-          <div class="flex flex-col items-start gap-1 mr-2">
+      <el-dropdown trigger="click" popper-class="-mt-2 w-137px" :show-arrow="false">
+        <div class="user-profile" :aria-label="userStore.userInfo.realName || '账号菜单'">
+          <img class="user-profile__avatar" src="@/assets/touxiang.png" alt="" />
+          <div class="user-profile__identity">
             <span class="user-profile__name">
               {{ userStore.userInfo.realName }}
             </span>
@@ -145,6 +142,15 @@ function logout() {
   align-items: center;
   height: 100%;
 
+  &__cart {
+    width: 44px;
+    margin-right: clamp(0px, 0.8vw, 16px);
+
+    &:empty {
+      cursor: default;
+    }
+  }
+
   &__item {
     position: relative;
     display: flex;
@@ -195,6 +201,7 @@ function logout() {
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: clamp(4px, 0.8vw, 12px);
     height: 100%;
     padding: 0 8px;
 
@@ -205,11 +212,38 @@ function logout() {
       border-radius: 50%;
     }
 
+    &__identity {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      max-width: 112px;
+    }
+
+    &__name,
+    &__org {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     &__name {
       color: var(--el-text-color-regular);
       white-space: nowrap;
       transition: color 0.3s;
     }
+  }
+}
+
+@media (max-width: 760px) {
+  .navbar-actions .navbar-actions__item,
+  .navbar-actions .user-profile {
+    padding-inline: 4px;
+  }
+
+  .navbar-actions .user-profile__identity {
+    display: none;
   }
 }
 

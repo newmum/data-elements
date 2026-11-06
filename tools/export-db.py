@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import importlib.util
 from urllib.parse import urlsplit
 
 
@@ -60,6 +61,12 @@ def connections(config):
             if not schema:
                 raise ValueError(f"Dameng datasource {key} needs an explicit schema")
             yield key, "dameng", schema, source
+        elif url.startswith("jdbc:kingbase8:"):
+            parsed=urlsplit(url[len('jdbc:'):])
+            database=parsed.path.strip('/')
+            if not database or not source.get('schema'):
+                raise ValueError(f"Kingbase datasource {key} needs explicit database and schema")
+            yield key, "kingbase", database, source
         else:
             raise ValueError(f"Unsupported active datasource {key}")
 
@@ -305,7 +312,12 @@ def main():
     # Prepare every database successfully before replacing any canonical baseline.
     for key, dialect, schema, options in targets:
         try:
-            actual_schema, sql, counts, notes = (mysql_export if dialect == "mysql" else dameng_export)(schema, options)
+            if dialect=='kingbase':
+                spec=importlib.util.spec_from_file_location('kingbase_db',Path(__file__).with_name('kingbase-db.py'))
+                native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
+                actual_schema,sql,counts,notes=native.native_export(schema,options)
+            else:
+                actual_schema, sql, counts, notes = (mysql_export if dialect == "mysql" else dameng_export)(schema, options)
         except Exception as error:
             # JDBC/PyMySQL exception text can contain connection settings; keep it private.
             raise SystemExit(f"Export failed for datasource {key} ({dialect}, {schema}): {type(error).__name__}; canonical files were not replaced") from None

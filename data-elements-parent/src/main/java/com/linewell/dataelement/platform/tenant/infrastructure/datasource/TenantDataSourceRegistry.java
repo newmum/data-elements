@@ -2,6 +2,7 @@ package com.linewell.dataelement.platform.tenant.infrastructure.datasource;
 
 import com.alibaba.druid.pool.DruidDataSource;
 import com.linewell.dataelement.platform.persistence.config.DruidDataSourcePropertiesBinder;
+import com.linewell.dataelement.platform.persistence.KingbaseSqlFilter;
 import com.linewell.dataelement.platform.tenant.config.TenantDatabaseProperties;
 import jakarta.annotation.PreDestroy;
 import java.util.LinkedHashMap;
@@ -28,6 +29,10 @@ public class TenantDataSourceRegistry {
             dataSource.setUrl(definition.getUrl());
             dataSource.setUsername(definition.getUsername());
             dataSource.setPassword(definition.getPassword());
+            if (definition.getUrl() != null && definition.getUrl().startsWith("jdbc:kingbase8:")) {
+                dataSource.setProxyFilters(List.of(new KingbaseSqlFilter()));
+                dataSource.setConnectionInitSqls(List.of("SET ora_input_emptystr_isnull=off"));
+            }
             configureSchema(dataSource, definition);
             dataSource.setInitialSize(0);
             dataSource.setMinIdle(0);

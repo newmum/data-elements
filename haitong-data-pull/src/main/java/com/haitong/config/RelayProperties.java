@@ -167,6 +167,8 @@ public class RelayProperties {
         /** Optional SHA256:... fingerprint.  When blank, the first registered SFTP host key is pinned locally (TOFU). */
         private String sftpHostKeyFingerprint = "";
         private String outputDir = "/out";
+        /** Legacy table consumers may require a sidecar; file-collection manifests remain mandatory. */
+        private boolean tableCompletionMarkerEnabled = false;
         private Scan scan = new Scan();
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean value) { this.enabled = value; }
@@ -192,6 +194,8 @@ public class RelayProperties {
         public void setSftpHostKeyFingerprint(String value) { this.sftpHostKeyFingerprint = value; }
         public String getOutputDir() { return outputDir; }
         public void setOutputDir(String value) { this.outputDir = value; }
+        public boolean isTableCompletionMarkerEnabled() { return tableCompletionMarkerEnabled; }
+        public void setTableCompletionMarkerEnabled(boolean value) { this.tableCompletionMarkerEnabled = value; }
         public Scan getScan() { return scan; }
         public void setScan(Scan value) { this.scan = value; }
     }

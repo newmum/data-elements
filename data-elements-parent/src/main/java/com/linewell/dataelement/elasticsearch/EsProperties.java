@@ -77,6 +77,9 @@ public class EsProperties {
     public static class Tenant {
         private boolean enabled = true;
         private boolean defaultTenantUsesLegacyIndex = true;
+        // Pin historical index ownership when the deployment's default tenant changes.
+        // Null preserves the existing default-tenant convention for older installations.
+        private String legacyTenantId;
         private String separator = "__tenant_";
         private List<String> globalIndices = new ArrayList<>();
 
@@ -94,6 +97,14 @@ public class EsProperties {
 
         public void setDefaultTenantUsesLegacyIndex(boolean defaultTenantUsesLegacyIndex) {
             this.defaultTenantUsesLegacyIndex = defaultTenantUsesLegacyIndex;
+        }
+
+        public String getLegacyTenantId() {
+            return legacyTenantId;
+        }
+
+        public void setLegacyTenantId(String legacyTenantId) {
+            this.legacyTenantId = legacyTenantId;
         }
 
         public String getSeparator() {
