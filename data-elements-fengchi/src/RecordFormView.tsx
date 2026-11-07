@@ -2,7 +2,7 @@ import {useEffect, useId, useRef, useState} from 'react';
 import {KeyOutlined, LeftOutlined, RightOutlined, StepBackwardOutlined, StepForwardOutlined} from '@ant-design/icons';
 import type {Cell, Column, Row, TableDef} from './data';
 import './recordForm.css';
-import {getColumnLabel} from './ColumnHeader';
+import {FieldTypeIcon, getColumnLabel} from './ColumnHeader';
 
 export type RecordFormViewProps = {
   table: TableDef;
@@ -116,7 +116,7 @@ function RecordField({column, value, modified, onDraftChange, onCommit}: {column
     <label className="record-form-label" htmlFor={inputId} title={column.comment}>
       <span>{column.primary && <KeyOutlined aria-label="主键"/>}{column.name}</span>
       <span className="record-form-display-name">{getColumnLabel(column)}</span>
-      <small id={`${inputId}-type`}>{column.type}{column.primary ? ' · 主键' : ''}</small>
+      <small className="record-form-type" id={`${inputId}-type`}><FieldTypeIcon type={column.type}/><span>{column.type}{column.primary ? ' · 主键' : ''}</span></small>
     </label>
     <div className="record-form-editor" onBlur={event => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commit();

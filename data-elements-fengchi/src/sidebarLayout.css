@@ -1,0 +1,16 @@
+:root{--workspace-strip-height:40px;--workspace-view-height:31px}
+.tabs-strip{height:var(--workspace-strip-height);min-height:var(--workspace-strip-height)}
+.primary-content>.view-tabs{height:var(--workspace-view-height);min-height:var(--workspace-view-height)}
+.sidebar .connection-search-header{height:var(--workspace-view-height);min-height:var(--workspace-view-height);flex:0 0 var(--workspace-view-height);order:1;padding:3px 5px;border-bottom:1px solid var(--border);gap:0}
+.connection-search-header .ant-input-affix-wrapper{width:100%;min-width:0;height:24px;font-size:11px;border-radius:2px;box-shadow:none}
+.connection-search-header .ant-input-prefix{color:var(--text-muted);margin-right:5px}
+.connection-search-header .ant-input{min-width:0;font-size:11px}
+.sidebar .tree-wrap .ant-tree-treenode{min-width:0;white-space:nowrap}
+.sidebar .tree-wrap .ant-tree-node-content-wrapper{flex:1;min-width:0;overflow:hidden}
+.sidebar .tree-wrap .ant-tree-title{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.sidebar .tree-wrap .ant-tree-switcher,.sidebar .tree-wrap .ant-tree-indent{flex:none}
+.connection-tree-label{display:flex;align-items:center;gap:4px;width:100%;min-width:0;white-space:nowrap;overflow:hidden;font-size:11px}
+.connection-tree-text{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.connection-tree-count{flex:none;margin-left:auto;color:var(--text-muted);font-size:9px;padding-right:2px;white-space:nowrap}
+.connection-tree-badge{flex:none;font-size:8px;color:var(--text-muted);border:1px solid var(--border);padding:0 2px;line-height:13px}
+.connection-tree-status{width:4px;height:4px;flex:none;border-radius:50%}

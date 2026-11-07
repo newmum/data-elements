@@ -1,0 +1,5 @@
+.app-shell>.workspace-navigation{width:100%;flex:none;min-width:0}
+.workspace-navigation .document-tabs{min-width:0;flex:1}
+.workspace-navigation .inspector-toggle{width:28px;min-width:28px;height:32px;margin-top:2px;display:grid;place-items:center;border:0;border-left:1px solid var(--border);background:transparent;color:var(--text-secondary);flex:none}
+.workspace-navigation .inspector-toggle:hover{background:var(--hover);color:var(--text)}
+.selected-rows-count{white-space:nowrap;font-size:10px;color:var(--text-secondary);margin-right:3px}

@@ -1,0 +1,22 @@
+.export-data-content{padding:17px 21px 6px;color:var(--text);font-size:12px}
+.export-data-target{display:flex;align-items:baseline;gap:15px;margin-bottom:17px;min-width:0}
+.export-data-target>span{flex:none;color:var(--text-secondary)}
+.export-data-target>strong{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.export-data-field{display:grid;grid-template-columns:65px minmax(0,1fr);align-items:center;gap:14px;margin-bottom:14px}
+.export-data-field>label{color:var(--text-secondary)}
+.export-data-field select,.export-data-quantity-controls>input{height:28px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface);color:var(--text);font:inherit;padding:3px 7px;min-width:0}
+.export-data-field select:focus-visible,.export-data-quantity-controls>input:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px;border-color:var(--accent)}
+.export-data-quantity{padding:0;margin:0 0 14px;border:0;min-width:0}
+.export-data-quantity>legend{float:left;width:65px;margin-right:14px;padding:5px 0;color:var(--text-secondary);font-size:12px}
+.export-data-quantity-controls{display:flex;flex-wrap:wrap;align-items:center;gap:9px;min-height:28px}
+.export-data-quantity-controls>label{display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer}
+.export-data-quantity-controls input[type=radio]{margin:0;accent-color:var(--accent)}
+.export-data-quantity-controls>input{width:76px}
+.export-data-quantity-controls>input:disabled{background:var(--disabled-bg);color:var(--text-disabled);cursor:not-allowed}
+.export-data-quantity-controls>input[aria-invalid=true]{border-color:var(--danger)}
+.export-data-summary{display:flex;flex-direction:column;gap:5px;padding:10px 12px;border:1px solid var(--border);background:var(--surface-inset);border-radius:4px}
+.export-data-summary>strong{font-weight:500}
+.export-data-summary>span{font-size:11px;color:var(--text-secondary);overflow-wrap:anywhere}
+.export-data-note{font-size:11px;line-height:1.6;color:var(--text-muted);margin:9px 0 0}
+.export-data-error{min-height:21px;margin-top:7px;font-size:11px;line-height:1.5;color:var(--danger)}
+@media(max-width:480px){.export-data-content{padding:14px 12px 5px}.export-data-quantity>legend{float:none;width:auto;margin:0 0 5px}.export-data-quantity-controls{padding-left:0}.export-data-field{grid-template-columns:65px minmax(0,1fr);gap:8px}}

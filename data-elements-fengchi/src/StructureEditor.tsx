@@ -13,6 +13,7 @@ export default function StructureEditor({table,draft,error,errorField,onChange,o
  function changeType(field:SchemaFieldDraft,type:string){const textLength=/^(CHAR|VARCHAR|BINARY|VARBINARY)$/.test(type),decimal=/^(DECIMAL|NUMERIC)$/.test(type);const sameGroup=textLength&&/^(CHAR|VARCHAR|BINARY|VARBINARY)$/.test(field.type)||decimal&&/^(DECIMAL|NUMERIC)$/.test(field.type);change(field.key,{type,length:sameGroup?field.length:textLength?'255':decimal?'10,2':'',unsigned:numeric(type)&&field.unsigned})}
  return <div className="structure-panel schema-editor">
   <div className="section-toolbar"><span><BranchesOutlined/> 字段设计 <span className="schema-count">{draft.length}</span></span><Button icon={<CodeOutlined/>} onClick={onShowDdl}>查看建表语句</Button></div>
+  {error&&<div className="schema-validation" role="alert"><InfoCircleOutlined/><span>{error}。请修正后应用，当前记录尚未改变。</span></div>}
   <div className="schema-grid-scroll"><table className="schema-grid" aria-label={`${table.name} 字段结构`}><colgroup><col style={{width:165}}/><col style={{width:135}}/><col style={{width:98}}/><col style={{width:66}}/><col style={{width:70}}/><col style={{width:52}}/><col style={{width:192}}/><col style={{width:205}}/></colgroup><thead><tr>{['字段名','数据类型','长度','无符号','允许空值','主键','默认值','注释'].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{draft.map(field=>{
    const original=baseline.find(item=>item.sourceName===field.sourceName);
    const dirty=(property:keyof SchemaFieldDraft)=>original&&original[property]!==field[property]?'schema-property changed':'schema-property';
@@ -28,7 +29,5 @@ export default function StructureEditor({table,draft,error,errorField,onChange,o
     <td className={dirty('comment')}><input aria-label={label('注释')} value={field.comment} onChange={event=>change(field.key,{comment:event.target.value})}/></td>
    </tr>;
   })}</tbody></table></div>
-  {error?<div className="schema-validation" role="alert"><InfoCircleOutlined/><span>{error}。请修正后应用，当前记录尚未改变。</span></div>:<div className="schema-guidance"><InfoCircleOutlined/><span>直接编辑字段属性，点击上方“应用更改”生效；DDL 随有效草稿同步。</span></div>}
-  <div className="schema-property-note">长度独立设置：VARCHAR 使用字符数，DECIMAL 使用“总位数,小数位”。修改类型或长度时会检查现有记录，避免截断内容。</div>
  </div>;
 }

@@ -1,0 +1,8 @@
+/* Share the existing workspace separator instead of drawing four little boxes. */
+:root .primary-content>.view-tabs{padding:0;gap:0;align-items:stretch;border:0;border-bottom:1px solid var(--border);background:var(--chrome)}
+:root .primary-content>.view-tabs>button{position:relative;height:100%;margin:0;padding:0 8px;flex:none;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--text-secondary);font-weight:400}
+:root .primary-content>.view-tabs>button:hover{background:var(--hover);color:var(--text)}
+:root .primary-content>.view-tabs>button.active{background:var(--surface);color:var(--text);font-weight:500}
+/* Keep the shared lower separator visible beneath every view, including active. */
+:root .primary-content>.view-tabs>button:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+@media(max-width:680px){:root .primary-content>.view-tabs>button{padding:0 5px}}

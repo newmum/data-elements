@@ -1,0 +1,10 @@
+.table-changes-footer{display:flex;flex:none;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:5px 12px;min-height:32px;padding:4px 7px;border-top:1px solid var(--border);background:var(--chrome-soft);color:var(--text-muted);font-size:10px;min-width:0}
+.table-change-actions{display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-width:0}
+.table-change-actions .ant-btn{font-size:11px;height:23px;line-height:19px;flex:none}
+.table-change-status{white-space:nowrap;margin-left:3px}
+.table-footer-pagination{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:5px 7px;margin-left:auto;min-width:0;max-width:100%}
+.table-record-count{white-space:nowrap}
+.table-footer-pagination .ant-pagination{display:flex;flex-wrap:wrap;align-items:center;margin:0;max-width:100%}
+.table-page-size{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.table-page-size .ant-select{width:55px;font-size:10px;height:23px}
+@container (max-width:560px){.table-footer-pagination{width:100%}}

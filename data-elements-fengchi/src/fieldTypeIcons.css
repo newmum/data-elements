@@ -1,0 +1,44 @@
+/* Borderless type accents stay secondary to field names. Shape and SQL text
+   identify the type even when colors are unavailable. */
+:root, :root[data-theme='light'] {
+  --field-type-text: #4b6f9b;
+  --field-type-number: #337769;
+  --field-type-temporal: #8b642e;
+  --field-type-boolean: #527343;
+  --field-type-document: #7b5c99;
+  --field-type-binary: #606b77;
+}
+
+:root[data-theme='dark'] {
+  --field-type-text: #8aafd7;
+  --field-type-number: #80baa8;
+  --field-type-temporal: #d0ad75;
+  --field-type-boolean: #a0b98b;
+  --field-type-document: #baa0d2;
+  --field-type-binary: #a9b2bf;
+}
+
+/* More specific than the legacy monochrome rule, regardless of import order. */
+:root .field-type-icon {
+  display: block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--field-type-text);
+}
+
+:root .field-type-icon.field-kind-number { color: var(--field-type-number); }
+:root .field-type-icon.field-kind-temporal { color: var(--field-type-temporal); }
+:root .field-type-icon.field-kind-boolean { color: var(--field-type-boolean); }
+:root .field-type-icon.field-kind-document { color: var(--field-type-document); }
+:root .field-type-icon.field-kind-binary { color: var(--field-type-binary); }
+
+.record-form-label .record-form-type {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (forced-colors: active) {
+  :root .field-type-icon[class*='field-kind-'] { color: CanvasText; }
+}
