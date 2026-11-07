@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
+import json
 
 import yaml
 
@@ -41,6 +43,38 @@ class NacosExportTest(unittest.TestCase):
         config = {"username": "${TENANT_CHENGTIAN_DB_USER}",
                   "password": "${TENANT_CHENGTIAN_DB_PASSWORD}"}
         self.assertEqual(config, exporter.redact_configuration(config))
+
+    def test_private_environment_uses_effective_overrides_without_nacos_credentials(self):
+        config = {"spring": {"datasource": {"username": "source-user", "password": "source-secret"}},
+                  "tenant": {"password": "${TENANT_PASSWORD}"}}
+        runtime = {"NACOS_USER": "config-user", "NACOS_PASSWORD": "config-secret", "TENANT_PASSWORD": "tenant-secret",
+                   "SPRING_APPLICATION_JSON": json.dumps({"spring.datasource.password": "effective-secret",
+                                                          "spring.cloud.nacos.password": "config-login-secret",
+                                                          "spring": {"config": {"import": "nacos:stale.yml"}}})}
+        result = exporter.local_environment(config, runtime)["environment"]
+        self.assertEqual("source-user", result["NACOS_SPRING_DATASOURCE_USERNAME"])
+        self.assertEqual("effective-secret", result["NACOS_SPRING_DATASOURCE_PASSWORD"])
+        self.assertEqual("tenant-secret", result["TENANT_PASSWORD"])
+        self.assertNotIn("NACOS_PASSWORD", result)
+        self.assertNotIn("NACOS_USER", result)
+        self.assertNotIn("config-login-secret", result["SPRING_APPLICATION_JSON"])
+        self.assertNotIn("nacos:stale.yml", result["SPRING_APPLICATION_JSON"])
+        self.assertNotIn("source-secret", exporter.export_yaml(config, "data-element.yml", "validation", "DEFAULT_GROUP"))
+
+    def test_private_environment_resolves_defaults_and_rejects_missing_values(self):
+        config = {"password": "${BUSINESS_SECRET:validation-default}"}
+        self.assertEqual("validation-default", exporter.local_environment(config, {})["environment"]["BUSINESS_SECRET"])
+        with self.assertRaisesRegex(ValueError, "MISSING_BUSINESS_SECRET"):
+            exporter.local_environment({"password": "${MISSING_BUSINESS_SECRET}"}, {})
+
+    def test_private_environment_cannot_be_written_under_git_workspace(self):
+        with self.assertRaisesRegex(ValueError, "outside the Git workspace"):
+            exporter.write_private_environment(Path(__file__).resolve().parents[2] / "logs/validation-private.json", {})
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "environment.private.json"
+            configuration = {"environment": {"VALIDATION_SECRET": "synthetic-private-value"}}
+            exporter.write_private_environment(destination, configuration)
+            self.assertEqual(configuration, json.loads(destination.read_text(encoding="utf-8")))
 
 
 if __name__ == "__main__":

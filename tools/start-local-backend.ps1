@@ -1,6 +1,13 @@
 param(
     [string]$ConfigPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/local-runtime.private.json'),
-    [switch]$Restart
+    [switch]$Restart,
+    [switch]$WithoutNacos,
+    [string]$LocalConfigPath = (Join-Path $PSScriptRoot '../db/nacos/data-element_ct.yml'),
+    [string]$LocalEnvironmentPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/no-nacos-environment.private.json'),
+    [string]$JarPath = '',
+    [string]$JavaExe = '',
+    [int]$Port = 8088,
+    [switch]$ValidateOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,9 +16,72 @@ $taskPrivatePath = [IO.Path]::GetFullPath($ConfigPath)
 if ($taskPrivatePath.StartsWith($taskRepo + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Runtime credentials must stay outside the Git workspace'
 }
-$taskConfig = Get-Content -LiteralPath $taskPrivatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+$taskConfig = if (Test-Path -LiteralPath $taskPrivatePath -PathType Leaf) {
+    Get-Content -LiteralPath $taskPrivatePath -Raw -Encoding UTF8 | ConvertFrom-Json
+} elseif ($WithoutNacos) {
+    [pscustomobject]@{ environment = [pscustomobject]@{} }
+} else { throw 'Private runtime configuration is unavailable' }
 $taskRuntimeJar = Join-Path $taskRepo '.runtime/data-element-runtime.jar'
-if (!(Test-Path -LiteralPath $taskRuntimeJar -PathType Leaf)) { throw 'Install the reviewed backend JAR in .runtime first' }
+$taskLogRoot = Join-Path $taskRepo 'logs/backend/local-runtime'
+if ($WithoutNacos) {
+    $taskTransportKeyFile = $taskConfig.transportKeyFile
+    $taskBusinessConfig = [IO.Path]::GetFullPath($LocalConfigPath)
+    $taskLocalModeConfig = Join-Path $taskRepo 'db/nacos/application-no-nacos.yml'
+    foreach ($taskConfigFile in @($taskBusinessConfig, $taskLocalModeConfig)) {
+        if (!(Test-Path -LiteralPath $taskConfigFile -PathType Leaf)) { throw 'Local YAML configuration is unavailable' }
+    }
+    $taskEnvironment = @{}
+    foreach ($taskProperty in $taskConfig.environment.PSObject.Properties) {
+        $taskEnvironment[$taskProperty.Name] = [string]$taskProperty.Value
+    }
+    if (Test-Path -LiteralPath $LocalEnvironmentPath -PathType Leaf) {
+        $taskEnvironmentFile = [IO.Path]::GetFullPath($LocalEnvironmentPath)
+        if ($taskEnvironmentFile.StartsWith($taskRepo + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Private environment must stay outside the Git workspace'
+        }
+        $taskLocalEnvironment = Get-Content -LiteralPath $taskEnvironmentFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach ($taskProperty in $taskLocalEnvironment.environment.PSObject.Properties) {
+            $taskEnvironment[$taskProperty.Name] = [string]$taskProperty.Value
+        }
+    }
+    # Neither stale bootstrap variables nor SPRING_APPLICATION_JSON may reactivate Nacos.
+    foreach ($taskName in @('NACOS_HOST','NACOS_PORT','NACOS_USER','NACOS_PASSWORD','NACOS_NAMESPACE','NACOS_CONFIG_IMPORTS',
+                            'SPRING_CONFIG_IMPORT','SPRING_CONFIG_LOCATION','SPRING_CONFIG_ADDITIONAL_LOCATION')) {
+        $taskEnvironment.Remove($taskName)
+    }
+    $taskEnvironment['SPRING_CLOUD_NACOS_CONFIG_ENABLED'] = 'false'
+    $taskEnvironment['SPRING_CLOUD_NACOS_CONFIG_IMPORT_CHECK_ENABLED'] = 'false'
+    $taskEnvironment['SPRING_CLOUD_NACOS_DISCOVERY_ENABLED'] = 'false'
+    $taskEnvironment['SPRING_CLOUD_SERVICE_REGISTRY_AUTO_REGISTRATION_ENABLED'] = 'false'
+    $taskEnvironment['SPRING_CLOUD_DISCOVERY_ENABLED'] = 'false'
+    $taskExecutable = if ($JavaExe) { $JavaExe } elseif ($taskConfig.executable) { [string]$taskConfig.executable }
+        elseif ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin/java.exe' } else { (Get-Command java.exe -ErrorAction Stop).Source }
+    $taskSourceJar = if ($JarPath) { [IO.Path]::GetFullPath($JarPath) } elseif (Test-Path -LiteralPath $taskRuntimeJar) { $taskRuntimeJar }
+        else { Join-Path $taskRepo 'data-elements-parent/target/data-element.jar' }
+    if (!(Test-Path -LiteralPath $taskSourceJar -PathType Leaf)) { throw 'Build the backend JAR before no-Nacos startup' }
+    $taskRuntimeJar = Join-Path $taskRepo '.runtime/no-nacos/data-element-runtime.jar'
+    $taskLogRoot = Join-Path $taskRepo 'logs/backend/no-nacos'
+    $taskConfigLocations = 'file:' + $taskBusinessConfig.Replace('\','/') + ',file:' + $taskLocalModeConfig.Replace('\','/')
+    $taskArgumentLine = '-jar "' + $taskRuntimeJar + '" "--spring.config.location=' + $taskConfigLocations + '"' +
+        ' --spring.config.import= --spring.cloud.nacos.config.enabled=false --spring.cloud.nacos.config.import-check.enabled=false' +
+        ' --spring.cloud.nacos.discovery.enabled=false --spring.cloud.nacos.discovery.register-enabled=false' +
+        ' --spring.cloud.discovery.enabled=false --spring.cloud.service-registry.auto-registration.enabled=false' +
+        ' --server.port=' + $Port + ' "--storage.error-root-dir=' + $taskLogRoot + '"'
+    $taskConfig = [pscustomobject]@{ executable = $taskExecutable; argumentLine = $taskArgumentLine; port = $Port;
+        environment = [pscustomobject]$taskEnvironment; transportKeyFile = $taskTransportKeyFile }
+}
+if ($ValidateOnly) {
+    if (!$WithoutNacos) { throw '-ValidateOnly requires -WithoutNacos' }
+    if (!(Test-Path -LiteralPath $taskConfig.executable -PathType Leaf)) { throw 'Configured Java executable is unavailable' }
+    @{mode='without-nacos'; port=$taskConfig.port; businessConfiguration=$taskBusinessConfig; overrides=$taskLocalModeConfig;
+      jarSource=$taskSourceJar; nacosConfigEnabled=$false; nacosDiscoveryEnabled=$false;
+      environmentVariableNames=@($taskConfig.environment.PSObject.Properties.Name | Sort-Object);
+      argumentLine=$taskConfig.argumentLine} | ConvertTo-Json -Depth 4
+    return
+}
+if ($WithoutNacos) {
+    # The isolated runtime copy is written only after ownership/key checks below.
+} elseif (!(Test-Path -LiteralPath $taskRuntimeJar -PathType Leaf)) { throw 'Install the reviewed backend JAR in .runtime first' }
 if (!(Test-Path -LiteralPath $taskConfig.executable -PathType Leaf)) { throw 'Configured Java executable is unavailable' }
 if (!$taskConfig.argumentLine -or !$taskConfig.environment -or !$taskConfig.port) { throw 'Incomplete private runtime configuration' }
 $taskNormalizedJar = $taskRuntimeJar.Replace('\', '/').ToLowerInvariant()
@@ -19,6 +89,8 @@ if (!$taskConfig.argumentLine.Replace('\', '/').ToLowerInvariant().Contains($tas
     throw 'Configured arguments must run this workspace runtime JAR'
 }
 foreach ($taskProperty in $taskConfig.environment.PSObject.Properties) {
+    if ($WithoutNacos -and $taskProperty.Name -cmatch '^[A-Z][A-Z0-9_]*$' -and
+        $taskProperty.Name -notin @('PATH','COMSPEC','PSMODULEPATH','USERPROFILE','HOME','SYSTEMROOT','JAVA_TOOL_OPTIONS','JDK_JAVA_OPTIONS')) { continue }
     if ($taskProperty.Name -notmatch '^(NACOS_|DATA_ELEMENT_|DATA_ELEMENTS_|SPRING_)[A-Z0-9_]+$' -and
         $taskProperty.Name -notin @('IDAAS_TRANSPORT_KEY', 'IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP', 'JDBC_DRIVER_DIRECTORY',
                                     'TENANT_CHENGTIAN_DB_USER', 'TENANT_CHENGTIAN_DB_PASSWORD')) {
@@ -34,6 +106,12 @@ foreach ($taskOwner in $taskOwners) {
         !$taskProcess.CommandLine.Replace('\', '/').ToLowerInvariant().Contains($taskNormalizedJar) -or
         $taskProcess.ExecutablePath -ne $taskConfig.executable) {
         throw 'The port belongs to another process; refusing to stop it'
+    }
+}
+if ($WithoutNacos) {
+    foreach ($taskName in @('NACOS_HOST','NACOS_PORT','NACOS_USER','NACOS_PASSWORD','NACOS_NAMESPACE','NACOS_CONFIG_IMPORTS',
+                            'SPRING_CONFIG_IMPORT','SPRING_CONFIG_LOCATION','SPRING_CONFIG_ADDITIONAL_LOCATION')) {
+        [Environment]::SetEnvironmentVariable($taskName, $null, 'Process')
     }
 }
 foreach ($taskProperty in $taskConfig.environment.PSObject.Properties) {
@@ -70,7 +148,11 @@ foreach ($taskOwner in $taskOwners) {
     Stop-Process -Id $taskOwner -ErrorAction Stop
     Wait-Process -Id $taskOwner -ErrorAction SilentlyContinue -Timeout 20
 }
-$taskLogRoot = Join-Path $taskRepo 'logs/backend/local-runtime'
+if ($WithoutNacos) {
+    New-Item -ItemType Directory -Path (Split-Path -Parent $taskRuntimeJar) -Force | Out-Null
+    Copy-Item -LiteralPath $taskSourceJar -Destination $taskRuntimeJar -Force
+    [Environment]::SetEnvironmentVariable('DATA_ELEMENTS_LOG_DIR', $taskLogRoot, 'Process')
+}
 New-Item -Path $taskLogRoot -ItemType Directory -Force | Out-Null
 $taskLaunched = Start-Process -FilePath $taskConfig.executable -ArgumentList $taskConfig.argumentLine `
     -WorkingDirectory $taskRepo -WindowStyle Hidden `

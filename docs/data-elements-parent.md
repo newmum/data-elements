@@ -91,24 +91,36 @@ NACOS_NAMESPACE=data-element
 NACOS_CONFIG_IMPORTS=nacos:data-elements.yml?group=DEFAULT_GROUP&refreshable=true
 ```
 
-如果需要本地不依赖 Nacos 运行，需要在 `src/main/resources/application.yml` 或本地 profile 中补充数据库、Redis、服务端口等配置，例如：
+<a id="without-nacos"></a>
 
-```yaml
-server:
-	port: ${SERVER_PORT:8088}
+### 未部署 Nacos 时启动
 
-spring:
-	datasource:
-		driver-class-name: com.mysql.cj.jdbc.Driver
-		url: ${DB_URL:jdbc:mysql://localhost:3306/baseline?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
-		username: ${DB_USERNAME:root}
-		password: ${DB_PASSWORD:}
-	redis:
-		host: ${REDIS_HOST:localhost}
-		port: ${REDIS_PORT:6379}
-		database: ${REDIS_DB:0}
-		password: ${REDIS_PASSWORD:}
+`db/nacos/` 统一维护配置版本源：`data-element.yml` 是基础配置，`data-element-dev.yml` 是开发覆盖，`data-element_ct.yml` 是当前澄天金仓环境的完整配置。`application-no-nacos.yml` 是无 Nacos 启动覆盖：关闭配置拉取、导入检查、服务发现和自动注册。它与完整业务配置一起加载，数据库、Redis、ES、Magic、行业数据库路由等参数复用现有完整配置，不另维护一份重复的业务参数。
+
+在仓库根目录执行：
+
+```powershell
+# 只检查启动计划；不会启动 Java、复制运行包或中断已有服务
+.\start-data-elements.cmd -WithoutNacos -ValidateOnly
+
+# 使用本地 YAML 启动后端，默认端口 8088
+.\start-data-elements.cmd -WithoutNacos
+
+# 使用其他已构建的 JAR、完整业务配置或空闲端口
+.\start-data-elements.cmd -WithoutNacos -JarPath "D:\deploy\data-element.jar" -LocalConfigPath "D:\deploy\data-element-complete.yml" -Port 18088
 ```
+
+该模式不需要 Nacos 服务及其登录账号，使用 `spring.config.location` 显式选择本地完整配置和无 Nacos 覆盖，并清空远程导入；命令行关闭开关优先于遗留的 `SPRING_APPLICATION_JSON`。默认优先使用已验证的 `.runtime/data-element-runtime.jar`，不存在时使用 `data-elements-parent/target/data-element.jar`；实际进程运行独立副本 `.runtime/no-nacos/data-element-runtime.jar`，日志位于 `logs/backend/no-nacos/`。先执行正常 Maven 构建生成 JAR；该入口不支持同时指定 `-Build`。普通启动命令继续使用原 Nacos 模式。已有进程占用端口时不会默认停止它，可选择空闲端口；`-Restart` 只允许重启此无 Nacos 运行副本的进程。
+
+配置文件中的账号、密码及密钥使用 `${...}` 引用，真实值从进程环境或工程外 `~/.codex/private/data-elements/no-nacos-environment.private.json` 的 `environment` 对象加载；可用 `-LocalEnvironmentPath` 指向其他受限文件。已有私有运行配置中的 `SPRING_APPLICATION_JSON` 和租户连接覆盖继续保留，IDAAS 持久主密钥沿用原私有配置或原密钥文件。换电脑时需自行提供这些业务环境值，不能将 `${...}` 当作账号或密码，也不能重新生成原主密钥。数据库、Redis、ES 等地址仍指向所选完整配置中的真实服务，无 Nacos 模式不会自动安装或替换这些服务。
+
+在仍可访问当前 Nacos 的机器上，可一次性生成无 Nacos 启动所需的私有环境文件：
+
+```powershell
+python tools/export-nacos-config.py --data-id data-element_ct.yml --local-environment-output "$env:USERPROFILE\.codex\private\data-elements\no-nacos-environment.private.json"
+```
+
+该命令只读 Nacos，将脱敏 YAML 写到 `db/nacos/data-element_ct.yml`；只有显式指定 `--local-environment-output` 时才将业务引用的实际值写到仓库外私有 JSON。它保留现有进程/受限配置及 `SPRING_APPLICATION_JSON` 的有效覆盖，不保存 Nacos 登录账号、口令或访问 token。私有 JSON 不得提交 Git、放进配置交付包或打印其内容。Nacos 已不可用时，可按配置中的变量名手工提供进程环境或同结构私有 JSON。修改本地 YAML 后需要重启对应进程生效。
 
 
 <a id="overview--构建与打包"></a>

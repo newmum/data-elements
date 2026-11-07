@@ -14,6 +14,11 @@ param(
     # Empty means use the selected Nacos configuration, not a second broker default.
     [string]$KafkaBootstrapServers = "",
     [string]$NacosConfigImports = "",
+    # No-Nacos startup loads the complete local YAML and disables config/discovery clients.
+    [switch]$WithoutNacos,
+    [string]$LocalConfigPath = (Join-Path $PSScriptRoot 'db/nacos/data-element_ct.yml'),
+    [string]$LocalEnvironmentPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/no-nacos-environment.private.json'),
+    [switch]$ValidateOnly,
     # Default local starts reuse the reviewed private runtime, including the
     # dedicated CT Nacos import and its environment. Explicit build/profile
     # arguments continue to use the configurable launcher below.
@@ -33,10 +38,17 @@ $ErrorActionPreference = "Stop"
 $privateRuntimeArguments = @('Restart','NoLiveLog','StartupTimeoutSeconds','RuntimeConfigPath')
 $usesPrivateRuntime = (Test-Path -LiteralPath $RuntimeConfigPath -PathType Leaf) -and
     @($PSBoundParameters.Keys | Where-Object { $_ -notin $privateRuntimeArguments }).Count -eq 0
-if ($usesPrivateRuntime) {
-    $runtimeResult = & (Join-Path $PSScriptRoot 'tools/start-local-backend.ps1') -ConfigPath $RuntimeConfigPath -Restart:$Restart |
-        ConvertFrom-Json
-    Write-Host "[start-data-elements] Starting reviewed private runtime on port $($runtimeResult.port)."
+if ($WithoutNacos -or $usesPrivateRuntime) {
+    $runtimeParameters = @{ConfigPath=$RuntimeConfigPath; Restart=$Restart}
+    if ($WithoutNacos) {
+        if ($Build) { throw 'Build the backend first, then use -WithoutNacos with the resulting JAR' }
+        $runtimeParameters += @{WithoutNacos=$true; LocalConfigPath=$LocalConfigPath; LocalEnvironmentPath=$LocalEnvironmentPath;
+                               JarPath=$JarPath; JavaExe=$JavaExe; Port=$Port; ValidateOnly=$ValidateOnly}
+    } elseif ($ValidateOnly) { throw '-ValidateOnly requires -WithoutNacos' }
+    $runtimeResult = & (Join-Path $PSScriptRoot 'tools/start-local-backend.ps1') @runtimeParameters | ConvertFrom-Json
+    if ($ValidateOnly) { $runtimeResult | ConvertTo-Json -Depth 4; return }
+    $runtimeLogDirectory = if ($WithoutNacos) { 'logs/backend/no-nacos' } else { 'logs/backend/local-runtime' }
+    Write-Host "[start-data-elements] Starting runtime on port $($runtimeResult.port); without Nacos=$([bool]$WithoutNacos)."
     $runtimeDeadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
     $runtimeReady = $false
     while ((Get-Date) -lt $runtimeDeadline -and (Get-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue)) {
@@ -46,10 +58,10 @@ if ($usesPrivateRuntime) {
         } catch { }
         Start-Sleep -Seconds 1
     }
-    if (-not $runtimeReady) { throw 'Private runtime did not become ready; inspect logs/backend/local-runtime' }
-    Write-Host '[start-data-elements] Tenant login routes ready. Runtime logs: logs/backend/local-runtime/stdout.log'
+    if (-not $runtimeReady) { throw "Runtime did not become ready; inspect $runtimeLogDirectory" }
+    Write-Host "[start-data-elements] Tenant login routes ready. Runtime logs: $runtimeLogDirectory/stdout.log"
     if ($NoLiveLog) { Wait-Process -Id $runtimeResult.pid -ErrorAction SilentlyContinue }
-    else { Get-Content -LiteralPath (Join-Path $PSScriptRoot 'logs/backend/local-runtime/stdout.log') -Tail 30 -Wait }
+    else { Get-Content -LiteralPath (Join-Path $PSScriptRoot "$runtimeLogDirectory/stdout.log") -Tail 30 -Wait }
     return
 }
 

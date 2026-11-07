@@ -21,7 +21,7 @@
 
 后端开发与批次验收标准见 [Magic API 优先与数据库访问抽象](docs/data-elements.md#magic-first-data-access) 和 [Magic 脚本可读性与注释规范](docs/data-elements.md#lowcode-magic--magic-api-readability-and-documentation)。
 
-数据库结构变更同时维护 `db/<库名>/init.sql` 完整定义和 `db/increments/` 中按序号维护的增量升级 SQL，方便 Git 比较及生产按需升级；使用方法见[数据库结构](docs/data-elements.md#database-schema)。Nacos 基础与开发配置分别维护为 `db/data-element.yml`、`db/data-element-dev.yml`，澄天金仓专用完整配置为 `db/data-element_ct.yml`，均保存脱敏版本，导出方法见[配置版本管理](docs/data-elements.md#nacos-config-versioning)。运行日志、测试报告、实际执行副本、脚本备份与发布临时产物统一放在根 `logs/`，该目录不提交 Git。长期有用的说明保留在 `docs/`。运行凭据只应从环境或受限配置注入，不要写入前端 `VITE_*` 变量或提交到 Git。
+数据库结构变更同时维护 `db/<库名>/init.sql` 完整定义和 `db/increments/` 中按序号维护的增量升级 SQL，方便 Git 比较及生产按需升级；使用方法见[数据库结构](docs/data-elements.md#database-schema)。Nacos 基础与开发配置分别维护为 `db/nacos/data-element.yml`、`db/nacos/data-element-dev.yml`，澄天金仓专用完整配置为 `db/nacos/data-element_ct.yml`，均保存脱敏版本，导出方法见[配置版本管理](docs/data-elements.md#nacos-config-versioning)。未部署 Nacos 时执行 `.\start-data-elements.cmd -WithoutNacos`，使用本地完整配置及 `db/nacos/application-no-nacos.yml`；首次使用和私有环境准备见[无 Nacos 启动](docs/data-elements-parent.md#without-nacos)。运行日志、测试报告、实际执行副本、脚本备份与发布临时产物统一放在根 `logs/`，该目录不提交 Git。长期有用的说明保留在 `docs/`。运行凭据只应从环境或受限配置注入，不要写入前端 `VITE_*` 变量或提交到 Git。
 
 <a id="documentation"></a>
 

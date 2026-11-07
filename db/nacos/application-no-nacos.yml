@@ -1,0 +1,25 @@
+# 未部署 Nacos 时的本地启动覆盖配置；与同目录 data-element_ct.yml 一起加载。
+# data-element_ct.yml 保存当前完整业务配置；本文件仅关闭配置中心和服务注册，避免维护第二份业务参数。
+# 从仓库根目录执行：.\start-data-elements.cmd -WithoutNacos
+# 数据库、Redis、ES 及业务密钥仍由工程外受限环境文件或进程环境提供；不填写明文凭据。
+spring:
+  application:
+    name: data-element
+  cloud:
+    discovery:
+      enabled: false
+    service-registry:
+      auto-registration:
+        enabled: false
+    nacos:
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+      discovery:
+        enabled: false
+        register-enabled: false
+management:
+  health:
+    nacos:
+      enabled: false

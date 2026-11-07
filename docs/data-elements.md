@@ -38,7 +38,7 @@ Magic、低代码和数据库结构从本仓库维护，采用“先改本地，
 | `lowcode/` | Vue 源码及组件索引 | `baseline.ui_component_t`；按组件管理器真实 `pid` 树和中文显示名称建目录及 Vue 文件 |
 | `db/` | 平台五库及独立工程数据库各一份完整 `init.sql` 和结构清单 | 表、视图、索引、约束、注释，以及实际存在的其他结构；不含业务数据和账号 |
 | `db/increments/` | 按递增序号、业务含义和方言维护的结构升级 SQL | 与完整结构同一任务更新，供已有库经审查后执行 |
-| `db/data-element*.yml` | 当前 Nacos 基础/开发覆盖配置的脱敏版本 | 保留配置层次和非敏感值，凭据使用环境变量引用 |
+| `db/nacos/data-element*.yml` | 当前 Nacos 基础/开发覆盖配置的脱敏版本 | 保留配置层次和非敏感值，凭据使用环境变量引用 |
 | `tools/` | 可维护的导出、比较、编译、发布工具及其安全测试 | 所有操作入口共用一份实现 |
 | `logs/` | 不提交 Git | 日志、审计报告、截图、编译结果、临时变更 SQL 和运行备份 |
 
@@ -84,14 +84,16 @@ Windows 本地启动使用 `tools/start-local-backend.ps1`，默认读取仓库�
 
 ### Nacos 配置版本管理
 
-当前本机后端从 `192.168.175.86:8848` 的 `data-element` 命名空间、`DEFAULT_GROUP` 单独导入澄天金仓专用完整配置 `data-element_ct.yml`。原 `data-element.yml`、`data-element-dev.yml` 仍分别保留基础与开发覆盖，原内容未修改。三份在线 Data ID 分别导出到根 `db/` 同名文件。其他环境按实际 Data ID、Group 和 Namespace 核对，不能因本机配置正确就宣称生产已更新。
+当前本机后端从 `192.168.175.86:8848` 的 `data-element` 命名空间、`DEFAULT_GROUP` 单独导入澄天金仓专用完整配置 `data-element_ct.yml`。原 `data-element.yml`、`data-element-dev.yml` 仍分别保留基础与开发覆盖，原内容未修改。三份在线 Data ID 分别导出到 `db/nacos/` 同名文件。其他环境按实际 Data ID、Group 和 Namespace 核对，不能因本机配置正确就宣称生产已更新。
 
 ```powershell
-python tools/export-nacos-config.py --data-id data-element.yml --output db/data-element.yml
-python tools/export-nacos-config.py --data-id data-element-dev.yml --output db/data-element-dev.yml
-python tools/export-nacos-config.py --data-id data-element_ct.yml --output db/data-element_ct.yml
+python tools/export-nacos-config.py --data-id data-element.yml --output db/nacos/data-element.yml
+python tools/export-nacos-config.py --data-id data-element-dev.yml --output db/nacos/data-element-dev.yml
+python tools/export-nacos-config.py --data-id data-element_ct.yml --output db/nacos/data-element_ct.yml
 python -m unittest discover -s tools/tests -p test_nacos_config_export.py
 ```
+
+省略 `--output` 时默认导出到 `db/nacos/<Data ID>`。未部署 Nacos 的启动说明见[共享后端无 Nacos 启动](data-elements-parent.md#without-nacos)：复用本目录的完整配置，叠加 `application-no-nacos.yml`，通过根启动入口的 `-WithoutNacos` 显式启用。业务密钥继续在工程外提供；仅显式使用 `--local-environment-output <工程外私有JSON>` 时，导出工具才保存本地启动所需的实际业务环境值，普通导出仍只生成脱敏 YAML。
 
 导出工具默认读取仓库外 `~/.codex/private/data-elements/local-runtime.private.json` 的 Nacos 环境配置，也可用 `--runtime-config` 指定已核对的其他私有运行配置。工具只读 Nacos；输出替换密码、账号、token、访问密钥、同步密钥及带凭据 URL，删除秘密环境变量的明文默认值，保留非敏感配置。不要在命令行传入口令，不把在线原文或凭据备份保存到 Git。
 
@@ -211,7 +213,7 @@ git diff -- db
 
 现用公共结构增量为 `000002_lakehouse_gateway_tables`（MySQL、达梦、金仓），仅用于缺少所列全部15表的行业旧基线；已有表必须先核对，不能重复建表。`000003_market_catalog_view_count` 为四行业目录主表增加有符号 `BIGINT NOT NULL DEFAULT 0` 浏览量列，不改变目录修订号或更新时间。`000004_retire_unused_nifi_task_status.mysql.sql` 仅适用于经独立引用核查的海渔旧空表。实际执行前核对部署绑定、方言、当前结构与恢复材料；这些结构增量不回填索引历史或切换计数写入者。
 
-澄天原 MySQL `chengtian` 保留为切换前恢复来源，其旧完整定义仍在 `db/chengtian/init.sql`，不再代表当前运行绑定。金仓原生结构为 `db/baseline_ct/init.sql`；当前 Nacos 专用 Data ID 为 `data-element_ct.yml`，脱敏版本位于 `db/data-element_ct.yml`。控制库、共享 Magic/低代码及另外三个行业的数据库绑定均保持原位置。切换步骤与恢复边界见[澄天金仓部署](data-elements-chengtian.md#kingbase-runtime)。
+澄天原 MySQL `chengtian` 保留为切换前恢复来源，其旧完整定义仍在 `db/chengtian/init.sql`，不再代表当前运行绑定。金仓原生结构为 `db/baseline_ct/init.sql`；当前 Nacos 专用 Data ID 为 `data-element_ct.yml`，脱敏版本位于 `db/nacos/data-element_ct.yml`。控制库、共享 Magic/低代码及另外三个行业的数据库绑定均保持原位置。切换步骤与恢复边界见[澄天金仓部署](data-elements-chengtian.md#kingbase-runtime)。
 
 四个行业租户维护同一套业务表、列、主键、索引和约束，以实际已确认的公安租户库为统一结构权威，不能按旧库名选择发布目标。原共同结构包含公安原 139 张表和以下一张有现用功能依据的公共表；新增版本表在各方言定义中完整维护，新增空表不复制其他租户数据。
 
