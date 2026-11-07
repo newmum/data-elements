@@ -1,0 +1,84 @@
+[
+  {
+    "file": "mysql.svg",
+    "repository": "Devicon",
+    "version": "v2.17.0",
+    "url": "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/mysql/mysql-original.svg",
+    "repositoryLicense": "MIT",
+    "sha256": "f73fa5d6b9da33fbf540ff96f5360c24b6d29d883ecfe6fcaecf89a8d3456067",
+    "changes": "None. Original paths, colors, and viewBox retained."
+  },
+  {
+    "file": "postgresql.svg",
+    "repository": "Devicon",
+    "version": "v2.17.0",
+    "url": "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/postgresql/postgresql-original.svg",
+    "repositoryLicense": "MIT",
+    "sha256": "f220a436258ed014c512ba4f9c0de6b9e5c2c4b55331a0a29f8c7a1a12c36443",
+    "changes": "None. Original paths, colors, and viewBox retained."
+  },
+  {
+    "file": "sqlserver.svg",
+    "repository": "Devicon",
+    "version": "v2.17.0",
+    "url": "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/microsoftsqlserver/microsoftsqlserver-original.svg",
+    "repositoryLicense": "MIT",
+    "sha256": "f52b63cb5ff8c17efc079ae93eb7e2f1a04ca34eb736310c3576b19c0b9db21d",
+    "changes": "None. Original paths, colors, and viewBox retained."
+  },
+  {
+    "file": "oracle.svg",
+    "repository": "Devicon",
+    "version": "v2.17.0",
+    "url": "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/oracle/oracle-original.svg",
+    "repositoryLicense": "MIT",
+    "sha256": "6afd3872d2ecb9a619fc10048b6a18bc3b948dfd7c97d1a694af26c6a7153cbf",
+    "changes": "None. Original paths, colors, and viewBox retained."
+  },
+  {
+    "file": "sqlite.svg",
+    "repository": "Devicon",
+    "version": "v2.17.0",
+    "url": "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/sqlite/sqlite-original.svg",
+    "repositoryLicense": "MIT",
+    "sha256": "2b91c30887d3602479ba845cc012ef6ae577fba71eb96705a05b12e35d2c5e7e",
+    "changes": "None. Original paths, colors, and viewBox retained."
+  },
+  {
+    "file": "mariadb.svg",
+    "repository": "Devicon",
+    "version": "v2.17.0",
+    "url": "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/mariadb/mariadb-original.svg",
+    "repositoryLicense": "MIT",
+    "sha256": "90f14c26b478447171ad800791535f5f5ab0f9abf80387edefb410b6fc85cbdc",
+    "changes": "None. Original paths, colors, and viewBox retained."
+  },
+  {
+    "file": "mongodb.svg",
+    "repository": "Devicon",
+    "version": "v2.17.0",
+    "url": "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/mongodb/mongodb-original.svg",
+    "repositoryLicense": "MIT",
+    "sha256": "d9f2bf7041264f4747e9969fb82ede0199c0ac97dfa8632aa0687d702ec05f7b",
+    "changes": "None. Original paths, colors, and viewBox retained."
+  },
+  {
+    "file": "redis.svg",
+    "repository": "Devicon",
+    "version": "v2.17.0",
+    "url": "https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/redis/redis-original.svg",
+    "repositoryLicense": "MIT",
+    "sha256": "4707378b190878f36f7e6e1c01fa3ee7e7884c76101809d191dddd943a2e6bdb",
+    "changes": "None. Original paths, colors, and viewBox retained."
+  },
+  {
+    "file": "snowflake.svg",
+    "repository": "Simple Icons",
+    "version": "15.14.0",
+    "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/15.14.0/icons/snowflake.svg",
+    "repositoryLicense": "CC0-1.0 (underlying trademark/brand rights are separate)",
+    "sha256": "ffba0ab5ce4e2f222c3fdacc42e2d7de763b39d525ea0948566cb02614ee7908",
+    "changes": "Added fill #29B5E8 from the pinned Simple Icons metadata. Paths, registered trademark symbol, and viewBox unchanged.",
+    "upstreamBrandSource": "https://www.snowflake.com/brand-guidelines/"
+  }
+]

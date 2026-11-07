@@ -1,0 +1,7 @@
+/* Explicit colors preserve range visibility over hover, modified cells and row selection. */
+:root .data-grid { --range-fill:#d5e9fa; --range-text:#153d60; --range-border:#4c8cbd; }
+:root[data-theme="dark"] .data-grid { --range-fill:#294c70; --range-text:#eff7ff; --range-border:#80b7e8; }
+:root .data-grid .ant-table-tbody>tr>td.ant-table-cell:has([data-range-selected="true"]) { background:var(--range-fill)!important; }
+:root .data-grid .data-cell[data-range-selected="true"] { background:var(--range-fill)!important;color:var(--range-text)!important;box-shadow:inset 0 0 0 1px var(--range-border); }
+:root .data-grid .data-cell[data-range-selected="true"] .null-value { color:var(--range-text)!important;opacity:.72; }
+:root .data-grid[data-range-dragging="true"], :root .data-grid[data-range-dragging="true"] * { user-select:none!important;cursor:cell!important; }

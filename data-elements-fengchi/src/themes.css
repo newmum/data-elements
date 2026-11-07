@@ -1,0 +1,458 @@
+/* Shared semantic colors keep native workspace chrome and portal dialogs in sync.
+   Import after styles.css. Layout, pane resizing, and modal dragging stay there. */
+:root, :root[data-theme='light'] {
+  color-scheme: light;
+  --app-bg: #f3f3f4;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-inset: #f7f7f8;
+  --surface-alt: #fafafa;
+  --chrome: #f0f0f1;
+  --chrome-soft: #f5f5f6;
+  --hover: #eceef1;
+  --pressed: #e1e4e8;
+  --border: #d5d7dc;
+  --border-soft: #e7e8eb;
+  --border-strong: #bcc1c9;
+  --text: #30343b;
+  --text-secondary: #60656e;
+  --text-muted: #686e77;
+  --text-disabled: #949aa4;
+  --disabled-bg: #f1f2f3;
+  --accent: #2877ba;
+  --accent-hover: #22659e;
+  --accent-fill: #2f77b0;
+  --accent-fill-hover: #286da6;
+  --accent-fill-active: #245f91;
+  --selection: #dfebf6;
+  --selection-hover: #d2e3f2;
+  --selection-border: #a6c5e2;
+  --selection-text: #235e8e;
+  --selected-cell: #2f77b0;
+  --focus-ring: #2877ba30;
+  --success: #3b7352;
+  --success-bg: #edf5ef;
+  --warning: #8b6425;
+  --warning-bg: #fcf7ea;
+  --warning-border: #ebdbb6;
+  --danger: #b64e52;
+  --danger-bg: #faebec;
+  --purple: #785c9f;
+  --purple-bg: #f2eef8;
+  --scrollbar: #bfc3ca;
+  --scrollbar-hover: #a0a6b0;
+  --popup-shadow: 0 4px 16px #1c20251f, 0 1px 3px #1c202512;
+  --dialog-shadow: 0 16px 50px #151a222b, 0 2px 8px #151a2214;
+  --dialog-mask: #171b2330;
+  --button-highlight: #ffffffc7;
+  --tooltip-bg: #34383f;
+  --tooltip-text: #f6f7f9;
+  --editor-active-line: #f4f5f7;
+  --editor-gutter: #f7f7f8;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --app-bg: #1e2024;
+  --surface: #24262b;
+  --surface-raised: #2b2d33;
+  --surface-inset: #202226;
+  --surface-alt: #282a2f;
+  --chrome: #292b30;
+  --chrome-soft: #2d3036;
+  --hover: #353940;
+  --pressed: #40454e;
+  --border: #41464f;
+  --border-soft: #34383f;
+  --border-strong: #565d68;
+  --text: #e4e6ea;
+  --text-secondary: #b1b6bf;
+  --text-muted: #989ea8;
+  --text-disabled: #7f8692;
+  --disabled-bg: #2d2f35;
+  --accent: #6baae3;
+  --accent-hover: #94c6f2;
+  --accent-fill: #2f77b0;
+  --accent-fill-hover: #327bb4;
+  --accent-fill-active: #2b6da0;
+  --selection: #2c4763;
+  --selection-hover: #345473;
+  --selection-border: #507a9e;
+  --selection-text: #d6e9fb;
+  --selected-cell: #2f77b0;
+  --focus-ring: #6baae338;
+  --success: #7dbb96;
+  --success-bg: #293a31;
+  --warning: #d5ae67;
+  --warning-bg: #3b3427;
+  --warning-border: #5f5035;
+  --danger: #e28b8b;
+  --danger-bg: #4b3035;
+  --purple: #baa5dd;
+  --purple-bg: #393243;
+  --scrollbar: #525963;
+  --scrollbar-hover: #707884;
+  --popup-shadow: 0 6px 20px #0000005c, 0 1px 4px #00000038;
+  --dialog-shadow: 0 18px 60px #00000070, 0 2px 8px #00000040;
+  --dialog-mask: #06080d70;
+  --button-highlight: #ffffff0a;
+  --tooltip-bg: #3d424b;
+  --tooltip-text: #f6f7f9;
+  --editor-active-line: #2c3037;
+  --editor-gutter: #202226;
+}
+
+:root, body, #root, .ant-app { background: var(--app-bg); color: var(--text); }
+::selection { background: var(--selection); color: var(--selection-text); }
+button:focus-visible, [role='button']:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:root * { scrollbar-color: var(--scrollbar) var(--surface-inset); }
+:root ::-webkit-scrollbar { width: 9px; height: 9px; }
+:root ::-webkit-scrollbar-track { background: var(--surface-inset); }
+:root ::-webkit-scrollbar-thumb { background: var(--scrollbar); border: 2px solid var(--surface-inset); border-radius: 5px; }
+:root ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+:root ::-webkit-scrollbar-corner { background: var(--surface-inset); }
+
+/* Neutral workspace surfaces, with blue reserved for meaningful emphasis. */
+:root :is(.app-shell,.workbench,.primary-content,.data-grid,.objects-workspace,.structure-panel,.ddl-panel,.query-workspace,.query-results,.sql-editor,.inspector,.inspector-heading,.object-card) {
+  background: var(--surface); color: var(--text);
+}
+:root :is(.menubar,.main-toolbar,.sidebar-heading,.tabs-strip,.view-tabs,.data-toolbar,.object-list-toolbar,.query-toolbar,.results-header,.changes-bar,.statusbar) {
+  background: var(--chrome); color: var(--text-secondary); border-color: var(--border);
+}
+:root :is(.sidebar,.empty-workspace) { background: var(--surface-inset); color: var(--text-secondary); border-color: var(--border); }
+:root :is(.object-search,.sidebar-footer,.grid-footer,.objects-bottom,.editor-status,.section-toolbar,.schema-info) {
+  background: var(--chrome-soft); color: var(--text-muted); border-color: var(--border);
+}
+:root :is(.object-card,.detail-section,.inspector,.inspector-heading,.native-field-panel .field-value-section,.help-stack,.picker-notice,.native-connection-notice) { border-color: var(--border-soft); }
+:root :is(.toolbar-divider,.action-divider,.statusbar-divider) { background: var(--border); border-right-color: var(--button-highlight); }
+:root :is(.menu-button,.top-tool,.connection-label,.object-open,.tab-main,.native-field-panel,.native-field-panel h3,.native-field-panel span,.object-card h3,.detail-row>b,.statistics strong,.table-title h1,.column-label>b) { color: var(--text); }
+:root :is(.mock-note,.toolbar-end .ant-btn,.sidebar-heading .ant-btn,.tree-wrap .ant-tree-switcher,.tree-table>span,.database-name>span,.tab-close,.tab-add,.sidebar-toggle,.breadcrumb,.breadcrumb strong,.table-count,.table-count small,.table-title h1>span,.table-title p,.column-label>span:not(.anticon),.column-label>span>i,.primary-cell,.null-value,.grid-footer,.changes-bar>span,.inspector-heading,.inspector-heading button,.object-card p,.detail-section h4,.detail-section h4>span,.detail-row>span,.statistics span,.statistics strong small,.inspector-field small,.native-field-panel label,.prototype-note,.prototype-note p,.statusbar,.statusbar>button,.editor-status,.query-empty,.query-empty p,.form-type,.ssl-note,.help-stack,.dialog-prototype-label,.picker-sidebar-note,.picker-notice,.no-password-note,.native-connection-notice,.native-settings-placeholder p) {
+  color: var(--text-muted);
+}
+:root :is(.inspector .detail-row,.inspector .inspector-field,.inspector-field,.type-icon,.native-field-panel .field-type-symbol,.inspector-ddl h4,.inspector-ddl pre,.sidebar-footer b,.help-content,.native-settings-placeholder,.picker-heading,.connection-picker h4,.connection-diagram>div,.native-settings-grid>span) { color: var(--text-secondary); }
+:root .sidebar-footer span:not(.connection-ok) { color: var(--text-muted); }
+:root :is(.keyboard-hint,.query-empty>div span,.database-name>span,.field-dot) { color: var(--text-muted); border-color: var(--border); }
+:root .footer-dot { color: var(--border-strong); }
+:root :is(.tree-count,.schema-tag,.engine-icon,.object-card .ant-tag) { background: var(--hover); color: var(--text-secondary); border-color: var(--border); }
+:root :is(.table-tree-icon,.object-open>.anticon,.table-title-icon,.object-icon,.breadcrumb>.anticon:first-child) { color: var(--accent); }
+:root :is(.connection-ok,.query-message,.results-header>span,.changes-bar .anticon-check) { color: var(--success); }
+:root .query-message.error { color: var(--danger); }
+:root :is(.online,.status-connected i) { background: var(--success); }
+:root :is(.offline,.mock-dot) { background: var(--text-disabled); }
+:root :is(.key-color,.column-label>.anticon,.native-field-panel h3>.anticon,.statusbar>div>.anticon) { color: var(--warning); }
+:root .changes-bar.has-changes { background: var(--warning-bg); border-color: var(--warning-border); }
+:root .changes-bar.has-changes>span { color: var(--warning); }
+:root :is(.change-dot,.tab-main i) { background: var(--warning); }
+
+/* Preserve the existing click/hover behavior of the native menus and tools. */
+:root .menu-button:hover, :root .menu-button[aria-expanded='true'] { background: var(--hover); border-color: var(--border-strong); }
+:root .top-tool { color: var(--text); }
+:root .top-tool:hover { background: linear-gradient(var(--surface-raised),var(--hover)); border-color: var(--border-strong); box-shadow: inset 0 0 0 1px var(--button-highlight); }
+:root .top-tool:active { background: var(--pressed); border-color: var(--border-strong); box-shadow: inset 0 1px 3px #00000014; }
+:root .top-tool.table-tool { background: linear-gradient(var(--hover),var(--chrome)); border-color: var(--border-strong); box-shadow: inset 0 0 0 1px var(--button-highlight); }
+:root .top-tool.table-tool:hover { background: var(--pressed); }
+:root .toolbar-end .pane-controls { border-color: var(--border); }
+:root .toolbar-end :is(.pane-toggle.ant-btn,.theme-toggle.ant-btn) { color: var(--text-secondary); }
+:root .toolbar-end .pane-toggle.active { background: var(--surface-raised); border-color: var(--border-strong); color: var(--text); box-shadow: inset 0 1px 0 var(--button-highlight); }
+:root .toolbar-end .ant-btn:hover, :root .toolbar-end .pane-toggle.ant-btn:hover { background: var(--hover); color: var(--accent); border-color: var(--border-strong); }
+:root .tree-wrap .ant-tree { background: transparent; color: var(--text); }
+:root .tree-wrap .ant-tree-node-content-wrapper:hover { background: var(--hover); }
+:root .tree-wrap .ant-tree-node-selected { background: var(--selection) !important; color: var(--selection-text); }
+:root .tree-wrap .ant-tree-node-selected .connection-label { color: inherit; }
+:root .document-tab { background: linear-gradient(var(--chrome-soft),var(--chrome)); border-color: var(--border); }
+:root .document-tab.active { background: var(--surface); border-color: var(--border-strong); box-shadow: inset 0 2px 0 var(--accent); }
+:root .document-tab.active .tab-main { color: var(--text); }
+:root :is(.tab-close:hover,.tab-add:hover,.sidebar-toggle:hover,.inspector-mode-buttons button:hover) { background: var(--hover); color: var(--text); border-color: var(--border); }
+:root .tab-close:active { background: var(--pressed); }
+:root .view-tabs>button { color: var(--text-secondary); }
+:root .view-tabs>button:hover { background: var(--hover); color: var(--text); }
+:root .view-tabs>button.active { background: var(--surface); color: var(--text); border-color: var(--border); }
+:root .inspector-mode-buttons button.active { background: var(--selection); color: var(--accent); }
+:root .pane-resizer:hover, :root .pane-resizer:focus-visible, :root .pane-resizer[data-resizing='true'] { background: var(--focus-ring); box-shadow: inset 1px 0 var(--accent); }
+:root .document-tabs::-webkit-scrollbar-thumb { background: var(--scrollbar); }
+:root .document-tabs::-webkit-scrollbar-track { background: var(--chrome); }
+
+/* Tables: quiet zebra rows and distinct row versus cell selection. */
+:root .ant-table { background: var(--surface); color: var(--text); }
+:root :is(.data-grid .ant-table-wrapper,.structure-panel .ant-table) { border-color: var(--border); }
+:root .ant-table-thead>tr>th { background: var(--chrome-soft) !important; color: var(--text-secondary) !important; border-right-color: var(--border) !important; border-bottom-color: var(--border-strong) !important; }
+:root .ant-table-thead>tr>th.ant-table-column-has-sorters:hover { background: var(--hover) !important; }
+:root .ant-table-tbody>tr>td { background: var(--surface); color: var(--text); border-right-color: var(--border-soft) !important; border-bottom-color: var(--border-soft) !important; }
+:root .ant-table-tbody>tr:nth-child(even):not(.ant-table-row-selected)>td { background: var(--surface-alt); }
+:root .ant-table-tbody>tr.ant-table-row:hover>td { background: var(--hover) !important; }
+:root .ant-table-tbody>tr.focus-row:not(.ant-table-row-selected)>td,
+:root .ant-table-tbody>tr.ant-table-row-selected>td { background: var(--selection) !important; color: var(--text) !important; }
+:root .ant-table-tbody>tr.ant-table-row-selected:hover>td { background: var(--selection-hover) !important; }
+:root .data-cell, :root .ant-table-row-selected .data-cell { color: var(--text) !important; }
+:root .data-cell.primary-cell { color: var(--text-secondary) !important; }
+:root .ant-table-selection-column { background: var(--chrome-soft) !important; border-right-color: var(--border) !important; }
+:root .data-cell.selected-cell { background: var(--selected-cell); color: #ffffff !important; box-shadow: inset 0 0 0 1px var(--accent); }
+:root .ant-table-tbody>tr>td.ant-table-cell:has(.selected-cell) { background: var(--selected-cell) !important; }
+:root .ant-table-row-selected .null-value { color: var(--text-muted); }
+:root .data-cell.selected-cell .null-value { color: #e4eff9; }
+:root .data-cell .ant-tag-success { color: var(--success); background: var(--success-bg); }
+:root .data-cell .ant-tag-default { color: var(--text-secondary); background: var(--hover); }
+:root .role-label { color: var(--text-secondary); background: var(--hover); border-color: var(--border); }
+:root .role-label.admin { color: var(--purple); background: var(--purple-bg); border-color: transparent; }
+:root .ant-pagination-total-text { color: var(--text-muted); }
+:root .ant-pagination-item:hover { background: var(--hover); }
+:root .ant-pagination-item-active { background: var(--selection) !important; border-color: var(--selection-border) !important; }
+:root .ant-pagination-item-active a { color: var(--selection-text); }
+
+/* Compact controls use the same color language in every workspace and dialog. */
+:root .ant-btn-default { background: linear-gradient(var(--surface-raised),var(--chrome-soft)); color: var(--text); border-color: var(--border-strong); box-shadow: inset 0 1px 0 var(--button-highlight); }
+:root .ant-btn-default:not(:disabled):hover { background: var(--hover) !important; color: var(--text) !important; border-color: var(--text-muted) !important; box-shadow: none; }
+:root .ant-btn-default:not(:disabled):active { background: var(--pressed) !important; border-color: var(--border-strong) !important; box-shadow: inset 0 1px 2px #00000014; }
+:root .ant-btn-primary { background: var(--accent-fill) !important; border-color: var(--accent-fill) !important; color: #fff; text-shadow: none; box-shadow: none !important; }
+:root .ant-btn-primary:not(:disabled):hover { background: var(--accent-fill-hover) !important; border-color: var(--accent-fill-hover) !important; color: #fff !important; }
+:root .ant-btn-primary:not(:disabled):active { background: var(--accent-fill-active) !important; border-color: var(--accent-fill-active) !important; box-shadow: none !important; }
+:root .ant-btn-text:not(:disabled):hover { background: var(--hover); color: var(--text); }
+:root .ant-btn:disabled, :root .ant-btn-primary:disabled { color: var(--text-disabled) !important; background: var(--disabled-bg) !important; border-color: var(--border) !important; text-shadow: none; box-shadow: none !important; }
+:root .ant-btn-text:disabled, :root .data-actions .ant-btn:disabled { background: transparent !important; border-color: transparent !important; }
+:root .ant-btn-dangerous:not(:disabled) { color: var(--danger); }
+:root .ant-btn-dangerous.ant-btn-primary:not(:disabled) { color: #fff; background: #b64e52 !important; border-color: #b64e52 !important; }
+:root .data-actions .ant-btn { background: transparent; color: var(--text-secondary); border-color: transparent; }
+:root .data-actions .ant-btn:not(:disabled):hover { background: var(--hover) !important; border-color: var(--border-strong) !important; color: var(--text) !important; box-shadow: none; }
+:root :is(.ant-input,.ant-input-affix-wrapper,.ant-input-number,.ant-select-selector) { background: var(--surface); color: var(--text); border-color: var(--border-strong) !important; box-shadow: none; }
+:root .ant-input-affix-wrapper .ant-input { background: transparent; }
+:root :is(.ant-input-prefix,.ant-input-suffix,.ant-select-arrow,.ant-input-clear-icon,.ant-select-clear) { color: var(--text-muted); }
+:root :is(.ant-input,.ant-input-number-input)::placeholder { color: var(--text-muted); }
+:root :is(.ant-input:hover,.ant-input-affix-wrapper:hover,.ant-input-number:hover),
+:root .ant-select:not(.ant-select-disabled):hover .ant-select-selector { border-color: var(--text-muted) !important; }
+:root :is(.ant-input:focus,.ant-input-affix-wrapper-focused,.ant-input-number-focused),
+:root .ant-select-focused:not(.ant-select-disabled) .ant-select-selector { border-color: var(--accent) !important; box-shadow: 0 0 0 2px var(--focus-ring) !important; }
+:root :is(.ant-input-disabled,.ant-input-affix-wrapper-disabled,.ant-input-number-disabled),
+:root .ant-select-disabled .ant-select-selector { background: var(--disabled-bg) !important; border-color: var(--border) !important; color: var(--text-disabled) !important; box-shadow: none !important; }
+:root .ant-input-disabled:hover, :root .ant-input-number-disabled:hover { border-color: var(--border) !important; }
+:root .ant-input-disabled::placeholder { color: var(--text-disabled); }
+:root .ant-input-status-error:not(:disabled), :root .ant-input-number-status-error, :root .ant-input-affix-wrapper-status-error { border-color: var(--danger) !important; }
+:root .ant-form-item-explain-error { color: var(--danger); }
+:root .ant-table-cell .ant-input { background: var(--surface); color: var(--text); border-color: var(--accent) !important; box-shadow: 0 0 0 1px var(--focus-ring); }
+:root .ant-checkbox-wrapper-disabled>span { color: var(--text-disabled); }
+
+/* Menus, selects, help tips, and messages are portaled outside .app-shell. */
+:root .ant-dropdown .ant-dropdown-menu { background: var(--surface-raised); border-color: var(--border-strong); box-shadow: var(--popup-shadow); }
+:root .ant-dropdown .ant-dropdown-menu-item, :root .ant-dropdown .ant-dropdown-menu-submenu-title { color: var(--text); }
+:root .ant-dropdown .ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover,
+:root .ant-dropdown .ant-dropdown-menu-item-active { background: var(--selection) !important; color: var(--selection-text) !important; }
+:root .ant-dropdown .ant-dropdown-menu-item-disabled { color: var(--text-disabled); }
+:root .ant-dropdown .ant-dropdown-menu-item-disabled:hover { background: transparent !important; color: var(--text-disabled) !important; }
+:root .ant-dropdown-menu-item-divider { background: var(--border-soft) !important; }
+:root .ant-select-dropdown { background: var(--surface-raised); border-color: var(--border-strong); box-shadow: var(--popup-shadow) !important; }
+:root .ant-select-item { color: var(--text); }
+:root .ant-select-item-option-active { background: var(--hover) !important; }
+:root .ant-select-item-option-selected { background: var(--selection) !important; color: var(--selection-text); }
+:root .ant-select-item-option-disabled { color: var(--text-disabled); }
+:root .ant-tooltip-inner { background: var(--tooltip-bg) !important; color: var(--tooltip-text) !important; border-color: transparent !important; box-shadow: var(--popup-shadow) !important; }
+:root .ant-message-notice-content { background: var(--surface-raised); color: var(--text); border-color: var(--border); box-shadow: var(--popup-shadow) !important; }
+
+/* Dialog hierarchy: calm title bar, aligned form fields, and a separate action row. */
+:root .ant-modal-mask { background: var(--dialog-mask) !important; }
+:root .ant-modal .ant-modal-content { background: var(--surface-raised); border-color: var(--border-strong); border-radius: 6px !important; box-shadow: var(--dialog-shadow) !important; }
+:root .ant-modal .ant-modal-header { background: var(--chrome-soft); border-color: var(--border); padding-right: 42px !important; }
+:root .ant-modal .ant-modal-title { color: var(--text); font-weight: 600; }
+:root .ant-modal .ant-modal-close { color: var(--text-muted); }
+:root .ant-modal .ant-modal-close:hover { background: var(--danger-bg); color: var(--danger); border-color: transparent; }
+:root .ant-modal .ant-modal-close:active { background: var(--danger-bg); }
+:root .ant-modal .ant-modal-body { background: var(--surface-raised); color: var(--text); padding: 20px 24px; }
+:root .ant-modal .ant-modal-footer,
+:root .native-confirm-dialog .ant-modal-confirm-btns { background: var(--chrome-soft); border-color: var(--border); padding: 10px 16px; }
+:root .ant-modal .ant-modal-footer .ant-btn,
+:root .native-confirm-dialog .ant-modal-confirm-btns .ant-btn { height: 27px; min-width: 74px; padding-inline: 13px; }
+:root .native-dialog-footer>div { gap: 8px; }
+:root .ant-modal .ant-form-item { margin-bottom: 15px; }
+:root .ant-modal .ant-form-item:last-child { margin-bottom: 0; }
+:root .ant-modal .ant-form-item-label>label { color: var(--text-secondary); font-size: 12px; }
+:root .ant-modal .ant-form-vertical .ant-form-item-label { padding-bottom: 5px; }
+:root .ant-modal :is(.ant-input,.ant-input-affix-wrapper,.ant-input-number,.ant-select-selector) { border-radius: 3px !important; }
+:root .ant-modal .ant-form-vertical :is(.ant-input,.ant-input-number) { min-height: 28px; }
+:root .ant-modal .ant-form-vertical .ant-input-number-input { height: 26px; }
+:root .native-confirm-dialog .ant-modal-header { background: var(--chrome-soft); border-color: var(--border); }
+:root .native-confirm-dialog .ant-modal-body { padding: 0 !important; }
+:root .native-confirm-dialog .ant-modal-confirm-body { align-items: flex-start; gap: 13px; padding: 24px; background: var(--surface-raised); }
+:root .native-confirm-dialog .ant-modal-confirm-body>.anticon { color: var(--warning); }
+:root .native-confirm-dialog .ant-modal-confirm-content { color: var(--text-secondary); line-height: 24px; }
+:root .native-confirm-dialog .ant-modal-confirm-btns { display: flex; justify-content: flex-end; gap: 8px; }
+:root .native-confirm-dialog .ant-modal-confirm-btns .ant-btn+.ant-btn { margin-inline-start: 0; }
+:root .connection-dialog .ant-modal-body { padding: 0 !important; }
+:root .connection-picker>aside { background: var(--surface-inset); border-color: var(--border-soft); padding-top: 18px; }
+:root .connection-picker>aside>button { color: var(--text-secondary); border-radius: 3px; margin-bottom: 3px; }
+:root .connection-picker>aside>button:hover { background: var(--hover); border-color: transparent; color: var(--text); }
+:root .connection-picker>aside>button.active { background: var(--selection); border-color: var(--selection-border); color: var(--selection-text); }
+:root .connection-picker>section { padding-top: 18px; }
+:root .connection-type-tile { color: var(--text); border-color: var(--border-soft); border-radius: 5px; background: var(--surface); }
+:root .connection-type-tile:hover { background: var(--hover); border-color: var(--border-strong); }
+:root .connection-type-tile.selected { background: var(--selection); border-color: var(--selection-border); box-shadow: inset 0 0 0 1px var(--selection-border); }
+:root .connection-type-tile:active { background: var(--selection-hover); border-color: var(--accent); }
+:root .native-dialog-tabs { background: var(--chrome-soft); border-color: var(--border); }
+:root .native-dialog-tabs button { color: var(--text-secondary); background: var(--chrome); border-color: var(--border); }
+:root .native-dialog-tabs button:hover { background: var(--hover); color: var(--text); }
+:root .native-dialog-tabs button.active { background: var(--surface-raised); color: var(--text); box-shadow: inset 0 2px var(--accent); }
+:root .connection-diagram { opacity: 1; margin: 22px 0 20px; }
+:root .connection-diagram>i { background: var(--border-strong); box-shadow: none; }
+:root .native-connection-form .ant-form-item { margin-bottom: 10px !important; }
+:root .native-connection-form .ant-form-item-label>label { height: 26px; font-size: 11px; }
+:root .native-connection-form .ant-form-item-control-input { min-height: 26px; }
+:root .native-connection-form .ant-input, :root .native-connection-form .ant-input-number { height: 26px; }
+:root .native-connection-form .ant-input-number-input { height: 24px; }
+:root .connection-form-gap { height: 8px; }
+:root .native-settings-placeholder { background: var(--surface-raised); }
+:root .modal-notice { background: var(--surface-inset); color: var(--text-secondary); border-color: var(--border); margin-bottom: 0; }
+:root .history-list>button { background: var(--surface-inset); border-color: var(--border-soft); border-radius: 4px; }
+:root .history-list>button:hover { background: var(--hover); border-color: var(--border-strong); }
+:root .history-list>button>span { color: var(--text-muted); }
+:root .history-list pre { color: var(--text-secondary); }
+:root .help-content h4 { color: var(--text); margin: 18px 0 6px; }
+:root .help-content ul { padding-left: 20px; }
+:root .help-content p:last-child { margin-bottom: 0; }
+
+/* CodeMirror's theme prop supplies syntax colors; surfaces follow our palette. */
+:root .cm-editor, :root .ddl-panel .cm-editor { background: var(--surface); color: var(--text); }
+:root .cm-scroller { background: var(--surface); }
+:root .cm-content { caret-color: var(--text); }
+:root .cm-cursor, :root .cm-dropCursor { border-left-color: var(--text) !important; }
+:root .cm-gutters { background: var(--editor-gutter) !important; color: var(--text-muted) !important; border-right-color: var(--border-soft) !important; }
+:root .cm-activeLine { background: var(--editor-active-line) !important; }
+:root .cm-activeLineGutter { background: var(--hover) !important; color: var(--text-secondary); }
+:root .cm-selectionBackground, :root .cm-editor.cm-focused .cm-selectionBackground { background: var(--selection) !important; }
+:root .cm-selectionMatch { background: var(--focus-ring) !important; }
+:root .cm-matchingBracket { background: var(--selection) !important; outline: 1px solid var(--selection-border); color: var(--text) !important; }
+:root .cm-tooltip { background: var(--surface-raised); color: var(--text); border-color: var(--border-strong); box-shadow: var(--popup-shadow); }
+:root .cm-tooltip-autocomplete>ul>li[aria-selected] { background: var(--selection) !important; color: var(--selection-text) !important; }
+:root .cm-panels { background: var(--chrome-soft); color: var(--text); border-color: var(--border); }
+:root .cm-textfield { background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); }
+:root .cm-button { background: var(--chrome); color: var(--text); border-color: var(--border-strong); }
+:root .cm-searchMatch { background: var(--warning-bg); outline: 1px solid var(--warning-border); }
+:root .cm-foldPlaceholder { background: var(--hover); color: var(--text-muted); border-color: var(--border); }
+:root .cm-placeholder { color: var(--text-muted); }
+:root .query-toolbar .ant-btn-primary .anticon { filter: none; }
+:root .query-empty>.anticon { background: var(--surface-inset); color: var(--text-muted); }
+:root .query-empty h3, :root .empty-workspace h2 { color: var(--text-secondary); }
+:root .result-tabs>button { background: linear-gradient(var(--chrome-soft),var(--chrome)); color: var(--text-secondary); border-color: var(--border); }
+:root .result-tabs>button:hover { background: var(--hover); color: var(--text); border-color: var(--border-strong); }
+:root .result-tabs>button.active { background: var(--surface); color: var(--text); border-color: var(--border-strong); box-shadow: inset 0 2px var(--accent); }
+:root .results-header .ant-segmented { background: var(--chrome); border-color: var(--border); }
+:root .results-header .ant-segmented-item-selected { background: var(--surface); color: var(--text); box-shadow: none; }
+
+@media (max-width: 680px) {
+  :root .ant-modal .ant-modal-body { padding: 16px; }
+  :root .ant-modal .ant-modal-footer, :root .native-confirm-dialog .ant-modal-confirm-btns { padding: 9px 12px; }
+  :root .connection-picker>aside, :root .connection-picker>section { padding-top: 13px; }
+  :root .native-dialog-footer>div { gap: 5px; }
+}
+
+/* Official marks keep their original colors and a quiet light backing in dark mode. */
+:root[data-theme='dark'] img.database-logo {
+  background: #f4f4f2;
+  border-radius: 3px;
+  padding: 1px;
+  box-shadow: 0 0 0 1px #ffffff14;
+}
+:root[data-theme='dark'] .connection-type-tile img.database-logo {
+  padding: 4px;
+  border-radius: 6px;
+}
+
+/* The product lockup stays within the existing native menu row. */
+.product-logo{display:block;flex-shrink:0;user-select:none;object-fit:contain}
+.product-brand{display:flex;align-items:center;gap:7px;padding-right:8px;margin-left:12px;white-space:nowrap;color:var(--text-secondary);font-size:11px;line-height:20px;letter-spacing:.3px;user-select:none}
+.product-brand span{font-weight:600}
+.help-brand{display:flex;align-items:center;gap:12px;margin:2px 0 18px;padding-bottom:18px;border-bottom:1px solid var(--border-soft)}
+.help-brand strong{font-size:15px;letter-spacing:.4px;color:var(--text);font-weight:600}
+.help-brand p{margin:5px 0 0!important;color:var(--text-secondary)}
+.connection-diagram:has(.product-logo){opacity:1}
+@media(max-width:620px){.product-brand span{display:none}.product-brand{margin-left:4px;padding-right:2px}}
+
+/* A single discreet appearance control joins workspace controls in the status bar. */
+.utility-icon{display:inline-flex;align-items:center;justify-content:center;line-height:0;vertical-align:-.125em;flex-shrink:0}
+.utility-icon svg{display:block;overflow:visible}
+:root .statusbar .status-theme-toggle{width:26px;height:20px;min-width:26px;padding:2px;border:1px solid transparent;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;background:transparent;color:var(--text-secondary);font-size:15px;line-height:1;flex-shrink:0}
+:root .statusbar .status-theme-toggle:hover{background:var(--hover);border-color:var(--border-strong);color:var(--accent)}
+:root .statusbar .status-theme-toggle:active{background:var(--pressed)}
+:root .statusbar .status-theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+
+/* Bilingual headers: identity, display name, then a quiet technical line. */
+:root .column-label{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:2px;height:54px;min-height:54px;padding:1px 0;line-height:15px;white-space:nowrap;overflow:hidden}
+:root .column-identity{display:flex;align-items:center;gap:5px;min-width:0;color:var(--text)}
+:root .column-identity b{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis}
+:root .column-identity>.anticon{font-size:11px;color:var(--warning);flex:none}
+:root .column-display-name{color:var(--text-secondary);font-size:10px;line-height:14px;overflow:hidden;text-overflow:ellipsis}
+:root .column-data-type{display:flex;align-items:center;gap:4px;min-width:0;color:var(--text-muted);font-size:9px;line-height:14px;letter-spacing:.1px}
+.field-type-icon{flex:none;color:var(--text-muted);display:block}
+:root .column-data-type span{overflow:hidden;text-overflow:ellipsis}
+:root .record-form-label>.record-form-display-name{color:var(--text-secondary);font-size:10px;line-height:14px}
+
+/* Desktop chrome never participates in document scrolling. Popups stay within the viewport. */
+html,body,#root{width:100%;height:100%;overflow:hidden}
+:root .app-shell{min-height:0;height:100dvh}
+:root .inspector-heading,:root .data-toolbar{flex-shrink:0}
+
+/* Quiet native document tabs without inset white highlights or left-edge seams. */
+:root .document-tab,:root .document-tab.active{border:1px solid transparent;border-right-color:var(--border);border-bottom:0;box-shadow:none;background:var(--chrome);padding-top:0;margin-top:2px;isolation:isolate}
+:root .document-tab:hover{background:var(--hover);border-color:var(--border);border-bottom:0}
+:root .document-tab.active{background:var(--surface);border-top-color:var(--accent);border-right-color:var(--border-strong);border-left-color:var(--border);box-shadow:none}
+:root .document-tab.active:hover{background:var(--surface)}
+:root .document-tab .tab-main,:root .document-tab .tab-main:hover{background:transparent;box-shadow:none;border:0}
+:root .document-tab .tab-main:focus{outline:none}
+:root .document-tab .tab-main:focus-visible{outline:1px solid var(--accent);outline-offset:-3px;border-radius:2px}
+:root .tab-close{border:0;outline-offset:-2px}
+
+.document-tabs{overscroll-behavior-x:contain;scroll-behavior:auto}
+.document-tab .tab-main{touch-action:none;user-select:none;cursor:grab}
+.document-tab.dragging{opacity:.75;z-index:2}
+.document-tab.dragging:after{content:'';position:absolute;inset:1px;border:1px dashed var(--accent);pointer-events:none;border-radius:1px}
+.document-tab.dragging .tab-main{cursor:grabbing}
+
+:root,:root[data-theme='light']{--modified-cell-bg:#fff1b8;--modified-cell-border:#d5ac3c;--modified-cell-text:#604b10}
+:root[data-theme='dark']{--modified-cell-bg:#514321;--modified-cell-border:#b39340;--modified-cell-text:#ffe59a}
+:root .data-grid .ant-table-tbody>tr>td.modified-table-cell{background:var(--modified-cell-bg)!important;color:var(--modified-cell-text)!important}
+:root .data-cell.modified-cell{background:var(--modified-cell-bg)!important;color:var(--modified-cell-text)!important;box-shadow:inset 0 -1px 0 var(--modified-cell-border)}
+:root .data-cell.modified-cell.selected-cell{box-shadow:inset 0 0 0 1px var(--accent)}
+:root .modified-table-cell .ant-input{background:var(--modified-cell-bg);color:var(--modified-cell-text)}
+.edit-actions-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex:none;min-height:29px;padding:2px 7px;background:var(--chrome-soft);border-bottom:1px solid var(--border);color:var(--text-muted);font-size:10px}
+.edit-actions-bar>div{display:flex;align-items:center;gap:5px}
+.edit-actions-bar .ant-btn{font-size:11px;height:23px;line-height:19px}
+
+/* Match the menu text and brand lockup on the same 24px horizontal axis. */
+:root .menubar{height:24px;min-height:24px;align-items:center}
+.menubar>div:first-child{display:flex;align-items:center;height:24px}
+:root .menubar .menu-button{height:24px;line-height:24px;padding-top:0;padding-bottom:0}
+:root .product-brand{height:24px;line-height:24px;align-items:center}
+:root .product-brand>span{line-height:24px}
+
+.function-workspace-host{flex:1;min-height:0;overflow:hidden;flex-direction:column}.connection-properties p{margin:8px 0}.connection-properties small{color:var(--muted)}
+/* CodeMirror's theme wrapper has cm-theme-light/dark, not the bare cm-theme class. */
+.sql-editor > div,.sql-editor .cm-editor{height:100%;min-height:0}
+.sql-editor .cm-scroller{height:100%;overflow:auto}
+.function-editor-tabs .ant-tabs-tabpane > div,.function-editor-tabs [class^='cm-theme']{height:100%;min-height:0}
+
+:root .tabs-strip :is(.sidebar-toggle,.tab-add){border-right-color:var(--border);border-left-color:var(--border)}
+
+/* Shared read-only SQL views: one statement, theme-aware token colors. */
+:root{--ddl-keyword:#245cb5;--ddl-type:#7355a0;--ddl-string:#287243;--ddl-number:#985d18;--ddl-comment:#747d87;--ddl-punctuation:#626a75}
+:root[data-theme='dark']{--ddl-keyword:#86b7fa;--ddl-type:#c5a2f0;--ddl-string:#91cba2;--ddl-number:#e6b57b;--ddl-comment:#969eaa;--ddl-punctuation:#b0b8c4}
+:root .ddl-token-keyword{color:var(--ddl-keyword)}
+:root .ddl-token-type{color:var(--ddl-type)}
+:root .ddl-token-string{color:var(--ddl-string)}
+:root .ddl-token-number{color:var(--ddl-number)}
+:root .ddl-token-comment{color:var(--ddl-comment)}
+:root .ddl-token-punctuation{color:var(--ddl-punctuation)}
+:root .inspector-ddl{padding:0;min-width:0;overflow:hidden}
+.inspector-ddl-heading{height:30px;display:flex;align-items:center;gap:6px;padding:0 8px;border-bottom:1px solid var(--border-soft);background:var(--chrome-soft);color:var(--text-secondary);font-size:11px}
+.inspector-ddl-heading>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inspector-ddl-heading>button{width:22px;height:22px;flex:none;border:1px solid transparent;background:transparent;color:var(--text-secondary);border-radius:2px;display:grid;place-items:center}
+.inspector-ddl-heading>button:hover{background:var(--hover);border-color:var(--border)}
+.ddl-code-viewer{min-width:0}
+.ddl-code-viewer .cm-editor{font-size:12px;line-height:1.65;outline:none}
+.ddl-code-viewer.compact .cm-editor{font-size:11px;line-height:1.75}
+.ddl-code-viewer.compact .cm-content{padding:10px 8px!important}
+.ddl-code-viewer.compact .cm-line{padding:0;overflow-wrap:anywhere}
+.ddl-code-viewer .cm-scroller{min-width:0;overflow:auto}
+/* Four view tabs occupy the former three-tab strip before the data controls. */
+.data-toolbar{left:210px}
+@media(max-width:680px){.data-toolbar{left:174px}}
+@container(max-width:650px){.data-toolbar{left:auto}}
+
+.data-cell:focus{outline:none}
+/* Keep pending edits identifiable within the blue selection range. */
+:root .data-grid .data-cell.modified-cell[data-range-selected='true']{box-shadow:inset 0 0 0 1px var(--range-border),inset 0 -3px 0 var(--modified-border)}

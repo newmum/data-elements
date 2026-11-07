@@ -1,0 +1,59 @@
+# Third-party database brand artwork
+
+The connection picker uses locally bundled SVG brand artwork from Devicon and Simple Icons. These are upstream community-maintained depictions of the brands, not a claim that every file is an official vendor-distributed asset. They identify database types only; no affiliation, sponsorship, or endorsement is implied. No icon is fetched from an external server at runtime.
+
+## Sources and versions
+
+Verified on 2026-11-07. All SVG source URLs below returned the expected SVG. `src/assets/database/sources.json` records exact versions, changes, and SHA-256 checksums.
+
+- `mysql.svg`: [Devicon v2.17.0](https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/mysql/mysql-original.svg).
+- `postgresql.svg`: [Devicon v2.17.0](https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/postgresql/postgresql-original.svg).
+- `sqlserver.svg`: [Devicon v2.17.0](https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/microsoftsqlserver/microsoftsqlserver-original.svg).
+- `oracle.svg`: [Devicon v2.17.0](https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/oracle/oracle-original.svg).
+- `sqlite.svg`: [Devicon v2.17.0](https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/sqlite/sqlite-original.svg).
+- `mariadb.svg`: [Devicon v2.17.0](https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/mariadb/mariadb-original.svg).
+- `mongodb.svg`: [Devicon v2.17.0](https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/mongodb/mongodb-original.svg).
+- `redis.svg`: [Devicon v2.17.0](https://raw.githubusercontent.com/devicons/devicon/v2.17.0/icons/redis/redis-original.svg).
+- `snowflake.svg`: [Simple Icons 15.14.0](https://raw.githubusercontent.com/simple-icons/simple-icons/15.14.0/icons/snowflake.svg).
+
+## Devicon
+
+Eight SVGs (MySQL, PostgreSQL, SQL Server, Oracle, SQLite, MariaDB, MongoDB, Redis) are unmodified copies from Devicon v2.17.0. They retain the upstream colors, paths, and square viewBoxes. Oracle is the complete red wordmark, not a fabricated letter icon. Its wide aspect ratio naturally makes it finer at small sizes.
+
+- [Repository MIT license](https://github.com/devicons/devicon/blob/v2.17.0/LICENSE), reproduced in `src/assets/database/LICENSE-DEVICON.txt` and below.
+- [Upstream trademark notice](https://github.com/devicons/devicon/blob/v2.17.0/README.md): product names, logos, and brands belong to their respective owners; use is for identification, does not imply endorsement, and is subject to the applicable brand policy. The repository license does not itself grant trademark rights.
+
+## Simple Icons / Snowflake
+
+- [Simple Icons 15.14.0 license](https://github.com/simple-icons/simple-icons/blob/15.14.0/LICENSE.md): CC0 1.0 Universal. A copy is at `src/assets/database/LICENSE-SIMPLE-ICONS.md`.
+- [Pinned source/color metadata](https://github.com/simple-icons/simple-icons/blob/15.14.0/data/simple-icons.json) gives Snowflake color `#29B5E8` and identifies `https://www.snowflake.com/brand-guidelines/` as its source and brand-guidelines URL.
+- The only local change is setting that brand color on the SVG root. The paths and registered-trademark symbol are unchanged.
+- [Simple Icons legal disclaimer](https://github.com/simple-icons/simple-icons/blob/15.14.0/DISCLAIMER.md) explicitly says its CC0 release does not imply every underlying logo is CC0, and users must consider underlying brand rights and permissions. Its Snowflake metadata has no separate logo-license grant.
+- The official Snowflake brand-center page could not be inspected because it returned HTTP 403. No vendor permission or unrestricted commercial logo reuse is claimed. Review applicable vendor brand policies before public redistribution beyond this database-identification prototype.
+
+## Trademark attribution
+
+MySQL, PostgreSQL, Microsoft SQL Server, Oracle, SQLite, MariaDB, MongoDB, Redis, and Snowflake names and marks are the property of their respective owners. No ownership of their marks is asserted. Open-source repository licenses and brand/trademark permissions are different matters.
+
+## Devicon MIT license text
+
+The MIT License (MIT)
+
+Copyright (c) 2015 konpa
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

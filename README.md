@@ -8,9 +8,10 @@
 | 海通数据集成中心 | [`data-elements-haitong/`](docs/data-elements-haitong.md#overview) | React 18 / Vite | 3002 | `/haitong/` | `pnpm install --frozen-lockfile`、`pnpm run dev` |
 | 统一身份管理平台 | [`data-elements-idaas/`](docs/data-elements-idaas.md#identity-boundaries) | React 19 / Vite | 3005 | `/idaas/` | `pnpm install --frozen-lockfile`、`pnpm run dev` |
 | 万象数据治理中心 | [`data-elements-wanxiang/`](docs/data-elements-wanxiang.md#overview) | React 19 / Vite | 3010 | `/wanxiang-governance/` | `npm ci`、`npm run dev` |
+| 风驰数据计算平台 | [`data-elements-fengchi/`](docs/data-elements-fengchi.md#overview) | React 19 / Vite | 3020 | `/`（独立静态站点） | `npm ci`、`npm run dev` |
 | 共享后端 | [`data-elements-parent/`](docs/data-elements-parent.md#overview) | Java 21 / Spring Boot / Maven | 8088 | API 网关配置决定 | `mvn -f data-elements-parent/pom.xml spring-boot:run` |
 
-前端共同建议使用 Node.js 22.12 或更高版本。每个应用请在自己的目录执行安装和构建命令；本仓库没有根目录的 Node workspace，也没有一份供所有前端共用的锁文件。前端的页面与静态资源可独立启动；登录、数据读取和写入需要后端及其 Nacos、数据库等运行服务可用。
+前端共同建议使用 Node.js 22.12 或更高版本。每个应用请在自己的目录执行安装和构建命令；本仓库没有根目录的 Node workspace，也没有一份供所有前端共用的锁文件。前端的页面与静态资源可独立启动；主平台的登录、数据读取和写入需要后端及其 Nacos、数据库等运行服务可用。风驰目前为独立的浏览器本地工作台原型，无真实数据库连接，不依赖共享后端。
 
 海通的 NiFi 画布和[数据上报工作台](docs/data-elements-haitong.md#data-report)都属于海通前端路由。数据上报的页面、业务逻辑和测试统一在海通工程维护。仓库还包含[云梯设计器](docs/data-elements-yunti.md)和[海通数据推送服务](docs/haitong-data-pull.md)，其运行方式和边界分别在各自主文档维护。
 
@@ -37,6 +38,7 @@
 | 共享 Java 后端及 NiFi 扩展 | [data-elements-parent.md](docs/data-elements-parent.md) |
 | 万象数据治理中心 | [data-elements-wanxiang.md](docs/data-elements-wanxiang.md) |
 | 云梯应用设计器 | [data-elements-yunti.md](docs/data-elements-yunti.md) |
+| 风驰数据计算平台 | [data-elements-fengchi.md](docs/data-elements-fengchi.md) |
 | 海通数据推送服务 | [haitong-data-pull.md](docs/haitong-data-pull.md) |
 | 数据库完整结构、方言与环境基线 | [数据库结构基线](docs/data-elements.md#database-schema) |
 | 跨工程维护工具 | [统一维护工具](docs/data-elements.md#maintenance-tools) |
