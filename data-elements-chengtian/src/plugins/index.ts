@@ -35,7 +35,7 @@ export default {
     // Element-plus图标
     setupElIcons(app);
     // 路由守卫
-    setupPermission(app);
+    setupPermission();
     // WebSocket服务
     // setupWebSocket();
     // form-crete

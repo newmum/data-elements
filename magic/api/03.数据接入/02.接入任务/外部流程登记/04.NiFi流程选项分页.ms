@@ -16,6 +16,11 @@
 ================================
 import tenantRuntime
 
+/**
+ * 可登记的 NiFi 流程选项。按当前租户、关键字和分页读取已保存的 Canvas DSL v1 流程。
+ * 返回选项需要的 ID、名称、状态和运行组信息。
+ */
+
 var tenantId = tenantRuntime.id()
 if (tenantId == null || ('' + tenantId).trim() == '') {
     exit 401, '当前登录租户无效，请重新登录后选择NiFi流程'
@@ -29,35 +34,21 @@ if (pageNum < 1 || pageNum > 1000 || pageSize < 1 || pageSize > 100) {
 if (keyword.length() > 100) {
     exit 400, '搜索词不能超过100字'
 }
-var keywordPattern = '%' + keyword + '%'
-// 单次 db.page 完成 count 与有界当前页查询；没有逐流程读取或 DSL 大字段反序列化。
-// NiFi 流程当前的数据范围是租户级；租户 ID 仅从服务端会话获得，忽略任何前端 tenantId。
-var result = db.page("""
-    SELECT id,
-           name,
-           status,
-           nifi_process_group_id AS processGroupId
-      FROM nifi_pipeline_t
-     WHERE tenant_id = #{tenantId}
-       AND is_del = 0
-       AND dsl_version = 1
-       AND dsl_hash IS NOT NULL
-       AND dsl_hash <> ''
-       AND (#{keyword} = '' OR name LIKE #{keywordPattern} OR id LIKE #{keywordPattern})
-     ORDER BY updated_at DESC, id DESC
-""", pageSize, (pageNum - 1) * pageSize)
-var value = (row, key) => {
-    if (row[key] != null) { return row[key] }
-    if (row[key.toLowerCase()] != null) { return row[key.toLowerCase()] }
-    return row[key.toUpperCase()]
+// 摘要至少有一个字符。用固定匹配模式兼容把空串视为 NULL 的数据库。
+var pipelines = db.camel().table('nifi_pipeline_t')
+    .columns('id', 'name', 'status', 'nifi_process_group_id')
+    .where().eq('tenant_id', tenantId).eq('is_del', 0).eq('dsl_version', 1)
+    .isNotNull('dsl_hash').like('dsl_hash', '_%')
+if (keyword != '') {
+    var pattern = '%' + keyword + '%'
+    pipelines.and(match => match.like('name', pattern).or().like('id', pattern))
 }
+
+// 沿用数据库的更新时间降序，更新时间相同的流程按 ID 降序。
+var page = pipelines.orderByDesc('updated_at').orderByDesc('id')
+    .page(pageSize, (pageNum - 1) * pageSize)
 var items = []
-for (row in (result.list == null ? [] : result.list)) {
-    items.add({
-        id: value(row, 'id'),
-        name: value(row, 'name'),
-        status: value(row, 'status'),
-        processGroupId: value(row, 'processGroupId')
-    })
+for (row in (page.list == null ? [] : page.list)) {
+    items.add({id: row.id, name: row.name, status: row.status, processGroupId: row.nifiProcessGroupId})
 }
-return { pageNum: pageNum, pageSize: pageSize, total: result.total, list: items }
+return {pageNum: pageNum, pageSize: pageSize, total: page.total, list: items}

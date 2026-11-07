@@ -46,7 +46,8 @@ onMounted(() => {
   }
   if (route.query.tab) {
     detailStore.currentTab = (route.query.tab as string) || "";
-  } else {
+  } else if (detailStore.config?.tabs?.length) {
+    // 详情主体可能在鉴权后才挂载，届时由主体初始化默认页签。
     detailStore.initTab();
   }
 });

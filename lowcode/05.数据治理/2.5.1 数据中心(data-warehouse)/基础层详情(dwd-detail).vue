@@ -1,11 +1,20 @@
 <template>
-  <div class="dwd-detail card-container flex flex-col px-5 pt-5 pb-2">
+  <div
+    class="warehouse-layer-detail card-container flex flex-col px-5 pt-5 pb-2"
+    :class="`${layer}-detail`"
+  >
     <div class="h-full grid" style="grid-template-columns: 20% 80%">
       <!-- ========== 左侧树 ========== -->
       <div class="left-panel h-full">
         <div class="left-header flex items-center justify-between">
-          <h3>基础层分类</h3>
-          <el-button type="primary" link icon="plus" @click="handleRootAdd" />
+          <h3>{{ config.treeTitle }}</h3>
+          <el-button
+            type="primary"
+            link
+            icon="plus"
+            :disabled="!rootDictNode?.tid"
+            @click="handleNodeAction('add', rootDictNode)"
+          />
         </div>
         <div class="tree-container">
           <u-tree
@@ -86,16 +95,20 @@
               <div class="flex items-center gap-3">
                 <el-input
                   v-model.trim="state.keyword"
-                  placeholder="搜索目录名称/表名"
+                  :placeholder="config.searchPlaceholder"
                   clearable
                   prefix-icon="Search"
                   style="width: 200px"
                   @keydown.enter="handleAction('refresh')"
                   @clear="handleAction('refresh')"
                 />
-                <el-button type="primary" @click="handleAction('add')">
+                <el-button
+                  type="primary"
+                  :disabled="!state.leftSelectNode.tid"
+                  @click="handleNodeAction('add', state.leftSelectNode)"
+                >
                   <Icon :icon="'el-icon-Plus'" class="mr-2" />
-                  新建基础目录
+                  {{ config.addLabel }}
                 </el-button>
               </div>
             </div>
@@ -130,32 +143,22 @@
             </el-text>
             <el-text v-else type="info">暂无挂接表</el-text>
           </template>
-          <template #column-tableName="{ row }">
-            <el-text
-              type="primary"
-              cursor-pointer
-              @click="
-                handleAction('详情', { id: row.sourceTableId, type: 'table', title: row.tableName })
-              "
-            >
-              <Icon icon="hive" />
-              {{ row.tableName }}
-            </el-text>
-          </template>
           <template #column-sourceDir="{ row }">
             <el-text
+              v-if="row.sourceCatalogId"
               type="primary"
               cursor-pointer
               @click="
                 handleAction('详情', {
                   id: row.sourceCatalogId,
-                  type: 'category',
+                  type: 'catalog',
                   title: row.sourceDir,
                 })
               "
             >
               {{ row.sourceDir }}
             </el-text>
+            <el-text v-else>{{ row.sourceDir || '—' }}</el-text>
           </template>
         </DataTable>
       </div>
@@ -180,7 +183,7 @@
               emitPath: false,
               value: 'tid',
             }"
-            :filters="{ value: 'dwd' }"
+            :filters="{ value: layer }"
             style="width: 100%"
             placeholder="请选择父级节点"
           />
@@ -219,13 +222,34 @@
 </template>
 
 <script setup lang="ts">
-import { useRegisterModal } from "@/composables";
 import { ref, reactive, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { get } from "lodash-es";
 
-// 登记弹框
-const { openRegisterModal, open } = useRegisterModal();
+const props = defineProps<{ layer?: "dwd" | "dws" }>();
+const layer = props.layer === "dws" ? "dws" : "dwd";
+const isBaseLayer = layer === "dwd";
+const config = {
+  dwd: {
+    treeTitle: "基础层分类",
+    searchPlaceholder: "搜索目录名称/表名",
+    addLabel: "新建基础目录",
+    tableNameLabel: "基础表名称",
+    sourceCatalogField: "sourceDir",
+    keywordField: "catalogOrTableName",
+    listUrl: "/dwm/center/dwd-list",
+  },
+  dws: {
+    treeTitle: "专题库分类",
+    searchPlaceholder: "搜索目录名称",
+    addLabel: "新建专题库目录",
+    tableNameLabel: "服务表名称",
+    sourceCatalogField: "sourceCatalogName",
+    keywordField: "catalogName",
+    listUrl: "/dwm/center/dws-list",
+  },
+}[layer];
+
 const router = useRouter();
 const taskTreeRef = ref();
 const tableRef = ref();
@@ -247,58 +271,31 @@ const state = reactive({
 });
 
 // ─── 表格列配置 ──────────────────────────────
-const tableColumns = ref([
-  { prop: "catalogName", label: "基础表名称" },
+const countColumnWidth = isBaseLayer ? undefined : 120;
+const tableColumns = [
+  { prop: "catalogName", label: config.tableNameLabel },
   { prop: "targetTableName", label: "挂接表名" },
-  { prop: "sourceDir", label: "关联源目录" },
-  { prop: "processLogic", label: "加工逻辑概要" },
+  { prop: config.sourceCatalogField, label: "关联源目录" },
+  ...(isBaseLayer ? [{ prop: "processLogic", label: "加工逻辑概要" }] : []),
   { prop: "shareType", label: "共享属性", options: "shareType", width: 120 },
   { prop: "dataLevel", label: "数据范围", options: "dataLevel" },
-  { prop: "fieldCount", label: "字段数", props: { suffix: "个" }, align: "right" },
-  { prop: "recordCount", label: "记录数", props: { suffix: "条" }, align: "right" },
-  { prop: "updatedTime", label: "最后更新时间" },
-  { prop: "status", label: "对标状态", options: "alignmentStatus" },
   {
-    prop: "operation",
-    label: "操作",
-    buttons: [
-      {
-        label: "数据开发",
-        type: "primary",
-        link: true,
-        if: (row: any) => row.develop == "0",
-        click: (row: any) => handleAction("develop", row),
-      },
-      {
-        label: "开发任务",
-        type: "primary",
-        link: true,
-        if: (row: any) => row.develop == "1",
-        click: (row: any) => handleAction("task", row),
-      },
-      {
-        label: "数据质检",
-        type: "primary",
-        link: true,
-        if: (row: any) => row.quality == "0",
-        click: (row: any) => handleAction("check", row),
-      },
-      {
-        label: "质检结果",
-        type: "primary",
-        link: true,
-        if: (row: any) => row.quality == "1",
-        click: (row: any) => handleAction("result", row),
-      },
-      {
-        label: "删除",
-        type: "danger",
-        link: true,
-        click: (row: any) => handleAction("delete", row),
-      },
-    ],
+    prop: "fieldCount",
+    label: "字段数",
+    props: { suffix: "个" },
+    align: "right",
+    width: countColumnWidth,
   },
-]);
+  {
+    prop: "recordCount",
+    label: "记录数",
+    props: { suffix: "条" },
+    align: "right",
+    width: countColumnWidth,
+  },
+  { prop: "updatedTime", label: "最后更新时间" },
+  ...(isBaseLayer ? [{ prop: "status", label: "对标状态", options: "alignmentStatus" }] : []),
+];
 
 // ─── 弹窗 ────────────────────────────────────
 const dialogVisible = ref(false);
@@ -320,9 +317,9 @@ const dialogTitle = computed(() => (dialogMode.value === "edit" ? "编辑" : "�
 const handleAction = (type: string, row?: any) => {
   switch (type) {
     case "node-click":
-      state.leftSelectNode = row;
-      currentNodeKey.value = row.tid || row.value;
-      currentNodeName.value = row.label;
+      state.leftSelectNode = row || {};
+      currentNodeKey.value = row?.tid || row?.value || null;
+      currentNodeName.value = row?.label || "";
       tableRef.value?.refresh(false);
       break;
     case "refresh":
@@ -333,24 +330,6 @@ const handleAction = (type: string, row?: any) => {
         path: "detail",
         query: { id: row.id, type: row.type, title: row.title },
       });
-      break;
-    // 表格操作按钮（占位，后续实现）
-    case "add":
-      openRegisterModal({
-        registerClass: "table",
-        updateFormRule: [
-          {
-            field: "dataSourceType",
-            value: state.leftSelectNode.value,
-          },
-        ],
-      });
-    case "develop":
-    case "task":
-    case "check":
-    case "result":
-    case "delete":
-      console.log("[dwd-detail] handleAction:", type, row);
       break;
   }
 };
@@ -387,16 +366,16 @@ const fetchTreeData = async () => {
   treeLoading.value = true;
   try {
     const dictTreeList = await $common.get("/sym/dict", { code: "dataSourceType" });
-    treeData.value = dictTreeList.filter((el: any) => el.value === "dwd");
+    treeData.value = dictTreeList.filter((el: any) => el.value === layer);
     rootDictNode.value = treeData.value[0] || null;
-    if (rootDictNode.value?.tid) {
-      defaultExpandedKeys.value = [rootDictNode.value.tid];
-    }
+    defaultExpandedKeys.value = rootDictNode.value?.tid ? [rootDictNode.value.tid] : [];
     // 加载统计
     loadCountMap();
   } catch (e) {
-    console.error("[dwd-detail] 加载树数据失败", e);
+    console.error(`[${layer}-detail] 加载树数据失败`, e);
     treeData.value = [];
+    rootDictNode.value = null;
+    defaultExpandedKeys.value = [];
   } finally {
     treeLoading.value = false;
   }
@@ -418,38 +397,18 @@ const refreshTree = async () => {
     return null;
   };
 
-  if (prevKey && treeData.value.length) {
-    const node = findNodeByTid(treeData.value, prevKey);
-    if (node) {
-      handleAction("node-click", node);
-    } else if (treeData.value.length) {
-      handleAction("node-click", treeData.value[0]);
-    }
-  } else if (treeData.value.length) {
-    handleAction("node-click", treeData.value[0]);
-  }
+  const node = prevKey ? findNodeByTid(treeData.value, prevKey) : null;
+  handleAction("node-click", node || treeData.value[0]);
 };
 
-// ─── 根节点 + 按钮 → 新增子级 ───
-const handleRootAdd = () => {
-  dialogMode.value = "add";
-  dialogForm.value = {
-    parentId: rootDictNode.value?.tid || null,
-    sortNo: 0,
-    dictName: "",
-    dictCode: "",
-    dictDesc: "",
-  };
-  dialogVisible.value = true;
-};
-
-// ─── 树节点 ... 菜单 ───
+// ─── 目录新增及树节点菜单 ───
 const handleNodeAction = (command: string, data: any) => {
   switch (command) {
     case "add":
+      if (!data?.tid) return;
       dialogMode.value = "add";
       dialogForm.value = {
-        parentId: data.tid || null,
+        parentId: data.tid,
         sortNo: 0,
         dictName: "",
         dictCode: "",
@@ -519,7 +478,18 @@ const handleDialogConfirm = async () => {
 // ========================================================
 //  fetchData — 表格数据接口（由 DataTable 组件调用）
 // ========================================================
-const fetchData = async ({ pageNo: pageNum, pageSize }: { pageNo: number; pageSize: number }) => {
+const fetchData = async ({
+  pageNo: pageNum,
+  pageSize,
+  sortField = "updatedTime",
+  sortDir = "desc",
+}: {
+  pageNo: number;
+  pageSize: number;
+  sortField?: string;
+  sortDir?: "asc" | "desc";
+}) => {
+  if (!rootDictNode.value) return { list: [], total: 0 };
   const conditions: any[] = [];
 
   // 树节点筛选：收集叶子节点 value 作为 category 过滤条件
@@ -535,12 +505,12 @@ const fetchData = async ({ pageNo: pageNum, pageSize }: { pageNo: number; pageSi
 
   // 关键字搜索
   if (state.keyword) {
-    conditions.push({ field: "catalogName", value: state.keyword, type: "like" });
+    conditions.push({ field: config.keywordField, value: state.keyword, type: "like" });
   }
 
-  const { list = [], total } = await $common.post("/dwm/center/dwd-list", {
-    sortField: "updatedTime",
-    sortDir: "desc",
+  const { list = [], total } = await $common.post(config.listUrl, {
+    sortField,
+    sortDir,
     pageNum,
     pageSize,
     conditions,
@@ -552,20 +522,15 @@ const fetchData = async ({ pageNo: pageNum, pageSize }: { pageNo: number; pageSi
 onMounted(async () => {
   await fetchTreeData();
   const rootNode = treeData.value[0];
-  if (router.currentRoute.value.query.layerCode) {
-    handleAction(
-      "node-click",
-      rootNode.children.find((el) => el.value == router.currentRoute.value.query.layerCode) ||
-        rootNode
-    );
-  } else if (rootNode) {
-    handleAction("node-click", rootNode);
-  }
+  if (!rootNode) return;
+  const layerCode = router.currentRoute.value.query.layerCode;
+  const selectedNode = rootNode.children?.find((node) => node.value === layerCode);
+  handleAction("node-click", selectedNode || rootNode);
 });
 </script>
 
 <style scoped lang="scss">
-.dwd-detail {
+.warehouse-layer-detail {
   .left-panel {
     border-right: 1px solid rgba(5, 5, 5, 0.06);
     overflow-y: auto;

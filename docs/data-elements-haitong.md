@@ -2788,19 +2788,21 @@ MySQL分页会将完整查询包进`SELECT COUNT(*) FROM (...) count_`，因此�
 | --- | --- |
 | 登录、租户、NiFi 画布 | 平台 `capability-session.html` 会话桥、`/sym/user/me`、`/sym/tenant/current`、原 NiFi 流程接口；进入画布不再手填 Token |
 | 集成任务与创建 | `/ods/task/page`、`/ods/dataAggPage`、`/ods/dataAggTaskEnsure`，对应 `data_access_agg_task_t`、登记数据源和表 |
-| 接入监控 | NiFi `/nifi/api/pipelines/runtime-list`、`/ods/task/monitorSnapPage` 和已有 `data_access_task_monitor_snap_t` |
+| 接入监控 | NiFi `/nifi/api/pipelines/runtime-list` 和 Magic `POST /ods/task/monitorSnapPage`。快照按租户、来源库角色范围、时间和排序在数据库分页，保留历史指标别名 |
 | NiFi 节点 | `/ods/nifi-node/page`、可用节点选项及原节点维护/健康接口，对应 `nifi_node_t` |
 | 盘点策略、执行和差异 | `/ods/reconciliation/policy/*`、`/ods/reconciliation/run/*`、`/ods/reconciliation/summary`，对应现有对账策略、执行、差异和字段规则表 |
-| 批量匹配与持久队列 | 新增租户内 `ods_batch_create_job_t`、`ods_batch_create_item_t` 和 Magic `POST /ods/batchCreateJob`，按当前角色范围分页预览、批量复核并保存作业；用户主动点击一次只调用一次既有 `/ods/dataAggTaskEnsure`，结果和失败可跨页面查看与续跑。批量确保链路以当前 `/ods/dataAggTaskEnsureBatch` 契约及运行验证为准。 |
-| 多表任务编组 | 新增租户内 `data_access_multi_group_t`、`data_access_multi_group_item_t` 和 `/ods/task/multi/*`；只把已有的独立单表任务编组、排序和展示逐表状态，不创建一个合并的 NiFi 流程。 |
-| 分发任务只读总览 | 新增 Magic `POST /ods/distribution/task/page`，按当前登录租户分页读取既有 `data_distribution_task_t`；当前租户确实为 0 条，不虚构执行量 |
-| 小时监控趋势 | 新增 Magic `POST /ods/task/monitor/trend`，按当前登录租户与时间窗口读取有界快照，在脚本内逐任务取小时峰值再求和；无 MySQL 时间分组函数依赖，明确不是目标库确认写入 |
+| 批量匹配与持久队列 | 租户内 `ods_batch_create_job_t`、`ods_batch_create_item_t` 和 Magic `POST /ods/batchCreateJob` 支持按当前角色范围分页预览、批量复核并保存作业。用户主动点击一次只调用一次既有 `/ods/dataAggTaskEnsure`，结果和失败可跨页面查看与续跑。自动执行的批量确保接口仍按[下文设计](#guide-a328d01d)跟踪。 |
+| 多表任务编组 | `/ods/task/multi/*` 将既有的独立单表任务编组，保存到当前租户的 `data_access_multi_group_t` 和 `data_access_multi_group_item_t`，保留逐表状态。候选分页与保存预检共享任务、来源表和数据源的角色范围条件。候选每页最多 100 条，保存时一次校验 2 至 100 个任务并在同一事务内批量写入成员，固定请求标识可安全重试。删除和补齐关联仅允许创建者操作，任一成员来源失效或超出当前范围时拒绝整组，缺少创建人或部门归属的来源分别在 `OWNER` 或 `ORG` 范围下拒绝。补齐关联只写入同一来源表的有效任务。 |
+| 分发任务只读总览 | Magic `POST /ods/distribution/task/page` 按当前登录租户分页读取 `data_distribution_task_t`。状态和关键词可分别省略，结果仅包含实际任务及持久化状态。升序和降序都将空值放在末尾，同值按任务 ID 升序。 |
+| 小时监控趋势 | Magic `POST /ods/task/monitor/trend` 以单表结构化查询读取当前租户最多七天的快照。每个任务先取小时峰值，再汇总为监控趋势点 |
 | 脱敏差异完整导出 | 新增 Magic `POST /ods/reconciliation/run/diff/export`，只允许当前租户已完成实例；最多 5000 条，超限显式拒绝，结果使用既有仓储脱敏值 |
-| 外部 NiFi 流程登记 | 新增 Magic `POST /ods/task/registry/validate|save|page` 与租户内 `nifi_pipeline_external_ref_t`；仅将外部 ID 绑定已保存的 NiFi Canvas DSL v1 流程，预检、防重复和真实登记历史已接入。原海通 Flow JSON 保留独立本地演示模式 |
-| 外部登记选择已有流程 | 新增 Magic `POST /ods/task/registry/pipeline-options`；按当前登录租户分页搜索已保存的 Canvas DSL v1 流程，选择框每次只加载当前页，不再调用无界 `/nifi/api/pipelines` 全量列表 |
+| 外部 NiFi 流程登记 | Magic `POST /ods/task/registry/validate|save|page` 使用租户内 `nifi_pipeline_external_ref_t`。登记绑定已保存的 Canvas DSL v1 流程，历史分页仅关联当前租户的有效流程，按流程名称排序时空值置后 |
+| 外部登记选择已有流程 | Magic `POST /ods/task/registry/pipeline-options` 按当前租户分页搜索有 DSL 哈希的 Canvas DSL v1 流程，按更新时间和流程 ID 倒序返回当前页 |
 | NiFi 节点资源 | Java `POST /sym/node-config/service/diagnostics` 读取 NiFi 系统诊断并按当前租户节点范围返回安全汇总；集群页展示堆内存、线程等真实指标，不能用它推断目标表写入成功。 |
 
 `data_distribution_task_t` 和 `data_access_task_monitor_snap_t` 在当前租户库中已经存在。不能把“缺少分发监控接口”或“缺少趋势汇总接口”理解为缺这两张表。
+
+监控快照分页的起止时间都包含端点。ALL 范围可查看同租户的历史孤立快照，ORG 和 OWNER 通过有效任务与来源库限定。小时趋势包含开始时间并排除结束时间，单次超过 50,000 条返回 `413`。趋势按任务取峰值可避免重复累加同一小时内的重叠采样。
 
 
 <a id="guide-f9d1e359--尚需补充的后端契约"></a>
@@ -2825,7 +2827,7 @@ MySQL分页会将完整查询包进`SELECT COUNT(*) FROM (...) count_`，因此�
 
 ### 结构与发布维护
 
-现行表结构以根目录 `db/` 的完整初始化文件及结构清单为准。当前四行业库已通过表集合、列、主键、索引和外键比较，均为 156 张表，包含批量作业、多表编组和外部流程登记表。旧说明中的“三个 MySQL 已迁移、广电待补表”是历史状态，不再作为本机现状。
+批量作业、多表编组和外部流程登记的表结构以根目录 `db/` 的完整初始化文件及结构清单为准。当前行业库绑定、统一目标和既有差异统一记录在[数据库结构基线](data-elements.md#database-schema)。
 
 部署前按当前运行配置核对真实租户绑定，保存受限备份并审查结构差异；已有库只执行本次受控差异。变更完成后运行根工具检查、重新导出完整结构。临时执行语句放忽略的根 `logs/`，不恢复旧 `db/migrations/`、资源快照或按日期累积的迁移文件。
 
@@ -2865,7 +2867,7 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 
 状态：**设计与审计记录，尚未实现或发布批量确保接口**。现有 `POST /ods/batchCreateJob` 可以创建持久作业并按页预览来源表；`POST /ods/dataAggTaskEnsure` 仍是单来源表写接口。页面不能以循环、并发池或服务端代理逐项调用它来宣称“批量创建”。单项由用户主动点击执行仍可保留。
 
-本记录按仓库的[前后端批量查询与分页规范](data-elements.md#batch-pagination)制定。审计依据为 `data/working/panshi-integration-20261002/existing/ods_data_agg_task_ensure_01.ms` 的 2026-10-02 导出快照，并只读确认本地活动 `baseline.api_file_t` 仍有 `ods_data_agg_task_ensure_01`（路径 `/magic-api/api/03.数据接入/13.按来源表补齐接入任务.ms`，本地记录更新时间 2026-10-02 23:19:49）。正式实施前仍须再次导出、备份并逐项比对活动资源，不能用此快照覆盖共享 Magic 资源。
+本设计遵循[前后端批量查询与分页规范](data-elements.md#batch-pagination)。单项入口以[当前可维护脚本](../magic/api/03.数据接入/13.按来源表补齐接入任务.ms)及实际运行版本为准。实施前按[本地资源版本管理](data-elements.md#resource-versioning)只读比较资源身份、内容及远端并发变化。
 
 
 <a id="guide-a328d01d--为什么不能包装现有单表接口"></a>

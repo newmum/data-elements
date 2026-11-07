@@ -3,12 +3,6 @@
     <div class="market__top">
       <h1 class="market__title">数据超市</h1>
       <div class="market__search">
-        <!-- <u-tabs
-          v-model="state.activeTop"
-          class="market__tabs"
-          :tabs="tabs"
-          @change="handleAction('change-top')"
-        ></u-tabs> -->
         <div class="market__search-box">
           <el-input
             v-model="state.keyword"
@@ -16,17 +10,12 @@
             placeholder="请输入数据目录关键词"
             size="large"
             clearable
-            @keyup.enter="handleAction('search')"
+            @keyup.enter="search"
+            @clear="search"
           ></el-input>
-          <el-button type="primary" icon="search" @click="handleAction('search')">搜索</el-button>
+          <el-button type="primary" icon="search" @click="search">搜索</el-button>
         </div>
       </div>
-      <!-- <el-button type="primary" plain class="market__apply-btn">
-        <template #icon>
-          <Icon icon="apply" />
-        </template>
-        需求申请
-      </el-button> -->
     </div>
 
     <div class="market__body">
@@ -40,7 +29,7 @@
         >
           <Icon icon="el-icon-menu" size="16" />
           分类筛选
-          <span v-if="state.valueSidebar" class="category-selected">已选分类</span>
+          <span v-if="state.selectedOrg" class="category-selected">已选分类</span>
           <Icon :icon="categoriesOpen ? 'el-icon-ArrowUp' : 'el-icon-ArrowDown'" size="14" />
         </button>
         <!--    侧边页签    -->
@@ -59,7 +48,7 @@
                   'left-nav': ind === 0,
                   'right-nav': ind === 1,
                 }"
-                @click="handleAction('change-left-tab', { title: item.title, ind })"
+                @click="changeCategory(item.title)"
               >
                 {{ item.title }}
               </div>
@@ -74,7 +63,11 @@
 
         <!--    侧边树    -->
         <div id="market-category-tree" class="sidebar-card__list">
-          <template v-for="(tree, ind) in sidebarItems" :key="state.activeTop + tree.title">
+          <div v-if="countError" class="market__filter-error" role="status">
+            分类统计加载失败
+            <el-button link type="primary" @click="loadCounts">重试</el-button>
+          </div>
+          <template v-for="(tree, ind) in sidebarItems" :key="tree.title">
             <u-tree
               v-show="state.activeSidebar === tree.title"
               ref="treeRef"
@@ -85,8 +78,8 @@
               :expand-on-click-node="false"
               :default-props="{ label: 'label' }"
               node-key="value"
-              :current-node-key="state.valueSidebar"
-              @node-click="(node) => handleAction('click-left', node)"
+              :current-node-key="state.selectedOrg?.value"
+              @node-click="selectOrganization"
             >
               <template #node="{ node }">
                 <u-tree-node
@@ -94,7 +87,7 @@
                   :keyword="treeRef ? treeRef[ind]?.searchValue : ''"
                 >
                   <template #count>
-                    {{ get(state.countMap, `${tree.es.field}.${node.data.value}`) ?? 0 }}
+                    {{ countMap ? (countMap[node.data.value] ?? 0) : "—" }}
                   </template>
                 </u-tree-node>
               </template>
@@ -107,14 +100,18 @@
         <check-card
           v-model="state.valueRight"
           :filters="rightItems"
-          @change="handleAction('change-tag')"
+          @change="queueList(true)"
         />
+        <div v-if="appError" class="market__filter-error" role="status">
+          业务系统加载失败
+          <el-button link type="primary" @click="loadApps">重试</el-button>
+        </div>
 
         <div class="result-card">
           <div class="result-card__header">
-            <div class="result-count">
+            <div v-if="state.sTime !== null && !state.loading && !state.listError" class="result-count">
               搜索结果
-              <span>{{ state.total }}</span>
+              <span>{{ state.totalLimited ? `至少 ${state.total}` : state.total }}</span>
               项
               <i>
                 (用时
@@ -122,6 +119,7 @@
                 秒)
               </i>
             </div>
+            <div v-else class="result-count">搜索结果</div>
             <div class="sort-options">
               <template v-for="item in sorts" :key="item.title">
                 <button
@@ -129,7 +127,7 @@
                   type="button"
                   :aria-pressed="state.sortField === item.field"
                   :class="{ active: state.sortField === item.field }"
-                  @click="handleAction('change-sort', item)"
+                  @click="changeSort(item)"
                 >
                   {{ item.title }}
                   <Icon
@@ -151,27 +149,32 @@
             </div>
           </div>
           <div class="result-card__body">
+            <div v-if="state.listError" class="market__list-error" role="status">
+              数据目录加载失败
+              <el-button link type="primary" @click="queueList()">重试</el-button>
+            </div>
             <market-list
+              v-else
               :loading="state.loading"
-              :filters="{}"
-              :filter-alias="{}"
               :display-fields="displayFields"
-              :control="currentConfig.control"
               :data-list="state.list"
-              @detail="handleAction('detail', $event)"
-              @collect="handleAction('collect', $event)"
-              @apply="(item, e) => handleAction('apply', item, e)"
+              :adding-catalogs="addingCatalogs"
+              :collecting-catalogs="collectingCatalogs"
+              @detail="openDetail"
+              @collect="collectCatalog"
+              @apply="addCatalogToCart"
             />
 
-            <div v-if="state.total !== state.list.length" class="pagination">
+            <div v-if="!state.listError && state.total > 0" class="pagination">
               <ElPagination
-                v-model:current-page="state.pageNo"
-                v-model:page-size="state.pageSize"
+                :current-page="state.pageNo"
+                :page-size="state.pageSize"
+                :page-sizes="[10, 20, 50, 100]"
                 :total="state.total"
                 :background="true"
                 layout="prev, pager, next, sizes"
-                @current-change="handleAction('change-page')"
-                @size-change="handleAction('change-page')"
+                @update:current-page="changePage"
+                @update:page-size="changePageSize"
               />
             </div>
           </div>
@@ -182,862 +185,386 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, onMounted, watch, onActivated } from "vue";
-import { useDictStore } from "@/store";
-import { get, cloneDeep, isEmpty, isObject, isString } from "lodash-es";
-import { genEsQueryField } from "@/utils";
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { useRegisterModal } from "@/composables";
-import dayjs from "dayjs";
+import { useCartCount, useRegisterModal } from "@/composables";
+import { useDictStore } from "@/store";
 
-const { open } = useRegisterModal();
+type SortField = "createdTime" | "updatedTime" | "recordCount";
+type SortOrder = "asc" | "desc";
+type Category = "行政处室" | "事业单位";
+type FilterName = "业务系统" | "共享类型" | "加工程度" | "发布时间";
+type FilterValue = string | number;
+type FilterOption = { label: string; value: FilterValue };
+type Organization = {
+  id: string;
+  serialNumber: string;
+  value: string;
+  label: string;
+  children?: Organization[];
+};
+type ApplicationOption = { label: string; value: string; orgId: string };
+type MarketCatalog = {
+  tid: string;
+  assetType: string;
+  catalogName: string;
+  collected?: boolean | "1" | "0";
+  applyStatus?: number | string;
+  canApply?: boolean;
+  canCollect?: boolean;
+};
+type ListResult = { list: MarketCatalog[]; total: number; totalLimited?: boolean };
+type CountResult = { orgPath: Record<string, number> };
+
+const { completedVersion } = useRegisterModal();
+const { refresh: refreshCartCount, sessionRevision } = useCartCount();
 const router = useRouter();
-const treeRef = ref();
+const dictStore = useDictStore();
+const treeRef = ref<{ searchValue?: string }[]>([]);
 const categoriesOpen = ref(false);
-const dictDict = useDictStore();
+const addingCatalogs = reactive(new Set<string>());
+const collectingCatalogs = reactive(new Set<string>());
 const state = reactive({
-  // 顶部
-  activeTop: "", // 索引页签
-  keyword: "", // 搜索关键字
-
-  // 侧边
-  activeSidebar: "", // 侧边页签
-  sidebarKeyword: "", // 侧边搜索关键字
-  valueSidebar: "", // 侧边选中值
-
-  // 右侧
-  valueRight: {}, // 右侧选中值
-
-  // 排序
-  sortField: "",
-  sortOrder: "desc",
-
-  // 列表、分页
-  list: [],
+  keyword: "",
+  appliedKeyword: "",
+  activeSidebar: "行政处室" as Category,
+  selectedOrg: undefined as Organization | undefined,
+  valueRight: {} as Partial<Record<FilterName, FilterValue[]>>,
+  sortField: "createdTime" as SortField,
+  sortOrder: "desc" as SortOrder,
+  list: [] as MarketCatalog[],
   total: 0,
-  loading: false,
-  sTime: 0,
+  totalLimited: false,
+  loading: true,
+  listError: false,
+  sTime: null as number | null,
   pageNo: 1,
   pageSize: 20,
-
-  // 部门筛选出的业务系统
-  apps: [],
-
-  // 申请单
-  open: false,
-  registerData: {},
-
-  // 聚合统计 { field: { key: count } }
-  countMap: {} as Record<string, Record<string, number>>,
 });
-const leftValue = computed(() => {
-  return state.valueSidebar ? [state.valueSidebar] : [];
-});
+const countMap = ref<Record<string, number> | null>(null);
+const countError = ref(false);
+const apps = ref<ApplicationOption[]>([]);
+const appError = ref(false);
 
-// 当前索引配置
-const currentConfig = ref({});
-// 索引页签
-const tabs = computed(() => {
-  return config.search.map((el) => el.title).map((el) => ({ label: el, value: el }));
-});
-// 侧边筛选树
-const sidebarItems = computed(() => {
-  return (
-    currentConfig.value.filter?.map((el) => ({
-      ...el,
-      options: isString(el.options) ? dictDict.getDictItems(el.options) : el.options,
-    })) || []
-  );
-});
-// 右侧筛选标签
-const rightItems = ref([]);
+const sorts: { title: string; field: SortField; order: SortOrder }[] = [
+  { title: "准入时间", field: "createdTime", order: "desc" },
+  { title: "更新时间", field: "updatedTime", order: "asc" },
+  { title: "数据量", field: "recordCount", order: "asc" },
+];
+const publishPeriods: FilterOption[] = [
+  { label: "最近十天", value: "10d" },
+  { label: "近一个月", value: "1M" },
+  { label: "近三个月", value: "3M" },
+  { label: "近六个月", value: "6M" },
+];
 
-// 排序
-const sorts = computed(() => {
-  return currentConfig.value.sort;
-});
-// 列表展示字段
-const displayFields = computed(() => {
-  return currentConfig.value.displayFields;
+function organizationNodes(nodes: Organization[] = []): Organization[] {
+  return nodes.map((node) => ({
+    ...node,
+    value: node.serialNumber,
+    children: organizationNodes(node.children),
+  }));
+}
+
+const sidebarItems = computed<{ title: Category; options: Organization[] }[]>(() => {
+  const groups = dictStore.getDictItems("org") as unknown as Organization[];
+  return [
+    { title: "行政处室", options: organizationNodes(groups[0]?.children) },
+    { title: "事业单位", options: organizationNodes(groups[1]?.children) },
+  ];
 });
 
-onMounted(() => {
-  state.activeTop = config.search[0].title;
-  handleAction("init");
+const filteredApps = computed(() => {
+  const organization = state.selectedOrg;
+  return organization ? apps.value.filter((app) => app.orgId === organization.id) : apps.value;
 });
 
-onActivated(() => {
-  handleSearch();
-});
+const rightItems = computed(() => [
+  { title: "业务系统", options: filteredApps.value },
+  { title: "共享类型", options: dictStore.getDictItems("shareType") },
+  { title: "加工程度", options: dictStore.getDictItems("dataProcessLevel") },
+  { title: "发布时间", options: publishPeriods },
+]);
 
-// 监听关闭登记弹框
-watch(open, (newVal, oldVal) => {
-  if (newVal === false && oldVal) {
-    handleAction("search");
-  }
-});
+const displayFields = computed(() => [
+  { title: "数源单位", field: "orgId", options: "org" },
+  { title: "共享属性", field: "shareType", options: "shareType" },
+  { title: "访问量", field: "viewCount" },
+  { title: "更新周期", field: "updateCycle", options: "updateCycle" },
+  { title: "业务系统", field: "appId", options: apps.value },
+  { title: "注册时间", field: "createdTime" },
+]);
 
-const handleAction = (type: string, item?: any, item2?: any) => {
-  switch (type) {
-    case "init": {
-      // 确定索引配置
-      currentConfig.value = config.search.find((el) => el.title === state.activeTop);
-      // 初始化排序
-      const { field = "updatedTime", order = "desc" } =
-        sorts.value.length > 0 ? sorts.value[0] : {};
-      state.sortField = field;
-      state.sortOrder = order;
-      // 设置左侧激活页签
-      state.activeSidebar = sidebarItems.value.length > 0 ? sidebarItems.value[0].title : "";
-      // 清空筛选值
-      state.valueSidebar = "";
-      state.valueRight = {};
-      state.sTime = 0;
-      state.countMap = {};
+let active = false;
+let activatedOnce = false;
+let listQueued = false;
+let listRequest = 0;
+let countRequest = 0;
+let appRequest = 0;
+let countLoading = false;
+let appsLoading = false;
+let appsLoaded = false;
 
-      loadFilters();
-      handleAction("search");
-      break;
-    }
-    case "change-top":
-      handleAction("init");
-      break;
-    case "change-left-tab":
-      state.activeSidebar = item.title;
-      state.valueSidebar = "";
-      loadFilters();
-      break;
-    case "change-sort": {
-      // 更新排序
-      const { field, order = "desc" } = item;
-      if (state.sortField === field) {
-        // 切换排序方向
-        state.sortOrder = state.sortOrder === "asc" ? "desc" : "asc";
-      } else {
-        // 切换列，默认降序
-        state.sortField = field;
-        state.sortOrder = order;
-      }
-      handleAction("search");
-      break;
-    }
-    case "click-left":
-      if (state.valueSidebar !== item.value) {
-        state.valueSidebar = item.value;
-      } else {
-        state.valueSidebar = undefined;
-      }
-      // 左右筛选联动
-      loadFilters();
-    case "change-page":
-    case "change-tag":
-      handleAction("search");
-      break;
-    case "search":
-      handleSearch();
-      break;
+function isCurrentSession(revision: typeof sessionRevision.value) {
+  return active && revision === sessionRevision.value;
+}
 
-    // 列表项操作
-    case "apply":
-      $common
-        .post("/dws/market/shoppingCard", {
-          catalogId: item.tid,
-        })
-        .then((res) => {
-          handleAction("search");
-          $common.addToCart(item2);
-        });
-      break;
-    case "collect":
-      $common
-        .post("/dws/market/collect", {
-          catalogId: item.tid,
-        })
-        .then((res) => {
-          item.collected = !item.collected;
-          $message.success(res ? "收藏成功" : "取消收藏");
-        });
-      break;
-    case "detail":
-      router.push({
-        path: "detail",
-        query: { id: item.tid, type: item.assetType, title: item.catalogName },
-      });
-      break;
-  }
-};
-// 设置点击部门节点时，筛选右侧业务系统
-const refreshApp = async () => {
-  await $common.post("/dst/catalog/list", { assetType: "app" }).then((data) => {
-    state.apps = data.map((el) => ({ label: el.appName, value: el.tid, orgId: el.orgId }));
-  });
-};
-
-// 加载右侧筛选
-const loadFilters = async () => {
-  const list = currentConfig.value.filter2?.map((el) => {
-    const obj = {
-      ...el,
-      options: isString(el.options) ? dictDict.getDictItems(el.options) : el.options,
-    };
-    return obj;
-  });
-
-  // 部门筛选业务系统
-  const ind = list.findIndex((el) => el.title === "业务系统");
-  const flag = sidebarItems.value.find((el) => el.title === state.activeSidebar)?.flag;
-  if (ind > -1) {
-    !state.apps?.length && (await refreshApp());
-    if (["org"].includes(flag) && !!state.valueSidebar) {
-      list[ind].options = state.apps.filter((el) => el.orgId === state.valueSidebar);
-    } else {
-      list[ind].options = state.apps;
-    }
-
-    // 取消不存在于 新业务系统列表中的选择(考虑单选情况)
-    if (state.valueRight["业务系统"]?.length === 1) {
-      const appId = state.valueRight["业务系统"][0];
-      const indApp = list[ind].options.find((el) => el.value === appId);
-      if (!indApp) {
-        state.valueRight["业务系统"] = [];
-      }
-    }
-  }
-
-  rightItems.value = list;
-};
-
-// 获取es查询语句
-const getQueryParam = () => {
-  const valueKeys = Object.keys(state.valueRight);
-
-  if (valueKeys.length === 0) return [];
-
-  const queryParams: {
-    [key: string]: {
-      [k: string]: any;
-    };
-  }[] = [];
-
-  // 左侧树筛选
-  if (leftValue.value.length > 0) {
-    const section = currentConfig.value.filter.find(
-      (section) => section.title === state.activeSidebar
-    );
-
-    // 获取es查询字段对象
-    const { query, field } = section?.es || {};
-    const obj = genEsQueryField(query, field, leftValue.value);
-    queryParams.push(obj);
-  }
-
-  // 右侧筛选
-  for (const valueKey of valueKeys) {
-    // 找到字段的配置section
-    const section = currentConfig.value.filter2.find((section) => section.title === valueKey);
-    const esValue = state.valueRight[valueKey];
-    if (!isObject(section) || esValue.length === 0) {
-      continue;
-    }
-
-    // 获取es查询字段对象
-    const { query, field } = section?.es || {};
-    const obj = genEsQueryField(query, field, esValue);
-    queryParams.push(obj);
-  }
-
-  return queryParams;
-};
-
-const handleSearch = async () => {
+function queueList(resetPage = false) {
+  if (resetPage) state.pageNo = 1;
+  if (!active || listQueued) return;
+  listRequest += 1;
   state.loading = true;
-  const startTime = performance.now();
+  state.listError = false;
+  listQueued = true;
+  queueMicrotask(() => {
+    listQueued = false;
+    if (active) void loadList();
+  });
+}
+
+async function loadList() {
+  const request = ++listRequest;
+  const revision = sessionRevision.value;
+  const start = performance.now();
+  const orgPath = state.selectedOrg?.value;
+  const appId = state.valueRight["业务系统"]?.[0];
+  const shareType = state.valueRight["共享类型"]?.[0];
+  const dataProcessLevel = state.valueRight["加工程度"]?.[0];
+  const publishedWithin = state.valueRight["发布时间"]?.[0];
 
   try {
-    // 1、提取搜索关键词参数
-    const kParam = state.keyword
-      ? {
-          multi_match: {
-            query: state.keyword,
-            fields: currentConfig.value.searchFields,
-          },
-        }
-      : undefined;
-
-    // 2、提取筛选条件参数
-    const queryParams = getQueryParam() || {};
-
-    // 获取列表固定参数
-    const querys = [...currentConfig.value.params];
-    !isEmpty(kParam) && querys.push(kParam);
-    !isEmpty(queryParams) && querys.push(...queryParams);
-
-    querys.forEach((el) => {
-      if (el["range"]) {
-        const fieldName = Object.keys(el["range"])[0];
-        if (el["range"][fieldName]["gte"]) {
-          el["range"][fieldName]["gte"] = $common.parseEsDate(el["range"][fieldName]["gte"]);
-        }
-        if (el["range"][fieldName]["lte"]) {
-          el["range"][fieldName]["lte"] = $common.parseEsDate(el["range"][fieldName]["lte"]);
-        }
-      }
-    });
-
-    if (state.sTime === 0) {
-      // 只加载一次
-      handleCount(querys);
-    }
-
-    // 执行查询
-    await list(currentConfig.value.indexType, {
-      pageNum: state.pageNo ?? 1,
-      pageSize: state.pageSize ?? 20,
-      query: querys,
+    const result: ListResult = await $common.postSilently("/dws/market/list", {
+      pageNum: state.pageNo,
+      pageSize: state.pageSize,
+      keyword: state.appliedKeyword,
+      orgPath,
+      appId,
+      shareType,
+      dataProcessLevel,
+      publishedWithin,
       sortField: state.sortField,
       sortDir: state.sortOrder,
-    }).then((res) => {
-      state.list = res.list || [];
-      state.total = res.total;
     });
-    return {
-      list: state.list,
-      total: state.total,
-    };
+    if (request !== listRequest || !isCurrentSession(revision)) return;
+    if (!Array.isArray(result?.list) || !Number.isSafeInteger(result.total) || result.total < 0) {
+      throw new Error("数据目录响应无效");
+    }
+
+    const lastPage = Math.max(1, Math.ceil(result.total / state.pageSize));
+    if (state.pageNo > lastPage) {
+      state.pageNo = lastPage;
+      queueList();
+      return;
+    }
+    state.list = result.list;
+    state.total = result.total;
+    state.totalLimited = result.totalLimited === true;
+    state.sTime = Number(((performance.now() - start) / 1000).toFixed(3));
+  } catch {
+    if (request !== listRequest || !isCurrentSession(revision)) return;
+    state.listError = true;
   } finally {
-    const endTime = performance.now();
-    state.sTime = Number(((endTime - startTime) * 0.001).toFixed(3));
-    state.loading = false;
+    if (request === listRequest && isCurrentSession(revision)) state.loading = false;
   }
-};
+}
 
-/**
- * 列表查询
- * @param indexType
- * @param param
- */
-const list = async (indexType, param: any) => {
-  return $common.post("/dws/market/list", param);
-};
+async function loadCounts() {
+  if (!active || countLoading || countMap.value) return;
+  const request = ++countRequest;
+  const revision = sessionRevision.value;
+  countLoading = true;
+  countError.value = false;
+  try {
+    const result: CountResult = await $common.postSilently("/dws/market/count", {});
+    if (request !== countRequest || !isCurrentSession(revision)) return;
+    if (!result?.orgPath || typeof result.orgPath !== "object" || Array.isArray(result.orgPath)) {
+      throw new Error("分类统计响应无效");
+    }
+    countMap.value = result.orgPath;
+  } catch {
+    if (request === countRequest && isCurrentSession(revision)) countError.value = true;
+  } finally {
+    if (request === countRequest) countLoading = false;
+  }
+}
 
-const handleCount = async (query: any) => {
-  const res = await $common.post("/dws/market/count", {
-    query: [...currentConfig.value.params],
-    aggs: currentConfig.value?.aggs,
+async function loadApps() {
+  if (!active || appsLoading || appsLoaded) return;
+  const request = ++appRequest;
+  const revision = sessionRevision.value;
+  appsLoading = true;
+  appError.value = false;
+  try {
+    const result: ApplicationOption[] = await $common.getSilently("/sym/dict", { code: "app" });
+    if (request !== appRequest || !isCurrentSession(revision)) return;
+    if (!Array.isArray(result)) throw new Error("业务系统响应无效");
+    apps.value = result;
+    appsLoaded = true;
+  } catch {
+    if (request === appRequest && isCurrentSession(revision)) appError.value = true;
+  } finally {
+    if (request === appRequest) appsLoading = false;
+  }
+}
+
+function search() {
+  state.appliedKeyword = state.keyword.trim();
+  queueList(true);
+}
+
+function changePage(page: number) {
+  if (page === state.pageNo) return;
+  state.pageNo = page;
+  queueList();
+}
+
+function changePageSize(size: number) {
+  if (size === state.pageSize) return;
+  state.pageSize = size;
+  queueList(true);
+}
+
+function changeSort(sort: (typeof sorts)[number]) {
+  if (state.sortField === sort.field) {
+    state.sortOrder = state.sortOrder === "asc" ? "desc" : "asc";
+  } else {
+    state.sortField = sort.field;
+    state.sortOrder = sort.order;
+  }
+  queueList(true);
+}
+
+function changeCategory(category: Category) {
+  if (state.activeSidebar === category) return;
+  state.activeSidebar = category;
+  if (!state.selectedOrg) return;
+  state.selectedOrg = undefined;
+  queueList(true);
+}
+
+function selectOrganization(organization: Organization) {
+  if (!organization.value) return;
+  state.selectedOrg = state.selectedOrg?.value === organization.value ? undefined : organization;
+  const selectedApp = state.valueRight["业务系统"]?.[0];
+  if (selectedApp && !filteredApps.value.some((app) => app.value === selectedApp)) {
+    state.valueRight["业务系统"] = [];
+  }
+  queueList(true);
+}
+
+function openDetail(item: MarketCatalog) {
+  void router.push({
+    path: "detail",
+    query: { id: item.tid, type: item.assetType, title: item.catalogName },
   });
-  state.countMap = res;
-};
+}
 
-const orgs = cloneDeep($dict.getDictItems("org"));
+async function addCatalogToCart(item: MarketCatalog) {
+  const catalogId = item.tid;
+  if (!catalogId || item.canApply === false || addingCatalogs.has(catalogId)) return;
+  addingCatalogs.add(catalogId);
+  const revision = sessionRevision.value;
+  try {
+    const receipt = await $common.post("/dws/market/shoppingCard", { catalogId });
+    if (!isCurrentSession(revision)) return;
+    if (typeof receipt !== "string" || !receipt.trim()) {
+      $message.warning("加购结果暂未确认，请刷新后重试");
+      return;
+    }
+    $message.success("已加入购物车");
+    queueList();
+    void refreshCartCount().catch(() => {});
+  } catch (error: unknown) {
+    if (!isCurrentSession(revision) || !error || typeof error !== "object") return;
+    const code = "errorCode" in error ? error.errorCode : undefined;
+    // 请求层展示拒绝原因；目录状态发生变化时重新读取当前页。
+    if (typeof code === "string" && /^(?:MAGIC|API)-BUSINESS-(?:404|409)$/.test(code)) queueList();
+  } finally {
+    if (revision === sessionRevision.value) addingCatalogs.delete(catalogId);
+  }
+}
 
-$common.deepTree(orgs, (node) => {
-  node.value = node.serialNumber;
+async function collectCatalog(item: MarketCatalog) {
+  const catalogId = item.tid;
+  if (!catalogId || item.canCollect === false || collectingCatalogs.has(catalogId)) return;
+  collectingCatalogs.add(catalogId);
+  const revision = sessionRevision.value;
+  const collected = item.collected !== true && item.collected !== "1";
+  try {
+    const result = await $common.post("/dws/market/collect", { catalogId, collected });
+    if (!isCurrentSession(revision)) return;
+    if (result !== collected) {
+      $message.warning("收藏状态暂未确认，请重试");
+      return;
+    }
+    const current = state.list.find((entry) => entry.tid === catalogId);
+    if (current) current.collected = result;
+    if (state.loading) queueList();
+    $message.success(result ? "已收藏" : "已取消收藏");
+  } catch {
+    // 请求层展示操作失败的具体原因。
+  } finally {
+    if (revision === sessionRevision.value) collectingCatalogs.delete(catalogId);
+  }
+}
+
+function activate() {
+  active = true;
+  queueList();
+  void loadCounts();
+  void loadApps();
+}
+
+onMounted(activate);
+onActivated(() => {
+  if (activatedOnce || !active) activate();
+  activatedOnce = true;
 });
+function deactivate() {
+  active = false;
+  listRequest += 1;
+  countRequest += 1;
+  appRequest += 1;
+  countLoading = false;
+  appsLoading = false;
+}
+onDeactivated(deactivate);
+onBeforeUnmount(deactivate);
 
-// 页面配置
-const config = {
-  // 页面标题
-  title: "数据超市",
-  // 是否只统计一次
-  onceCount: true,
-  // 页面筛选配置
-  search: [
-    {
-      title: "部门目录",
-      /* 固定传参 */
-      params: [{ term: { publishStatus: 1 } }, { term: { assetType: "catalog" } }],
-      /* 返回字段选择 */
-      sourceFields: [],
-      /* 用于全文搜索字段，可设置权重 */
-      searchFields: ["catalogName^3", "catalogNameEn^2"],
-      /* 排序，order为默认排序 */
-      sort: [
-        {
-          title: "准入时间",
-          field: "createdTime",
-          order: "desc",
-        },
-        {
-          title: "更新时间",
-          field: "updatedTime",
-          order: "asc",
-        },
-        {
-          title: "数据量",
-          field: "recordCount",
-          order: "asc",
-        },
-      ],
-      /* 左侧树筛选条件，筛选项包含组件类型、字段、选项值、es查询方法、图标配置 */
-      filter: [
-        {
-          type: "tree",
-          title: "行政处室",
-          options: orgs[0]?.children,
-          flag: "org", // 标识为部门，则会触发筛选业务系统
-          es: {
-            query: "terms",
-            field: "orgPath",
-          },
-        },
-        {
-          type: "tree",
-          title: "事业单位",
-          options: orgs[1]?.children,
-          flag: "org",
-          es: {
-            query: "terms",
-            field: "orgPath",
-          },
-        },
-      ],
-      /* 右侧上方筛选条件 */
-      filter2: [
-        {
-          type: "radio",
-          title: "业务系统",
-          options: "app",
-          es: {
-            query: "terms",
-            field: "appId",
-          },
-        },
-        {
-          type: "radio",
-          title: "共享类型",
-          options: "shareType",
-          es: {
-            query: "terms",
-            field: "shareType",
-          },
-        },
-        {
-          type: "radio",
-          title: "加工程度",
-          options: "dataProcessLevel",
-          es: {
-            query: "terms",
-            field: "dataProcessLevel",
-          },
-        },
-        {
-          type: "radio",
-          title: "发布时间",
-          options: [
-            {
-              label: "最近十天",
-              value: {
-                gte: "now-10d",
-                lte: "now",
-              },
-            },
-            {
-              label: "近一个月",
-              value: {
-                gte: "now-1M",
-                lte: "now",
-              },
-            },
-            {
-              label: "近三个月",
-              value: {
-                gte: "now-3M",
-                lte: "now",
-              },
-            },
-            {
-              label: "近六个月",
-              value: {
-                gte: "now-6M",
-                lte: "now",
-              },
-            },
-          ],
-          es: {
-            query: "range",
-            field: "publishTime",
-          },
-        },
-      ],
-      /* 聚合统计 */
-      aggs: {
-        orgPath: {
-          terms: {
-            field: "orgPath",
-            size: 10000,
-          },
-        },
-      },
-      /* 列表配置 */
-      control: {
-        showApply: "申请",
-        showCollect: true,
-      },
-      /* 列表显示字段 */
-      displayFields: [
-        {
-          title: "数源单位",
-          field: "orgId",
-          options: "org",
-        },
-        {
-          title: "共享属性",
-          field: "shareType",
-          options: "shareType",
-        },
-        {
-          title: "访问量",
-          field: "viewCount",
-        },
-        {
-          title: "更新周期",
-          field: "updateCycle",
-          options: "updateCycle",
-        },
-        {
-          title: "业务系统",
-          field: "appId",
-          options: "app",
-        },
-        {
-          title: "注册时间",
-          field: "createdTime",
-        },
-      ],
-    },
-    {
-      title: "主题目录",
-      /* 固定传参 */
-      params: [{ term: { publishStatus: 1 } }, { term: { assetType: "catalog" } }],
-      /* 返回字段选择 */
-      sourceFields: [],
-      /* 用于全文搜索字段，可设置权重 */
-      searchFields: ["catalogName^3", "catalogNameEn^2"],
-      /* 排序，order为默认排序 */
-      sort: [
-        {
-          title: "准入时间",
-          field: "createdTime",
-          order: "desc",
-        },
-        {
-          title: "更新时间",
-          field: "updatedTime",
-          order: "asc",
-        },
-        {
-          title: "数据量",
-          field: "recordCount",
-          order: "asc",
-        },
-      ],
-      /* 左侧树筛选条件，筛选项包含组件类型、字段、选项值、es查询方法、图标配置 */
-      filter: [
-        {
-          type: "tree",
-          title: "警种",
-          options: "policeType",
-          es: {
-            query: "terms",
-            field: "policeType",
-          },
-        },
-        {
-          type: "tree",
-          title: "部门",
-          options: orgs,
-          flag: "org",
-          es: {
-            query: "terms",
-            field: "orgPath",
-          },
-        },
-      ],
-      /* 右侧上方筛选条件 */
-      filter2: [
-        {
-          type: "radio",
-          title: "业务系统",
-          options: "app",
-          es: {
-            query: "terms",
-            field: "appId",
-          },
-        },
-        {
-          type: "radio",
-          title: "共享类型",
-          options: "shareType",
-          es: {
-            query: "terms",
-            field: "shareType",
-          },
-        },
-        {
-          type: "radio",
-          title: "加工程度",
-          options: "dataProcessLevel",
-          es: {
-            query: "terms",
-            field: "dataProcessLevel",
-          },
-        },
-        {
-          type: "radio",
-          title: "发布时间",
-          options: [
-            {
-              label: "最近十天",
-              value: {
-                gte: "now-10d",
-                lte: "now",
-              },
-            },
-            {
-              label: "近一个月",
-              value: {
-                gte: "now-1M",
-                lte: "now",
-              },
-            },
-            {
-              label: "近三个月",
-              value: {
-                gte: "now-3M",
-                lte: "now",
-              },
-            },
-            {
-              label: "近六个月",
-              value: {
-                gte: "now-6M",
-                lte: "now",
-              },
-            },
-          ],
-          es: {
-            query: "range",
-            field: "publishTime",
-          },
-        },
-      ],
-      /* 聚合统计 */
-      aggs: {
-        orgPath: {
-          terms: {
-            field: "orgPath",
-            size: 10000,
-          },
-        },
-        policeType: {
-          terms: {
-            field: "policeType",
-            size: 10000,
-          },
-        },
-      },
-      /* 列表配置 */
-      control: {
-        showApply: "申请",
-        showCollect: true,
-      },
-      /* 列表显示字段 */
-      displayFields: [
-        {
-          title: "数源单位",
-          field: "orgId",
-          options: "org",
-        },
-        {
-          title: "共享属性",
-          field: "shareType",
-          options: "shareType",
-        },
-        {
-          title: "访问量",
-          field: "viewCount",
-        },
-        {
-          title: "更新周期",
-          field: "updateCycle",
-          options: "updateCycle",
-        },
-        {
-          title: "业务系统",
-          field: "appId",
-          options: "app",
-        },
-        {
-          title: "注册时间",
-          field: "createdTime",
-        },
-      ],
-    },
-    {
-      title: "服务目录",
-      /* 固定传参 */
-      params: [{ term: { publishStatus: 1 } }, { term: { assetType: "catalog" } }],
-      /* 返回字段选择 */
-      sourceFields: [],
-      /* 用于全文搜索字段，可设置权重 */
-      searchFields: ["catalogName^3", "catalogNameEn^2"],
-      /* 排序，order为默认排序 */
-      sort: [
-        {
-          title: "准入时间",
-          field: "createdTime",
-          order: "desc",
-        },
-        {
-          title: "更新时间",
-          field: "updatedTime",
-          order: "asc",
-        },
-        {
-          title: "数据量",
-          field: "recordCount",
-          order: "asc",
-        },
-      ],
-      /* 左侧树筛选条件，筛选项包含组件类型、字段、选项值、es查询方法、图标配置 */
-      filter: [
-        {
-          type: "tree",
-          title: "行政处室",
-          options: orgs[0]?.children,
-          flag: "org", // 标识为部门，则会触发筛选业务系统
-          es: {
-            query: "terms",
-            field: "orgPath",
-          },
-        },
-        {
-          type: "tree",
-          title: "事业单位",
-          options: orgs[1]?.children,
-          flag: "org",
-          es: {
-            query: "terms",
-            field: "orgPath",
-          },
-        },
-      ],
-      /* 右侧上方筛选条件 */
-      filter2: [
-        {
-          type: "radio",
-          title: "业务系统",
-          options: "app",
-          es: {
-            query: "terms",
-            field: "appId",
-          },
-        },
-        {
-          type: "radio",
-          title: "共享类型",
-          options: "shareType",
-          es: {
-            query: "terms",
-            field: "shareType",
-          },
-        },
-        {
-          type: "radio",
-          title: "加工程度",
-          options: "dataProcessLevel",
-          es: {
-            query: "terms",
-            field: "dataProcessLevel",
-          },
-        },
-        {
-          type: "radio",
-          title: "发布时间",
-          options: [
-            {
-              label: "最近十天",
-              value: {
-                gte: "now-10d",
-                lte: "now",
-              },
-            },
-            {
-              label: "近一个月",
-              value: {
-                gte: "now-1M",
-                lte: "now",
-              },
-            },
-            {
-              label: "近三个月",
-              value: {
-                gte: "now-3M",
-                lte: "now",
-              },
-            },
-            {
-              label: "近六个月",
-              value: {
-                gte: "now-6M",
-                lte: "now",
-              },
-            },
-          ],
-          es: {
-            query: "range",
-            field: "publishTime",
-          },
-        },
-      ],
-      /* 聚合统计 */
-      aggs: {
-        orgPath: {
-          terms: {
-            field: "orgPath",
-            size: 10000,
-          },
-        },
-      },
-      /* 列表配置 */
-      control: {
-        showApply: "申请",
-        showCollect: true,
-      },
-      /* 列表显示字段 */
-      displayFields: [
-        {
-          title: "数源单位",
-          field: "orgId",
-          options: "org",
-        },
-        {
-          title: "共享属性",
-          field: "shareType",
-          options: "shareType",
-        },
-        {
-          title: "访问量",
-          field: "viewCount",
-        },
-        {
-          title: "更新周期",
-          field: "updateCycle",
-          options: "updateCycle",
-        },
-        {
-          title: "业务系统",
-          field: "appId",
-          options: "app",
-        },
-        {
-          title: "注册时间",
-          field: "createdTime",
-        },
-      ],
-    },
-  ],
-};
+watch(completedVersion, () => queueList());
+watch(
+  sessionRevision,
+  () => {
+    listRequest += 1;
+    countRequest += 1;
+    appRequest += 1;
+    countLoading = false;
+    appsLoading = false;
+    appsLoaded = false;
+    countMap.value = null;
+    countError.value = false;
+    apps.value = [];
+    appError.value = false;
+    addingCatalogs.clear();
+    collectingCatalogs.clear();
+    state.keyword = "";
+    state.appliedKeyword = "";
+    state.selectedOrg = undefined;
+    state.valueRight = {};
+    state.list = [];
+    state.total = 0;
+    state.totalLimited = false;
+    state.sTime = null;
+    state.pageNo = 1;
+    state.loading = true;
+    const revision = sessionRevision.value;
+    // 会话版本先更新，凭证在同一轮调用中随后写入。
+    if (active) queueMicrotask(() => {
+      if (isCurrentSession(revision)) activate();
+    });
+  },
+  { flush: "sync" }
+);
 </script>
 
 <style scoped lang="scss">
@@ -1107,50 +634,19 @@ const config = {
     }
   }
 
-  .market__apply-btn {
-    width: 120;
-    height: 48px;
-    border-radius: 8px;
-    font-size: 16px;
-  }
+}
 
-  .market__tabs {
-    :deep(.el-tabs__nav) {
-      .el-tabs__item {
-        padding: 0 26px;
-        font-size: 16px;
-        letter-spacing: 1px;
-        font-family: Source Han Sans SC Bold;
-        font-weight: 550;
-        &.is-active {
-          font-weight: 800;
-        }
-      }
-      .el-tabs__item:nth-child(2) {
-        padding-left: 0;
-      }
-    }
-    :deep(.el-tabs__active-bar) {
-      height: 3px;
-    }
-    :deep(.el-tabs__nav-wrap),
-    :deep(.el-tabs__nav-scroll) {
-      overflow: visible;
-    }
-    :deep(.el-tabs__active-bar)::after {
-      position: absolute;
-      top: 100%;
-      left: 50%;
-      width: 7px;
-      aspect-ratio: 1 / 1;
-      margin-inline: auto;
-      content: "";
-      background-color: var(--el-color-primary);
-      clip-path: polygon(0% 0%, 100% 0%, 0% 100%);
-      transform: translateY(calc(7px / -2)) rotate(225deg);
-      transform-origin: 50%;
-    }
-  }
+.market__filter-error,
+.market__list-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--el-text-color-secondary);
+}
+
+.market__list-error {
+  justify-content: center;
+  min-height: 160px;
 }
 
 .market__body {

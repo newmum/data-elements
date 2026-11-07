@@ -48,9 +48,6 @@
     "@form-create/designer": "3.3.1",
     "@form-create/element-ui": "3.2.31",
     "@stomp/stompjs": "^7.1.1",
-    "@vue-office/docx": "^1.6.3",
-    "@vue-office/excel": "^1.7.14",
-    "@vue-office/pdf": "^2.0.10",
     "@vueuse/core": "^12.8.2",
     "@vxe-ui/plugin-export-xlsx": "4.4.0",
     "@vxe-ui/plugin-render-element": "4.1.1",
@@ -117,13 +114,6 @@
   },
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@vue-office/pdf",
-      "@vue-office/docx",
-      "@vue-office/excel"
-    ]
   },
   "packageManager": "pnpm@10.13.1+sha512.37ebf1a5c7a30d5fabe0c5df44ee8da4c965ca0c5af3dbab28c3a1681b70a256218d05c81c9c0dcf767ef6b8551eb5b960042b9ed4300c59242336377e01cfad"
 }

@@ -154,9 +154,6 @@
   }
 }
 ================================
-// 接口：02.批量重建资产索引
-// 路由：POST /dst/maintenance/batchRefresh
-// 业务说明：按当前租户批量重建应用、数据源、数据表和目录索引；指定 tids 时统一预取主表与统计依赖。
 import cn.hutool.json.JSONUtil as JSONUtil
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.elasticsearch.EsPageInfo
@@ -166,6 +163,11 @@ import java.util.List
 import java.util.Map
 import jsons
 import tenantRuntime
+
+// POST /dst/maintenance/batchRefresh：按当前租户重建应用、数据源、数据表和目录的检索投影。
+// assetType 选择资源类型；tids 指定最多 200 个 ID，主表、关联和属性按集合预取。
+// 返回刷新、移除及请求数量。未指定 tids 时执行全量重建，purgeStale 默认允许清理陈旧投影。
+// 仅写当前租户索引，不修改业务主表；本批保持既有定向重建和全量重建行为。
 var tenantId = tenantRuntime.id()
 
 var text = (value) => value == null ? '' : value + ''
@@ -259,6 +261,78 @@ var putIndexProps = (target, source) => {
     }
 }
 
+var catalogCounterById = {}
+var catalogDocument = (main, props, id) => {
+    var doc = {}
+    // 目录动态属性优先，主表字段兜底，避免历史目录缺少属性时名称等字段为空。
+    putIndexProps(doc, props)
+    doc.assetType = 'catalog'
+    if (blank(doc.catalogName)) { doc.catalogName = first(main, ['catalogName', 'catalog_name']) }
+    if (blank(doc.catalogNameEn)) { doc.catalogNameEn = first(main, ['catalogNameEn', 'catalog_name_en']) }
+    if (blank(doc.assetDesc)) { doc.assetDesc = first(main, ['assetDesc', 'asset_desc']) }
+    if (blank(doc.appId)) { doc.appId = first(main, ['appId', 'app_id']) }
+    if (blank(doc.appName)) { doc.appName = first(main, ['appName', 'app_name']) }
+    if (blank(doc.dbId)) { doc.dbId = first(main, ['dbId', 'db_id']) }
+    if (blank(doc.dbName)) { doc.dbName = first(main, ['dbName', 'db_name']) }
+    if (blank(doc.sourceTableId)) { doc.sourceTableId = first(main, ['sourceTableId', 'source_table_id']) }
+    if (blank(doc.sourceTableName)) { doc.sourceTableName = first(main, ['sourceTableName', 'source_table_name']) }
+    if (blank(doc.sourceDbId)) { doc.sourceDbId = first(main, ['sourceDbId', 'source_db_id']) }
+    if (blank(doc.sourceDbName)) { doc.sourceDbName = first(main, ['sourceDbName', 'source_db_name']) }
+    if (blank(doc.targetTableId)) { doc.targetTableId = first(main, ['targetTableId', 'target_table_id']) }
+    if (blank(doc.targetTableName)) { doc.targetTableName = first(main, ['targetTableName', 'target_table_name']) }
+    if (blank(doc.targetDbId)) { doc.targetDbId = first(main, ['targetDbId', 'target_db_id']) }
+    if (blank(doc.targetDbType)) { doc.targetDbType = first(main, ['targetDbType', 'target_db_type']) }
+    if (blank(doc.orgId)) { doc.orgId = first(main, ['orgId', 'org_id']) }
+    if (blank(doc.manageUnit)) { doc.manageUnit = first(main, ['manageUnit', 'manage_unit']) }
+    if (blank(doc.businessType)) { doc.businessType = first(main, ['businessType', 'business_type']) }
+    if (blank(doc.dataSourceType)) { doc.dataSourceType = first(main, ['dataSourceType', 'data_source_type']) }
+    if (blank(doc.timestampField)) { doc.timestampField = first(main, ['timestampField', 'timestamp_field']) }
+    if (blank(doc.dictionaryTableFlag)) { doc.dictionaryTableFlag = first(main, ['dictionaryTableFlag', 'dictionary_table_flag']) }
+    doc.assetStatus = first(main, ['assetStatus', 'asset_status']) == null ? 2 : first(main, ['assetStatus', 'asset_status'])
+    doc.flowStatus = first(main, ['flowStatus', 'flow_status']) == null ? 2 : first(main, ['flowStatus', 'flow_status'])
+    doc.tenantId = tenantId
+    doc.regTime = first(main, ['regTime', 'reg_time'])
+    doc.createdTime = first(main, ['createdTime', 'created_time'])
+    doc.updatedTime = first(main, ['updatedTime', 'updated_time'])
+    doc.regTime_date = doc.regTime
+    doc.createdTime_date = doc.createdTime
+    doc.updatedTime_date = doc.updatedTime
+    doc.tid = id
+    doc.id = id
+    // 累计浏览量仅来自目录主表，扩展属性和旧索引值不能成为权威来源。
+    var count = first(main, ['marketViewCount', 'market_view_count'])::long(0)
+    catalogCounterById[id] = count
+    doc.viewCount = count
+    return doc
+}
+var saveProjectedDocuments = (documentIds, documents) => {
+    var catalogIds = []
+    var catalogDocs = []
+    var catalogCounts = []
+    var otherIds = []
+    var otherDocs = []
+    for (i, document in documents) {
+        var id = documentIds[i]
+        if (document.assetType == 'catalog') {
+            catalogIds.add(id)
+            catalogDocs.add(document)
+            catalogCounts.add(catalogCounterById[id])
+        } else {
+            otherIds.add(id)
+            otherDocs.add(document)
+        }
+    }
+    // 目录采用脚本原子替换并保留计数上界；其他类型继续使用原有索引写入路径。
+    var position = 0
+    while (position < catalogIds.size()) {
+        var end = Math.min(position + 100, catalogIds.size())
+        esCommonService.bulkReplaceCatalogProjections('dataassets', catalogIds.subList(position, end),
+            catalogDocs.subList(position, end), catalogCounts.subList(position, end))
+        position = end
+    }
+    if (otherIds.size() > 0) { esCommonService.bulkSaveWithIds('dataassets', otherIds, otherDocs) }
+}
+
 var ids = []
 var docs = []
 var active = {}
@@ -291,6 +365,8 @@ if (hasTargetTids) {
     var referencedAppIds = []
     var sourceAppById = {}
     var appNamesById = {}
+    var catalogRowById = {}
+    var catalogPropsById = {}
     if (requestedIds.size() > 0) {
         if (typeEnabled('db')) {
             for (sourceRow in db.table('db_datasource_t').where()
@@ -318,6 +394,21 @@ if (hasTargetTids) {
             for (tableRow in db.table('db_table_t').where()
                 .in('tid', requestedIds).eq('tenant_id', tenantId).eq('is_del', 0).select()) {
                 tableById[text(first(tableRow, ['tid']))] = tableRow
+            }
+        }
+        // 目录主表与动态属性统一批量预取；不依赖租户可选的 da_asset_t 兼容视图。
+        if (typeEnabled('catalog') && requestedIds.size() > 0) {
+            for (catalogPrefetchRow in db.table('da_catalog_t').where()
+                .in('tid', requestedIds).eq('tenant_id', tenantId).eq('is_del', 0).select()) {
+                catalogRowById[text(first(catalogPrefetchRow, ['tid']))] = catalogPrefetchRow
+            }
+            for (catalogPrefetchProp in db.table('da_prop_t').where()
+                .in('parent_id', requestedIds).eq('tenant_id', tenantId)
+                .eq('data_type', 'catalog').eq('is_del', 0).select()) {
+                var catalogPrefetchOwner = text(first(catalogPrefetchProp, ['parentId', 'parent_id']))
+                if (catalogPropsById[catalogPrefetchOwner] == null) { catalogPropsById[catalogPrefetchOwner] = {} }
+                var catalogPrefetchName = first(catalogPrefetchProp, ['propName', 'prop_name'])
+                if (!blank(catalogPrefetchName)) { catalogPropsById[catalogPrefetchOwner][catalogPrefetchName] = first(catalogPrefetchProp, ['propValue', 'prop_value']) }
             }
         }
     }
@@ -547,9 +638,20 @@ if (hasTargetTids) {
                 touched = touched + 1
             }
         }
+        if (typeEnabled('catalog')) {
+            var catalogRow = catalogRowById[idText]
+            if (catalogRow != null) {
+                var catalogDoc = catalogDocument(catalogRow, catalogPropsById[idText], idText)
+                targetIds.add(idText)
+                targetDocs.add(catalogDoc)
+                touched = touched + 1
+                continue
+            }
+        }
     }
     if (targetIds.size() > 0) {
-        esCommonService.bulkSaveWithIds('dataassets', targetIds, targetDocs)
+        saveProjectedDocuments(targetIds, targetDocs)
+        // 目录原语已在bulk内即时刷新；普通应用投影仍沿用显式刷新。
         if (typeEnabled('app')) {
             // 保留已有映射和字段类型；显式刷新当前租户索引，使保存后的首次查询读取新值。
             esOperations.indexOps(IndexCoordinates.of(esCommonService.resolveTenantIndexName('dataassets'))).refresh()
@@ -566,7 +668,7 @@ var annotatedCountByDb = {}
 var registeredCountByDb = {}
 var problemCountByDb = {}
 var catalogCountByDb = {}
-for (prop in db.table('da_prop_t').where().eq('is_del', 0).select()) {
+for (prop in db.table('da_prop_t').where().eq('tenant_id', tenantId).eq('is_del', 0).select()) {
     var parentId = first(prop, ['parentId', 'parent_id'])
     var propName = first(prop, ['propName', 'prop_name'])
     var propValue = first(prop, ['propValue', 'prop_value'])
@@ -587,12 +689,12 @@ for (prop in db.table('da_prop_t').where().eq('is_del', 0).select()) {
     }
 }
 var appNames = {}
-for (app in db.table('sym_application_t').where().eq('is_del', 0).select()) {
+for (app in db.table('sym_application_t').where().eq('tenant_id', tenantId).eq('is_del', 0).select()) {
     appNames[first(app, ['tid'])] = first(app, ['appName', 'app_name'])
 }
 var dbCountByApp = {}
 var sourceAppById = {}
-for (source in db.table('db_datasource_t').where().eq('is_del', 0).select()) {
+for (source in db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('is_del', 0).select()) {
     var sourceId = first(source, ['tid'])
     var appId = first(source, ['appId', 'app_id'])
     sourceAppById[sourceId] = appId
@@ -600,7 +702,7 @@ for (source in db.table('db_datasource_t').where().eq('is_del', 0).select()) {
         dbCountByApp[appId] = (dbCountByApp[appId] == null ? 0 : dbCountByApp[appId]) + 1
     }
 }
-for (table in db.table('db_table_t').where().eq('is_del', 0).select()) {
+for (table in db.table('db_table_t').where().eq('tenant_id', tenantId).eq('is_del', 0).select()) {
     var sourceId = first(table, ['datasourceId', 'datasource_id'])
     var appId = sourceAppById[sourceId]
     tableCountByDb[sourceId] = (tableCountByDb[sourceId] == null ? 0 : tableCountByDb[sourceId]) + 1
@@ -629,7 +731,7 @@ var addDocument = (id, doc) => {
     docs.add(doc)
 }
 if (typeEnabled('app')) {
-    for (main in db.table('sym_application_t').where().eq('is_del', 0).select()) {
+    for (main in db.table('sym_application_t').where().eq('tenant_id', tenantId).eq('is_del', 0).select()) {
         var id = first(main, ['tid'])
         var props = propsByParent[id] == null ? {} : propsByParent[id]
         var doc = {}
@@ -659,7 +761,7 @@ if (typeEnabled('app')) {
     }
 }
 if (typeEnabled('db')) {
-    for (main in db.table('db_datasource_t').where().eq('is_del', 0).select()) {
+    for (main in db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('is_del', 0).select()) {
         var id = first(main, ['tid'])
         var props = connectionProps(main)
         var hasConnection = props != null && !props.isEmpty()
@@ -717,7 +819,7 @@ if (typeEnabled('db')) {
     }
 }
 if (typeEnabled('table')) {
-    for (main in db.table('db_table_t').where().eq('is_del', 0).select()) {
+    for (main in db.table('db_table_t').where().eq('tenant_id', tenantId).eq('is_del', 0).select()) {
         var id = first(main, ['tid'])
         var doc = {}
         doc.assetType = 'table'
@@ -749,26 +851,13 @@ if (typeEnabled('table')) {
     }
 }
 if (typeEnabled('catalog')) {
-    for (main in db.table('da_asset_t').where().eq('asset_type', 'catalog').eq('is_del', 0).select()) {
+    // 全量目录和定向目录使用同一主表及投影契约，金仓无需兼容视图。
+    for (main in db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('is_del', 0).select()) {
         var id = first(main, ['tid'])
-        var doc = {}
-        if (propsByParent[id] != null) {
-            putIndexProps(doc, propsByParent[id])
-        }
-        doc.assetType = 'catalog'
-        doc.assetStatus = first(main, ['assetStatus', 'asset_status'])
-        doc.flowStatus = first(main, ['flowStatus', 'flow_status'])
-        doc.tenantId = tenantId
-        doc.regTime = first(main, ['regTime', 'reg_time'])
-        doc.createdTime = first(main, ['createdTime', 'created_time'])
-        doc.updatedTime = first(main, ['updatedTime', 'updated_time'])
-        doc.regTime_date = doc.regTime; doc.createdTime_date = doc.createdTime; doc.updatedTime_date = doc.updatedTime
-        addDocument(id, doc)
+        addDocument(id, catalogDocument(main, propsByParent[id], id))
     }
 }
-if (ids.size() > 0) {
-    esCommonService.bulkSaveWithIds('dataassets', ids, docs)
-}
+if (ids.size() > 0) { saveProjectedDocuments(ids, docs) }
 
 var removed = 0
 if (body?.purgeStale != false && (tids == null || tids.size() == 0)) {

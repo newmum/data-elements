@@ -74,6 +74,20 @@
       <el-alert v-if="sourcePreflightError" class="source-preflight-error" :title="sourcePreflightError"
         type="error" :closable="false" show-icon />
       <el-alert v-if="reuseTypeNotice" :title="reuseTypeNotice" type="info" :closable="false" show-icon />
+      <section v-if="materializationResults.length" class="materialization-results" aria-label="物化建表结果">
+        <div class="materialization-result-summary" role="status">
+          <strong>物化建表结果</strong>
+          <span>已完成 {{ materializationResults.filter((row) => row.status === 'succeeded').length }} / {{ materializationResults.length }} 张</span>
+        </div>
+        <ul>
+          <li v-for="row in materializationResults" :key="row.dbId">
+            <span class="materialization-result-target">{{ row.datasource }} · {{ row.tableName }}</span>
+            <el-tag size="small" :type="materializationResultStatuses[row.status].type">{{ materializationResultStatuses[row.status].label }}</el-tag>
+            <span v-if="row.message" class="materialization-result-message">{{ row.message }}</span>
+          </li>
+        </ul>
+        <p>再次提交会保留配置未变的已完成目标，并重新检查其余目标。</p>
+      </section>
       <div v-show="!ddlMode && !loadError" class="materialization-form-view">
       <u-title name="建表信息" />
       <el-alert v-for="message in templateWarnings" :key="message" :title="message" type="warning" :closable="false" show-icon class="mb-2" />
@@ -185,6 +199,17 @@
     </div>
 
     <template #footer>
+      <section v-if="hivePartitionResults.length" class="hive-partition-results" aria-label="Hive 分区逐表结果" aria-live="polite">
+        <strong>Hive 分区逐表结果</strong>
+        <ul>
+          <li v-for="row in hivePartitionResults" :key="row.dbId">
+            <span class="hive-partition-target">{{ row.datasource }} · {{ row.table }}</span>
+            <el-tag size="small" :type="hivePartitionStatuses[row.status].type">{{ hivePartitionStatuses[row.status].label }}</el-tag>
+          </li>
+        </ul>
+        <p v-if="!isSaveing && hivePartitionBatchReviewPending" class="hive-partition-review">整批复核未通过，上方保留单表核验结果。</p>
+        <p v-if="!isSaveing">再次提交会重新读取实际分区，已齐全的表无需再次注册。</p>
+      </section>
       <div class="flex" style="justify-content: flex-end">
         <el-button
           v-if="recoveryTarget && !knownTargets.some((target) => target.targetTableId === recoveryTarget.targetTableId)"
@@ -260,7 +285,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from "vue";
+import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick, h } from "vue";
 import { FormUtils } from "@/utils/form";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useDictStore } from "@/store";
@@ -278,6 +303,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "save", payload: any): void;
+  (e: "materialization-changed"): void;
   (e: "target-deleted", payload: any): void;
   (e: "update:modelValue", value: boolean): void;
 }>();
@@ -512,6 +538,49 @@ const activeDdlSql = computed({
   },
 });
 const isSaveing = ref(false);
+const hivePartitionStatuses = {
+  ready: { label: '已齐全', type: 'success' },
+  pending: { label: '未执行', type: 'info' },
+  registering: { label: '补齐中', type: 'primary' },
+  registered: { label: '已补齐', type: 'success' },
+  review: { label: '需复核', type: 'warning' },
+} as const;
+const hivePartitionResults = ref<Array<{
+  dbId: string;
+  datasource: string;
+  table: string;
+  status: keyof typeof hivePartitionStatuses;
+}>>([]);
+const hivePartitionBatchReviewPending = ref(false);
+const materializationResultStatuses = {
+  succeeded: { label: '已完成', type: 'success' },
+  failed: { label: '失败', type: 'danger' },
+  skipped: { label: '未执行', type: 'info' },
+  unknown: { label: '待核对', type: 'warning' },
+} as const;
+type MaterializationTarget = {
+  dbId: string;
+  key: string;
+  dbName: string;
+  propList: { dbId: string; tableName: string; dbType: string };
+};
+type MaterializationResult = {
+  dbId: string;
+  datasource: string;
+  tableName: string;
+  status: keyof typeof materializationResultStatuses;
+  message?: string;
+};
+type MaterializedTable = {
+  targetTableId: string;
+  targetDbId: string;
+  targetDbName: string;
+  targetDbType: string;
+  targetTableName: string;
+  reusedExisting: boolean;
+};
+const materializationResults = ref<MaterializationResult[]>([]);
+const completedMaterializations = new Map<string, { fingerprint: string; table: MaterializedTable }>();
 const materializationProgress = ref({ phase: 0, detail: "", total: 0, completed: 0 });
 const materializationElapsed = ref(0);
 const materializationAwaitingDecision = ref(false);
@@ -1332,6 +1401,8 @@ const sourceAccessModeLabel = (value: any) => {
 
 const init = async () => {
   const runId = ++initRun;
+  hivePartitionResults.value = [];
+  hivePartitionBatchReviewPending.value = false;
   partitionPlans.value = {};
   ddlPartitionPlans.value = {};
   partitionSupport.value = {};
@@ -1347,6 +1418,8 @@ const init = async () => {
   loadError.value = "";
   sourcePreflightError.value = "";
   reuseTypeNotice.value = "";
+  materializationResults.value = [];
+  completedMaterializations.clear();
   loadErrorCode.value = "";
   sourceFileConfig.value = null;
   knownTargets.value = (Array.isArray(props.existingTargets) ? props.existingTargets : [])
@@ -1645,11 +1718,85 @@ const handleAddField = async () => {
   if (result?.row) await grid.setEditRow(result.row);
 };
 
+const materializationResultRow = (
+  target: MaterializationTarget, status: MaterializationResult['status'], message?: string,
+): MaterializationResult => ({
+  dbId: String(target.dbId),
+  datasource: target.dbName || String(target.dbId),
+  tableName: target.propList.tableName,
+  status,
+  message,
+});
+
+const prepareMaterializationTarget = (target: MaterializationTarget, tableItems: any[]) => {
+  const ddl = String(ddlSqlByTarget.value[target.key] || '');
+  if (!ddl.trim()) throw new Error(`请填写“${target.dbName}”的建表语句`);
+  const payload = {
+    propList: { ...target.propList },
+    partitionPlan: ddlPartitionPlans.value[target.key],
+    tableItems: ddlTableItemsByTarget.value[target.key] || targetTableItems(tableItems, target.propList.dbType),
+    ddl,
+  };
+  return { target, payload, fingerprint: JSON.stringify([String(props.id), payload]) };
+};
+
+const readMaterializationBatch = (
+  response: any,
+  pending: ReturnType<typeof prepareMaterializationTarget>[],
+  completedTables: MaterializedTable[],
+) => {
+  const batch = response?.data || response;
+  if (batch?.batch !== true || typeof batch.complete !== 'boolean'
+    || !Array.isArray(batch.results) || batch.results.length !== pending.length) {
+    throw new Error('批量物化结果不完整，请重新检查目标表后重试');
+  }
+  const usedTableIds = new Set(completedTables.map((table) => table.targetTableId));
+  const outcomes = pending.map(({ target }, index) => {
+    const result = batch.results[index];
+    const { dbId, propList } = target;
+    if (String(result?.dbId) !== String(dbId) || result?.tableName !== propList.tableName
+      || !['succeeded', 'failed', 'skipped'].includes(result.status)
+      || (result.sourceTableId && String(result.sourceTableId) !== String(props.id))) {
+      throw new Error('批量物化结果与本次目标不一致，请重新检查目标表后重试');
+    }
+    let table: MaterializedTable | undefined;
+    if (result.status === 'succeeded') {
+      const id = String(result.targetTableId || result.tid || '').trim();
+      if (!id || usedTableIds.has(id)) throw new Error('返回的目标表标识无效，请重新检查目标表后重试');
+      usedTableIds.add(id);
+      table = {
+        ...result,
+        targetTableId: id,
+        targetDbId: String(dbId),
+        targetDbName: target.dbName,
+        targetDbType: propList.dbType,
+        targetTableName: propList.tableName,
+        reusedExisting: result.physicalTableReused === true,
+      };
+    }
+    const message = result.status === 'succeeded' ? undefined : [
+      result.message || (result.status === 'failed' ? '该目标处理失败' : '前序目标未完成，本项尚未执行'),
+      result.sideEffectsPossible === true ? '重试前将核对目标物理表及登记状态。' : '',
+    ].filter(Boolean).join(' ');
+    return { row: materializationResultRow(target, result.status, message), table };
+  });
+  if (batch.complete !== outcomes.every(({ table }) => Boolean(table))) {
+    throw new Error('批量物化完成状态与逐项结果不一致，请重新检查目标表后重试');
+  }
+  return outcomes;
+};
+
+const finishMaterialization = (targetTables: MaterializedTable[]) => {
+  const reused = targetTables.filter((table) => table.reusedExisting).length;
+  ElMessage.success(`已处理 ${targetTables.length} 个目标表（复用 ${reused} 个），正在准备任务画布`);
+  emit('save', { ...targetTables[0], targetTables, sourceFileConfig: sourceFileConfig.value });
+};
+
 const handleSave = async () => {
   if (isSaveing.value) return;
   isSaveing.value = true;
   startMaterializationProgress();
-  let lastTargetForm: any = null;
+  let targetChangesPossible = false;
   const reuseTargetDbIds = new Set<string>();
   sourcePreflightError.value = '';
   reuseTypeNotice.value = '';
@@ -1694,20 +1841,57 @@ const handleSave = async () => {
       ElMessage.warning("字段或目标配置已变化，建表语句已同步更新，请确认 SQL 后再次提交");
       return;
     }
+    const preparedTargets: ReturnType<typeof prepareMaterializationTarget>[] = ddlInput.targets.map((target: MaterializationTarget) =>
+      prepareMaterializationTarget(target, ddlInput.tableItems));
+    const pending = preparedTargets.filter(({ target, fingerprint }) => {
+      const id = String(target.dbId);
+      if (completedMaterializations.get(id)?.fingerprint === fingerprint) return false;
+      completedMaterializations.delete(id);
+      return true;
+    });
+    const completedTables = () => preparedTargets.flatMap(({ target }) => {
+      const saved = completedMaterializations.get(String(target.dbId));
+      return saved ? [saved.table] : [];
+    });
+    materializationProgress.value.completed = preparedTargets.length - pending.length;
+    if (!pending.length) {
+      finishMaterialization(completedTables());
+      return;
+    }
+    const pendingTargets = pending.map(({ target }) => target);
+    const batchTargets = (reuse = reuseTargetDbIds) => pending.map(({ target, payload }) => {
+      const reuseExistingTable = reuse.has(String(target.dbId));
+      return { ...payload, reuseExistingTable, recreateMissingTable: !reuseExistingTable };
+    });
+    // 清理或补分区前，先用同一份最终建表请求核验全批权限和配置。
+    const validateMaterializationBatch = async (
+      targets: (ReturnType<typeof batchTargets>[number] & { pendingTargetCleanup?: boolean })[],
+    ) => {
+      const response = await $common.post('/ods/createTapleApply', {
+        tid: props.id, targets, dryRun: true,
+      }, { _hiddenErrorMsg: true }, 120 * 1000);
+      const validation = response?.data || response;
+      if (validation?.batch !== true || validation.complete !== true || validation.sideEffectsApplied !== false
+        || !Array.isArray(validation.results) || validation.results.length !== targets.length) {
+        throw new Error('批量物化预检结果不完整，已停止修改目标表');
+      }
+      for (const [index, { propList }] of targets.entries()) {
+        const result = validation.results[index];
+        if (String(result?.dbId) !== String(propList.dbId) || result?.tableName !== propList.tableName
+          || result?.status !== 'succeeded' || result?.valid !== true) {
+          throw new Error('批量物化预检与本次所选目标不一致，已停止修改目标表');
+        }
+      }
+    };
     const validateEditedDdl = async () => {
-      if (!ddlSourceFingerprint.value) return;
       // Batch-check selected target authorization; SQL syntax and constraints are decided by the database.
-      const targets = ddlInput.targets.map((target: any) => {
-        const ddl = String(ddlSqlByTarget.value[target.key] || "").trim();
-        if (!ddl) throw new Error(`请填写“${target.dbName}”的建表语句`);
-        return {
-          dbId: target.dbId,
-          tableName: target.propList.tableName,
-          ddl,
-          partitionPlan: ddlPartitionPlans.value[target.key],
-          tableItems: ddlTableItemsByTarget.value[target.key],
-        };
-      });
+      const targets = pending.map(({ target, payload }) => ({
+        dbId: target.dbId,
+        tableName: target.propList.tableName,
+        ddl: payload.ddl,
+        partitionPlan: payload.partitionPlan,
+        tableItems: payload.tableItems,
+      }));
       const response = await $common.post("/dst/database/metadata/createTable", {
         canvas: true,
         validateOnly: true,
@@ -1728,7 +1912,7 @@ const handleSave = async () => {
         }
       }
     };
-    const plannedTargets = ddlInput.targets.map((target: any) => ({
+    const plannedTargets = pendingTargets.map((target: MaterializationTarget) => ({
       targetDbId: target.dbId,
       targetTableName: target.propList.tableName,
       targetDbName: target.dbName,
@@ -1794,26 +1978,94 @@ const handleSave = async () => {
         if (!canReuse) throw new Error('没有可复用的目标物理表');
         const reusable = conflicts.filter((item: any) => item.probe.targetPhysicalExists === true);
         const targets = reusable.map((item: any) => {
-          const target = ddlInput.targets.find((plan: any) => String(plan.dbId) === String(item.targetDbId));
+          const plan = pending.find(({ target }) => String(target.dbId) === String(item.targetDbId));
+          if (!plan) throw new Error('已有目标表与本次所选目标不一致');
+          const { target, payload } = plan;
           return { dbId:target.dbId, tableName:target.propList.tableName,
-            ddl:ddlSqlByTarget.value[target.key], partitionPlan:ddlPartitionPlans.value[target.key], tableItems:targetTableItems(ddlInput.tableItems,target.propList.dbType) };
+            ddl:payload.ddl, partitionPlan:payload.partitionPlan, tableItems:payload.tableItems };
         });
-        const response = await $common.post('/dst/database/metadata/createTable', {
-          canvas:true, validateOnly:true, batchReuseValidation:true, targets,
-        }, { _hiddenErrorMsg:true }, 120 * 1000);
-        const validation = response?.data || response || {};
+        const checkReuseTargets = async (preview: boolean) => {
+          const response = await $common.post('/dst/database/metadata/createTable', {
+            canvas:true, validateOnly:true, batchReuseValidation:true, partitionPreviewOnly:preview, targets,
+          }, { _hiddenErrorMsg:true }, 120 * 1000);
+          return response?.data || response || {};
+        };
+        let validation = await checkReuseTargets(true);
         if (validation.batchReuseValidation !== true || validation.sideEffectsApplied !== false
           || !Array.isArray(validation.results) || validation.results.length !== targets.length) {
           throw new Error('已有目标表批量结构校验结果不完整');
         }
+        const hiveTargets: Array<{ target: (typeof targets)[number]; check: any; datasource: string }> = [];
         for (const [index, target] of targets.entries()) {
           const result = validation.results[index];
           if (String(result?.dbId) !== String(target.dbId) || result?.requestedTableName !== target.tableName
             || result?.valid !== true || result?.physicalTableReused !== true || result?.sideEffectsApplied !== false) {
             throw new Error('已有目标表结构校验与所选目标不一致');
           }
+          const check = result.partitionCheck;
+          if (check && (!Array.isArray(check.missing) || !Array.isArray(check.buckets))) {
+            throw new Error('Hive 分区检查结果不完整，请重试');
+          }
+          if (check) hiveTargets.push({ target, check, datasource: reusable[index].targetDbName || String(target.dbId) });
+        }
+        const missingTargets = hiveTargets.filter(({ check }) => check.missing.length > 0);
+        if (missingTargets.length || hivePartitionResults.value.length) {
+          hivePartitionResults.value = hiveTargets.map(({ target, check, datasource }) => ({
+            dbId: String(target.dbId), datasource, table: `${check.database}.${check.tableName}`,
+            status: check.missing.length ? 'pending' : 'ready',
+          }));
+        }
+        hivePartitionBatchReviewPending.value = false;
+        if (missingTargets.length) {
+          await validateMaterializationBatch(batchTargets(new Set(reusable.map((item: any) => String(item.targetDbId)))));
+          const details = missingTargets.map(({ check }: any) =>
+            `${check.database}.${check.tableName}\n表存储位置：${check.tableLocation || '未读取到'}\n缺失分区：${check.missing.join('、')}`).join('\n\n');
+          await confirmMaterialization(
+            h('div', { style: { whiteSpace:'pre-wrap', maxHeight:'50vh', overflowY:'auto', overflowWrap:'anywhere' } },
+              `以下 Hive 目标表缺少本次配置的分区：\n${details}\n\n请核对分区范围和表存储位置。缺失分区将由 Hive 按默认位置注册，已有分区不会修改；注册不会导入历史数据，默认位置若已有文件可能被纳入查询。是否继续？`),
+            '检查并补齐 Hive 分区',
+            { type:'warning', confirmButtonText:'确认补齐', cancelButtonText:'取消' },
+          );
+          for (const [index, { target, check }] of hiveTargets.entries()) {
+            if (!check.missing.length) continue;
+            const row = hivePartitionResults.value[index];
+            row.status = 'registering';
+            materializationProgress.value.detail = `正在补齐并核验 ${check.database}.${check.tableName} 的 Hive 分区`;
+            try {
+              targetChangesPossible = true;
+              const response = await $common.post('/dst/database/metadata/createTable', {
+                ...target, canvas:true, reuseExistingOnly:true, repairHivePartitions:true,
+                expectedHiveDatabase:check.database, expectedHiveTable:check.tableName,
+                expectedHiveLocation:check.tableLocation, expectedMissingPartitions:check.missing,
+              }, { _hiddenErrorMsg:true }, 120 * 1000);
+              const result = response?.data || response || {};
+              if (result.status !== 'partitions-registered' || result.physicalTableReused !== true
+                || result.partitionCheck?.database !== check.database || result.partitionCheck?.tableName !== check.tableName
+                || !Array.isArray(result.partitionCheck?.missing) || result.partitionCheck.missing.length !== 0) {
+                throw new Error('Hive 分区补齐结果不完整，请重新检查实际分区后重试');
+              }
+              row.status = 'registered';
+            } catch (error) {
+              row.status = 'review';
+              throw error;
+            }
+          }
+          hivePartitionBatchReviewPending.value = true;
+          validation = await checkReuseTargets(false);
+          if (validation.batchReuseValidation !== true || validation.sideEffectsApplied !== false
+            || !Array.isArray(validation.results) || validation.results.length !== targets.length) {
+            throw new Error('Hive 分区补齐后复核失败，请重新检查');
+          }
+        }
+        for (const [index, target] of targets.entries()) {
+          const result = validation.results[index];
+          if (String(result?.dbId) !== String(target.dbId) || result?.requestedTableName !== target.tableName
+            || result?.valid !== true || result?.physicalTableReused !== true || result?.sideEffectsApplied !== false) {
+            throw new Error('已有目标表复核与所选目标不一致');
+          }
           reuseTargetDbIds.add(String(target.dbId));
         }
+        hivePartitionBatchReviewPending.value = false;
         const compatibilityWarnings = validation.results.flatMap((result: any) =>
           Array.isArray(result.compatibilityWarnings) ? result.compatibilityWarnings : []);
         if (compatibilityWarnings.length) {
@@ -1821,7 +2073,14 @@ const handleSave = async () => {
           ElMessage.info(reuseTypeNotice.value);
         }
       } else {
+        if (conflicts.some((item) => isHiveTarget({ ...item, targetDatabaseType: item.probe?.targetDatabaseType }))) {
+          throw new Error('Hive 已有目标表可复用，不能在此删除物理表');
+        }
         await validateEditedDdl();
+        const cleanupDbIds = new Set(conflicts.map((item) => String(item.targetDbId)));
+        await validateMaterializationBatch(batchTargets().map((target) => cleanupDbIds.has(String(target.propList.dbId))
+          ? { ...target, pendingTargetCleanup: true }
+          : target));
         await confirmMaterialization(
           `将删除 ${conflicts.length} 个同名目标物理表及其关联元数据，然后重新物化。删除不可恢复，确认继续吗？`,
           '删除目标表并重新物化',
@@ -1829,6 +2088,7 @@ const handleSave = async () => {
         );
         materializationProgress.value.detail = "正在清理已确认重新物化的目标表";
         for (const item of conflicts) {
+          targetChangesPossible = true;
           const result = await $common.post('/ods/dataAggReset', {
             sourceTableId: props.id,
             targetTableId: item.probe?.targetTableId || item.known?.targetTableId || '',
@@ -1845,7 +2105,6 @@ const handleSave = async () => {
           }
           if (item.known) {
             knownTargets.value = knownTargets.value.filter((target: any) => target.targetTableId !== item.known.targetTableId);
-            emit('target-deleted', item.known);
           }
         }
         recoveryTarget.value = null;
@@ -1853,46 +2112,33 @@ const handleSave = async () => {
     }
     if (!conflicts.length || reuseTargetDbIds.size) await validateEditedDdl();
     materializationProgress.value.phase = 2;
-    const targetTables: any[] = [];
-    for (const target of ddlInput.targets) {
-      const targetDbId = target.dbId;
-      const targetDatasource = datasourceMap.value[targetDbId] || {};
-      // Reuse the exact target configuration used by DDL preview and preflight validation.
-      const targetForm = { ...target.propList };
-      lastTargetForm = targetForm;
-      const reuseExistingTable = reuseTargetDbIds.has(String(targetDbId));
-      materializationProgress.value.detail = `正在${reuseExistingTable ? '复用' : '创建'}第 ${targetTables.length + 1} / ${ddlInput.targets.length} 张：${target.dbName} · ${targetForm.tableName}`;
-      const result = await $common.post("/ods/createTapleApply", {
-        propList: targetForm,
-        partitionPlan: ddlPartitionPlans.value[target.key],
-        tableItems: ddlTableItemsByTarget.value[target.key] || targetTableItems(ddlInput.tableItems, targetForm.dbType),
-        tid: props.id,
-        ddl: ddlSourceFingerprint.value ? ddlSqlByTarget.value[targetDbId] : undefined,
-        reuseExistingTable,
-        recreateMissingTable: !reuseExistingTable,
-      }, { _hiddenErrorMsg: true }, 120 * 1000);
-      const payload = result?.data || result || {};
-      const targetTableId = payload.targetTableId || payload.tid;
-      if (!targetTableId) {
-        throw new Error(`目标数据源“${targetDatasource.dbName || targetDbId}”的目标表未创建成功`);
-      }
-      materializationProgress.value.completed = targetTables.length + 1;
-      targetTables.push({
-        ...payload,
-        targetTableId,
-        targetDbId,
-        targetDbName: targetDatasource.dbName || targetDatasource.label || "",
-        targetDbType: targetDatasource.dbType || "",
-        targetTableName: targetForm.tableName,
-      });
+    materializationProgress.value.detail = `正在执行 ${pending.length} 张目标表，等待服务端返回逐项结果`;
+    const previousTables = completedTables();
+    const resultRows = (outcomes = new Map<string, MaterializationResult>()) => preparedTargets.map(({ target }) =>
+      outcomes.get(String(target.dbId)) || (completedMaterializations.has(String(target.dbId))
+        ? materializationResultRow(target, 'succeeded')
+        : materializationResultRow(target, 'unknown', '未收到该目标的执行结果，重新提交时将先检查目标表。')));
+    materializationResults.value = resultRows();
+    targetChangesPossible = true;
+    const response = await $common.post('/ods/createTapleApply', {
+      tid: props.id,
+      targets: batchTargets(),
+    }, { _hiddenErrorMsg: true }, Math.min(pending.length, 5) * 120 * 1000);
+    const outcomes = readMaterializationBatch(response, pending, previousTables);
+    if ((response?.data || response).registrationStatusRefreshed === false) {
+      ElMessage.warning('已登记的目标表已保留，目标数据源的汇总状态暂未更新。');
     }
-    ElMessage.success(`已处理 ${targetTables.length} 个目标表（复用 ${reuseTargetDbIds.size} 个），正在准备任务画布`);
-    emit("save", {
-      ...targetTables[0],
-      targetTableId: targetTables[0]?.targetTableId || "",
-      targetTables,
-      sourceFileConfig: sourceFileConfig.value,
-    });
+    for (const [index, { row, table }] of outcomes.entries()) {
+      if (table) completedMaterializations.set(row.dbId, { fingerprint: pending[index].fingerprint, table });
+    }
+    const targetTables = completedTables();
+    materializationProgress.value.completed = targetTables.length;
+    materializationResults.value = resultRows(new Map(outcomes.map(({ row }) => [row.dbId, row])));
+    if (targetTables.length !== preparedTargets.length) {
+      emit('materialization-changed');
+      return;
+    }
+    finishMaterialization(targetTables);
   } catch (error: any) {
     const message = String(error?.message || error || "");
     if (error?.partitionValidation || error?.ddlGeneration) {
@@ -1902,13 +2148,7 @@ const handleSave = async () => {
       partitionErrorType.value = error?.partitionValidation ? "warning" : "error";
       partitionError.value = message;
     }
-    if (message.includes("目标物理表已存在")) {
-      recoveryTarget.value = {
-        sourceTableId: props.id,
-        targetDbId: lastTargetForm?.dbId,
-        targetTableName: lastTargetForm?.tableName,
-      };
-    }
+    if (targetChangesPossible) emit('materialization-changed');
     if (error !== 'cancel' && error !== 'close' && !message.includes('目标物理表已存在') && !error?.handled) {
       ElMessage.error(error?.message || error || '物化建表失败');
     }
@@ -1985,6 +2225,12 @@ const handleDeleteExistingTarget = async (selectedTarget: any = null) => {
     const summary = targetCleanupSummary([outcome]);
     if (outcome.targetMetadataRetained !== true && outcome.targetCleanupPending !== true) {
       knownTargets.value = knownTargets.value.filter((item: any) => item.targetTableId !== target.targetTableId);
+      const id = String(target.targetDbId);
+      const completed = completedMaterializations.get(id);
+      if (completed && completed.table.targetTableId === String(preview.targetTableId || target.targetTableId)) {
+        completedMaterializations.delete(id);
+        materializationResults.value = materializationResults.value.filter((row) => row.dbId !== id);
+      }
       recoveryTarget.value = null;
       emit('target-deleted', target);
     }
@@ -2110,6 +2356,20 @@ onBeforeUnmount(stopDdlEditorSizing);
 </script>
 
 <style lang="scss" scoped>
+.hive-partition-results {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
+
+  ul { max-height: 132px; overflow: auto; margin: 6px 0 0; padding: 0; list-style: none; }
+  li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+  p { margin: 6px 0 0; color: var(--el-text-color-secondary); }
+  .hive-partition-target { min-width: 0; overflow-wrap: anywhere; }
+  .hive-partition-review { color: var(--el-color-warning-dark-2); }
+}
 .existing-target-panel {
   display: flex;
   flex-direction: column;
@@ -2233,6 +2493,37 @@ onBeforeUnmount(stopDdlEditorSizing);
 .source-preflight-error { flex: 0 0 auto; margin-bottom: 12px; }
 // 内容在弹框可见高度内滚动，遮罩始终覆盖这个可见区域，不跟随字段总高度。
 .access-apply-content { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+.materialization-results {
+  flex: 0 1 auto;
+  max-block-size: 30vh;
+  overflow: auto;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+  background: var(--el-fill-color-lighter);
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+}
+.materialization-result-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+.materialization-results ul { margin: 6px 0; padding: 0; list-style: none; }
+.materialization-results li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+.materialization-result-target { min-width: 0; }
+.materialization-result-message,
+.materialization-results p { color: var(--el-text-color-regular); }
+.materialization-results p { margin: 0; }
 .materialization-form-view { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
 .materialization-progress-overlay { position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(248, 250, 255, .94); }
 .materialization-progress-card { width: min(100%, 410px); max-height: 100%; overflow: auto; padding: 26px 28px 22px; box-sizing: border-box; border: 1px solid #e2eaf8; border-radius: 14px; background: #fff; box-shadow: 0 10px 40px rgba(33, 78, 145, .1); text-align: center; }

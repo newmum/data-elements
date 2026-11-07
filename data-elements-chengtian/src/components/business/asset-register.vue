@@ -18,10 +18,10 @@
     </div>
 
     <el-scrollbar class="register-container__body" view-class="h-full">
-      <register-body ref="middleRef" @finish-trigger-fn="finishAction" />
+      <RegisterBody ref="middleRef" @finish-trigger-fn="finishAction" />
     </el-scrollbar>
 
-    <register-action
+    <RegisterAction
       v-show="store.state.showAction"
       ref="actionRef"
       class="register-container__action"
@@ -35,6 +35,8 @@
 import { storeToRefs } from "pinia";
 import { useRegisterStore } from "@/store";
 import { computed, nextTick, onBeforeUnmount, onMounted, PropType, provide, ref } from "vue";
+import RegisterBody from "./register-body.vue";
+import RegisterAction from "./register-action.vue";
 
 // 定义事件类型
 const emit = defineEmits<{
@@ -49,7 +51,7 @@ const props = defineProps({
       registerClass: string;
       title: string;
       currentStep: number;
-      steps: Array<{ title: string; component: string; props: object }>;
+      steps: Array<{ title: string; component: string; props?: object }>;
     }>,
     required: true,
   },
@@ -62,6 +64,7 @@ const props = defineProps({
 const store = useRegisterStore();
 // 底部操作组件引用
 const { actionRef } = storeToRefs(store);
+const isActionBusy = computed(() => Object.values(store.state.loadStatus).some(Boolean));
 
 // 步骤条仅显示未标记 hidden 的步骤，内部步骤仍保留用于渲染完成页等隐藏状态。
 const visibleSteps = computed(() => store.state.steps.filter((s: any) => !s.hidden));
@@ -78,12 +81,12 @@ const displayCurrentStep = computed(() => {
 const displaySteps = computed(() =>
   visibleSteps.value.map((step: any, visibleIndex: number) => ({
     ...step,
-    clickable: !step.skipped && visibleIndex < displayCurrentStep.value,
+    clickable: !isActionBusy.value && !step.skipped && visibleIndex < displayCurrentStep.value,
   }))
 );
 
 const goToCompletedStep = (visibleIndex: number): void => {
-  if (visibleIndex < 0 || visibleIndex >= displayCurrentStep.value) return;
+  if (isActionBusy.value || visibleIndex < 0 || visibleIndex >= displayCurrentStep.value) return;
 
   const targetStep = visibleSteps.value[visibleIndex];
   if (targetStep?.skipped) return;

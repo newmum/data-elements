@@ -17,32 +17,52 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n    \"code\": 0,\n    \"msg\": \"success\",\n    \"success\": true,\n    \"data\": [\n        {\n            \"tid\": \"218a6493926c485b85f6cd92983c23f9\",\n            \"applyUserId\": \"1995681734511165441\",\n            \"applyUserName\": \"1995681734511165441\",\n            \"applyName\": \"动态组件目录(sys_dynamic_component)\",\n            \"type\": \"catalogSubscribe\",\n            \"catalogIds\": \"31583b5e1fc745aaa058d35b733c2f91\",\n            \"flowStatus\": 2,\n            \"tenantId\": null,\n            \"createdTime\": \"2026-04-08 15:37:44\",\n            \"updatedTime\": \"2026-04-08 15:37:44\",\n            \"sceneType\": \"0\",\n            \"applicantPhone\": \"aaa\",\n            \"useDays\": \"\",\n            \"usci\": \"9111000071780321XQ\",\n            \"userPhone\": \"aaa\",\n            \"businessScene\": \"eefe\",\n            \"applyResource\": \"[31583b5e1fc745aaa058d35b733c2f91]\",\n            \"attachment\": \"\",\n            \"applyType\": \"政务服务\",\n            \"useTime\": \"\",\n            \"applicantName\": \"zz\",\n            \"applyTime\": \"2026-04-08 15:37:36\",\n            \"appId\": \"143c3b6d96774010a19fcc289441b704\",\n            \"useScope\": \"0\",\n            \"otherRequests\": \"\",\n            \"userEmail\": \"zz\",\n            \"useTitle\": \"\",\n            \"applicantEmail\": \"zz\",\n            \"peakFrequency\": \"\",\n            \"applyBasis\": \"\",\n            \"applyOrgId\": \"2026505033717514242\",\n            \"userName\": \" zz\",\n            \"averageFrequency\": \"\",\n            \"flow_status\": 1,\n            \"id\": \"218a6493926c485b85f6cd92983c23f9\"\n        },\n        {\n            \"tid\": \"30253579e54d4061bd95c7af602e17e7\",\n            \"applyUserId\": \"1995681734511165441\",\n            \"applyUserName\": \"1995681734511165441\",\n            \"applyName\": \"完成剧申报数据目录(res_1772095968985_copy28989)\",\n            \"type\": \"catalogSubscribe\",\n            \"catalogIds\": \"685ee1e783064ff8a9d7b3d08c5fe89a\",\n            \"flowStatus\": 2,\n            \"tenantId\": null,\n            \"createdTime\": \"2026-04-08 17:04:18\",\n            \"updatedTime\": \"2026-04-08 17:05:26\",\n            \"businessScene\": \"SSSS\",\n            \"otherRequests\": \"\",\n            \"useTime\": \"\",\n            \"applyBasis\": \"\",\n            \"applyType\": \"政务服务\",\n            \"applicantName\": \"zeng343\",\n            \"useScope\": \"1\",\n            \"useTitle\": \"\",\n            \"applicantPhone\": \"EEERFE\",\n            \"applyResource\": \"[685ee1e783064ff8a9d7b3d08c5fe89a]\",\n            \"applicantEmail\": \"3334\",\n            \"applyOrgId\": \"2026505033717514242\",\n            \"useDays\": \"\",\n            \"averageFrequency\": \"\",\n            \"peakFrequency\": \"\",\n            \"attachment\": \"[{\\\"name\\\":\\\"25555.xlsx\\\",\\\"url\\\":\\\"/data/download?fileId=010146be47254171a1b591b2348ed350\\\",\\\"tid\\\":\\\"010146be47254171a1b591b2348ed350\\\"}]\",\n            \"applyTime\": \"2026-04-08 16:06:53\",\n            \"appId\": \"a60c267ab6c1416d93e5965f0c2c15b5\",\n            \"usci\": \"9111000071780321XQ\",\n            \"sceneType\": \"1\",\n            \"userName\": \"33\",\n            \"userEmail\": \"3333\",\n            \"userPhone\": \"SFS\",\n            \"id\": \"30253579e54d4061bd95c7af602e17e7\"\n        },\n        {\n            \"tid\": \"be4738f8783a46c7b04348df78e54a31\",\n            \"applyUserId\": \"1995681734511165441\",\n            \"applyUserName\": \"1995681734511165441\",\n            \"applyName\": \"生成目录信息(sys_gen_info)\",\n            \"type\": \"catalogSubscribe\",\n            \"catalogIds\": \"85368b91972c4a35b83b8fa73e34e740\",\n            \"flowStatus\": 1,\n            \"tenantId\": null,\n            \"createdTime\": \"2026-04-08 17:40:06\",\n            \"updatedTime\": \"2026-04-09 10:21:21\",\n            \"applyOrgId\": \"2026505033717514242\",\n            \"useTime\": \"\",\n            \"useTitle\": \"\",\n            \"peakFrequency\": \"\",\n            \"userEmail\": \"zzonia001@gmail.com\",\n            \"attachment\": \"\",\n            \"applicantName\": \"z\",\n            \"businessScene\": \"1\",\n            \"otherRequests\": \"\",\n            \"applicantPhone\": \"1\",\n            \"applicantEmail\": \"zzonia001@gmail.com\",\n            \"userName\": \"zonia\",\n            \"applyBasis\": \"\",\n            \"usci\": \"9111000071780321XQ\",\n            \"userPhone\": \"1\",\n            \"applyType\": \"政务服务\",\n            \"applyTime\": \"2026-04-08 17:40:25\",\n            \"useDays\": \"\",\n            \"averageFrequency\": \"\",\n            \"sceneType\": \"0\",\n            \"appId\": \"7d6efc981bfc4f92be875dd3bfc06857\",\n            \"useScope\": \"0\",\n            \"applyResource\": \"[85368b91972c4a35b83b8fa73e34e740]\",\n            \"id\": \"be4738f8783a46c7b04348df78e54a31\"\n        },\n        {\n            \"id\": \"71b6b05a4ba84079ba24b4d7fea8db5a\",\n            \"flowStatus\": 2\n        },\n        {\n            \"flowStatus\": 1,\n            \"id\": \"order_000000000651\"\n        },\n        {\n            \"flowStatus\": 1,\n            \"id\": \"order_000000000652\"\n        },\n        {\n            \"flowStatus\": 1,\n            \"id\": \"order_000000000653\"\n        }\n    ]\n}",
-  "description": "读取资产申请单主记录和检索投影，按当前页面条件返回申请单列表。",
+  "description": "分页读取当前租户中当前申请人的有效申请单，返回购物车草稿箱使用的数组。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
 // 接口：10.资产申请单列表
-// 路由：POST /dws/market/applyForm/list
-// 业务说明：读取资产申请单主记录和检索投影，按当前页面条件返回申请单列表。
-import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
+import approvalRuntime
+import tableRead
+import tenantRuntime
+// 资产申请单列表：按当前申请人分页读取，保持购物车草稿箱的数组契约。
 
-//项目初始化时创建空索引，有数据再查询es
-var count = db.table("data_apply_form_t").count();
-if( count == 0){
-     // 返回当前业务分支的标准结果。
-     return {
-        total: 0,
-        list: []
-    }
+var tenantId = tenantRuntime.id()
+var userId = approvalRuntime.principal().userId
+if (tenantId == null || userId == null) { exit 401, '请先登录' }
+
+var pageNum = Math.max(1, body?.pageNum::int(1))
+var pageSize = Math.min(100, Math.max(1, body?.pageSize::int(100)))
+var applyType = body?.type == null ? '' : (body.type + '').trim()
+var status = body?.flowStatus == null ? '' : (body.flowStatus + '').trim()
+if (applyType.length() > 32 || (status != '' && !status.matches('[0-9]{1,3}'))) {
+    exit 400, '申请单筛选条件无效'
 }
 
+var textColumn = name => tableRead.column('a', name, 'TEXT')
+var statusColumn = tableRead.column('a', 'flow_status', 'NUMBER')
+var updated = tableRead.column('a', 'updated_time', 'TIME')
+var forms = tableRead.from('data_apply_form_t', 'a', tenantId)
+forms.where(tableRead.equal(tableRead.coalesce([tableRead.column('a', 'is_del', 'NUMBER'), 0]), 0))
+// 旧单据缺少申请人时，沿用个人中心的创建者归属规则。
+forms.where(tableRead.equal(tableRead.coalesce([tableRead.blankAsNull(textColumn('apply_user_id')), textColumn('created_by')]), userId))
+if (applyType != '') { forms.where(tableRead.equal(textColumn('type'), applyType)) }
+if (status != '') { forms.where(tableRead.equal(statusColumn, status::int)) }
 
-// 执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致。
-existInxex = esCommonService.indexExists("dataassets_apply_form");
-if(!existInxex){
-    // 返回当前业务分支的标准结果。
-    return []
-}
-//多条件查询
-return esCommonService.list("dataassets_apply_form", body || {})
+// 老版表单只在扩展属性中保存名称，读取同租户最新有效的历史名称作为回退。
+forms.leftJoinLatest('da_prop_t', 'p', 'parent_id', 'tid',
+    {data_type: 'apply_form', prop_name: 'applyName'}, 'is_del', 'updated_time', 'tid', true)
+var applyName = tableRead.coalesce([
+    tableRead.blankAsNull(textColumn('apply_name')),
+    tableRead.boundedText(tableRead.column('p', 'prop_value', 'LOB'))
+])
+var page = forms.page({
+    tid: textColumn('tid'),
+    applyName: applyName,
+    catalogIds: textColumn('catalog_ids'),
+    type: textColumn('type'),
+    flowStatus: statusColumn,
+    updatedTime: updated
+}, updated, 'desc', 'tid', pageNum, pageSize)
+return page.rows

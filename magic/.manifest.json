@@ -263,7 +263,7 @@
         "52e398a9f2fc429da79048b9ea719b37"
       ],
       "kind": null,
-      "baseSha256": "7b3e02ca1a5c4cc9016ada96d16deffaffcb09ef9fac980efbe9a969b300d6d6",
+      "baseSha256": "1b2997d195e3d47235251fb7f6c65104a003b86a947643ebe546897187f108b2",
       "metadataId": "52e398a9f2fc429da79048b9ea719b37"
     },
     {
@@ -323,7 +323,7 @@
         "8a56e7d664934c1499102cfa508cd58a"
       ],
       "kind": null,
-      "baseSha256": "72d2c36859168e7ea401e8743494f4103d5d33c9c37b7eb0ff19a2e44a54bb3b",
+      "baseSha256": "f0bb17e45b7491c0c57e643e3666708e45cdfc87fd898e7c29505b0b0f9ade16",
       "metadataId": "8a56e7d664934c1499102cfa508cd58a"
     },
     {
@@ -333,7 +333,7 @@
         "a0b5bba38fbf428c8e3646864d83d56b"
       ],
       "kind": null,
-      "baseSha256": "70bd6afa067c273749c205bcbb0b272c26cbcc28795c00989e3f934838e49110",
+      "baseSha256": "1c16274d32301a63e102a94bc9c0f329bf219e41e3fb237e046d2df9855887b3",
       "metadataId": "a0b5bba38fbf428c8e3646864d83d56b"
     },
     {
@@ -424,7 +424,7 @@
       ],
       "kind": "api",
       "metadataId": "metadata_file_registration_01",
-      "baseSha256": "1f8a28274e195a6d0219a17d6b0763d51cf91cb03108ae786c54a30a90edaa68"
+      "baseSha256": "24e4eedaac2503665127f2d07383ae3c5cd7422ca7e91683defa2425e150a3d4"
     },
     {
       "path": "api/02.数据盘点/02.数据库表/01.元数据管理/26.数据上报登记.ms",
@@ -463,7 +463,7 @@
         "datapd_database_page_01"
       ],
       "kind": null,
-      "baseSha256": "41b73ec35437a759848c4ad2c22a9b7684dca716df9e72fac6e786a61e8515e7",
+      "baseSha256": "016be884f01f3d0e8784ed9bd83e22558aa6b355c7c3f3e5eebebed2b81a7218",
       "metadataId": "datapd_database_page_01"
     },
     {
@@ -492,7 +492,7 @@
         "datapd_db_table_page_01"
       ],
       "kind": null,
-      "baseSha256": "860199388085647d289eef8ff8aaaaddb5d8764e7adc1b6e289caf132ed9c9e1",
+      "baseSha256": "b6ef2e564e0630e45583252b4c545e920a60394c42834f4a80d9199d25814cc8",
       "metadataId": "datapd_db_table_page_01"
     },
     {
@@ -522,7 +522,7 @@
         "datapd_db_table_govern_01"
       ],
       "kind": null,
-      "baseSha256": "ea2e0b5798adc84460b87ba8ddca090544b1d942ec48ce7857ca0093f6ff72fe",
+      "baseSha256": "b50352b2b2edf7df7655eaafe6b549bf75a729bdf0e4c9f9d8351307dbda8966",
       "metadataId": "datapd_db_table_govern_01"
     },
     {
@@ -532,7 +532,7 @@
         "db_table_batch_annotate_01"
       ],
       "kind": null,
-      "baseSha256": "fc3f973a27d410d087f4251050dcae0d8f38497064a4e749506c68290c6558b2",
+      "baseSha256": "8d399cc7a8dc78e35a343d70753fa7f679d32de188dd577229d05ed7d581d2b5",
       "metadataId": "db_table_batch_annotate_01"
     },
     {
@@ -562,7 +562,7 @@
         "datapd_save_update_datasource_01"
       ],
       "kind": null,
-      "baseSha256": "a821fd0fdd9ccffbeaaf832eeb26d10fc9c006103a75ad8350a879f4d80e5e74",
+      "baseSha256": "92ed726133e28ef5f542731350206cdb679f3160d9b4fec17313bd9bffbbf135",
       "metadataId": "datapd_save_update_datasource_01"
     },
     {
@@ -582,7 +582,7 @@
         "datapd_dept_datasources_01"
       ],
       "kind": null,
-      "baseSha256": "1a2d7727d48b1f172d5958fb8adc121ec68a5ded64d5c73928924a10cb8597b7",
+      "baseSha256": "0cc358a379ec40d827c074f9d8eb6fdd83a9419c1f308991024215854d75b839",
       "metadataId": "datapd_dept_datasources_01"
     },
     {
@@ -592,7 +592,7 @@
         "datapd_db_tree_stats_20260723"
       ],
       "kind": null,
-      "baseSha256": "a265b3c54e430283c0689630c9994ed5c4ab5bace56b71b6e1b04a40e15c4fa1",
+      "baseSha256": "e69c2c4617926cb6b7806ca0d84ffd2d256d51f320c861a30b900bd207ddab97",
       "metadataId": "datapd_database_tree_statistics_01"
     },
     {
@@ -720,7 +720,7 @@
         "datapd_catalog_page_compat_01"
       ],
       "kind": null,
-      "baseSha256": "1c83f5b59a3934fe3fd78be57d2082d4ee3cea9ac9ee1ca979d258d960faebb5",
+      "baseSha256": "d8c871d3c45ea5fc238a272456d91bfb23c5dcaf9c69d6505830e9822362fba7",
       "metadataId": "datapd_catalog_page_compat_01"
     },
     {
@@ -730,7 +730,7 @@
         "datapd_catalog_detail_compat_01"
       ],
       "kind": null,
-      "baseSha256": "3d47e8405fd8764714f70263c479fc171980f7ccb0bb4d82fb192877797f3759",
+      "baseSha256": "fd28b1ee4e25e9b141932628edd48ed70a47a94114250a5a199bf840c6b89d3b",
       "metadataId": "datapd_catalog_detail_compat_01"
     },
     {
@@ -750,7 +750,7 @@
         "datapd_catalog_items_list_01"
       ],
       "kind": "api",
-      "baseSha256": "c2ecb0ed9128d4f3dd2123cbf13991fdca78ffd8a6ee07946007e2f46480f734",
+      "baseSha256": "ca74aa0d5750ff01a4b57d496d813b9937593ed8cf9bab858b7b1f73e874117d",
       "metadataId": "datapd_catalog_items_list_01"
     },
     {
@@ -897,7 +897,7 @@
         "b5b9ae3e7af64140910e7c1c6301935d"
       ],
       "kind": null,
-      "baseSha256": "247fc4d7290c28c1ba890ab81fbc615577fda8a6509aa138bde506cb4a2f4ad5",
+      "baseSha256": "4f71f497f64175d654fc65775f72637dda869f64bc3e6f3b44d0acd212594430",
       "metadataId": "datapd_assets_batch_refresh_01"
     },
     {
@@ -1025,7 +1025,7 @@
         "f541570df3bc4bf3a38e9466d2e16cd7"
       ],
       "kind": null,
-      "baseSha256": "1c84a7c8faa85506b389614431c7a030f3afbbe9c12e9b01c4e119978d2f8f83",
+      "baseSha256": "943c4e78370fdc43ce692a91290b67fb27324fa4b55c74b6a42ec569c37f98c1",
       "metadataId": "f541570df3bc4bf3a38e9466d2e16cd7"
     },
     {
@@ -1045,7 +1045,7 @@
         "b964b2d54ba0477b86d3fb6e6d18c45b"
       ],
       "kind": null,
-      "baseSha256": "f762a4f03af1c73c16ae1ccdb45a5fae6a61fbc6ce1c105d6b0e93fa6f59f472",
+      "baseSha256": "7489225358715ef77fc24a67e1d0b70ac59aad05ea97b04aaad49e35097ff86c",
       "metadataId": "b964b2d54ba0477b86d3fb6e6d18c45b"
     },
     {
@@ -1065,7 +1065,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "6564370c29b771de6ab2e645fc1e1169e8092388a76379f354006cc5f823e770",
+      "baseSha256": "877016bad20fba8cee54173268f3957c24e4eb890f776562a7d4fb8f360607d7",
       "metadataId": "c276687fa7cb4a0fada25b972ccda4b1"
     },
     {
@@ -1075,7 +1075,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "46a6db6fb177608ffb9be7787680dc286fa78cf4f86f0b61183fd31c4a826b4b",
+      "baseSha256": "67c2d3b80f6a2ca0bd12be7e7228d81c887ca8784c669557490f8c9d85911f9d",
       "metadataId": "59ce9120d637482a8b63cdc643510727"
     },
     {
@@ -1085,7 +1085,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "258b7d719e92b3e983b73cebca9d574f8b3b14bbd3457b74e14f44e880ed9438",
+      "baseSha256": "d6f76955cd1795e0e288ccbf7cc0a5eb609fcdc700cc833a4037357166c0c74e",
       "metadataId": "9dc102c8fc8845d2a48c161b442385b8"
     },
     {
@@ -1095,7 +1095,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "86e14ec1176378f13d00d60f7117cd1fc40c6767d27636554cb5b38d83b74fef",
+      "baseSha256": "4ee7ba1dbc40beb37f96f2a403e1359576e1025ff07f16a3b90a4d0c2e82ff47",
       "metadataId": "c8754c53bb644104a178b88fbcebb7cd"
     },
     {
@@ -1144,7 +1144,7 @@
         "94c9cc1afcd742a6a2486fce18adaa77"
       ],
       "kind": null,
-      "baseSha256": "d71a7bb11405e874334f9dec2f65a43f2a5a56fdc568b82cfee5e947fb37e722",
+      "baseSha256": "803c6568aa9e9d583ae257a96015f847fc63b814a9e104abc5ba79c01f07f10a",
       "metadataId": "94c9cc1afcd742a6a2486fce18adaa77"
     },
     {
@@ -1154,7 +1154,7 @@
         "28d9a96c33d34c84a628add5d44d7b8e"
       ],
       "kind": null,
-      "baseSha256": "d98e3b91e3b21044ae324374a47d3749339897a84255a6d01d940af577947ef4",
+      "baseSha256": "4b73bd30dea8453ce404f7a923822afe05ea9f105667f6839c84e97d86e55c57",
       "metadataId": "28d9a96c33d34c84a628add5d44d7b8e"
     },
     {
@@ -1174,7 +1174,7 @@
         "e3320ec899a24426adf5f77e2dab36f9"
       ],
       "kind": null,
-      "baseSha256": "78a2b62aed5480be00bd81527e833443227a0c6fa04202a8e19f2abf70b78129",
+      "baseSha256": "3c700b87d827ab7dccc0814ec57a4a30f97fa98e86183951e14585c7c5cd3392",
       "metadataId": "e3320ec899a24426adf5f77e2dab36f9"
     },
     {
@@ -1409,7 +1409,7 @@
         "b1813cae042f4fa0a5e08ae30fd00a12"
       ],
       "kind": null,
-      "baseSha256": "c2b6b8abf616dd19350ae55d9f544c2940c5b868130414fbb49b9b843c153e0a",
+      "baseSha256": "cee1fc04b58438e768dc70c13fb70159300d951ac096fb693aee54c16d4f312d",
       "metadataId": "b1813cae042f4fa0a5e08ae30fd00a12"
     },
     {
@@ -1449,7 +1449,7 @@
         "76fd211790f54164947f276824d19c1d"
       ],
       "kind": null,
-      "baseSha256": "a8f56ed52dcb805d500be90fdcea7674dc3c0f48a4baf69014716ca4df5c0ec7",
+      "baseSha256": "406bcc7ce423110eff9f8b8539497dc4f525ecddd0586c7dafbe0fc9af22148f",
       "metadataId": "76fd211790f54164947f276824d19c1d"
     },
     {
@@ -1469,7 +1469,7 @@
         "2b8dd89d130a4738a8aa1d0c8584e401"
       ],
       "kind": "api",
-      "baseSha256": "a168c96e699685c94c033475968e387c8a31836d1ab905ea92d169fc59f39afd",
+      "baseSha256": "d6b1076163237573f01411e8b04db7c93aec5db854ea66f954da17ff248850cc",
       "metadataId": "2b8dd89d130a4738a8aa1d0c8584e401"
     },
     {
@@ -1499,7 +1499,7 @@
         "ods_data_agg_tree_statistics_01"
       ],
       "kind": "api",
-      "baseSha256": "4af87712eb2ab45228bafe1625f7a581e2027d346bfaa003a5a0869a128a5ddc",
+      "baseSha256": "1db02d744547f866ccaa7b584e7a4a4c23d5d236abd350ea3ee79d5c6cb70b87",
       "metadataId": "ods_data_agg_tree_statistics_01"
     },
     {
@@ -1558,7 +1558,7 @@
         "1f475a245fda4ba4a885b3ac4f8e2d59"
       ],
       "kind": "api",
-      "baseSha256": "dd3dca523e356f3887045d46320cda5065e7cffbe72f08fc0fc6efc633767ae1",
+      "baseSha256": "7627c35341c980758592d9fbc970eca327aeb3494adf52db58eb23e5f7ca27eb",
       "metadataId": "1f475a245fda4ba4a885b3ac4f8e2d59"
     },
     {
@@ -1588,7 +1588,7 @@
         "ods_data_agg_task_ensure_01"
       ],
       "kind": "api",
-      "baseSha256": "8c79151e3580cee7439b74d6881273b73ad50b1b23f79edb2c798e70e28acd10",
+      "baseSha256": "e33e30dd5a9ae365fb10a7dfe97d4379542708da5a8682586c1ac1bf35f3cf0a",
       "metadataId": "ods_data_agg_task_ensure_01"
     },
     {
@@ -1628,7 +1628,7 @@
         "ods_target_datasource_options_01"
       ],
       "kind": "api",
-      "baseSha256": "3387965221b40a3516ea992cbbb40e9009f615fbb284b2df598bad986228775c",
+      "baseSha256": "e840c7f23327d51ecf145c8e430370dc49bba852bfc7e2808ddec9b758ca9adc",
       "metadataId": "ods_target_datasource_options_01"
     },
     {
@@ -2201,7 +2201,7 @@
         "77dd13a825764993848cb05d8cb6a771"
       ],
       "kind": "api",
-      "baseSha256": "6ff356c56d6794174a0afaadbd57f97271aea69ed603cffed124a0731677bf35",
+      "baseSha256": "e14e500cb944a173bbc93b1a1724694c3a6640d1e35422f11bbc5c3b3ded6f22",
       "metadataId": "77dd13a825764993848cb05d8cb6a771"
     },
     {
@@ -2251,7 +2251,7 @@
         "48f4dd83b6a943fbba6b252921c730f8"
       ],
       "kind": null,
-      "baseSha256": "34b2fbc8045a9c6e115716988bb9fac79de04fb9998b70c266b997c4703f4a9d",
+      "baseSha256": "b0a685a9606a44c237b48fed363ec1b943b81b9b0fd8f06907f7bfbbec6c9303",
       "metadataId": "48f4dd83b6a943fbba6b252921c730f8"
     },
     {
@@ -2271,7 +2271,7 @@
         "dwm_center_datasource_options_01"
       ],
       "kind": "api",
-      "baseSha256": "f5f28a62a934e14153c59e003b92e26352fee0e2943f067355353eabb2c315b5",
+      "baseSha256": "edbaf45c0c8033b6b24f405b3d87c1c3a3cc0db89d9a0a952d46757e4ad51d44",
       "metadataId": "dwm_center_datasource_options_01"
     },
     {
@@ -2281,7 +2281,7 @@
         "dwm_center_node_save_01"
       ],
       "kind": "api",
-      "baseSha256": "1bd374610a8e7fa230db8703d8864e7a9ffd34945649be0165a2e648d005e03d",
+      "baseSha256": "db4d8095e7e0a96f73d01070dc5504a8e7f64447657e6ecaa16a672fa593ffe2",
       "metadataId": "dwm_center_node_save_01"
     },
     {
@@ -2331,7 +2331,7 @@
         "b6aaff9e31925977b94369d347e7c32a"
       ],
       "kind": "api",
-      "baseSha256": "7e79265b51cb73fd97024d2d5b865aa0d13aedc34511d1601be54c2bb60dc158",
+      "baseSha256": "66f0ec3ed86b4b3c714505f36e646d2162fdf870f3bde5d4e65757ae0830990e",
       "metadataId": "b6aaff9e31925977b94369d347e7c32a"
     },
     {
@@ -2341,7 +2341,7 @@
         "f32458ca37a55794b4cb49cfb191ca76"
       ],
       "kind": "api",
-      "baseSha256": "0bb003163b88a76a6d06945b822a699699f1a0fe5be05924391905ebd0445de1",
+      "baseSha256": "c1505421a767393634366d915de23faba3f8e2767e2d6909fe4abc3a884d8a2e",
       "metadataId": "f32458ca37a55794b4cb49cfb191ca76"
     },
     {
@@ -2722,7 +2722,7 @@
         "b78cf957a41645ccbea4fda1f6c6b9e9"
       ],
       "kind": null,
-      "baseSha256": "910018c9c2bf18f47ff310f63ca7221c71b399890ed0e2f55fec45678e65b710",
+      "baseSha256": "41450dde0d0747232eb72d9bb2b187c25a5b53e4557e0d27ce51f769b0ce59da",
       "metadataId": "b78cf957a41645ccbea4fda1f6c6b9e9"
     },
     {
@@ -2732,7 +2732,7 @@
         "f12fde8d078541abb7083a4cfc6fb3b4"
       ],
       "kind": null,
-      "baseSha256": "571c9ca9ac81f8875d9759f2abc054fa1314b01d4af1c63849863353a6da35f6",
+      "baseSha256": "245aefe31a6b8f506ad863be692916c738189dbab74dea0d725584bab8170e96",
       "metadataId": "f12fde8d078541abb7083a4cfc6fb3b4"
     },
     {
@@ -2742,7 +2742,7 @@
         "7ddfe8a23a524cc0ad8f801cb57b7381"
       ],
       "kind": null,
-      "baseSha256": "029051f6d91da4d0e45135c7da11708d7a2a5b2ca4dde8828a19c1d5d394af30",
+      "baseSha256": "7f277547b2a5d9360ed442ceee83c5d4d603a29137bd04526aa219e42115f513",
       "metadataId": "7ddfe8a23a524cc0ad8f801cb57b7381"
     },
     {
@@ -2752,7 +2752,7 @@
         "624a0191565640a18c81c131ab0b4228"
       ],
       "kind": null,
-      "baseSha256": "6cc07945f0bfc09dca736cb072657ab276af211ef73851529d5bcbe42b85f999",
+      "baseSha256": "8f431d999b34e6cbe2ebc6657472956dd4fe0f8ec02ca98bdd2c62e99e3b3574",
       "metadataId": "624a0191565640a18c81c131ab0b4228"
     },
     {
@@ -2762,7 +2762,7 @@
         "9fc031d411354d8baff7006b11f5ad0a"
       ],
       "kind": null,
-      "baseSha256": "76d57499a0f74dfd596f842b63a6c10fab1db824cd9c9ec5bf835ab2e995f4d2",
+      "baseSha256": "af41c38a4b7c993b6b117865177f8601f390d6931a8ac2f6a04ccd60f45a39b8",
       "metadataId": "9fc031d411354d8baff7006b11f5ad0a"
     },
     {
@@ -2772,7 +2772,7 @@
         "8cc51c590a964ad2b9a5b76656c5b3ce"
       ],
       "kind": null,
-      "baseSha256": "d7ae7ccd74e2b091ffd521884c2b72f555537ce431ca4601920a754492d87a67",
+      "baseSha256": "45d0414c3cc11861ee705589f4abcf9b475a0290265cddfecd0f66b494f4bf18",
       "metadataId": "8cc51c590a964ad2b9a5b76656c5b3ce"
     },
     {
@@ -2782,7 +2782,7 @@
         "597176b6460544c395498e374bf8bfe8"
       ],
       "kind": null,
-      "baseSha256": "2d9282f99445c5b4734bab615833153ffacdabd01003d8b16f9d8d699bf6698a",
+      "baseSha256": "0ba9257a57ddbb82d153cd3b853e6a8dfc1911c60a1a4f0ca31249c8e1684eeb",
       "metadataId": "597176b6460544c395498e374bf8bfe8"
     },
     {
@@ -2792,7 +2792,7 @@
         "c4348978915046c4af25470dd509c239"
       ],
       "kind": null,
-      "baseSha256": "8545432071f1d190a0b45e6f7ff208d16ce151f2d8cf2d3e8299c68c94dc4631",
+      "baseSha256": "894f3dcb149674138a46fa39ce00253912e93b56123adbd4cd224100e6ea9817",
       "metadataId": "c4348978915046c4af25470dd509c239"
     },
     {
@@ -2802,7 +2802,7 @@
         "1c10f955048340db9b921cb342b5e8f5"
       ],
       "kind": null,
-      "baseSha256": "f6fc5b2c80af33d36733858e4168f78bba111ddfc8e40009c10e9e2b7e95c7dc",
+      "baseSha256": "0f2ef13324997262c74fb4be5efaffa324a7c2015a75fe8ed4fbe8e85fbfac69",
       "metadataId": "1c10f955048340db9b921cb342b5e8f5"
     },
     {
@@ -2812,7 +2812,7 @@
         "db35431a36b34bc88b3b48914d7ba0ff"
       ],
       "kind": null,
-      "baseSha256": "a9bb732638b865b70b6300ff31f87784d30dcdc7b8d2a4be97999504be8fd19d",
+      "baseSha256": "0d8e768a805d69519a6ca655793399cfed6966c087d6d39da544860daa3f0e07",
       "metadataId": "db35431a36b34bc88b3b48914d7ba0ff"
     },
     {
@@ -2822,7 +2822,7 @@
         "241456b9741748059d853cdbb4e12461"
       ],
       "kind": null,
-      "baseSha256": "7c35b15c38a6807df695ad77a178071fb607cb8bbb917acbe27faf3fd2452c97",
+      "baseSha256": "3daabaf57bf3c964f5648d2dc78ed2778acb22081f5e7e476bb5f46f1c228fb4",
       "metadataId": "241456b9741748059d853cdbb4e12461"
     },
     {
@@ -2832,7 +2832,7 @@
         "64c0bb65fad54c538d5b80423623cbf7"
       ],
       "kind": null,
-      "baseSha256": "46dec1b7efcee761885b2739cc848c98387e8df3a4a3f3f09570830a5cc03b81",
+      "baseSha256": "4caec3f7cb80d8708974498a5679e5a8eb01d8eb63e1ac3c5a1c0bb5cd57fd8c",
       "metadataId": "64c0bb65fad54c538d5b80423623cbf7"
     },
     {
@@ -2842,7 +2842,7 @@
         "bc7ab46f70354dab95ca7deb785d72fd"
       ],
       "kind": null,
-      "baseSha256": "7984170f2ec3c41ee1af13e3283372f00ad40efac1d729f6df2f621f07fac60e",
+      "baseSha256": "822adb7623035da87eb4e127023c45d59a4243ee95ccbdffb13a0d5e0faa7146",
       "metadataId": "bc7ab46f70354dab95ca7deb785d72fd"
     },
     {
@@ -3833,7 +3833,7 @@
         "a3b59b1dfb2c4c3989bf0a8a0e1f91cc"
       ],
       "kind": null,
-      "baseSha256": "6675ed404a5ac28a22c5c71be499913af8068ac31404ab2a0c02f61fbd61293f",
+      "baseSha256": "b79e8b12896c3ba4efa9e8c1a3a91b9b7fece149349e1c232bacf2c75b64a897",
       "metadataId": "a3b59b1dfb2c4c3989bf0a8a0e1f91cc"
     },
     {
@@ -3921,7 +3921,7 @@
         "fa050435331a44da84dafa64d74d39c5"
       ],
       "kind": null,
-      "baseSha256": "7753ce372cff445b0e0e2f999b116faf5299c4eee22afef71a1f822bf1e18280",
+      "baseSha256": "f0b04289c3ee4fe7a89fc433fc99703ff4a180116302f8b00749dbf9c32b1e01",
       "metadataId": "fa050435331a44da84dafa64d74d39c5"
     },
     {
@@ -6069,6 +6069,56 @@
       "baseSha256": "5f0735e6a6068d0b560ba95b8d4b60fe5dc794328330958fc276288c719f0153"
     },
     {
+      "path": "function/01.通用函数/23.ODS来源库分类.ms",
+      "databasePath": "/magic-api/function/01.通用函数/23.ODS来源库分类.ms",
+      "rowIds": [
+        "b7a62ebd1ee44a829d0fab646dd79fee"
+      ],
+      "kind": "function",
+      "metadataId": "d2138de2de28456aa57d9ade2305eed7",
+      "baseSha256": "91410b341655fa0818d25d8edbf2ed2f84ebfb1376d1c0bce8f90114efcbfb30"
+    },
+    {
+      "path": "function/01.通用函数/24.接入任务关联表批量读取.ms",
+      "databasePath": "/magic-api/function/01.通用函数/24.接入任务关联表批量读取.ms",
+      "rowIds": [
+        "090324d60b064b63969306b6c8934af7"
+      ],
+      "kind": "function",
+      "metadataId": "35e3408567e34c46abc946414c3405da",
+      "baseSha256": "71d2102b17c33c3bf007cb84804de2fb744e47f3feae5db28be28985b793d017"
+    },
+    {
+      "path": "function/01.通用函数/25.多表编组可见任务查询.ms",
+      "databasePath": "/magic-api/function/01.通用函数/25.多表编组可见任务查询.ms",
+      "rowIds": [
+        "5b2f2b26fcb84739ab5df6867b6ad988"
+      ],
+      "kind": "function",
+      "metadataId": "b407fbd38e4c4d048c10eb9e92845d91",
+      "baseSha256": "6e67b6ad573c4d98248ec7f96db0d8a493c86490ea0ab779ec1361666d0c131d"
+    },
+    {
+      "path": "function/01.通用函数/26.多表编组写权限查询.ms",
+      "databasePath": "/magic-api/function/01.通用函数/26.多表编组写权限查询.ms",
+      "rowIds": [
+        "d2341f3332a04659a67241c13e40b2dd"
+      ],
+      "kind": "function",
+      "metadataId": "19e712f3e2ab4b529d0910896dfc1c39",
+      "baseSha256": "9efccb62487b836ad36ebf2aa299008923ff3c40c1a607d9a943363087e0441b"
+    },
+    {
+      "path": "function/01.通用函数/27.超市目录发布资格.ms",
+      "databasePath": "/magic-api/function/01.通用函数/27.超市目录发布资格.ms",
+      "rowIds": [
+        "9aa42aab21824bf8ac35f59ad228e4e5"
+      ],
+      "kind": "function",
+      "metadataId": "09ecb205502244aba26408368d56aad3",
+      "baseSha256": "4277fe60a86583c0a8ef259161e006970133547da66ae52cf7197f7d2c25c995"
+    },
+    {
       "path": "function/01.通用函数/group.json",
       "databasePath": "/magic-api/function/01.通用函数/group.json",
       "rowIds": [
@@ -6512,7 +6562,7 @@
         "0454d01c38ab5d66aafdaf02d9b547d6"
       ],
       "kind": "function",
-      "baseSha256": "0f3ad62300507086a41a26fd2ff0aa2d1ca785c0f995f79d10757ef96c031ee9",
+      "baseSha256": "e5d00aed9495da03b64504619406d049210bac4f1251f6d8aac1b9f3e0736858",
       "metadataId": "0454d01c38ab5d66aafdaf02d9b547d6"
     },
     {
@@ -6522,7 +6572,7 @@
         "084a92c02bd05f8bb8507cc4c4660e40"
       ],
       "kind": "function",
-      "baseSha256": "422232e9fec63a8b3c6da1a3e49e3c7ef3d86b3683faa43f6bea9c12f42cb864",
+      "baseSha256": "f29084c13b19d97653fd796bf83d71f3eb745ce9f1e09ce7f8b47610a678b2ea",
       "metadataId": "084a92c02bd05f8bb8507cc4c4660e40"
     },
     {
@@ -6532,7 +6582,7 @@
         "2ebdc2a6af4b5e2989cd8add98c849fa"
       ],
       "kind": "function",
-      "baseSha256": "57573c9d0cceacbb2b5d454c4c3ab9188c5c9413b22b6ae69608e6a43375b46c",
+      "baseSha256": "cb9d097b790e553d1d27061dc8e1c58b883735236a75bb879b863c214b88f1fb",
       "metadataId": "2ebdc2a6af4b5e2989cd8add98c849fa"
     },
     {
@@ -6542,7 +6592,7 @@
         "ad740688aec155419e89ac237559c727"
       ],
       "kind": "function",
-      "baseSha256": "9669ff43392f408ae165d82829e52e598fdfb9acd9d6dccd267c2214a716d214",
+      "baseSha256": "460f97798ef020f70ebc7ba7867bb215b8491fc29d9c633f896ad02c080d6099",
       "metadataId": "ad740688aec155419e89ac237559c727"
     },
     {
@@ -6552,7 +6602,7 @@
         "7a5e47d9db00585f8d0feeefedcd6465"
       ],
       "kind": "function",
-      "baseSha256": "6a086f583d94fd5edd46ee641bf16f66678221d648fa973f2b21b2abaecbb72e",
+      "baseSha256": "23479c853d475d858f3f0e524b05e5722b76e6d0fc32d1c03696dc502efb0c5a",
       "metadataId": "7a5e47d9db00585f8d0feeefedcd6465"
     },
     {
@@ -6572,7 +6622,7 @@
         "fa237a4aca795e95b6a1086b2e3ed012"
       ],
       "kind": "function",
-      "baseSha256": "da486236812b565064aef5189196ea551a47d237619b618537ccf4c859054a2a",
+      "baseSha256": "fbfbcfff7679539d31075f1f807869dec829bf20b4ce2b1e8e27a2043f225848",
       "metadataId": "fa237a4aca795e95b6a1086b2e3ed012"
     },
     {
@@ -6582,7 +6632,7 @@
         "4e0ee97e906054229d56e22da830272e"
       ],
       "kind": "function",
-      "baseSha256": "386036d70b5041235a4c1e6675a261fbe57b83d684506e36b52a75855ba289f5",
+      "baseSha256": "71012a9b806759f50b39e31e25e6ec4475b77f32c73b7395638823349bd4fde0",
       "metadataId": "4e0ee97e906054229d56e22da830272e"
     },
     {
@@ -6592,7 +6642,7 @@
         "4049d07b6bcc53f2b88f544ff0f62d22"
       ],
       "kind": "function",
-      "baseSha256": "a6193b82f3247640d666b13cede48a67ccde44816e6080c069a3a154beb37f7d",
+      "baseSha256": "2475c580380147da86ce7998b8e66770b5ea6013cf68c053388f23b2c4f2024e",
       "metadataId": "4049d07b6bcc53f2b88f544ff0f62d22"
     },
     {
@@ -6602,7 +6652,7 @@
         "490931832d8a5b87a46bdb77544bb02c"
       ],
       "kind": "function",
-      "baseSha256": "5a9ce239d6a1a1ff0f28ddecba111a4eef3846533d336df165c79747afbe1a72",
+      "baseSha256": "c783ef81b0bdfd4d5051df5348ecd0f31af406a4c6520ec0278bf0bdc0699d12",
       "metadataId": "490931832d8a5b87a46bdb77544bb02c"
     },
     {

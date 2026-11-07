@@ -329,6 +329,8 @@ import {
   watch,
   nextTick,
   onMounted,
+  onActivated,
+  onDeactivated,
   onBeforeUnmount,
   getCurrentInstance,
 } from "vue";
@@ -784,7 +786,7 @@ const refreshComponentCache = async () => {
       timeout: 120000,
     });
     const app = currentInstance?.appContext?.app;
-    const componentCount = app ? await runtimeSfc.loadAll(app) : 0;
+    const componentCount = app ? await runtimeSfc.loadAll(app, { force: true }) : 0;
     const version = result?.version ? `，缓存版本 ${result.version}` : "";
     const hasUnsavedCode = tabs.value.some((tab) => tab.isSave === 1);
 
@@ -797,6 +799,9 @@ const refreshComponentCache = async () => {
     window.setTimeout(() => window.location.reload(), 500);
   } catch (error) {
     console.error("刷新低代码组件缓存失败:", error);
+    if (!error?.handled) {
+      ElMessage.warning(`组件缓存刷新未完成：${error?.message || "请稍后重试"}`);
+    }
   } finally {
     componentCacheRefreshing.value = false;
   }
@@ -891,15 +896,21 @@ async function saveCode(showRun) {
     return;
   }
 
-  let compiling = true;
+  let compiling = false;
   try {
     const sourceCode = tab.code;
 
     // 编译大组件会短暂占用浏览器主线程，先渲染遮罩，避免用户误以为保存无响应。
     saving.value = true;
+    const previewApp = currentInstance?.appContext.app;
+    if (showRun && previewApp) {
+      savingText.value = "正在加载预览组件...";
+      await runtimeSfc.loadAll(previewApp);
+    }
     savingText.value = "正在编译组件...";
     await nextTick();
 
+    compiling = true;
     const { compileJs, compileCss } = await runtimeSfc.compile(sourceCode);
     compiling = false;
 
@@ -960,7 +971,9 @@ async function saveCode(showRun) {
       errorMsg.value = e;
       showModel.value = true;
     } else if (!e?.handled) {
-      ElMessage.warning(`保存失败：${e?.message || e || "请稍后重试"}`);
+      ElMessage.warning(
+        `${showRun ? "运行预览失败" : "保存失败"}：${e?.message || e || "请稍后重试"}`
+      );
     }
     tab.isSave = 1;
   } finally {
@@ -1076,17 +1089,19 @@ const handleFileChange = async (file) => {
   }
 };
 
-const init = () => {
-  window.addEventListener("keydown", (e) => {
-    // 判断是否按下 Ctrl+S（Mac 上是 Cmd+S）
-    const isCtrlOrCmd = e.ctrlKey || e.metaKey; // metaKey 对应 Mac 的 Command 键
-    const isSKey = e.key.toLowerCase() === "s";
+/** @param {KeyboardEvent} event */
+const handleSaveShortcut = (event) => {
+  if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") return;
+  event.preventDefault();
+  if (!event.repeat) void saveCode(false);
+};
 
-    if (isCtrlOrCmd && isSKey) {
-      e.preventDefault(); // 阻止默认行为（如浏览器保存页面）
-      saveCode();
-    }
-  });
+const registerSaveShortcut = () => {
+  window.addEventListener("keydown", handleSaveShortcut);
+};
+
+const unregisterSaveShortcut = () => {
+  window.removeEventListener("keydown", handleSaveShortcut);
 };
 
 const copy = () => {
@@ -1100,12 +1115,14 @@ const handlePreview = async () => {
   const tab = tabs.value.find((it) => it.tid === tid);
   if (!tab) return;
 
+  let readingSource = true;
   try {
     // 预览始终直读数据库，不使用浏览器运行时组件缓存，也不使用未保存的编辑器内容。
     const sourceCode = await request({
       url: `/sym/component?action=getSourceCode&tid=${tid}`,
       method: "post",
     });
+    readingSource = false;
     if (!sourceCode) {
       ElMessage.warning("数据库中未找到该组件代码，暂无法预览");
       return;
@@ -1122,14 +1139,16 @@ const handlePreview = async () => {
 
     if (currentInstance) {
       const app = currentInstance.appContext.app;
+      await runtimeSfc.loadAll(app);
       runtimeSfc.register(app, appState);
       state.name = componentName;
       editMode.value = "preview";
     }
   } catch (e) {
-    console.error("读取数据库组件并预览失败:", e);
+    const message = readingSource ? "读取数据库组件失败" : "预览组件失败";
+    console.error(message, e);
     if (!e?.handled) {
-      ElMessage.warning("读取数据库组件失败，无法预览");
+      ElMessage.warning(`${message}：${e?.message || e || "请稍后重试"}`);
     }
   }
 };
@@ -1179,13 +1198,10 @@ watch(
   { immediate: true }
 );
 
-// 初始化监听
-onMounted(() => {
-  init();
-});
-onBeforeUnmount(() => {
-  window.removeEventListener("ctrls", init);
-});
+onMounted(registerSaveShortcut);
+onActivated(registerSaveShortcut);
+onDeactivated(unregisterSaveShortcut);
+onBeforeUnmount(unregisterSaveShortcut);
 </script>
 
 <style scoped>

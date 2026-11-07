@@ -7,7 +7,19 @@
       <detail-breadcrumb />
     </div>
 
-    <div class="market-detail__body">
+    <div v-if="loading && !detail" class="market-detail__body" aria-busy="true">
+      <LoadingState title="正在加载目录详情" compact />
+    </div>
+    <div v-else-if="!detail" class="market-detail__body">
+      <el-result icon="info" title="暂时无法查看目录" :sub-title="loadError">
+        <template v-if="id" #extra>
+          <el-button type="primary" plain @click="loadDetail"
+            >重新加载</el-button
+          >
+        </template>
+      </el-result>
+    </div>
+    <div v-else class="market-detail__body">
       <div class="detail-info">
         <div class="detail-info__icon">
           <Icon :icon="leftIcon" size="83" />
@@ -15,18 +27,37 @@
         <div class="detail-info-view">
           <div class="detail-info-view-title">
             <h2 :title="title">{{ title }}</h2>
-            <div style="margin-top: -8px">
-              <el-button type="primary" text @click="handleAction('apply')">
+            <div class="detail-info__actions">
+              <el-tag
+                v-if="statusLabel"
+                :type="
+                  detail.applicationState === 'approved' ? 'success' : 'info'
+                "
+              >
+                {{ statusLabel }}
+              </el-tag>
+              <el-button
+                v-if="detail.canApply"
+                type="primary"
+                :disabled="loading || modalOpen"
+                @click="openApplication"
+              >
                 <template #icon>
                   <Icon icon="apply" />
                 </template>
                 申请
               </el-button>
-              <el-button style="margin-left: -8px" text @click="handleAction('collect')">
+              <el-button
+                v-if="detail.canCollect"
+                text
+                :loading="collecting"
+                :disabled="loading"
+                @click="toggleCollection"
+              >
                 <template #icon>
-                  <Icon :icon="isCollected ? 'star-filled' : 'star'" style="margin-top: -2px" />
+                  <Icon :icon="detail.collected ? 'star-filled' : 'star'" />
                 </template>
-                <span style="color: #000000e0">{{ isCollected ? "已收藏" : "收藏" }}</span>
+                {{ detail.collected ? "已收藏" : "收藏" }}
               </el-button>
             </div>
           </div>
@@ -50,109 +81,217 @@
         </div>
       </div>
 
-      <detail-page class="detail-tabs" type="catalog" tab-type="market-catalog" />
+      <detail-page
+        :key="detail.tid"
+        class="detail-tabs"
+        type="catalog"
+        tab-type="market-catalog"
+        :id="detail.tid"
+        :title="title"
+        :data-source-type="detail.dataSourceType || ''"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { usePermissionStore } from "@/store";
+import { useCartCount, useRegisterModal } from "@/composables";
 
-// 判断是否Layout布局下的详情
-const permissionStore = usePermissionStore();
-const isLayoutDetail = computed(() => {
-  const matched = route.matched.filter((item) => item.meta && item.meta.title);
-  return (
-    permissionStore.mixLayoutTopMenus.find((el) => el.path === matched[0].path)?.component?.name ===
-    "Layout"
-  );
-});
+type ApplicationState =
+  | "available"
+  | "cart"
+  | "draft"
+  | "pending"
+  | "approved"
+  | "withdrawn"
+  | "restricted"
+  | "no-resources"
+  | "no-department";
+
+interface MarketDetail {
+  tid: string;
+  catalogName?: string;
+  dataSourceType?: string;
+  resType: string[];
+  applicationState: ApplicationState;
+  canApply: boolean;
+  canCollect: boolean;
+  collected: boolean;
+  [field: string]: unknown;
+}
 
 const route = useRoute();
-const assetType = computed(() => {
-  return route.query.type || "catalog";
+const permissions = usePermissionStore();
+const { open: modalOpen, openRegisterModal } = useRegisterModal();
+const { sessionRevision } = useCartCount();
+const isLayoutDetail = computed(() => {
+  const first = route.matched.find((item) => item.meta?.title);
+  return (
+    permissions.mixLayoutTopMenus.find((item) => item.path === first?.path)
+      ?.component?.name === "Layout"
+  );
 });
-const title = computed<string>(() => {
-  return route.query.title as string; // 增加类型断言，避免TS警告
-});
-const id = computed<string>(() => {
-  return route.query.id as string; // 增加类型断言
-});
-const detail = ref<any>({});
-const isCollected = computed(() => detail.value?.collected);
-const config = computed(() => (assetType.value ? configs[assetType.value] : undefined));
+const id = computed(() =>
+  typeof route.query.id === "string" ? route.query.id.trim() : "",
+);
+const detail = ref<MarketDetail | null>(null);
+const loading = ref(false);
+const collecting = ref(false);
+const loadError = ref("");
+const applicationFor = ref("");
+const title = computed(() => detail.value?.catalogName || "数据目录");
+let requestSequence = 0;
+let visitSequence = 0;
+let viewRecorded = false;
 
-const fields = computed(() => {
-  return config.value?.fields || []; // 改为数组默认值
-});
+const statusLabels: Partial<Record<ApplicationState, string>> = {
+  cart: "已加购",
+  draft: "待提交",
+  pending: "申请处理中",
+  approved: "已申请",
+  withdrawn: "已撤回",
+  restricted: "不予共享",
+  "no-resources": "暂无可申请资源",
+  "no-department": "当前账号未关联申请部门",
+};
+const statusLabel = computed(() =>
+  detail.value ? statusLabels[detail.value.applicationState] : undefined,
+);
 
-const updateBrowse = async () => {
-  if (!id.value) {
+function currentVisit() {
+  return { id: id.value, path: route.path, revision: sessionRevision.value, sequence: visitSequence };
+}
+
+function isCurrentVisit(visit: ReturnType<typeof currentVisit>) {
+  return (
+    visit.sequence === visitSequence &&
+    visit.id === id.value &&
+    visit.path === route.path &&
+    visit.revision === sessionRevision.value
+  );
+}
+
+async function loadDetail() {
+  const visit = currentVisit();
+  const requested = visit.id;
+  const sequence = ++requestSequence;
+  loadError.value = "";
+  if (!requested) {
+    detail.value = null;
+    loading.value = false;
+    loadError.value = "缺少目录编号，请从数据超市重新打开。";
     return;
   }
-  $common.post("/dws/market/view", { tid: id.value });
-};
 
-const leftIcon = computed<string | undefined>(() => (config.value as any)?.icon);
-onMounted(() => {
-  handleAction("init");
+  loading.value = true;
+  try {
+    const row = await $common.postSilently("/dws/market/detail", { tid: requested });
+    if (sequence !== requestSequence || !isCurrentVisit(visit)) return;
+    if (row instanceof Error) throw row;
+    if (!row || row.tid !== requested || row.assetType !== "catalog") {
+      throw new Error("目录详情与当前访问记录不一致，请重新加载。");
+    }
+    detail.value = row;
+    // 一次详情访问只提交一次浏览计数，详情刷新沿用本次访问。
+    if (!viewRecorded) {
+      viewRecorded = true;
+      void $common.postSilently("/dws/market/view", { tid: requested }).catch(() => {});
+    }
+  } catch (error: unknown) {
+    if (sequence !== requestSequence || !isCurrentVisit(visit)) return;
+    detail.value = null;
+    loadError.value =
+      error instanceof Error ? error.message : "请稍后重试，或返回数据超市。";
+  } finally {
+    if (sequence === requestSequence && isCurrentVisit(visit)) loading.value = false;
+  }
+}
+
+function openApplication() {
+  const row = detail.value;
+  if (
+    !row?.canApply ||
+    row.tid !== id.value ||
+    loading.value ||
+    modalOpen.value
+  )
+    return;
+  applicationFor.value = row.tid;
+  openRegisterModal({
+    registerClass: "apply",
+    registerData: { apply: { applyResource: [{ ...row }] } },
+  });
+}
+
+async function toggleCollection() {
+  const row = detail.value;
+  if (
+    !row?.canCollect ||
+    row.tid !== id.value ||
+    collecting.value ||
+    loading.value
+  )
+    return;
+  const visit = currentVisit();
+  const desired = !row.collected;
+  collecting.value = true;
+  try {
+    const collected = await $common.postSilently("/dws/market/collect", {
+      catalogId: row.tid,
+      collected: desired,
+    });
+    if (!isCurrentVisit(visit)) return;
+    if (collected instanceof Error) throw collected;
+    if (collected !== desired)
+      throw new Error("收藏状态暂未确认，请重新加载。");
+    if (detail.value?.tid === row.tid) detail.value.collected = collected;
+    if (loading.value) void loadDetail();
+    $message.success(collected ? "已收藏" : "已取消收藏");
+  } catch (error: unknown) {
+    if (!isCurrentVisit(visit)) return;
+    $message.error(error instanceof Error ? error.message : "收藏操作未完成，请重试。");
+  } finally {
+    if (isCurrentVisit(visit)) collecting.value = false;
+  }
+}
+
+watch(
+  [id, sessionRevision],
+  () => {
+    visitSequence++;
+    detail.value = null;
+    viewRecorded = false;
+    collecting.value = false;
+    applicationFor.value = "";
+    void loadDetail();
+  },
+  { immediate: true },
+);
+
+watch(modalOpen, (open, wasOpen) => {
+  if (open || !wasOpen || !applicationFor.value) return;
+  const requested = applicationFor.value;
+  applicationFor.value = "";
+  if (requested === id.value) void loadDetail();
+});
+onBeforeUnmount(() => {
+  visitSequence++;
 });
 
-const handleAction = (type: string) => {
-  switch (type) {
-    case "init":
-      updateBrowse();
-      //@todo 获取详情
-      $common.post("/dws/market/detail", { tid: id.value }).then((data) => {
-        detail.value = data;
-      });
-      break;
-    case "collect":
-      $common
-        .post("/dws/market/collect", {
-          catalogId: detail.value.tid,
-        })
-        .then((res) => {
-          detail.value.collected = !detail.value.collected;
-          $message.success(res ? "收藏成功" : "取消收藏");
-        });
-      break;
-    case "apply":
-      // 可补充申请逻辑
-      break;
-  }
-};
-
-const configs = {
-  catalog: {
-    icon: "market-catalog",
-    fields: [
-      { title: "提供部门", field: "orgId", options: "org" },
-      { title: "资源情况", field: "resources", options: "" },
-      { title: "数据条数", field: "recordCount", suffix: "条" },
-      { title: "更新时间", field: "updatedTime" },
-      { title: "资源类型", field: "resType", options: "assetType" },
-      { title: "共享属性", field: "shareType", options: "shareType" },
-      { title: "更新周期", field: "updateCycle", options: "updateCycle" },
-      { title: "发布时间", field: "publishTime", options: "" },
-    ],
-  },
-  api: {
-    icon: "market-api",
-    fields: [
-      { title: "数源单位", field: "orgId", options: "org" },
-      { title: "共享属性", field: "shareType", options: "shareType" },
-      { title: "所属网域", field: "storageDomian", options: "" },
-      { title: "更新时间", field: "updatedTime", options: "" },
-      { title: "请求参数", field: "reqCount", options: "" },
-      { title: "响应参数", field: "resCount", options: "" },
-      { title: "更新周期", field: "updateCycle", options: "updateCycle" },
-      { title: "发布时间", field: "publishTime", options: "" },
-    ],
-  },
-};
+const leftIcon = "market-catalog";
+const fields = [
+  { title: "提供部门", field: "orgId", options: "org" },
+  { title: "资源情况", field: "resources" },
+  { title: "数据条数", field: "recordCount", suffix: "条" },
+  { title: "更新时间", field: "updatedTime" },
+  { title: "资源类型", field: "resType", options: "assetType" },
+  { title: "共享属性", field: "shareType", options: "shareType" },
+  { title: "更新周期", field: "updateCycle", options: "updateCycle" },
+  { title: "发布时间", field: "publishTime" },
+];
 </script>
 
 <style scoped lang="scss">
@@ -183,6 +322,7 @@ const configs = {
   min-height: 100%;
   padding-top: 55px;
   padding-bottom: 8px;
+  padding-inline: clamp(12px, 2vw, 24px);
 
   display: flex;
   flex-direction: column;
@@ -192,14 +332,15 @@ const configs = {
 }
 
 .market-detail__header {
-  width: 1345px;
+  width: min(100%, 1345px);
   display: flex;
   margin-top: 9px;
   margin-bottom: 11px;
 }
 
 .market-detail__body {
-  width: 1345px;
+  width: min(100%, 1345px);
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -208,7 +349,8 @@ const configs = {
   .detail-info {
     display: flex;
     flex-direction: row;
-    padding-right: 28px;
+    padding: 20px 24px;
+    gap: 20px;
     background-color: #fff;
     border-radius: 8px;
     flex: 0;
@@ -219,7 +361,6 @@ const configs = {
       border-radius: 8px;
       width: 85px;
       height: 85px;
-      margin: 26px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -227,12 +368,26 @@ const configs = {
       color: #0b8bf9;
     }
 
+    &__actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+
+      .el-button + .el-button {
+        margin-left: 0;
+      }
+    }
+
     &-view {
       flex: 1;
-      margin-top: 21px;
+      min-width: 0;
       &-title {
         display: flex;
+        align-items: center;
+        flex-wrap: wrap;
         justify-content: space-between;
+        gap: 8px 16px;
         margin-bottom: 11px;
 
         h2 {
@@ -244,7 +399,8 @@ const configs = {
           overflow: hidden;
           white-space: nowrap;
           text-overflow: ellipsis;
-          max-width: 500px;
+          min-width: 0;
+          max-width: 100%;
           line-height: 32px;
         }
       }
@@ -255,9 +411,9 @@ const configs = {
         gap: 14px 8px;
         width: 100%;
         font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-          "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-          "Noto Color Emoji";
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+          "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
         color: #636981;
         font-size: 14px;
@@ -290,6 +446,27 @@ const configs = {
     }
     .detail-container__breadcrumb {
       display: none;
+    }
+  }
+}
+
+@media (max-width: 1100px) {
+  .market-detail__body .detail-info-view-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .market-detail__body .detail-info {
+    padding: 16px;
+    gap: 12px;
+
+    &__icon {
+      display: none;
+    }
+
+    &-view-fields {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 }

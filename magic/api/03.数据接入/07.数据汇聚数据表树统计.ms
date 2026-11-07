@@ -22,19 +22,17 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：07.数据汇聚数据表树统计
-// 路由：POST /ods/dataAggTreeStatistics
-// 业务说明：数据接入左侧树数据表统计（POST /ods/dataAggTreeStatistics）。只读接口；关系库限定数据源与数据表登记状态均大于 0，按当前租户内对象归属一次分组统计业务表/日志表/字典表，Elasticsearch 投影仅辅助层级展示；没有表的数据源统计为 0。与右侧列表使用相同的数据源资格边界；使用请求参数 keyword、orgIds；涉及 db_datasource_t、db_table_t 等业务表。
 import tenantEs
 import tenantRuntime
+import tableRead
 import '@/common/configData' as configData
+import '@/common/ods-source-classifier' as odsSourceClassifier
 
-/*
- * 数据接入左树统计接口（POST /ods/dataAggTreeStatistics）。
- *
- * 1. 先从关系库取得登记状态大于 0 的数据源，再读取对应 ES 数据源投影；
- * 2. 在同一授权数据源范围内，以关系库登记状态一次分组统计业务表、日志表、字典表数量；
- * 3. 只返回统计与层级结构，不写入 MySQL / ES，右侧列表仍由 /ods/dataAggPage 按相同表口径分页查询。
+/**
+ * POST /ods/dataAggTreeStatistics 读取接入任务左侧组织树。
+ * 输入 keyword、orgIds，返回 {total, orgCounts, orgApps}。未登记数据源及数据表不计入结果。
+ * 来源资格与 /ods/dataAggPage 一致，按当前租户排除 ODS 层及直属分域绑定的数据源。
+ * 关系库按来源库统计业务表、日志表和字典表，ES 投影仅补充展示信息。无写入。
  */
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -84,22 +82,12 @@ if (blank(tenantId)) {
 }
 
 var distributionView = false
-// 接入/分发依据当前租户资源中心 ODS 层及其分域绑定分类，不按库名、节点类型或数据库产品判断。
-// 同时校验真实字典根、层/域和绑定的 tenant_id / is_del，旧解绑或其他租户配置不能改变当前候选范围。
-var warehouseBindings = db.select("""
-    SELECT DISTINCT binding.datasource_id AS datasourceId
-      FROM dwm_center_layer_source_t binding
-      JOIN sym_dict_t node ON node.tid=binding.target_id AND node.tenant_id=#{tenantId} AND node.is_del=0
-      JOIN sym_dict_t ods ON ods.tenant_id=#{tenantId} AND ods.is_del=0 AND LOWER(ods.dict_code)='ods'
-           AND ((binding.target_type='layer' AND node.tid=ods.tid)
-                OR (binding.target_type='domain' AND node.parent_id=ods.tid))
-      JOIN sym_dict_t root ON root.tid=ods.parent_id AND root.tenant_id=#{tenantId}
-           AND root.is_del=0 AND root.parent_id='0' AND root.dict_code='dataSourceType'
-     WHERE binding.tenant_id=#{tenantId} AND binding.is_del=0 AND binding.datasource_id IS NOT NULL
-""")
+// 接入和分发共享真实 ODS 字典与绑定口径。
+var odsSources = odsSourceClassifier()
+var warehouseBindings = odsSources.query.grouped(odsSources.projection, odsSources.groups)
 var warehouseDatasourceIds = []
-for (binding in (warehouseBindings == null ? [] : warehouseBindings)) {
-    var bindingDatasourceId = text(first(binding, ['datasourceId', 'datasourceid', 'datasource_id']))
+for (binding in warehouseBindings) {
+    var bindingDatasourceId = text(binding.source_id)
     if (!blank(bindingDatasourceId) && !warehouseDatasourceIds.contains(bindingDatasourceId)) {
         warehouseDatasourceIds.add(bindingDatasourceId)
     }
@@ -210,20 +198,21 @@ for (registeredDatasourceId in registeredDatasourceIds) {
 var tableCountsByDatasource = {}
 var total = 0
 if (datasourceIds.size() > 0) {
-    var registeredTableRows = db.select("""
-        SELECT datasource_id AS datasourceId, COUNT(*) AS tableCount
-          FROM db_table_t
-         WHERE tenant_id=#{tenantId} AND is_del=0 AND asset_status>0
-           AND datasource_id IN <foreach collection="datasourceIds" item="sourceDb" open="(" close=")" separator=",">#{sourceDb}</foreach>
-           AND business_type IN ('业务表','日志表','字典表')
-         GROUP BY datasource_id
-    """)
-    for (registeredTableRow in (registeredTableRows == null ? [] : registeredTableRows)) {
-        var tableDatasourceId = text(first(registeredTableRow, ['datasourceId', 'datasourceid', 'datasource_id']))
+    var tables = tableRead.from('db_table_t', 't', tenantId)
+    var datasource = tableRead.column('t', 'datasource_id', 'TEXT')
+    tables.where(tableRead.all([
+        tableRead.equal(tableRead.column('t', 'is_del', 'NUMBER'), 0),
+        tableRead.greaterThan(tableRead.column('t', 'asset_status', 'NUMBER'), 0),
+        tableRead.in(datasource, datasourceIds),
+        tableRead.in(tableRead.column('t', 'business_type', 'TEXT'), ['业务表', '日志表', '字典表'])
+    ]))
+    var registeredTableRows = tables.grouped({ source_id: datasource, table_count: tableRead.count() }, [datasource])
+    for (registeredTableRow in registeredTableRows) {
+        var tableDatasourceId = text(registeredTableRow.source_id)
         if (blank(tableDatasourceId) || datasourceMap[tableDatasourceId] == null) {
             continue
         }
-        var tableCount = first(registeredTableRow, ['tableCount', 'tablecount', 'table_count'])::int
+        var tableCount = registeredTableRow.table_count::int
         tableCountsByDatasource[tableDatasourceId] = tableCount
         total = total + tableCount
     }

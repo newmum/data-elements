@@ -28,54 +28,74 @@ if (typeof window !== "undefined" && !window.pathToFileURL) {
   }
 }
 
-// ===================== 第二步：全局常量与 Babel 初始化 =====================
+// ===================== 第二步：Babel 按需加载 =====================
 const COMP_IDENTIFIER = `__sfc__`;
+const BABEL_LOAD_TIMEOUT = 30_000;
+let babelLoadPromise;
 
-/**
- * 获取 Babel 实例（运行时动态读取，避免模块加载时 window.Babel 尚未就绪的竞态问题）
- * Babel 通过 index.html 中的 <script type="module" src="/babel.min.js"> 异步加载（约3MB），
- * 如果 sfc-compiler 模块先于 babel.min.js 完成加载，顶层 const Babel = window.Babel 会捕获到 undefined。
- * 改为每次编译时动态获取，确保用户实际触发编译时 Babel 已完成加载。
- */
 function getBabel() {
-  return window.Babel || null;
+  const babel = globalThis.window?.Babel;
+  return typeof babel?.transform === "function" ? babel : null;
 }
 
-/**
- * 等待 Babel 加载完成（带超时）
- * @param {number} timeout - 最大等待时间(ms)，默认 5000
- * @returns {Promise<object|null>} Babel 实例或 null
- */
-async function waitForBabel(timeout = 5000) {
-  const start = Date.now();
-  while (!window.Babel) {
-    if (Date.now() - start > timeout) return null;
-    await new Promise((r) => setTimeout(r, 100));
+function loadBabel() {
+  // 命令行编译器会预先注入同一份 Babel，直接复用。
+  const babel = getBabel();
+  if (babel) return Promise.resolve(babel);
+  if (typeof document === "undefined") {
+    throw new Error("TypeScript 编译器未初始化，请先加载 Babel Standalone");
   }
-  // 确保 TypeScript 预设已注册
-  if (window.Babel && !window.Babel._tsPresetRegistered) {
-    window.Babel.registerPreset("typescript", {
-      presets: [window.Babel.availablePresets?.["typescript"] || []],
-    });
-    window.Babel._tsPresetRegistered = true;
-  }
-  return window.Babel;
+  if (babelLoadPromise) return babelLoadPromise;
+
+  babelLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = new URL(`${import.meta.env?.BASE_URL ?? "./"}babel.min.js`, document.baseURI).href;
+    script.async = true;
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      script.onload = null;
+      script.onerror = null;
+    };
+    const fail = (reason) => {
+      cleanup();
+      script.remove();
+      reject(new Error(`TypeScript 编译器${reason}，请重新尝试编译`));
+    };
+    const timeout = setTimeout(() => fail("加载超时"), BABEL_LOAD_TIMEOUT);
+    script.onerror = () => fail("加载失败");
+    script.onload = () => {
+      const loaded = getBabel();
+      if (!loaded) {
+        fail("加载后未能初始化");
+        return;
+      }
+      cleanup();
+      resolve(loaded);
+    };
+    try {
+      document.head.appendChild(script);
+    } catch {
+      fail("加载失败");
+    }
+  }).catch((error) => {
+    babelLoadPromise = undefined;
+    throw error;
+  });
+  return babelLoadPromise;
 }
+
+const usesTypeScript = (descriptor) =>
+  descriptor.script?.lang === "ts" || descriptor.scriptSetup?.lang === "ts";
 
 // ===================== 第三步：核心编译函数（compileCode）=====================
 /**
  * 编译 SFC 源代码
- * 改为 async 函数：当检测到 lang="ts" 时会等待 Babel 加载完成后再进行类型剥离
+ * TypeScript 组件在实际编译前按需加载 Babel。
  * @param {string} sourceCode - SFC 源码
  * @returns {Promise<{compileJs: string, compileCss: string}>}
  */
 export async function compileCode(sourceCode) {
-  // 预检：如果源码包含 lang="ts"，先确保 Babel 就绪（解决 CDN 异步加载竞态问题）
-  const hasTypeScript = /<script[^>]+lang=["']ts["'][^>]*>/.test(sourceCode);
-  if (hasTypeScript && !getBabel()) {
-    await waitForBabel(5000);
-  }
-
   // 初始化编译结果容器，避免属性未定义报错
   const compiled = {
     js: "",
@@ -84,7 +104,11 @@ export async function compileCode(sourceCode) {
   };
 
   try {
-    compileFile(sourceCode, compiled);
+    const file = parseFile(sourceCode, compiled);
+    if (file) {
+      const babel = usesTypeScript(file.descriptor) ? await loadBabel() : null;
+      compileParsedFile(sourceCode, compiled, file, babel);
+    }
   } catch (e) {
     compiled.errors.push(e instanceof Error ? e.message : "未知编译错误");
   }
@@ -147,6 +171,11 @@ export async function compileCode(sourceCode) {
 
 // ===================== 第四步：文件编译核心逻辑（compileFile）=====================
 export function compileFile(code, compiled) {
+  const file = parseFile(code, compiled);
+  if (file) compileParsedFile(code, compiled, file, getBabel());
+}
+
+function parseFile(code, compiled) {
   // 生成唯一 ID，用于 scoped CSS 和文件名
   const uuid = () => {
     function S4() {
@@ -159,7 +188,6 @@ export function compileFile(code, compiled) {
   const filename = `${id}.vue`;
 
   // 第一步：解析 SFC 模板
-  let descriptor;
   try {
     const parseResult = SFCCompiler.parse(code, {
       filename,
@@ -170,12 +198,13 @@ export function compileFile(code, compiled) {
       compiled.errors = parseResult.errors.map((err) => err.message);
       return;
     }
-    descriptor = parseResult.descriptor;
+    return { descriptor: parseResult.descriptor, id, filename };
   } catch (e) {
     compiled.errors.push(`SFC 解析失败：${e.message}`);
-    return;
   }
+}
 
+function compileParsedFile(code, compiled, { descriptor, id, filename }, babel) {
   // 第二步：校验组合式 API 使用环境（仅允许 <script setup>）
   if (hasVueCompositionFunctions(code) && !hasScriptSetup(code)) {
     compiled.errors.push(
@@ -192,7 +221,7 @@ export function compileFile(code, compiled) {
     clientCode += code;
   };
 
-  const clientScriptResult = compileScript(descriptor, id, compiled);
+  const clientScriptResult = compileScript(descriptor, id, compiled, babel);
   if (!clientScriptResult) {
     return;
   }
@@ -303,9 +332,7 @@ export function compileFile(code, compiled) {
 }
 
 // ===================== 第五步：脚本编译（compileScript）=====================
-function compileScript(descriptor, id, compiled) {
-  const result = { errors: [] };
-
+function compileScript(descriptor, id, compiled, babel) {
   try {
     // 无脚本时返回空组件
     if (!descriptor.script && !descriptor.scriptSetup) {
@@ -325,36 +352,28 @@ function compileScript(descriptor, id, compiled) {
       code += `\n/* Analyzed bindings: ${JSON.stringify(compiledScript.bindings, null, 2)} */`;
     }
 
-    // TypeScript 转译处理（运行时动态获取 Babel，避免模块加载竞态导致 TS 编译失效）
-    const isTypeScript = descriptor.script?.lang === "ts" || descriptor.scriptSetup?.lang === "ts";
-    if (isTypeScript) {
-      const BabelRuntime = getBabel();
-      if (BabelRuntime) {
-        try {
-          const transformResult = BabelRuntime.transform(code, {
-            filename: `${id}.ts`,
-            presets: ["typescript"],
-            sourceType: "module",
-          });
+    if (usesTypeScript(descriptor)) {
+      if (!babel) {
+        compiled.errors.push("TypeScript 编译器尚未加载，请通过 compileCode 编译 TypeScript 组件");
+        return;
+      }
+      try {
+        const transformResult = babel.transform(code, {
+          filename: `${id}.ts`,
+          presets: ["typescript"],
+          sourceType: "module",
+        });
 
-          if (transformResult.errors && transformResult.errors.length) {
-            const tsErrors = transformResult.errors.map((e) => `TS 转译失败：${e.message}`);
-            result.errors = tsErrors;
-            compiled.errors = tsErrors;
-            return;
-          }
-
-          code = transformResult.code || code;
-        } catch (transformErr) {
-          const tsError = `TS 转译异常：${transformErr instanceof Error ? transformErr.message : String(transformErr)}`;
-          result.errors = [tsError];
-          compiled.errors = [tsError];
+        if (transformResult.errors && transformResult.errors.length) {
+          compiled.errors = transformResult.errors.map((e) => `TS 转译失败：${e.message}`);
           return;
         }
-      } else {
-        console.warn(
-          "[sfc-compiler] 检测到 lang=\"ts\" 但 Babel 尚未加载完成，TypeScript 类型注解将无法剥离。请确保 /babel.min.js 正常加载。"
-        );
+
+        code = transformResult.code || code;
+      } catch (transformErr) {
+        const tsError = `TS 转译异常：${transformErr instanceof Error ? transformErr.message : String(transformErr)}`;
+        compiled.errors = [tsError];
+        return;
       }
     }
 
@@ -363,9 +382,7 @@ function compileScript(descriptor, id, compiled) {
 
     return [code, compiledScript.bindings];
   } catch (e) {
-    const errorMsg = `脚本编译失败：${e.message}`;
-    compiled.errors.push(errorMsg);
-    result.errors.push(errorMsg);
+    compiled.errors.push(`脚本编译失败：${e.message}`);
     return;
   }
 }
@@ -425,26 +442,3 @@ function hasScriptSetup(content) {
   const regex = /<script\s+setup[^>]*>/i; // 忽略大小写，提高兼容性
   return regex.test(content);
 }
-
-/*function doCompileScript(descriptor, id, compiled) {
-  if (descriptor.script || descriptor.scriptSetup) {
-    try {
-      const compiledScript = SFCCompiler.compileScript(descriptor, {
-        id,
-        refSugar: true,
-        inlineTemplate: true,
-      });
-      let code = "";
-      if (compiledScript.bindings) {
-        code += `\n/!* Analyzed bindings: ${JSON.stringify(compiledScript.bindings, null, 2)} *!/`;
-      }
-      code += `\n` + SFCCompiler.rewriteDefault(compiledScript.content, COMP_IDENTIFIER);
-      return [code, compiledScript.bindings];
-    } catch (e) {
-      compiled.errors = [e];
-      return;
-    }
-  } else {
-    return [`\nconst ${COMP_IDENTIFIER} = {}`, undefined];
-  }
-}*/

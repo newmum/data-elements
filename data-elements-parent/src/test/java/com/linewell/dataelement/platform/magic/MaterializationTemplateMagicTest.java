@@ -313,12 +313,10 @@ class MaterializationTemplateMagicTest {
         // This isolated helper test does not execute the endpoint's runtime initialization.
         String helpers = canonical.substring(canonical.indexOf("var text ="), canonical.indexOf("var upsertCatalogProp"))
                 .replace("var tenantId = tenantRuntime.id()", "");
-        String boundary = canonical.substring(canonical.indexOf("// Hive 的物理表名"), canonical.indexOf("// The submitted rows"));
+        var normalize = MagicScript.create(helpers + "return normalizePhysicalTargetName(name, targetType)", null);
         for (String type : List.of("hive", "mrshive", "oracle", "postgresql", "mysql")) {
-            Map<String, Object> submitted = new LinkedHashMap<>(Map.of("tableName", "ODS_Mixed_TABLE", "dbType", "mysql"));
-            Map<?, ?> normalized = assertInstanceOf(Map.class, MagicScript.create(helpers + boundary + "return propList", null)
-                    .execute(new MagicScriptContext(Map.of("propList", submitted, "targetDatasource", Map.of("dbType", type)))));
-            assertEquals(type.equals("hive") || type.equals("mrshive") ? "ods_mixed_table" : "ODS_Mixed_TABLE", normalized.get("tableName"));
+            Object normalized = normalize.execute(new MagicScriptContext(Map.of("name", "ODS_Mixed_TABLE", "targetType", type)));
+            assertEquals(type.equals("hive") || type.equals("mrshive") ? "ods_mixed_table" : "ODS_Mixed_TABLE", normalized);
         }
     }
 

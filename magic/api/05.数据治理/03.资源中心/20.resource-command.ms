@@ -22,11 +22,10 @@
   "responseBodyDefinition" : null
 }
 ================================
-// 02.资源中心业务命令入口。路由白名单、租户会话与乐观版本统一校验。
 import tenantRuntime
 import dataScope
+import tableRead
 import tableSort
-import cn.hutool.core.util.StrUtil
 import cn.hutool.core.util.NumberUtil
 import '@/resource-center/planning-read' as planningRead
 import '@/resource-center/model-read' as modelRead
@@ -37,6 +36,14 @@ import '@/resource-center/model-command' as modelCommand
 import '@/resource-center/materialization-command' as materializationCommand
 import '@/resource-center/resource-command' as resourceCommand
 import '@/resource-center/catalog-command' as catalogCommand
+
+/**
+ * 磐石资源中心业务入口。POST /dwm/center/resource-command
+ * 接收 kind、method 和 body。表格读取传 kind=table、method=GET，body 指定 table、分页及筛选。
+ * 模型日志和目录在数据库分页，配置视图先逐项核验请求 ID 再排序。业务租户取自当前会话。
+ * 写入请求交给对应业务函数校验版本和权限。
+ */
+
 var tenantId = tenantRuntime.id()
 if (body == null || body.kind == null) { exit 400,'缺少资源操作类型' }
 var command = body
@@ -46,7 +53,7 @@ if (command.body == null) { command.body = {} }
 if (command.body.tenantId != null) { exit 400,'不能通过请求切换业务租户' }
 var kind = command.kind + ''
 
-// Lists use the same authenticated command gateway, with a read-only operation.
+// 表格请求通过同一认证入口，只允许读取。
 if (kind == 'table') {
     if (command.method != 'GET') { exit 400,'表格排序只支持读取' }
     var q = command.body
@@ -58,54 +65,111 @@ if (kind == 'table') {
 
     if (table == 'modelLogs') {
         var events = {
-            '创建逻辑模型':{stage:'设计',event:'创建模型'}, '复制逻辑模型':{stage:'设计',event:'复制模型'},
-            '维护逻辑模型：保存':{stage:'设计',event:'保存模型设计'}, '维护逻辑模型：reverse':{stage:'设计',event:'导入来源表'},
-            '维护逻辑模型：reference':{stage:'设计',event:'引用模型实体'}, '维护逻辑模型：bind':{stage:'标准化',event:'绑定数据标准'},
-            '生成模型数据项集':{stage:'标准化',event:'生成数据项集'}, '提交标准候选':{stage:'标准化',event:'提交标准候选'},
-            '冻结设计版本':{stage:'版本',event:'冻结设计版本'}, '维护逻辑模型：archive':{stage:'版本',event:'归档模型'},
-            '创建物化方案':{stage:'物化',event:'创建物化方案'}, '重新预检物化':{stage:'物化',event:'重新预检物化'},
-            '开始物化建表':{stage:'物化',event:'开始物化建表'}, '物化执行完成':{stage:'物化',event:'物化执行完成'},
-            '请求取消物化':{stage:'物化',event:'请求取消物化'}, '装载融合模型数据':{stage:'物化',event:'装载融合数据'},
-            '融合模型装载失败':{stage:'物化',event:'融合装载失败'}
+            '创建逻辑模型': {stage: '设计', event: '创建模型'},
+            '复制逻辑模型': {stage: '设计', event: '复制模型'},
+            '维护逻辑模型：保存': {stage: '设计', event: '保存模型设计'},
+            '维护逻辑模型：reverse': {stage: '设计', event: '导入来源表'},
+            '维护逻辑模型：reference': {stage: '设计', event: '引用模型实体'},
+            '维护逻辑模型：bind': {stage: '标准化', event: '绑定数据标准'},
+            '生成模型数据项集': {stage: '标准化', event: '生成数据项集'},
+            '提交标准候选': {stage: '标准化', event: '提交标准候选'},
+            '冻结设计版本': {stage: '版本', event: '冻结设计版本'},
+            '维护逻辑模型：archive': {stage: '版本', event: '归档模型'},
+            '创建物化方案': {stage: '物化', event: '创建物化方案'},
+            '重新预检物化': {stage: '物化', event: '重新预检物化'},
+            '开始物化建表': {stage: '物化', event: '开始物化建表'},
+            '物化执行完成': {stage: '物化', event: '物化执行完成'},
+            '请求取消物化': {stage: '物化', event: '请求取消物化'},
+            '装载融合模型数据': {stage: '物化', event: '装载融合数据'},
+            '融合模型装载失败': {stage: '物化', event: '融合装载失败'}
         }
-        var actions = []; var stageActions = []
         var stage = q.stage == null ? '' : q.stage + ''
-        if (!['','设计','标准化','版本','物化'].contains(stage)) { exit 400,'模型阶段无效' }
-        for (action in events.keySet()) { actions.add(action); if (stage == '' || events[action].stage == stage) { stageActions.add(action) } }
-        var modelId = q.modelId == null ? '' : q.modelId + ''
-        if (modelId != '' && db.selectOne('SELECT tid FROM res_logical_model WHERE tenant_id=#{tenantId} AND tid=#{modelId} AND is_del=0') == null) { exit 404,'模型不属于当前租户' }
-        var keyword = q.keyword == null ? '' : (q.keyword + '').trim()
-        if (keyword.length() > 200) { exit 400,'检索关键词过长' }
-        var search = '%' + keyword + '%'
-        var nameSql = "COALESCE(m.model_name,l.object_name,'关联模型已不存在')"
-        var order = tableSort.field(q,{time:'l.created_time',modelName:nameSql},'time')
-        var dir = tableSort.direction(q)
-        var logsSql = """
-          SELECT l.tid AS id,l.actor_id,l.action_name AS action,l.object_id,l.object_name AS name,l.detail_text AS detail,
-                 l.created_time AS time,m.tid AS model_id,m.model_code,m.model_status AS model_status,
-        """ + nameSql + """ AS model_name
-            FROM res_resource_operation_log l
-            LEFT JOIN res_materialization_plan p ON p.tid=l.object_id AND p.tenant_id=l.tenant_id AND p.is_del=0
-            LEFT JOIN res_model_itemset i ON i.tid=l.object_id AND i.tenant_id=l.tenant_id AND i.is_del=0
-            LEFT JOIN res_logical_model m ON m.tid=COALESCE(p.model_id,i.model_id,l.object_id) AND m.tenant_id=l.tenant_id AND m.is_del=0
-           WHERE l.tenant_id=#{tenantId}
-             AND l.action_name IN <foreach collection="stageActions" item="action" open="(" close=")" separator=",">#{action}</foreach>
-             AND (#{modelId}='' OR m.tid=#{modelId})
-             AND (#{keyword}='' OR m.model_name LIKE #{search} OR m.model_code LIKE #{search} OR l.object_name LIKE #{search} OR l.detail_text LIKE #{search} OR l.action_name LIKE #{search})
-        """ + " ORDER BY (" + order + ") IS NULL," + order + " " + dir + ",l.tid ASC"
-        var result = db.page(logsSql,size,(page-1)*size)
-        var value = (row,key) => row[key] == null ? row[StrUtil.toCamelCase(key)] == null ? row[key.toLowerCase()] == null ? row[key.toUpperCase()] : row[key.toLowerCase()] : row[StrUtil.toCamelCase(key)] : row[key]
-        var actorIds = []; for (row in result.list) { var id = value(row,'actor_id'); if (id != null && !actorIds.contains(id)) { actorIds.add(id) } }
-        var users = actorIds.size() == 0 ? [] : db.table('rm_user_t').column('id,real_name,user_name').where().eq('tenant_id',tenantId).in('id',actorIds).select()
-        var names = {}; for (user in users) { names[value(user,'id') + ''] = value(user,'real_name') == null || value(user,'real_name') == '' ? value(user,'user_name') : value(user,'real_name') }
-        var list = []
-        for (row in result.list) {
-            var action = value(row,'action') + ''; var actor = value(row,'actor_id') + ''
-            list.add({id:value(row,'id'),actorId:actor,actorName:names[actor],action:action,objectId:value(row,'object_id'),name:value(row,'name'),
-                detail:value(row,'detail'),time:value(row,'time'),modelId:value(row,'model_id'),modelName:value(row,'model_name'),modelCode:value(row,'model_code'),
-                modelArchived:value(row,'model_status') == 'ARCHIVED',stage:events[action].stage,event:events[action].event})
+        if (!['', '设计', '标准化', '版本', '物化'].contains(stage)) {
+            exit 400, '模型阶段无效'
         }
-        return {list:list,total:result.total,page:page,size:size}
+        var stageActions = []
+        for (action in events.keySet()) {
+            if (stage == '' || events[action].stage == stage) {
+                stageActions.add(action)
+            }
+        }
+        var modelId = q.modelId == null ? '' : q.modelId + ''
+        if (modelId != '') {
+            var model = db.lower().table('res_logical_model').columns('tid').where()
+                .eq('tenant_id', tenantId).eq('tid', modelId).eq('is_del', 0).selectOne()
+            if (model == null) {
+                exit 404, '模型不属于当前租户'
+            }
+        }
+        var keyword = q.keyword == null ? '' : (q.keyword + '').trim()
+        if (keyword.length() > 200) {
+            exit 400, '检索关键词过长'
+        }
+
+        var column = (alias, name) => tableRead.column(alias, name, 'TEXT')
+        var active = alias => tableRead.equal(tableRead.column(alias, 'is_del', 'NUMBER'), 0)
+        var logs = tableRead.from('res_resource_operation_log', 'l', tenantId)
+        var logAction = column('l', 'action_name')
+        var logName = column('l', 'object_name')
+        var logDetail = tableRead.column('l', 'detail_text', 'LOB')
+        var linkedModelId = column('m', 'tid')
+        var modelName = column('m', 'model_name')
+        var modelCode = column('m', 'model_code')
+        var displayName = tableRead.coalesce([modelName, logName, '关联模型已不存在'])
+
+        logs.leftJoin('res_materialization_plan', 'p', 'tid', 'object_id', [active('p')])
+        logs.leftJoin('res_model_itemset', 'i', 'tid', 'object_id', [active('i')])
+        // 优先按有效物化方案、数据项集的模型标识关联，最后才用日志对象标识。
+        var modelReference = tableRead.coalesce([column('p', 'model_id'), column('i', 'model_id'), column('l', 'object_id')])
+        logs.leftJoin('res_logical_model', 'm', 'tenant_id', 'tenant_id', [
+            active('m'), tableRead.equal(linkedModelId, modelReference)
+        ])
+        logs.where(tableRead.in(logAction, stageActions))
+        if (modelId != '') {
+            logs.where(tableRead.equal(linkedModelId, modelId))
+        }
+        if (keyword != '') {
+            // 保留原有通配检索，关键词作为参数绑定。
+            var search = '%' + keyword + '%'
+            logs.where(tableRead.any([
+                tableRead.like(modelName, search), tableRead.like(modelCode, search),
+                tableRead.like(logName, search), tableRead.like(logDetail, search), tableRead.like(logAction, search)
+            ]))
+        }
+        var logTime = tableRead.column('l', 'created_time', 'TIME')
+        var order = tableSort.field(q, {time: 'time', modelName: 'modelName'}, 'time')
+        var result = logs.page({
+            id: column('l', 'tid'), actorId: column('l', 'actor_id'), action: logAction,
+            objectId: column('l', 'object_id'), name: logName, detail: logDetail, time: logTime,
+            modelId: linkedModelId, modelName: displayName, modelCode: modelCode, modelStatus: column('m', 'model_status')
+        }, order == 'time' ? logTime : displayName, tableSort.direction(q), 'tid', page, size)
+
+        // 操作人标识只取当前页，并按当前租户批量查询姓名。
+        var actorIds = []
+        for (row in result.rows) {
+            if (row.actorId != null && !actorIds.contains(row.actorId)) {
+                actorIds.add(row.actorId)
+            }
+        }
+        var names = {}
+        if (actorIds.size() > 0) {
+            var users = db.lower().table('rm_user_t').columns('id', 'real_name', 'user_name').where()
+                .eq('tenant_id', tenantId).in('id', actorIds).select()
+            for (user in users) {
+                names[user.id + ''] = user.real_name == null || user.real_name == '' ? user.user_name : user.real_name
+            }
+        }
+        var list = []
+        for (row in result.rows) {
+            var actor = row.actorId + ''
+            var event = events[row.action]
+            list.add({
+                id: row.id, actorId: actor, actorName: names[actor], action: row.action, objectId: row.objectId,
+                name: row.name, detail: row.detail, time: row.time, modelId: row.modelId, modelName: row.modelName,
+                modelCode: row.modelCode, modelArchived: row.modelStatus == 'ARCHIVED', stage: event.stage, event: event.event
+            })
+        }
+        return {list: list, total: result.total, page: page, size: size}
     }
     var ids = q.ids == null ? [] : q.ids
     if (ids.size() > 1000) { exit 400,'配置视图最多支持1000项，请缩小范围' }
@@ -117,33 +181,31 @@ if (kind == 'table') {
     var all = []; var allowed = {name:'name',updatedAt:'updatedAt',createdAt:'createdAt'}
     if (['layers','databases','bindings'].contains(table)) {
         var planning = planningRead({})
-        var domainIds = []; for (domain in planning.databases) { domainIds.add(domain.id) }
-        if (domainIds.size() == 0) { domainIds = [''] }
-        var scope = dataScope.dataSource()
-        var scopeMode = scope.scope + ''; var scopeUserId = scope.userId + ''
-        var scopeOrgIds = scope.organizationIds == null ? [] : scope.organizationIds
-        var scopeOrgCount = scopeOrgIds.size(); if (scopeOrgCount == 0) { scopeOrgIds = [''] }
-        if (!['ALL','OWNER','ORG'].contains(scopeMode) || scopeUserId == '') { exit 403,'无法确定当前数据范围' }
-        var counts = db.select("""SELECT t.resource_domain_id AS id,COUNT(*) AS amount
-            FROM db_table_t t JOIN db_datasource_t s ON s.tid=t.datasource_id AND s.tenant_id=t.tenant_id AND s.is_del=0
-           WHERE t.tenant_id=#{tenantId} AND t.is_del=0
-             AND (#{scopeMode}='ALL' OR (#{scopeMode}='OWNER' AND s.created_by=#{scopeUserId})
-               OR (#{scopeMode}='ORG' AND #{scopeOrgCount}>0 AND s.org_id IN
-                 <foreach collection="scopeOrgIds" item="oid" open="(" close=")" separator=",">#{oid}</foreach>))
-             AND t.resource_domain_id IN <foreach collection="domainIds" item="did" open="(" close=")" separator=",">#{did}</foreach>
-           GROUP BY t.resource_domain_id""")
-        var resourceCounts = {}; for (row in counts) { resourceCounts[row.id + ''] = row.amount }
-        for (layer in planning.layers) {
-            var count = 0; for (domain in planning.databases) { if (domain.layerId == layer.id) { count = count + 1 } }
-            layer.count = count; layer.tables = layer.sourceId == '' ? null : layer.tableCount; layer.source = layer.sourceName
-            if (table == 'layers') { all.add(layer) }
-            if (table == 'bindings') { all.add({id:'layer:' + layer.id,name:layer.name,source:layer.sourceName,tableCount:layer.sourceId == '' ? null : layer.tableCount}) }
-        }
-        for (domain in planning.databases) {
-            domain.count = resourceCounts[domain.id] == null ? 0 : resourceCounts[domain.id]
-            domain.tables = domain.sourceId == '' ? null : domain.tableCount; domain.source = domain.sourceName
-            if (table == 'databases') { all.add(domain) }
-            if (table == 'bindings') { all.add({id:'domain:' + domain.id,name:domain.name,source:domain.sourceName,tableCount:domain.sourceId == '' ? null : domain.tableCount}) }
+        if (table == 'layers') {
+            var domainsByLayer = {}
+            for (domain in planning.databases) {
+                var count = domainsByLayer[domain.layerId]
+                domainsByLayer[domain.layerId] = count == null ? 1 : count + 1
+            }
+            for (layer in planning.layers) {
+                layer.count = domainsByLayer[layer.id] == null ? 0 : domainsByLayer[layer.id]
+                layer.tables = layer.sourceId == '' ? null : layer.tableCount
+                layer.source = layer.sourceName
+                all.add(layer)
+            }
+        } else if (table == 'databases') {
+            for (domain in planning.databases) {
+                domain.tables = domain.sourceId == '' ? null : domain.tableCount
+                domain.source = domain.sourceName
+                all.add(domain)
+            }
+        } else {
+            var bindingRow = (prefix, row) => ({
+                id: prefix + row.id, name: row.name, source: row.sourceName,
+                tableCount: row.sourceId == '' ? null : row.tableCount
+            })
+            all.addAll(planning.layers.map(row => bindingRow('layer:', row)))
+            all.addAll(planning.databases.map(row => bindingRow('domain:', row)))
         }
         allowed.putAll({count:'count',tables:'tables',tableCount:'tableCount',source:'source'})
     } else if (['models','materializations','itemSets','fields','materializationItems'].contains(table)) {
@@ -182,7 +244,7 @@ if (kind == 'table') {
         allowed.putAll({appCount:'appCount',dbCount:'dbCount',tableCount:'tableCount'})
     } else { exit 400,'不支持的资源表格' }
     var byId = {}; for (row in all) { byId[row.id + ''] = row }
-    // Every requested ID is checked against the authorized server collection before ordering.
+    // 请求的每个 ID 都必须来自当前会话可见的服务端集合。
     var selected = []
     for (id in unique) { if (byId[id] == null) { exit 404,'部分记录不存在或不在当前可见范围' }; selected.add(byId[id]) }
     var keyword = q.keyword == null ? '' : (q.keyword + '').trim().toLowerCase()
@@ -190,6 +252,36 @@ if (kind == 'table') {
     var filtered = []
     for (row in selected) {
         if (keyword == '' || ((row.name == null ? '' : row.name) + ' ' + (row.code == null ? '' : row.code) + ' ' + (row.source == null ? '' : row.source)).toLowerCase().contains(keyword)) { filtered.add(row) }
+    }
+    if (table == 'databases' && filtered.size() > 0) {
+        // 仅分库视图使用分域资源数。对已校验且匹配检索的分域先批量统计，再排序和分页。
+        var scope = dataScope.dataSource()
+        var scopeMode = scope?.scope == null ? '' : scope.scope + ''
+        var scopeUserId = scope?.userId == null ? '' : scope.userId + ''
+        var scopeOrgIds = scope?.organizationIds == null ? [] : scope.organizationIds
+        if (!['ALL', 'OWNER', 'ORG'].contains(scopeMode) || scopeUserId == '') {
+            exit 403, '无法确定当前数据范围'
+        }
+        var tables = tableRead.from('db_table_t', 't', tenantId)
+        var domainId = tableRead.column('t', 'resource_domain_id', 'TEXT')
+        tables.leftJoin('db_datasource_t', 's', 'tid', 'datasource_id', [
+            tableRead.equal(tableRead.column('s', 'is_del', 'NUMBER'), 0)
+        ])
+        tables.where(tableRead.equal(tableRead.column('t', 'is_del', 'NUMBER'), 0))
+        tables.where(tableRead.not(tableRead.isNull(tableRead.column('s', 'tid', 'TEXT'))))
+        tables.where(tableRead.in(domainId, filtered.map(row => row.id)))
+        if (scopeMode == 'OWNER') {
+            tables.where(tableRead.equal(tableRead.column('s', 'created_by', 'TEXT'), scopeUserId))
+        } else if (scopeMode == 'ORG') {
+            tables.where(tableRead.in(tableRead.column('s', 'org_id', 'TEXT'), scopeOrgIds))
+        }
+        var resourceCounts = {}
+        for (row in tables.grouped({id: domainId, amount: tableRead.count()}, [domainId])) {
+            resourceCounts[row.id] = row.amount
+        }
+        for (row in filtered) {
+            row.count = resourceCounts[row.id] == null ? 0 : resourceCounts[row.id]
+        }
     }
     var order = {sortField:q.sortField == null ? 'name' : q.sortField,sortDir:q.sortDir == null ? 'asc' : q.sortDir}
     var sorted = tableSort.rows(filtered,order,allowed,'name','id')

@@ -17,15 +17,11 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "元数据管理 14：生成建表 DDL；使用请求参数 propList、tableItems、canvas、sourceDatabaseType；涉及 db_datasource_t 等业务表；读取或计算后返回业务结果。",
+  "description": "根据字段和登记的目标库方言预览建表 DDL。单表返回 SQL 字符串。画布支持不同数据源批量预览，以及同一租户单一数据源有界预览。同源预览返回成功前缀和首项失败信息。不会连接目标库执行建表。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：14.获取ddl建表语句
-// 路由：POST /dst/database/metadata/getCreateTableDDL
-// 业务说明：元数据管理 14：生成建表 DDL；使用请求参数 propList、tableItems、canvas、sourceDatabaseType；涉及 db_datasource_t 等业务表；读取或计算后返回业务结果。
-
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
 import cn.hutool.json.JSONUtil as poolJsons
@@ -42,11 +38,11 @@ import com.linewell.dataelement.metautil.service.MetadataExplorerService as meta
 import java.util.Map
 import java.util.List
 
-/*
- * 元数据管理 14：生成建表 DDL。
- *
- * 只读接口。根据 propList.tableName/tableNameCn 和 tableItems 字段定义生成目标库方言的 CREATE TABLE。
- * 传 dbId 时按目标数据库类型生成；不传 dbId 时使用默认 MySQL 配置，仅用于模板预览。
+/**
+ * POST /dst/database/metadata/getCreateTableDDL
+ * 根据 propList、tableItems 和目标库方言生成建表语句，单表返回 DDL 字符串。
+ * canvasBatchGenerate 接收当前租户已登记的 dbId 和同源 targets，按原顺序返回成功前缀和首项失败。
+ * batchGenerate 保持原有多数据源预览契约。预览只生成文本，不连接目标库执行建表。
  */
 
 // 来源DDL转换只处理文本与字段模型，不查询业务资源或校验租户。
@@ -69,7 +65,7 @@ if (body?.importSourceDdl == true || body?.convertSourceDdl == true) {
 
 var textOf = (value) => value == null ? null : value + ''
 var blank = (value) => value == null || textOf(value).trim() == ''
-var ddlFailureTip = (failure) => {
+var ddlFailureTip = (failure, includeReason) => {
     var reason = failure == null ? '' : textOf(failure.getMessage())
     if (blank(reason)) { return '请检查字段类型、长度和分区配置后重试' }
     if (reason.contains('请配置1至') || reason.contains('LIST分区必须填写枚举值')) {
@@ -84,7 +80,7 @@ var ddlFailureTip = (failure) => {
     if (reason.contains('分区名称或Hive分桶值重复')) { return '分区名称或分区目录有重复，请为每个分区设置不同的名称' }
     if (reason.contains('该MySQL目标不支持LIST DEFAULT')) { return '当前目标库不支持区域分区的默认兜底分区，请明确列出区域编码或调整分区规则' }
     if (reason.contains('按月分区请选择目标')) { return '按月分区需要日期或时间字段，请更换分区字段；按区域编码划分请选择区域／枚举分区' }
-    return reason
+    return includeReason ? reason : '请检查字段类型、长度和分区配置后重试'
 }
 var rowValue = (row, keys) => {
     if (row == null) {
@@ -427,10 +423,151 @@ if (body?.batchGenerate == true) {
                 tableName: requestedTableName, ddl: ddl, warnings: previewWarnings, tableItems: converted.tableItems,
                 partitionPlan:partitionPlan, partitionSupported:tablePartitions.supported(targetType)})
         } catch (e) {
-            exit 400, '目标数据源“' + targetDisplayName + '”未能生成建表语句：' + ddlFailureTip(e)
+            exit 400, '目标数据源“' + targetDisplayName + '”未能生成建表语句：' + ddlFailureTip(e, true)
         }
     }
     return {batchGenerate: true, results: generated}
+}
+
+// 从可信租户的登记配置解析一次目标方言，不使用请求中的连接参数。
+var canvasConfig = (sourceId) => {
+    if (blank(sourceId)) { exit 400, '请选择已登记的目标库' }
+    if (blank(tenantId)) { exit 401, '无法识别当前租户' }
+    var registered = connectionProperties.resolve(tenantId, textOf(sourceId))
+    if (registered == null || registered.isEmpty()) { exit 404, '当前租户中不存在所选目标数据源' }
+    var typeCode = textOf(registered.dbType)
+    var targetType = blank(typeCode) ? null : DatabaseType.fromCode(typeCode.toLowerCase())
+    if (targetType == null) { exit 400, '目标数据源未配置数据库类型' }
+    var config = new DataSourceConfig()
+    config.setDatabaseType(targetType)
+    config.setConnectorProperties(registered)
+    config.setDatabase(firstValue(registered, ['database', 'dbName', 'dbMetaDbName']))
+    config.setUsername(firstValue(registered, ['username', 'user']))
+    config.setSchema(firstValue(registered, ['schema', 'defaultSchema', 'currentSchema', 'schemaName']))
+    return config
+}
+
+// 受保护的 ODS 入库时间字段使用实际目标库类型，避免采用编辑表单的旧类型。
+var materializationTimeType = (databaseType) => {
+    var code = databaseType == null ? '' : textOf(databaseType.getCode()).trim().toLowerCase()
+    if (code.indexOf('oceanbase') >= 0 || code == 'oracle' || code == 'dameng') {
+        return 'DATE'
+    }
+    if (code == 'postgresql' || code == 'kingbase' || code == 'gaussdb'
+        || code == 'vertica' || code == 'hetu' || code == 'hive') {
+        return 'TIMESTAMP'
+    }
+    if (code == 'sqlserver') {
+        return 'DATETIME2'
+    }
+    return 'DATETIME'
+}
+
+var columnsFor = (request, dsConfig) => {
+    var columns = []
+    for (item in request.tableItems) {
+        var columnInfo = new ColumnInfo()
+        columnInfo.setSourceDatabaseType(firstValue(item, ['sourceDatabaseType']) || (request.sourceDatabaseType == null ? null : textOf(request.sourceDatabaseType)))
+        var columnName = firstValue(item, ['columnName', 'name'])
+        var normalizedColumnName = blank(columnName) ? '' : textOf(columnName).trim().toUpperCase()
+        var dataType = firstValue(item, ['dataType', 'type'])
+        var columnType = resolvedColumnType(item)
+        if (normalizedColumnName == 'ODS_RKSJ' || normalizedColumnName == 'ODS_GXSJ') {
+            dataType = materializationTimeType(dsConfig.getEffectiveDatabaseType())
+            columnType = dataType
+        }
+        columnInfo.setColumnName(columnName)
+        columnInfo.setQuotedIdentifier(rowValue(item, ['quotedIdentifier']) == true)
+        columnInfo.setColumnComment(firstValue(item, ['columnComment', 'comment']))
+        columnInfo.setDataType(dataType)
+        columnInfo.setColumnType(columnType)
+        if (rowValue(item, ['length']) != null) {
+            columnInfo.setLength(rowValue(item, ['length'])::long)
+        }
+        if (rowValue(item, ['precisionLength']) != null) {
+            columnInfo.setPrecision(rowValue(item, ['precisionLength'])::int)
+        }
+        if (rowValue(item, ['scale']) != null) {
+            columnInfo.setScale(rowValue(item, ['scale'])::int)
+        }
+        columnInfo.setNullable(rowValue(item, ['nullable']) == 1 || rowValue(item, ['nullable']) == true)
+        columnInfo.setDefaultValue(rowValue(item, ['defaultValue']))
+        columnInfo.setPrimaryKey(rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true)
+        columnInfo.setAutoIncrement(rowValue(item, ['autoIncrement']) == 1 || rowValue(item, ['autoIncrement']) == true)
+        columnInfo.setUnique(rowValue(item, ['isUnique', 'unique']) == 1 || rowValue(item, ['isUnique', 'unique']) == true)
+        columnInfo.setIndexed(rowValue(item, ['indexed']) == 1 || rowValue(item, ['indexed']) == true)
+        if (rowValue(item, ['ordinalPosition']) != null) {
+            columnInfo.setOrdinalPosition(rowValue(item, ['ordinalPosition'])::int)
+        }
+        columnInfo.setCharset(rowValue(item, ['charset']))
+        columnInfo.setLengthSemantics(rowValue(item, ['lengthSemantics']))
+        if (rowValue(item, ['characterLength']) != null) { columnInfo.setCharacterLength(rowValue(item, ['characterLength'])::long) }
+        if (rowValue(item, ['byteLength']) != null) { columnInfo.setByteLength(rowValue(item, ['byteLength'])::long) }
+        columnInfo.setCollation(rowValue(item, ['collation']))
+        columnInfo.setExtra(rowValue(item, ['extra']))
+        columns.add(columnInfo)
+    }
+    return columns
+}
+
+var renderDdl = (request, dsConfig, columns) => {
+    var propList = request.propList
+    var targetTableName = textOf(propList.tableName).trim()
+    if (dsConfig.getEffectiveDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
+    var converted = portableDdl.prepare(columns, dsConfig)
+    var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
+    var partitionPlan = tablePartitions.normalize(request?.partitionPlan, converted.columns, dsConfig.getEffectiveDatabaseType())
+    ddl = tablePartitions.enrichConstraints(ddl, request?.sourceConstraints, dsConfig, partitionPlan).ddl
+    return tablePartitions.apply(ddl, partitionPlan, dsConfig)
+}
+
+if (body?.canvasBatchGenerate == true) {
+    if (body.canvas != true) { exit 400, '同源批量生成建表语句仅支持画布物化流程' }
+    var targets = body.targets
+    if (!(targets instanceof List) || targets.size() == 0 || targets.size() > 100) {
+        exit 400, '请选择 1 至 100 张同源目标表'
+    }
+    var sourceId = textOf(body.dbId)
+    var config = canvasConfig(sourceId)
+    var names = {}
+    var response = {canvasBatchGenerate: true, results: [], error: null}
+    var index = 0
+
+    // 使用同一份已校验的登记配置渲染，循环内无数据库读取。首项失败时返回已生成的有序前缀。
+    for (target in targets) {
+        var props = target instanceof Map ? target.propList : null
+        var name = props instanceof Map && !blank(props.tableName) ? textOf(props.tableName).trim() : null
+        var normalizedName = name == null ? null : name.toLowerCase()
+        var items = target instanceof Map ? target.tableItems : null
+        var message = null
+        if (name == null) {
+            message = '目标表名不能为空'
+        } else if (props.dbId != null && textOf(props.dbId) != sourceId) {
+            message = '目标表必须使用同一已登记数据源'
+        } else if (names.containsKey(normalizedName)) {
+            message = '同源预览的目标表名不能重复'
+        } else if (!(items instanceof List) || items.size() == 0 || items.size() > 1000) {
+            message = '每张目标表须包含 1 至 1000 个字段'
+        } else {
+            names[normalizedName] = true
+            try {
+                var ddl = renderDdl(target, config, columnsFor(target, config))
+                if (blank(ddl)) {
+                    message = '共享DDL接口未返回建表脚本'
+                } else {
+                    response.results.add({tableName: name, ddl: ddl})
+                }
+            } catch (failure) {
+                message = '未能生成建表语句：' + ddlFailureTip(failure, false)
+            }
+        }
+        if (message != null) {
+            response.error = {index: index, tableName: name, message: message}
+            break
+        }
+        index = index + 1
+    }
+    return response
 }
 
 // 解析请求体并为可选参数设置默认值。
@@ -446,31 +583,14 @@ if (propList == null || blank(propList.tableName)) {
 }
 
 var dsConfig
-var targetConnection = {}
-var registeredTypeCode = null
 if (body.canvas == true) {
-    if (blank(propList.dbId)) { exit 400, '请选择已登记的目标库' }
-    var registered = connectionProperties.resolve(tenantRuntime.id(), textOf(propList.dbId))
-    if (registered == null || registered.isEmpty()) { exit 404, '当前租户中不存在所选目标数据源' }
-    targetConnection = registered
-    registeredTypeCode = registered.dbType
-    // DDL generation only needs target dialect/scope; managed Hive credentials stay on the server.
-    dsConfig = new DataSourceConfig()
-    var targetType = DatabaseType.fromCode(textOf(registered.dbType).toLowerCase())
-    if (targetType == null) { exit 400, '目标数据源未配置数据库类型' }
-    dsConfig.setDatabaseType(targetType)
-    dsConfig.setConnectorProperties(registered)
-    dsConfig.setDatabase(firstValue(registered, ['database', 'dbName', 'dbMetaDbName']))
-    dsConfig.setUsername(firstValue(registered, ['username', 'user']))
-    dsConfig.setSchema(firstValue(registered, ['schema', 'defaultSchema', 'currentSchema', 'schemaName']))
+    dsConfig = canvasConfig(propList.dbId)
 } else if (propList != null && !blank(propList.dbId)) {
     var dbAsset = loadAsset(propList.dbId)
     if (dbAsset == null) {
         // 参数或业务状态不满足要求时立即终止请求。
         exit 500, 'dbId参数不正确'
     }
-    targetConnection = dbAsset
-    registeredTypeCode = firstValue(dbAsset, ['dbType', 'databaseType'])
     // DDL 预览只依赖目标库方言和可选的库/模式名，并不会建立 JDBC 连接。
     // 因此不能复用 dataSourceOf 的“主机、账号、连接参数完整”校验：
     // 该校验属于实际建表/连通性测试，若用于预览会把本可生成的 DDL 错误地拦截。
@@ -490,76 +610,9 @@ if (body.canvas == true) {
     dsConfig.setUsername('root')
 }
 
-// Final DDL guard for the protected ODS ingestion timestamps.  Callers may send
-// stale/editable table rows, so derive their physical type from the resolved
-// target datasource instead of trusting the request's generic `datetime` value.
-var materializationTimeType = (databaseType) => {
-    var code = databaseType == null ? '' : textOf(databaseType.getCode()).trim().toLowerCase()
-    if (code.indexOf('oceanbase') >= 0 || code == 'oracle' || code == 'dameng') {
-        return 'DATE'
-    }
-    if (code == 'postgresql' || code == 'kingbase' || code == 'gaussdb'
-        || code == 'vertica' || code == 'hetu' || code == 'hive') {
-        return 'TIMESTAMP'
-    }
-    if (code == 'sqlserver') {
-        return 'DATETIME2'
-    }
-    return 'DATETIME'
-}
-var columns = []
-for (item in tableItems) {
-    var columnInfo = new ColumnInfo()
-    columnInfo.setSourceDatabaseType(firstValue(item, ['sourceDatabaseType']) || (body.sourceDatabaseType == null ? null : textOf(body.sourceDatabaseType)))
-    var columnName = firstValue(item, ['columnName', 'name'])
-    var normalizedColumnName = blank(columnName) ? '' : textOf(columnName).trim().toUpperCase()
-    var dataType = firstValue(item, ['dataType', 'type'])
-    var columnType = resolvedColumnType(item)
-    if (normalizedColumnName == 'ODS_RKSJ' || normalizedColumnName == 'ODS_GXSJ') {
-        dataType = materializationTimeType(dsConfig.getEffectiveDatabaseType())
-        columnType = dataType
-    }
-    columnInfo.setColumnName(columnName)
-    columnInfo.setQuotedIdentifier(rowValue(item, ['quotedIdentifier']) == true)
-    columnInfo.setColumnComment(firstValue(item, ['columnComment', 'comment']))
-    columnInfo.setDataType(dataType)
-    columnInfo.setColumnType(columnType)
-    if (rowValue(item, ['length']) != null) {
-        columnInfo.setLength(rowValue(item, ['length'])::long)
-    }
-    if (rowValue(item, ['precisionLength']) != null) {
-        columnInfo.setPrecision(rowValue(item, ['precisionLength'])::int)
-    }
-    if (rowValue(item, ['scale']) != null) {
-        columnInfo.setScale(rowValue(item, ['scale'])::int)
-    }
-    columnInfo.setNullable(rowValue(item, ['nullable']) == 1 || rowValue(item, ['nullable']) == true)
-    columnInfo.setDefaultValue(rowValue(item, ['defaultValue']))
-    columnInfo.setPrimaryKey(rowValue(item, ['primaryKey']) == 1 || rowValue(item, ['primaryKey']) == true)
-    columnInfo.setAutoIncrement(rowValue(item, ['autoIncrement']) == 1 || rowValue(item, ['autoIncrement']) == true)
-    columnInfo.setUnique(rowValue(item, ['isUnique', 'unique']) == 1 || rowValue(item, ['isUnique', 'unique']) == true)
-    columnInfo.setIndexed(rowValue(item, ['indexed']) == 1 || rowValue(item, ['indexed']) == true)
-    if (rowValue(item, ['ordinalPosition']) != null) {
-        columnInfo.setOrdinalPosition(rowValue(item, ['ordinalPosition'])::int)
-    }
-    columnInfo.setCharset(rowValue(item, ['charset']))
-    columnInfo.setLengthSemantics(rowValue(item, ['lengthSemantics']))
-    if (rowValue(item, ['characterLength']) != null) { columnInfo.setCharacterLength(rowValue(item, ['characterLength'])::long) }
-    if (rowValue(item, ['byteLength']) != null) { columnInfo.setByteLength(rowValue(item, ['byteLength'])::long) }
-    columnInfo.setCollation(rowValue(item, ['collation']))
-    columnInfo.setExtra(rowValue(item, ['extra']))
-    columns.add(columnInfo)
-}
-
-// 返回当前业务分支的标准结果。
+var columns = columnsFor(body, dsConfig)
 try {
-    var targetTableName = textOf(propList.tableName).trim()
-    if (dsConfig.getEffectiveDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
-    var converted = portableDdl.prepare(columns, dsConfig)
-    var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
-    var partitionPlan = tablePartitions.normalize(body?.partitionPlan, converted.columns, dsConfig.getEffectiveDatabaseType())
-    ddl = tablePartitions.enrichConstraints(ddl, body?.sourceConstraints, dsConfig, partitionPlan).ddl
-    return tablePartitions.apply(ddl, partitionPlan, dsConfig)
+    return renderDdl(body, dsConfig, columns)
 } catch (e) {
-    exit 400, '未能生成建表语句：' + ddlFailureTip(e)
+    exit 400, '未能生成建表语句：' + ddlFailureTip(e, true)
 }

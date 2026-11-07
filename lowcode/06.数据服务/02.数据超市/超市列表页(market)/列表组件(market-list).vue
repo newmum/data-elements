@@ -1,20 +1,21 @@
 <template>
   <div v-loading="loading" class="list-wrapper">
-    <div v-if="dataList.length === 0" class="empty-list">
-      <Empty />
+    <div v-if="dataList.length === 0" class="empty-list" :aria-busy="loading">
+      <Empty v-if="!loading" />
     </div>
-    <template v-for="(item, ind) in dataList" :key="ind">
+    <template v-for="item in dataList" :key="item.tid">
       <div class="asset-item">
         <div class="asset-header">
           <div class="header-left">
-            <span
+            <button
+              type="button"
               class="title"
               :class="{ new: isNewItem(item.publishTime) }"
               @click="$emit('detail', item)"
             >
               <Icon v-if="item.assetType" :icon="item.assetType" size="18" />
               {{ item[`${item.assetType}Name`] }}
-            </span>
+            </button>
             <el-tag
               v-if="item.applyStatus != null"
               size="small"
@@ -40,7 +41,7 @@
               class="info-item"
             >
               <span class="field-label">{{ field.title }}:</span>
-              <span class="field-value" :title="getFieldValue(item, field.field)">
+              <span class="field-value" :title="String(item[field.field] ?? '')">
                 <dict-label
                   :model-value="item[field.field]"
                   :options="field.options"
@@ -56,7 +57,7 @@
               class="info-item"
             >
               <span class="field-label">{{ field.title }}:</span>
-              <span class="field-value" :title="getFieldValue(item, field.field)">
+              <span class="field-value" :title="String(item[field.field] ?? '')">
                 <dict-label
                   :model-value="item[field.field]"
                   :options="field.options"
@@ -100,15 +101,16 @@
           </div>
           <div class="action-right">
             <ElButton
-              v-if="showCollect"
-              :class="{ collected: item.collected === '1' }"
+              v-if="item.canCollect !== false"
+              :class="{ collected: isCollected(item) }"
+              :loading="collectingCatalogs?.has(item.tid)"
               @click="$emit('collect', item)"
             >
               <template #icon>
-                <Icon v-if="item.collected" icon="star-filled" size="14" />
+                <Icon v-if="isCollected(item)" icon="star-filled" size="14" />
                 <Icon v-else icon="star" size="14" />
               </template>
-              <span>{{ item.collected ? "已收藏" : "收藏" }}</span>
+              <span>{{ isCollected(item) ? "已收藏" : "收藏" }}</span>
             </ElButton>
             <template v-if="item.applyStatus === 2">
               <ElButton type="primary" plain @click="$emit('detail', item)">
@@ -118,6 +120,7 @@
             </template>
             <template
               v-else-if="
+                item.canApply === false ||
                 item.applyStatus === 0 || item.applyStatus === 1 || item.applyStatus === 'cart'
               "
             >
@@ -127,9 +130,9 @@
               </ElButton>
             </template>
             <template v-else>
-              <ElButton type="primary" plain @click="$emit('apply', item, $event)">
+              <ElButton type="primary" plain :loading="addingCatalogs?.has(item.tid)" @click="$emit('apply', item)">
                 <template #icon><Icon icon="apply" /></template>
-                {{ showApply || "申请" }}
+                申请
               </ElButton>
             </template>
           </div>
@@ -140,47 +143,53 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
-
-const props = withDefaults(
-  defineProps<{
-    dataList: Array;
-    loading: boolean;
-    item: Record<string, any>;
-    displayFields: { title: string; field: string }[];
-    showApply?: string;
-    showCollect?: boolean;
-  }>(),
-  {
-    showApply: "申请",
-    showCollect: true,
-  }
-);
-
-defineEmits(["collect", "apply", "page-change", "detail"]);
-
-// 获取字段值
-const getFieldValue = (item: any, field: string) => {
-  return item[field];
+type MarketCatalog = {
+  tid: string;
+  assetType: string;
+  publishTime?: string;
+  applyStatus?: number | string;
+  collected?: boolean | "1" | "0";
+  canApply?: boolean;
+  canCollect?: boolean;
+  resType?: string | string[];
+  [field: string]: unknown;
 };
 
+defineProps<{
+  dataList: MarketCatalog[];
+  loading: boolean;
+  displayFields: { title: string; field: string; options?: string | { label: string; value: string }[] }[];
+  addingCatalogs?: ReadonlySet<string>;
+  collectingCatalogs?: ReadonlySet<string>;
+}>();
+
+defineEmits<{
+  collect: [item: MarketCatalog];
+  apply: [item: MarketCatalog];
+  detail: [item: MarketCatalog];
+}>();
+
+function isCollected(item: MarketCatalog) {
+  return item.collected === true || item.collected === "1";
+}
+
 // 判断是否为新上架项目（7天内）
-const isNewItem = (dateStr: string) => {
+const isNewItem = (dateStr?: string) => {
   if (!dateStr) return false;
   const publishDate = new Date(dateStr);
   const now = new Date();
   const diffTime = now.getTime() - publishDate.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 3600 * 24));
-  return diffDays <= 7;
+  return diffDays >= 0 && diffDays <= 7;
 };
 
 // 判断是否包含特定资源类型
-const hasResourceType = (item: any, typeName: string) => {
-  return item.resType && item.resType.includes(typeName);
+const hasResourceType = (item: MarketCatalog, typeName: string) => {
+  return item.resType?.includes(typeName);
 };
 
 // 申请状态 Tag 配置：根据 applyStatus 返回文字、类型、效果、图标
-const getApplyTagConfig = (item: any) => {
+const getApplyTagConfig = (item: MarketCatalog) => {
   const s = item.applyStatus;
   if (s === 2) return { text: "已申请", type: "success", effect: "dark", icon: "check-circle" };
   if (s === 1) return { text: "审核中", type: "warning", effect: "dark", icon: "el-icon-Timer" };
@@ -197,6 +206,7 @@ const getApplyTagConfig = (item: any) => {
 }
 
 .empty-list {
+  min-height: 160px;
   background: #fff;
   padding: 40px 0;
   border-radius: 8px;
@@ -236,6 +246,10 @@ const getApplyTagConfig = (item: any) => {
         display: flex;
         align-items: center;
         gap: 4px;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        text-align: left;
         font-family: PingFang SC Medium;
         font-size: 16px;
         margin-right: 8px;

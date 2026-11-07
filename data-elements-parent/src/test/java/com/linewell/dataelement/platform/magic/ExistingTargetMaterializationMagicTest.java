@@ -13,6 +13,19 @@ import org.ssssssss.script.runtime.ExitValue;
 /** Replays materialization after task deletion: retained physical table, missing registration. */
 class ExistingTargetMaterializationMagicTest {
     @Test
+    void legacySelectedCatalogRetainsAuthoritativeCounterWithoutSourceRelation() throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.selectedCatalogId = "validation-legacy-catalog";
+        fixture.jdbc.update("insert into da_catalog_t(tid,tenant_id,is_del,market_view_count) values(?,'police',0,41)",
+                fixture.selectedCatalogId);
+        Map<?, ?> result = assertInstanceOf(Map.class, fixture.run(false));
+        assertEquals(fixture.selectedCatalogId, result.get("catalogId"));
+        assertEquals(List.of(41L), fixture.catalogCounters);
+        assertEquals(41L, fixture.jdbc.queryForObject("select market_view_count from da_catalog_t where tid=?", Long.class,
+                fixture.selectedCatalogId));
+    }
+
+    @Test
     void retainedHiveTableGetsRegisteredThenCreatesAFlowAndRetriesKeepFieldIds() throws Exception {
         List<Integer> readCounts=new ArrayList<>();
         for(int fields:List.of(20,100)) {
@@ -91,8 +104,11 @@ class ExistingTargetMaterializationMagicTest {
     public static class Fixture {
         final DataAggTaskEnsureBatchMagicTest.Fixture base=new DataAggTaskEnsureBatchMagicTest.Fixture(0);
         final JdbcTemplate jdbc=base.jdbc;
+        final LockClient locks=new LockClient();
         final int fields;
         int physicalCalls;
+        String selectedCatalogId;
+        final List<Long> catalogCounters = new ArrayList<>();
         Fixture(int count) {
             fields=count; base.prepareCreation();
             jdbc.execute("alter table nifi_pipeline_t alter column dsl_json clob");
@@ -100,7 +116,7 @@ class ExistingTargetMaterializationMagicTest {
             add("db_datasource_t","db_name varchar(64),org_id varchar(64),app_id varchar(64),show_connect int default 1");
             add("db_table_column_t","column_comment varchar(300),data_type varchar(64),column_type varchar(100),length bigint,precision_length int,scale int,nullable int,default_value varchar(64),primary_key int,auto_increment int,is_unique int,indexed int,charset varchar(64),collation varchar(64),extra varchar(64),source_table_column_id varchar(64),created_time timestamp,updated_time timestamp");
             add("da_prop_t","tid varchar(64),prop_type varchar(32),data_type varchar(64),created_time timestamp,updated_time timestamp");
-            add("da_catalog_t","reg_time timestamp,asset_status int,flow_status int,created_time timestamp,updated_time timestamp");
+            add("da_catalog_t","reg_time timestamp,asset_status int,flow_status int,created_time timestamp,updated_time timestamp,market_view_count bigint default 0");
             jdbc.update("update db_datasource_t set pool_cfg=?,db_name='fixture-source' where tid='source-db'",
                 "{\"host\":\"fixture.invalid\",\"database\":\"fixture\",\"username\":\"fixture\"}");
             jdbc.update("insert into db_datasource_t(tid,tenant_id,db_type,pool_cfg,is_del,db_name,asset_status) values('retained-db','police','hive',?,0,'Retained Hive',2)",
@@ -120,12 +136,15 @@ class ExistingTargetMaterializationMagicTest {
             Map<String,Object> body=new LinkedHashMap<>(Map.of("tid","source-1","propList",new LinkedHashMap<>(Map.of("dbId","retained-db","tableName","ods_retained","tableNameCn","保留物理表")),"tableItems",items,"ddl","CREATE TABLE ods_retained(id STRING)","reuseExistingTable",true));
             if(probe) body.put("validateReuseOnly",true);
             if(dryRun) body.put("dryRun",true);
+            if(selectedCatalogId != null) body.put("tid", selectedCatalogId);
             String script=CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9").replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n","");
             script="var createTable=()=> fixture.physical(body)\nvar date_format=value=>value+''\n"+script;
             Map<String,Object> inputs=new LinkedHashMap<>();
             inputs.put("db",base.db); inputs.put("body",body); inputs.put("fixture",this);
             inputs.put("tenantRuntime",base.scope); inputs.put("dataScope",base.scope); inputs.put("jsons",new JsonModule());
             inputs.put("metadataAsset",this); inputs.put("esCommonService",this);
+            inputs.put("redissonClient",locks);
+            inputs.put("platformJdbc",jdbc);
             base.resetCounter();
             return MagicScript.create(script,null).execute(new MagicScriptContext(inputs));
         }
@@ -135,7 +154,14 @@ class ExistingTargetMaterializationMagicTest {
             var items=StructuredValues.objectRows(request.get("tableItems"));
             return Map.of("created",false,"physicalTableReused",true,"tableItems",items);
         }
-        public Object getDocument(String index,String id) { return null; }
+        public Object getDocument(String index,String id) {
+            return id.equals(selectedCatalogId) ? Map.of("assetType", "catalog", "sourceTableId", "source-1") : null;
+        }
+        public String mergeCatalogProjection(String index,String id,String content,Object count) {
+            assertEquals("catalog", cn.hutool.json.JSONUtil.parseObj(content).getStr("assetType"));
+            catalogCounters.add(((Number) count).longValue());
+            return id;
+        }
         public void saveOrUpdate(String index,String id,String content,boolean overwrite) { }
         public void save(String index,String id,Map<String,Object> content) { }
         public void refreshRegistrationStatus(String id,boolean finish) { }
@@ -146,6 +172,36 @@ class ExistingTargetMaterializationMagicTest {
                 jdbc.update(sql,keys.stream().map(column::get).toArray());
             }
             return columns.size();
+        }
+    }
+
+    public static final class LockClient {
+        final Lock lock = new Lock();
+        String key;
+
+        public Lock getLock(String key) {
+            this.key = key;
+            return lock;
+        }
+    }
+
+    public static final class Lock {
+        boolean heldByAnother;
+        boolean owned;
+        int attempts;
+        int releases;
+
+        public boolean tryLock() {
+            attempts++;
+            if (heldByAnother || owned) return false;
+            owned = true;
+            return true;
+        }
+
+        public void unlock() {
+            if (!owned) throw new IllegalStateException("The submit request does not own the lock");
+            owned = false;
+            releases++;
         }
     }
 }

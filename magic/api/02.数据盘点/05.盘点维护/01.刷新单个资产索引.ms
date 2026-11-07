@@ -17,49 +17,41 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\"refreshed\":true}",
-  "description": "兼容旧地址，原样转发请求到资产索引单条刷新接口并返回其结果。",
+  "description": "按 tid 核对当前租户有效主记录并委托定向重建；目录直接读取主表，不存在时仅移除当前租户残留索引。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.刷新单个资产索引
-// 路由：POST /dst/maintenance/refresh
-// 业务说明：兼容旧地址，原样转发请求到资产索引单条刷新接口并返回其结果。
 import '@post:/dst/maintenance/batchRefresh' as batchRefresh
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import tenantRuntime
-var tenantId = tenantRuntime.id()
 
-// 单资产索引刷新。主表不存在时只删除 ES 残留；存在时委托批量重建逻辑生成一致文档。
-var tid = body?.tid
-if (tid == null || (tid + '').trim() == '') {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 400, 'tid不能为空'
-}
+// POST /dst/maintenance/refresh：按 tid 刷新当前租户的应用、数据源、数据表或目录投影。
+// 主记录不存在时移除当前租户残留投影；存在时委托有界批量重建，返回刷新结果。
+var tenantId = tenantRuntime.id()
+var tid = body?.tid == null ? '' : (body.tid + '').trim()
+if (tid == '') { exit 400, 'tid不能为空' }
 var type = null
-// 从 MySQL 业务表读取当前有效数据。
-if (db.table('sym_application_t').where().eq('tid', tid).eq('is_del', 0).selectOne() != null) {
+// 存在性只取当前租户有效主记录，目录不依赖可选的 da_asset_t 兼容视图。
+if (db.table('sym_application_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne() != null) {
     type = 'app'
-// 从 MySQL 业务表读取当前有效数据。
-} else if (db.table('db_datasource_t').where().eq('tid', tid).eq('is_del', 0).selectOne() != null) {
+} else if (db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne() != null) {
     type = 'db'
-// 从 MySQL 业务表读取当前有效数据。
-} else if (db.table('db_table_t').where().eq('tid', tid).eq('is_del', 0).selectOne() != null) {
+} else if (db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne() != null) {
     type = 'table'
-} else {
-    // 从 MySQL 业务表读取当前有效数据。
-    var asset = db.table('da_asset_t').where().eq('tid', tid).eq('is_del', 0).selectOne()
-    if (asset != null) {
-        type = asset.assetType == null ? asset.asset_type : asset.assetType
-    }
+} else if (db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('tid', tid).eq('is_del', 0).selectOne() != null) {
+    type = 'catalog'
 }
-// 执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致。
 if (type == null) {
     esCommonService.deleteById('dataassets', tid)
-    // 返回当前业务分支的标准结果。
-    return { tid: tid, removed: true, refreshed: false }
+    return {tid: tid, removed: true, refreshed: false}
 }
-body = { tids: [tid], assetType: [type], purgeStale: false }
-var result = batchRefresh()
-// 返回当前业务分支的标准结果。
-return { tid: tid, assetType: type, removed: false, refreshed: true, result: result }
+var submitted = body
+var result = null
+try {
+    body = {tids: [tid], assetType: [type], purgeStale: false}
+    result = batchRefresh()
+} finally {
+    body = submitted
+}
+return {tid: tid, assetType: type, removed: false, refreshed: true, result: result}

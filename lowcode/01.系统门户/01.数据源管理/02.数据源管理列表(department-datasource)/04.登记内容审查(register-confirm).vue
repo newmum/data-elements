@@ -181,174 +181,6 @@ Windows PowerShell:
             </el-collapse-item>
           </el-collapse>
         </div>
-        <div v-if="false" class="report-upload-workspace">
-          <div class="report-workspace-head">
-            <div>
-              <strong>数据上报工作区</strong>
-              <p>模板按已登记的业务表和日志表字段生成；上传校验通过后，数据将写入 {{ reportStorageDatabase }} 库。</p>
-            </div>
-            <div class="report-workspace-actions">
-              <el-button plain :disabled="!reportableTables.length" @click="downloadReportTemplate">
-                <template #icon><Icon icon="el-icon-Download" /></template>
-                下载上报数据模板
-              </el-button>
-              <el-button
-                type="primary"
-                :loading="reportImporting"
-                :disabled="!reportableTables.length"
-                @click="openReportFilePicker"
-              >
-                <template #icon><Icon icon="el-icon-UploadFilled" /></template>
-                上报数据
-              </el-button>
-              <input
-                ref="reportFileInput"
-                class="report-file-input"
-                type="file"
-                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                @change="handleReportFileSelected"
-              />
-            </div>
-          </div>
-          <div class="report-summary-grid">
-            <div><span>可上报数据表</span><strong>{{ reportableTables.length }} 张</strong></div>
-            <div><span>模板字段</span><strong>{{ reportTemplateFieldCount }} 个</strong></div>
-            <div><span>已上报批次</span><strong>{{ reportTotals.total }} 批</strong></div>
-            <div><span>累计入库</span><strong>{{ reportTotalRows }} 行</strong></div>
-          </div>
-          <el-tabs v-model="reportWorkspaceTab" class="report-workspace-tabs" @tab-change="handleReportWorkspaceTabChange">
-            <el-tab-pane label="已上报数据" name="batches">
-              <div class="report-batch-panel">
-                <div class="report-batch-title">
-                  <div>
-                    <strong>上报批次</strong>
-                    <span>按批次保留原始文件，并可删除该批次写入的业务数据。</span>
-                  </div>
-                  <el-button link :loading="reportBatchLoading" @click="loadReportBatches">
-                    <template #icon><Icon icon="el-icon-Refresh" /></template>
-                    刷新
-                  </el-button>
-                </div>
-                <DataTable
-                  v-if="reportBatches.length"
-                  :data="fetchReportBatches"
-                  :loading="reportBatchLoading"
-                  :show-page="true"
-                  border
-                  stripe
-                  max-height="320"
-                >
-                  <el-table-column prop="batchId" label="上报批次" min-width="170" show-overflow-tooltip />
-                  <el-table-column sortable="custom" prop="fileName" label="上报文件" min-width="180" show-overflow-tooltip />
-                  <el-table-column prop="tableSummary" label="入库数据表" min-width="300" show-overflow-tooltip />
-                  <el-table-column sortable="custom" prop="rowCount" label="数据量" width="90" align="right">
-                    <template #default="{ row }">{{ row.rowCount }} 行</template>
-                  </el-table-column>
-                  <el-table-column prop="createdName" label="上报人" width="110" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.createdName || row.createdBy || "-" }}</template>
-                  </el-table-column>
-                  <el-table-column sortable="custom" prop="createdTime" label="上报时间" width="168" />
-                  <el-table-column label="状态" width="90" align="center">
-                    <template #default="{ row }">
-                      <el-tag size="small" :type="row.status === 'completed' ? 'success' : 'warning'" effect="light">
-                        {{ row.status === "completed" ? "已入库" : "处理中" }}
-                      </el-tag>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="操作" width="148" fixed="right" align="center">
-                    <template #default="{ row }">
-                      <el-button link type="primary" :disabled="!row.fileUrl" @click="downloadReportedFile(row)">下载</el-button>
-                      <el-button link type="danger" :loading="deletingReportBatchId === row.batchId" @click="deleteReportBatch(row)">删除</el-button>
-                    </template>
-                  </el-table-column>
-                </DataTable>
-                <div v-else-if="reportBatchLoading" class="report-batch-empty is-loading">
-                  <Icon icon="el-icon-Loading" />
-                  <span>正在读取已上报批次</span>
-                </div>
-                <div v-else class="report-batch-empty">
-                  <span class="report-batch-empty-icon"><Icon icon="el-icon-UploadFilled" /></span>
-                  <div>
-                    <strong>还没有上报数据</strong>
-                    <p>请先下载模板，按已登记字段填写实际业务数据后上传。</p>
-                  </div>
-                </div>
-              </div>
-            </el-tab-pane>
-            <el-tab-pane label="数据预览" name="preview">
-              <div class="report-batch-panel report-preview-panel">
-                <div class="report-batch-title report-preview-title">
-                  <div>
-                    <strong>已入库数据预览</strong>
-                    <span>展示当前数据源已实际写入 {{ reportStorageDatabase }} 库的数据；删除上报批次后，预览数据会同步移除。</span>
-                  </div>
-                  <div class="report-preview-actions">
-                    <el-select
-                      v-model="reportPreviewTableName"
-                      class="report-preview-table-select"
-                      placeholder="请选择可上报表"
-                      :disabled="!reportableTables.length"
-                      @change="handleReportPreviewTableChange"
-                    >
-                      <el-option
-                        v-for="table in reportableTables"
-                        :key="reportTableName(table)"
-                        :label="reportTableLabel(table)"
-                        :value="reportTableName(table)"
-                      />
-                    </el-select>
-                    <el-button link :loading="reportPreviewLoading" :disabled="!reportableTables.length" @click="loadReportPreview()">
-                      <template #icon><Icon icon="el-icon-Refresh" /></template>
-                      刷新
-                    </el-button>
-                  </div>
-                </div>
-                <DataTable
-                  v-if="reportPreview.list.length"
-                  :data="reportPreview.list" @sort-change="sortReportPreview"
-                  :loading="reportPreviewLoading"
-                  :show-page="false"
-                  border
-                  stripe
-                  max-height="320"
-                >
-                  <el-table-column
-                    v-for="column in reportPreview.columns"
-                    :key="column.name"
-                    :prop="column.name" sortable="custom"
-                    :label="column.label"
-                    min-width="150"
-                    show-overflow-tooltip
-                  >
-                    <template #default="{ row }">{{ reportPreviewCellValue(row, column.name) }}</template>
-                  </el-table-column>
-                </DataTable>
-                <div v-else-if="reportPreviewLoading" class="report-batch-empty is-loading">
-                  <Icon icon="el-icon-Loading" />
-                  <span>正在读取实际入库数据</span>
-                </div>
-                <div v-else class="report-batch-empty">
-                  <span class="report-batch-empty-icon"><Icon icon="el-icon-DataAnalysis" /></span>
-                  <div>
-                    <strong>{{ reportPreview.tableExists ? "当前表还没有上报记录" : "还没有可预览的上报数据" }}</strong>
-                    <p>{{ reportPreview.tableExists ? "请上报数据后，在这里查看写入数据表的实际记录。" : "请选择已完成上报的业务表或日志表后查看数据。" }}</p>
-                  </div>
-                </div>
-                <div v-if="reportPreview.total > reportPreview.pageSize" class="report-preview-pagination">
-                  <el-pagination
-                    v-model:current-page="reportPreview.pageNo"
-                    v-model:page-size="reportPreview.pageSize"
-                    :total="reportPreview.total"
-                    :page-sizes="[20, 50, 100]"
-                    layout="total, sizes, prev, pager, next"
-                    @size-change="handleReportPreviewPageSizeChange"
-                    @current-change="loadReportPreview(false)"
-                  />
-                </div>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
-        </div>
         <template v-else-if="!isDataPushSource && !isDataPullSource">
         <div class="source-information-section-head">
           <div>
@@ -411,24 +243,13 @@ Windows PowerShell:
 
     <section v-if="isProxyAccess" class="review-workbench data-table-workbench">
       <section class="review-detail-panel data-table-information-card">
-        <div class="review-toolbar data-table-toolbar proxy-review-toolbar">
-          <strong>已登记数据服务</strong>
-          <el-input v-model.trim="proxyServiceKeyword" class="proxy-review-search" placeholder="搜索服务名称、编码或地址" clearable @clear="proxyServicesRef?.refresh?.(true)" @keyup.enter="proxyServicesRef?.refresh?.(true)">
-            <template #suffix><el-button link type="primary" title="查询服务" @click="proxyServicesRef?.refresh?.(true)"><Icon icon="search" /></el-button></template>
-          </el-input>
-        </div>
-        <div class="section-content data-table-section-content">
-          <LoadingState v-if="sourceDetailLoading" type="table" compact />
-          <div v-else-if="reviewSummaryError" class="proxy-review-empty" role="alert">{{ reviewSummaryError }}<el-button link type="primary" @click="retryReviewSummary">重新读取</el-button></div>
-          <DataTable v-else :key="sourceTid" ref="proxyServicesRef" height="auto" flex-type="flex-[0_1_auto]" :data="fetchProxyServices" :columns="[]" :show-search="false" :show-reset="false" :page-sizes="[20,50,100]" row-key="tid" show-index class="review-table">
-            <el-table-column prop="serviceName" label="服务名称" min-width="200" sortable="custom" show-overflow-tooltip />
-            <el-table-column prop="method" label="请求方式" width="110" />
-            <el-table-column prop="publishAddressFull" label="服务地址" min-width="260" show-overflow-tooltip />
-            <el-table-column prop="status" label="状态" width="100"><template #default="{row}"><el-tag :type="row.status === 'published' ? 'success' : 'info'" size="small">{{ ({draft:'草稿',published:'已发布',offline:'已停用'})[row.status] || row.status || '草稿' }}</el-tag></template></el-table-column>
-            <el-table-column prop="updatedTime" label="更新时间" width="170" sortable="custom" />
-            <template #empty><div class="proxy-review-empty" :role="proxyServiceError ? 'alert' : 'status'">{{ proxyServiceError || (proxyServiceKeyword ? '没有匹配的数据服务' : '尚未登记服务，请返回第一步登记服务。') }}<el-button v-if="proxyServiceError" link type="primary" @click="proxyServicesRef?.refresh?.(true)">重新读取</el-button></div></template>
-          </DataTable>
-        </div>
+        <ProxyDatasourceServices
+          :source-id="sourceTid"
+          mode="review"
+          :source-loading="sourceDetailLoading"
+          :source-error="reviewSummaryError"
+          @retry-source="retryReviewSummary"
+        />
       </section>
     </section>
 
@@ -682,58 +503,48 @@ Windows PowerShell:
             size="small"
             @sort-change="sortReviewTables"
           >
-            <el-table-column label="序号" width="62" align="center">
+            <el-table-column label="序号" width="52" align="center">
               <template #default="{ $index }">{{ reviewTableRowNumber($index) }}</template>
             </el-table-column>
             <el-table-column prop="name" sortable="custom" label="中文名称" min-width="160" show-overflow-tooltip>
               <template #default="{row: table}">{{ tableChineseName(table) || '未填写中文名' }}</template>
             </el-table-column>
             <el-table-column prop="tableName" sortable="custom" label="英文表名" min-width="180" show-overflow-tooltip />
-            <el-table-column prop="tableType" label="对象类型" width="90">
-              <template #default="{row: table}">{{table.tableType === '视图' ? '视图' : '数据表'}}</template>
-            </el-table-column>
-            <el-table-column prop="businessType" label="业务类型" width="90">
+            <el-table-column prop="businessType" label="业务类型" width="80">
               <template #default="{row: table}">{{businessLabel(table.businessType)}}</template>
             </el-table-column>
             <el-table-column prop="fieldCount" sortable="custom" label="字段数" width="80" align="right">
               <template #default="{row: table}"><el-button type="primary" link size="small" @click.stop="openTablePreview(table)">{{table.fieldCount || fieldsFor(table).length}}</el-button></template>
             </el-table-column>
-            <el-table-column label="登记检查" min-width="185">
+            <el-table-column label="登记检查" width="100">
               <template #default="{ row: table }">
                 <div class="review-table-tags">
-                  <el-popover v-if="tableIssueCount(table.tableName, 'error')" trigger="hover" placement="top-start" :width="440" popper-class="table-issue-popper">
+                  <el-popover v-if="tableIssueCount(table.tableName)" :trigger="['hover', 'click']" placement="right" :width="440" popper-class="table-issue-popper">
                     <template #reference>
-                      <el-tag size="small" type="danger" effect="plain">
-                        {{ tableIssueCount(table.tableName, "error") }} 个必改
-                      </el-tag>
+                      <button type="button" class="review-issue-trigger" :aria-label="`${tableIssueCount(table.tableName, 'error')} 个必改，${tableIssueCount(table.tableName, 'warning')} 条建议，查看审查详情`" @keydown.tab="focusReviewIssueDetails" @keydown.esc="closeReviewIssueDetails">
+                        <el-tag size="small" :type="tableIssueCount(table.tableName, 'error') ? 'danger' : 'warning'" effect="plain">
+                          {{ tableIssueCount(table.tableName, 'error') ? `${tableIssueCount(table.tableName, 'error')} 个必改` : `${tableIssueCount(table.tableName, 'warning')} 条建议` }}
+                        </el-tag>
+                      </button>
                     </template>
-                    <div class="table-issue-popover-content">
-                      <strong>必改项</strong>
+                    <div class="table-issue-popover-content" @keydown.esc="closeReviewIssueDetails">
+                      <strong v-if="tableIssueCount(table.tableName, 'error')">必改项</strong>
                       <button v-for="issue in tableIssuesByLevel(table.tableName, 'error')" :key="issue.id" type="button" @click="goToStep(issue.step, issue.target)">
                         <span>{{ issue.title }}</span><small>{{ issue.message }}</small>
                       </button>
-                    </div>
-                  </el-popover>
-                  <el-popover v-if="tableIssueCount(table.tableName, 'warning')" trigger="hover" placement="top-start" :width="440" popper-class="table-issue-popper">
-                    <template #reference>
-                      <el-tag size="small" type="warning" effect="plain">
-                        {{ tableIssueCount(table.tableName, "warning") }} 条建议
-                      </el-tag>
-                    </template>
-                    <div class="table-issue-popover-content">
-                      <strong>建议项</strong>
+                      <strong v-if="tableIssueCount(table.tableName, 'warning')">建议项</strong>
                       <button v-for="issue in tableIssuesByLevel(table.tableName, 'warning')" :key="issue.id" type="button" @click="goToStep(issue.step, issue.target)">
                         <span>{{ issue.title }}</span><small>{{ issue.message }}</small>
                       </button>
                     </div>
                   </el-popover>
-                  <el-tag v-if="!tableIssueCount(table.tableName)" size="small" type="success" effect="light">
+                  <el-tag v-else size="small" type="success" effect="light">
                     检查通过
                   </el-tag>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="接入状态" min-width="120">
+            <el-table-column label="接入状态" width="96" show-overflow-tooltip>
               <template #default="{row: table}"><el-tag size="small" :type="tableTaskSummary(table).execution.type" effect="plain">{{tableTaskSummary(table).execution.label}}</el-tag></template>
             </el-table-column>
             <el-table-column label="同步频率" min-width="150" show-overflow-tooltip>
@@ -751,7 +562,7 @@ Windows PowerShell:
             <el-table-column label="数据更新时间" min-width="170" show-overflow-tooltip>
               <template #default="{row: table}">{{tableTaskSummary(table).lastDataUpdatedAt}}</template>
             </el-table-column>
-            <el-table-column label="操作" width="172" fixed="right" align="center">
+            <el-table-column label="操作" :width="reviewActionColumnWidth" class-name="review-actions-column" fixed="right" align="center">
               <template #default="{row: table}">
                 <el-button type="primary" link size="small" @click.stop="goToStep(table.businessType === '字典表' ? 2 : 3, table.tableName)">返回编辑</el-button>
                 <el-button class="registration-access-action" type="primary" link size="small" :disabled="accessTaskLoading || !!accessTaskError || !findTableAccessTaskRow(table) || (!findTableAccessTaskRow(table)?.taskCount && !findTableAccessTaskRow(table)?.canApply && findTableAccessTaskRow(table)?.accessStatus !== '2')" @click.stop="openRegistrationAccess(table)">{{registrationAction(table)}}</el-button>
@@ -1435,6 +1246,8 @@ const sourceAccessMode = computed(() => {
 });
 // 动态任务状态只读取本页ID，不进入登记快照缓存；顶部计数由服务端按整个数据源汇总。
 const accessTaskRows = ref([]);
+// 当前页有多个接入任务时保留较长操作名称的完整宽度。
+const reviewActionColumnWidth = computed(() => accessTaskRows.value.some(row => Number(row.taskCount) > 1) ? 152 : 128);
 const accessTotals = ref({});
 const accessTaskLoading = ref(false);
 const accessTaskLoaded = ref(false);
@@ -1657,30 +1470,6 @@ const isDataUploadSource = computed(() => sourceAccessMode.value.value === "uplo
 const isDataPushSource = computed(() => sourceAccessMode.value.value === "receive");
 const isDataPullSource = computed(() => sourceAccessMode.value.value === "capture");
 const isProxyAccess = computed(() => isProxyAccessSource(source.value));
-const proxyServicesRef = ref();
-const proxyServiceKeyword = ref("");
-const proxyServiceTotal = ref(0);
-const proxyServiceError = ref("");
-let proxyServiceRequestVersion = 0;
-async function fetchProxyServices({ pageNo = 1, pageSize = 20, sortField, sortDir } = {}) {
-  const datasourceId = sourceTid.value;
-  const requestVersion = ++proxyServiceRequestVersion;
-  if (!datasourceId || !isProxyAccess.value) return { list: [], total: 0 };
-  proxyServiceError.value = "";
-  try {
-    const result = await $common.post("/dws/flowserve/gateway/api/list", { datasourceId, pageNum: pageNo, pageSize, sortField, sortDir, keyword: proxyServiceKeyword.value });
-    if (requestVersion !== proxyServiceRequestVersion || datasourceId !== sourceTid.value) return { list: [], total: 0 };
-    const payload = result?.data || result || {};
-    proxyServiceTotal.value = Number(payload.total || 0);
-    return { list: payload.list || [], total: proxyServiceTotal.value };
-  } catch (error) {
-    if (requestVersion === proxyServiceRequestVersion && datasourceId === sourceTid.value) {
-      proxyServiceTotal.value = 0;
-      proxyServiceError.value = error?.message || "服务清单读取失败，请重新读取";
-    }
-    return { list: [], total: 0 };
-  }
-}
 
 const apiPullInformationOpenItems = ref([]);
 
@@ -2219,196 +2008,6 @@ function openReportWorkspace() {
   target.hash = `/report?${new URLSearchParams({ datasourceId, returnTo: returnTo.href })}`;
   window.location.assign(target.href);
 }
-const reportFileInput = ref(null);
-const reportBatches = ref([]);
-const reportBatchLoading = ref(false);
-const reportTotals=ref({total:0,rowTotal:0});
-const reportImporting = ref(false);
-const deletingReportBatchId = ref("");
-const reportStorageDatabase = ref("test1");
-const reportWorkspaceTab = ref("batches");
-const reportPreviewLoading = ref(false);
-const reportPreviewTableName = ref("");
-const reportPreview = ref({
-  columns: [],
-  list: [],
-  total: 0,
-  pageNo: 1,
-  pageSize: 20,
-  tableExists: false,
-});
-
-function normalizeReportBatch(row = {}) {
-  return {
-    batchId: firstNonEmpty(row.batchId, row.batchid, row.batch_id) || "",
-    fileId: firstNonEmpty(row.fileId, row.fileid, row.file_id) || "",
-    fileName: firstNonEmpty(row.fileName, row.filename, row.file_name) || "未命名上报文件",
-    fileUrl: firstNonEmpty(row.fileUrl, row.fileurl, row.file_url) || "",
-    tableCount: Number(firstNonEmpty(row.tableCount, row.tablecount, row.table_count) || 0),
-    rowCount: Number(firstNonEmpty(row.rowCount, row.rowcount, row.row_count) || 0),
-    status: String(row.status || "completed"),
-    createdBy: firstNonEmpty(row.createdBy, row.createdby, row.created_by) || "",
-    createdName: firstNonEmpty(row.createdName, row.createdname, row.created_name) || "",
-    createdTime: firstNonEmpty(row.createdTime, row.createdtime, row.created_time) || "",
-    tableSummary: firstNonEmpty(row.tableSummary, row.tablesummary, row.table_summary) || "-",
-  };
-}
-
-async function fetchReportBatches({pageNo=1,pageSize=20,sortField,sortDir}={}){
-   if(!sourceTid.value || !isDataUploadSource.value)return {list:[],total:0};
-   const result=await $common.post('/dst/database/report-data',{action:'list',datasourceId:sourceTid.value,pageNo,pageSize,sortField,sortDir});
-   reportStorageDatabase.value=result.storageDatabase;
-   reportTotals.value={total:Number(result.total||0),rowTotal:Number(result.rowTotal||0)};
-   return {list:(result.list||[]).map(normalizeReportBatch),total:Number(result.total||0)};
- }
- async function loadReportBatches() {
-  if (!sourceTid.value || !isDataUploadSource.value) {
-    reportBatches.value = [];
-    return;
-  }
-  reportBatchLoading.value = true;
-  try {
-    const result = await $common.post("/dst/database/report-data", {
-      action: "list",
-      datasourceId: sourceTid.value,
-    });
-    reportStorageDatabase.value = result?.storageDatabase || "test1";
-    reportBatches.value = Array.isArray(result?.list) ? result.list.map(normalizeReportBatch) : [];
-    reportTotals.value={total:Number(result.total||0),rowTotal:Number(result.rowTotal||0)};
-  } catch (error) {
-    reportBatches.value = [];
-    console.warn("读取数据上报批次失败:", error);
-    $message.error(error?.message || "读取已上报数据失败");
-  } finally {
-    reportBatchLoading.value = false;
-  }
-}
-
-function reportTableName(table) {
-  return String(table?.tableName || table?.tableNameEn || table?.sourceTableName || "").trim();
-}
-
-function reportTableLabel(table) {
-  const tableName = reportTableName(table);
-  const tableNameCn = String(table?.tableNameCn || table?.tableComment || table?.table_name_cn || "").trim();
-  return tableNameCn && tableNameCn !== tableName ? `${tableNameCn}（${tableName}）` : tableName;
-}
-
-function resetReportPreview() {
-  reportPreview.value = {
-    columns: [],
-    list: [],
-    total: 0,
-    pageNo: 1,
-    pageSize: 20,
-    tableExists: false,
-  };
-}
-
-function ensureReportPreviewTable() {
-  const availableNames = reportableTables.value.map((table) => reportTableName(table)).filter(Boolean);
-  if (!availableNames.includes(reportPreviewTableName.value)) {
-    reportPreviewTableName.value = availableNames[0] || "";
-  }
-  return reportPreviewTableName.value;
-}
-
-function normalizeReportPreviewRow(row, columns) {
-  const source = row && typeof row === "object" ? row : {};
-  const normalizedKeyMap = new Map(
-    Object.keys(source).map((key) => [String(key).toLowerCase(), key])
-  );
-  return (Array.isArray(columns) ? columns : []).reduce((result, column) => {
-    const key = column?.name;
-    if (!key) return result;
-    const sourceKey = Object.prototype.hasOwnProperty.call(source, key)
-      ? key
-      : normalizedKeyMap.get(String(key).toLowerCase());
-    result[key] = sourceKey === undefined ? "" : source[sourceKey];
-    return result;
-  }, {});
-}
-
-function reportPreviewCellValue(row, name) {
-  const source = row && typeof row === "object" ? row : {};
-  const key = String(name || "");
-  const raw = source._previewRaw && typeof source._previewRaw === "object" ? source._previewRaw : source;
-  let value = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : undefined;
-  if (value === undefined && raw instanceof Map) value = raw.get(key);
-  if (value === undefined && raw && typeof raw === "object") {
-    const matchedKey = Object.keys(raw).find((item) => String(item).toLowerCase() === key.toLowerCase());
-    if (matchedKey !== undefined) value = raw[matchedKey];
-  }
-  return value === undefined || value === null || value === "" ? "-" : String(value);
-}
-
-const reportPreviewSort=ref({});
- function sortReportPreview({prop,order}){reportPreviewSort.value=order&&prop?{sortField:prop,sortDir:order==='ascending'?'asc':'desc'}:{};loadReportPreview(true);}
- async function loadReportPreview(resetPage = true) {
-  if (!sourceTid.value || !isDataUploadSource.value) {
-    resetReportPreview();
-    return;
-  }
-  const tableName = ensureReportPreviewTable();
-  if (!tableName) {
-    resetReportPreview();
-    return;
-  }
-  if (resetPage) reportPreview.value.pageNo = 1;
-  reportPreviewLoading.value = true;
-  try {
-    const result = await $common.post("/dst/database/report-data", {
-      action: "preview",
-      datasourceId: sourceTid.value,
-      tableName,
-      ...reportPreviewSort.value,
-      pageNo: reportPreview.value.pageNo,
-      pageSize: reportPreview.value.pageSize,
-    });
-    reportStorageDatabase.value = result?.storageDatabase || "test1";
-    const columns = Array.isArray(result?.columns) ? result.columns : [];
-    const rows = Array.isArray(result?.list) ? result.list : [];
-    reportPreview.value = {
-      columns,
-      list: rows.map((row) => ({ ...normalizeReportPreviewRow(row, columns), _previewRaw: row })),
-      total: Number(result?.total || 0),
-      pageNo: Number(result?.pageNo || reportPreview.value.pageNo || 1),
-      pageSize: Number(result?.pageSize || reportPreview.value.pageSize || 20),
-      tableExists: Boolean(result?.tableExists),
-    };
-  } catch (error) {
-    resetReportPreview();
-    console.warn("读取已上报数据预览失败:", error);
-    $message.error(error?.message || "读取数据预览失败");
-  } finally {
-    reportPreviewLoading.value = false;
-  }
-}
-
-function handleReportWorkspaceTabChange(tabName) {
-  if (tabName === "preview") loadReportPreview();
-}
-
-function handleReportPreviewTableChange() {
-  loadReportPreview();
-}
-
-function handleReportPreviewPageSizeChange() {
-  loadReportPreview(true);
-}
-
-watch(
-  [sourceTid, isDataUploadSource],
-  ([tid, uploadMode]) => {
-    // 上报工作台由海通工程的独立页面维护。第五步不再预取、维护或
-    // 展示上报批次；仅保留当前登记上下文并通过 openReportWorkspace 交接。
-    reportBatches.value = [];
-    reportPreviewTableName.value = "";
-    resetReportPreview();
-  },
-  { immediate: true }
-);
-
 const sourceConnectionStatusText = computed(() => {
   const textByStatus = {
     success: "连接测试通过",
@@ -2757,11 +2356,6 @@ const processTables = computed(() => tables.value.filter((table) => table.busine
 const temporaryTables = computed(() =>
   tables.value.filter((table) => ["临时表", "备份表"].includes(table.businessType))
 );
-const reportableTables = computed(() => [...businessTables.value, ...logTables.value]);
-const reportTemplateFieldCount = computed(() =>
-  reportableTables.value.reduce((total, table) => total + fieldsFor(table).length, 0)
-);
-const reportTotalRows = computed(() => reportTotals.value.rowTotal);
 const uncertainTables = computed(() => tables.value.filter((table) =>
   isTableAnnotated(table) && isPendingBusinessType(table.businessType)
 ));
@@ -4153,277 +3747,6 @@ function openTablePreview(table) {
   loadTablePreview(table);
 }
 
-function reportFieldName(field) {
-  return String(field?.columnName || field?.colEn || field?.fieldName || "").trim();
-}
-
-function reportFieldComment(field) {
-  return String(field?.columnComment || field?.colCn || field?.fieldComment || reportFieldName(field)).trim();
-}
-
-function reportFieldType(field) {
-  return String(field?.columnType || field?.dataType || field?.fieldType || "字符串").trim();
-}
-
-function reportFieldLength(field) {
-  const explicitLength = [field?.length, field?.columnLength, field?.column_length, field?.maxLength, field?.max_length]
-    .find((value) => value !== null && value !== undefined && String(value).trim() && Number(value) > 0);
-  if (explicitLength !== undefined) return String(explicitLength).trim();
-  const matched = reportFieldType(field).match(/\(([^)]+)\)/);
-  return matched ? matched[1].trim() : "—";
-}
-
-function reportFieldRequirement(field) {
-  return `类型：${reportFieldType(field)}\n长度：${reportFieldLength(field)}`;
-}
-
-function reportTemplateFields(table) {
-  const usedLabels = new Set();
-  return fieldsFor(table)
-    .filter((field) => reportFieldName(field))
-    .map((field) => {
-      const fieldName = reportFieldName(field);
-      const preferredLabel = reportFieldComment(field) || fieldName;
-      const label = usedLabels.has(preferredLabel) ? `${preferredLabel}（${fieldName}）` : preferredLabel;
-      usedLabels.add(label);
-      return { field, fieldName, label };
-    });
-}
-
-function workbookClass() {
-  return ExcelJS.Workbook || ExcelJS.default?.Workbook;
-}
-
-function safeReportSheetName(table, usedNames) {
-  const raw = String(table?.tableName || "数据表").replace(/[\\/?*\[\]:]/g, "_").slice(0, 31) || "数据表";
-  let name = raw;
-  let suffix = 1;
-  while (usedNames.has(name)) {
-    const tail = `_${suffix++}`;
-    name = `${raw.slice(0, 31 - tail.length)}${tail}`;
-  }
-  usedNames.add(name);
-  return name;
-}
-
-async function downloadReportTemplate() {
-  if (!reportableTables.value.length) {
-    $message.warning("当前数据源没有可上报的业务表或日志表");
-    return;
-  }
-  const WorkbookClass = workbookClass();
-  if (!WorkbookClass) {
-    $message.error("Excel 模板组件未正确加载");
-    return;
-  }
-  const workbook = new WorkbookClass();
-  workbook.creator = "源数据管理平台";
-  workbook.created = new Date();
-  const usedNames = new Set();
-  reportableTables.value.forEach((table) => {
-    const templateFields = reportTemplateFields(table);
-    if (!templateFields.length) return;
-    const sheet = workbook.addWorksheet(safeReportSheetName(table, usedNames));
-    sheet.mergeCells(1, 1, 1, templateFields.length);
-    sheet.getCell("A1").value = `${tableChineseName(table) || table.tableName} 数据上报模板`;
-    templateFields.forEach((item, index) => {
-      const columnNumber = index + 1;
-      sheet.getCell(2, columnNumber).value = item.label;
-      sheet.getCell(3, columnNumber).value = reportFieldRequirement(item.field);
-    });
-    [1, 2, 3].forEach((rowNumber) => {
-      const row = sheet.getRow(rowNumber);
-      row.font = { bold: rowNumber <= 2 };
-      row.alignment = { vertical: "middle", wrapText: rowNumber === 3 };
-      row.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin", color: { argb: "FFDDE5F2" } },
-          left: { style: "thin", color: { argb: "FFDDE5F2" } },
-          bottom: { style: "thin", color: { argb: "FFDDE5F2" } },
-          right: { style: "thin", color: { argb: "FFDDE5F2" } },
-        };
-        if (rowNumber === 1 || rowNumber === 2) {
-          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEAF3FF" } };
-        }
-      });
-    });
-    templateFields.forEach((item, index) => {
-      const requirementCell = sheet.getCell(3, index + 1);
-      requirementCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
-      requirementCell.font = { color: { argb: "FF7A4E00" }, size: 10 };
-    });
-    sheet.getRow(1).height = 26;
-    sheet.getRow(3).height = 36;
-    templateFields.forEach((item, index) => {
-      sheet.getColumn(index + 1).width = Math.max(16, Math.min(30, item.label.length * 2 + 4));
-    });
-    sheet.views = [{ state: "frozen", ySplit: 2 }];
-    sheet.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: templateFields.length } };
-  });
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${source.value?.dbName || "数据源"}_数据上报模板.xlsx`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function openReportFilePicker() {
-  reportFileInput.value?.click();
-}
-
-function reportCellValue(cell) {
-  let value = cell?.value;
-  if (value && typeof value === "object" && "result" in value) value = value.result;
-  if (value && typeof value === "object" && Array.isArray(value.richText)) {
-    value = value.richText.map((item) => item.text || "").join("");
-  }
-  if (value instanceof Date) {
-    const pad = (number) => String(number).padStart(2, "0");
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
-  }
-  return value === undefined || value === null ? "" : value;
-}
-
-function parseReportWorkbook(workbook) {
-  const tableByName = new Map(reportableTables.value.map((table) => [String(table.tableName).toLowerCase(), table]));
-  const usedSheetNames = new Set();
-  const tableBySheetName = new Map(
-    reportableTables.value.map((table) => [safeReportSheetName(table, usedSheetNames).toLowerCase(), table])
-  );
-  const payloadTables = [];
-  workbook.eachSheet((sheet) => {
-    const legacyTableName = String(reportCellValue(sheet.getCell("B1")) || "").trim();
-    const legacyTable = tableByName.get(legacyTableName.toLowerCase());
-    const table = legacyTable || tableBySheetName.get(String(sheet.name || "").trim().toLowerCase());
-    if (!table) throw new Error(`工作表“${sheet.name}”未对应当前数据源可上报的业务表或日志表`);
-    const templateFields = reportTemplateFields(table);
-    const expectedFieldNames = templateFields.map((item) => item.fieldName);
-    const headerToFieldName = new Map(
-      (legacyTable ? templateFields.map((item) => [item.fieldName, item.fieldName]) : templateFields.map((item) => [item.label, item.fieldName]))
-    );
-    const headerNames = [];
-    const headerColumns = [];
-    sheet.getRow(2).eachCell({ includeEmpty: false }, (cell, columnNumber) => {
-      if (legacyTable && columnNumber === 1) return;
-      const name = String(reportCellValue(cell) || "").trim();
-      if (!name) return;
-      if (!legacyTable && columnNumber === templateFields.length + 1 && name === "填写说明") return;
-      const fieldName = headerToFieldName.get(name);
-      if (!fieldName) throw new Error(`${table.tableName} 模板包含未登记字段：${name}`);
-      if (headerNames.includes(fieldName)) throw new Error(`${table.tableName} 模板字段重复：${name}`);
-      headerNames.push(fieldName);
-      headerColumns.push(columnNumber);
-    });
-    const missingFields = expectedFieldNames.filter((name) => !headerNames.includes(name));
-    if (missingFields.length) throw new Error(`${table.tableName} 模板缺少登记字段：${missingFields.join("、")}`);
-    const rows = [];
-    const dataStartRow = legacyTable ? 5 : 4;
-    for (let rowNumber = dataStartRow; rowNumber <= sheet.actualRowCount; rowNumber += 1) {
-      const row = {};
-      let hasValue = false;
-      headerNames.forEach((name, index) => {
-        const value = reportCellValue(sheet.getCell(rowNumber, headerColumns[index]));
-        row[name] = value;
-        if (value !== "") hasValue = true;
-      });
-      if (hasValue) rows.push(row);
-    }
-    if (rows.length) {
-      payloadTables.push({
-        tableId: table.tid || table.id || table.tableId,
-        tableName: table.tableName,
-        rows,
-      });
-    }
-  });
-  if (!payloadTables.length) throw new Error("上报模板中没有填写业务数据，请从字段表头下方的数据行开始录入");
-  return payloadTables;
-}
-
-async function handleReportFileSelected(event) {
-  const file = event?.target?.files?.[0];
-  if (!file) return;
-  let uploadedFileId = "";
-  reportImporting.value = true;
-  try {
-    if (!/\.xlsx$/i.test(file.name)) throw new Error("请上传平台生成的 .xlsx 数据上报模板");
-    if (file.size > 20 * 1024 * 1024) throw new Error("单个上报文件不能超过 20MB");
-    const WorkbookClass = workbookClass();
-    if (!WorkbookClass) throw new Error("Excel 模板组件未正确加载");
-    const workbook = new WorkbookClass();
-    await workbook.xlsx.load(await file.arrayBuffer());
-    const payloadTables = parseReportWorkbook(workbook);
-    const uploaded = await FileAPI.uploadFile(file);
-    uploadedFileId = firstNonEmpty(uploaded?.tid, uploaded?.id, uploaded?.fileId) || "";
-    const result = await $common.post("/dst/database/report-data", {
-      action: "import",
-      datasourceId: sourceTid.value,
-      fileId: uploadedFileId,
-      fileName: uploaded?.name || file.name,
-      fileUrl: uploaded?.url || "",
-      tables: payloadTables,
-    });
-    reportStorageDatabase.value = result?.storageDatabase || "test1";
-    await loadReportBatches();
-    const rowCount = payloadTables.reduce((sum, item) => sum + item.rows.length, 0);
-    if (reportWorkspaceTab.value === "preview") await loadReportPreview();
-    $message.success(`上报成功，${payloadTables.length} 张表共 ${rowCount} 行数据已写入 ${reportStorageDatabase.value} 库`);
-  } catch (error) {
-    if (uploadedFileId) {
-      try { await FileAPI.delete(uploadedFileId); } catch (cleanupError) { console.warn("清理失败上报文件失败:", cleanupError); }
-    }
-    $message.error(error?.message || "上报数据失败，请检查模板内容");
-  } finally {
-    reportImporting.value = false;
-    if (event?.target) event.target.value = "";
-  }
-}
-
-async function downloadReportedFile(row) {
-  if (!row?.fileUrl) return;
-  try {
-    await FileAPI.download(row.fileUrl, row.fileName);
-  } catch (error) {
-    $message.error(error?.message || "下载上报文件失败");
-  }
-}
-
-async function deleteReportBatch(row) {
-  if (!row?.batchId || deletingReportBatchId.value) return;
-  try {
-    await ElMessageBox.confirm(
-      `删除批次后，将同时删除 ${reportStorageDatabase.value} 库中该批次写入的 ${row.rowCount} 行数据。是否继续？`,
-      "删除上报批次",
-      { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" }
-    );
-  } catch {
-    return;
-  }
-  deletingReportBatchId.value = row.batchId;
-  try {
-    const result = await $common.post("/dst/database/report-data", {
-      action: "delete",
-      datasourceId: sourceTid.value,
-      batchId: row.batchId,
-    });
-    await loadReportBatches();
-    if (reportWorkspaceTab.value === "preview") await loadReportPreview();
-    if (row.fileId) {
-      try { await FileAPI.delete(row.fileId); } catch (fileError) { console.warn("删除上报原始文件失败:", fileError); }
-    }
-    $message.success("上报批次及对应入库数据已删除");
-  } catch (error) {
-    $message.error(error?.message || "删除上报批次失败");
-  } finally {
-    deletingReportBatchId.value = "";
-  }
-}
-
 function uniqueCatalogs(rows = []) {
   const merged = new Map();
   rows.filter(Boolean).forEach((catalog) => {
@@ -4648,6 +3971,32 @@ function tableSectionIssueCount(level) {
   return issues.value.filter(
     (issue) => [1, 2, 3].includes(issue.step) && (!level || issue.level === level)
   ).length;
+}
+
+function focusReviewIssueDetails(event) {
+  if (event.shiftKey) return;
+  const popoverId = event.currentTarget.getAttribute('aria-describedby');
+  const popover = popoverId && document.getElementById(popoverId);
+  const firstIssue = popover?.getAttribute('aria-hidden') === 'false' && popover.querySelector('.table-issue-popover-content button');
+  if (firstIssue) {
+    event.preventDefault();
+    firstIssue.focus();
+  }
+}
+
+function closeReviewIssueDetails(event) {
+  const current = event.currentTarget;
+  const popover = current.classList.contains('review-issue-trigger')
+    ? document.getElementById(current.getAttribute('aria-describedby') || '')
+    : current.closest('.table-issue-popper');
+  if (!popover || popover.getAttribute('aria-hidden') !== 'false') return;
+  const trigger = [...document.querySelectorAll('.review-issue-trigger')]
+    .find(button => button.getAttribute('aria-describedby') === popover.id);
+  if (!trigger) return;
+  event.preventDefault();
+  event.stopPropagation();
+  trigger.click();
+  trigger.focus({ preventScroll: true });
 }
 
 function tableIssueCount(tableName, level) {
@@ -7202,12 +6551,6 @@ defineExpose({ next, finish, commit });
   background: #fff;
 }
 
-.report-upload-workspace {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
 .report-workspace-handoff {
   display: flex;
   align-items: center;
@@ -7230,201 +6573,6 @@ defineExpose({ next, finish, commit });
   color: #64748b;
   font-size: 12px;
   line-height: 1.7;
-}
-
-.report-workspace-head,
-.report-batch-title {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.report-workspace-head strong,
-.report-batch-title strong {
-  display: block;
-  color: #1d2939;
-  font-size: 14px;
-}
-
-.report-workspace-head p,
-.report-batch-title span,
-.report-batch-empty p {
-  margin: 4px 0 0;
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.report-workspace-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.report-file-input {
-  display: none;
-}
-
-.report-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid #dbe7f4;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #f7fbff 0%, #fbfdff 100%);
-}
-
-.report-summary-grid > div {
-  padding: 12px 14px;
-  border-right: 1px solid #e5edf6;
-}
-
-.report-summary-grid > div:last-child {
-  border-right: 0;
-}
-
-.report-summary-grid span,
-.report-summary-grid strong {
-  display: block;
-}
-
-.report-summary-grid span {
-  color: #667085;
-  font-size: 11px;
-}
-
-.report-summary-grid strong {
-  margin-top: 4px;
-  color: #101828;
-  font-size: 19px;
-}
-
-.report-workspace-tabs :deep(.el-tabs__header) {
-  margin: 0;
-}
-
-.report-workspace-tabs :deep(.el-tabs__nav-wrap::after) {
-  height: 1px;
-  background-color: #e4e7ec;
-}
-
-.report-workspace-tabs :deep(.el-tabs__item) {
-  height: 34px;
-  color: #667085;
-  font-size: 13px;
-  line-height: 34px;
-}
-
-.report-workspace-tabs :deep(.el-tabs__item.is-active) {
-  color: #2468f2;
-  font-weight: 650;
-}
-
-.report-workspace-tabs :deep(.el-tabs__content) {
-  padding-top: 10px;
-}
-
-.report-batch-panel {
-  padding: 13px 14px 14px;
-  border: 1px solid #e4e7ec;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.report-batch-title {
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.report-batch-title > div {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.report-batch-title span {
-  margin: 0;
-}
-
-.report-preview-title {
-  align-items: flex-start;
-}
-
-.report-preview-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-}
-
-.report-preview-table-select {
-  width: 250px;
-}
-
-.report-preview-pagination {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-.report-batch-empty {
-  display: flex;
-  min-height: 116px;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  border: 1px dashed #cbd8e8;
-  border-radius: 6px;
-  background: #fafcff;
-}
-
-.report-batch-empty.is-loading {
-  color: #2468f2;
-  font-size: 12px;
-}
-
-.report-batch-empty-icon {
-  display: inline-flex;
-  width: 42px;
-  height: 42px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  color: #2468f2;
-  font-size: 21px;
-  background: #eaf3ff;
-}
-
-.report-batch-empty strong {
-  color: #344054;
-  font-size: 13px;
-}
-
-@media (max-width: 900px) {
-  .report-workspace-head,
-  .report-batch-title {
-    flex-direction: column;
-  }
-
-  .report-preview-actions,
-  .report-preview-table-select {
-    width: 100%;
-  }
-
-  .report-summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .report-summary-grid > div:nth-child(2) {
-    border-right: 0;
-  }
-
-  .report-summary-grid > div:nth-child(-n + 2) {
-    border-bottom: 1px solid #e5edf6;
-  }
 }
 
 .source-information-section-head,
@@ -7768,6 +6916,25 @@ defineExpose({ next, finish, commit });
   align-items:center;
   flex-wrap:nowrap;
   gap:8px;
+}
+
+.review-issue-trigger {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  line-height: 1;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid #155eef;
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+}
+
+.review-table :deep(.review-actions-column .cell) {
+  padding-right: 6px;
+  padding-left: 6px;
 }
 
 .review-table-field-link {
@@ -8880,8 +8047,4 @@ button.push-contract-endpoint:focus-visible { outline: 2px solid #2468f2; outlin
 .push-credential-error { color: #d92d20 !important; }
 .push-contract-auth-grid .push-credential-input { margin-top: 8px; }
 .push-contract-tables .push-contract-table-toolbar { margin-top: 12px; }
-.proxy-review-toolbar { flex-wrap: wrap; gap: 12px; }
-.proxy-review-search { width: 300px; max-width: 100%; }
-.proxy-review-empty { padding: 40px 16px; color: var(--el-text-color-secondary); text-align: center; }
-.proxy-review-empty .el-button { margin-left: 8px; }
 </style>

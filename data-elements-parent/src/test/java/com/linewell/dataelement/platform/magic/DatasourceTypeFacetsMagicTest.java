@@ -2,10 +2,12 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.ssssssss.script.MagicScript;
 import org.ssssssss.script.MagicScriptContext;
 import org.ssssssss.script.runtime.ExitValue;
@@ -36,6 +38,8 @@ class DatasourceTypeFacetsMagicTest {
         f.jdbc.update("update db_datasource_t set db_type='api',pool_cfg=? where tid='own-2'", "{\"accessMode\":\"upload\"}");
         f.jdbc.update("update db_datasource_t set db_type='api',pool_cfg=?,show_connect=0 where tid='own-3'", "{\"accessMode\":\"proxy\"}");
         f.jdbc.update("update db_datasource_t set db_type='api',show_connect=0 where tid='own-4'");
+        f.jdbc.update("update db_datasource_t set pool_cfg=? where tid='own-5'", "{invalid JSON");
+        f.jdbc.update("update db_datasource_t set pool_cfg=? where tid='own-6'", "{\"database\":\"schema_%validation\"}");
         var all = run(f, Map.of("mode","facets"), f.index);
         var counts = (Map<?,?>)all.get("typeCounts");
         assertThat(number(all.get("total"))).isEqualTo(20);
@@ -45,11 +49,21 @@ class DatasourceTypeFacetsMagicTest {
         assertThat(number(counts.get("mode:proxy"))).isEqualTo(1);
         assertThat(number(run(f,Map.of("mode","facets","filter","incomplete"),f.index).get("total"))).isEqualTo(1);
         assertThat(number(run(f,Map.of("mode","facets","keyword","own-0"),f.index).get("total"))).isEqualTo(1);
-        assertThat(number(run(f,Map.of("mode","facets","keyword","%"),f.index).get("total"))).isZero();
+        assertThat(number(run(f,Map.of("mode","facets","keyword","%"),f.index).get("total"))).isEqualTo(1);
+        assertThat(number(run(f,Map.of("mode","facets","keyword","schema_%"),f.index).get("total"))).isEqualTo(1);
+        assertThat(number(run(f,Map.of("mode","facets","keyword","schemaX"),f.index).get("total"))).isZero();
         assertThat(number(run(f,Map.of("mode","facets","orgIds",List.of("dept-b")),f.index).get("total"))).isZero();
         assertThat(number(run(f,Map.of("mode","facets","appId","missing"),f.index).get("total"))).isZero();
         f.jdbc.update("update db_datasource_t set table_num=10 where tid='own-0'");
-        assertThat(number(run(f,Map.of("mode","facets","filter","unannotated"),f.index).get("total"))).isEqualTo(1);
+        f.jdbc.update("""
+                insert into db_table_t(tid,tenant_id,datasource_id,is_del,annotated) values
+                  ('validation-annotated','ga','own-7',0,1),
+                  ('validation-unannotated','ga','own-7',0,0),
+                  ('validation-foreign','foreign','own-8',0,0),
+                  ('validation-deleted','ga','own-8',1,0)
+                """);
+        assertThat(number(run(f,Map.of("mode","facets","filter","unannotated"),f.index).get("total"))).isEqualTo(2);
+        assertThat(f.counter.reads).isEqualTo(1);
         var denied = raw(f, Map.of("mode","facets","orgIds",Collections.nCopies(1001,"dept-a")), f.index);
         assertThat(denied).isInstanceOf(ExitValue.class);
         assertThat(f.counter.writes).isZero();
@@ -70,14 +84,27 @@ class DatasourceTypeFacetsMagicTest {
         System.out.println("changed "+count+" sources: SQL="+f.counter.reads+", ES="+index.reads+"; 500 IDs/page, foreign/denied/deleted/missing excluded");
     }
 
+    @Test void changedPageFailureDoesNotReturnPartialCounts() throws Exception {
+        var f = fixture("ALL", 1);
+        var invalid = new CompositeIndex(List.of()) {
+            @Override public Map<String,Object> search(Map<?,?> query) {
+                return Map.of("timed_out",true);
+            }
+        };
+        var reply = (ExitValue)raw(f, Map.of("mode","facets","filter","changed"),invalid);
+        assertThat(reply.getValues()[0]).isEqualTo(503);
+        assertThat(f.counter.reads).isZero();
+    }
+
     private static int number(Object value){return value==null?0:((Number)value).intValue();}
     private static DatasourceManagementPermissionsMagicTest.Fixture fixture(String policy,int size) throws Exception {
-        var f=new DatasourceManagementPermissionsMagicTest.Fixture(policy,size);
+        return new DatasourceManagementPermissionsMagicTest.Fixture(policy,size);
+    }
+    static void registerJsonFunctions(JdbcTemplate jdbc) {
         for(var function:List.of("jsonValid","jsonExtract","jsonUnquote")) {
             String sqlName=function.replace("json","JSON_").toUpperCase();
-            f.jdbc.execute("CREATE ALIAS "+sqlName+" FOR '"+JsonFunctions.class.getName()+"."+function+"'");
+            jdbc.execute("CREATE ALIAS "+sqlName+" FOR '"+JsonFunctions.class.getName()+"."+function+"'");
         }
-        return f;
     }
     private static Map<?,?> run(DatasourceManagementPermissionsMagicTest.Fixture f,Map<String,Object> body,Object index) throws Exception {
         return (Map<?,?>)raw(f,body,index);
@@ -88,13 +115,23 @@ class DatasourceTypeFacetsMagicTest {
             .replaceAll("(?m)^import (?!java\\.util\\.)[^\\r\\n]*\\r?\\n","");
         var vars=new HashMap<String,Object>();vars.put("db",f.db);vars.put("body",body);
         vars.put("tenantRuntime",f.scope);vars.put("dataScope",f.scope);vars.put("tenantEs",index);
-        return MagicScript.create("var configData=()=>{es_dataassets:'assets'};\n"+script,null).execute(new MagicScriptContext(vars));
+        vars.put("tableRead",f.tableRead);
+        var compiled=MagicScript.create("var configData=()=>{es_dataassets:'assets'};\n"+script,null);
+        return TenantContext.call("ga", () -> compiled.execute(new MagicScriptContext(vars)));
     }
     public static class JsonFunctions {
         private static final ObjectMapper JSON=new ObjectMapper();
         public static boolean jsonValid(String value){try{return value!=null&&JSON.readTree(value)!=null;}catch(Exception e){return false;}}
-        public static String jsonExtract(String value,String path)throws Exception{var node=JSON.readTree(value).get(path.substring(2));return node==null?null:node.toString();}
-        public static String jsonUnquote(String value)throws Exception{return value==null?null:JSON.readTree(value).asText();}
+        public static String jsonExtract(String value,String path)throws Exception {
+            if (value==null) return null;
+            var node=JSON.readTree(value).get(path.substring(2));
+            return node==null?null:node.toString();
+        }
+        public static String jsonUnquote(String value)throws Exception {
+            if (value==null) return null;
+            var node=JSON.readTree(value);
+            return node.isTextual()?node.textValue():node.toString();
+        }
     }
     public static class CompositeIndex {
         final List<String> ids;int reads;

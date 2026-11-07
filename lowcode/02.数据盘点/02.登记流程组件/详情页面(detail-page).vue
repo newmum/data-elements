@@ -112,7 +112,7 @@ const configMap = {
       { title: "挂接资源", component: "catalog-rela", props: { catalogId: id, dataSourceType: dataSourceType } },
       { title: "关联资源", component: "catalog-rela-table", props: { catalogId: id, dataSourceType: dataSourceType } },
       { title: "汇聚情况", component: "catalog-collect", props: { catalogId: id } },
-      { title: "数据质量", component: "quality-report", props: { catalogId: id } },
+      { title: "数据质量", component: "quality-report" },
     ],
   },
   fileCatalog: {
@@ -127,7 +127,6 @@ const configMap = {
     title: "API服务",
     tabs: [
       { title: "服务详情", component: "api-detail", props: { tid: id } },
-      // { title: "服务信息", component: "api-param", props: { apiId: id } },
       { title: "API调试", component: "api-test", props: { apiId: id } },
       { title: "使用情况", component: "api-use", props: { apiId: id } },
     ],

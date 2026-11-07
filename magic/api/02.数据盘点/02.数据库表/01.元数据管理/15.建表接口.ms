@@ -1,32 +1,30 @@
 {
-  "properties": {},
-  "id": "a0b5bba38fbf428c8e3646864d83d56b",
-  "script": null,
-  "groupId": "6e30fb6d565c40b18d480b219e13b20e",
-  "name": "15.建表接口",
-  "createTime": 1782955344211,
-  "updateTime": 1790843736559,
-  "lock": null,
-  "createBy": null,
-  "updateBy": null,
-  "path": "/createTable",
-  "method": "POST",
-  "parameters": [],
-  "options": [],
-  "requestBody": "{\n    \"ddl\": \"CREATE TABLE sys_gen_info_traget (\\n  id int(0) NOT NULL AUTO_INCREMENT COMMENT '序号',\\n  name varchar(50) NOT NULL COMMENT '姓名',\\n  nationality varchar(50) NOT NULL COMMENT '国籍',\\n  id_number varchar(50) NOT NULL COMMENT '证件号码',\\n  entry_date date(0) NOT NULL COMMENT '入境日期',\\n  entry_port varchar(100) NOT NULL COMMENT '入境口岸',\\n  current_location varchar(100) NOT NULL COMMENT '当前位置',\\n  in_border_status varchar(20) NOT NULL COMMENT '在境状态',\\n  risk_level varchar(20) NOT NULL COMMENT '风险等级',\\n  last_activity_time datetime(0) NOT NULL COMMENT '最后活动时间',\\n  is_del tinyint(0) NOT NULL DEFAULT 0 COMMENT '删除标记（0-未删除，1-已删除）',\\n  create_time datetime(0) NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',\\n  update_time datetime(0) NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',\\n  is_deleted int(1) NOT NULL AUTO_INCREMENT COMMENT '删除标志',\\n  PRIMARY KEY (id)\\n) COMMENT='生成表信息';\\n\",\n    \"dbId\": \"62d25cc8bf1344d6b9f41fed23af4eaf\"\n}",
-  "headers": [],
-  "paths": [],
-  "responseBody": null,
-  "description": "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只预检目标授权和请求完整性，不解析或改写DDL，语法及约束交给数据库执行判断。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。batchReuseValidation=true批量只读校验已有表结构，reuseExistingOnly=true明确复用且绝不建表。",
-  "requestBodyDefinition": null,
-  "responseBodyDefinition": null
+  "properties" : { },
+  "id" : "a0b5bba38fbf428c8e3646864d83d56b",
+  "script" : null,
+  "groupId" : "6e30fb6d565c40b18d480b219e13b20e",
+  "name" : "15.建表接口",
+  "createTime" : 1782955344211,
+  "updateTime" : 1793971287781,
+  "lock" : null,
+  "createBy" : null,
+  "updateBy" : null,
+  "path" : "/createTable",
+  "method" : "POST",
+  "parameters" : [ ],
+  "options" : [ ],
+  "requestBody" : "{\n    \"ddl\": \"CREATE TABLE sys_gen_info_traget (\\n  id int(0) NOT NULL AUTO_INCREMENT COMMENT '序号',\\n  name varchar(50) NOT NULL COMMENT '姓名',\\n  nationality varchar(50) NOT NULL COMMENT '国籍',\\n  id_number varchar(50) NOT NULL COMMENT '证件号码',\\n  entry_date date(0) NOT NULL COMMENT '入境日期',\\n  entry_port varchar(100) NOT NULL COMMENT '入境口岸',\\n  current_location varchar(100) NOT NULL COMMENT '当前位置',\\n  in_border_status varchar(20) NOT NULL COMMENT '在境状态',\\n  risk_level varchar(20) NOT NULL COMMENT '风险等级',\\n  last_activity_time datetime(0) NOT NULL COMMENT '最后活动时间',\\n  is_del tinyint(0) NOT NULL DEFAULT 0 COMMENT '删除标记（0-未删除，1-已删除）',\\n  create_time datetime(0) NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',\\n  update_time datetime(0) NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',\\n  is_deleted int(1) NOT NULL AUTO_INCREMENT COMMENT '删除标志',\\n  PRIMARY KEY (id)\\n) COMMENT='生成表信息';\\n\",\n    \"dbId\": \"62d25cc8bf1344d6b9f41fed23af4eaf\"\n}",
+  "headers" : [ ],
+  "paths" : [ ],
+  "responseBody" : null,
+  "description" : "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只预检目标授权和请求完整性，不解析或改写DDL，语法及约束交给数据库执行判断。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。batchReuseValidation=true批量只读校验已有表结构，reuseExistingOnly=true明确复用且绝不建表。",
+  "requestBodyDefinition" : null,
+  "responseBodyDefinition" : null
 }
 ================================
-// 接口：15.建表接口
-// 路由：POST /dst/database/metadata/createTable
-// 业务说明：默认执行单目标 DDL；batchValidateOnly=true 仅做最多 20 个目标表的批量只读校验，一次预取当前租户目标数据源并逐 ID 核验角色范围。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import jsons
+import request
 import cn.hutool.json.JSONUtil as poolJsons
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig
@@ -48,7 +46,7 @@ import com.alibaba.druid.sql.ast.statement.SQLColumnUniqueKey
 import com.alibaba.druid.sql.ast.statement.SQLColumnPrimaryKey
 
 /*
- * 元数据管理 15：执行建表 DDL。
+ * POST /dst/database/metadata/createTable：执行单目标 DDL，或批量只读校验目标资源。
  *
  * 写接口。根据 dbId 找到目标数据库连接，然后执行 body.ddl。
  * 本接口只负责物理建表，不自动登记资产；建表后若要资产快照，请调用 08 或页面登记流程。
@@ -94,14 +92,32 @@ var firstValue = (row, keys) => {
     // 返回当前业务分支的标准结果。
     return null
 }
-var verifyPartitionReuse = (config, managedHive, table, plan) => {
-    if (plan?.enabled != true || config.getDatabaseType() != DatabaseType.HIVE) { return }
+var verifyPartitionReuse = (config, managedHive, table, plan, preview) => {
+    if (plan?.enabled != true || config.getDatabaseType() != DatabaseType.HIVE) { return null }
     if (config.getDatabaseType() == DatabaseType.HIVE) {
         if (!managedHive) { exit 400, '当前普通Hive写入方式尚不支持分区复用，请使用受管MRS入湖方式' }
+        if (!(plan.partitions instanceof List) || plan.partitions.size() == 0 || plan.partitions.size() > 2000) { exit 400, 'Hive分区计划必须包含1至2000个分区' }
         var layout = hwhive.partitionLayout(config.getDatabase(), table)
+        var missing = []
+        var buckets = []
         for (partition in plan.partitions) {
-            if (!layout.partitions.contains('ods_partition=' + partition.bucket)) { exit 409, '已有Hive表缺少本次配置的分区：' + partition.bucket }
+            var bucket = textOf(partition.bucket)
+            if (blank(bucket) || !bucket.matches('[A-Za-z0-9_-]{1,64}') || buckets.contains(bucket)) { exit 400, 'Hive分区值无效或重复' }
+            buckets.add(bucket)
+            if (!layout.partitions.contains('ods_partition=' + bucket)) { missing.add(bucket) }
         }
+        if (layout.partitions.size() + missing.size() > 2000) {
+            exit 409, '补齐后Hive分区总数将超过2000个的核验上限，请调整分区计划'
+        }
+        if (!preview && missing.size() > 0) { exit 409, '已有Hive表缺少本次配置的分区：' + missing.join(', ') }
+        return { database: config.getDatabase(), tableName: table, tableLocation: layout.location, missing: missing, buckets: buckets }
+    }
+}
+var verifyHivePartitionLocations = (check, afterRegistration) => {
+    if (check == null || check.missing.size() > 0) { return }
+    try { hwhive.partitionLocations(check.database, check.tableName, check.buckets) }
+    catch (e) {
+        exit 409, (afterRegistration ? '分区已注册，但无法核验全部实际目录' : 'Hive分区已存在，但无法核验全部实际目录') + '，请检查Metastore配置和权限后重试'
     }
 }
 var loadAsset = (assetId) => {
@@ -350,6 +366,11 @@ var hiveColumns = (config, name) => {
 }
 // Validate edited DDL as well as generated rows. Keep this boundary active on
 // older running backends until the shared Java parser is upgraded.
+if (body?.repairHivePartitions == true && (body?.canvas != true || body?.reuseExistingOnly != true
+    || body?.validateOnly == true || body?.batchValidateOnly == true || body?.batchReuseValidation == true)) {
+    exit 400, 'Hive补分区仅支持单个已有目标表的确认操作'
+}
+
 if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
     if (body?.canvas != true || body?.validateOnly != true) {
         exit 400, '批量建表语句校验只支持 canvas=true 且 validateOnly=true'
@@ -444,7 +465,8 @@ if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
                 entry.result.tableItems = reusedTableItems(entry.target.tableItems, columns, group.config, entry.target.tableName, warnings)
                 entry.result.compatibilityWarnings = warnings
                 entry.result.physicalTableReused = true
-                verifyPartitionReuse(group.config, group.managedHive, entry.parsed.lookupName, entry.target?.partitionPlan)
+                entry.result.partitionCheck = verifyPartitionReuse(group.config, group.managedHive, entry.parsed.lookupName, entry.target?.partitionPlan, body?.partitionPreviewOnly == true)
+                verifyHivePartitionLocations(entry.result.partitionCheck, false)
             }
         }
         return {batchReuseValidation:true, results:validated, sideEffectsApplied:false}
@@ -470,31 +492,85 @@ if (blank(ddl)) {
 // its selected target exclusively inside the active tenant, then validate DDL.
 if (body.canvas == true) {
     var tenantId = tenantRuntime.id()
-    var registered = connectionProperties.resolve(tenantId, textOf(dbId))
+    // 内部物化批次才会设置 Servlet 属性。直接 HTTP 请求始终从当前租户重新解析登记连接。
+    var internal = request?.get()?.getAttribute('ods.materialization.targets')
+    var trustedBatch = internal != null && !blank(tenantId) && textOf(internal.tenantId) == textOf(tenantId)
+        && internal.prepared != null && internal.connections != null && internal.connections[textOf(dbId)] != null
+    var registered = trustedBatch ? internal.connections[textOf(dbId)] : connectionProperties.resolve(tenantId, textOf(dbId))
     if (registered == null || registered.isEmpty()) { exit 404, '当前租户中不存在所选目标数据源' }
-    var managedHive = databaseTypeOf(registered.dbType) == DatabaseType.HIVE && registered.hiveConnectionMode != 'open-source'
-        && (registered.metadataAccessMode == 'server-managed-mrs' || registered.hiveConnectionMode == 'huawei-mrs'
-            || !blank(registered.hiveProfile))
-    var config = null
-    if (managedHive) {
-        config = new DataSourceConfig()
-        config.setDatabaseType(DatabaseType.HIVE)
-        config.setDatabase(firstValue(registered, ['database', 'dbName', 'dbMetaDbName']))
-    } else {
-        config = dataSourceOf(registered)
+    var prepared = trustedBatch ? internal.prepared[textOf(dbId)] : null
+    if (prepared != null && (prepared.requestedDdl != textOf(ddl) || prepared.requestedTable != textOf(tableName))) {
+        exit 409, '物化目标配置已变化，请重新预检'
     }
-    var parsed = canvasTableDdl.submitted(textOf(ddl), textOf(tableName), config)
+    var managedHive = false
+    var config = null
+    var parsed = null
+    if (prepared != null) {
+        managedHive = prepared.managedHive
+        config = prepared.config
+        parsed = prepared.parsed
+    } else {
+        var databaseType = databaseTypeOf(registered.dbType)
+        if (trustedBatch) {
+            if (blank(registered.dbType)) { exit 400, '目标数据源未配置数据库类型' }
+            try { databaseType = DatabaseType.fromCode(textOf(registered.dbType).toLowerCase()) }
+            catch (error) { exit 400, '目标数据源数据库类型不受支持' }
+            if (!databaseType.isRelational()) { exit 400, '目标数据源类型不支持物理建表' }
+        }
+        managedHive = databaseType == DatabaseType.HIVE && registered.hiveConnectionMode != 'open-source'
+            && (registered.metadataAccessMode == 'server-managed-mrs' || registered.hiveConnectionMode == 'huawei-mrs'
+                || !blank(registered.hiveProfile))
+        if (managedHive) {
+            config = new DataSourceConfig()
+            config.setDatabaseType(DatabaseType.HIVE)
+            config.setDatabase(firstValue(registered, ['database', 'dbName', 'dbMetaDbName']))
+            if (trustedBatch && blank(config.getDatabase())) { exit 400, 'Hive目标未配置数据库名称' }
+        } else {
+            config = dataSourceOf(registered)
+        }
+        parsed = canvasTableDdl.submitted(textOf(ddl), textOf(tableName), config)
+        if (trustedBatch && body.validateOnly == true) {
+            internal.prepared[textOf(dbId)] = {config:config, parsed:parsed, managedHive:managedHive,
+                requestedDdl:textOf(ddl), requestedTable:textOf(tableName)}
+        }
+    }
     if (body.validateOnly == true) {
         return { valid: true, tableName: parsed.tableName, targetScope: parsed.schemaName, ddl: parsed.ddl, partitionPlan:body?.partitionPlan, syntaxChecked:false, sideEffectsApplied: false }
     }
     config.setSchema(parsed.schemaName)
     if (body.reuseExistingOnly == true) {
-        var scoped = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', dbId).eq('is_del', 0).select()
-        if ((scoped).size() != 1) { exit 403, '已有目标表关联的数据源不存在或已删除' }
+        if (!trustedBatch) {
+            var scoped = db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', dbId).eq('is_del', 0).select()
+            if ((scoped).size() != 1) { exit 403, '已有目标表关联的数据源不存在或已删除' }
+        }
         var columns = managedHive ? hiveColumns(config, parsed.lookupName) : metadataExplorerService.getColumns(config, parsed.lookupName)
         var warnings = []
         var tableItems = reusedTableItems(body.tableItems, columns, config, parsed.tableName, warnings)
-        verifyPartitionReuse(config, managedHive, parsed.lookupName, body?.partitionPlan)
+        var partitionCheck = verifyPartitionReuse(config, managedHive, parsed.lookupName, body?.partitionPlan, body?.repairHivePartitions == true)
+        if (body?.repairHivePartitions == true) {
+            if (partitionCheck == null || textOf(body?.expectedHiveDatabase) != textOf(partitionCheck.database)
+                || textOf(body?.expectedHiveTable) != textOf(partitionCheck.tableName)
+                || textOf(body?.expectedHiveLocation) != textOf(partitionCheck.tableLocation)) { exit 409, 'Hive目标库表或存储位置已变化，请重新检查后确认' }
+            if (!(body?.expectedMissingPartitions instanceof List) || body.expectedMissingPartitions.size() == 0
+                || body.expectedMissingPartitions.size() != partitionCheck.missing.size()) { exit 409, '分区检查结果已变化，请重新检查后确认' }
+            var confirmed = []
+            for (bucket in body.expectedMissingPartitions) {
+                if (confirmed.contains(textOf(bucket)) || !partitionCheck.missing.contains(textOf(bucket))) { exit 409, '分区检查结果已变化，请重新检查后确认' }
+                confirmed.add(textOf(bucket))
+            }
+            var qualifiedTable = textOf(parsed.lookupName)
+            if (!qualifiedTable.matches('[A-Za-z_][A-Za-z0-9_]{0,127}')) { exit 400, 'Hive目标表名称不支持安全补分区' }
+            var partitionsToAdd = []
+            for (bucket in partitionCheck.missing) {
+                partitionsToAdd.add('PARTITION (`ods_partition`=\'' + bucket + '\')')
+            }
+            try { hwhive.execDDLSqlInDatabase(config.getDatabase(), 'ALTER TABLE `' + qualifiedTable + '` ADD IF NOT EXISTS ' + partitionsToAdd.join(' ')) }
+            catch (e) { exit 500, 'Hive分区注册未完成，请重新检查实际分区后重试' }
+            partitionCheck = verifyPartitionReuse(config, managedHive, parsed.lookupName, body?.partitionPlan, false)
+            verifyHivePartitionLocations(partitionCheck, true)
+            return {status:'partitions-registered', tableName:parsed.tableName, physicalTableReused:true, partitionCheck:partitionCheck}
+        }
+        verifyHivePartitionLocations(partitionCheck, false)
         return {status:'exists', created:false, tableName:parsed.tableName, physicalTableReused:true,
             tableItems:tableItems, compatibilityWarnings:warnings, partitionPlan:body?.partitionPlan}
     }
@@ -512,7 +588,9 @@ if (body.canvas == true) {
             databaseFailure = databaseFailure.getCause()
             causeDepth = causeDepth + 1
         }
-        exit 500, '目标数据库执行建表语句失败：' + ErrorDetailSanitizer.errorText(databaseFailure.getMessage())
+        var message = '目标数据库执行建表语句失败：' + ErrorDetailSanitizer.errorText(databaseFailure.getMessage())
+        if (trustedBatch) { return {status:'failed', code:500, message:message} }
+        exit 500, message
     }
     return { status: 'created', created: true, tableName: parsed.tableName, partitionPlan:body?.partitionPlan, message: '物化建表成功' }
 }

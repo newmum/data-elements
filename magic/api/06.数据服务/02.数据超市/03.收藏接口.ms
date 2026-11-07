@@ -13,66 +13,132 @@
   "method": "POST",
   "parameters": [],
   "options": [],
-  "requestBody": "{\n    \"catalogId\": \"11\"\n}",
+  "requestBody": "{\"catalogId\":\"validation-catalog\",\"collected\":true}",
   "headers": [],
   "paths": [],
-  "responseBody": "{\n    \"code\": 0,\n    \"msg\": \"success\",\n    \"success\": true,\n    \"data\": {\n        \"id\": \"1995681734511165441\",\n        \"realName\": \"叶华\",\n        \"userName\": \"zn\",\n        \"phone\": \"13222222222\",\n        \"gender\": \"2\",\n        \"orgId\": \"2026503859392086017\",\n        \"orgName\": \"福建省公安\",\n        \"orgRootId\": \"2026503859392086017\",\n        \"serialNumber\": \"0006\",\n        \"orgPath\": \"福建省公安\",\n        \"roles\": [\n            \"admin\"\n        ],\n        \"perms\": [\n            \"sym:asset:add\"\n        ]\n    }\n}",
-  "description": "按当前登录人员和目录标识检查已有收藏，再新增或取消收藏记录并返回处理结果。",
+  "responseBody": "{\"code\":0,\"success\":true,\"data\":true}",
+  "description": "按当前租户和部门设置已上架目录的收藏状态。collected 为布尔值，省略时兼容原切换调用。返回实际收藏状态。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：03.收藏接口
-// 路由：POST /dws/market/collect
-// 业务说明：按当前登录人员和目录标识检查已有收藏，再新增或取消收藏记录并返回处理结果。
 import cn.hutool.core.util.IdUtil
-import log
+import org.redisson.api.RedissonClient as redissonClient
 import "@post:/sym/user/me" as me
+import '@/common/configData' as configData
+import elasticsearch
+import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
+import tableRead
+import tenantRuntime
+import log
 
-// ========== 获取请求参数 ==========
-var catalogId      = body?.catalogId
-
-var userInfo = me()
-
-var applyUserId    = userInfo.id
-var applyUserName  = userInfo.userName
-var applyOrgId  = userInfo.orgId
-
-// ========== 参数校验 ==========
-if (catalogId == null || catalogId == '') {
-    // 参数或业务状态不满足要求时立即终止请求。
-    exit 500, 'catalog_id不能为空'
+// POST /dws/market/collect：设置当前部门对数据目录的收藏状态，返回实际状态。
+// 显式传 collected 时允许重试。旧调用省略时按当前状态切换。
+var submittedId = body?.catalogId
+if (!(submittedId instanceof String) && !(submittedId instanceof Number)) {
+    exit 400, '数据目录标识无效'
+}
+var catalogId = (submittedId + '').trim()
+if (!catalogId.matches('[A-Za-z0-9_-]{1,32}')) {
+    exit 400, '数据目录标识无效'
+}
+var desired = body?.collected
+if (body.containsKey('collected') && !(desired instanceof Boolean)) {
+    exit 400, '收藏状态必须为布尔值'
 }
 
-// ========== 查询是否已收藏 ==========
-var existing = db.table('data_market_collect_t')
-    .where()
-    .eq('catalog_id', catalogId)
-    .eq('apply_org_id', applyOrgId)
-    .selectOne()
+var tenantId = tenantRuntime.id()
+if (tenantId == null || (tenantId + '').trim() == '') { exit 401, '请先登录' }
+// 用户接口使用当前会话应用，调用方的筛选或业务字段不能参与身份解析。
+var submitted = body
+var user = null
+try {
+    body = {}
+    user = me()
+} finally {
+    body = submitted
+}
+if (user?.id == null || (user.id + '').trim() == '') {
+    exit 401, '请先登录'
+}
+var department = user.orgId
+if (department == null || (department + '').trim() == '') {
+    exit 409, '当前账号未关联部门，无法操作收藏'
+}
 
-if (existing != null) {
-    // 已收藏 -> 取消收藏（物理删除）
-    db.table('data_market_collect_t')
-        .where()
-        .eq('tid', existing.tid)
-        .delete()
-    log.info('取消收藏成功, catalog_id: {}, apply_org_id: {}', catalogId, applyOrgId)
-    // 返回当前业务分支的标准结果。
-    return false
-} else {
-    // 未收藏 -> 新增收藏
-    var tid = IdUtil.getSnowflakeNextIdStr()
-    // 将校验后的业务数据写入 MySQL 主表。
-    db.table('data_market_collect_t').primary('tid').insert({
-        tid: tid,
+var lock = null
+var acquired = false
+try {
+    lock = redissonClient.getLock('data-elements:market:favorite:' + tenantId + ':' + department + ':' + catalogId)
+    acquired = lock.tryLock()
+} catch (error) {
+    exit 503, '收藏暂时无法处理，请稍后重试'
+}
+if (!acquired) {
+    exit 409, '收藏状态正在更新，请稍后重试'
+}
+try {
+    var textColumn = (name) => tableRead.column('f', name, 'TEXT')
+    var favorite = tableRead.from('data_market_collect_t', 'f', tenantId)
+    favorite.where(tableRead.equal(textColumn('apply_org_id'), department))
+    favorite.where(tableRead.equal(textColumn('catalog_id'), catalogId))
+    var existing = favorite.rows({tid: textColumn('tid')}, textColumn('tid'), 'asc', 1).size() > 0
+    var nextState = desired == null ? !existing : desired
+    if (nextState == existing) { return existing }
+
+    // 取消收藏只删除当前部门的记录，保留对历史失效目录的清理能力。
+    if (!nextState) {
+        db.table('data_market_collect_t').where()
+            .eq('tenant_id', tenantId).eq('apply_org_id', department).eq('catalog_id', catalogId).delete()
+        return false
+    }
+
+    // 新增收藏同时校验登记主表和租户发布索引，避免引用其它租户或未上架目录。
+    var catalog = db.table('da_catalog_t').columns('tid').where()
+        .eq('tenant_id', tenantId).eq('tid', catalogId).eq('is_del', 0)
+        .eq('asset_status', 2).eq('flow_status', 2).selectOne()
+    if (catalog == null) { exit 404, '该数据目录不存在或暂未上架' }
+    var indexName = esCommonService.resolveTenantIndexName(configData().es_dataassets)
+    var result = null
+    try {
+        result = elasticsearch.index(indexName).search({
+            size: 1,
+            _source: ['tid', 'assetType'],
+            query: {bool: {filter: [
+                {term: {tid: catalogId}},
+                {term: {assetType: 'catalog'}},
+                {term: {publishStatus: 1}},
+                {bool: {should: [{term: {tenantId: tenantId}}, {bool: {must_not: [{exists: {field: 'tenantId'}}]}}],
+                    minimum_should_match: 1}}
+            ]}}
+        })
+    } catch (error) {
+        if ((error?.message + '').contains('index_not_found_exception')) {
+            exit 404, '该数据目录不存在或暂未上架'
+        }
+        throw error
+    }
+    if (result?.timed_out == true || (result?._shards?.failed || 0) > 0) {
+        exit 502, '目录状态暂时无法确认，请稍后重试'
+    }
+    var hits = result?.hits?.hits || []
+    if (hits.size() == 0 || hits[0]?._source?.tid != catalogId || hits[0]._source.assetType != 'catalog') {
+        exit 404, '该数据目录不存在或暂未上架'
+    }
+    db.table('data_market_collect_t').insert({
+        tid: IdUtil.getSnowflakeNextIdStr(),
+        tenant_id: tenantId,
         catalog_id: catalogId,
-        apply_user_id: applyUserId,
-        apply_user_name: applyUserName,
-        apply_org_id: applyOrgId,
-        org_tree_path: userInfo.serialNumber
+        apply_user_id: user.id,
+        apply_user_name: user.userName,
+        apply_org_id: department,
+        org_tree_path: user.serialNumber
     })
-    log.info('收藏成功, tid: {}, catalog_id: {}, apply_user_id: {}', tid, catalogId, applyUserId)
-    // 返回当前业务分支的标准结果。
     return true
+} finally {
+    try {
+        lock.unlock()
+    } catch (error) {
+        log.warn('目录收藏操作锁释放失败')
+    }
 }

@@ -93,7 +93,9 @@ export const centerTableColumns = (tableId: string) => resourceGet<CenterColumn[
   '/dwm/metadata-governance/tables/columns', { tableId }, { timeoutMs: 30000 },
 );
 
-export const directoryDetail = (tid: string) => resourcePost<DirectoryDetail>('/dst/catalog/detail', { tid });
+export const directoryDetail = (tid: string) => resourcePost<DirectoryDetail>('/dwm/center/resource-command', {
+  kind: 'catalogs', method: 'GET', action: 'directory-detail', id: tid,
+});
 export const directoryItems = (tid: string) => resourcePost<DirectoryItem[]>('/dst/catalog/catalog-items/list', { tid });
 /** Load the tenant's dictionary tree once instead of issuing a request for each form field. */
 export async function directoryDictionaries(codes: readonly string[]): Promise<Record<string, DirectoryDictionary[]>> {

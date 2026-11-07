@@ -4,6 +4,9 @@ declare module "vue-router" {
   // https://router.vuejs.org/zh/guide/advanced/meta.html#typescript
   // 可以通过扩展 RouteMeta 接口来输入 meta 字段
   interface RouteMeta {
+    /** 由授权路由确定的低代码入口。 */
+    runtimeSfcRoot?: string;
+
     /**
      * 菜单名称
      * @example 'Dashboard'

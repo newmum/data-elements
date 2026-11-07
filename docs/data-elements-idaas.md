@@ -2690,7 +2690,7 @@ U：先交付详细需求规格，再开发React与Ant Design前端；以Mock数
 
 ### 映射与数据归属
 
-控制库 `baseline.iam_sync_config_t` 中公安配置 `0ba83000fd0344c28c3de98407da7030` 的 `mapping_json` 为 `{"mode":"EXISTING_LOCAL"}`，仅定义“使用已有本地目录”模式，不重复存储逐项映射。公安运行租户为 `2084109831682699264`，当前业务库是 `baseline_ga_old`，接收实例为 `ga-local-v2`。请勿误用 `baseline_ga`。
+控制库 `baseline.iam_sync_config_t` 中公安配置 `0ba83000fd0344c28c3de98407da7030` 的 `mapping_json` 为 `{"mode":"EXISTING_LOCAL"}`，仅定义“使用已有本地目录”模式。公安运行租户为 `2084109831682699264`，接收实例为 `ga-local-v2`。历史验证时使用过 `baseline_ga_old`，当前业务库按[实际数据库与统一结构](data-elements.md#database-schema--当前数据库与统一结构)和运行绑定核实。
 
 逐项映射的唯一入口是公安库 `idaas_receiver_object_t`。本次按相同 ID 与名称核对后关联 113 个机构及 3 个角色；角色还核对了编码、所属本地应用 `1995678661281710081`、启用状态。角色对应关系为：
 
@@ -2799,7 +2799,7 @@ U：先交付详细需求规格，再开发React与Ant Design前端；以Mock数
 - 构建后的运行包不含 `IdentityWorkerMagicModule`，新服务启动健康。
 - 活动 Magic 资源中已无上述两个自动函数和对账接口，人工下发接口仍在。
 - 运行期间连续观察 20 秒，`iam_sync_task_t` 和 `iam_change_event_t` 的记录数与最后更新时间未变化；该观察只证明当时没有自动推进，不替代人工下发端到端测试。
-- `data-elements/scripts/verify_idaas_manual_sync.py` 可重复执行以上只读核验。
+- 复验时按以上检查项比对当前活动资源和运行结果，材料保存到忽略的 `logs/`。历史一次性核验脚本已退役。
 
 
 
@@ -2961,13 +2961,13 @@ V2.2 目录中的旧验收日志与截图继续代表原始排版交付状态；
 
 应用详情的“接入配置”位于末尾，承载客户端登记、回调与认证接入配置，不再显示重复提示。人员、机构、角色、资源、授权用户页签分别显示公安租户库的只读现状与平台正式 IAM 数据，概览用“应用本地／平台”对照。
 
-公安应用 `2084109831682699264` 的已核验运行绑定指向 `baseline_ga_old` 与本地权限应用 `1995678661281710081`。首次导入前，控制库已有 5 名人员、113 个机构和 3 条任职关系，ID、姓名及有效任职与公安库对应；中央机构编码及部分层级按平台规则保留。一次性导入为应用创建 5 条人员资料分配、113 条机构资料分配、3 个应用角色、94 个资源和 95 条角色资源关系。资源缺失的本地编码生成稳定的 `LOCAL_MENU_<本地ID>` 编码，原本地编码和父级 ID 保存在资源扩展资料中。原有中央人员和机构未被覆盖。
+公安应用 `2084109831682699264` 首次导入时绑定 `baseline_ga_old` 与本地权限应用 `1995678661281710081`，现行库以[公共运行基线](data-elements.md#database-schema)为准。首次导入前，控制库已有 5 名人员、113 个机构和 3 条任职关系，ID、姓名及有效任职与公安库对应；中央机构编码及部分层级按平台规则保留。一次性导入为应用创建 5 条人员资料分配、113 条机构资料分配、3 个应用角色、94 个资源和 95 条角色资源关系。资源缺失的本地编码生成稳定的 `LOCAL_MENU_<本地ID>` 编码，原本地编码和父级 ID 保存在资源扩展资料中。原有中央人员和机构未被覆盖。
 
-导入通过 `data-elements/scripts/import_idaas_ga_initial.py` 显式执行，默认只预览，`--apply` 才在控制库事务中提交。完成标记保存在 `iam_application_config_t` 的 `SYSTEM/initialTenantImport` 配置项中，再次运行会拒绝租户数据回流。此前的 `iam_local_inventory_snapshot_t` 已私有备份并删除，其迁移脚本和写入接口 `POST /idaas/applications/local-inventory/refresh` 均已退役。`GET /idaas/applications/local-inventory` 保留为只读本地现状查询，不能写入控制库。
+首次导入在控制库事务中完成，标记保存在 `iam_application_config_t` 的 `SYSTEM/initialTenantImport` 配置项中。一次性导入入口已退役。此前的 `iam_local_inventory_snapshot_t` 已私有备份并删除，其迁移脚本和写入接口 `POST /idaas/applications/local-inventory/refresh` 均已退役。`GET /idaas/applications/local-inventory` 保留为只读本地现状查询。
 
 两套登录账号、密码及已有授权仍隔离：没有复制 `rm_user_t.password` 或租户的用户角色授权，没有创建平台或统一认证账号，也没有生成中央有效授权。应用保持 `auth_mode=LOCAL`、`provisioning_mode=OFF`。初始化以后，公安租户自行新增的人员不自动进入控制库；控制库新建资料若要下发，须按现有接收标准显式配置并启用下发。
 
-验收脚本 `data-elements/scripts/verify_idaas_local_inventory.py` 只读检查正式 IAM 计数、旧镜像表退役、独立账号权限及应用认证开关。密码由进程环境提供。
+复验时只读检查正式 IAM 计数、旧镜像表退役、独立账号权限及应用认证开关。历史一次性验收脚本已退役。
 
 <a id="guide-33258400"></a>
 

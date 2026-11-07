@@ -22,14 +22,15 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：18.目标数据源选项
-// 路由：POST /ods/targetDatasource/options
-// 接入返回 ODS 分域；分发按接入左树数据源范围返回部门→数据源。
-/*
- * 物化建表目标数据源选项。
- * 两种任务共享真实数据库类型和当前租户归属检查，分发目标不默认勾选。
- */
 import tenantRuntime
+import tableRead
+import '@/common/ods-source-classifier' as odsSourceClassifier
+
+/**
+ * 物化建表目标数据源选项。POST /ods/targetDatasource/options
+ * 接入返回当前租户 ODS 分域，分发返回有效部门下已登记的非 ODS 数据源。
+ * taskCategory 默认接入，返回级联 options、平铺 list 与 total。
+ */
 
 var text = value => value == null ? '' : value + ''
 var blank = value => text(value).trim() == ''
@@ -43,45 +44,71 @@ if (taskCategory != 'ingestion' && taskCategory != 'distribution') {
     exit 400, '不支持的任务分类'
 }
 if (taskCategory == 'distribution') {
-    // 同接入左树：已登记的非 ODS 数据源。只投影选项与权限所需字段，部门也校验租户和有效性。
-    // LIMIT 多读一项用于明确拒绝超上限，不能静默截断或逐数据源补查。
-    var candidates = db.select("""
-        SELECT d.tid, d.tenant_id, d.org_id, d.created_by, d.db_name,
-               d.db_type, d.show_connect, d.asset_status, o.name AS department_name
-          FROM db_datasource_t d
-          JOIN rm_org_t o ON o.id=d.org_id AND o.tenant_id=d.tenant_id AND o.deleted=0
-         WHERE d.tenant_id=#{tenantId} AND d.is_del=0 AND d.asset_status>0
-           AND NOT EXISTS (
-                SELECT 1 FROM dwm_center_layer_source_t binding
-                JOIN sym_dict_t node ON node.tid=binding.target_id
-                     AND node.tenant_id=#{tenantId} AND node.is_del=0
-                JOIN sym_dict_t ods ON ods.tenant_id=#{tenantId} AND ods.is_del=0
-                     AND LOWER(ods.dict_code)='ods'
-                     AND ((binding.target_type='layer' AND node.tid=ods.tid)
-                          OR (binding.target_type='domain' AND node.parent_id=ods.tid))
-                JOIN sym_dict_t root ON root.tid=ods.parent_id AND root.tenant_id=#{tenantId}
-                     AND root.is_del=0 AND root.parent_id='0' AND root.dict_code='dataSourceType'
-                WHERE binding.tenant_id=#{tenantId} AND binding.is_del=0 AND binding.datasource_id=d.tid
-           )
-         ORDER BY o.sort_num, o.id, d.db_name, d.tid
-         LIMIT 1001
-    """)
-    if (candidates.size() > 1000) {
-        exit 400, '分发目标数据源候选超过 1000 个，请联系管理员调整可用数据源范围'
+    // 与接入左树共用 ODS 分类，部门与数据源均须在当前租户有效。
+    var classification = odsSourceClassifier()
+    var candidates = tableRead.from('db_datasource_t', 'd', tenantId)
+    var datasourceIdColumn = tableRead.column('d', 'tid', 'TEXT')
+    var departmentIdColumn = tableRead.column('d', 'org_id', 'TEXT')
+    var validDepartmentId = tableRead.column('o', 'id', 'TEXT')
+    candidates.leftJoin('rm_org_t', 'o', 'id', 'org_id', [
+        tableRead.equal(tableRead.column('o', 'deleted', 'NUMBER'), 0)
+    ])
+    candidates.leftJoinGrouped(classification.query, 'ods', 'source_id', 'tid',
+        classification.projection, classification.groups)
+    candidates.where(tableRead.equal(tableRead.column('d', 'is_del', 'NUMBER'), 0))
+    candidates.where(tableRead.greaterThan(tableRead.column('d', 'asset_status', 'NUMBER'), 0))
+    candidates.where(tableRead.not(tableRead.isNull(validDepartmentId)))
+    candidates.where(tableRead.isNull(tableRead.column('ods', 'source_id', 'TEXT')))
+
+    var candidateLimit = 1000
+    var candidateRows = candidates.rows({
+        tid: datasourceIdColumn, orgId: departmentIdColumn, departmentId: validDepartmentId
+    }, datasourceIdColumn, 'asc', candidateLimit)
+    if (candidateRows.size() == 0) {
+        return {options: [], list: [], total: 0}
     }
-    var visibleCandidates = (candidates)
-    var departmentOptions = []
-    var departmentMap = {}
-    var distributionList = []
-    for (datasource in visibleCandidates) {
-        var departmentId = text(datasource.orgId)
-        var department = departmentMap[departmentId]
-        if (department == null) {
-            department = { value: departmentId, label: datasource.departmentName, children: [] }
-            departmentMap[departmentId] = department
-            departmentOptions.add(department)
+    if (candidateRows.size() == candidateLimit) {
+        // 首窗满时再探查一项，明确拒绝溢出。
+        candidates.where(tableRead.greaterThan(datasourceIdColumn, candidateRows[candidateLimit - 1].tid))
+        var overflow = candidates.rows({tid: datasourceIdColumn}, datasourceIdColumn, 'asc', 1)
+        if (overflow.size() > 0) {
+            exit 400, '分发目标数据源候选超过 1000 个，请联系管理员调整可用数据源范围'
         }
+    }
+
+    var candidateById = {}
+    var datasourceIds = []
+    var departmentIds = []
+    for (candidate in candidateRows) {
+        var candidateId = text(candidate.tid)
+        var departmentId = text(candidate.departmentId)
+        datasourceIds.add(candidateId)
+        candidateById[candidateId] = candidate
+        if (!departmentIds.contains(departmentId)) {
+            departmentIds.add(departmentId)
+        }
+    }
+
+    // 按数据库原生顺序分别读取部门和库名，再按部门组装，保持同序号、同库名的 ID 顺序。
+    var departments = db.camel().table('rm_org_t').columns('id', 'name').where()
+        .eq('tenant_id', tenantId).eq('deleted', 0).in('id', departmentIds)
+        .orderBy('sort_num', 'asc').orderBy('id', 'asc').select()
+    var datasources = db.camel().table('db_datasource_t')
+        .columns('tid', 'org_id', 'db_name', 'db_type', 'show_connect', 'asset_status').where()
+        .eq('tenant_id', tenantId).eq('is_del', 0).gt('asset_status', 0).in('tid', datasourceIds)
+        .orderBy('db_name', 'asc').orderBy('tid', 'asc').select()
+    var optionsByDepartment = {}
+    for (datasource in datasources) {
+        var orgId = text(datasource.orgId)
         var datasourceId = text(datasource.tid)
+        var candidate = candidateById[datasourceId]
+        if (candidate == null || text(candidate.orgId) != orgId) {
+            continue
+        }
+        var departmentId = text(candidate.departmentId)
+        if (optionsByDepartment[departmentId] == null) {
+            optionsByDepartment[departmentId] = []
+        }
         var datasourceName = blank(datasource.dbName) ? datasourceId : text(datasource.dbName)
         var unavailable = text(datasource.showConnect) != '1' || text(datasource.assetStatus) != '2'
         var reason = text(datasource.showConnect) != '1' ? '未提供连接' : '未完成登记'
@@ -89,12 +116,31 @@ if (taskCategory == 'distribution') {
             label: datasourceName + (unavailable ? '（' + reason + '）' : ''),
             value: datasourceId, tid: datasourceId, datasourceId: datasourceId,
             datasourceName: datasourceName, dbType: datasource.dbType,
-            orgId: departmentId, parentValue: departmentId,
+            orgId: orgId, parentValue: orgId,
             showConnect: datasource.showConnect, assetStatus: datasource.assetStatus,
             disabled: unavailable
         }
-        department.children.add(option)
-        distributionList.add(option)
+        optionsByDepartment[departmentId].add(option)
+    }
+    var departmentOptions = []
+    var departmentByOrgId = {}
+    var distributionList = []
+    for (department in departments) {
+        var children = optionsByDepartment[text(department.id)]
+        if (children == null) {
+            continue
+        }
+        for (option in children) {
+            var orgId = option.orgId
+            var group = departmentByOrgId[orgId]
+            if (group == null) {
+                group = {value: orgId, label: department.name, children: []}
+                departmentByOrgId[orgId] = group
+                departmentOptions.add(group)
+            }
+            group.children.add(option)
+            distributionList.add(option)
+        }
     }
     return { options: departmentOptions, list: distributionList, total: distributionList.size() }
 }
@@ -126,12 +172,9 @@ var domains = db.table('sym_dict_t').where()
     .orderBy('sort_no', 'asc')
     .orderBy('tid', 'asc')
     .select()
-var domainMap = {}
 var domainIds = []
 for (domain in (domains == null ? [] : domains)) {
-    var domainId = text(domain.tid)
-    domainMap[domainId] = domain
-    domainIds.add(domainId)
+    domainIds.add(text(domain.tid))
 }
 if (domainIds.size() == 0) {
     return { options: [], list: [], total: 0 }

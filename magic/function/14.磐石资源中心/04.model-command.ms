@@ -10,13 +10,13 @@
   "createBy" : null,
   "updateBy" : null,
   "path" : "/model-command",
-  "description" : null,
+  "description" : "维护当前租户的逻辑模型、冻结版本和模型数据项集。保存按版本更新模型及字段投影，提交数据项集时在同一事务生成标准候选。返回业务对象或状态冲突。",
   "returnType" : null,
   "mappingPath" : null,
   "parameters" : [ {
     "name" : "input",
     "value" : null,
-    "description" : null,
+    "description" : "kind、method、action 指定命令，id 为对象标识，version 为更新前版本，body 为业务参数。",
     "required" : false,
     "dataType" : "Object",
     "type" : null,
@@ -28,7 +28,6 @@
   } ]
 }
 ================================
-// 05.逻辑建模、冻结版本和数据项候选。模型草稿与标准候选在当前租户事务内写入。
 import tenantRuntime
 import jsons
 import cn.hutool.json.JSONUtil
@@ -39,7 +38,15 @@ import '@/resource-center/model-read' as readModels
 import '@/resource-center/model-validate' as validateModel
 import '@/resource-center/technical-read' as technicalRead
 import '@/resource-center/planning-read' as readPlanning
+
+// 函数：/resource-center/model-command
+// input.kind、method、action 选择建模、冻结或数据项集操作，修改现有对象须传 id 和 version。
+// 模型、字段投影、标准候选及审计记录在当前租户事务内按操作共同写入。
+
 var tenantId = tenantRuntime.id()
+if (tenantId == null || (tenantId + '').trim() == '') {
+    exit 401, '当前登录租户无效，请重新登录'
+}
 var actorId = StpUtil.getLoginIdAsString()
 var now = new Date()
 var text = v => v == null ? '' : (v + '').trim()
@@ -127,13 +134,32 @@ var save = (m, fresh) => {
             domain_name:m.domain,database_id:m.databaseId,owner_name:m.owner,model_status:m.state,model_description:m.description,
             design_json:designJson,revision_no:1,created_by:actorId,created_time:now,updated_by:actorId,updated_time:now,is_del:0})
     } else {
-        var changed = db.update('UPDATE res_logical_model SET model_name=#{name}, model_description=#{description},design_json=#{designJson},model_status=#{state}, revision_no=revision_no+1,updated_by=#{actorId},updated_time=#{now} WHERE tid=#{id} AND tenant_id=#{tenantId} AND is_del=0 AND revision_no=#{version}',
-            {name:m.name,description:m.description,designJson:designJson,state:m.state,actorId:actorId,now:now,id:m.id,tenantId:tenantId,version:m.version})
-        if (changed != 1) { exit 409,'模型已更新，请刷新后重试' }; m.version = m.version + 1
+        // 旧版本作为更新条件。允许显式空说明覆盖旧值。
+        var expected = m.version
+        var changed = db.table('res_logical_model').withBlank().where()
+            .eq('tenant_id', tenantId)
+            .eq('tid', m.id)
+            .eq('is_del', 0)
+            .eq('revision_no', expected)
+            .update({
+                model_name: m.name,
+                model_description: m.description,
+                design_json: designJson,
+                model_status: m.state,
+                revision_no: expected + 1,
+                updated_by: actorId,
+                updated_time: now
+            })
+        if (changed != 1) {
+            exit 409, '模型已更新，请刷新后重试'
+        }
+        m.version = expected + 1
     }
-    // 历史单实体字段表继续作为查询投影；entity_id将同名字段隔离到各自实体。
-    var modelId = m.id
-    db.update('DELETE FROM res_logical_model_field WHERE tenant_id=#{tenantId} AND model_id=#{modelId}')
+    // 同一事务重建当前租户模型的全部字段投影，包括此前删除的投影行。
+    db.table('res_logical_model_field').where()
+        .eq('tenant_id', tenantId)
+        .eq('model_id', m.id)
+        .delete()
     for (e in m.entities) { for (f in e.fields) {
         var pk = false; for (k in e.keys == null ? [] : e.keys) { if (k.kind == 'primary' && k.fieldIds.contains(f.id)) { pk = true } }
         db.table('res_logical_model_field').primary('tid').insert({tid:IdUtil.fastSimpleUUID(),tenant_id:tenantId,model_id:m.id,entity_id:e.id,
@@ -164,10 +190,28 @@ if (kind == 'itemsets') {
             item.candidateId = candidateId
             created = created + 1
         }
-        var changed = db.update('UPDATE res_model_itemset SET items_json=#{json},itemset_status=\'SUBMITTED\',revision_no=revision_no+1,updated_time=#{now},updated_by=#{actorId} WHERE tid=#{id} AND tenant_id=#{tenantId} AND revision_no=#{version} AND is_del=0',
-            {json:jsons.toJSONStr(items),now:now,actorId:actorId,id:id,tenantId:tenantId,version:set.version})
-        if (changed != 1) { exit 409,'数据项集已经更新' }; audit('提交标准候选',set,'提交 ' + items.size() + ' 个数据项，新建 ' + created + ' 个未发布标准候选草稿')
-        set.items = items; set.state = 'SUBMITTED'; set.version = set.version + 1; return set
+        // 最终版本校验失败时退出事务，撤销此前写入的候选项。
+        var expected = set.version
+        var changed = db.table('res_model_itemset').where()
+            .eq('tenant_id', tenantId)
+            .eq('tid', id)
+            .eq('revision_no', expected)
+            .eq('is_del', 0)
+            .update({
+                items_json: jsons.toJSONStr(items),
+                itemset_status: 'SUBMITTED',
+                revision_no: expected + 1,
+                updated_time: now,
+                updated_by: actorId
+            })
+        if (changed != 1) {
+            exit 409, '数据项集已经更新'
+        }
+        audit('提交标准候选', set, '提交 ' + items.size() + ' 个数据项，新建 ' + created + ' 个未发布标准候选草稿')
+        set.items = items
+        set.state = 'SUBMITTED'
+        set.version = expected + 1
+        return set
     })
 }
 if (kind != 'models') { exit 400,'不支持的模型对象类型' }

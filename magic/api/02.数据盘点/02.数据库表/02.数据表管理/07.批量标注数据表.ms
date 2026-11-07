@@ -17,28 +17,25 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "批量标注数据表（POST /dst/database/table/batchAnnotate）。批量写入 db_table_t，并使用一次 bulk 请求同步当前分片的 dataassets ES 投影；同一数据源的已有表只预读一次，避免逐表 N+1 查询。refreshDatasource=false 可由分片客户端延迟到全部分片完成后统一刷新数据源统计；dryRun=true 时只校验和返回待写入结果；使用请求参数 tables、rows、list、datasourceId、dbId、annotated、dryRun、refreshDatasource。",
+  "description": "批量标注数据表（POST /dst/database/table/batchAnnotate）。整批已有表通常预读一次，同名候选量较大时按表 ID 分窗读取。缺少可用同源显式 ID 且名称回退命中多条活动表时，返回 409 并拒绝整批。批量保存表及字段，使用一次 bulk 同步当前分片的 dataassets ES 投影。refreshDatasource=false 可延迟数据源统计刷新；dryRun=true 时仅校验和预览。使用请求参数 tables、rows、list、datasourceId、dbId、annotated、dryRun、refreshDatasource。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：07.批量标注数据表
-// 路由：POST /dst/database/table/batchAnnotate
-// 业务说明：批量标注数据表（POST /dst/database/table/batchAnnotate）。批量写入 db_table_t，并使用一次 bulk 请求同步当前分片的 dataassets ES 投影；同一数据源的已有表只预读一次，避免逐表 N+1 查询。refreshDatasource=false 可由分片客户端延迟到全部分片完成后统一刷新数据源统计；dryRun=true 时只校验和返回待写入结果；使用请求参数 tables、rows、list、datasourceId、dbId、annotated、dryRun、refreshDatasource。
 import cn.hutool.core.util.IdUtil
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import jsons
 import log
 import metadataAsset
+import tableRead
 import tenantRuntime
 import '@post:/dst/maintenance/batchRefresh' as refreshAssetIndex
 
-/*
- * 数据表管理 07：第二步批量标注数据表。
- *
- * 该接口服务 register-dbTable 的多选/当前筛选分片标注场景。每个数据源只预读一次
- * db_table_t，分片内逐表幂等写主表，再按 dataassets 既有 mapping 批量同步搜索投影。
- * 数据表仍以 db_table_t 为唯一主表，不写 da_asset_t/da_prop_t/审批关系。
+/**
+ * 批量标注数据表（POST /dst/database/table/batchAnnotate）。
+ * 接收当前租户内最多 100 张表，按显式 ID 优先、同数据源活动表名回退，返回标注结果和预读次数。
+ * 显式 ID 与数据源不匹配时拒绝整批，名称回退匹配到多条活动记录时返回冲突。
+ * dryRun 仅校验和预览。正式提交保存表及字段，并批量同步搜索投影，可由客户端延迟刷新数据源统计。
  */
 
 var textOf = (value) => value == null ? null : value + ''
@@ -127,15 +124,19 @@ for (item in tableItems) {
 // 整批预取来源、现有表和字段；循环中只读内存，不逐表或逐数据源补查。
 var batchSourceIds = []
 var requestedTableIds = []
-var requestedNames = []
+var requestedNamesBySource = {}
 for (prepared in preparedItems) {
     var sourceId = textOf(prepared.datasourceId)
-    if (!batchSourceIds.contains(sourceId)) { batchSourceIds.add(sourceId) }
+    if (requestedNamesBySource[sourceId] == null) {
+        batchSourceIds.add(sourceId)
+        requestedNamesBySource[sourceId] = []
+    }
     var requestedId = rowValue(prepared.item, ['tid', 'tableId', 'id'])
     if (blank(requestedId)) { requestedId = rowValue(prepared.props, ['tid', 'tableId', 'id']) }
     if (!blank(requestedId) && !requestedTableIds.contains(textOf(requestedId))) { requestedTableIds.add(textOf(requestedId)) }
     var nameKey = normalizeKey(prepared.tableName)
-    if (!requestedNames.contains(nameKey)) { requestedNames.add(nameKey) }
+    var sourceNames = requestedNamesBySource[sourceId]
+    if (!sourceNames.contains(nameKey)) { sourceNames.add(nameKey) }
 }
 var sources = db.table('db_datasource_t').where().in('tid', batchSourceIds)
     .eq('tenant_id', tenantId).eq('is_del', 0).select()
@@ -145,29 +146,90 @@ for (source in visibleSources) { visibleSourceIds.add(textOf(rowValue(source, ['
 for (sourceId in batchSourceIds) {
     if (!visibleSourceIds.contains(sourceId)) { exit 403, '数据源不存在或不在当前租户内' }
 }
-if (requestedTableIds.size() == 0) { requestedTableIds.add('') }
-var existingRows = db.select("""
-    SELECT * FROM db_table_t WHERE tenant_id=#{tenantId}
-      AND (tid IN (#{requestedTableIds}) OR
-           (datasource_id IN (#{batchSourceIds}) AND LOWER(table_name) IN (#{requestedNames})))
-""")
+
+var existingColumn = (name, kind) => tableRead.column('existing_table', name, kind)
+var existingIdColumn = existingColumn('tid', 'TEXT')
+var existingSourceColumn = existingColumn('datasource_id', 'TEXT')
+var existingNameColumn = existingColumn('table_name', 'TEXT')
+var existingDeletedColumn = existingColumn('is_del', 'NUMBER')
+var normalizedNameColumn = tableRead.lower(existingNameColumn)
+var sourceNameMatches = []
+for (sourceId in batchSourceIds) {
+    sourceNameMatches.add(tableRead.all([
+        tableRead.equal(existingSourceColumn, sourceId),
+        tableRead.in(normalizedNameColumn, requestedNamesBySource[sourceId])
+    ]))
+}
+// 显式 ID 独立于来源和删除状态查询，才能识别错配并保留同源历史记录。
+var existingMatches = tableRead.any([
+    tableRead.in(existingIdColumn, requestedTableIds),
+    tableRead.all([tableRead.equal(existingDeletedColumn, 0), tableRead.any(sourceNameMatches)])
+])
+var existingProjection = {
+    tid: existingIdColumn,
+    datasource_id: existingSourceColumn,
+    table_name: existingNameColumn,
+    is_del: existingDeletedColumn,
+    table_name_cn: existingColumn('table_name_cn', 'TEXT'),
+    table_type: existingColumn('table_type', 'TEXT'),
+    business_type: existingColumn('business_type', 'TEXT'),
+    business_type_reason: existingColumn('business_type_reason', 'TEXT'),
+    record_count: existingColumn('record_count', 'NUMBER'),
+    field_count: existingColumn('field_count', 'NUMBER'),
+    storage_size: existingColumn('storage_size', 'TEXT'),
+    total_size_formatted: existingColumn('total_size_formatted', 'TEXT'),
+    total_size_bytes: existingColumn('total_size_bytes', 'NUMBER'),
+    org_id: existingColumn('org_id', 'TEXT'),
+    org_path: existingColumn('org_path', 'LOB'),
+    related_directory: existingColumn('related_directory', 'TEXT'),
+    data_source_type: existingColumn('data_source_type', 'TEXT'),
+    field_governance_config: existingColumn('field_governance_config', 'LOB')
+}
 var existingCache = {}
-var existingQueryCount = 1
+var existingQueryCount = 0
 var requestedIdSource = {}
-for (sourceId in batchSourceIds) { existingCache[sourceId] = { byId: {}, byName: {} } }
-for (existingRow in existingRows) {
-    var existingId = textOf(rowValue(existingRow, ['tid']))
-    var sourceKey = textOf(rowValue(existingRow, ['datasourceId', 'datasource_id']))
-    if (!visibleSourceIds.contains(sourceKey)) { exit 403, '数据表不在本批次获授权的数据源内' }
-    var maps = existingCache[sourceKey]
-    maps.byId[existingId] = existingRow
-    requestedIdSource[existingId] = sourceKey
-    if (textOf(rowValue(existingRow, ['isDel', 'is_del'])) == '0') {
-        maps.byName[normalizeKey(rowValue(existingRow, ['tableName', 'table_name']))] = existingRow
+for (sourceId in batchSourceIds) {
+    existingCache[sourceId] = {byId: {}, byName: {}, ambiguousNames: {}}
+}
+var lastExistingId = null
+var hasMoreExistingRows = true
+var existingWindowSize = 1000
+while (hasMoreExistingRows) {
+    // 常规批次只读一窗，历史同名较多时以唯一表 ID 续读，不截断候选。
+    var query = tableRead.from('db_table_t', 'existing_table', tenantId)
+    query.where(existingMatches)
+    if (lastExistingId != null) {
+        query.where(tableRead.greaterThan(existingIdColumn, lastExistingId))
+    }
+    var existingRows = query.rows(existingProjection, existingIdColumn, 'asc', existingWindowSize)
+    existingQueryCount++
+    for (existingRow in existingRows) {
+        var existingId = textOf(existingRow.tid)
+        var sourceKey = textOf(existingRow.datasource_id)
+        if (!visibleSourceIds.contains(sourceKey)) { exit 403, '数据表不在本批次获授权的数据源内' }
+        var maps = existingCache[sourceKey]
+        if (requestedTableIds.contains(existingId)) {
+            maps.byId[existingId] = existingRow
+            requestedIdSource[existingId] = sourceKey
+        }
+        // 数据库排序规则可能宽于 Magic 规范化，只缓存精确请求的名称键。
+        var nameKey = normalizeKey(existingRow.table_name)
+        if (textOf(existingRow.is_del) == '0' && requestedNamesBySource[sourceKey].contains(nameKey)) {
+            if (maps.byName[nameKey] == null) {
+                maps.byName[nameKey] = existingRow
+            } else if (textOf(maps.byName[nameKey].tid) != existingId) {
+                maps.ambiguousNames[nameKey] = true
+            }
+        }
+    }
+    hasMoreExistingRows = existingRows.size() == existingWindowSize
+    if (hasMoreExistingRows) {
+        lastExistingId = existingRows[existingRows.size() - 1].tid
     }
 }
 var existingMapsOf = (datasourceId) => existingCache[textOf(datasourceId)]
 var resolvedTableIds = []
+var ambiguousTableName = null
 for (prepared in preparedItems) {
     var requestedId = rowValue(prepared.item, ['tid', 'tableId', 'id'])
     if (blank(requestedId)) { requestedId = rowValue(prepared.props, ['tid', 'tableId', 'id']) }
@@ -177,11 +239,22 @@ for (prepared in preparedItems) {
     }
     var maps = existingMapsOf(prepared.datasourceId)
     var existing = blank(requestedId) ? null : maps.byId[textOf(requestedId)]
-    if (existing == null) { existing = maps.byName[normalizeKey(prepared.tableName)] }
+    if (existing == null) {
+        var nameKey = normalizeKey(prepared.tableName)
+        if (maps.ambiguousNames[nameKey] == true) {
+            if (ambiguousTableName == null) { ambiguousTableName = prepared.tableName }
+            continue
+        }
+        existing = maps.byName[nameKey]
+    }
     if (existing != null) {
         var resolvedId = textOf(rowValue(existing, ['tid']))
         if (!resolvedTableIds.contains(resolvedId)) { resolvedTableIds.add(resolvedId) }
     }
+}
+// 保留跨来源 ID 错误优先级，整批校验后才读取旧字段或写入。
+if (ambiguousTableName != null) {
+    exit 409, ambiguousTableName + ' 匹配多条活动数据表，请指定表 ID'
 }
 var oldColumnsByTable = {}
 if (resolvedTableIds.size() > 0 && annotatedFlag == 1) {

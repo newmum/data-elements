@@ -519,7 +519,7 @@ const loadLayerDomains = async (layer: any, existingDomains: any[]) => {
         code,
         name: item.dictName || item.dict_name || item.name || existing.name || "",
         datasourceId: existing.datasourceId || "",
-        sortNo: Number(item.sortNo || item.sort_no || index + 1),
+        sortNo: Number(item.sortNo ?? item.sort_no ?? index + 1),
         index,
       };
     });
@@ -640,15 +640,21 @@ const moveDomain = async (index: number, step: number) => {
   const current = domains[index];
   const target = domains[targetIndex];
   if (current.readonly || target.readonly) return;
+  const currentSortNo = current.sortNo;
+  const targetSortNo = target.sortNo;
   await Promise.all([
-    $common.post("/sym/dictSaveOrUpdate", { tid: current.targetId, sortNo: target.sortNo }),
-    $common.post("/sym/dictSaveOrUpdate", { tid: target.targetId, sortNo: current.sortNo }),
+    $common.post("/sym/dictSaveOrUpdate", { tid: current.targetId, sortNo: targetSortNo }),
+    $common.post("/sym/dictSaveOrUpdate", { tid: target.targetId, sortNo: currentSortNo }),
   ]);
+  // 同步已保存的排序值，后续整层保存会继续提交这个顺序。
+  if (targetSortNo != null) current.sortNo = targetSortNo;
+  if (currentSortNo != null) target.sortNo = currentSortNo;
   [domains[index], domains[targetIndex]] = [domains[targetIndex], domains[index]];
   reindexDomains();
 };
 
-const saveNodeConfig = () => {
+const saveNodeConfig = async () => {
+  if (configSaving.value) return;
   const form = configDialog.value;
   if (!form.name.trim()) {
     ElMessage.warning("请填写名称");
@@ -672,48 +678,35 @@ const saveNodeConfig = () => {
     ElMessage.warning("同一分层下的分域编码不能重复");
     return;
   }
+  const settings = { name: form.name.trim(), datasourceId: form.datasourceId || "" };
+  // 整层配置交由服务端一次校验并提交，展示用的只读分域不参与保存。
+  const payload = form.targetType === "layer"
+    ? {
+      ...settings,
+      layerId: form.targetId,
+      domains: editableDomains.map((domain: any, index: number) => ({
+        targetId: domain.targetId,
+        datasourceId: domain.datasourceId || "",
+        dictName: domain.name.trim(),
+        dictCode: String(domain.code || domain.layerCode || "").trim().toLowerCase(),
+        sortNo: domain.sortNo ?? index + 1,
+      })),
+    }
+    : { ...settings, targetType: form.targetType, targetId: form.targetId, layerCode: form.layerCode };
+
   configSaving.value = true;
-  const requests = [
-    $common.post("/dwm/center/node/save", {
-      targetType: form.targetType,
-      targetId: form.targetId,
-      layerCode: form.layerCode,
-      name: form.name.trim(),
-      datasourceId: form.datasourceId || "",
-    }),
-  ];
-  if (form.targetType === "layer") {
-    editableDomains.forEach((domain: any, index: number) => {
-      const code = String(domain.code || domain.layerCode || "").trim().toLowerCase();
-      domain.code = code;
-      domain.layerCode = code;
-      requests.push(
-        $common.post("/sym/dictSaveOrUpdate", {
-          tid: domain.targetId,
-          dictName: domain.name.trim(),
-          dictCode: code,
-          sortNo: domain.sortNo || index + 1,
-        }).then(() => (
-          $common.post("/dwm/center/node/save", {
-            targetType: "domain",
-            targetId: domain.targetId,
-            layerCode: code,
-            name: domain.name.trim(),
-            datasourceId: domain.datasourceId || "",
-          })
-        )),
-      );
-    });
+  try {
+    const result = await $common.post("/dwm/center/node/save", payload);
+    if (result?.success !== true) {
+      ElMessage.error(result?.message || result?.msg || "保存失败，请重试");
+      return;
+    }
+    ElMessage.success("保存成功");
+    configDialog.value.visible = false;
+    await handleAction("init");
+  } finally {
+    configSaving.value = false;
   }
-  Promise.all(requests)
-    .then(() => {
-      ElMessage.success("保存成功");
-      configDialog.value.visible = false;
-      handleAction("init", null);
-    })
-    .finally(() => {
-      configSaving.value = false;
-    });
 };
 
 const handleLayerCommand = (command: string, layer: any) => {

@@ -2,6 +2,7 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.junit.jupiter.api.Assertions.*;
 import cn.hutool.json.JSONUtil;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.ssssssss.script.MagicScript;
@@ -32,7 +33,15 @@ class FileRegistrationSnapshotMagicTest {
         Object run(Map<String,Object> body) throws Exception {
             String script=CanonicalMagicSources.byId("metadata_file_registration_01").replaceAll("(?m)^import (?!java\\.|cn\\.)[^\\r\\n]*\\r?\\n","");
             base.reads=0;
-            return MagicScript.create(script,null).execute(new MagicScriptContext(Map.of("body",body,"db",base.db,"tenantRuntime",base.scope,"dataScope",scope)));
+            var tableRead = TaskRuntimeMagicFixture.structuredReads(base.jdbc, sql -> base.reads++);
+            try (var tenant = TenantContext.use("police")) {
+                return MagicScript.create(script,null).execute(new MagicScriptContext(Map.of("body",body,"db",base.db,
+                        "tenantRuntime",base.scope,"dataScope",scope,"tableRead",tableRead)));
+            }
+        }
+
+        Object preview() throws Exception {
+            return run(Map.of("action", "save", "dbId", "source", "dryRun", true, "files", files));
         }
     }
     @Test void twentyAndHundredDefinitionsUseThreeReadsAndCannotMixForeignIds() throws Exception {
@@ -66,5 +75,67 @@ class FileRegistrationSnapshotMagicTest {
             assertInstanceOf(Map.class,f.run(Map.of("action","save","dbId","source","dryRun",true,"files",f.files)));assertEquals(4,f.base.reads);
             f.files.getLast().put("relatedTableName","hidden");assertInstanceOf(ExitValue.class,f.run(Map.of("action","save","dbId","source","dryRun",true,"files",f.files)));assertEquals(4,f.base.reads);
         }
+    }
+
+    @Test void distinctFileReferencesReadTwoBatchesAndRejectAFieldFromAnotherTable() throws Exception {
+        for (int count : List.of(20, 100)) {
+            var f = new Fixture(count);
+            f.scope.policy = "ORG";
+            var tables = new ArrayList<Object[]>();
+            var columns = new ArrayList<Object[]>();
+            for (int i = 0; i < count; i++) {
+                String id = "related-" + i;
+                String name = "registered_table_" + i;
+                String fieldId = "attribute-" + i;
+                tables.add(new Object[] {id, name});
+                columns.add(new Object[] {fieldId, id});
+                f.files.get(i).put("relatedTableName", i % 2 == 0 ? id : name);
+                f.files.get(i).put("relatedFieldName", i % 2 == 0 ? fieldId : "attribute");
+            }
+            f.base.jdbc.batchUpdate("insert into db_table_t(tid,tenant_id,datasource_id,table_type,table_name,is_del) "
+                    + "values(?,'police','source','TABLE',?,0)", tables);
+            f.base.jdbc.batchUpdate("insert into db_table_column_t(tid,tenant_id,table_id,column_name,is_del) "
+                    + "values(?,'police',?,'attribute',0)", columns);
+
+            var response = assertInstanceOf(Map.class, f.preview());
+            var rows = assertInstanceOf(List.class, response.get("list"));
+            assertEquals(count, rows.size());
+            assertEquals(5, f.base.reads);
+            for (int i = 0; i < count; i++) {
+                var row = assertInstanceOf(Map.class, rows.get(i));
+                assertEquals("related-" + i, row.get("relatedTableId"));
+                assertEquals("attribute-" + i, row.get("relatedFieldId"));
+            }
+            f.files.getLast().put("relatedFieldName", "attribute-0");
+            var denied = assertInstanceOf(ExitValue.class, f.preview());
+            assertEquals(422, denied.getValues()[0]);
+            assertEquals(5, f.base.reads);
+            System.out.println("File registration: " + count + " distinct related tables/fields, 5 reads, wrong-table field denied");
+        }
+    }
+
+    @Test void rejectsAmbiguousNamesAndAllowsExplicitReferences() throws Exception {
+        var f = new Fixture(1);
+        f.base.jdbc.execute("""
+                insert into db_table_t(tid,tenant_id,datasource_id,table_type,table_name,is_del) values
+                    ('ref-one','police','source','TABLE','shared_name',0),
+                    ('ref-two','police','source','TABLE','shared_name',0);
+                insert into db_table_column_t(tid,tenant_id,table_id,column_name,is_del) values
+                    ('field-one','police','ref-one','shared_field',0),
+                    ('field-two','police','ref-one','shared_field',0);
+                """);
+        var file = f.files.getFirst();
+        file.put("relatedTableName", "shared_name");
+        file.put("relatedFieldName", "shared_field");
+        assertEquals(422, assertInstanceOf(ExitValue.class, f.preview()).getValues()[0]);
+        assertEquals(4, f.base.reads, "Ambiguous table names must not trigger field reads");
+        file.put("relatedTableName", "ref-one");
+        assertEquals(422, assertInstanceOf(ExitValue.class, f.preview()).getValues()[0]);
+        assertEquals(5, f.base.reads);
+        file.put("relatedFieldName", "field-two");
+        var response = assertInstanceOf(Map.class, f.preview());
+        var row = assertInstanceOf(Map.class, ((List<?>) response.get("list")).getFirst());
+        assertEquals("ref-one", row.get("relatedTableId"));
+        assertEquals("field-two", row.get("relatedFieldId"));
     }
 }

@@ -30,6 +30,10 @@ public final class CanonicalMagicSources {
         return read(matches.getFirst()).source();
     }
 
+    static String byPath(String relativePath, String metadataId) throws IOException {
+        return read(new Entry(magicRoot(), relativePath, metadataId)).source();
+    }
+
     public static List<Script> under(String... relativeDirectories) throws IOException {
         List<Script> result = new ArrayList<>();
         for (var entry : entries()) {

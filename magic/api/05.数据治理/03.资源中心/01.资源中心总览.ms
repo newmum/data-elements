@@ -22,35 +22,47 @@
   "responseBodyDefinition": null
 }
 ================================
-// 路由：GET /dwm/center/layer-list
-// 总览只读取轻量元数据和数据库聚合结果，禁止读取完整表资产或逐表补查。
 import '@get:/dwm/center/dst-info' as dstInfo
 import tenantRuntime
 import dataScope
+import tableRead
 import java.util.Map
 import cn.hutool.json.JSONUtil
 
+// GET /dwm/center/layer-list 无请求参数，返回当前租户的数仓分层、分域、可见绑定及数据统计。
+// 字典使用当前租户的活动 dataSourceType 根。按角色限定数据源和资产范围，关联及统计在集合遍历前完成。
+// 配置只用于服务端解析历史分类，响应不返回连接凭据。接口只读。
 var textOf = value => value == null ? '' : ('' + value).trim()
 var blank = value => textOf(value) == ''
 var lower = value => textOf(value).toLowerCase()
 var rowValue = (row, keys) => {
-    if (row == null) { return null }
+    if (row == null) {
+        return null
+    }
     for (key in keys) {
         var value = row instanceof Map ? row.get(key) : row[key]
-        if (value == null) { value = row[key.toUpperCase()] }
-        if (value != null) { return value }
+        if (value == null) {
+            value = row[key.toUpperCase()]
+        }
+        if (value != null) {
+            return value
+        }
     }
     return null
 }
 var firstValue = (row, keys) => {
     for (key in keys) {
         var value = rowValue(row, [key])
-        if (!blank(value)) { return value }
+        if (!blank(value)) {
+            return value
+        }
     }
     return null
 }
 var tenantId = textOf(tenantRuntime.id())
-if (tenantId == '') { exit 401, '当前租户无效' }
+if (tenantId == '') {
+    exit 401, '当前租户无效'
+}
 var scope = dataScope.dataSource()
 var scopeMode = textOf(scope?.scope)
 var scopeUserId = textOf(scope?.userId)
@@ -58,101 +70,165 @@ var scopeOrgIds = scope?.organizationIds == null ? [] : scope.organizationIds
 if (!['ALL', 'ORG', 'OWNER'].contains(scopeMode) || scopeUserId == '') {
     exit 403, '无法确定当前数据范围'
 }
-// 权限条件固定在 SQL 中，身份/部门/租户均绑定；空部门范围不返回数据。
-var scopeOrgCount = scopeOrgIds.size()
-if (scopeOrgCount == 0) { scopeOrgIds = [''] }
+// 各聚合沿用同一可见数据源条件。空组织集合直接匹配空集。
+var visibleSource = (query, alias) => {
+    query.where(tableRead.equal(tableRead.column(alias, 'is_del', 'NUMBER'), 0))
+    if (scopeMode == 'OWNER') {
+        query.where(tableRead.equal(tableRead.column(alias, 'created_by', 'TEXT'), scopeUserId))
+    } else if (scopeMode == 'ORG') {
+        query.where(tableRead.in(tableRead.column(alias, 'org_id', 'TEXT'), scopeOrgIds))
+    }
+}
 
-var layerRows = db.select("""
-    SELECT tid, dict_name, dict_code, parent_id, tree_path
-      FROM sym_dict_t
-     WHERE tenant_id=#{tenantId} AND is_del=0
-       AND tree_path LIKE '0.8961bb1c926143a89dd9d0b0e0adb4ef.%'
-     ORDER BY level_no, sort_no, dict_name
-""")
+// 只从有效的顶层根定位目录，兼容旧库用空父标识表示顶层的记录。
+var dictionary = tableRead.from('sym_dict_t', 'r', tenantId)
+var dictionaryId = tableRead.column('r', 'tid', 'TEXT')
+var dictionaryParent = tableRead.column('r', 'parent_id', 'TEXT')
+dictionary.where(tableRead.equal(tableRead.column('r', 'dict_code', 'TEXT'), 'dataSourceType'))
+dictionary.where(tableRead.equal(tableRead.column('r', 'is_del', 'NUMBER'), 0))
+dictionary.where(tableRead.any([
+    tableRead.equal(dictionaryParent, '0'), tableRead.equal(dictionaryParent, ''), tableRead.isNull(dictionaryParent)
+]))
+var dictionaryRoots = dictionary.rows({
+    tid: dictionaryId, treePath: tableRead.column('r', 'tree_path', 'TEXT')
+}, dictionaryId, 'asc', 1)
+var layerRows = []
+var dataSourceTypeId = ''
+if (dictionaryRoots.size() > 0) {
+    var dictionaryRoot = dictionaryRoots[0]
+    dataSourceTypeId = textOf(dictionaryRoot.tid)
+    var rootPath = textOf(dictionaryRoot.treePath)
+    if (rootPath != '' && !rootPath.contains('%') && !rootPath.contains('_')) {
+        var prefix = (rootPath.endsWith('.') ? rootPath : rootPath + '.') + '%'
+        var orderedLayers = db.camel().table('sym_dict_t').columns('tid', 'dict_name', 'dict_code', 'parent_id', 'tree_path')
+            .where().eq('tenant_id', tenantId).eq('is_del', 0).ne('tid', dataSourceTypeId).like('tree_path', prefix)
+            .orderBy('level_no', 'asc').orderBy('sort_no', 'asc').orderBy('dict_name', 'asc').orderBy('tid', 'asc')
+        var windowSize = 1000
+        var first = orderedLayers.page(windowSize, 0)
+        if (first.list != null) {
+            layerRows.addAll(first.list)
+        }
+        var offset = windowSize
+        while (first.total != null && offset < first.total) {
+            var next = orderedLayers.page(windowSize, offset)
+            if (next.list == null || next.list.size() == 0) {
+                break
+            }
+            layerRows.addAll(next.list)
+            offset = offset + windowSize
+        }
+    }
+}
 var roots = {}
 var childrenByParent = {}
 var rootByCode = { dst: 'dst', ods: 'ods', dwd: 'dwd', dwm: 'dwm', dws: 'dws' }
 for (row in layerRows) {
     var code = lower(firstValue(row, ['dictCode', 'dict_code']))
-    if (rootByCode[code] != null) { roots[code] = row }
     var parentId = textOf(firstValue(row, ['parentId', 'parent_id']))
-    if (childrenByParent[parentId] == null) { childrenByParent[parentId] = [] }
+    if (parentId == dataSourceTypeId && rootByCode[code] != null) {
+        roots[code] = row
+    }
+    if (childrenByParent[parentId] == null) {
+        childrenByParent[parentId] = []
+    }
     childrenByParent[parentId].add(row)
 }
 // 一次建立分类索引；后续只遍历按来源和分类汇总的行，不遍历物理表。
 for (row in layerRows) {
     var code = lower(firstValue(row, ['dictCode', 'dict_code']))
-    if (rootByCode[code] != null) { continue }
+    if (rootByCode[code] != null) {
+        continue
+    }
     var treePath = '.' + textOf(firstValue(row, ['treePath', 'tree_path'])) + '.'
     for (rootCode in ['ods', 'dwd', 'dwm', 'dws']) {
         var rootId = textOf(firstValue(roots[rootCode], ['tid']))
-        if (rootId != '' && treePath.indexOf('.' + rootId + '.') >= 0) { rootByCode[code] = rootCode; break }
+        if (rootId != '' && treePath.indexOf('.' + rootId + '.') >= 0) {
+            rootByCode[code] = rootCode
+            break
+        }
     }
 }
 var rootCodeOf = code => rootByCode[lower(code)] == null ? 'dst' : rootByCode[lower(code)]
-var datasourceRows = db.select("""
-    SELECT d.tid, d.db_name, d.db_type, d.pool_cfg
-      FROM db_datasource_t d
-     WHERE d.tenant_id=#{tenantId} AND d.is_del=0 AND (
-           #{scopeMode}='ALL'
-           OR (#{scopeMode}='OWNER' AND d.created_by=#{scopeUserId})
-           OR (#{scopeMode}='ORG' AND #{scopeOrgCount}>0 AND d.org_id IN
-               <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>)
-       )
-""")
-// 旧登记属性只批量读取分类值，保留历史数据源的回退语义。
-var legacyTypes = db.select("""
-    SELECT p.parent_id, MAX(p.prop_value) AS source_type
-      FROM da_prop_t p
-      JOIN db_datasource_t d ON d.tid=p.parent_id AND d.tenant_id=#{tenantId} AND d.is_del=0
-     WHERE p.tenant_id=#{tenantId} AND p.is_del=0
-       AND p.prop_name IN ('dataSourceType', 'connection.dataSourceType') AND (
-           #{scopeMode}='ALL'
-           OR (#{scopeMode}='OWNER' AND d.created_by=#{scopeUserId})
-           OR (#{scopeMode}='ORG' AND #{scopeOrgCount}>0 AND d.org_id IN
-               <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>)
-       )
-     GROUP BY p.parent_id
-""")
-var sourceTypeMap = {}
-for (row in legacyTypes) {
-    sourceTypeMap[textOf(firstValue(row, ['parentId', 'parent_id']))] = lower(firstValue(row, ['sourceType', 'source_type']))
+// 同次查询取得可见数据源和按来源聚合的旧分类属性，按来源 ID 分窗读取。
+var legacyTypes = tableRead.from('da_prop_t', 'p', tenantId)
+var legacySourceId = tableRead.column('p', 'parent_id', 'TEXT')
+var legacyValue = tableRead.column('p', 'prop_value', 'LOB')
+legacyTypes.leftJoin('db_datasource_t', 'registered', 'tid', 'parent_id', [])
+legacyTypes.where(tableRead.equal(tableRead.column('p', 'is_del', 'NUMBER'), 0))
+legacyTypes.where(tableRead.in(tableRead.column('p', 'prop_name', 'TEXT'), ['dataSourceType', 'connection.dataSourceType']))
+visibleSource(legacyTypes, 'registered')
+var legacyProjection = {source_id: legacySourceId, source_type: tableRead.max(tableRead.boundedText(legacyValue))}
+var datasourceId = tableRead.column('d', 'tid', 'TEXT')
+var sourceProjection = {
+    tid: datasourceId, dbName: tableRead.column('d', 'db_name', 'TEXT'), dbType: tableRead.column('d', 'db_type', 'TEXT'),
+    poolCfg: tableRead.column('d', 'pool_cfg', 'LOB'), legacyType: tableRead.column('legacy_type', 'source_type', 'TEXT')
 }
+var sourceTypeMap = {}
 var datasourceMap = {}
-for (source in datasourceRows) {
-    var sourceId = textOf(firstValue(source, ['tid']))
-    var poolConfig = firstValue(source, ['poolCfg', 'pool_cfg'])
-    var sourceType = ''
-    if (!blank(poolConfig) && JSONUtil.isTypeJSONObject(poolConfig)) {
-        // 配置只在服务端解析分类，不返回或记录连接凭据。
-        var config = JSONUtil.parseObj(poolConfig)
-        sourceType = lower(config.get('dataSourceType'))
-        if (sourceType == '' && config.get('connection') instanceof Map) {
-            sourceType = lower(config.get('connection').get('dataSourceType'))
+var sourceCursor = null
+var sourceWindow = 1000
+while (true) {
+    var sources = tableRead.from('db_datasource_t', 'd', tenantId)
+    visibleSource(sources, 'd')
+    sources.leftJoinGrouped(legacyTypes, 'legacy_type', 'source_id', 'tid', legacyProjection, [legacySourceId])
+    if (sourceCursor != null) {
+        sources.where(tableRead.greaterThan(datasourceId, sourceCursor))
+    }
+    var sourceRows = sources.rows(sourceProjection, datasourceId, 'asc', sourceWindow)
+    for (source in sourceRows) {
+        var sourceId = textOf(source.tid)
+        var poolConfig = source.poolCfg
+        var sourceType = ''
+        if (!blank(poolConfig) && JSONUtil.isTypeJSONObject(poolConfig)) {
+            // 先读现代配置的分类，再读历史属性。连接配置保留在当前窗口内。
+            var config = JSONUtil.parseObj(poolConfig)
+            sourceType = lower(config.get('dataSourceType'))
+            if (sourceType == '' && config.get('connection') instanceof Map) {
+                sourceType = lower(config.get('connection').get('dataSourceType'))
+            }
         }
+        if (sourceType == '') {
+            sourceType = lower(source.legacyType)
+        }
+        sourceTypeMap[sourceId] = sourceType
+        datasourceMap[sourceId] = {tid: sourceId, dbName: blank(source.dbName) ? null : source.dbName,
+            dbType: blank(source.dbType) ? null : source.dbType}
     }
-    if (sourceType == '') { sourceType = textOf(sourceTypeMap[sourceId]) }
-    sourceTypeMap[sourceId] = sourceType
-    datasourceMap[sourceId] = {
-        tid: sourceId,
-        dbName: firstValue(source, ['dbName', 'db_name']),
-        dbType: firstValue(source, ['dbType', 'db_type'])
+    if (sourceRows.size() < sourceWindow) {
+        break
     }
+    sourceCursor = sourceRows[sourceRows.size() - 1].tid
 }
 
-var sourceRelationRows = db.select("""
-    SELECT target_id, target_type, datasource_id
-      FROM dwm_center_layer_source_t
-     WHERE tenant_id=#{tenantId} AND is_del=0
-""")
-var sourceRelationMap = {}
-for (relation in sourceRelationRows) {
-    var source = datasourceMap[textOf(firstValue(relation, ['datasourceId', 'datasource_id']))]
-    // 关联目标逐 ID 从已受租户/角色约束的索引校验，隐藏不可见数据源。
-    if (source != null) {
-        var key = textOf(firstValue(relation, ['targetType', 'target_type'])) + '_' + textOf(firstValue(relation, ['targetId', 'target_id']))
-        sourceRelationMap[key] = source
+// 绑定只读取会进入响应的字典节点，组织汇总行没有分域绑定。
+var relationTargetIds = []
+for (rootCode in ['dst', 'ods', 'dwd', 'dwm', 'dws']) {
+    var rootId = textOf(firstValue(roots[rootCode], ['tid']))
+    if (rootId == '') {
+        continue
     }
+    relationTargetIds.add(rootId)
+    if (rootCode != 'dst' && childrenByParent[rootId] != null) {
+        for (child in childrenByParent[rootId]) {
+            relationTargetIds.add(child.tid)
+        }
+    }
+}
+var sourceRelationMap = {}
+var relationStart = 0
+while (datasourceMap.size() > 0 && relationStart < relationTargetIds.size()) {
+    var relationEnd = Math.min(relationStart + 500, relationTargetIds.size())
+    var relations = db.camel().table('dwm_center_layer_source_t').columns('target_id', 'target_type', 'datasource_id')
+        .where().eq('tenant_id', tenantId).eq('is_del', 0).in('target_type', ['layer', 'domain'])
+        .in('target_id', relationTargetIds.subList(relationStart, relationEnd)).select()
+    for (relation in relations) {
+        // 关联逐 ID 对照已授权的来源索引，无法通过分域绑定扩大来源范围。
+        var source = datasourceMap[textOf(relation.datasourceId)]
+        if (source != null) {
+            sourceRelationMap[textOf(relation.targetType) + '_' + textOf(relation.targetId)] = source
+        }
+    }
+    relationStart = relationEnd
 }
 var sourceInfoOf = (targetType, targetId) => {
     var source = sourceRelationMap[textOf(targetType) + '_' + textOf(targetId)]
@@ -160,26 +236,27 @@ var sourceInfoOf = (targetType, targetId) => {
         { datasourceId: source.tid, datasourceName: source.dbName, dbType: source.dbType }
 }
 
-// COUNT/SUM 在数据库完成；不会读取字段治理 JSON、列定义等大字段。
-var tableStats = db.select("""
-    SELECT t.datasource_id, LOWER(TRIM(COALESCE(t.data_source_type, ''))) AS table_type,
-           COUNT(*) AS table_count, COALESCE(SUM(t.record_count), 0) AS data_count
-      FROM db_table_t t
-      JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=#{tenantId} AND d.is_del=0
-     WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.asset_status=2 AND (
-           #{scopeMode}='ALL'
-           OR (#{scopeMode}='OWNER' AND d.created_by=#{scopeUserId})
-           OR (#{scopeMode}='ORG' AND #{scopeOrgCount}>0 AND d.org_id IN
-               <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>)
-       )
-     GROUP BY t.datasource_id, LOWER(TRIM(COALESCE(t.data_source_type, '')))
-""")
+// 数据库汇总已登记表，只返回来源、原始分类和计数。脚本归一分类时累加同义分组。
+var tables = tableRead.from('db_table_t', 't', tenantId)
+var tableSourceId = tableRead.column('t', 'datasource_id', 'TEXT')
+var tableTypeColumn = tableRead.column('t', 'data_source_type', 'TEXT')
+var records = tableRead.column('t', 'record_count', 'NUMBER')
+tables.leftJoin('db_datasource_t', 'd', 'tid', 'datasource_id', [])
+visibleSource(tables, 'd')
+tables.where(tableRead.equal(tableRead.column('t', 'is_del', 'NUMBER'), 0))
+tables.where(tableRead.equal(tableRead.column('t', 'asset_status', 'NUMBER'), 2))
+var tableStats = tables.grouped({datasourceId: tableSourceId, tableType: tableTypeColumn,
+    tableCount: tableRead.count(), dataCount: tableRead.coalesce([tableRead.sum(records), 0])}, [tableSourceId, tableTypeColumn])
 var layerCounts = { dst: 0, ods: 0, dwd: 0, dwm: 0, dws: 0 }
 var domainCounts = {}
 var addDomain = (rootCode, code, tableCount, dataCount) => {
-    if (blank(code)) { return }
+    if (blank(code)) {
+        return
+    }
     var key = rootCode + '_' + code
-    if (domainCounts[key] == null) { domainCounts[key] = { tableCount: 0, dataCount: 0 } }
+    if (domainCounts[key] == null) {
+        domainCounts[key] = { tableCount: 0, dataCount: 0 }
+    }
     domainCounts[key].tableCount = domainCounts[key].tableCount + tableCount
     domainCounts[key].dataCount = domainCounts[key].dataCount + dataCount
 }
@@ -192,7 +269,9 @@ for (stats in tableStats) {
     layerCounts[rootCode] = layerCounts[rootCode] + tableCount
     // 保留表分类/来源分类匹配任一分域的原口径，同一代码不重复计数。
     addDomain(rootCode, tableType, tableCount, dataCount)
-    if (sourceType != tableType) { addDomain(rootCode, sourceType, tableCount, dataCount) }
+    if (sourceType != tableType) {
+        addDomain(rootCode, sourceType, tableCount, dataCount)
+    }
 }
 var buildDictionaryItems = rootCode => {
     var rootId = textOf(firstValue(roots[rootCode], ['tid']))
@@ -231,7 +310,6 @@ var dwmSource = sourceInfoOf('layer', dwmId)
 var dwdSource = sourceInfoOf('layer', dwdId)
 var odsSource = sourceInfoOf('layer', odsId)
 var dstSource = sourceInfoOf('layer', dstId)
-// 返回当前业务分支的标准结果。
 return [
     {
         id: dwsId,

@@ -1,31 +1,27 @@
 {
-  "properties": {},
-  "id": "ods_data_agg_task_ensure_01",
-  "script": null,
-  "groupId": "1f4028f20aaa4f379b5e37a343b99fa9",
-  "name": "13.按来源表补齐接入任务",
-  "createTime": 1785063600000,
-  "updateTime": 1790420562971,
-  "lock": null,
-  "createBy": null,
-  "updateBy": null,
-  "path": "/dataAggTaskEnsure",
-  "method": "POST",
-  "parameters": [],
-  "options": [],
-  "requestBody": "{\n  \"tableId\": \"015c09572d174e89b9bea9c765ef72df\"\n}",
-  "headers": [],
-  "paths": [],
-  "responseBody": "",
-  "description": "按当前租户来源表和所选物化目标表分别补齐独立接入任务。targetTableIds（最多100项）或targetTableId指定目标，省略时处理全部物化目标；首个任务从原来源读取，后续任务从前一个目标表读取；每个任务生成单目标画布及自己的字段映射，重复提交复用已有任务。批量校验当前租户有效记录和关联关系，dryRun只返回计划；forceRebuild须明确确认，会替换所选旧任务的画布。返回tasks、createdCount及兼容的首个task/taskId。",
-  "requestBodyDefinition": null,
-  "responseBodyDefinition": null
+  "properties" : { },
+  "id" : "ods_data_agg_task_ensure_01",
+  "script" : null,
+  "groupId" : "1f4028f20aaa4f379b5e37a343b99fa9",
+  "name" : "13.按来源表补齐接入任务",
+  "createTime" : 1785063600000,
+  "updateTime" : 1793939742724,
+  "lock" : null,
+  "createBy" : null,
+  "updateBy" : null,
+  "path" : "/dataAggTaskEnsure",
+  "method" : "POST",
+  "parameters" : [ ],
+  "options" : [ ],
+  "requestBody" : "{\n  \"tableId\": \"015c09572d174e89b9bea9c765ef72df\"\n}",
+  "headers" : [ ],
+  "paths" : [ ],
+  "responseBody" : "",
+  "description" : "按当前租户来源表和所选物化目标表分别补齐独立接入任务。targetTableIds（最多100项）或targetTableId指定目标，省略时处理全部物化目标；首个任务从原来源读取，后续任务从前一个目标表读取；每个任务生成单目标画布及自己的字段映射，重复提交复用已有任务。批量校验当前租户有效记录和关联关系，dryRun只返回计划；forceRebuild须明确确认，会替换所选旧任务的画布。返回tasks、createdCount及兼容的首个task/taskId。",
+  "requestBodyDefinition" : null,
+  "responseBodyDefinition" : null
 }
 ================================
-// 接口：13.按来源表补齐接入任务
-// 路由：POST /ods/dataAggTaskEnsure
-// 业务说明：一次预取来源、所选目标、连接及字典元数据，ODS 目标按分域配置顺序逐级生成独立任务。
-// 重复请求复用任务；仅显式重建替换画布，dryRun不写入。事务锁住来源登记，串行处理同一来源的创建请求。
 import cn.hutool.core.util.IdUtil
 import jsons
 import cn.hutool.json.JSONUtil as poolJsons
@@ -36,7 +32,14 @@ import java.util.Map
 import java.util.List
 import com.linewell.dataelement.integration.nifi.canvas.mapping.FieldMappingStorageGuard as mappingStorage
 import com.linewell.dataelement.integration.nifi.canvas.compile.RegisteredDatasourceType as sourceTypes
-import com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy as batchSchedules
+import tableRead
+
+/**
+ * POST /ods/dataAggTaskEnsure。按当前租户和来源表补齐独立接入任务。
+ * 接收 tableId 和最多 100 个所选目标表。按有效 ODS 分域顺序组织链路，返回任务和计划统计。
+ * 批量校验来源与目标归属。事务锁定来源表，重复请求复用任务，显式重建才替换画布。
+ * dryRun 只返回计划，正式请求提交任务、画布和映射。
+ */
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -926,6 +929,7 @@ if (blank(sourceTableId)) {
     exit 400, 'tableId不能为空'
 }
 
+// 在写入事务内锁定来源登记，避免并发请求重复创建同一条接入链路。
 var sourceTable = db.selectOne("""
     SELECT * FROM db_table_t
      WHERE tid = #{sourceTableId} AND tenant_id = #{tenantId} AND is_del = 0
@@ -1193,33 +1197,87 @@ for (candidateDbId in targetDatasourceIds) {
     }
 }
 // ODS 分域是接入链路顺序的权威配置。目标已逐 ID 校验租户、有效记录和来源关联；
-// 一次关联查询只给这些已授权目标排序，不能借请求顺序反转汇聚→原始链路。
-// 非 ODS 的分发目标没有分域绑定，保留其显式选择顺序。
-if (targetTables.size() > 1) {
-    var orderedDomainBindings = db.select("""
-        SELECT binding.datasource_id
-          FROM dwm_center_layer_source_t binding
-          JOIN sym_dict_t domain ON domain.tid=binding.target_id
-               AND domain.tenant_id=#{tenantId} AND domain.is_del=0
-          JOIN sym_dict_t ods ON ods.tid=domain.parent_id
-               AND ods.tenant_id=#{tenantId} AND ods.is_del=0 AND LOWER(ods.dict_code)='ods'
-          JOIN sym_dict_t root ON root.tid=ods.parent_id
-               AND root.tenant_id=#{tenantId} AND root.is_del=0
-               AND root.parent_id='0' AND root.dict_code='dataSourceType'
-         WHERE binding.tenant_id=#{tenantId} AND binding.is_del=0 AND binding.target_type='domain'
-           AND binding.datasource_id IN (#{targetDatasourceIds})
-         ORDER BY domain.sort_no ASC, domain.tid ASC
-    """)
+// 非 ODS 的分发目标没有分域绑定，保留显式选择顺序。
+if (targetDatasourceIds.size() > 1) {
     var targetsByDatasource = {}
     for (target in targetTables) {
         var dbId = text(first(target, ['datasourceId', 'datasource_id']))
         if (targetsByDatasource[dbId] == null) { targetsByDatasource[dbId] = [] }
         targetsByDatasource[dbId].add(target)
     }
+    var domainText = (alias, name) => tableRead.column(alias, name, 'TEXT')
+    var domainActive = alias => tableRead.equal(tableRead.column(alias, 'is_del', 'NUMBER'), 0)
+    var sourceId = domainText('binding', 'datasource_id')
+    var domainId = domainText('domain_node', 'tid')
+    var odsId = domainText('ods_layer', 'tid')
+    var rootId = domainText('dict_root', 'tid')
+    var readDomainBindings = afterDomainId => {
+        var bindings = tableRead.from('dwm_center_layer_source_t', 'binding', tenantId)
+        bindings.leftJoin('sym_dict_t', 'domain_node', 'tid', 'target_id', [domainActive('domain_node')])
+        bindings.leftJoin('sym_dict_t', 'ods_layer', 'tenant_id', 'tenant_id', [
+            domainActive('ods_layer'), tableRead.equal(odsId, domainText('domain_node', 'parent_id')),
+            tableRead.equal(tableRead.lower(domainText('ods_layer', 'dict_code')), 'ods')
+        ])
+        bindings.leftJoin('sym_dict_t', 'dict_root', 'tenant_id', 'tenant_id', [
+            domainActive('dict_root'), tableRead.equal(rootId, domainText('ods_layer', 'parent_id')),
+            tableRead.equal(domainText('dict_root', 'parent_id'), '0'),
+            tableRead.equal(domainText('dict_root', 'dict_code'), 'dataSourceType')
+        ])
+        var filters = [domainActive('binding'), tableRead.equal(domainText('binding', 'target_type'), 'domain'),
+            tableRead.in(sourceId, targetDatasourceIds), tableRead.not(tableRead.isNull(rootId))]
+        if (afterDomainId != null) { filters.add(tableRead.greaterThan(domainId, afterDomainId)) }
+        bindings.where(tableRead.all(filters))
+        return bindings.rows({ source_id: sourceId, domain_id: domainId }, domainId, 'asc', 1000)
+    }
+
+    var orderedDatasourceIds = []
+    var firstDomainByDatasource = {}
+    var lastDomainId = null
+    var hasMoreDomains = true
+    // 按分域 ID 分段读取，合并已知最早分域后交给数据库按原有空值规则排序。
+    while (hasMoreDomains) {
+        var rows = readDomainBindings(lastDomainId)
+        var domainIds = []
+        var datasourceByDomain = {}
+        for (dbId in orderedDatasourceIds) {
+            var id = firstDomainByDatasource[dbId]
+            domainIds.add(id)
+            datasourceByDomain[id] = dbId
+        }
+        var priorSize = domainIds.size()
+        for (row in rows) {
+            var dbId = text(row.source_id)
+            var id = text(row.domain_id)
+            // 数据库可能使用不区分大小写的比较，绑定仍按已授权数据源的准确 ID 匹配。
+            if (targetsByDatasource[dbId] == null || datasourceByDomain[id] != null) { continue }
+            domainIds.add(id)
+            datasourceByDomain[id] = dbId
+        }
+        if (domainIds.size() > priorSize) {
+            var domains = db.table('sym_dict_t').columns('tid').where().eq('tenant_id', tenantId).eq('is_del', 0)
+            if (domainIds.size() > 1000) {
+                domains.and(ids => ids.in('tid', domainIds.subList(0, 1000)).or()
+                    .in('tid', domainIds.subList(1000, domainIds.size())))
+            } else {
+                domains.in('tid', domainIds)
+            }
+            orderedDatasourceIds = []
+            firstDomainByDatasource = {}
+            for (domain in domains.orderBy('sort_no', 'asc').orderBy('tid', 'asc').select()) {
+                var id = text(domain.tid)
+                var dbId = datasourceByDomain[id]
+                if (firstDomainByDatasource[dbId] != null) { continue }
+                firstDomainByDatasource[dbId] = id
+                orderedDatasourceIds.add(dbId)
+            }
+        }
+        hasMoreDomains = rows.size() == 1000
+        if (hasMoreDomains) { lastDomainId = rows[rows.size() - 1].domain_id }
+    }
     var orderedTargets = []
     var orderedTargetIds = []
-    for (binding in orderedDomainBindings) {
-        for (target in (targetsByDatasource[text(binding.datasourceId)] == null ? [] : targetsByDatasource[text(binding.datasourceId)])) {
+    for (dbId in orderedDatasourceIds) {
+        for (target in targetsByDatasource[dbId]) {
             if (!orderedTargetIds.contains(text(target.tid))) {
                 orderedTargets.add(target)
                 orderedTargetIds.add(text(target.tid))
@@ -1716,7 +1774,6 @@ var canUpsert = !blank(sourcePrimaryKeys) && !blank(targetPrimaryKeys)
 
 // 每个独立任务生成来源、自己的字段治理和唯一目标节点。
 var sourceNodeId = 'source-' + sourceTableId
-sourceNodeConfig = batchSchedules.defaultConfig(tenantId, pipelineId, sourceNodeId, sourceManifestKey, sourceNodeConfig)
 var mapNodeId = 'map-' + taskId
 var dslNodes = [
     {

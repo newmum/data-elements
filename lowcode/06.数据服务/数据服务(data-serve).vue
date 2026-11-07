@@ -92,7 +92,7 @@
       <data-table
         ref="tableRef"
         show-index
-        :columns="[]"
+        :columns="actionColumns"
         :data="fetchServices"
         row-key="tid"
         height="100%"
@@ -119,23 +119,6 @@
           <template #default="{ row }"><el-tag size="small" :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag></template>
         </el-table-column>
         <el-table-column prop="updatedTime" sortable="custom" label="更新时间" width="170" align="left" header-align="left" show-overflow-tooltip />
-        <el-table-column
-          label="操作"
-          width="158"
-          align="right"
-          header-align="center"
-          fixed="right"
-          class-name="operation-column"
-          :show-overflow-tooltip="false"
-        >
-          <template #default="{ row }">
-            <div class="operation-buttons table-actions">
-              <el-button link type="primary" @click="openOrchestration(row)">编排</el-button>
-              <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
-              <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
-            </div>
-          </template>
-        </el-table-column>
       </data-table>
     </main>
       </el-splitter-panel>
@@ -645,6 +628,19 @@ const handleDelete = async (row) => {
   ElMessage.success("删除成功");
   await Promise.all([loadGroups(), tableRef.value?.refresh?.()]);
 };
+const actionColumns = [
+  {
+    type: "buttons",
+    prop: "action",
+    label: "操作",
+    align: "right",
+    buttons: [
+      { type: "primary", label: "编排", click: openOrchestration },
+      { type: "primary", label: "编辑", click: handleEdit },
+      { type: "danger", label: "删除", click: handleDelete },
+    ],
+  },
+];
 const onModalClose = async (result) => {
   // 当前路由以完整地址为页面标识；打开时清理参数会重建页面并关闭登记框。
   if (route.query.register === '1') {
@@ -896,24 +892,6 @@ onUnmounted(() => {
   }
 }
 
-.table-actions {
-  display: inline-flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  white-space: nowrap;
-
-  :deep(.el-button) {
-    margin-left: 0;
-    font-weight: 400;
-    height: auto;
-    min-height: 28px;
-    padding: 0 2px;
-    line-height: 28px;
-  }
-}
-
 .serve-table {
   flex: 1;
   min-width: 0;
@@ -943,10 +921,6 @@ onUnmounted(() => {
     min-width: 0;
     margin-left: auto;
     white-space: nowrap;
-  }
-
-  :deep(.operation-column .cell) {
-    overflow: visible;
   }
 
   :deep(.el-scrollbar__bar.is-horizontal) {

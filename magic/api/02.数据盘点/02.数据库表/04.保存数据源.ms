@@ -22,9 +22,6 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：04.保存数据源
-// 路由：POST /dst/database/saveOrUpdate
-// 业务说明：保存数据源主记录、应用关系和 db_datasource_t.pool_cfg 连接配置，并同步 Elasticsearch；不使用 da_prop_t 动态属性；使用请求参数 tid、propList、dryRun、deferIndexRefresh。
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import tenantRuntime
@@ -37,6 +34,9 @@ import java.util.Map
 import jsons
 import log
 
+// 接口：04.保存数据源
+// 路由：POST /dst/database/saveOrUpdate
+// 业务说明：保存数据源主记录、应用关系和 pool_cfg 连接配置；推送来源地址复用 host，不使用动态属性表。
 /*
  * 数据源 04：新增或修改 db_datasource_t。
  *
@@ -303,6 +303,14 @@ if (accessMode == 'upload' && oldConnectionConfig.reportRegistration != null) {
 // 数据推送由平台提供统一接入通道，不依赖调用方填写物理库连接；将其明确记录为已提供，
 // 以便列表状态和登记确认页不会误显示为“未提供连接信息”。
 if (accessMode == 'receive') {
+    // 来源是上游程序或服务的地址，与平台接收节点地址分别配置；仅要求非空，接受 IP 或 URL。
+    // 未提交 host 的局部更新沿用已有值，明确清空则拒绝，避免重新显示旧地址。
+    var sourceAddressSubmitted = props instanceof Map && props.containsKey('host')
+    var sourceAddress = sourceAddressSubmitted ? props.host : oldConnectionConfig.host
+    if (blank(sourceAddress)) {
+        exit 400, '请填写数据来源地址'
+    }
+    connectionConfig.host = text(sourceAddress).trim()
     showConnect = 1
     connectionConfig.pushChannelProvided = true
 }

@@ -11,7 +11,6 @@ declare module 'vue' {
     AppLink: typeof import('./../layouts/components/AppLink/index.vue')['default']
     AppLogo: typeof import('./../layouts/components/AppLogo/index.vue')['default']
     AppMain: typeof import('./../layouts/components/AppMain/index.vue')['default']
-    AppView: typeof import('./../layouts/components/AppView/index.vue')['default']
     Breadcrumb: typeof import('./../components/base/breadcrumb.vue')['default']
     CardHeader: typeof import('./../components/base/card-header.vue')['default']
     CodeDiff: typeof import('./../components/form/code-diff.vue')['default']

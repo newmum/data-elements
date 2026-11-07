@@ -51,7 +51,6 @@
                   <icon :icon="item.meta?.icon" />
                   {{ item.meta?.title }}
                 </div>
-                <!--                <div class="menu-item-right">{{ getMenuCount(item.name as string) }}</div>-->
               </div>
             </template>
           </div>
@@ -116,18 +115,6 @@ const openInfo = () => {
 const toPath = (path: string) => {
   router.push({ path });
 };
-// const menuCounts = ref();
-const initMenuCount = async () => {};
-// const getMenuCount = (name: string) => {
-//   return menuCounts.value ? menuCounts.value[name] || 0 : 0;
-// };
-
-const initData = async () => {};
-
-onMounted(() => {
-  initMenuCount();
-  initData();
-});
 </script>
 
 <!-- 顶部菜单样式 -->
@@ -341,15 +328,6 @@ onMounted(() => {
           :deep(.svg-icon) {
             font-size: 24px;
           }
-        }
-        .menu-item-right {
-          width: 28px;
-          height: 19px;
-          font-size: 12px;
-          color: #686c80;
-          text-align: center;
-          background: #edf0f4;
-          border-radius: 9.5px;
         }
       }
     }

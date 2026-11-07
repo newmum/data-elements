@@ -17,52 +17,69 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"list\": [\n    {\n      \"label\": \"出入境人员动管系统数据库\",\n      \"value\": \"4b5d9992d89744b9b514f8905dc27998\",\n      \"dbType\": \"mysql\",\n      \"nodeName\": \"业务库\"\n    }\n  ],\n  \"total\": 1\n}",
-  "description": "资源中心关联数据源选项（POST /dwm/center/datasource-options）。只读接口；从 db_datasource_t 读取全部有效数据源并支持名称/库类型/节点类型模糊搜索，用于分层/分域配置选择关联数据源；不读取或返回 connection extension property 密码；使用请求参数 keyword。",
+  "description": "为当前租户的分层和分域返回数据源选项。按更新时间等原有排序取得最新 500 条有效候选，keyword 可按名称、库类型或节点名称做字面搜索，最多返回 100 项及返回数量。仅返回展示字段。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：08.资源中心关联数据源选项
-// 路由：POST /dwm/center/datasource-options
-// 业务说明：资源中心关联数据源选项（POST /dwm/center/datasource-options）。只读接口；从 db_datasource_t 读取全部有效数据源并支持名称/库类型/节点类型模糊搜索，用于分层/分域配置选择关联数据源；不读取或返回 connection extension property 密码；使用请求参数 keyword。
-/*
- * 资源中心分层/分域配置的数据源下拉选项。
- * - 下拉展示全部有效数据源，方便从现有业务库/前置机/数据中心中选择；
- * - 真正保存时由 /dwm/center/node/save 将被关联数据源 node_id 归一为“数据中心”字典项。
+import tenantRuntime
+import tableRead
+
+/**
+ * 资源中心分层、分域的数据源候选。POST /dwm/center/datasource-options
+ * keyword 按名称、库类型和节点名称做不区分大小写的字面检索。
+ * 在当前租户最近的 500 条有效候选中搜索，返回最多 100 项及实际返回数量。
+ * 只读展示所需字段，绑定动作由节点保存接口完成。
  */
-var keyword = body?.keyword == null ? '' : (body.keyword + '').trim()
-var likeKeyword = '%' + keyword.replace("'", "''") + '%'
-
-// node_id 与字典 tid 在历史库里可能存在不同 collation，避免 SQL join 产生排序规则冲突。
-var nodeRows = db.select("""
-    SELECT c.tid, c.dict_name
-      FROM sym_dict_t c
-      JOIN sym_dict_t p ON p.tid = c.parent_id AND p.is_del = 0
-     WHERE c.is_del = 0
-       AND p.dict_code = 'nodeType'
-""")
-var nodeNameById = {}
-for (node in (nodeRows == null ? [] : nodeRows)) {
-    nodeNameById[node.tid + ''] = node.dictName
+var tenantId = tenantRuntime.id()
+if (tenantId == null || (tenantId + '').trim() == '') {
+    exit 401, '无法识别当前租户'
 }
+var keyword = body?.keyword == null ? '' : (body.keyword + '').trim().toLowerCase()
 
-var rows = db.select("""
-    SELECT tid, db_name, db_type, show_connect, connection_status, node_id
-      FROM db_datasource_t
-     WHERE is_del = 0
-       AND (tid IS NULL OR tid NOT LIKE 'validation\_%')
-       AND (db_name IS NULL OR db_name NOT LIKE 'validation\_%')
-     ORDER BY updated_time DESC, created_time DESC, db_name ASC
-     LIMIT 500
-""")
+// 排除验证数据后按原有数据库顺序取候选窗口，再匹配名称、类型和字典标签。
+var validationPrefix = 'validation\\_%'
+var candidates = db.camel().table('db_datasource_t')
+    .columns('tid', 'db_name', 'db_type', 'show_connect', 'connection_status', 'node_id').where()
+    .eq('tenant_id', tenantId).eq('is_del', 0)
+    .and(filter => filter.isNull('tid').or().notLike('tid', validationPrefix))
+    .and(filter => filter.isNull('db_name').or().notLike('db_name', validationPrefix))
+    .orderBy('updated_time', 'desc').orderBy('created_time', 'desc').orderBy('db_name', 'asc')
+    .page(500, 0)
+var rows = candidates.list == null ? [] : candidates.list
+
+// 只批量读取当前窗口需要的有效节点。源表 node_id 与字典 tid 在历史库可能使用不同排序规则。
+var nodeIds = []
+var seenNodeIds = {}
+for (row in rows) {
+    if (row.nodeId != null && seenNodeIds[row.nodeId] == null) {
+        seenNodeIds[row.nodeId] = true
+        nodeIds.add(row.nodeId)
+    }
+}
+var nodeNameById = {}
+if (nodeIds.size() > 0) {
+    var nodes = tableRead.from('sym_dict_t', 'c', tenantId)
+    var nodeId = tableRead.column('c', 'tid', 'TEXT')
+    nodes.leftJoin('sym_dict_t', 'p', 'tid', 'parent_id', [
+        tableRead.equal(tableRead.column('p', 'is_del', 'NUMBER'), 0)
+    ])
+    nodes.where(tableRead.equal(tableRead.column('c', 'is_del', 'NUMBER'), 0))
+    nodes.where(tableRead.equal(tableRead.column('p', 'dict_code', 'TEXT'), 'nodeType'))
+    nodes.where(tableRead.in(nodeId, nodeIds))
+    var labels = nodes.rows({id: nodeId, name: tableRead.column('c', 'dict_name', 'TEXT')}, nodeId, 'asc', nodeIds.size())
+    for (label in labels) {
+        nodeNameById[label.id] = label.name
+    }
+}
 var list = []
-for (row in (rows == null ? [] : rows)) {
+for (row in rows) {
     var nodeName = nodeNameById[row.nodeId + '']
     if (keyword != '') {
         var hitText = ((row.dbName == null ? '' : row.dbName) + ' ' +
             (row.dbType == null ? '' : row.dbType) + ' ' +
             (nodeName == null ? '' : nodeName)).toLowerCase()
-        if (!hitText.contains(keyword.toLowerCase())) {
+        if (!hitText.contains(keyword)) {
             continue
         }
     }

@@ -12,9 +12,54 @@
       :show-add="false"
       :show-delete="false"
       :show-edit="false"
-      :loading-more="datasourceListLoading"
+      :auto-select="false"
+      :loading-more="datasourceList.loading"
       @select="(item) => handleAction('select', item)"
-    />
+    >
+      <template #header>
+        <div class="register-source-list-header">
+          <h4>数据源列表</h4>
+          <el-input
+            v-model="datasourceList.keywordInput"
+            placeholder="搜索数据源"
+            aria-label="搜索数据源"
+            :maxlength="256"
+            clearable
+            @keydown.enter.prevent="searchAccessibleDatasources"
+            @clear="searchAccessibleDatasources"
+          >
+            <template #suffix>
+              <el-button link aria-label="搜索" @click="searchAccessibleDatasources">
+                <Icon icon="el-icon-Search" />
+              </el-button>
+            </template>
+          </el-input>
+        </div>
+      </template>
+      <template #footer>
+        <div class="register-source-list-footer">
+          <div v-if="datasourceList.error" class="register-source-list-feedback" role="alert">
+            <span>数据源列表读取失败</span>
+            <el-button link type="primary" @click="loadAccessibleDatasources(datasourceList.requestedPage)">重试</el-button>
+          </div>
+          <div v-else-if="!datasourceList.loading && datasourceList.keyword && datasourceList.total === 0" class="register-source-list-feedback" role="status">
+            未找到匹配的数据源
+          </div>
+          <el-pagination
+            v-if="datasourceList.total > DATASOURCE_LIST_PAGE_SIZE"
+            size="small"
+            layout="prev, pager, next"
+            :pager-count="5"
+            :current-page="datasourceList.page"
+            :page-size="DATASOURCE_LIST_PAGE_SIZE"
+            :total="datasourceList.total"
+            :disabled="datasourceList.loading"
+            aria-label="数据源列表分页"
+            @update:current-page="loadAccessibleDatasources"
+          />
+        </div>
+      </template>
+    </left-select>
 
     <div class="pr-5">
       <el-skeleton class="right" :loading="rightPanelLoading" animated>
@@ -79,29 +124,18 @@
           </div>
         </section>
 
-        <section v-if="accessMode === 'proxy'" class="proxy-service-registration">
-          <div class="proxy-service-toolbar">
-            <u-title name="当前数据源已登记服务" class="proxy-service-title" />
-            <div class="proxy-service-actions">
-              <el-input v-model.trim="proxyServiceKeyword" placeholder="搜索服务名称、编码或地址" clearable @clear="proxyServiceTableRef?.refresh?.(true)" @keyup.enter="proxyServiceTableRef?.refresh?.(true)"><template #suffix><el-button link title="查询服务" @click="proxyServiceTableRef?.refresh?.(true)"><Icon icon="search" /></el-button></template></el-input>
-              <el-button type="primary" :disabled="!proxyDatasourceId" @click="goToServiceRegistration"><Icon icon="el-icon-Plus" class="mr-1" />登记服务</el-button>
-            </div>
-          </div>
-          <DataTable :key="proxyDatasourceId || 'new-proxy-source'" ref="proxyServiceTableRef" height="auto" flex-type="flex-[0_1_auto]" :data="fetchDepartmentServices" :columns="[]" :show-search="false" :show-reset="false" :page-sizes="[10,20,50,100]" row-key="tid" show-index class="proxy-service-table">
-            <el-table-column prop="serviceName" label="服务名称" min-width="180" sortable="custom" show-overflow-tooltip />
-            <el-table-column prop="method" label="请求方式" width="100" />
-            <el-table-column prop="publishAddressFull" label="服务地址" min-width="230" show-overflow-tooltip />
-            <el-table-column prop="status" label="状态" width="105"><template #default="{row}"><el-tag :type="row.status==='published'?'success':'info'" size="small">{{ row.status==='published'?'已发布':row.status==='offline'?'已停用':'草稿' }}</el-tag></template></el-table-column>
-            <el-table-column prop="updatedTime" label="更新时间" width="170" sortable="custom" />
-            <template #empty>
-              <div class="proxy-service-no-results" role="status">
-                {{ proxyServiceKeyword
-                  ? "没有匹配的服务，请调整搜索关键词。"
-                  : proxyDatasourceId ? "暂无已登记服务" : "保存数据源后，可登记服务。" }}
-              </div>
-            </template>
-          </DataTable>
-        </section>
+        <ProxyDatasourceServices
+          v-if="accessMode === 'proxy'"
+          ref="proxyServiceTableRef"
+          :source-id="proxyDatasourceId"
+          mode="step1"
+        >
+          <template #actions>
+            <el-button type="primary" :disabled="!proxyDatasourceId" @click="goToServiceRegistration">
+              <Icon icon="el-icon-Plus" class="mr-1" />登记服务
+            </el-button>
+          </template>
+        </ProxyDatasourceServices>
 
         <section v-if="accessMode === 'receive'" class="receive-spec-bordered">
           <div class="connection-guide receive-template-guide">
@@ -120,11 +154,17 @@
                   />
                 </el-select>
               </label>
-              <div class="receive-push-address">
-                <span class="receive-push-address-label">推送数据地址</span>
-                <code :title="receivePushAddress">{{ receivePushAddress }}</code>
+              <label class="receive-push-address">
+                <span class="receive-push-address-label"><em>*</em> 数据来源地址</span>
+                <el-input
+                  v-model="receiveDeliveryProfile.sourceAddress"
+                  aria-label="数据来源地址"
+                  aria-required="true"
+                  placeholder="请输入上游程序或服务的 IP 地址或 URL"
+                  clearable
+                />
                 <small class="receive-network-tag">{{ receiveNetworkName }}</small>
-              </div>
+              </label>
             </div>
             <template v-if="isFilePush">
               <AccessOnboarding
@@ -2580,7 +2620,11 @@ import * as ExcelJS from "exceljs";
 // 再因异步详情加载被替换成骨架屏。
 const loading = ref(false);
 const pageInitializing = ref(true);
-const datasourceListLoading = ref(true);
+const DATASOURCE_LIST_PAGE_SIZE = 24;
+const datasourceList = reactive({
+  keywordInput: "", keyword: "", page: 1, requestedPage: 1, total: 0, loading: true, error: false,
+});
+let datasourceListSequence = 0;
 const rightPanelLoading = computed(
   () => pageInitializing.value || loading.value,
 );
@@ -2598,19 +2642,11 @@ const store = useRegisterStore();
 const accessMode = ref("explore");
 const registerModalContext = useRegisterModal();
 const proxyServiceTableRef = ref();
-const proxyServiceKeyword = ref('');
 const proxyServiceRegistrationVisible = ref(false);
 const onProxyServiceRegistrationClosed = (result) => {
   if (result === 'success') proxyServiceTableRef.value?.refresh?.(true);
 };
 const proxyDatasourceId = computed(() => currentDb.value?.isDraft || currentDb.value?.detailMissing ? '' : String(currentDb.value?.tid || currentDb.value?.id || '').trim());
-const fetchDepartmentServices = async ({ pageNo=1,pageSize=10,sortField,sortDir }={}) => {
-  const datasourceId = proxyDatasourceId.value;
-  if (!datasourceId) return {list:[],total:0};
-  const response = await $common.post('/dws/flowserve/gateway/api/list', {datasourceId,pageNum:pageNo,pageSize,sortField,sortDir,keyword:proxyServiceKeyword.value});
-  const payload = response?.data || response || {};
-  return datasourceId === proxyDatasourceId.value ? {list:payload.list || [],total:Number(payload.total || 0)} : {list:[],total:0};
-};
 const goToServiceRegistration = async () => {
   if (!proxyDatasourceId.value) throw new Error('请先保存当前数据源，再为它登记服务');
   proxyServiceRegistrationVisible.value=true;
@@ -2620,8 +2656,6 @@ const sourceType = ref("");
 const connectionEnabled = ref("");
 const receiveAccessNode = ref("");
 const defaultAccessNodeOptions = [];
-const receivePushNodes = ref([]);
-const receivePushNodesState = ref("loading");
 const accessNodeValueAliases = {};
 const normalizeAccessNodeValue = (value) => {
   const text = String(value || "").trim();
@@ -2648,64 +2682,30 @@ const mergeAccessNodeOptions = (remoteOptions = []) => {
 };
 const accessNodeOptions = ref(mergeAccessNodeOptions());
 const accessNetworkOptions = ref([]);
-const receiveNetworkPushNodes = computed(() =>
-  receivePushNodes.value.filter(
-    (item) => item.networkCode === receiveAccessNode.value,
-  ),
-);
-const selectedReceivePushNode = computed(() =>
-  receiveNetworkPushNodes.value.find((item) => item.isDefault) ||
-  (receiveNetworkPushNodes.value.length === 1
-    ? receiveNetworkPushNodes.value[0]
-    : null),
-);
 const receiveNetworkName = computed(
   () =>
     accessNetworkOptions.value.find(
       (item) => item.value === receiveAccessNode.value,
     )?.label || receiveAccessNode.value || "未选择网络",
 );
-const receivePushAddress = computed(() => {
-  if (!receiveAccessNode.value) return "请先选择所属网络";
-  if (receivePushNodesState.value === "loading") return "正在加载推送节点…";
-  if (receivePushNodesState.value === "error") return "推送节点加载失败，请重新打开登记页面";
-  const baseUrl = selectedReceivePushNode.value?.baseUrl;
-  if (baseUrl) return baseUrl + "/api/v1/data-push";
-  return receiveNetworkPushNodes.value.length > 1
-    ? "当前网络有多个推送节点，请在节点管理中设置默认节点"
-    : "当前网络未配置启用的推送节点";
-});
 const receivePushDataTypeOptions = [
   { value: "STRUCTURED", label: "结构化数据" },
   { value: "UNSTRUCTURED", label: "非结构化数据" },
 ];
-const receiveDeliveryProfile = reactive({ pushDataType: "STRUCTURED" });
+const receiveDeliveryProfile = reactive({ pushDataType: "STRUCTURED", sourceAddress: "" });
 const normalizePushDataType = (value) =>
   ["UNSTRUCTURED", "非结构化数据"].includes(String(value || "").trim().toUpperCase())
     ? "UNSTRUCTURED" : "STRUCTURED";
 const syncReceiveDeliveryProfile = (data = {}) => {
   receiveDeliveryProfile.pushDataType = normalizePushDataType(data.pushDataType || data.push_data_type);
+  const poolCfg = parsePoolCfg(data.poolCfg ?? data.pool_cfg);
+  // 与数据抽取共用 pool_cfg.host；来源地址不从推送服务接收节点生成。
+  receiveDeliveryProfile.sourceAddress = String(data.host ?? poolCfg.host ?? "").trim();
 };
-const loadReceivePushNodes = async () => {
-  receivePushNodesState.value = "loading";
-  try {
-    // 与节点管理复用同一租户接口，一次读取所有有界配置，不逐数据源或节点补查。
-    const response = await $common.post("/ods/nifi-node/page", { nodeType: "push" });
-    const payload = response?.data || response || {};
-    receivePushNodes.value = (Array.isArray(payload.list) ? payload.list : [])
-      .filter((item) => Number(item.enabled) === 1)
-      .map((item) => ({
-        networkCode: normalizeAccessNodeValue(item.networkCode || item.network_code || item.networkType || item.network_type || ""),
-        baseUrl: String(item.baseUrl || item.base_url || "").trim().replace(/\/+$/, ""),
-        isDefault: Number(item.isDefault ?? item.is_default ?? 0) === 1,
-      }))
-      .filter((item) => item.networkCode && item.baseUrl);
-    receivePushNodesState.value = "ready";
-  } catch (error) {
-    receivePushNodes.value = [];
-    receivePushNodesState.value = "error";
-    console.warn("加载数据推送节点失败", error);
-  }
+const buildReceiveDeliveryData = () => {
+  const host = String(receiveDeliveryProfile.sourceAddress || "").trim();
+  if (!host) throw new Error("请填写数据来源地址");
+  return { pushDataType: receiveDeliveryProfile.pushDataType, host };
 };
 const syncReceiveAccessNode = (
   value = formRef.value?.api?.getValue?.("SSWL"),
@@ -4680,37 +4680,52 @@ const ensureInitialDatasource = () => {
   syncCurrentDatasourceToStore(selected);
   return selected;
 };
-const loadAccessibleDatasources = async () => {
-  // 复用外层已授权的摘要清单；弹窗不重复读取包含大量元数据的完整清单。
-  // 其他登记入口未提供摘要时仍从服务端获取，选中详情与保存继续逐对象鉴权。
-  const supplied = store.data?.datasourceOptions;
-  const result = Array.isArray(supplied)
-    ? { list: supplied }
-    : await $common.post("/dst/database/departmentDataSources", { mode: "summary" });
-  const list = Array.isArray(result?.list)
-    ? result.list
-    : Array.isArray(result)
-      ? result
-      : [];
-  const draft =
-    dbs.value.find((item) => item?.isDraft) || createDatasourceDraft();
-  const candidates = [...dbs.value.filter((item) => !item?.isDraft), ...list]
-    .filter((item) => item && (item.tid || item.id))
-    .map((item) => ({ ...toDatasourceItem(item), isDraft: false }));
-  const sources = [];
-  const seen = new Set();
-  for (const item of candidates) {
-    const key = datasourceKey(item);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    sources.push(item);
+const loadAccessibleDatasources = async (page = 1, keyword = datasourceList.keyword) => {
+  const sequence = ++datasourceListSequence;
+  const keywordChanged = keyword !== datasourceList.keyword;
+  datasourceList.keyword = keyword;
+  datasourceList.requestedPage = page;
+  datasourceList.loading = true;
+  datasourceList.error = false;
+  if (keywordChanged) {
+    datasourceList.total = 0;
+    datasourceList.page = 1;
+    dbs.value = dbs.value.filter((item) => item.isDraft || item.did === currentDid.value);
   }
-  dbs.value = [draft, ...sources];
-  if (!dbs.value.some((item) => item.did === currentDid.value)) {
-    currentDid.value = draft.did;
-    syncCurrentDatasourceToStore(draft);
+  try {
+    const result = await $common.postSilently("/dst/database/departmentDataSources", {
+      mode: "choices", pageNum: page, pageSize: DATASOURCE_LIST_PAGE_SIZE, keyword,
+    });
+    if (sequence !== datasourceListSequence) return;
+    if (!Array.isArray(result?.list) || !Number.isSafeInteger(result.total) || result.total < 0
+      || !Number.isSafeInteger(result.pageNum) || result.pageNum < 1) {
+      throw new Error("数据源列表响应不完整");
+    }
+    // 先保留草稿和当前表单对象，翻页或搜索时不重置正在编辑的连接配置。
+    const draft = dbs.value.find((item) => item.isDraft) || createDatasourceDraft();
+    const selected = dbs.value.find((item) => !item.isDraft && item.did === currentDid.value);
+    const selectedKey = selected ? datasourceKey(selected) : "";
+    const known = new Set();
+    const candidates = [];
+    for (const item of result.list) {
+      if (!item?.tid && !item?.id) continue;
+      const key = datasourceKey(item);
+      if (known.has(key)) continue;
+      known.add(key);
+      candidates.push(key === selectedKey ? selected : toDatasourceItem(item));
+    }
+    if (selected && !known.has(selectedKey)) candidates.unshift(selected);
+    dbs.value = [draft, ...candidates];
+    datasourceList.total = result.total;
+    datasourceList.page = result.pageNum;
+  } catch {
+    if (sequence === datasourceListSequence) datasourceList.error = true;
+  } finally {
+    if (sequence === datasourceListSequence) datasourceList.loading = false;
   }
 };
+const searchAccessibleDatasources = () =>
+  loadAccessibleDatasources(1, datasourceList.keywordInput.trim());
 // 库的初始数据
 const resolveApplicationOrg = async (data = {}) => {
   const result = { ...data };
@@ -5423,17 +5438,9 @@ const initData = computed(() => {
   return obj;
 });
 onMounted(() => {
-  loadReceivePushNodes();
   const initialDb = ensureInitialDatasource();
   // 接口按当前会话部门进行权限约束，左侧只展示当前用户可访问的数据源。
-  loadAccessibleDatasources()
-    .catch((error) => {
-      console.warn("加载当前用户可访问的数据源失败，已保留当前登记对象", error);
-    })
-    .finally(() => {
-      // 已有登记对象一直保留在列表中；接口补充的对象加载完成后再移除尾部骨架。
-      datasourceListLoading.value = false;
-    });
+  loadAccessibleDatasources();
   nextTick(() => {
     if (!formRef.value) return;
     applyDatasourceToForm(
@@ -5529,6 +5536,7 @@ onMounted(() => {
     });
 });
 onBeforeUnmount(() => {
+  ++datasourceListSequence;
   clearInterval(connectionTestTimer);
   if (applicationSearchTimer) window.clearTimeout(applicationSearchTimer);
 });
@@ -6242,9 +6250,7 @@ const save = async () => {
     const connectorSaveData = buildConnectorSaveData();
     const receiveDeliveryData =
       accessMode.value === "receive"
-        ? {
-            pushDataType: receiveDeliveryProfile.pushDataType,
-          }
+        ? buildReceiveDeliveryData()
         : {};
     const resolvedFormData = await resolveApplicationOrg({
       ...rawFormData,
@@ -8962,6 +8968,7 @@ function validateConnector() {
       throw new Error("请选择有效的抓取时间");
   }
   if (accessMode.value === "receive") {
+    buildReceiveDeliveryData();
     if (isFilePush.value) {
       if (fileRegistrationState.value.loading || fileRegistrationState.value.error) throw new Error(fileRegistrationState.value.error || "文件登记信息正在读取，请稍后保存");
       if (!fileRegistrationState.value.rows.length) throw new Error("请先上传已填写的文件登记模板");
@@ -9309,34 +9316,38 @@ defineExpose({
 </script>
 
 <style scoped lang="scss">
-.proxy-service-registration {
-  min-width: 0;
+.register-source-list-header {
+  padding: 0 16px;
+
+  h4 { margin: 0 0 10px; }
+  .el-button { margin: 0; }
 }
-.proxy-service-toolbar {
+
+.register-source-list-footer {
+  display: grid;
+  justify-items: center;
+  border-top: 1px solid var(--el-border-color-lighter);
+
+  &:empty { display: none; }
+  .el-pagination { padding: 8px 0 0; }
+}
+
+.register-source-list-feedback {
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 10px 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
-.proxy-service-toolbar .el-input {
-  width: 320px;
-  max-width: 100%;
-}
-.proxy-service-toolbar .proxy-service-title { height: 38px; width: auto; flex: 0 0 auto; min-width: 0; }
-.proxy-service-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; margin-left: auto; }
+
 .webservice-wsdl-input { display: flex; gap: 8px; width: 100%; min-width: 0; }
 .webservice-wsdl-input .el-input { flex: 1; min-width: 0; }
 @media (max-width: 600px) {
-  .proxy-service-actions { width: 100%; }
-  .proxy-service-actions .el-input { flex: 1; width: auto; min-width: 0; }
   .webservice-wsdl-input { flex-wrap: wrap; }
   .webservice-wsdl-input .el-input { flex-basis: 100%; }
-}
-.proxy-service-table {
-  min-height: 280px;
-  max-width: 100%;
 }
 /* ========== 连接配置面板（bordered 风格，与 JsonForm 统一） ========== */
 .link-config-bordered {
@@ -9589,18 +9600,14 @@ defineExpose({
   white-space: nowrap;
 }
 
-.receive-push-address code {
+.receive-push-address .el-input {
+  min-width: 0;
   width: 100%;
-  max-width: 360px;
-  box-sizing: border-box;
-  overflow: hidden;
-  padding: 7px 10px;
-  border-radius: 6px;
-  color: #155eef;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  background: #f1f7ff;
+}
+
+.receive-push-address-label em {
+  color: var(--el-color-danger);
+  font-style: normal;
 }
 
 .receive-push-address small {
@@ -11215,9 +11222,6 @@ defineExpose({
   background: transparent;
 }
 
-.proxy-service-table :deep(.el-table__empty-text) { width: 100%; line-height: normal; }
-.proxy-service-table :deep(.el-table__empty-block) { padding: 0; align-items: stretch; }
-.proxy-service-no-results { padding: 40px 16px; color: var(--el-text-color-secondary); }
 .offline-template-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 
 

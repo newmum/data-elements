@@ -16,6 +16,12 @@
 ================================
 import tenantRuntime
 import tableSort
+import tableRead
+
+/**
+ * 外部流程登记历史。按当前租户分页读取仍关联有效 NiFi 流程的登记记录。
+ * 支持关键字及外部流程 ID、流程名称和登记时间排序，返回总数与当页登记信息。
+ */
 
 var tenantId = tenantRuntime.id()
 if (tenantId == null || ('' + tenantId).trim() == '') {
@@ -29,40 +35,33 @@ var keyword = body?.keyword == null ? '' : ('' + body.keyword).trim()
 if (keyword.length() > 100) {
     exit 400, '搜索词过长'
 }
-var keywordPattern = '%' + keyword + '%'
-var order=tableSort.field(body,{externalFlowId:'r.external_flow_id',pipelineName:'p.name',createdTime:'r.created_time'},'createdTime');
-var direction=tableSort.direction(body);
-var result = db.page("""
-    SELECT r.tid,
-           r.external_flow_id AS externalFlowId,
-           r.pipeline_id AS pipelineId,
-           p.name AS pipelineName,
-           p.status AS pipelineStatus,
-           p.nifi_process_group_id AS processGroupId,
-           r.source_format AS sourceFormat,
-           r.created_time AS createdTime
-      FROM nifi_pipeline_external_ref_t r
-      JOIN nifi_pipeline_t p ON p.id = r.pipeline_id AND p.tenant_id = r.tenant_id AND p.is_del = 0
-     WHERE r.tenant_id = #{tenantId}
-       AND (#{keyword} = '' OR r.external_flow_id LIKE #{keywordPattern}
-            OR p.name LIKE #{keywordPattern})
-"""+' ORDER BY '+order+' '+direction+',r.tid ASC', pageSize, (pageNum - 1) * pageSize)
-var items = []
-var value = (row, key) => {
-    if (row[key] != null) { return row[key] }
-    if (row[key.toLowerCase()] != null) { return row[key.toLowerCase()] }
-    return row[key.toUpperCase()]
+var sortFields = {externalFlowId: 'externalFlowId', pipelineName: 'pipelineName', createdTime: 'createdTime'}
+var sortField = tableSort.field(body, sortFields, 'createdTime')
+var direction = tableSort.direction(body)
+var projection = {
+    tid: tableRead.column('r', 'tid', 'TEXT'),
+    externalFlowId: tableRead.column('r', 'external_flow_id', 'TEXT'),
+    pipelineId: tableRead.column('r', 'pipeline_id', 'TEXT'),
+    pipelineName: tableRead.column('p', 'name', 'TEXT'),
+    pipelineStatus: tableRead.column('p', 'status', 'TEXT'),
+    processGroupId: tableRead.column('p', 'nifi_process_group_id', 'TEXT'),
+    sourceFormat: tableRead.column('r', 'source_format', 'TEXT'),
+    createdTime: tableRead.column('r', 'created_time', 'TIME')
 }
-for (row in (result.list == null ? [] : result.list)) {
-    items.add({
-        tid: value(row, 'tid'),
-        externalFlowId: value(row, 'externalFlowId'),
-        pipelineId: value(row, 'pipelineId'),
-        pipelineName: value(row, 'pipelineName'),
-        pipelineStatus: value(row, 'pipelineStatus'),
-        processGroupId: value(row, 'processGroupId'),
-        sourceFormat: value(row, 'sourceFormat'),
-        createdTime: value(row, 'createdTime')
-    })
+var registrations = tableRead.from('nifi_pipeline_external_ref_t', 'r', tenantId)
+// 只保留与当前租户有效流程关联的登记，两次分页读取使用相同条件。
+var activePipeline = tableRead.equal(tableRead.column('p', 'is_del', 'NUMBER'), 0)
+registrations.leftJoin('nifi_pipeline_t', 'p', 'id', 'pipeline_id', [activePipeline])
+registrations.where(tableRead.not(tableRead.isNull(tableRead.column('p', 'id', 'TEXT'))))
+if (keyword != '') {
+    var pattern = '%' + keyword + '%'
+    registrations.where(tableRead.any([
+        tableRead.like(projection.externalFlowId, pattern),
+        tableRead.like(projection.pipelineName, pattern)
+    ]))
 }
-return { pageNum: pageNum, pageSize: pageSize, total: result.total, list: items }
+
+// 可选流程名称的空值排在末尾，同值按登记 ID 升序。
+var order = sortField == 'pipelineName' ? tableRead.blankAsNull(projection.pipelineName) : projection[sortField]
+var page = registrations.page(projection, order, direction, 'tid', pageNum, pageSize)
+return {pageNum: pageNum, pageSize: pageSize, total: page.total, list: page.rows}

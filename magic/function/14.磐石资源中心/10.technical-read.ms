@@ -28,17 +28,25 @@
   } ]
 }
 ================================
-// 读取共享技术元数据投影。只读当前会话租户；数据源凭据、连接串和原始业务记录不进入响应。
-// input.entityIds 指定真实 db_table_t.tid 时加载完整字段；默认分页 200 张并补齐已登记的仓库资源。
 import tenantRuntime
-import jsons
+import tableRead
 import cn.hutool.json.JSONUtil
 import cn.dev33.satoken.stp.StpUtil
 import cn.hutool.core.util.NumberUtil
 import cn.hutool.crypto.digest.DigestUtil
 import '@post:/sym/user/me' as currentUser
 
+/**
+ * 磐石技术元数据读取。/resource-center/technical-read
+ * 接收 pageNo、pageSize、entityKeyword，或最多 1000 个 entityIds。分页默认 200 张并补齐已登记的仓库资源。
+ * 只读当前租户，返回数据源、技术表和字段、标准映射、质量观测及当前会话身份。
+ * 响应不包含连接凭据、连接串或质量问题的原始数据快照。
+ */
+
 var tenantId = tenantRuntime.id()
+if (tenantId == null || tenantId == '') {
+    exit 401, '无法识别当前租户'
+}
 var text = value => value == null ? '' : value + ''
 var number = value => text(value).matches('^[0-9]+$') ? NumberUtil.parseInt(text(value)) : 0
 var bool = value => ['1', 'true', 'TRUE', 'YES', 'Y', 'yes', 'y'].contains(text(value))
@@ -57,20 +65,36 @@ var family = value => {
     if (type.contains('json')) { return 'object' }
     return 'unknown'
 }
-var sourceRows = db.select("""
-    SELECT tid, db_name, COALESCE(NULLIF(db_type,''),database_type) AS engine,
-           connection_status, is_enable, org_id, app_id, revision, updated_time
-      FROM db_datasource_t
-     WHERE tenant_id = #{tenantId} AND is_del = 0
-     ORDER BY db_name, tid
-""")
+var active = (table, columns) => db.camel().table(table).columns(columns).where()
+    .eq('tenant_id', tenantId).eq('is_del', 0)
+var rowsOf = page => page.list == null ? [] : page.list
+var readCollection = (where, windowSize) => {
+    // 兼容集合仍完整返回。每次 SQL 仅读固定窗口，以首批总数限制读取次数。
+    var rows = []
+    var first = where.page(windowSize, 0)
+    rows.addAll(rowsOf(first))
+    var offset = windowSize
+    while (offset < first.total) {
+        var next = rowsOf(where.page(windowSize, offset))
+        if (next.size() == 0) {
+            break
+        }
+        rows.addAll(next)
+        offset = offset + windowSize
+    }
+    return rows
+}
+var sourceRows = readCollection(active('db_datasource_t', [
+    'tid', 'db_name', 'db_type', 'database_type', 'connection_status', 'is_enable',
+    'org_id', 'app_id', 'revision', 'updated_time'
+]).orderBy('db_name').orderBy('tid'), 1000)
 var sources = []
 var sourceById = {}
 var sourceIds = []
 var manifest = {}
 for (row in sourceRows) {
     var sourceId = text(row.tid)
-    var engine = text(row.engine).toUpperCase()
+    var engine = (text(row.dbType) == '' ? text(row.databaseType) : text(row.dbType)).toUpperCase()
     if (engine == 'DAMENG') { engine = 'DM8' }
     if (engine == 'KINGBASE8' || engine == 'KINGBASE') { engine = 'KINGBASEES' }
     var source = {id:sourceId, name:text(row.dbName), engine:engine,
@@ -89,41 +113,60 @@ if (keyword.length() > 200) { exit 400, '检索关键词过长' }
 var search = '%' + keyword + '%'
 var pageNo = input == null ? 1 : number(input.pageNo)
 if (pageNo < 1) { pageNo = 1 }
+if (pageNo > 100000) {
+    exit 400, '技术实体页码不能超过 100000'
+}
 var pageSize = input == null ? 200 : number(input.pageSize)
 if (pageSize < 1) { pageSize = 200 }
 if (pageSize > 500) { pageSize = 500 }
 var offset = (pageNo - 1) * pageSize
 var tableRows = []
 var total = 0
+var tableColumns = [
+    'tid', 'datasource_id', 'table_name', 'table_name_cn', 'table_comment', 'table_type', 'field_count',
+    'revision', 'created_time', 'updated_time', 'resource_domain_id', 'resource_owner', 'asset_desc',
+    'resource_plan_id', 'resource_state', 'resource_model_id', 'resource_field_map', 'resource_revision_no'
+]
 if (entityIds.size() > 0) {
-    tableRows = db.table('db_table_t').where().eq('tenant_id',tenantId).eq('is_del',0).in('tid',entityIds).select()
+    tableRows = active('db_table_t', tableColumns).in('tid', entityIds).select()
     total = tableRows.size()
-} else {
-    var countRow = db.selectOne("""
-        SELECT COUNT(*) AS total
-          FROM db_table_t t
-          JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=#{tenantId} AND d.is_del=0
-         WHERE t.tenant_id=#{tenantId} AND t.is_del=0
-           AND (#{keyword}='' OR t.table_name LIKE #{search} OR t.table_name_cn LIKE #{search} OR t.table_comment LIKE #{search})
-    """)
-    total = countRow.total
-    tableRows = db.select("""
-        SELECT t.* FROM db_table_t t
-          JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=#{tenantId} AND d.is_del=0
-         WHERE t.tenant_id=#{tenantId} AND t.is_del=0
-           AND (#{keyword}='' OR t.table_name LIKE #{search} OR t.table_name_cn LIKE #{search} OR t.table_comment LIKE #{search})
-         ORDER BY t.table_name, t.tid LIMIT #{offset}, #{pageSize}
-    """)
-    var registered = db.select("""
-        SELECT t.* FROM db_table_t t
-          JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=#{tenantId} AND d.is_del=0
-         WHERE t.tenant_id=#{tenantId} AND t.is_del=0
-           AND t.resource_domain_id IS NOT NULL AND t.resource_domain_id<>''
-         ORDER BY t.table_name, t.tid
-    """)
-    var loaded = []
-    for (table in tableRows) { loaded.add(text(table.tid)) }
-    for (table in registered) { if (!loaded.contains(text(table.tid))) { tableRows.add(table); loaded.add(text(table.tid)) } }
+} else if (sourceIds.size() > 0) {
+    // 先限制到同租户未删除的来源，再计数和分页。每个 IN 子句最多 500 个来源。
+    var tablesFromActiveSources = () => active('db_table_t', tableColumns).and(sourcesWhere => {
+        var start = 0
+        while (start < sourceIds.size()) {
+            if (start > 0) {
+                sourcesWhere.or()
+            }
+            var end = Math.min(start + 500, sourceIds.size())
+            sourcesWhere.in('datasource_id', sourceIds.subList(start, end))
+            start = end
+        }
+        return sourcesWhere
+    })
+    var tableQuery = tablesFromActiveSources()
+    if (keyword != '') {
+        tableQuery.and(matching => matching.like('table_name', search)
+            .or().like('table_name_cn', search).or().like('table_comment', search))
+    }
+    var page = tableQuery.orderBy('table_name').orderBy('tid').page(pageSize, offset)
+    total = page.total == null ? 0 : page.total
+    tableRows.addAll(rowsOf(page))
+
+    // 已登记资源无论是否匹配技术检索仍参与工作台模型、资源组装。合并时保留分页条目顺序。
+    var registered = readCollection(tablesFromActiveSources().isNotNull('resource_domain_id')
+        .orderBy('table_name').orderBy('tid'), 1000)
+    var loaded = {}
+    for (table in tableRows) {
+        loaded[text(table.tid)] = true
+    }
+    for (table in registered) {
+        var tableId = text(table.tid)
+        if (text(table.resourceDomainId) != '' && loaded[tableId] == null) {
+            tableRows.add(table)
+            loaded[tableId] = true
+        }
+    }
 }
 var tables = []
 var tableIds = []
@@ -131,18 +174,29 @@ for (row in tableRows) {
     if (sourceById[text(row.datasourceId)] != null) { tables.add(row); tableIds.add(text(row.tid)) }
 }
 if (entityIds.size() > 0 && tableIds.size() != entityIds.size()) { exit 404, '部分技术表已删除或不属于当前租户' }
-var columnRows = tableIds.size() == 0 ? [] : db.table('db_table_column_t').where().eq('tenant_id',tenantId).eq('is_del',0).in('table_id',tableIds).orderBy('table_id','asc').orderBy('ordinal_position','asc').orderBy('tid','asc').select()
+var columnRows = []
+var columnProjection = [
+    'tid', 'table_id', 'column_type', 'data_type', 'column_name', 'column_comment', 'length',
+    'precision_length', 'scale', 'nullable', 'ordinal_position', 'primary_key', 'is_unique', 'data_standard_id'
+]
+// 仅批读已经核验的技术表。按最多 500 个表 ID 分组，避免逐表补查和方言的 IN 上限。
+var columnStart = 0
+while (columnStart < tableIds.size()) {
+    var columnEnd = Math.min(columnStart + 500, tableIds.size())
+    var batch = tableIds.subList(columnStart, columnEnd)
+    columnRows.addAll(readCollection(active('db_table_column_t', columnProjection).in('table_id', batch)
+        .orderBy('table_id').orderBy('ordinal_position').orderBy('tid'), 10000))
+    columnStart = columnEnd
+}
 var fieldsByTable = {}
 var primaryByTable = {}
 var uniqueByTable = {}
 var mappings = []
-var standardRows = db.select("""
-    SELECT tid, meta_name, meta_code, standard_encode, biz_def, data_type_id,
-           field_type, field_length, numeric_precision, numeric_scale, data_category_name,
-           publish_status, version_no, updated_time, created_time, is_nullable
-      FROM da_metadata_t WHERE tenant_id=#{tenantId} AND is_del=0
-     ORDER BY meta_name, tid
-""")
+var standardRows = readCollection(active('da_metadata_t', [
+    'tid', 'meta_name', 'meta_code', 'standard_encode', 'biz_def', 'data_type_id', 'field_type', 'field_length',
+    'numeric_precision', 'numeric_scale', 'data_category_name', 'publish_status', 'version_no',
+    'updated_time', 'created_time', 'is_nullable'
+]).orderBy('meta_name').orderBy('tid'), 1000)
 var standards = []
 var standardById = {}
 var standardByCode = {}
@@ -212,29 +266,49 @@ for (row in tables) {
             version:row.resourceRevisionNo == null ? 1 : row.resourceRevisionNo, createdAt:row.createdTime, updatedAt:row.updatedTime})
     }
 }
-// Quality results contain execution metadata only. Row snapshots and sensitive issue values remain behind the quality detail APIs.
+// 质量观测只返回执行元数据。问题样本的原始行、敏感值和异常详情留在专用接口。
 var results = []
 var issues = []
 var qualityError = null
 try {
-results = db.select("""
-    SELECT r.tid AS id, t.table_id AS entity_id, t.table_id AS entityId, r.status,
-           r.checked_count AS checkedCount, r.violation_count AS violationCount,
-           CASE WHEN r.checked_count>0 THEN r.quality_score ELSE NULL END AS score,
-           r.started_at AS startedAt, r.finished_at AS finishedAt
-      FROM dq_quality_run_t r
-      JOIN dq_quality_task_t t ON t.tid=r.task_id AND t.tenant_id=#{tenantId} AND t.is_del=0
-     WHERE r.tenant_id=#{tenantId} AND r.is_del=0 ORDER BY r.created_time DESC LIMIT 200
-""")
-issues = db.select("""
-    SELECT i.tid AS id, t.table_id AS entity_id, i.run_id AS runId, i.column_name AS columnName,
-           i.severity, i.issue_status AS status, i.created_time AS createdAt
-      FROM dq_quality_issue_sample_t i
-      JOIN dq_quality_run_t r ON r.tid=i.run_id AND r.tenant_id=#{tenantId} AND r.is_del=0
-      JOIN dq_quality_task_t t ON t.tid=r.task_id AND t.tenant_id=#{tenantId} AND t.is_del=0
-     WHERE i.tenant_id=#{tenantId} ORDER BY i.created_time DESC LIMIT 200
-""")
-} catch (e) { qualityError = '质量观测读取失败：' + text(e.getMessage()) }
+    var column = (alias, field) => tableRead.column(alias, field, 'TEXT')
+    var numeric = (alias, field) => tableRead.column(alias, field, 'NUMBER')
+    var time = (alias, field) => tableRead.column(alias, field, 'TIME')
+    var runs = tableRead.from('dq_quality_run_t', 'r', tenantId)
+    runs.where(tableRead.equal(numeric('r', 'is_del'), 0))
+    runs.leftJoin('dq_quality_task_t', 't', 'tid', 'task_id', [
+        tableRead.equal(numeric('t', 'is_del'), 0)
+    ])
+    runs.where(tableRead.not(tableRead.isNull(column('t', 'tid'))))
+    var runId = column('r', 'tid')
+    var tableId = column('t', 'table_id')
+    var checked = numeric('r', 'checked_count')
+    results = runs.rows({
+        id: runId, entityId: tableId, status: column('r', 'status'), checkedcount: checked,
+        violationcount: numeric('r', 'violation_count'),
+        score: tableRead.when(tableRead.greaterThan(checked, 0), numeric('r', 'quality_score'), null),
+        startedat: time('r', 'started_at'), finishedat: time('r', 'finished_at')
+    }, time('r', 'created_time'), 'desc', 200)
+    // 旧工作台响应同时提供两个实体标识键，结构化查询后显式保留兼容键。
+    for (result in results) {
+        result.put('entityid', result.entityId)
+    }
+
+    // 样本仅能关联同租户未删除运行和任务。先按运行归组，确保一个样本最多关联一条记录。
+    var samples = tableRead.from('dq_quality_issue_sample_t', 'i', tenantId)
+    samples.leftJoinGrouped(runs, 'observed_run', 'run_id', 'run_id', {
+        run_id: runId, table_id: tableRead.max(tableId)
+    }, [runId])
+    samples.where(tableRead.not(tableRead.isNull(column('observed_run', 'run_id'))))
+    var createdAt = time('i', 'created_time')
+    issues = samples.rows({
+        id: column('i', 'tid'), entityId: column('observed_run', 'table_id'), runid: column('i', 'run_id'),
+        columnname: column('i', 'column_name'), severity: column('i', 'severity'),
+        status: column('i', 'issue_status'), createdat: createdAt
+    }, createdAt, 'desc', 200)
+} catch (e) {
+    qualityError = '质量观测读取失败，请稍后重试'
+}
 var user = currentUser()
 var actorId = StpUtil.getLoginIdAsString()
 var actorName = user.realName == null ? text(user.userName) : text(user.realName)

@@ -230,12 +230,7 @@
                   :options="column.options"
                   :model-value="row[column.prop]"
                 />
-                <dict-label
-                  v-else
-                  v-auto-width
-                  v-bind="column.props"
-                  :model-value="row[column.prop]"
-                />
+                <dict-label v-else v-bind="column.props" :model-value="row[column.prop]" />
               </template>
 
               <!-- 表头筛选 -->
@@ -638,17 +633,6 @@ const freshColumns = () => {
   });
 };
 
-// 自适应宽度指令
-const vAutoWidth = {
-  mounted() {
-    // 初次挂载的时候计算一次
-    // freshColumns();
-  },
-  updated() {
-    // 数据更新时重新计算一次
-    // freshColumns();
-  },
-};
 // 行样式
 const tableRowClassName = ({ rowIndex }: { rowIndex: number }) => {
   return rowIndex === curIndex.value ? "current-row" : "";

@@ -3,6 +3,8 @@ package com.linewell.dataelement.platform.magic;
 import com.linewell.dataelement.utils.StructuredValues;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver;
 
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
@@ -376,6 +378,149 @@ class BatchCreateTableDdlMagicTest {
     }
 
     @Test
+    void sameSourceTwentyAndHundredUseOneScopedDatasourceRead() throws Exception {
+        for (int size : List.of(20, 100)) {
+            Fixture fixture = new Fixture(size);
+            fixture.jdbc.update("delete from db_datasource_t where tid <> 'db-0'");
+
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.runSameSource());
+            assertEquals(true, response.get("canvasBatchGenerate"));
+            assertNull(response.get("error"));
+            List<?> results = assertInstanceOf(List.class, response.get("results"));
+            assertEquals(size, results.size());
+            for (int index = 0; index < results.size(); index++) {
+                Map<?, ?> result = assertInstanceOf(Map.class, results.get(index));
+                String name = "ods_person_" + index;
+                assertEquals(name, result.get("tableName"));
+                assertTrue(result.get("ddl").toString().contains(name));
+            }
+            assertEquals(1, fixture.resolverReads);
+            assertEquals(0, fixture.counter.reads);
+            assertEquals(0, fixture.counter.writes);
+            assertEquals(size, fixture.ddlGenerator.calls);
+        }
+    }
+
+    @Test
+    void sameSourceUsesExactSingleCanvasDialectAndColumnRules() throws Exception {
+        for (String databaseType : List.of("mysql", "postgresql", "oracle", "hive")) {
+            Fixture fixture = new Fixture(1);
+            fixture.jdbc.update("update db_datasource_t set db_type=?, username='ODS_OWNER', pool_cfg=?",
+                    databaseType, "{\"schema\":\"ODS_OWNER\",\"charset\":\"utf8mb4\"}");
+            fixture.ddlGenerator.expectedColumns = 2;
+            var target = new LinkedHashMap<>(fixture.targets.getFirst());
+            target.put("tableItems", List.of(
+                    Map.of("columnName", "person_id", "dataType", "varchar", "length", 32, "primaryKey", 1),
+                    Map.of("columnName", "ODS_RKSJ", "dataType", "varchar", "length", 20, "nullable", 1)));
+            if ("mysql".equals(databaseType)) {
+                target.put("partitionPlan", Map.of("enabled", true, "strategy", "LIST", "field", "person_id",
+                        "partitions", List.of(Map.of("name", "p_region", "values", List.of("350100")))));
+            }
+            var single = new LinkedHashMap<>(target);
+            single.put("canvas", true);
+
+            String expected = assertInstanceOf(String.class, fixture.run(single));
+            assertEquals(1, fixture.resolverReads);
+            Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(sameSourceBody(List.of(target))));
+            List<?> results = assertInstanceOf(List.class, response.get("results"));
+            assertNull(response.get("error"), databaseType);
+            assertEquals(expected, assertInstanceOf(Map.class, results.getFirst()).get("ddl"), databaseType);
+            assertEquals(1, fixture.resolverReads);
+            assertEquals(0, fixture.counter.writes);
+        }
+    }
+
+    @Test
+    void sameSourceStopsAtFirstFailureAndReturnsOnlyTheSuccessfulPrefix() throws Exception {
+        Fixture fixture = new Fixture(3);
+        List<Map<String, Object>> targets = fixture.sameSourceTargets();
+        fixture.ddlGenerator.rejectedTableName = "ods_person_1";
+
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(sameSourceBody(targets)));
+        List<?> results = assertInstanceOf(List.class, response.get("results"));
+        assertEquals(1, results.size());
+        assertEquals("ods_person_0", assertInstanceOf(Map.class, results.getFirst()).get("tableName"));
+        Map<?, ?> error = assertInstanceOf(Map.class, response.get("error"));
+        assertEquals(1, error.get("index"));
+        assertEquals("ods_person_1", error.get("tableName"));
+        assertEquals("未能生成建表语句：请检查字段类型、长度和分区配置后重试", error.get("message"));
+        assertEquals(2, fixture.ddlGenerator.calls);
+        assertEquals(1, fixture.resolverReads);
+        assertEquals(0, fixture.counter.writes);
+
+        fixture.ddlGenerator.rejectedTableName = null;
+        targets.set(1, fixture.targets.get(1));
+        response = assertInstanceOf(Map.class, fixture.run(sameSourceBody(targets)));
+        error = assertInstanceOf(Map.class, response.get("error"));
+        assertEquals(1, error.get("index"));
+        assertEquals("目标表必须使用同一已登记数据源", error.get("message"));
+        assertEquals(3, fixture.ddlGenerator.calls);
+        assertEquals(1, fixture.resolverReads);
+
+        targets.set(1, Map.of("propList", Map.of("tableName", "ODS_PERSON_0"),
+                "tableItems", targets.getFirst().get("tableItems")));
+        response = assertInstanceOf(Map.class, fixture.run(sameSourceBody(targets)));
+        error = assertInstanceOf(Map.class, response.get("error"));
+        assertEquals("同源预览的目标表名不能重复", error.get("message"));
+        assertEquals(4, fixture.ddlGenerator.calls);
+        assertEquals(1, fixture.resolverReads);
+    }
+
+    @Test
+    void sameSourceValidatesTrustedTenantAndBoundsBeforeRendering() throws Exception {
+        Fixture fixture = new Fixture(101);
+        assertEquals(400, assertInstanceOf(ExitValue.class, fixture.runSameSource()).getValues()[0]);
+        assertEquals(0, fixture.resolverReads);
+        assertEquals(0, fixture.ddlGenerator.calls);
+
+        List<Map<String, Object>> targets = fixture.sameSourceTargets().subList(0, 1);
+        fixture.scope.tenantId = "";
+        assertEquals(401, assertInstanceOf(ExitValue.class, fixture.run(sameSourceBody(targets))).getValues()[0]);
+        assertEquals(0, fixture.resolverReads);
+
+        fixture.scope.tenantId = "police";
+        fixture.jdbc.update("update db_datasource_t set tenant_id='other' where tid='db-0'");
+        var spoofed = new LinkedHashMap<>(sameSourceBody(targets));
+        spoofed.put("tenantId", "other");
+        assertEquals(404, assertInstanceOf(ExitValue.class, fixture.run(spoofed)).getValues()[0]);
+        assertEquals(1, fixture.resolverReads);
+
+        fixture.jdbc.update("update db_datasource_t set tenant_id='police',is_del=1 where tid='db-0'");
+        assertEquals(404, assertInstanceOf(ExitValue.class, fixture.run(sameSourceBody(targets))).getValues()[0]);
+        assertEquals(1, fixture.resolverReads);
+        assertEquals(0, fixture.ddlGenerator.calls);
+        assertEquals(0, fixture.counter.writes);
+    }
+
+    @Test
+    void sameSourceSupportsTheExistingThousandFieldModelLimit() throws Exception {
+        Fixture fixture = new Fixture(1);
+        fixture.ddlGenerator.expectedColumns = 1000;
+        var target = new LinkedHashMap<>(fixture.targets.getFirst());
+        var items = new ArrayList<Map<String, Object>>();
+        for (int index = 0; index < 1000; index++) {
+            items.add(Map.of("columnName", "field_" + index, "dataType", "int", "nullable", 1));
+        }
+        target.put("tableItems", items);
+
+        Map<?, ?> response = assertInstanceOf(Map.class, fixture.run(sameSourceBody(List.of(target))));
+        assertNull(response.get("error"));
+        assertEquals(1, fixture.ddlGenerator.calls);
+        assertEquals(1, fixture.resolverReads);
+
+        items.add(Map.of("columnName", "extra_field", "dataType", "int"));
+        response = assertInstanceOf(Map.class, fixture.run(sameSourceBody(List.of(target))));
+        Map<?, ?> error = assertInstanceOf(Map.class, response.get("error"));
+        assertEquals(0, error.get("index"));
+        assertEquals(1, fixture.ddlGenerator.calls);
+        assertEquals(1, fixture.resolverReads);
+    }
+
+    private static Map<String, Object> sameSourceBody(List<Map<String, Object>> targets) {
+        return Map.of("canvasBatchGenerate", true, "canvas", true, "dbId", "db-0", "targets", targets);
+    }
+
+    @Test
     void menuRoleDoesNotRejectTheCurrentTenantTwentyTargetBatch() throws Exception {
         Fixture fixture = new Fixture(20);
         fixture.scope.deniedId = "db-19";
@@ -471,12 +616,14 @@ class BatchCreateTableDdlMagicTest {
 
     private static final class Fixture {
         final JdbcTemplate jdbc;
+        final DataSourceConnectionPropertyResolver connectionProperties;
         final SQLModule db;
         final QueryCounter counter = new QueryCounter();
         final ScopeRuntime scope = new ScopeRuntime();
         final DdlGenerator ddlGenerator = new DdlGenerator();
         final CanvasTableDdl ddlParser = new CanvasTableDdl();
         final List<Map<String, Object>> targets = new ArrayList<>();
+        int resolverReads;
 
         Fixture(int targetCount) {
             var source = new DriverManagerDataSource("jdbc:h2:mem:ddl_batch_" + UUID.randomUUID()
@@ -495,6 +642,13 @@ class BatchCreateTableDdlMagicTest {
             db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());
             db.setRowMapColumnMapper(value -> value);
             jdbc = new JdbcTemplate(source);
+            connectionProperties = new DataSourceConnectionPropertyResolver(new JdbcTemplate(source) {
+                @Override
+                public List<Map<String, Object>> queryForList(String sql, Object... args) {
+                    resolverReads++;
+                    return super.queryForList(sql, args);
+                }
+            }, new ObjectMapper());
             jdbc.execute("""
                     create table db_datasource_t(tid varchar(64),tenant_id varchar(32),is_del int,
                         db_type varchar(32),db_name varchar(100),pool_cfg varchar(1000),username varchar(100))
@@ -515,6 +669,23 @@ class BatchCreateTableDdlMagicTest {
         Object run() throws Exception {
             return run(Map.of("batchGenerate", true, "canvas", true, "targets", targets));
         }
+
+        Object runSameSource() throws Exception {
+            return run(sameSourceBody(sameSourceTargets()));
+        }
+
+        List<Map<String, Object>> sameSourceTargets() {
+            var sameSource = new ArrayList<Map<String, Object>>();
+            for (var target : targets) {
+                var copy = new LinkedHashMap<>(target);
+                var props = new LinkedHashMap<>(StructuredValues.objectMap(target.get("propList")));
+                props.remove("dbId");
+                copy.put("propList", props);
+                sameSource.add(copy);
+            }
+            return sameSource;
+        }
+
         Object run(Map<String,Object> body) throws Exception {
             String script = CanonicalMagicSources.byId(SOURCE_ID)
                     .replaceAll("(?m)^import (?!com\\.linewell\\.dataelement\\.metautil\\.model\\.|cn\\.hutool\\.json\\.JSONUtil|java\\.util\\.Map|java\\.util\\.List)[^\\r\\n]*\\r?\\n", "");
@@ -523,6 +694,7 @@ class BatchCreateTableDdlMagicTest {
             inputs.put("db", db);
             inputs.put("tenantRuntime", scope);
             inputs.put("dataScope", scope);
+            inputs.put("connectionProperties", connectionProperties);
             inputs.put("metadataExplorerService", ddlGenerator);
             inputs.put("canvasTableDdl", ddlParser);
             inputs.put("portableDdl", new com.linewell.dataelement.metautil.ddl.PortableDdlConverter());
@@ -530,6 +702,7 @@ class BatchCreateTableDdlMagicTest {
             inputs.put("jsons", new JsonModule());
             counter.reads = 0;
             counter.writes = 0;
+            resolverReads = 0;
             return MagicScript.create(script, null)
                     .execute(new MagicScriptContext(inputs));
         }
@@ -548,7 +721,8 @@ class BatchCreateTableDdlMagicTest {
 
     public static final class ScopeRuntime {
         String deniedId;
-        public String id() { return "police"; }
+        String tenantId = "police";
+        public String id() { return tenantId; }
         public List<Map<String, Object>> visibleDataSourcesFor(String resource,
                                                                 Collection<Map<String, Object>> rows) {
             assertEquals("MENU:2081000000000000002", resource);
@@ -560,10 +734,14 @@ class BatchCreateTableDdlMagicTest {
         int calls;
         int expectedColumns=1;
         boolean rename;
+        String rejectedTableName;
         List<ColumnInfo> lastColumns;
         public String generateCreateTableDdl(DataSourceConfig config, String tableName,
                                              List<ColumnInfo> columns, String tableComment) {
             calls++;
+            if (tableName.equals(rejectedTableName)) {
+                throw new IllegalArgumentException("unexpected adapter detail");
+            }
             lastColumns = List.copyOf(columns);
             assertEquals(expectedColumns, columns.size());
             String name = rename ? "UNEXPECTED_TABLE" : tableName;

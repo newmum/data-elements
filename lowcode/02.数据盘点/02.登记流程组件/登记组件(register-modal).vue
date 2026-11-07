@@ -33,15 +33,13 @@
 
     <asset-register
 
-      v-if="loaded"
+      v-if="flow"
 
       class="register-content"
 
-      :init-store="initData"
+      :init-store="flow.initStore"
 
-      :config="config"
-
-      :actions="actions"
+      :actions="flow.actions"
 
       @completed="onCompleted"
 
@@ -56,647 +54,283 @@
 
 
 <script setup lang="ts">
-
-import { ref, computed, watch } from "vue";
-
+import { computed, ref, shallowRef, watch } from "vue";
 import { useRegisterStore } from "@/store";
 
+// BEGIN GENERATED REGISTRATION FLOW
+// 源文件 registration-flow.ts。修改后运行 node tools/sync-registration-flow.mjs。
+interface RegistrationFlowOptions {
+  registerClass: string;
+  registerMode?: string;
+  registerData?: { currentStep?: number | null };
+  currentStep?: number;
+  updateFormRule?: unknown[];
+}
 
+interface RegistrationStep {
+  title: string;
+  component: string;
+  props?: object;
+  hidden?: boolean;
+  skipped?: boolean;
+}
+
+interface RegistrationActionContext {
+  state: { currentStep: number; steps?: RegistrationStep[] };
+  isFirstStep: boolean;
+  isSecondLastStep: boolean;
+}
+
+type RegistrationActionCode = "cancel" | "pre" | "save" | "next" | "finish" | "commit" | "print";
+type RegistrationActionVisibility = (context: RegistrationActionContext) => boolean;
+
+interface RegistrationAction {
+  code: RegistrationActionCode;
+  name: string;
+  icon?: string;
+  class?: string;
+  props: { type: "default" | "primary" | "dashed"; plain?: boolean };
+  if?: RegistrationActionVisibility;
+}
+
+const registrationActionDefaults: Record<
+  RegistrationActionCode,
+  Omit<RegistrationAction, "code">
+> = {
+  cancel: { name: "取消", props: { type: "default" } },
+  pre: { name: "上一步", icon: "rollback", class: "btn-pre", props: { type: "default" } },
+  save: { name: "保存", icon: "save", props: { type: "primary", plain: true } },
+  next: { name: "下一步", icon: "right-circle", props: { type: "primary" } },
+  finish: { name: "完成登记", icon: "check-circle", props: { type: "primary" } },
+  commit: { name: "提交申请", icon: "check-circle", props: { type: "primary" } },
+  print: { name: "打印", props: { type: "dashed" } },
+};
+
+function registrationAction(
+  code: RegistrationActionCode,
+  visible?: RegistrationActionVisibility,
+  label?: string
+): RegistrationAction {
+  const defaults = registrationActionDefaults[code];
+  const action: RegistrationAction = {
+    ...defaults,
+    code,
+    name: label ?? defaults.name,
+    props: { ...defaults.props },
+  };
+  if (visible) action.if = visible;
+  return action;
+}
+
+function registrationSteps({ registerClass }: RegistrationFlowOptions): {
+  title: string;
+  steps: RegistrationStep[];
+} {
+  switch (registerClass) {
+    case "db":
+    case "dbTable":
+      return {
+        title: "登记数据资源",
+        steps: [
+          { title: "登记数据源", component: "register-db" },
+          { title: "探查数据表", component: "register-dbTable" },
+          {
+            title: "登记字典表",
+            component: "register-dbTable-catalog",
+            props: { catalogPhase: "dictionary" },
+          },
+          {
+            title: "登记业务/日志表",
+            component: "register-dbTable-catalog",
+            props: { catalogPhase: "business" },
+          },
+          { title: "登记内容审查", component: "register-confirm" },
+          {
+            title: "完成",
+            component: "register-finish",
+            props: { finishType: "datasource" },
+            hidden: true,
+          },
+        ],
+      };
+    case "app":
+      return {
+        title: "",
+        steps: [
+          { title: "业务系统", component: "register-app" },
+          { title: "完成", component: "register-finish", props: { finishType: "application" } },
+        ],
+      };
+    case "catalog":
+      return {
+        title: "登记数据目录",
+        steps: [
+          { title: "目录登记", component: "register-catalog" },
+          { title: "完成", component: "register-finish", props: { finishType: "catalog" } },
+        ],
+      };
+    case "fileCatalog":
+      return {
+        title: "",
+        steps: [
+          { title: "数据目录登记", component: "register-fileCatalog" },
+          { title: "导入数据文件", component: "register-fileCatalog-data" },
+          { title: "生成数据目录", component: "register-finish", props: { finishType: "catalog" } },
+        ],
+      };
+    case "apply":
+    case "car-apply":
+      return {
+        title: "订阅申请单",
+        steps:
+          registerClass === "car-apply"
+            ? [
+                { title: "选择申请资源", component: "car-list" },
+                { title: "填写申请单", component: "car-register-apply" },
+              ]
+            : [{ title: "登记", component: "car-register-apply" }],
+      };
+    default:
+      return { title: "", steps: [] };
+  }
+}
+
+const registrationNotFirst: RegistrationActionVisibility = ({ isFirstStep }) => !isFirstStep;
+const registrationBeforeCommit: RegistrationActionVisibility = ({ isSecondLastStep }) =>
+  !isSecondLastStep;
+const registrationCommitStep: RegistrationActionVisibility = ({ isSecondLastStep }) =>
+  isSecondLastStep;
+const registrationApplyFormStep: RegistrationActionVisibility = ({ state }) =>
+  state.steps?.[state.currentStep]?.component === "car-register-apply";
+const registrationOnFinishStep = ({ steps, currentStep }: RegistrationActionContext["state"]) =>
+  steps?.[currentStep]?.component === "register-finish";
+
+function registrationActions(registerClass: string, datasourceFinishLabel: string) {
+  switch (registerClass) {
+    case "app":
+      return [
+        registrationAction(
+          "pre",
+          (context) => registrationNotFirst(context) && !registrationOnFinishStep(context.state)
+        ),
+        registrationAction("save", ({ state }) => state.currentStep !== 2),
+        registrationAction("next", registrationBeforeCommit),
+        registrationAction("finish", registrationCommitStep),
+      ];
+    case "apply":
+      return [
+        registrationAction("cancel"),
+        registrationAction("save", registrationApplyFormStep),
+        registrationAction("commit", registrationApplyFormStep),
+      ];
+    case "car-apply":
+      return [
+        registrationAction("cancel"),
+        registrationAction("pre", registrationApplyFormStep),
+        registrationAction("print", registrationApplyFormStep),
+        registrationAction("save", registrationApplyFormStep),
+        registrationAction(
+          "next",
+          ({ state }) => state.steps?.[state.currentStep]?.component === "car-list"
+        ),
+        registrationAction("commit", registrationApplyFormStep),
+      ];
+    case "db":
+    case "dbTable":
+      return [
+        registrationAction("pre", registrationNotFirst),
+        registrationAction(
+          "save",
+          ({ state }) => [0, 2, 3].includes(state.currentStep) && !registrationOnFinishStep(state)
+        ),
+        registrationAction(
+          "next",
+          ({ state }) => state.currentStep !== 4 && !registrationOnFinishStep(state)
+        ),
+        registrationAction("finish", ({ state }) => state.currentStep === 4, datasourceFinishLabel),
+      ];
+    default:
+      // 目录登记沿用登记布局自己的默认按钮。
+      return undefined;
+  }
+}
+
+/** 每次打开生成独立步骤，步骤组件可为当前登记标记跳过状态。 */
+function createRegistrationFlow(
+  options: RegistrationFlowOptions,
+  host: "native" | "lowcode"
+) {
+  const { registerClass, registerMode = "", registerData, currentStep, updateFormRule } = options;
+  const editingDatasource = registerClass === "db" && registerMode === "explore-edit";
+  const quickEdit = editingDatasource && host === "lowcode";
+  const { title, steps } = quickEdit
+    ? { title: "编辑数据源", steps: [{ title: "编辑数据源", component: "register-db" }] }
+    : registrationSteps(options);
+  return {
+    initStore: {
+      registerClass,
+      title: editingDatasource ? "编辑数据源" : title,
+      assets: [{ assetClass: registerClass }],
+      steps,
+      currentStep: registerData?.currentStep ?? currentStep ?? 0,
+      loadStatus: {},
+      updateFormRule: updateFormRule ?? [],
+      registerMode,
+      hiddenStep: quickEdit || registerClass === "apply" || registerClass === "car-apply",
+    },
+    actions: quickEdit
+      ? [registrationAction("cancel"), registrationAction("finish", undefined, "保存并完成")]
+      : registrationActions(registerClass, host === "native" ? "结束登记" : "完成登记"),
+  };
+}
+// END GENERATED REGISTRATION FLOW
 
 const emit = defineEmits<{
-
   (e: "update:modelValue", value: boolean): void;
-
-  (e: "close", value: boolean): void;
-
+  (e: "close"): void;
   (e: "completed"): void;
-
 }>();
 
-
-
 const props = defineProps({
-
   modelValue: Boolean,
-
-  registerClass: {
-
-    type: String,
-
-    required: true,
-
-  },
-
-  registerData: {
-
-    // 登记数据，直接应用于store-data中
-
-    type: Object,
-
-    default: () => ({}),
-
-  },
-
-  qualityData: {
-
-    // 质检数据
-
-    type: Object,
-
-    default: () => ({}),
-
-  },
-
-  id: String,
-
-  currentStep: Number, // 初始步骤
-
-  // 从页面入口显式传入的流程模式。只有数据探查编辑会使用 explore-edit，
-  // 其他数据源管理入口不传此值，始终保留现有五步登记。
-  registerMode: {
-    type: String,
-    default: "",
-  },
-
-  updateFormRule: {
-    type: Array,
-    default: () => [],
-  }, // 更新表单
-
+  registerClass: { type: String, required: true },
+  registerData: { type: Object, default: () => ({}) },
+  currentStep: Number,
+  registerMode: { type: String, default: "" },
+  updateFormRule: { type: Array, default: () => [] },
 });
-
-
-
-const loaded = ref(false);
-
-const actions = ref();
-
-const store = useRegisterStore();
-
-
-
-useRegisterStore().$reset();
-
-loaded.value = true;
-
-
-
-// 登记产配置
-
-const config = {
-
-  dbTable: {
-    title: "登记数据资源",
-    steps: [
-      { title: "登记数据源", component: "register-db" },
-      { title: "探查数据表", component: "register-dbTable" },
-      { title: "登记字典表", component: "register-dbTable-catalog", props: { catalogPhase: "dictionary" } },
-      { title: "登记业务/日志表", component: "register-dbTable-catalog", props: { catalogPhase: "business" } },
-      { title: "登记内容审查", component: "register-confirm" },
-      { title: "完成", component: "register-finish", props: { finishType: "datasource" }, hidden: true },
-    ],
-
-  },
-
-  app: {
-
-    title: "",
-
-    steps: [
-
-      { title: "业务系统", component: "register-app" },
-
-      { title: "完成", component: "register-finish", props: { finishType: "application" } },
-
-    ],
-
-  },
-
-  catalog: {
-
-    title: "登记数据目录",
-
-    steps: [
-
-      { title: "目录登记", component: "register-catalog" },
-
-      { title: "完成", component: "register-finish", props: { finishType: "catalog" } },
-
-    ],
-
-  },
-
-  db: {
-    title: "登记数据资源",
-    steps: [
-      { title: "登记数据源", component: "register-db" },
-      { title: "探查数据表", component: "register-dbTable" },
-      { title: "登记字典表", component: "register-dbTable-catalog", props: { catalogPhase: "dictionary" } },
-      { title: "登记业务/日志表", component: "register-dbTable-catalog", props: { catalogPhase: "business" } },
-      { title: "登记内容审查", component: "register-confirm" },
-      { title: "完成", component: "register-finish", props: { finishType: "datasource" }, hidden: true },
-    ],
-
-  },
-
-  fileCatalog: {
-
-    title: "",
-
-    steps: [
-
-      { title: "数据目录登记", component: "register-fileCatalog" },
-
-      { title: "导入数据文件", component: "register-fileCatalog-data" },
-
-      { title: "生成数据目录", component: "register-finish", props: { finishType: "catalog" } },
-
-    ],
-
-  },
-
-  quality: {
-
-    title: "数据质检",
-
-    steps: [
-
-      { title: "规则定义配置", component: "quality-rule-config", props: { id: props.id } },
-
-      { title: "质检任务设置", component: "quality-task-config", props: { id: props.id } },
-
-      { title: "提交配置", component: "task-finish", props: { ...props.qualityData } },
-
-    ],
-
-  },
-
-  "car-apply": {
-
-    // 带购物车的申请流程
-
-    title: "订阅申请单",
-
-    steps: [
-
-      { title: "选择申请资源", component: "car-list" },
-
-      { title: "填写申请单", component: "car-register-apply" },
-
-      {
-
-        title: "完成申请",
-
-        component: "register-finish",
-
-        props: {
-
-          cols: [
-
-            { prop: "assetName", label: "资产名称" },
-
-            { prop: "orgId", label: "提供部门", options: "org" },
-
-            { prop: "status", label: "信息完整状态", align: "center" },
-
-            { prop: "applyTime", label: "申请时间" },
-
-          ],
-
-        },
-
-      },
-
-    ],
-
-  },
-
-  apply: {
-
-    title: "订阅申请单",
-
-    steps: [
-
-      { title: "登记", component: "car-register-apply" },
-
-      {
-
-        title: "完成申请",
-
-        component: "register-finish",
-
-        props: {
-
-          cols: [
-
-            { prop: "assetName", label: "资产名称" },
-
-            { prop: "orgId", label: "提供部门", options: "org" },
-
-            { prop: "status", label: "信息完整状态", align: "center" },
-
-            { prop: "applyTime", label: "申请时间" },
-
-          ],
-
-        },
-
-      },
-
-    ],
-
-  },
-
-};
-
-
 
 const open = computed({
-
   get: () => props.modelValue,
-
-  set: (val: boolean) => emit("update:modelValue", val),
-
+  set: (value: boolean) => emit("update:modelValue", value),
 });
-
-
-
-const initData = ref({});
-
+const flow = shallowRef<ReturnType<typeof createRegistrationFlow>>();
 const completed = ref(false);
+const store = useRegisterStore();
+store.$reset();
 
-const isExploreQuickEdit = computed(
-  () => props.registerClass === "db" && props.registerMode === "explore-edit"
-);
-
-const isRegisterFinishStep = (state): boolean => {
-  return state.steps?.[state.currentStep]?.component === "register-finish";
-};
-
-
-
-const onCancel = (): void => {
-
-  emit("close");
-
-};
-
-const onCompleted = (): void => {
-
+const onCancel = () => emit("close");
+const onCompleted = () => {
   if (completed.value) return;
-
   completed.value = true;
-
   emit("completed");
-
   open.value = false;
-
 };
 
-
-
-
-
-
-
-/*
-
-不同登记类型，使用不同的按钮配置操作
-
-*/
-
-const refreshState = (type) => {
-  // 数据探查中的编辑仅维护已登记数据源本身，不重复进入表探查、分类和审查。
-  // registerClass 仍为 db，确保 register-db 继续复用同一份保存与校验逻辑。
-  if (isExploreQuickEdit.value) {
-    store.state.hiddenStep = true;
-    actions.value = [
-      {
-        code: "cancel",
-        name: "取消",
-        props: { type: "default" },
-      },
-      {
-        // asset-register 的 finish 动作会在当前步骤保存成功后统一发出 completed 并关闭弹窗。
-        code: "finish",
-        name: "保存并完成",
-        icon: "check-circle",
-        props: { type: "primary" },
-      },
-    ];
+watch(open, (value) => {
+  if (!value) {
+    // 对话框退场时还会保留插槽，立即卸载登记步骤以结束待提交的动作。
+    flow.value = undefined;
     return;
   }
-  store.state.hiddenStep = false;
-  if (type === "app") {
-    actions.value = [
-      {
-        code: "pre",
-        name: "上一步",
-        icon: "rollback",
-        class: "btn-pre",
-        props: {
-          type: "default",
-        },
-        if({ isFirstStep, state }) {
-          return !isFirstStep && !isRegisterFinishStep(state);
-        },
-      },
-      {
-        props: {
-          type: "primary",
-          plain: true,
-        },
-        code: "save",
-        name: "保存",
-        icon: "save",
-        if({ state }) {
-          // 第三步表登记，不需要保存按钮
-          return state.currentStep !== 2;
-        },
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        code: "next",
-        name: "下一步",
-        icon: "right-circle",
-        if({ isSecondLastStep }) {
-          return !isSecondLastStep;
-        },
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        code: "finish",
-        name: "完成登记",
-        icon: "check-circle",
-        if({ state, isSecondLastStep }) {
-          return isSecondLastStep;
-        },
-      },
-    ];
-  }
+  if (!props.registerClass) return;
+  store.data = props.registerData;
 
-  // 数据接入
-  if (type === "quality") {
-    actions.value = [
-      {
-        code: "cancel",
-        name: "取消",
-        props: {
-          type: "default",
-        },
-      },
-      {
-        code: "pre",
-        name: "上一步",
-        icon: "rollback",
-        class: "btn-pre",
-        props: {
-          type: "default",
-        },
-        if({ isFirstStep }) {
-          return !isFirstStep;
-        },
-      },
-      {
-        props: {
-          type: "primary",
-          plain: true,
-        },
-        code: "save",
-        name: "保存",
-        icon: "save",
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        code: "next",
-        name: "下一步",
-        icon: "right-circle",
-        if({ isSecondLastStep }) {
-          return !isSecondLastStep;
-        },
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        code: "commit",
-        name: "提交配置",
-        icon: "check-circle",
-        if({ isSecondLastStep }) {
-          return isSecondLastStep;
-        },
-      },
-    ];
-  }
-
-  // 订阅申请按钮配置
-  if (type === "apply") {
-    store.state.hiddenStep = true;
-    actions.value = [
-      {
-        code: "cancel",
-        name: "取消",
-        props: {
-          type: "default",
-        },
-      },
-      {
-        props: {
-          type: "primary",
-          plain: true,
-        },
-        code: "save",
-        name: "保存",
-        icon: "save",
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        code: "commit",
-        name: "提交申请",
-        icon: "check-circle",
-        if({ isSecondLastStep }) {
-          return isSecondLastStep;
-        },
-      },
-    ];
-  }
-
-  // 订阅申请按钮配置
-  if (type === "car-apply") {
-    store.state.hiddenStep = true;
-    actions.value = [
-      {
-        code: "cancel",
-        name: "取消",
-        props: {
-          type: "default",
-        },
-      },
-      {
-        code: "pre",
-        name: "上一步",
-        icon: "rollback",
-        class: "btn-pre",
-        props: {
-          type: "default",
-        },
-        if({ isFirstStep }) {
-          return !isFirstStep;
-        },
-      },
-      {
-        code: "print",
-        name: "打印",
-        props: {
-          type: "dashed",
-        },
-        if({ isSecondLastStep }) {
-          return isSecondLastStep;
-        },
-      },
-      {
-        props: {
-          type: "primary",
-          plain: true,
-        },
-        code: "save",
-        name: "保存",
-        icon: "save",
-        if({ isSecondLastStep }) {
-          return isSecondLastStep;
-        },
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        code: "next",
-        name: "下一步",
-        icon: "right-circle",
-        if({ isSecondLastStep }) {
-          return !isSecondLastStep;
-        },
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        code: "commit",
-        name: "提交申请",
-        icon: "check-circle",
-        if({ isSecondLastStep }) {
-          return isSecondLastStep;
-        },
-      },
-    ];
-  }
-
-  if (["dbTable", "db"].includes(type)) {
-    actions.value = [
-      {
-        code: "pre",
-        name: "上一步",
-        icon: "rollback",
-        class: "btn-pre",
-        props: {
-          type: "default",
-        },
-        if({ isFirstStep }) {
-          return !isFirstStep;
-        },
-      },
-      {
-        props: {
-          type: "primary",
-          plain: true,
-        },
-        code: "save",
-        name: "保存",
-        icon: "save",
-        if({ state }) {
-          return [0, 2, 3].includes(state.currentStep) && !isRegisterFinishStep(state);
-        },
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        code: "next",
-        name: "下一步",
-        icon: "right-circle",
-        if({ state }) {
-          return state.currentStep !== 4 && !isRegisterFinishStep(state);
-        },
-      },
-      {
-        props: {
-          type: "primary",
-        },
-        // asset-register 仅会在 finish 动作成功后推进到隐藏的 register-finish 步骤。
-        code: "finish",
-        name: "完成登记",
-        icon: "check-circle",
-        if({ state }) {
-          return state.currentStep == 4;
-        },
-      },
-    ];
-  }
-};
-
-
-
-watch(
-
-  open,
-
-  (val: boolean) => {
-
-    store.data = props.registerData;
-
-    if (val) completed.value = false;
-
-    if (val && props.registerClass) {
-
-      initData.value = {
-
-        registerClass: props.registerClass,
-
-        title: isExploreQuickEdit.value ? "编辑数据源" : config[props.registerClass]?.title,
-
-        assets: props.assets?.length > 0 ? props.assets : [{ assetClass: props.registerClass } as Asset],
-
-        // 轻量编辑只有一个数据源表单步骤；标准入口维持既有五步登记配置。
-        steps: isExploreQuickEdit.value
-          ? [{ title: "编辑数据源", component: "register-db" }]
-          : config[props.registerClass]?.steps || [],
-
-        currentStep: props.registerData.currentStep ?? props.currentStep ?? 0,
-
-        updateFormRule: props.updateFormRule || [],
-
-        registerMode: props.registerMode || "",
-
-      };
-
-    }
-
-    refreshState(props.registerClass);
-
-  },
-
-  { immediate: true }
-
-);
-
+  completed.value = false;
+  const registration = createRegistrationFlow(props, "lowcode");
+  store.state.hiddenStep = registration.initStore.hiddenStep;
+  flow.value = registration;
+}, { immediate: true });
 </script>
 
 

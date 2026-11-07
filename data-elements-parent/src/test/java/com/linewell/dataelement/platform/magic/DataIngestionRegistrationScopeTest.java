@@ -1,7 +1,10 @@
 package com.linewell.dataelement.platform.magic;
 
 import static org.assertj.core.api.Assertions.*;
+
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.*;
+import java.util.function.Function;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.ssssssss.magicapi.core.context.RequestEntity;
@@ -14,7 +17,7 @@ import org.ssssssss.script.*;
 class DataIngestionRegistrationScopeTest {
     @ParameterizedTest @ValueSource(ints={20,100})
     void treeAndPageUsePositiveSourceAndTableStatusesWithConstantReads(int count) throws Exception {
-        var f = new DatasourceCompletionMagicTest.Fixture(count);
+        var f = new Fixture(count);
         createWarehouseConfiguration(f);
         f.jdbc.execute("alter table db_datasource_t add db_name varchar(100)");
         f.jdbc.execute("alter table db_datasource_t add org_id varchar(64)");
@@ -39,7 +42,7 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,table_name,updated_time) values('done','ga','completed',2,0,'字典表','done',current_timestamp),('draft','ga','draft',2,0,'业务表','draft',current_timestamp),('foreign','other','foreign',2,0,'业务表','foreign',current_timestamp),('denied','ga','denied',2,0,'业务表','denied',current_timestamp)");
         f.jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,asset_status,is_del,business_type,table_name,updated_time) values('null-status','ga','db',null,0,'业务表','null-status',current_timestamp),('negative','ga','db',-1,0,'业务表','negative',current_timestamp),('deleted','ga','db',1,1,'业务表','deleted',current_timestamp),('process','ga','db',1,0,'过程表','process',current_timestamp),('foreign-in-db','other','db',1,0,'业务表','foreign-in-db',current_timestamp)");
         f.jdbc.update("update db_datasource_t set is_del=1 where tid='denied'");
-        var counter=new Counter();f.db.setSqlInterceptors(List.of(counter));
+        var counter = f.counter;
         var dialects=new DialectAdapter();dialects.add(new MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});
         f.db.setDialectAdapter(dialects);f.db.setResultProvider(new DefaultResultProvider("status-test"));
         var scope=new VisibleScope();
@@ -69,16 +72,16 @@ class DataIngestionRegistrationScopeTest {
         Map<?,?> pending=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",count,"accessStatus","0"),scope);
         assertThat(((Number)pending.get("total")).intValue()).isEqualTo(count);
         assertThat((List<?>)pending.get("list")).hasSize(count);
-        assertThat(counter.reads).isEqualTo(8);
+        assertThat(counter.reads).isEqualTo(7);
         counter.reads=0;
         Map<?,?> search=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",count,"keyword","table-"),scope);
         assertThat(((Number)search.get("total")).intValue()).isEqualTo(count-1);
         assertThat(counter.reads).isEqualTo(7);
-        System.out.println("filtered page verification: items="+count+", pending SQL=8; keyword SQL=7");
+        System.out.println("filtered page verification: items="+count+", pending SQL=7; keyword SQL=7");
     }
     @ParameterizedTest @ValueSource(ints={20,100})
     void taskLinksResolveAllTargetsAndRealChainedSourcesInConstantReads(int count) throws Exception {
-        var f = new DatasourceCompletionMagicTest.Fixture(count);
+        var f = new Fixture(count);
         createWarehouseConfiguration(f);
         f.jdbc.execute("alter table db_datasource_t add db_name varchar(100)");
         f.jdbc.execute("alter table db_datasource_t add org_id varchar(64)");
@@ -110,12 +113,12 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.update("insert into data_access_agg_task_t(tid,source_table_id,target_table_id,pipeline_id,tenant_id,is_del,updated_time) values('chain','ods-0','hive-0','chain-pipe','ga',0,current_timestamp)");
         f.jdbc.update("insert into nifi_pipeline_t(id,tenant_id,is_del,dsl_json) values('chain-pipe','ga',0,'{\"nodes\":[{\"category\":\"sink\",\"config\":{\"targetTableId\":\"hive-0\"}}]}')");
         f.jdbc.update("update db_datasource_t set is_del=1 where tid='denied'");
-        var counter=new Counter();f.db.setSqlInterceptors(List.of(counter));
+        var counter = f.counter;
         var dialects=new DialectAdapter();dialects.add(new MySQLDialect(){@Override public boolean match(String url){return url.contains(":h2:");}});
         f.db.setDialectAdapter(dialects);f.db.setResultProvider(new DefaultResultProvider("link-test"));
         Map<?,?> page=run(f,"76fd211790f54164947f276824d19c1d",Map.of("viewLevel","table","pageSize",count,"datasourceIds",List.of("db")),new VisibleScope());
         assertThat((List<?>)page.get("list")).hasSize(count);
-        assertThat(counter.reads).isEqualTo(11);
+        assertThat(counter.reads).isEqualTo(12);
         for (Object raw:(List<?>)page.get("list")) {
             Map<?,?> row=(Map<?,?>)raw;
             List<?> tasks=(List<?>)row.get("tasks");
@@ -158,12 +161,19 @@ class DataIngestionRegistrationScopeTest {
         f.jdbc.execute("create table sym_dict_t(tid varchar(64),tenant_id varchar(32),parent_id varchar(64),dict_code varchar(64),is_del int)");
         f.jdbc.execute("create table dwm_center_layer_source_t(tenant_id varchar(32),target_id varchar(64),target_type varchar(32),datasource_id varchar(64),is_del int)");
     }
-    private Map<?,?> run(DatasourceCompletionMagicTest.Fixture f,String id,Map<String,Object> body,VisibleScope scope) throws Exception {
+    private Map<?,?> run(Fixture f,String id,Map<String,Object> body,VisibleScope scope) throws Exception {
         String script=CanonicalMagicSources.byId(id).replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n","");
         Map<String,Object> bindings=new LinkedHashMap<>();bindings.put("body",body);bindings.put("db",f.db);
         bindings.put("tenantRuntime",scope);bindings.put("dataScope",scope);bindings.put("identityRuntime",scope);
         bindings.put("tableSort",new TableSortMagicModule());
-        try (var runtime = new TaskRuntimeMagicFixture(scope.id())) {
+        bindings.put("tableRead", f.tableRead);
+        TaskRuntimeMagicFixture.bindTableFamily(bindings);
+        String classifier = CanonicalMagicSources.byPath("function/01.通用函数/23.ODS来源库分类.ms",
+                "d2138de2de28456aa57d9ade2305eed7").replaceAll("(?m)^import [^\\r\\n]+\\R", "");
+        MagicScript classifierScript = MagicScript.create(classifier, null);
+        bindings.put("odsSourceClassifier", (Function<Object[], Object>) arguments -> classifierScript.execute(
+                new MagicScriptContext(Map.of("tenantRuntime", scope, "tableRead", f.tableRead))));
+        try (var runtime = new TaskRuntimeMagicFixture(scope.id()); var ignored = TenantContext.use(scope.id())) {
             bindings.put("taskRuntime", runtime.module);
             return (Map<?,?>)MagicScript.create(script,null).execute(new MagicScriptContext(bindings));
         }
@@ -181,9 +191,25 @@ class DataIngestionRegistrationScopeTest {
     static class Counter implements SQLInterceptor {
         int reads;
         @Override public void preHandle(BoundSql sql,RequestEntity request){
-            String statement=sql.getSql().stripLeading().toLowerCase();
-            if(statement.startsWith("select") || statement.startsWith("with")) reads++;
-            H2RecursiveCteParameters.adapt(sql);
+            record(sql.getSql());
+        }
+
+        void record(String sql) {
+            String statement = sql.stripLeading().toLowerCase(Locale.ROOT);
+            if (statement.startsWith("select") || statement.startsWith("with")) {
+                reads++;
+            }
+        }
+    }
+
+    private static final class Fixture extends DatasourceCompletionMagicTest.Fixture {
+        final Counter counter = new Counter();
+        final StructuredTableReadMagicModule tableRead;
+
+        Fixture(int count) {
+            super(count);
+            db.setSqlInterceptors(List.of(counter));
+            tableRead = TaskRuntimeMagicFixture.structuredReads(jdbc, counter::record);
         }
     }
 }

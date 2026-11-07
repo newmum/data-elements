@@ -145,6 +145,7 @@ export const useUserStore = defineStore("user", () => {
    * Authentication is retained so this is safe immediately after login switch.
    */
   function resetTenantScopedState() {
+    AuthStorage.invalidateSession();
     usePermissionStoreHook().resetRouter();
     useDictStoreHook().clearDictCache();
     useTagsViewStore().delAllViews();

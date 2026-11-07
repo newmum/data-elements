@@ -8,13 +8,14 @@
       :page-no="state.pageNo"
       :page-size="state.pageSize"
       @title-click="handleAction('detail', $event)"
+      @page-change="changePage"
     >
       <template #toolbar>
         <div class="flex-x-between">
           <el-segmented
             v-model="state.seg"
             :options="['审批通过', '审批中', '不通过', '被驳回', '撤回', '待提交']"
-            @change="handleAction('refresh')"
+            @change="searchApplications"
           />
           <el-space>
             <el-input
@@ -22,7 +23,8 @@
               clearable
               placeholder="请输入搜索关键词"
               suffix-icon="search"
-              @keydown.enter="handleAction('refresh')"
+              @clear="searchApplications"
+              @keydown.enter="searchApplications"
             />
           </el-space>
         </div>
@@ -49,11 +51,11 @@
       </template>
 
       <template #actions="{ row }">
-        <template v-if="state.seg === '待提交'">
+        <template v-if="state.seg === '待提交' && row.type === 'catalogSubscribe'">
           <el-button type="primary" link icon="EditPen" @click="handleAction('继续申请', row)">
             继续申请
           </el-button>
-          <el-button type="danger" link icon="delete" @click="handleAction('删除', row)">
+          <el-button type="danger" link icon="delete" :disabled="deletingDraft" @click="handleAction('删除', row)">
             删除
           </el-button>
         </template>
@@ -88,24 +90,6 @@
           修改申请
         </el-button>
 
-        <!--        <el-button-->
-        <!--          v-if="state.seg === '审批通过'"-->
-        <!--          type="primary"-->
-        <!--          link-->
-        <!--          icon="download"-->
-        <!--          @click="handleAction('文件下载', row)"-->
-        <!--        >-->
-        <!--          文件下载-->
-        <!--        </el-button>-->
-        <!--        <el-button-->
-        <!--          v-if="state.seg === '审批通过'"-->
-        <!--          type="primary"-->
-        <!--          link-->
-        <!--          icon="view"-->
-        <!--          @click="handleAction('查看调用信息', row)"-->
-        <!--        >-->
-        <!--          查看调用信息-->
-        <!--        </el-button>-->
         <el-button
           v-if="state.seg === '审批中'"
           type="danger"
@@ -135,11 +119,13 @@
 <script setup lang="ts">
 import { reactive, onMounted, watch, ref, h } from "vue";
 import { useRouter } from "vue-router";
-import { useRegisterModal } from "@/composables";
+import { useCartCount, useRegisterModal } from "@/composables";
 import { ElCheckbox } from "element-plus";
 
 // 登记弹框
-const { openRegisterModal, open } = useRegisterModal();
+const { openRegisterModal, open, registerClass } = useRegisterModal();
+const { refresh: refreshCartCount } = useCartCount();
+const deletingDraft = ref(false);
 const router = useRouter();
 const state = reactive<any>({
   loading: false,
@@ -161,7 +147,7 @@ const state = reactive<any>({
 
 // 监听关闭登记弹框
 watch(open, (newVal, oldVal) => {
-  if (newVal === false && oldVal) {
+  if (!newVal && oldVal && ["apply", "car-apply"].includes(registerClass.value)) {
     handleAction("refresh");
   }
 });
@@ -246,11 +232,13 @@ const handleAction = (type: string, row?: any) => {
   }
 };
 
+let requestSequence = 0;
 const fetchList = async () => {
+  const sequence = ++requestSequence;
   state.loading = true;
+  state.data = [];
   try {
-    state.data = [];
-    const segMap: Record<string, number | null> = {
+    const segMap: Record<string, string> = {
       审批通过: "2",
       审批中: "1",
       不通过: "3",
@@ -279,13 +267,25 @@ const fetchList = async () => {
         },
       ],
     });
-    state.data = list;
-    state.total = total;
+    if (sequence === requestSequence) {
+      state.data = list;
+      state.total = total;
+    }
   } finally {
-    state.loading = false;
+    if (sequence === requestSequence) state.loading = false;
   }
 };
+
+const changePage = ({ pageNo, pageSize }: { pageNo: number; pageSize: number }) => {
+  state.pageNo = pageNo;
+  state.pageSize = pageSize;
+  void fetchList();
+};
+
+const searchApplications = () => changePage({ pageNo: 1, pageSize: state.pageSize });
 const handleDraft = async (item: any) => {
+  if (deletingDraft.value || item.type !== "catalogSubscribe") return;
+  deletingDraft.value = true;
   const addToCart = ref(false);
 
   try {
@@ -309,20 +309,31 @@ const handleDraft = async (item: any) => {
       type: "warning",
     });
   } catch {
+    deletingDraft.value = false;
     return;
   }
 
-  await $common.post("/dws/market/applyForm/deleteById", {
-    tid: item.tid,
-    addToCart: addToCart.value,
-  });
-
-  $message.success(addToCart.value ? "已删除，目录已重新加入购物车" : "删除成功");
-  state.drafts = state.drafts.filter((d: any) => d.id !== item.id);
-  state.draftCount = state.drafts.length;
-
-  // 刷新
-  handleAction("refresh");
+  try {
+    const removed: unknown = await $common.post("/dws/market/applyForm/deleteById", {
+      tid: item.tid,
+      addToCart: addToCart.value,
+    });
+    if (removed !== true) {
+      throw removed instanceof Error
+        ? removed
+        : new Error("暂未确认草稿已删除，请重新加载申请列表。");
+    }
+    $message.success("草稿已删除");
+    await Promise.all([fetchList(), addToCart.value ? refreshCartCount() : undefined]);
+  } catch (error: unknown) {
+    const alreadyShown =
+      error && typeof error === "object" && "handled" in error && error.handled === true;
+    if (!alreadyShown) {
+      $message.error(error instanceof Error ? error.message : "删除草稿失败，请重试。");
+    }
+  } finally {
+    deletingDraft.value = false;
+  }
 };
 
 state.fields = [

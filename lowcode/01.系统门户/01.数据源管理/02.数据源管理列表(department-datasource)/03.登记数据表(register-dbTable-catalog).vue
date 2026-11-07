@@ -1,5 +1,5 @@
 <template>
-  <div class="batch-register-page" :class="{ 'is-business-phase': catalogPhase === 'business', 'is-detail-mode': detailMode }" :aria-busy="tableLoading || undefined">
+  <div class="batch-register-page" :class="{ 'is-dictionary-phase': catalogPhase === 'dictionary' && !detailMode, 'is-business-phase': catalogPhase === 'business' || detailMode, 'is-detail-mode': detailMode }" :aria-busy="tableLoading || undefined">
     <div v-if="tableLoadError && !tableLoading" class="empty-state register-error-state">
       <el-result icon="error" title="数据表读取失败" :sub-title="tableLoadError">
         <template #extra>
@@ -234,6 +234,7 @@
             </div>
           </div>
           <el-dialog v-model="batchCommentDialog.visible" title="批量填充字段中文名" width="520px" append-to-body>
+            <p class="batch-comment-scope">{{ selectedBusinessFields.length ? `仅填充已选的 ${selectedBusinessFields.length} 个字段` : '未选择字段时，按英文名匹配当前表全部字段' }}</p>
             <el-input
               v-model="batchCommentDialog.content"
               type="textarea"
@@ -246,17 +247,20 @@
               <el-button type="primary" @click="applyBatchFieldCommentsFromText">识别并回填</el-button>
             </template>
           </el-dialog>
-          <template v-if="isActiveDictionaryTable">
+          <template v-if="isActiveDictionaryTable && !detailMode">
             <div class="dictionary-design-layout">
               <div class="dictionary-rule-grid">
                 <section class="dictionary-block rule-block">
-                  <div class="dictionary-block-head">
-                    <strong>字段翻译规则配置</strong>
-                    <span>确定码值字段如何翻译成表述字段</span>
-                  </div>
                   <div class="rule-flow-row">
                     <label class="role-map-field">
-                      <span>编码字段<em>*</em></span>
+                      <span class="rule-field-label">
+                        <el-tooltip content="字段翻译规则配置：确定码值字段如何翻译成表述字段" placement="top" :trigger="['hover', 'focus']">
+                          <button type="button" class="rule-help" aria-label="字段翻译规则配置说明" @click.stop.prevent>
+                            <Icon icon="el-icon-QuestionFilled" />
+                          </button>
+                        </el-tooltip>
+                        编码字段<em>*</em>
+                      </span>
                       <el-select
                         :class="{ 'is-required-error': dictionaryFieldError('code') }"
                         :model-value="roleColumn('code')"
@@ -273,10 +277,7 @@
                         />
                       </el-select>
                     </label>
-                    <span class="rule-action-text rule-connector">
-                      <span class="rule-connector-label">翻译</span>
-                      <span class="rule-connector-arrow" aria-hidden="true">→</span>
-                    </span>
+                    <span class="rule-action-text">翻译</span>
                     <label class="role-map-field">
                       <span>表述字段<em>*</em></span>
                       <el-select
@@ -299,13 +300,16 @@
                 </section>
 
                 <section class="dictionary-block rule-block">
-                  <div class="dictionary-block-head">
-                    <strong>状态过滤规则配置</strong>
-                    <span>可选配置，只保留有效字典值</span>
-                  </div>
                   <div class="rule-flow-row">
                     <label class="role-map-field">
-                      <span>状态字段（条件）</span>
+                      <span class="rule-field-label">
+                        <el-tooltip content="状态过滤规则配置：可选配置，只保留有效字典值" placement="top" :trigger="['hover', 'focus']">
+                          <button type="button" class="rule-help" aria-label="状态过滤规则配置说明" @click.stop.prevent>
+                            <Icon icon="el-icon-QuestionFilled" />
+                          </button>
+                        </el-tooltip>
+                        状态字段（条件）
+                      </span>
                       <el-select
                         :model-value="roleColumn('status')"
                         clearable
@@ -321,10 +325,7 @@
                         />
                       </el-select>
                     </label>
-                    <span class="rule-action-text rule-connector">
-                      <span class="rule-connector-label">筛选</span>
-                      <span class="rule-connector-arrow" aria-hidden="true">→</span>
-                    </span>
+                    <span class="rule-action-text">筛选</span>
                     <label class="role-map-field">
                       <span>状态值</span>
                       <el-input
@@ -339,48 +340,47 @@
 
               <div class="dictionary-workbench">
                 <section class="dictionary-block category-block">
-                  <div class="dictionary-block-head">
-                    <strong>字典业务类型配置</strong>
+                  <div class="preview-table-head category-table-head">
+                    <div class="dictionary-preview-switch" role="radiogroup" aria-label="字典类别">
+                      <button
+                        v-for="item in dictionaryStructureOptions"
+                        :key="item.value"
+                        type="button"
+                        role="radio"
+                        :aria-checked="dictionaryStructureType === item.value"
+                        :class="{ 'is-active': dictionaryStructureType === item.value }"
+                        @click="setDictionaryStructureType(item.value)"
+                      >
+                        {{ item.label }}
+                      </button>
+                    </div>
+                    <el-input
+                      v-if="dictionaryStructureType === 'multi'"
+                      v-model="categorySearchDraft"
+                      class="category-value-search"
+                      size="small"
+                      clearable
+                      placeholder="搜索标识或表述"
+                      aria-label="按业务字段标识或表述搜索类别"
+                      @keyup.enter="applyCategorySearch"
+                      @clear="applyCategorySearch"
+                    >
+                      <template #suffix>
+                        <button
+                          type="button"
+                          class="category-search-trigger"
+                          title="搜索业务字段标识或表述"
+                          aria-label="搜索业务字段标识或表述"
+                          @click="applyCategorySearch"
+                        >
+                          <Icon icon="el-icon-Search" />
+                        </button>
+                      </template>
+                    </el-input>
                   </div>
                   <div class="category-compose">
-                    <div class="type-compose">
-                      <div class="dictionary-type-field">
-                        <div class="segmented-like dictionary-type-segment" role="radiogroup">
-                          <button
-                            v-for="item in dictionaryStructureOptions"
-                            :key="item.value"
-                            :class="['segment-option', dictionaryStructureType === item.value ? 'is-selected' : '']"
-                            type="button"
-                            role="radio"
-                            :aria-checked="dictionaryStructureType === item.value"
-                            :title="item.description"
-                            @click="setDictionaryStructureType(item.value)"
-                          >
-                            <span class="segment-label">{{ item.label }}</span>
-                          </button>
-                        </div>
-                        <el-input
-                          v-if="dictionaryStructureType === 'multi'"
-                          v-model="categorySearchDraft"
-                          class="category-value-search"
-                          size="small"
-                          placeholder="请输入业务字段标识"
-                          aria-label="按业务字段标识值搜索类别卡片"
-                        >
-                          <template #suffix>
-                            <button
-                              type="button"
-                              class="category-search-trigger"
-                              title="搜索业务字段标识"
-                              aria-label="搜索业务字段标识"
-                              @click="applyCategorySearch"
-                            >
-                              <Icon icon="el-icon-Search" />
-                            </button>
-                          </template>
-                        </el-input>
-                      </div>
-                      <label v-if="dictionaryStructureType === 'multi'" class="role-map-field category-field-select">
+                    <div v-if="dictionaryStructureType === 'multi'" class="type-compose">
+                      <label class="role-map-field category-field-select">
                         <span>业务字段标识<em>*</em></span>
                         <el-select
                           :class="{ 'is-required-error': dictionaryFieldError('category') }"
@@ -399,7 +399,7 @@
                           />
                         </el-select>
                       </label>
-                      <label v-if="dictionaryStructureType === 'multi'" class="role-map-field category-field-select">
+                      <label class="role-map-field category-field-select">
                         <span>业务字段表述</span>
                         <el-select
                           :model-value="activeTable?.dictionaryCategoryNameField || ''"
@@ -521,7 +521,7 @@
                       />
                       <el-empty
                         v-else-if="!filteredCategoryMatchRows.length"
-                        description="未找到匹配的业务字段标识值"
+                        description="未找到匹配的业务字段标识或表述"
                         :image-size="64"
                       />
                     </div>
@@ -804,8 +804,19 @@
                           </div>
                         </template>
                       </el-table-column>
-                      <el-table-column label="是否为空" width="100" align="center">
-                        <template #default="{ row }">{{ nullableText(row.nullable) }}</template>
+                      <el-table-column label="不为空" width="100" align="center">
+                        <template #default="{ row }">
+                          <div class="nullable-check-cell">
+                            <el-checkbox
+                              :model-value="nullableText(row.nullable) === '否'"
+                              :indeterminate="nullableText(row.nullable) === '未知'"
+                              :aria-label="`字段 ${row.columnName} 不为空`"
+                              :title="nullableText(row.nullable) === '未知' ? '可空性未知，点击设为不为空' : '勾选表示该字段不为空'"
+                              @change="(checked) => setFieldNotNull(row, checked)"
+                            />
+                            <span v-if="nullableText(row.nullable) === '未知'" class="nullable-unknown">未知</span>
+                          </div>
+                        </template>
                       </el-table-column>
                       <el-table-column label="统一格式" min-width="144" fixed="right">
                         <template #default="{ row }">
@@ -848,7 +859,7 @@
             </div>
           </template>
 
-          <div v-if="businessFieldViewMounted && !isActiveDictionaryTable" v-show="businessViewMode === 'fields'" class="field-config-layout">
+          <div v-if="businessFieldViewMounted && (!isActiveDictionaryTable || detailMode)" v-show="businessViewMode === 'fields'" class="field-config-layout">
             <div class="field-grid-pane">
               <el-alert v-if="activeFieldMessage && activeFields.length" class="catalog-field-error" type="error" :closable="false" :title="activeFieldMessage" show-icon />
               <DataTable
@@ -863,9 +874,9 @@
                 @selection-change="(rows) => (selectedBusinessFields = rows || [])"
                 @row-click="selectDictionaryField"
               >
-            <el-table-column v-if="!detailMode" type="selection" width="34" />
+            <el-table-column type="selection" width="34" />
             <el-table-column prop="serialNo" label="序号" width="56" align="center" />
-            <el-table-column prop="columnName" :label="detailMode ? '字段名称' : '字段名'" :min-width="detailMode ? 188 : 196" show-overflow-tooltip>
+            <el-table-column prop="columnName" label="字段名" :min-width="detailMode ? 150 : 196" show-overflow-tooltip>
               <template #default="{ row }">
                 <div :class="['column-name-cell', fieldValidationError(row, 'name') ? 'is-invalid' : '']">
                   <div class="field-name-heading">
@@ -931,9 +942,9 @@
                       </el-popover>
                     </span>
                   </div>
-                  <div v-if="(detailMode ? timeRolesFor(row) : fieldPropertyValues(row)).length" class="field-property-tags">
+                  <div v-if="fieldPropertyValues(row).length" class="field-property-tags">
                     <el-tag
-                      v-for="value in (detailMode ? timeRolesFor(row) : fieldPropertyValues(row))"
+                      v-for="value in fieldPropertyValues(row)"
                       :key="value"
                       size="small"
                       :type="fieldPropertyTagType(value)"
@@ -945,12 +956,12 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column :label="detailMode ? '字段注释' : '字段中文名'" min-width="180">
+            <el-table-column label="字段中文名" :min-width="detailMode ? 150 : 180">
               <template #header>
                 <span class="field-comment-header">
-                  {{ detailMode ? '字段注释' : '字段中文名' }}
+                  字段中文名
                   <el-tooltip content="批量填充字段中文名" placement="top">
-                    <el-button class="batch-comment-trigger" size="small" text circle @click.stop="openBatchFieldCommentDialog">
+                    <el-button class="batch-comment-trigger" size="small" text circle aria-label="批量填充字段中文名" @click.stop="openBatchFieldCommentDialog">
                       <Icon icon="el-icon-EditPen" />
                     </el-button>
                   </el-tooltip>
@@ -966,17 +977,17 @@
                 />
               </template>
             </el-table-column>
-            <el-table-column label="字段类型" :width="detailMode ? 136 : 176" show-overflow-tooltip>
+            <el-table-column label="字段类型" :width="detailMode ? 130 : 176" show-overflow-tooltip>
               <template #default="{ row }">
                 <div class="field-type-cell">
                   <span
                     class="field-type-readonly"
                     :title="row.columnType || row.dataType || '未知类型'"
                   >
-                    {{ detailMode ? detailFieldType(row) : row.columnType || row.dataType || '未知类型' }}
+                    {{ row.columnType || row.dataType || '未知类型' }}
                   </span>
                   <el-tag
-                    v-if="!detailMode && standardFieldTypeText(row.standardField)"
+                    v-if="standardFieldTypeText(row.standardField)"
                     size="small"
                     effect="plain"
                     type="primary"
@@ -986,30 +997,21 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column v-if="detailMode" label="长度" width="72" align="center">
-              <template #default="{ row }">{{ detailFieldLength(row) }}</template>
-            </el-table-column>
-            <el-table-column v-if="!detailMode" label="是否为空" width="100" align="center">
-              <template #default="{ row }">{{ nullableText(row.nullable) }}</template>
-            </el-table-column>
-                      <el-table-column v-if="isActiveDictionaryTable" label="字段用途" min-width="160">
+            <el-table-column label="不为空" :width="detailMode ? 80 : 100" align="center">
               <template #default="{ row }">
-                <el-select
-                  v-model="row.dictionaryRole"
-                  class="dictionary-role-select"
-                  size="small"
-                  @change="(value) => setDictionaryRole(row, value)"
-                >
-                  <el-option
-                    v-for="item in dictionaryRoleOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
+                <div class="nullable-check-cell">
+                  <el-checkbox
+                    :model-value="nullableText(row.nullable) === '否'"
+                    :indeterminate="nullableText(row.nullable) === '未知'"
+                    :aria-label="`字段 ${row.columnName} 不为空`"
+                    :title="nullableText(row.nullable) === '未知' ? '可空性未知，点击设为不为空' : '勾选表示该字段不为空'"
+                    @change="(checked) => setFieldNotNull(row, checked)"
                   />
-                </el-select>
+                  <span v-if="nullableText(row.nullable) === '未知'" class="nullable-unknown">未知</span>
+                </div>
               </template>
             </el-table-column>
-            <el-table-column v-else label="字典翻译" min-width="188">
+            <el-table-column label="字典翻译" :min-width="detailMode ? 150 : 188">
               <template #default="{ row }">
                 <div class="dictionary-benchmark-cell">
                   <el-checkbox
@@ -1060,7 +1062,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column v-if="!isActiveDictionaryTable" label="统一格式" width="150" :fixed="detailMode ? false : 'right'">
+            <el-table-column label="统一格式" :width="detailMode ? 140 : 150" fixed="right">
               <template #default="{ row }">
                 <div class="standard-format-cell">
                   <el-select
@@ -1088,9 +1090,6 @@
                   </el-select>
                 </div>
               </template>
-            </el-table-column>
-            <el-table-column v-if="detailMode" label="非空" width="76" align="center">
-              <template #default="{ row }"><Icon v-if="nullableText(row.nullable) === '否'" class="detail-nonnull-check" icon="el-icon-Check" aria-label="非空" /></template>
             </el-table-column>
                 <template #empty>
                   <el-empty :description="activeFieldMessage || '暂无字段数据'" :image-size="72">
@@ -1544,21 +1543,6 @@ const detailMode = computed(() => Boolean(props.detailTableId));
 const detailSavedSnapshot = ref("");
 const schemaSync = reactive({ visible: false, loading: false, applying: false, error: "", plan: null, page: 1, requestId: 0 });
 
-// 只拆分展示，不回写类型或长度；物理结构仍由采集快照维护。
-function detailFieldType(field) {
-  return String(field.columnType || field.dataType || field.typeName || "未知类型")
-    .replace(/\s*\([^)]*\)/g, "");
-}
-
-function detailFieldLength(field) {
-  const length = field.length ?? field.columnLength ?? field.columnSize;
-  if (length !== undefined && length !== null && String(length).trim() && Number(length) > 0) return length;
-  const type = String(field.columnType || field.dataType || "");
-  // 时间类型的括号是小数秒精度，枚举的括号是候选值，不能当作字段长度。
-  if (!/^(?:n?varchar2?|nvarchar2?|char|nchar|character(?: varying)?|varbinary|binary|bit|numeric|decimal|number)\b/i.test(type)) return "";
-  return type.match(/\(\s*(\d+(?:\s*,\s*\d+)?)\s*\)/)?.[1] || "";
-}
-
 const store = props.detailTableId
   ? reactive({ data: {}, state: { currentStep: 3, loadStatus: { main: false } } })
   : useRegisterStore();
@@ -1720,16 +1704,8 @@ const dictionaryRoleOptions = [
 ];
 
 const dictionaryStructureOptions = [
-  {
-    label: "单类别",
-    value: "single",
-    description: "整张表只表示一个字典类别；树形字典、父子码表、字段枚举如果不需要按类别拆分，也按单类别配置。",
-  },
-  {
-    label: "多类别",
-    value: "multi",
-    description: "同一张表包含多个字典类别；支持通过业务类别字段区分不同类别。",
-  },
+  { label: "单类别", value: "single" },
+  { label: "多类别", value: "multi" },
 ];
 
 const db = computed(() => {
@@ -2086,7 +2062,9 @@ const filteredCategoryMatchRows = computed(() => {
     const matchesKeyword =
       !keyword ||
       dictionaryStructureType.value !== "multi" ||
-      String(row?.categoryValue ?? "").trim().toLowerCase().includes(keyword);
+      [row?.categoryValue, row?.categoryCode, row?.categoryName].some((value) =>
+        String(value ?? "").trim().toLowerCase().includes(keyword)
+      );
     const matchesForceStandard =
       !categoryForceStandardOnly.value || Boolean(row?.forceStandardEnabled);
     return matchesKeyword && matchesForceStandard;
@@ -2650,7 +2628,7 @@ watch(
     if (value.length && !value.some((item) => item.tableName === activeTableName.value)) {
       activeTableName.value = value[0].tableName;
     }
-    if (catalogPhase.value === "business") {
+    if (detailMode.value || catalogPhase.value === "business") {
       loadDictionaryTables();
     }
   },
@@ -2755,7 +2733,7 @@ watch(
 watch(
   () => [activeTableName.value, activeFields.value.length],
   () => {
-    if (isActiveDictionaryTable.value) {
+    if (isActiveDictionaryTable.value && !detailMode.value) {
       // Start the shared read early; matching waits for this table's preview
       // categories so it runs once against the correct table, not every table.
       void loadForceStandardElements().catch((error) =>
@@ -3006,6 +2984,7 @@ function normalizeFieldRows(rows, tableName, preserveIncomingRole = false, prefe
         ? (String(row.columnComment ?? "").trim() ? row.columnComment : (old?.columnComment ?? savedField.columnComment ?? ""))
         : (old?.columnComment ?? row.columnComment ?? savedField.columnComment ?? suggestion.comment ?? ""),
       columnType: row.columnType || buildColumnType(row),
+      nullable: preferPhysicalStructure ? row.nullable : (old?.nullable ?? row.nullable),
       primaryKey: normalizePrimaryKey(
         old?.primaryKey ??
           old?.primary_key ??
@@ -6611,10 +6590,13 @@ async function loadDictionaryPreview() {
   }
 }
 
-function buildGovernanceConfig(table, fields) {
+function buildGovernanceConfig(table, fields, preserveDictionary = false) {
+  const previous = preserveDictionary ? normalizeCatalogConfig(table).fieldGovernanceConfig || {} : {};
   const dictionaryProfiles =
-    table.businessType === "字典表" ? buildDictionaryProfilesForTable(table, fields) : [];
-  const dictionaryCategories = Array.isArray(table.dictionaryCategories) ? table.dictionaryCategories : [];
+    preserveDictionary ? previous.dictionaryProfiles || [] :
+      table.businessType === "字典表" ? buildDictionaryProfilesForTable(table, fields) : [];
+  const dictionaryCategories = preserveDictionary ? previous.dictionaryCategories || [] :
+    Array.isArray(table.dictionaryCategories) ? table.dictionaryCategories : [];
   return {
     version: 2,
     registrationSavedPhase: table.businessType === "字典表" ? "dictionary" : "business",
@@ -6622,13 +6604,13 @@ function buildGovernanceConfig(table, fields) {
     tableName: table.tableName,
     tableComment: table.tableComment,
     businessType: table.businessType,
-    dictionaryStructureType: table.dictionaryStructureType || "",
-    dictionaryCategoryNameField: table.dictionaryCategoryNameField || "",
+    dictionaryStructureType: preserveDictionary ? previous.dictionaryStructureType || "" : table.dictionaryStructureType || "",
+    dictionaryCategoryNameField: preserveDictionary ? previous.dictionaryCategoryNameField || "" : table.dictionaryCategoryNameField || "",
     dictionaryCategories,
     timestampField: fields.find((item) => timeRolesFor(item).includes("timestamp"))?.columnName || "",
     businessTimeField: fields.find((item) => timeRolesFor(item).includes("business"))?.columnName || "",
     occurrenceTimeField: fields.find((item) => timeRolesFor(item).includes("occurrence"))?.columnName || "",
-    dictionaryProfile: dictionaryProfiles[0] || null,
+    dictionaryProfile: preserveDictionary ? previous.dictionaryProfile || null : dictionaryProfiles[0] || null,
     dictionaryProfiles,
     fields: fields.map((item) => ({
       columnName: item.columnName,
@@ -6851,8 +6833,9 @@ function applyBatchFieldCommentsFromText() {
     $message.warning("请粘贴字段英文名和字段中文名");
     return;
   }
+  const scope = selectedBusinessFields.value.length ? selectedBusinessFields.value : activeFields.value;
   const fieldsByName = new Map(
-    activeFields.value.map((field) => [String(field.columnName || "").trim().toLowerCase(), field])
+    scope.map((field) => [String(field.columnName || "").trim().toLowerCase(), field])
   );
   let matched = 0;
   let skipped = 0;
@@ -6878,7 +6861,7 @@ function applyBatchFieldCommentsFromText() {
     matched += 1;
   });
   if (!matched) {
-    $message.warning("未识别到当前表的字段英文名，请检查粘贴内容");
+    $message.warning("未匹配到范围内的字段英文名，请检查选择和粘贴内容");
     return;
   }
   batchCommentDialog.visible = false;
@@ -7033,8 +7016,11 @@ async function persistGovernanceTable(table, strictValidation = true) {
     throw new Error(`请先填写 ${table.tableName} 的数据表中文名`);
   }
   const fields = fieldMap[table.tableName] || [];
+  const savedNullableEdits = new Map(fields.filter((field) => field._nullableEdited).map((field) => [field, field.nullable]));
   const tableColumns = fields.map((field) => ({
     ...field,
+    nullable: nullableText(field.nullable) === "未知" ? null : (nullableText(field.nullable) === "是" ? 1 : 0),
+    nullableEdited: Boolean(field._nullableEdited),
     primaryKey: normalizePrimaryKey(field.primaryKey),
     primary_key: normalizePrimaryKey(field.primaryKey) ? "1" : "0",
     dataStandardId: field.standardField || "",
@@ -7050,7 +7036,7 @@ async function persistGovernanceTable(table, strictValidation = true) {
   }));
   const governanceConfig = {
     ...normalizeCatalogConfig(table).fieldGovernanceConfig,
-    ...buildGovernanceConfig(table, fields),
+    ...buildGovernanceConfig(table, fields, detailMode.value),
   };
   if (detailMode.value) {
     const previous = normalizeCatalogConfig(table).fieldGovernanceConfig || {};
@@ -7098,6 +7084,9 @@ async function persistGovernanceTable(table, strictValidation = true) {
     columns: tableColumns,
     fieldGovernanceConfig: governanceConfig,
   });
+  if (detailMode.value) fields.forEach((field) => {
+    if (savedNullableEdits.has(field) && Object.is(field.nullable, savedNullableEdits.get(field))) field._nullableEdited = false;
+  });
   const savedBusinessType = data?.businessType || propList.businessType;
   const savedAnnotated = isPendingBusinessType(savedBusinessType)
     ? 0
@@ -7144,10 +7133,11 @@ async function save() {
 }
 
 async function saveDetailFields() {
+  const submittedSnapshot = JSON.stringify(fieldExportRows());
   try {
     const result = await save();
     if (result.success) {
-      detailSavedSnapshot.value = JSON.stringify(fieldExportRows());
+      detailSavedSnapshot.value = submittedSnapshot;
       $message.success("字段配置已保存到平台数据库");
     }
     else $message.warning(result.msg);
@@ -7210,9 +7200,15 @@ async function applySchemaSync() {
 }
 
 function nullableText(value) {
-  if (value === true || value === 1 || ["1", "true", "yes", "y"].includes(String(value).toLowerCase())) return "是";
-  if (value === false || value === 0 || ["0", "false", "no", "n"].includes(String(value).toLowerCase())) return "否";
+  if (value === true || value === 1 || ["1", "true", "yes", "y"].includes(String(value).trim().toLowerCase())) return "是";
+  if (value === false || value === 0 || ["0", "false", "no", "n"].includes(String(value).trim().toLowerCase())) return "否";
   return "未知";
+}
+
+function setFieldNotNull(row, checked) {
+  // 存储契约为 nullable：0 表示不为空，1 表示允许为空。
+  row.nullable = checked ? 0 : 1;
+  row._nullableEdited = true;
 }
 
 function fieldExportRows() {
@@ -7268,6 +7264,10 @@ defineExpose({ next, save, finish, commit });
   overflow: hidden;
   color: #1f2937;
   background: #f6f7f9;
+}
+
+.batch-register-page.is-dictionary-phase {
+  padding-bottom: 0;
 }
 
 .is-detail-mode {
@@ -8107,73 +8107,6 @@ defineExpose({ next, save, finish, commit });
   margin-top: 0;
 }
 
-.segmented-like {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  height: var(--dict-control-height, 34px);
-  max-height: var(--dict-control-height, 34px);
-  padding: 3px;
-  border: 1px solid #dce3ea;
-  border-radius: 7px;
-  background: #fff;
-  gap: 2px;
-  overflow: hidden;
-  box-shadow: none;
-}
-
-.dictionary-type-segment {
-  width: 112px;
-  max-width: 100%;
-  overflow: hidden;
-  scrollbar-width: none;
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
-
-  .segment-option {
-    flex: 1 1 0;
-    min-width: 0;
-    padding: 0 5px;
-  }
-}
-
-.segment-option {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 28px;
-  min-width: 86px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: #4b5563;
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1.1;
-  white-space: nowrap;
-  transition: background-color 0.16s ease, color 0.16s ease;
-
-  &:hover {
-    background: #f3f4f6;
-    color: #111827;
-  }
-
-  &.is-selected {
-    color: #fff;
-    background: #1677ff;
-  }
-}
-
-.segment-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .field-config-layout {
   display: flex;
   flex: 1;
@@ -8208,66 +8141,27 @@ defineExpose({ next, save, finish, commit });
   overflow: hidden;
 }
 
-.dictionary-block-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-height: 0;
-  padding: 12px 12px 0;
-  border-bottom: 0;
-
-  strong {
-    flex: 0 0 auto;
-    color: #1f2937;
-    font-size: 13px;
-    font-weight: 700;
-  }
-
-  span {
-    overflow: hidden;
-    color: #5f6b7a;
-    font-size: 12px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-
 .rule-block {
   padding-bottom: 10px;
 }
 
 .rule-flow-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 64px minmax(150px, 1fr);
+  grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr);
   align-items: stretch;
   gap: 6px;
   padding: 10px 12px 0;
 }
 
 .rule-action-text {
-  display: grid;
-  grid-template-rows: 20px var(--dict-control-height);
+  display: flex;
   align-items: center;
-  align-content: start;
-  justify-items: center;
-  justify-content: flex-start;
-  height: calc(20px + var(--dict-control-height));
-  padding: 0;
+  justify-content: center;
+  align-self: end;
+  height: var(--dict-control-height);
   color: #2f6df6;
   font-size: 12px;
   font-weight: 650;
-  line-height: 20px;
-}
-
-.rule-action-text::after {
-  display: block;
-  align-self: center;
-  margin-top: 0;
-  color: #2f6df6;
-  content: "→";
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 1;
 }
 
 .category-block {
@@ -8455,6 +8349,43 @@ defineExpose({ next, save, finish, commit });
   }
 }
 
+.rule-field-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dictionary-rule-grid .role-map-field > span {
+  min-height: 16px;
+  line-height: 16px;
+}
+
+.rule-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  color: #8c98aa;
+  background: transparent;
+  cursor: help;
+  font-size: 14px;
+
+  &:hover {
+    color: var(--el-color-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--el-color-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
 .role-map-stack {
   display: flex;
   flex-direction: column;
@@ -8469,18 +8400,9 @@ defineExpose({ next, save, finish, commit });
   min-width: 0;
 }
 
-.dictionary-type-field {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 5px;
-  grid-column: 1 / -1;
-  min-width: 0;
-}
-
 .category-value-search {
-  flex: 1;
-  min-width: 148px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .category-value-search :deep(.el-input__suffix),
@@ -8549,6 +8471,15 @@ defineExpose({ next, save, finish, commit });
   font-size: 13px;
 }
 
+.category-block .category-value-search :deep(.el-input__wrapper) {
+  min-height: 30px;
+  height: 30px;
+}
+
+.dictionary-design-layout .category-value-search :deep(.el-input__inner) {
+  height: 28px;
+}
+
 .dictionary-design-layout :deep(.el-select__selected-item),
 .dictionary-design-layout :deep(.el-select__selected-item span) {
   color: #1f2937;
@@ -8557,45 +8488,6 @@ defineExpose({ next, save, finish, commit });
 .dictionary-design-layout :deep(.el-select__placeholder),
 .dictionary-design-layout :deep(.el-input__inner::placeholder) {
   color: #a0a9b5;
-}
-
-.dictionary-design-layout .rule-connector {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  align-self: end;
-  width: 64px;
-  min-width: 64px;
-  height: var(--dict-control-height);
-  gap: 4px;
-  padding: 0;
-  color: #2f6df6;
-  line-height: 1;
-}
-
-.dictionary-design-layout .rule-connector::after {
-  display: none;
-  content: none;
-}
-
-.rule-connector-label {
-  display: inline-block;
-  align-self: center;
-  color: #2f6df6;
-  font-size: 12px;
-  font-weight: 650;
-  line-height: 18px;
-}
-
-.rule-connector-arrow {
-  display: inline-block;
-  align-self: center;
-  margin-left: 0;
-  color: #2f6df6;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 18px;
 }
 
 .dictionary-design-layout :deep(.el-select.is-required-error .el-select__wrapper),
@@ -8871,6 +8763,13 @@ defineExpose({ next, save, finish, commit });
 
 }
 
+.category-table-head {
+  justify-content: flex-start;
+  gap: 8px;
+  padding-right: 12px;
+  padding-left: 12px;
+}
+
 .dictionary-preview-switch {
   display: inline-flex;
   flex: 0 0 auto;
@@ -8898,6 +8797,11 @@ defineExpose({ next, save, finish, commit });
   color: #155eef;
   background: #fff;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.dictionary-preview-switch button:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 1px;
 }
 
 .preview-head-actions {
@@ -10462,51 +10366,10 @@ button.preview-count-pill:hover {
   }
 }
 
-/* 详情页沿用原有元数据表的平面布局，不继承登记工作台的多层卡片。 */
+/* 详情页保留独立工具栏，字段表直接沿用第四步样式。 */
 .is-detail-mode.is-business-phase .field-panel { padding-top: 0; }
 .is-detail-mode .field-table {
-  border: 0;
-  border-radius: 8px 8px 0 0;
-
   :deep(> div) { min-height: 0; overflow: hidden; }
-  :deep(.el-table) {
-    --el-table-header-bg-color: #f4f6fb;
-    --el-table-tr-bg-color: #fff;
-    --el-table-row-hover-bg-color: #f0f6ff;
-    --el-table-border-color: #e9edf4;
-    --el-table-text-color: #3b4252;
-    --el-table-header-text-color: #5276a7;
-    font-size: 14px;
-  }
-  :deep(.el-table__header th) {
-    height: 44px;
-    background: #f4f6fb;
-    color: #5276a7;
-  }
-  :deep(.el-table__body td) { height: 48px; padding: 8px 0; }
-  :deep(.el-table__row--striped > td) { background: #f8f9fb; }
-  :deep(.el-table__body tr:last-child > td) { border-bottom: 1px solid #e9edf4; }
-  :deep(.el-table__row:hover > td) { background: #f0f6ff; }
-  :deep(.el-table .cell) { padding-right: 12px; padding-left: 12px; }
-
-  .column-name-cell { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .column-name-cell strong { font-family: inherit; font-size: 14px; font-weight: 400; color: #3b4252; }
-  .field-property-tags { gap: 4px; }
-  .detail-nonnull-check { color: #5276a7; font-size: 20px; vertical-align: middle; }
-  :deep(.el-input__wrapper) {
-    background: transparent;
-    box-shadow: none;
-    padding: 1px 8px;
-    transition: box-shadow 160ms, background-color 160ms;
-  }
-  :deep(.el-input__wrapper:hover) { background: #fff; box-shadow: 0 0 0 1px #d6e0ed inset; }
-  :deep(.el-input__wrapper.is-focus) { background: #fff; box-shadow: 0 0 0 1px #1d63ff inset; }
-  :deep(.el-input__inner) { font-size: 14px; }
-  :deep(.is-required-error .el-input__wrapper) { box-shadow: 0 0 0 1px #f56c6c inset; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .is-detail-mode .field-table :deep(.el-input__wrapper) { transition: none; }
 }
 
 @media (max-width: 1100px) {
@@ -10560,6 +10423,9 @@ button.preview-count-pill:hover {
 
 .field-comment-header { display: inline-flex; align-items: center; gap: 4px; }
 .batch-comment-trigger { width: 20px; height: 20px; padding: 0; }
+.batch-comment-scope { margin: 0 0 10px; color: #667085; font-size: 13px; }
+.nullable-check-cell { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.nullable-unknown { color: #667085; font-size: 12px; white-space: nowrap; }
 .field-table .el-input.is-required-error .el-input__wrapper {
   background: #fff8db;
   box-shadow: 0 0 0 1px #e6a23c inset !important;

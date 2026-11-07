@@ -6,12 +6,12 @@ const root = new URL('../../', import.meta.url);
 const babel = {};
 vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/babel.min.js', root), 'utf8'), babel);
 const plain = value => JSON.parse(JSON.stringify(value));
-for (const file of ['2.3.1 数据汇聚(data-convergence).vue', '2.3.1 Hive元数据库(data-convergence-hive).vue']) {
-  const source = await fs.readFile(new URL(`lowcode/03.数据接入/${file}`, root), 'utf8');
+const source = await fs.readFile(new URL('lowcode/03.数据接入/2.3.1 数据汇聚(data-convergence).vue', root), 'utf8');
+for (const category of ['ingestion', 'distribution']) {
   const script = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/)[1];
   const ast = babel.Babel.transform(script, { ast: true, code: false, configFile: false, babelrc: false,
     parserOpts: { sourceType: 'module', plugins: ['typescript'] } }).ast;
-  const names = ['qualifiedTableName', 'taskSourceTableName', 'taskLinkTargets', 'taskLinkStatus', 'taskLinkRoutes',
+  const names = ['props', 'isDistribution', 'taskPage', 'qualifiedTableName', 'taskSourceTableName', 'taskLinkTargets', 'taskLinkStatus', 'taskLinkRoutes',
     'targetTablesOf', 'targetTaskSectionsOf', 'currentTargetSection', 'deleteCurrentFlow', 'deleteSingleTarget',
     'deleteAllTargets', 'targetCleanupPlan', 'targetCleanupSummary', 'handleRowTaskMenu'];
   const code = names.map(name => {
@@ -20,6 +20,7 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue', '2.3.1 Hive元�
   }).join('\n') + '\nglobalThis.routes=taskLinkRoutes;globalThis.status=taskLinkStatus;globalThis.sections=targetTaskSectionsOf;globalThis.plan=targetCleanupPlan;globalThis.rowMenu=handleRowTaskMenu;globalThis.actions={deleteCurrentFlow,deleteSingleTarget,deleteAllTargets};';
   const menuCalls = [], recoveryCalls = [], resetCalls = [], notices = [], confirmations = [];
   const ctx = vm.createContext({ runtimeConnection:{value:'live'}, console:{...console,warn:()=>{}}, targetDrawerContext:{value:null},targetDrawerSections:{value:[]},
+    defineProps: () => ({taskCategory:category}),
     deletingAllTargets:{value:false},deleteAllTargetCount:{value:0},deleteAllTargetProgress:{value:0},
     targetDrawerVisible:{value:true},accessTaskId:{value:''},tableRef:{value:{refresh:async()=>{}}},
     ElMessageBox:{confirm:async(text,title)=>confirmations.push({text,title})},$message:{success:text=>notices.push({type:'success',text}),warning:text=>notices.push({type:'warning',text}),error:assert.fail},
@@ -98,7 +99,7 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue', '2.3.1 Hive元�
     const manyTasks={tid:'business',tasks:Array.from({length:count},(_,i)=>task(`batch-${i}`,'business','业务库',[target(`target-${i}`,'目标库')]))};
     assert.equal(ctx.sections(manyTasks).length,count,'All authorized tasks remain visible');
     assert.equal(ctx.plan(ctx.sections(manyTasks),manyTasks).length,count,'Preparing 20/100 target operations uses only preloaded batch data');
-    console.log(`${file}: ${count} rows/tasks rendered chains and all target sections with zero additional requests/SQL`);
+    console.log(`${category}: ${count} rows/tasks rendered chains and all target sections with zero additional requests/SQL`);
   }
   ctx.$common={post:async(route,body)=>{assert.equal(route,'/ods/dataAggReset');resetCalls.push(plain(body));return {data:{}};}};
   await ctx.actions.deleteAllTargets(downstream);
@@ -151,9 +152,6 @@ for (const file of ['2.3.1 数据汇聚(data-convergence).vue', '2.3.1 Hive元�
   assert.equal(decisionCalls,1,'Repeated click while confirming cannot start a second cleanup');
   rejectDecision('cancel');await firstClick;
   assert.equal(ctx.deletingAllTargets.value,false);
-  if (file.includes('Hive')) {
-    assert.ok(source.includes('/ods/hiveTargetPage') && source.includes('/ods/hiveTargetTree'));
-    assert.ok(!source.includes('__hive_stage__'), 'Distribution uses the actual warehouse source');
-  }
 }
+assert.ok(!source.includes('__hive_stage__'), 'Distribution uses the actual warehouse source');
 console.log('Linear chains, parallel sinks, unrelated IDs, branching and cycles passed');

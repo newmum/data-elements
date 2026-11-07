@@ -3,18 +3,21 @@ package com.linewell.dataelement.platform.magic;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.linewell.dataelement.platform.magic.module.JsonModule;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.magicapi.core.interceptor.DefaultResultProvider;
 import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
@@ -729,6 +732,68 @@ class DataAggTaskEnsureBatchMagicTest {
         assertEquals(3, denied.counter.writes, "Current-tenant valid targets retain configured order without a menu-role gate");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"FIRST", "LAST"})
+    void domainOrderKeepsTheDatabaseNullOrderAndFirstAssociation(String nullOrder) throws Exception {
+        Fixture fixture = new Fixture(4);
+        fixture.prepareCreation();
+        fixture.jdbc.execute("set default_null_ordering " + nullOrder);
+        fixture.jdbc.update("""
+                insert into sym_dict_t values ('root','police','0','dataSourceType',0,0),
+                ('ods','police','root','ODS',0,0),('a-null','police','ods','first',0,null),
+                ('b-null','police','ods','second',0,null),('c-number','police','ods','third',0,1),
+                ('d-number','police','ods','fourth',0,2)
+                """);
+        fixture.jdbc.update("""
+                insert into dwm_center_layer_source_t values ('police','a-null','domain','target-db-0',0),
+                ('police','b-null','domain','target-db-1',0),('police','c-number','domain','target-db-2',0),
+                ('police','d-number','domain','target-db-0',0),('police','ods','layer','target-db-3',0)
+                """);
+        var plan = assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true,
+                "targetTableIds", List.of("target-3", "target-2", "target-1", "target-0"))));
+        var expected = nullOrder.equals("FIRST") ? List.of("target-0", "target-1", "target-2", "target-3")
+                : List.of("target-2", "target-0", "target-1", "target-3");
+        assertEquals(expected, plan.get("targetTableIds"));
+        assertEquals(false, plan.get("sideEffectsApplied"));
+        assertEquals(0, fixture.counter.writes);
+    }
+
+    @Test
+    void domainOrderMergesWindowsAndIgnoresNonExactDatasourceIds() throws Exception {
+        Fixture fixture = new Fixture(3);
+        fixture.prepareCreation();
+        fixture.jdbc.execute("alter table dwm_center_layer_source_t alter column datasource_id set data type varchar_ignorecase(64)");
+        fixture.jdbc.update("insert into sym_dict_t values('root','police','0','dataSourceType',0,0),('ods','police','root','ods',0,0)");
+        List<Object[]> domains = new ArrayList<>();
+        List<Object[]> bindings = new ArrayList<>();
+        for (int i = 0; i < 2_000; i++) {
+            String id = "domain-%04d".formatted(i);
+            int sort = 10_000 + i;
+            String datasource = "target-db-0";
+            if (i == 999) {
+                datasource = "target-db-1";
+            } else if (i == 1_000) {
+                datasource = "TARGET-DB-0";
+                sort = 0;
+            } else if (i == 1_001) {
+                sort = 5;
+            } else if (i == 1_999) {
+                datasource = "target-db-1";
+                sort = 1;
+            }
+            domains.add(new Object[] {id, sort});
+            bindings.add(new Object[] {id, datasource});
+        }
+        fixture.jdbc.batchUpdate("insert into sym_dict_t values(?,'police','ods','domain',0,?)", domains);
+        fixture.jdbc.batchUpdate("insert into dwm_center_layer_source_t values('police',?,'domain',?,0)", bindings);
+
+        var plan = assertInstanceOf(Map.class, fixture.run(Map.of("tableId", "source-1", "dryRun", true,
+                "targetTableIds", List.of("target-2", "target-0", "target-1"))));
+        assertEquals(List.of("target-1", "target-0", "target-2"), plan.get("targetTableIds"));
+        assertEquals(false, plan.get("sideEffectsApplied"));
+        assertEquals(0, fixture.counter.writes);
+    }
+
     @Test
     void explicitRepairSplitsLegacyAndFailedBatchRollsBackAllHops() throws Exception {
         Fixture fixture=new Fixture(2);
@@ -811,13 +876,16 @@ class DataAggTaskEnsureBatchMagicTest {
             inputs.put("taskRuntime",new com.linewell.dataelement.integration.nifi.canvas.runtime.TaskRuntimeMagicModule(service));
             inputs.put("tableRuntimeSnapshot",service.snapshot());
             inputs.put("db",f.db); inputs.put("tenantId","police"); inputs.put("dataScope",f.scope);
+            inputs.put("tenantRuntime",f.scope);
+            inputs.put("tableRead",TaskRuntimeMagicFixture.structuredReads(f.jdbc,f.counter::record));
+            TaskRuntimeMagicFixture.bindTableFamily(inputs);
             inputs.put("candidateIds",ids); inputs.put("tableCandidates",rows);
             inputs.put("registeredTableMap",rows.stream().collect(java.util.stream.Collectors.toMap(row -> row.get("tid").toString(),row -> row)));
             inputs.put("requestedAccessStatus","all"); inputs.put("selectedDatasourceNameMap",Map.of("source-db","来源库"));
             inputs.put("registeredDatasourceMap",Map.of("source-db",Map.of("tid","source-db","assetStatus",2,"dbType","mysql")));
             inputs.put("selectedDatasourceAppNameMap",Map.of());
             f.counter.queries=0;
-            Map<?,?> debug = assertInstanceOf(Map.class,MagicScript.create(helpers+aggregation+"\nreturn {items:tableItems, groups:taskGroups, roots:chainRootBySource}",null).execute(new MagicScriptContext(inputs)));
+            Map<?,?> debug = assertInstanceOf(Map.class,MagicScript.create(helpers+aggregation+"\nreturn {items:tableItems, groups:taskGroups, roots:chainRootsBySource}",null).execute(new MagicScriptContext(inputs)));
             List<?> actual = assertInstanceOf(List.class,debug.get("items"));
             readCounts.add(f.counter.queries);
             org.mockito.Mockito.verify(nifi,org.mockito.Mockito.times(1)).getRuntimeRootStatus(runtimeNode);
@@ -856,6 +924,7 @@ class DataAggTaskEnsureBatchMagicTest {
         assertInstanceOf(Map.class,f.run());
         f.jdbc.execute("alter table db_table_t add updated_time timestamp");
         f.jdbc.execute("alter table db_table_t add business_type varchar(64)");
+        TaskCategoryWarehouseScopeMagicTest.createDistributionColumns(f.jdbc);
         f.jdbc.execute("alter table db_datasource_t add db_name varchar(100)");
         f.jdbc.update("insert into sym_dict_t(tid,tenant_id,parent_id,dict_code,is_del) values('root','police','0','dataSourceType',0),('ods','police','root','ods',0),('domain','police','ods','business',0)");
         f.jdbc.update("insert into dwm_center_layer_source_t values('police','domain','domain','target-db-0',0)");
@@ -866,8 +935,15 @@ class DataAggTaskEnsureBatchMagicTest {
         inputs.put("db",f.db); inputs.put("tenantRuntime",f.scope); inputs.put("dataScope",f.scope);
         inputs.put("body",Map.of("pageNum",1,"pageSize",20));
         inputs.put("tableSort",new TableSortMagicModule());
+        var tableRead = TaskRuntimeMagicFixture.structuredReads(f.jdbc, ignored -> {});
+        inputs.put("tableRead", tableRead);
+        TaskRuntimeMagicFixture.bindTableFamily(inputs);
+        var classifier = MagicScript.create(CanonicalMagicSources.byPath("function/01.通用函数/23.ODS来源库分类.ms",
+                "d2138de2de28456aa57d9ade2305eed7").replaceAll("(?m)^import [^\\r\\n]+\\R", ""), null);
+        inputs.put("odsSourceClassifier", (Function<Object[], Object>) arguments -> classifier.execute(
+                new MagicScriptContext(Map.of("tableRead", tableRead, "tenantRuntime", f.scope))));
         Map<?,?> result;
-        try (var runtime = new TaskRuntimeMagicFixture(f.scope.id())) {
+        try (var runtime = new TaskRuntimeMagicFixture(f.scope.id()); var ignored = TenantContext.use(f.scope.id())) {
             inputs.put("taskRuntime", runtime.module);
             result = assertInstanceOf(Map.class,MagicScript.create(script,null).execute(new MagicScriptContext(inputs)));
             runtime.verifySingleRootRead();
@@ -1015,7 +1091,7 @@ class DataAggTaskEnsureBatchMagicTest {
 
         Object run(Map<String, Object> body) throws Exception {
             String script = CanonicalMagicSources.byId(SOURCE_ID)
-                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|apiPullConfig|tenantRuntime|dataScope|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
+                    .replaceAll("(?m)^import (jsons|metadataAsset|targetTableSchema|apiPullConfig|tenantRuntime|dataScope|tableRead|com\\.linewell\\.dataelement\\.metautil\\.structured\\.StructuredSourceProbeService as structuredFileProbe)\\r?\\n", "");
             Map<String, Object> inputs = new LinkedHashMap<>();
             inputs.put("db", db);
             inputs.put("body", body);
@@ -1024,9 +1100,16 @@ class DataAggTaskEnsureBatchMagicTest {
             inputs.put("jsons", new JsonModule());
             inputs.put("apiPullConfig", new ApiPullStub());
             inputs.put("structuredFileProbe", fileProbe);
+            inputs.put("tableRead", TaskRuntimeMagicFixture.structuredReads(jdbc, sql -> {
+                assertTrue(TransactionSynchronizationManager.hasResource(jdbc.getDataSource()),
+                        "Domain ranking must read within the source-lock transaction");
+                counter.record(sql);
+            }));
             counter.queries = 0;
             counter.writes = 0;
-            return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
+            try (var tenant = TenantContext.use(scope.id())) {
+                return MagicScript.create(script, null).execute(new MagicScriptContext(inputs));
+            }
         }
     }
 
@@ -1050,7 +1133,10 @@ class DataAggTaskEnsureBatchMagicTest {
         int writes;
         @Override
         public void preHandle(BoundSql sql, RequestEntity request) {
-            String statement = sql.getSql().stripLeading().toLowerCase();
+            record(sql.getSql());
+        }
+        void record(String sql) {
+            String statement = sql.stripLeading().toLowerCase(java.util.Locale.ROOT);
             if (statement.startsWith("select")) { queries++; }
             else { writes++; }
         }

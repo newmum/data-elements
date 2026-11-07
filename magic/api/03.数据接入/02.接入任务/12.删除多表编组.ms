@@ -22,12 +22,17 @@
   "responseBodyDefinition" : null
 }
 ================================
-// 接口：删除多表任务编组（POST /ods/task/multi/delete）
-// 只软删除编组；全部成员来源数据源仍须落在当前角色范围，不触碰单表任务或 NiFi。
 import tenantRuntime
 import dataScope
+import tableRead
+import '@/common/multi-group-edit-query' as multiGroupEditQuery
 import cn.dev33.satoken.stp.StpUtil
 
+/**
+ * 删除多表任务编组（POST /ods/task/multi/delete）。
+ * 接收编组 ID。验证当前租户、创建人和全组成员来源范围后，只软删除编组。
+ * 重试仍校验权限，返回编组 ID、删除状态及原单表任务保留标志。
+ */
 var text = value => value == null ? '' : ('' + value).trim()
 var tenantId = text(tenantRuntime.id())
 if (tenantId == '') { exit 401, '当前租户无效' }
@@ -40,31 +45,17 @@ var scopeMode = text(scope?.scope)
 var scopeUserId = text(scope?.userId)
 var scopeOrgIds = scope?.organizationIds == null ? [] : scope.organizationIds
 if (!['ALL', 'ORG', 'OWNER'].contains(scopeMode) || scopeUserId != actor) { exit 403, '无法确定当前数据范围' }
-var visibleSql = scopeMode == 'ALL' ? '1=1' :
-    (scopeMode == 'OWNER' ? 'd.created_by=#{scopeUserId}' :
-     (scopeOrgIds.size() == 0 ? '1=0' :
-      'd.org_id in <foreach collection="scopeOrgIds" item="orgId" open="(" close=")" separator=",">#{orgId}</foreach>'))
 
 return db.transaction(() => {
-    // 一次关联反查验证整组所有来源，不在循环内逐成员 SELECT。
-    var group = db.selectOne("""
-        select g.tid as groupId, g.is_del as deleted
-          from data_access_multi_group_t g
-         where g.tid=#{groupId} and g.tenant_id=#{tenantId}
-           and g.created_by=#{actor}
-           and not exists (
-               select 1 from data_access_multi_group_item_t m
-               left join db_table_t t on t.tid=m.source_table_id
-                    and t.tenant_id=g.tenant_id and t.is_del=0
-               left join db_datasource_t d on d.tid=t.datasource_id
-                    and d.tenant_id=g.tenant_id and d.is_del=0
-               where m.group_id=g.tid and m.tenant_id=g.tenant_id
-                 and (t.tid is null or d.tid is null or not (${visibleSql}))
-           )
-    """)
-    if (group == null) { exit 403, '编组不存在或当前无权删除' }
-    var deleted = group.deleted == null ? group.DELETED : group.deleted
-    if (deleted == 0) {
+    // 包含已删除的编组，确保重复请求仍按同一来源范围校验。
+    var groupQuery = multiGroupEditQuery(tenantId, groupId, actor, scopeMode, scopeOrgIds)
+    var groupIdColumn = tableRead.column('task_group', 'tid', 'TEXT')
+    var deletedColumn = tableRead.column('task_group', 'is_del', 'NUMBER')
+    var groups = groupQuery.rows({deleted: deletedColumn}, groupIdColumn, 'asc', 1)
+    if (groups.size() == 0) { exit 403, '编组不存在或当前无权删除' }
+
+    if (groups[0].deleted == 0) {
+        // 并发删除只允许活跃记录发生一次状态变化。
         db.table('data_access_multi_group_t').where()
             .eq('tid', groupId).eq('tenant_id', tenantId).eq('is_del', 0)
             .update({is_del: 1, updated_time: new Date()})

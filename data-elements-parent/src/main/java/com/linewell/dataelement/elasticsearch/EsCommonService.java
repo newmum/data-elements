@@ -6,11 +6,20 @@ import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -24,12 +33,17 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch._types.query_dsl.QueryStringQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.TermQuery;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.json.JsonData;
+import co.elastic.clients.elasticsearch.core.UpdateByQueryRequest;
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.transport.rest_client.RestClientOptions;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
 import org.springframework.data.elasticsearch.client.elc.NativeQueryBuilder;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
 import org.springframework.data.elasticsearch.core.AggregationsContainer;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.IndexOperations;
@@ -40,10 +54,17 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.document.Document;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.DeleteQuery;
+import org.springframework.data.elasticsearch.core.query.ByQueryResponse;
+import org.springframework.data.elasticsearch.core.query.BulkOptions;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.StringQuery;
+import org.springframework.data.elasticsearch.core.query.ScriptType;
 import org.springframework.data.elasticsearch.core.query.UpdateQuery;
+import org.springframework.data.elasticsearch.core.query.UpdateResponse;
+import org.springframework.data.elasticsearch.NoSuchIndexException;
+import org.apache.http.client.config.RequestConfig;
+import org.elasticsearch.client.RequestOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,6 +87,47 @@ public class EsCommonService {
     private static final int ES_TRANSIENT_RETRY_ATTEMPTS = 3;
     private static final long ES_TRANSIENT_RETRY_DELAY_MILLIS = 250L;
     private static final int ES_BULK_WRITE_BATCH_SIZE = 250;
+    private static final int CATALOG_PROJECTION_LIMIT = 1000;
+    private static final Set<String> CATALOG_METADATA_TIME_FIELDS = Set.of(
+            "createdTime", "updatedTime", "regTime", "createdTime_date", "updatedTime_date", "regTime_date");
+    private static final DateTimeFormatter LEGACY_CATALOG_TIME = DateTimeFormatter
+            .ofPattern("uuuu-MM-dd HH:mm:ss", java.util.Locale.ROOT).withResolverStyle(ResolverStyle.STRICT);
+    private static final String CATALOG_PROJECTION_SCRIPT = """
+            long validCounter(def value) {
+              if (value == null) { return 0L; }
+              if (value instanceof Double || value instanceof Float) {
+                double numeric = value.doubleValue();
+                if (Double.isNaN(numeric) || Double.isInfinite(numeric) || numeric < 0.0 ||
+                    numeric >= 9.223372036854776E18 || Math.floor(numeric) != numeric) { return 0L; }
+                return (long)numeric;
+              }
+              try {
+                long parsed = Long.parseLong(value.toString().trim());
+                return parsed < 0L ? 0L : parsed;
+              } catch (NumberFormatException ignored) { return 0L; }
+            }
+            def current = ctx._source;
+            if (!'create'.equals(ctx.op) &&
+                (current.tid == null || !params.tid.equals(current.tid.toString()) ||
+                 !'catalog'.equals(current.assetType) ||
+                 (current.id != null && !params.tid.equals(current.id.toString())) ||
+                 (current.tenantId != null && !params.tenantId.equals(current.tenantId.toString())) ||
+                 (current.tenant_id != null && !params.tenantId.equals(current.tenant_id.toString())))) {
+              throw new IllegalArgumentException('catalog projection identity conflict');
+            }
+            long previous = validCounter(current.viewCount);
+            long incoming = params.incoming.longValue();
+            long next = previous > incoming ? previous : incoming;
+            if ('advance'.equals(params.mode)) {
+              if (current.viewCount instanceof Number && current.viewCount.toString().equals(Long.toString(next))) {
+                ctx.op = 'noop';
+              } else { current.viewCount = next; }
+              return;
+            }
+            if ('replace'.equals(params.mode)) { current.clear(); }
+            current.putAll(params.document);
+            current.viewCount = next;
+            """;
     private static final String KEYWORD_STRING_MAPPING_JSON = """
             {
               "dynamic_templates": [
@@ -666,6 +728,411 @@ public class EsCommonService {
             out.add(info.id());
         }
         return out;
+    }
+
+    /**
+     * Replaces current-tenant catalog projections while preserving a newer shard counter.
+     * The caller supplies separately read database counts; dynamic properties are never a count source.
+     * All entries are checked before any index preparation or write, then sent in bounded bulk requests.
+     */
+    public List<String> bulkReplaceCatalogProjections(
+            String logicalIndex, List<String> ids, List<?> docs, List<?> counters) {
+        return bulkCatalogProjections(logicalIndex, ids, docs, counters, "replace");
+    }
+
+    /** Merges bounded catalog patches without discarding existing publication or business fields. */
+    public List<String> bulkMergeCatalogProjections(
+            String logicalIndex, List<String> ids, List<?> docs, List<?> counters) {
+        return bulkCatalogProjections(logicalIndex, ids, docs, counters, "merge");
+    }
+
+    private List<String> bulkCatalogProjections(
+            String logicalIndex, List<String> ids, List<?> docs, List<?> counters, String mode) {
+        String tenantId = requireCatalogProjectionTenant(logicalIndex);
+        if (ids == null || docs == null || counters == null
+                || ids.size() != docs.size() || ids.size() != counters.size()
+                || ids.size() > CATALOG_PROJECTION_LIMIT) {
+            throw new IllegalArgumentException("目录投影编号、文档及计数必须一一对应，单批最多1000项");
+        }
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Set<String> seen = new HashSet<>();
+        List<Map<String, Object>> documents = new ArrayList<>(ids.size());
+        List<Long> counts = new ArrayList<>(ids.size());
+        for (int position = 0; position < ids.size(); position++) {
+            String id = catalogProjectionId(ids.get(position));
+            if (!seen.add(id)) {
+                throw new IllegalArgumentException("目录投影编号不能重复");
+            }
+            Map<String, Object> document = catalogProjectionDocument(
+                    id, tenantId, StructuredValues.objectMap(docs.get(position)));
+            long count = catalogProjectionCounter(counters.get(position));
+            documents.add(document);
+            counts.add(count);
+        }
+        Map<String, Object> mapping = prepareCatalogProjectionMapping(logicalIndex);
+        List<UpdateQuery> updates = new ArrayList<>(ids.size());
+        for (int position = 0; position < ids.size(); position++) {
+            adaptCatalogMetadataTimes(documents.get(position), mapping);
+            updates.add(catalogProjectionUpdate(
+                    ids.get(position), tenantId, documents.get(position), counts.get(position), mode));
+        }
+        IndexCoordinates target = index(logicalIndex);
+        for (int start = 0; start < updates.size(); start += ES_BULK_WRITE_BATCH_SIZE) {
+            List<UpdateQuery> batch = List.copyOf(updates.subList(
+                    start, Math.min(start + ES_BULK_WRITE_BATCH_SIZE, updates.size())));
+            executeWithTransientRetry("bulk catalog projection " + target.getIndexName(), () -> {
+                // Replaying max(existing, incoming) cannot repeat a database increment.
+                // A following update-by-query must see this completed projection's
+                // version rather than a pre-refresh search snapshot.
+                operations.bulkUpdate(batch, BulkOptions.builder()
+                        .withRefreshPolicy(RefreshPolicy.IMMEDIATE)
+                        .withTimeout(java.time.Duration.ofSeconds(5)).build(), target);
+                return Boolean.TRUE;
+            });
+        }
+        return List.copyOf(ids);
+    }
+
+    /** Merges a catalog snapshot without allowing its copied viewCount to replace a newer value. */
+    public String mergeCatalogProjection(
+            String logicalIndex, String id, Map<String, Object> doc, Object incomingCount) {
+        String tenantId = requireCatalogProjectionTenant(logicalIndex);
+        String catalogId = catalogProjectionId(id);
+        long count = catalogProjectionCounter(incomingCount);
+        Map<String, Object> document = catalogProjectionDocument(catalogId, tenantId, doc);
+        adaptCatalogMetadataTimes(document, prepareCatalogProjectionMapping(logicalIndex));
+        UpdateQuery query = catalogProjectionUpdate(catalogId, tenantId, document, count, "merge");
+        UpdateResponse response = executeWithTransientRetry(
+                "merge catalog projection " + resolveIndexName(logicalIndex),
+                () -> operations.update(query, index(logicalIndex)));
+        if (response == null || (response.getResult() != UpdateResponse.Result.CREATED
+                && response.getResult() != UpdateResponse.Result.UPDATED
+                && response.getResult() != UpdateResponse.Result.NOOP)) {
+            throw new IllegalStateException("目录投影更新结果无法确认");
+        }
+        return catalogId;
+    }
+
+    /** Preserves an existing caller's JSON date/null contract while protecting its copied counter. */
+    public String mergeCatalogProjection(
+            String logicalIndex, String id, String json, Object incomingCount) {
+        if (json == null) {
+            throw new IllegalArgumentException("目录投影JSON不能为空");
+        }
+        try {
+            Map<String, Object> document = OBJECT_MAPPER.readValue(
+                    json, new TypeReference<Map<String, Object>>() {});
+            return mergeCatalogProjection(logicalIndex, id, document, incomingCount);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException failure) {
+            throw new IllegalArgumentException("目录投影JSON必须是有效对象", failure);
+        }
+    }
+
+    /**
+     * Advances one existing catalog's projection; false means no matching document/index.
+     * Update-by-query never auto-creates an index, unlike the ordinary document update endpoint.
+     * A failed projection may be retried independently after the database transaction commits.
+     */
+    public boolean advanceCatalogCounter(String logicalIndex, String id, Object incomingCount) {
+        String tenantId = requireCatalogProjectionTenant(logicalIndex);
+        String catalogId = catalogProjectionId(id);
+        long count = catalogProjectionCounter(incomingCount);
+        Query matchingTenant = Query.of(query -> query.term(term -> term.field("tenantId").value(tenantId)));
+        Query missingTenant = Query.of(query -> query.bool(scope -> scope
+                .mustNot(part -> part.exists(field -> field.field("tenantId")))));
+        Query tenantOwnership = Query.of(query -> query.bool(tenant -> tenant
+                .should(matchingTenant).should(missingTenant).minimumShouldMatch("1")));
+        Query identity = Query.of(query -> query.bool(scope -> scope
+                .filter(part -> part.ids(ids -> ids.values(catalogId)))
+                .filter(part -> part.term(term -> term.field("tid").value(catalogId)))
+                .filter(part -> part.term(term -> term.field("assetType").value("catalog")))
+                .filter(tenantOwnership)));
+        UpdateQuery update = UpdateQuery.builder(NativeQuery.builder().withQuery(identity).build())
+                .withScript(CATALOG_PROJECTION_SCRIPT)
+                .withScriptType(ScriptType.INLINE)
+                .withLang("painless")
+                .withParams(catalogProjectionParams(catalogId, tenantId, null, count, "advance"))
+                .withMaxDocs(1)
+                .withAbortOnVersionConflict(false)
+                .withTimeout("2s")
+                .withRefreshPolicy(RefreshPolicy.IMMEDIATE)
+                .build();
+        ByQueryResponse response;
+        try {
+            int conflictAttempts = 0;
+            do {
+                response = catalogCounterUpdateByQuery(update, logicalIndex);
+                // A competing projection changes the search snapshot's version. Only the
+                // idempotent ES upper bound is repeated; the database visit is not repeated.
+                conflictAttempts++;
+            } while (response != null && response.getVersionConflicts() > 0
+                    && conflictAttempts < ES_TRANSIENT_RETRY_ATTEMPTS
+                    && !response.getTimedOut()
+                    && (response.getFailures() == null || response.getFailures().isEmpty())
+                    && (response.getSearchFailures() == null || response.getSearchFailures().isEmpty()));
+        } catch (RuntimeException failure) {
+            if (missingCatalogProjectionIndex(failure)) {
+                return false;
+            }
+            throw failure;
+        }
+        if (response == null || response.getTimedOut() || response.getVersionConflicts() != 0
+                || response.getDeleted() != 0 || response.getTotal() < 0 || response.getTotal() > 1
+                || response.getUpdated() < 0 || response.getUpdated() > 1
+                || response.getNoops() < 0 || response.getNoops() > 1
+                || (response.getReasonCancelled() != null && !response.getReasonCancelled().isBlank())
+                || (response.getFailures() != null && !response.getFailures().isEmpty())
+                || (response.getSearchFailures() != null && !response.getSearchFailures().isEmpty())) {
+            throw new IllegalStateException("目录计数投影更新结果无法确认");
+        }
+        long completed = response.getUpdated() + response.getNoops();
+        if (response.getTotal() == 0 && completed == 0) {
+            return false;
+        }
+        if (response.getTotal() == 1 && completed == 1) {
+            return true;
+        }
+        throw new IllegalStateException("目录计数投影响应数量不一致");
+    }
+
+    private ByQueryResponse catalogCounterUpdateByQuery(UpdateQuery update, String logicalIndex) {
+        if (!(operations instanceof ElasticsearchTemplate template)) {
+            return operations.updateByQuery(update, index(logicalIndex));
+        }
+        // Spring Data 5.3.8's UpdateByQuery response converter omits `updated`.
+        // Read the same client's native response so a successful increment is
+        // confirmed explicitly rather than inferred from the search total.
+        Map<String, JsonData> parameters = new LinkedHashMap<>();
+        update.getParams().forEach((key, value) -> parameters.put(key, JsonData.of(value)));
+        UpdateByQueryRequest request = UpdateByQueryRequest.of(query -> query
+                .index(resolveIndexName(logicalIndex))
+                .query(((NativeQuery) update.getQuery()).getQuery())
+                .script(script -> script.inline(inline -> inline.lang("painless")
+                        .source(update.getScript()).params(parameters)))
+                .maxDocs(1L)
+                .conflicts(co.elastic.clients.elasticsearch._types.Conflicts.Proceed)
+                .refresh(true)
+                .timeout(timeout -> timeout.time("2s"))
+                .searchTimeout(timeout -> timeout.time("2s"))
+                .waitForCompletion(true));
+        var response = template.execute(client -> catalogCounterClientWithBudget(client).updateByQuery(request));
+        if (response == null || response.total() == null || response.updated() == null
+                || response.noops() == null || response.deleted() == null
+                || response.versionConflicts() == null || response.timedOut() == null
+                || !response.failures().isEmpty()) {
+            throw new IllegalStateException("目录计数投影原始响应不完整或包含失败记录");
+        }
+        return ByQueryResponse.builder().withTotal(response.total()).withUpdated(response.updated())
+                .withNoops(response.noops()).withDeleted(response.deleted())
+                .withVersionConflicts(response.versionConflicts()).withTimedOut(response.timedOut()).build();
+    }
+
+    private ElasticsearchClient catalogCounterClientWithBudget(ElasticsearchClient client) {
+        var options = client._transportOptions();
+        if (options == null && client._transport() != null) {
+            options = client._transport().options();
+        }
+        if (options != null && !(options instanceof RestClientOptions)) {
+            throw new IllegalStateException("当前ES传输不支持目录补投影的单次请求超时配置");
+        }
+        RequestOptions existing = options instanceof RestClientOptions rest
+                ? rest.restClientRequestOptions() : RequestOptions.DEFAULT;
+        RequestConfig previous = existing.getRequestConfig();
+        RequestConfig.Builder budget = previous == null ? RequestConfig.custom() : RequestConfig.copy(previous);
+        // Best-effort projection runs after the DB commit: preserve headers and
+        // avoid extending a browser request by repeated default 30-second waits.
+        RequestOptions bounded = existing.toBuilder().setRequestConfig(budget
+                .setConnectionRequestTimeout(500).setConnectTimeout(500).setSocketTimeout(2000).build()).build();
+        return client.withTransportOptions(new RestClientOptions(bounded));
+    }
+
+    private String requireCatalogProjectionTenant(String logicalIndex) {
+        String tenantId = TenantContext.requireTenantId();
+        if (TenantContext.isIgnored() || TenantContext.usesControlDatabase()
+                || !resolveIndexName("dataassets").equals(resolveIndexName(logicalIndex))) {
+            throw new IllegalArgumentException("目录投影必须使用当前行业租户的资产索引");
+        }
+        return tenantId;
+    }
+
+    private String catalogProjectionId(String id) {
+        if (id == null || !id.matches("[A-Za-z0-9_-]{1,32}")) {
+            throw new IllegalArgumentException("目录投影编号无效");
+        }
+        return id;
+    }
+
+    private long catalogProjectionCounter(Object value) {
+        try {
+            long count;
+            if (value instanceof BigDecimal decimal) {
+                count = decimal.longValueExact();
+            } else if (value instanceof BigInteger integer) {
+                count = integer.longValueExact();
+            } else if (value instanceof Byte || value instanceof Short
+                    || value instanceof Integer || value instanceof Long) {
+                count = ((Number) value).longValue();
+            } else if (value instanceof String text && text.matches("[0-9]{1,19}")) {
+                count = Long.parseLong(text);
+            } else {
+                throw new IllegalArgumentException("目录浏览计数必须为非负整数");
+            }
+            if (count < 0) {
+                throw new IllegalArgumentException("目录浏览计数不能为负数");
+            }
+            return count;
+        } catch (ArithmeticException | NumberFormatException failure) {
+            throw new IllegalArgumentException("目录浏览计数超出有符号64位整数范围", failure);
+        }
+    }
+
+    private Map<String, Object> catalogProjectionDocument(
+            String id, String tenantId, Map<String, Object> source) {
+        source = StructuredValues.objectMap(source);
+        if (source == null || !"catalog".equals(source.get("assetType"))) {
+            throw new IllegalArgumentException("单调计数投影只接受数据目录文档");
+        }
+        for (String field : List.of("tid", "id")) {
+            if (source.get(field) != null && !id.equals(String.valueOf(source.get(field)))) {
+                throw new IllegalArgumentException("目录投影文档编号不一致");
+            }
+        }
+        for (String field : List.of("tenantId", "tenant_id")) {
+            if (source.get(field) != null && !tenantId.equals(String.valueOf(source.get(field)))) {
+                throw new IllegalArgumentException("目录投影文档不属于当前租户");
+            }
+        }
+        Map<String, Object> document = new LinkedHashMap<>(source);
+        document.remove("viewCount");
+        document.remove("view_count");
+        document.remove("marketViewCount");
+        document.remove("market_view_count");
+        document.remove("tenant_id");
+        document.put("tid", id);
+        document.put("id", id);
+        document.put("assetType", "catalog");
+        document.put("tenantId", tenantId);
+        return catalogProjectionJsonDocument(document);
+    }
+
+    private Map<String, Object> catalogProjectionJsonDocument(Map<String, Object> document) {
+        var converter = operations.getElasticsearchConverter();
+        Map<String, Object> mapped = converter == null ? document : converter.mapObject(document);
+        if (operations instanceof ElasticsearchTemplate template) {
+            return template.execute(client -> {
+                // Use exactly the mapper that ordinary bulkIndex uses. It owns
+                // registered temporal/custom serializers; this layer invents no date format.
+                var mapper = client._jsonpMapper();
+                String json = JsonData.of(mapped, mapper).toJson(mapper).toString();
+                return OBJECT_MAPPER.readerFor(new TypeReference<Map<String, Object>>() {})
+                        .with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).readValue(json);
+            });
+        }
+        // Non-ELC implementations must still receive JSON values, never driver or temporal objects.
+        return OBJECT_MAPPER.convertValue(mapped, new TypeReference<Map<String, Object>>() {});
+    }
+
+    private Map<String, Object> prepareCatalogProjectionMapping(String logicalIndex) {
+        return executeWithTransientRetry("prepare catalog projection mapping " + resolveIndexName(logicalIndex), () -> {
+            IndexOperations target = operations.indexOps(index(logicalIndex));
+            boolean keywordStrings = usesKeywordStringMapping(logicalIndex);
+            if (!target.exists()) {
+                boolean created = keywordStrings
+                        ? target.create(Collections.emptyMap(), Document.parse(KEYWORD_STRING_MAPPING_JSON))
+                        : target.create();
+                if (!created) {
+                    throw new IllegalStateException("目录投影索引初始化结果无法确认");
+                }
+            }
+            // Read once even after creation: a deployment's index template may
+            // already define these fields. Every document in the batch reuses it.
+            Map<String, Object> mapping = target.getMapping();
+            if (mapping == null) {
+                mapping = Map.of();
+            }
+            if (keywordStrings && mapping.isEmpty()) {
+                target.putMapping(Document.parse(KEYWORD_STRING_MAPPING_JSON));
+            }
+            return mapping;
+        });
+    }
+
+    private void adaptCatalogMetadataTimes(Map<String, Object> document, Map<String, Object> mapping) {
+        Map<String, Object> properties = StructuredValues.objectMap(mapping.get("properties"));
+        if (properties == null) {
+            return;
+        }
+        for (String field : CATALOG_METADATA_TIME_FIELDS) {
+            Object value = document.get(field);
+            if (!(value instanceof String text) || !text.matches("[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}")) {
+                continue;
+            }
+            Map<String, Object> definition = StructuredValues.objectMap(properties.get(field));
+            if (definition == null || !("date".equals(definition.get("type")) || "date_nanos".equals(definition.get("type")))) {
+                continue;
+            }
+            // Validate the exact local value before changing its separator. No
+            // timezone, truncation, epoch interpretation or business-field guess.
+            LocalDateTime.parse(text, LEGACY_CATALOG_TIME);
+            String format = definition.get("format") == null
+                    ? ("date_nanos".equals(definition.get("type"))
+                        ? "strict_date_optional_time_nanos||epoch_millis" : "strict_date_optional_time||epoch_millis")
+                    : String.valueOf(definition.get("format"));
+            List<String> alternatives = Arrays.stream(format.split("\\|\\|")).map(String::trim).toList();
+            if (alternatives.contains("yyyy-MM-dd HH:mm:ss") || alternatives.contains("uuuu-MM-dd HH:mm:ss")) {
+                continue;
+            }
+            if (alternatives.stream().noneMatch(candidate -> Set.of(
+                    "strict_date_optional_time", "date_optional_time", "strict_date_optional_time_nanos",
+                    "yyyy-MM-dd'T'HH:mm:ss", "uuuu-MM-dd'T'HH:mm:ss").contains(candidate))) {
+                throw new IllegalArgumentException("目录元数据时间字段 " + field + " 的索引格式无法安全转换：" + format);
+            }
+            document.put(field, text.substring(0, 10) + "T" + text.substring(11));
+        }
+    }
+
+    private UpdateQuery catalogProjectionUpdate(String id, String tenantId,
+            Map<String, Object> document, long count, String mode) {
+        return UpdateQuery.builder(id)
+                .withScript(CATALOG_PROJECTION_SCRIPT)
+                .withScriptType(ScriptType.INLINE)
+                .withLang("painless")
+                .withParams(catalogProjectionParams(id, tenantId, document, count, mode))
+                .withUpsert(Document.create())
+                .withScriptedUpsert(true)
+                .withRetryOnConflict(5)
+                .withTimeout("5s")
+                .withRefreshPolicy(RefreshPolicy.IMMEDIATE)
+                .build();
+    }
+
+    private Map<String, Object> catalogProjectionParams(String id, String tenantId,
+            Map<String, Object> document, long count, String mode) {
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("tid", id);
+        parameters.put("tenantId", tenantId);
+        parameters.put("incoming", count);
+        parameters.put("mode", mode);
+        if (document != null) {
+            parameters.put("document", document);
+        }
+        return parameters;
+    }
+
+    private boolean missingCatalogProjectionIndex(Throwable failure) {
+        for (Throwable current = failure; current != null && current.getCause() != current;
+                current = current.getCause()) {
+            if (current instanceof NoSuchIndexException) {
+                return true;
+            }
+            if (current instanceof co.elastic.clients.elasticsearch._types.ElasticsearchException es
+                    && "index_not_found_exception".equals(es.error().type())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<IndexedObjectInformation> bulkIndexInBatches(String indexName, List<IndexQuery> queries) {

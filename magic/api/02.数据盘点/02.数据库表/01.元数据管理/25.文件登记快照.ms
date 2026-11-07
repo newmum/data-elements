@@ -10,10 +10,9 @@
   "description": "非结构化推送文件定义的读取、保存与登记完成。复用当前租户 db_table_t(FILE) 和 db_table_column_t，不探查物理数据库；read/save/complete 均按数据源归属校验，save 支持 dryRun。"
 }
 ================================
-// 文件登记复用表/字段快照。FILE 是逻辑文件登记项，不是可执行 SQL 的物理表。
-// 格式和大小上限保存为治理规则，不能冒充实际存储量；一次最多100项，关联批量校验。
 import tenantRuntime
 import dataScope
+import tableRead
 import cn.hutool.core.util.IdUtil
 import cn.hutool.json.JSONUtil
 import java.util.List
@@ -22,6 +21,11 @@ import java.util.Map
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import log
 
+/**
+ * POST /dst/database/metadata/fileRegistration 读取、预检、保存或结束非结构化文件登记。
+ * 最多处理 100 项文件定义，关联表与字段按当前租户和角色范围整批验证。
+ * FILE 是逻辑登记项。格式和大小上限保存为治理规则，dryRun 只返回校验后的快照。
+ */
 var text = value => value == null ? '' : (value+'').trim()
 var value = (row, snake, camel) => row == null ? null : (row[snake] == null ? row[camel] : row[snake])
 var object = input => {
@@ -85,7 +89,7 @@ for (table in oldTables) {
 if (action=='read') { return {datasourceId:sourceId,list:rows,total:rows.size(),resourceKind:'FILE'} }
 var incoming=action=='complete' ? rows : body.files
 if (!(incoming instanceof List) || incoming.size()==0 || incoming.size()>100) { exit 422, '请填写1至100项文件登记信息' }
-var normalized=[];var names=new HashSet();var requestedIds=new HashSet();var relatedNames=new HashSet();var relatedFields=new HashSet()
+var normalized=[];var names=new HashSet();var requestedIds=new HashSet();var relatedNames=new HashSet()
 for (item in incoming) {
     var name=text(item.fileName);var description=text(item.fileDescription)
     var fileCode=text(item.fileCode)
@@ -113,44 +117,121 @@ for (item in incoming) {
     var relatedField=text(action=='complete' && text(item.relatedFieldId)!='' ? item.relatedFieldId : item.relatedFieldName)
     if (relatedTable.length()>255 || relatedField.length()>255 || (relatedTable=='' && relatedField!='')) { exit 422, '填写关联字段时须同时填写关联表，名称最多255字' }
     if (relatedTable!='') { relatedNames.add(relatedTable) }
-    if (relatedField!='') { relatedFields.add(relatedField) }
     normalized.add({tableId:id,collectionId:old==null ? fileCode : old.collectionId,fileCode:fileCode,fileName:name,fileDescription:description,fileFormat:format,maxFileBytes:bytes,maxFileSizeMb:sizeText::double,relatedTableName:relatedTable,relatedFieldName:relatedField,registered:action=='complete'})
 }
 var totalIds=new HashSet(oldIds);totalIds.addAll(requestedIds)
 if (totalIds.size()>100) { exit 422, '同一数据源最多100项文件定义；重复导入按名称或登记ID更新，不删除未列出的已有项' }
-// 所有关联记录一次批量读取，先验证全部归属再写入；不根据输入切换行业数据库。
-var relatedByKey={};var relatedIds=[]
-if (relatedNames.size()>0) {
-    var associationScope=''
-    var associationOwner=text(scope.userId);var associationOrganizations=scope.organizationIds || []
-    if (scope.scope=='OWNER') { associationScope=' AND d.created_by=#{associationOwner}' }
-    else if (scope.scope=='ORG') { associationScope=' AND d.org_id IN (#{associationOrganizations})' }
-    var matches=db.select('SELECT t.tid,t.table_name,t.table_type FROM db_table_t t JOIN db_datasource_t d ON d.tid=t.datasource_id AND d.tenant_id=#{tenantId} AND d.is_del=0 WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND (t.tid IN (#{relatedNames}) OR t.table_name IN (#{relatedNames}))'+associationScope,{tenantId:tenantId,relatedNames:relatedNames.toArray(),associationOwner:associationOwner,associationOrganizations:associationOrganizations})
-    for (table in matches) {
-        var id=text(table.tid);var name=text(value(table,'table_name','tableName'))
-        relatedByKey[id]=[table]
-        if (relatedByKey[name]==null) { relatedByKey[name]=[] }
-        if (name!=id) { relatedByKey[name].add(table) }
-        relatedIds.add(id)
+// 正常匹配各读一批。历史同名过多时按唯一 ID 分窗，只保留本次请求所需的匹配和歧义标记。
+var scanReferences = (createQuery, projection, idColumn, accept) => {
+    var cursor = null
+    while (true) {
+        var query = createQuery()
+        if (cursor != null) { query.where(tableRead.greaterThan(idColumn, cursor)) }
+        var candidates = query.rows(projection, idColumn, 'asc', 1000)
+        for (candidate in candidates) { accept(candidate) }
+        if (candidates.size() < 1000) { break }
+        cursor = candidates[candidates.size() - 1].tid
     }
 }
-var relatedColumnByKey={}
-if (relatedIds.size()>0 && relatedFields.size()>0) {
-    var matches=db.select('SELECT tid,table_id,column_name FROM db_table_column_t WHERE tenant_id=#{tenantId} AND is_del=0 AND table_id IN (#{relatedIds}) AND (column_name IN (#{relatedFields}) OR tid IN (#{relatedFields}))',{tenantId:tenantId,relatedIds:relatedIds,relatedFields:relatedFields.toArray()})
-    for (column in matches) {
-        var tableId=text(value(column,'table_id','tableId'));var name=text(value(column,'column_name','columnName'))
-        relatedColumnByKey[tableId+':'+name]=column;relatedColumnByKey[tableId+':'+text(column.tid)]=column
+var textColumn = (alias, name) => tableRead.column(alias, name, 'TEXT')
+var active = alias => tableRead.equal(tableRead.column(alias, 'is_del', 'NUMBER'), 0)
+var newMatches = () => { return {ids: {}, names: {}, ambiguous: new HashSet()} }
+var recordMatch = (matches, keys, row, name) => {
+    if (keys.contains(text(row.tid))) { matches.ids[text(row.tid)] = row }
+    if (keys.contains(name)) {
+        if (matches.names[name] == null) { matches.names[name] = row }
+        else { matches.ambiguous.add(name) }
     }
 }
+var resolveMatch = (matches, key) => {
+    var exact = matches.ids[key]
+    return exact != null ? exact : (matches.ambiguous.contains(key) ? null : matches.names[key])
+}
+
+var tableMatches = newMatches()
+if (relatedNames.size() > 0) {
+    var keys = []
+    keys.addAll(relatedNames)
+    var referenceId = textColumn('ref_table', 'tid')
+    var referenceName = textColumn('ref_table', 'table_name')
+    var dbId = textColumn('source_db', 'tid')
+    var createQuery = () => {
+        var query = tableRead.from('db_table_t', 'ref_table', tenantId)
+        query.leftJoin('db_datasource_t', 'source_db', 'tid', 'datasource_id', [active('source_db')])
+        query.where(tableRead.all([
+            active('ref_table'), tableRead.not(tableRead.isNull(dbId)),
+            tableRead.any([tableRead.in(referenceId, keys), tableRead.in(referenceName, keys)])
+        ]))
+        if (scope.scope == 'OWNER') {
+            query.where(tableRead.equal(textColumn('source_db', 'created_by'), text(scope.userId)))
+        } else if (scope.scope == 'ORG') {
+            query.where(tableRead.in(textColumn('source_db', 'org_id'), scope.organizationIds))
+        }
+        return query
+    }
+    scanReferences(createQuery, {
+        tid: referenceId, table_name: referenceName, table_type: textColumn('ref_table', 'table_type')
+    }, referenceId, table => recordMatch(tableMatches, relatedNames, table, text(table.table_name)))
+}
+
+// 仅为已唯一定位且非 FILE 的关联表读取本次选中的字段，避免跨表名称组合扩大读取范围。
+var tableByFile = {}
+var fieldKeysByTable = {}
 for (row in normalized) {
-    if (row.relatedTableName=='') { continue }
-    var matches=relatedByKey[row.relatedTableName] || []
-    if (matches.size()!=1 || text(value(matches[0],'table_type','tableType'))=='FILE') { exit 422, '关联表不存在、同名不唯一或不是结构化表；同名时可填写当前行业的登记表ID' }
-    var table=matches[0];row.relatedTableId=text(table.tid);row.relatedTableName=text(value(table,'table_name','tableName'))
-    if (row.relatedFieldName!='') {
-        var column=relatedColumnByKey[row.relatedTableId+':'+row.relatedFieldName]
-        if (column==null) { exit 422, '关联字段不存在或不属于所选关联表' }
-        row.relatedFieldId=text(column.tid);row.relatedFieldName=text(value(column,'column_name','columnName'))
+    if (row.relatedTableName == '') { continue }
+    var table = resolveMatch(tableMatches, row.relatedTableName)
+    if (table == null || text(table.table_type) == 'FILE') { continue }
+    tableByFile[row.tableId] = table
+    if (row.relatedFieldName == '') { continue }
+    var tableId = text(table.tid)
+    if (fieldKeysByTable[tableId] == null) { fieldKeysByTable[tableId] = [] }
+    if (!fieldKeysByTable[tableId].contains(row.relatedFieldName)) {
+        fieldKeysByTable[tableId].add(row.relatedFieldName)
+    }
+}
+
+var fieldMatchesByTable = {}
+if (fieldKeysByTable.size() > 0) {
+    var fieldId = textColumn('ref_field', 'tid')
+    var parentId = textColumn('ref_field', 'table_id')
+    var fieldName = textColumn('ref_field', 'column_name')
+    var conditions = []
+    for (tableId in fieldKeysByTable.keySet()) {
+        var fieldKeys = fieldKeysByTable[tableId]
+        fieldMatchesByTable[tableId] = newMatches()
+        conditions.add(tableRead.all([
+            tableRead.equal(parentId, tableId),
+            tableRead.any([tableRead.in(fieldId, fieldKeys), tableRead.in(fieldName, fieldKeys)])
+        ]))
+    }
+    var createQuery = () => {
+        var query = tableRead.from('db_table_column_t', 'ref_field', tenantId)
+        query.where(tableRead.all([active('ref_field'), tableRead.any(conditions)]))
+        return query
+    }
+    scanReferences(createQuery, {tid: fieldId, table_id: parentId, column_name: fieldName}, fieldId, column => {
+        var tableId = text(column.table_id)
+        if (fieldMatchesByTable[tableId] != null) {
+            recordMatch(fieldMatchesByTable[tableId], fieldKeysByTable[tableId], column, text(column.column_name))
+        }
+    })
+}
+
+for (row in normalized) {
+    if (row.relatedTableName == '') { continue }
+    var table = tableByFile[row.tableId]
+    if (table == null) { exit 422, '关联表不存在、同名不唯一或不是结构化表；同名时可填写当前行业的登记表ID' }
+    row.relatedTableId = text(table.tid)
+    row.relatedTableName = text(table.table_name)
+    if (row.relatedFieldName != '') {
+        var matches = fieldMatchesByTable[row.relatedTableId]
+        var column = resolveMatch(matches, row.relatedFieldName)
+        if (column == null) {
+            if (matches.ambiguous.contains(row.relatedFieldName)) { exit 422, '关联字段同名不唯一，请填写当前关联表的字段ID' }
+            exit 422, '关联字段不存在或不属于所选关联表'
+        }
+        row.relatedFieldId = text(column.tid)
+        row.relatedFieldName = text(column.column_name)
     }
 }
 // 重复保存相同定义保留完成状态；有业务变化时只将相关文件定义恢复为待结束登记。

@@ -26,6 +26,9 @@ const names = [
   'normalizeCode', 'orderTargetDatasourceIds', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
   'materializationProgress', 'materializationElapsed', 'materializationAwaitingDecision',
   'materializationStartedAt', 'materializationTimer', 'startMaterializationProgress', 'stopMaterializationProgress', 'confirmMaterialization',
+  'hivePartitionResults', 'hivePartitionBatchReviewPending', 'materializationResults',
+  'completedMaterializations', 'materializationResultRow', 'prepareMaterializationTarget',
+  'readMaterializationBatch', 'finishMaterialization',
 ];
 const selected = names.map(name => {
   const node = ast.program.body.find(n => n.type === 'VariableDeclaration'
@@ -84,7 +87,11 @@ function fixture(size = 2) {
     ddlWarningsByTarget: ref({}), ddlTableItemsByTarget: ref({}), activeDdlKey: ref(''),
     ddlSourceFingerprint: ref(''), ddlWasEdited: ref(false), ddlMode: ref(false), isSaveing: ref(false),
     ElMessage: Object.fromEntries(['error', 'warning', 'success', 'info'].map(key => [key, message => notices.push({ key, message })])),
-    ElMessageBox: { confirm: async () => {} }, emit: (...args) => emitted.push(plain(args)), console,
+    h: (_tag, _attributes, text) => ({ text }),
+    ElMessageBox: { confirm: async (message, title) => {
+      calls.push({ route: 'confirmation', title, message: plain(message) });
+      if (context.cancelPartitionConfirmation && title === '检查并补齐 Hive 分区') throw 'cancel';
+    } }, emit: (...args) => emitted.push(plain(args)), console,
     askExistingDecision: async (targets, canReuse) => {
       calls.push({route:'user-confirm', targets:plain(targets),canReuse});
       return context.existingChoice || 'flow';
@@ -113,7 +120,10 @@ function fixture(size = 2) {
         })),
       } };
       if (route === '/ods/dataAggReset') {
-        assert.equal(body.dryRun, true, 'No deletion is allowed in this test');
+        if (!body.dryRun) {
+          assert.ok(context.allowCleanup, 'Only the explicit rebuild fixture may simulate a deletion');
+          return { data: { targetPhysicalDeleted: true, targetCleanupPending: false } };
+        }
         return { data: { batchDryRun: true, sideEffectsApplied: false,
           results: body.targets.map(target => ({ ...target, sideEffectsApplied: false,
             targetPhysicalExists: context.existingPhysical === true || context.existingDbIds?.includes(target.targetDbId),
@@ -121,12 +131,23 @@ function fixture(size = 2) {
         } };
       }
       if (route.endsWith('/createTable')) {
+        if (body.repairHivePartitions) {
+          if (context.repairFails) throw new Error('无法补齐分区');
+          context.repairedPartition = true;
+          return { data: { status: 'partitions-registered', physicalTableReused: true, partitionCheck: {
+            database: body.expectedHiveDatabase, tableName: body.expectedHiveTable, missing: [],
+          } } };
+        }
         assert.equal(body.validateOnly, true, 'Only validation is allowed');
         if (body.batchReuseValidation) {
           if (context.incompatibleExisting) throw new Error('已有目标表结构不兼容：ODS_UUID（缺少字段）');
           return {data:{batchReuseValidation:true,sideEffectsApplied:false,results:body.targets.map(target=>({
             dbId:target.dbId, requestedTableName:target.tableName, valid:true, physicalTableReused:true,sideEffectsApplied:false,
             compatibilityWarnings: context.compatibilityWarnings || [],
+            ...(context.missingPartition && target.dbId === 'db-1' ? { partitionCheck: {
+              database: 'validation', tableName: target.tableName, tableLocation: '/warehouse/validation',
+              missing: context.repairedPartition ? [] : ['2026'], buckets: ['2026'],
+            } } : {}),
           }))}};
         }
         return { data: { batchValidateOnly: true, sideEffectsApplied: false,
@@ -134,7 +155,16 @@ function fixture(size = 2) {
             valid: true, sideEffectsApplied: false })),
         } };
       }
-      if (route === '/ods/createTapleApply') return { data: { targetTableId: `fake-${body.propList.dbId}` } };
+      if (route === '/ods/createTapleApply') {
+        assert.ok(Array.isArray(body.targets));
+        if (context.materializationReply) return context.materializationReply(body);
+        if (body.dryRun) return { data: { batch: true, complete: true, dryRun: true, sideEffectsApplied: false,
+          results: body.targets.map(({ propList }) => ({ dbId: propList.dbId, tableName: propList.tableName, status: 'succeeded', valid: true })) } };
+        return { data: { batch: true, complete: true, results: body.targets.map(({ propList, reuseExistingTable }) => ({
+          dbId: propList.dbId, tableName: propList.tableName, status: 'succeeded',
+          targetTableId: `fake-${propList.dbId}`, physicalTableReused: reuseExistingTable === true,
+        })) } };
+      }
       throw new Error(`Unexpected route ${route}`);
     } },
   });
@@ -248,16 +278,17 @@ await multi.actual.handleSave();
 assert.equal(multi.notices.filter(n => n.key === 'error').length, 0, JSON.stringify(multi.notices));
 const generated = multi.calls.find(c => c.route.endsWith('/getCreateTableDDL') && c.body.batchGenerate).body.targets;
 const validated = multi.calls.find(c => c.route.endsWith('/createTable')).body.targets;
-const saved = multi.calls.filter(c => c.route === '/ods/createTapleApply');
-assert.equal(saved.length, 2);
-assert.deepEqual(saved.map(c => c.body.propList.dbId), ['db-0', 'db-1'],
+const saveRequests = multi.calls.filter(c => c.route === '/ods/createTapleApply' && !c.body.dryRun);
+assert.equal(saveRequests.length, 1);
+const saved = saveRequests[0].body.targets;
+assert.deepEqual(saved.map(target => target.propList.dbId), ['db-0', 'db-1'],
   'Reversed clicks must still materialize huiju first and yuanshi second');
 for (let i = 0; i < saved.length; i++) {
   const expectedName = generated[i].propList.dbType === 'hive' ? 'ods_user_confirmed' : 'ODS_User_CONFIRMED';
   assert.equal(generated[i].propList.tableName, expectedName);
   assert.equal(validated[i].tableName, expectedName);
-  assert.deepEqual(saved[i].body.propList, generated[i].propList, 'Saving must reuse the preview target configuration');
-  assert.deepEqual(saved[i].body.tableItems, generated[i].tableItems, 'Persisted types must match this target DDL');
+  assert.deepEqual(saved[i].propList, generated[i].propList, 'Saving must reuse the preview target configuration');
+  assert.deepEqual(saved[i].tableItems, generated[i].tableItems, 'Persisted types must match this target DDL');
   const fields = generated[i].tableItems;
   assert.equal(fields.find(f => f.columnName === 'occurred_at').dataType,
     generated[i].propList.dbType === 'oracle' ? 'date' : 'timestamp');
@@ -287,8 +318,9 @@ existingHive.actual.syncTargetDatasourceSelection(existingHive.form.dbId);
 existingHive.context.existingPhysical = true;
 existingHive.context.compatibilityWarnings = ['amount：已有Hive STRING将按文本保存（模板类型decimal）'];
 await existingHive.actual.handleSave();
-assert.equal(existingHive.calls.filter(c => c.route === '/ods/createTapleApply').length, 2);
-assert.ok(existingHive.calls.filter(c => c.route === '/ods/createTapleApply').every(c=>c.body.reuseExistingTable===true));
+const reuseSubmissions = existingHive.calls.filter(c => c.route === '/ods/createTapleApply' && !c.body.dryRun);
+assert.equal(reuseSubmissions.length, 1);
+assert.ok(reuseSubmissions[0].body.targets.every(target => target.reuseExistingTable === true));
 assert.equal(existingHive.calls.filter(c => c.route === '/ods/dataAggReset' && !c.body.dryRun).length, 0);
 assert.equal(existingHive.calls.filter(c=>c.route.endsWith('/createTable') && c.body.batchReuseValidation).length,1);
 assert.equal(existingHive.calls.find(c=>c.route==='user-confirm').canReuse,true,'Physical table without registration can be adopted');
@@ -301,9 +333,10 @@ for (const type of ['hive','mrshive','mysql','postgresql','kingbase8','oracle','
   await mixed.actual.init(); mixed.form.dbId=[['ODS','db-1'],['ODS','db-0']];
   mixed.actual.syncTargetDatasourceSelection(mixed.form.dbId); mixed.context.existingDbIds=['db-1'];
   await mixed.actual.handleSave();
-  const registrations=mixed.calls.filter(c=>c.route==='/ods/createTapleApply');
-  assert.deepEqual(registrations.map(c=>c.body.propList.dbId),['db-0','db-1']);
-  assert.deepEqual(registrations.map(c=>c.body.reuseExistingTable),[false,true]);
+  const registrations=mixed.calls.filter(c=>c.route==='/ods/createTapleApply' && !c.body.dryRun);
+  assert.equal(registrations.length,1);
+  assert.deepEqual(registrations[0].body.targets.map(target=>target.propList.dbId),['db-0','db-1']);
+  assert.deepEqual(registrations[0].body.targets.map(target=>target.reuseExistingTable),[false,true]);
   assert.equal(mixed.emitted.length,1);
   assert.equal(mixed.calls.findIndex(c=>c.body?.batchReuseValidation)<mixed.calls.findIndex(c=>c.route==='/ods/createTapleApply'),true,
     'All reused targets are checked before creating the missing target');
@@ -316,6 +349,95 @@ assert.equal(incompatible.emitted.length,0);
 const cancelled=fixture(); await cancelled.actual.init(); cancelled.context.existingPhysical=true;
 cancelled.context.existingChoice='cancel'; await cancelled.actual.handleSave();
 assert.equal(cancelled.calls.filter(c=>c.route==='/ods/createTapleApply').length,0);
+
+for (const size of [1, 20]) {
+  const f = fixture(size);
+  await f.actual.init();
+  f.form.dbId = Array.from({ length: size }, (_, i) => ['ODS', `db-${i}`]);
+  f.actual.syncTargetDatasourceSelection(f.form.dbId);
+  await f.actual.handleSave();
+  assert.equal(f.notices.filter(n => n.key === 'error').length, 0, JSON.stringify(f.notices));
+  const writes = f.calls.filter(call => call.route === '/ods/createTapleApply' && !call.body.dryRun);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].body.targets.length, size);
+  assert.equal(f.emitted.at(-1)[1].targetTables.length, size);
+}
+
+const partial = fixture(3);
+await partial.actual.init();
+partial.form.dbId = ['db-0', 'db-1', 'db-2'].map(id => ['ODS', id]);
+partial.actual.syncTargetDatasourceSelection(partial.form.dbId);
+partial.context.materializationReply = body => ({ data: { batch: true, complete: false,
+  results: body.targets.map(({ propList }, index) => ({ dbId: propList.dbId, tableName: propList.tableName,
+    ...([{ status: 'succeeded', targetTableId: 'kept-0' }, { status: 'failed', message: '目标连接超时', sideEffectsPossible: true },
+      { status: 'skipped' }][index]),
+  })),
+} });
+await partial.actual.handleSave();
+assert.deepEqual(partial.emitted.map(([name]) => name), ['materialization-changed']);
+assert.deepEqual(plain(partial.actual.materializationResults.value.map(row => row.status)), ['succeeded', 'failed', 'skipped']);
+assert.match(partial.actual.materializationResults.value[1].message, /目标连接超时.*核对目标物理表/);
+delete partial.context.materializationReply;
+await partial.actual.handleSave();
+const partialWrites = partial.calls.filter(call => call.route === '/ods/createTapleApply' && !call.body.dryRun);
+assert.deepEqual(partialWrites.map(call => call.body.targets.map(({ propList }) => propList.dbId)), [
+  ['db-0', 'db-1', 'db-2'], ['db-1', 'db-2'],
+]);
+assert.equal(partial.emitted.at(-1)[0], 'save');
+assert.deepEqual(partial.emitted.at(-1)[1].targetTables.map(row => row.targetTableId), ['kept-0', 'fake-db-1', 'fake-db-2']);
+
+for (const scenario of ['confirm', 'cancel', 'repair-fails']) {
+  const f = fixture();
+  await f.actual.init();
+  f.form.dbId = [['ODS', 'db-0'], ['ODS', 'db-1']];
+  f.actual.syncTargetDatasourceSelection(f.form.dbId);
+  f.context.existingDbIds = ['db-1'];
+  f.context.missingPartition = true;
+  f.context.cancelPartitionConfirmation = scenario === 'cancel';
+  f.context.repairFails = scenario === 'repair-fails';
+  await f.actual.handleSave();
+  const confirmation = f.calls.findIndex(call => call.title === '检查并补齐 Hive 分区');
+  assert.ok(confirmation >= 0, JSON.stringify(f.notices));
+  assert.match(f.calls[confirmation].message.text, /\/warehouse\/validation[\s\S]*2026/);
+  const repair = f.calls.findIndex(call => call.body?.repairHivePartitions);
+  const precheck = f.calls.findIndex(call => call.route === '/ods/createTapleApply' && call.body.dryRun);
+  const review = f.calls.findIndex(call => call.body?.batchReuseValidation && call.body?.partitionPreviewOnly === false);
+  const save = f.calls.findIndex(call => call.route === '/ods/createTapleApply' && !call.body.dryRun);
+  if (scenario === 'confirm') {
+    assert.ok(precheck >= 0 && confirmation > precheck && repair > confirmation && review > repair && save > review);
+    assert.deepEqual(f.calls[repair].body.expectedMissingPartitions, ['2026']);
+    assert.equal(f.calls[repair].body.expectedHiveLocation, '/warehouse/validation');
+    assert.equal(f.actual.hivePartitionResults.value[0].status, 'registered');
+  } else {
+    assert.equal(save, -1);
+    if (scenario === 'cancel') assert.equal(repair, -1);
+    else assert.equal(f.actual.hivePartitionResults.value[0].status, 'review');
+  }
+}
+
+for (const valid of [true, false]) {
+  const f = fixture(1);
+  await f.actual.init();
+  f.form.dbId = [['ODS', 'db-0']];
+  f.actual.syncTargetDatasourceSelection(f.form.dbId);
+  f.context.existingPhysical = true;
+  f.context.existingChoice = 'delete';
+  f.context.allowCleanup = true;
+  if (!valid) f.context.materializationReply = () => ({ data: { batch: true, complete: false, results: [] } });
+  await f.actual.handleSave();
+  const precheck = f.calls.findIndex(call => call.route === '/ods/createTapleApply' && call.body.dryRun);
+  const confirmation = f.calls.findIndex(call => call.title === '删除目标表并重新物化');
+  const cleanup = f.calls.findIndex(call => call.route === '/ods/dataAggReset' && !call.body.dryRun);
+  const save = f.calls.findIndex(call => call.route === '/ods/createTapleApply' && !call.body.dryRun);
+  assert.ok(precheck >= 0, JSON.stringify(f.notices));
+  assert.equal(f.calls[precheck].body.targets[0].pendingTargetCleanup, true);
+  if (valid) {
+    assert.ok(confirmation > precheck && cleanup > confirmation && save > cleanup);
+    assert.ok(!('pendingTargetCleanup' in f.calls[save].body.targets[0]));
+  } else {
+    assert.deepEqual([confirmation, cleanup, save], [-1, -1, -1]);
+  }
+}
 
 const timed=fixture();
 timed.actual.startMaterializationProgress();

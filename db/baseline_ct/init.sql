@@ -1753,6 +1753,7 @@ CREATE TABLE "public"."da_catalog_t" (
   "dictionary_table_flag" character varying(8 char),
   "field_governance_config" text,
   "resource_revision_no" integer DEFAULT 1 NOT NULL,
+  "market_view_count" bigint DEFAULT 0 NOT NULL,
   CONSTRAINT "da_catalog_t_pkey" PRIMARY KEY (tid)
 );
 
@@ -1825,6 +1826,8 @@ COMMENT ON COLUMN "public"."da_catalog_t"."dictionary_table_flag" IS '是否字�
 COMMENT ON COLUMN "public"."da_catalog_t"."field_governance_config" IS '字段治理配置';
 
 COMMENT ON COLUMN "public"."da_catalog_t"."resource_revision_no" IS '资源编目乐观锁版本';
+
+COMMENT ON COLUMN "public"."da_catalog_t"."market_view_count" IS '数据超市目录累计浏览次数';
 
 CREATE TABLE "public"."da_demand_case_t" (
   "tid" character varying(64 char) NOT NULL,
@@ -5809,6 +5812,171 @@ COMMENT ON COLUMN "public"."idaas_receiver_receipt_t"."result_json" IS '结果JS
 
 COMMENT ON COLUMN "public"."idaas_receiver_receipt_t"."created_time" IS '创建时间';
 
+CREATE TABLE "public"."lake_zone_object_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "zone_id" character varying(32 char) NOT NULL,
+  "object_type" character varying(16 char) NOT NULL,
+  "object_ref" character varying(128 char) NOT NULL,
+  "object_name" character varying(128 char),
+  "source_id" character varying(32 char),
+  "lifecycle_status" character varying(16 char) DEFAULT 'REGISTERED'::varchar NOT NULL,
+  "last_sync_at" timestamp(6) without time zone,
+  "registered_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "lake_zone_object_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."lake_zone_object_t" IS '数据资源（湖仓底座）-已纳管对象清单';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."zone_id" IS '湖仓分层标识';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."object_type" IS '对象类型：TABLE/VIEW/FILE/API';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."object_ref" IS '对象引用：表标识、视图名、文件路径或接口编码';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."object_name" IS '对象名称';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."source_id" IS '来源数据源或来源对象标识';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."lifecycle_status" IS '生命周期：REGISTERED已登记、ONLINE在线、OFFLINE下线、ARCHIVED归档';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."last_sync_at" IS '最近同步时间';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."registered_by" IS '登记人';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."lake_zone_object_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."lake_zone_rule_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "zone_id" character varying(32 char) NOT NULL,
+  "rule_code" character varying(32 char) NOT NULL,
+  "rule_name" character varying(100 char) NOT NULL,
+  "rule_type" character varying(8 char) NOT NULL,
+  "object_scope" character varying(32 char) DEFAULT 'ALL'::varchar NOT NULL,
+  "file_format" character varying(64 char),
+  "compression" character varying(32 char),
+  "partition_rule" character varying(256 char),
+  "retention_days" integer DEFAULT 0 NOT NULL,
+  "approval_required" smallint DEFAULT 0 NOT NULL,
+  "interaction_mode" character varying(32 char) DEFAULT 'API'::varchar NOT NULL,
+  "priority" integer DEFAULT 0 NOT NULL,
+  "status" character varying(16 char) DEFAULT 'ENABLED'::varchar NOT NULL,
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "lake_zone_rule_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."lake_zone_rule_t" IS '数据资源（湖仓底座）-入出湖标准与交互规则';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."zone_id" IS '湖仓分层标识';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."rule_code" IS '规则编号，拒绝时返回该编号';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."rule_name" IS '规则名称';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."rule_type" IS '规则方向：IN入湖、OUT出湖';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."object_scope" IS '适用对象：ALL/TABLE/VIEW/FILE/API';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."file_format" IS '允许的文件格式，逗号分隔';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."compression" IS '允许的压缩方式，逗号分隔';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."partition_rule" IS '分区规则说明';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."retention_days" IS '保留天数，0表示不限制';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."approval_required" IS '是否需要审批：0否，1是';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."interaction_mode" IS '交互方式：API/FILE/JDBC/STREAM';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."priority" IS '规则优先级，数值越大越先校验';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."description" IS '规则说明';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."lake_zone_rule_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."lake_zone_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "zone_code" character varying(32 char) NOT NULL,
+  "zone_name" character varying(100 char) NOT NULL,
+  "zone_type" character varying(32 char) NOT NULL,
+  "datasource_id" character varying(32 char),
+  "schema_name" character varying(128 char),
+  "status" character varying(16 char) DEFAULT 'ENABLED'::varchar NOT NULL,
+  "sort_no" integer DEFAULT 0 NOT NULL,
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "lake_zone_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."lake_zone_t" IS '数据资源（湖仓底座）-湖仓分层实例';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."zone_code" IS '分层编码：ODS原始库、BASE基础库、SUBJECT主题库、TOPIC专题库、LAKE_DW数据湖仓库区、LAKE_COLLECT数据湖汇聚区';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."zone_name" IS '分层名称';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."zone_type" IS '分层类型：ORIGIN/BASE/SUBJECT/TOPIC/LAKE';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."datasource_id" IS '承载数据源标识';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."schema_name" IS '物理模式名称';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."sort_no" IS '排序号';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."description" IS '分层说明';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."lake_zone_t"."is_del" IS '删除标志：0正常，1删除';
+
 CREATE TABLE "public"."log_archive_batch_t" (
   "tid" character varying(32 char) NOT NULL,
   "scope_kind" character varying(16 char) NOT NULL,
@@ -9485,6 +9653,651 @@ COMMENT ON COLUMN "public"."surveillance_topic_daily_stat_t"."last_event_time" I
 
 COMMENT ON COLUMN "public"."surveillance_topic_daily_stat_t"."updated_time" IS '记录更新时间，精确到微秒';
 
+CREATE TABLE "public"."svc_feedback_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "service_code" character varying(64 char) NOT NULL,
+  "app_id" character varying(32 char),
+  "feedback_type" character varying(32 char) DEFAULT 'ISSUE'::varchar NOT NULL,
+  "content" text NOT NULL,
+  "status" character varying(16 char) DEFAULT 'OPEN'::varchar NOT NULL,
+  "handler" character varying(32 char),
+  "handle_result" character varying(1000 char),
+  "closed_time" timestamp(6) without time zone,
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_feedback_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_feedback_t" IS '服务网关-服务反馈';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."service_code" IS '服务编码';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."app_id" IS '反馈应用标识';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."feedback_type" IS '反馈类型：ISSUE问题、SUGGEST建议、OTHER其他';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."content" IS '反馈内容';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."status" IS '状态：OPEN待处理、PROCESSING处理中、CLOSED已关闭';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."handler" IS '处理人';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."handle_result" IS '处理结果';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."closed_time" IS '闭环时间';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_feedback_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_gateway_app_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "app_code" character varying(64 char) NOT NULL,
+  "app_name" character varying(100 char) NOT NULL,
+  "auth_type" character varying(16 char) DEFAULT 'API_KEY'::varchar NOT NULL,
+  "client_id" character varying(128 char),
+  "credential_ref" character varying(256 char),
+  "contact" character varying(100 char),
+  "status" character varying(16 char) DEFAULT 'ENABLED'::varchar NOT NULL,
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_gateway_app_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_gateway_app_t" IS '服务网关-接入应用';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."app_code" IS '应用编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."app_name" IS '应用名称';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."auth_type" IS '鉴权类型：NONE/API_KEY/HMAC/OAUTH2';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."client_id" IS '客户端标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."credential_ref" IS '凭证引用，禁止保存明文密钥';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."contact" IS '联系人';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."description" IS '应用说明';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_app_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_gateway_instance_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "service_code" character varying(64 char) NOT NULL,
+  "version" character varying(32 char) DEFAULT 'v1'::varchar NOT NULL,
+  "instance_url" character varying(512 char) NOT NULL,
+  "weight" integer DEFAULT 100 NOT NULL,
+  "health_status" character varying(16 char) DEFAULT 'UNKNOWN'::varchar NOT NULL,
+  "last_heartbeat" timestamp(6) without time zone,
+  "status" character varying(16 char) DEFAULT 'ENABLED'::varchar NOT NULL,
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_gateway_instance_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_gateway_instance_t" IS '服务网关-服务实例与健康状态';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."service_code" IS '服务编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."version" IS '服务版本';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."instance_url" IS '实例地址';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."weight" IS '负载权重';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."health_status" IS '健康状态：UNKNOWN/UP/DOWN';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."last_heartbeat" IS '最近心跳时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."description" IS '实例说明';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_instance_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_gateway_log_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "trace_id" character varying(64 char) NOT NULL,
+  "service_code" character varying(64 char) NOT NULL,
+  "app_id" character varying(32 char),
+  "log_type" character varying(32 char) NOT NULL,
+  "uri" character varying(512 char),
+  "method" character varying(16 char),
+  "status_code" integer,
+  "cost_ms" integer,
+  "error_code" character varying(64 char),
+  "client_ip" character varying(64 char),
+  "region_code" character varying(32 char) NOT NULL,
+  "request_hash" character varying(64 char),
+  "response_size" integer,
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_gateway_log_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_gateway_log_t" IS '服务网关-请求与治理日志';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."trace_id" IS '链路追踪标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."service_code" IS '服务编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."app_id" IS '调用应用标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."log_type" IS '日志类型：REQUEST/EVENT/ERROR/FLOW_LIMIT/HEALTH/IP_LIMIT/CIRCUIT/PROTOCOL/AUTH';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."uri" IS '请求路径';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."method" IS 'HTTP 方法';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."status_code" IS '响应状态码';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."cost_ms" IS '耗时毫秒';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."error_code" IS '错误编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."client_ip" IS '客户端 IP';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."region_code" IS '网络区域编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."request_hash" IS '请求摘要';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."response_size" IS '响应字节数';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_log_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_gateway_policy_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "route_id" character varying(32 char) NOT NULL,
+  "policy_code" character varying(64 char) NOT NULL,
+  "policy_name" character varying(100 char) NOT NULL,
+  "priority" integer DEFAULT 0 NOT NULL,
+  "auth_mode" character varying(16 char) DEFAULT 'TOKEN'::varchar NOT NULL,
+  "ip_allow" character varying(1000 char),
+  "ip_deny" character varying(1000 char),
+  "qps" integer DEFAULT 0 NOT NULL,
+  "burst" integer DEFAULT 0 NOT NULL,
+  "circuit_threshold" integer DEFAULT 0 NOT NULL,
+  "circuit_window_ms" integer DEFAULT 60000 NOT NULL,
+  "retry_backoff_ms" integer DEFAULT 200 NOT NULL,
+  "param_rules_json" text,
+  "status" character varying(16 char) DEFAULT 'ENABLED'::varchar NOT NULL,
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_gateway_policy_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_gateway_policy_t" IS '服务网关-路由治理策略';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."route_id" IS '所属路由标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."policy_code" IS '策略编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."policy_name" IS '策略名称';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."priority" IS '生效优先级，数值越大越先应用';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."auth_mode" IS '鉴权方式：NONE/TOKEN/HMAC/OAUTH2';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."ip_allow" IS 'IP 白名单，逗号分隔，为空表示不限制';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."ip_deny" IS 'IP 黑名单，逗号分隔';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."qps" IS '每秒请求上限，0 表示不限制';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."burst" IS '令牌桶突发容量';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."circuit_threshold" IS '熔断失败阈值，0 表示关闭熔断';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."circuit_window_ms" IS '熔断统计窗口毫秒数';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."retry_backoff_ms" IS '重试退避毫秒数';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."param_rules_json" IS '参数校验规则 JSON';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."description" IS '策略说明';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_policy_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_gateway_region_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "region_code" character varying(32 char) NOT NULL,
+  "region_name" character varying(100 char) NOT NULL,
+  "network_zone" character varying(32 char),
+  "endpoint" character varying(512 char),
+  "status" character varying(16 char) DEFAULT 'ENABLED'::varchar NOT NULL,
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_gateway_region_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_gateway_region_t" IS '服务网关-网络区域';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."region_code" IS '区域编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."region_name" IS '区域名称';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."network_zone" IS '网络分区：INTERNET互联网区、GOV政务外网区、CROSS跨网区';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."endpoint" IS '区域入口地址';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."status" IS '状态：ENABLED启用、DISABLED停用';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."description" IS '区域说明';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_region_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_gateway_route_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "service_code" character varying(64 char) NOT NULL,
+  "version" character varying(32 char) DEFAULT 'v1'::varchar NOT NULL,
+  "path_prefix" character varying(256 char) NOT NULL,
+  "target_type" character varying(16 char) DEFAULT 'FLOW'::varchar NOT NULL,
+  "target_ref" character varying(512 char) NOT NULL,
+  "region_code" character varying(32 char) NOT NULL,
+  "timeout_ms" integer DEFAULT 3000 NOT NULL,
+  "retry_times" integer DEFAULT 0 NOT NULL,
+  "lb_strategy" character varying(16 char) DEFAULT 'WEIGHT'::varchar NOT NULL,
+  "status" character varying(16 char) DEFAULT 'DRAFT'::varchar NOT NULL,
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_gateway_route_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_gateway_route_t" IS '服务网关-服务路由与目标配置';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."service_code" IS '服务编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."version" IS '服务版本';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."path_prefix" IS '网关路径前缀';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."target_type" IS '目标类型：FLOW/HTTP/DB/KAFKA/ES';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."target_ref" IS '目标引用：FlowServe 服务标识、URL、表名或主题';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."region_code" IS '网络区域编码';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."timeout_ms" IS '请求超时毫秒数';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."retry_times" IS '失败重试次数，仅幂等方法生效';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."lb_strategy" IS '负载均衡策略：WEIGHT/ROUND_ROBIN';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."status" IS '状态：DRAFT草稿、PUBLISHED已发布、DISABLED停用';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."description" IS '路由说明';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_gateway_route_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_gray_release_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "service_code" character varying(64 char) NOT NULL,
+  "from_version" character varying(32 char) NOT NULL,
+  "to_version" character varying(32 char) NOT NULL,
+  "strategy" character varying(16 char) DEFAULT 'WEIGHT'::varchar NOT NULL,
+  "match_value" character varying(256 char),
+  "weight" integer DEFAULT 0 NOT NULL,
+  "status" character varying(16 char) DEFAULT 'DRAFT'::varchar NOT NULL,
+  "start_time" timestamp(6) without time zone,
+  "end_time" timestamp(6) without time zone,
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_gray_release_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_gray_release_t" IS '服务网关-灰度发布规则';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."service_code" IS '服务编码';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."from_version" IS '原版本';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."to_version" IS '灰度版本';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."strategy" IS '灰度策略：WEIGHT/HEADER/IP';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."match_value" IS '匹配值：Header 值或 IP 段';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."weight" IS '灰度流量权重百分比';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."status" IS '状态：DRAFT草稿、RUNNING运行中、STOPPED已停止';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."start_time" IS '开始时间';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."end_time" IS '结束时间';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."description" IS '灰度说明';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_gray_release_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_market_package_item_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "package_id" character varying(32 char) NOT NULL,
+  "service_code" character varying(64 char) NOT NULL,
+  "version" character varying(32 char) DEFAULT 'v1'::varchar NOT NULL,
+  "sort_no" integer DEFAULT 0 NOT NULL,
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_market_package_item_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_market_package_item_t" IS '服务网关-服务合集明细';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."package_id" IS '合集标识';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."service_code" IS '服务编码';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."version" IS '服务版本';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."sort_no" IS '排序号';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_market_package_item_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_market_package_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "package_code" character varying(64 char) NOT NULL,
+  "package_name" character varying(100 char) NOT NULL,
+  "subscription_mode" character varying(16 char) DEFAULT 'PACKAGE'::varchar NOT NULL,
+  "approval_required" smallint DEFAULT 0 NOT NULL,
+  "status" character varying(16 char) DEFAULT 'DRAFT'::varchar NOT NULL,
+  "description" character varying(1000 char),
+  "sort_no" integer DEFAULT 0 NOT NULL,
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_market_package_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_market_package_t" IS '服务网关-服务合集';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."package_code" IS '合集编码';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."package_name" IS '合集名称';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."subscription_mode" IS '订阅模式：SINGLE单服务、PACKAGE整套';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."approval_required" IS '是否需要审批：0否，1是';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."status" IS '状态：DRAFT草稿、ON_SHELF上架、OFF_SHELF下架';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."description" IS '合集说明';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."sort_no" IS '排序号';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_market_package_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_metric_hour_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "stat_hour" timestamp(6) without time zone NOT NULL,
+  "service_code" character varying(64 char) NOT NULL,
+  "app_id" character varying(32 char),
+  "call_count" bigint DEFAULT 0 NOT NULL,
+  "success_count" bigint DEFAULT 0 NOT NULL,
+  "fail_count" bigint DEFAULT 0 NOT NULL,
+  "p95_ms" integer DEFAULT 0 NOT NULL,
+  "active_users" integer DEFAULT 0 NOT NULL,
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_metric_hour_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_metric_hour_t" IS '服务网关-小时级调用指标';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."stat_hour" IS '统计小时';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."service_code" IS '服务编码';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."app_id" IS '调用应用标识';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."call_count" IS '调用总次数';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."success_count" IS '成功次数';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."fail_count" IS '失败次数';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."p95_ms" IS 'P95 耗时毫秒';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."active_users" IS '活跃应用数';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_metric_hour_t"."is_del" IS '删除标志：0正常，1删除';
+
+CREATE TABLE "public"."svc_subscription_t" (
+  "tid" character varying(32 char) NOT NULL,
+  "tenant_id" character varying(32 char) NOT NULL,
+  "app_id" character varying(32 char),
+  "service_code" character varying(64 char) NOT NULL,
+  "version" character varying(32 char) DEFAULT 'v1'::varchar NOT NULL,
+  "status" character varying(16 char) DEFAULT 'PENDING'::varchar NOT NULL,
+  "valid_from" timestamp(6) without time zone,
+  "valid_until" timestamp(6) without time zone,
+  "quota" bigint DEFAULT 0 NOT NULL,
+  "apply_id" character varying(32 char),
+  "description" character varying(500 char),
+  "created_by" character varying(32 char),
+  "updated_by" character varying(32 char),
+  "created_time" timestamp(6) without time zone,
+  "updated_time" timestamp(6) without time zone,
+  "is_del" smallint DEFAULT 0 NOT NULL,
+  CONSTRAINT "svc_subscription_t_pkey" PRIMARY KEY (tid)
+);
+
+COMMENT ON TABLE "public"."svc_subscription_t" IS '服务网关-服务订阅';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."tid" IS '主键标识';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."tenant_id" IS '租户标识';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."app_id" IS '订阅应用标识';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."service_code" IS '服务编码';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."version" IS '服务版本';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."status" IS '状态：PENDING待审批、ACTIVE生效、EXPIRED过期、REVOKED撤销';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."valid_from" IS '生效时间';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."valid_until" IS '失效时间';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."quota" IS '调用配额，0 表示不限制';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."apply_id" IS '审批单标识';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."description" IS '订阅说明';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."created_by" IS '创建人';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."updated_by" IS '更新人';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."created_time" IS '创建时间';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."updated_time" IS '更新时间';
+
+COMMENT ON COLUMN "public"."svc_subscription_t"."is_del" IS '删除标志：0正常，1删除';
+
 CREATE TABLE "public"."sym_application_t" (
   "tid" character varying(32 char) NOT NULL,
   "client_id" character varying(50 char),
@@ -10659,6 +11472,22 @@ CREATE INDEX ix_07ec5466b9e45c4ca2fecd5d ON public.idaas_receiver_receipt_t USIN
 
 CREATE UNIQUE INDEX ix_ff87538e0faf6462a0db4ede ON public.idaas_receiver_receipt_t USING btree (app_id, instance_id, nonce);
 
+CREATE INDEX ix_2344bf0696cc9ec83862a6bc ON public.lake_zone_object_t USING btree (tenant_id, zone_id, lifecycle_status, is_del);
+
+CREATE UNIQUE INDEX ix_4fb4d31004d5b764f0668ed2 ON public.lake_zone_object_t USING btree (tenant_id, zone_id, object_type, object_ref, is_del);
+
+CREATE INDEX ix_e58ec3ee60e411018bff5b38 ON public.lake_zone_object_t USING btree (object_ref);
+
+CREATE UNIQUE INDEX ix_116e89b0f7dde98f9942947a ON public.lake_zone_rule_t USING btree (tenant_id, zone_id, rule_type, rule_code, is_del);
+
+CREATE INDEX ix_88011184300f73794fda4c04 ON public.lake_zone_rule_t USING btree (tenant_id, zone_id, rule_type, status, is_del);
+
+CREATE INDEX ix_8fa51d9eff53406281a63a1b ON public.lake_zone_t USING btree (tenant_id, status, is_del);
+
+CREATE UNIQUE INDEX ix_9c0406e9ad43e134d31d4aea ON public.lake_zone_t USING btree (tenant_id, zone_code, is_del);
+
+CREATE INDEX ix_be713e17a86e9e13bfb6cba8 ON public.lake_zone_t USING btree (datasource_id);
+
 CREATE INDEX ix_0d433b40566e2f70dc13908a ON public.log_archive_batch_t USING btree (status, updated_time);
 
 CREATE UNIQUE INDEX ix_e2bef939743c54355aaf5b8c ON public.log_archive_batch_t USING btree (scope_kind, scope_id, identity_domain, event_store, range_start, range_end, generation);
@@ -10904,6 +11733,58 @@ CREATE INDEX ix_291ddc43c3be7311e7ee7de4 ON public.surveillance_task_history_t U
 CREATE INDEX ix_8fda09e6b7d71896149a57ce ON public.surveillance_topic_daily_stat_t USING btree (tenant_id, engine_code, channel_code, stat_date);
 
 CREATE UNIQUE INDEX ix_f8030c84685ec22abbd2d075 ON public.surveillance_topic_daily_stat_t USING btree (tenant_id, engine_code, resource_code, stat_date);
+
+CREATE INDEX ix_4131e584cf61b8908c18087f ON public.svc_feedback_t USING btree (tenant_id, status, created_time);
+
+CREATE INDEX ix_9d5f531a0e91c9a43f91b532 ON public.svc_feedback_t USING btree (tenant_id, service_code, created_time);
+
+CREATE INDEX ix_a2837424897e1e42d85fa20c ON public.svc_gateway_app_t USING btree (tenant_id, status, is_del);
+
+CREATE UNIQUE INDEX ix_bca35c96decc625dfd60dcbb ON public.svc_gateway_app_t USING btree (tenant_id, app_code, is_del);
+
+CREATE INDEX ix_ab10f8153a70a4c0dcf95026 ON public.svc_gateway_instance_t USING btree (tenant_id, service_code, health_status, is_del);
+
+CREATE UNIQUE INDEX ix_fb45961a8730b4959611cd2d ON public.svc_gateway_instance_t USING btree (tenant_id, service_code, version, instance_url);
+
+CREATE INDEX ix_8fa7596677885de215dea37f ON public.svc_gateway_log_t USING btree (tenant_id, service_code, created_time);
+
+CREATE INDEX ix_994649ebf593fc4f40b1bf21 ON public.svc_gateway_log_t USING btree (tenant_id, trace_id);
+
+CREATE INDEX ix_f44fb046f6b9401a270eb881 ON public.svc_gateway_log_t USING btree (tenant_id, log_type, created_time);
+
+CREATE UNIQUE INDEX ix_b50a806730df4432ef4af065 ON public.svc_gateway_policy_t USING btree (tenant_id, route_id, policy_code, is_del);
+
+CREATE INDEX ix_b53548904c70f342190d1677 ON public.svc_gateway_policy_t USING btree (tenant_id, route_id, status, is_del);
+
+CREATE UNIQUE INDEX ix_237c894482c3766c3d84259a ON public.svc_gateway_region_t USING btree (tenant_id, region_code, is_del);
+
+CREATE INDEX ix_b269d94eb8e64ab90de79db6 ON public.svc_gateway_region_t USING btree (tenant_id, status, is_del);
+
+CREATE INDEX ix_021ae6f62ef061c3a51e6c60 ON public.svc_gateway_route_t USING btree (tenant_id, path_prefix);
+
+CREATE INDEX ix_2d9066a4541645e152c017f7 ON public.svc_gateway_route_t USING btree (tenant_id, status, is_del);
+
+CREATE UNIQUE INDEX ix_b3778a21a7d0019b29a8884b ON public.svc_gateway_route_t USING btree (tenant_id, service_code, version, is_del);
+
+CREATE UNIQUE INDEX ix_bd9049ca6883f8eb550202ab ON public.svc_gray_release_t USING btree (tenant_id, service_code, from_version, to_version, is_del);
+
+CREATE INDEX ix_c08e66cf3dd72bb60263621a ON public.svc_gray_release_t USING btree (tenant_id, service_code, status, is_del);
+
+CREATE INDEX ix_0e31f4046dbfe93c1e06089a ON public.svc_market_package_item_t USING btree (tenant_id, package_id, sort_no);
+
+CREATE UNIQUE INDEX ix_e85c64b62a8bd52cf94b5fe8 ON public.svc_market_package_item_t USING btree (tenant_id, package_id, service_code, version, is_del);
+
+CREATE UNIQUE INDEX ix_6fef57453911f7d77cbd684c ON public.svc_market_package_t USING btree (tenant_id, package_code, is_del);
+
+CREATE INDEX ix_7bc0a11e887fdf4712e80585 ON public.svc_market_package_t USING btree (tenant_id, status, sort_no);
+
+CREATE UNIQUE INDEX ix_030591a28e6b0bcc82e4f5cd ON public.svc_metric_hour_t USING btree (tenant_id, stat_hour, service_code, app_id, is_del);
+
+CREATE INDEX ix_9a57f7916256c9c436442a2c ON public.svc_metric_hour_t USING btree (tenant_id, service_code, stat_hour);
+
+CREATE UNIQUE INDEX ix_ce1ac3ca513052bc92b02763 ON public.svc_subscription_t USING btree (tenant_id, app_id, service_code, version, is_del);
+
+CREATE INDEX ix_e31ebe0d79ef6912e5d1e5d1 ON public.svc_subscription_t USING btree (tenant_id, status, valid_until);
 
 CREATE INDEX ix_bc197311ba961abc3a9463c7 ON public.sym_application_t USING btree (tenant_id, is_del, updated_time);
 

@@ -9,8 +9,10 @@ import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.metautil.service.MetadataExplorerService;
 import com.linewell.dataelement.metautil.service.TargetTableDeletionService;
 import com.linewell.dataelement.platform.magic.module.HiveModule;
+import com.linewell.dataelement.platform.magic.module.JsonModule;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +40,7 @@ import org.ssssssss.magicapi.core.context.RequestEntity;
 /** Executes the released reset script with real Magic/H2 persistence and a mocked Hive connection. */
 class HuaweiHiveTargetDeletionMagicTest {
     private static final String SOURCE_ID = "ods_data_agg_reset_01";
+    private static final String MATERIALIZATION_ID = "e3320ec899a24426adf5f77e2dab36f9";
     private SQLModule db;
     private JdbcTemplate jdbc;
     private HiveModule hive;
@@ -290,43 +293,77 @@ class HuaweiHiveTargetDeletionMagicTest {
 
     @Test
     void materializationDuplicateReferenceReadsStayAtFiveForTwentyAndHundredCandidates() throws Exception {
-        String materialization = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
-        // The isolated duplicate-check fixture supplies its own tenantId below.
-        String helpers = materialization.substring(materialization.indexOf("var text ="), materialization.indexOf("var upsertCatalogProp"))
-                .replace("var tenantId = tenantRuntime.id()", "");
-        String duplicateCheck = materialization.substring(materialization.indexOf("var duplicateRows ="), materialization.indexOf("// 表字段名称去重"));
         for (int size : List.of(20, 100)) {
-            setUp();
+            var registration = new ExistingTargetMaterializationMagicTest.Fixture(1);
+            var execution = new MaterializationProbe(false);
+            var placeholders = new ArrayList<String>();
             for (int i = 0; i < size; i++) {
-                jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values(?,?,?,?,0)",
-                        "placeholder-" + i, "police", "target-db", " ods_duplicate ");
+                String id = "placeholder-" + i;
+                placeholders.add(id);
+                registration.jdbc.update("""
+                        insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del)
+                        values(?,'police','retained-db',' ods_duplicate ',0)
+                        """, id);
             }
-            jdbc.update("insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del) values('foreign','other','target-db','ods_duplicate',0)");
-            Map<String, Object> inputs = Map.of("db", db, "tenantId", "police", "sourceTableId", "source-1",
-                    "propList", Map.of("dbId", "target-db", "tableName", "ods_duplicate"),
-                    "targetDatasource", Map.of("dbName", "target"));
-            Object result = MagicScript.create(helpers + duplicateCheck + "return stalePlaceholderIds", null)
-                    .execute(new MagicScriptContext(inputs));
-            assertEquals(size, assertInstanceOf(List.class, result).size());
-            assertEquals(5, queryCounter.queries);
-            assertEquals(0, queryCounter.writes, "Do not remove placeholder rows before physical creation succeeds");
+            registration.jdbc.update("""
+                    insert into db_table_t(tid,tenant_id,datasource_id,table_name,is_del)
+                    values('placeholder-foreign','other','retained-db','ods_duplicate',0)
+                    """);
+
+            assertInstanceOf(Map.class, runHiveMaterialization(registration, execution, "ods_duplicate"));
+            assertEquals(List.of(0L), registration.catalogCounters);
+            assertEquals(List.of(true, false), execution.validationCalls);
+            assertEquals(1, execution.candidateScans);
+            assertEquals(4, execution.referenceReads.size());
+            for (List<String> ids : execution.referenceReads) {
+                assertEquals(size, ids.size());
+                assertTrue(ids.containsAll(placeholders));
+            }
+            assertEquals(size, registration.jdbc.queryForObject("""
+                    select count(*) from db_table_t where tenant_id='police' and tid like 'placeholder-%' and is_del=1
+                    """, Integer.class));
+            assertEquals(0, registration.jdbc.queryForObject("""
+                    select is_del from db_table_t where tenant_id='other' and tid='placeholder-foreign'
+                    """, Integer.class));
         }
     }
 
     @Test
     void materializingExistingHiveTableStopsBeforeAnyPlaceholderMetadataWrite() throws Exception {
-        String materialization = CanonicalMagicSources.byId("e3320ec899a24426adf5f77e2dab36f9");
-        String helpers = materialization.substring(materialization.indexOf("var text ="), materialization.indexOf("var upsertCatalogProp"))
-                .replace("var tenantId = tenantRuntime.id()", "");
-        String boundary = materialization.substring(materialization.indexOf("var originalBody = body"),
-                materialization.indexOf("// Hive 重名或物理建表失败之前"));
-        String prefix = "var createTable = () => {return {created:false}}; var getCreateTableDDL = () => 'CREATE TABLE ods_person (id string)';";
-        Map<String, Object> inputs = Map.of("body", Map.of(), "db", db, "reuseTargetTable", true,
-                "targetDatasource", Map.of("dbType", "hive"), "submittedDdl", "CREATE TABLE ods_person (id string)",
-                "propList", Map.of("dbId", "target-db", "tableName", "ods_person"), "tableItems", List.of());
-        ExitValue result = assertInstanceOf(ExitValue.class, MagicScript.create(helpers + prefix + boundary, null)
-                .execute(new MagicScriptContext(inputs)));
-        assertEquals(0, queryCounter.writes);
+        var registration = new ExistingTargetMaterializationMagicTest.Fixture(1);
+        registration.jdbc.update("""
+                insert into db_table_t(tid,tenant_id,datasource_id,table_name,source_table_id,is_del)
+                values('registered-hive','police','retained-db','ods_person','source-1',0),
+                      ('placeholder-hive','police','retained-db',' ods_person ',null,0)
+                """);
+        var execution = new MaterializationProbe(true);
+
+        var conflict = assertInstanceOf(ExitValue.class, runHiveMaterialization(registration, execution, "ods_person"));
+        assertEquals(409, conflict.getValues()[0]);
+        assertTrue(String.valueOf(conflict.getValues()[1]).contains("Hive 目标物理表已存在"));
+        assertEquals(List.of(true, false), execution.validationCalls);
+        assertEquals(0, execution.writes);
+        assertEquals(2, registration.jdbc.queryForObject("""
+                select count(*) from db_table_t where tenant_id='police' and datasource_id='retained-db' and is_del=0
+                """, Integer.class));
+    }
+
+    private Object runHiveMaterialization(ExistingTargetMaterializationMagicTest.Fixture registration,
+                                          MaterializationProbe execution, String tableName) throws Exception {
+        // Run the canonical endpoint with actual fixture SQL and replace only the remote Hive call.
+        registration.base.db.setSqlInterceptors(List.of(execution));
+        String script = CanonicalMagicSources.byId(MATERIALIZATION_ID)
+                .replaceAll("(?m)^import (?!cn\\.hutool\\.)[^\\r\\n]*\\r?\\n", "");
+        String adapters = "var createTable = () => execution.physical(body)\nvar date_format = value => value + ''\n";
+        var body = new LinkedHashMap<String, Object>(Map.of("tid", "source-1",
+                "propList", Map.of("dbId", "retained-db", "tableName", tableName),
+                "tableItems", List.of(Map.of("columnName", "field_0", "dataType", "string", "columnType", "string")),
+                "ddl", "CREATE TABLE " + tableName + " (field_0 STRING)"));
+        var context = Map.of("body", body, "db", registration.base.db, "execution", execution,
+                "tenantRuntime", registration.base.scope, "dataScope", registration.base.scope,
+                "redissonClient", registration.locks, "jsons", new JsonModule(), "metadataAsset", registration,
+                "esCommonService", registration, "log", LoggerFactory.getLogger(HuaweiHiveTargetDeletionMagicTest.class));
+        return MagicScript.create(adapters + script, null).execute(new MagicScriptContext(context));
     }
 
     @Test
@@ -773,6 +810,42 @@ class HuaweiHiveTargetDeletionMagicTest {
             String statement = sql.getSql().stripLeading().toLowerCase();
             if (statement.startsWith("select")) { queries++; }
             else { writes++; }
+        }
+    }
+
+    public static final class MaterializationProbe implements SQLInterceptor {
+        private final boolean existingTable;
+        private final List<Boolean> validationCalls = new ArrayList<>();
+        private final List<List<String>> referenceReads = new ArrayList<>();
+        private int candidateScans;
+        private int writes;
+
+        MaterializationProbe(boolean existingTable) {
+            this.existingTable = existingTable;
+        }
+
+        @Override
+        public void preHandle(BoundSql sql, RequestEntity request) {
+            String statement = sql.getSql().stripLeading().toLowerCase();
+            if (!statement.startsWith("select")) {
+                writes++;
+                return;
+            }
+            if (writes > 0) return;
+            var parameters = Arrays.asList(sql.getParameters());
+            if (statement.contains("from db_table_t") && parameters.contains("retained-db")) candidateScans++;
+            var ids = parameters.stream().map(String::valueOf).filter(value -> value.startsWith("placeholder-")).toList();
+            if (!ids.isEmpty()) referenceReads.add(ids);
+        }
+
+        public Map<String, Object> physical(Map<String, Object> request) {
+            assertEquals(0, writes, "Do not remove placeholder rows before physical creation succeeds");
+            assertEquals("retained-db", request.get("dbId"));
+            assertEquals(true, request.get("skipIfExists"));
+            assertEquals(false, request.get("reuseExistingOnly"));
+            boolean validate = Boolean.TRUE.equals(request.get("validateOnly"));
+            validationCalls.add(validate);
+            return validate ? Map.of("valid", true) : Map.of("created", !existingTable);
         }
     }
 }

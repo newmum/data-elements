@@ -48,6 +48,7 @@ class MaterializationDictionaryReferenceMagicTest {
             "sourceType","standard","forceStandardEnabled",true,"forceStandardDictionaryId","standard-gender",
             "enumItems",List.of(Map.of("value","01","label","男"))))));
         var result=assertInstanceOf(Map.class,f.run(false));
+        assertEquals(List.of(0L),f.catalogCounters,"New catalog count must use the database default through monotonic merge");
         String targetId=result.get("targetTableId").toString();
         assertEquals(0,f.jdbc.queryForObject("select count(*) from da_prop_t where tenant_id is null or tenant_id<>'police'",Integer.class));
         var governance=JSONUtil.parseObj(f.jdbc.queryForObject("select field_governance_config from db_table_t where tid=?",String.class,targetId));

@@ -18,7 +18,7 @@
 
 <script setup lang="ts">
 import { type RouteLocationNormalized } from "vue-router";
-import { useSettingStore, useTagsViewStore } from "@/store";
+import { useTagsViewStore } from "@/store";
 import Error404 from "@/views/error/404.vue";
 import { useListRouteCache } from "@/composables/useListRouteCache";
 import { useLayout } from "@/layouts/composables/useLayout";
@@ -29,7 +29,7 @@ const props = defineProps({
 
 const { isShowTagsView } = useLayout();
 // tag视图缓存，会结合keepAlive
-const { cachedViews: cachedTagViews } = useTagsViewStore();
+const { cachedViews: cachedTagViews } = storeToRefs(useTagsViewStore());
 // 列表->详情, 缓存列表
 const { cachedViews: cachedListViews } = useListRouteCache();
 
@@ -68,12 +68,11 @@ const currentComponent = (component: Component, route: RouteLocationNormalized) 
 };
 
 const appMainHeight = computed(() => {
-  if (props.height) return props.height as string;
-  if (useSettingStore().showTagsView) {
-    return `calc(100vh - var(--navbar-height) - var(--tags-view-height)})`;
-  } else {
-    return `calc(100vh - var(--navbar-height))`;
+  if (props.height) return props.height;
+  if (isShowTagsView.value) {
+    return "calc(100vh - var(--navbar-height) - var(--tags-view-height))";
   }
+  return "calc(100vh - var(--navbar-height))";
 });
 </script>
 

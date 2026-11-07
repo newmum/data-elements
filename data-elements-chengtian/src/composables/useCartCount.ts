@@ -1,22 +1,45 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
+import { AuthStorage } from "@/utils/auth";
+import { requestPolicy } from "@/utils/request-policy";
 
-// 模块级单例，整个应用共享同一个 ref
-const cartCount = ref(0);
+const sessionRevision = computed(() => AuthStorage.getSessionRevision());
+const count = ref({ total: 0, revision: -1 });
+const cartCount = computed(() =>
+  count.value.revision === sessionRevision.value ? count.value.total : 0
+);
+let readSequence = 0;
+let committedRead = 0;
+
+function beginRead() {
+  const sequence = ++readSequence;
+  const revision = sessionRevision.value;
+  const token = AuthStorage.getAccessToken();
+  return (total: unknown) => {
+    if (
+      sequence > committedRead &&
+      revision === sessionRevision.value &&
+      token === AuthStorage.getAccessToken() &&
+      typeof total === "number" &&
+      Number.isSafeInteger(total) &&
+      total >= 0
+    ) {
+      committedRead = sequence;
+      count.value = { total, revision };
+    }
+  };
+}
+
+async function refresh() {
+  if (!AuthStorage.getAccessToken()) return;
+  const commit = beginRead();
+  const result = await requestPolicy.quiet<{ total: number }>({
+    url: "/dws/market/shoppingCardList",
+    method: "post",
+    data: { mode: "count" },
+  });
+  commit(result?.total);
+}
 
 export function useCartCount() {
-  const refresh = async () => {
-    const res = await $common.post("/dws/market/shoppingCardList");
-    const payload = (res as any)?.data ?? res;
-    cartCount.value = Array.isArray(payload)
-      ? payload.length
-      : Array.isArray(payload?.list)
-        ? payload.list.length
-        : 0;
-  };
-
-  const decrement = (n = 1) => {
-    cartCount.value = Math.max(0, cartCount.value - n);
-  };
-
-  return { cartCount, refresh, decrement };
+  return { cartCount, refresh, beginRead, sessionRevision };
 }

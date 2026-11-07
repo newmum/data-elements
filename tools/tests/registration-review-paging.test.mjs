@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { createRequire } from "node:module";
 import test from "node:test";
 import vm from "node:vm";
 
@@ -84,4 +85,46 @@ test("network, foreign and duplicate responses stay actionable; obsolete respons
   context.$common.post = async () => { throw new Error("连接中断，请重试"); };
   await context.load();
   assert.equal(context.reviewOrderError.value, "连接中断，请重试");
+});
+
+test("review issue badge retains both actionable issue groups and handles warning-only and clean rows", async () => {
+  const require = createRequire(new URL("../../data-elements-chengtian/package.json", import.meta.url));
+  const Vue = require("vue");
+  const { renderToString } = require("vue/server-renderer");
+  const begin = source.indexOf('<el-table-column label="登记检查"');
+  const end = source.indexOf("</el-table-column>", begin) + "</el-table-column>".length;
+  assert.ok(begin >= 0 && end > begin);
+  const template = source.slice(begin, end);
+  const error = { id: "error", level: "error", title: "必改内容", message: "需要填写", step: 3, target: "table" };
+  const warning = { id: "warning", level: "warning", title: "建议内容", message: "建议补充", step: 3, target: "table" };
+
+  async function render(issues) {
+    const app = Vue.createSSRApp({
+      data: () => ({
+        tableIssueCount: (_, level) => issues.filter(issue => !level || issue.level === level).length,
+        tableIssuesByLevel: (_, level) => issues.filter(issue => issue.level === level),
+        goToStep: () => {},
+        focusReviewIssueDetails: () => {},
+        closeReviewIssueDetails: () => {},
+      }),
+      render: Vue.compile(template),
+    });
+    app.component("ElTableColumn", { setup: (_, { slots }) => () => Vue.h("div", slots.default?.({ row: { tableName: "validation" } })) });
+    app.component("ElPopover", { setup: (_, { slots }) => () => Vue.h("div", [Vue.h("div", { class: "reference" }, slots.reference?.()), Vue.h("div", { class: "details" }, slots.default?.())]) });
+    app.component("ElTag", { setup: (_, { slots }) => () => Vue.h("span", slots.default?.()) });
+    return renderToString(app);
+  }
+
+  const both = await render([error, warning]);
+  const reference = both.match(/<div class="reference">([\s\S]*?)<\/div>/)?.[1];
+  assert.ok(reference);
+  assert.match(reference, />\s*1 个必改\s*</);
+  assert.doesNotMatch(reference, />\s*1 条建议\s*</);
+  assert.match(reference, /1 个必改，1 条建议/);
+  assert.match(both, /必改项[\s\S]*必改内容[\s\S]*需要填写/);
+  assert.match(both, /建议项[\s\S]*建议内容[\s\S]*建议补充/);
+  const warningOnly = await render([warning]);
+  assert.match(warningOnly, />\s*1 条建议\s*</);
+  assert.doesNotMatch(warningOnly, /必改项/);
+  assert.match(await render([]), /检查通过/);
 });

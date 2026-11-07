@@ -69,16 +69,18 @@
   ]
 }
 ================================
-// 共享函数：07.维护登记表目录投影
-// 函数路径：/common/registeredTableCatalogProjection
-// 业务说明：action=ensure 时维护指定登记表的目录投影；action=syncCompleted 时补偿当前租户已完成登记的表。
-// 函数输入：action：要执行的业务操作；tableId：数据表 ID；syncCompleted 时为空；synchronizeIndex：ensure 时是否同步 ES 索引；maxRows：syncCompleted 最大处理数，最大 10000。
 import cn.hutool.core.util.IdUtil
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import jsons
 import java.util.List
 import java.util.Map
 import log
+import tenantRuntime
+
+// 共享函数：07.维护登记表目录投影
+// 函数路径：/common/registeredTableCatalogProjection
+// 业务说明：action=ensure 时维护指定登记表的目录投影；action=syncCompleted 时补偿当前租户已完成登记的表。
+// 函数输入：action：要执行的业务操作；tableId：数据表 ID；syncCompleted 时为空；synchronizeIndex：ensure 时是否同步 ES 索引；maxRows：syncCompleted 最大处理数，最大 10000。
 
 /*
  * 已登记数据表 -> 数据目录投影。
@@ -87,6 +89,9 @@ import log
  * 都可在 Magic 编辑器实时调整。db.table 使用当前请求绑定的租户元数据数据源，
  * 因而不依赖登记源（MySQL/达梦/Oracle 等）的 SQL 方言。
  */
+var tenantId = tenantRuntime.id()
+if (tenantId == null || (tenantId + '').trim() == '') { exit 401, '请先登录' }
+
 var textOf = value => value == null ? '' : value + ''
 var blank = value => value == null || textOf(value).trim() == ''
 var nowTime = () => new Date()
@@ -132,7 +137,7 @@ var assetDescOf = table => firstText([
     rowValue(table, ['tableComment', 'table_comment']),
     catalogNameOf(table)
 ])
-var catalogPropRows = (catalogId, propName) => db.table('da_prop_t').where()
+var catalogPropRows = (catalogId, propName) => db.table('da_prop_t').where().eq('tenant_id', tenantId)
     .eq('parent_id', catalogId).eq('data_type', 'catalog').eq('prop_name', propName).eq('is_del', 0).select()
 var catalogProp = (catalogId, propName) => {
     var rows = catalogPropRows(catalogId, propName)
@@ -142,7 +147,7 @@ var upsertCatalogProp = (catalogId, name, value, now) => {
     var rows = catalogPropRows(catalogId, name)
     if (rows == null || rows.size() == 0) {
         db.table('da_prop_t').primary('tid').insert({
-            tid: newId(), parent_id: catalogId, prop_name: name, prop_value: value,
+            tid: newId(), tenant_id: tenantId, parent_id: catalogId, prop_name: name, prop_value: value,
             prop_type: '0', data_type: 'catalog', is_del: 0, created_time: now, updated_time: now
         })
         return
@@ -164,7 +169,7 @@ var catalogCanRepresentTable = (catalogId, sourceTableId) => {
     if (blank(catalogId)) {
         return false
     }
-    var catalog = db.table('da_catalog_t').where().eq('tid', catalogId).eq('is_del', 0).selectOne()
+    var catalog = db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('tid', catalogId).eq('is_del', 0).selectOne()
     if (catalog == null) {
         return false
     }
@@ -182,12 +187,12 @@ var resolveCatalogId = table => {
     if (catalogCanRepresentTable(requested, tableIdValue)) {
         return textOf(requested)
     }
-    var physical = db.table('da_catalog_t').where()
+    var physical = db.table('da_catalog_t').where().eq('tenant_id', tenantId)
         .eq('source_table_id', tableIdValue).eq('is_del', 0).select()
     if (physical != null && physical.size() > 0) {
         return textOf(rowValue(physical.get(0), ['tid']))
     }
-    var props = db.table('da_prop_t').where()
+    var props = db.table('da_prop_t').where().eq('tenant_id', tenantId)
         .eq('data_type', 'catalog').eq('prop_name', 'sourceTableId')
         .eq('prop_value', tableIdValue).eq('is_del', 0).select()
     if (props != null && props.size() > 0) {
@@ -197,6 +202,7 @@ var resolveCatalogId = table => {
 }
 var catalogValues = (catalogId, table, now) => ({
     tid: catalogId,
+    tenant_id: tenantId,
     is_del: 0,
     asset_status: 2,
     flow_status: 2,
@@ -220,7 +226,7 @@ var catalogValues = (catalogId, table, now) => ({
 })
 var upsertCatalog = (catalogId, table, now) => {
     var values = catalogValues(catalogId, table, now)
-    var current = db.table('da_catalog_t').where().eq('tid', catalogId).selectOne()
+    var current = db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('tid', catalogId).selectOne()
     if (current == null) {
         values.created_time = now
         values.reg_time = now
@@ -228,6 +234,8 @@ var upsertCatalog = (catalogId, table, now) => {
     } else {
         db.table('da_catalog_t').primary('tid').update(values, true)
     }
+    // 已有主表读取直接携带计数，避免为索引投影再次查询。
+    return current == null ? 0L : rowValue(current, ['marketViewCount', 'market_view_count'])::long(0)
 }
 var syncCatalogProperties = (catalogId, table, now) => {
     var properties = {
@@ -254,6 +262,7 @@ var syncCatalogProperties = (catalogId, table, now) => {
 }
 var itemValues = (itemId, catalogId, source, now) => ({
     tid: itemId,
+    tenant_id: tenantId,
     catalog_id: catalogId,
     is_del: 0,
     col_name: firstText([rowValue(source, ['catalogItemName', 'catalog_item_name']), rowValue(source, ['columnComment', 'column_comment']), rowValue(source, ['columnName', 'column_name'])]),
@@ -272,7 +281,7 @@ var itemValues = (itemId, catalogId, source, now) => ({
     updated_time: now
 })
 var syncCatalogItems = (catalogId, tableIdValue, now) => {
-    var existing = db.table('da_catalog_item_t').where().eq('catalog_id', catalogId).eq('is_del', 0).select()
+    var existing = db.table('da_catalog_item_t').where().eq('tenant_id', tenantId).eq('catalog_id', catalogId).eq('is_del', 0).select()
     var existingByColumn = {}
     for (item in (existing == null ? [] : existing)) {
         var sourceColumnId = rowValue(item, ['sourceTableColumnId', 'source_table_column_id'])
@@ -281,7 +290,7 @@ var syncCatalogItems = (catalogId, tableIdValue, now) => {
         }
     }
     var retained = {}
-    var columns = db.table('db_table_column_t').where().eq('table_id', tableIdValue).eq('is_del', 0)
+    var columns = db.table('db_table_column_t').where().eq('tenant_id', tenantId).eq('table_id', tableIdValue).eq('is_del', 0)
         .orderBy('ordinal_position').select()
     for (column in (columns == null ? [] : columns)) {
         var columnId = textOf(rowValue(column, ['tid']))
@@ -315,11 +324,11 @@ var updateTableLink = (catalogId, table, now) => db.table('db_table_t').primary(
 }, true)
 var retireCatalogs = (tableIdValue, now) => {
     var ids = {}
-    var physical = db.table('da_catalog_t').where().eq('source_table_id', tableIdValue).eq('is_del', 0).select()
+    var physical = db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('source_table_id', tableIdValue).eq('is_del', 0).select()
     for (catalog in (physical == null ? [] : physical)) {
         ids[textOf(rowValue(catalog, ['tid']))] = true
     }
-    var props = db.table('da_prop_t').where().eq('data_type', 'catalog').eq('prop_name', 'sourceTableId')
+    var props = db.table('da_prop_t').where().eq('tenant_id', tenantId).eq('data_type', 'catalog').eq('prop_name', 'sourceTableId')
         .eq('prop_value', tableIdValue).eq('is_del', 0).select()
     for (prop in (props == null ? [] : props)) {
         ids[textOf(rowValue(prop, ['parentId', 'parent_id']))] = true
@@ -328,11 +337,11 @@ var retireCatalogs = (tableIdValue, now) => {
     for (catalogIdValue in ids.keySet()) {
         var catalogId = catalogIdValue + ''
         db.table('da_catalog_t').primary('tid').update({tid: catalogId, is_del: 1, updated_time: now}, true)
-        var catalogProps = db.table('da_prop_t').where().eq('parent_id', catalogId).eq('data_type', 'catalog').eq('is_del', 0).select()
+        var catalogProps = db.table('da_prop_t').where().eq('tenant_id', tenantId).eq('parent_id', catalogId).eq('data_type', 'catalog').eq('is_del', 0).select()
         for (prop in (catalogProps == null ? [] : catalogProps)) {
             db.table('da_prop_t').primary('tid').update({tid: rowValue(prop, ['tid']), is_del: 1, updated_time: now}, true)
         }
-        var catalogItems = db.table('da_catalog_item_t').where().eq('catalog_id', catalogId).eq('is_del', 0).select()
+        var catalogItems = db.table('da_catalog_item_t').where().eq('tenant_id', tenantId).eq('catalog_id', catalogId).eq('is_del', 0).select()
         for (item in (catalogItems == null ? [] : catalogItems)) {
             db.table('da_catalog_item_t').primary('tid').update({tid: rowValue(item, ['tid']), is_del: 1, updated_time: now}, true)
         }
@@ -341,7 +350,7 @@ var retireCatalogs = (tableIdValue, now) => {
     db.table('db_table_t').primary('tid').update({tid: tableIdValue, source_catalog_id: null, updated_time: now}, true)
     return retired
 }
-var syncIndex = (catalogId, table) => {
+var syncIndex = (catalogId, table, count) => {
     var document = {
         tid: catalogId, id: catalogId, assetType: 'catalog',
         catalogName: catalogNameOf(table), catalogNameEn: catalogNameEnOf(table),
@@ -353,7 +362,7 @@ var syncIndex = (catalogId, table) => {
         assetStatus: 2, flowStatus: 2
     }
     try {
-        esCommonService.saveOrUpdate('dataassets', catalogId, jsons.toJSONStr(document), false)
+        esCommonService.mergeCatalogProjection('dataassets', catalogId, jsons.toJSONStr(document), count)
         return true
     } catch (e) {
         log.warn('数据目录索引同步失败，但关系投影已保留: catalogId={}, message={}', catalogId, e.message)
@@ -364,7 +373,7 @@ var ensure = (requestedTableId, withIndex) => {
     if (blank(requestedTableId)) {
         exit 400, 'tableId不能为空'
     }
-    var table = db.table('db_table_t').where().eq('tid', textOf(requestedTableId).trim()).eq('is_del', 0)
+    var table = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', textOf(requestedTableId).trim()).eq('is_del', 0)
         .eq('asset_status', 2).selectOne()
     if (table == null) {
         exit 404, '数据表不存在或尚未完成登记'
@@ -375,29 +384,29 @@ var ensure = (requestedTableId, withIndex) => {
         return {tableId: tableIdValue, retired: retireCatalogs(tableIdValue, now), eligible: false, indexed: false}
     }
     var datasourceId = rowValue(table, ['datasourceId', 'datasource_id'])
-    var datasource = blank(datasourceId) ? null : db.table('db_datasource_t').where().eq('tid', datasourceId).eq('is_del', 0).selectOne()
+    var datasource = blank(datasourceId) ? null : db.table('db_datasource_t').where().eq('tenant_id', tenantId).eq('tid', datasourceId).eq('is_del', 0).selectOne()
     if (datasource != null) {
         table.dbName = rowValue(datasource, ['dbName', 'db_name'])
         table.appId = rowValue(datasource, ['appId', 'app_id'])
         var applicationId = rowValue(datasource, ['appId', 'app_id'])
         if (!blank(applicationId)) {
-            var application = db.table('sym_application_t').where().eq('tid', applicationId).eq('is_del', 0).selectOne()
+            var application = db.table('sym_application_t').where().eq('tenant_id', tenantId).eq('tid', applicationId).eq('is_del', 0).selectOne()
             if (application != null) {
                 table.appName = rowValue(application, ['appName', 'app_name'])
             }
         }
     }
     var catalogId = resolveCatalogId(table)
-    upsertCatalog(catalogId, table, now)
+    var count = upsertCatalog(catalogId, table, now)
     syncCatalogProperties(catalogId, table, now)
     syncCatalogItems(catalogId, tableIdValue, now)
     updateTableLink(catalogId, table, now)
-    return {tableId: tableIdValue, catalogId: catalogId, catalogName: catalogNameOf(table), eligible: true, indexed: boolValue(withIndex) ? syncIndex(catalogId, table) : false}
+    return {tableId: tableIdValue, catalogId: catalogId, catalogName: catalogNameOf(table), eligible: true, indexed: boolValue(withIndex) ? syncIndex(catalogId, table, count) : false}
 }
 var syncCompleted = maximum => {
     var requested = maximum == null ? 10000 : maximum::int
     var limit = requested <= 0 ? 10000 : (requested > 10000 ? 10000 : requested)
-    var completed = db.table('db_table_t').where().eq('is_del', 0).eq('asset_status', 2).orderByDesc('updated_time').select()
+    var completed = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('is_del', 0).eq('asset_status', 2).orderByDesc('updated_time').select()
     var targets = []
     for (table in (completed == null ? [] : completed)) {
         if (catalogEligible(rowValue(table, ['businessType', 'business_type']))) {

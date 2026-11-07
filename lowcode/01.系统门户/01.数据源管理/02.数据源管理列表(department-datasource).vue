@@ -35,88 +35,6 @@
       </div>
     </section>
 
-    <section class="overview-grid">
-      <article
-        class="overview-card is-blue"
-        :class="{ 'is-active': isMetricSelected('sourceIssues') }"
-        role="button"
-        tabindex="0"
-        @click="applyIncompleteFilter"
-        @keyup.enter="applyIncompleteFilter"
-      >
-        <span class="card-icon"><Icon icon="el-icon-Monitor" /></span>
-        <div class="card-main">
-          <div class="card-header">
-            <small>数据源</small>
-            <span class="card-note" :class="{ 'attention-warning': stats.incompleteDatasourceTotal > 0 }">未完成登记 {{ stats.incompleteDatasourceTotal }} 个</span>
-          </div>
-          <div class="card-value">
-            <strong>{{ stats.datasourceTotal }}<em>个</em></strong>
-            <span class="card-note" :class="{ 'attention-danger': stats.unreachableDatasourceTotal > 0 }">无法连通 {{ stats.unreachableDatasourceTotal }} 个</span>
-          </div>
-        </div>
-      </article>
-      <article
-        class="overview-card is-green"
-        :class="{ 'is-active': isMetricSelected('unannotated') }"
-        role="button"
-        tabindex="0"
-        @click="applyMetricFilter('unannotated')"
-        @keyup.enter="applyMetricFilter('unannotated')"
-      >
-        <span class="card-icon"><Icon icon="complete" /></span>
-        <div class="card-main">
-          <div class="card-header">
-            <small>表标注</small>
-            <span class="card-note" :class="{ 'attention-warning': stats.unannotatedTotal > 0 }">未完成标注 {{ stats.unannotatedTotal }}</span>
-          </div>
-          <strong>
-            {{ stats.annotatedTableTotal }}
-            <em>/ {{ stats.tableTotal }} 张</em>
-          </strong>
-        </div>
-      </article>
-      <article
-        class="overview-card is-purple"
-        :class="{ 'is-active': isMetricSelected('tableIssues') }"
-        role="button"
-        tabindex="0"
-        @click="applyMetricFilter('tableIssues')"
-        @keyup.enter="applyMetricFilter('tableIssues')"
-      >
-        <span class="card-icon"><Icon icon="table" /></span>
-        <div class="card-main">
-          <div class="card-header">
-            <small>表登记</small>
-            <span class="card-note" :class="{ 'attention-warning': stats.problemTableTotal > 0 }">未完成登记 {{ stats.problemTableTotal }}</span>
-          </div>
-          <strong>{{ stats.registeredTableTotal }}<em>/ {{ stats.tableTotal }} 张</em></strong>
-        </div>
-      </article>
-      <article
-        class="overview-card is-orange"
-        :class="{ 'is-active': isMetricSelected('changed') }"
-        role="button"
-        tabindex="0"
-        @click="applyMetricFilter('changed')"
-        @keyup.enter="applyMetricFilter('changed')"
-      >
-        <span class="card-icon"><Icon icon="todo" /></span>
-        <div class="card-main">
-          <small>表变更</small>
-          <strong :class="{ 'is-text-value': stats.changedTotal === 0 }">
-            {{ stats.changedTotal > 0 ? stats.changedTotal : "未发现变更" }}
-            <em v-if="stats.changedTotal > 0">张</em>
-          </strong>
-        </div>
-        <div v-if="stats.changedTotal > 0" class="card-breakdown is-change">
-          <span v-if="stats.addedTableTotal > 0" class="is-added">新增 {{ stats.addedTableTotal }}</span>
-          <span v-if="stats.modifiedTableTotal > 0" class="is-modified">修改 {{ stats.modifiedTableTotal }}</span>
-          <span v-if="stats.deletedTableTotal > 0" class="is-deleted">删除 {{ stats.deletedTableTotal }}</span>
-        </div>
-      </article>
-    </section>
-
     <section class="work-card management-workspace">
       <aside class="organization-tree-panel" aria-label="组织机构">
         <el-alert v-if="state.treeError" :title="state.treeError" type="error" :closable="false" />
@@ -167,15 +85,17 @@
         <el-empty v-else :image-size="58" description="暂无可管理部门" />
       </aside>
 
-      <div class="application-workspace">
-      <el-alert v-if="state.listError" :title="state.listError" type="error" :closable="false" />
+      <div ref="sourceListTop" class="application-workspace">
+      <el-alert v-if="state.listError" :title="state.listError" type="error" :closable="false">
+        <el-button link type="primary" @click="loadSourcePage()">重试</el-button>
+      </el-alert>
       <div class="work-toolbar">
-        <el-segmented v-model="state.filter" :options="filterOptions" @change="clearMetricFilter" />
+        <el-segmented v-model="state.filter" :options="filterOptions" />
       </div>
 
-      <el-skeleton v-if="state.loading && !state.list.length" class="source-skeleton" :rows="8" animated />
+      <el-skeleton v-if="state.loading" class="source-skeleton" :rows="8" animated />
 
-      <div v-else-if="visibleList.length === 0" class="source-empty-state">
+      <div v-else-if="!state.listError && state.list.length === 0" class="source-empty-state">
         <div class="source-empty-illustration" aria-hidden="true">
           <span class="empty-db empty-db-main">
             <Icon icon="database" />
@@ -191,9 +111,9 @@
         <p>当前筛选条件下没有数据源，可切换应用系统、调整关键词或查看其他状态。</p>
       </div>
 
-      <div v-else class="source-list">
+      <div v-else-if="!state.listError" class="source-list">
         <article
-          v-for="item in displayList"
+          v-for="item in state.list"
           :key="item.tid"
           class="source-card"
           @click="handleCardClick(item)"
@@ -287,7 +207,10 @@
             <span>字典表 {{ item.dictionaryTableNum || 0 }} 张</span>
             <span>业务表 {{ item.businessTableNum || 0 }} 张</span>
             <span>日志表 {{ item.logTableNum || 0 }} 张</span>
-            <span :class="{ warning: normalizeNumber(item.changedTableNum) > 0 }">发现变更 {{ item.changedTableNum || 0 }} 张</span>
+            <span v-if="state.sourceChangesAvailable" :class="{ warning: normalizeNumber(item.changedTableNum) > 0 }">
+              发现变更 {{ item.changedTableNum || 0 }} 张
+            </span>
+            <span v-else>变更暂不可用</span>
           </div>
 
           <transition name="table-panel">
@@ -377,13 +300,21 @@
             </div>
           </transition>
         </article>
-        <div v-if="canLoadMoreSources" class="source-load-more">
-          <span>已展示 {{ displayList.length }} / {{ visibleList.length }} 个数据源</span>
-          <el-button plain @click.stop="loadMoreSources">
-            加载更多（+{{ nextSourceLoadCount }}）
-          </el-button>
-        </div>
       </div>
+      <nav v-if="state.sourceTotal > 0 && !state.listError" class="source-pagination" aria-label="数据源卡片分页">
+        <el-pagination
+          :current-page="state.sourcePage"
+          :page-size="state.sourcePageSize"
+          :page-sizes="SOURCE_PAGE_SIZES"
+          :total="state.sourceTotal"
+          :disabled="state.loading"
+          :layout="state.filter === 'changed' ? 'total, sizes, prev, slot, next' : 'total, sizes, prev, pager, next'"
+          @update:current-page="changeSourcePage"
+          @update:page-size="changeSourcePageSize"
+        >
+          <span v-if="state.filter === 'changed'">第 {{ state.sourcePage }} 页</span>
+        </el-pagination>
+      </nav>
       </div>
     </section>
   </div>
@@ -399,17 +330,20 @@ const { openRegisterModal, completedVersion } = useRegisterModal();
 const router = useRouter();
 const route = useRoute();
 const treeRef = ref();
+const sourceListTop = ref();
 const orgTreeSource = ref([]);
 const treeData = ref([
   { name: "全部部门", label: "全部部门", value: "", type: "org", children: [] },
 ]);
 const treeStatistics = ref({ total: 0, orgCounts: {}, orgApps: {} });
 const countMap = ref({});
-const SOURCE_BATCH_SIZE = 24;
+const SOURCE_PAGE_SIZES = [24, 48, 100];
+const sourceCursors = new Map();
 
 const state = reactive({
   dataScope: "",
   loading: false,
+  sourceChangesAvailable: true,
   treeLoading: false,
   listError: "",
   treeError: "",
@@ -421,8 +355,9 @@ const state = reactive({
   typeStatisticsLoading: true,
   typeStatisticsError: "",
   filter: "all",
-  metricFilter: "",
-  sourceDisplayLimit: SOURCE_BATCH_SIZE,
+  sourcePage: 1,
+  sourcePageSize: SOURCE_PAGE_SIZES[0],
+  sourceTotal: 0,
   leftSelectNode: treeData.value[0],
   expanded: [],
   deletedIds: [],
@@ -440,14 +375,11 @@ const filterOptions = [
 
 // 工作台沿用本页已有的筛选口径；路由只提供筛选条件，不接收租户或权限范围。
 watch(
-  () => [route.path, route.query.filter, route.query.metric],
+  () => [route.path, route.query.filter],
   () => {
     if (route.path !== "/datasource-manage/index") return;
     const filter = typeof route.query.filter === "string" ? route.query.filter : "all";
     state.filter = filterOptions.some((item) => item.value === filter) ? filter : "all";
-    state.metricFilter = state.filter === "incomplete" && route.query.metric === "tableIssues" ? "tableIssues" : "";
-    state.expanded = [];
-    state.sourceDisplayLimit = SOURCE_BATCH_SIZE;
   },
   { immediate: true }
 );
@@ -457,14 +389,6 @@ const userOrgName = computed(() => $user?.orgName || "当前部门");
 const normalizeNumber = (value) => {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
-};
-
-const firstPositive = (...values) => {
-  for (const value of values) {
-    const n = normalizeNumber(value);
-    if (n > 0) return n;
-  }
-  return 0;
 };
 
 const firstNumber = (...values) => {
@@ -545,95 +469,13 @@ const mergeDatasourceDetail = (summary = {}, detail = {}) => {
   };
 };
 
-const isTableAnnotated = (table) =>
-  Number(table.annotated ?? table.isAnnotated ?? table.is_annotated ?? 0) === 1 ||
-  ["1", "true", "yes", "completed"].includes(
-    String(table.annotatedStatus || table.annotated_status || "").toLowerCase()
-  );
-
-const isTableRegistered = (table) =>
-  normalizeNumber(table.assetStatus ?? table.asset_status) === 2;
-
-const tableHasIssue = (table) => !isTableRegistered(table);
-
-const tableChangeStatus = (table) => {
-  const status = String(table.changeStatus || table.change_status || "").toLowerCase();
-  if (["added", "add", "new"].includes(status)) return "added";
-  if (["deleted", "delete", "removed"].includes(status)) return "deleted";
-  if (["modified", "modify", "changed", "change", "reset"].includes(status)) return "modified";
-  return "unchanged";
-};
-
-const tableArrayStats = (tables) => {
-  const result = {
-    tableNum: tables.length,
-    annotatedTableNum: 0,
-    unannotatedTableNum: 0,
-    registeredTableNum: 0,
-    unregisteredTableNum: 0,
-    businessTableNum: 0,
-    dictionaryTableNum: 0,
-    logTableNum: 0,
-    coreTableNum: 0,
-    registeredCoreTableNum: 0,
-    deferredTableNum: 0,
-    issueTableNum: 0,
-    problemTableNum: 0,
-    changedTableNum: 0,
-    addedTableNum: 0,
-    modifiedTableNum: 0,
-    deletedTableNum: 0,
-  };
-  tables.forEach((table) => {
-    if (isTableAnnotated(table)) result.annotatedTableNum += 1;
-    else result.unannotatedTableNum += 1;
-
-    if (isTableRegistered(table)) result.registeredTableNum += 1;
-    else result.unregisteredTableNum += 1;
-
-    const businessType = String(table.businessType || table.business_type || "").toLowerCase();
-    const isCoreTable = ["business", "业务表", "dict", "dictionary", "字典表", "log", "日志表"].includes(businessType);
-    const isDeferredTable = ["暂不处理", "暂不登记", "不确定"].includes(businessType);
-    if (isCoreTable) {
-      result.coreTableNum += 1;
-      if (isTableRegistered(table)) result.registeredCoreTableNum += 1;
-    }
-    if (isDeferredTable) result.deferredTableNum += 1;
-    // 卡片类型数量包含部分登记和完成登记的表，不能复用“完全登记”的状态 2 判断。
-    if (normalizeNumber(table.assetStatus ?? table.asset_status) > 0) {
-      if (["business", "业务表"].includes(businessType)) result.businessTableNum += 1;
-      else if (["dict", "dictionary", "字典表"].includes(businessType)) result.dictionaryTableNum += 1;
-      else if (["log", "日志表"].includes(businessType)) result.logTableNum += 1;
-    }
-
-    if (tableHasIssue(table)) result.issueTableNum += 1;
-    if (!isTableRegistered(table) || tableHasIssue(table)) result.problemTableNum += 1;
-
-    const changeStatus = tableChangeStatus(table);
-    if (changeStatus === "added") {
-      result.addedTableNum += 1;
-      result.changedTableNum += 1;
-    } else if (changeStatus === "deleted") {
-      result.deletedTableNum += 1;
-      result.changedTableNum += 1;
-    } else if (changeStatus === "modified") {
-      result.modifiedTableNum += 1;
-      result.changedTableNum += 1;
-    }
-  });
-  return result;
-};
-
 const normalizeItem = (item) => {
-  const tables = Array.isArray(item.tables) ? item.tables : [];
-  const fallbackStats = tableArrayStats(tables);
-  const tableNum = firstNumber(item.tableNum, item.table_num, fallbackStats.tableNum);
-  const annotatedTableNum = firstNumber(item.annotatedTableNum, item.annotated_table_num, fallbackStats.annotatedTableNum);
+  const tableNum = firstNumber(item.tableNum, item.table_num);
+  const annotatedTableNum = firstNumber(item.annotatedTableNum, item.annotated_table_num);
   const unannotatedTableNum = firstNumber(
     item.unannotatedTableNum,
     item.unannotated_table_num,
-    Math.max(tableNum - annotatedTableNum, 0),
-    fallbackStats.unannotatedTableNum
+    Math.max(tableNum - annotatedTableNum, 0)
   );
   return {
     ...item,
@@ -669,31 +511,29 @@ const normalizeItem = (item) => {
     tableNum,
     annotatedTableNum,
     unannotatedTableNum,
-    registeredTableNum: firstNumber(item.registeredTableNum, item.registered_table_num, fallbackStats.registeredTableNum),
-    unregisteredTableNum: firstNumber(item.unregisteredTableNum, item.unregistered_table_num, Math.max(tableNum - firstNumber(item.registeredTableNum, item.registered_table_num, fallbackStats.registeredTableNum), 0), fallbackStats.unregisteredTableNum),
-    businessTableNum: firstNumber(item.businessTableNum, item.business_table_num, fallbackStats.businessTableNum),
-    dictionaryTableNum: firstNumber(item.dictionaryTableNum, item.dictionary_table_num, fallbackStats.dictionaryTableNum),
-    logTableNum: firstNumber(item.logTableNum, item.log_table_num, fallbackStats.logTableNum),
-    coreTableNum: firstNumber(item.coreTableNum, item.core_table_num, fallbackStats.coreTableNum),
+    registeredTableNum: firstNumber(item.registeredTableNum, item.registered_table_num),
+    unregisteredTableNum: firstNumber(item.unregisteredTableNum, item.unregistered_table_num, Math.max(tableNum - firstNumber(item.registeredTableNum, item.registered_table_num), 0)),
+    businessTableNum: firstNumber(item.businessTableNum, item.business_table_num),
+    dictionaryTableNum: firstNumber(item.dictionaryTableNum, item.dictionary_table_num),
+    logTableNum: firstNumber(item.logTableNum, item.log_table_num),
+    coreTableNum: firstNumber(item.coreTableNum, item.core_table_num),
     registeredCoreTableNum: firstNumber(
       item.registeredCoreTableNum,
-      item.registered_core_table_num,
-      fallbackStats.registeredCoreTableNum
+      item.registered_core_table_num
     ),
     deferredTableNum: firstNumber(
       item.deferredTableNum,
       item.deferred_table_num,
       item.pendingRegistrationTableNum,
-      item.pending_registration_table_num,
-      fallbackStats.deferredTableNum
+      item.pending_registration_table_num
     ),
-    issueTableNum: firstNumber(item.issueTableNum, item.issue_table_num, fallbackStats.issueTableNum),
-    problemTableNum: firstNumber(item.problemTableNum, item.problem_table_num, fallbackStats.problemTableNum),
+    issueTableNum: firstNumber(item.issueTableNum, item.issue_table_num),
+    problemTableNum: firstNumber(item.problemTableNum, item.problem_table_num),
     serviceCount: firstNumber(item.serviceCount, item.service_count, 0),
-    changedTableNum: firstNumber(item.changedTableNum, item.changed_table_num, fallbackStats.changedTableNum),
-    addedTableNum: firstNumber(item.addedTableNum, item.added_table_num, fallbackStats.addedTableNum),
-    modifiedTableNum: firstNumber(item.modifiedTableNum, item.modified_table_num, fallbackStats.modifiedTableNum),
-    deletedTableNum: firstNumber(item.deletedTableNum, item.deleted_table_num, fallbackStats.deletedTableNum),
+    changedTableNum: firstNumber(item.changedTableNum, item.changed_table_num),
+    addedTableNum: firstNumber(item.addedTableNum, item.added_table_num),
+    modifiedTableNum: firstNumber(item.modifiedTableNum, item.modified_table_num),
+    deletedTableNum: firstNumber(item.deletedTableNum, item.deleted_table_num),
     showConnect: item.showConnect ?? item.show_connect,
     connectionStatus:
       item.connectionStatus || item.connection_status || item.testStatus || item.test_status || "",
@@ -709,47 +549,74 @@ const normalizeItem = (item) => {
     ),
     updatedTime: item.updatedTime || item.updated_time || item.updateTime || item.update_time || "",
     createdTime: item.createdTime || item.created_time || item.createTime || item.create_time || "",
-    tables,
   };
 };
 
-// 数据源管理列表以最近一次修改时间为唯一的主排序依据。接口虽已按时间返回，
-// 但页面会按应用系统分组，必须在分组前后再次统一排序，避免应用名称打乱顺序。
-const datasourceUpdatedAt = (item) => {
-  const value = String(item?.updatedTime || item?.updated_time || item?.createdTime || item?.created_time || "").trim();
-  if (!value) return 0;
-  const parsed = Date.parse(value.replace(" ", "T"));
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-const compareDatasourceUpdated = (left, right) => {
-  const difference = datasourceUpdatedAt(right) - datasourceUpdatedAt(left);
-  if (difference !== 0) return difference;
-  return String(left?.dbName || "").localeCompare(String(right?.dbName || ""), "zh-Hans-CN");
-};
-
-// 列表和组织树独立落地；一次失败不丢弃另一项成功结果。
+// 卡片、总览和组织树独立落地；过期的卡片与表格请求不能覆盖当前结果。
 let loadGeneration = 0;
-const loadSourceOverview = async (generation) => {
+let sourcePageGeneration = 0;
+const loadSourcePage = async (generation = loadGeneration) => {
+  const request = ++sourcePageGeneration;
+  const payload = sourcePagePayload();
+  const filterKey = sourcePageFilterKey();
+  const isCurrent = () => request === sourcePageGeneration && generation === loadGeneration &&
+    filterKey === sourcePageFilterKey();
   state.loading = true;
   state.listError = "";
+  state.list = [];
+  state.expanded = [];
+  state.tableLoads = {};
   try {
-    const result = await $common.post("/dst/database/departmentDataSources", { mode: "summary" });
-    if (generation !== loadGeneration) return;
-    const list = Array.isArray(result?.list) ? result.list : Array.isArray(result) ? result : [];
-    state.dataScope = ["ALL", "ORG", "OWNER"].includes(result?.dataScope) ? result.dataScope : "";
-    treeData.value[0].label = { ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" }[state.dataScope] || "可见数据";
-    state.list = list.map(normalizeItem).sort(compareDatasourceUpdated);
-    state.expanded = [];
-    state.tableLoads = {};
-    state.sourceDisplayLimit = SOURCE_BATCH_SIZE;
+    const result = await $common.post("/dst/database/departmentDataSources", payload);
+    if (!isCurrent()) return;
+    state.sourceChangesAvailable = result?.changesAvailable !== false;
+    if (payload.filter === "changed" && !state.sourceChangesAvailable) {
+      state.listError = "表变更暂不可用，请稍后重试。";
+      return;
+    }
+
+    const list = result?.list;
+    const total = Number(result?.total ?? NaN);
+    const pageNum = Number(result?.pageNum ?? NaN);
+    const pageSize = Number(result?.pageSize ?? NaN);
+    if (!Array.isArray(list) || !Number.isSafeInteger(total) || total < 0 ||
+        !Number.isInteger(pageNum) || pageNum < 1 || pageSize !== payload.pageSize ||
+        list.length > pageSize || list.length > total) {
+      throw new Error("数据源卡片分页响应无效");
+    }
+    const lastPage = Math.max(1, Math.ceil(total / pageSize));
+    if (total > 0 && pageNum > lastPage) {
+      const correctedPage = payload.filter === "changed" ? 1 : lastPage;
+      if (correctedPage >= payload.pageNum) throw new Error("数据源卡片分页响应无效");
+      state.sourcePage = correctedPage;
+      sourceCursors.clear();
+      return loadSourcePage(generation);
+    }
+
+    state.dataScope = ["ALL", "ORG", "OWNER"].includes(result.dataScope) ? result.dataScope : "";
+    treeData.value[0].label =
+      { ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" }[state.dataScope] || "可见数据";
+    state.sourcePage = total === 0 ? 1 : pageNum;
+    state.sourceTotal = total;
+    state.list = list.map(normalizeItem);
+
+    if (payload.filter === "changed") {
+      for (const page of sourceCursors.keys()) {
+        if (page > pageNum) sourceCursors.delete(page);
+      }
+      if (typeof result.nextCursor?.sortKey === "string" && result.nextCursor?.tid) {
+        sourceCursors.set(pageNum + 1, result.nextCursor);
+      }
+    }
   } catch (error) {
-    if (generation !== loadGeneration) return;
-    console.error("加载数据源概要失败:", error);
-    state.listError = "数据源加载失败，请点击刷新重试。";
+    if (!isCurrent()) return;
+    console.error("加载数据源卡片失败:", error);
+    state.listError = "数据源加载失败，请重试。";
   } finally {
-    if (generation === loadGeneration) state.loading = false;
+    if (isCurrent()) state.loading = false;
   }
 };
+
 const loadOrganizationTree = async (generation) => {
   state.treeLoading = true;
   state.treeError = "";
@@ -763,8 +630,10 @@ const loadOrganizationTree = async (generation) => {
     treeStatistics.value = { total: normalizeNumber(statistics?.total), orgCounts: statistics?.orgCounts || {}, orgApps: statistics?.orgApps || {} };
     countMap.value = { org: treeStatistics.value.orgCounts };
     rebuildTree();
-    state.leftSelectNode = treeData.value[0];
-    if (!state.keyword && state.filter === "all") applyTypeStatistics(statistics, JSON.stringify(typeStatisticsPayload()));
+    state.leftSelectNode = findSelectedTreeNode(treeData.value, state.leftSelectNode) || treeData.value[0];
+    if (!state.keyword && state.filter === "all" && !state.leftSelectNode?.value) {
+      applyTypeStatistics(statistics, JSON.stringify(typeStatisticsPayload()));
+    }
   } catch (error) {
     if (generation !== loadGeneration) return;
     console.error("加载组织机构失败:", error);
@@ -774,7 +643,9 @@ const loadOrganizationTree = async (generation) => {
   } finally {
     if (generation === loadGeneration) {
       state.treeLoading = false;
-      if (!state.treeError && (state.keyword || state.filter !== "all")) scheduleTypeStatistics();
+      if (!state.treeError && (state.keyword || state.filter !== "all" || state.leftSelectNode?.value)) {
+        scheduleTypeStatistics();
+      }
     }
   }
 };
@@ -782,28 +653,20 @@ const loadData = () => {
   const generation = ++loadGeneration;
   state.typeStatisticsLoading = true;
   state.typeStatisticsError = "";
-  // 即使概要刷新失败，也不能让已作废的展开请求永久停在 loading。
-  for (const [key, cache] of Object.entries(state.tableLoads)) {
-    if (cache.loading) state.tableLoads[key] = { ...cache, loading: false, requestId: undefined, error: "加载已取消，请重试。" };
+  if (state.filter === "changed") {
+    state.sourcePage = 1;
+    sourceCursors.clear();
   }
-  return Promise.allSettled([loadSourceOverview(generation), loadOrganizationTree(generation)])
-    .then(async (results) => {
-      // 组织树和权限范围并行返回，二者就绪后再应用默认展开，不能受请求先后顺序影响。
-      if (generation === loadGeneration) await applyDefaultTreeState(generation);
-      return results;
+  return Promise.allSettled([loadSourcePage(generation), loadOrganizationTree(generation)])
+    .then(() => {
+      // 列表返回的权限范围和组织树都就绪后再设置默认展开和选中。
+      if (generation === loadGeneration) return applyDefaultTreeState(generation);
     });
 };
 
 const sourceTodoCount = (item) =>
-  normalizeNumber(item.unannotatedTableNum) + normalizeNumber(item.changedTableNum);
-
-const matchedKeyword = (item) => {
-  const keyword = (state.keyword || "").toLowerCase();
-  if (!keyword) return true;
-  return [item.dbName, item.appName, item.database, item.schema, item.dbType]
-    .filter(Boolean)
-    .some((value) => String(value).toLowerCase().includes(keyword));
-};
+  normalizeNumber(item.unannotatedTableNum) +
+  (state.sourceChangesAvailable ? normalizeNumber(item.changedTableNum) : 0);
 
 const commitKeyword = () => {
   state.keyword = String(state.keywordInput || "").trim();
@@ -813,18 +676,6 @@ const clearKeyword = () => {
   state.keywordInput = "";
   state.keyword = "";
 };
-
-const matchedFilter = (item) => {
-  if (state.filter === "incomplete") return hasIncompleteRegistrationStatus(item);
-  if (state.filter === "completed") return isRegistrationComplete(item);
-  if (state.filter === "unannotated") return normalizeNumber(item.unannotatedTableNum) > 0;
-  if (state.filter === "changed") return normalizeNumber(item.changedTableNum) > 0;
-  return true;
-};
-
-const filteredBeforeOrganization = computed(() =>
-  state.list.filter((item) => matchedKeyword(item) && matchedFilter(item))
-);
 
 const getTreeNodeCount = (node) => {
   if (!node) return 0;
@@ -869,7 +720,7 @@ const applyDefaultTreeState = (generation = loadGeneration) => {
       });
     };
     expandOrganizations(treeData.value);
-    tree.setCurrentNode?.(treeData.value[0]);
+    tree.setCurrentNode?.(state.leftSelectNode || treeData.value[0]);
   }));
 };
 
@@ -882,16 +733,65 @@ const collectTreeNodeOrgIds = (node) => {
   return [node.value, ...(node.children || []).flatMap((child) => collectTreeNodeOrgIds(child))].filter(Boolean);
 };
 
-// 全量角标独立于概要及卡片页；类型自身不进入请求，其他条件合并为一次统计。
+const findSelectedTreeNode = (nodes, selected) => {
+  if (!selected?.value) return null;
+  for (const node of nodes) {
+    if (node.value === selected.value && node.type === selected.type) return node;
+    const match = findSelectedTreeNode(node.children || [], selected);
+    if (match) return match;
+  }
+  return null;
+};
+
+const sourceScopePayload = () => {
+  const node = state.leftSelectNode;
+  return {
+    keyword: state.keyword,
+    filter: state.filter,
+    orgIds: node?.value && node.type !== "app"
+      ? [...new Set(collectTreeNodeOrgIds(node).map(String))].sort()
+      : [],
+    appId: node?.type === "app" ? node.value : "",
+  };
+};
+const sourcePageFilters = () => ({ ...sourceScopePayload(), typeKey: state.datasourceType || "" });
+const sourcePageFilterKey = () => JSON.stringify(sourcePageFilters());
+const sourcePagePayload = () => {
+  const cursor = state.filter === "changed" ? sourceCursors.get(state.sourcePage) : null;
+  return {
+    mode: "cards",
+    ...sourcePageFilters(),
+    pageNum: state.sourcePage,
+    pageSize: state.sourcePageSize,
+    ...(cursor ? { cursor } : {}),
+  };
+};
+
+const resetSourcePage = () => {
+  state.sourcePage = 1;
+  state.sourceTotal = 0;
+  sourceCursors.clear();
+  return loadSourcePage();
+};
+const changeSourcePage = (pageNum) => {
+  if (state.loading || !Number.isInteger(pageNum) || pageNum < 1 || pageNum === state.sourcePage) return;
+  if (state.filter === "changed" && pageNum > 1 && !sourceCursors.has(pageNum)) return;
+  state.sourcePage = pageNum;
+  sourceListTop.value?.scrollIntoView?.({ block: "start" });
+  return loadSourcePage();
+};
+const changeSourcePageSize = (pageSize) => {
+  if (!SOURCE_PAGE_SIZES.includes(pageSize) || pageSize === state.sourcePageSize) return;
+  state.sourcePageSize = pageSize;
+  sourceListTop.value?.scrollIntoView?.({ block: "start" });
+  return resetSourcePage();
+};
+
+// 全量角标独立于卡片页；仅在其余统计条件变化时请求。
 let typeStatisticsGeneration = 0;
 let typeStatisticsTimer;
 let typeStatisticsKey = "";
-const typeStatisticsPayload = () => {
-  const node = state.leftSelectNode;
-  return { mode: "facets", keyword: state.keyword, filter: state.filter,
-    orgIds: node?.value && node.type !== "app" ? collectTreeNodeOrgIds(node) : [],
-    appId: node?.type === "app" ? node.value : "" };
-};
+const typeStatisticsPayload = () => ({ mode: "facets", ...sourceScopePayload() });
 const applyTypeStatistics = (result, key) => {
   if (result?.complete !== true || !result.typeCounts) throw new Error("未返回完整类型统计");
   state.typeStatistics = result;
@@ -924,17 +824,8 @@ const scheduleTypeStatistics = () => {
   typeStatisticsTimer = setTimeout(() => loadTypeStatistics(), 150);
 };
 
-const matchesSelectedTreeNode = (item) => {
-  const node = state.leftSelectNode;
-  if (!node || !node.value) return true;
-  if (node.type === "app") return String(item.appId || "") === String(node.value);
-  return collectTreeNodeOrgIds(node).map(String).includes(String(item.orgId || ""));
-};
-
 const selectTreeNode = (node) => {
   state.leftSelectNode = node || treeData.value[0];
-  state.expanded = [];
-  state.sourceDisplayLimit = SOURCE_BATCH_SIZE;
 };
 
 const treeNodeIcon = (node) => (node?.data?.type === "app" ? "app" : node?.expanded ? "folder-open" : "folder");
@@ -947,75 +838,6 @@ const currentScopeLabel = computed(() => {
   if (selected?.value && selected?.label) return selected.label;
   return { ALL: "全部部门", ORG: "本部门数据", OWNER: "本人登记数据" }[state.dataScope] || "可见数据";
 });
-// 类型角标按其余条件统计，类型自身只裁剪列表，避免选中后其他选项都变为零。
-const sourcesBeforeType = computed(() => filteredBeforeOrganization.value.filter(matchesSelectedTreeNode));
-const visibleList = computed(() => sourcesBeforeType.value.filter((item) =>
-  !state.datasourceType || datasourceTypeKey(item) === state.datasourceType
-));
-const displayList = computed(() => visibleList.value.slice(0, state.sourceDisplayLimit));
-const canLoadMoreSources = computed(() => displayList.value.length < visibleList.value.length);
-const nextSourceLoadCount = computed(() => Math.min(SOURCE_BATCH_SIZE, visibleList.value.length - displayList.value.length));
-const loadMoreSources = () => {
-  state.sourceDisplayLimit = Math.min(state.sourceDisplayLimit + SOURCE_BATCH_SIZE, visibleList.value.length);
-};
-
-const stats = computed(() => {
-  const appKeys = new Set();
-  const result = state.list.reduce(
-    (acc, item) => {
-      acc.datasourceTotal += 1;
-      if (isConnectionUnavailable(item)) {
-        acc.unreachableDatasourceTotal += 1;
-      }
-      if (hasAppSystem(item)) {
-        appKeys.add(appSystemKey(item));
-        acc.appDatasourceTotal += 1;
-      } else {
-        acc.unboundAppDatasourceTotal += 1;
-      }
-      acc.tableTotal += normalizeNumber(item.tableNum);
-      acc.annotatedTableTotal += normalizeNumber(item.annotatedTableNum);
-      acc.unannotatedTotal += normalizeNumber(item.unannotatedTableNum);
-      acc.registeredTableTotal += normalizeNumber(item.registeredTableNum);
-      acc.problemTableTotal += normalizeNumber(item.problemTableNum);
-      acc.changedTotal += normalizeNumber(item.changedTableNum);
-      acc.addedTableTotal += normalizeNumber(item.addedTableNum);
-      acc.modifiedTableTotal += normalizeNumber(item.modifiedTableNum);
-      acc.deletedTableTotal += normalizeNumber(item.deletedTableNum);
-      if (isRegistrationComplete(item)) {
-        acc.completedTotal += 1;
-      } else {
-        acc.pendingDatasourceTotal += 1;
-        if (hasIncompleteRegistrationStatus(item)) acc.incompleteDatasourceTotal += 1;
-        else acc.draftDatasourceTotal += 1;
-      }
-      return acc;
-    },
-    {
-      appSystemTotal: 0,
-      appDatasourceTotal: 0,
-      unboundAppDatasourceTotal: 0,
-      datasourceTotal: 0,
-      completedTotal: 0,
-      pendingDatasourceTotal: 0,
-      draftDatasourceTotal: 0,
-      incompleteDatasourceTotal: 0,
-      unreachableDatasourceTotal: 0,
-      tableTotal: 0,
-      annotatedTableTotal: 0,
-      unannotatedTotal: 0,
-      registeredTableTotal: 0,
-      problemTableTotal: 0,
-      changedTotal: 0,
-      addedTableTotal: 0,
-      modifiedTableTotal: 0,
-      deletedTableTotal: 0,
-    }
-  );
-  result.appSystemTotal = appKeys.size;
-  return result;
-});
-
 const isExpanded = (item) => state.expanded.includes(item.tid);
 function isFilePushDatasource(item) {
   let pool=item?.poolCfg ?? item?.pool_cfg ?? {};
@@ -1079,18 +901,9 @@ const changeTablePage = (item, delta) => {
   loadTablePage(item, nextPage);
 };
 
-const appSystemKey = (item) =>
-  String(item.appId || item.appName || "").trim();
-
-const hasAppSystem = (item) => appSystemKey(item).length > 0;
-
 // 0 尚未结束登记，1 已结束流程但仍未完成全部表登记，2 全部完成；状态口径保持不变。
 const hasCompletedRegistrationStatus = (item) =>
   normalizeNumber(item.assetStatus ?? item.asset_status) === 2;
-
-// 顶部未完成登记数量与列表“未完成”筛选共用状态 1，不混入待登记或仅连接失败的数据源。
-const hasIncompleteRegistrationStatus = (item) =>
-  normalizeNumber(item.assetStatus ?? item.asset_status) === 1;
 
 const isRegistrationComplete = (item) => hasCompletedRegistrationStatus(item);
 
@@ -1322,30 +1135,6 @@ const sourceCreatorText = (item) => firstText(
   "未留痕"
 );
 
-// 两张登记卡片共用“未完成”条件；卡片标识只区分点击来源，列表统一使用下方筛选规则。
-const isMetricSelected = (filter) => {
-  if (filter === "sourceIssues") return state.filter === "incomplete" && state.metricFilter !== "tableIssues";
-  if (filter === "tableIssues") return state.filter === "incomplete" && state.metricFilter === "tableIssues";
-  return state.filter === filter;
-};
-
-const applyMetricFilter = (filter) => {
-  const selected = isMetricSelected(filter);
-  state.filter = selected ? "all" : {
-    sourceIssues: "incomplete",
-    tableIssues: "incomplete",
-    unannotated: "unannotated",
-    changed: "changed",
-  }[filter];
-  state.metricFilter = selected ? "" : filter;
-};
-
-const applyIncompleteFilter = () => applyMetricFilter("sourceIssues");
-
-const clearMetricFilter = () => {
-  state.metricFilter = "";
-};
-
 const businessTypeText = (value) => {
   const map = {
     business: "业务表",
@@ -1441,7 +1230,6 @@ const openDatasourceRegister = () => {
   };
   const registerData = {
     db: [newDb],
-    datasourceOptions: state.list,
     departmentOnly: true,
     defaultOrgId: $user?.orgId,
     defaultOrgName: $user?.orgName,
@@ -1475,7 +1263,7 @@ const openDatasourceEdit = (row) => {
       };
   openRegisterModal({
     registerClass: "db",
-    registerData: { db: [editRow], datasourceOptions: state.list, departmentOnly: true, forceChooseType: !typeSupported },
+    registerData: { db: [editRow], departmentOnly: true, forceChooseType: !typeSupported },
   });
 };
 
@@ -1484,7 +1272,7 @@ const openDatasourceDetail = (row) => {
   if (isProxyDatasource(row)) {
     openRegisterModal({
       registerClass: "db",
-      registerData: { db: [row], currentStep: 4, datasourceOptions: state.list, departmentOnly: true },
+      registerData: { db: [row], currentStep: 4, departmentOnly: true },
     });
     return;
   }
@@ -1575,14 +1363,13 @@ watch(completedVersion, () => loadData());
 watch(() => JSON.stringify(typeStatisticsPayload()), (key) => {
   if (!state.treeLoading && key !== typeStatisticsKey) scheduleTypeStatistics();
 });
-onBeforeUnmount(() => { clearTimeout(typeStatisticsTimer); ++typeStatisticsGeneration; ++loadGeneration; });
-watch(
-  [() => state.keyword, () => state.filter, () => state.metricFilter, () => state.datasourceType],
-  () => {
-    state.sourceDisplayLimit = SOURCE_BATCH_SIZE;
-    state.expanded = [];
-  }
-);
+watch(sourcePageFilterKey, () => { void resetSourcePage(); });
+onBeforeUnmount(() => {
+  clearTimeout(typeStatisticsTimer);
+  ++typeStatisticsGeneration;
+  ++sourcePageGeneration;
+  ++loadGeneration;
+});
 
 onMounted(loadData);
 </script>
@@ -1723,208 +1510,6 @@ onMounted(loadData);
   border-radius: 6px;
   background: #eff6ff;
   color: #1677ff;
-}
-
-.overview-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin: 0 0 14px;
-}
-
-.overview-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 88px;
-  padding: 14px 16px;
-  overflow: hidden;
-  cursor: pointer;
-  border: 1px solid #e8edf5;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 8px 18px rgba(16, 24, 40, 0.035);
-  outline: none;
-  transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    background 0.2s ease;
-
-  &::after {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 54px;
-    height: 4px;
-    content: "";
-    background: currentColor;
-    border-radius: 999px 0 16px;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-  }
-
-  &:hover {
-    border-color: currentColor;
-    box-shadow: 0 13px 28px rgba(16, 24, 40, 0.09);
-    transform: translateY(-3px);
-  }
-
-  &.is-active {
-    border-color: currentColor;
-    background: linear-gradient(135deg, #fff 0%, #f8fbff 100%);
-    box-shadow:
-      0 14px 30px rgba(16, 24, 40, 0.1),
-      inset 0 0 0 1px currentColor;
-
-    &::after {
-      opacity: 1;
-    }
-  }
-
-  small {
-    display: block;
-    color: #667085;
-    font-size: 13px;
-  }
-
-  strong {
-    display: block;
-    margin-top: 4px;
-    color: #101828;
-    font-size: 26px;
-    line-height: 1;
-
-    em {
-      margin-left: 2px;
-      color: #667085;
-      font-size: 13px;
-      font-style: normal;
-      font-weight: 600;
-    }
-
-    &.is-text-value {
-      font-size: 20px;
-      line-height: 1.2;
-    }
-  }
-}
-
-.card-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.card-header,
-.card-value {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.card-note {
-  flex-shrink: 0;
-  margin-left: auto;
-  color: #667085;
-  font-size: 12px;
-  white-space: nowrap;
-
-  &.attention-danger {
-    color: #d92d20;
-  }
-
-  &.attention-warning {
-    color: #f79009;
-  }
-}
-
-.card-breakdown {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  margin-left: auto;
-  text-align: right;
-
-  span {
-    color: #667085;
-    font-size: 12px;
-    white-space: nowrap;
-  }
-
-  .attention-danger {
-    color: #d92d20;
-    font-weight: 400;
-  }
-
-  .attention-warning {
-    color: #f79009;
-    font-weight: 400;
-  }
-
-  &.is-change {
-    gap: 4px;
-
-    .is-added {
-      color: #039855;
-    }
-
-    .is-modified {
-      color: #f79009;
-    }
-
-    .is-deleted {
-      color: #d92d20;
-    }
-  }
-}
-
-.card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  border-radius: 14px;
-  font-size: 22px;
-}
-
-.overview-card.is-blue .card-icon {
-  background: #eff6ff;
-  color: #1677ff;
-}
-
-.overview-card.is-blue {
-  color: #1677ff;
-}
-
-.overview-card.is-green .card-icon {
-  background: #ecfdf3;
-  color: #12b76a;
-}
-
-.overview-card.is-green {
-  color: #12b76a;
-}
-
-.overview-card.is-purple .card-icon {
-  background: #f4f3ff;
-  color: #7a5af8;
-}
-
-.overview-card.is-purple {
-  color: #7a5af8;
-}
-
-.overview-card.is-orange .card-icon {
-  background: #fff7ed;
-  color: #f79009;
-}
-
-.overview-card.is-orange {
-  color: #f79009;
 }
 
 .work-card {
@@ -2244,18 +1829,15 @@ onMounted(loadData);
   padding-top: 0;
 }
 
-.source-load-more {
+.source-pagination {
   display: flex;
-  align-items: center;
   justify-content: center;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 0 2px;
-  color: #667085;
-  font-size: 13px;
+  padding: 12px 0 2px;
 
-  :deep(.el-button) {
-    min-width: 148px;
+  :deep(.el-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
   }
 }
 
@@ -2884,10 +2466,6 @@ onMounted(loadData);
   .source-actions {
     max-width: 100%;
     transform: none;
-  }
-
-  .overview-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .search-input,

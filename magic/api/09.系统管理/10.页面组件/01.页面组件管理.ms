@@ -15,7 +15,7 @@
     {
       "name": "action",
       "value": "list",
-      "description": "页面组件管理接口。读写 ui_component_t / ui_component_history_t；用于低代码页面列表、组件树、保存源码和递归删除；SQL 使用 MySQL/达梦兼容写法。",
+      "description": "读取共享低代码编译包、组件树和历史，或通过组件管理服务维护组件。runtimeBatch 使用 body.root 请求已核对依赖的入口，返回 complete、scope 和 components。",
       "required": false,
       "dataType": "String",
       "type": null,
@@ -537,14 +537,67 @@
   }
 }
 ================================
-// 接口：01.页面组件管理
-// 路由：POST /sym/component
-// 业务说明：根据 action 查询页面组件列表或树，或调用组件管理服务执行保存与维护操作。
+import cn.hutool.crypto.digest.DigestUtil
+import java.util.Locale
 import uiComponentCache
 import uiComponentAdmin
 
-if(action == 'list'){
+// POST /sym/component：按 action 读取共享编译包、树和历史，或调用管理服务维护组件。
+// runtimeBatch 接收 body.root，在同一已认证路由返回入口包或兼容的全量包。
+if (action == 'list') {
     return uiComponentCache.list()
+}
+if (action == 'runtimeBatch') {
+    var root = body?.root
+    var dataTaskRoot = root == 'data-convergence' || root == 'data-convergence-hive'
+    if (root != 'my-workbench' && root != 'app-shell' && !dataTaskRoot) {
+        return { complete: false, components: [] }
+    }
+
+    // 仅为已核对编译产物及其依赖提供入口包。独立详情路由和登记仍按原流程加载。
+    var reviewedDigests = {
+        'global-nav': '2043d19053a529bdcdf89812c496d804c88915fe905ce91a6ff25c903ef03719',
+        'shopping-car': '1fd5afffdffb61f935d4b959db1257bbd3e59a811af689915fc36f31884b0e38'
+    }
+    if (root == 'my-workbench') {
+        reviewedDigests['my-workbench'] = 'ea214eee37c62654fadf8660ffd80fc330124ae437a8761c7a18c32576187cbf'
+    }
+    if (dataTaskRoot) {
+        reviewedDigests.putAll({
+            'data-convergence': '88f639c5b3d353d711f8e0c49f9bd3a68e74cdf830f7bb7637c20539118d8ef4',
+            'data-convergence-hive': '063b0d0f72166d65e6e195f4261c160384e385c39cee3bc9ea7a19baec727c98',
+            'access-apply': '70eef44205912840db9d6d977f7d0bd98d82dd03cdbffe2f23cf9df88c143ae2',
+            'schedule-setting': 'cacb84d9abe0ace3717610d60fb17392865dccbee637a07124eebfd58cef260e'
+        })
+    }
+
+    // 历史名称可能用驼峰或其他大小写。发现与入口包名称近似的别名就沿用全量注册顺序。
+    var reviewedNames = {}
+    for (name in reviewedDigests.keySet()) {
+        reviewedNames[name.replaceAll('-', '').toLowerCase(Locale.ROOT)] = name
+    }
+
+    // 从同一控制库缓存快照取得编译包，按入口名在内存定位，无逐组件数据库读取。
+    var components = uiComponentCache.list()
+    var selected = []
+    var matchedNames = []
+    for (item in components) {
+        var name = item.name
+        var reviewedName = name == null ? null : reviewedNames.get(name.replaceAll('-', '').toLowerCase(Locale.ROOT))
+        if (reviewedName == null) {
+            continue
+        }
+        // 在线编译改动、组件缺失或同名冲突均使用原全量包，保持动态依赖可用。
+        if (name != reviewedName || matchedNames.contains(name) || DigestUtil.sha256Hex(item.compileJs) != reviewedDigests.get(name)) {
+            return { complete: true, scope: 'all', components: components }
+        }
+        matchedNames.add(name)
+        selected.add(item)
+    }
+    if (selected.size() == reviewedDigests.size()) {
+        return { complete: true, scope: 'root', components: selected }
+    }
+    return { complete: true, scope: 'all', components: components }
 }
 if(action == 'tree'){
     return uiComponentAdmin.tree()

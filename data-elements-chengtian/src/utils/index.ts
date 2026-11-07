@@ -1,4 +1,3 @@
-export * from "./es";
 export * from "./metadata-table-classification.js";
 
 /**

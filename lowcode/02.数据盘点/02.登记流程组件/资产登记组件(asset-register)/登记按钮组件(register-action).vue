@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div v-if="!isLastStep" class="action-btns">
+    <div v-if="showActions" class="action-btns">
       <template v-for="btn in actions" :key="btn.code">
         <span :class="`action-btn-${btn.code}-left`"></span>
         <el-button
@@ -24,13 +24,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRegisterStore } from "@/store";
-import { storeToRefs } from "pinia";
 
 const emit = defineEmits<{
   (event: "action", type: string): void;
 }>();
 const store = useRegisterStore();
-const { isSecondLastStep, isLastStep, loadStatus } = storeToRefs(store);
+const loadStatus = computed(() => store.state.loadStatus);
+const showActions = computed(
+  () => Boolean(store.currentComponent) && store.currentComponent !== "register-finish"
+);
 const isActionBusy = computed(() => Object.values(loadStatus.value || {}).some(Boolean));
 const clickLocked = ref(false);
 const isActionLocked = computed(() => clickLocked.value || isActionBusy.value);

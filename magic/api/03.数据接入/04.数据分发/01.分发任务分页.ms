@@ -15,9 +15,22 @@
 }
 ================================
 import tableSort
+import tableRead
 import tenantRuntime
-var sortColumn=tableSort.field(body,{taskName:'task_name',progress:'progress',createdTime:'created_time',updatedTime:'updated_time',startedTime:'started_time',finishedTime:'finished_time'},'createdTime')
-var sortDirection=tableSort.direction(body)
+
+// POST /ods/distribution/task/page 查询当前租户的分发任务。
+// 接收分页、任务名称或编码、状态及排序条件，返回持久化任务和同一范围的总数。
+// 仅查询当前登录租户的有效记录，保留实际状态与进度，不调用 NiFi 或写入数据。
+var sortFields = {
+    taskName: 'taskName',
+    progress: 'progress',
+    createdTime: 'createdTime',
+    updatedTime: 'updatedTime',
+    startedTime: 'startedTime',
+    finishedTime: 'finishedTime'
+}
+var sortField = tableSort.field(body, sortFields, 'createdTime')
+var sortDirection = tableSort.direction(body)
 
 var tenantId = tenantRuntime.id()
 if (tenantId == null || ('' + tenantId).trim() == '') {
@@ -32,58 +45,50 @@ var status = body?.status == null ? '' : ('' + body.status).trim()
 if (keyword.length() > 100 || status.length() > 40) {
     exit 400, '查询条件过长'
 }
-var keywordPattern = '%' + keyword + '%'
-var result = db.page("""
-    SELECT tid,
-           apply_form_id AS applyFormId,
-           catalog_id AS catalogId,
-           catalog_name AS catalogName,
-           source_table_id AS sourceTableId,
-           source_table_name AS sourceTableName,
-           task_code AS taskCode,
-           task_name AS taskName,
-           task_status AS taskStatus,
-           progress,
-           execution_engine AS executionEngine,
-           execution_mode AS executionMode,
-           status_message AS statusMessage,
-           started_time AS startedTime,
-           finished_time AS finishedTime,
-           created_time AS createdTime,
-           updated_time AS updatedTime
-      FROM data_distribution_task_t
-     WHERE tenant_id = #{tenantId}
-       AND is_del = 0
-       AND (#{keyword} = '' OR task_name LIKE #{keywordPattern}
-            OR task_code LIKE #{keywordPattern})
-       AND (#{status} = '' OR task_status = #{status})
-     ORDER BY ${sortColumn} ${sortDirection}, tid ASC
-""", pageSize, (pageNum - 1) * pageSize)
-var items = []
-var value = (row, key) => {
-    if (row[key] != null) { return row[key] }
-    if (row[key.toLowerCase()] != null) { return row[key.toLowerCase()] }
-    return row[key.toUpperCase()]
+
+var projection = {
+    tid: tableRead.column('task', 'tid', 'TEXT'),
+    applyFormId: tableRead.column('task', 'apply_form_id', 'TEXT'),
+    catalogId: tableRead.column('task', 'catalog_id', 'TEXT'),
+    catalogName: tableRead.column('task', 'catalog_name', 'TEXT'),
+    sourceTableId: tableRead.column('task', 'source_table_id', 'TEXT'),
+    sourceTableName: tableRead.column('task', 'source_table_name', 'TEXT'),
+    taskCode: tableRead.column('task', 'task_code', 'TEXT'),
+    taskName: tableRead.column('task', 'task_name', 'TEXT'),
+    taskStatus: tableRead.column('task', 'task_status', 'TEXT'),
+    progress: tableRead.column('task', 'progress', 'NUMBER'),
+    executionEngine: tableRead.column('task', 'execution_engine', 'TEXT'),
+    executionMode: tableRead.column('task', 'execution_mode', 'TEXT'),
+    statusMessage: tableRead.column('task', 'status_message', 'TEXT'),
+    startedTime: tableRead.column('task', 'started_time', 'TIME'),
+    finishedTime: tableRead.column('task', 'finished_time', 'TIME'),
+    createdTime: tableRead.column('task', 'created_time', 'TIME'),
+    updatedTime: tableRead.column('task', 'updated_time', 'TIME')
 }
-for (row in (result.list == null ? [] : result.list)) {
-    items.add({
-        tid: value(row, 'tid'),
-        applyFormId: value(row, 'applyFormId'),
-        catalogId: value(row, 'catalogId'),
-        catalogName: value(row, 'catalogName'),
-        sourceTableId: value(row, 'sourceTableId'),
-        sourceTableName: value(row, 'sourceTableName'),
-        taskCode: value(row, 'taskCode'),
-        taskName: value(row, 'taskName'),
-        taskStatus: value(row, 'taskStatus'),
-        progress: value(row, 'progress'),
-        executionEngine: value(row, 'executionEngine'),
-        executionMode: value(row, 'executionMode'),
-        statusMessage: value(row, 'statusMessage'),
-        startedTime: value(row, 'startedTime'),
-        finishedTime: value(row, 'finishedTime'),
-        createdTime: value(row, 'createdTime'),
-        updatedTime: value(row, 'updatedTime')
-    })
+var query = tableRead.from('data_distribution_task_t', 'task', tenantId)
+query.where(tableRead.equal(tableRead.column('task', 'is_del', 'NUMBER'), 0))
+
+// 有筛选值才加条件，达梦等数据库即使将空字符串视为 NULL，也能正确返回未筛选任务。
+if (keyword != '') {
+    var pattern = '%' + keyword + '%'
+    query.where(tableRead.any([
+        tableRead.like(projection.taskName, pattern),
+        tableRead.like(projection.taskCode, pattern)
+    ]))
 }
-return { pageNum: pageNum, pageSize: pageSize, total: result.total, list: items }
+if (status != '') {
+    query.where(tableRead.equal(projection.taskStatus, status))
+}
+
+// 数据库端将空值排在末尾，同值按任务 ID 升序，保证翻页顺序稳定。
+var page = query.page(projection, projection[sortField], sortDirection, 'tid', pageNum, pageSize)
+
+// 只返回约定的投影字段，保留数值和时间类型，排除方言分页附加的内部行号。
+var items = page.rows.map(row => {
+    var item = {}
+    for (key in projection.keySet()) {
+        item[key] = row[key]
+    }
+    return item
+})
+return {pageNum: pageNum, pageSize: pageSize, total: page.total, list: items}

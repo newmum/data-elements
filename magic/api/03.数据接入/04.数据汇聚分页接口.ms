@@ -25,17 +25,17 @@
 
 import cn.hutool.json.JSONUtil
 import log
-// 接口：04.数据汇聚分页接口
-// 路由：POST /ods/dataAggPage
-// 业务说明：数据汇聚分页接口（POST /ods/dataAggPage）。页面专用只读接口；当前租户内，数据源与数据表登记状态均大于 0；表清单默认按本表与已授权关联画布的最新修改时间倒序、表ID升序后服务端分页，空时间排末尾，任务及来源/全部已授权目标按当前页批量补充，ES 仅辅助层级和详情展示；不写入数据库；使用请求参数 pageNum、pageSize、viewLevel、datasourceId、datasourceIds、tableId、tid、keyword、accessStatus（表视图：0待接入、1已接入、2待审批、3待启动）；涉及 db_table_t、db_datasource_t、data_access_agg_task_t 等业务表。
 import tenantEs
 import '@/common/configData' as configData
+import '@/common/ods-source-classifier' as odsSourceClassifier
+import '@/common/access-table-family' as accessTableFamily
 import tenantRuntime
-import identityRuntime
 import taskRuntime
+import tableSort
+import tableRead
 
 /*
- * 数据汇聚分页
+ * 数据汇聚分页。POST /ods/dataAggPage
  *
  * 核心口径：
  * 1. 关系库主表限定数据源与数据表登记状态均大于 0，并保留租户归属和业务类型；
@@ -105,7 +105,6 @@ if (pageNum < 1) { pageNum = 1 }
 if (pageSize < 1) { pageSize = 20 }
 if (pageSize > 100) { pageSize = 100 }
 // 默认按本表与关联画布最新修改时间倒序；白名单排序先于分页，补齐链路后保持数据库顺序。
-import tableSort
 var sortFields={tableName:'table_name',createdTime:'created_time',updatedTime:'updated_time',
     fieldCount:'field_count',recordCount:'record_count',taskCount:'taskCount'}
 var sortField=body?.sortField==null?'updatedTime':text(body.sortField)
@@ -254,26 +253,10 @@ if (viewLevel == 'tableDetail') {
 }
 
 var distributionView = false
-// 接入/分发依据当前租户资源中心 ODS 层及其分域绑定分类，不按库名、节点类型或数据库产品判断。
-// 同时校验真实字典根、层/域和绑定的 tenant_id / is_del，旧解绑或其他租户配置不能改变当前候选范围。
-var warehouseBindings = db.select("""
-    SELECT DISTINCT binding.datasource_id AS datasourceId
-      FROM dwm_center_layer_source_t binding
-      JOIN sym_dict_t node ON node.tid=binding.target_id AND node.tenant_id=#{tenantId} AND node.is_del=0
-      JOIN sym_dict_t ods ON ods.tenant_id=#{tenantId} AND ods.is_del=0 AND LOWER(ods.dict_code)='ods'
-           AND ((binding.target_type='layer' AND node.tid=ods.tid)
-                OR (binding.target_type='domain' AND node.parent_id=ods.tid))
-      JOIN sym_dict_t root ON root.tid=ods.parent_id AND root.tenant_id=#{tenantId}
-           AND root.is_del=0 AND root.parent_id='0' AND root.dict_code='dataSourceType'
-     WHERE binding.tenant_id=#{tenantId} AND binding.is_del=0 AND binding.datasource_id IS NOT NULL
-""")
-var warehouseDatasourceIds = []
-for (binding in (warehouseBindings == null ? [] : warehouseBindings)) {
-    var bindingDatasourceId = text(first(binding, ['datasourceId', 'datasourceid', 'datasource_id']))
-    if (!blank(bindingDatasourceId) && !warehouseDatasourceIds.contains(bindingDatasourceId)) {
-        warehouseDatasourceIds.add(bindingDatasourceId)
-    }
-}
+// 接入列表一次取得当前租户的 ODS 绑定分类，随后从主列表排除这些来源。
+var odsClassification = odsSourceClassifier()
+var warehouseDatasourceIds = odsClassification.query.grouped(odsClassification.projection, odsClassification.groups)
+    .map(row => text(row.source_id)).filter(id => !blank(id))
 // 与数据源管理相同的身份：接入方式优先，兼容历史驱动别名和无连接 API。
 var taskDatasourceType = (row) => {
     var raw = text(first(row,['dbType','db_type'])).trim().toLowerCase().replaceAll('\\s|_|-','')
@@ -343,308 +326,174 @@ if (viewLevel == 'table') {
         }
     }
 
-    // 运行状态筛选先取一次快照；其他页签在查询后读取，避免长查询期间版本变化触发连续补刷。
-    var tableRuntimeSnapshot = requestedAccessStatus == '1' || requestedAccessStatus == '3' ? taskRuntime.snapshot() : null
-    var runningGroupChunks = []
-    var groupChunk = []
-    if (tableRuntimeSnapshot != null && tableRuntimeSnapshot.fresh == true && tableRuntimeSnapshot.index != null) {
-        var runtimeGroups = tableRuntimeSnapshot.index.groups()
-        for (groupId, runtimeGroup in runtimeGroups) {
-            if (runtimeGroup.running()) {
-                groupChunk.add(groupId)
-                if (groupChunk.size() == 500) { runningGroupChunks.add(groupChunk); groupChunk = [] }
-            }
+    // 运行状态筛选使用同一次快照，避免计数、分页和任务展示观察到不同版本。
+    var needsRuntimeFilter = requestedAccessStatus == '1' || requestedAccessStatus == '3'
+    var tableRuntimeSnapshot = needsRuntimeFilter ? taskRuntime.snapshot() : null
+    var freshRuntime = tableRuntimeSnapshot?.fresh == true
+    var runningGroupIds = []
+    if (freshRuntime && tableRuntimeSnapshot.index != null) {
+        for (groupId, runtimeGroup in tableRuntimeSnapshot.index.groups()) {
+            if (runtimeGroup.running()) { runningGroupIds.add(groupId) }
         }
-        if (groupChunk.size() > 0) { runningGroupChunks.add(groupChunk) }
     }
 
-    /*
-     * 任务表候选必须有登记状态：asset_status>0。
-     * annotated=1 仅代表第二步已经标注，不能越过表资产的完成边界。ES
-     * 仅是搜索投影；候选直接从 db_table_t 主表产生，避免投影滞后或大库扫描。
-     */
-    // 所有页签和关键词均在数据库内分页，后续只批量装载当前页的链路。
     if (tableKeyword.length() > 100) { exit 400, '搜索词过长' }
-    var taskEpochBase = new Date(0::long)
-    var sortTargetSourceIds=accessibleDatasourceRows.map(row=>text(row.tid))
-    if(sortTargetSourceIds.size()==0) {sortTargetSourceIds=['__none__']}
-    // 按实际租户业务库转换毫秒时间戳；复用现有技术模块取得方言，连接由模块负责释放。
-    var sortDatabaseProduct=text(identityRuntime.inspectTenantBinding(tenantId).databaseProduct).toLowerCase()
-    var pipelineTimeSql=''
-    if(sortDatabaseProduct.contains('mysql') || sortDatabaseProduct.contains('mariadb') || sortDatabaseProduct=='h2') {
-        pipelineTimeSql='TIMESTAMPADD(MICROSECOND,MOD(sortPipeline.updated_at,1000)*1000,TIMESTAMPADD(SECOND,FLOOR(sortPipeline.updated_at/1000),CAST(#{taskEpochBase} AS DATETIME(3))))'
-    } else if(sortDatabaseProduct.contains('kingbase')) {
-        pipelineTimeSql="(CAST(#{taskEpochBase} AS TIMESTAMP)+sortPipeline.updated_at*INTERVAL '1 millisecond')"
-    } else if(sortDatabaseProduct.contains('dm') || sortDatabaseProduct.contains('oracle')) {
-        pipelineTimeSql="(CAST(#{taskEpochBase} AS TIMESTAMP)+NUMTODSINTERVAL(sortPipeline.updated_at/1000.0,'SECOND'))"
-    } else { exit 500, '当前业务库尚未适配任务修改时间排序' }
-    // 有画布时不采用任务监控更新时间；旧任务才回退任务时间，避免监控刷新让列表反复置顶。
-    // 数据库一次展开最多15跳授权祖先并聚合；先聚合再关联候选，避免逐候选重复追溯。
-    // MySQL、H2 和金仓使用 WITH RECURSIVE，达梦和 Oracle 使用递归 WITH。
-    var recursivePrefix=sortDatabaseProduct.contains('dm') || sortDatabaseProduct.contains('oracle') ? 'WITH ' : 'WITH RECURSIVE '
-    var taskSortCteSql=recursivePrefix+"""
-        task_ancestry(task_id,root_table_id,parent_table_id,modified_time,hop_depth) AS (
-          SELECT sortTask.tid,hop.tid,hop.source_table_id,
-                 CASE WHEN sortPipeline.updated_at IS NOT NULL THEN """+pipelineTimeSql+""" ELSE sortTask.updated_time END,0
-            FROM data_access_agg_task_t sortTask
-            JOIN db_table_t hop ON hop.tid=sortTask.source_table_id AND hop.tenant_id=#{tenantId} AND hop.is_del=0
-            JOIN db_table_t sortTarget ON sortTarget.tid=sortTask.target_table_id AND sortTarget.tenant_id=#{tenantId} AND sortTarget.is_del=0
-            LEFT JOIN nifi_pipeline_t sortPipeline ON sortPipeline.id=sortTask.pipeline_id AND sortPipeline.tenant_id=#{tenantId} AND sortPipeline.is_del=0
-           WHERE sortTask.tenant_id=#{tenantId} AND sortTask.is_del=0
-             AND hop.datasource_id IN <foreach collection="sortTargetSourceIds" item="sortHopSource" open="(" close=")" separator=",">#{sortHopSource}</foreach>
-             AND sortTarget.datasource_id IN <foreach collection="sortTargetSourceIds" item="sortTargetSource" open="(" close=")" separator=",">#{sortTargetSource}</foreach>
-          UNION ALL
-          SELECT ancestry.task_id,parent.tid,parent.source_table_id,ancestry.modified_time,ancestry.hop_depth+1
-            FROM task_ancestry ancestry
-            JOIN db_table_t parent ON parent.tid=ancestry.parent_table_id AND parent.tenant_id=#{tenantId} AND parent.is_del=0
-           WHERE ancestry.hop_depth<15 AND parent.tid<>ancestry.root_table_id
-             AND parent.datasource_id IN <foreach collection="sortTargetSourceIds" item="sortAncestorSource" open="(" close=")" separator=",">#{sortAncestorSource}</foreach>
-        ),task_sort AS (
-          SELECT root_table_id,MAX(modified_time) AS task_modified_time,COUNT(DISTINCT task_id) AS sort_task_count
-            FROM task_ancestry GROUP BY root_table_id
-        )
-    """
-    var keywordPattern = '%' + tableKeyword.toLowerCase().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
-    var visibleTaskDatasourceIds = []
-    var taskStatusSql = ''
-    if (['0','1','2','3'].contains(requestedAccessStatus)) {
-        // 目标库不必是原始库的登记状态；来源和目标均须是当前租户有效数据源。
-        var taskDatasourceRows = db.table('db_datasource_t').where()
-            .eq('tenant_id', tenantId).eq('is_del', 0).select()
-        for (taskDatasource in taskDatasourceRows) { visibleTaskDatasourceIds.add(text(taskDatasource.tid)) }
-        if (visibleTaskDatasourceIds.size() == 0) { visibleTaskDatasourceIds = ['__none__'] }
-        var accessPipelineJoin = ['0','2'].contains(requestedAccessStatus) ? '' : """
-                LEFT JOIN nifi_pipeline_t access_pipeline ON access_pipeline.id=task.pipeline_id
-                     AND access_pipeline.tenant_id=#{tenantId} AND access_pipeline.is_del=0
-        """
-        // 已绑定有效画布以其 PG 为准；旧任务才使用任务 PG，与下方任务装饰使用同一规则。
-        var effectiveGroupSql = '(CASE WHEN access_pipeline.id IS NOT NULL THEN access_pipeline.nifi_process_group_id ELSE task.process_group_id END)'
-        var taskRuntimeCondition = '1=0'
-        if (runningGroupChunks.size() > 0) {
-            taskRuntimeCondition = '<foreach collection="runningGroupChunks" item="groupBatch" open="(" close=")" separator=" OR ">'
-                + effectiveGroupSql + ' IN <foreach collection="groupBatch" item="runningGroup" open="(" close=")" separator=",">#{runningGroup}</foreach></foreach>'
+    var textColumn = (alias, name) => tableRead.column(alias, name, 'TEXT')
+    var numberColumn = (alias, name) => tableRead.column(alias, name, 'NUMBER')
+    var timeColumn = (alias, name) => tableRead.column(alias, name, 'TIME')
+    var active = alias => tableRead.equal(numberColumn(alias, 'is_del'), 0)
+    var present = expression => tableRead.not(tableRead.isNull(expression))
+    var tableDatasource = textColumn('t', 'datasource_id')
+    var tableName = textColumn('t', 'table_name')
+    var tableNameCn = textColumn('t', 'table_name_cn')
+    var tableComment = tableRead.column('t', 'table_comment', 'LOB')
+    var taskSource = textColumn('task', 'source_table_id')
+
+    // 历史目标可以未登记，但来源、目标表及其所属数据源必须是当前租户有效记录。
+    var authorizedTasks = () => {
+        var query = tableRead.from('data_access_agg_task_t', 'task', tenantId)
+        query.leftJoin('db_table_t', 'hop', 'tid', 'source_table_id', [active('hop')])
+        query.leftJoin('db_table_t', 'target', 'tid', 'target_table_id', [active('target')])
+        query.leftJoin('db_datasource_t', 'hop_db', 'tenant_id', 'tenant_id', [
+            active('hop_db'), tableRead.equal(textColumn('hop_db', 'tid'), textColumn('hop', 'datasource_id'))
+        ])
+        query.leftJoin('db_datasource_t', 'target_db', 'tenant_id', 'tenant_id', [
+            active('target_db'), tableRead.equal(textColumn('target_db', 'tid'), textColumn('target', 'datasource_id'))
+        ])
+        query.where(tableRead.all([active('task'), present(textColumn('hop_db', 'tid')),
+            present(textColumn('target_db', 'tid'))]))
+        return query
+    }
+
+    var candidatesFor = sourceIds => {
+        var query = tableRead.from('db_table_t', 't', tenantId)
+        query.where(tableRead.all([
+            active('t'), tableRead.greaterThan(numberColumn('t', 'asset_status'), 0),
+            tableRead.in(tableDatasource, sourceIds),
+            tableRead.in(textColumn('t', 'business_type'), ['业务表', '日志表', '字典表'])
+        ]))
+        if (!blank(tableKeyword)) {
+            query.where(tableRead.any([tableRead.contains(tableName, tableKeyword),
+                tableRead.contains(tableNameCn, tableKeyword), tableRead.contains(tableComment, tableKeyword)]))
         }
-        var existsSql = """
-            EXISTS (
-                SELECT 1 FROM data_access_agg_task_t task
-                JOIN db_table_t hop ON hop.tid=task.source_table_id
-                     AND hop.tenant_id=#{tenantId} AND hop.is_del=0
-                JOIN db_datasource_t hop_db ON hop_db.tid=hop.datasource_id
-                     AND hop_db.tenant_id=#{tenantId} AND hop_db.is_del=0
-                JOIN db_table_t target ON target.tid=task.target_table_id
-                     AND target.tenant_id=#{tenantId} AND target.is_del=0
-                ${accessPipelineJoin}
-                WHERE task.tenant_id=#{tenantId} AND task.is_del=0
-                  AND hop.tid=t.tid
-                  AND hop.datasource_id IN <foreach collection="visibleTaskDatasourceIds" item="hopDb" open="(" close=")" separator=",">#{hopDb}</foreach>
-                  AND target.datasource_id IN <foreach collection="visibleTaskDatasourceIds" item="targetDb" open="(" close=")" separator=",">#{targetDb}</foreach>
-            )
-        """
+        if (!['0', '1', '2', '3'].contains(requestedAccessStatus)) { return query }
+
+        // 页签按直接任务判定。已有画布即以画布 PG 为准，即使该 PG 为空。
+        var tasks = authorizedTasks()
+        tasks.where(tableRead.in(textColumn('hop', 'datasource_id'), sourceIds))
+        var statusProjection = { source_id: taskSource }
+        if (needsRuntimeFilter) {
+            tasks.leftJoin('nifi_pipeline_t', 'status_pipeline', 'id', 'pipeline_id', [active('status_pipeline')])
+            var effectiveGroup = tableRead.when(present(textColumn('status_pipeline', 'id')),
+                textColumn('status_pipeline', 'nifi_process_group_id'), textColumn('task', 'process_group_id'))
+            // 快照不可用时，只能判定无 PG 的任务待启动。带 PG 的旧任务继续待确认。
+            var excluded = freshRuntime ? tableRead.in(effectiveGroup, runningGroupIds)
+                : present(tableRead.blankAsNull(tableRead.trim(effectiveGroup)))
+            statusProjection.excluded_count = tableRead.countIf(excluded)
+        }
+        query.leftJoinGrouped(tasks, 'direct_access', 'source_id', 'tid', statusProjection, [taskSource])
+        var directSource = textColumn('direct_access', 'source_id')
         if (requestedAccessStatus == '0' || requestedAccessStatus == '2') {
-            taskStatusSql = ' AND NOT ' + existsSql + (requestedAccessStatus == '2' ? ' AND COALESCE(t.access_request_status,0)=1' : ' AND COALESCE(t.access_request_status,0)<>1')
+            var approval = tableRead.equal(tableRead.coalesce([numberColumn('t', 'access_request_status'), 0]), 1)
+            query.where(tableRead.all([tableRead.isNull(directSource),
+                requestedAccessStatus == '2' ? approval : tableRead.not(approval)]))
         } else {
-            var runningExistsSql = existsSql.replace('AND hop.tid=t.tid', 'AND hop.tid=t.tid AND (' + taskRuntimeCondition + ')')
+            var hasExcluded = tableRead.greaterThan(numberColumn('direct_access', 'excluded_count'), 0)
             if (requestedAccessStatus == '1') {
-                taskStatusSql = ' AND ' + runningExistsSql
+                // 过期快照中的 PG 不能判断任务正在运行。
+                query.where(freshRuntime ? hasExcluded : tableRead.in(textColumn('t', 'tid'), []))
             } else {
-                // 快照不可用时，仅无 PG 的未部署任务可确定为待启动，已有 PG 的任务保持待确认。
-                var excludedExistsSql = tableRuntimeSnapshot.fresh == true ? runningExistsSql
-                    : existsSql.replace('AND hop.tid=t.tid', 'AND hop.tid=t.tid AND NULLIF(TRIM(' + effectiveGroupSql + "), '') IS NOT NULL")
-                taskStatusSql = ' AND ' + existsSql + ' AND NOT ' + excludedExistsSql
+                query.where(tableRead.all([present(directSource), tableRead.not(hasExcluded)]))
+            }
+        }
+        return query
+    }
+
+    // 统计先按候选数据源汇总，再应用用户选择的来源类型。
+    if (body?.includeDatasourceTypeStatistics == true) {
+        var facetRows = candidatesFor(scopedDatasourceIds).grouped({ source_id: tableDatasource,
+            table_count: tableRead.count() }, [tableDatasource])
+        for (facet in facetRows) {
+            var source = registeredDatasourceMap[text(facet.source_id)]
+            if (source == null) { continue }
+            var tableCount = facet.table_count || 0
+            var key = taskDatasourceType(source)
+            var raw = text(first(source, ['dbType', 'db_type']))
+            datasourceTypeStatistics.total += tableCount
+            datasourceTypeStatistics.typeCounts[key] = (datasourceTypeStatistics.typeCounts[key] || 0) + tableCount
+            if (!blank(raw)) {
+                datasourceTypeStatistics.dbTypes[raw] = (datasourceTypeStatistics.dbTypes[raw] || 0) + tableCount
             }
         }
     }
-    // 同值以表ID稳定排序，空值始终排末尾；全部、搜索和状态页签复用同一分页顺序。
-    var tableOrderExpression = sortField=='taskCount' ? 'ordered_table.sort_task_count' : sortField=='updatedTime' ? 'ordered_table.access_modified_time' : 'ordered_table.'+sortColumn
-    var tableNullOrderSql = sortField=='taskCount' ? '' : 'CASE WHEN '+tableOrderExpression+' IS NULL THEN 1 ELSE 0 END ASC,'
-    var tableWhereSql="""
-WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.asset_status>0
-           AND t.datasource_id IN <foreach collection="scopedDatasourceIds" item="sourceDb" open="(" close=")" separator=",">#{sourceDb}</foreach>
-           AND t.business_type IN ('业务表','日志表','字典表')
-           AND (#{tableKeyword}='' OR LOWER(t.table_name) LIKE #{keywordPattern} ESCAPE '!'
-                OR LOWER(t.table_name_cn) LIKE #{keywordPattern} ESCAPE '!'
-                OR LOWER(t.table_comment) LIKE #{keywordPattern} ESCAPE '!')
-    """ + taskStatusSql
-    // 按数据源一次聚合匹配表数，再归入类型；角标与分页使用同一记录口径。
-    if(body?.includeDatasourceTypeStatistics==true) {
-        var facetSources=db.select('SELECT t.datasource_id AS datasourceId, COUNT(*) AS tableCount FROM db_table_t t '+tableWhereSql+' GROUP BY t.datasource_id')
-        for(facet in facetSources) {
-            var id=text(first(facet,['datasourceId','datasourceid','datasource_id']))
-            var source=registeredDatasourceMap[id]
-            if(source==null) {continue}
-            var tableCount=first(facet,['tableCount','tablecount','table_count']) || 0
-            var key=taskDatasourceType(source)
-            var raw=text(first(source,['dbType','db_type']))
-            datasourceTypeStatistics.total+=tableCount
-            datasourceTypeStatistics.typeCounts[key]=(datasourceTypeStatistics.typeCounts[key] || 0)+tableCount
-            if(!blank(raw)) {datasourceTypeStatistics.dbTypes[raw]=(datasourceTypeStatistics.dbTypes[raw] || 0)+tableCount}
-        }
-    }
-    // 统计忽略自身类型条件，列表再应用类型；其余查询条件完全共用。
-    if(!blank(requestedDatasourceType)) {
-        scopedDatasourceIds=scopedDatasourceIds.filter(id=>taskDatasourceType(registeredDatasourceMap[text(id)])==requestedDatasourceType)
-        if(scopedDatasourceIds.size()==0) {return {viewLevel:'table',pageNum:pageNum,pageSize:pageSize,total:0,list:[],datasourceTypeStatistics:datasourceTypeStatistics}}
-    }
-    var tablePageSql = """
-        SELECT t.*
-    """+',task_sort.task_modified_time'+(sortField=='taskCount' ? ',COALESCE(task_sort.sort_task_count,0) AS sort_task_count' : '')+"""
-          FROM db_table_t t
-        LEFT JOIN task_sort ON task_sort.root_table_id=t.tid
-    """ + tableWhereSql
-    tablePageSql='SELECT modified_table.*,CASE WHEN modified_table.updated_time IS NULL OR modified_table.task_modified_time>modified_table.updated_time THEN modified_table.task_modified_time ELSE modified_table.updated_time END AS access_modified_time FROM ('+tablePageSql+') modified_table'
-    tablePageSql=taskSortCteSql+'SELECT ordered_table.* FROM ('+tablePageSql+') ordered_table ORDER BY '+tableNullOrderSql+tableOrderExpression+' '+sortDir+',ordered_table.tid ASC'
-    var registeredTablePage = db.page(tablePageSql, pageSize, (pageNum - 1) * pageSize)
-    var registeredTableTotal = registeredTablePage == null || registeredTablePage.total == null ? 0 : registeredTablePage.total
-    var registeredTableRows = registeredTablePage == null || registeredTablePage.list == null ? [] : registeredTablePage.list
-    var registeredTableMap = {}
-    for (registeredTableRow in (registeredTableRows == null ? [] : registeredTableRows)) {
-        var registeredTableId = text(first(registeredTableRow, ['tid', 'id']))
-        if (!blank(registeredTableId)) {
-            registeredTableMap[registeredTableId] = registeredTableRow
-        }
-    }
-    var tableHits = []
-    var tableHitIndexes = {}
-    var tableHitIndex = 0
-    for (tableHit in tableHits) {
-        var tableHitId = text(first(tableHit?._source, ['tid', 'id']) || tableHit?._id)
-        if (!blank(tableHitId)) {
-            tableHitIndexes[tableHitId] = tableHitIndex
-        }
-        tableHitIndex = tableHitIndex + 1
-    }
-    for (fallbackTableRow in (registeredTableRows == null ? [] : registeredTableRows)) {
-        var fallbackTableId = text(first(fallbackTableRow, ['tid', 'id']))
-        var fallbackTableText = text(first(fallbackTableRow, ['tableName', 'table_name'])) + ' ' +
-            text(first(fallbackTableRow, ['tableNameCn', 'table_name_cn', 'tableComment', 'table_comment']))
-        if (blank(fallbackTableId) || (!blank(tableKeyword) && !fallbackTableText.toLowerCase().contains(tableKeyword.toLowerCase()))) {
-            continue
-        }
-        if (tableHitIndexes[fallbackTableId] == null) {
-            tableHitIndexes[fallbackTableId] = tableHits.size()
-            tableHits.add({ _id: fallbackTableId, _source: fallbackTableRow })
-        } else {
-            // The relational record also carries the latest business type,
-            // workflow state and source-table binding.
-            tableHits[tableHitIndexes[fallbackTableId]]._source = fallbackTableRow
-        }
-    }
-    var datasourceIdsForNames = []
-    for (selectedDatasourceIdForName in scopedDatasourceIds) {
-        if (!datasourceIdsForNames.contains(selectedDatasourceIdForName)) {
-            datasourceIdsForNames.add(selectedDatasourceIdForName)
-        }
-    }
-    for (tableHitForDatasource in tableHits) {
-        var tableDocForDatasource = tableHitForDatasource?._source
-        var tableDatasourceIdForName = text(first(tableDocForDatasource, ['datasourceId', 'dbId', 'datasource_id', 'db_id']))
-        if (!blank(tableDatasourceIdForName) && !datasourceIdsForNames.contains(tableDatasourceIdForName)) {
-            datasourceIdsForNames.add(tableDatasourceIdForName)
+    if (!blank(requestedDatasourceType)) {
+        scopedDatasourceIds = scopedDatasourceIds.filter(id => taskDatasourceType(registeredDatasourceMap[text(id)]) == requestedDatasourceType)
+        if (scopedDatasourceIds.size() == 0) {
+            return { viewLevel: 'table', pageNum: pageNum, pageSize: pageSize, total: 0, list: [],
+                datasourceTypeStatistics: datasourceTypeStatistics }
         }
     }
 
-    // 数据源名称以 db_datasource_t 主表为准。不要为补充展示名称再访问 ES，
-    // 否则根节点查询会随数据源数量放大，并破坏本接口的主表查询口径。
+    // 全局排序先按 15 跳祖先聚合。有效画布的修改时间优先，历史任务才回退到任务时间。
+    var sortTasks = authorizedTasks()
+    sortTasks.leftJoin('nifi_pipeline_t', 'sort_pipeline', 'id', 'pipeline_id', [active('sort_pipeline')])
+    var epoch = numberColumn('sort_pipeline', 'updated_at')
+    var taskTime = tableRead.when(present(epoch), tableRead.epochMillis(epoch), timeColumn('task', 'updated_time'))
+    var authorizedDatasourceIds = accessibleDatasourceRows.map(row => text(row.tid))
+    var ancestors = sortTasks.ancestors('access_ancestor', 'db_table_t', 'parent', 'tid', 'source_table_id',
+        textColumn('hop', 'tid'), textColumn('hop', 'source_table_id'),
+        { task_id: textColumn('task', 'tid'), modified_time: taskTime },
+        [active('parent'), tableRead.in(textColumn('parent', 'datasource_id'), authorizedDatasourceIds)], 15)
+    var ancestorId = textColumn('access_ancestor', 'node_id')
+    var query = candidatesFor(scopedDatasourceIds)
+    var sortProjection = { node_id: ancestorId, modified_time: tableRead.max(timeColumn('access_ancestor', 'modified_time')) }
+    if (sortColumn == 'taskCount') {
+        sortProjection.task_count = tableRead.countDistinct(textColumn('access_ancestor', 'task_id'))
+    }
+    // 此关联只用于行字段和排序。总数与角标无需展开祖先。
+    query.leftJoinGroupedProjection(ancestors, 'task_sort', 'node_id', 'tid', sortProjection, [ancestorId])
+    var updatedTime = timeColumn('t', 'updated_time')
+    var taskUpdatedTime = timeColumn('task_sort', 'modified_time')
+    var modifiedTime = tableRead.when(tableRead.any([tableRead.isNull(updatedTime),
+        tableRead.greaterThan(taskUpdatedTime, updatedTime)]), taskUpdatedTime, updatedTime)
+    var orders = {
+        table_name: tableName,
+        created_time: timeColumn('t', 'created_time'),
+        updated_time: modifiedTime,
+        field_count: numberColumn('t', 'field_count'),
+        record_count: numberColumn('t', 'record_count')
+    }
+    var order = sortColumn == 'taskCount' ? tableRead.coalesce([numberColumn('task_sort', 'task_count'), 0]) : orders[sortColumn]
+    // 保留旧部署可能仍存在的表登记字段，并在同一查询返回全局计算的修改时间。
+    var registeredPage = query.pageRootRows({ access_modified_time: modifiedTime }, order, sortDir, 'tid', pageNum, pageSize)
+    var registeredTableTotal = registeredPage.total
+    var tableCandidates = registeredPage.rows
+    var candidateIds = []
+    var registeredTableMap = {}
+    for (row in tableCandidates) {
+        candidateIds.add(row.tid)
+        registeredTableMap[row.tid] = row
+    }
+
+    // 当前页数据源已经按租户批量校验，复用主表展示名称。
     var selectedDatasourceNameMap = {}
     var selectedDatasourceAppNameMap = {}
-    for (fallbackDatasourceId in datasourceIdsForNames) {
-        var fallbackDatasource = registeredDatasourceMap[text(fallbackDatasourceId)]
-        if (fallbackDatasource != null) {
-            selectedDatasourceNameMap[text(fallbackDatasourceId)] = first(fallbackDatasource, ['dbName', 'db_name'])
-            selectedDatasourceAppNameMap[text(fallbackDatasourceId)] = first(fallbackDatasource, ['appName', 'app_name'])
-        }
+    for (sourceId in scopedDatasourceIds) {
+        var source = registeredDatasourceMap[sourceId]
+        selectedDatasourceNameMap[sourceId] = first(source, ['dbName', 'db_name'])
+        selectedDatasourceAppNameMap[sourceId] = first(source, ['appName', 'app_name'])
     }
 
-    // 只保留五步登记支持接入的业务表、日志表和字典表。
-    var tableCandidates = []
-    var candidateIds = []
-    for (hit in tableHits) {
-        var tableDoc = hit?._source
-        var tableId = text(first(tableDoc, ['tid', 'id']) || hit?._id)
-        var registeredTable = registeredTableMap[tableId]
-        if (tableDoc == null || registeredTable == null || !isAccessTableType(first(registeredTable, ['businessType', 'business_type']))) {
-            continue
-        }
-        tableDoc = registeredTable
-        tableDoc.tid = tableId
-        tableCandidates.add(tableDoc)
-        candidateIds.add(tableId)
-    }
 
-    // 当前页登记表已经来自关系库，直接复用同一批权威记录。
-    // 重读完整行会重复传输字段治理和字典配置等大字段，导致大页在低带宽环境超时。
     var tableWorkflowMap = registeredTableMap
 
-    // 已有链路支持 source_table_id 保留原始根、逐跳父级两种历史表示，根自指也有效。
-    // 固定 16 层按父级主键关联；用祖先 ID 集合过滤，避免每个 hop 与整页 root 的 OR 连接乘积。
-    // 一次批量查询后按祖先集合归组，不按表行或链路深度补查；别名固定，请求值仍绑定。
-    var materializedTargetMap = {}
-    var materializedTargetDatasourceIds = []
-    var materializedTargets = []
-    var candidateRootMap = {}
-    var chainSourceIds = []
-    var chainRootBySource = {}
-    var chainRootsBySource = {}
-    for (candidateId in candidateIds) {
-        candidateRootMap[candidateId] = true
-        chainSourceIds.add(candidateId)
-    }
-    var rootIdSetSql = '<foreach collection="candidateIds" item="rootId" open="(" close=")" separator=",">#{rootId}</foreach>'
-    var ancestorJoinSql = ''
-    var ancestorColumnsSql = ',hop.source_table_id AS ancestorSource0'
-    var ancestorMatchSql = '(hop.tid<>hop.source_table_id AND hop.source_table_id IN ' + rootIdSetSql + ')'
-    var ancestorDepth = 1
-    while (ancestorDepth <= 15) {
-        var ancestorAlias = 'ancestor_' + ancestorDepth
-        var previousAlias = ancestorDepth == 1 ? 'hop' : 'ancestor_' + (ancestorDepth - 1)
-        ancestorJoinSql = ancestorJoinSql + ' LEFT JOIN db_table_t ' + ancestorAlias
-            + ' ON ' + ancestorAlias + '.tid=' + previousAlias + '.source_table_id'
-            + ' AND ' + ancestorAlias + '.tenant_id=#{tenantId} AND ' + ancestorAlias + '.is_del=0'
-            + ' AND ' + ancestorAlias + '.tid<>' + previousAlias + '.tid'
-        ancestorColumnsSql = ancestorColumnsSql + ',' + ancestorAlias + '.source_table_id AS ancestorSource' + ancestorDepth
-        ancestorMatchSql = ancestorMatchSql + ' OR (hop.tid<>' + ancestorAlias + '.source_table_id AND '
-            + ancestorAlias + '.source_table_id IN ' + rootIdSetSql + ')'
-        ancestorDepth = ancestorDepth + 1
-    }
-    if (candidateIds.size() > 0) {
-        var familySql = 'SELECT hop.*' + ancestorColumnsSql + ' FROM db_table_t hop' + ancestorJoinSql
-            + ' WHERE hop.tenant_id=#{tenantId} AND hop.is_del=0 AND (' + ancestorMatchSql + ')'
-        var familyPage = db.page(familySql, 2001, 0)
-        if (familyPage != null && familyPage.total != null && familyPage.total::int > 2000) {
-            exit 413, '当前页关联表超过 2000 项，请缩小页大小或选择具体数据源后重试'
-        }
-        materializedTargets = familyPage == null || familyPage.list == null ? [] : familyPage.list
-        var materializedAssociationCount = 0
-        for (materializedTarget in (materializedTargets == null ? [] : materializedTargets)) {
-            var materializedTid = text(first(materializedTarget, ['tid']))
-            if (blank(materializedTid)) { continue }
-            var matchedRoots = []
-            var matchedDepth = 0
-            while (matchedDepth < 16) {
-                var materializedRootId = text(first(materializedTarget, ['ancestorSource' + matchedDepth,
-                    'ancestorsource' + matchedDepth, 'ancestor_source_' + matchedDepth]))
-                if (materializedRootId != materializedTid && candidateRootMap[materializedRootId] == true
-                    && !matchedRoots.contains(materializedRootId)) {
-                    matchedRoots.add(materializedRootId)
-                    materializedAssociationCount = materializedAssociationCount + 1
-                    if (materializedAssociationCount > 2000) {
-                        exit 413, '当前页关联表超过 2000 项，请缩小页大小或选择具体数据源后重试'
-                    }
-                    if (materializedTargetMap[materializedRootId] == null) { materializedTargetMap[materializedRootId] = [] }
-                    materializedTargetMap[materializedRootId].add(materializedTarget)
-                    if (chainRootsBySource[materializedTid] == null) { chainRootsBySource[materializedTid] = [] }
-                    chainRootsBySource[materializedTid].add(materializedRootId)
-                    if (chainRootBySource[materializedTid] == null) { chainRootBySource[materializedTid] = materializedRootId }
-                }
-                matchedDepth = matchedDepth + 1
-            }
-            if (matchedRoots.size() > 0) {
-                if (!chainSourceIds.contains(materializedTid)) { chainSourceIds.add(materializedTid) }
-                var materializedDbId = text(first(materializedTarget, ['datasourceId', 'datasource_id']))
-                if (!materializedTargetDatasourceIds.contains(materializedDbId)) { materializedTargetDatasourceIds.add(materializedDbId) }
-            }
-        }
-    }
+    // 仅对当前页已授权来源表按层批量读取物化链路。
+    var tableFamily = accessTableFamily(candidateIds)
+    if (tableFamily.limitMessage != null) { exit 413, tableFamily.limitMessage }
+    var materializedTargetMap = tableFamily.targetsByRoot
+    var materializedTargetDatasourceIds = tableFamily.datasourceIds
+    var chainSourceIds = tableFamily.sourceIds
+    var chainRootsBySource = tableFamily.rootsByTarget
     var taskPipelineIds = []
     // 接入任务是业务主数据，不在 dataassets 搜索投影中；按当前候选表一次性批量读取。
     var taskGroups = {}
@@ -748,9 +597,12 @@ WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.asset_status>0
         var rawTasks = taskGroups[selectedTableId] == null ? [] : taskGroups[selectedTableId]
         var materializedTargetsForSource = materializedTargetMap[selectedTableId] == null ? [] : materializedTargetMap[selectedTableId]
         var targetTables = []
-        for (materializedTarget in materializedTargetsForSource) {
-            if (materializedDatasourceMap[text(first(materializedTarget, ['datasourceId', 'datasource_id']))] != null) {
-                targetTables.add(targetSummary(materializedTarget))
+        var materializedTarget = null
+        for (linkedTable in materializedTargetsForSource) {
+            if (materializedDatasourceMap[text(first(linkedTable, ['datasourceId', 'datasource_id']))] != null) {
+                // 兼容单目标字段，取已校验并按链路距离和 ID 排序的第一个目标。
+                if (materializedTarget == null) { materializedTarget = linkedTable }
+                targetTables.add(targetSummary(linkedTable))
             }
         }
         var tasks = []
@@ -840,8 +692,6 @@ WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t.asset_status>0
         tasks = familyTasks.sort((left, right) => left.chainOrder >= 0 && right.chainOrder >= 0 ? left.chainOrder - right.chainOrder : 0)
         var hasTask = tasks.size() > 0
         var workflowRow = tableWorkflowMap[selectedTableId]
-        // 只有数据源和数据表均有登记状态的表才会作为接入候选。
-        var materializedTarget = materializedTargetsForSource.size() > 0 ? materializedTargetsForSource[0] : null
         var materializedTargetId = text(first(materializedTarget, ['tid']))
         tableItems.add({
             tid: selectedTableId,
@@ -1052,38 +902,31 @@ var datasourceScopeFinishedAt = System.currentTimeMillis()
 var summaryMap = {}
 // 不筛选接入状态时无需统计全部候选数据源，直接分页；筛选时用一次分组查询
 // 替代逐数据源查表、逐表 COUNT。任务先按来源表去重，避免重复任务放大已接入数。
-if (accessStatus == '0' || accessStatus == '1') {
-    var summaryRows = db.select("""
-        SELECT t.datasource_id AS datasourceId,
-               COUNT(*) AS tableTotal,
-               COUNT(task.source_table_id) AS accessed
-          FROM db_table_t t
-          JOIN db_datasource_t source
-            ON source.tid = t.datasource_id
-           AND source.tenant_id = #{tenantId}
-           AND source.is_del = 0
-           AND source.asset_status > 0
-          LEFT JOIN (
-               SELECT DISTINCT tenant_id, source_table_id
-                 FROM data_access_agg_task_t
-                WHERE tenant_id = #{tenantId}
-                  AND is_del = 0
-          ) task
-            ON task.tenant_id = t.tenant_id
-           AND task.source_table_id = t.tid
-         WHERE t.tenant_id = #{tenantId}
-           AND t.is_del = 0
-           AND t.asset_status > 0
-           AND LOWER(REPLACE(REPLACE(REPLACE(COALESCE(t.business_type, ''), '_', ''), '-', ''), ' ', ''))
-               IN ('业务表', '日志表', '字典表', 'business', 'businesstable',
-                   'log', 'logtable', 'dict', 'dictionary', 'dictionarytable')
-         GROUP BY t.datasource_id
-    """)
-    for (summaryRow in (summaryRows == null ? [] : summaryRows)) {
-        var summaryDatasourceId = text(first(summaryRow, ['datasourceId', 'datasourceid', 'datasource_id']))
-        var summaryTotal = first(summaryRow, ['tableTotal', 'tabletotal']) || 0
-        var summaryAccessed = first(summaryRow, ['accessed']) || 0
-        summaryMap[summaryDatasourceId] = { done: summaryTotal > 0 && summaryAccessed >= summaryTotal }
+if ((accessStatus == '0' || accessStatus == '1') && completedCandidateIds.size() > 0) {
+    var tasks = tableRead.from('data_access_agg_task_t', 'task', tenantId)
+    var sourceTable = tableRead.column('task', 'source_table_id', 'TEXT')
+    tasks.where(tableRead.equal(tableRead.column('task', 'is_del', 'NUMBER'), 0))
+    var summary = tableRead.from('db_table_t', 't', tenantId)
+    summary.leftJoin('db_datasource_t', 'source', 'tid', 'datasource_id', [
+        tableRead.equal(tableRead.column('source', 'is_del', 'NUMBER'), 0),
+        tableRead.greaterThan(tableRead.column('source', 'asset_status', 'NUMBER'), 0)
+    ])
+    summary.leftJoinGrouped(tasks, 'linked_task', 'source_id', 'tid', { source_id: sourceTable }, [sourceTable])
+    var sourceId = tableRead.column('t', 'datasource_id', 'TEXT')
+    var normalizedType = tableRead.column('t', 'business_type', 'TEXT')
+    for (separator in ['_', '-', ' ']) { normalizedType = tableRead.replace(normalizedType, separator, '') }
+    summary.where(tableRead.all([
+        tableRead.equal(tableRead.column('t', 'is_del', 'NUMBER'), 0),
+        tableRead.greaterThan(tableRead.column('t', 'asset_status', 'NUMBER'), 0),
+        tableRead.in(sourceId, completedCandidateIds),
+        tableRead.not(tableRead.isNull(tableRead.column('source', 'tid', 'TEXT'))),
+        tableRead.in(tableRead.lower(normalizedType), ['业务表', '日志表', '字典表', 'business', 'businesstable',
+            'log', 'logtable', 'dict', 'dictionary', 'dictionarytable'])
+    ]))
+    var summaryRows = summary.grouped({ source_id: sourceId, table_total: tableRead.count(),
+        accessed: tableRead.countIf(tableRead.not(tableRead.isNull(tableRead.column('linked_task', 'source_id', 'TEXT')))) }, [sourceId])
+    for (row in summaryRows) {
+        summaryMap[text(row.source_id)] = { done: row.table_total > 0 && row.accessed >= row.table_total }
     }
 }
 
@@ -1151,7 +994,7 @@ var targetIds = []
 if (tableIds.size() > 0) {
     // 接入任务以 source_table_id 关联登记原表；一张表有多条任务时取最新查询结果中的第一条。
     var taskRows = db.table('data_access_agg_task_t').where()
-        .in('source_table_id', tableIds).eq('is_del', 0)
+        .eq('tenant_id', tenantId).in('source_table_id', tableIds).eq('is_del', 0)
         .orderBy('updated_time', 'desc').select()
     for (task in (taskRows == null ? [] : taskRows)) {
         var sourceTableId = text(first(task, ['sourceTableId', 'source_table_id']))
@@ -1168,7 +1011,8 @@ if (tableIds.size() > 0) {
 
 var targetTableMap = {}
 if (targetIds.size() > 0) {
-    var targetRows = db.table('db_table_t').where().in('tid', targetIds).eq('is_del', 0).select()
+    var targetRows = db.table('db_table_t').where()
+        .eq('tenant_id', tenantId).in('tid', targetIds).eq('is_del', 0).select()
     for (target in (targetRows == null ? [] : targetRows)) {
         targetTableMap[text(first(target, ['tid']))] = target
     }
@@ -1198,10 +1042,10 @@ for (table in (tableRows == null ? [] : tableRows)) {
         dataCount: first(table, ['recordCount', 'record_count']),
         dataUpdateTime: first(task, ['endRunning', 'end_running', 'updatedTime', 'updated_time']) || first(table, ['updatedTime', 'updated_time']),
         lastBizTime: first(table, ['ddlUpdateTime', 'ddl_update_time', 'updatedTime', 'updated_time']),
-        targetTableId: targetId,
+        targetTableId: target == null ? '' : targetId,
         targetTableName: first(target, ['tableName', 'table_name']) || '',
-            targetTableNameCn: first(target, ['tableNameCn', 'table_name_cn', 'tableComment', 'table_comment']) || '',
-            targetSchemaName: first(target, ['schemaName', 'schema_name']) || '',
+        targetTableNameCn: first(target, ['tableNameCn', 'table_name_cn', 'tableComment', 'table_comment']) || '',
+        targetSchemaName: first(target, ['schemaName', 'schema_name']) || '',
         targetDbType: first(target, ['dbType', 'db_type']) || '',
         accessTaskId: first(task, ['tid']) || '',
         accessTaskName: first(task, ['taskName', 'task_name']) || '',

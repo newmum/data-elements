@@ -10,8 +10,12 @@ function loadTypeScript(file, dependencies, environment={ DEV:true }) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText.replaceAll('import.meta.env', 'viteEnv');
   const result = { exports: {} };
+  let platformError;
   const localRequire = (name) => {
     if (Object.hasOwn(dependencies, name)) return dependencies[name];
+    if (name === './platformError') {
+      return platformError ??= loadTypeScript('src/api/platformError.ts', {}, environment);
+    }
     if(name.endsWith('/platformLocation'))return loadTypeScript('src/services/platformLocation.ts',{},environment);
     throw new Error(`Unexpected dependency in session test: ${name}`);
   };

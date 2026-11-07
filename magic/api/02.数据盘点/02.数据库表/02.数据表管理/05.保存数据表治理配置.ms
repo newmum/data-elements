@@ -22,9 +22,6 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：05.保存数据表治理配置
-// 路由：POST /dst/database/table/governance/save
-// 业务说明：数据表管理 05：保存登记步骤 3/4 的表治理配置；使用请求参数 tableId、tid、propList、fieldGovernanceConfig、dryRun、columns、catalogItems、fields；涉及 db_table_column_t、db_table_t 等业务表。
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import jsons
 import cn.hutool.json.JSONUtil
@@ -39,6 +36,10 @@ import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService
 import tableSchemaSync
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
 import cn.dev33.satoken.stp.StpUtil
+
+// 接口：05.保存数据表治理配置
+// 路由：POST /dst/database/table/governance/save
+// 业务说明：保存登记步骤 3/4 的表治理配置和字段快照。
 var tenantId = tenantRuntime.id()
 
 /*
@@ -112,6 +113,12 @@ var saveColumns = (tableId, items) => {
         var key = textOf(columnName).trim().toLowerCase()
         var existing = existingByName[key]
         var columnId = existing == null ? newId() : rowValue(existing, ['tid'])
+        var incomingNullable = itemValue(item, ['nullable'])
+        // 现有字段保留未知快照；新字段显式传 null 表示未知，旧客户端未传字段仍默认可空。
+        var nullableValue = blank(incomingNullable)
+            ? (existing != null ? rowValue(existing, ['nullable'])
+                : (item instanceof Map && item.containsKey('nullable') && incomingNullable == null ? null : 1))
+            : toInt(incomingNullable, 1)
         var values = {
             tid: columnId,
             table_id: tableId,
@@ -122,7 +129,7 @@ var saveColumns = (tableId, items) => {
             length: toInt(itemValue(item, ['length', 'columnLength']), 0),
             precision_length: toInt(itemValue(item, ['precisionLength', 'precision', 'colPrecision']), 0),
             scale: toInt(itemValue(item, ['scale']), 0),
-            nullable: toInt(itemValue(item, ['nullable']), 1),
+            nullable: nullableValue,
             default_value: itemValue(item, ['defaultValue']),
             primary_key: toInt(itemValue(item, ['primaryKey']), 0),
             auto_increment: toInt(itemValue(item, ['autoIncrement']), 0),
@@ -183,6 +190,9 @@ var validateDetailColumns = (items, registeredItems) => {
         var columnName = textOf(rowValue(column, ['columnName', 'column_name']))
         if ((!blank(id) && id != columnId) || (!blank(name) && name.trim().toLowerCase() != columnName.trim().toLowerCase()) || seen[columnId] == true) {
             exit 403, '字段 ID、名称或归属不匹配'
+        }
+        if (item.nullableEdited == true && !['0', '1'].contains(textOf(itemValue(item, ['nullable'])))) {
+            exit 400, '不为空设置只能为允许为空或不为空'
         }
         seen[columnId] = true
     }
@@ -256,8 +266,9 @@ var dictionaryProfile = props.dictionaryProfile
 if (body.editMode == 'fields') {
     var registeredItems = validateDetailColumns(body.columns, registeredColumnItems(tableId, body.columns))
     governance = governance instanceof Map ? governance : (blank(governance) ? {} : JSONUtil.parseObj(textOf(governance)))
-    // 登记完成标记属于原流程，详情编辑不能把未登记表变成已登记表。
-    for (key in ['registrationSavedPhase', 'registrationSavedAt', 'tableName', 'tableComment', 'businessType']) {
+    // 详情只编辑字段，登记标记和字典表的分类、编码与翻译规则沿用已保存配置。
+    for (key in ['registrationSavedPhase', 'registrationSavedAt', 'tableName', 'tableComment', 'businessType',
+                 'dictionaryStructureType', 'dictionaryCategoryNameField', 'dictionaryCategories', 'dictionaryProfiles', 'dictionaryProfile']) {
         governance.remove(key)
         if (previousGovernance.containsKey(key)) { governance[key] = previousGovernance[key] }
     }
@@ -273,8 +284,8 @@ if (body.editMode == 'fields') {
     db.transaction(() => {
         for (registered in registeredItems) {
             var item = registered.item
-            // 物理类型、可空性和连接信息保持已采集快照；只更新登记页面可编辑的属性。
-            db.table('db_table_column_t').primary('tid').update({
+            // 未经用户编辑的可空性保持原样；明确修改只更新平台快照，不执行来源库 DDL。
+            var columnUpdate = {
                 tid: rowValue(registered.column, ['tid']),
                 column_comment: itemValue(item, ['columnComment', 'colName']),
                 primary_key: item.primaryKey == true || textOf(item.primaryKey) == '1' ? 1 : 0,
@@ -282,15 +293,13 @@ if (body.editMode == 'fields') {
                 enable_code_table: item.enableCodeTable,
                 code_table_id: item.codeTableId,
                 updated_time: nowTime()
-            }, true)
+            }
+            if (item.nullableEdited == true) { columnUpdate.nullable = toInt(itemValue(item, ['nullable']), 1) }
+            db.table('db_table_column_t').primary('tid').update(columnUpdate, true)
         }
         db.table('db_table_t').primary('tid').update({
             tid: tableId,
             timestamp_field: governance.timestampField,
-            dictionary_structure_type: governance.dictionaryStructureType,
-            dictionary_categories: valueText(governance.dictionaryCategories),
-            dictionary_profiles: valueText(governance.dictionaryProfiles),
-            dictionary_profile: valueText(governance.dictionaryProfile),
             field_governance_config: valueText(governance),
             updated_time: nowTime()
         }, true)

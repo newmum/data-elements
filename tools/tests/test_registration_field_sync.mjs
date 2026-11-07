@@ -14,20 +14,25 @@ async function extract(file, names) {
     assert.ok(node,name);return script.slice(node.start,node.end);
   }).join('\n');
 }
-const catalog = await extract('lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue',['normalizeFieldRows','syncActiveTableFields']);
+const catalog = await extract('lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/03.登记数据表(register-dbTable-catalog).vue',['normalizeFieldRows','syncActiveTableFields','nullableText','setFieldNotNull']);
 for (const count of [20,100,260]) {
-  const rows=Array.from({length:count},(_,i)=>({columnName:`field_${i}`,columnComment:i===1?'':`新中文名${i}`,dataType:'varchar'}));
+  const rows=Array.from({length:count},(_,i)=>({columnName:`field_${i}`,columnComment:i===1?'':`新中文名${i}`,dataType:'varchar',nullable:i%2===0?1:0}));
   rows.push({columnName:'new_field',columnComment:'新增字段',dataType:'int'});
   const relation={enabled:true,mode:'enum'};
-  const previous=Array.from({length:count},(_,i)=>({columnName:i===0?'FIELD_0':`field_${i}`,columnComment:'旧中文名',dictionaryRelation:relation,timeRoles:i===0?['timestamp']:[],standardField:'DATE'}));
+  const previous=Array.from({length:count},(_,i)=>({columnName:i===0?'FIELD_0':`field_${i}`,columnComment:'旧中文名',nullable:0,dictionaryRelation:relation,timeRoles:i===0?['timestamp']:[],standardField:'DATE'}));
   const calls=[];let invalidations=0;
   const context=vm.createContext({fieldMap:{wide:previous},activeTable:{value:{tid:'table-a',tableName:'wide'}},syncingFields:{value:false},fieldErrorMap:{},connectionErrorMap:{},dictionaryPreviewRequestVersion:{value:0},dictionaryPreview:{loaded:true,initialPage:{rows:[]}},
     savedCatalogFieldMap:()=>new Map(),suggestField:()=>({}),normalizeStandardField:v=>v||'',autoStandardField:()=>'',normalizeTimeRoles:v=>Array.isArray(v)?v:[],isTimestampEnabled:v=>v===true,normalizePrimaryKey:v=>Boolean(v),normalizeFieldBase:()=>'',buildColumnType:r=>r.dataType,
     ElMessageBox:{confirm:async()=>{}},$common:{postSilently:async(route,payload)=>{calls.push({route,payload});return rows}},$message:{success:()=>{},warning:()=>{}},unwrapList:v=>v,reportConnectionFailure:()=>false,resetBusinessPreview:()=>invalidations++});
-  vm.runInContext(catalog+'\nglobalThis.sync=syncActiveTableFields;',context);
+  vm.runInContext(catalog+'\nObject.assign(globalThis,{sync:syncActiveTableFields,normalizeFieldRows,nullableText,setFieldNotNull});',context);
   await context.sync();
   assert.equal(calls.length,1,`${count} fields use one synchronization request`);assert.equal(calls[0].payload.force,true);
   const actual=context.fieldMap.wide;assert.equal(actual.length,count+1);assert.equal(actual[0].columnComment,'新中文名0');assert.equal(actual[1].columnComment,'旧中文名');assert.equal(actual.at(-1).columnName,'new_field');
+  assert.equal(actual[0].nullable,1,'explicit source synchronization uses the physical nullable value');
+  context.setFieldNotNull(actual[0],true);assert.equal(actual[0].nullable,0);assert.equal(actual[0]._nullableEdited,true);assert.equal(context.nullableText(actual[0].nullable),'否');
+  assert.equal(context.normalizeFieldRows(rows,'wide')[0].nullable,0,'normal reload preserves the unsaved nullable edit');
+  context.setFieldNotNull(actual[0],false);assert.equal(actual[0].nullable,1);assert.equal(context.nullableText(actual[0].nullable),'是');
+  assert.equal(context.nullableText(null),'未知');
   assert.deepEqual(actual[0].dictionaryRelation,relation);assert.equal(actual[0].timeRoles[0],'timestamp');assert.equal(actual[0].standardField,'DATE');assert.equal(context.activeTable.value.fieldCount,count+1);assert.equal(invalidations,1);assert.equal(context.dictionaryPreview.loaded,false);
 }
 const discovery = await extract('lowcode/01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/02.探查数据表(register-dbTable).vue',['syncPreviewFields']);

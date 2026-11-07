@@ -10,6 +10,14 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const require = createRequire(path.join(root, "data-elements-chengtian/package.json"));
 const vue = require("vue"),
   ts = require("typescript");
+const actions = {};
+const actionSource = fs.readFileSync(
+  path.join(root, "data-elements-chengtian/src/components/business/registration-actions.ts"),
+  "utf8"
+);
+new Function("exports", ts.transpileModule(actionSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(actions);
 const contentPath =
   "lowcode/06.数据服务/数据服务(data-serve)/服务组件/api注册(api-register-content).vue";
 const compiled = JSON.parse(
@@ -202,28 +210,73 @@ test("selecting proxy access does not activate database or spreadsheet metadata 
   assert.equal(accessMode.value, "proxy");
   assert.equal(metadataReads, 0);
 });
-function proxyFixture(post, id = "source-a") {
-  const context={open:vue.ref(true)},visible=vue.ref(false),sourceId=vue.ref(id);
-  const api=new Function("$common","proxyServiceKeyword","proxyDatasourceId","proxyServiceRegistrationVisible",`${declaration("fetchDepartmentServices")}\n${declaration("goToServiceRegistration")}\nreturn {fetchDepartmentServices,goToServiceRegistration};`)({post},vue.ref("服务"),sourceId,visible);
-  return {api,context,visible,sourceId};
+function proxyFixture(datasource) {
+  const visible = vue.ref(false);
+  const refreshed = [];
+  const table = vue.ref({ refresh: (resetPage) => refreshed.push(resetPage) });
+  const api = new Function(
+    "computed", "currentDb", "proxyServiceRegistrationVisible", "proxyServiceTableRef",
+    `${declaration("proxyDatasourceId")}\n${declaration("goToServiceRegistration")}\n${declaration("onProxyServiceRegistrationClosed")}\nreturn { proxyDatasourceId, goToServiceRegistration, onProxyServiceRegistrationClosed };`
+  )(vue.computed, vue.ref(datasource), visible, table);
+  return { api, visible, refreshed };
 }
 test("proxy datasource restoration never loads physical table metadata",async()=>{
   let reads=0;
   const restore=new Function("accessMode","$common",`${declaration("loadMetadataImportResult")}\nreturn loadMetadataImportResult;`)(vue.ref("proxy"),{get:()=>reads++});
   await restore("source-a");assert.equal(reads,0);
 });
-for(const count of [20,100])test(`registration reuses ${count} authorized datasource summaries without a duplicate full-list request`,async()=>{
-  let reads=0;const dbs=vue.ref([{did:'new',isDraft:true}]),currentDid=vue.ref('new');
-  const run=new Function('store','$common','dbs','currentDid','createDatasourceDraft','datasourceKey','toDatasourceItem','syncCurrentDatasourceToStore',`${declaration('loadAccessibleDatasources')}\nreturn loadAccessibleDatasources;`)(
-    {data:{datasourceOptions:Array.from({length:count},(_,i)=>({tid:'source-'+i}))}},
-    {post:async()=>{reads++;return {list:[]};}},dbs,currentDid,()=>({did:'new',isDraft:true}),row=>row.tid||row.id,row=>({...row,did:row.tid}),()=>{});
-  await run();assert.equal(reads,0);assert.equal(dbs.value.length,count+1);assert.equal(currentDid.value,'new');
+function datasourceSidebarFixture(respond) {
+  const requests = [];
+  const draft = { did: 'new', isDraft: true };
+  const selected = { tid: 'source-current', did: 'current', dbName: '正在编辑' };
+  const dbs = vue.ref([draft, selected]);
+  const currentDid = vue.ref(selected.did);
+  const api = new Function('reactive', '$common', 'dbs', 'currentDid', 'createDatasourceDraft', 'datasourceKey', 'toDatasourceItem',
+    `${declaration('DATASOURCE_LIST_PAGE_SIZE')}\n${declaration('datasourceList')}\nlet datasourceListSequence = 0;\n`
+    + `${declaration('loadAccessibleDatasources')}\n${declaration('searchAccessibleDatasources')}\n`
+    + 'return { datasourceList, loadAccessibleDatasources, searchAccessibleDatasources };')(
+    vue.reactive, { postSilently: async (url, body) => { requests.push({ url, body }); return respond(body); } },
+    dbs, currentDid, () => draft, row => row.tid || row.id || row.did, row => ({ ...row, did: row.tid }));
+  return { dbs, currentDid, requests, ...api };
+}
+
+test('registration sidebar reads a lightweight server page and preserves the current edit', async () => {
+  const f = datasourceSidebarFixture(({ pageNum }) => ({
+    total: 1200, pageNum, list: [{ tid: 'source-current', dbName: '服务端旧名称' }, { tid: `source-${pageNum}` }],
+  }));
+  await f.loadAccessibleDatasources(45);
+  assert.deepEqual(f.requests, [{ url: '/dst/database/departmentDataSources',
+    body: { mode: 'choices', pageNum: 45, pageSize: 24, keyword: '' } }]);
+  assert.equal(f.datasourceList.total, 1200);
+  assert.equal(f.datasourceList.page, 45);
+  assert.equal(f.currentDid.value, 'current');
+  assert.equal(f.dbs.value[1].dbName, '正在编辑');
+  assert.equal(f.dbs.value[2].tid, 'source-45');
+  await f.loadAccessibleDatasources(46);
+  assert.equal(f.dbs.value.length, 3);
+  assert.equal(f.dbs.value[2].tid, 'source-46');
 });
-test("registration entries without supplied summaries use the existing lightweight summary contract",async()=>{
-  const requests=[],dbs=vue.ref([{did:'new',isDraft:true}]);
-  const run=new Function('store','$common','dbs','currentDid','createDatasourceDraft','datasourceKey','toDatasourceItem','syncCurrentDatasourceToStore',`${declaration('loadAccessibleDatasources')}\nreturn loadAccessibleDatasources;`)(
-    {data:{}},{post:async(url,body)=>{requests.push({url,body});return {list:[]};}},dbs,vue.ref('new'),()=>({did:'new',isDraft:true}),row=>row.tid||row.id,row=>({...row,did:row.tid}),()=>{});
-  await run();assert.deepEqual(requests,[{url:'/dst/database/departmentDataSources',body:{mode:'summary'}}]);
+
+test('registration sidebar ignores late pages, and retry preserves the submitted search', async () => {
+  const pending = [];
+  const f = datasourceSidebarFixture(() => new Promise((resolve, reject) => pending.push({ resolve, reject })));
+  const older = f.loadAccessibleDatasources(8);
+  f.datasourceList.keywordInput = ' Oracle ';
+  const search = f.searchAccessibleDatasources();
+  pending[1].reject(new Error('offline'));
+  await search;
+  assert.equal(f.datasourceList.error, true);
+  assert.equal(f.dbs.value.length, 2);
+  const retry = f.loadAccessibleDatasources(f.datasourceList.requestedPage);
+  assert.deepEqual(f.requests[2].body, { mode: 'choices', pageNum: 1, pageSize: 24, keyword: 'Oracle' });
+  pending[2].resolve({ list: [{ tid: 'oracle' }], total: 1, pageNum: 1 });
+  await retry;
+  pending[0].resolve({ list: [{ tid: 'old' }], total: 200, pageNum: 8 });
+  await older;
+  assert.equal(f.datasourceList.error, false);
+  assert.equal(f.datasourceList.loading, false);
+  assert.equal(f.datasourceList.total, 1);
+  assert.deepEqual(f.dbs.value.map(row => row.did), ['new', 'current', 'oracle']);
 });
 
 function webServiceFixture(post = async () => ({})) {
@@ -287,78 +340,56 @@ test("a failed SOAP call retains the backend Fault and clears the prior connecti
   assert.deepEqual(feedback, ["SOAP Fault: missing query condition"]);
   assert.equal(loading.value, "");
 });
-for (const count of [20,100]) test(`${count} datasource services use one scoped page request and registration retains its parent`,async()=>{
-  const requests=[];
-  const f=proxyFixture(async(url,body)=>{requests.push({url,body});return {list:Array.from({length:count},(_,i)=>({tid:`s${i}`})),total:150};});
-  const result=await f.api.fetchDepartmentServices({pageNo:2,pageSize:count,sortField:"serviceName",sortDir:"asc"});
-  assert.equal(result.list.length,count);assert.equal(result.total,150);assert.equal(requests.length,1);
-  assert.equal(requests[0].body.datasourceId,"source-a");assert.equal(requests[0].body.pageNum,2);
-  assert.equal((await f.api.goToServiceRegistration()).navigationHandled,true);assert.equal(f.visible.value,true);
-  assert.equal(f.context.open.value,true);assert.equal(requests.length,1);
+test("a saved proxy datasource opens its registration dialog and refreshes the shared list only after save", async () => {
+  const f = proxyFixture({ tid: "source-a" });
+  assert.equal(f.api.proxyDatasourceId.value, "source-a");
+  assert.deepEqual(await f.api.goToServiceRegistration(), { navigationHandled: true });
+  assert.equal(f.visible.value, true);
+  f.api.onProxyServiceRegistrationClosed("cancel");
+  assert.deepEqual(f.refreshed, []);
+  f.api.onProxyServiceRegistrationClosed("success");
+  assert.deepEqual(f.refreshed, [true]);
 });
-test("an unsaved new datasource stays empty without any global service request",async()=>{
-  let requests=0;const f=proxyFixture(async()=>{requests++;},"");
-  assert.deepEqual(await f.api.fetchDepartmentServices(),{list:[],total:0});
-  await assert.rejects(f.api.goToServiceRegistration(),/先保存/);assert.equal(requests,0);assert.equal(f.visible.value,false);
-});
-test("late service responses from a previous datasource are ignored",async()=>{
-  let resolve;const f=proxyFixture(()=>new Promise(r=>resolve=r));
-  const pending=f.api.fetchDepartmentServices();f.sourceId.value="source-b";
-  resolve({list:[{tid:"old-service"}],total:1});assert.deepEqual(await pending,{list:[],total:0});
+test("drafts and unavailable datasource details cannot open service registration", async () => {
+  for (const datasource of [{ tid: "draft-id", isDraft: true }, { tid: "missing-id", detailMissing: true }]) {
+    const f = proxyFixture(datasource);
+    assert.equal(f.api.proxyDatasourceId.value, "");
+    await assert.rejects(f.api.goToServiceRegistration(), /先保存/);
+    assert.equal(f.visible.value, false);
+  }
 });
 
 function footerFixture(next) {
-  const script = fs
-    .readFileSync(
-      path.join(root, "data-elements-chengtian/src/components/business/register-body.vue"),
-      "utf8"
-    )
-    .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
-  const ast = ts.createSourceFile("register-body.ts", script, ts.ScriptTarget.Latest, true);
-  const declarations = ["customApi", "nextApi"].map((name) =>
-    ast.statements
-      .find(
-        (node) =>
-          ts.isVariableStatement(node) &&
-          node.declarationList.declarations.some((item) => item.name.getText(ast) === name)
-      )
-      .getText(ast)
-  );
-  const js = ts.transpileModule(declarations.join("\n"), {
-    compilerOptions: { target: ts.ScriptTarget.ES2022 },
-  }).outputText;
   const events = [],
     loading = [],
     warnings = [];
-  const api = new Function(
-    "actionPending",
-    "store",
-    "emit",
-    "callCurrentStepMethod",
-    "nextTick",
-    "window",
-    "$message",
-    "console",
-    `${js}\nreturn nextApi;`
-  )(
-    { value: false },
-    { setLoadStatus: (...args) => loading.push(args) },
-    (...args) => events.push(args),
-    next,
-    async () => {},
-    { setTimeout: (callback) => callback() },
-    { warning: (message) => warnings.push(message) },
-    { error: () => {} }
-  );
-  return { api, events, loading, warnings };
+  const loadStatus = new Proxy({}, {
+    set(state, action, value) {
+      loading.push([action, value]);
+      return Reflect.set(state, action, value);
+    },
+  });
+  const step = { next };
+  const runner = actions.createRegistrationActionRunner({
+    store: { state: { currentStep: 0, loadStatus, steps: [] }, data: {}, registerClass: "db", setCurrentStep() {} },
+    getStep: () => step,
+    nextTick: async () => {},
+    delay: async () => {},
+    emit: (result) => events.push(["finishTriggerFn", result]),
+    warning: (message) => warnings.push(message),
+    success() {},
+    reportError() {},
+    showDatasourceSuccess: true,
+  });
+  return { next: () => runner.handleAction("next"), events, loading, warnings };
 }
 
 test("original next button advances ordinary steps and suppresses advancement after a service redirect", async () => {
   const ordinary = footerFixture(async () => undefined);
-  await ordinary.api();
+  await ordinary.next();
   assert.deepEqual(ordinary.events, [["finishTriggerFn", "next"]]);
   const proxy = footerFixture(async () => ({ navigationHandled: true }));
-  await proxy.api();
+  await proxy.next();
   assert.deepEqual(proxy.events, [["finishTriggerFn", null]]);
   assert.deepEqual(proxy.loading, [
     ["next", true],
@@ -370,7 +401,7 @@ test("original next button retains the step and releases loading when navigation
   const f = footerFixture(async () => {
     throw new Error("服务登记暂时无法打开，请重试");
   });
-  await f.api();
+  await f.next();
   assert.deepEqual(f.events, [["finishTriggerFn", null]]);
   assert.deepEqual(f.warnings, ["服务登记暂时无法打开，请重试"]);
   assert.deepEqual(f.loading, [

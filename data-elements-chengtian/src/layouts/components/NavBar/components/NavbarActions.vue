@@ -9,7 +9,11 @@
 
     <!-- 超市购物车 -->
     <div class="navbar-actions__item navbar-actions__cart">
-      <shopping-car v-if="settingStore.showShoppingCar || route.path.startsWith('/market')" />
+      <shopping-car
+        v-if="
+          shoppingCarReady && (settingStore.showShoppingCar || route.path.startsWith('/market'))
+        "
+      />
     </div>
 
     <!-- 全屏 -->
@@ -25,7 +29,11 @@
 
     <!-- 用户菜单 -->
     <div class="navbar-actions__item">
-      <el-dropdown trigger="click" popper-class="-mt-2 w-137px" :show-arrow="false">
+      <el-dropdown
+        :trigger="isTouchOnly ? 'click' : 'hover'"
+        popper-class="-mt-2 w-137px"
+        :show-arrow="false"
+      >
         <div class="user-profile" :aria-label="userStore.userInfo.realName || '账号菜单'">
           <img class="user-profile__avatar" src="@/assets/touxiang.png" alt="" />
           <div class="user-profile__identity">
@@ -67,7 +75,10 @@
 </template>
 
 <script setup lang="ts">
+import { getCurrentInstance } from "vue";
+import { useMediaQuery } from "@vueuse/core";
 import { useRoute, useRouter } from "vue-router";
+import { hasRuntimeSfc } from "@/plugins/compiler/runtime-sfc";
 import { useSettingStore, useUserStore } from "@/store";
 import PersonalCenterDialog from "./PersonalCenterDialog.vue";
 
@@ -86,6 +97,9 @@ const settingStore = useSettingStore();
 const route = useRoute();
 const router = useRouter();
 const profileVisible = ref(false);
+const isTouchOnly = useMediaQuery("(hover: none)");
+const app = getCurrentInstance()?.appContext.app;
+const shoppingCarReady = computed(() => hasRuntimeSfc(app, "shopping-car"));
 /**
  * 打开当前用户资料弹窗
  */
@@ -147,7 +161,9 @@ function logout() {
     margin-right: clamp(0px, 0.8vw, 16px);
 
     &:empty {
-      cursor: default;
+      // 保留导航宽度，把空位放到搜索入口前。
+      order: -1;
+      pointer-events: none;
     }
   }
 

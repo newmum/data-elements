@@ -207,6 +207,10 @@ const parseDynamicRoutes = (rawRoutes: RouteVO[], rootPath = ""): RouteRecordRaw
       name: routeName,
       redirect,
       component: routeComponent,
+      meta:
+        routeComponent === ShowComponent
+          ? { ...route.meta, runtimeSfcRoot: route.componentName }
+          : route.meta,
     } as RouteRecordRaw;
 
     // 递归解析子路由
@@ -218,28 +222,6 @@ const parseDynamicRoutes = (rawRoutes: RouteVO[], rootPath = ""): RouteRecordRaw
   });
 
   return parsedRoutes;
-};
-
-/**
- * 遍历路由树收集缓存路由
- * @param nodes 路由节点
- * @param path 当前路径
- * @param result 结果数组
- */
-const traverseRoutes = (nodes: RouteRecordRaw[], path: string[], result: string[][]) => {
-  nodes.forEach((node) => {
-    const newPath: string[] = node.name ? [...path, String(node.name)] : [...path];
-
-    // 叶子节点且需要缓存
-    if (!node.children?.length && node.meta?.keepAlive) {
-      result.push(newPath);
-    }
-
-    // 递归处理子节点
-    if (node.children?.length) {
-      traverseRoutes(node.children, newPath, result);
-    }
-  });
 };
 
 /**

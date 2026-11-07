@@ -216,7 +216,8 @@ var buildAssetResultData = (assetId) => {
             result[name] = rowValue(prop, ['propValue', 'prop_value'])
         }
     }
-    // 返回当前业务分支的标准结果。
+    // 属性不能覆盖主表累计计数；保存目录不会改动该列。
+    result.viewCount = rowValue(asset, ['marketViewCount', 'market_view_count'])::long(0)
     return result
 }
 
@@ -226,7 +227,7 @@ var saveToEs = (assetId, data) => {
     }
     try {
         // 执行 Elasticsearch 查询或索引同步，保持检索结果与主数据一致。
-        esCommonService.saveOrUpdate('dataassets', assetId, jsons.toJSONStr(data), false)
+        esCommonService.mergeCatalogProjection('dataassets', assetId, jsons.toJSONStr(data), data.viewCount)
     } catch (e) {
         log.warn('sync dataassets es failed, tid: {}, error: {}', assetId, e.message)
     }

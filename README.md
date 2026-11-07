@@ -18,6 +18,8 @@
 
 共享资源采用本地修改、审查差异、再发布的工作方式，详见 [本地资源版本管理](docs/data-elements.md#resource-versioning)。根 `magic/` 对应 Magic 在线目录，`lowcode/` 对应数据库低代码组件目录，`db/` 保存控制库、四个当前租户库和独立 `haitong` 库的完整结构初始化文件。普通前端 `src/` 中的 Vue 文件继续属于各自应用。
 
+后端开发与批次验收标准见 [Magic API 优先与数据库访问抽象](docs/data-elements.md#magic-first-data-access) 和 [Magic 脚本可读性与注释规范](docs/data-elements.md#lowcode-magic--magic-api-readability-and-documentation)。
+
 数据库结构变更同时维护 `db/<库名>/init.sql` 完整定义和 `db/increments/` 中按序号维护的增量升级 SQL，方便 Git 比较及生产按需升级；使用方法见[数据库结构](docs/data-elements.md#database-schema)。Nacos 基础与开发配置分别维护为 `db/data-element.yml`、`db/data-element-dev.yml`，澄天金仓专用完整配置为 `db/data-element_ct.yml`，均保存脱敏版本，导出方法见[配置版本管理](docs/data-elements.md#nacos-config-versioning)。运行日志、测试报告、实际执行副本、脚本备份与发布临时产物统一放在根 `logs/`，该目录不提交 Git。长期有用的说明保留在 `docs/`。运行凭据只应从环境或受限配置注入，不要写入前端 `VITE_*` 变量或提交到 Git。
 
 <a id="documentation"></a>

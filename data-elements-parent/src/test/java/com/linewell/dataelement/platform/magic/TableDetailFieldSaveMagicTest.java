@@ -37,6 +37,7 @@ class TableDetailFieldSaveMagicTest {
         final SQLModule db;
         final Scope scope = new Scope();
         final List<Map<String,Object>> fields = new ArrayList<>();
+        final Map<String,Object> governanceOverrides = new LinkedHashMap<>();
         int reads;
         Fixture(int count) {
             var source = new DriverManagerDataSource("jdbc:h2:mem:detail_fields_" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
@@ -62,6 +63,7 @@ class TableDetailFieldSaveMagicTest {
             String canonical = CanonicalMagicSources.byId("datapd_db_table_govern_01");
             String script = "import java.util.Map\nimport java.util.List\nimport cn.hutool.json.JSONUtil\nimport com.linewell.dataelement.metautil.structured.StructuredSourceProbeService\nvar tenantId=tenantRuntime.id()\n" + canonical.substring(canonical.indexOf("var textOf ="));
             var config = new LinkedHashMap<>(Map.of("fields",fields,"registrationSavedPhase","business","registrationSavedAt","spoofed","attachmentFields",List.of(),"timestampField","field_0"));
+            config.putAll(governanceOverrides);
             reads=0;
             return MagicScript.create(script,null).execute(new MagicScriptContext(Map.of("db",db,"tenantRuntime",scope,"dataScope",scope,"jsons",new Jsons(),"body",Map.of("tableId",table,"editMode","fields","dryRun",dry,"columns",fields,"fieldGovernanceConfig",config))));
         }
@@ -97,6 +99,46 @@ class TableDetailFieldSaveMagicTest {
         assertEquals(0,f.jdbc.queryForObject("select count(*) from db_table_column_t where column_comment='新注释'",Integer.class));
         f.fields.get(19).put("tid","c19"); assertInstanceOf(Map.class,f.save("table",true));
         assertEquals(0,f.jdbc.queryForObject("select count(*) from db_table_column_t where column_comment='新注释'",Integer.class));
+    }
+    @Test void explicitNullableEditsAndDictionaryRulesAreHandledWithoutAdditionalReads() throws Exception {
+        for (int count : List.of(20,100)) {
+            var f = new Fixture(count);
+            var saved = "{\"registrationSavedPhase\":\"dictionary\",\"dictionaryStructureType\":\"multi\",\"dictionaryCategoryNameField\":\"type_name\",\"dictionaryCategories\":[{\"categoryCode\":\"kept\"}],\"dictionaryProfiles\":[{\"codeField\":\"code\",\"labelField\":\"name\"}],\"dictionaryProfile\":{\"codeField\":\"code\",\"labelField\":\"name\"}}";
+            f.jdbc.update("update db_table_t set business_type='字典表',field_governance_config=?,dictionary_structure_type='multi',dictionary_categories='categories-kept',dictionary_profiles='profiles-kept',dictionary_profile='profile-kept' where tid='table'",saved);
+            f.jdbc.update("update db_table_column_t set nullable=null where tid in ('c0','c3')");
+            f.jdbc.update("update db_table_column_t set nullable=1 where tid='c1'");
+            f.fields.get(0).put("nullable",0); f.fields.get(0).put("nullableEdited",true);
+            f.fields.get(1).put("nullable",0);
+            f.fields.get(2).put("nullable",1); f.fields.get(2).put("nullableEdited",true);
+            f.governanceOverrides.put("dictionaryStructureType","single");
+            f.governanceOverrides.put("dictionaryCategoryNameField","changed");
+            f.governanceOverrides.put("dictionaryCategories",List.of());
+            f.governanceOverrides.put("dictionaryProfiles",List.of());
+            f.governanceOverrides.put("dictionaryProfile",Map.of());
+
+            assertInstanceOf(Map.class,f.save("table",true)); assertEquals(3,f.reads);
+            assertNull(f.jdbc.queryForObject("select nullable from db_table_column_t where tid='c0'",Integer.class));
+            assertInstanceOf(Map.class,f.save("table",false)); assertEquals(3,f.reads);
+            assertEquals(0,f.jdbc.queryForObject("select nullable from db_table_column_t where tid='c0'",Integer.class));
+            assertEquals(1,f.jdbc.queryForObject("select nullable from db_table_column_t where tid='c1'",Integer.class));
+            assertEquals(1,f.jdbc.queryForObject("select nullable from db_table_column_t where tid='c2'",Integer.class));
+            assertNull(f.jdbc.queryForObject("select nullable from db_table_column_t where tid='c3'",Integer.class));
+            var table=f.jdbc.queryForMap("select * from db_table_t where tid='table'");
+            assertEquals("multi",table.get("dictionary_structure_type"));
+            assertEquals("categories-kept",table.get("dictionary_categories"));
+            assertEquals("profiles-kept",table.get("dictionary_profiles"));
+            assertEquals("profile-kept",table.get("dictionary_profile"));
+            var governance=cn.hutool.json.JSONUtil.parseObj(table.get("field_governance_config").toString());
+            assertEquals("multi",governance.getStr("dictionaryStructureType"));
+            assertEquals("type_name",governance.getStr("dictionaryCategoryNameField"));
+            assertTrue(governance.getJSONArray("dictionaryCategories").toString().contains("kept"));
+            assertTrue(governance.getJSONArray("dictionaryProfiles").toString().contains("codeField"));
+            assertEquals("code",governance.getJSONObject("dictionaryProfile").getStr("codeField"));
+        }
+        var invalid = new Fixture(20);
+        invalid.fields.get(0).put("nullable",2); invalid.fields.get(0).put("nullableEdited",true);
+        assertInstanceOf(ExitValue.class,invalid.save("table",false));
+        assertEquals(0,invalid.jdbc.queryForObject("select count(*) from db_table_column_t where column_comment='新注释'",Integer.class));
     }
     @Test void schemaPreviewLoadsOnlyTenantOwnedSnapshotAndKeepsReadCountConstant() throws Exception {
         for(int count:List.of(20,100)) {

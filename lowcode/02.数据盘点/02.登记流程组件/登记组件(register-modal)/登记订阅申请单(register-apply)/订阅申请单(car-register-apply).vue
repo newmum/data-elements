@@ -1,144 +1,164 @@
 <template>
   <div class="px-5 py-2">
-    <apply-json-form
-      ref="applyFormRef"
-      :init-data="applyData"
-      :copy="store.data.editType === '再次申请'"
-    />
-
+    <apply-json-form ref="applyFormRef" :init-data="applyData" :copy="isCopy" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { storeToRefs } from "pinia";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { useRegisterStore } from "@/store";
 import { useCartCount } from "@/composables";
-import { get, set } from "lodash-es";
 
-const { refresh: refreshCartCount } = useCartCount();
+interface ApplyForm {
+  getFormData: () => Promise<Record<string, unknown>>;
+  openPrint: () => void;
+}
 
-// refs
-const applyFormRef = ref();
+interface DraftOrder {
+  tid?: string;
+  draftKey?: string;
+  type: "catalogSubscribe";
+  propList: Record<string, unknown> & { applyResource: string[] };
+}
+
 const store = useRegisterStore();
-const { state } = storeToRefs(store);
-
-// 当前申请单信息
-const applyData = computed({
-  get: () => {
-    if (!get(store.data, "apply")) {
-      set(store.data, "apply", {});
-    }
-    return get(store.data, "apply", {});
-  },
-  set: (val) => set(store.data, "apply", val),
+const applyFormRef = ref<ApplyForm>();
+const emptyRecord: Record<string, unknown> = {};
+const applicationState = computed(() => asRecord(store.data));
+const applyData = computed(() => asRecord(applicationState.value.apply));
+const isCopy = computed(() => applicationState.value.editType === "再次申请");
+const { refresh: refreshCartCount } = useCartCount();
+const draftKeys = new Map<string, string>();
+const savedByCatalog = new Map<string, string>();
+let saved: { snapshot: string; ids: string[] } | undefined;
+let active = true;
+onBeforeUnmount(() => {
+  active = false;
 });
 
-// 验证表单
-const validate = async () => {
-  await applyFormRef.value?.validate();
-};
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : emptyRecord;
+}
 
-// 保存单个申请单
-const saveApi = (data: Record<string, any>) => {
-  // applyResource 保存为目录 tid 数组
-  return ($common as any).post("/dws/market/applyForm/saveOrUpdate", {
-    tid: data.tid,
-    type: "catalogSubscribe",
-    propList: {
-      ...data,
-    },
+function draftKey(catalogId: string) {
+  const existing = draftKeys.get(catalogId);
+  if (existing) return existing;
+  const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  draftKeys.set(catalogId, key);
+  return key;
+}
+
+async function readForm() {
+  if (!applyFormRef.value) throw new Error("申请单正在加载，请稍后重试");
+  const { applyResource, ...fields } = await applyFormRef.value.getFormData();
+  if (!Array.isArray(applyResource) || !applyResource.length)
+    throw new Error("请选择申请资源");
+  if (applyResource.length > 100)
+    throw new Error("一次最多申请 100 个数据目录");
+
+  const catalogIds = applyResource.map((resource: unknown) => {
+    const row = asRecord(resource);
+    if (
+      row.unavailable === true ||
+      typeof row.tid !== "string" ||
+      !row.tid.trim()
+    )
+      throw new Error("申请包含不可用的数据目录，请重新选择");
+    return row.tid;
   });
-};
+  if (new Set(catalogIds).size !== catalogIds.length)
+    throw new Error("申请资源中有重复的数据目录");
 
-const save = async (): Promise<any> => {
-  try {
-    state.value.loadStatus["main"] = true;
-    await validate();
+  return { fields, catalogIds, snapshot: JSON.stringify([fields, catalogIds]) };
+}
 
-    const isUpdate = !!applyData.value.tid;
-    const saveData = await applyFormRef.value?.getFormData();
+async function saveDraft(form: Awaited<ReturnType<typeof readForm>>) {
+  if (!active) throw new Error("申请单已关闭");
+  if (saved?.snapshot === form.snapshot) return saved.ids;
+  const originalId = applyData.value.tid;
+  // 历史申请单可能关联多个目录，继续编辑时保留原申请单；购物车新建仍为每个目录一单。
+  const orders: DraftOrder[] =
+    !isCopy.value && typeof originalId === "string" && originalId
+      ? [
+          {
+            tid: originalId,
+            type: "catalogSubscribe",
+            propList: { ...form.fields, applyResource: form.catalogIds },
+          },
+        ]
+      : form.catalogIds.map((catalogId) => {
+          const tid = savedByCatalog.get(catalogId);
+          return {
+            ...(tid ? { tid } : { draftKey: draftKey(catalogId) }),
+            type: "catalogSubscribe",
+            propList: { ...form.fields, applyResource: [catalogId] },
+          };
+        });
 
-    // 保持一个目录一条申请记录，便于后续分别维护和撤销。
-    let saveBatchList = [];
-    const catalogIds = saveData.applyResource?.map((el) => el.tid);
-
-    if (!isUpdate) {
-      // 新增：每个目录都是新申请单
-      saveBatchList = catalogIds.map((id: any) => ({
-        ...saveData,
-        applyResource: [id],
-        applyName: saveData.applyResource.find((el) => el.tid === id)?.catalogName,
-      }));
-    } else {
-      // 编辑：用逗号分隔的 tid 匹配
-      const tids = applyData.value.tid.split(",");
-      saveBatchList = catalogIds.map((id: any, ind: number) => ({
-        ...saveData,
-        applyResource: [id],
-        tid: tids[ind],
-        applyName: saveData.applyResource.find((el) => el.tid === id)?.catalogName,
-      }));
-    }
-
-    // 并行保存所有申请单
-    const res = await Promise.all(saveBatchList.map((el) => saveApi(el)));
-
-    // 新增申请单则更新购物车目录数
-    if (!isUpdate) {
-      refreshCartCount();
-    }
-
-    // 合并所有 tid 用逗号连接
-    applyData.value = Object.assign(applyData.value, saveData, {
-      tid: res.map((el: any) => el.tid).join(","),
-    });
-
-    return { success: true, msg: "保存成功" };
-  } catch (err: any) {
-    return { success: false, msg: (err.message || err) as string };
-  } finally {
-    state.value.loadStatus["main"] = false;
-  }
-};
-
-const next = () => {
-  if (!applyData.value?.tid) {
-    throw "请保存";
-  }
-};
-const commit = async () => {
-  next();
-
-  const saveData = await applyFormRef.value?.getFormData();
-  const finishData = saveData.applyResource?.map((el) => ({
-    ...el,
-    assetType: "catalog",
-    assetName: el.catalogName,
-    applyTime: saveData.applyTime,
-  }));
-  store.data["finish"] = finishData;
-  await finish();
-};
-
-const finish = async () => {
-  next();
-
-  const tids = applyData.value.tid.split(",");
-  const apis = tids.map((tid) =>
-    $common.post("/dws/market/submit", {
-      flowOrderId: tid,
-    })
+  const response: unknown = await $common.post(
+    "/dws/market/applyForm/saveOrUpdate",
+    { orders },
   );
-  await Promise.all(apis);
-  $message.success("申请已直接生效");
-  store.handleAction("next");
-};
-const print = () => {
-  applyFormRef.value?.openPrint();
+  const items = asRecord(response).items;
+  if (!Array.isArray(items) || items.length !== orders.length)
+    throw new Error("保存结果不完整，请重试");
+  const ids = items.map((value: unknown, index: number) => {
+    const item = asRecord(value);
+    const order = orders[index];
+    if (
+      typeof item.tid !== "string" ||
+      item.tid !== (order.tid ?? order.draftKey) ||
+      JSON.stringify(item.catalogIds) !==
+        JSON.stringify(order.propList.applyResource)
+    )
+      throw new Error("保存结果与当前申请不一致，请重试");
+    return item.tid;
+  });
+
+  orders.forEach((order, index) => {
+    for (const catalogId of order.propList.applyResource)
+      savedByCatalog.set(catalogId, ids[index]);
+  });
+  saved = { snapshot: form.snapshot, ids };
+  if (orders.some((order) => order.draftKey)) {
+    void refreshCartCount().catch(() => {});
+  }
+  return ids;
+}
+
+const save = async () => {
+  await saveDraft(await readForm());
+  return { success: true, msg: "申请草稿已保存" };
 };
 
-// 暴露方法给父组件
-defineExpose({ save, next, commit, print });
+const commit = async () => {
+  const ids = await saveDraft(await readForm());
+  // 用户离开表单后，已完成的草稿保存仍然有效，但不能继续发出提交。
+  if (!active) return;
+  const response: unknown = await $common.post("/dws/market/submit", {
+    flowOrderIds: ids,
+  });
+  const items = asRecord(response).items;
+  if (!Array.isArray(items) || items.length !== ids.length)
+    throw new Error("提交结果不完整，请重试");
+  const confirmed = new Set(
+    items.map((value: unknown) => {
+      const item = asRecord(value);
+      return item.flowStatus === 2 && item.directGranted === true
+        ? item.flowOrderId
+        : undefined;
+    }),
+  );
+  if (ids.some((id) => !confirmed.has(id)))
+    throw new Error("申请尚未全部生效，请重试");
 
+  return { completed: true, msg: "申请已直接生效" };
+};
+
+const print = () => applyFormRef.value?.openPrint();
+defineExpose({ save, commit, print });
 </script>

@@ -3,15 +3,35 @@ import requestPolicy from "@/utils/request-policy";
 
 const COMPONENT_BASE_URL = "/sym/component";
 
+interface CompiledComponent {
+  name: string;
+  compileJs: string;
+  compileCss: string;
+}
+
 const ComponentAPI = {
   /** 组件列表 */
   getList() {
-    return requestPolicy.data<any[]>({
+    return requestPolicy.quiet<CompiledComponent[]>({
       url: `${COMPONENT_BASE_URL}`,
       method: "post",
       params: { action: "list" },
       // The first request after a cache reset may need to stream all compiled
       // low-code bundles from the remote primary database.
+      timeout: 120000,
+    });
+  },
+
+  getRuntimeBatch(root: string) {
+    return requestPolicy.quiet<{
+      complete: boolean;
+      scope?: "root" | "all";
+      components: CompiledComponent[];
+    }>({
+      url: COMPONENT_BASE_URL,
+      method: "post",
+      params: { action: "runtimeBatch" },
+      data: { root },
       timeout: 120000,
     });
   },

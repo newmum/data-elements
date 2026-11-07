@@ -2,16 +2,22 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.ssssssss.magicapi.core.context.RequestEntity;
 import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.magicapi.modules.db.*;
-import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
+import org.ssssssss.magicapi.modules.db.dialect.DialectAdapter;
 import org.ssssssss.magicapi.modules.db.provider.*;
 import org.ssssssss.script.*;
 import org.ssssssss.script.runtime.ExitValue;
@@ -26,7 +32,7 @@ class DatasourceManagementPermissionsMagicTest {
                 "mode","summary","tenantId","foreign","orgId","dept-b","scope","ALL"));
         assertThat(ids((List<?>)cards.get("list"))).isEqualTo(fixture.allowedIds());
         assertThat(cards.get("dataScope")).isEqualTo(policy);
-        assertThat(fixture.counter.reads).isEqualTo(3);
+        assertThat(fixture.counter.reads).isEqualTo(2);
         assertThat(fixture.scope.decisions).isEqualTo(1);
         assertThat(fixture.index.reads).isEqualTo(2);
         var tree=(Map<?,?>)fixture.run("datapd_database_tree_statistics_01",Map.of("tenantId","foreign"));
@@ -34,7 +40,26 @@ class DatasourceManagementPermissionsMagicTest {
         assertThat(fixture.counter.reads).isEqualTo(1);
         assertThat(fixture.scope.decisions).isEqualTo(1);
         assertThat(fixture.index.reads).isEqualTo(1);
-        System.out.println(policy+" "+size+" rows/group: cards SQL=3 ES=2 scope=1; tree SQL=1 ES=1 scope=1");
+        System.out.println(policy+" "+size+" rows/group: cards SQL=2 ES=2 scope=1; tree SQL=1 ES=1 scope=1");
+    }
+
+    @Test
+    void legacyTreeChecksScopeInBoundedChunksAndIgnoresDuplicateAndStaleEsRows() throws Exception {
+        var fixture = new Fixture("OWNER", 501);
+        fixture.index.rows.add(Map.of("tid", "own-0"));
+        fixture.index.rows.add(Map.of("tid", "missing"));
+        fixture.jdbc.update("UPDATE db_datasource_t SET org_id = 'dept-b' WHERE tid = 'own-0'");
+        var result = (Map<?, ?>) fixture.run("datapd_database_tree_statistics_01",
+                Map.of("orgIds", List.of("dept-a"), "tenantId", "foreign", "scope", "ALL"));
+        // ES returns a forged dept-a for every document. Only the current owner's active dept-a rows survive.
+        assertThat(((Number) result.get("total")).intValue()).isEqualTo(500);
+        assertThat(result.get("orgCounts")).isEqualTo(Map.of("dept-a", 500));
+        var apps = (Map<?, ?>) result.get("orgApps");
+        var app = (Map<?, ?>) ((List<?>) apps.get("dept-a")).getFirst();
+        assertThat(idsFromTree((List<?>) app.get("datasources"))).doesNotContain("own-0", "foreign", "missing", "deleted", "dept-0");
+        assertThat(fixture.counter.reads).isEqualTo(4);
+        assertThat(fixture.index.reads).isEqualTo(1);
+        assertThat(fixture.scope.decisions).isEqualTo(1);
     }
 
     @ParameterizedTest
@@ -108,13 +133,20 @@ class DatasourceManagementPermissionsMagicTest {
         return result;
     }
 
+    private static List<String> idsFromTree(List<?> rows) {
+        return rows.stream().map(row -> String.valueOf(((Map<?, ?>) row).get("value"))).toList();
+    }
+
     static class Fixture {
         final JdbcTemplate jdbc;final SQLModule db;final Counter counter=new Counter();
+        final StructuredTableReadMagicModule tableRead;
         final Scope scope;final Index index;final int size;
         Fixture(String policy,int size) {
             this.size=size;scope=new Scope(policy);
-            var source=new DriverManagerDataSource("jdbc:h2:mem:permission_"+UUID.randomUUID()+";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
+            var source=new CountedSource(counter);
             jdbc=new JdbcTemplate(source);
+            tableRead=new StructuredTableReadMagicModule(jdbc);
+            DatasourceTypeFacetsMagicTest.registerJsonFunctions(jdbc);
             jdbc.execute("""
                 create table db_datasource_t(tid varchar(64),tenant_id varchar(64),is_del int,
                     db_name varchar(100),db_type varchar(32),database_type varchar(32),remark varchar(100),
@@ -124,7 +156,7 @@ class DatasourceManagementPermissionsMagicTest {
                     created_time timestamp,updated_time timestamp,reg_time timestamp)
                 """);
             jdbc.execute("create table sym_application_t(tid varchar(64),tenant_id varchar(64),app_name varchar(100),is_del int)");
-            jdbc.execute("create table rm_org_t(id varchar(64),name varchar(100),org_path varchar(100),deleted int)");
+            jdbc.execute("create table rm_org_t(id varchar(64),tenant_id varchar(64),name varchar(100),org_path varchar(100),deleted int)");
             jdbc.execute("""
                 create table db_table_t(tid varchar(64),tenant_id varchar(64),datasource_id varchar(64),is_del int,
                     asset_status int,annotated int,business_type varchar(32),field_count int,
@@ -142,7 +174,8 @@ class DatasourceManagementPermissionsMagicTest {
             var dynamic=new MagicDynamicDataSource();dynamic.setDefault(source);db=new SQLModule(dynamic);db.setDataSourceNode(dynamic.getDataSource());
             var columns=new ColumnMapperAdapter();columns.add(new DefaultColumnMapperProvider());columns.add(new CamelColumnMapperProvider());columns.setDefault("camel");
             db.setColumnMapperProvider(columns);db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());db.setRowMapColumnMapper(v->v);
-            db.setSqlInterceptors(List.of(counter));db.setNamedTableInterceptors(List.of());
+            db.setSqlInterceptors(List.of());db.setNamedTableInterceptors(List.of());
+            db.setDialectAdapter(new DialectAdapter());
             index=new Index(jdbc.queryForList("select tid from db_datasource_t"));
         }
         void insert(String id,String tenant,String org,String creator,int deleted) {
@@ -158,6 +191,9 @@ class DatasourceManagementPermissionsMagicTest {
             return ids;
         }
         Object run(String id,Map<String,Object> body) throws Exception {
+            return run(id, body, index);
+        }
+        Object run(String id,Map<String,Object> body,Object searchModule) throws Exception {
             counter.reads=0;counter.writes=0;scope.decisions=0;index.reads=0;
             String script=CanonicalMagicSources.byId(id).replaceAll("(?m)^import (?!cn\\.hutool\\.|java\\.util\\.)[^\\r\\n]*\\r?\\n","");
             script=script.replaceAll("(?s)coalesce\\(\\s*nullif\\(json_unquote.*?\\) as accessMode","'upload' as accessMode")
@@ -166,8 +202,10 @@ class DatasourceManagementPermissionsMagicTest {
             script="var me=()=>{orgId:'dept-a',orgName:'本部门'};var configData=()=>{es_dataassets:'assets'};\n"+script;
             var variables=new LinkedHashMap<String,Object>();variables.put("body",body);variables.put("db",db);
             variables.put("dataScope",scope);variables.put("tenantRuntime",scope);variables.put("tenantAccounts",scope);
-            variables.put("tenantEs",index);variables.put("tableSort",new TableSortMagicModule());
-            return MagicScript.create(script,null).execute(new MagicScriptContext(variables));
+            variables.put("tenantEs",searchModule);variables.put("tableSort",new TableSortMagicModule());
+            variables.put("tableRead",tableRead);
+            var compiled=MagicScript.create(script,null);
+            return TenantContext.call("ga", () -> compiled.execute(new MagicScriptContext(variables)));
         }
     }
     public static class Scope {
@@ -186,8 +224,47 @@ class DatasourceManagementPermissionsMagicTest {
         public Index index(String name){return this;}
         public Map<String,Object> search(Map<?,?> query){reads++;return Map.of("hits",Map.of("hits",rows.stream().map(row->Map.of("_id",row.get("tid"),"_source",new LinkedHashMap<>(Map.of("tid",row.get("tid"),"orgId","dept-a","createdBy","person-a","dbName",row.get("tid"),"appId","app","appName","系统","assetType","db")))).toList()));}
     }
-    static class Counter implements SQLInterceptor {
+    static class Counter {
         int reads,writes;
-        @Override public void preHandle(BoundSql sql,RequestEntity request){if(sql.getSql().stripLeading().toLowerCase().startsWith("select"))reads++;else writes++;}
+
+        void record(String sql) {
+            if (sql.stripLeading().regionMatches(true, 0, "SELECT", 0, 6)) reads++;
+            else writes++;
+        }
+    }
+
+    /** Counts both native Magic and structured SQL at the same prepared-statement boundary. */
+    private static final class CountedSource extends DriverManagerDataSource {
+        private final Counter counter;
+
+        private CountedSource(Counter counter) {
+            super("jdbc:h2:mem:permission_" + UUID.randomUUID() + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
+            this.counter = counter;
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            Connection actual = super.getConnection();
+            return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Connection.class},
+                    (proxy, method, args) -> {
+                        if (method.getName().equals("getMetaData")) {
+                            DatabaseMetaData metadata = actual.getMetaData();
+                            return Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{DatabaseMetaData.class},
+                                    (ignored, metaMethod, metaArgs) -> metaMethod.getName().equals("getURL")
+                                            ? "jdbc:mysql://datasource-permissions-validation"
+                                            : invoke(metadata, metaMethod, metaArgs));
+                        }
+                        if (method.getName().equals("prepareStatement")) counter.record((String) args[0]);
+                        return invoke(actual, method, args);
+                    });
+        }
+
+        private static Object invoke(Object target, Method method, Object[] args) throws Throwable {
+            try {
+                return method.invoke(target, args);
+            } catch (InvocationTargetException error) {
+                throw error.getCause();
+            }
+        }
     }
 }

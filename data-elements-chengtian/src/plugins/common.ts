@@ -1,7 +1,6 @@
 import request from "@/utils/request";
 import { regexps } from "@/utils/regexps";
 import * as _ from "lodash-es";
-import dayjs from "dayjs";
 
 // 假设 $dialog 和 $message 是全局引入的 UI 库 API，需确保已声明类型
 declare const $dialog: typeof ElMessageBox;
@@ -341,37 +340,6 @@ const common = {
         common.deepTree(node.children, callback);
       }
     });
-  },
-  parseEsDate(esDate: string): string {
-    // 1. 基础时间：now 直接返回当前时间
-    if (esDate === "now") {
-      return dayjs().format("YYYY-MM-DD HH:mm:ss");
-    }
-
-    // 2. 匹配 now-10d / now-6M / now-1y / now-2h 格式
-    const match = esDate.match(/^now-(\d+)([d|M|h|m|y])$/);
-    if (!match) {
-      throw new Error(`不支持的时间表达式：${esDate}`);
-    }
-
-    const num = parseInt(match[1], 10); // 数字 10、6、1
-    const unit = match[2] as any; // 单位 d/M/h/m/y
-
-    // 3. 映射单位（和 ES 一致）
-    const unitMap: Record<string, dayjs.ManipulateType> = {
-      d: "day",
-      M: "month",
-      y: "year",
-      h: "hour",
-      m: "minute",
-    };
-
-    if (!unitMap[unit]) {
-      throw new Error(`不支持的时间单位：${unit}`);
-    }
-
-    // 4. 当前时间减去对应时长
-    return dayjs().subtract(num, unitMap[unit]).format("YYYY-MM-DD HH:mm:ss");
   },
 };
 

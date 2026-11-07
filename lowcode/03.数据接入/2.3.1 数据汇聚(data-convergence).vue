@@ -4,7 +4,7 @@
       <el-splitter-panel size="300px" min="10%">
         <div class="left-panel">
           <div class="panel-header">
-          <h3>接入任务</h3>
+          <h3>{{ taskName }}</h3>
           <el-tooltip :content="runtimeHint" placement="bottom"><el-tag :type="runtimeConnection === 'live' ? 'success' : runtimeConnection === 'connecting' ? 'info' : 'warning'" size="small" effect="plain">{{ runtimeConnection === 'live' ? '实时状态' : runtimeConnection === 'connecting' ? '连接中' : '状态待确认' }}</el-tag></el-tooltip>
           </div>
 
@@ -126,7 +126,7 @@
             flex-type="flex-[1_1_200px]"
             class="source-table"
             :row-class-name="sourceRowClassName"
-            :default-sort="{ prop: 'updatedTime', order: 'descending' }"
+            :default-sort="{ prop: taskPage.sortField, order: 'descending' }"
             @expand-change="handleExpandChange"
             @sort-change="handleSourceSortChange"
           >
@@ -160,7 +160,7 @@
 
                   <el-empty
                     v-else
-                    description="该数据表尚未创建接入任务"
+                    :description="`该数据表尚未创建${taskName}`"
                     :image-size="72"
                   />
                 </div>
@@ -183,10 +183,10 @@
                 </div>
               </template>
             </el-table-column>
-              <el-table-column prop="taskCount" label="接入任务" width="100" align="center">
+              <el-table-column prop="taskCount" :label="taskName" width="100" align="center">
               <template #default="{ row }">
                 <span v-if="Number(row.taskCount) > 0">{{ row.taskCount || 0 }} 个</span>
-                <span v-else class="task-empty">未接入</span>
+                <span v-else class="task-empty">未{{ taskPage.verb }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="datasourceName" label="所属数据源" width="185">
@@ -218,7 +218,20 @@
             </el-table-column>
             <el-table-column prop="accessStatusText" label="状态" width="112" align="center">
               <template #default="{ row }">
-                <el-tag :type="accessStatusType(row)" size="small">{{ row.accessStatusText || '状态待确认' }}</el-tag>
+                <el-tag v-if="!isDistribution" :type="accessStatusType(row)" size="small">
+                  {{ row.accessStatusText || '状态待确认' }}
+                </el-tag>
+                <el-tag v-else-if="Number(row.taskCount) > 0" type="success" size="small">已分发</el-tag>
+                <el-button
+                  v-else
+                  link
+                  type="warning"
+                  class="reject-modify-action"
+                  :disabled="!getSourceTableId(row)"
+                  @click="handleRejectForModify(row)"
+                >
+                  驳回修改
+                </el-button>
               </template>
             </el-table-column>
             <el-table-column label="操作" fixed="right" width="98" align="center" header-align="center">
@@ -229,7 +242,7 @@
                   type="primary"
                   :loading="creatingTaskId === getSourceTableId(row)"
                   :disabled="Boolean(creatingTaskId) || !getSourceTableId(row)"
-                  @click="handleTableAction(row, 'createTable')"
+                  @click="handleCreateTask(row)"
                 >
                   创建任务
                 </el-button>
@@ -253,20 +266,16 @@
       </el-splitter-panel>
     </el-splitter>
 
-    <access-modal
-      v-if="accessVisible"
-      :id="id"
-      v-model="accessVisible"
-      :access-task-id="accessTaskId"
-      @close="closeRegisterModal"
-    />
     <access-apply
       v-if="applyVisible"
       :id="id"
       v-model="applyVisible"
       :type="applyType"
+      :task-category="isDistribution ? 'distribution' : undefined"
       :existing-targets="pendingTaskRow ? targetTablesOf(pendingTaskRow) : []"
       @save="handleApplySave"
+      @close="pendingTaskRow = null"
+      @materialization-changed="tableRef?.refresh?.(false)"
       @target-deleted="handleTargetDeleted"
     />
     <schedule-setting
@@ -298,11 +307,11 @@
             <small>{{ qualifiedTableName(targetDrawerContext.tableName, targetDrawerContext.schemaName) }}</small>
           </div>
           <div class="target-section-summary">
-            <span>接入任务 · {{ targetDrawerSections.filter(section => section.task).length }} 个</span>
+            <span>{{ taskName }} · {{ targetDrawerSections.filter(section => section.task).length }} 个</span>
             <span>目标表 · {{ targetDrawerSections.reduce((total, section) => total + section.targets.length, 0) }} 张</span>
           </div>
           <el-alert v-if="targetDrawerSections.some(section => section.targets.some(isHiveTarget))" type="info" :closable="false" show-icon class="mb-4"
-            title="Hive 仅移除接入登记和流程，物理表及数据保留；后续可校验并复用已有表创建流程。" />
+            :title="`Hive 仅移除${taskPage.verb}登记和流程，物理表及数据保留；后续可校验并复用已有表创建流程。`" />
           <section v-for="(section, index) in targetDrawerSections" :key="section.key" class="target-task-section">
             <div class="target-task-heading">
               <span class="target-task-number">{{ index + 1 }}</span>
@@ -333,7 +342,7 @@
               <el-button v-if="section.targets.length" size="small" type="danger" plain :disabled="deletingAllTargets" @click="deleteAllTargets(section)">清理此组目标和流程</el-button>
             </div>
           </section>
-          <el-empty v-if="!targetDrawerSections.length" description="尚未创建接入任务或目标表" :image-size="80" />
+          <el-empty v-if="!targetDrawerSections.length" :description="`尚未创建${taskName}或目标表`" :image-size="80" />
         </template>
       </div>
       <template #footer>
@@ -352,6 +361,29 @@ import { ElMessageBox } from "element-plus";
 import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { get } from "lodash-es";
+
+const props = defineProps({
+  taskCategory: { type: String, default: "ingestion" },
+});
+
+// 菜单入口决定任务类别。分页与树接口各自校验租户和候选范围。
+const isDistribution = props.taskCategory === "distribution";
+const taskPage = isDistribution ? {
+  verb: "分发",
+  pageEndpoint: "/ods/hiveTargetPage",
+  treeEndpoint: "/ods/hiveTargetTree",
+  routeBase: "/jr/hive-metastore",
+  sortField: "createdTime",
+  canvasName: "任务画布",
+} : {
+  verb: "接入",
+  pageEndpoint: "/ods/dataAggPage",
+  treeEndpoint: "/ods/dataAggTreeStatistics",
+  routeBase: "/jr/data-convergence",
+  sortField: "updatedTime",
+  canvasName: "接入画布",
+};
+const taskName = `${taskPage.verb}任务`;
 
 const router = useRouter();
 const treeRef = ref();
@@ -433,7 +465,6 @@ const orgTreeSource = ref([]);
 const expandedRows = ref([]);
 
 const applyVisible = ref(false);
-const accessVisible = ref(false);
 const scheduleVisible = ref(false);
 const id = ref("");
 const accessTaskId = ref("");
@@ -453,10 +484,12 @@ const deleteAllLoadingText = computed(() => {
 
 const tabs = [
   { label: "全部", value: "all" },
-  { label: "待接入", value: "0" },
-  { label: "待审批", value: "2" },
-  { label: "待启动", value: "3" },
-  { label: "已接入", value: "1" },
+  { label: `待${taskPage.verb}`, value: "0" },
+  ...(!isDistribution ? [
+    { label: "待审批", value: "2" },
+    { label: "待启动", value: "3" },
+  ] : []),
+  { label: `已${taskPage.verb}`, value: "1" },
 ];
 
 const treeData = ref([
@@ -485,7 +518,7 @@ const state = reactive({
   datasourceTypeError: "",
   accessStatus: "all",
   leftSelectNode: treeData.value[0],
-  sortField: "updatedTime",
+  sortField: taskPage.sortField,
   sortDir: "desc",
 });
 
@@ -824,7 +857,7 @@ const loadTree = async () => {
   try {
     const [orgTree, statistics] = await Promise.all([
       $common.post("/sym/org/getOrgTree", { parentId: $user.orgRootId }),
-      $common.post("/ods/dataAggTreeStatistics", statisticsPayload()),
+      $common.post(taskPage.treeEndpoint, statisticsPayload()),
     ]);
     orgTreeSource.value = orgTree || [];
     treeStatistics.value = {
@@ -859,7 +892,7 @@ const fetchSources = async ({ pageNo = 1, pageSize = 20 } = {}) => {
   const datasourceIds = [...new Set(collectDatasourceIds(selectedNode))];
   state.loading = true;
   try {
-    const result = await $common.post("/ods/dataAggPage", {
+    const result = await $common.post(taskPage.pageEndpoint, {
       viewLevel: "table",
       datasourceType: state.datasourceType,
       includeDatasourceTypeStatistics: true,
@@ -917,7 +950,7 @@ const handleSearch = () => {
 const handleSourceSortChange = ({ prop, order }) => {
   if (order && !["tableName", "taskCount", "createdTime", "updatedTime", "fieldCount", "recordCount"].includes(prop)) return;
   if (!order) {
-    state.sortField = "updatedTime";
+    state.sortField = taskPage.sortField;
     state.sortDir = "desc";
   } else {
     state.sortField = prop;
@@ -957,12 +990,12 @@ const openTableDetail = (row) => {
     return;
   }
   router.push({
-    path: "/jr/data-convergence/detail",
+    path: `${taskPage.routeBase}/detail`,
     query: {
       id: tableId,
       type: "table",
       title: row.tableNameCn || row.tableComment || row.tableName || "数据表",
-      from: "/jr/data-convergence/list",
+      from: `${taskPage.routeBase}/list`,
     },
   });
 };
@@ -984,12 +1017,12 @@ const openDatasourceDetail = (row) => {
     return;
   }
   router.push({
-    path: "/jr/data-convergence/detail",
+    path: `${taskPage.routeBase}/detail`,
     query: {
       id: datasourceId,
       type: "db",
       title: row.datasourceName || row.dbName || "数据源",
-      from: "/jr/data-convergence/list",
+      from: `${taskPage.routeBase}/list`,
     },
   });
 };
@@ -1018,7 +1051,7 @@ const openTaskSetting = (task, row = null) => {
   }
   const taskId = task?.tid || task?.id || row?.accessTaskId || "";
   if (!taskId) {
-    $message.warning("当前记录没有关联接入任务，无法查看任务");
+    $message.warning(`当前记录没有关联${taskName}，无法查看任务`);
     return;
   }
   id.value = sourceTableId;
@@ -1030,7 +1063,7 @@ const openNifiDesigner = (taskId, sourceTableId = "") => {
   if (sourceTableId) id.value = sourceTableId;
   accessTaskId.value = taskId || "";
   if (!accessTaskId.value) {
-    $message.warning("接入任务创建失败，未返回任务标识");
+    $message.warning(`${taskName}创建失败，未返回任务标识`);
     return;
   }
   scheduleVisible.value = true;
@@ -1047,7 +1080,7 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
     ...(row?.sourceFileConfig ? { sourceFileConfig: row.sourceFileConfig } : {}),
   };
   if (!payload.tableId) {
-    $message.warning("无法读取来源表标识，暂不能创建接入任务");
+    $message.warning(`无法读取来源表标识，暂不能创建${taskName}`);
     return null;
   }
   const result = await $common.post("/ods/dataAggTaskEnsure", payload, { _hiddenErrorMsg: true });
@@ -1056,7 +1089,7 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
   const task = tasks[0] || response?.task || response;
   const taskId = task?.tid || response?.taskId;
   if (!taskId) {
-    $message.warning("接入任务创建失败，请稍后重试");
+    $message.warning(`${taskName}创建失败，请稍后重试`);
     return null;
   }
   const pipelineId = task?.pipelineId || task?.pipeline_id || result?.pipelineId || result?.data?.pipelineId || "";
@@ -1080,7 +1113,7 @@ const ensureAccessTask = async (row, forceRebuild = false) => {
       });
     } catch (error) {
       // API 表规则绑定只是附加关联，不能阻止已创建的任务打开画布。
-      console.warn("接入任务已创建，但 API 表规则绑定失败", error);
+      console.warn(`${taskName}已创建，但 API 表规则绑定失败`, error);
       bindingWarning = "任务已创建，但 API 表规则绑定失败；可先在画布中配置流程";
     }
   }
@@ -1104,19 +1137,19 @@ const isHiveTarget = (target) => ['hive', 'mrshive', 'huaweihive', 'huaweimrshiv
 const targetCleanupConfirmText = (target, preview = {}) => {
   const name = target?.targetTableName || target?.tableName || '当前目标表';
   if (preview.targetHivePhysicalRetained === true || isHiveTarget(target)) {
-    return `将移除“${name}”的接入流程和目标登记，Hive 物理表及数据保留。后续可在物化建表时确认复用已有表并重新创建流程。确认继续吗？`;
+    return `将移除“${name}”的${taskPage.verb}流程和目标登记，Hive 物理表及数据保留。后续可在物化建表时确认复用已有表并重新创建流程。确认继续吗？`;
   }
   if (preview.targetCleanupPending === true) {
-    return `目标库暂时无法检查，将取消可清理的接入流程，并保留“${name}”的目标登记供重试。确认继续吗？`;
+    return `目标库暂时无法检查，将取消可清理的${taskPage.verb}流程，并保留“${name}”的目标登记供重试。确认继续吗？`;
   }
-  return `将删除目标物理表“${name}”及其元数据，并移除接入流程。该操作不可恢复；若目标库删除失败会保留登记供重试。确认继续吗？`;
+  return `将删除目标物理表“${name}”及其元数据，并移除${taskPage.verb}流程。该操作不可恢复；若目标库删除失败会保留登记供重试。确认继续吗？`;
 };
 const targetCleanupSummary = (outcomes) => {
   const pending = outcomes.filter((item) => item.targetCleanupPending === true || Number(item.processGroupCleanupPendingCount || 0) > 0).length;
   const hive = outcomes.filter((item) => item.targetHivePhysicalRetained === true).length;
   const message = outcomes.length === 1 && outcomes[0].message
     ? outcomes[0].message
-    : `已处理 ${outcomes.length} 个目标的接入清理${hive ? `；${hive} 个 Hive 物理表及数据保留` : ''}${pending ? `；${pending} 个目标有清理待重试，相关登记或流程记录已保留` : ''}`;
+    : `已处理 ${outcomes.length} 个目标的${taskPage.verb}清理${hive ? `；${hive} 个 Hive 物理表及数据保留` : ''}${pending ? `；${pending} 个目标有清理待重试，相关登记或流程记录已保留` : ''}`;
   return { pending, message };
 };
 
@@ -1132,12 +1165,12 @@ const handleTaskRecovery = async (task, row, command, target = null) => {
     return;
   }
   const deleteTargetTable = command === "target";
-  const actionText = deleteTargetTable ? (isHiveTarget(target) ? "移除 Hive 接入登记和流程" : "删除目标表并移除流程") : "删除任务";
+  const actionText = deleteTargetTable ? (isHiveTarget(target) ? `移除 Hive ${taskPage.verb}登记和流程` : "删除目标表并移除流程") : "删除任务";
   try {
     await ElMessageBox.confirm(
       deleteTargetTable
         ? targetCleanupConfirmText(target)
-        : "将删除当前接入任务和关联流程，已创建的目标表及其数据会保留，可通过“查看建表情况”统一管理。确认继续吗？",
+        : `将删除当前${taskName}和关联流程，已创建的目标表及其数据会保留，可通过“查看建表情况”统一管理。确认继续吗？`,
       actionText,
       { type: "warning", confirmButtonText: "确认", cancelButtonText: "取消" },
     );
@@ -1154,11 +1187,11 @@ const handleTaskRecovery = async (task, row, command, target = null) => {
     targetDrawerVisible.value = false;
     const outcome = response?.data || response || {};
     const summary = targetCleanupSummary([outcome]);
-    $message[summary.pending ? 'warning' : 'success'](summary.message || '接入清理已处理');
+    $message[summary.pending ? 'warning' : 'success'](summary.message || `${taskPage.verb}清理已处理`);
     await tableRef.value?.refresh?.();
   } catch (error) {
     if (error === "cancel" || error === "close") return;
-    console.error("重建接入任务失败", error);
+    console.error(`重建${taskName}失败`, error);
     $message.error(error?.message || error || "重建操作失败，请稍后重试");
   }
 };
@@ -1296,7 +1329,7 @@ const handleCreateTask = async (row) => {
     }
     const sourceTableId = getSourceTableId(row);
     if (!sourceTableId) {
-      $message.warning("无法读取来源表标识，暂不能创建接入任务");
+      $message.warning(`无法读取来源表标识，暂不能创建${taskName}`);
       return;
     }
     pendingTaskRow.value = row;
@@ -1305,28 +1338,35 @@ const handleCreateTask = async (row) => {
     applyVisible.value = true;
   } catch (error) {
     creatingTaskId.value = "";
-    console.error("创建接入任务失败", error);
-    $message.error(error?.message || error || "创建接入任务失败");
+    console.error(`创建${taskName}失败`, error);
+    $message.error(error?.message || error || `创建${taskName}失败`);
   }
 };
 
-const handleTableAction = (row, type) => {
-  accessTaskId.value = row.accessTaskId || "";
-  id.value = getSourceTableId(row) || row.sourceCatalogId || row.catalogId || "";
-  switch (type) {
-    case "createTable":
-      handleCreateTask(row);
-      return;
-    case "viewTable":
-      applyType.value = "view";
-      applyVisible.value = true;
-      return;
-    case "access":
-      accessVisible.value = true;
-      return;
-    case "schedule":
-      scheduleVisible.value = true;
-      return;
+const handleRejectForModify = async (row) => {
+  if (!isDistribution) return;
+  const tableId = getSourceTableId(row);
+  if (!tableId) {
+    $message.warning("无法读取来源表标识，暂不能驳回修改");
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认驳回“${row.tableNameCn || row.tableComment || row.tableName || "该数据表"}”的登记信息吗？该表会回到未登记状态，数据源仍保持已注册。`,
+      "驳回修改",
+      { type: "warning" },
+    );
+    await $common.post("/ods/dataAggReject", {
+      tableId,
+      datasourceId: row.datasourceId || row.dbId || "",
+    });
+    $message.success("已驳回，请在数据源登记中重新标注该表");
+    await loadTree();
+    tableRef.value?.refresh?.();
+  } catch (error) {
+    if (error === "cancel" || error === "close") return;
+    console.error("驳回登记信息失败", error);
+    $message.error(error?.message || error || "驳回修改失败，请稍后重试");
   }
 };
 
@@ -1345,7 +1385,7 @@ const handleApplySave = async (materializedTarget = null) => {
       (target) => target?.targetTableId || target?.tid || "",
     ).filter(Boolean))];
     if (!targetTableIds.length) {
-      throw new Error("目标表未创建成功，不能继续创建接入任务");
+      throw new Error(`目标表未创建成功，不能继续创建${taskName}`);
     }
     const sourceFileConfig = materializedTarget?.sourceFileConfig;
     let task = await ensureAccessTask({ ...row, targetTableIds, sourceFileConfig });
@@ -1353,11 +1393,11 @@ const handleApplySave = async (materializedTarget = null) => {
       if (task.repairRequired) {
         const reasons = task.repairReasons.length
           ? task.repairReasons.join("；")
-          : "已有接入画布需要更新";
+          : `已有${taskPage.canvasName}需要更新`;
         try {
           await ElMessageBox.confirm(
-            `目标表已物化，但已有接入画布需要更新：${reasons}。重新生成会按每个目标表创建独立任务，并替换所选旧画布的人工配置；目标表及数据会保留。是否重新生成？`,
-            "接入画布需要更新",
+            `目标表已物化，但已有${taskPage.canvasName}需要更新：${reasons}。重新生成会按每个目标表创建独立任务，并替换所选旧画布的人工配置；目标表及数据会保留。是否重新生成？`,
+            `${taskPage.canvasName}需要更新`,
             { type: "warning", confirmButtonText: "重新生成", cancelButtonText: "保留旧画布" },
           );
         } catch (decision) {
@@ -1367,14 +1407,14 @@ const handleApplySave = async (materializedTarget = null) => {
         }
         const rebuilt = await ensureAccessTask({ ...row, targetTableIds, sourceFileConfig }, true);
         if (!rebuilt?.tid || rebuilt.repairRequired) {
-          throw new Error("接入画布重新生成失败，请在任务设置中检查后重试");
+          throw new Error(`${taskPage.canvasName}重新生成失败，请在任务设置中检查后重试`);
         }
         task = rebuilt;
       }
       const tasks = task.tasks || [task];
       $message.success(tasks.length > 1
-        ? `物化建表完成，已准备 ${tasks.length} 个级联接入任务，正在打开第一段画布`
-        : (materializedTarget?.reusedExisting ? "已复用现有目标表并创建接入任务" : "物化建表完成，接入任务已创建"));
+        ? `物化建表完成，已准备 ${tasks.length} 个级联${taskName}，正在打开第一段画布`
+        : (materializedTarget?.reusedExisting ? `已复用现有目标表并创建${taskName}` : `物化建表完成，${taskName}已创建`));
       expandedRows.value = [...new Set([...expandedRows.value, row.tid])];
       // 直接使用创建响应中的任务打开画布，不等待分页刷新，也不依赖排序后的行位置。
       const firstTask = tasks.find(item => String(item.sourceTableId || item.source_table_id || '') === String(getSourceTableId(row))) || tasks[0];
@@ -1382,8 +1422,8 @@ const handleApplySave = async (materializedTarget = null) => {
       void Promise.resolve(tableRef.value?.refresh?.()).catch(error => console.warn("任务已创建，列表刷新失败", error));
     }
   } catch (error) {
-    console.error("物化后创建接入任务失败", error);
-    $message.error(`目标表已保留，接入任务创建未完成：${error?.message || error || '请稍后重试'}。处理后可在列表点击“创建任务”重试，无需重复物化或删表。`);
+    console.error(`物化后创建${taskName}失败`, error);
+    $message.error(`目标表已保留，${taskName}创建未完成：${error?.message || error || '请稍后重试'}。处理后可在列表点击“创建任务”重试，无需重复物化或删表。`);
     tableRef.value?.refresh?.();
   }
 };
@@ -1400,13 +1440,6 @@ const handleTargetDeleted = (target) => {
     };
   }
   tableRef.value?.refresh?.();
-};
-
-const closeRegisterModal = (refresh) => {
-  if (refresh) {
-    tableRef.value?.refresh?.();
-  }
-  accessVisible.value = false;
 };
 
 const closeNifiDesigner = () => {
@@ -1887,8 +1920,12 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-
-
+.reject-modify-action {
+  min-height: 20px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
 .task-links { display: flex; flex-direction: column; gap: 14px; }
 .task-link-card { min-width: 0; padding: 0; border: 0; background: transparent; overflow-x: auto; }
 .task-link-card__route { display: flex; align-items: center; gap: 12px; width: 100%; min-width: var(--task-route-min-width); }

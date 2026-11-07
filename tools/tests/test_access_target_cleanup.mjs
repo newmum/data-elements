@@ -7,9 +7,10 @@ const root = new URL('../../', import.meta.url);
 const babel = {};
 vm.runInNewContext(await fs.readFile(new URL('data-elements-chengtian/public/babel.min.js', root), 'utf8'), babel);
 const helpers = ['isHiveTarget', 'targetCleanupConfirmText', 'targetCleanupSummary'];
+const sharedList = 'lowcode/03.数据接入/2.3.1 数据汇聚(data-convergence).vue';
 const paths = [
-  'lowcode/03.数据接入/2.3.1 数据汇聚(data-convergence).vue',
-  'lowcode/03.数据接入/2.3.1 Hive元数据库(data-convergence-hive).vue',
+  sharedList,
+  sharedList,
   'lowcode/03.数据接入/2.3.2 接入监控(access-monitoring).vue',
   'lowcode/03.数据接入/2.3.1 数据汇聚(data-convergence)/接入申请(access-apply).vue',
 ];
@@ -19,7 +20,8 @@ let assertions = 0;
 for (const [index, file] of paths.entries()) {
   const source = await fs.readFile(new URL(file, root), 'utf8');
   const script = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/)?.[1];
-  const names = [...helpers, ...(index === 3 ? ['handleDeleteExistingTarget']
+  const names = [...(index < 2 ? ['props','isDistribution','taskPage','taskName'] : []),
+    ...helpers, ...(index === 3 ? ['handleDeleteExistingTarget']
     : index === 2 ? ['deleteTargetPayload', 'deleteSingleTarget', 'deleteAllTargets'] : ['handleTaskRecovery'])];
   const ast = babel.Babel.transform(script, { ast: true, code: false, configFile: false, babelrc: false,
     parserOpts: { sourceType: 'module', plugins: ['typescript'] } }).ast;
@@ -36,7 +38,10 @@ for (const [index, file] of paths.entries()) {
     const messages = Object.fromEntries(['error', 'warning', 'success'].map(key => [key, message => notices.push({ key, message })]));
     const context = vm.createContext({
       console, datasourceMap: ref({ 'db-1': { dbType: 'hive' } }), props: { id: 'source-1' },
+      defineProps: defs => ({taskCategory: index === 1 ? 'distribution' : defs.taskCategory.default}),
       knownTargets: ref([target]), recoveryTarget: ref(target), recoveryDeleting: ref(false),
+      completedMaterializations: new Map([[target.targetDbId, { table: target }]]),
+      materializationResults: ref([{ dbId: target.targetDbId, status: 'succeeded' }]),
       scheduleVisible: ref(true), targetDrawerVisible: ref(true), accessTaskId: ref('task-1'),
       deleteDrawerRow: ref({ sourceTableId: 'source-1' }), deleteDrawerVisible: ref(true),
       deleteDrawerTargets: ref([target]), deletingTargets: ref(false), canDeleteTarget: () => true,
@@ -64,6 +69,7 @@ for (const [index, file] of paths.entries()) {
   const hive = fixture();
   await cleanup(hive);
   assert.ok(hive.confirmations.every(text => /Hive.*保留/.test(text)), file);
+  if (index < 2) assert.match(hive.confirmations[0], index === 1 ? /分发流程/ : /接入流程/);
   assert.equal(hive.notices.filter(item => item.key === 'error').length, 0, file);
   assert.ok(hive.notices.some(item => item.key === 'success' && /Hive.*保留/.test(item.message)), file);
   const pending = fixture({ targetCleanupPending: true, targetMetadataRetained: true, targetPhysicalDeleted: false });
@@ -71,7 +77,10 @@ for (const [index, file] of paths.entries()) {
   assert.equal(pending.notices.filter(item => item.key === 'error').length, 0, file);
   assert.ok(pending.notices.some(item => item.key === 'warning' && /待重试/.test(item.message)), file);
   if (index === 3) {
+    assert.equal(hive.context.completedMaterializations.has(target.targetDbId), false);
+    assert.equal(hive.context.materializationResults.value.length, 0);
     assert.equal(pending.context.knownTargets.value.length, 1);
+    assert.equal(pending.context.completedMaterializations.has(target.targetDbId), true);
     assert.equal(pending.emitted.length, 0, 'Do not remove a pending registration from the UI');
   }
   for (const size of [20, 100]) {

@@ -166,18 +166,17 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：06.获取表列表
-// 路由：GET /dst/database/metadata/tables
-// 业务说明：获取当前数据源已保存的数据表快照（GET /dst/database/metadata/tables）。默认返回数组兼容步骤三至五；paged=true 时按租户、数据源、业务类型和名称关键词在数据库侧去重分页，供登记第二步右侧列表使用；不连接物理数据源；涉及 db_datasource_t、metadata_table_collection_job_t、db_table_t、da_catalog_t 等业务表。
 import java.util.Map
 import jsons
+import tableRead
 import tenantRuntime
-var tenantId = tenantRuntime.id()
 
-/*
- * 元数据管理 06：读取当前数据源的表资产快照。
- * 标注状态的事实来源是 db_table_t；物理表实时清单由 /tables/preview 提供。
+/**
+ * GET /dst/database/metadata/tables 读取当前租户数据源的已保存表快照。
+ * dbId 必填。默认返回数组，paged=true 返回去重后的分页、筛选总数和筛选前统计。
+ * includeGovernance=false 省略治理大字段。此接口只读取登记快照，不连接物理来源库。
  */
+var tenantId = tenantRuntime.id()
 var textOf = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || textOf(value).trim() == ''
 // 第五步大数据源首屏只需要表级摘要。默认保留完整治理配置，传 false 时显式省略大字段。
@@ -395,7 +394,8 @@ if (pendingMode) {
         .eq('annotated', 0)
         .orderBy('updated_time', 'desc')
         .select()
-}var pagedMode = textOf(paged).trim().toLowerCase() == 'true' || textOf(paged) == '1'
+}
+var pagedMode = textOf(paged).trim().toLowerCase() == 'true' || textOf(paged) == '1'
 if (pagedMode) {
     // 详情页展示与登记两侧共用的全部快照；默认仍为第二步已标注列表。
     var allSnapshotsFlag = textOf(allSnapshots).toLowerCase() == 'true' || textOf(allSnapshots) == '1'
@@ -403,82 +403,113 @@ if (pagedMode) {
     var safePageSize = pageSize == null || pageSize::int < 1 ? 50 : Math.min(pageSize::int, 100)
     var selectedBusinessType = blank(businessType) || textOf(businessType) == '全部' ? null : textOf(businessType)
     var searchKeyword = blank(keyword) ? null : '%' + textOf(keyword).trim().toLowerCase() + '%'
-    var dedupSql = """
-        select * from (
-            select t.tid, t.datasource_id, t.table_name, t.table_name_en, t.table_name_cn,
-                   t.table_comment, t.table_type, t.business_type, t.business_type_reason,
-                   t.annotated, t.record_count, t.field_count, t.storage_size,
-                   t.total_size_bytes, t.total_size_formatted, t.org_id, t.org_path,
-                   t.related_directory, t.data_source_type, t.timestamp_field,
-                   t.dictionary_structure_type, t.dictionary_table_flag, t.source_catalog_id,
-                   <if test="includeGovernanceFlag">t.field_governance_config, t.dictionary_profiles,
-                   t.dictionary_profile, t.dictionary_categories,</if>
-                   t.source_table_id, t.source_table_name, t.manage_unit, t.asset_status,
-                   t.flow_status, t.reg_time, t.created_time, t.updated_time, t.tenant_id,
-                   row_number() over (
-                       partition by lower(t.table_name)
-                       order by coalesce(t.annotated, 0) desc, coalesce(t.field_count, 0) desc, t.updated_time desc, t.tid desc
-                   ) as row_rank
-              from db_table_t t
-             where t.tenant_id = #{tenantId}
-               and t.datasource_id = #{dbId}
-               and t.is_del = 0
-               <if test="!allSnapshotsFlag">and t.annotated = 1</if>
-        ) ranked
-        where ranked.row_rank = 1
-          <if test="selectedBusinessType != null and selectedBusinessType != ''">
-            and ranked.business_type = #{selectedBusinessType}
-          </if>
-          <if test="searchKeyword != null and searchKeyword != ''">
-            and (lower(coalesce(ranked.table_name, '')) like #{searchKeyword}
-                 or lower(coalesce(ranked.table_name_cn, '')) like #{searchKeyword}
-                 or lower(coalesce(ranked.table_comment, '')) like #{searchKeyword})
-          </if>
-    """
-    var sortColumns = {tableName: 'ranked.table_name', tableComment: 'ranked.table_comment', fieldCount: 'ranked.field_count', annotated: 'ranked.annotated', businessType: 'ranked.business_type'}
-    var selectedSort = sortColumns[textOf(sortField)]
-    var orderSql = selectedSort == null ? 'ranked.updated_time desc, ranked.tid desc' : selectedSort + (textOf(sortDir).toLowerCase() == 'desc' ? ' desc' : ' asc') + ', ranked.tid desc'
-    var page = db.page(dedupSql + ' order by ' + orderSql, safePageSize, (safePageNo - 1) * safePageSize)
-    var rows = []
-    for (row in page.list == null ? [] : page.list) {
-        rows.add(tableItem(row, datasource))
+    var snapshotAlias = 'snapshot'
+    var rankedAlias = 'ranked_snapshot'
+    var snapshotColumn = (name, kind) => tableRead.column(snapshotAlias, name, kind)
+    var annotatedColumn = snapshotColumn('annotated', 'NUMBER')
+    var businessColumn = snapshotColumn('business_type', 'TEXT')
+    var snapshots = tableRead.from('db_table_t', snapshotAlias, tenantId)
+    snapshots.where(tableRead.all([
+        tableRead.equal(snapshotColumn('datasource_id', 'TEXT'), dbId),
+        tableRead.equal(snapshotColumn('is_del', 'NUMBER'), 0)
+    ]))
+    if (!allSnapshotsFlag) {
+        snapshots.where(tableRead.equal(annotatedColumn, 1))
     }
 
-    var statsRows = db.select("""
-        select coalesce(grouped.business_type, '业务表') as business_type, grouped.annotated, count(1) as total
-          from (
-            select ranked.business_type, ranked.annotated
-              from (
-                select t.table_name, t.business_type, t.annotated,
-                       row_number() over (
-                           partition by lower(t.table_name)
-                           order by coalesce(t.annotated, 0) desc, coalesce(t.field_count, 0) desc, t.updated_time desc, t.tid desc
-                       ) as row_rank
-                  from db_table_t t
-                 where t.tenant_id = #{tenantId}
-                   and t.datasource_id = #{dbId}
-                   and t.is_del = 0
-                   <if test="!allSnapshotsFlag">and t.annotated = 1</if>
-              ) ranked
-             where ranked.row_rank = 1
-          ) grouped
-         group by coalesce(grouped.business_type, '业务表'), grouped.annotated
-    """)
+    // 按原表名的小写值分组，依次比较标注状态、字段数、更新时间和表 ID。
+    var nameKey = tableRead.lower(snapshotColumn('table_name', 'TEXT'))
+    var rankOrder = [
+        tableRead.coalesce([annotatedColumn, 0]),
+        tableRead.coalesce([snapshotColumn('field_count', 'NUMBER'), 0]),
+        snapshotColumn('updated_time', 'TIME'),
+        snapshotColumn('tid', 'TEXT')
+    ]
+    var rankSnapshots = projection => snapshots.ranked(rankedAlias, projection, [nameKey], rankOrder,
+        ['desc', 'desc', 'desc', 'desc'])
+
+    // 统计使用相同的代表行规则，只投影统计字段，且不受分页关键词和类型筛选影响。
+    var stats = rankSnapshots({
+        business_type: tableRead.coalesce([businessColumn, '业务表']),
+        annotated: annotatedColumn
+    })
+    var statsBusinessType = tableRead.column(rankedAlias, 'business_type', 'TEXT')
+    var statsAnnotated = tableRead.column(rankedAlias, 'annotated', 'NUMBER')
+    var statsRows = stats.grouped({
+        business_type: statsBusinessType,
+        annotated: statsAnnotated,
+        total: tableRead.count()
+    }, [statsBusinessType, statsAnnotated])
+
+    var columnKinds = {
+        tid: 'TEXT', datasource_id: 'TEXT', table_name: 'TEXT', table_name_en: 'TEXT', table_name_cn: 'TEXT',
+        table_comment: 'LOB', table_type: 'TEXT', business_type: 'TEXT', business_type_reason: 'TEXT',
+        annotated: 'NUMBER', record_count: 'NUMBER', field_count: 'NUMBER', storage_size: 'TEXT',
+        total_size_bytes: 'NUMBER', total_size_formatted: 'TEXT', org_id: 'TEXT', org_path: 'LOB',
+        related_directory: 'TEXT', data_source_type: 'TEXT', timestamp_field: 'TEXT',
+        dictionary_structure_type: 'TEXT', dictionary_table_flag: 'NUMBER', source_catalog_id: 'TEXT',
+        source_table_id: 'TEXT', source_table_name: 'TEXT', manage_unit: 'TEXT', asset_status: 'NUMBER',
+        flow_status: 'NUMBER', reg_time: 'TIME', created_time: 'TIME', updated_time: 'TIME', tenant_id: 'TEXT'
+    }
+    // 摘要请求不从数据库读取治理配置及字典大字段。
+    if (includeGovernanceFlag) {
+        columnKinds.field_governance_config = 'LOB'
+        columnKinds.dictionary_profiles = 'LOB'
+        columnKinds.dictionary_profile = 'LOB'
+        columnKinds.dictionary_categories = 'LOB'
+    }
+    var projectColumns = alias => {
+        var fields = {}
+        for (name in columnKinds.keySet()) {
+            fields[name] = tableRead.column(alias, name, columnKinds[name])
+        }
+        return fields
+    }
+    var ranked = rankSnapshots(projectColumns(snapshotAlias))
+    var projection = projectColumns(rankedAlias)
+
+    // 先选代表行，再过滤类型和关键词，避免匹配到已被去重的旧快照。
+    if (selectedBusinessType != null) {
+        ranked.where(tableRead.equal(projection.business_type, selectedBusinessType))
+    }
+    if (searchKeyword != null) {
+        var matchesKeyword = column => tableRead.like(tableRead.lower(tableRead.coalesce([column, ''])), searchKeyword)
+        ranked.where(tableRead.any([
+            matchesKeyword(projection.table_name),
+            matchesKeyword(projection.table_name_cn),
+            matchesKeyword(projection.table_comment)
+        ]))
+    }
+    var sortColumns = {
+        tableName: projection.table_name,
+        tableComment: projection.table_comment,
+        fieldCount: projection.field_count,
+        annotated: projection.annotated,
+        businessType: projection.business_type
+    }
+    var selectedSort = sortColumns[textOf(sortField)]
+    var sortOrder = selectedSort == null ? projection.updated_time : selectedSort
+    var direction = selectedSort == null || textOf(sortDir).toLowerCase() == 'desc' ? 'desc' : 'asc'
+    var page = ranked.page(projection, sortOrder, direction, 'tid', 'desc', safePageNo, safePageSize)
+    var rows = page.rows.map(row => tableItem(row, datasource))
+
     var businessStats = {}
     var annotatedTotal = 0
     var snapshotTotal = 0
-    for (stat in statsRows == null ? [] : statsRows) {
+    for (stat in statsRows) {
         var type = firstValue(stat, ['businessType', 'business_type'])
         var count = rowValue(stat, ['total']) == null ? 0 : rowValue(stat, ['total'])::long
         var key = blank(type) ? '业务表' : type
         businessStats[key] = (businessStats[key] == null ? 0 : businessStats[key]) + count
         snapshotTotal = snapshotTotal + count
-        if (textOf(rowValue(stat, ['annotated'])) == '1' || textOf(rowValue(stat, ['annotated'])) == 'true') { annotatedTotal = annotatedTotal + count }
+        if (textOf(rowValue(stat, ['annotated'])) == '1' || textOf(rowValue(stat, ['annotated'])) == 'true') {
+            annotatedTotal = annotatedTotal + count
+        }
     }
     return {
         pageNo: safePageNo,
         pageSize: safePageSize,
-        total: page.total == null ? 0 : page.total,
+        total: page.total,
         annotatedTotal: annotatedTotal,
         snapshotTotal: snapshotTotal,
         businessStats: businessStats,

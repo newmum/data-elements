@@ -1,5 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import java.util.*;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,6 +17,7 @@ class ProxyDatasourceCardCountsMagicTest {
     void serviceCountsAreBatchedAndScoped(int count, String sourcePolicy, String servicePolicy, int expected) throws Exception {
         var f = new DatasourceManagementPermissionsMagicTest.Fixture(sourcePolicy, count);
         f.jdbc.update("delete from db_datasource_t where tid like 'dept-%' or tid like 'other-%'");
+        f.jdbc.update("update db_datasource_t set pool_cfg=? where tenant_id=? and is_del=0", "{\"accessMode\":\"proxy\"}", "ga");
         f.jdbc.execute("create table api_info_t(tid varchar(64),tenant_id varchar(64),datasource_id varchar(64),org_id varchar(64),created_by varchar(64),is_del int)");
         for (int i = 0; i < count; i++) {
             String source = "own-" + i;
@@ -31,18 +34,17 @@ class ProxyDatasourceCardCountsMagicTest {
         insert(f, "deleted-source", "ga", "deleted", "dept-a", "person-a", 0);
 
         String script = CanonicalMagicSources.byId("datapd_dept_datasources_01")
-                .replaceAll("(?m)^import [^\\r\\n]*\\r?\\n", "")
-                .replaceAll("(?s)coalesce\\(\\s*nullif\\(json_unquote.*?\\) as accessMode", "'proxy' as accessMode")
-                .replaceAll("(?s)upper\\(coalesce\\(nullif\\(json_unquote.*?\\) as pushDataType", "'STRUCTURED' as pushDataType")
-                .replaceAll("(?s)coalesce\\(json_length\\(json_extract.*?\\) as reportFileCount", "0 as reportFileCount");
+                .replaceAll("(?m)^import (?!cn\\.hutool\\.|java\\.util\\.)[^\\r\\n]*\\r?\\n", "");
         script = "var me=()=>{orgId:'dept-a',orgName:'本部门'};var configData=()=>{es_dataassets:'assets'};\n" + script;
         var scope = new Scope(f.scope, servicePolicy);
         var variables = new LinkedHashMap<String,Object>();
         variables.put("body", Map.of("mode", "summary", "tenantId", "foreign", "orgId", "dept-b", "scope", "ALL"));
         variables.put("db", f.db); variables.put("tenantRuntime", f.scope);
+        variables.put("tableRead", f.tableRead);
         variables.put("tenantAccounts", f.scope); variables.put("tenantEs", f.index); variables.put("dataScope", scope);
         f.counter.reads = 0; f.counter.writes = 0; f.scope.decisions = 0; f.index.reads = 0;
-        var result = (Map<?,?>) MagicScript.create(script, null).execute(new MagicScriptContext(variables));
+        var compiled = MagicScript.create(script, null);
+        var result = (Map<?,?>) TenantContext.call("ga", () -> compiled.execute(new MagicScriptContext(variables)));
         var rows = (List<?>) result.get("list");
         assertThat(rows).hasSize(count);
         for (Object value : rows) {
@@ -52,12 +54,12 @@ class ProxyDatasourceCardCountsMagicTest {
             assertThat(((Number) row.get("serviceCount")).intValue())
                     .as("service scope for %s", id).isEqualTo(id.equals("own-" + (count - 1)) ? 0 : expected);
         }
-        assertThat(f.counter.reads).isEqualTo(4);
+        assertThat(f.counter.reads).isEqualTo(3);
         assertThat(f.counter.writes).isZero();
         assertThat(f.scope.decisions).isEqualTo(1);
         assertThat(scope.serviceDecisions).isEqualTo(1);
         assertThat(f.index.reads).isEqualTo(2);
-        System.out.printf("proxy cards=%d source=%s service=%s: SQL=4, ES=2; foreign/deleted/orphan services excluded%n", count, sourcePolicy, servicePolicy);
+        System.out.printf("proxy cards=%d source=%s service=%s: SQL=3, ES=2; foreign/deleted/orphan services excluded%n", count, sourcePolicy, servicePolicy);
     }
 
     private static void insert(DatasourceManagementPermissionsMagicTest.Fixture f, String id, String tenant,

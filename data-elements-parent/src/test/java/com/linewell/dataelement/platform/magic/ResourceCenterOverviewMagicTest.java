@@ -2,16 +2,23 @@ package com.linewell.dataelement.platform.magic;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.SQLException;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.ssssssss.magicapi.core.context.RequestEntity;
+import org.ssssssss.magicapi.core.interceptor.DefaultResultProvider;
 import org.ssssssss.magicapi.datasource.model.MagicDynamicDataSource;
 import org.ssssssss.magicapi.modules.db.*;
-import org.ssssssss.magicapi.modules.db.inteceptor.SQLInterceptor;
+import org.ssssssss.magicapi.modules.db.dialect.DialectAdapter;
 import org.ssssssss.magicapi.modules.db.provider.*;
 import org.ssssssss.script.*;
 import org.ssssssss.script.runtime.ExitValue;
@@ -19,23 +26,28 @@ import org.ssssssss.script.runtime.ExitValue;
 /** Execute the canonical overview and its DST dependency, including SQL and scope predicates. */
 class ResourceCenterOverviewMagicTest {
     @ParameterizedTest @ValueSource(ints = {20, 100})
-    void overviewUsesSevenAggregateReadsForTwentyAndHundredDomains(int size) throws Exception {
-        Fixture f = new Fixture(size);
-        List<Map<String, Object>> layers = f.overview();
-        Map<String, Object> dwd = layer(layers, "DWD");
-        assertThat(((Number) dwd.get("categoryCount")).longValue()).isEqualTo(size);
-        List<Map<String, Object>> items = items(dwd);
-        assertThat(items).hasSize(size);
-        for (Map<String, Object> item : items) {
-            assertThat(((Number) item.get("tableCount")).longValue()).isEqualTo(1);
-            assertThat(((Number) item.get("dataCount")).longValue()).isEqualTo(7);
-            assertThat(item.get("sourceId")).isEqualTo("db-" + item.get("layerCode"));
-            assertThat(item.keySet()).doesNotContain("poolCfg", "pool_cfg");
+    void overviewUsesFixedAggregateReadsForTwentyAndHundredDomains(int size) throws Exception {
+        for (String mode : List.of("MySQL", "PostgreSQL")) {
+            Fixture f = new Fixture(size, mode);
+            List<Map<String, Object>> layers = f.overview();
+            Map<String, Object> dwd = layer(layers, "DWD");
+            assertThat(((Number) dwd.get("categoryCount")).longValue()).isEqualTo(size);
+            List<Map<String, Object>> items = items(dwd);
+            assertThat(items).hasSize(size);
+            for (Map<String, Object> item : items) {
+                assertThat(((Number) item.get("tableCount")).longValue()).isEqualTo(1);
+                assertThat(((Number) item.get("dataCount")).longValue()).isEqualTo(7);
+                assertThat(item.get("sourceId")).isEqualTo("db-" + item.get("layerCode"));
+                assertThat(item.keySet()).doesNotContain("poolCfg", "pool_cfg");
+            }
+            assertThat(f.counter.reads).isEqualTo(8);
+            assertThat(f.counter.writes).isZero();
+            assertThat(f.scope.calls).isEqualTo(2);
+            assertThat(f.counter.sql).allSatisfy(sql -> assertThat(sql.toLowerCase(Locale.ROOT))
+                    .doesNotContain("select *", "field_governance_config"));
+            System.out.printf("Resource center mode=%s domains=%d reads=%d writes=%d%n",
+                    mode, size, f.counter.reads, f.counter.writes);
         }
-        assertThat(f.counter.reads).isEqualTo(7);
-        assertThat(f.counter.writes).isZero();
-        assertThat(f.scope.calls).isEqualTo(2);
-        assertThat(f.counter.sql).allSatisfy(sql -> assertThat(sql.toLowerCase()).doesNotContain("select *", "field_governance_config"));
     }
 
     @Test void ownerAndOrganizationScopesHideForeignAndUnauthorizedBindingsAndCounts() throws Exception {
@@ -51,7 +63,7 @@ class ResourceCenterOverviewMagicTest {
             assertThat(((Number) dst.get("tableCount")).longValue()).isEqualTo(20);
             assertThat(items(dst)).hasSize(1);
             assertThat(items(dst).getFirst().get("orgId")).isEqualTo("org-a");
-            assertThat(f.counter.reads).isEqualTo(7);
+            assertThat(f.counter.reads).isEqualTo(8);
         }
     }
 
@@ -59,6 +71,9 @@ class ResourceCenterOverviewMagicTest {
         Fixture f = new Fixture(1);
         f.jdbc.update("insert into db_datasource_t values('modern','ga',0,1,'u','org-a','app','modern','mysql','{\"dataSourceType\":\"dwd-0\"}')");
         f.jdbc.update("insert into db_table_t values('modern-table','ga','modern',0,2,'',11)");
+        f.jdbc.update("insert into da_prop_t values('modern','ga',0,'dataSourceType','dws')");
+        f.jdbc.update("insert into db_datasource_t values('nested','ga',0,2,'u','org-a','app','nested','mysql','{\"connection\":{\"dataSourceType\":\" DWD-0 \"}}')");
+        f.jdbc.update("insert into db_table_t values('nested-table','ga','nested',0,2,null,5)");
         f.jdbc.update("insert into db_datasource_t values('legacy','ga',0,2,'u','org-a','app','legacy','mysql',null)");
         f.jdbc.update("insert into da_prop_t values('legacy','ga',0,'dataSourceType','dwd-0')");
         f.jdbc.update("insert into db_table_t values('legacy-table','ga','legacy',0,2,null,13)");
@@ -67,10 +82,10 @@ class ResourceCenterOverviewMagicTest {
         f.jdbc.update("insert into db_table_t values('deleted','ga','modern',1,2,'dwd-0',23)");
         List<Map<String, Object>> layers = f.overview();
         Map<String, Object> dwd = layer(layers, "DWD");
-        assertThat(((Number) dwd.get("categoryCount")).longValue()).isEqualTo(3);
-        assertThat(((Number) items(dwd).getFirst().get("dataCount")).longValue()).isEqualTo(31);
+        assertThat(((Number) dwd.get("categoryCount")).longValue()).isEqualTo(4);
+        assertThat(((Number) items(dwd).getFirst().get("dataCount")).longValue()).isEqualTo(36);
         assertThat(((Number) layer(layers, "DWS").get("categoryCount")).longValue()).isEqualTo(1);
-        assertThat(((Number) layer(layers, "DST").get("tableCount")).longValue()).isEqualTo(4);
+        assertThat(((Number) layer(layers, "DST").get("tableCount")).longValue()).isEqualTo(5);
     }
 
     @Test void missingTenantOrUnknownRoleFailsClosedBeforeAnySql() throws Exception {
@@ -84,6 +99,114 @@ class ResourceCenterOverviewMagicTest {
         assertThat(f.counter.reads).isZero();
     }
 
+    @Test void followsCurrentTenantPlanningRootAndIgnoresOtherTrees() throws Exception {
+        Fixture f = new Fixture(1);
+        f.jdbc.update("""
+                INSERT INTO sym_dict_t VALUES
+                ('foreign-root','other',0,'Foreign','dataSourceType','0','0.foreign-root.',1,0),
+                ('foreign-layer','other',0,'Foreign DWD','dwd','foreign-root','0.foreign-root.foreign-layer.',2,0),
+                ('retired-root','ga',1,'Retired','dataSourceType','0','0.retired-root.',1,0),
+                ('retired-layer','ga',0,'Retired DWD','dwd','retired-root','0.retired-root.retired-layer.',2,0),
+                ('unrelated-layer','ga',0,'Wrong DWD','dwd','unrelated','0.unrelated.unrelated-layer.',2,0)
+                """);
+        assertThat(f.path).doesNotContain("8961bb1c926143a89dd9d0b0e0adb4ef");
+        var layers = f.overview();
+        assertThat(layers).extracting(row -> row.get("id")).containsExactly("dws", "dwm", "dwd", "ods", "dst");
+        assertThat(items(layer(layers, "DWD"))).extracting(row -> row.get("id")).containsExactly("dwd-0");
+    }
+
+    @Test void dstKeepsVisibleSourcesWithoutCompletedTablesAndFiltersOrganizationTree() throws Exception {
+        Fixture f = new Fixture(1);
+        f.jdbc.update("INSERT INTO rm_org_t VALUES ('org-out','ga','树外部门',0,'999901',2)");
+        f.jdbc.update("""
+                INSERT INTO db_datasource_t VALUES
+                ('empty','ga',0,1,'u','org-a','app','Empty','mysql',null),
+                ('outside','ga',0,2,'u','org-out','out-app','Outside','mysql',null),
+                ('unpublished','ga',0,3,'u','org-b','hidden-app','Unpublished','mysql',null),
+                ('no-app','ga',0,2,'u','org-b',null,'No app','mysql',null)
+                """);
+        f.jdbc.update("INSERT INTO db_table_t VALUES ('pending','ga','empty',0,1,null,11)");
+        f.counter.reset();
+        var result = (Map<?, ?>) f.dst();
+        assertThat(((Number) result.get("dbCount")).longValue()).isEqualTo(3);
+        assertThat(((Number) result.get("dstTableCount")).longValue()).isEqualTo(1);
+        var organizations = (List<?>) result.get("dst");
+        assertThat(organizations).hasSize(2);
+        var orgA = (Map<?, ?>) organizations.getFirst();
+        var orgB = (Map<?, ?>) organizations.getLast();
+        assertThat(orgA.get("orgId")).isEqualTo("org-a");
+        assertThat(((Number) orgA.get("appCount")).longValue()).isEqualTo(1);
+        assertThat(((Number) orgA.get("dbCount")).longValue()).isEqualTo(2);
+        assertThat(orgB.get("orgId")).isEqualTo("org-b");
+        assertThat(((Number) orgB.get("appCount")).longValue()).isZero();
+        assertThat(((Number) orgB.get("tableCount")).longValue()).isZero();
+        assertThat(f.counter.reads).isEqualTo(2);
+        assertThat(f.counter.writes).isZero();
+    }
+
+    @Test void emptyOrganizationRoleDoesNotExposeAnySourceCounts() throws Exception {
+        Fixture f = new Fixture(2);
+        f.scope.mode = "ORG";
+        f.scope.organizations = List.of();
+        var layers = f.overview();
+        var dwd = layer(layers, "DWD");
+        assertThat(((Number) dwd.get("categoryCount")).longValue()).isZero();
+        assertThat(items(dwd)).hasSize(2).allSatisfy(item -> assertThat(item.get("sourceId")).isNull());
+        assertThat(items(layer(layers, "DST"))).isEmpty();
+    }
+
+    @ParameterizedTest @ValueSource(ints = {20, 100, 1001})
+    void dstOrganizationLabelsUseBoundedReadsAndPreserveAllRows(int size) throws Exception {
+        var fixture = new Fixture(0);
+        fixture.jdbc.update("""
+                INSERT INTO rm_org_t
+                SELECT CONCAT('bulk-org-', x), 'ga', CONCAT('部门 ', x), 0, '000199', x + 10
+                  FROM SYSTEM_RANGE(1, ?) AS numbers(x)
+                """, size);
+        fixture.jdbc.update("""
+                INSERT INTO db_datasource_t
+                SELECT CONCAT('source-', x), 'ga', 0, 2, 'u', CONCAT('bulk-org-', x), 'app', 'source', 'mysql', NULL
+                  FROM SYSTEM_RANGE(1, ?) AS numbers(x)
+                """, size);
+        fixture.counter.reset();
+        var result = (Map<?, ?>) fixture.dst();
+        assertThat(((Number) result.get("dbCount")).longValue()).isEqualTo(size);
+        var organizations = (List<?>) result.get("dst");
+        assertThat(organizations).hasSize(size);
+        assertThat(((Map<?, ?>) organizations.getFirst()).get("orgId")).isEqualTo("bulk-org-1");
+        assertThat(((Map<?, ?>) organizations.getLast()).get("orgId")).isEqualTo("bulk-org-" + size);
+        assertThat(fixture.counter.reads).isEqualTo(size <= 1000 ? 2 : 5);
+        assertThat(fixture.counter.writes).isZero();
+        System.out.printf("DST organization count=%d reads=%d%n", size, fixture.counter.reads);
+    }
+
+    @Test void multipleSourceDictionaryAndBindingWindowsKeepEveryConfiguredDomain() throws Exception {
+        var fixture = new Fixture(0);
+        fixture.jdbc.update("""
+                INSERT INTO sym_dict_t
+                SELECT CONCAT('dwd-bulk-', x), 'ga', 0, CONCAT('域 ', x), CONCAT('bulk-', x), 'dwd',
+                       CONCAT(?, 'dwd.dwd-bulk-', x, '.'), 3, x
+                  FROM SYSTEM_RANGE(1, 1001) AS numbers(x)
+                """, fixture.path);
+        fixture.jdbc.update("""
+                INSERT INTO db_datasource_t
+                SELECT CONCAT('bulk-source-', x), 'ga', 0, 2, 'u', 'org-a', 'app', 'source', 'mysql', NULL
+                  FROM SYSTEM_RANGE(1, 1001) AS numbers(x)
+                """);
+        fixture.jdbc.update("""
+                INSERT INTO dwm_center_layer_source_t
+                SELECT 'ga', 0, CONCAT('dwd-bulk-', x), 'domain', CONCAT('bulk-source-', x)
+                  FROM SYSTEM_RANGE(1, 1001) AS numbers(x)
+                """);
+        var domains = items(layer(fixture.overview(), "DWD"));
+        assertThat(domains).hasSize(1001).allSatisfy(domain ->
+                assertThat(domain.get("sourceId")).isEqualTo(domain.get("layerCode").toString().replace("bulk-", "bulk-source-")));
+        assertThat(domains.getFirst().get("id")).isEqualTo("dwd-bulk-1");
+        assertThat(domains.getLast().get("id")).isEqualTo("dwd-bulk-1001");
+        assertThat(fixture.counter.reads).isEqualTo(13);
+        assertThat(fixture.counter.writes).isZero();
+    }
+
     @SuppressWarnings("unchecked")
     static List<Map<String, Object>> items(Map<String, Object> layer) {
         return (List<Map<String, Object>>) ((List<Map<String, Object>>) layer.get("domains")).getFirst().get("items");
@@ -95,13 +218,17 @@ class ResourceCenterOverviewMagicTest {
     public static class Fixture {
         final JdbcTemplate jdbc;
         final SQLModule db;
+        final StructuredTableReadMagicModule tableRead;
         final Scope scope = new Scope();
         final Counter counter = new Counter();
-        final String path = "0.8961bb1c926143a89dd9d0b0e0adb4ef.";
-        Fixture(int size) {
-            var source = new DriverManagerDataSource("jdbc:h2:mem:center_" + UUID.randomUUID()
-                    + ";MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1", "sa", "");
+        final String rootId = "validation-planning-root";
+        final String path = "0." + rootId + ".";
+        Fixture(int size) { this(size, "MySQL"); }
+
+        Fixture(int size, String mode) {
+            var source = new CountedSource(mode, counter);
             jdbc = new JdbcTemplate(source);
+            tableRead = new StructuredTableReadMagicModule(jdbc);
             jdbc.execute("create table sym_dict_t(tid varchar(64),tenant_id varchar(32),is_del int,dict_name varchar(64),dict_code varchar(64),parent_id varchar(64),tree_path varchar(256),level_no int,sort_no int)");
             jdbc.execute("create table db_datasource_t(tid varchar(64),tenant_id varchar(32),is_del int,asset_status int,created_by varchar(64),org_id varchar(64),app_id varchar(64),db_name varchar(64),db_type varchar(32),pool_cfg clob)");
             jdbc.execute("create table db_table_t(tid varchar(64),tenant_id varchar(32),datasource_id varchar(64),is_del int,asset_status int,data_source_type varchar(64),record_count bigint)");
@@ -110,22 +237,25 @@ class ResourceCenterOverviewMagicTest {
             jdbc.execute("create table rm_org_t(id varchar(64),tenant_id varchar(32),name varchar(64),deleted int,serial_number varchar(64),sort_num int)");
             jdbc.update("insert into rm_org_t values('org-a','ga','本部门',0,'000101',0)");
             jdbc.update("insert into rm_org_t values('org-b','ga','其他部门',0,'000102',1)");
+            jdbc.update("insert into sym_dict_t values(?,'ga',0,'数据源类型','dataSourceType','0',?,1,0)", rootId, path);
             for (String code : List.of("dst", "ods", "dwd", "dwm", "dws")) {
-                jdbc.update("insert into sym_dict_t values(?,'ga',0,?,?, 'root',?,1,0)", code, code, code, path + code + ".");
+                jdbc.update("insert into sym_dict_t values(?,'ga',0,?,?,?,?,2,0)", code, code, code, rootId, path + code + ".");
             }
             for (int i = 0; i < size; i++) {
                 String code = "dwd-" + i;
-                jdbc.update("insert into sym_dict_t values(?,'ga',0,?,?,'dwd',?,2,?)", code, code, code, path + "dwd." + code + ".", i);
+                jdbc.update("insert into sym_dict_t values(?,'ga',0,?,?,'dwd',?,3,?)", code, code, code, path + "dwd." + code + ".", i);
                 jdbc.update("insert into db_datasource_t values(?,'ga',0,2,'u','org-a','app',?,'mysql',null)", "db-" + code, code);
                 jdbc.update("insert into db_table_t values(?,'ga',?,0,2,?,7)", code, "db-" + code, code);
                 jdbc.update("insert into dwm_center_layer_source_t values('ga',0,?,'domain',?)", code, "db-" + code);
             }
             var dynamic = new MagicDynamicDataSource(); dynamic.setDefault(source);
             db = new SQLModule(dynamic); db.setDataSourceNode(dynamic.getDataSource());
+            db.setDialectAdapter(new DialectAdapter());
+            db.setResultProvider(new DefaultResultProvider("resource-center-overview-validation"));
             var columns = new ColumnMapperAdapter(); columns.add(new DefaultColumnMapperProvider());
-            columns.add(new CamelColumnMapperProvider()); columns.setDefault("camel");
+            columns.add(new CamelColumnMapperProvider()); columns.add(new LowerColumnMapperProvider()); columns.setDefault("camel");
             db.setColumnMapperProvider(columns); db.setColumnMapRowMapper(columns.getDefaultColumnMapRowMapper());
-            db.setRowMapColumnMapper(v -> v); db.setSqlInterceptors(List.of(counter)); db.setNamedTableInterceptors(List.of());
+            db.setRowMapColumnMapper(v -> v); db.setSqlInterceptors(List.of()); db.setNamedTableInterceptors(List.of());
         }
         void addHiddenAndForeignSources() {
             jdbc.update("insert into db_datasource_t values('hidden','ga',0,2,'other','org-b','app','不可见','mysql',null)");
@@ -142,6 +272,7 @@ class ResourceCenterOverviewMagicTest {
             return (List<Map<String, Object>>) executeOverview();
         }
         Object executeOverview() throws Exception {
+            counter.reset();
             return execute("77dd13a825764993848cb05d8cb6a771", "var dstInfo = () => fixture.dst();\n");
         }
         public Object dst() throws Exception {
@@ -150,23 +281,74 @@ class ResourceCenterOverviewMagicTest {
         Object execute(String id, String prelude) throws Exception {
             String script = CanonicalMagicSources.byId(id)
                     .replaceAll("(?m)^import (?!cn\\.hutool\\.|java\\.util\\.)[^\\r\\n]*\\r?\\n", "");
-            return MagicScript.create(prelude + script, null).execute(new MagicScriptContext(Map.of(
-                    "db", db, "tenantRuntime", scope, "dataScope", scope, "fixture", this)));
+            var runnable = MagicScript.create(prelude + script, null);
+            var context = new MagicScriptContext(Map.of(
+                    "db", db, "tenantRuntime", scope, "dataScope", scope, "fixture", this, "tableRead", tableRead));
+            return scope.tenant.isEmpty() ? runnable.execute(context) : TenantContext.call(scope.tenant, () -> runnable.execute(context));
         }
     }
     public static class Scope {
         String mode = "ALL", tenant = "ga"; int calls;
+        List<String> organizations = List.of("org-a");
         public String id() { return tenant; }
         public Map<String, Object> dataSource() {
             calls++;
-            return Map.of("scope", mode, "userId", "u", "organizationIds", List.of("org-a"));
+            return Map.of("scope", mode, "userId", "u", "organizationIds", organizations);
         }
     }
-    static class Counter implements SQLInterceptor {
-        int reads, writes; List<String> sql = new ArrayList<>();
-        @Override public void preHandle(BoundSql bound, RequestEntity request) {
-            sql.add(bound.getSql());
-            if (bound.getSql().stripLeading().toLowerCase().startsWith("select")) reads++; else writes++;
+    private static final class Counter {
+        int reads, writes;
+        final List<String> sql = new ArrayList<>();
+        void reset() {
+            reads = 0;
+            writes = 0;
+            sql.clear();
+        }
+        void record(String statement) {
+            sql.add(statement);
+            if (statement.stripLeading().regionMatches(true, 0, "select", 0, 6)) {
+                reads++;
+            } else {
+                writes++;
+            }
+        }
+    }
+
+    private static final class CountedSource extends DriverManagerDataSource {
+        private final String dialect;
+        private final Counter counter;
+
+        CountedSource(String mode, Counter counter) {
+            super("jdbc:h2:mem:center_" + UUID.randomUUID() + ";MODE=" + mode
+                    + ";DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1", "sa", "");
+            this.dialect = mode.toLowerCase(Locale.ROOT);
+            this.counter = counter;
+        }
+
+        @Override public Connection getConnection() throws SQLException {
+            var connection = super.getConnection();
+            return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Connection.class},
+                    (proxy, method, args) -> {
+                        if (method.getName().equals("getMetaData")) {
+                            var metadata = connection.getMetaData();
+                            return Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{DatabaseMetaData.class},
+                                    (unused, metaMethod, metaArgs) -> metaMethod.getName().equals("getURL")
+                                            ? "jdbc:" + dialect + "://warehouse-overview-validation"
+                                            : invoke(metadata, metaMethod, metaArgs));
+                        }
+                        if (method.getName().equals("prepareStatement")) {
+                            counter.record((String) args[0]);
+                        }
+                        return invoke(connection, method, args);
+                    });
+        }
+    }
+
+    private static Object invoke(Object target, Method method, Object[] arguments) throws Throwable {
+        try {
+            return method.invoke(target, arguments);
+        } catch (InvocationTargetException exception) {
+            throw exception.getCause();
         }
     }
 }

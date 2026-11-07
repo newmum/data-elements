@@ -2,8 +2,6 @@ import type { RouteRecordRaw } from "vue-router";
 import router from "@/router";
 import { usePermissionStore, useSettingStore, useSettingStoreHook, useUserStore } from "@/store";
 import { ROLE_ROOT } from "@/enums";
-import { loadAllRuntimeSfc } from "@/plugins/compiler/runtime-sfc";
-import type { App } from "vue";
 import { addClass, getUrlKey, isExternal, isInternal, removeClass } from "@/utils";
 import { Storage } from "@/utils/storage";
 import { setupDict } from "@/plugins/dict";
@@ -108,7 +106,7 @@ function extractSsoParam(
   return null;
 }
 
-export function setupPermission(app: App<Element>) {
+export function setupPermission() {
   const whiteList = ["/login"]; // 无需登录的页面
 
   // 加载系统设置
@@ -175,15 +173,7 @@ export function setupPermission(app: App<Element>) {
         // 一次性加载所有字典
         setupDict();
 
-        console.time(`[loadAllRuntimeSfc]   `);
-        await loadAllRuntimeSfc(app);
-        console.timeEnd(`[loadAllRuntimeSfc]   `);
-
-        try {
-          $form.loadAll();
-        } catch (error) {
-          console.error("❌ 加载动态表单失败:", error);
-        }
+        void window.$form?.loadAll().catch((error) => console.error("加载动态表单失败:", error));
 
         const dynamicRoutes = await permissionStore.generateRoutes();
         dynamicRoutes.forEach((route: RouteRecordRaw) => {

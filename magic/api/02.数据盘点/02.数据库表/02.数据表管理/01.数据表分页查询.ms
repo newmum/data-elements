@@ -22,23 +22,18 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.数据表分页查询
-// 路由：POST /dst/database/table/page
-// 业务说明：数据表管理 01：分页查询已登记数据表；使用请求参数 tid、dbId、datasourceId、conditions、keyword、pageNum、pageSize；涉及 db_table_t、db_datasource_t 等业务表。
+import java.util.List
 import java.util.Map
+import tableSort
 import tenantRuntime
-var tenantId = tenantRuntime.id()
 
-/*
- * 数据表管理 01：分页查询已登记数据表。
- *
- * 主数据及全部表属性直接读取 db_table_t，数据源名称读取 db_datasource_t。
- * 本接口只读，不访问物理业务库、不写 MySQL 或 Elasticsearch。
- */
+// POST /dst/database/table/page：分页查询当前行业的登记数据表和所属数据源。
+// 数仓目录检索与首列排序使用和列表显示一致的目录名称。
+var tenantId = tenantRuntime.id()
 
 var textOf = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || textOf(value).trim() == ''
-var lower = (value) => textOf(value).trim().toLowerCase()
+var literalPattern = (value) => '%'+textOf(value).replace('!','!!').replace('%','!%').replace('_','!_')+'%'
 var rowValue = (row, keys) => {
     if (row == null) {
         // 返回当前业务分支的标准结果。
@@ -64,11 +59,6 @@ var firstValue = (row, keys) => {
     }
     // 返回当前业务分支的标准结果。
     return null
-}
-var putIfPresent = (target, name, value) => {
-    if (value != null) {
-        target[name] = value
-    }
 }
 var tableData = (row) => {
     var tid = rowValue(row, ['tid'])
@@ -124,45 +114,9 @@ var tableData = (row) => {
     // 返回当前业务分支的标准结果。
     return item
 }
-var matches = (item, condition) => {
-    if (condition == null || blank(condition.field)) {
-        // 返回当前业务分支的标准结果。
-        return true
-    }
-    var actual = item[condition.field]
-    var expected = condition.value
-    var type = blank(condition.type) ? 'match' : condition.type
-    if (type == 'null') {
-        // 返回当前业务分支的标准结果。
-        return blank(actual)
-    }
-    if (type == 'like') {
-        // 返回当前业务分支的标准结果。
-        return lower(actual).indexOf(lower(expected)) >= 0
-    }
-    if (type == 'in') {
-        if (expected == null) {
-            // 返回当前业务分支的标准结果。
-            return true
-        }
-        for (value in expected) {
-            if (textOf(actual) == textOf(value)) {
-                // 返回当前业务分支的标准结果。
-                return true
-            }
-        }
-        // 返回当前业务分支的标准结果。
-        return false
-    }
-    // 返回当前业务分支的标准结果。
-    return textOf(actual) == textOf(expected)
-}
-
-// Sort and page the authorized, deduplicated source-table set in the database.
-import tableSort;
-import java.util.List;
-var whereSql=' WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t._row_rank=1';
 // 数据表列表按当前行业库和 tenant_id 查询，不再叠加 OWNER/ORG 角色范围。
+var whereSql=' WHERE t.tenant_id=#{tenantId} AND t.is_del=0 AND t._row_rank=1';
+var catalogNameSql="coalesce(nullif(trim(t.catalog_name),''),nullif(trim(t.table_name_cn),''))";
 var fields={tid:'t.tid',dbId:'t.datasource_id',datasourceId:'t.datasource_id',tableName:'t.table_name',
     tableNameEn:'t.table_name',tableNameCn:'t.table_name_cn',tableComment:'t.table_comment',
     appId:'d.app_id',orgId:'coalesce(t.org_id,d.org_id)',businessType:'t.business_type',
@@ -177,23 +131,36 @@ var values={};
 for(i,condition in conditions) {
     var field=condition?.field;
     if(field=='assetType') {if(condition.value!='table') {whereSql=whereSql+' AND 1=0';};continue;}
-    if(fields.get(field)==null) {exit 400,'不支持的数据表筛选字段：'+field;}
+    var catalogSearch=field=='catalogName' || field=='catalogOrTableName';
+    if(!catalogSearch && fields.get(field)==null) {exit 400,'不支持的数据表筛选字段：'+field;}
     var key='filter'+i;
     var type=condition.type||'match';
+    if(catalogSearch) {
+        if(type!='like') {exit 400,'不支持的数据表筛选方式：'+type;}
+        values.put(key,literalPattern(condition.value));
+        var likeClause=" LIKE #{values."+key+"} ESCAPE '!'";
+        // 注释可能是达梦的大字段，回退时直接匹配全文，避免隐式转换为定长字符串。
+        var nameMatch=catalogNameSql+likeClause+' OR ('+catalogNameSql+' IS NULL AND t.table_comment'+likeClause+')';
+        if(field=='catalogOrTableName') {
+            nameMatch=nameMatch+' OR t.table_name'+likeClause+' OR t.table_name_cn'+likeClause+' OR t.table_name_en'+likeClause;
+        }
+        whereSql=whereSql+' AND ('+nameMatch+')';
+        continue;
+    }
     values.put(key,condition.value);
     if(type=='null') {whereSql=whereSql+' AND '+fields.get(field)+' IS NULL';}
     else if(type=='in') {
         if(!(condition.value instanceof List) || condition.value.size()>1000) {exit 400,'多值筛选最多 1000 项';}
         whereSql=whereSql+(condition.value.size()==0?' AND 1=0':' AND '+fields.get(field)+' IN (#{values.'+key+'})');
     } else if(type=='like') {
-        values.put(key,'%'+textOf(condition.value).replace('!','!!').replace('%','!%').replace('_','!_')+'%');
+        values.put(key,literalPattern(condition.value));
         whereSql=whereSql+' AND '+fields.get(field)+" LIKE #{values."+key+"} ESCAPE '!'";
     } else if(type=='match' || type=='eq') {whereSql=whereSql+' AND '+fields.get(field)+'=#{values.'+key+'}';}
     else {exit 400,'不支持的数据表筛选方式：'+type;}
 }
 var keyword=body?.keyword;
 if(!blank(keyword)) {
-    keyword='%'+textOf(keyword).replace('!','!!').replace('%','!%').replace('_','!_')+'%';
+    keyword=literalPattern(keyword);
     whereSql=whereSql+" AND (t.table_name LIKE #{keyword} ESCAPE '!' OR t.table_name_cn LIKE #{keyword} ESCAPE '!' OR t.table_comment LIKE #{keyword} ESCAPE '!')";
 }
 var fromSql="""
@@ -207,7 +174,9 @@ var fromSql="""
 var pageNum=Math.max(1,body?.pageNum::int(1));
 var pageSize=Math.min(100,Math.max(1,body?.pageSize::int(20)));
 var offset=(pageNum-1)*pageSize;
-var allowed={tableName:"coalesce(nullif(t.table_name_cn,''),nullif(t.table_comment,''),t.table_name)",tableNameEn:'t.table_name',
+// 目录名称排序回退到注释前 512 字符。2048 字节缓冲兼容达梦的多字节字符。
+var catalogSortSql="coalesce("+catalogNameSql+",nullif(substr(trim(cast(t.table_comment as char(2048))),1,512),''))";
+var allowed={tableName:"coalesce(nullif(t.table_name_cn,''),nullif(t.table_comment,''),t.table_name)",tableNameEn:'t.table_name',catalogName:catalogSortSql,
     tableNameCn:'t.table_name_cn',name:"coalesce(nullif(t.table_name_cn,''),nullif(t.table_comment,''),t.table_name)",
     fieldCount:'t.field_count',recordCount:'t.record_count',totalSizeBytes:'t.total_size_bytes',
     ddlCreatTime:'t.ddl_create_time',ddlCreateTime:'t.ddl_create_time',ddlUpdateTime:'t.ddl_update_time',

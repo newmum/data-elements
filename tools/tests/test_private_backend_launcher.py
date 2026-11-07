@@ -61,6 +61,7 @@ function Start-Process {
         self.config.write_text(json.dumps(self.fixture), encoding='utf-8')
         environment = {key: value for key, value in os.environ.items()
                        if key not in {'IDAAS_TRANSPORT_KEY', 'IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP'}}
+        environment['NACOS_HOST'] = 'stale.invalid'
         if inherited_key is not None:
             environment['IDAAS_TRANSPORT_KEY'] = inherited_key
         events = self.folder / 'events.txt'
@@ -149,6 +150,13 @@ function Start-Process {
         result, events = self.run_probe()
         self.assertNotEqual(0, result.returncode)
         self.assertIn('Unexpected runtime environment variable name', result.stderr)
+        self.assertEqual([], events)
+
+    def test_private_config_inside_workspace_is_rejected(self):
+        self.config = self.repo / 'runtime.json'
+        result, events = self.run_probe()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn('Runtime credentials must stay outside the Git workspace', result.stderr)
         self.assertEqual([], events)
 
     def test_key_file_inside_workspace_is_rejected(self):

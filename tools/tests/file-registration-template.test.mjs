@@ -63,10 +63,10 @@ test('skipped table steps remain in the five-step header without becoming return
  const component=fs.readFileSync(path.join(root,'data-elements-chengtian/src/components/business/asset-register.vue'),'utf8');
  const body=component.match(/<script setup[^>]*>([\s\S]*?)<\/script>/)[1];
  const ast=ts.createSourceFile('asset-register.ts',body,ts.ScriptTarget.Latest,true);
- const names=['visibleSteps','displayCurrentStep','displaySteps','goToCompletedStep'];
+ const names=['isActionBusy','visibleSteps','displayCurrentStep','displaySteps','goToCompletedStep'];
  const declarations=ast.statements.filter(n=>ts.isVariableStatement(n)&&n.declarationList.declarations.some(d=>names.includes(d.name.getText(ast)))).map(n=>n.getText(ast)).join('\n');
  const js=ts.transpileModule(declarations,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
- const store={state:{currentStep:0,steps:Array.from({length:6},(_,index)=>({title:String(index+1),skipped:index>=1&&index<=3,hidden:index===5}))},setCurrentStep(index){this.state.currentStep=index;}};
+ const store={state:{currentStep:0,loadStatus:{},steps:Array.from({length:6},(_,index)=>({title:String(index+1),skipped:index>=1&&index<=3,hidden:index===5}))},setCurrentStep(index){this.state.currentStep=index;}};
  const computed=get=>({get value(){return get();}});
  const nav=new Function('store','computed',js+'\nreturn {visibleSteps,displayCurrentStep,displaySteps,goToCompletedStep};')(store,computed);
  assert.equal(nav.visibleSteps.value.length,5);
@@ -75,6 +75,10 @@ test('skipped table steps remain in the five-step header without becoming return
  assert.equal(nav.displayCurrentStep.value,4);
  assert.deepEqual(nav.displaySteps.value.map(s=>s.clickable),[true,false,false,false,false]);
  nav.goToCompletedStep(1);assert.equal(store.state.currentStep,4);
+ store.state.loadStatus.finish=true;
+ assert.ok(nav.displaySteps.value.every(step=>!step.clickable));
+ nav.goToCompletedStep(0);assert.equal(store.state.currentStep,4);
+ store.state.loadStatus.finish=false;
  nav.goToCompletedStep(0);assert.equal(store.state.currentStep,0);
  store.state.steps.forEach(s=>s.skipped=false);store.state.currentStep=3;
  nav.goToCompletedStep(1);assert.equal(store.state.currentStep,1);

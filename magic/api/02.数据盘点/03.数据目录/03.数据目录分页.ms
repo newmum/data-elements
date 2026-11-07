@@ -22,151 +22,294 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：03.数据目录分页
-// 路由：POST /dst/catalog/page
-// 业务说明：数据目录分页接口（POST /dst/catalog/page）。目录、树统计和详情统一读取 da_catalog_t；使用请求参数 conditions、keyword、statisticsOnly、pageNum、pageSize、sortField、sortDir。
 import tenantRuntime
-import java.util.LinkedHashMap
-import java.util.ArrayList
-import java.util.List
-import tableSort
 import dataScope
-
-/* 数据目录分页（只读）：da_catalog_t 为权威来源，不以源表登记状态作为准入条件。
- * 组织树统计复用同一查询条件。所有主表、属性和关联对象均限制在登录租户内。
- * 不补建目录，不修改源表；分页仅加载当前页及该页动态属性。
+import tableRead
+import tableSort
+import java.math.BigDecimal
+import java.sql.Timestamp
+import java.util.ArrayList
+import java.util.LinkedHashMap
+import java.util.List
+/**
+ * 数据目录分页查询。POST /dst/catalog/page
+ * 接收分页、排序、关键词和筛选条件，返回目录列表与总数。
+ * statisticsOnly 为 true 时返回组织与应用计数。统计和列表使用同一租户及角色范围，只读。
  */
+
 var text = value => value == null ? '' : (value + '').trim()
-var blank = value => text(value) == ''
-var sqlValue = value => "'" + text(value).replace("'", "''") + "'"
-var rowValue = (row, keys) => {
-  for (key in keys) {
-    if (row != null && row[key] != null) { return row[key] }
-  }
-  return null
-}
 var tenantId = text(tenantRuntime.id())
-if (tenantId == '') { exit 401, '当前登录租户无效，请重新登录' }
-var propExpr = name => "(select p.prop_value from da_prop_t p where p.tenant_id=c.tenant_id and p.parent_id=c.tid and p.data_type='catalog' and ifnull(p.is_del,0)=0 and p.prop_name=" + sqlValue(name) + " order by p.updated_time desc,p.tid desc limit 1)"
+if (tenantId == '') {
+    exit 401, '当前登录租户无效，请重新登录'
+}
+var scope = dataScope.resource('MENU:2081000000000000002')
+if (!['ALL', 'ORG', 'OWNER'].contains(scope.scope)) {
+    exit 403, '数据范围无效'
+}
+
+var column = (alias, name) => tableRead.column(alias, name, 'TEXT')
+var master = name => column('c', name)
+var isActive = alias => tableRead.equal(tableRead.coalesce([column(alias, 'is_del'), 0]), 0)
+var query = tableRead.from('da_catalog_t', 'c', tenantId)
+query.where(isActive('c'))
+// 可信角色范围先行。请求里的组织、创建人或目录条件不能扩大结果。
+if (scope.scope == 'OWNER') {
+    query.where(text(scope.userId) == '' ? tableRead.any([]) : tableRead.equal(master('created_by'), scope.userId))
+} else if (scope.scope == 'ORG') {
+    query.where(tableRead.in(master('org_id'), scope.organizationIds))
+}
+
+// 仅关联当前租户的有效记录。目录没有留存名称时，使用关联记录的名称。
+query.leftJoin('sym_application_t', 'a', 'tid', 'app_id', [isActive('a')])
+query.leftJoin('db_datasource_t', 'd', 'tid', 'db_id', [isActive('d')])
+query.leftJoin('db_table_t', 't', 'tid', 'source_table_id', [tableRead.equal(column('t', 'is_del'), 0)])
+var projectedName = (alias, name) => tableRead.coalesce([tableRead.blankAsNull(master(name)), column(alias, name)])
 var fields = {
-  tid:'c.tid', tenantId:'c.tenant_id', assetStatus:'c.asset_status', flowStatus:'c.flow_status',
-  regTime:'c.reg_time', createdTime:'c.created_time', updatedTime:'c.updated_time',
-  catalogName:'c.catalog_name', catalogNameEn:'c.catalog_name_en', assetDesc:'c.asset_desc',
-  appId:'c.app_id', dbId:'c.db_id', sourceTableId:'c.source_table_id', sourceTableName:'c.source_table_name',
-  orgId:'c.org_id', manageUnit:'c.manage_unit', businessType:'c.business_type', timestampField:'c.timestamp_field',
-  dictionaryTableFlag:'c.dictionary_table_flag',
-  appName:"coalesce(nullif(c.app_name,''),a.app_name)",
-  dbName:"coalesce(nullif(c.db_name,''),d.db_name)",
-  dataSourceType:"coalesce(nullif(c.data_source_type,'')," + propExpr('dataSourceType') + ",'ods')",
-  dataLevel:propExpr('dataLevel'), shareType:propExpr('shareType'),
-  recordCount:'t.record_count',fieldCount:'t.field_count',totalSizeBytes:'t.total_size_bytes'
+    tid: master('tid'),
+    tenantId: master('tenant_id'),
+    assetStatus: tableRead.column('c', 'asset_status', 'NUMBER'),
+    flowStatus: tableRead.column('c', 'flow_status', 'NUMBER'),
+    regTime: tableRead.column('c', 'reg_time', 'TIME'),
+    createdTime: tableRead.column('c', 'created_time', 'TIME'),
+    updatedTime: tableRead.column('c', 'updated_time', 'TIME'),
+    catalogName: master('catalog_name'),
+    catalogNameEn: master('catalog_name_en'),
+    assetDesc: tableRead.column('c', 'asset_desc', 'LOB'),
+    appId: master('app_id'),
+    dbId: master('db_id'),
+    sourceTableId: master('source_table_id'),
+    sourceTableName: master('source_table_name'),
+    orgId: master('org_id'),
+    manageUnit: master('manage_unit'),
+    businessType: master('business_type'),
+    timestampField: master('timestamp_field'),
+    dictionaryTableFlag: master('dictionary_table_flag'),
+    appName: projectedName('a', 'app_name'),
+    dbName: projectedName('d', 'db_name'),
+    dataSourceType: tableRead.coalesce([
+        tableRead.blankAsNull(master('data_source_type')),
+        tableRead.boundedText(tableRead.column('p_source', 'prop_value', 'LOB')),
+        'ods'
+    ]),
+    dataLevel: tableRead.column('p_level', 'prop_value', 'LOB'),
+    shareType: tableRead.column('p_share', 'prop_value', 'LOB'),
+    recordCount: tableRead.column('t', 'record_count', 'NUMBER'),
+    fieldCount: tableRead.column('t', 'field_count', 'NUMBER'),
+    totalSizeBytes: tableRead.column('t', 'total_size_bytes', 'NUMBER')
 }
-var fromSql = " from da_catalog_t c left join sym_application_t a on a.tid=c.app_id and a.tenant_id=c.tenant_id and ifnull(a.is_del,0)=0 left join db_datasource_t d on d.tid=c.db_id and d.tenant_id=c.tenant_id and ifnull(d.is_del,0)=0 left join db_table_t t on t.tid=c.source_table_id and t.tenant_id=c.tenant_id and t.is_del=0 "
-var whereSql = " where c.tenant_id=" + sqlValue(tenantId) + " and ifnull(c.is_del,0)=0 "
-var scope=dataScope.resource('MENU:2081000000000000002')
-var scopeUserId=scope.userId
-var scopeOrgIds=scope.organizationIds
-if(scope.scope=='OWNER') {whereSql=whereSql+' AND c.created_by=#{scopeUserId}'}
-else if(scope.scope=='ORG') {whereSql=whereSql+(scopeOrgIds.size()==0?' AND 1=0':' AND c.org_id IN (#{scopeOrgIds})')}
-else if(scope.scope!='ALL') {exit 403,'数据范围无效'}
-var conditions = body == null || body.conditions == null ? [] : body.conditions
+// 关键字匹配目录名或来源表名。数值和时间条件使用与列对应的参数类型。
+var names = value => tableRead.any([
+    tableRead.contains(fields.catalogName, value),
+    tableRead.contains(fields.sourceTableName, value)
+])
+var typed = (field, value) => {
+    var normalized = text(value)
+    try {
+        if (['assetStatus', 'flowStatus', 'recordCount', 'fieldCount', 'totalSizeBytes'].contains(field)) {
+            return new BigDecimal(normalized)
+        }
+        if (['regTime', 'createdTime', 'updatedTime'].contains(field)) {
+            if (normalized.length() == 10) {
+                normalized = normalized + ' 00:00:00'
+            }
+            return Timestamp.valueOf(normalized.replace('T', ' '))
+        }
+        return normalized
+    } catch (e) {
+        return null
+    }
+}
+
+var conditions = body?.conditions == null ? [] : body.conditions
+if (!(conditions instanceof List) || conditions.size() > 32) {
+    exit 400, '数据目录筛选条件最多 32 个'
+}
+var used = {}
 for (condition in conditions) {
-  if (condition == null || blank(condition.field) || condition.value == null || text(condition.value) == '') { continue }
-  var field = text(condition.field)
-  if (field == 'assetType') {
-    if (text(condition.value) != 'catalog') { whereSql = whereSql + ' and 1=0 ' }
-    continue
-  }
-  if (field == 'orgIds') { field = 'orgId' }
-  if (fields[field] == null) { exit 400, '不支持的数据目录筛选字段：' + field }
-  var expr = fields[field]
-  var type = text(condition.type).toLowerCase()
-  if (type == 'in') {
-    var values = condition.value
-    if (!(values instanceof List)) { exit 400, '多值筛选必须传入数组' }
-    if (values.size() == 0) { whereSql = whereSql + ' and 1=0 '; continue }
-    whereSql = whereSql + ' and ' + expr + ' in (' + values.map(v => sqlValue(v)).join(',') + ')'
-  } else if (type == 'like') {
-    // 名称查询同时匹配关联数据资源；instr 将用户的 %/_ 当作普通字符。
-    if (field == 'catalogName') {
-      whereSql = whereSql + ' and (instr(lower(ifnull(' + fields.catalogName + ",'')),lower(" + sqlValue(condition.value) + '))>0 or instr(lower(ifnull(' + fields.sourceTableName + ",'')),lower(" + sqlValue(condition.value) + '))>0)'
+    if (condition == null || text(condition.field) == '' || text(condition.value) == '') {
+        continue
+    }
+    var field = text(condition.field)
+    if (field == 'assetType') {
+        if (text(condition.value) != 'catalog') {
+            query.where(tableRead.any([]))
+        }
+        continue
+    }
+    if (field == 'orgIds') {
+        field = 'orgId'
+    }
+    if (fields[field] == null) {
+        exit 400, '不支持的数据目录筛选字段：' + field
+    }
+    used[field] = true
+    var type = text(condition.type).toLowerCase()
+    if (type == 'in') {
+        if (!(condition.value instanceof List)) {
+            exit 400, '多值筛选必须传入数组'
+        }
+        if (condition.value.size() > 1000) {
+            exit 400, '数据目录多值筛选最多 1000 项'
+        }
+        var values = condition.value.map(value => typed(field, value)).filter(value => value != null).distinct()
+        query.where(tableRead.in(fields[field], values))
+    } else if (type == 'like') {
+        var value = text(condition.value)
+        query.where(field == 'catalogName' ? names(value) : tableRead.contains(fields[field], value))
+    } else if (type == '' || type == 'match' || type == 'eq') {
+        var value = typed(field, condition.value)
+        query.where(value == null ? tableRead.any([]) : tableRead.equal(fields[field], value))
     } else {
-      whereSql = whereSql + ' and instr(lower(ifnull(' + expr + ",'')),lower(" + sqlValue(condition.value) + '))>0'
+        exit 400, '不支持的数据目录筛选方式：' + type
     }
-  } else if (type == '' || type == 'match' || type == 'eq') {
-    whereSql = whereSql + ' and ' + expr + '=' + sqlValue(condition.value)
-  } else { exit 400, '不支持的数据目录筛选方式：' + type }
 }
-var keyword = body == null ? '' : text(body.keyword)
-if (keyword != '') {
-  whereSql = whereSql + ' and (instr(lower(ifnull(' + fields.catalogName + ",'')),lower(" + sqlValue(keyword) + '))>0 or instr(lower(ifnull(' + fields.sourceTableName + ",'')),lower(" + sqlValue(keyword) + '))>0)'
+if (text(body?.keyword) != '') {
+    query.where(names(text(body.keyword)))
 }
 
-// 同一目录集合生成树统计，避免“树显示数量”和“点击后的列表”口径分裂。
-if (body != null && body.statisticsOnly == true) {
-  var rows = db.select('select c.org_id orgId,c.app_id appId,' + fields.appName + ' appName,c.db_id dbId,' + fields.dbName + ' dbName,d.db_type dbType,count(1) total' + fromSql + whereSql + ' group by c.org_id,c.app_id,c.app_name,a.app_name,c.db_id,c.db_name,d.db_name,d.db_type')
-  var total = 0
-  var orgCounts = new LinkedHashMap()
-  var appMap = new LinkedHashMap()
-  for (row in rows) {
-    var count = rowValue(row,['total','TOTAL'])::int
-    total = total + count
-    var orgId = text(rowValue(row,['orgId','orgid','ORGID']))
-    var appId = text(rowValue(row,['appId','appid','APPID']))
-    if (orgId == '') { continue }
-    orgCounts[orgId] = (orgCounts[orgId] == null ? 0 : orgCounts[orgId]) + count
-    if (appId == '') { continue }
-    if (appMap[orgId] == null) { appMap[orgId] = new LinkedHashMap() }
-    if (appMap[orgId][appId] == null) {
-      var appName = text(rowValue(row,['appName','appname','APPNAME']))
-      appMap[orgId][appId] = { label: appName == '' ? '未命名业务系统' : appName, value:appId, type:'app', count:0, datasources:[] }
+// 过滤需要的属性参与计数，普通属性只为页面投影关联，避免扩大统计开销。
+var statisticsOnly = body?.statisticsOnly == true
+var propertyAliases = {dataSourceType: 'p_source', dataLevel: 'p_level', shareType: 'p_share'}
+for (property in propertyAliases.keySet()) {
+    if (!statisticsOnly || used[property] == true) {
+        query.leftJoinLatest(
+            'da_prop_t', propertyAliases[property], 'parent_id', 'tid',
+            {data_type: 'catalog', prop_name: property}, 'is_del', 'updated_time', 'tid', used[property] != true
+        )
     }
-    var app = appMap[orgId][appId]
-    app.count = app.count + count
-    var dbId = text(rowValue(row,['dbId','dbid','DBID']))
-    if (dbId != '') {
-      app.datasources.add({label:rowValue(row,['dbName','dbname','DBNAME']),value:dbId,count:count,dbType:rowValue(row,['dbType','dbtype','DBTYPE'])})
-    }
-  }
-  var orgApps = new LinkedHashMap()
-  for (orgId in appMap.keySet()) { orgApps[orgId] = new ArrayList(appMap[orgId].values()) }
-  return { total:total, orgCounts:orgCounts, orgApps:orgApps }
 }
 
-var pageNum = body == null || body.pageNum == null ? 1 : body.pageNum::int
-var pageSize = body == null || body.pageSize == null ? 20 : body.pageSize::int
-if (pageNum < 1) { pageNum = 1 }
-if (pageSize < 1) { pageSize = 20 }
-if (pageSize > 100) { pageSize = 100 }
-var countRows = db.select('select count(1) total' + fromSql + whereSql)
-var total = rowValue(countRows[0],['total','TOTAL'])::int
-var sortExpr=tableSort.field(body,{catalogName:fields.catalogName,regTime:fields.regTime,createdTime:fields.createdTime,updatedTime:fields.updatedTime,recordCount:fields.recordCount,fieldCount:fields.fieldCount,totalSizeBytes:fields.totalSizeBytes},'updatedTime')
-var sortDir=tableSort.direction(body)
-var columns = []
-for (field in fields.keySet()) { columns.add(fields[field] + ' ' + field) }
-var rows = db.select('select ' + columns.join(',') + fromSql + whereSql + ' order by ' + 'CASE WHEN '+sortExpr+' IS NULL THEN 1 ELSE 0 END ASC,'+sortExpr + ' ' + sortDir + ',c.tid ASC' + ' limit ' + ((pageNum-1)*pageSize) + ',' + pageSize)
+if (statisticsOnly) {
+    // 数据库按组织、应用和数据源聚合。脚本只组装统计树。
+    var rows = query.grouped({
+        orgId: fields.orgId,
+        appId: fields.appId,
+        appName: fields.appName,
+        dbId: fields.dbId,
+        dbName: fields.dbName,
+        dbType: column('d', 'db_type'),
+        total: tableRead.count()
+    }, [
+        fields.orgId, fields.appId, master('app_name'), column('a', 'app_name'),
+        fields.dbId, master('db_name'), column('d', 'db_name'), column('d', 'db_type')
+    ])
+    var total = 0
+    var orgCounts = new LinkedHashMap()
+    var appMap = new LinkedHashMap()
+    for (row in rows) {
+        var count = row.total::int
+        total = total + count
+        var orgId = text(row.orgId)
+        var appId = text(row.appId)
+        if (orgId == '') {
+            continue
+        }
+        orgCounts[orgId] = (orgCounts[orgId] == null ? 0 : orgCounts[orgId]) + count
+        if (appId == '') {
+            continue
+        }
+        if (appMap[orgId] == null) {
+            appMap[orgId] = new LinkedHashMap()
+        }
+        if (appMap[orgId][appId] == null) {
+            var appName = text(row.appName)
+            appMap[orgId][appId] = {
+                label: appName == '' ? '未命名业务系统' : appName,
+                value: appId,
+                type: 'app',
+                count: 0,
+                datasources: []
+            }
+        }
+        var app = appMap[orgId][appId]
+        app.count = app.count + count
+        var dbId = text(row.dbId)
+        if (dbId != '') {
+            app.datasources.add({label: row.dbName, value: dbId, count: count, dbType: row.dbType})
+        }
+    }
+    var orgApps = new LinkedHashMap()
+    for (orgId in appMap.keySet()) {
+        orgApps[orgId] = new ArrayList(appMap[orgId].values())
+    }
+    return {total: total, orgCounts: orgCounts, orgApps: orgApps}
+}
+
+var pageNum = body?.pageNum == null ? 1 : body.pageNum::int
+var pageSize = body?.pageSize == null ? 20 : body.pageSize::int
+if (pageNum < 1) {
+    pageNum = 1
+}
+if (pageSize < 1) {
+    pageSize = 20
+}
+if (pageSize > 100) {
+    pageSize = 100
+}
+var sortField = tableSort.field(body, {
+    catalogName: 'catalogName',
+    regTime: 'regTime',
+    createdTime: 'createdTime',
+    updatedTime: 'updatedTime',
+    recordCount: 'recordCount',
+    fieldCount: 'fieldCount',
+    totalSizeBytes: 'totalSizeBytes'
+}, 'updatedTime')
+var page = query.page(fields, fields[sortField], tableSort.direction(body), 'tid', pageNum, pageSize)
 var list = []
-var ids = []
 var itemMap = {}
-for (row in rows) {
-  var item = {assetType:'catalog',props:{}}
-  for (field in fields.keySet()) { item[field] = rowValue(row,[field,field.toLowerCase(),field.toUpperCase()]) }
-  item.id = item.tid
-  item.displayStatus = item.flowStatus == 1 ? 1 : item.assetStatus
-  list.add(item)
-  ids.add(sqlValue(item.tid))
-  itemMap[text(item.tid)] = item
+var ids = []
+for (row in page.rows) {
+    // 分页方言可能返回额外技术列。仅组装声明的目录字段。
+    var item = {}
+    for (field in fields.keySet()) {
+        item[field] = row[field]
+    }
+    item.assetType = 'catalog'
+    item.props = {}
+    item.id = item.tid
+    item.displayStatus = item.flowStatus == 1 ? 1 : item.assetStatus
+    list.add(item)
+    ids.add(item.tid)
+    itemMap[text(item.tid)] = item
 }
+
+// 只为本页可见目录批取属性。保留主表的身份、状态与归属，旧的无时间属性先处理。
 if (ids.size() > 0) {
-  var props = db.select("select parent_id parentId,prop_name propName,prop_value propValue from da_prop_t where tenant_id=" + sqlValue(tenantId) + " and ifnull(is_del,0)=0 and data_type='catalog' and parent_id in (" + ids.join(',') + ') order by updated_time,tid')
-  for (prop in props) {
-    var item = itemMap[text(rowValue(prop,['parentId','parentid','PARENTID']))]
-    var name = text(rowValue(prop,['propName','propname','PROPNAME']))
-    if (item == null || name == '') { continue }
-    var value = rowValue(prop,['propValue','propvalue','PROPVALUE'])
-    item.props[name] = value
-    // 身份、状态以及组织归属仅以主表为准；动态属性补全其余表单内容。
-    if (!['tid','id','tenantId','assetType','assetStatus','flowStatus','orgId','appId','dbId','sourceTableId','displayStatus','props'].contains(name) && blank(item[name])) { item[name] = value }
-  }
+    var props = db.lower().table('da_prop_t')
+        .columns('parent_id', 'prop_name', 'prop_value', 'updated_time')
+        .where()
+        .eq('tenant_id', tenantId)
+        .eq('data_type', 'catalog')
+        .in('parent_id', ids)
+        .and(active => active.eq('is_del', 0).or().isNull('is_del'))
+        .orderBy('updated_time')
+        .orderBy('tid')
+        .select()
+    var masterFields = [
+        'tid', 'id', 'tenantId', 'assetType', 'assetStatus', 'flowStatus', 'orgId',
+        'appId', 'dbId', 'sourceTableId', 'displayStatus', 'props'
+    ]
+    var applyProp = prop => {
+        var item = itemMap[text(prop.parent_id)]
+        var name = text(prop.prop_name)
+        if (item == null || name == '') {
+            return
+        }
+        item.props[name] = prop.prop_value
+        if (!masterFields.contains(name) && text(item[name]) == '') {
+            item[name] = prop.prop_value
+        }
+    }
+    for (prop in props) {
+        if (prop.updated_time == null) {
+            applyProp(prop)
+        }
+    }
+    for (prop in props) {
+        if (prop.updated_time != null) {
+            applyProp(prop)
+        }
+    }
 }
-return {pageNum:pageNum,pageSize:pageSize,total:total,list:list}
+return {pageNum: pageNum, pageSize: pageSize, total: page.total, list: list}

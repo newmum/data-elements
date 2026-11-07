@@ -23,9 +23,6 @@ import * as s2Vue from "@antv/s2-vue";
 import * as sfcCompiler from "@/plugins/compiler/sfc-compiler";
 import * as dynamicComponent from "@/plugins/compiler/dynamicComponent.js";
 import { resolveMagicImport } from "@/plugins/compiler/magic-import-resolver.js";
-// import * as VueOfficePdf from "@vue-office/pdf";
-// import * as VueOfficeExcel from "@vue-office/excel";
-// import * as VueOfficeDocx from "@vue-office/docx";
 
 const libs = {
   vue,
@@ -52,9 +49,6 @@ const libs = {
   "@antv/s2": s2,
   "@antv/s2-vue": s2Vue,
   exceljs: ExcelJS,
-  // "@vue-office/pdf": VueOfficePdf,
-  // "@vue-office/excel": VueOfficeExcel,
-  // "@vue-office/docx": VueOfficeDocx,
 };
 
 window.___magic__import__ = function (lib, name) {

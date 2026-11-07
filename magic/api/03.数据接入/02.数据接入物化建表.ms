@@ -17,31 +17,27 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"tid\": \"17fe19f8f69849f88a34352550039ee3\",\n  \"targetTableId\": \"17fe19f8f69849f88a34352550039ee3\",\n  \"catalogId\": \"faae1bc3ebaa4611aded5ed4a52d6a03\",\n  \"sourceTableId\": \"015c09572d174e89b9bea9c765ef72df\",\n  \"physicalTableReused\": false\n}",
-  "description": "数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，dryRun=true只读校验登记、字典类型和DDL，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。",
+  "description": "数据接入物化建表（POST /ods/createTapleApply）。单目标沿用 propList/tableItems。多目标传 tid、targets（最多20），全部预检后按ODS配置顺序执行，按原请求顺序返回逐项结果。dryRun=true只读验证请求完整性和资源权限，不验证目标SQL语法。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：02.数据接入物化建表
-// 路由：POST /ods/createTapleApply
-// 业务说明：数据接入物化建表（POST /ods/createTapleApply）。写接口；接收来源表 ID 或旧目录 ID，按用户确认创建新表或复用已有物理表；reuseExistingTable=true时校验真实结构并补齐登记，validateReuseOnly=true只读预检，dryRun=true只读校验登记、字典类型和DDL，写入 db_table_t/db_table_column_t，自动生成或更新代表目标表的数据目录 da_asset_t/da_prop_t，并同步 ES。用于数据接入-创建任务链路中的来源表=>目标表(目录)物化步骤；使用请求参数 tid、sourceTableId、tableId、sourceCatalogId、catalogId、id、propList、tableItems。
 import tenantRuntime
 import metadataAsset
-/*
- * 物化建表并自动补目录。
- *
- * 最新接入链路：
- * 来源表（右侧列表点击的 db_table_t.tid）=> 字段映射 => 目标表（物化到目标库）
- * 目标表会自动生成/更新一条目录资产，目录属性同时保存 sourceTableId 与 targetTableId，
- * 以便继续复用原来的目录/NiFi 模板逻辑。
- */
+import request
+import tableRead
+import log
 import cn.hutool.core.util.IdUtil
+import org.redisson.api.RedissonClient as redissonClient
+import org.springframework.jdbc.core.JdbcTemplate as platformJdbc
 import jsons
-import metadataAsset
+import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver as connectionProperties
+import com.linewell.dataelement.shared.error.ErrorDetailSanitizer
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import '@post:/dst/database/metadata/getCreateTableDDL' as getCreateTableDDL
 import '@post:/dst/database/metadata/createTable' as createTable
 
+// POST /ods/createTapleApply：复用现有物理建表与登记逻辑；批量入口先完整验证，再顺序执行。
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
 // Magic 闭包定义时须已有租户变量，避免治理读取/目录属性写入捕获空上下文。
@@ -57,13 +53,13 @@ var first = (row, keys) => {
     }
     return null
 }
-var upsertCatalogProp = (catalogId, name, value, now) => {
-    var old = db.table('da_prop_t').where()
-        .eq('tenant_id', tenantId)
-        .eq('parent_id', catalogId)
-        .eq('prop_name', name)
-        .eq('is_del', 0)
-        .selectOne()
+// Hive 物理表名沿用元数据接口的大小写规则，其他数据库保留登记名。
+var normalizePhysicalTargetName = (name, targetType) => ['hive', 'mrshive'].contains(targetType) ? name.toLowerCase() : name
+var requireMetadataUpdate = affected => {
+    if (affected != 1) { throw new IllegalStateException('登记元数据已变化，请重新检查目标后再提交') }
+}
+var upsertCatalogProp = (catalogId, existingProps, name, value, now) => {
+    var old = existingProps[name]
     if (old == null) {
         db.table('da_prop_t').primary('tid').insert({
             tid: IdUtil.getSnowflakeNextIdStr(),
@@ -78,10 +74,12 @@ var upsertCatalogProp = (catalogId, name, value, now) => {
             updated_time: now
         })
     } else {
-        db.table('da_prop_t').where()
+        var affected = db.table('da_prop_t').where()
             .eq('tenant_id', tenantId)
             .eq('tid', old.tid)
+            .eq('is_del', 0)
         .update({ prop_value: value, updated_time: now })
+        requireMetadataUpdate(affected)
     }
 }
 // ODS ingestion timestamps must use the target database's native temporal type.
@@ -460,8 +458,7 @@ var dictionaryRelations = (sourceTable) => {
     }
     return result
 }
-var appendDictionaryTranslationColumns = (items, sourceTable) => {
-    var relations = dictionaryRelations(sourceTable)
+var appendDictionaryTranslationColumns = (items, relations) => {
     var names = {}
     for (item in items) {
         names[text(item.columnName).toLowerCase()] = true
@@ -501,12 +498,7 @@ var appendDictionaryTranslationColumns = (items, sourceTable) => {
 // The source table's fieldGovernanceConfig owns the rule definition itself.
 // Keeping the binding on the target makes one source safely materializable to
 // multiple targets, even when each target uses a different output field name.
-var buildFieldTransformBindings = (sourceTable, sourceColumns, targetTableId, tableItems, columns) => {
-    var relations = dictionaryRelations(sourceTable)
-    var sourceByName = {}
-    for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
-        sourceByName[text(sourceColumn.columnName).toLowerCase()] = sourceColumn
-    }
+var buildFieldTransformBindings = (sourceTable, sourceByName, relations, targetTableId, tableItems, columns) => {
     var bindings = []
     for (index, item in (tableItems == null ? [] : tableItems)) {
         var targetColumn = columns == null ? null : columns[index]
@@ -534,8 +526,6 @@ var buildFieldTransformBindings = (sourceTable, sourceColumns, targetTableId, ta
 }
 
 var inputId = text(body?.tid || body?.sourceTableId || body?.tableId || body?.sourceCatalogId || body?.catalogId || body?.id).trim()
-var propList = body?.propList
-var tableItems = body?.tableItems
 // 租户只来自当前认证请求的 TenantContext，不能从 principal、请求体或历史资产推断。
 if (blank(tenantId)) {
     exit 401, '当前登录租户无效，请重新登录后再提交物化建表'
@@ -543,624 +533,841 @@ if (blank(tenantId)) {
 if (blank(inputId)) {
     exit 400, 'tid不能为空'
 }
-if (propList == null) {
-    exit 400, 'propList不能为空'
+var batch = body?.targets != null
+var dryRun = body?.dryRun == true
+var submittedTargets = batch ? body.targets : [body]
+if (!(submittedTargets instanceof List) || submittedTargets.size() == 0 || submittedTargets.size() > 20) {
+    exit 400, '一次最多提交20个物化目标'
 }
-if (blank(propList.dbId)) {
-    exit 400, 'propList.dbId不能为空'
+var plans = []
+var targetDbIds = []
+var totalFields = 0
+var totalDdlSize = 0
+var totalPartitions = 0
+for (target in submittedTargets) {
+    var props = target?.propList
+    var fields = target?.tableItems
+    var partitionPlan = target?.partitionPlan
+    if (!(props instanceof Map)) { exit 400, 'propList不能为空' }
+    var dbId = text(props.dbId).trim()
+    var name = text(props.tableName).trim()
+    var ddl = text(target?.ddl).trim()
+    if (blank(dbId) || (batch && dbId.length() > 64)) { exit 400, 'propList.dbId不合法' }
+    if (blank(name) || (batch && name.length() > 256)) { exit 400, 'propList.tableName不合法' }
+    if (!(fields instanceof List) || fields.size() == 0) { exit 400, 'tableItems不能为空' }
+    if (batch && (fields.size() > 2000 || blank(ddl) || ddl.length() > 1000000
+            || target?.validateReuseOnly == true || target?.dryRun == true
+            || (target?.pendingTargetCleanup == true && !dryRun)
+            || (target?.pendingTargetCleanup == true && target?.reuseExistingTable == true))) {
+        exit 400, '物化目标字段、建表语句或清理选项不合法'
+    }
+    if (batch) {
+        for (field in fields) {
+            if (!(field instanceof Map)) { exit 400, '物化目标字段定义格式不合法' }
+        }
+        if (partitionPlan != null && (!(partitionPlan instanceof Map) || (partitionPlan.partitions != null
+                && (!(partitionPlan.partitions instanceof List) || partitionPlan.partitions.size() > 2000)))) {
+            exit 400, '物化目标分区计划格式不合法'
+        }
+        if (partitionPlan?.partitions != null) { totalPartitions += partitionPlan.partitions.size() }
+    }
+    if (targetDbIds.contains(dbId)) { exit 400, '同一目标库一次只能提交一张物化表' }
+    targetDbIds.add(dbId)
+    totalFields += fields.size()
+    totalDdlSize += ddl.length()
+    var properties = {}
+    properties.putAll(props)
+    properties.dbId = dbId
+    properties.tableName = name
+    plans.add({inputIndex: plans.size(), propList: properties, tableItems: fields, ddl: ddl,
+        partitionPlan: partitionPlan, confirmReuse: target?.reuseExistingTable == true,
+        recreateMissing: target?.recreateMissingTable == true, validateReuseOnly: target?.validateReuseOnly == true,
+        pendingCleanup: batch && dryRun && target?.pendingTargetCleanup == true})
 }
-if (blank(propList.tableName)) {
-    exit 400, 'propList.tableName不能为空'
-}
-propList.tableName = text(propList.tableName).trim()
-if (tableItems == null || tableItems.size() == 0) {
-    exit 400, 'tableItems不能为空'
+if (batch && (totalFields > 10000 || totalPartitions > 10000 || totalDdlSize > 4000000)) {
+    exit 400, '物化批次最多10000个字段、10000个分区和400万个SQL字符，请缩小提交范围'
 }
 
-// 兼容旧入口：如果 tid 是目录，则读取目录的来源表；否则 tid 就是来源表。
-var catalogId = ''
-var sourceTableId = ''
-var inputCatalog = null
-try {
-    inputCatalog = esCommonService.getDocument('dataassets', inputId)
-} catch (e) {
-    // ES 只作为目录快速判断；失败时继续使用 MySQL 元数据兜底。
-    inputCatalog = null
-}
-if (inputCatalog != null && text(inputCatalog.assetType) == 'catalog') {
-    catalogId = inputId
-    sourceTableId = text(inputCatalog.sourceTableId)
-}
-if (blank(sourceTableId)) {
-    var sourceProp = db.table('da_prop_t').where()
-        .eq('tenant_id', tenantId)
-        .eq('parent_id', inputId)
-        .eq('prop_name', 'sourceTableId')
-        .eq('is_del', 0)
-        .selectOne()
-    if (sourceProp != null) {
-        catalogId = inputId
-        sourceTableId = text(sourceProp.propValue)
+var runMaterialization = () => {
+    // 兼容旧入口：如果 tid 是目录，则读取目录的来源表；否则 tid 就是来源表。
+    var catalogId = ''
+    var sourceTableId = ''
+    if (!batch) {
+        try {
+            var inputCatalog = esCommonService.getDocument('dataassets', inputId)
+            if (inputCatalog != null && text(inputCatalog.assetType) == 'catalog') {
+                catalogId = inputId
+                sourceTableId = text(inputCatalog.sourceTableId)
+            }
+        } catch (e) {
+            // 单目标兼容旧目录投影，批量以当前租户的登记关联为准。
+        }
     }
-}
-if (blank(sourceTableId)) {
-    sourceTableId = inputId
-}
-
-var sourceTable = db.table('db_table_t').where()
-    .eq('tenant_id', tenantId)
-    .eq('tid', sourceTableId)
-    .eq('is_del', 0)
-    .selectOne()
-if (sourceTable == null) {
-    exit 404, '来源表不存在'
-}
-if (text(first(sourceTable, ['tableType', 'table_type'])).toUpperCase() == 'FILE') {
-    exit 422, '文件登记项用于非结构化文件上传，不能物化为结构化数据库表'
-}
-
-var sourceDatasource = db.table('db_datasource_t').where()
-    .eq('tenant_id', tenantId)
-    .eq('tid', sourceTable.datasourceId)
-    .eq('is_del', 0)
-    .selectOne()
-
-var targetDatasource = db.table('db_datasource_t').where()
-    .eq('tenant_id', tenantId)
-    .eq('tid', propList.dbId)
-    .eq('is_del', 0)
-    .selectOne()
-if (targetDatasource == null) {
-    exit 404, '目标数据源不存在'
-}
-if (sourceDatasource == null) { exit 404, '来源数据源不存在或不属于当前租户' }
-var visibleDatabases = ([sourceDatasource, targetDatasource])
-var visibleDatabaseIds = []
-for (databaseRow in (visibleDatabases == null ? [] : visibleDatabases)) {
-    visibleDatabaseIds.add(text(databaseRow.tid))
-}
-if (sourceDatasource == null || !visibleDatabaseIds.contains(text(sourceDatasource.tid))
-    || !visibleDatabaseIds.contains(text(targetDatasource.tid))) {
-    exit 403, '来源或目标数据源不存在或已删除'
-}
-if (!blank(catalogId)) {
-    var selectedCatalog = db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('tid', catalogId).eq('is_del', 0).selectOne()
-    if (selectedCatalog == null) { exit 403, '来源目录不存在或不属于当前租户' }
-}
-// 来源与关联字典一次批量预取；字段遍历及治理 helper 只读内存映射。
-var sourceColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId)
-    .eq('table_id', sourceTableId).eq('is_del', 0).select()
-metadataTableById[sourceTableId] = sourceTable
-metadataColumnsByTableId[sourceTableId] = sourceColumns
-// 先加载来源表/目录的治理快照，再解析兼容列中的字典引用类型。
-loadGovernanceForTableIds([sourceTableId])
-var sourceFieldRelations = dictionaryRelationsByField(sourceTable)
-var dictionaryIds = []
-var dictionaryFieldsById = {}
-for (column in sourceColumns) {
-    var fieldName = text(first(column, ['columnName','column_name'])).trim()
-    if (!physicalDictionaryRelation(sourceFieldRelations[fieldName.toLowerCase()])) { continue }
-    var dictionaryId = text(first(column, ['codeTableId','code_table_id','dictId','dict_id'])).trim()
-    if (!blank(dictionaryId)) {
-        if (!dictionaryIds.contains(dictionaryId)) { dictionaryIds.add(dictionaryId) }
-        if (dictionaryFieldsById[dictionaryId] == null) { dictionaryFieldsById[dictionaryId] = [] }
-        dictionaryFieldsById[dictionaryId].add(fieldName)
-    }
-}
-if (dictionaryIds.size() > 199) { exit 400, '单次最多处理199个关联字典表，请缩小字段范围' }
-if (dictionaryIds.size() > 0) {
-    var dictionaryRows = db.table('db_table_t').where().eq('tenant_id', tenantId).in('tid', dictionaryIds).eq('is_del', 0).select()
-    var dictionaryDbIds = []
-    for (dictionary in dictionaryRows) {
-        metadataTableById[text(dictionary.tid)] = dictionary
-        if (!dictionaryDbIds.contains(text(dictionary.datasourceId))) { dictionaryDbIds.add(text(dictionary.datasourceId)) }
-    }
-    var dictionaryDbRows = dictionaryDbIds.size() == 0 ? [] : db.table('db_datasource_t').where()
-        .eq('tenant_id', tenantId).in('tid', dictionaryDbIds).eq('is_del', 0).select()
-    var visibleDictionaryDbs = (dictionaryDbRows)
-    var permittedDictionaryDbIds = []
-    for (dictionaryDb in visibleDictionaryDbs) { permittedDictionaryDbIds.add(text(dictionaryDb.tid)) }
-    for (dictionaryId in dictionaryIds) {
-        var dictionary = metadataTableById[dictionaryId]
-        var fieldNames = dictionaryFieldsById[dictionaryId].join('、')
-        if (dictionary == null) { exit 403, '字段“' + fieldNames + '”关联的数据库字典表不存在、已删除或不属于当前租户，请在登记第4步核对字典表关联' }
-        if (!permittedDictionaryDbIds.contains(text(dictionary.datasourceId))) { exit 403, '字段“' + fieldNames + '”关联的字典数据源不存在或已删除' }
-    }
-    var dictionaryColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('table_id', dictionaryIds).eq('is_del', 0).select()
-    for (column in dictionaryColumns) {
-        var ownerId = text(column.tableId)
-        if (metadataColumnsByTableId[ownerId] == null) { metadataColumnsByTableId[ownerId] = [] }
-        metadataColumnsByTableId[ownerId].add(column)
-    }
-}
-loadGovernanceForTableIds(dictionaryIds)
-tableItems = appendDictionaryTranslationColumns(tableItems, sourceTable)
-if (targetDatasource.showConnect == 0) {
-    exit 400, '目标数据源未提供连接信息'
-}
-// Hive 的物理表名和登记名统一小写，包括 ODS_ 前缀；目标类型只能取服务端登记。
-if (['hive', 'mrshive'].contains(text(targetDatasource.dbType).trim().toLowerCase())) {
-    propList.tableName = propList.tableName.toLowerCase()
-}
-// The submitted rows are editable client data, so normalize the two protected
-// ODS time columns again from the authoritative target datasource before DDL
-// generation and metadata persistence.
-tableItems = ensureOdsSystemColumns(tableItems, targetDatasource.dbType)
-// Keep the submit boundary aligned with the target datasource selector. In addition
-// to completed registrations, a datasource explicitly bound to a current-tenant ODS
-// domain is a governed materialization target and must not be rejected merely
-// because it is managed as a warehouse target rather than a normal registered source.
-var targetAssetStatus = text(first(targetDatasource, ['assetStatus', 'asset_status']))
-var targetRegistered = ['1', '2'].contains(targetAssetStatus)
-var dataSourceTypeRoot = db.table('sym_dict_t').where()
-    .eq('tenant_id', tenantId)
-    .eq('dict_code', 'dataSourceType')
-    .eq('parent_id', '0')
-    .eq('is_del', 0)
-    .selectOne()
-var odsNode = dataSourceTypeRoot == null ? null : db.table('sym_dict_t').where()
-    .eq('tenant_id', tenantId)
-    .eq('parent_id', dataSourceTypeRoot.tid)
-    .eq('dict_code', 'ods')
-    .eq('is_del', 0)
-    .selectOne()
-var targetOdsDomainBound = false
-if (odsNode != null) {
-    var odsDomains = db.table('sym_dict_t').where()
-        .eq('tenant_id', tenantId)
-        .eq('parent_id', odsNode.tid)
-        .eq('is_del', 0)
-        .select()
-    var odsDomainIds = []
-    for (odsDomain in (odsDomains == null ? [] : odsDomains)) {
-        odsDomainIds.add(text(odsDomain.tid))
-    }
-    if (odsDomainIds.size() > 0) {
-        var odsTargetBinding = db.table('dwm_center_layer_source_t').where()
+    if (blank(sourceTableId)) {
+        var sourceProp = db.table('da_prop_t').where()
             .eq('tenant_id', tenantId)
-            .eq('target_type', 'domain')
-            .in('target_id', odsDomainIds)
-            .eq('datasource_id', propList.dbId)
+            .eq('parent_id', inputId)
+            .eq('prop_name', 'sourceTableId')
             .eq('is_del', 0)
             .selectOne()
-        targetOdsDomainBound = odsTargetBinding != null
-    }
-}
-if (!targetRegistered && !targetOdsDomainBound) {
-    exit 400, '目标数据源未完成登记且未配置为贴源层 ODS 分域的数据源，不能用于物化建表'
-}
-// A manually edited statement is validated against the selected tenant-owned
-// datasource and exact target table before any placeholder metadata is changed.
-var submittedDdl = text(body?.ddl).trim()
-var submittedPartitionPlan = body?.partitionPlan
-if (!blank(submittedDdl)) {
-    var validationBody = body
-    body = { canvas: true, validateOnly: true, ddl: submittedDdl,
-        dbId: propList.dbId, tableName: propList.tableName, partitionPlan:submittedPartitionPlan, tableItems:tableItems }
-    var partitionValidation = createTable()
-    if (partitionValidation?.partitionPlan != null) { submittedPartitionPlan = partitionValidation.partitionPlan }
-    body = validationBody
-}
-// 表名由用户在物化抽屉中最终确认。按当前目标数据源枚举后做 trim + 不区分大小写
-// 对比，避免历史空格或数据库大小写规则造成“看似不同、实际重复”的误导。
-var duplicateRows = db.table('db_table_t').where()
-    .eq('tenant_id', tenantId)
-    .eq('datasource_id', propList.dbId)
-    .eq('is_del', 0)
-    .select()
-var duplicate = null
-var reuseTargetTable = false
-var confirmReuseExisting = body?.reuseExistingTable == true
-var duplicateCheckTime = new Date()
-var candidateIds = []
-var matchingRows = []
-for (candidate in (duplicateRows == null ? [] : duplicateRows)) {
-    if (text(first(candidate, ['tableName', 'table_name'])).trim().toLowerCase() == propList.tableName.toLowerCase()) {
-        candidateIds.add(text(candidate.tid))
-        matchingRows.add(candidate)
-    }
-}
-if (candidateIds.size() > 100) { exit 409, '目标表同名登记异常，请先核对登记记录' }
-var referencedIds = []
-var protectedReferenceIds = []
-var candidateColumns = []
-if (candidateIds.size() > 0) {
-    // 四次批量预取，候选 20/100 行时均不逐项查询。
-    candidateColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('table_id', candidateIds).eq('is_del', 0).select()
-    var candidateSourceTasks = db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId)
-        .in('source_table_id', candidateIds).eq('is_del', 0).select()
-    var candidateTargetTasks = db.table('data_access_agg_task_t').where().eq('tenant_id', tenantId)
-        .in('target_table_id', candidateIds).eq('is_del', 0).select()
-    var candidateProps = db.table('da_prop_t').where().in('parent_id', candidateIds).eq('is_del', 0).select()
-    for (row in candidateColumns) { referencedIds.add(text(first(row, ['tableId', 'table_id']))) }
-    for (row in candidateSourceTasks) { referencedIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
-    for (row in candidateTargetTasks) { referencedIds.add(text(first(row, ['targetTableId', 'target_table_id']))) }
-    for (row in candidateProps) { referencedIds.add(text(first(row, ['parentId', 'parent_id']))) }
-    for (row in candidateSourceTasks) { protectedReferenceIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
-    for (row in candidateTargetTasks) { protectedReferenceIds.add(text(first(row, ['targetTableId', 'target_table_id']))) }
-    for (row in candidateProps) { protectedReferenceIds.add(text(first(row, ['parentId', 'parent_id']))) }
-    if (confirmReuseExisting) {
-        var childRows = db.table('db_table_t').where().eq('tenant_id', tenantId).in('source_table_id', candidateIds).eq('is_del', 0).select()
-        var catalogReferences = db.table('da_prop_t').where().in('prop_value', candidateIds).eq('is_del', 0).select()
-        for (row in childRows) { protectedReferenceIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
-        for (row in catalogReferences) { protectedReferenceIds.add(text(first(row, ['propValue', 'prop_value']))) }
-    }
-}
-var stalePlaceholderIds = []
-for (candidate in matchingRows) {
-    var candidateId = text(candidate.tid)
-    if (candidateId == sourceTableId) { exit 409, '不能将来源表自身复用为物化目标表' }
-    var candidateSourceId = text(candidate.sourceTableId)
-    if (candidateSourceId == sourceTableId) {
-        duplicate = candidate
-        reuseTargetTable = true
-        break
-    }
-    if (confirmReuseExisting && (blank(candidateSourceId) || candidateSourceId == candidateId)
-        && !protectedReferenceIds.contains(candidateId) && candidateId != sourceTableId) {
-        // 用户明确确认后采用无人引用的独立登记；不抢占其他来源或活动任务。
-        duplicate = candidate
-        reuseTargetTable = true
-        break
-    }
-    var stalePlaceholder = (blank(candidateSourceId) || candidateSourceId == candidateId)
-        && !referencedIds.contains(candidateId)
-    if (stalePlaceholder) {
-        stalePlaceholderIds.add(candidateId)
-    } else {
-        exit 400, '目标数据表「' + propList.tableName + '」已存在于目标数据源「'
-            + text(first(targetDatasource, ['dbName', 'db_name'])) + '」，请修改表名后重试'
-    }
-}
-
-// 表字段名称去重，避免 DDL 创建失败后才暴露错误。
-var names = {}
-for (index, item in tableItems) {
-    if (blank(item.columnName)) {
-        exit 400, '第' + (index + 1) + '个字段名称不能为空'
-    }
-    var key = text(item.columnName).toLowerCase()
-    if (names[key] != null) {
-        exit 400, '第' + names[key] + '个和第' + (index + 1) + '个字段名称重复'
-    }
-    names[key] = index + 1
-}
-
-// 复用现有 DDL 生成和建表能力，保持各数据库类型的适配口径统一。
-// 如果上一次请求已经完成物理建表和 MySQL 目标表落库、但在 ES 同步处失败，
-// 本次重试直接复用同一目标表，避免重复建表/重复插主表。
-var originalBody = body
-var physicalTableReused = reuseTargetTable
-// 用户明确确认复用后只读物理字段并补齐登记；不执行CREATE或覆盖已有数据。
-var materializationDbType = text(first(targetDatasource, ['dbType', 'db_type'])).toLowerCase().replace('_', '').replace('-', '')
-var hiveMaterialization = materializationDbType == 'hive' || materializationDbType == 'mrshive'
-    || materializationDbType == 'huaweihive' || materializationDbType == 'huaweimrshive'
-if (!reuseTargetTable || hiveMaterialization || confirmReuseExisting || body?.recreateMissingTable == true || body?.dryRun == true) {
-    var ddl = submittedDdl
-    if (blank(ddl)) {
-        var ddlRequestBody = {
-            // Preserve the existing generated-DDL path for clients that do not
-            // explicitly submit an edited statement.
-            canvas: true,
-            propList: propList,
-            tableItems: tableItems,
-            partitionPlan:submittedPartitionPlan
+        if (sourceProp != null) {
+            catalogId = inputId
+            sourceTableId = text(sourceProp.propValue)
         }
-        body = ddlRequestBody
-        ddl = getCreateTableDDL()
     }
-    var createTableRequestBody = {
-        // Keep the execution strategy aligned with DDL generation: ordinary
-        // targets use JDBC, while server-managed MRS Hive uses hwhive on the
-        // deployment host and never reads a browser-side JDBC URL.
-        canvas: true,
-        ddl: ddl,
-        dbId: propList.dbId,
-        tableName: propList.tableName,
-        skipIfExists: true,
-        validateOnly: originalBody?.dryRun == true,
-        reuseExistingOnly: confirmReuseExisting,
-        tableItems: tableItems,
-        partitionPlan:submittedPartitionPlan
+    if (blank(sourceTableId)) {
+        sourceTableId = inputId
     }
-    body = createTableRequestBody
-    var createResult = createTable()
-    body = originalBody
-    if (originalBody?.dryRun == true) {
-        if (createResult?.valid != true) { exit 400, '物化建表预检未完成' }
-        return {valid:true, dryRun:true, sideEffectsApplied:false, dictionaryValidationPassed:true,
-            physicalTableChecked:false, sourceTableId:sourceTableId, tableItems:tableItems}
-    }
-    // A physical table that is not registered for this source must not be adopted silently.
-    // Otherwise the next task creation can point at an incomplete target and open an empty canvas.
-    if (createResult != null && createResult.created == false && !confirmReuseExisting) {
-        if (hiveMaterialization) {
-            exit 409, 'Hive 目标物理表已存在，请修改目标表名，或联系运维手动删除原表后重新物化；系统不会自动删除 Hive 表'
-        }
-        exit 409, '目标物理表已存在，请先删除目标表或改用其他目标表名后再创建任务'
-    }
-    if (confirmReuseExisting) {
-        if (createResult?.physicalTableReused != true || createResult?.tableItems == null || createResult.tableItems.size() == 0) {
-            exit 409, '已有目标表复用校验未完成，未保存目标登记'
-        }
-        // 保存真实字段顺序和类型，华为Hive CSV写入与已有物理表保持一致。
-        tableItems = createResult.tableItems
-    }
-    physicalTableReused = createResult != null && createResult.created == false
-}
-if (body?.validateReuseOnly == true && confirmReuseExisting) {
-    return {valid:true, dryRun:true, sideEffectsApplied:false, physicalTableReused:physicalTableReused,
-        targetTableId:duplicate == null ? '' : text(duplicate.tid), sourceTableId:sourceTableId, tableItems:tableItems}
-}
-// Hive 重名或物理建表失败之前不得清理任何占位登记。
-if (stalePlaceholderIds.size() > 0) {
-    db.table('db_table_t').where().eq('tenant_id', tenantId).in('tid', stalePlaceholderIds)
-        .eq('is_del', 0).update({ is_del: 1, updated_time: duplicateCheckTime })
-}
 
-var now = new Date()
-var targetTableId = reuseTargetTable ? text(duplicate.tid) : IdUtil.getSnowflakeNextIdStr()
-var tableNameCn = propList.tableNameCn || propList.tableName
-var lowerName = text(propList.tableName).toLowerCase()
-var businessType = lowerName.endsWith('log') ? '日志表'
-    : lowerName.endsWith('dict') ? '字典表'
-    : lowerName.endsWith('temp') || lowerName.endsWith('tmp') ? '临时表'
-    : (first(sourceTable, ['businessType', 'business_type']) || '业务表')
-
-// 写目标表主数据，并用 source_table_id 明确来源表。
-var targetTableValues = {
-    datasource_id: propList.dbId,
-    table_name: propList.tableName,
-    table_name_cn: tableNameCn,
-    table_comment: tableNameCn,
-    table_type: propList.tableType || '数据表',
-    business_type: businessType,
-    record_count: 0,
-    field_count: tableItems.size(),
-    storage_size: '0 KB',
-    total_size_bytes: 0,
-    total_size_formatted: '0 KB',
-    related_directory: '自动生成目录',
-    source_table_id: sourceTableId,
-    source_table_name: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
-    org_id: sourceTable.orgId || targetDatasource.orgId,
-    tenant_id: tenantId,
-    is_del: 0,
-    asset_status: 2,
-    flow_status: 2,
-    updated_time: now
-}
-if (physicalTableReused && duplicate != null) {
-    // 复用保留已有统计，不能把有数据的目标表重新标成空表。
-    for (key in ['record_count','storage_size','total_size_bytes','total_size_formatted']) { targetTableValues.remove(key) }
-}
-if (reuseTargetTable) {
-    db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).update(targetTableValues)
-    if (!confirmReuseExisting) { db.table('db_table_column_t').where().eq('table_id', targetTableId).update({ is_del: 1, updated_time: now }) }
-} else {
-    targetTableValues.tid = targetTableId
-    targetTableValues.reg_time = now
-    targetTableValues.created_time = now
-    db.table('db_table_t').primary('tid').insert(targetTableValues)
-}
-
-var columns = []
-var existingColumnsByName = {}
-if (reuseTargetTable && confirmReuseExisting) {
-    for (column in candidateColumns) {
-        if (text(first(column, ['tableId','table_id'])) == targetTableId) { existingColumnsByName[text(column.columnName).toLowerCase()] = column }
-    }
-}
-// sourceColumns 已在授权后一次读取，字段保存不再次查询来源。
-var sourceColumnMap = {}
-for (sourceColumn in (sourceColumns == null ? [] : sourceColumns)) {
-    sourceColumnMap[text(sourceColumn.columnName).toLowerCase()] = sourceColumn
-}
-for (index, item in tableItems) {
-    var sourceColumn = sourceColumnMap[text(item.columnName).toLowerCase()]
-    if (sourceColumn == null && !blank(item.dictionarySourceField)) {
-        sourceColumn = sourceColumnMap[text(item.dictionarySourceField).toLowerCase()]
-    }
-    columns.add({
-        tid: existingColumnsByName[text(item.columnName).toLowerCase()]?.tid || IdUtil.getSnowflakeNextIdStr(),
-        table_id: targetTableId,
-        column_name: item.columnName,
-        column_comment: item.columnComment,
-        data_type: item.dataType,
-        column_type: item.columnType,
-        length: item.length,
-        precision_length: item.precisionLength,
-        scale: item.scale,
-        nullable: item.nullable,
-        default_value: item.defaultValue,
-        primary_key: item.primaryKey,
-        auto_increment: item.autoIncrement,
-        is_unique: item.isUnique,
-        indexed: item.indexed,
-        ordinal_position: index,
-        charset: item.charset,
-        collation: item.collation,
-        extra: item.extra,
-        source_table_column_id: sourceColumn == null ? null : sourceColumn.tid,
-        tenant_id: tenantId,
-        is_del: 0,
-        created_time: existingColumnsByName[text(item.columnName).toLowerCase()]?.createdTime || now,
-        updated_time: now
-    })
-}
-// Java 通用持久化层依据当前数据库的标识符规则引用保留字列，兼容 MySQL、达梦等数据库。
-var columnsToInsert = []
-var actualColumnNames = []
-for (column in columns) { actualColumnNames.add(text(column.column_name).toLowerCase()) }
-var staleColumnIds = []
-for (column in existingColumnsByName.values()) {
-    if (!actualColumnNames.contains(text(column.columnName).toLowerCase())) { staleColumnIds.add(text(column.tid)) }
-}
-if (staleColumnIds.size() > 0) {
-    db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('tid', staleColumnIds).update({is_del:1,updated_time:now})
-}
-for (column in columns) {
-    if (existingColumnsByName[text(column.column_name).toLowerCase()] != null) {
-        // 保留原字段 ID，已有画布/治理绑定不会因补登记而失效。
-        db.table('db_table_column_t').where().eq('tenant_id', tenantId).eq('tid', column.tid).update(column)
-    } else { columnsToInsert.add(column) }
-}
-try {
-    metadataAsset.batchInsertTableColumns(columnsToInsert)
-} catch (e) {
-    // 当前运行包存在 MySQL 驱动批处理兼容问题时，回退为 Magic 命名表逐行插入。
-    for (column in columnsToInsert) {
-        db.table('db_table_column_t').primary('tid').insert(column)
-    }
-}
-
-// Persist a first-class source-to-target binding for every dictionary
-// translation/mandatory-standard output.  <source>_cn remains the default
-// field created by the UI, but the workflow later reads this binding rather
-// than deriving semantics from the target field name.
-var targetGovernanceConfig = {
-    version: 3,
-    registrationSavedPhase: 'materialized',
-    sourceTableId: sourceTableId,
-    sourceTableName: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
-    partitionPlan: submittedPartitionPlan,
-    fieldTransformBindings: buildFieldTransformBindings(sourceTable, sourceColumns, targetTableId, tableItems, columns)
-}
-db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
-    .update({ field_governance_config: jsons.toJSONStr(targetGovernanceConfig), updated_time: now })
-
-// 目标表同步到 ES，供列表和详情快速读取。
-var targetDoc = {
-    tid: targetTableId,
-    assetType: 'table',
-    datasourceId: propList.dbId,
-    dbId: propList.dbId,
-    dbName: targetDatasource.dbName,
-    appId: targetDatasource.appId,
-    orgId: targetDatasource.orgId,
-    tableName: propList.tableName,
-    tableNameCn: tableNameCn,
-    tableComment: tableNameCn,
-    tableType: propList.tableType || '数据表',
-    businessType: businessType,
-    sourceTableId: sourceTableId,
-    sourceTableName: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
-    recordCount: physicalTableReused && duplicate != null ? first(duplicate,['recordCount','record_count']) : 0,
-    fieldCount: tableItems.size(),
-    storageSize: physicalTableReused && duplicate != null ? first(duplicate,['storageSize','storage_size']) : '0 KB',
-    totalSizeBytes: physicalTableReused && duplicate != null ? first(duplicate,['totalSizeBytes','total_size_bytes']) : 0,
-    totalSizeFormatted: physicalTableReused && duplicate != null ? first(duplicate,['totalSizeFormatted','total_size_formatted']) : '0 KB',
-    assetStatus: 2,
-    flowStatus: 2,
-    regTime: date_format(now),
-    createdTime: date_format(now),
-    updatedTime: date_format(now),
-    regTime_date: date_format(now),
-    createdTime_date: date_format(now),
-    updatedTime_date: date_format(now)
-}
-try {
-    esCommonService.saveOrUpdate('dataassets', targetTableId, jsons.toJSONStr(targetDoc), false)
-} catch (e) {
-    // elements_dataassets 是混合投影索引，历史 mapping 里 datasourceId 等字符串字段可能是 text。
-    // saveOrUpdate 的动态 mapping 校验会把普通字符串推断为 keyword 并误判冲突；
-    // 这里目标表文档字段均为 ES 可接受的普通标量，回退到直接按 id 写入，避免物化链路中断。
-    try {
-        esCommonService.save('dataassets', targetTableId, targetDoc)
-    } catch (ignored) {
-        // ES 临时不可用时不阻断物理表和 MySQL 元数据提交。
-    }
-}
-
-// 如果来源表已有自动目录则复用，否则新建。目录代表目标表，但保留来源表属性形成完整链路。
-if (blank(catalogId)) {
-    for (sourceCatalogId in (governanceCatalogIdsBySource[sourceTableId] == null ? [] : governanceCatalogIdsBySource[sourceTableId])) {
-        if (governanceCatalogById[sourceCatalogId] != null && blank(catalogId)) { catalogId = sourceCatalogId }
-    }
-}
-if (blank(catalogId)) {
-    catalogId = IdUtil.getSnowflakeNextIdStr()
-    db.table('da_catalog_t').primary('tid').insert({
-        tid: catalogId,
-        tenant_id: tenantId,
-        is_del: 0,
-        reg_time: now,
-        asset_status: 2,
-        flow_status: 2,
-        created_time: now,
-        updated_time: now
-    })
-} else {
-    db.table('da_catalog_t').where()
+    var sourceTable = db.table('db_table_t').where()
         .eq('tenant_id', tenantId)
-        .eq('tid', catalogId)
-        .update({ updated_time: now, asset_status: 2, flow_status: 2, is_del: 0 })
-}
+        .eq('tid', sourceTableId)
+        .eq('is_del', 0)
+        .selectOne()
+    if (sourceTable == null) {
+        exit 404, '来源表不存在'
+    }
+    if (text(first(sourceTable, ['tableType', 'table_type'])).toUpperCase() == 'FILE') {
+        exit 422, '文件登记项用于非结构化文件上传，不能物化为结构化数据库表'
+    }
 
-var catalogName = tableNameCn
-var sourceTableName = first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
-upsertCatalogProp(catalogId, 'catalogName', catalogName, now)
-upsertCatalogProp(catalogId, 'catalogNameEn', propList.tableName, now)
-upsertCatalogProp(catalogId, 'assetDesc', catalogName, now)
-upsertCatalogProp(catalogId, 'dataSourceType', 'ods', now)
-upsertCatalogProp(catalogId, 'businessType', businessType, now)
-upsertCatalogProp(catalogId, 'sourceDbId', sourceTable.datasourceId, now)
-upsertCatalogProp(catalogId, 'sourceDbName', sourceDatasource == null ? '' : sourceDatasource.dbName, now)
-upsertCatalogProp(catalogId, 'sourceTableId', sourceTableId, now)
-upsertCatalogProp(catalogId, 'sourceTableName', sourceTableName, now)
-upsertCatalogProp(catalogId, 'targetDbId', propList.dbId, now)
-upsertCatalogProp(catalogId, 'targetDbType', targetDatasource.dbType || 'mysql', now)
-upsertCatalogProp(catalogId, 'targetTableId', targetTableId, now)
-upsertCatalogProp(catalogId, 'targetTableName', propList.tableName, now)
-upsertCatalogProp(catalogId, 'dbId', propList.dbId, now)
-upsertCatalogProp(catalogId, 'orgId', sourceTable.orgId || targetDatasource.orgId, now)
-upsertCatalogProp(catalogId, 'manageUnit', sourceTable.orgId || targetDatasource.orgId, now)
+    var allDbIds = [text(sourceTable.datasourceId)]
+    for (id in targetDbIds) { if (!allDbIds.contains(id)) { allDbIds.add(id) } }
+    var datasources = db.table('db_datasource_t').where().eq('tenant_id', tenantId).in('tid', allDbIds).eq('is_del', 0).select()
+    var datasourceById = {}
+    for (row in datasources) { datasourceById[text(row.tid)] = row }
+    var sourceDatasource = datasourceById[text(sourceTable.datasourceId)]
+    if (sourceDatasource == null) { exit 404, '来源数据源不存在或不属于当前租户' }
+    for (plan in plans) {
+        plan.datasource = datasourceById[plan.propList.dbId]
+        if (plan.datasource == null) { exit 404, '目标数据源不存在或不属于当前租户' }
+    }
+    if (batch && ((first(sourceTable, ['assetStatus', 'asset_status']) || 0)::int <= 0
+            || (first(sourceDatasource, ['assetStatus', 'asset_status']) || 0)::int <= 0)) {
+        exit 409, '来源数据源和来源表均须完成登记后再物化建表'
+    }
+    if (!blank(catalogId)) {
+        var selectedCatalog = db.table('da_catalog_t').where().eq('tenant_id', tenantId).eq('tid', catalogId).eq('is_del', 0).selectOne()
+        if (selectedCatalog == null) { exit 403, '来源目录不存在或不属于当前租户' }
+        // 兼容入口已读取的目录也纳入治理快照，避免缺少关系属性时把已有计数当作新目录0。
+        governanceCatalogById[text(catalogId)] = selectedCatalog
+    }
+    // 来源与关联字典一次批量预取；字段遍历及治理 helper 只读内存映射。
+    var sourceColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId)
+        .eq('table_id', sourceTableId).eq('is_del', 0).select()
+    metadataTableById[sourceTableId] = sourceTable
+    metadataColumnsByTableId[sourceTableId] = sourceColumns
+    // 先加载来源表/目录的治理快照，再解析兼容列中的字典引用类型。
+    loadGovernanceForTableIds([sourceTableId])
+    var sourceFieldRelations = dictionaryRelationsByField(sourceTable)
+    var dictionaryIds = []
+    var dictionaryFieldsById = {}
+    for (column in sourceColumns) {
+        var fieldName = text(first(column, ['columnName','column_name'])).trim()
+        if (!physicalDictionaryRelation(sourceFieldRelations[fieldName.toLowerCase()])) { continue }
+        var dictionaryId = text(first(column, ['codeTableId','code_table_id','dictId','dict_id'])).trim()
+        if (!blank(dictionaryId)) {
+            if (!dictionaryIds.contains(dictionaryId)) { dictionaryIds.add(dictionaryId) }
+            if (dictionaryFieldsById[dictionaryId] == null) { dictionaryFieldsById[dictionaryId] = [] }
+            dictionaryFieldsById[dictionaryId].add(fieldName)
+        }
+    }
+    if (dictionaryIds.size() > 199) { exit 400, '单次最多处理199个关联字典表，请缩小字段范围' }
+    if (dictionaryIds.size() > 0) {
+        var dictionaryRows = db.table('db_table_t').where().eq('tenant_id', tenantId).in('tid', dictionaryIds).eq('is_del', 0).select()
+        var dictionaryDbIds = []
+        for (dictionary in dictionaryRows) {
+            metadataTableById[text(dictionary.tid)] = dictionary
+            if (!dictionaryDbIds.contains(text(dictionary.datasourceId))) { dictionaryDbIds.add(text(dictionary.datasourceId)) }
+        }
+        var dictionaryDbRows = dictionaryDbIds.size() == 0 ? [] : db.table('db_datasource_t').where()
+            .eq('tenant_id', tenantId).in('tid', dictionaryDbIds).eq('is_del', 0).select()
+        var visibleDictionaryDbs = (dictionaryDbRows)
+        var permittedDictionaryDbIds = []
+        for (dictionaryDb in visibleDictionaryDbs) { permittedDictionaryDbIds.add(text(dictionaryDb.tid)) }
+        for (dictionaryId in dictionaryIds) {
+            var dictionary = metadataTableById[dictionaryId]
+            var fieldNames = dictionaryFieldsById[dictionaryId].join('、')
+            if (dictionary == null) { exit 403, '字段“' + fieldNames + '”关联的数据库字典表不存在、已删除或不属于当前租户，请在登记第4步核对字典表关联' }
+            if (!permittedDictionaryDbIds.contains(text(dictionary.datasourceId))) { exit 403, '字段“' + fieldNames + '”关联的字典数据源不存在或已删除' }
+        }
+        var dictionaryColumns = db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('table_id', dictionaryIds).eq('is_del', 0).select()
+        for (column in dictionaryColumns) {
+            var ownerId = text(column.tableId)
+            if (metadataColumnsByTableId[ownerId] == null) { metadataColumnsByTableId[ownerId] = [] }
+            metadataColumnsByTableId[ownerId].add(column)
+        }
+    }
+    loadGovernanceForTableIds(dictionaryIds)
+    var relations = dictionaryRelations(sourceTable)
+    var sourceColumnMap = {}
+    for (column in sourceColumns) { sourceColumnMap[text(column.columnName).toLowerCase()] = column }
 
-var catalogDoc = {
-    tid: catalogId,
-    assetType: 'catalog',
-    catalogName: catalogName,
-    catalogNameEn: propList.tableName,
-    assetDesc: catalogName,
-    dataSourceType: 'ods',
-    businessType: businessType,
-    sourceDbId: sourceTable.datasourceId,
-    sourceDbName: sourceDatasource == null ? '' : sourceDatasource.dbName,
-    sourceTableId: sourceTableId,
-    sourceTableName: sourceTableName,
-    targetDbId: propList.dbId,
-    targetDbType: targetDatasource.dbType || 'mysql',
-    targetTableId: targetTableId,
-    targetTableName: propList.tableName,
-    dbId: propList.dbId,
-    orgId: sourceTable.orgId || targetDatasource.orgId,
-    assetStatus: 2,
-    flowStatus: 2,
-    regTime: date_format(now),
-    createdTime: date_format(now),
-    updatedTime: date_format(now)
-}
-try {
-    esCommonService.saveOrUpdate('dataassets', catalogId, jsons.toJSONStr(catalogDoc), false)
-} catch (e) {
+    // ODS 目标按配置分域的顺序执行。先批量读取绑定，再验证每个目标的准入条件。
+    var dataSourceTypeRoot = db.table('sym_dict_t').where().eq('tenant_id', tenantId)
+        .eq('dict_code', 'dataSourceType').eq('parent_id', '0').eq('is_del', 0).selectOne()
+    var odsNode = dataSourceTypeRoot == null ? null : db.table('sym_dict_t').where().eq('tenant_id', tenantId)
+        .eq('parent_id', dataSourceTypeRoot.tid).eq('dict_code', 'ods').eq('is_del', 0).selectOne()
+    var odsRankByDb = {}
+    if (odsNode != null) {
+        var domains = db.table('sym_dict_t').where().eq('tenant_id', tenantId).eq('parent_id', odsNode.tid)
+            .eq('is_del', 0).orderBy('sort_no', 'asc').orderBy('tid', 'asc').select()
+        var domainIds = domains.map(row => text(row.tid))
+        if (domainIds.size() > 0) {
+            var bindings = db.table('dwm_center_layer_source_t').where().eq('tenant_id', tenantId)
+                .eq('target_type', 'domain').in('target_id', domainIds).in('datasource_id', targetDbIds)
+                .eq('is_del', 0).select()
+            for (binding in bindings) {
+                var id = text(first(binding, ['datasourceId', 'datasource_id']))
+                var rank = domainIds.indexOf(text(first(binding, ['targetId', 'target_id'])))
+                if (odsRankByDb[id] == null || rank < odsRankByDb[id]) { odsRankByDb[id] = rank }
+            }
+        }
+    }
+    var needsReferenceCheck = false
+    for (plan in plans) {
+        var target = plan.datasource
+        var targetType = text(first(target, ['dbType', 'db_type'])).trim().toLowerCase()
+        var normalizedType = targetType.replace('_', '').replace('-', '')
+        plan.hive = ['hive', 'mrshive', 'huaweihive', 'huaweimrshive'].contains(normalizedType)
+        if (target.showConnect == 0) { exit 400, '目标数据源未提供连接信息' }
+        if (batch && blank(targetType)) { exit 400, '目标数据源未配置数据库类型' }
+        if (!['1', '2'].contains(text(first(target, ['assetStatus', 'asset_status'])))
+                && odsRankByDb[plan.propList.dbId] == null) {
+            exit 400, '目标数据源未完成登记且未配置为贴源层 ODS 分域的数据源，不能用于物化建表'
+        }
+        if (plan.hive && plan.pendingCleanup) { exit 400, 'Hive 目标只能明确复用，不能通过物化自动删除' }
+        plan.propList.tableName = normalizePhysicalTargetName(plan.propList.tableName, targetType)
+        if (plan.propList.dbId == text(sourceTable.datasourceId)
+                && plan.propList.tableName.toLowerCase() == text(first(sourceTable, ['tableName', 'table_name'])).trim().toLowerCase()) {
+            exit 409, '不能将来源表自身复用为物化目标表'
+        }
+        plan.tableItems = ensureOdsSystemColumns(appendDictionaryTranslationColumns(plan.tableItems, relations), target.dbType)
+        var names = {}
+        for (index, item in plan.tableItems) {
+            if (blank(item.columnName)) { exit 400, '第' + (index + 1) + '个字段名称不能为空' }
+            var name = text(item.columnName).toLowerCase()
+            if (names[name] != null) { exit 400, '第' + names[name] + '个和第' + (index + 1) + '个字段名称重复' }
+            names[name] = index + 1
+        }
+        if (plan.confirmReuse || plan.pendingCleanup) { needsReferenceCheck = true }
+    }
+
+    // 以目标库与表名配对查询，兼容历史首尾带空格的登记；下方再精确核对归一化名称。
+    var duplicateRows = []
+    if (batch) {
+        var field = (name, type) => tableRead.column('t', name, type)
+        var idColumn = field('tid', 'TEXT')
+        var datasourceColumn = field('datasource_id', 'TEXT')
+        var nameColumn = field('table_name', 'TEXT')
+        var padded = tableRead.any([tableRead.like(nameColumn, ' %'), tableRead.like(nameColumn, '% ')])
+        var targetNames = plans.map(plan => {
+            var name = plan.propList.tableName.toLowerCase()
+            return tableRead.all([
+                tableRead.equal(datasourceColumn, plan.propList.dbId),
+                tableRead.any([tableRead.equal(tableRead.lower(nameColumn), name),
+                    tableRead.all([padded, tableRead.contains(nameColumn, name)])])
+            ])
+        })
+        var candidates = tableRead.from('db_table_t', 't', tenantId)
+        candidates.where(tableRead.equal(field('is_del', 'NUMBER'), 0))
+        candidates.where(tableRead.any(targetNames))
+        duplicateRows = candidates.rows({tid:idColumn, datasourceId:datasourceColumn, tableName:nameColumn,
+            sourceTableId:field('source_table_id','TEXT'), recordCount:field('record_count','NUMBER'),
+            storageSize:field('storage_size','TEXT'), totalSizeBytes:field('total_size_bytes','NUMBER'),
+            totalSizeFormatted:field('total_size_formatted','TEXT')}, idColumn, 'asc', 401)
+        if (duplicateRows.size() > 400) {
+            exit 409, '目标表候选元数据过多，请先核对登记记录'
+        }
+    } else {
+        duplicateRows = db.table('db_table_t').where().eq('tenant_id', tenantId)
+            .eq('datasource_id', targetDbIds[0]).eq('is_del', 0).select()
+    }
+    var planByDb = {}
+    for (plan in plans) { plan.matchingRows = []; planByDb[plan.propList.dbId] = plan }
+    var candidateIds = []
+    for (candidate in duplicateRows) {
+        var plan = planByDb[text(first(candidate, ['datasourceId', 'datasource_id']))]
+        if (plan != null && text(first(candidate, ['tableName', 'table_name'])).trim().toLowerCase()
+                == plan.propList.tableName.toLowerCase()) {
+            plan.matchingRows.add(candidate)
+            candidateIds.add(text(candidate.tid))
+        }
+    }
+    var referencedIds = []
+    var protectedReferenceIds = []
+    var candidateColumns = []
+    if (candidateIds.size() > 0) {
+        var columnQuery = db.table('db_table_column_t').where().eq('tenant_id', tenantId)
+            .in('table_id', candidateIds).eq('is_del', 0)
+        if (batch) {
+            var columnPage = columnQuery.page(10001, 0)
+            if (columnPage.total > 10000) { exit 409, '目标表候选字段过多，请缩小物化批次' }
+            candidateColumns = columnPage.list || []
+        } else { candidateColumns = columnQuery.select() }
+        var sourceTasks = db.table('data_access_agg_task_t').column('source_table_id').where().eq('tenant_id', tenantId)
+            .in('source_table_id', candidateIds).eq('is_del', 0).groupBy('source_table_id').select()
+        var targetTasks = db.table('data_access_agg_task_t').column('target_table_id').where().eq('tenant_id', tenantId)
+            .in('target_table_id', candidateIds).eq('is_del', 0).groupBy('target_table_id').select()
+        var candidateProps = db.table('da_prop_t').column('parent_id').where().eq('tenant_id', tenantId)
+            .in('parent_id', candidateIds).eq('is_del', 0).groupBy('parent_id').select()
+        for (row in sourceTasks) { protectedReferenceIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
+        for (row in targetTasks) { protectedReferenceIds.add(text(first(row, ['targetTableId', 'target_table_id']))) }
+        for (row in candidateProps) { protectedReferenceIds.add(text(first(row, ['parentId', 'parent_id']))) }
+        referencedIds.addAll(protectedReferenceIds)
+        for (row in candidateColumns) { referencedIds.add(text(first(row, ['tableId', 'table_id']))) }
+        if (batch || needsReferenceCheck) {
+            var children = db.table('db_table_t').column('source_table_id').where().eq('tenant_id', tenantId)
+                .in('source_table_id', candidateIds).eq('is_del', 0).groupBy('source_table_id').select()
+            var catalogReferences = []
+            if (batch) {
+                var link = tableRead.from('da_prop_t', 'p', tenantId)
+                var valueColumn = tableRead.column('p', 'prop_value', 'LOB')
+                var valueText = tableRead.boundedText(valueColumn)
+                link.where(tableRead.equal(tableRead.column('p', 'is_del', 'NUMBER'), 0))
+                link.where(tableRead.in(tableRead.column('p', 'prop_name', 'TEXT'), ['sourceTableId', 'targetTableId']))
+                link.where(tableRead.in(valueColumn, candidateIds))
+                catalogReferences = link.grouped({propValue:valueText}, [valueText])
+            } else {
+                catalogReferences = db.table('da_prop_t').column('prop_value').where().eq('tenant_id', tenantId)
+                    .in('prop_value', candidateIds).eq('is_del', 0).select()
+            }
+            for (row in children) { protectedReferenceIds.add(text(first(row, ['sourceTableId', 'source_table_id']))) }
+            for (row in catalogReferences) { protectedReferenceIds.add(text(first(row, ['propValue', 'prop_value']))) }
+            if (batch) { referencedIds.addAll(protectedReferenceIds) }
+        }
+    }
+
+    var sourceCatalogIds = governanceCatalogIdsBySource[sourceTableId] || []
+    var catalogPropsById = {}
+    if (!blank(catalogId) && !sourceCatalogIds.contains(catalogId)) { sourceCatalogIds.add(catalogId) }
+    if (!blank(catalogId) && governancePropertiesByParent[catalogId] == null) {
+        governancePropertiesByParent[catalogId] = db.table('da_prop_t').where().eq('tenant_id', tenantId)
+            .eq('parent_id', catalogId).eq('is_del', 0).select()
+    }
+    for (id in sourceCatalogIds) {
+        if (id != catalogId && governanceCatalogById[id] == null) { continue }
+        var properties = {}
+        for (property in (governancePropertiesByParent[id] || [])) {
+            var key = text(first(property, ['propName', 'prop_name']))
+            if (properties[key] == null) { properties[key] = property }
+        }
+        catalogPropsById[id] = properties
+    }
+    var reservedCatalogIds = []
+    for (plan in plans) {
+        plan.duplicate = null
+        plan.stalePlaceholderIds = []
+        if (plan.matchingRows.size() > 100) { exit 409, '目标表同名登记异常，请先核对登记记录' }
+        for (candidate in plan.matchingRows) {
+            var id = text(candidate.tid)
+            if (id == sourceTableId) { exit 409, '不能将来源表自身复用为物化目标表' }
+            var ownerId = text(first(candidate, ['sourceTableId', 'source_table_id']))
+            var unlinked = blank(ownerId) || ownerId == id
+            if (plan.pendingCleanup && (ownerId == sourceTableId || (unlinked && !protectedReferenceIds.contains(id)))) {
+                continue
+            }
+            if (ownerId == sourceTableId || (plan.confirmReuse && unlinked && !protectedReferenceIds.contains(id))) {
+                if (batch && plan.duplicate != null) { exit 409, '目标表有多条同名登记，请先核对元数据' }
+                plan.duplicate = candidate
+                if (!batch) { break }
+                continue
+            }
+            if (unlinked && !referencedIds.contains(id)) {
+                plan.stalePlaceholderIds.add(id)
+            } else {
+                exit 400, '目标数据表「' + plan.propList.tableName + '」已存在于目标数据源「'
+                    + text(first(plan.datasource, ['dbName', 'db_name'])) + '」，请修改表名后重试'
+            }
+        }
+        // 单目标保留旧目录入口；批量按目标匹配各自目录，避免后续项覆盖前一项。
+        plan.catalogId = !batch ? catalogId : ''
+        for (id in sourceCatalogIds) {
+            if (!blank(plan.catalogId) || catalogPropsById[id] == null || reservedCatalogIds.contains(id)) { continue }
+            var properties = catalogPropsById[id]
+            var registeredDb = text(first(properties.targetDbId, ['propValue', 'prop_value']))
+            var registeredTable = text(first(properties.targetTableId, ['propValue', 'prop_value']))
+            var registeredName = text(first(properties.targetTableName, ['propValue', 'prop_value'])).trim()
+            var duplicateId = text(plan.duplicate?.tid)
+            if (!batch || (registeredDb == plan.propList.dbId && (registeredName.toLowerCase() == plan.propList.tableName.toLowerCase()
+                    || (!blank(duplicateId) && registeredTable == duplicateId)))) {
+                plan.catalogId = id
+                reservedCatalogIds.add(id)
+            }
+        }
+    }
+
+    // 使用当前平台库驱动的标识符引号，避免金仓和达梦将字段名解析为保留字。
+    var identifierQuote = ''
+    if (!dryRun && (batch || (plans[0].confirmReuse && !plans[0].validateReuseOnly))) {
+        var platformConnection = platformJdbc.getDataSource().getConnection()
+        try {
+            identifierQuote = text(platformConnection.getMetaData().getIdentifierQuoteString()).trim()
+            if (blank(identifierQuote)) { exit 503, '当前平台数据库驱动未提供标识符引用能力' }
+        } finally { platformConnection.close() }
+    }
+    var columnWriteValues = column => {
+        if (blank(identifierQuote)) { return column }
+        var closeQuote = identifierQuote == '[' ? ']' : identifierQuote
+        var values = {}
+        for (key in column.keySet()) {
+            // 租户和审计字段保留命名表拦截器使用的键，字段定义按驱动引用。
+            var mapped = ['tenant_id', 'created_time', 'updated_time'].contains(key)
+                ? key : identifierQuote + key + closeQuote
+            var value = column[key]
+            values[mapped] = value instanceof Boolean ? (value ? 1 : 0) : value
+        }
+        return values
+    }
+
+    var callPhysical = payload => {
+        var original = body
+        body = payload
+        try { return createTable() } finally { body = original }
+    }
+    var physicalPayload = (plan, validate) => {
+        return { canvas: true, ddl: plan.ddl, dbId: plan.propList.dbId, tableName: plan.propList.tableName,
+            skipIfExists: true, validateOnly: validate, reuseExistingOnly: plan.confirmReuse,
+            tableItems: plan.tableItems, partitionPlan: plan.partitionPlan }
+    }
+
+    // 目标登记成功后才更新搜索投影，搜索不可用时保留已提交的权威数据。
+    var saveProjection = doc => {
+        if (doc.assetType == 'catalog') {
+            // 目录只能走单调投影；失败后不能使用整篇覆盖的通用兜底。
+            try { esCommonService.mergeCatalogProjection('dataassets', doc.tid, jsons.toJSONStr(doc), doc.viewCount) }
+            catch (error) { log.warn('目录计数投影待补齐: tid={}, error={}', doc.tid, error.message) }
+            return
+        }
+        try {
+            esCommonService.saveOrUpdate('dataassets', doc.tid, jsons.toJSONStr(doc), false)
+        } catch (e) {
+            try {
+                esCommonService.save('dataassets', doc.tid, doc)
+            } catch (ignored) {
+                // 后续可从已提交的租户元数据补齐投影。
+            }
+        }
+    }
+
+    var persistTarget = (plan, tableItems, physicalTableReused) => {
+        var propList = plan.propList
+        var targetDatasource = plan.datasource
+        var submittedPartitionPlan = plan.partitionPlan
+        var duplicate = plan.duplicate
+        var reuseTargetTable = duplicate != null
+        var confirmReuseExisting = plan.confirmReuse
+        var catalogId = plan.catalogId
+        var stalePlaceholderIds = plan.stalePlaceholderIds
+        var now = new Date()
+        // Hive 重名或物理建表失败之前不得清理任何占位登记。
+        if (stalePlaceholderIds.size() > 0) {
+            db.table('db_table_t').where().eq('tenant_id', tenantId).in('tid', stalePlaceholderIds)
+                .eq('is_del', 0).update({ is_del: 1, updated_time: now })
+        }
+
+        var targetTableId = reuseTargetTable ? text(duplicate.tid) : IdUtil.getSnowflakeNextIdStr()
+        var tableNameCn = propList.tableNameCn || propList.tableName
+        var lowerName = text(propList.tableName).toLowerCase()
+        var businessType = lowerName.endsWith('log') ? '日志表'
+            : lowerName.endsWith('dict') ? '字典表'
+            : lowerName.endsWith('temp') || lowerName.endsWith('tmp') ? '临时表'
+            : (first(sourceTable, ['businessType', 'business_type']) || '业务表')
+
+        // 写目标表主数据，并用 source_table_id 明确来源表。
+        var targetTableValues = {
+            datasource_id: propList.dbId,
+            table_name: propList.tableName,
+            table_name_cn: tableNameCn,
+            table_comment: tableNameCn,
+            table_type: propList.tableType || '数据表',
+            business_type: businessType,
+            record_count: 0,
+            field_count: tableItems.size(),
+            storage_size: '0 KB',
+            total_size_bytes: 0,
+            total_size_formatted: '0 KB',
+            related_directory: '自动生成目录',
+            source_table_id: sourceTableId,
+            source_table_name: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
+            org_id: sourceTable.orgId || targetDatasource.orgId,
+            tenant_id: tenantId,
+            is_del: 0,
+            asset_status: 2,
+            flow_status: 2,
+            updated_time: now
+        }
+        if (physicalTableReused && duplicate != null) {
+            // 复用保留已有统计，不能把有数据的目标表重新标成空表。
+            for (key in ['record_count','storage_size','total_size_bytes','total_size_formatted']) { targetTableValues.remove(key) }
+        }
+        if (reuseTargetTable) {
+            var affected = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId)
+                .eq('is_del', 0).update(targetTableValues)
+            requireMetadataUpdate(affected)
+            if (!confirmReuseExisting) { db.table('db_table_column_t').where().eq('tenant_id', tenantId).eq('table_id', targetTableId).update({ is_del: 1, updated_time: now }) }
+        } else {
+            targetTableValues.tid = targetTableId
+            targetTableValues.reg_time = now
+            targetTableValues.created_time = now
+            db.table('db_table_t').primary('tid').insert(targetTableValues)
+        }
+
+        var columns = []
+        var existingColumnsByName = {}
+        if (reuseTargetTable && confirmReuseExisting) {
+            for (column in candidateColumns) {
+                if (text(first(column, ['tableId','table_id'])) == targetTableId) { existingColumnsByName[text(column.columnName).toLowerCase()] = column }
+            }
+        }
+        // sourceColumns 已在授权后一次读取，字段保存不再次查询来源。
+        for (index, item in tableItems) {
+            var sourceColumn = sourceColumnMap[text(item.columnName).toLowerCase()]
+            if (sourceColumn == null && !blank(item.dictionarySourceField)) {
+                sourceColumn = sourceColumnMap[text(item.dictionarySourceField).toLowerCase()]
+            }
+            columns.add({
+                tid: existingColumnsByName[text(item.columnName).toLowerCase()]?.tid || IdUtil.getSnowflakeNextIdStr(),
+                table_id: targetTableId,
+                column_name: item.columnName,
+                column_comment: item.columnComment,
+                data_type: item.dataType,
+                column_type: item.columnType,
+                length: item.length,
+                precision_length: item.precisionLength,
+                scale: item.scale,
+                nullable: item.nullable,
+                default_value: item.defaultValue,
+                primary_key: item.primaryKey,
+                auto_increment: item.autoIncrement,
+                is_unique: item.isUnique,
+                indexed: item.indexed,
+                ordinal_position: index,
+                charset: item.charset,
+                collation: item.collation,
+                extra: item.extra,
+                source_table_column_id: sourceColumn == null ? null : sourceColumn.tid,
+                tenant_id: tenantId,
+                is_del: 0,
+                created_time: existingColumnsByName[text(item.columnName).toLowerCase()]?.createdTime || now,
+                updated_time: now
+            })
+        }
+        var columnsToInsert = []
+        var actualColumnNames = []
+        for (column in columns) { actualColumnNames.add(text(column.column_name).toLowerCase()) }
+        var staleColumnIds = []
+        for (column in existingColumnsByName.values()) {
+            if (!actualColumnNames.contains(text(column.columnName).toLowerCase())) { staleColumnIds.add(text(column.tid)) }
+        }
+        if (staleColumnIds.size() > 0) {
+            db.table('db_table_column_t').where().eq('tenant_id', tenantId).in('tid', staleColumnIds).update({is_del:1,updated_time:now})
+        }
+        for (column in columns) {
+            if (existingColumnsByName[text(column.column_name).toLowerCase()] != null) {
+                // 保留原字段 ID，已有画布/治理绑定不会因补登记而失效。
+                var affected = db.table('db_table_column_t').where().eq('tenant_id', tenantId).eq('tid', column.tid)
+                    .eq('table_id', targetTableId).eq('is_del', 0).update(columnWriteValues(column))
+                requireMetadataUpdate(affected)
+            } else { columnsToInsert.add(column) }
+        }
+        if (columnsToInsert.size() > 0) {
+            if (batch) {
+                // 命名表批量写入使用当前 Magic 事务；单目标兼容旧驱动的字段保存路径。
+                db.table('db_table_column_t').batchInsert(columnsToInsert.map(columnWriteValues))
+            } else {
+                try {
+                    metadataAsset.batchInsertTableColumns(columnsToInsert)
+                } catch (e) {
+                    for (column in columnsToInsert) { db.table('db_table_column_t').primary('tid').insert(column) }
+                }
+            }
+        }
+
+        // Persist a first-class source-to-target binding for every dictionary
+        // translation/mandatory-standard output.  <source>_cn remains the default
+        // field created by the UI, but the workflow later reads this binding rather
+        // than deriving semantics from the target field name.
+        var targetGovernanceConfig = {
+            version: 3,
+            registrationSavedPhase: 'materialized',
+            sourceTableId: sourceTableId,
+            sourceTableName: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
+            partitionPlan: submittedPartitionPlan,
+            fieldTransformBindings: buildFieldTransformBindings(sourceTable, sourceColumnMap, relations, targetTableId, tableItems, columns)
+        }
+        db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
+            .update({ field_governance_config: jsons.toJSONStr(targetGovernanceConfig), updated_time: now })
+
+        // 目标表同步到 ES，供列表和详情快速读取。
+        var targetDoc = {
+            tid: targetTableId,
+            assetType: 'table',
+            datasourceId: propList.dbId,
+            dbId: propList.dbId,
+            dbName: targetDatasource.dbName,
+            appId: targetDatasource.appId,
+            orgId: targetDatasource.orgId,
+            tableName: propList.tableName,
+            tableNameCn: tableNameCn,
+            tableComment: tableNameCn,
+            tableType: propList.tableType || '数据表',
+            businessType: businessType,
+            sourceTableId: sourceTableId,
+            sourceTableName: first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en']),
+            recordCount: physicalTableReused && duplicate != null ? first(duplicate,['recordCount','record_count']) : 0,
+            fieldCount: tableItems.size(),
+            storageSize: physicalTableReused && duplicate != null ? first(duplicate,['storageSize','storage_size']) : '0 KB',
+            totalSizeBytes: physicalTableReused && duplicate != null ? first(duplicate,['totalSizeBytes','total_size_bytes']) : 0,
+            totalSizeFormatted: physicalTableReused && duplicate != null ? first(duplicate,['totalSizeFormatted','total_size_formatted']) : '0 KB',
+            assetStatus: 2,
+            flowStatus: 2,
+            regTime: date_format(now),
+            createdTime: date_format(now),
+            updatedTime: date_format(now),
+            regTime_date: date_format(now),
+            createdTime_date: date_format(now),
+            updatedTime_date: date_format(now)
+        }
+        // 如果来源表已有自动目录则复用，否则新建。目录代表目标表，但保留来源表属性形成完整链路。
+        if (blank(catalogId)) {
+            catalogId = IdUtil.getSnowflakeNextIdStr()
+            db.table('da_catalog_t').primary('tid').insert({
+                tid: catalogId,
+                tenant_id: tenantId,
+                is_del: 0,
+                reg_time: now,
+                asset_status: 2,
+                flow_status: 2,
+                created_time: now,
+                updated_time: now
+            })
+        } else {
+            var affected = db.table('da_catalog_t').where()
+                .eq('tenant_id', tenantId)
+                .eq('tid', catalogId)
+                .eq('is_del', 0)
+                .update({ updated_time: now, asset_status: 2, flow_status: 2, is_del: 0 })
+            requireMetadataUpdate(affected)
+        }
+
+        var existingProps = catalogPropsById[catalogId] || {}
+        var catalogName = tableNameCn
+        var sourceTableName = first(sourceTable, ['tableName', 'table_name', 'tableNameEn', 'table_name_en'])
+        upsertCatalogProp(catalogId, existingProps, 'catalogName', catalogName, now)
+        upsertCatalogProp(catalogId, existingProps, 'catalogNameEn', propList.tableName, now)
+        upsertCatalogProp(catalogId, existingProps, 'assetDesc', catalogName, now)
+        upsertCatalogProp(catalogId, existingProps, 'dataSourceType', 'ods', now)
+        upsertCatalogProp(catalogId, existingProps, 'businessType', businessType, now)
+        upsertCatalogProp(catalogId, existingProps, 'sourceDbId', sourceTable.datasourceId, now)
+        upsertCatalogProp(catalogId, existingProps, 'sourceDbName', sourceDatasource == null ? '' : sourceDatasource.dbName, now)
+        upsertCatalogProp(catalogId, existingProps, 'sourceTableId', sourceTableId, now)
+        upsertCatalogProp(catalogId, existingProps, 'sourceTableName', sourceTableName, now)
+        upsertCatalogProp(catalogId, existingProps, 'targetDbId', propList.dbId, now)
+        upsertCatalogProp(catalogId, existingProps, 'targetDbType', targetDatasource.dbType || 'mysql', now)
+        upsertCatalogProp(catalogId, existingProps, 'targetTableId', targetTableId, now)
+        upsertCatalogProp(catalogId, existingProps, 'targetTableName', propList.tableName, now)
+        upsertCatalogProp(catalogId, existingProps, 'dbId', propList.dbId, now)
+        upsertCatalogProp(catalogId, existingProps, 'orgId', sourceTable.orgId || targetDatasource.orgId, now)
+        upsertCatalogProp(catalogId, existingProps, 'manageUnit', sourceTable.orgId || targetDatasource.orgId, now)
+
+        var catalogDoc = {
+            tid: catalogId,
+            assetType: 'catalog',
+            catalogName: catalogName,
+            catalogNameEn: propList.tableName,
+            assetDesc: catalogName,
+            dataSourceType: 'ods',
+            businessType: businessType,
+            sourceDbId: sourceTable.datasourceId,
+            sourceDbName: sourceDatasource == null ? '' : sourceDatasource.dbName,
+            sourceTableId: sourceTableId,
+            sourceTableName: sourceTableName,
+            targetDbId: propList.dbId,
+            targetDbType: targetDatasource.dbType || 'mysql',
+            targetTableId: targetTableId,
+            targetTableName: propList.tableName,
+            dbId: propList.dbId,
+            orgId: sourceTable.orgId || targetDatasource.orgId,
+            assetStatus: 2,
+            flowStatus: 2,
+            regTime: date_format(now),
+            createdTime: date_format(now),
+            updatedTime: date_format(now)
+        }
+        // 复用治理目录的批量预取结果；新建目录使用数据库默认计数0。
+        var previousCatalog = governanceCatalogById[catalogId]
+        catalogDoc.viewCount = previousCatalog == null ? 0L : first(previousCatalog, ['marketViewCount', 'market_view_count'])::long(0)
+        // 反写来源表与目标表的目录关联，后续列表和任务创建都能直接定位。
+        var sourceUpdated = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', sourceTableId).eq('is_del', 0)
+            .update({ source_catalog_id: catalogId, catalog_name: catalogName, updated_time: now })
+        var targetUpdated = db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
+            .update({ source_catalog_id: catalogId, catalog_name: catalogName, updated_time: now })
+        requireMetadataUpdate(sourceUpdated)
+        requireMetadataUpdate(targetUpdated)
+
+        return {targetDoc:targetDoc, catalogDoc:catalogDoc, result:{
+            tid: targetTableId,
+            targetTableId: targetTableId,
+            catalogId: catalogId,
+            sourceTableId: sourceTableId,
+            physicalTableReused: physicalTableReused
+        }}
+    }
+
+    var applyTarget = plan => {
+        var propList = plan.propList
+        var tableItems = plan.tableItems
+        var submittedPartitionPlan = plan.partitionPlan
+        var duplicate = plan.duplicate
+        var reuseTargetTable = duplicate != null
+        var confirmReuseExisting = plan.confirmReuse
+        var physicalTableReused = reuseTargetTable
+        if (batch || !reuseTargetTable || plan.hive || confirmReuseExisting || plan.recreateMissing || dryRun) {
+            if (blank(plan.ddl)) {
+                // 旧单目标调用可以省略SQL，继续使用现有方言生成器。
+                var saved = body
+                body = {canvas:true, propList:propList, tableItems:tableItems, partitionPlan:submittedPartitionPlan}
+                try { plan.ddl = getCreateTableDDL() } finally { body = saved }
+            }
+            var physical = plan.preparedReuse != null ? plan.preparedReuse : callPhysical(physicalPayload(plan, dryRun))
+            if (physical?.status == 'failed') {
+                return {errorCode: physical.code || 500, message: physical.message, sideEffectsPossible: true}
+            }
+            if (dryRun) {
+                if (physical?.valid != true) { return {errorCode:400, message:'物化建表预检未完成'} }
+                return {valid:true, dryRun:true, sideEffectsApplied:false, dictionaryValidationPassed:true,
+                    physicalTableChecked:false, sourceTableId:sourceTableId, tableItems:tableItems}
+            }
+            if (physical != null && physical.created == false && !confirmReuseExisting) {
+                var message = plan.hive
+                    ? 'Hive 目标物理表已存在，请修改目标表名，或联系运维手动删除原表后重新物化；系统不会自动删除 Hive 表'
+                    : '目标物理表已存在，请先删除目标表或改用其他目标表名后再创建任务'
+                return {errorCode:409, message:message, sideEffectsPossible:false}
+            }
+            if (confirmReuseExisting) {
+                if (physical?.physicalTableReused != true || physical?.tableItems == null || physical.tableItems.size() == 0) {
+                    return {errorCode:409, message:'已有目标表复用校验未完成，未保存目标登记'}
+                }
+                tableItems = physical.tableItems
+            } else if (batch && physical?.created != true) {
+                return {errorCode:500, message:'目标数据库未确认物理建表结果', sideEffectsPossible:true}
+            }
+            physicalTableReused = physical != null && physical.created == false
+        }
+        if (plan.validateReuseOnly && confirmReuseExisting) {
+            return {valid:true, dryRun:true, sideEffectsApplied:false, physicalTableReused:physicalTableReused,
+                targetTableId:duplicate == null ? '' : text(duplicate.tid), sourceTableId:sourceTableId, tableItems:tableItems}
+        }
+        // 物理建表完成后，在同一个平台库事务中保存目标表、字段和目录关联。
+        var saved = batch ? db.transaction(() => persistTarget(plan, tableItems, physicalTableReused))
+            : persistTarget(plan, tableItems, physicalTableReused)
+        saveProjection(saved.targetDoc)
+        saveProjection(saved.catalogDoc)
+        return saved.result
+    }
+
+    var executeTargets = () => {
+        // 全批先校验已授权目标及请求完整性。正式复用还需在任何 DDL 前验证目标真实结构。
+        for (plan in plans) {
+            if (!blank(plan.ddl)) {
+                var checked = callPhysical(physicalPayload(plan, true))
+                if (batch && checked?.valid != true) { exit 400, '物化目标的建表请求预检未完成' }
+                if (checked?.partitionPlan != null) { plan.partitionPlan = checked.partitionPlan }
+            }
+            if (batch && !dryRun && plan.confirmReuse) {
+                plan.preparedReuse = callPhysical(physicalPayload(plan, false))
+                if (plan.preparedReuse?.physicalTableReused != true || plan.preparedReuse?.tableItems == null
+                        || plan.preparedReuse.tableItems.size() == 0) {
+                    exit 409, '已有目标表复用校验未完成'
+                }
+            }
+        }
+        if (!batch) {
+            var result = applyTarget(plans[0])
+            if (result.errorCode != null) { exit result.errorCode, result.message }
+            if (result.sideEffectsApplied != false) { metadataAsset.refreshRegistrationStatus(plans[0].propList.dbId, false) }
+            return result
+        }
+        if (dryRun) {
+            var validated = plans.map(plan => {return {dbId:plan.propList.dbId, tableName:plan.propList.tableName,
+                status:'succeeded', valid:true, syntaxChecked:false, sideEffectsApplied:false}})
+            return {batch:true, complete:true, sideEffectsApplied:false, sourceTableId:sourceTableId, results:validated}
+        }
+
+        var executionOrder = []
+        var orderedOds = plans.filter(plan => odsRankByDb[plan.propList.dbId] != null).sort(
+            (left, right) => odsRankByDb[left.propList.dbId] - odsRankByDb[right.propList.dbId])
+        var odsIndex = 0
+        for (plan in plans) {
+            if (odsRankByDb[plan.propList.dbId] == null) { executionOrder.add(plan) }
+            else { executionOrder.add(orderedOds[odsIndex]); odsIndex++ }
+        }
+        var resultByIndex = {}
+        var touchedDbIds = []
+        var stopped = false
+        for (plan in executionOrder) {
+            var output = {dbId:plan.propList.dbId, tableName:plan.propList.tableName, status:'skipped'}
+            resultByIndex[plan.inputIndex] = output
+            if (stopped) { continue }
+            try {
+                var result = applyTarget(plan)
+                if (result.errorCode != null) {
+                    output.status = 'failed'
+                    output.code = result.errorCode
+                    output.message = result.message
+                    output.sideEffectsPossible = result.sideEffectsPossible == true
+                    stopped = true
+                } else {
+                    output.putAll(result)
+                    output.status = 'succeeded'
+                    touchedDbIds.add(plan.propList.dbId)
+                }
+            } catch (error) {
+                output.status = 'failed'
+                output.code = 500
+                output.message = ErrorDetailSanitizer.errorText(error.getMessage()) || '目标物化失败，请重新预检后重试'
+                output.sideEffectsPossible = true
+                stopped = true
+            }
+        }
+        var registrationStatusRefreshed = true
+        if (touchedDbIds.size() > 0) {
+            try { metadataAsset.refreshRegistrationStatuses(touchedDbIds) }
+            catch (error) { registrationStatusRefreshed = false }
+        }
+        return {batch:true, complete:!stopped, results:plans.map(plan => resultByIndex[plan.inputIndex]),
+            sourceTableId:sourceTableId, registrationStatusRefreshed:registrationStatusRefreshed}
+    }
+
+    if (!batch) { return executeTargets() }
+
+    // Servlet 属性只在当前内部调用链可写；直接请求的请求体不能替换目标连接。
+    var http = request.get()
+    var attribute = 'ods.materialization.targets'
+    var previousContext = http.getAttribute(attribute)
+    var authorizedConnections = connectionProperties.resolveBatch(tenantId, targetDbIds, 'MENU:2081000000000000002')
     try {
-        esCommonService.save('dataassets', catalogId, catalogDoc)
-    } catch (ignored) {
-        // ES 临时不可用时不阻断物理表和 MySQL 元数据提交。
+        http.setAttribute(attribute, {tenantId:tenantId, connections:authorizedConnections, prepared:{}})
+        return executeTargets()
+    } finally {
+        http.setAttribute(attribute, previousContext)
     }
 }
 
-// 反写来源表与目标表的目录关联，后续列表和任务创建都能直接定位。
-db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', sourceTableId).eq('is_del', 0)
-    .update({ source_catalog_id: catalogId, catalog_name: catalogName, updated_time: now })
-db.table('db_table_t').where().eq('tenant_id', tenantId).eq('tid', targetTableId).eq('is_del', 0)
-    .update({ source_catalog_id: catalogId, catalog_name: catalogName, updated_time: now })
-
-metadataAsset.refreshRegistrationStatus(propList.dbId, false)
-return {
-    tid: targetTableId,
-    targetTableId: targetTableId,
-    catalogId: catalogId,
-    sourceTableId: sourceTableId,
-    physicalTableReused: physicalTableReused
+// 相同租户的物化提交共用一个看门狗锁，覆盖复用目标的查重和登记写入；只读预检可并行。
+if (dryRun || (!batch && plans[0].validateReuseOnly && plans[0].confirmReuse)) { return runMaterialization() }
+var lock = null
+var acquired = false
+try {
+    lock = redissonClient.getLock('data-elements:ods:materialization:' + tenantId)
+    acquired = lock.tryLock()
+} catch (error) {
+    exit 503, '物化提交暂时无法获取操作锁，请稍后重试'
+}
+if (!acquired) { exit 409, '当前租户已有物化申请正在提交，请稍后重试' }
+try { return runMaterialization() }
+finally {
+    try { lock.unlock() }
+    catch (error) { log.warn('物化提交操作锁释放失败') }
 }
