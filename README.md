@@ -32,6 +32,7 @@
 | 工程或范围 | 持续维护文档 |
 | --- | --- |
 | 仓库公共约定与资源维护 | [data-elements.md](docs/data-elements.md) |
+| 跨应用 Mock 设计、要求与接手说明 | [mock-design.md](docs/mock-design.md) |
 | 澄天数据中台 | [data-elements-chengtian.md](docs/data-elements-chengtian.md) |
 | 海通数据集成中心 | [data-elements-haitong.md](docs/data-elements-haitong.md) |
 | 统一身份管理平台 | [data-elements-idaas.md](docs/data-elements-idaas.md) |
