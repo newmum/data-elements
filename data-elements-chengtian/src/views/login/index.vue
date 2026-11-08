@@ -439,8 +439,35 @@ function retrySettings() {
 }
 
 @media (max-width: 640px) {
-  .brand-card,
   .metrics-panel {
+    display: none;
+  }
+
+  // 小窗口也保留现有 Logo，保证五次点击显示行业选择的入口可用。
+  .brand-card {
+    gap: 12px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .brand-logo {
+    flex-basis: 44px;
+    border-radius: 12px;
+  }
+
+  .brand-logo :deep(.el-image) {
+    width: 44px;
+    height: 44px;
+  }
+
+  .brand-card h1 {
+    font-size: 22px;
+  }
+
+  .brand-card p {
     display: none;
   }
 

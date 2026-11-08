@@ -24,7 +24,7 @@ const routes = {
   "数据资产中心": "/assets/my",
   "数据集成中心": "/integration/overview",
   "数据资源中心": "/resource/overview",
-  "数据计算中心": "/compute/overview",
+  "人工智能中心": "/ai/robots",
   "数据治理中心": "/governance/overview",
   "数据服务中心": "/services/catalog",
   "知识服务中心": "/graph/datasets",
@@ -39,8 +39,8 @@ let checks = 0;
 
 const groups = [...descriptor.template.content.matchAll(/<div class="grid">([\s\S]*?)<\/div>\s*<\/div>/g)];
 const expectedGroups = [
-  ["大数据能力产品", ["数据集成中心", "数据资源中心", "数据计算中心", "数据治理中心", "数据资产中心", "数据服务中心"]],
-  ["数据应用产品", ["智能搜索中心", "知识服务中心", "数据可视化中心"]],
+  ["大数据能力产品", ["数据集成中心", "数据资源中心", "风驰数据计算平台", "数据治理中心", "数据资产中心", "数据服务中心"]],
+  ["数据应用产品", ["智能搜索中心", "知识服务中心", "数据可视化中心", "人工智能中心"]],
   ["数据安全产品", ["统一身份管理中心", "数据安全中心", "数据运行监控中心"]],
 ];
 assert.equal(groups.length, expectedGroups.length);
@@ -64,8 +64,8 @@ function sandbox({ hostname = "localhost", port = "3000", globals = {}, meta = {
   const navigated = [];
   const origin = `http://${hostname}${port ? `:${port}` : ""}`;
   return {
-    URL, navigated,
-    window: { ...globals, location: { hostname, port, origin, assign: (url) => navigated.push(url) } },
+    URL, URLSearchParams, navigated,
+    window: { ...globals, location: { hostname, port, origin, hash: "", assign: (url) => navigated.push(url) } },
     document: { querySelector: (selector) => {
       const key = selector.match(/name="([^"]+)"/)?.[1];
       return meta[key] ? { getAttribute: () => meta[key] } : null;
@@ -119,7 +119,7 @@ function visit(value) {
   } else Object.entries(value).forEach(([key, item]) => visit(key === "default" && typeof item === "function" ? item() : item));
 }
 visit(tree);
-assert.equal(clicks.size, 12);
+assert.equal(clicks.size, 13);
 for (const [name, route] of Object.entries(routes)) {
   clicks.get(name)();
   assert.equal(context.navigated.at(-1), `http://localhost:${devPorts[owner(route)]}/#${route}`);
@@ -155,7 +155,7 @@ const identityOverride = sandbox({globals:{__DATA_ELEMENTS_IDAAS_BASE_URL__: "ht
 vm.createContext(identityOverride); vm.runInContext(script,identityOverride); vm.runInContext("openIdentityCenter()",identityOverride);
 assert.equal(identityOverride.navigated.at(-1), "https://identity.example/custom/#/console/workforce/overview"); checks++;
 assert.ok(source.includes('height: calc(100% - 55px)')); checks++;
-const main = readFileSync(new URL("src/main.ts", project), "utf8");
+const main = readFileSync(new URL("src/bootstrap.ts", project), "utf8");
 assert.ok(main.includes("window.__DATA_ELEMENTS_IDAAS_BASE_URL__ = identityCenterBase")); checks++;
 for (const [key, center] of Object.entries({ QIZHI_BASE_URL: "qizhi", WANXIANG_BASE_URL: "wanxiang", HAITONG_BASE_URL: "haitong", SEARCH_BASE_URL: "search" })) {
   assert.ok(main.includes(`window.__DATA_ELEMENTS_${key}__ = capabilityCenterBases.${center}`));
@@ -167,6 +167,17 @@ for (const path of ["src/utils/capabilitySession.ts", "src/views/login/component
   assert.ok(!file.includes("import.meta.env.VITE_"));
   checks++;
 }
+// 风驰使用独立地址与只读 Mock 桥，不加入真实会话接收名单。
+assert.equal(loadRegistry({DEV:true}, "fengchiCenterBase"), "http://localhost:3020/");
+assert.equal(loadRegistry({DEV:false}, "fengchiCenterBase"), "/fengchi/");
+clicks.get("风驰数据计算平台")();
+assert.equal(context.navigated.at(-1), "http://localhost:3020/");
+context.window.location.hash = "#/datasource-manage/detail?id=selected-source&type=db&token=must-not-forward";
+clicks.get("风驰数据计算平台")();
+assert.equal(context.navigated.at(-1), "http://localhost:3020/?sourceId=selected-source");
+assert.ok(main.includes("window.__DATA_ELEMENTS_FENGCHI_BASE_URL__ = fengchiCenterBase"));
+checks += 5;
+
 // Correcting navigation must not relax the session bridge's trust boundary.
 const sessionSource = readFileSync(new URL("src/utils/capabilitySession.ts", project), "utf8").replace(/^import .*;$/gm, "");
 const sessionJs = ts.transpileModule(sessionSource, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -188,6 +199,7 @@ for (const origin of ["http://localhost:3001", "http://localhost:3010", "http://
 const replyCount = replies.length;
 for (const event of [
   { origin: "http://localhost:3004", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },
+  { origin: "http://localhost:3020", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },
   { origin: "http://localhost:3005", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },
   { origin: "http://localhost:5173", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },
   { origin: "http://127.0.0.1:3300", source: parent, data: { type: "data-elements:session-request", nonce: "n" } },

@@ -142,15 +142,15 @@ function normalizeTenantId(value: unknown): string {
 }
 
 function readLastSelectedTenantId(): string {
-  return normalizeTenantId(localStorage.getItem(AUTH_KEYS.LAST_SELECTED_TENANT));
+  return normalizeTenantId(Storage.getString(AUTH_KEYS.LAST_SELECTED_TENANT));
 }
 
 function persistLastSelectedTenantId(value: unknown) {
   const tenantId = normalizeTenantId(value);
   if (tenantId) {
-    localStorage.setItem(AUTH_KEYS.LAST_SELECTED_TENANT, tenantId);
+    Storage.set(AUTH_KEYS.LAST_SELECTED_TENANT, tenantId);
   } else {
-    localStorage.removeItem(AUTH_KEYS.LAST_SELECTED_TENANT);
+    Storage.remove(AUTH_KEYS.LAST_SELECTED_TENANT);
   }
 }
 

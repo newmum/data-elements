@@ -12,6 +12,10 @@
 
 子工程中的 `AGENTS.md` 继续生效；涉及 `data-elements` 多租户及低代码发布时，还须遵守 `data-elements-lowcode` 技能约定。不要用历史迁移脚本覆盖运行中的共享 Magic/低代码资源。
 
+接入 mock 的接口及前端修改必须遵守 [Mock 场景与接口契约同步](docs/data-elements.md#mock-contracts)。根 `mock/` 保存当前数据库的公开配置镜像、虚构业务场景、模拟行为与契约关联，沿用原前端端口及现有行业选择入口；根 `lowcode/` 继续是组件唯一源码，禁止为 mock 复制组件或将固定样例写入真实 Magic。参数、响应、状态、错误及权限语义变化须在同一任务同步真实实现、mock 和调用方并验证。仅示例数据或契约不变的内部重构无需机械双改，但须更新核查说明。Java 业务登记为待迁移，必要技术保留说明理由，不能借 mock 接入扩大 Java 业务保留范围。
+
+菜单和组织机构 Mock 使用当前实际租户库的配置及层级，不另造可见菜单、组织或跨租户补齐空配置。风驰与元数据平台共用数据源/表标识、字段及预览契约，并读取同一份场景状态；不能把风驰旧独立样例或独立业务缓存当作共享数据。跨应用读取仍按当前模拟会话逐对象检查范围，不把会话或连接凭据放进跳转 URL。
+
 ## 工程范围与规则归属
 
 - 根目录 `README.md` 是唯一 README 和文档索引；每个工程只维护 `docs/<工程名>.md` 一份主文档，公共约定维护在 `docs/data-elements.md`。新增能力或修改行为时原位更新对应章节，不再新增日期、版本、阶段、单次验收或增量变更文档。各工程及子目录不再创建 README；当前采用原生部署，不维护 Dockerfile、Compose 或 .dockerignore。协作规则仍放 AGENTS.md；附属资源放 `docs/assets/<工程名>/`，运行报告与截图放忽略的 `logs/`。
@@ -30,8 +34,8 @@
 - 根目录 `lowcode/` 是共享 `ui_component_t` 低代码 Vue 源码的唯一可维护副本；严格按组件管理器的真实 `pid` 树和显示名称构造目录、Vue 文件名：组用 `name`，组件有中文 `remark` 时用 `remark(name)`，无展示名时用 `name`。历史有效组件本身也可能有子组件，不能将 `type=1` 父级误判为断链。索引保留组件 ID、父级、可导入的英文 `name`、中文展示名、真实相对路径和源码摘要，不根据菜单或标题猜造目录。只有父记录确实不存在时才保存到 `_unattached/<原父级ID>` 并报告，不能为了整齐修改远端父级或丢弃资源。正常前端 `src/**/*.vue` 不属于需要移动的低代码副本。
 - 根目录 `db/` 按实际数据库及 SQL 方言保存完整、可创建空库的初始化结构：表、完整列定义、主键、外键、索引、默认值、约束、注释，以及该数据库实际使用的视图/触发器/例程等结构。控制库与各行业实际租户库分别保存；达梦等数据库不能以 MySQL DDL 代替。初始化文件不包含业务数据、用户密码、账号授权、连接凭据或 Magic/低代码内容 INSERT。
 - 修改 Magic / 低代码必须先修改上述本地源，通过 Git 差异和针对性验证确认后，再发布所选资源到明确的环境。结构变更必须在同一任务同步 `db/` 的完整初始化结构，并新增 `db/increments/<六位递增序号>_<业务含义>.<方言>.sql` 增量升级文件；不同方言分别维护，注明适用起始结构、目标库范围、执行顺序、前后置检查及回退/备份要求，供生产审阅后拷贝执行。禁止仅留全量结构或仅留增量，禁止用全量初始化重建已有库；没有结构变更时不生成空增量文件。
-- Nacos 配置也必须随 Git 维护：当前基础配置保存到 `db/nacos/data-element.yml`，开发覆盖保存到 `db/nacos/data-element-dev.yml`，澄天金仓专用完整配置保存到 `db/nacos/data-element_ct.yml`，文件头记录真实 Data ID、Group、Namespace。当前本机启动单独导入 `data-element_ct.yml`；不能在其后叠加旧开发配置覆盖澄天连接。澄天数据源键 `chengtian` 映射金仓 `baseline_ct.public`，原 MySQL `chengtian` 保留为切换前恢复来源，不再作为当前运行绑定。修改运行 Nacos 后，同一任务用 `tools/export-nacos-config.py` 只读导出脱敏版本并核对差异；密码、账号、token 和各类密钥使用无明文默认值的环境变量引用。发布时保留受限运行凭据，不能直接用脱敏占位符覆盖在线配置；验证最终有效值时同时检查进程环境变量和 `SPRING_APPLICATION_JSON` 等高优先级覆盖。
-- 未部署 Nacos 时，通过根启动入口 `-WithoutNacos` 显式选择本地完整配置与 `db/nacos/application-no-nacos.yml`，关闭配置拉取、导入检查、服务发现及自动注册；默认启动仍保持现行 Nacos 分支。无 Nacos 模式复用完整配置，不维护第二份业务参数；实际业务环境值只能存于工程外受限配置或进程环境。`tools/export-nacos-config.py --local-environment-output` 只在显式指定仓库外路径时生成私有业务环境文件，不能保存 Nacos 登录凭据到该文件，不能将其混入 Git 或发布包。
+- Nacos 配置也必须随 Git 维护：当前基础配置保存到 `db/nacos/data-element.yml`，开发覆盖保存到 `db/nacos/data-element-dev.yml`，澄天金仓专用完整配置保存到 `db/nacos/data-element_ct.yml`，文件头记录真实 Data ID、Group、Namespace。当前本地主平台通过 `14.103.233.56:8848`、`public/DEFAULT_GROUP` 单独导入完整配置 `chengtian-14.yml`，脱敏版本保存到 `db/nacos/chengtian-14.yml`；不能叠加 86 环境的旧开发配置或连接覆盖。本机私有启动配置提供该文件引用的实际业务凭据，关闭本地服务向共享 Nacos 的注册。86 环境的 `data-element_ct.yml` 与金仓 `baseline_ct.public` 绑定继续作为原开发环境的恢复来源；14 环境使用现有 `baseline` 控制库及四个 `baseline_demo_*` MySQL 租户库，不因切换连接而自动升级演示结构。修改运行 Nacos 后，同一任务用 `tools/export-nacos-config.py` 只读导出脱敏版本并核对差异；密码、账号、token 和各类密钥使用无明文默认值的环境变量引用。发布时保留受限运行凭据，不能直接用脱敏占位符覆盖在线配置；验证最终有效值时同时检查进程环境变量和 `SPRING_APPLICATION_JSON` 等高优先级覆盖。
+- 本地不依赖 Nacos 时，通过根启动入口 `-WithoutNacos` 显式选择完整配置与 `db/nacos/application-no-nacos.yml`，默认完整配置为连接14公网环境的 `db/nacos/chengtian-14.yml`，私有业务环境文件为工程外 `no-nacos-14-environment.private.json`；关闭配置拉取、导入检查、服务发现及自动注册，普通启动仍保持现行 Nacos 分支。无 Nacos 模式复用完整配置，不维护第二份业务参数；打包的单文件只从完整配置和禁用覆盖生成。另一台电脑须使用自己的路径及 Java21，沿用已确认的业务凭据与原 IDAAS 主密钥，不生成新密钥；私有文件与公开配置包分开交付。`tools/export-nacos-config.py --local-environment-output` 只在显式指定仓库外路径时生成私有业务环境文件，不能保存 Nacos 登录凭据到该文件，不能将其混入 Git 或发布包。
 - 当前共享资源的发布目标是控制库 `baseline`：Magic 为 `baseline.api_file_t`，低代码为 `baseline.ui_component_t`。用户已要求每次修改或更新后在同一任务内完成所选资源发布、运行刷新和实际验证；除非用户明确要求只读、只改源码不发布或指定其他目标，不能把仅修改本地、构建或提交 Git 当作完成。在已授权的本地环境和资源范围内继续完成发布；生产目标仍需明确。收尾比较当前任务文件并列出其他未发布差异，不能全量覆盖历史或并发修改。
 - 本地版本源与数据库运行资源是两种状态。首次接管或发现线上编辑时先只读核对差异；数据库的新变化需显式合并到本地，不能以旧本地文件静默覆盖服务器。发布前再次核对目标资源 ID、路径、版本/时间或内容摘要；目标有并发修改时停止该资源的写入并解决差异。
 - 资源导出、状态比较和发布计划使用 `tools/resource-sync.py`；数据库完整结构导出使用 `tools/export-db.py`，具体用法以 [本地资源版本管理](docs/data-elements.md#resource-versioning) 和工具帮助为准。工具默认只读，pull 不能覆盖已修改文件；发布能力只采用工具已实现并核验的方式，不猜造命令。每次只发布当前任务选定的文件，明确目标并先比较远端，默认不执行全量覆盖、删除同步、业务数据同步或后端重启；本地缺少某文件不代表允许删除数据库中的同名资源。

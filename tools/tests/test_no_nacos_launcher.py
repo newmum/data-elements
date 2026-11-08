@@ -22,7 +22,7 @@ class NoNacosLauncherTest(unittest.TestCase):
         (self.workspace / 'db/nacos').mkdir(parents=True)
         for script in ('start-data-elements.ps1', 'tools/start-local-backend.ps1'):
             shutil.copyfile(ROOT / script, self.workspace / script)
-        for name in ('data-element_ct.yml', 'application-no-nacos.yml'):
+        for name in ('chengtian-14.yml', 'data-element_ct.yml', 'application-no-nacos.yml'):
             shutil.copyfile(ROOT / 'db/nacos' / name, self.workspace / 'db/nacos' / name)
         self.java = self.folder / 'java.exe'
         self.java.write_bytes(b'validation-not-executed')
@@ -57,6 +57,7 @@ class NoNacosLauncherTest(unittest.TestCase):
         self.assertEqual(18099, plan['port'])
         self.assertFalse(plan['nacosConfigEnabled'])
         self.assertFalse(plan['nacosDiscoveryEnabled'])
+        self.assertTrue(plan['businessConfiguration'].replace('\\', '/').endswith('/db/nacos/chengtian-14.yml'))
         self.assertNotIn('NACOS_PASSWORD', plan['environmentVariableNames'])
         self.assertNotIn('NACOS_CONFIG_IMPORTS', plan['environmentVariableNames'])
         self.assertIn('NACOS_SPRING_DATASOURCE_PASSWORD', plan['environmentVariableNames'])
@@ -64,6 +65,7 @@ class NoNacosLauncherTest(unittest.TestCase):
             self.assertNotIn(value, result.stdout)
         self.assertIn('--spring.config.import=', plan['argumentLine'])
         self.assertIn('--spring.cloud.nacos.discovery.enabled=false', plan['argumentLine'])
+        self.assertIn('-Djdk.net.unixdomain.tmpdir=', plan['argumentLine'])
         self.assertIn('.runtime/no-nacos/data-element-runtime.jar', plan['argumentLine'].replace('\\', '/'))
         self.assertFalse((self.workspace / '.runtime').exists(), 'Validation must not launch or copy a runtime')
 

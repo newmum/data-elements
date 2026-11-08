@@ -5,7 +5,7 @@ import com.alibaba.druid.filter.FilterChain;
 import com.alibaba.druid.proxy.jdbc.*;
 import java.sql.SQLException;
 
-/** Installed only on Kingbase tenant pools; control/MySQL/DM pools are unaffected. */
+/** Installed only on explicitly selected Kingbase control or tenant pools. */
 public final class KingbaseSqlFilter extends FilterAdapter {
     @Override public PreparedStatementProxy connection_prepareStatement(FilterChain c,ConnectionProxy p,String s)throws SQLException{return c.connection_prepareStatement(p,KingbaseSql.adapt(s));}
     @Override public PreparedStatementProxy connection_prepareStatement(FilterChain c,ConnectionProxy p,String s,int a)throws SQLException{return c.connection_prepareStatement(p,KingbaseSql.adapt(s),a);}

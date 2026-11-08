@@ -16,8 +16,8 @@ param(
     [string]$NacosConfigImports = "",
     # No-Nacos startup loads the complete local YAML and disables config/discovery clients.
     [switch]$WithoutNacos,
-    [string]$LocalConfigPath = (Join-Path $PSScriptRoot 'db/nacos/data-element_ct.yml'),
-    [string]$LocalEnvironmentPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/no-nacos-environment.private.json'),
+    [string]$LocalConfigPath = (Join-Path $PSScriptRoot 'db/nacos/chengtian-14.yml'),
+    [string]$LocalEnvironmentPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/no-nacos-14-environment.private.json'),
     [switch]$ValidateOnly,
     # Default local starts reuse the reviewed private runtime, including the
     # dedicated CT Nacos import and its environment. Explicit build/profile

@@ -35,11 +35,12 @@ def service_url(value):
     return value.rstrip('/')
 
 
-def resolve(value):
+def resolve(value, environment=None):
+    environment = os.environ if environment is None else environment
     value = str(value)
     def replace(match):
         name, default = match.groups()
-        result = os.environ.get(name, default)
+        result = environment.get(name, default)
         if result is None:
             raise ConfigurationError('Missing environment setting: ' + name)
         return result
@@ -54,54 +55,67 @@ def merge(target, incoming):
             target[key] = value
 
 
-def resolve_configuration(value):
+def resolve_configuration(value, environment=None):
     """Materialize tenant connection references in the owner-only private file."""
     if isinstance(value, dict):
-        return {key: resolve_configuration(item) for key, item in value.items()}
+        return {key: resolve_configuration(item, environment) for key, item in value.items()}
     if isinstance(value, list):
-        return [resolve_configuration(item) for item in value]
-    return resolve(value) if isinstance(value, str) else value
+        return [resolve_configuration(item, environment) for item in value]
+    return resolve(value, environment) if isinstance(value, str) else value
 
 
 def main():
     import yaml
-    from nacos_config import NacosConfigReader
+    try:
+        from nacos_config import NacosConfigReader
+    except ModuleNotFoundError:
+        from tools.nacos_config import NacosConfigReader
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--nacos-url', default='http://' + os.environ.get('NACOS_HOST', '192.168.175.86')
-                        + ':' + os.environ.get('NACOS_PORT', '8848') + '/nacos')
-    parser.add_argument('--namespace', default=os.environ.get('NACOS_NAMESPACE', 'data-element'))
-    parser.add_argument('--profile', default=os.environ.get('DATA_ELEMENT_PROFILE', 'dev'))
+    parser.add_argument('--runtime-config', type=Path,
+                        default=Path.home() / '.codex/private/data-elements/local-runtime.private.json')
+    parser.add_argument('--nacos-url')
+    parser.add_argument('--namespace')
+    parser.add_argument('--profile')
     parser.add_argument('--api-url', default='http://localhost:8088')
     parser.add_argument('--data-id', action='append', help='Explicit complete Nacos YAML Data ID; repeat for ordered overlays')
     parser.add_argument('--output', type=Path,
                         default=Path.home() / '.codex/private/data-elements/resources.local.json')
     args = parser.parse_args()
+    environment = dict(os.environ)
+    if args.runtime_config.exists():
+        runtime = json.loads(args.runtime_config.read_text(encoding='utf-8-sig'))
+        environment.update({key: str(value) for key, value in runtime.get('environment', {}).items()})
+    namespace = args.namespace if args.namespace is not None else environment.get('NACOS_NAMESPACE', 'data-element')
+    profile = args.profile or environment.get('DATA_ELEMENT_PROFILE', 'dev')
+    data_ids = args.data_id or re.findall(r'(?:optional:)?nacos:([^?,\s]+\.ya?ml)', environment.get('NACOS_CONFIG_IMPORTS', ''))
+    data_ids = data_ids or ['data-element.yml', 'data-element-' + profile + '.yml']
     repo = Path(__file__).resolve().parents[1]
     output = private_output(args.output, repo)
-    base, api_url = service_url(args.nacos_url), service_url(args.api_url)
-    username, password = os.environ.get('NACOS_USER'), os.environ.get('NACOS_PASSWORD')
+    base = service_url(args.nacos_url or ('http://' + environment.get('NACOS_HOST', '192.168.175.86')
+                                        + ':' + environment.get('NACOS_PORT', '8848') + '/nacos'))
+    api_url = service_url(args.api_url)
+    username, password = environment.get('NACOS_USER'), environment.get('NACOS_PASSWORD')
     if not username or not password:
         raise ConfigurationError('Set NACOS_USER and NACOS_PASSWORD in the invoking environment')
     reader = NacosConfigReader(base, username, password)
     config = {}
-    for data_id in (args.data_id or ['data-element.yml', 'data-element-' + args.profile + '.yml']):
+    for data_id in data_ids:
         if not re.fullmatch(r'[A-Za-z0-9_.-]+\.ya?ml', data_id):
             raise ConfigurationError('Data ID must be a YAML filename')
-        content = reader.read(data_id, 'DEFAULT_GROUP', args.namespace)
+        content = reader.read(data_id, 'DEFAULT_GROUP', namespace)
         merge(config, yaml.safe_load(content) or {})
     datasource = config['spring']['datasource']
-    url = resolve(datasource['url'])
+    url = resolve(datasource['url'], environment)
     if not url.startswith('jdbc:mysql://'):
         raise ConfigurationError('Shared resource control datasource must use supported MySQL dialect')
     parsed = urllib.parse.urlsplit(url[5:])
     private = {
         'control': {'host': parsed.hostname, 'port': parsed.port or 3306,
-                    'database': parsed.path.strip('/'), 'user': resolve(datasource['username']),
-                    'password': resolve(datasource['password']), 'charset': 'utf8mb4'},
-        'nacos_tenant_database': resolve_configuration(config['data-element']['tenant']['database']),
+                    'database': parsed.path.strip('/'), 'user': resolve(datasource['username'], environment),
+                    'password': resolve(datasource['password'], environment), 'charset': 'utf8mb4'},
+        'nacos_tenant_database': resolve_configuration(config['data-element']['tenant']['database'], environment),
         'runtime': {'baseUrl': api_url},
-        'origin': {'nacosUrl': base, 'namespace': args.namespace, 'profile': args.profile,
-                   'dataIds': args.data_id or ['data-element.yml','data-element-'+args.profile+'.yml']},
+        'origin': {'nacosUrl': base, 'namespace': namespace, 'profile': profile, 'dataIds': data_ids},
     }
     if output.exists():
         previous=json.loads(output.read_text(encoding='utf-8-sig'))

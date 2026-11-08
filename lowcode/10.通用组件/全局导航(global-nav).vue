@@ -21,7 +21,7 @@
         <div class="menu-items">
           <h5 @click="open('/integration/overview')">数据集成中心</h5>
           <h5 @click="open('/resource/overview')">数据资源中心</h5>
-          <h5 @click="open('/compute/overview')">数据计算中心</h5>
+          <h5 role="button" tabindex="0" @click="openFengchiCenter" @keydown.enter="openFengchiCenter" @keydown.space.prevent="openFengchiCenter">风驰数据计算平台</h5>
           <h5 @click="open('/governance/overview')">数据治理中心</h5>
           <h5 @click="openAssetCenter">数据资产中心</h5>
           <h5 @click="open('/services/catalog')">数据服务中心</h5>
@@ -37,6 +37,7 @@
           <h5 @click="openSearchCenter">智能搜索中心</h5>
           <h5 @click="open('/graph/datasets')">知识服务中心</h5>
           <h5 @click="open('/visualization/screens')">数据可视化中心</h5>
+          <h5 @click="open('/ai/robots')">人工智能中心</h5>
         </div>
       </div>
       <div class="grid">
@@ -137,6 +138,15 @@ function openIdentityCenter() {
 
 function openSearchCenter() {
   window.location.assign(resolveSearchBaseUrl().toString());
+}
+
+function openFengchiCenter() {
+  const destination = resolveCenterBaseUrl("__DATA_ELEMENTS_FENGCHI_BASE_URL__", "data-elements-fengchi-base-url", "http://localhost:3020/", "/fengchi/");
+  // 从数据源详情进入时保留对象标识；会话不进入 URL，工作区仍校验当前租户与数据范围。
+  const context = new URLSearchParams(window.location.hash.split("?")[1] || "");
+  const sourceId = context.get("type") === "db" ? context.get("id") : null;
+  if (sourceId) destination.searchParams.set("sourceId", sourceId);
+  window.location.assign(destination.toString());
 }
 
 function openAssetCenter() {

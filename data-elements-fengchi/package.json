@@ -12,7 +12,9 @@
     "test": "vitest run",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "check": "npm test && npm run build"
+    "check": "npm test && npm run build",
+    "dev:mock": "vite --mode mock",
+    "build:mock": "tsc -b && vite build --mode mock --outDir ../logs/mock/fengchi/dist"
   },
   "dependencies": {
     "@ant-design/icons": "5.6.1",

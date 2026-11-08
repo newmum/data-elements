@@ -1,9 +1,10 @@
 import { AuthStorage } from './auth';
+import { scopedStorageKey } from '@/mock/config';
 
 // BroadcastChannel is restricted by the browser to the platform's own origin.
 // This shares an active non-remembered session between platform tabs and its
 // bridge iframe, without persisting credentials or exposing them in a URL.
-const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel('data-elements:platform-session');
+const channel = typeof BroadcastChannel === 'undefined' ? undefined : new BroadcastChannel(scopedStorageKey('data-elements:platform-session'));
 const waiters = new Map<string, (token: string) => void>();
 let sessionEpoch = 0;
 function clearSession() {

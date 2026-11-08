@@ -39,6 +39,15 @@ class KingbaseSqlTest {
         assertTrue(sql.contains("input_count=surveillance_topic_daily_stat_t.input_count+EXCLUDED.input_count"));
         assertTrue(sql.contains("updated_time=EXCLUDED.updated_time"));
     }
+    @Test void adaptsControlDatabaseJobAndRelayUpserts() {
+        String job=KingbaseSql.adapt("INSERT INTO api_job_t(tid,job_code,run_count,last_started_at,last_status,last_error) VALUES(?,?,1,?,'RUNNING',NULL) ON DUPLICATE KEY UPDATE run_count=run_count+1,last_started_at=VALUES(last_started_at),last_status='RUNNING',last_error=NULL");
+        assertTrue(job.contains("ON CONFLICT (job_code)"));
+        assertTrue(job.contains("run_count=api_job_t.run_count+1"));
+        assertTrue(job.contains("last_started_at=EXCLUDED.last_started_at"));
+        String relay=KingbaseSql.adapt("INSERT INTO data_push_relay_client_t(tid,relay_client_id,tenant_id,datasource_id) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE tid=tid");
+        assertTrue(relay.contains("ON CONFLICT (relay_client_id,tenant_id,datasource_id)"));
+        assertTrue(relay.contains("tid=data_push_relay_client_t.tid"));
+    }
     @Test void rejectsUnknownUpsertRatherThanGuessingPermissionOrUniqueKeys() {
         assertThrows(IllegalArgumentException.class,()->KingbaseSql.adapt("INSERT INTO unrelated(tid) VALUES(?) ON DUPLICATE KEY UPDATE tid=VALUES(tid)"));
     }

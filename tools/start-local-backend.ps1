@@ -2,8 +2,8 @@ param(
     [string]$ConfigPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/local-runtime.private.json'),
     [switch]$Restart,
     [switch]$WithoutNacos,
-    [string]$LocalConfigPath = (Join-Path $PSScriptRoot '../db/nacos/data-element_ct.yml'),
-    [string]$LocalEnvironmentPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/no-nacos-environment.private.json'),
+    [string]$LocalConfigPath = (Join-Path $PSScriptRoot '../db/nacos/chengtian-14.yml'),
+    [string]$LocalEnvironmentPath = (Join-Path $env:USERPROFILE '.codex/private/data-elements/no-nacos-14-environment.private.json'),
     [string]$JarPath = '',
     [string]$JavaExe = '',
     [int]$Port = 8088,
@@ -61,8 +61,10 @@ if ($WithoutNacos) {
     if (!(Test-Path -LiteralPath $taskSourceJar -PathType Leaf)) { throw 'Build the backend JAR before no-Nacos startup' }
     $taskRuntimeJar = Join-Path $taskRepo '.runtime/no-nacos/data-element-runtime.jar'
     $taskLogRoot = Join-Path $taskRepo 'logs/backend/no-nacos'
+    # Keep Windows selector/pipe sockets below the OS Unix-domain path limit.
+    $taskSocketDirectory = Join-Path $taskRepo 'logs/uds'
     $taskConfigLocations = 'file:' + $taskBusinessConfig.Replace('\','/') + ',file:' + $taskLocalModeConfig.Replace('\','/')
-    $taskArgumentLine = '-jar "' + $taskRuntimeJar + '" "--spring.config.location=' + $taskConfigLocations + '"' +
+    $taskArgumentLine = '-Dfile.encoding=UTF-8 "-Djdk.net.unixdomain.tmpdir=' + $taskSocketDirectory + '" -jar "' + $taskRuntimeJar + '" "--spring.config.location=' + $taskConfigLocations + '"' +
         ' --spring.config.import= --spring.cloud.nacos.config.enabled=false --spring.cloud.nacos.config.import-check.enabled=false' +
         ' --spring.cloud.nacos.discovery.enabled=false --spring.cloud.nacos.discovery.register-enabled=false' +
         ' --spring.cloud.discovery.enabled=false --spring.cloud.service-registry.auto-registration.enabled=false' +
@@ -150,6 +152,7 @@ foreach ($taskOwner in $taskOwners) {
 }
 if ($WithoutNacos) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $taskRuntimeJar) -Force | Out-Null
+    New-Item -ItemType Directory -Path $taskSocketDirectory -Force | Out-Null
     Copy-Item -LiteralPath $taskSourceJar -Destination $taskRuntimeJar -Force
     [Environment]::SetEnvironmentVariable('DATA_ELEMENTS_LOG_DIR', $taskLogRoot, 'Process')
 }

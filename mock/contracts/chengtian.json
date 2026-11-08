@@ -1,0 +1,596 @@
+{
+  "version": 1,
+  "application": "data-elements-chengtian",
+  "scope": "实际菜单与组织配置、共享数据源、表/视图目录、字段结构与分页预览；风驰只读工作区",
+  "interfaces": [
+    {
+      "operation": "GET /portal/index",
+      "source": {
+        "kind": "magic",
+        "id": "f5c231f2eb04431e8ff2a7ecbb7d07c2",
+        "file": "magic/api/01.系统门户/01.门户首页.ms",
+        "reviewedSha256": "6a61fd33f81407c837e6f0e069ada583464eb525eb5aa1d07496920fc33d65aa"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。"
+    },
+    {
+      "operation": "POST /portal/login",
+      "source": {
+        "kind": "magic",
+        "id": "portal_login_01",
+        "file": "magic/api/01.系统门户/05.用户登录.ms",
+        "reviewedSha256": "9c2308ca31f6e658c47136650269c81bd8b674707eddce052e2aea66835640a2"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "object",
+        "required": [
+          "token",
+          "url"
+        ]
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /portal/logout",
+      "source": {
+        "kind": "magic",
+        "id": "10def1f21f6e42769e696534efbb91a9",
+        "file": "magic/api/01.系统门户/04.系统登出.ms",
+        "reviewedSha256": "6c7bf6556106c42152e7fbfee90902e5dfbe7852e44b4dad144028fecf1675ca"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "string"
+      },
+      "review": "沿用真实 Magic 登出接口返回 /login 路径，调用方据此跳转；退出清理模拟会话。"
+    },
+    {
+      "operation": "POST /sym/user/me",
+      "source": {
+        "kind": "magic",
+        "id": "bced293de53e4b348940f99b1b5bdf9f",
+        "file": "magic/api/09.系统管理/02.用户管理/03.当前用户信息.ms",
+        "reviewedSha256": "c5ae4736b9e05c2690d5065d67474023ed53dcfcfc8c55b89c7207c82e32119a"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "GET /sym/menu/routes",
+      "source": {
+        "kind": "magic",
+        "id": "1dc43be6fbe648ea979c59fa37da7fb8",
+        "file": "magic/api/09.系统管理/05.菜单管理/05.菜单路由查询.ms",
+        "reviewedSha256": "fc893e5884219331c547c07e8e251d6a1c79692a471bb6906de8e4f80f4c9af4"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "array"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "GET /sym/dict",
+      "source": {
+        "kind": "magic",
+        "id": "fa5e60254452443a8d512df21c6eed53",
+        "file": "magic/api/09.系统管理/13.数据字典/01.数据字典查询.ms",
+        "reviewedSha256": "cb035c1a54ba9de74b974933eac1ff25f3441fbf5654d46519b4eb1370ec8d6d"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /sym/org/getOrgTree",
+      "source": {
+        "kind": "magic",
+        "id": "14c675168c134d4ea7d0c3ac3bc98131",
+        "file": "magic/api/09.系统管理/04.机构管理/10.组织机构树查询.ms",
+        "reviewedSha256": "fa162848233130ae87660e6afaa5a3acc4d1ad222fa6263bea1d43eaa8b4f616"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "array"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /sym/component",
+      "source": {
+        "kind": "magic",
+        "id": "a3b59b1dfb2c4c3989bf0a8a0e1f91cc",
+        "file": "magic/api/09.系统管理/10.页面组件/01.页面组件管理.ms",
+        "reviewedSha256": "b79e8b12896c3ba4efa9e8c1a3a91b9b7fece149349e1c232bacf2c75b64a897"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /sym/form",
+      "source": {
+        "kind": "magic",
+        "id": "b5dd6283a2af4141ac6e53d31ed8f507",
+        "file": "magic/api/09.系统管理/12.动态表单/01.动态表单配置.ms",
+        "reviewedSha256": "96f851d075965d85437b3c2bc68a84ea5935be4c3c5d5dc2354c37b646837b07"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "array"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/database/treeStatistics",
+      "source": {
+        "kind": "magic",
+        "id": "datapd_database_tree_statistics_01",
+        "file": "magic/api/02.数据盘点/02.数据库表/07.数据源组织业务系统统计.ms",
+        "reviewedSha256": "e69c2c4617926cb6b7806ca0d84ffd2d256d51f320c861a30b900bd207ddab97"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/database/page",
+      "source": {
+        "kind": "magic",
+        "id": "datapd_database_page_01",
+        "file": "magic/api/02.数据盘点/02.数据库表/01.数据源分页查询.ms",
+        "reviewedSha256": "016be884f01f3d0e8784ed9bd83e22558aa6b355c7c3f3e5eebebed2b81a7218"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "object",
+        "required": [
+          "list",
+          "total",
+          "pageNum",
+          "pageSize"
+        ],
+        "properties": {
+          "list": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "tid",
+                "dbName",
+                "dbType",
+                "orgId",
+                "createdBy"
+              ]
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "pageNum": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          }
+        }
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/database/departmentDataSources",
+      "source": {
+        "kind": "magic",
+        "id": "datapd_dept_datasources_01",
+        "file": "magic/api/02.数据盘点/02.数据库表/06.本部门数据源清单.ms",
+        "reviewedSha256": "0cc358a379ec40d827c074f9d8eb6fdd83a9419c1f308991024215854d75b839"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "object",
+        "required": [
+          "list",
+          "total",
+          "pageNum",
+          "pageSize"
+        ],
+        "properties": {
+          "list": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "tid",
+                "dbName",
+                "dbType",
+                "orgId",
+                "createdBy"
+              ]
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "pageNum": {
+            "type": "number"
+          },
+          "pageSize": {
+            "type": "number"
+          }
+        }
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/database/detail",
+      "source": {
+        "kind": "magic",
+        "id": "datapd_database_detail_01",
+        "file": "magic/api/02.数据盘点/02.数据库表/03.数据源详情.ms",
+        "reviewedSha256": "018247c5e12d2c03f9fce690a93b1e4213503f174c6090c51408388c548e5427"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "object",
+        "required": [
+          "tid",
+          "dbName",
+          "dbType",
+          "database",
+          "orgId",
+          "createdBy"
+        ]
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/database/saveOrUpdate",
+      "source": {
+        "kind": "magic",
+        "id": "datapd_save_update_datasource_01",
+        "file": "magic/api/02.数据盘点/02.数据库表/04.保存数据源.ms",
+        "reviewedSha256": "92ed726133e28ef5f542731350206cdb679f3160d9b4fec17313bd9bffbbf135"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "object",
+        "required": [
+          "tid"
+        ]
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/database/delete",
+      "source": {
+        "kind": "magic",
+        "id": "datapd_database_delete_01",
+        "file": "magic/api/02.数据盘点/02.数据库表/05.删除数据源.ms",
+        "reviewedSha256": "a629cae0dafc630c9e51942e3cb32dfd64e6d34081948f8e4bfc2314c21d5ced"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/maintenance/refresh",
+      "source": {
+        "kind": "magic",
+        "id": "datapd_asset_refresh_01",
+        "file": "magic/api/02.数据盘点/05.盘点维护/01.刷新单个资产索引.ms",
+        "reviewedSha256": "d409285f9f0b5eafccdb80e6ccf426e538c91fed38a4efa10fa8f1d87c9f34c5"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "GET /dst/database/metadata/dbInfo",
+      "source": {
+        "kind": "magic",
+        "id": "metadata_db_info_01",
+        "file": "magic/api/02.数据盘点/02.数据库表/01.元数据管理/09.查询数据库元信息.ms",
+        "reviewedSha256": "1c6f99c05156b12e518a5937a5faeb1c4e0a97404f2f5a1a822a5b4ae93fcb5c"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "GET /dst/database/metadata/refreshDbInfo",
+      "source": {
+        "kind": "magic",
+        "id": "metadata_refresh_db_info_01",
+        "file": "magic/api/02.数据盘点/02.数据库表/01.元数据管理/10.刷新数据库元信息.ms",
+        "reviewedSha256": "805087c571306974e0ec464da472159415c3de1ce5a169a171d78eeaa181080b"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "GET /dst/database/metadata/tables",
+      "source": {
+        "kind": "magic",
+        "id": "52e398a9f2fc429da79048b9ea719b37",
+        "file": "magic/api/02.数据盘点/02.数据库表/01.元数据管理/06.获取表列表.ms",
+        "reviewedSha256": "1b2997d195e3d47235251fb7f6c65104a003b86a947643ebe546897187f108b2"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/application/register-options",
+      "source": {
+        "kind": "magic",
+        "id": "application_register_options_01",
+        "file": "magic/api/02.数据盘点/01.应用系统/09.登记所属系统选择项.ms",
+        "reviewedSha256": "a7494838527d14bb7efc7f74cfef8402d1178c0ba514c208d98bc47ba4d8c5c7"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "array"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dst/application/detail",
+      "source": {
+        "kind": "magic",
+        "id": "datapd_application_detail_01",
+        "file": "magic/api/02.数据盘点/01.应用系统/02.应用系统详情.ms",
+        "reviewedSha256": "ef08a43bdd9320243f1f8f15b8d1fd646201e32c6f3b316cc3d4c64765bdf40d"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "GET /sym/tenant/login-options",
+      "source": {
+        "kind": "java",
+        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
+        "state": "technical-retained",
+        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
+        "reviewedSha256": "5386c868bb7b622ef9938b7aae50aadb9339f09c8d981b7ae73186aa92cee711"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。"
+    },
+    {
+      "operation": "GET /sym/tenant/login-settings",
+      "source": {
+        "kind": "java",
+        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
+        "state": "technical-retained",
+        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
+        "reviewedSha256": "5386c868bb7b622ef9938b7aae50aadb9339f09c8d981b7ae73186aa92cee711"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "返回当前数据库生效的公开配置镜像，保留真实行业标识、名称、编码、品牌字段和值类型；只读导出工具为 tools/export-mock-config.py。"
+    },
+    {
+      "operation": "GET /sym/tenant/current",
+      "source": {
+        "kind": "java",
+        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
+        "state": "technical-retained",
+        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
+        "reviewedSha256": "5386c868bb7b622ef9938b7aae50aadb9339f09c8d981b7ae73186aa92cee711"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "GET /sym/tenant/available",
+      "source": {
+        "kind": "java",
+        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
+        "state": "technical-retained",
+        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
+        "reviewedSha256": "5386c868bb7b622ef9938b7aae50aadb9339f09c8d981b7ae73186aa92cee711"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /sym/tenant/switch",
+      "source": {
+        "kind": "java",
+        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/platform/tenant/api/TenantController.java",
+        "state": "technical-retained",
+        "reason": "租户认证入口与会话绑定的安全框架；保留真实成员校验和令牌会话，不在本地模拟接入中重写。",
+        "reviewedSha256": "5386c868bb7b622ef9938b7aae50aadb9339f09c8d981b7ae73186aa92cee711"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "GET /dst/database/metadata/tables/collection/status",
+      "source": {
+        "kind": "java",
+        "file": "data-elements-parent/src/main/java/com/linewell/dataelement/metautil/controller/TableMetadataCollectionController.java",
+        "state": "pending-magic",
+        "reason": "现用异步采集状态入口。首阶段只演示已保存快照，不迁移启动、后台执行及补偿；后续按业务链路迁入 Magic 后删除对应 Java 业务实现。",
+        "reviewedSha256": "b047c4d8328cf057d9fba0bba7cf9d6fcc731061e8ba71c891703564c43d72cb"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+    },
+    {
+      "operation": "POST /dws/market/shoppingCardList",
+      "source": {
+        "kind": "magic",
+        "id": "9fc031d411354d8baff7006b11f5ad0a",
+        "file": "magic/api/06.数据服务/02.数据超市/07.购物车列表.ms",
+        "reviewedSha256": "af41c38a4b7c993b6b117865177f8601f390d6931a8ac2f6a04ccd60f45a39b8"
+      },
+      "request": {
+        "type": "object",
+        "required": [
+          "mode"
+        ]
+      },
+      "response": {
+        "type": "object",
+        "required": [
+          "total"
+        ],
+        "properties": {
+          "total": {
+            "type": "number"
+          }
+        }
+      },
+      "review": "首阶段覆盖导航的 mode=count；场景没有购物车记录，返回零计数。购物车列表及写入后续接入。"
+    },
+    {
+      "operation": "GET /dst/database/metadata/columns",
+      "source": {
+        "kind": "magic",
+        "id": "a9dc328184b7410781b389f67fad1233",
+        "file": "magic/api/02.数据盘点/02.数据库表/01.元数据管理/07.获取字段列表.ms",
+        "reviewedSha256": "2f172d805fe7eb2ce198fc8246e0ea478e54c0471e38660c0e8da3de7ad425ad"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。"
+    },
+    {
+      "operation": "POST /dst/database/metadata/table/preview-data",
+      "source": {
+        "kind": "magic",
+        "id": "bc30a3edb1f04bceaeee373ed5952d4a",
+        "file": "magic/api/02.数据盘点/02.数据库表/01.元数据管理/13.数据表预览.ms",
+        "reviewedSha256": "ebce615ccd4446148429f8e98ba4e64220eb13531a57ef775ac56d58f16286d2"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。"
+    },
+    {
+      "operation": "POST /dst/database/metadata/table/sample-data",
+      "source": {
+        "kind": "magic",
+        "id": "06ee6f0e37e44762be967dbd2d764780",
+        "file": "magic/api/02.数据盘点/02.数据库表/01.元数据管理/12.数据库表抽样.ms",
+        "reviewedSha256": "ca17e4037d19d6a9d39349740f7788c76f4ff66537f0b1d52ad8e3b8e5e134de"
+      },
+      "request": {
+        "type": "object"
+      },
+      "response": {
+        "type": "any"
+      },
+      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。"
+    }
+  ],
+  "configurationSource": "mock/scenarios/configuration.json"
+}

@@ -144,7 +144,8 @@ def local_environment(config, runtime_environment):
         raise ValueError("Missing runtime environment variables: " + ", ".join(sorted(missing)))
     for name in ("IDAAS_TRANSPORT_KEY", "IDAAS_TRANSPORT_ALLOW_LOCAL_HTTP",
                  "JDBC_DRIVER_DIRECTORY", "DATA_ELEMENT_PUSH_REGISTRY_RELAY_BASE_URL",
-                 "DATA_ELEMENT_PUSH_REGISTRY_RELAY_TIMEOUT_SECONDS", "DATA_ELEMENT_PUSH_REGISTRY_SHARED_KEY"):
+                 "DATA_ELEMENT_PUSH_REGISTRY_RELAY_TIMEOUT_SECONDS", "DATA_ELEMENT_PUSH_REGISTRY_SHARED_KEY",
+                 "DATA_ELEMENT_SYSTEM_CONFIG_GLOBAL_TENANT_ID"):
         if name in runtime_environment:
             values[name] = str(runtime_environment[name])
     def business_overrides(mapping, path=()):
@@ -183,7 +184,10 @@ def write_private_environment(path, configuration):
 
 
 def main():
-    from nacos_config import NacosConfigReader
+    try:
+        from nacos_config import NacosConfigReader
+    except ModuleNotFoundError:
+        from tools.nacos_config import NacosConfigReader
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-config", type=Path,
                         default=Path.home() / ".codex/private/data-elements/local-runtime.private.json")

@@ -159,18 +159,28 @@ pnpm run type-check
 
 ### 常用环境变量
 
+首阶段本地 mock 已接入统一公共网络层，规范见 [Mock 契约同步](data-elements.md#mock-contracts)。在本工程运行 `pnpm run dev:mock`，沿用原端口 `http://localhost:3000/`，或运行 `pnpm run build:mock` 生成静态演示包；常规 `dev/build` 继续调用真实接口。真实模式和 mock 模式使用同一端口，切换时停止当前前端再使用对应启动命令，不另开演示端口。mock 构建需要 Node.js 22.12 或更高版本，浏览器需支持 Service Worker，localhost 可使用 HTTP，远程演示使用 HTTPS。
+
+`.env.mock` 中 `VITE_MOCK_ENABLED=true` 开启模拟；`VITE_MOCK_SCENARIO` 可选 `police`、`broadcasting`、`sea-fishery`、`chengtian`，仅指定新会话优先选择的行业；`VITE_MOCK_ROLE` 可选 `admin`（ALL）、`department`（ORG）、`registrar`（OWNER），延迟由 `VITE_MOCK_LATENCY_MS` 控制。普通生产模式拒绝开启 mock，显式 `build:mock` 才生成演示包。行业切换复用登录页原有的 Logo 五次连击（1.2 秒内）和行业选择，不增加悬浮工具条；小窗口保留同一 Logo 入口。使用虚构账号和至少六位的演示密码即可进入，不校验真实口令；记住密码、设置和会话的模拟缓存与真实模式隔离，行业切换及刷新沿用同一登录流程。
+
+根 `mock/scenarios/configuration.json` 保存当前数据库生效的四行业登录选项、公开门户配置、实际菜单及组织机构。保持真实字符串 ID、父子关系、排序、隐藏状态、组件标识及配置类型；没有行业覆盖值时保留实际全局回退结果，不自行更名。`python tools/export-mock-config.py --with-structure` 通过公开接口及受限连接配置只读导出白名单，后续普通导出也会保留结构范围；`--check` 比较当前运行配置及实际租户库与本地镜像。业务配置白名单不包含账号、令牌、连接信息或内部运行设置，受限数据库连接凭据不进入输出。当前公安库有 102 条机构记录，接口树按原契约不显示虚拟 ROOT；其余三个租户的菜单、组织表为空，保持为空，不复制公安配置。
+
+本阶段保留四行业各 120 个虚构数据源、6 个虚构业务系统，每个数据源有 5 张表和 1 个视图，共 600 张表、120 个视图快照。公安样例归属实际机构；没有机构配置的行业保留未分配归属，不造组织记录。覆盖卡片与表格列表、筛选排序分页、数据源详情编辑保存、本地删除，以及表字段结构和预览。页面源码仍取根 `lowcode/`，开发时修改后重新编译并刷新，构建时打入独立组件包。浏览器修改保存到专用本地状态，不写回源码、不操作真实资源。重置时只删除当前场景的 `data-elements:mock:chengtian:v3:<场景>` 本地键后刷新，不清除真实模式缓存。31 项接口关联见根 `mock/contracts/chengtian.json`，检查命令为 `pnpm run check:mock`。
+
+当前菜单完全沿用实际租户配置，已覆盖功能以契约清单为准；未覆盖的采集启动、完整登记后续步骤、NiFi、治理、服务和审批明确报未覆盖，不回退真实服务。点击左上角 Logo 后的“风驰数据计算平台”进入原 3020 工作台，数据源详情跳转可携带 sourceId，风驰仍按当前会话校验归属；导航 URL 不携带 token。风驰通过元数据平台同源只读桥复用组织、数据源、表/视图、字段及分页预览。两端不各存一份业务数据，详情数据源改名后共享接口也会读取新值。已保存表只读，异步采集状态的 Java 入口保持待迁移。本阶段没有完成真实 Java 迁移；关闭 mock 后继续读取服务器已发布资源。
+
 ```env
 VITE_APP_PORT=3000
 VITE_APP_BASE_API=/dev-api
 VITE_APP_API_URL=http://192.168.175.86:8088
 VITE_APP_WS_ENDPOINT=
-VITE_MOCK_DEV_SERVER=false
+VITE_MOCK_ENABLED=false
 ```
 
 - `VITE_APP_BASE_API`：前端请求代理前缀。
 - `VITE_APP_API_URL`：后端服务地址，开发环境由 Vite 代理转发。
 - `VITE_APP_WS_ENDPOINT`：WebSocket 地址，未配置时跳过 WebSocket 初始化。
-- `VITE_MOCK_DEV_SERVER`：是否启用本地 Mock。
+- `VITE_MOCK_ENABLED`：是否启用统一本地 mock；完整场景与端口由 `.env.mock` 提供。
 
 
 <a id="overview--后端联调"></a>

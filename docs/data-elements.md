@@ -15,6 +15,7 @@
 - [数据库结构基线](#database-schema)
 - [统一维护工具](#maintenance-tools)
 - [前后端批量查询与分页规范](#batch-pagination)
+- [Mock 场景与接口契约同步](#mock-contracts)
 - [低代码与 Magic 业务约束](#lowcode-magic)
 - [Magic API 优先与数据库访问抽象](#magic-first-data-access)
 - [资源目录组织建议](#resource-layout)
@@ -38,7 +39,7 @@ Magic、低代码和数据库结构从本仓库维护，采用“先改本地，
 | `lowcode/` | Vue 源码及组件索引 | `baseline.ui_component_t`；按组件管理器真实 `pid` 树和中文显示名称建目录及 Vue 文件 |
 | `db/` | 平台五库及独立工程数据库各一份完整 `init.sql` 和结构清单 | 表、视图、索引、约束、注释，以及实际存在的其他结构；不含业务数据和账号 |
 | `db/increments/` | 按递增序号、业务含义和方言维护的结构升级 SQL | 与完整结构同一任务更新，供已有库经审查后执行 |
-| `db/nacos/data-element*.yml` | 当前 Nacos 基础/开发覆盖配置的脱敏版本 | 保留配置层次和非敏感值，凭据使用环境变量引用 |
+| `db/nacos/*.yml` | 当前 Nacos 基础/开发覆盖配置的脱敏版本 | 保留配置层次和非敏感值，凭据使用环境变量引用 |
 | `tools/` | 可维护的导出、比较、编译、发布工具及其安全测试 | 所有操作入口共用一份实现 |
 | `logs/` | 不提交 Git | 日志、审计报告、截图、编译结果、临时变更 SQL 和运行备份 |
 
@@ -61,13 +62,13 @@ Magic 目录使用编辑器的 `parentId` / `groupId` 分组树及中文 `name`�
 
 本机维护工具使用 Python 3；需要 `PyMySQL`、`PyYAML`。达梦结构导出还使用 `JayDeBeApi`、`JPype1` 及已安装的 JDBC 驱动。低代码编译使用澄天现有依赖和现有在线编译器，先在澄天应用内安装依赖。
 
-确认当前环境变量中的 `NACOS_USER`、`NACOS_PASSWORD` 后，读取当前 Nacos API 配置：
+工具默认从仓库外 `~/.codex/private/data-elements/local-runtime.private.json` 读取当前 Nacos 地址、账号、导入的 Data ID 及其业务环境变量，再只读定位控制库与租户库：
 
 ```powershell
 python tools/configure-resources.py --api-url http://localhost:8088
 ```
 
-可用 `--nacos-url`、`--namespace`、`--profile`、`--output` 指定目标。工具拒绝把含凭据的配置写入当前仓库。Nacos 底层数据库缓存可能过期，应通过当前 API/运行配置确认绑定；每次改变目标环境或租户路由后重新读取配置并核对目标。
+可用 `--runtime-config` 选择另一份私有运行配置，或用 `--nacos-url`、`--namespace`、`--profile`、`--data-id`、`--output` 明确目标；不传 `--data-id` 时优先解析所选私有运行配置的 `NACOS_CONFIG_IMPORTS`，没有明确导入时才使用基础与 profile 配置。工具拒绝把含凭据的配置写入当前仓库。Nacos 底层数据库缓存可能过期，应通过当前 API/运行配置确认绑定；每次改变目标环境或租户路由后重新读取配置并核对目标。
 
 资源工具也支持 `RESOURCE_DB_HOST`、`RESOURCE_DB_PORT`、`RESOURCE_DB_USER`、`RESOURCE_DB_PASSWORD`、`RESOURCE_DB_DATABASE` 覆盖私有配置。发布时以 `RESOURCE_API_URL` 和 `RESOURCE_API_TOKEN` 明确运行服务及已认证会话。数据库地址和运行服务必须属于同一环境；工具发布前会比较运行资源与数据库内容。
 
@@ -84,22 +85,37 @@ Windows 本地启动使用 `tools/start-local-backend.ps1`，默认读取仓库�
 
 ### Nacos 配置版本管理
 
-当前本机后端从 `192.168.175.86:8848` 的 `data-element` 命名空间、`DEFAULT_GROUP` 单独导入澄天金仓专用完整配置 `data-element_ct.yml`。原 `data-element.yml`、`data-element-dev.yml` 仍分别保留基础与开发覆盖，原内容未修改。三份在线 Data ID 分别导出到 `db/nacos/` 同名文件。其他环境按实际 Data ID、Group 和 Namespace 核对，不能因本机配置正确就宣称生产已更新。
+当前本地主平台（8088）从公网 `14.103.233.56:8848` 的 `public` 命名空间、`DEFAULT_GROUP` 单独导入 `chengtian-14.yml`。控制台是 `http://14.103.233.56:8080/next/`，SDK 使用 8848 和配套的 gRPC 9848；不能把控制台端口当成 SDK 端口。该文件以这台服务器 `data-element` 命名空间中已运行的主平台 `data-elements.yml` 为基准，适配本地路径和启动设置；public 下原来的 `chengtian.yml` 属于云梯服务，保持原样。86 环境的基础、开发和金仓专用三份配置继续保留，不能叠加到新的公网完整配置。
+
+| 本地主平台依赖 | 公网配置中的实际目标 |
+| --- | --- |
+| 控制库及共享资源 | `14.103.233.56:3306/baseline` |
+| 公安、广电、海渔、澄天租户库 | 同一 MySQL 的 `baseline_demo_ga`、`baseline_demo_broadcasting`、`baseline_demo_sea_fishery`、`baseline_demo_chengtian` |
+| Redis | `14.103.233.56:6379`，数据库 13 |
+| Kafka | `14.103.233.56:9092`，broker 元数据也必须返回该公网地址 |
+| Elasticsearch | `14.103.233.56:19200`，保留当前 Java 客户端的 HTTP 连接兼容，浏览器可使用 HTTPS |
+| NiFi | `https://14.103.233.56:8443`，沿用该节点既有认证与证书策略 |
+| 海通服务入口 | `https://14.103.233.56/haitong-api`；本模板未配置独立登记同步密钥，不能用业务密钥替代 |
+
+`chengtian-14.yml` 中的密码和密钥为无明文默认值的环境变量引用，实际值保存在工程外 `local-runtime.private.json.environment`。默认 `start-data-elements.cmd` 使用这份私有运行配置启动本机 8088；本次切换前的运行配置另存为 `~/.codex/private/data-elements/local-runtime-before-public-14.private.json`。本机已关闭共享 Nacos 的服务注册，以及自动索引初始化和 NiFi 后台监控，保留主动操作能力；上传、存储、日志路径使用本仓库本地目录。显式使用 `-Build`、IDE 或自定义连接参数启动时，也必须装载这份完整配置及其私有环境，不能沿用脚本旧连接参数或依赖它们覆盖公网配置。
+
+当前演示控制库为 52 张表、四个演示租户库各 143 张；本次只切换配置及连接，不执行结构升级，不用本机 176 表结构或本地 Magic/低代码覆盖演示资源。完整结构版本源仍区分原开发环境与 `db/environments/demo/`。Nacos Java SDK 的实际配置读取、主平台健康、真实登录和当前租户均须验证；仅 TCP 端口连通不能证明断开 VPN 后可用。
 
 ```powershell
-python tools/export-nacos-config.py --data-id data-element.yml --output db/nacos/data-element.yml
-python tools/export-nacos-config.py --data-id data-element-dev.yml --output db/nacos/data-element-dev.yml
-python tools/export-nacos-config.py --data-id data-element_ct.yml --output db/nacos/data-element_ct.yml
-python -m unittest discover -s tools/tests -p test_nacos_config_export.py
+python tools/export-nacos-config.py --data-id chengtian-14.yml --namespace public --output db/nacos/chengtian-14.yml
+python tools/configure-resources.py --api-url http://localhost:8088
+python -m unittest discover -s tools/tests -p test_*.py
 ```
 
-省略 `--output` 时默认导出到 `db/nacos/<Data ID>`。未部署 Nacos 的启动说明见[共享后端无 Nacos 启动](data-elements-parent.md#without-nacos)：复用本目录的完整配置，叠加 `application-no-nacos.yml`，通过根启动入口的 `-WithoutNacos` 显式启用。业务密钥继续在工程外提供；仅显式使用 `--local-environment-output <工程外私有JSON>` 时，导出工具才保存本地启动所需的实际业务环境值，普通导出仍只生成脱敏 YAML。
+省略 `--output` 时默认导出到 `db/nacos/<Data ID>`。不依赖 Nacos 的启动说明见[共享后端无 Nacos 启动](data-elements-parent.md#without-nacos)：默认复用本目录的 `chengtian-14.yml`，叠加 `application-no-nacos.yml`，通过根启动入口的 `-WithoutNacos` 显式启用。业务密钥继续在工程外 `no-nacos-14-environment.private.json` 提供，换电脑时单独复制所需业务值及原 IDAAS 主密钥，不携带 Nacos 登录凭据；生成的完整单文件和启动包不作为第二份业务版本源。仅显式使用 `--local-environment-output <工程外私有JSON>` 时，导出工具才保存本地启动所需的实际业务环境值，普通导出仍只生成脱敏 YAML。
 
 导出工具默认读取仓库外 `~/.codex/private/data-elements/local-runtime.private.json` 的 Nacos 环境配置，也可用 `--runtime-config` 指定已核对的其他私有运行配置。工具只读 Nacos；输出替换密码、账号、token、访问密钥、同步密钥及带凭据 URL，删除秘密环境变量的明文默认值，保留非敏感配置。不要在命令行传入口令，不把在线原文或凭据备份保存到 Git。
 
+`export-nacos-config.py` 与 `configure-resources.py` 共用 `tools/nacos_config.py` 的只读协议适配：优先使用 Nacos 3 管理 API，旧环境保留 Nacos 2 API 回退，认证失败不得作为版本差异继续尝试。访问 token 只放请求头，不拼到配置 URL。读取私有租户连接时保留逐租户绑定，并在工程外解析各自的凭据引用；两个环境的账号、SDK 地址和业务数据库不能混用。
+
 Nacos 配置修改后，在同一任务导出并审查对应文件的 Git 差异。Git 中的 `${...}` 引用由部署环境提供，不能直接把脱敏文件整份覆盖到线上，使运行密钥变成占位符或丢失。发布时仅合并已审阅的配置项，保留目标环境的真实凭据，并回读确认；导出本身不会修改 Nacos 或重启服务。
 
-海通登记同步的目标是 `data-element.push-registry.relay-base-url`；本机服务使用 `http://127.0.0.1:18083`。当前基础文件仍保留 `8080` 默认值，由开发文件及本机启动环境覆盖为 `18083`，脱敏文件忠实记录两份原配置。排查 `ConnectException` 时必须核对进程的 `DATA_ELEMENT_PUSH_REGISTRY_RELAY_BASE_URL` 与 `SPRING_APPLICATION_JSON.data-element.push-registry.relay-base-url`，它们可能覆盖 Nacos。修正受限启动配置后重启对应本机后端使进程环境生效，再以真实会话对当前数据源“重试同步”，确认“密钥已配置”。同步使用 `standalone-sync-key`，与调用方业务 `X-Api-Key` 分离；连接失败不应通过轮换业务密钥处理。
+海通登记同步的目标是 `data-element.push-registry.relay-base-url`；当前公网主平台配置指向 `https://14.103.233.56/haitong-api`。原独立本机服务仍可使用 `http://127.0.0.1:18083`，但不是本次公网运行绑定。排查 `ConnectException` 时必须核对进程的 `DATA_ELEMENT_PUSH_REGISTRY_RELAY_BASE_URL` 与 `SPRING_APPLICATION_JSON.data-element.push-registry.relay-base-url`，它们可能覆盖 Nacos。同步使用单独配置的 `standalone-sync-key`，与调用方业务 `X-Api-Key` 分离；公网模板中该项为空时不应宣称登记同步已经启用，也不能通过复制业务密钥或轮换业务密钥处理连接失败。
 
 <a id="resource-versioning--同步与审查"></a>
 
@@ -209,11 +225,11 @@ git diff -- db
 
 原有达梦适配定义保存在 [haitong/compatibility/dameng.sql](../db/haitong/compatibility/dameng.sql)，明确标记为未连接实库核验的 9 表模板，缺少 MySQL 中的推送凭据和 Magic 资源表；不能作为当前 15 表结构、完整兼容承诺或已有库升级脚本。应用打包使用的 H2 本地初始化资源继续保留在应用 `src/main/resources/db/h2.sql`，不作为生产 MySQL 基线。
 
-上表为当前本机后端实际绑定数据库的完整读取结果。四行业统一为176张业务表，包含3张湖仓分层表和12张服务网关表，保留全部应用登记及关联和登记第五步的接入申请三字段。海渔旧 `nifi_task_status_t` 经数据、登记资产、流程、数据库程序对象及现用源码和编译内容引用核查为空且无引用，已保存受限结构恢复材料后移除。四行业的表、列、主键、索引及外键比较一致；平台五库完整结构与独立海通结构均已重新导出，见 `db/schema-manifest.json`。历史演示环境仍单独维护在 `environments/demo/`，其143张实际结构未自动升级。
+上表记录 86 开发环境切换前已核验的完整结构，继续作为本地结构版本源；当前 8088 使用的 14 公网连接见上文 Nacos 配置章节。四行业统一为176张业务表，包含3张湖仓分层表和12张服务网关表，保留全部应用登记及关联和登记第五步的接入申请三字段。海渔旧 `nifi_task_status_t` 经数据、登记资产、流程、数据库程序对象及现用源码和编译内容引用核查为空且无引用，已保存受限结构恢复材料后移除。四行业的表、列、主键、索引及外键比较一致；平台五库完整结构与独立海通结构均已重新导出，见 `db/schema-manifest.json`。历史演示环境仍单独维护在 `environments/demo/`，其143张实际结构未自动升级。
 
 现用公共结构增量为 `000002_lakehouse_gateway_tables`（MySQL、达梦、金仓），仅用于缺少所列全部15表的行业旧基线；已有表必须先核对，不能重复建表。`000003_market_catalog_view_count` 为四行业目录主表增加有符号 `BIGINT NOT NULL DEFAULT 0` 浏览量列，不改变目录修订号或更新时间。`000004_retire_unused_nifi_task_status.mysql.sql` 仅适用于经独立引用核查的海渔旧空表。实际执行前核对部署绑定、方言、当前结构与恢复材料；这些结构增量不回填索引历史或切换计数写入者。
 
-澄天原 MySQL `chengtian` 保留为切换前恢复来源，其旧完整定义仍在 `db/chengtian/init.sql`，不再代表当前运行绑定。金仓原生结构为 `db/baseline_ct/init.sql`；当前 Nacos 专用 Data ID 为 `data-element_ct.yml`，脱敏版本位于 `db/nacos/data-element_ct.yml`。控制库、共享 Magic/低代码及另外三个行业的数据库绑定均保持原位置。切换步骤与恢复边界见[澄天金仓部署](data-elements-chengtian.md#kingbase-runtime)。
+澄天原 MySQL `chengtian` 保留为切换前恢复来源，其旧完整定义仍在 `db/chengtian/init.sql`，不再代表当前运行绑定。金仓原生结构为 `db/baseline_ct/init.sql`；86 环境的专用 Data ID 为 `data-element_ct.yml`，脱敏版本位于 `db/nacos/data-element_ct.yml`。该条描述 86 环境的结构与恢复来源，不代表当前已切到 14 的本机运行绑定。金仓切换步骤与恢复边界见[澄天金仓部署](data-elements-chengtian.md#kingbase-runtime)。
 
 四个行业租户维护同一套业务表、列、主键、索引和约束，以实际已确认的公安租户库为统一结构权威，不能按旧库名选择发布目标。原共同结构包含公安原 139 张表和以下一张有现用功能依据的公共表；新增版本表在各方言定义中完整维护，新增空表不复制其他租户数据。
 
@@ -273,7 +289,7 @@ git diff -- db
 
 原 MySQL JSON 使用金仓原生 JSON；无符号整数使用足够范围的原生整数/NUMERIC，并保留上下界 CHECK；生成列保留实际表达式；20 个自动更新时间规则以原生触发器表达。外键引用的既有唯一索引绑定为原生 UNIQUE 约束，保留原列序及更新/删除行为。原生导出包含 176 张表、624 个索引、2 个外键、20 个触发器和 49 个函数，不导出数据库扩展自身的对象。
 
-`KingbaseSqlFilter` 只装在金仓租户连接池，处理当前业务的反引号标识符、schema 元数据查询、SIGNED 转型、JSON_TABLE 和已审阅的原子 UPSERT；JSON_TABLE 改为原生 LATERAL 查询并保持绑定参数个数。JSON 辅助函数只存在 `baseline_ct.public`。未审阅 UPSERT 表拒绝执行，不能推测唯一键。控制库、MySQL 及达梦连接不安装该过滤器。共享 Magic/低代码源码保持同一份，不复制成金仓专用资源。
+`KingbaseSqlFilter` 安装在明确配置为金仓的租户或控制库连接池，处理反引号标识符、schema 元数据查询、SIGNED 转型、JSON_TABLE 和已审阅的原子 UPSERT；JSON_TABLE 改为原生 LATERAL 查询并保持绑定参数个数。金仓控制库的任务状态与推送调用方登记分别使用已审阅的唯一键适配 UPSERT。执行 JSON 兼容 SQL 的数据库须具备相应辅助函数；未审阅 UPSERT 表拒绝执行，不能推测唯一键。MySQL 及达梦连接不安装该过滤器。共享 Magic/低代码源码保持同一份，不复制成金仓专用资源。
 
 金仓检查器按真实原生类型、默认值、生成列、主键/索引/外键及自动更新时间规则进行语义核对。数据库排序规则不会机械替换为 `ci_x_icu`：当前版本的不确定性排序规则不能执行 LIKE。后续新增自定义 SQL、JSON 路径或 UPSERT 必须在目标金仓版本上验证，不能以本次已验证接口推断任意 MySQL SQL 都可执行。
 
@@ -295,7 +311,7 @@ python tools/export-db.py --project haitong-data-pull
 
 工具使用 `pymysql`；达梦还使用 `jaydebeapi`、`JPype1` 和现有 JDBC 驱动。可用 `DATA_ELEMENTS_DM_JDBC_JAR` 指定驱动，或从当前用户 Maven 仓库发现。导出移除源账号 `DEFINER` 与随业务变化的表级自增计数，保留列自增属性；五库全部成功读取后才写本地文件。
 
-金仓通过相同的 `jaydebeapi`、`JPype1` 和现有 kingbase8 JDBC 驱动读取原生目录。`configure-resources.py --data-id data-element_ct.yml` 读取专用完整配置；不传 `--data-id` 时仍保留原基础配置加环境覆盖的工具默认行为。重新定位后须保留私有配置中的独立工程 `project_databases`。
+金仓通过相同的 `jaydebeapi`、`JPype1` 和现有 kingbase8 JDBC 驱动读取原生目录。`configure-resources.py --data-id data-element_ct.yml --runtime-config <86环境私有运行配置>` 可读取原专用配置；默认按当前私有启动配置读取 `chengtian-14.yml`，显式 `--data-id` 仍可选择其他已核对的资源。重新定位后须保留私有配置中的独立工程 `project_databases`。
 
 ### 登记接入申请字段
 
@@ -344,6 +360,20 @@ python -m unittest discover -s tools/tests
 工具默认只读；`pull` 只写本地副本并保护本地修改。发布需要指定资源、环境和已认证会话，不能因本地缺少文件自动删除数据库资源。含凭据配置和恢复材料保持在仓库外的受限目录，其他运行产物放根 `logs/`。
 
 接口引用清单不能直接当删除计划。菜单导航并非接口请求；动态表达式、资源 ID 调度、外部回调和服务登记需要人工核对。当前运行上下文通过 `audit-api.py --context <受限上下文文件>` 传入，原始内容不写入报告；工具不会读取用户会话凭据或探测生产接口。目录建议见 [资源目录组织建议](#resource-layout)。
+
+<a id="mock-contracts"></a>
+
+## Mock 场景与接口契约同步
+
+- 根 `mock/` 是前端演示场景、模拟处理器和接口契约关联的可维护源；配置类数据优先使用当前数据库生效的公开配置镜像，保留字段、值和类型，业务记录使用虚构或已审阅的脱敏数据，不保存真实凭据。配置通过只读白名单工具刷新，mock 运行时只读取本地文件，不连接真实数据库或后端。沿用各前端原端口及行业选择等现有交互，不为 mock 改端口或增加重复入口。普通前端仍独立安装和构建。组件直接从根 `lowcode/` 按 `.manifest.json` 身份编译，复用现有编译器，禁止复制一份 Vue 源码或使用旧发布快照。编译产物不作为第二份版本源。
+- 开关只在应用初始化与公共网络层处理，业务页面沿用现有调用；mock 就绪后才初始化设置、会话和路由。已知业务接口未覆盖或失败时明确拒绝，不回退真实后端。开发服务器同时关闭业务代理；HTTP、流式读取、上传下载、WebSocket 与嵌入应用按实际覆盖范围单独验证，不能以启动成功宣称所有页面可用。
+- 对外接口用方法、完整路由和必要的 `action` 识别，契约记录真实实现位置、Magic 元数据 ID、已审阅源码摘要、请求/响应结构及覆盖范围。`mock/contracts/chengtian.json` 保存澄天首阶段关联，`node tools/check-mock-contracts.mjs` 校验资源身份、路由和审阅摘要；`node --test tools/tests/chengtian-mock.test.mjs` 验证实际模拟行为。源码摘要变化要求核查契约影响，并在完成验证后更新摘要及审阅说明；不能只更新摘要绕过同步。
+- 新增、修改、删除受 mock 覆盖的接口，或修改其公共函数导致参数、返回结构、分页排序、枚举、状态流转、错误或权限行为变化，必须在同一任务同步真实实现、mock、场景数据、调用方和验证。mock 先行的新业务明确标记为拟建，不能冒充真实接口已实现。示例名称、数量、日期或内部种子组织变化，对外契约不变时不要求改 Magic；真实实现内部重构或 Java 迁 Magic 且契约不变时，更新实现关联及核查说明，通过原契约回归即可。
+- 业务优先关联根 `magic/`。仍在 Java 的业务记录为 `pending-magic`，后续按完整调用链迁入 Magic 并回归、发布后再删除 Java；框架或必要技术接口记录为 `technical-retained` 并说明具体理由。不创建空壳 Magic 转发以伪装迁移完成，不按 Java 类为 mock 建另一套业务接口。
+- mock 会话、广播通道、场景修改及详情缓存与真实模式隔离；种子只用于初始化，编辑保存写入专用浏览器状态，不能直接改写工程源码。恢复场景仅清理选定模拟数据。模拟租户与 ALL/ORG/OWNER 在筛选、分页、详情和每个批量 ID 上保持一致，请求参数只能缩小范围。20/100 行保持固定请求数；mock 不执行 SQL，不能用其零 SQL 冒充真实后端的查询数、事务、方言或权限验收。
+- 菜单和组织机构使用 `tools/export-mock-config.py --with-structure` 按当前真实租户绑定只读导出的白名单，保存于同一配置镜像；保留原 ID、父子关系、排序、隐藏状态和组件标识。数据库为空就保存空配置，不从其他租户补齐，不因 Mock 方便增加可见二级菜单。配置中的虚拟 ROOT 记录保留原始镜像，树接口按现行契约返回 ROOT 下的真实机构。
+- 风驰共享模式通过元数据平台同源只读桥消费现有 `/sym/org/getOrgTree`、`/dst/database/treeStatistics`、元数据表目录、字段及分页预览契约。业务状态只由元数据平台同源存储维护；每次读取重新检查当前会话和数据源归属，不给风驰复制一份可维护数据或另设业务 API。桥只接受配置中的风驰 origin 与对应 iframe 父窗口，按 nonce 关联响应，限制操作白名单和载荷大小；不传递会话 token、角色或连接信息，不连接真实业务服务。首次读取一张表可另读一次字段，分页 20/100 行均只新增一次预览请求；目录只按用户操作展开，禁止按表或行自动补查。
+- 新增能力与实际覆盖范围更新各前端唯一主文档，执行记录、浏览器截图和构建结果放根 `logs/`。真实 Magic/低代码的修改仍按现行逐资源发布、刷新和回读规则处理；仅增加前端 mock 或在本地读取既有组件不需要向共享库写入模拟内容。
 
 <a id="batch-pagination"></a>
 
@@ -1089,7 +1119,7 @@ SFTP 验证来源为演示服务器端口 22 下的独立模拟文件目录 `/ho
 
 ### 当前实现与发布状态
 
-当前本机控制库为 55 张表；四行业统一基线为 176 张，包含五张日志辅助表及湖仓分层、服务网关公共表。公安、海渔 MySQL、澄天金仓和广电达梦的表、列、主键、索引及外键语义比较一致；海渔旧任务状态空表已完成引用核查及退役。完整结构见 `db/`，历史演示环境不随本机自动升级。
+86 开发结构版本源中的控制库为 55 张表；四行业统一基线为 176 张，包含五张日志辅助表及湖仓分层、服务网关公共表。公安、海渔 MySQL、澄天金仓和广电达梦的表、列、主键、索引及外键语义比较一致；海渔旧任务状态空表已完成引用核查及退役。完整结构见 `db/`，历史演示环境不随本机自动升级。
 
 本机 8088 已经用户授权换包并正常冷启动；22 个日志 Magic 脚本及唯一低代码页面 `log-management` 已选择性发布到 baseline；原八个入口/统计组件经全库源码、编译内容与 Magic 引用核对后已软删除，编辑器历史保留。本轮另更新平台日志查询脚本，保留各页签独立权限。实际运行源、编译 JavaScript 和 CSS 均已回读核对。行业日志菜单挂到各库当前有效的“后台管理”根节点，不复用已停用的旧菜单。演示与生产环境尚未发布。
 

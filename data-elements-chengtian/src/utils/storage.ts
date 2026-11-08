@@ -1,4 +1,5 @@
 import { isString } from "lodash-es";
+import { scopedStorageKey } from "@/mock/config";
 
 /**
  * 存储工具类
@@ -9,11 +10,11 @@ export class Storage {
    * localStorage 存储
    */
   static set(key: string, value: any): void {
-    localStorage.setItem(key, isString(value) ? value : JSON.stringify(value));
+    localStorage.setItem(scopedStorageKey(key), isString(value) ? value : JSON.stringify(value));
   }
 
   static get<T>(key: string, defaultValue?: T): T {
-    const value = localStorage.getItem(key);
+    const value = localStorage.getItem(scopedStorageKey(key));
     if (!value) return defaultValue as T;
 
     try {
@@ -26,22 +27,22 @@ export class Storage {
 
   /** 文本值保持原样，避免数字账号、长 ID 或密文被 JSON.parse 转成数字。 */
   static getString(key: string, defaultValue = ""): string {
-    return localStorage.getItem(key) ?? defaultValue;
+    return localStorage.getItem(scopedStorageKey(key)) ?? defaultValue;
   }
 
   static remove(key: string): void {
-    localStorage.removeItem(key);
+    localStorage.removeItem(scopedStorageKey(key));
   }
 
   /**
    * sessionStorage 存储
    */
   static sessionSet(key: string, value: any): void {
-    sessionStorage.setItem(key, JSON.stringify(value));
+    sessionStorage.setItem(scopedStorageKey(key), JSON.stringify(value));
   }
 
   static sessionGet<T>(key: string, defaultValue?: T): T {
-    const value = sessionStorage.getItem(key);
+    const value = sessionStorage.getItem(scopedStorageKey(key));
     if (!value) return defaultValue as T;
 
     try {
@@ -53,6 +54,6 @@ export class Storage {
   }
 
   static sessionRemove(key: string): void {
-    sessionStorage.removeItem(key);
+    sessionStorage.removeItem(scopedStorageKey(key));
   }
 }

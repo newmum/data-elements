@@ -95,3 +95,5 @@
 .data-search{min-width:80px;flex:0 1 170px}
 .data-actions{flex:none}
 @container(max-width:650px){.data-toolbar{position:static;left:auto;height:32px;min-height:32px}.data-search{flex:1;width:auto}.status-filter{display:none}.record-form-heading,.record-form-field{grid-template-columns:135px minmax(0,1fr)}.record-form-hint{display:none}}
+
+.shared-fengchi-workspace > .ant-spin-container { height: 100%; }

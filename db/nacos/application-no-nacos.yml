@@ -1,5 +1,5 @@
-# 未部署 Nacos 时的本地启动覆盖配置；与同目录 data-element_ct.yml 一起加载。
-# data-element_ct.yml 保存当前完整业务配置；本文件仅关闭配置中心和服务注册，避免维护第二份业务参数。
+# 不依赖 Nacos 时的本地启动覆盖配置；默认与同目录 chengtian-14.yml 一起加载。
+# 完整业务配置保存数据库和中间件连接；本文件仅关闭配置中心和服务注册，不维护第二份业务参数。
 # 从仓库根目录执行：.\start-data-elements.cmd -WithoutNacos
 # 数据库、Redis、ES 及业务密钥仍由工程外受限环境文件或进程环境提供；不填写明文凭据。
 spring:

@@ -21,7 +21,7 @@ function memoryStorage(values = []) {
 }
 
 function loadStorage(localStorage) {
-  const context = { exports: {}, localStorage, isString: (value) => typeof value === "string" };
+  const context = { exports: {}, localStorage, scopedStorageKey: key => key, isString: (value) => typeof value === "string" };
   vm.runInNewContext(compile(read("src/utils/storage.ts")), context);
   return context.exports.Storage;
 }

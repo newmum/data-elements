@@ -3,6 +3,7 @@ import { defaultSettings } from "@/settings";
 import request from "@/utils/request";
 import { AuthStorage } from "@/utils/auth";
 import { applyTheme, generateThemeColors } from "@/utils/theme";
+import { useScopedStorage as useStorage } from "@/mock/storage";
 
 /**
  * 系统配置状态类型定义

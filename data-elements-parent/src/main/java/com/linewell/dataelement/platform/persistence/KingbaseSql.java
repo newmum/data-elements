@@ -3,7 +3,7 @@ package com.linewell.dataelement.platform.persistence;
 import java.util.*;
 import java.util.regex.*;
 
-/** SQL adaptation for the explicitly selected Kingbase tenant connection only. */
+/** SQL adaptation for explicitly selected Kingbase connections. */
 public final class KingbaseSql {
     private KingbaseSql() {}
     private static final Pattern REVISION_INCREMENT = Pattern.compile(
@@ -12,7 +12,9 @@ public final class KingbaseSql {
         "surveillance_kafka_connection_t","tenant_id,engine_code,connection_role",
         "surveillance_rule_snapshot_t","tenant_id,engine_code,channel_code,snapshot_version,is_del",
         "surveillance_topic_daily_stat_t","tenant_id,engine_code,resource_code,stat_date",
-        "dq_quality_metric_t","tenant_id,run_id,task_rule_id");
+        "dq_quality_metric_t","tenant_id,run_id,task_rule_id",
+        "api_job_t","job_code",
+        "data_push_relay_client_t","relay_client_id,tenant_id,datasource_id");
 
     public static String adapt(String sql) {
         if(sql==null)return null;

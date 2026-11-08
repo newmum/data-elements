@@ -534,13 +534,13 @@ class ConfigurationTests(unittest.TestCase):
         secret_url = 'http://localhost/nacos?accessToken=synthetic-token'
         responses = [io.BytesIO(b'{"accessToken":"synthetic-token"}'), urllib.error.HTTPError(secret_url, 500, 'synthetic-secret', {}, None)]
         stderr = io.StringIO()
-        with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', {'NACOS_USER': 'synthetic-user', 'NACOS_PASSWORD': 'synthetic-secret'}), patch.object(sys, 'argv', ['configure-resources.py', '--output', str(Path(directory) / 'private.json')]), patch('urllib.request.urlopen', side_effect=responses), patch('sys.stderr', stderr):
+        with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', {'NACOS_USER': 'synthetic-user', 'NACOS_PASSWORD': 'synthetic-secret'}), patch.object(sys, 'argv', ['configure-resources.py', '--runtime-config', str(Path(directory) / 'not-present.json'), '--output', str(Path(directory) / 'private.json')]), patch('urllib.request.OpenerDirector.open', side_effect=responses), patch('sys.stderr', stderr):
             with self.assertRaises(SystemExit):
                 runpy.run_path(str(TOOLS / 'configure-resources.py'), run_name='__main__')
             self.assertFalse((Path(directory) / 'private.json').exists())
         self.assertNotIn('synthetic-token', stderr.getvalue())
         self.assertNotIn('synthetic-secret', stderr.getvalue())
-        self.assertIn('HTTPError', stderr.getvalue())
+        self.assertIn('NacosConfigError', stderr.getvalue())
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import { useSessionStorage } from "@vueuse/core";
+import { useScopedSessionStorage as useSessionStorage } from "@/mock/storage";
+import { scopedStorageKey } from "@/mock/config";
 import { RouteMeta } from "vue-router";
 import { isEmpty, isEqual, pickBy } from "lodash-es";
 
@@ -59,9 +60,9 @@ export const useDetailStore = defineStore("detail", () => {
   // 销毁
   const $destroy = () => {
     $reset();
-    sessionStorage.removeItem("detail-data");
-    sessionStorage.removeItem("detail-state");
-    sessionStorage.removeItem("detail-history");
+    sessionStorage.removeItem(scopedStorageKey("detail-data"));
+    sessionStorage.removeItem(scopedStorageKey("detail-state"));
+    sessionStorage.removeItem(scopedStorageKey("detail-history"));
   };
 
   const setCurrentTab = (tab: string) => {

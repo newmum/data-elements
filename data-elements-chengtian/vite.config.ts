@@ -5,13 +5,12 @@ import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
-import { mockDevServerPlugin } from "vite-plugin-mock-dev-server";
-
 import UnoCSS from "unocss/vite";
 import { extname, resolve } from "path";
 import { existsSync, readFileSync, statSync } from "fs";
 import { name, version, engines, dependencies, devDependencies } from "./package.json";
 import VueDevTools from "vite-plugin-vue-devtools";
+import { chengtianMockPlugin } from "../mock/vite-plugin.mjs";
 
 // 平台的名称、版本、运行所需的 node 版本、依赖、构建时间的类型提示
 const __APP_INFO__ = {
@@ -76,12 +75,15 @@ function serveYuntuDist(): PluginOption {
 }
 
 // Vite配置  https://cn.vitejs.dev/config
-export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
+export default defineConfig(({ mode, command }: ConfigEnv): UserConfig => {
   const env = loadEnv(mode, process.cwd());
-  const isProduction = mode === "production";
+  const isProduction = command === "build";
+  const mockEnabled = env.VITE_MOCK_ENABLED === "true";
+  if (mode === "production" && mockEnabled) throw new Error("常规生产构建禁止开启 mock，请显式使用 build:mock");
 
   return {
     base: "./", // 生产环境按 nginx 二级路径发布
+    cacheDir: mockEnabled ? resolve(__dirname, "../logs/mock/chengtian/vite-cache") : "node_modules/.vite",
     resolve: {
       alias: {
         "@": pathSrc,
@@ -100,6 +102,7 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
     // login navigation, which otherwise returns 504 Outdated Optimize Dep.
     optimizeDeps: {
       include: [
+        ...(mockEnabled ? ["msw/browser", "msw/http", "msw"] : []),
         "element-plus/es/components/alert/style/css",
         "element-plus/es/components/descriptions/style/css",
         "element-plus/es/components/descriptions-item/style/css",
@@ -108,8 +111,9 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
     server: {
       host: "0.0.0.0",
       port: +env.VITE_APP_PORT,
-      open: true,
-      proxy: {
+      open: !mockEnabled,
+      strictPort: mockEnabled,
+      proxy: mockEnabled ? {} : {
         // “NiFi”工具栏按钮会在新窗口打开原生 NiFi。画布返回的地址必须
         // 保持平台同源，开发环境由这里转发至后端的 NifiNativeUiProxyController。
         // 原生页面的 API 基址是相对 ../nifi-api，因此两个前缀必须成对代理；
@@ -145,7 +149,7 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
     plugins: [
       ...(isProduction ? [] : [VueDevTools()]),
       vue(),
-      ...(env.VITE_MOCK_DEV_SERVER === "true" ? [mockDevServerPlugin()] : []),
+      chengtianMockPlugin({ enabled: mockEnabled }),
       serveYuntuDist(),
       UnoCSS(),
       // API 自动导入

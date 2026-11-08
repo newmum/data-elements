@@ -95,7 +95,7 @@ NACOS_CONFIG_IMPORTS=nacos:data-elements.yml?group=DEFAULT_GROUP&refreshable=tru
 
 ### 未部署 Nacos 时启动
 
-`db/nacos/` 统一维护配置版本源：`data-element.yml` 是基础配置，`data-element-dev.yml` 是开发覆盖，`data-element_ct.yml` 是当前澄天金仓环境的完整配置。`application-no-nacos.yml` 是无 Nacos 启动覆盖：关闭配置拉取、导入检查、服务发现和自动注册。它与完整业务配置一起加载，数据库、Redis、ES、Magic、行业数据库路由等参数复用现有完整配置，不另维护一份重复的业务参数。
+`db/nacos/` 统一维护配置版本源：`data-element.yml` 和 `data-element-dev.yml` 是原基础、开发配置，`data-element_ct.yml` 保留86金仓环境；当前默认完整配置为 `chengtian-14.yml`，连接14公网环境的控制库、四个演示租户库及中间件。`application-no-nacos.yml` 是无 Nacos 启动覆盖：关闭配置拉取、导入检查、服务发现和自动注册。它与完整业务配置一起加载，数据库、Redis、ES、Magic、行业数据库路由等参数复用现有完整配置，不另维护一份重复的业务参数。服务器即使仍运行 Nacos，本地也可使用该模式独立启动。
 
 在仓库根目录执行：
 
@@ -112,15 +112,17 @@ NACOS_CONFIG_IMPORTS=nacos:data-elements.yml?group=DEFAULT_GROUP&refreshable=tru
 
 该模式不需要 Nacos 服务及其登录账号，使用 `spring.config.location` 显式选择本地完整配置和无 Nacos 覆盖，并清空远程导入；命令行关闭开关优先于遗留的 `SPRING_APPLICATION_JSON`。默认优先使用已验证的 `.runtime/data-element-runtime.jar`，不存在时使用 `data-elements-parent/target/data-element.jar`；实际进程运行独立副本 `.runtime/no-nacos/data-element-runtime.jar`，日志位于 `logs/backend/no-nacos/`。先执行正常 Maven 构建生成 JAR；该入口不支持同时指定 `-Build`。普通启动命令继续使用原 Nacos 模式。已有进程占用端口时不会默认停止它，可选择空闲端口；`-Restart` 只允许重启此无 Nacos 运行副本的进程。
 
-配置文件中的账号、密码及密钥使用 `${...}` 引用，真实值从进程环境或工程外 `~/.codex/private/data-elements/no-nacos-environment.private.json` 的 `environment` 对象加载；可用 `-LocalEnvironmentPath` 指向其他受限文件。已有私有运行配置中的 `SPRING_APPLICATION_JSON` 和租户连接覆盖继续保留，IDAAS 持久主密钥沿用原私有配置或原密钥文件。换电脑时需自行提供这些业务环境值，不能将 `${...}` 当作账号或密码，也不能重新生成原主密钥。数据库、Redis、ES 等地址仍指向所选完整配置中的真实服务，无 Nacos 模式不会自动安装或替换这些服务。
+配置文件中的账号、密码及密钥使用 `${...}` 引用，真实值从进程环境或工程外 `~/.codex/private/data-elements/no-nacos-14-environment.private.json` 的 `environment` 对象加载；可用 `-LocalEnvironmentPath` 指向其他受限文件。该私有文件保存14环境所需业务值、全局系统配置租户范围、接收路由和原 IDAAS 持久主密钥，不含 Nacos 登录账号或口令。`NACOS_SPRING_*` 等业务变量名称沿用已有配置，并不代表访问 Nacos。换电脑时复制这份受限文件到当前用户目录，保留原主密钥，不能重新生成。为避免另一台电脑原来的86运行配置混入，同时将这份环境文件作为 `-RuntimeConfigPath` 与 `-LocalEnvironmentPath`；Java 和 JAR 由显式参数、`JAVA_HOME`、PATH 或目标电脑上的实际文件定位，不能沿用原电脑绝对路径。数据库、Redis、ES 等服务仍通过互联网连接14，无 Nacos 模式不会自动安装或替换这些服务。
+
+Windows 配置包可包含由 `chengtian-14.yml` 和禁用覆盖合并生成的 `application-14-no-nacos.yml`、原有启动脚本及说明，实际凭据文件单独交付。将已构建的 Java21 后端 JAR 放到解压目录并命名 `data-element.jar`，复制上述私有环境文件后，执行包中的 `start-14-no-nacos.cmd`；该入口显式使用本地完整配置和私有业务环境。公开包不包含凭据或主密钥，单文件只是生成产物，修改应回到两份规范源文件。Windows 的 Selector/pipe 临时 socket 使用忽略的 `logs/uds/` 短路径；启动日志保存在 `logs/backend/no-nacos/`。
 
 在仍可访问当前 Nacos 的机器上，可一次性生成无 Nacos 启动所需的私有环境文件：
 
 ```powershell
-python tools/export-nacos-config.py --data-id data-element_ct.yml --local-environment-output "$env:USERPROFILE\.codex\private\data-elements\no-nacos-environment.private.json"
+python tools/export-nacos-config.py --data-id chengtian-14.yml --namespace public --local-environment-output "$env:USERPROFILE\.codex\private\data-elements\no-nacos-14-export.private.json"
 ```
 
-该命令只读 Nacos，将脱敏 YAML 写到 `db/nacos/data-element_ct.yml`；只有显式指定 `--local-environment-output` 时才将业务引用的实际值写到仓库外私有 JSON。它保留现有进程/受限配置及 `SPRING_APPLICATION_JSON` 的有效覆盖，不保存 Nacos 登录账号、口令或访问 token。私有 JSON 不得提交 Git、放进配置交付包或打印其内容。Nacos 已不可用时，可按配置中的变量名手工提供进程环境或同结构私有 JSON。修改本地 YAML 后需要重启对应进程生效。
+该命令只读 Nacos，将脱敏 YAML 写到 `db/nacos/chengtian-14.yml`；只有显式指定 `--local-environment-output` 时才将业务引用的实际值写到仓库外私有 JSON。它保留现有进程/受限配置及 `SPRING_APPLICATION_JSON` 的有效覆盖和全局系统配置租户范围，不保存 Nacos 登录账号、口令或访问 token。若原进程的主密钥由 `transportKeyFile` 提供而不在环境变量中，跨电脑交付前还需将原值作为 `IDAAS_TRANSPORT_KEY` 合并到私有环境；本次准备的 `no-nacos-14-environment.private.json` 已包含原值，不用重新生成。私有 JSON 不得提交 Git、放进配置交付包或打印其内容。Nacos 已不可用时，可按配置中的变量名手工提供进程环境或同结构私有 JSON。修改本地 YAML 后需要重启对应进程生效。
 
 
 <a id="overview--构建与打包"></a>

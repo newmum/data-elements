@@ -48,6 +48,7 @@ class NacosExportTest(unittest.TestCase):
         config = {"spring": {"datasource": {"username": "source-user", "password": "source-secret"}},
                   "tenant": {"password": "${TENANT_PASSWORD}"}}
         runtime = {"NACOS_USER": "config-user", "NACOS_PASSWORD": "config-secret", "TENANT_PASSWORD": "tenant-secret",
+                   "DATA_ELEMENT_SYSTEM_CONFIG_GLOBAL_TENANT_ID": "validation-global",
                    "SPRING_APPLICATION_JSON": json.dumps({"spring.datasource.password": "effective-secret",
                                                           "spring.cloud.nacos.password": "config-login-secret",
                                                           "spring": {"config": {"import": "nacos:stale.yml"}}})}
@@ -55,6 +56,7 @@ class NacosExportTest(unittest.TestCase):
         self.assertEqual("source-user", result["NACOS_SPRING_DATASOURCE_USERNAME"])
         self.assertEqual("effective-secret", result["NACOS_SPRING_DATASOURCE_PASSWORD"])
         self.assertEqual("tenant-secret", result["TENANT_PASSWORD"])
+        self.assertEqual("validation-global", result["DATA_ELEMENT_SYSTEM_CONFIG_GLOBAL_TENANT_ID"])
         self.assertNotIn("NACOS_PASSWORD", result)
         self.assertNotIn("NACOS_USER", result)
         self.assertNotIn("config-login-secret", result["SPRING_APPLICATION_JSON"])

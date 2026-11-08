@@ -18,3 +18,7 @@ export const capabilityCenterBases = {
 export const identityCenterBase =
   import.meta.env.VITE_IDAAS_CENTER_URL?.trim() ||
   (import.meta.env.DEV ? "http://localhost:3005/" : "/idaas/");
+
+/** 风驰独立工作台；保持原有 3020 开发端口。 */
+export const fengchiCenterBase = import.meta.env.VITE_FENGCHI_BASE_URL?.trim() ||
+  (import.meta.env.DEV ? "http://localhost:3020/" : "/fengchi/");

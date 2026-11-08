@@ -10,17 +10,18 @@ export interface TableFooterPagination {
   onPageSizeChange: (pageSize: number) => void;
 }
 
-export default function TableChangesFooter({ dirty, onApply, onRevert, pagination }: {
+export default function TableChangesFooter({ dirty, onApply, onRevert, pagination, readOnly=false }: {
+  readOnly?: boolean;
   dirty: boolean;
   onApply: () => void;
   onRevert: () => void;
   pagination?: TableFooterPagination;
 }) {
   return <div className="table-changes-footer" aria-label="表格底部操作栏">
-    <div className="table-change-actions">
+    <div className="table-change-actions" style={readOnly?{pointerEvents:"none"}:undefined}>
       <Button size="small" type="primary" icon={<CheckOutlined />} title="应用全部未应用的记录与结构修改" disabled={!dirty} onClick={onApply}>应用更改</Button>
       <Button size="small" icon={<UndoOutlined />} title="撤销全部未应用的记录与结构修改" disabled={!dirty} onClick={onRevert}>撤销</Button>
-      <span className="table-change-status" role="status" aria-live="polite">{dirty ? '有未应用的更改' : '所有更改已应用'}</span>
+      <span className="table-change-status" role="status" aria-live="polite">{readOnly?'只读预览':dirty ? '有未应用的更改' : '所有更改已应用'}</span>
     </div>
     {pagination && <div className="table-footer-pagination">
       <span className="table-record-count">共 {pagination.total.toLocaleString('en-US')} 条</span>
