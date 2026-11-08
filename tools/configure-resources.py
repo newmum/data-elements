@@ -54,8 +54,18 @@ def merge(target, incoming):
             target[key] = value
 
 
+def resolve_configuration(value):
+    """Materialize tenant connection references in the owner-only private file."""
+    if isinstance(value, dict):
+        return {key: resolve_configuration(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [resolve_configuration(item) for item in value]
+    return resolve(value) if isinstance(value, str) else value
+
+
 def main():
     import yaml
+    from nacos_config import NacosConfigReader
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--nacos-url', default='http://' + os.environ.get('NACOS_HOST', '192.168.175.86')
                         + ':' + os.environ.get('NACOS_PORT', '8848') + '/nacos')
@@ -72,16 +82,12 @@ def main():
     username, password = os.environ.get('NACOS_USER'), os.environ.get('NACOS_PASSWORD')
     if not username or not password:
         raise ConfigurationError('Set NACOS_USER and NACOS_PASSWORD in the invoking environment')
-    request = urllib.request.Request(base + '/v1/auth/login', data=urllib.parse.urlencode(
-        {'username': username, 'password': password}).encode('utf-8'))
-    token = json.load(urllib.request.urlopen(request, timeout=15))['accessToken']
+    reader = NacosConfigReader(base, username, password)
     config = {}
     for data_id in (args.data_id or ['data-element.yml', 'data-element-' + args.profile + '.yml']):
         if not re.fullmatch(r'[A-Za-z0-9_.-]+\.ya?ml', data_id):
             raise ConfigurationError('Data ID must be a YAML filename')
-        query = urllib.parse.urlencode({'dataId': data_id, 'group': 'DEFAULT_GROUP',
-                                        'tenant': args.namespace, 'accessToken': token})
-        content = urllib.request.urlopen(base + '/v1/cs/configs?' + query, timeout=15).read().decode('utf-8')
+        content = reader.read(data_id, 'DEFAULT_GROUP', args.namespace)
         merge(config, yaml.safe_load(content) or {})
     datasource = config['spring']['datasource']
     url = resolve(datasource['url'])
@@ -92,7 +98,7 @@ def main():
         'control': {'host': parsed.hostname, 'port': parsed.port or 3306,
                     'database': parsed.path.strip('/'), 'user': resolve(datasource['username']),
                     'password': resolve(datasource['password']), 'charset': 'utf8mb4'},
-        'nacos_tenant_database': config['data-element']['tenant']['database'],
+        'nacos_tenant_database': resolve_configuration(config['data-element']['tenant']['database']),
         'runtime': {'baseUrl': api_url},
         'origin': {'nacosUrl': base, 'namespace': args.namespace, 'profile': args.profile,
                    'dataIds': args.data_id or ['data-element.yml','data-element-'+args.profile+'.yml']},

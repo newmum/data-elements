@@ -959,12 +959,21 @@ lowcode/
 
 | 项目 | 部署位置或入口 |
 | --- | --- |
-| 平台前端（澄天） | `http://14.103.233.56/wanxiang/`，保留原公共路径 |
-| 海通画布 | `http://14.103.233.56/haitong/`，由平台嵌入 |
+| 平台前端（澄天） | `https://14.103.233.56/wanxiang/`，保留原公共路径 |
+| 海通画布 | `https://14.103.233.56/haitong/`，由平台嵌入 |
+| Elasticsearch | `https://14.103.233.56:19200/`，继续使用原有 Elasticsearch 账号认证 |
 | Java 服务 | `data-element.service`，`/opt/data-element.jar` |
 | 服务工作目录 | `/opt/data-element-data` |
 | nginx 配置 | `/opt/nginx-1.26.2/conf/nginx.conf` |
 | nginx 命令 | `/opt/nginx/sbin/nginx` |
+
+HTTPS 使用 Let's Encrypt 为公网 IP `14.103.233.56` 签发的 `shortlived` 证书，保留 HTTP 供既有调用和 HTTP-01 验证。当前 Nginx 链接 OpenSSL 1.0.2k，启用 TLS 1.2；HTTPS 与 HTTP 共用现有静态页面、API 转发和 `$scheme` 请求头，不能另建一套业务路由。证书有效期约 160 小时，依赖自动续期。私钥和 ACME 账号仅位于服务器受限目录，不进入仓库或部署包。
+
+维护配置源为 [Nginx HTTPS 片段](assets/data-elements/demo-nginx-https.conf)、[续期与重载入口](assets/data-elements/demo-acme-renew.sh) 和 [六小时检查计划](assets/data-elements/demo-acme-renew.cron)。服务器使用原生 `acme.sh 3.1.6`，签发时指定生产 ACME 目录、`--certificate-profile shortlived`、`--webroot /var/lib/acme`、`--days 2` 和该 IP；测试 CA 使用独立配置目录，测试证书不得安装到正式 HTTPS。
+
+生产 ACME 配置与证书源保存在 `/etc/acme/`，Nginx 加载 `/etc/nginx/tls/14.103.233.56/fullchain.pem` 和 `privkey.pem`。`acme.sh --install-cert` 保存上述部署路径与 `/usr/local/sbin/data-elements-acme-renew reload` 回调；续期成功会复制新证书，并在 `nginx -t` 通过后平滑重载。`/etc/cron.d/data-elements-acme-renew` 每六小时执行一次带互斥锁的续期检查，日志为 `/var/log/data-elements-acme-renew.log`，由同名 logrotate 配置轮转。维护时验证 `crond`、实际续期时间、证书 SAN/有效期、客户端信任及主要页面/API；手动检查使用 `/usr/local/sbin/data-elements-acme-renew renew`，日常不要强制反复签发。回退配置保存在服务器 `/opt/deploy-backups/demo-https-20261108/`，恢复前先比较当前 Nginx，不能覆盖后续其他修改。
+
+Elasticsearch 的公网 `19200` 由 Nginx 接管，使用 [Elasticsearch HTTPS 代理配置](assets/data-elements/demo-elasticsearch-https.conf)，在 Nginx 的 `http` 块引入；同一张 IP 证书及重载回调同时覆盖网站和 ES 入口。ES 容器 `data-element-es` 只将内部 `9200` 发布到 `127.0.0.1:19201`，代理原样转发认证头、方法、请求体和 URI，未认证请求仍由 ES 返回 `401`。现有后端仍以 HTTP 访问公网 `19200`，因此通过 Nginx `497` 的命名位置处理保留同端口 HTTP 兼容；新连接使用 HTTPS，不能在迁移现有客户端前直接删除该兼容分支。ES 数据目录仍绑定 `/opt/data-element-data/elasticsearch`，原账号、keystore、集群和索引标识保持。后续重建容器须保留该本机端口映射和原数据挂载，不恢复对 `0.0.0.0:19200` 的直接发布。原容器 `data-element-es-before-https-20261108` 已停止并关闭自动重启，受限恢复材料保存在 `/opt/deploy-backups/demo-es-https-20261108/`；回退时先撤回 Nginx 的 `19200` 监听，再恢复原容器和端口，禁止两个容器同时打开同一 ES 数据目录。
 
 前端构建时，平台 API 使用 `/prod-api/`，海通 NiFi Java API 使用 `/prod-api/nifi/api`。nginx 的 `/prod-api/` 转发到本机 8088 时去掉该前缀；直接 `/nifi/api/`、`/nifi-ui/` 和 `/nifi-api/` 入口转发时保留原路径。旧 `/haitong-api/` 不是当前画布构建使用的入口。
 

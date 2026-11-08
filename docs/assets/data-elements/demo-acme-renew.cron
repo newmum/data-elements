@@ -1,0 +1,3 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+17 */6 * * * root /usr/local/sbin/data-elements-acme-renew renew >> /var/log/data-elements-acme-renew.log 2>&1

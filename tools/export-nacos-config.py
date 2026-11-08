@@ -183,6 +183,7 @@ def write_private_environment(path, configuration):
 
 
 def main():
+    from nacos_config import NacosConfigReader
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-config", type=Path,
                         default=Path.home() / ".codex/private/data-elements/local-runtime.private.json")
@@ -210,15 +211,8 @@ def main():
     host, port = env["NACOS_HOST"], env.get("NACOS_PORT", "8848")
     base = "http://" + host + ":" + port + "/nacos"
     namespace = args.namespace or env.get("NACOS_NAMESPACE", "data-element")
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    login = urllib.request.Request(base + "/v1/auth/login", data=urllib.parse.urlencode({
-        "username": env["NACOS_USER"], "password": env["NACOS_PASSWORD"]}).encode())
-    with opener.open(login, timeout=15) as response:
-        token = json.load(response)["accessToken"]
-    query = urllib.parse.urlencode({"dataId": args.data_id, "group": args.group,
-                                   "tenant": namespace, "accessToken": token})
-    with opener.open(base + "/v1/cs/configs?" + query, timeout=15) as response:
-        config = yaml.safe_load(response.read().decode("utf-8"))
+    reader = NacosConfigReader(base, env["NACOS_USER"], env["NACOS_PASSWORD"])
+    config = yaml.safe_load(reader.read(args.data_id, args.group, namespace))
     if not isinstance(config, dict):
         raise ValueError("Nacos YAML must contain a configuration mapping")
     private_environment = local_environment(config, env) if args.local_environment_output else None
