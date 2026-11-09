@@ -42,7 +42,7 @@
       "type": "1",
       "sortOrder": 2,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource).vue",
-      "baseSha256": "bee6fed0eb24236423986fb19fcdb9d7be6b7ea627d8aae6594f6e19da9f8577"
+      "baseSha256": "4b29017efdc05aef984502cc2f469f5cd475c8582fbdae54df90c0554dabdb77"
     },
     {
       "id": "2016435561264910336",
@@ -52,7 +52,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "01.系统门户/01.数据源管理/02.数据源管理列表(department-datasource)/01.登记数据源(register-db).vue",
-      "baseSha256": "88e4389d71b8beae161cc8650b09c428f02b1f2f3409c62058d5004223382c85"
+      "baseSha256": "f062a5ea30f9444870c8351165ad5a67fcc5cb5ab313210d7d16289e3bab91a4"
     },
     {
       "id": "2074806689771094016",
@@ -1473,7 +1473,7 @@
       "type": "1",
       "sortOrder": 1,
       "path": "10.通用组件/全局导航(global-nav).vue",
-      "baseSha256": "38e3c5a07ecc83da0546018bc665316805cc4ebf3caf28c1bf699a9ab421037c"
+      "baseSha256": "70f6f893ee7ae4c5729650e4d2f4bf254e938fd32a57c2a9955575dc3af113dd"
     }
   ]
 }

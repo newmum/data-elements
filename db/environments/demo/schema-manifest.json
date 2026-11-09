@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "scope": "structure-only",
-  "routingSource": "private current Nacos API/runtime snapshot",
+  "routingSource": "private current Nacos API/runtime snapshot and configured independent projects",
   "schemas": [
     {
       "dataSourceKey": "control",
@@ -9,16 +9,16 @@
       "dialect": "mysql",
       "file": "baseline/init.sql",
       "objects": {
-        "tables": 50,
+        "tables": 55,
         "views": 2,
-        "indexes": 149,
+        "indexes": 165,
         "foreignKeys": 1,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "eeca4c8916cd1c3a3a052040f7ef641ef70cbddfb888c6c63cc0d96b15a1d7e3",
+      "sha256": "526847b8fb42428110ad472e96834b285d23858cc5e96464797a17c50d2bfc8d",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -31,16 +31,16 @@
       "dialect": "mysql",
       "file": "baseline_demo_broadcasting/init.sql",
       "objects": {
-        "tables": 143,
+        "tables": 177,
         "views": 0,
-        "indexes": 518,
+        "indexes": 627,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "abf0cb8d55c9c934730d1e734615d84ed9db6208cbdfc3ae684743bb408451e7",
+      "sha256": "719328698c7675ef23b9372b91a714305e7c43c58a6367ec055e904a48b564a8",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -53,16 +53,16 @@
       "dialect": "mysql",
       "file": "baseline_demo_chengtian/init.sql",
       "objects": {
-        "tables": 143,
+        "tables": 177,
         "views": 0,
-        "indexes": 518,
+        "indexes": 627,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "031143a9afd700d272aecb5bf2a6c6e617a8427f5ec84040150836997bc67482",
+      "sha256": "374e5f9514261370884f18745da66d0f62e0bac850549395754ee806cb0f1757",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -75,16 +75,16 @@
       "dialect": "mysql",
       "file": "baseline_demo_ga/init.sql",
       "objects": {
-        "tables": 143,
+        "tables": 177,
         "views": 0,
-        "indexes": 518,
+        "indexes": 627,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "8869ee6dae86755822ad817c486d5dcfc5dbbc082fe0740561d5f3cff0b15f7b",
+      "sha256": "541965773e354f9eac98ab8224631b99bd9cfa83d2e11fa49e2dadaa12e89c3e",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -97,16 +97,16 @@
       "dialect": "mysql",
       "file": "baseline_demo_sea_fishery/init.sql",
       "objects": {
-        "tables": 143,
+        "tables": 177,
         "views": 0,
-        "indexes": 518,
+        "indexes": 627,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "9001ef7d39c50dc917a2e3b0224f4485e95b019146f5e6ec0bad12aac4368921",
+      "sha256": "8f45a59ccf0fd77fd01891c7b8e3894fe64c3b9a80dc798ee125ed9f5d8e8539",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

@@ -1378,31 +1378,38 @@ onMounted(loadData);
 .department-source-page {
   min-height: 100%;
   padding: 0;
+}
+
+/* 本页由外层主区滚动，避免根滚动槽与内容内边距把滚动条往左挤。 */
+:global(html:has(.app-main > .department-source-page)) {
+  scrollbar-gutter: auto;
+}
+
+:global(.app-main:has(> .department-source-page)) {
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-color: #cbd5e1 transparent;
   scrollbar-width: thin;
+}
+
+:global(.app-main:has(> .department-source-page)::-webkit-scrollbar) {
+  width: 8px;
+}
+
+:global(.app-main:has(> .department-source-page)::-webkit-scrollbar-track) {
   background: transparent;
+}
 
-  &::-webkit-scrollbar {
-    width: 8px;
-  }
+:global(.app-main:has(> .department-source-page)::-webkit-scrollbar-thumb) {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #cbd5e1;
+  background-clip: content-box;
+}
 
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background: #cbd5e1;
-    background-clip: content-box;
-  }
-
-  &::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-    background-clip: content-box;
-  }
+:global(.app-main:has(> .department-source-page)::-webkit-scrollbar-thumb:hover) {
+  background: #94a3b8;
+  background-clip: content-box;
 }
 
 .topbar {

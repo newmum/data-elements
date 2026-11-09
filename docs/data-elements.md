@@ -99,7 +99,9 @@ Windows 本地启动使用 `tools/start-local-backend.ps1`，默认读取仓库�
 
 `chengtian-14.yml` 中的密码和密钥为无明文默认值的环境变量引用，实际值保存在工程外 `local-runtime.private.json.environment`。默认 `start-data-elements.cmd` 使用这份私有运行配置启动本机 8088；本次切换前的运行配置另存为 `~/.codex/private/data-elements/local-runtime-before-public-14.private.json`。本机已关闭共享 Nacos 的服务注册，以及自动索引初始化和 NiFi 后台监控，保留主动操作能力；上传、存储、日志路径使用本仓库本地目录。显式使用 `-Build`、IDE 或自定义连接参数启动时，也必须装载这份完整配置及其私有环境，不能沿用脚本旧连接参数或依赖它们覆盖公网配置。
 
-当前演示控制库为 52 张表、四个演示租户库各 143 张；本次只切换配置及连接，不执行结构升级，不用本机 176 表结构或本地 Magic/低代码覆盖演示资源。完整结构版本源仍区分原开发环境与 `db/environments/demo/`。Nacos Java SDK 的实际配置读取、主平台健康、真实登录和当前租户均须验证；仅 TCP 端口连通不能证明断开 VPN 后可用。
+当前演示控制库为 55 张表，四个演示租户库各 177 张；四库包含行业统一基线的 176 张表，并保留一张磐高历史同步表。完整结构版本源仍区分原开发环境与 `db/environments/demo/`；演示环境资源与后端版本须分别核对，结构升级不代表 Magic、低代码或 Java 已同步。Nacos Java SDK 的实际配置读取、主平台健康、真实登录和当前租户均须验证；仅 TCP 端口连通不能证明断开 VPN 后可用。
+
+演示服务器自身的主平台后端使用 `public/DEFAULT_GROUP/data-element-server-14.yml`，以服务器原业务配置为基础；脱敏版本为 `db/nacos/data-element-server-14.yml`。服务器 systemd 的受限环境提供该配置引用的实际凭据及既有 IDAAS 主密钥。此配置与本机专用的 `chengtian-14.yml` 分开维护，保留服务器原有存储路径及中间件设置；两者不能互相覆盖。服务器服务更新后应同时核验 Nacos 读取、健康状态和真实租户会话。
 
 ```powershell
 python tools/export-nacos-config.py --data-id chengtian-14.yml --namespace public --output db/nacos/chengtian-14.yml
@@ -149,6 +151,8 @@ python tools/resource-sync.py publish --apply --file 'magic/api/真实目录/接
 ```
 
 `publish` 要求明确的 `--apply`，每次只接受一个已登记的文件。当前实现支持现有非空 `.ms` 内容更新，保留 ID、所属分组、公共路径和方法；重复 ID、远端身份变化或并发修改会阻止发布。发布先保存受限回退内容，再在控制库执行带并发校验的事务更新，刷新 Magic 资源并重新读取运行脚本。
+
+仅当用户明确要求不保存备份时，可在共享资源 `publish` 命令中追加 `--no-backup`，跳过本地回退材料；默认仍保存。该选项不改变并发核验、事务和运行回读要求，也不改变编辑器自身的历史记录机制。
 
 新增资源、分组创建/移动、删除或路由变化需单独审查完整目录元数据和调用方。新增共享 Magic 资源可使用 `register --kind magic --file <规范文件>`，多文件重复传入 `--file`，默认只生成计划；审阅后追加 `--apply`。单批最多50个新脚本或分组，校验路径、父级和全局资源ID，自动补齐新分组的物理目录记录；已有路径或ID、断链、目录名称不一致及并发修改均拒绝。登记在事务中只插入所选新记录，刷新完整运行资源树、回读脚本后更新本地索引。该命令不移动、删除或覆盖已有资源，不支持独立海通资源。分组移动、删除及已有路由变化仍需另行审查，不得另建本地缓存副本绕过限制。
 
@@ -225,7 +229,7 @@ git diff -- db
 
 原有达梦适配定义保存在 [haitong/compatibility/dameng.sql](../db/haitong/compatibility/dameng.sql)，明确标记为未连接实库核验的 9 表模板，缺少 MySQL 中的推送凭据和 Magic 资源表；不能作为当前 15 表结构、完整兼容承诺或已有库升级脚本。应用打包使用的 H2 本地初始化资源继续保留在应用 `src/main/resources/db/h2.sql`，不作为生产 MySQL 基线。
 
-上表记录 86 开发环境切换前已核验的完整结构，继续作为本地结构版本源；当前 8088 使用的 14 公网连接见上文 Nacos 配置章节。四行业统一为176张业务表，包含3张湖仓分层表和12张服务网关表，保留全部应用登记及关联和登记第五步的接入申请三字段。海渔旧 `nifi_task_status_t` 经数据、登记资产、流程、数据库程序对象及现用源码和编译内容引用核查为空且无引用，已保存受限结构恢复材料后移除。四行业的表、列、主键、索引及外键比较一致；平台五库完整结构与独立海通结构均已重新导出，见 `db/schema-manifest.json`。历史演示环境仍单独维护在 `environments/demo/`，其143张实际结构未自动升级。
+上表记录 86 开发环境切换前已核验的完整结构，继续作为本地结构版本源；当前 8088 使用的 14 公网连接见上文 Nacos 配置章节。四行业统一为176张业务表，包含3张湖仓分层表和12张服务网关表，保留全部应用登记及关联和登记第五步的接入申请三字段。海渔旧 `nifi_task_status_t` 经数据、登记资产、流程、数据库程序对象及现用源码和编译内容引用核查为空且无引用，已保存受限结构恢复材料后移除。四行业的表、列、主键、索引及外键比较一致；平台五库完整结构与独立海通结构见 `db/schema-manifest.json`。演示环境结构单独维护在 `environments/demo/`，当前各行业库为177张表，额外保留原磐高同步表。
 
 现用公共结构增量为 `000002_lakehouse_gateway_tables`（MySQL、达梦、金仓），仅用于缺少所列全部15表的行业旧基线；已有表必须先核对，不能重复建表。`000003_market_catalog_view_count` 为四行业目录主表增加有符号 `BIGINT NOT NULL DEFAULT 0` 浏览量列，不改变目录修订号或更新时间。`000004_retire_unused_nifi_task_status.mysql.sql` 仅适用于经独立引用核查的海渔旧空表。实际执行前核对部署绑定、方言、当前结构与恢复材料；这些结构增量不回填索引历史或切换计数写入者。
 
@@ -593,6 +597,7 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 
 - 数据源管理页面及其概要、分页、基础候选、组织树、统计、详情、修改、结束登记和删除接口恢复使用当前角色的 `ALL/ORG/OWNER` 范围：系统管理员看当前租户全部数据，部门管理员看当前账号所属部门的数据，登记人员看 `created_by` 为本人的数据；未配置角色范围按 OWNER 收敛。部门范围按可信账号部门成员关系决定，不包含客户端任意传入的部门。权限条件先于 SQL 分页和聚合；ES 仅是候选投影，必须以当前租户有效主表的部门/创建人为准，禁止用索引中的旧归属扩大范围。概要返回服务端 `dataScope`，页面不再通过部门数量推断权限。表明细和上报表批量读取逐 ID 校验，任一无权、跨租户、缺失或已删除 ID 整批拒绝；详情、更新、结束登记和删除在读取连接配置及执行副作用前校验主记录。系统范围内的搜索、部门和创建人筛选只能缩小权限。
 - 数据源管理组织树在概要返回的服务端权限范围和组织统计均加载完成后设置默认展开状态。ALL 范围展开组织层级至部门，部门下的业务系统默认折叠，用户可手动展开；ORG/OWNER 保留已有默认展开行为。权限范围尚未确定或概要失败时不自动展开业务系统，过期刷新不得改写当前树状态。展开操作仅使用已加载树，不新增接口或逐节点查询。
+- 数据源管理列表由应用主区统一纵向滚动，滚动条贴主区右边缘，卡片保留内容内边距。仅本页取消浏览器根滚动槽的预留空白；组织树、列表分页与详情按原有交互和数据范围工作。
 - 独立元数据探查及已有数据接入配置继续按当前行业库及 `tenantRuntime.id()`、逐 ID 存在性和关联关系校验；本次数据源管理权限恢复不全局改写 Java 连接解析器或其他模块的角色授权。登录、行业库路由、SQL `tenant_id`、来源/目标关联、登记状态、ODS 分域资格、画布操作及审批权限仍各按其职责生效。缺失会话不允许回退到客户端或旧记录的租户。
 
 - For a page rendered through `base-detail` / `json-form` (for example `/register/register-sjkb/detail`), `sym_form.form_json` is the source of truth for every user-visible form element: data fields, display order, sections, titles, labels, required/visible/read-only rules, selector choices, icons, and title-toolbar actions. Do not add page-specific controls or labels in the consuming low-code component merely because a particular detail form currently needs them.
@@ -820,6 +825,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 - 物化建表模板使用 db_table_column_t 登记字段快照和统一目标方言族转换，保留来源字段ID、原始类型、长度、精度及治理设置。历史快照缺少名称、原生类型或只有含义不确定的展示类型时，返回可编辑字段和逐字段提示，允许在登记流程确认字段或在建表模板中手工调整，不以409/422关闭整个抽屉；完整但尚未识别的扩展类型采用可见的长文本转换提示，不能偷偷猜成varchar(255)。转换器本身不查询租户、连接或业务数据；资源读取由现有认证路由与数据范围统一限定。
 - 模板读取支持全部已登记来源字段快照，来源是否具有SQL方言不作为打开抽屉的前置条件。来源类型缺失、历史别名或新增非SQL来源按中性列型模型返回，并提示日期、时间戳等需确认的来源语义；Oracle DATE/FLOAT和SQL Server原生TIMESTAMP等已知语义仍按真实方言处理。含义明确的历史字段标签（如“字符串(64)”）在统一列型模型中归一，并保留原始标签、长度和主键；“数字”“数值”等含义不确定的标签仍返回可编辑提示，不猜测精度。类型别名在Java统一登记，不能在字段遍历中重复查询来源连接，也不能把未知来源默认为MySQL进行物理探查。真正连接、DDL解析与执行仍要求明确的协议/目标类型。
 - FTP/SFTP 物化字段只读取当前租户、角色可见来源的 db_table_column_t 快照；打开和提交抽屉不采集文件、不调用 collectColumns，也不提供来源DDL导入或重新采集入口。登记字段采集时同时在既有 field_governance_config.sourceFile 保存无凭据的文件名、目录、格式、编码、分隔符及工作表/JSON路径，字段本身不在此重复存储；后续治理保存保留该服务端描述，客户端不能覆盖它。任务创建优先使用该描述，旧登记缺失时仅列一次目录定位唯一文件，不采样字段或按目标重复探查；文件内容由NiFi任务读取，保留来源文件。同名歧义或缺少数据集定位时在登记流程确认，不猜文件扩展名或扩大成整个目录采集。CSV/分隔TXT、JSON/JSON TXT、XLS/XLSX按登记解析器配置处理。普通FTP/SFTP始终按真实文件表头映射，不能因CSV/Excel格式或字段中文说明而改用展示名称；仅明确声明fileHeaderMode=registered-chinese的中文上报模板使用登记说明作表头。治理保存后的字段匹配按当前租户和表一次预取，再按ID/物理名称解析，不逐项读库。旧画布只在明确确认后重建。
+- FTP 抽取暂不提供连接时，下载与导入使用同一份资源目录模板。按相同资源目录标识关联“资源目录信息”和“资源数据项”，填写文件格式和来源路径。旧版表结构模板需将已填信息转入新版模板并补齐这些信息。
 - 物化提交在创建或清理目标表前调用一次 `dataAggTaskEnsure` 的 `dryRun=true, validateSourceOnly=true` 来源预检，无需已有目标表；按服务端真实登记类型判断是否需要文件定位，JDBC来源不进入FTP分支，分区配置不改变来源连接器。预检及正式任务创建分别在各自请求内核验来源租户、角色和登记状态；FTP旧登记每次最多列一次目录、不采样文件、不按目标重复探查，正式创建重新核验服务端登记且不信任客户端定位信息。网络超时、认证、目录权限、文件歧义、缺少工作表/JSON路径分别返回固定可操作提示，不将所有异常统称字段缺失，也不返回底层凭据或连接串。
 - 接入目标清理统一使用已选择连接的Schema、完整连接参数和标识符引用规则；转换及物理删除执行器不额外校验租户，业务资源定位仍由当前认证路由与现有数据范围负责。Hive（含MRS和普通JDBC Hive）只清理接入登记及流程，保留物理表和数据，不连接Hive执行DROP。非Hive先停止相关写入流程，再执行带Schema的原生DROP，并核验物理表不存在；已不存在按幂等成功处理，厂商“表不存在”错误也须核验，不能把权限不足误报为成功。流程、连接、驱动、权限或删除后核验失败保留已保存画布和目标登记供重试，成功后在同一事务内批量清理映射、快照、任务和流程记录；不能伪报删除成功。现用来源、其他数据源及未授权对象不能因删除适配而被清理。
 - 物化重名探查和删除核验只读取表标识，不逐表查询统计、大小或字段数；普通JDBC每个数据源/Schema调用一次表目录元数据，托管Hive调用一次SHOW TABLES。物化的目录探查不可用时返回unknown及提示，不冒充不存在，也不阻断新表DDL执行；CREATE直接执行，已存在由数据库错误码识别，复用仍须读取真实字段。删除时目录不可用或最终清理未确认仍保留可重试状态，不能把Oracle监听服务配置错误当成目标库已删除。
@@ -1031,15 +1037,15 @@ Elasticsearch 的公网 `19200` 由 Nginx 接管，使用 [Elasticsearch HTTPS �
 
 | 用途 | 实际数据库 | 方言 | 表数 |
 | --- | --- | --- | ---: |
-| 控制库 | `baseline` | MySQL | 50 |
-| 公安 | `baseline_demo_ga` | MySQL | 143 |
-| 广电 | `baseline_demo_broadcasting` | MySQL | 143 |
-| 海渔 | `baseline_demo_sea_fishery` | MySQL | 143 |
-| 澄天 | `baseline_demo_chengtian` | MySQL | 143 |
+| 控制库 | `baseline` | MySQL | 55 |
+| 公安 | `baseline_demo_ga` | MySQL | 177 |
+| 广电 | `baseline_demo_broadcasting` | MySQL | 177 |
+| 海渔 | `baseline_demo_sea_fishery` | MySQL | 177 |
+| 澄天 | `baseline_demo_chengtian` | MySQL | 177 |
 
 控制库另有两张部署视图；对象集合以本目录实际导出的结构为准，不按历史表数量恢复旧身份表。当前行业账号在所属租户的 `rm_user_t` 中维护，四个租户物理分库并同时校验 `tenant_id`。字段映射 1.1.1 新增计划、模板/快照及当前发布引用三张行业表，四库结构比较和五库完整导出已通过。
 
-本机的统一结构权威仍是 `baseline_ga`；演示环境校验使用实际绑定的公安库 `baseline_demo_ga`。升级时先审阅本机统一结构，再按演示租户路由应用、核对和导出。本目录与本机结构都需要同步维护，不能只让表数量一致。
+本机的统一结构权威仍是 `baseline_ga`；演示环境校验使用实际绑定的公安库 `baseline_demo_ga`。四个演示库保留额外表 `pingao_application_sync_state_t`，以及 `sym_application_t` 的 `data_origin`、`last_synced_at`、`source_key`、`sync_active` 和相关索引；这些历史资产没有因结构升级而删除。控制库已与主版本结构逐项核对，四个演示行业库之间的表、列、主键、索引和外键一致。`db/increments/000005_demo14_control.mysql.sql` 和 `000005_demo14_tenant.mysql.sql` 是针对原演示结构的增量，已应用的库不得重复执行。独立 `haitong` 演示库已补齐至 15 张表，增量为 `000006_demo14_haitong.mysql.sql`，不并入五库统一比较。
 
 连接配置保存于仓库外受限目录。对已定位的演示配置使用：
 

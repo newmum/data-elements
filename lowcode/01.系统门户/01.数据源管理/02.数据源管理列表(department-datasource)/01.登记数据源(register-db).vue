@@ -6795,12 +6795,13 @@ async function downloadResourceCatalogTemplate() {
     ? resourceCatalogFieldTypes
     : currentFieldTypeOptions();
   const resourceType = isReceiveTemplate ? "数据资源目录" : `${label}资源`;
+  const isFtpTemplate = sourceType.value === "ftp";
   const dataFormat = isReceiveTemplate
     ? "JSON"
     : sourceType.value === "kafka"
       ? "JSON"
-      : sourceType.value === "ftp"
-        ? "CSV/JSON"
+      : isFtpTemplate
+        ? "CSV"
         : "JSON";
   const sourceAddress = isDataUploadTemplate
     ? "文件名称或上传路径，例如 /upload/alarm.xlsx"
@@ -6808,8 +6809,8 @@ async function downloadResourceCatalogTemplate() {
       ? "外部单位按平台标准接收规范推送（审核通过后启用）"
       : sourceType.value === "kafka"
         ? "主题名称，例如 police.alarm"
-        : sourceType.value === "ftp"
-          ? "目录或文件路径，例如 /data/alarm/*.csv"
+        : isFtpTemplate
+          ? "/data/alarm/alarm.csv"
           : sourceType.value === "minio"
             ? "桶/对象前缀，例如 police-data/alarm/"
             : "接口地址，例如 https://api.example.com/v1/alarm";
@@ -6890,7 +6891,7 @@ async function downloadResourceCatalogTemplate() {
       "是",
       "否",
       "否",
-      "$.data.id",
+      isFtpTemplate ? example.fieldName : "$.data.id",
     ],
     [
       2,
@@ -6903,7 +6904,7 @@ async function downloadResourceCatalogTemplate() {
       "否",
       "是",
       "是",
-      "$.data.updateTime",
+      isFtpTemplate ? "update_time" : "$.data.updateTime",
     ],
   ]);
   const optionRanges = addTemplateOptionSheet(
@@ -6964,7 +6965,10 @@ async function downloadCurrentMetadataTemplate() {
   templateDownloadState.loading = true;
   await nextTick();
   try {
-    if (["receive", "capture", "upload", "proxy"].includes(accessMode.value)) {
+    if (
+      usesResourceCatalogTemplate.value ||
+      ["receive", "capture", "upload", "proxy"].includes(accessMode.value)
+    ) {
       await downloadResourceCatalogTemplate();
       return;
     }
@@ -8327,6 +8331,13 @@ async function handleMetadataTemplateImport(event) {
           ? "资源数据项"
           : "数据项信息",
     );
+    if (
+      isResourceCatalogTemplate && sourceType.value === "ftp" &&
+      !tableSheet && !fieldSheet &&
+      workbook.getWorksheet("数据表信息") && workbook.getWorksheet("数据项信息")
+    ) {
+      throw new Error("检测到旧版 FTP 表结构模板。请重新下载 FTP 资源目录模板，复制已填写信息，并补充数据格式和来源地址后导入。");
+    }
     validateTemplateHeaders(
       tableSheet,
       isIntegrationTemplate

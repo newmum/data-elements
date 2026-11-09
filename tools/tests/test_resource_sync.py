@@ -324,6 +324,24 @@ class ResourceTests(unittest.TestCase):
         self.assertEqual(self.connection.commits, 1)
         self.assertEqual(sync.load_manifest('magic')['resources'][0]['baseSha256'], sync.digest(local))
 
+    def test_success_can_skip_local_backup_when_explicitly_requested(self):
+        local = self.changed_source()
+        count = 0
+
+        def runtime(_config, route, body=None):
+            nonlocal count
+            if route.endswith('/refresh'):
+                return {}
+            count += 1
+            return {**self.meta, 'script': 'return 1' if count == 1 else 'return 2'}
+
+        with patch.object(sync, 'snapshot', return_value=self.remote), patch.object(sync, 'runtime_call', side_effect=runtime):
+            result = sync.publish(self.connection, {}, 'magic/api/example.ms', backup=False)
+        self.assertEqual(result['result'], 'published-and-runtime-verified')
+        self.assertFalse((self.root / 'logs/resources/backups').exists())
+        self.assertEqual(self.connection.commits, 1)
+        self.assertEqual(sync.load_manifest('magic')['resources'][0]['baseSha256'], sync.digest(local))
+
     def test_lowcode_bundle_wrong_component_identity_is_rejected(self):
         entry = {'id': 'component-a', 'parentId': 'group', 'name': 'a', 'type': '1', 'path': 'a.vue', 'baseSha256': sync.digest('old')}
         sync.write_json(self.root / 'lowcode/.manifest.json', {'database': 'baseline', 'resources': [entry]})

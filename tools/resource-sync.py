@@ -580,7 +580,7 @@ def register_magic(connection, config, files, apply=False):
     return result
 
 
-def publish(connection, config, file, compiled=None):
+def publish(connection, config, file, compiled=None, backup=True):
     kind, _, rel = file.replace('\\', '/').partition('/')
     if kind not in {'magic', 'lowcode'}:
         raise ValueError('Publish accepts a canonical magic/ or lowcode/ file')
@@ -625,9 +625,10 @@ def publish(connection, config, file, compiled=None):
         if digest(runtime_source) != digest(remote['content']):
             raise ValueError('Runtime source differs from control database; do not publish')
     # Private, ignored rollback material: never a second versioned source location.
-    backup_name = kind + '-' + digest(entry['path']) + '-' + hashlib.sha256(remote['content'].encode('utf-8')).hexdigest() + '.json'
-    backup = safe_path(ROOT / 'logs', 'resources/backups/' + backup_name)
-    write_json(backup, remote)
+    if backup:
+        backup_name = kind + '-' + digest(entry['path']) + '-' + hashlib.sha256(remote['content'].encode('utf-8')).hexdigest() + '.json'
+        backup_file = safe_path(ROOT / 'logs', 'resources/backups/' + backup_name)
+        write_json(backup_file, remote)
     connection.rollback()
     try:
         if kind == 'magic':
@@ -685,7 +686,7 @@ def publish(connection, config, file, compiled=None):
             if not item or item.get('compileJs') != bundle['compileJs'] or item.get('compileCss') != bundle['compileCss']:
                 raise ValueError('Low-code runtime bundle verification failed')
     except Exception as exc:
-        raise ValueError('Database saved, runtime verification incomplete. Inspect ignored backup and refresh: '
+        raise ValueError('Database saved, runtime verification incomplete. Inspect the resource and refresh: '
                          + type(exc).__name__) from None
     entry['baseSha256'] = digest(local)
     write_json(ROOT / kind / '.manifest.json', manifest)
@@ -920,9 +921,12 @@ def main():
     p.add_argument('--config', type=Path, default=PRIVATE_CONFIG)
     p.add_argument('--file', action='append')
     p.add_argument('--compiled', type=Path)
+    p.add_argument('--no-backup', action='store_true', help='Skip the local resource backup only when the user explicitly requests it')
     p.add_argument('--apply', action='store_true')
     p.add_argument('--project', choices=['shared', 'haitong-data-pull'], default='shared')
     args = p.parse_args()
+    if args.no_backup and (args.command != 'publish' or args.project != 'shared'):
+        p.error('--no-backup is supported only for shared-resource publication')
     if args.command == 'register' and (args.project != 'shared' or args.kind != 'magic'):
         p.error('register requires --kind magic and the shared project')
     if args.command == 'publish' and (not args.apply or not args.file or len(args.file) != 1):
@@ -937,7 +941,7 @@ def main():
         if args.command == 'register':
             result = register_magic(connection, config, args.file, args.apply)
         elif args.command == 'publish':
-            result = publish(connection, config, args.file[0], args.compiled)
+            result = publish(connection, config, args.file[0], args.compiled, backup=not args.no_backup)
         else:
             kinds = ['magic', 'lowcode'] if args.kind == 'all' else [args.kind]
             result = [pull(connection, k) if args.command == 'pull' else status(connection, k, args.file)

@@ -37,7 +37,6 @@
           <h5 @click="openSearchCenter">智能搜索中心</h5>
           <h5 @click="open('/graph/datasets')">知识服务中心</h5>
           <h5 @click="open('/visualization/screens')">数据可视化中心</h5>
-          <h5 @click="open('/ai/robots')">人工智能中心</h5>
         </div>
       </div>
       <div class="grid">
