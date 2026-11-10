@@ -514,6 +514,13 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
+		<!-- Metastore links ValidWriteIdList/ValidTxnList from this artifact at runtime.
+		     It is not supplied by hive-common; keep the same MRS release as the client. -->
+		<dependency>
+			<groupId>org.apache.hive</groupId>
+			<artifactId>hive-storage-api</artifactId>
+			<version>${hive.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>org.apache.hive</groupId>
 			<artifactId>hive-standalone-metastore</artifactId>
