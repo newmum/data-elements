@@ -97,7 +97,7 @@ Windows 本地启动使用 `tools/start-local-backend.ps1`，默认读取仓库�
 | NiFi | `https://14.103.233.56:8443`，沿用该节点既有认证与证书策略 |
 | 海通服务入口 | `https://14.103.233.56/haitong-api`；本模板未配置独立登记同步密钥，不能用业务密钥替代 |
 
-`chengtian-14.yml` 中的密码和密钥为无明文默认值的环境变量引用，实际值保存在工程外 `local-runtime.private.json.environment`。默认 `start-data-elements.cmd` 使用这份私有运行配置启动本机 8088；本次切换前的运行配置另存为 `~/.codex/private/data-elements/local-runtime-before-public-14.private.json`。本机已关闭共享 Nacos 的服务注册，以及自动索引初始化和 NiFi 后台监控，保留主动操作能力；上传、存储、日志路径使用本仓库本地目录。显式使用 `-Build`、IDE 或自定义连接参数启动时，也必须装载这份完整配置及其私有环境，不能沿用脚本旧连接参数或依赖它们覆盖公网配置。
+`chengtian-14.yml` 中的密码和密钥为无明文默认值的环境变量引用，实际值保存在工程外 `local-runtime.private.json.environment`。本机 14 环境私有运行配置保存在该文件；86 环境私有运行配置保存在 `~/.codex/private/data-elements/local-runtime-before-public-14.private.json`。默认启动通过 `db/nacos/local.properties` 选择环境及对应私有文件；该选择不代表当前正在运行的进程已经切换。本机 14 环境已关闭共享 Nacos 的服务注册，以及自动索引初始化和 NiFi 后台监控，保留主动操作能力；上传、存储、日志路径使用本仓库本地目录。显式使用 `-Build`、IDE 或自定义连接参数启动时，也必须装载这份完整配置及其私有环境，不能沿用脚本旧连接参数或依赖它们覆盖公网配置。
 
 当前演示控制库为 55 张表，四个演示租户库各 177 张；四库包含行业统一基线的 176 张表，并保留一张磐高历史同步表。完整结构版本源仍区分原开发环境与 `db/environments/demo/`；演示环境资源与后端版本须分别核对，结构升级不代表 Magic、低代码或 Java 已同步。Nacos Java SDK 的实际配置读取、主平台健康、真实登录和当前租户均须验证；仅 TCP 端口连通不能证明断开 VPN 后可用。
 
@@ -343,7 +343,7 @@ python tools/export-db.py --project haitong-data-pull
 | `export-db.py` | 只读导出平台五库及私有配置中独立工程库的完整结构；`--project haitong-data-pull` 只更新独立海通库及其清单条目，不执行数据库变更 |
 | `check-db.py` | 只读校验所有行业租户与 `baseline_ga` 的表集合、列、主键、索引和外键列；按达梦原生语义识别类型、生成列和自动更新时间，差异返回失败 |
 | `kingbase-db.py` | 澄天 MySQL 到 `baseline_ct.public` 的显式迁移：计划、创建空库、流式复制、原生结构完成、类型化内容摘要校验与停机后的目标暂存库增量收敛；恢复数据只保存到仓库外受限目录 |
-| `start-local-backend.ps1` | 从工程外受限配置启动已验证运行包；根目录 `start-data-elements.cmd` 默认也读取同一份 `local-runtime.private.json`，提供前台日志及登录接口就绪检查 |
+| `start-local-backend.ps1` | 从工程外受限配置启动已验证运行包；根目录 `start-data-elements.cmd` 按 `db/nacos/local.properties` 选择受限配置，提供前台日志及登录接口就绪检查 |
 | `audit-api.py` | 只读整理 Magic HTTP 接口的静态、有限模板及内部依赖引用；可加入受限的当前编译代码、菜单、表单、服务绑定和运行 Java 上下文，报告只写根 `logs/`，不自动删除 |
 | `tests/test_resource_sync.py` | 检查资源身份、路径、并发修改、凭据脱敏和发布保护 |
 | `tests/test_schema_gate.py` | 检查同数量不同表、额外唯一索引、主键变化、错误租户默认值与 Magic 断链/路径漂移的拦截 |

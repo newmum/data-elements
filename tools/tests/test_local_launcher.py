@@ -36,7 +36,7 @@ class LocalLauncherTest(unittest.TestCase):
         # The stub replaces the private launcher only inside this disposable workspace.
         # Process inspection, the health request and waiting are intercepted in this child shell.
         (self.workspace / 'tools' / 'start-local-backend.ps1').write_text('''
-param([string]$ConfigPath, [switch]$Restart)
+param([string]$ConfigPath, [switch]$Restart, [hashtable]$NacosSettings = @{})
 function global:Get-Process {
     param([int]$Id, [string]$ErrorAction)
     if ($Id -ne 54321) { throw 'Unexpected process' }
@@ -53,7 +53,7 @@ function global:Wait-Process {
     param([int]$Id, [string]$ErrorAction)
     @{waitedFor=$Id} | ConvertTo-Json -Compress
 }
-@{configPath=$ConfigPath; restart=[bool]$Restart} | ConvertTo-Json -Compress |
+@{configPath=$ConfigPath; restart=[bool]$Restart; nacos=$NacosSettings} | ConvertTo-Json -Compress |
     Set-Content -LiteralPath (Join-Path $PSScriptRoot 'delegation.json') -Encoding utf8
 @{pid=54321; port=18088} | ConvertTo-Json -Compress
 ''', encoding='utf-8')
@@ -76,6 +76,20 @@ function global:Wait-Process {
         actual = json.loads(self.delegation.read_text(encoding='utf-8-sig'))
         self.assertEqual(path, Path(actual['configPath']))
         self.assertEqual(restart, actual['restart'])
+
+    def test_editable_nacos_selection_overrides_private_address(self):
+        settings = self.workspace / 'db/nacos/local.properties'
+        settings.parent.mkdir(parents=True)
+        settings.write_text('NACOS_HOST=192.168.175.86\nNACOS_PORT=8848\n'
+                            'NACOS_NAMESPACE=data-element\n'
+                            'NACOS_CONFIG_IMPORTS=nacos:data-element_ct.yml?group=DEFAULT_GROUP\n'
+                            'RUNTIME_CONFIG_FILE=selected.private.json\n', encoding='utf-8')
+        selected = self.profile / '.codex/private/data-elements/selected.private.json'
+        self.assert_delegated(selected, True, '-Restart')
+        actual = json.loads(self.delegation.read_text(encoding='utf-8-sig'))
+        self.assertEqual('192.168.175.86', actual['nacos']['NACOS_HOST'])
+        self.assertEqual('data-element', actual['nacos']['NACOS_NAMESPACE'])
+        self.assertEqual('nacos:data-element_ct.yml?group=DEFAULT_GROUP', actual['nacos']['NACOS_CONFIG_IMPORTS'])
 
     def test_default_private_configuration_and_restart_are_forwarded(self):
         default = self.profile / '.codex/private/data-elements/local-runtime.private.json'

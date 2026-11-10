@@ -60,7 +60,7 @@
 .\start-data-elements.cmd
 ```
 
-该入口在工程外 `%USERPROFILE%/.codex/private/data-elements/local-runtime.private.json` 存在且未传显式构建或环境参数时，读取其中的环境变量和 Java 路径，运行 `.runtime/data-element-runtime.jar`，保留 `NACOS_CONFIG_IMPORTS` 与 `SPRING_APPLICATION_JSON`。当前本机从内网 Nacos `192.168.175.86:8848`、命名空间 `data-element` 导入 `data-element_ct.yml`，仅澄天连接 `baseline_ct.public`；其他环境使用各自受限配置。入口不会用 `target/` 中的旧包覆盖已验证运行包。可用 `-RuntimeConfigPath` 指定另一份工程外配置；直接调用 `tools/start-local-backend.ps1` 时参数名为 `-ConfigPath`。
+普通启动读取 `db/nacos/local.properties` 的 Nacos 地址、命名空间和 Data ID；该文件同时指定工程外私有运行配置文件名，由私有文件提供对应环境的凭据和 Java 路径。修改文件中的五项即可切换 86 或 14，文件末尾列出了 14 的取值；然后执行 `.\start-data-elements.cmd -Restart`。启动时会打印实际选择。已有服务需要重启才会生效，切换前会检查 Nacos HTTP 响应，无法访问时保留原进程。切换会改变整套本地租户及依赖配置，并非只切换单个租户；实际生效还须检查日志、登录和租户路由。私有资源工具的 `resources.local.json` 不会自动切换，需在目标可访问时使用 `tools/configure-resources.py` 同步。`-RuntimeConfigPath` 显式指定私有配置时不使用选择文件。入口运行 `.runtime/data-element-runtime.jar`，不会用旧 `target/` 包覆盖它。
 
 `-Build` 明确要求重新打包并替换运行包；`-JarPath` 明确选择其他包。需要其他环境时可显式传入 `-NacosHost`，并在该进程中提供相应 Nacos 凭据、命名空间和配置导入。直接执行 `java -jar` 或以下 Maven 命令不会自动读取上述受限 JSON，需要先设置同一套环境变量；不要依赖 JAR 的历史环境默认值。
 
@@ -95,7 +95,7 @@ NACOS_CONFIG_IMPORTS=nacos:data-elements.yml?group=DEFAULT_GROUP&refreshable=tru
 
 ### 未部署 Nacos 时启动
 
-`db/nacos/` 统一维护配置版本源：`data-element.yml` 和 `data-element-dev.yml` 是原基础、开发配置，`data-element_ct.yml` 保留86金仓环境；当前默认完整配置为 `chengtian-14.yml`，连接14公网环境的控制库、四个演示租户库及中间件。`application-no-nacos.yml` 是无 Nacos 启动覆盖：关闭配置拉取、导入检查、服务发现和自动注册。它与完整业务配置一起加载，数据库、Redis、ES、Magic、行业数据库路由等参数复用现有完整配置，不另维护一份重复的业务参数。服务器即使仍运行 Nacos，本地也可使用该模式独立启动。
+`db/nacos/` 统一维护配置版本源：`data-element.yml` 和 `data-element-dev.yml` 是原基础、开发配置，`data-element_ct.yml` 保留86金仓环境；无 Nacos 模式默认完整配置为 `chengtian-14.yml`，连接14公网环境的控制库、四个演示租户库及中间件。`application-no-nacos.yml` 是无 Nacos 启动覆盖：关闭配置拉取、导入检查、服务发现和自动注册。它与完整业务配置一起加载，数据库、Redis、ES、Magic、行业数据库路由等参数复用现有完整配置，不另维护一份重复的业务参数。服务器即使仍运行 Nacos，本地也可使用该模式独立启动。
 
 在仓库根目录执行：
 

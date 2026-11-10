@@ -35,11 +35,36 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Keep local environment selection in one editable, non-secret file. Explicit
+# RuntimeConfigPath continues to select the caller's complete private config.
+$localNacos = $null
+$localNacosPath = Join-Path $PSScriptRoot 'db/nacos/local.properties'
 $privateRuntimeArguments = @('Restart','NoLiveLog','StartupTimeoutSeconds','RuntimeConfigPath')
+if (-not $WithoutNacos -and -not $PSBoundParameters.ContainsKey('RuntimeConfigPath') -and
+    @($PSBoundParameters.Keys | Where-Object { $_ -notin $privateRuntimeArguments }).Count -eq 0 -and
+    (Test-Path -LiteralPath $localNacosPath -PathType Leaf)) {
+    $localNacos = Get-Content -LiteralPath $localNacosPath -Raw -Encoding UTF8 | ConvertFrom-StringData
+    foreach ($key in @('NACOS_HOST','NACOS_PORT','NACOS_NAMESPACE','NACOS_CONFIG_IMPORTS','RUNTIME_CONFIG_FILE')) {
+        if ([string]::IsNullOrWhiteSpace($localNacos[$key])) { throw "Missing $key in $localNacosPath" }
+    }
+    if ([IO.Path]::GetFileName($localNacos['RUNTIME_CONFIG_FILE']) -ne $localNacos['RUNTIME_CONFIG_FILE']) {
+        throw 'RUNTIME_CONFIG_FILE must be a file name in the private configuration directory'
+    }
+    $RuntimeConfigPath = Join-Path (Join-Path $env:USERPROFILE '.codex/private/data-elements') $localNacos['RUNTIME_CONFIG_FILE']
+    if (!(Test-Path -LiteralPath $RuntimeConfigPath -PathType Leaf)) { throw 'Selected private runtime configuration is unavailable' }
+}
+
 $usesPrivateRuntime = (Test-Path -LiteralPath $RuntimeConfigPath -PathType Leaf) -and
     @($PSBoundParameters.Keys | Where-Object { $_ -notin $privateRuntimeArguments }).Count -eq 0
 if ($WithoutNacos -or $usesPrivateRuntime) {
     $runtimeParameters = @{ConfigPath=$RuntimeConfigPath; Restart=$Restart}
+    if ($localNacos) {
+        $runtimeParameters.NacosSettings = @{}
+        foreach ($key in @('NACOS_HOST','NACOS_PORT','NACOS_NAMESPACE','NACOS_CONFIG_IMPORTS')) {
+            $runtimeParameters.NacosSettings[$key] = $localNacos[$key]
+        }
+        Write-Host "[start-data-elements] Nacos: $($localNacos.NACOS_HOST):$($localNacos.NACOS_PORT), namespace=$($localNacos.NACOS_NAMESPACE), import=$($localNacos.NACOS_CONFIG_IMPORTS)"
+    }
     if ($WithoutNacos) {
         if ($Build) { throw 'Build the backend first, then use -WithoutNacos with the resulting JAR' }
         $runtimeParameters += @{WithoutNacos=$true; LocalConfigPath=$LocalConfigPath; LocalEnvironmentPath=$LocalEnvironmentPath;

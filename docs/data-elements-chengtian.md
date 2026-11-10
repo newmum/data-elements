@@ -41,7 +41,7 @@ Nacos 新增完整配置 `data-element_ct.yml`（Namespace `data-element`，Grou
 NACOS_CONFIG_IMPORTS=optional:nacos:data-element_ct.yml?group=DEFAULT_GROUP&refreshable=true
 ```
 
-本机标准 `local-runtime.private.json` 保存该导入和必要受限环境。根 `start-data-elements.cmd`/PowerShell 默认启动及仅传 `-Restart` 的调用复用这份受限运行配置；显式传入构建、JAR、Nacos profile 等参数时使用原通用启动分支，须同时明确专用 import 和所需环境。后端使用既有持久身份加密密钥，不生成替代密钥。金仓 JDBC 连接固定 `public` 和空字符串保留设置，具体类型及 SQL 适配见[数据库原生表示](data-elements.md#database-schema)。
+本机通过 `db/nacos/local.properties` 选择该导入以及对应的工程外受限环境。根 `start-data-elements.cmd`/PowerShell 默认启动及仅传 `-Restart` 的调用使用所选配置；显式传入构建、JAR、Nacos profile 等参数时使用原通用启动分支，须同时明确专用 import 和所需环境。后端使用既有持久身份加密密钥，不生成替代密钥。金仓 JDBC 连接固定 `public` 和空字符串保留设置，具体类型及 SQL 适配见[数据库原生表示](data-elements.md#database-schema)。
 
 迁移按以下顺序执行：
 

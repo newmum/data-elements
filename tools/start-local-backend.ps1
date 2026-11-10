@@ -7,7 +7,8 @@ param(
     [string]$JarPath = '',
     [string]$JavaExe = '',
     [int]$Port = 8088,
-    [switch]$ValidateOnly
+    [switch]$ValidateOnly,
+    [hashtable]$NacosSettings = @{}
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,6 +22,12 @@ $taskConfig = if (Test-Path -LiteralPath $taskPrivatePath -PathType Leaf) {
 } elseif ($WithoutNacos) {
     [pscustomobject]@{ environment = [pscustomobject]@{} }
 } else { throw 'Private runtime configuration is unavailable' }
+foreach ($taskSetting in $NacosSettings.GetEnumerator()) {
+    if ($taskSetting.Key -notin @('NACOS_HOST','NACOS_PORT','NACOS_NAMESPACE','NACOS_CONFIG_IMPORTS')) {
+        throw 'Unexpected Nacos setting'
+    }
+    $taskConfig.environment | Add-Member -NotePropertyName $taskSetting.Key -NotePropertyValue ([string]$taskSetting.Value) -Force
+}
 $taskRuntimeJar = Join-Path $taskRepo '.runtime/data-element-runtime.jar'
 $taskLogRoot = Join-Path $taskRepo 'logs/backend/local-runtime'
 if ($WithoutNacos) {
@@ -146,6 +153,18 @@ catch { throw 'IDAAS transport key must be Base64 encoding of exactly 32 bytes' 
 if ($taskKeyBytes.Length -ne 32) { throw 'IDAAS transport key must be Base64 encoding of exactly 32 bytes' }
 [Environment]::SetEnvironmentVariable('IDAAS_TRANSPORT_KEY', $taskTransportKey, 'Process')
 # Validate configuration before interrupting an existing backend.
+if ($Restart -and $taskOwners.Count -gt 0 -and $NacosSettings.Count -gt 0) {
+    $taskNacosUrl = 'http://' + $taskConfig.environment.NACOS_HOST + ':' + $taskConfig.environment.NACOS_PORT + '/nacos/'
+    try {
+        $taskRequest = [Net.HttpWebRequest]::Create($taskNacosUrl)
+        $taskRequest.Timeout = 5000
+        $taskResponse = $taskRequest.GetResponse()
+        $taskResponse.Close()
+    } catch [Net.WebException] {
+        if ($_.Exception.Response) { $_.Exception.Response.Close() }
+        else { throw "Nacos HTTP is unreachable at $taskNacosUrl; current backend was left running" }
+    }
+}
 foreach ($taskOwner in $taskOwners) {
     Stop-Process -Id $taskOwner -ErrorAction Stop
     Wait-Process -Id $taskOwner -ErrorAction SilentlyContinue -Timeout 20
