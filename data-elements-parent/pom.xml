@@ -73,6 +73,11 @@
 	</properties>
 
 	<repositories>
+		<!-- Vendor binaries are supplied separately in the root local Maven repository. -->
+		<repository>
+			<id>project-vendor-libs</id>
+			<url>file://${project.basedir}/../libs/maven</url>
+		</repository>
 		<repository>
 			<id>huaweicloud-sdk</id>
 			<url>https://repo.huaweicloud.com/repository/maven/huaweicloudsdk/</url>
@@ -325,7 +330,7 @@
 			<version>${postgresql.version}</version>
 		</dependency>
 
-		<!-- Install the reviewed GaussDB vendor pair once using the Maven-install option in tools/install-gaussdb-drivers.py. -->
+		<!-- The reviewed vendor pair is supplied via libs/maven or a controlled Maven repository. -->
 		<dependency>
 			<groupId>com.huawei.gaussdb</groupId>
 			<artifactId>gaussdbjdbc</artifactId>

@@ -27,7 +27,7 @@ class IncrementalFieldErrorAdviceTest {
     @Test
     void scopedRejectionKeepsHttpStatusAheadOfGlobalCatchAll() throws Exception {
         var controller = mock(PipelineController.class);
-        when(controller.update(eq("task"), any(), any())).thenThrow(
+        when(controller.update(eq("task"), any(), isNull(), isNull())).thenThrow(
                 new ResponseStatusException(HttpStatus.CONFLICT, "来源节点缺少主增量字段"));
         var mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler(), new IncrementalFieldErrorAdvice()).build();
@@ -36,5 +36,6 @@ class IncrementalFieldErrorAdviceTest {
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value(409))
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.msg").value("来源节点缺少主增量字段"));
+        verify(controller).update(eq("task"), any(), isNull(), isNull());
     }
 }

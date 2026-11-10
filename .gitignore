@@ -9,6 +9,8 @@
 data-elements-parent/target/
 data-elements-parent/build/
 .runtime/
+# Vendor JDBC binaries are supplied separately from source control.
+/libs/**/*.jar
 !data-elements-parent/src/main/**/target/
 !data-elements-parent/src/test/**/target/
 !data-elements-parent/src/main/**/build/
