@@ -3507,19 +3507,16 @@ public class DslCompiler {
                 plan.put("inputField", firstNonBlank(stringConfig(cfg, "partitionInputField"), String.valueOf(plan.get("field"))));
                 String database = firstNonBlankStatic(configText(cfg, "database"), "default");
                 String table = configText(cfg, "table");
-                Map<String, Object> storage;
-                try { storage = hiveModule.partitionLayout(database, table); }
+                try { hiveModule.partitionLayout(database, table); }
                 catch (HiveModule.PartitionLayoutException mismatch) { throw new IllegalStateException(mismatch.getMessage(), mismatch); }
                 catch (Exception failure) { throw new IllegalStateException("无法核验Hive分区结构、文本格式和实际目录，请检查目标元数据访问", failure); }
-                List<?> present = storage.get("partitions") instanceof List<?> values ? values : List.of();
+                // Metastore locations are authoritative. SHOW PARTITIONS display text is not
+                // a second contract and must not reject existing partitions before the batch read.
                 List<String> buckets = ((List<?>) plan.get("partitions")).stream()
                         .map(part -> String.valueOf(((Map<?, ?>) part).get("bucket"))).toList();
-                Set<?> actual = new HashSet<>(present);
-                if (buckets.stream().anyMatch(bucket -> !actual.contains("ods_partition=" + bucket))) {
-                    throw new IllegalStateException("Hive目标缺少已配置分区，请先完成物化建表或分区注册");
-                }
                 Map<String, String> locations;
                 try { locations = hiveModule.partitionLocations(database, table, buckets); }
+                catch (IllegalArgumentException mismatch) { throw new IllegalStateException(mismatch.getMessage(), mismatch); }
                 catch (Exception failure) { throw new IllegalStateException("无法批量核验Hive分区实际Location，请检查MRS客户端Metastore配置及权限", failure); }
                 if (locations == null || buckets.stream().anyMatch(bucket -> locations.get(bucket) == null || locations.get(bucket).isBlank())) {
                     throw new IllegalStateException("Hive目标部分分区实际Location缺失，不能生成不完整写入链路");

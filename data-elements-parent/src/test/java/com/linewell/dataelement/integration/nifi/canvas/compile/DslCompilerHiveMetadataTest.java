@@ -370,7 +370,7 @@ class DslCompilerHiveMetadataTest {
             Map<String, String> locations = new java.util.LinkedHashMap<>();
             for (String bucket : buckets) locations.put(bucket, "hdfs://cluster/custom/" + bucket);
             when(hive.partitionLayout("analytics", "events")).thenReturn(Map.of("location", "hdfs://cluster/custom",
-                    "partitions", buckets.stream().map(bucket -> "ods_partition=" + bucket).toList()));
+                    "partitions", List.of("ods_partition=unrelated_or_padded_display_value   ")));
             when(hive.partitionLocations("analytics", "events", buckets)).thenReturn(locations);
             Pipeline sinkOnly = partitionPipeline(count);
             var source = new Pipeline.Node("source", "source.mysql", "数据库来源", "source", 0, 0, Map.of("table", "source_events", "incrementalColumn", "updated_at"));
@@ -419,6 +419,19 @@ class DslCompilerHiveMetadataTest {
         assertThatThrownBy(() -> compiler.compile(partitionPipeline(20))).hasMessageContaining("ExecuteScript").hasMessageContaining("未创建流程");
         verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
         verifyNoInteractions(hive);
+    }
+
+    @Test
+    void missingPartitionLocationKeepsTheActualDatabaseTableAndBucketInTheError() throws Exception {
+        var nifi = mock(NifiClient.class);
+        var hive = mock(HiveModule.class);
+        var compiler = partitionCompiler(nifi, hive);
+        when(hive.partitionLayout("analytics", "events")).thenReturn(Map.of("location", "hdfs://cluster/events"));
+        String detail = "Hive目标表`analytics`.`events`缺少可读取的分区Location：p_1；请核对分区注册及Metastore权限";
+        when(hive.partitionLocations(eq("analytics"), eq("events"), anyList()))
+                .thenThrow(new IllegalArgumentException(detail));
+        assertThatThrownBy(() -> compiler.compile(partitionPipeline(2))).hasMessage(detail);
+        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
     }
 
     @Test void incompleteLocationsFailBeforeAnyNativeMutation() throws Exception {

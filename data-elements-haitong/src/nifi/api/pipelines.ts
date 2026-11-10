@@ -146,6 +146,7 @@ export interface PipelineRuntimeSummary {
 }
 
 export interface Pipeline {
+  designHash?: string;
   id: string;
   name: string;
   description?: string | null;
@@ -228,7 +229,8 @@ export function useSavePipeline() {
           const stored = qc.getQueryData<Pipeline>(['pipeline', p.id, revision]);
           if (stored && stored.name === p.name && sameDesignDsl(stored.dsl, dsl)) return stored;
           const saved = (await api.post<Pipeline>(`/pipelines/${p.id}`, p, {
-            params: stored?.updatedAt ? { expectedUpdatedAt: stored.updatedAt } : undefined,
+            params: stored?.designHash ? { expectedDesignHash: stored.designHash }
+              : stored?.updatedAt ? { expectedUpdatedAt: stored.updatedAt } : undefined,
           })).data;
           if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开画布');
           if (!preservesIncrementalFields(dsl, saved.dsl)) throw new Error('保存响应改变了主增量字段，画布配置已保留，请核对后端版本后重试');

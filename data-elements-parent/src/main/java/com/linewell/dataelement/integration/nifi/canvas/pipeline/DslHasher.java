@@ -55,6 +55,30 @@ public final class DslHasher {
         }
     }
 
+    /** Design-only revision: lifecycle, native component IDs and deployment metadata are excluded. */
+    public static String designHash(Pipeline pipeline) {
+        Map<String, Object> design = new LinkedHashMap<>();
+        design.put("name", pipeline.name());
+        design.put("description", pipeline.description());
+        Pipeline.Dsl dsl = pipeline.dsl();
+        if (dsl != null) {
+            Map<String, Object> graph = new LinkedHashMap<>();
+            graph.put("version", dsl.version());
+            graph.put("nodes", dsl.nodes() == null ? List.of() : canonicalNodes(dsl.nodes(), true));
+            graph.put("edges", dsl.edges() == null ? List.of() : canonicalEdges(dsl.edges()).stream().map(edge -> {
+                // Generated connection IDs and null/empty default outlets do not change the design.
+                if ("".equals(edge.get("outlet"))) edge.put("outlet", null);
+                return edge;
+            }).toList());
+            design.put("dsl", graph);
+        } else design.put("dsl", null);
+        try {
+            return sha256(SORTED.writeValueAsBytes(design));
+        } catch (JsonProcessingException | NoSuchAlgorithmException e) {
+            throw new IllegalStateException("Design hash failed", e);
+        }
+    }
+
     /**
      * Produces a fixed-width deployment fingerprint for a DSL/compiler pair.
      * Database storage reserves 64 characters for a SHA-256 hex digest, so the
@@ -114,6 +138,10 @@ public final class DslHasher {
     }
 
     private static List<Map<String, Object>> canonicalNodes(List<Pipeline.Node> nodes) {
+        return canonicalNodes(nodes, false);
+    }
+
+    private static List<Map<String, Object>> canonicalNodes(List<Pipeline.Node> nodes, boolean includeLayout) {
         return nodes.stream()
                 .sorted(Comparator.comparing(Pipeline.Node::id))
                 .map(n -> {
@@ -122,7 +150,11 @@ public final class DslHasher {
                     m.put("manifestKey", n.manifestKey());
                     m.put("label", n.label());
                     m.put("category", n.category());
-                    // Position deliberately excluded — moving a node should NOT trigger redeploy.
+                    // Position belongs to saved designs, but moving a node does not trigger redeploy.
+                    if (includeLayout) {
+                        m.put("x", n.x());
+                        m.put("y", n.y());
+                    }
                     m.put("config", n.config() == null ? Map.of() : new TreeMap<>(n.config()));
                     return m;
                 })

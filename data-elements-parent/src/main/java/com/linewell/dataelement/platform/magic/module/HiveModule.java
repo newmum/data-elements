@@ -225,9 +225,9 @@ public class HiveModule {
             if(!isCtrlADescribeValue(effectiveDelimiter))throw new PartitionLayoutException("Hive目标表"+qualified
                     +"的字段分隔符不匹配：实际 "+delimiterProperty+"="+describeMetadataValue(effectiveDelimiter)
                     +"；分区Writer要求Ctrl-A（U+0001）。请核对目标表SerDe配置与写入格式，不能直接改写已有数据的分隔符");
-            List<String> values=new ArrayList<>();
-            try(var rs=statement.executeQuery("SHOW PARTITIONS "+qualified)){while(rs.next()){if(values.size()==2000)throw new IllegalArgumentException("Hive分区超过2000个，不能截断核验");values.add(rs.getString(1));}}
-            return Map.of("location",location,"partitions",values);
+            // The selected partitions and their actual directories are read together by
+            // partitionLocations. Avoid enumerating unrelated partitions through HiveServer2.
+            return Map.of("location",location);
         }
     }
 
@@ -281,7 +281,9 @@ public class HiveModule {
                 if(!buckets.contains(bucket))throw new IllegalArgumentException("Metastore返回非本次目标分区");
                 locations.put(bucket,partition.getSd().getLocation());
             }
-            if(locations.size()!=new java.util.HashSet<>(buckets).size())throw new IllegalArgumentException("Hive目标部分分区不存在或无权读取，不能猜测目录");
+            var missing=buckets.stream().filter(bucket -> !locations.containsKey(bucket)).toList();
+            if(!missing.isEmpty())throw new IllegalArgumentException("Hive目标表"+hiveIdentifier(database)+"."+hiveIdentifier(table)
+                    +"缺少可读取的分区Location："+String.join(", ",missing)+"；请核对分区注册及Metastore权限");
             return locations;
         } finally {client.close();}
     }

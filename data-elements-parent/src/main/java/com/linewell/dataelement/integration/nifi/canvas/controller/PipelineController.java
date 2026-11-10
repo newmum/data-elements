@@ -459,20 +459,25 @@ public class PipelineController {
     @SerializedNifiMutation
     @Transactional
     public ResponseEntity<Pipeline> update(@PathVariable String id, @RequestBody Pipeline body,
-                                           @RequestParam(required=false) Long expectedUpdatedAt) {
+                                           @RequestParam(required=false) Long expectedUpdatedAt,
+                                           @RequestParam(required=false) String expectedDesignHash) {
         Pipeline current = repo.findById(id).orElse(null);
         if (current == null) return ResponseEntity.notFound().build();
         final Pipeline prepared = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(validateIncrementalFields(body));
-        if (expectedUpdatedAt != null) {
-            return ResponseEntity.ok(repo.update(id, cur -> {
-                if (!java.util.Objects.equals(cur.updatedAt(),expectedUpdatedAt))
-                    throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,"加工图已被其他入口修改，请重新加载后再保存");
-                Pipeline next = new Pipeline(cur.id(),prepared.name(),prepared.description(),cur.createdAt(),cur.updatedAt(),prepared.dsl(),cur.nifiProcessGroupId(),cur.status(),cur.lastDeployedHash(),cur.lastDeployedAt(),cur.lastStoppedAt(),cur.nodeMapping(),cur.lastBulletinId());
-                if(mappingProjections!=null)mappingProjections.persist(next);
-                return next;
-            }));
-        }
-        return ResponseEntity.ok(saveDesign(current, prepared));
+        return ResponseEntity.ok(repo.update(id, cur -> {
+            // Native/runtime observations change updatedAt without changing the editable design.
+            // New clients compare the design they loaded; legacy timestamp callers retain their check.
+            boolean conflict = expectedDesignHash != null
+                    ? !Objects.equals(cur.designHash(), expectedDesignHash)
+                    : expectedUpdatedAt != null && !Objects.equals(cur.updatedAt(), expectedUpdatedAt);
+            if (conflict) throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT, "平台画布设计已被其他入口修改，请重新加载后再保存；NiFi原生修改不影响此校验");
+            Pipeline next = new Pipeline(cur.id(), prepared.name(), prepared.description(),
+                    cur.createdAt(), cur.updatedAt(), prepared.dsl(), cur.nifiProcessGroupId(), cur.status(),
+                    cur.lastDeployedHash(), cur.lastDeployedAt(), cur.lastStoppedAt(), cur.nodeMapping(), cur.lastBulletinId());
+            if (mappingProjections != null) mappingProjections.persist(next);
+            return next;
+        }));
     }
 
     /** Template generation initializes extraction fields once; saved/manual choices are never re-read or replaced. */
@@ -501,7 +506,12 @@ public class PipelineController {
         });
     }
 
-    // Compatibility for existing in-process callers; HTTP clients may send an optimistic timestamp.
+    // Compatibility for existing in-process callers and timestamp-only clients.
+    public ResponseEntity<Pipeline> update(String id, Pipeline body, Long expectedUpdatedAt) {
+        return update(id, body, expectedUpdatedAt, null);
+    }
+
+    // Compatibility for existing in-process callers; HTTP clients may send a design revision.
     public ResponseEntity<Pipeline> update(String id, Pipeline body) { return update(id,body,null); }
 
     private Pipeline findCatalogPipeline(String catalogTid) {

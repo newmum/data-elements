@@ -21,8 +21,8 @@ class HiveModulePartitionLayoutTest {
         var fixture = fixture("field.delim", delimiter, true, 20);
         var layout = fixture.hive.partitionLayout("warehouse", "events");
         assertThat(layout.get("location")).isEqualTo("hdfs://cluster/custom/events");
-        assertThat((List<?>) layout.get("partitions")).hasSize(20);
-        verify(fixture.statement, times(3)).executeQuery(anyString());
+        assertThat(layout).doesNotContainKey("partitions");
+        verify(fixture.statement, times(2)).executeQuery(anyString());
         verify(fixture.connection).close();
     }
 
@@ -57,8 +57,9 @@ class HiveModulePartitionLayoutTest {
     void metadataQueryCountIsFixedForTwentyAndOneHundredPartitions() throws Exception {
         for (int count : List.of(20, 100)) {
             var fixture = fixture("field.delim", "\\u0001   ", true, count);
-            assertThat((List<?>) fixture.hive.partitionLayout("warehouse", "events").get("partitions")).hasSize(count);
-            verify(fixture.statement, times(3)).executeQuery(anyString());
+            fixture.hive.partitionLayout("warehouse", "events");
+            verify(fixture.statement, never()).executeQuery(startsWith("SHOW PARTITIONS"));
+            verify(fixture.statement, times(2)).executeQuery(anyString());
             verify(fixture.statement).setMaxRows(2001);
         }
     }

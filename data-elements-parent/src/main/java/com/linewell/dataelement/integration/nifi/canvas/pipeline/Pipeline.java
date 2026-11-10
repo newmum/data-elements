@@ -40,6 +40,11 @@ public record Pipeline(
         if (status == null) status = PipelineStatus.DRAFT;
     }
 
+    @com.fasterxml.jackson.annotation.JsonProperty("designHash")
+    public String designHash() {
+        return DslHasher.designHash(this);
+    }
+
     public record Dsl(int version, List<Node> nodes, List<Edge> edges) {
         @com.fasterxml.jackson.annotation.JsonCreator
         public static Dsl read(@com.fasterxml.jackson.annotation.JsonProperty("version") int version,

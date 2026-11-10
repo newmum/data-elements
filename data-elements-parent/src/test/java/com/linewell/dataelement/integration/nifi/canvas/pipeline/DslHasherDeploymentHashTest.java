@@ -11,6 +11,28 @@ import org.junit.jupiter.api.Test;
 
 class DslHasherDeploymentHashTest {
     @Test
+    void savedDesignRevisionIncludesConfigurationAndLayoutButNotMapOrNodeOrder() {
+        var first = new Pipeline.Node("a", "sink.jdbc", "目标", "sink", 0, 0, Map.of("table", "events", "schema", "public"));
+        var other = new Pipeline.Node("b", "sink.jdbc", "目标B", "sink", 100, 0, Map.of("table", "archive"));
+        var dsl = new Pipeline.Dsl(1, List.of(first, other), List.of(new Pipeline.Edge("browser-edge", "a", "b", null)));
+        var pipeline = new Pipeline("p", "设计", null, 1L, 1L, dsl, null, null, null, null, null, null, null);
+        var reordered = new Pipeline.Dsl(1, List.of(other, new Pipeline.Node("a", "sink.jdbc", "目标", "sink", 0, 0,
+                new java.util.LinkedHashMap<>(Map.of("schema", "public", "table", "events")))),
+                List.of(new Pipeline.Edge("server-edge", "a", "b", "")));
+        assertThat(pipeline.designHash()).isEqualTo(withDesign(pipeline, reordered).designHash());
+        var moved = new Pipeline.Dsl(1, List.of(new Pipeline.Node("a", "sink.jdbc", "目标", "sink", 10, 0, first.config()), other), dsl.edges());
+        assertThat(pipeline.designHash()).isNotEqualTo(withDesign(pipeline, moved).designHash());
+        var changed = new Pipeline.Dsl(1, List.of(new Pipeline.Node("a", "sink.jdbc", "目标", "sink", 0, 0,
+                Map.of("table", "different", "schema", "public")), other), dsl.edges());
+        assertThat(pipeline.designHash()).isNotEqualTo(withDesign(pipeline, changed).designHash());
+    }
+
+    private static Pipeline withDesign(Pipeline p, Pipeline.Dsl dsl) {
+        return new Pipeline(p.id(), p.name(), p.description(), p.createdAt(), p.updatedAt(), dsl,
+                p.nifiProcessGroupId(), p.status(), p.lastDeployedHash(), p.lastDeployedAt(), p.lastStoppedAt(), p.nodeMapping(), p.lastBulletinId());
+    }
+
+    @Test
     void directFileConsumptionInvalidatesOnlyAcknowledgedFileDeployments() throws Exception {
         String revision = DslHasher.CURRENT_COMPILER_REVISION;
         for (String key : List.of("source.ftp", "source.sftp")) {

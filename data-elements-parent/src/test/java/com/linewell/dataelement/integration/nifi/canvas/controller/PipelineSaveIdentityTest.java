@@ -83,6 +83,40 @@ class PipelineSaveIdentityTest {
     }
 
     @Test
+    void nativeRuntimeStatusChangeDoesNotBlockSavingTheLoadedDesign() throws Exception {
+        Pipeline loaded = pipeline("p1", "original-group", PipelineStatus.STOPPED);
+        Pipeline running = new Pipeline(loaded.id(), loaded.name(), loaded.description(), loaded.createdAt(), 99L,
+                loaded.dsl(), "native-group", PipelineStatus.RUNNING, "new-deploy-hash", 88L, 77L, null, 66L);
+        when(repo.findById("p1")).thenReturn(Optional.of(running));
+        when(repo.update(eq("p1"), any())).thenAnswer(i -> i.<UnaryOperator<Pipeline>>getArgument(1).apply(running));
+        Pipeline edited = new Pipeline(loaded.id(), "新名称", loaded.description(), loaded.createdAt(), loaded.updatedAt(),
+                loaded.dsl(), null, null, null, null, null, null, null);
+        Pipeline saved = controller.update("p1", edited, loaded.updatedAt(), loaded.designHash()).getBody();
+        assertThat(saved.name()).isEqualTo("新名称");
+        assertThat(saved.status()).isEqualTo(PipelineStatus.RUNNING);
+        assertThat(saved.nifiProcessGroupId()).isEqualTo("native-group");
+        assertThat(saved.lastDeployedHash()).isEqualTo("new-deploy-hash");
+        // The server revision is present on the wire, including task-chain embedded pipelines.
+        assertThat(new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(running)).path("designHash").asText())
+                .isEqualTo(loaded.designHash());
+        verifyNoInteractions(nifi);
+    }
+
+    @Test
+    void concurrentPlatformDesignChangeStillRejectsAnOldDesignRevision() {
+        Pipeline loaded = pipeline("p1", "original-group", PipelineStatus.STOPPED);
+        Pipeline changed = new Pipeline(loaded.id(), "其他入口的新名称", loaded.description(), loaded.createdAt(), 99L,
+                loaded.dsl(), loaded.nifiProcessGroupId(), loaded.status(), null, null, null, null, null);
+        when(repo.findById("p1")).thenReturn(Optional.of(changed));
+        when(repo.update(eq("p1"), any())).thenAnswer(i -> i.<UnaryOperator<Pipeline>>getArgument(1).apply(changed));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.update("p1", loaded, null, loaded.designHash()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("平台画布设计");
+        verifyNoInteractions(nifi);
+    }
+
+    @Test
     void collectedTableDoesNotRequireACompiledAssetOrSearchIndex() {
         try (var scope = TenantContext.use("tenant")) {
             when(jdbc.queryForList(contains("from db_table_t"), eq("tenant"), eq("table1"), eq("tenant")))
