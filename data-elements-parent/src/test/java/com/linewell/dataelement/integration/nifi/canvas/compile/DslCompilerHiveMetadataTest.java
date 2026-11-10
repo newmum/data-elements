@@ -337,112 +337,98 @@ class DslCompilerHiveMetadataTest {
                 anyMap(), nullable(String.class), nullable(String.class));
     }
 
-    @Test
-    void partitionStorageMismatchKeepsSpecificTargetAndValueInsteadOfReportingConnectionFailure() throws Exception {
-        HiveModule hive = mock(HiveModule.class);
+    @ParameterizedTest
+    @ValueSource(ints = {20, 100})
+    void configuredPartitionsBuildTheOrdinaryTemplateWithoutMetastoreAccess(int count) throws Exception {
         NifiClient nifi = mock(NifiClient.class);
-        DslCompiler compiler = partitionCompiler(nifi, hive);
-        String detail = "Hive目标表`analytics`.`events`的字段分隔符不匹配：实际 field.delim=9；分区Writer要求Ctrl-A（U+0001）";
-        when(hive.partitionLayout("analytics", "events")).thenThrow(new HiveModule.PartitionLayoutException(detail));
-        assertThatThrownBy(() -> compiler.compile(partitionPipeline(20)))
-                .hasMessage(detail).hasRootCauseInstanceOf(HiveModule.PartitionLayoutException.class);
-        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
-        verify(hive, never()).partitionLocations(anyString(), anyString(), anyList());
-        verify(nifi, never()).createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
-    }
-
-    @Test
-    void partitionMetadataConnectionErrorsKeepTheirDistinctAccessDiagnosis() throws Exception {
         HiveModule hive = mock(HiveModule.class);
-        DslCompiler compiler = partitionCompiler(mock(NifiClient.class), hive);
-        when(hive.partitionLayout("analytics", "events")).thenThrow(new java.sql.SQLException("metadata unavailable"));
-        assertThatThrownBy(() -> compiler.compile(partitionPipeline(20)))
-                .hasMessageContaining("请检查目标元数据访问").hasRootCauseInstanceOf(java.sql.SQLException.class);
+        DslCompiler compiler = partitionCompiler(nifi, hive);
+        // Reproduce the reported deployment environment: metadata is inaccessible.
+        when(hive.partitionLayout(anyString(), anyString())).thenThrow(new java.sql.SQLException("metadata unavailable"));
+        when(hive.partitionLocations(anyString(), anyString(), anyList()))
+                .thenThrow(new org.apache.thrift.transport.TTransportException("Socket is closed by peer."));
+        var sinkOnly = partitionPipeline(count);
+        var source = new Pipeline.Node("source", "source.mysql", "数据库来源", "source", 0, 0,
+                Map.of("table", "source_events", "incrementalColumn", "updated_at"));
+        var pipeline = new Pipeline("partition-test", "partition-test", null, null, null,
+                new Pipeline.Dsl(1, List.of(source, sinkOnly.dsl().nodes().getFirst()),
+                        List.of(new Pipeline.Edge("source-hive", "source", "sink", "default"))),
+                null, null, null, null, null, null, null);
+        var result = compiler.compile(pipeline);
+        var sink = result.nodes().get("sink");
+        assertThat(sink.processorIds).containsOnlyKeys("convert", "filename", "put");
+        assertThat(sink.inletProcessorId).isEqualTo(sink.processorIds.get("convert"));
+        verify(nifi).createConnection("pg", result.nodes().get("source").processorIds.get("execute"), "PROCESSOR",
+                sink.processorIds.get("convert"), "PROCESSOR", List.of("success"));
+        verify(nifi).createConnection("pg", sink.processorIds.get("convert"), "PROCESSOR",
+                sink.processorIds.get("filename"), "PROCESSOR", List.of("success"));
+        verify(nifi).createConnection("pg", sink.processorIds.get("filename"), "PROCESSOR",
+                sink.processorIds.get("put"), "PROCESSOR", List.of("success"));
+        verify(nifi, times(5)).createProcessor(eq("pg"), anyString(), anyString(), anyDouble(), anyDouble(),
+                anyMap(), nullable(String.class), nullable(String.class));
+        verify(nifi, never()).findProcessorType("ExecuteScript");
+        verify(hive, never()).partitionLayout(anyString(), anyString());
+        verify(hive, never()).partitionLocations(anyString(), anyString(), anyList());
+        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.captor();
+        verify(nifi).createProcessor(eq("pg"), eq("com.linewell.microservice.processor.hadoop.PutHwHDFS"),
+                anyString(), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
+        assertThat(properties.getValue()).containsEntry("Directory", "/user/hive/warehouse/analytics.db/events");
+        assertThat(pipeline.dsl().nodes().get(1).config().get("partitionPlan"))
+                .isEqualTo(sinkOnly.dsl().nodes().getFirst().config().get("partitionPlan"));
+        verify(nifi).finalizeGeneratedProcessGroup("pg");
+        System.out.printf("manual Hive template partitions=%d: native processors=5, Metastore requests=0%n", count);
     }
 
     @Test
-    void twentyAndOneHundredHivePartitionsUseOneLayoutAndOneLocationBatchAndKeepCustomDirectories() throws Exception {
-        for (int count : List.of(20, 100)) {
-            NifiClient nifi = mock(NifiClient.class);
-            HiveModule hive = mock(HiveModule.class);
-            DslCompiler compiler = partitionCompiler(nifi, hive);
-            var buckets = java.util.stream.IntStream.range(0, count).mapToObj(i -> "p_" + i).toList();
-            Map<String, String> locations = new java.util.LinkedHashMap<>();
-            for (String bucket : buckets) locations.put(bucket, "hdfs://cluster/custom/" + bucket);
-            when(hive.partitionLayout("analytics", "events")).thenReturn(Map.of("location", "hdfs://cluster/custom",
-                    "partitions", List.of("ods_partition=unrelated_or_padded_display_value   ")));
-            when(hive.partitionLocations("analytics", "events", buckets)).thenReturn(locations);
-            Pipeline sinkOnly = partitionPipeline(count);
-            var source = new Pipeline.Node("source", "source.mysql", "数据库来源", "source", 0, 0, Map.of("table", "source_events", "incrementalColumn", "updated_at"));
-            var pipeline = new Pipeline("partition-test", "partition-test", null, null, null,
-                    new Pipeline.Dsl(1, List.of(source, sinkOnly.dsl().nodes().getFirst()),
-                            List.of(new Pipeline.Edge("source-hive", "source", "sink", "default"))),
-                    null, null, null, null, null, null, null);
-            var result = compiler.compile(pipeline);
-            var sink = result.nodes().get("sink");
-            assertThat(sink.processorIds).containsOnlyKeys("partition", "convert", "filename", "put");
-            assertThat(sink.inletProcessorId).isEqualTo(sink.processorIds.get("partition"));
-            String route = sink.processorIds.get("partition"), convert = sink.processorIds.get("convert");
-            verify(nifi).createConnection("pg", route, "PROCESSOR", convert, "PROCESSOR", List.of("success"));
-            verify(nifi).createConnection("pg", convert, "PROCESSOR", sink.processorIds.get("filename"), "PROCESSOR", List.of("success"));
-            verify(nifi).createConnection("pg", sink.processorIds.get("filename"), "PROCESSOR", sink.processorIds.get("put"), "PROCESSOR", List.of("success"));
-            verify(nifi).createConnection("pg", result.nodes().get("source").processorIds.get("execute"), "PROCESSOR", route, "PROCESSOR", List.of("success"));
-            verify(nifi).createConnection("pg", result.nodes().get("source").processorIds.get("fetch"), "PROCESSOR", result.nodes().get("source").processorIds.get("execute"), "PROCESSOR", List.of("success"));
-            assertThat(result.nodes().get("source").processorIds).containsOnlyKeys("fetch", "execute");
-            verify(nifi).finalizeGeneratedProcessGroup("pg");
-            verify(hive).partitionLayout("analytics", "events");
-            verify(hive).partitionLocations("analytics", "events", buckets);
-            verify(nifi).listControllerServices("root");
-            ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.captor();
-            verify(nifi, atLeastOnce()).createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(),
-                    properties.capture(), nullable(String.class), nullable(String.class));
-            String script = properties.getAllValues().stream().map(props -> props.get("Script Body"))
-                    .filter(java.util.Objects::nonNull).map(String::valueOf).findFirst().orElseThrow();
-            var encoded = java.util.regex.Pattern.compile("[A-Za-z0-9+/=]{100,}").matcher(script);
-            assertThat(encoded.find()).isTrue();
-            String payload = new String(java.util.Base64.getDecoder().decode(encoded.group()), java.nio.charset.StandardCharsets.UTF_8);
-            assertThat(payload).contains("hdfs://cluster/custom/p_0").contains("hdfs://cluster/custom/p_" + (count - 1));
-            String fixtureDirectory = System.getProperty("hive.partition.fixtureDirectory");
-            if (fixtureDirectory != null) {
-                var directory = java.nio.file.Path.of(fixtureDirectory);
-                java.nio.file.Files.createDirectories(directory);
-                java.nio.file.Files.writeString(directory.resolve("partition-" + count + ".groovy"), script);
-            }
-        }
-    }
-
-    @Test void absentPartitionProcessorCannotLeaveAPartialNativeGroup() throws Exception {
+    void manualPartitionTemplateKeepsConfiguredDirectoryAndDoesNotRequireGroovyOrCtrlA() throws Exception {
         var nifi = mock(NifiClient.class);
         var hive = mock(HiveModule.class);
         var compiler = partitionCompiler(nifi, hive);
         when(nifi.findProcessorType("ExecuteScript")).thenReturn(java.util.Optional.empty());
-        assertThatThrownBy(() -> compiler.compile(partitionPipeline(20))).hasMessageContaining("ExecuteScript").hasMessageContaining("未创建流程");
-        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
-        verifyNoInteractions(hive);
+        var writer = publicCsvWriterService();
+        ((com.fasterxml.jackson.databind.node.ObjectNode) writer.path("component").path("properties"))
+                .put("Value Separator", "\t");
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(writer));
+        var original = partitionPipeline(20);
+        var config = new java.util.LinkedHashMap<>(original.dsl().nodes().getFirst().config());
+        var plan = Map.<String, Object>of("enabled", true, "strategy", "MANUAL_NATIVE_CONFIGURATION");
+        config.put("partitionPlan", plan);
+        config.put("hdfsDirectory", "/native-editing/events");
+        var pipeline = withSinkConfig(original, config);
+        compiler.compile(pipeline);
+        ArgumentCaptor<Map<String, String>> properties = ArgumentCaptor.captor();
+        verify(nifi).createProcessor(eq("pg"), eq("com.linewell.microservice.processor.hadoop.PutHwHDFS"),
+                anyString(), anyDouble(), anyDouble(), properties.capture(), nullable(String.class), nullable(String.class));
+        assertThat(properties.getValue()).containsEntry("Directory", "/native-editing/events");
+        assertThat(config).containsEntry("partitionPlan", plan).containsEntry("hdfsDirectory", "/native-editing/events");
+        verify(nifi, never()).findProcessorType("ExecuteScript");
+        verify(hive, never()).partitionLayout(anyString(), anyString());
+        verify(hive, never()).partitionLocations(anyString(), anyString(), anyList());
     }
 
-    @Test
-    void missingPartitionLocationKeepsTheActualDatabaseTableAndBucketInTheError() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"HDFS_BATCH", "HIVE_RECORD_PUT"})
+    void manualPartitionMetadataKeepsTheSelectedOrdinaryWriter(String mode) throws Exception {
         var nifi = mock(NifiClient.class);
         var hive = mock(HiveModule.class);
         var compiler = partitionCompiler(nifi, hive);
-        when(hive.partitionLayout("analytics", "events")).thenReturn(Map.of("location", "hdfs://cluster/events"));
-        String detail = "Hive目标表`analytics`.`events`缺少可读取的分区Location：p_1；请核对分区注册及Metastore权限";
-        when(hive.partitionLocations(eq("analytics"), eq("events"), anyList()))
-                .thenThrow(new IllegalArgumentException(detail));
-        assertThatThrownBy(() -> compiler.compile(partitionPipeline(2))).hasMessage(detail);
-        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
+        when(nifi.findProcessorType("PutHDFS")).thenReturn(java.util.Optional.of("org.apache.nifi.processors.hadoop.PutHDFS"));
+        var original = partitionPipeline(2);
+        var config = new java.util.LinkedHashMap<>(original.dsl().nodes().getFirst().config());
+        config.put("hiveWriteMode", mode);
+        var result = compiler.compile(withSinkConfig(original, config));
+        assertThat(result.nodes().get("sink").processorIds).doesNotContainKey("partition");
+        String type = mode.equals("HDFS_BATCH") ? "org.apache.nifi.processors.hadoop.PutHDFS" : "com.linewell.nifi.hive.HiveRecordPut";
+        verify(nifi).createProcessor(eq("pg"), eq(type), anyString(), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
+        verify(hive, never()).partitionLayout(anyString(), anyString());
+        verify(hive, never()).partitionLocations(anyString(), anyString(), anyList());
     }
 
-    @Test void incompleteLocationsFailBeforeAnyNativeMutation() throws Exception {
-        var nifi = mock(NifiClient.class);
-        var hive = mock(HiveModule.class);
-        var compiler = partitionCompiler(nifi, hive);
-        when(hive.partitionLayout("analytics", "events")).thenReturn(Map.of("partitions", List.of("ods_partition=p_0", "ods_partition=p_1")));
-        when(hive.partitionLocations(eq("analytics"), eq("events"), anyList())).thenReturn(Map.of("p_0", "hdfs://cluster/custom/0"));
-        assertThatThrownBy(() -> compiler.compile(partitionPipeline(2))).hasMessageContaining("Location缺失");
-        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
-        verify(nifi, never()).createProcessor(anyString(), anyString(), anyString(), anyDouble(), anyDouble(), anyMap(), nullable(String.class), nullable(String.class));
+    private Pipeline withSinkConfig(Pipeline original, Map<String, Object> config) {
+        var sink = original.dsl().nodes().getFirst();
+        return new Pipeline(original.id(), original.name(), original.description(), original.createdAt(), original.updatedAt(),
+                new Pipeline.Dsl(1, List.of(new Pipeline.Node(sink.id(), sink.manifestKey(), sink.label(), sink.category(), sink.x(), sink.y(), config)), List.of()),
+                null, null, null, null, null, null, null);
     }
 
     private DslCompiler partitionCompiler(NifiClient nifi, HiveModule hive) throws Exception {

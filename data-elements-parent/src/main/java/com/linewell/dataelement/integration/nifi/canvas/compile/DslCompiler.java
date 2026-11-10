@@ -275,7 +275,6 @@ public class DslCompiler {
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi,pipeline);
-        Map<String, PreparedHivePartition> hivePartitions = prepareHivePartitions(pipeline);
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
         String pgName = pipeline.name() == null ? pipeline.id() : pipeline.name();
         var position = layout == null
@@ -492,8 +491,9 @@ public class DslCompiler {
         Map<String, String> hiveHdfsWriterTypes = new LinkedHashMap<>();
         if (pipeline.dsl().nodes().stream().anyMatch(node ->
                 isHiveBatchPutHdfs(manifestByNode.get(node.id()), "put", cfgByNode.get(node.id())))) {
-            boolean partitionedHive=cfgByNode.entrySet().stream().anyMatch(e->manifestByNode.get(e.getKey())!=null&&"sink.hive".equals(manifestByNode.get(e.getKey()).key())&&e.getValue().get("partitionPlan") instanceof Map<?,?> p&&Boolean.TRUE.equals(p.get("enabled")));
-            hiveCsvWriterId = resolveHiveCsvWriterServiceId(controllerServiceScopeId,globalJson,partitionedHive);
+            // Both ordinary and partitioned Hive targets start from the same basic native template.
+            // Partition routing/locations are maintained manually in NiFi, not probed at publication.
+            hiveCsvWriterId = resolveHiveCsvWriterServiceId(controllerServiceScopeId,globalJson);
             for (Pipeline.Node node : pipeline.dsl().nodes()) {
                 ComponentManifest manifest = manifestByNode.get(node.id());
                 Map<String, Object> cfg = cfgByNode.get(node.id());
@@ -552,7 +552,7 @@ public class DslCompiler {
 
             if (isHiveBatchPutHdfs(m, "put", cfg)) {
                 buildHiveHdfsSink(pgId, n, nc, nodeLayout, cfg, sharedCs, hiveCsvWriterId,
-                        hiveHdfsWriterTypes.get(hiveHdfsWriterMode(cfg)), hivePartitions.get(n.id()));
+                        hiveHdfsWriterTypes.get(hiveHdfsWriterMode(cfg)));
                 continue;
             }
 
@@ -3280,7 +3280,7 @@ public class DslCompiler {
      * to verify that this writer's delimiter, null and escaping rules match the
      * selected target table. Only an ancestor service is visible to the task PG.
      */
-    private String resolveHiveCsvWriterServiceId(String applicationScopeId,GlobalJsonRecordServices hiveGlobals,boolean requireCtrlA) {
+    private String resolveHiveCsvWriterServiceId(String applicationScopeId,GlobalJsonRecordServices hiveGlobals) {
         String name = System.getProperty(HIVE_HDFS_CSV_WRITER_NAME_PROPERTY,
                 HIVE_HDFS_CSV_WRITER_DEFAULT_NAME).trim();
         if (name.isEmpty()) {
@@ -3310,7 +3310,6 @@ public class DslCompiler {
                 if (!separator.isTextual() || separator.asText().isEmpty()) {
                     throw new IllegalStateException("Hive HDFS Record Writer 必须显式配置目标表字段分隔符：" + name);
                 }
-                if(requireCtrlA&&!Set.of("\u0001","\\001","\\u0001").contains(separator.asText()))throw new IllegalStateException("分区入湖的CSV Writer字段分隔符必须为Ctrl-A，与目标Hive表一致");
                 String csvFormat = properties.path("CSV Format").asText();
                 if (!csvFormat.isBlank() && !"custom".equalsIgnoreCase(csvFormat)
                         && !"Custom Format".equalsIgnoreCase(csvFormat)) {
@@ -3472,71 +3471,10 @@ public class DslCompiler {
                 ? HIVE_BATCH_LAKE_MODE : HIVE_LINEWELL_HDFS_MODE;
     }
 
-    private record PreparedHivePartition(String processorType, String script) { }
-
-    /** Resolve the whole partition contract before creating a native graph. */
-    private Map<String, PreparedHivePartition> prepareHivePartitions(Pipeline pipeline) {
-        List<Pipeline.Node> targets = pipeline.dsl().nodes().stream()
-                .filter(HiveSinkPublicationPolicy::isHiveSink)
-                .filter(node -> node.config() != null && node.config().get("partitionPlan") instanceof Map<?, ?> plan
-                        && Boolean.TRUE.equals(plan.get("enabled"))).toList();
-        if (targets.isEmpty()) return Map.of();
-        String scriptType = nifi.findProcessorType("ExecuteScript").orElseThrow(() ->
-                new IllegalStateException("Hive分区写入需要NiFi的ExecuteScript（Groovy）组件；未创建流程，请在所有NiFi节点安装该组件"));
-        Map<String, PreparedHivePartition> prepared = new LinkedHashMap<>();
-        for (Pipeline.Node node : targets) {
-            try {
-                Map<String, Object> cfg = node.config();
-                if ("HIVE_RECORD_PUT".equalsIgnoreCase(stringConfig(cfg, "hiveWriteMode"))) {
-                    throw new IllegalStateException("Hive分区表需要按实际分区目录写入，请选择Linewell PutHwHDFS或NiFi原生PutHDFS");
-                }
-                List<com.linewell.dataelement.metautil.model.dto.ColumnInfo> columns = new ArrayList<>();
-                List<String> physicalColumns = new ArrayList<>();
-                if (cfg.get("targetColumns") instanceof List<?> rawColumns) for (Object raw : rawColumns) {
-                    var column = columnValues(raw);
-                    String name = stringValue(column.get("columnName"));
-                    if (name == null || name.equalsIgnoreCase("ods_partition")) continue;
-                    var info = new com.linewell.dataelement.metautil.model.dto.ColumnInfo();
-                    info.setColumnName(name);
-                    info.setColumnType(stringValue(column.get("dataType")));
-                    columns.add(info);
-                    physicalColumns.add(name);
-                }
-                Map<String, Object> plan = new com.linewell.dataelement.metautil.ddl.TablePartitions().normalize(
-                        MAPPER.convertValue(cfg.get("partitionPlan"), new TypeReference<Map<String, Object>>() {}), columns, DatabaseType.HIVE);
-                plan.put("inputField", firstNonBlank(stringConfig(cfg, "partitionInputField"), String.valueOf(plan.get("field"))));
-                String database = firstNonBlankStatic(configText(cfg, "database"), "default");
-                String table = configText(cfg, "table");
-                try { hiveModule.partitionLayout(database, table); }
-                catch (HiveModule.PartitionLayoutException mismatch) { throw new IllegalStateException(mismatch.getMessage(), mismatch); }
-                catch (Exception failure) { throw new IllegalStateException("无法核验Hive分区结构、文本格式和实际目录，请检查目标元数据访问", failure); }
-                // Metastore locations are authoritative. SHOW PARTITIONS display text is not
-                // a second contract and must not reject existing partitions before the batch read.
-                List<String> buckets = ((List<?>) plan.get("partitions")).stream()
-                        .map(part -> String.valueOf(((Map<?, ?>) part).get("bucket"))).toList();
-                Map<String, String> locations;
-                try { locations = hiveModule.partitionLocations(database, table, buckets); }
-                catch (IllegalArgumentException mismatch) { throw new IllegalStateException(mismatch.getMessage(), mismatch); }
-                catch (Exception failure) { throw new IllegalStateException("无法批量核验Hive分区实际Location，请检查MRS客户端Metastore配置及权限", failure); }
-                if (locations == null || buckets.stream().anyMatch(bucket -> locations.get(bucket) == null || locations.get(bucket).isBlank())) {
-                    throw new IllegalStateException("Hive目标部分分区实际Location缺失，不能生成不完整写入链路");
-                }
-                plan.put("locations", locations);
-                prepared.put(node.id(), new PreparedHivePartition(scriptType, HivePartitionRouting.script(plan, physicalColumns)));
-            } catch (IllegalStateException failure) {
-                throw new NodeConfigException(node.id(), node.label(), "partitionPlan", failure.getMessage(), failure);
-            } catch (IllegalArgumentException failure) {
-                throw new NodeConfigException(node.id(), node.label(), "partitionPlan", failure.getMessage(), failure);
-            }
-        }
-        return prepared;
-    }
-
     /** Expand one Hive sink into the production-proven record-to-HDFS chain. */
     private void buildHiveHdfsSink(String pgId, Pipeline.Node node, NodeCompilation nc,
                                    NodeLayout layout, Map<String, Object> cfg,
-                                   Map<String, String> sharedCs, String csvWriterId, String putType,
-                                   PreparedHivePartition partition) {
+                                   Map<String, String> sharedCs, String csvWriterId, String putType) {
         if (csvWriterId == null || csvWriterId.isBlank()) {
             throw new IllegalStateException("Hive HDFS 写入缺少受管的 CSV Record Writer");
         }
@@ -3545,7 +3483,6 @@ public class DslCompiler {
         }
         boolean linewell = HIVE_LINEWELL_HDFS_MODE.equals(hiveHdfsWriterMode(cfg));
         Map<String, Object> writerConfig = new LinkedHashMap<>(cfg);
-        if (partition != null) writerConfig.put("hdfsDirectory", "${hive.partition.directory}");
         double x = nodeOriginX(layout);
         double y = nodeOriginY(layout);
 
@@ -3563,14 +3500,6 @@ public class DslCompiler {
         nc.processorIds.put("filename", filename.id());
         nc.processorIds.put("put", put.id());
         nc.inletProcessorId = convert.id();
-        if (partition != null) {
-            NifiEntity route = nifi.createProcessor(pgId, partition.processorType(), node.label() + "/partition",
-                    x - PROCESSOR_COLUMN_GAP, y, Map.of("Script Engine", "Groovy", "Script Body", partition.script()), null, null);
-            nc.processorIds.put("partition", route.id());
-            nc.inletProcessorId = route.id();
-            nifi.createConnection(pgId, route.id(), "PROCESSOR", convert.id(), "PROCESSOR", List.of("success"));
-            nc.usedOutgoing.computeIfAbsent(route.id(), ignored -> new LinkedHashSet<>()).add("success");
-        }
         nifi.createConnection(pgId, convert.id(), "PROCESSOR", filename.id(), "PROCESSOR", List.of("success"));
         nifi.createConnection(pgId, filename.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));
         nc.usedOutgoing.computeIfAbsent(convert.id(), ignored -> new LinkedHashSet<>()).add("success");

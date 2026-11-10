@@ -26,6 +26,8 @@ public final class DslHasher {
     public static final String CURRENT_COMPILER_REVISION = "nifi-sync-policy-serial-full-v31";
     private static final String DATE_FETCH_COMPILER_REVISION = "direct-date-fetch-source-record-window-v3-"
             + com.linewell.dataelement.integration.nifi.canvas.compile.DateTableFetchPolicy.BUNDLE_VERSION;
+    // Retain the published fingerprint when switching to manual partition templates:
+    // existing native edits must remain runnable without forcing a graph rebuild.
     private static final String HIVE_PARTITION_COMPILER_REVISION = "hive-partition-complete-candidate-v1";
     private static final String HIVE_TARGET_COMPILER_REVISION = "hive-chain-downstream-direct-write-v5";
     private static final String FIELD_MAPPING_COMPILER_REVISION = "field-mapping-lookup-dialect-utf8-v2";

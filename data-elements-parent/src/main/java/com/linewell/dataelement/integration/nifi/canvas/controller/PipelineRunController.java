@@ -576,7 +576,7 @@ public class PipelineRunController {
                             "请根据详情核对字段映射配置、扩展版本及依赖服务；旧流程已保留。", Map.of());
                 }
             }
-            if (DslHasher.usesJavaMapping(p.dsl()) || hasHivePartitions(p)) {
+            if (DslHasher.usesJavaMapping(p.dsl()) || hasHivePartitionPlan(p)) {
                 return stagedMappingDeploy(p, currentHash, start, layout);
             }
             List<String> previousParents = groups.parentIds(layout.previousIds());
@@ -684,7 +684,7 @@ public class PipelineRunController {
         }
     }
 
-    private static boolean hasHivePartitions(Pipeline pipeline) {
+    private static boolean hasHivePartitionPlan(Pipeline pipeline) {
         return pipeline.dsl().nodes().stream().anyMatch(node ->
                 com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.isHiveSink(node)
                         && node.config() != null && node.config().get("partitionPlan") instanceof Map<?, ?> plan
@@ -694,7 +694,7 @@ public class PipelineRunController {
     /** A candidate graph never starts before validation; previous sources and queues remain recoverable. */
     private ResponseEntity<?> stagedMappingDeploy(Pipeline pipeline, String hash, boolean start,
                                                  PipelineGroupOrganizer.Layout layout) {
-        boolean hivePartition = hasHivePartitions(pipeline);
+        boolean manualHiveTemplate = hasHivePartitionPlan(pipeline);
         final String[] staged = {null};
         boolean committed = false;
         boolean previousStopped = false;
@@ -724,7 +724,8 @@ public class PipelineRunController {
             }
             DslCompiler.CompileResult result = compiler.compile(pipeline, group -> staged[0] = group, layout);
             if (result == null || isBlank(result.processGroupId())) throw new IllegalStateException("候选流程编译失败");
-            if (hivePartition) nifi.requireValidGeneratedProcessGroup(result.processGroupId());
+            // Hive partition targets deliberately publish the ordinary template for native editing.
+            // Keep candidate/queue/watermark protection, without automatic partition validation.
             NifiNodeMapping mapping = buildMapping(pipeline, result);
             for (String group : layout.previousIds()) {
                 nifi.setProcessGroupState(group, "STOPPED");
@@ -756,7 +757,7 @@ public class PipelineRunController {
                 taskLifecycle.started(pipeline.id());
             } else taskLifecycle.statusOnly(pipeline.id(), 0);
             if (lineageAnalysis != null) { try { lineageAnalysis.captureDeployment(updated); } catch (RuntimeException ex) { log.warn("流程已部署，血缘索引归档待恢复，pipeline={}",pipeline.id()); } }
-            Map<String,Object> response = new LinkedHashMap<>();response.put("pipeline",updated);response.put("processGroupId",result.processGroupId());response.put("started",start);response.put("mode",hivePartition ? "staged-hive-partition-deploy" : "staged-unified-deploy");
+            Map<String,Object> response = new LinkedHashMap<>();response.put("pipeline",updated);response.put("processGroupId",result.processGroupId());response.put("started",start);response.put("mode",manualHiveTemplate ? "staged-hive-template-deploy" : "staged-unified-deploy");
             if (!retained.isEmpty()) response.put("retainedStoppedGroups",retained);
             return ResponseEntity.ok(response);
         } catch (RuntimeException ex) {
@@ -769,8 +770,8 @@ public class PipelineRunController {
                         pipeline.nifiProcessGroupId(),pipeline.status(),pipeline.lastDeployedHash(),pipeline.lastDeployedAt(),pipeline.lastStoppedAt(),pipeline.nodeMapping(),pipeline.lastBulletinId()));
                 if (previousStopped) repo.updateStatus(pipeline.id(),PipelineStatus.STOPPED);
             } else repo.updateStatus(pipeline.id(),PipelineStatus.STOPPED);
-            return deploymentFailure(pipeline.id(), 409, hivePartition ? "hive-partition-deployment-failed" : "mapping-deployment-failed",
-                    hivePartition ? "Hive分区候选流程部署失败" : "统一映射候选流程部署失败", ex,
+            return deploymentFailure(pipeline.id(), 409, manualHiveTemplate ? "hive-template-deployment-failed" : "mapping-deployment-failed",
+                    manualHiveTemplate ? "Hive基础候选流程部署失败" : "统一映射候选流程部署失败", ex,
                     committed ? "请检查新流程状态及错误详情。" : "旧流程及其状态已保留，请根据详情修复后重新部署。",
                     Map.of("previousGraphRetained", !committed));
         }

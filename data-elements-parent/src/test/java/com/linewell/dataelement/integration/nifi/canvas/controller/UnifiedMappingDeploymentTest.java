@@ -95,24 +95,41 @@ class UnifiedMappingDeploymentTest {
         verify(nifi, never()).cleanupProcessGroup("old");
         verify(nifi, never()).setProcessGroupState(eq("old"), anyString());
         verify(compiler, never()).preflightMapping(any());
-        verify(errors).add(eq("p"), argThat(error -> error.message().contains("Hive分区") && error.detail().contains("分区组件创建失败")));
+        verify(errors).add(eq("p"), argThat(error -> error.message().contains("Hive基础") && error.detail().contains("分区组件创建失败")));
     }
 
-    @Test void hivePartitionNativeValidationFailureCannotBePublishedAsStoppedSuccess() {
+    @Test void manualHiveTemplateStillPreservesAnExistingSourceWatermark() throws Exception {
+        partitionFixture();
+        var original = repo.findById("p").orElseThrow();
+        var pipeline = new Pipeline(original.id(), original.name(), original.description(), original.createdAt(), original.updatedAt(),
+                original.dsl(), original.nifiProcessGroupId(), original.status(), original.lastDeployedHash(), original.lastDeployedAt(),
+                original.lastStoppedAt(), new NifiNodeMapping(Map.of("s", "source"), Map.of("source", "s"), Map.of()), 0L);
+        when(repo.findById("p")).thenReturn(Optional.of(pipeline));
+        when(nifi.get(eq("/processors/source/state"), eq(com.fasterxml.jackson.databind.JsonNode.class)))
+                .thenReturn(new ObjectMapper().readTree("{\"componentState\":{\"clusterState\":{\"state\":[{\"key\":\"maxvalue.id\",\"value\":\"100\"}]}}}"));
+        assertEquals(409, controller.deploy("p", null).getStatusCode().value());
+        verify(compiler, never()).compile(any(), any(), any());
+        verify(nifi, never()).cleanupProcessGroup(anyString());
+        verify(nifi, never()).setProcessGroupState(anyString(), anyString());
+    }
+
+    @Test void basicHiveTemplateCanBePublishedForNativeEditingWithoutPartitionValidation() {
         partitionFixture();
         when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
             call.<java.util.function.Consumer<String>>getArgument(1).accept("candidate");
             return new DslCompiler.CompileResult("candidate", Map.of(), Map.of(), Map.of());
         });
-        doThrow(new IllegalStateException("Hive分区/partition：Relationship success未连接")).when(nifi).requireValidGeneratedProcessGroup("candidate");
+        // Native partition-specific configuration is deliberately completed by the operator later.
+        doThrow(new IllegalStateException("partition-specific native configuration is incomplete"))
+                .when(nifi).requireValidGeneratedProcessGroup("candidate");
         var response = controller.deploy("p", null);
-        assertEquals(409, response.getStatusCode().value());
-        verify(nifi).cleanupProcessGroup("candidate");
-        verify(nifi, never()).cleanupProcessGroup("old");
-        verify(nifi, never()).setProcessGroupState(eq("old"), anyString());
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("staged-hive-template-deploy", ((Map<?, ?>) response.getBody()).get("mode"));
+        verify(nifi, never()).requireValidGeneratedProcessGroup(anyString());
+        verify(nifi, never()).setProcessGroupState("candidate", "RUNNING");
     }
 
-    @Test void completeHivePartitionCandidateIsValidatedBeforeOldGraphIsStopped() {
+    @Test void basicHiveCandidateIsCreatedBeforeOldGraphIsStopped() {
         partitionFixture();
         when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
             call.<java.util.function.Consumer<String>>getArgument(1).accept("candidate");
@@ -120,10 +137,10 @@ class UnifiedMappingDeploymentTest {
         });
         var response = controller.deploy("p", null);
         assertEquals(200, response.getStatusCode().value());
-        assertEquals("staged-hive-partition-deploy", ((Map<?, ?>) response.getBody()).get("mode"));
+        assertEquals("staged-hive-template-deploy", ((Map<?, ?>) response.getBody()).get("mode"));
         var order = inOrder(compiler, nifi);
         order.verify(compiler).compile(any(), any(), any());
-        order.verify(nifi).requireValidGeneratedProcessGroup("candidate");
+        verify(nifi, never()).requireValidGeneratedProcessGroup(anyString());
         order.verify(nifi).setProcessGroupState("old", "STOPPED");
         order.verify(nifi).cleanupProcessGroup("old");
         verify(nifi, never()).cleanupProcessGroup("candidate");

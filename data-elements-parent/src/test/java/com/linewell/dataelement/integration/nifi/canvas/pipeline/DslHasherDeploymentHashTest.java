@@ -106,6 +106,14 @@ class DslHasherDeploymentHashTest {
                 .isEqualTo(previousDeploymentHash(ordinary, revision));
     }
 
+    @Test
+    void manualPartitionTemplatesDoNotForceRebuildsOfExistingNativeEdits() throws Exception {
+        var dsl = singleSink("sink.hive", Map.of("partitionPlan", Map.of("enabled", true)));
+        assertThat(DslHasher.deploymentHash(dsl, DslHasher.CURRENT_COMPILER_REVISION))
+                .isEqualTo(previousDeploymentHash(dsl, DslHasher.CURRENT_COMPILER_REVISION
+                        + "|hive-chain-downstream-direct-write-v5|hive-partition-complete-candidate-v1"));
+    }
+
     private static Pipeline.Dsl singleSink(String manifestKey, Map<String, Object> config) {
         return new Pipeline.Dsl(1,
                 List.of(new Pipeline.Node("sink", manifestKey, "Target", "sink", 0, 0, config)), List.of());
