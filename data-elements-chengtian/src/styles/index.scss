@@ -4,11 +4,6 @@
 @use "./auto-image-styles";
 @import url("./vxe-table.css");
 
-// 页面出现纵向滚动条时，顶部菜单仍使用相同的宽度。
-html:has(.layout__header-menu) {
-  scrollbar-gutter: stable;
-}
-
 .card-container {
   height: 100%;
   background-color: #fff;
