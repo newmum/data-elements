@@ -67,7 +67,7 @@ function makeHost(document) {
   return { renderer, root: node("root") };
 }
 
-test("a warm route replaces its loading state inside the animated layout", async (t) => {
+test("a committed menu change removes the previous page before the next page is ready", async (t) => {
   const [appRender, pageRender] = await Promise.all([
     compileRender("../src/layouts/components/AppMain/index.vue"),
     compileRender("../src/layouts/views/ShowComponent.vue"),
@@ -110,16 +110,22 @@ test("a warm route replaces its loading state inside the animated layout", async
     }
   }
 
-  const active = ref("接入任务");
+  const active = ref("数据源管理");
   const loaded = [];
-  const pages = new Map(
-    ["接入任务", "分发任务"].map((name) => [name, { render: () => h("main", name) }])
-  );
+  let finishIngestion;
+  const pendingIngestion = new Promise((resolve) => {
+    finishIngestion = () => resolve({ render: () => h("main", "接入任务") });
+  });
+  const pages = new Map([
+    ["数据源管理", { render: () => h("main", "数据源管理") }],
+    ["接入任务", pendingIngestion],
+    ["分发任务", { render: () => h("main", "分发任务") }],
+  ]);
   const ShowComponent = {
     props: ["name"],
     render: pageRender,
     components: {
-      LoadingState: { render: () => h("div", "正在加载页面") },
+      WorkspaceLoading: { render: () => h("div", "正在初始化应用资源") },
       ElButton: { render: () => h("button") },
     },
     setup(props) {
@@ -140,12 +146,12 @@ test("a warm route replaces its loading state inside the animated layout", async
       return () =>
         slots.default({
           Component: h(ShowComponent, { name: active.value }),
-          route: { fullPath: active.value },
+          route: { fullPath: active.value, meta: {} },
         });
     },
   };
   const wrappers = new Map();
-  const app = renderer.createApp({
+  const AppMain = {
     render: appRender,
     components: { RouterView },
     setup() {
@@ -161,22 +167,39 @@ test("a warm route replaces its loading state inside the animated layout", async
         },
       };
     },
+  };
+  const app = renderer.createApp({
+    render() {
+      return h("div", [h("nav", active.value), h(AppMain)]);
+    },
   });
   app.mount(root);
 
+  const visibleText = (type) =>
+    mountedNodes(root)
+      .filter((node) => node.type === type)
+      .map((node) => node.text);
   try {
+    await finishTransitions();
+    assert.deepEqual(visibleText("main"), ["数据源管理"]);
+
+    active.value = "接入任务";
+    await nextTick();
+    // Deliberately do not advance animation frames while the destination is still loading.
+    assert.deepEqual(visibleText("nav"), ["接入任务"]);
+    assert.deepEqual(visibleText("main"), []);
+    assert.ok(visibleText("div").includes("正在初始化应用资源"));
+    finishIngestion();
+    await finishTransitions();
+    assert.deepEqual(visibleText("main"), ["接入任务"]);
+
     for (const name of ["接入任务", "分发任务", "接入任务"]) {
       active.value = name;
       await finishTransitions();
-      assert.ok(loaded.includes(name), `组件已解析：${name}`);
-      const visible = mountedNodes(root);
-      assert.deepEqual(
-        visible.filter((node) => node.type === "main").map((node) => node.text),
-        [name]
-      );
-      assert.ok(!visible.some((node) => node.text === "正在加载页面"));
+      assert.deepEqual(visibleText("main"), [name]);
+      assert.ok(!visibleText("div").includes("正在初始化应用资源"));
     }
-    assert.deepEqual(loaded, ["接入任务", "分发任务"]);
+    assert.deepEqual(loaded, ["数据源管理", "接入任务", "分发任务"]);
   } finally {
     app.unmount();
     await finishTransitions();

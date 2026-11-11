@@ -17,7 +17,7 @@
   "headers" : [ ],
   "paths" : [ ],
   "responseBody" : null,
-  "description" : "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只预检目标授权和请求完整性，不解析或改写DDL，语法及约束交给数据库执行判断。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。batchReuseValidation=true批量只读校验已有表结构，reuseExistingOnly=true明确复用且绝不建表。",
+  "description" : "建表接口（POST /dst/database/metadata/createTable）。默认根据 dbId 连接目标库并执行 DDL；画布可传 canvas=true 与 validateOnly=true 只预检目标授权和请求完整性，不解析或改写DDL，语法及约束交给数据库执行判断。批量只读校验传 batchValidateOnly=true、canvas=true、validateOnly=true、最多 20 个 targets，服务端一次读取当前租户目标数据源并逐 ID 核验角色范围，不执行物理建表；托管 Hive 使用服务端 hwhive。batchReuseValidation=true批量只读校验已有表结构，reuseExistingOnly=true复用已有目标表及实际字段；已有Hive分区批量核验，缺失时须另行确认注册。",
   "requestBodyDefinition" : null,
   "responseBodyDefinition" : null
 }
@@ -33,6 +33,7 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
 import java.util.Map
 import java.util.List
+import java.lang.IllegalArgumentException
 import com.linewell.dataelement.shared.error.ErrorDetailSanitizer
 import tenantRuntime
 import canvasTableDdl
@@ -49,7 +50,8 @@ import com.alibaba.druid.sql.ast.statement.SQLColumnPrimaryKey
  * POST /dst/database/metadata/createTable：执行单目标 DDL，或批量只读校验目标资源。
  *
  * 写接口。根据 dbId 找到目标数据库连接，然后执行 body.ddl。
- * 本接口只负责物理建表，不自动登记资产；建表后若要资产快照，请调用 08 或页面登记流程。
+ * 复用已有表时读取实际字段和所需Hive分区；只有确认补分区时才执行分区注册。
+ * 本接口不登记资产，登记由页面或上层流程完成。
  */
 
 var textOf = (value) => value == null ? null : value + ''
@@ -92,33 +94,55 @@ var firstValue = (row, keys) => {
     // 返回当前业务分支的标准结果。
     return null
 }
-var verifyPartitionReuse = (config, managedHive, table, plan, preview) => {
+var verifyPartitionReuse = (config, managedHive, table, plan, preview, afterRegistration) => {
     if (plan?.enabled != true || config.getDatabaseType() != DatabaseType.HIVE) { return null }
-    if (config.getDatabaseType() == DatabaseType.HIVE) {
-        if (!managedHive) { exit 400, '当前普通Hive写入方式尚不支持分区复用，请使用受管MRS入湖方式' }
-        if (!(plan.partitions instanceof List) || plan.partitions.size() == 0 || plan.partitions.size() > 2000) { exit 400, 'Hive分区计划必须包含1至2000个分区' }
-        var layout = hwhive.partitionLayout(config.getDatabase(), table)
-        var missing = []
-        var buckets = []
-        for (partition in plan.partitions) {
-            var bucket = textOf(partition.bucket)
-            if (blank(bucket) || !bucket.matches('[A-Za-z0-9_-]{1,64}') || buckets.contains(bucket)) { exit 400, 'Hive分区值无效或重复' }
-            buckets.add(bucket)
-            if (!layout.partitions.contains('ods_partition=' + bucket)) { missing.add(bucket) }
-        }
-        if (layout.partitions.size() + missing.size() > 2000) {
-            exit 409, '补齐后Hive分区总数将超过2000个的核验上限，请调整分区计划'
-        }
-        if (!preview && missing.size() > 0) { exit 409, '已有Hive表缺少本次配置的分区：' + missing.join(', ') }
-        return { database: config.getDatabase(), tableName: table, tableLocation: layout.location, missing: missing, buckets: buckets }
+    if (!managedHive) { exit 400, '当前普通Hive写入方式尚不支持分区复用，请使用受管MRS入湖方式' }
+    if (!(plan.partitions instanceof List) || plan.partitions.size() == 0 || plan.partitions.size() > 2000) {
+        exit 400, 'Hive分区计划必须包含1至2000个分区'
     }
-}
-var verifyHivePartitionLocations = (check, afterRegistration) => {
-    if (check == null || check.missing.size() > 0) { return }
-    try { hwhive.partitionLocations(check.database, check.tableName, check.buckets) }
-    catch (e) {
-        exit 409, (afterRegistration ? '分区已注册，但无法核验全部实际目录' : 'Hive分区已存在，但无法核验全部实际目录') + '，请检查Metastore配置和权限后重试'
+    var buckets = []
+    for (partition in plan.partitions) {
+        var bucket = textOf(partition.bucket)
+        if (blank(bucket) || !bucket.matches('[A-Za-z0-9_-]{1,64}') || buckets.contains(bucket)) {
+            exit 400, 'Hive分区值无效或重复'
+        }
+        buckets.add(bucket)
     }
+    var database = config.getDatabase()
+    var layout = hwhive.partitionLayout(database, table)
+    var missing = []
+    var locationError = afterRegistration ? '分区已提交注册，但无法核验全部实际目录' : '无法核验Hive目标分区及其实际目录'
+    try {
+        // 只批量读取本次需要的分区。表结构查询只返回表 Location，不再返回全表分区清单。
+        var locations = hwhive.partitionLocations(database, table, buckets)
+        if (!(locations instanceof Map)) { exit 409, locationError }
+        for (bucket in buckets) {
+            if (blank(locations.get(bucket))) { exit 409, locationError }
+        }
+    } catch (e) {
+        var failure = e
+        var depth = 0
+        while (failure.getCause() != null && failure.getCause() != failure && depth < 8) {
+            failure = failure.getCause()
+            depth = depth + 1
+        }
+        // 已部署模块通过此固定诊断返回缺失项。仅识别当前库表及请求内分区，权限或连接错误不可用于补分区。
+        var detail = textOf(failure.getMessage())
+        var prefix = 'Hive目标表`' + database + '`.`' + table + '`缺少可读取的分区Location：'
+        var suffix = '；请核对分区注册及Metastore权限'
+        if (!(failure instanceof IllegalArgumentException) || blank(detail)
+            || !detail.startsWith(prefix) || !detail.endsWith(suffix)) {
+            exit 409, locationError + '，请检查Metastore配置和权限后重试'
+        }
+        var absent = detail.substring(prefix.length(), detail.length() - suffix.length()).split(', ')
+        for (bucket in absent) {
+            if (!buckets.contains(bucket) || missing.contains(bucket)) { exit 409, locationError }
+            missing.add(bucket)
+        }
+        if (missing.size() == 0) { exit 409, locationError }
+    }
+    if (!preview && missing.size() > 0) { exit 409, '已有Hive表缺少本次配置的分区：' + missing.join(', ') }
+    return { database: database, tableName: table, tableLocation: layout.location, missing: missing, buckets: buckets }
 }
 var loadAsset = (assetId) => {
     if (blank(assetId)) {
@@ -465,8 +489,7 @@ if (body?.batchValidateOnly == true || body?.batchReuseValidation == true) {
                 entry.result.tableItems = reusedTableItems(entry.target.tableItems, columns, group.config, entry.target.tableName, warnings)
                 entry.result.compatibilityWarnings = warnings
                 entry.result.physicalTableReused = true
-                entry.result.partitionCheck = verifyPartitionReuse(group.config, group.managedHive, entry.parsed.lookupName, entry.target?.partitionPlan, body?.partitionPreviewOnly == true)
-                verifyHivePartitionLocations(entry.result.partitionCheck, false)
+                entry.result.partitionCheck = verifyPartitionReuse(group.config, group.managedHive, entry.parsed.lookupName, entry.target?.partitionPlan, body?.partitionPreviewOnly == true, false)
             }
         }
         return {batchReuseValidation:true, results:validated, sideEffectsApplied:false}
@@ -546,7 +569,7 @@ if (body.canvas == true) {
         var columns = managedHive ? hiveColumns(config, parsed.lookupName) : metadataExplorerService.getColumns(config, parsed.lookupName)
         var warnings = []
         var tableItems = reusedTableItems(body.tableItems, columns, config, parsed.tableName, warnings)
-        var partitionCheck = verifyPartitionReuse(config, managedHive, parsed.lookupName, body?.partitionPlan, body?.repairHivePartitions == true)
+        var partitionCheck = verifyPartitionReuse(config, managedHive, parsed.lookupName, body?.partitionPlan, body?.repairHivePartitions == true, false)
         if (body?.repairHivePartitions == true) {
             if (partitionCheck == null || textOf(body?.expectedHiveDatabase) != textOf(partitionCheck.database)
                 || textOf(body?.expectedHiveTable) != textOf(partitionCheck.tableName)
@@ -566,11 +589,9 @@ if (body.canvas == true) {
             }
             try { hwhive.execDDLSqlInDatabase(config.getDatabase(), 'ALTER TABLE `' + qualifiedTable + '` ADD IF NOT EXISTS ' + partitionsToAdd.join(' ')) }
             catch (e) { exit 500, 'Hive分区注册未完成，请重新检查实际分区后重试' }
-            partitionCheck = verifyPartitionReuse(config, managedHive, parsed.lookupName, body?.partitionPlan, false)
-            verifyHivePartitionLocations(partitionCheck, true)
+            partitionCheck = verifyPartitionReuse(config, managedHive, parsed.lookupName, body?.partitionPlan, false, true)
             return {status:'partitions-registered', tableName:parsed.tableName, physicalTableReused:true, partitionCheck:partitionCheck}
         }
-        verifyHivePartitionLocations(partitionCheck, false)
         return {status:'exists', created:false, tableName:parsed.tableName, physicalTableReused:true,
             tableItems:tableItems, compatibilityWarnings:warnings, partitionPlan:body?.partitionPlan}
     }

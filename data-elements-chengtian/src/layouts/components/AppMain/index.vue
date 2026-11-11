@@ -2,15 +2,13 @@
   <section class="app-main" :style="{ height: appMainHeight }">
     <router-view>
       <template #default="{ Component, route }">
-        <transition enter-active-class="animate__animated animate__fadeIn" mode="out-in">
-          <keep-alive :include="isShowTagsView ? cachedTagViews : cachedListViews">
-            <component
-              :is="currentComponent(Component, route)"
-              :key="route.fullPath"
-              v-bind="(route.meta as any)?.params"
-            />
-          </keep-alive>
-        </transition>
+        <keep-alive :include="isShowTagsView ? cachedTagViews : cachedListViews">
+          <component
+            :is="currentComponent(Component, route)"
+            :key="route.fullPath"
+            v-bind="route.meta.params"
+          />
+        </keep-alive>
       </template>
     </router-view>
   </section>
@@ -80,19 +78,5 @@ const appMainHeight = computed(() => {
 .app-main {
   position: relative;
   background-color: var(--el-bg-color-page);
-
-  /* 布局切换动画优化 */
-  &.animate__animated {
-    animation-duration: 0.1s;
-    animation-fill-mode: forwards;
-  }
-
-  &.animate__fadeOut {
-    animation-timing-function: ease-in;
-  }
-
-  &.animate__fadeIn {
-    animation-timing-function: ease-out;
-  }
 }
 </style>

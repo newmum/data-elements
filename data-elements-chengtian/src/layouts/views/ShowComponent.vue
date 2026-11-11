@@ -36,7 +36,6 @@ async function loadPage(retry = false) {
 
   try {
     const component = await ensureRuntimeSfc(app, props.name, { retry });
-    // AppMain 负责路由动效，页面就绪后直接替换加载占位。
     if (sequence === requestSequence) pageComponent.value = component;
   } catch (error) {
     if (sequence === requestSequence) {

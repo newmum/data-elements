@@ -7,6 +7,9 @@ declare module "vue-router" {
     /** 由授权路由确定的低代码入口。 */
     runtimeSfcRoot?: string;
 
+    /** 由路由配置传给页面组件的参数。 */
+    params?: Record<string, unknown>;
+
     /**
      * 菜单名称
      * @example 'Dashboard'

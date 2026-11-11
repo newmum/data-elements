@@ -264,6 +264,87 @@ class CanvasCreateTableBatchValidationMagicTest {
     }
 
     @Test
+    void reusesPartitionedHiveFromLocationOnlyLayoutWithOneBatchRead() throws Exception {
+        for (int count : List.of(20, 100)) {
+            prepareHivePartitionFixture();
+            var target = hivePartitionTarget(count);
+            counter.queries = 0;
+            physical.layoutCalls = 0;
+            physical.partitionCalls = 0;
+            var result = assertInstanceOf(Map.class, run(hivePartitionPreview(target)));
+            var item = (Map<?, ?>) ((List<?>) result.get("results")).getFirst();
+            var check = assertInstanceOf(Map.class, item.get("partitionCheck"));
+            assertEquals(List.of(), check.get("missing"));
+            assertEquals(count, ((List<?>) check.get("buckets")).size());
+            assertEquals(1, counter.queries);
+            assertEquals(1, physical.layoutCalls);
+            assertEquals(1, physical.partitionCalls);
+            assertTrue(physical.createdDdls.isEmpty());
+            var request = new LinkedHashMap<>(target);
+            request.putAll(Map.of("canvas", true, "reuseExistingOnly", true));
+            assertEquals(true, assertInstanceOf(Map.class, run(request)).get("physicalTableReused"));
+            assertTrue(physical.createdDdls.isEmpty());
+        }
+    }
+
+    @Test
+    void reportsOnlyMissingPartitionsAndRegistersThemOnlyAfterConfirmation() throws Exception {
+        prepareHivePartitionFixture();
+        physical.missingPartitions = List.of("p_1");
+        var target = hivePartitionTarget(2);
+        var result = assertInstanceOf(Map.class, run(hivePartitionPreview(target)));
+        var check = (Map<?, ?>) ((Map<?, ?>) ((List<?>) result.get("results")).getFirst()).get("partitionCheck");
+        assertEquals(List.of("p_1"), check.get("missing"));
+        assertTrue(physical.createdDdls.isEmpty());
+        var request = new LinkedHashMap<>(target);
+        request.putAll(Map.of("canvas", true, "reuseExistingOnly", true));
+        assertInstanceOf(ExitValue.class, run(request));
+        assertTrue(physical.createdDdls.isEmpty());
+        physical.allowCreate = true;
+        request.putAll(Map.of("repairHivePartitions", true, "expectedHiveDatabase", "warehouse",
+                "expectedHiveTable", "ods_existing", "expectedHiveLocation", "hdfs://cluster/events",
+                "expectedMissingPartitions", List.of("p_0")));
+        assertInstanceOf(ExitValue.class, run(request));
+        assertTrue(physical.createdDdls.isEmpty());
+        request.put("expectedMissingPartitions", List.of("p_1"));
+        var repaired = assertInstanceOf(Map.class, run(request));
+        assertEquals("partitions-registered", repaired.get("status"));
+        assertEquals(List.of("ALTER TABLE `ods_existing` ADD IF NOT EXISTS PARTITION (`ods_partition`='p_1')"),
+                physical.createdDdls);
+    }
+
+    @Test
+    void metadataFailuresCannotBeTreatedAsMissingPartitions() throws Exception {
+        prepareHivePartitionFixture();
+        for (var failure : List.of(new java.sql.SQLException("Access denied"),
+                new IllegalArgumentException("Hive目标表`warehouse`.`other_table`缺少可读取的分区Location：p_0；请核对分区注册及Metastore权限"))) {
+            physical.partitionFailure = failure;
+            assertInstanceOf(ExitValue.class, run(hivePartitionPreview(hivePartitionTarget(2))));
+            assertTrue(physical.createdDdls.isEmpty());
+        }
+    }
+
+    private void prepareHivePartitionFixture() {
+        var id = new ColumnInfo();
+        id.setColumnName("id");
+        id.setDataType("string");
+        id.setNullable(true);
+        physical.columns = List.of(id);
+    }
+
+    private Map<String, Object> hivePartitionTarget(int count) {
+        var buckets = java.util.stream.IntStream.range(0, count).mapToObj(i -> Map.of("bucket", "p_" + i)).toList();
+        return Map.of("dbId", "target-db", "tableName", "ods_existing", "ddl", "CREATE TABLE ods_existing(id STRING)",
+                "tableItems", List.of(Map.of("columnName", "id", "dataType", "string")),
+                "partitionPlan", Map.of("enabled", true, "partitions", buckets));
+    }
+
+    private Map<String, Object> hivePartitionPreview(Map<String, Object> target) {
+        return Map.of("canvas", true, "validateOnly", true, "batchReuseValidation", true,
+                "partitionPreviewOnly", true, "targets", List.of(target));
+    }
+
+    @Test
     void hiveDescribeKeepsLengthAndDecimalCapacity() throws Exception {
         ColumnInfo name=new ColumnInfo(); name.setColumnName("name"); name.setDataType("varchar(32)");
         ColumnInfo amount=new ColumnInfo(); amount.setColumnName("amount"); amount.setDataType("decimal(10, 2)");
@@ -435,11 +516,31 @@ class CanvasCreateTableBatchValidationMagicTest {
             if(rawRows!=null) return rawRows;
             return columns.stream().map(column->Map.<String,Object>of("col_name",column.getColumnName(),"data_type",column.getDataType())).toList();
         }
+        int layoutCalls;
+        int partitionCalls;
+        List<String> missingPartitions = List.of();
+        Exception partitionFailure;
+
+        public Map<String, Object> partitionLayout(String database, String table) {
+            layoutCalls++;
+            return Map.of("location", "hdfs://cluster/events");
+        }
+
+        public Map<String, String> partitionLocations(String database, String table, List<String> buckets) throws Exception {
+            partitionCalls++;
+            if (partitionFailure != null) throw partitionFailure;
+            if (!missingPartitions.isEmpty()) throw new IllegalArgumentException("Hive目标表`" + database + "`.`" + table
+                    + "`缺少可读取的分区Location：" + String.join(", ", missingPartitions) + "；请核对分区注册及Metastore权限");
+            Map<String, String> result = new LinkedHashMap<>();
+            for (String bucket : buckets) result.put(bucket, "hdfs://cluster/events/ods_partition=" + bucket);
+            return result;
+        }
         public void createTable(DataSourceConfig config,String ddl) { fail("Reuse must never issue CREATE TABLE"); }
         public void execDDLSqlInDatabase(String database,String ddl) throws java.sql.SQLException {
             if (!allowCreate) fail("Hive reuse must never issue DDL");
             if (createFailure != null) throw createFailure;
             assertEquals("warehouse",database); createdDdls.add(ddl);
+            if (ddl.startsWith("ALTER TABLE")) missingPartitions = List.of();
         }
     }
 
