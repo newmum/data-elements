@@ -178,6 +178,8 @@ python tools/resource-sync.py publish --apply --file 'lowcode/05.数据治理/2.
 仅编译产物过期时，复用 `tools/resource-sync.py` 的 `repair_compiled` 批量修复函数。每次显式选择 1–200 个已登记组件，核对本地源码、当前数据库源码、编译源码摘要及已认证运行组件，再加锁复核并批量更新编译 JS/CSS，保留源码、身份和父级，刷新缓存后回读验证。并发源码或编译产物变化会阻止写入。含凭据的组件只能从仓库外受限保存的当前真实源码编译，恢复材料也保存到仓库外，不能将脱敏占位符作为运行源码发布。
 
 
+可独立运行、仅依赖 Vue、Element Plus 和全局 `Icon` 的组件，可使用 `tools/lowcode-preview/index.html?component=<lowcode 下的相对路径>` 做交互预览，默认打开异常任务页。工具读取当前发布分支的规范源和索引，在浏览器编译，不维护第二份业务组件；脱敏占位资源禁止预览。页面保留组件本身现有的示例数据，不补造 API 返回、不携带登录凭据，也不替代真实租户页面验收。部署到 GitHub Pages 时使用独立功能分支的仓库根目录及 `.nojekyll`，保留 `lowcode/` 与工具的相对路径；依赖版本与项目一致，并使用固定版本和 SRI 校验。
+
 <a id="resource-versioning--数据库结构"></a>
 
 ### 数据库结构
