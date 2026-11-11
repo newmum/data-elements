@@ -317,6 +317,14 @@ python tools/export-db.py --project haitong-data-pull
 
 金仓通过相同的 `jaydebeapi`、`JPype1` 和现有 kingbase8 JDBC 驱动读取原生目录。`configure-resources.py --data-id data-element_ct.yml --runtime-config <86环境私有运行配置>` 可读取原专用配置；默认按当前私有启动配置读取 `chengtian-14.yml`，显式 `--data-id` 仍可选择其他已核对的资源。重新定位后须保留私有配置中的独立工程 `project_databases`。
 
+### MongoDB 数据抽取与接入
+
+- 在“数据源管理 → 登记数据源 → 数据抽取”中选择 MongoDB，填写主机、端口和数据库名。需要认证时同时填写账号和密码，认证库默认 `admin`，使用 TLS 的实例需开启 TLS。测试连接只检查所登记数据库的集合枚举权限。
+- 来源集合沿用集合采集、字段快照、登记完成、接入申请与任务部署。MongoDB 来源按调度全量读取所选集合，`ObjectId` 以十六进制字符串进入字段映射。集合的字段快照来自最多 100 条样本文档。
+- 目标集合沿用 ODS 分域选择及物化预检。预览返回受限的集合创建指令，应用账号需能创建集合和索引，执行账号需能写入集合。任务会按已映射业务键更新或插入；没有可映射业务键时执行追加。全量读取不会向下游同步删除。
+- 在登记表或物化目标的“数据预览”中可分页查看集合文档，支持字段投影、排序、等值和包含过滤。
+- NiFi 执行节点需加载 MongoDB NAR 和 MongoDB Controller Service。MongoDB 认证信息与连接端点分别传递。
+
 ### 登记接入申请字段
 
 `db_table_t.access_request_status`为0未申请、1待处理、2已受理，默认0；`access_requested_by`保存认证申请人标识，`access_requested_at`保存申请时间。申请字段不替代`asset_status`登记进度或NiFi实时状态。MySQL时间使用DATETIME(6)，达梦使用TIMESTAMP(6)。接口和状态规则见[接入任务状态契约](data-elements-haitong.md#access-task-lifecycle)。
@@ -608,6 +616,7 @@ The frontend uses `@form-create/element-ui` to render configurable business form
 - 数据源管理卡片的“字典表／业务表／日志表”数量仅统计当前租户、可见数据源下 `is_del=0` 且 `db_table_t.asset_status > 0` 的对应类型表，状态 `1`、`2` 均计入，`0`、NULL、负值不计入。主表批量聚合为权威来源，不能沿用 ES 残留数量；前端备用统计保持同一规则。“数据表总数／已标注／待标注”仍使用探查与标注范围，不因本规则排除未登记表；数据源本身是否结束登记不影响管理卡片这三类数量。
 - 海通来源节点的 `incrementalColumn` 是持久化的流程配置，不是随启动或停止重置的运行水位。只有新建模板时根据来源表登记的抽取时间初始化一次，不按主键或字段名猜测；Java 模板与 Magic 接入任务创建保持同一规则，以本跳来源表明确登记的时间戳匹配真实物理字段名。级联下游无登记选择时可沿用已生成 ODS 契约的 `ODS_GXSJ`，不能覆盖明确登记的选择。来源节点的增量配置在全量模式下也保持可查看、可预先编辑，切换增量同步后生效；不能只显示空分组标题，也不能为显示字段而自动修改已保存的同步方式。打开已有画布、来源配置面板、保存和启动均不异步重新读取登记配置或自动补齐历史任务；历史任务缺失字段由用户手工填写。保存及启动只校验当前配置，不能用登记值覆盖手工选择；缺少必填主增量字段时明确提示并拒绝增量操作，全量同步不依赖该字段。停止、监控刷新和保存回读必须保持已保存的字段及完整设计配置，服务端返回空值或不同字段时不能静默覆盖当前画布。
 - 数据库来源发布使用现有 `com.linewell.microservice:datadevs-database-nar:2.9.0` 的 `GenerateDateTableFetch`，不依赖自创后缀版本。按月、间隔 1、`Partition Size=10000`、`Max Wait Time=0 seconds`、Min/Max Date 默认未设置，不自动填入当前时间或最大时间。普通增量及首次全量后增量的 `Maximum-value Columns` 与 `Column for Value Partitioning` 同为初始化自来源登记表的时间戳字段；单次/定时全量只保留时间分片字段，不启用增量水位。现有 2.9.0 未声明 `Initial Load Strategy`，不得把该属性作为动态属性写入；“从当前最大值开始”保留既有原生 QueryDatabaseTableRecord 初始化路径，不能变成历史全量，也不使用 Max Date 模拟初始水位。新模板的 Java/Magic 默认批量大小同为 10000，来源 ExecuteSQLRecord 每个 FlowFile 最多 10000 行。发布前一次核验指定扩展并在内存校验所有来源配置，禁止逐节点补查登记表或读取来源数据。非数据库协议保留相应采集组件。
+- 自动创建 MySQL 接入任务时，登记的水位字段为 `DATETIME`（含精度）且 JDBC URL 未指定 `treatMysqlDatetimeAsTimestamp` 时，在新任务的来源连接中设置该选项。Connector/J 8.4 由此向时间分片处理器返回 JDBC Timestamp。已保存任务可以在来源连接中显式设置后重新发布。
 - 表保存、重新标注、驳回、删除快照、模板导入及探查新增表后同步数据源状态；未结束登记的 `0` 不因单表保存自动升为 `1/2`。数据接入树、列表、统计及任务创建采用相同范围：`db_datasource_t.asset_status > 0` 且 `db_table_t.asset_status > 0`，并保留有效记录、业务表/日志表/字典表及当前租户条件。状态 `0` 或 NULL 不计入接入候选；状态 `1` 的表也可接入，但数据源“全部登记完成”的聚合仍要求所有有效表状态为 `2`。推送契约仍只发布状态 `2` 的表，其发布范围独立于接入候选。接入任务展开区按真实任务来源展示“来源库／来源表 → 目标库／目标表”的数据链路，级联任务不能用根来源替代上一跳，历史多目标任务须展示全部已授权目标；所需元数据随分页接口批量返回，不在展开时逐任务补查。状态聚合每批最多 `100` 个数据源，在集合外一次分组查询，不逐表/逐数据源补查。
 - The `是否可连通` field binds to `connectionStatus` / `connection_status`, is display-only in the detail form, and its result may be updated only by an actual connection test or the deliberate removal of connection information. Enforce this in the save API as well as by disabling the form control.
 - Before changing a detail page, audit the complete runtime path: the consuming component, `base-detail`, `json-form`, all custom rule components, and the selected tenant's `sym_form` row. Move any discovered page-specific visual element or behavior into the applicable form configuration, unless it is a truly generic renderer capability or an authorization/data-integrity rule that must stay server-side.

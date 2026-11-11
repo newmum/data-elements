@@ -258,7 +258,7 @@ var taskDatasourceType = (row) => {
     var mode=text(pool.accessMode || pool.dataAccessMode).trim().toLowerCase()
     var noConnection=['0','false','no','off'].contains(text(first(row,['showConnect','show_connect'])).trim().toLowerCase())
     if(mode=='proxy') {return 'mode:proxy'}
-    if(['upload','report'].contains(mode) || (key=='api' && noConnection)) {return 'mode:upload'}
+    if(['upload','report'].contains(mode) || (key=='api' && noConnection && !['capture','pull'].contains(mode))) {return 'mode:upload'}
     if(['receive','push'].contains(mode)) {return 'mode:receive'}
     return key
 }

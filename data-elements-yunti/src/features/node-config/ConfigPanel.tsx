@@ -18,6 +18,7 @@ import {
 } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { requireNodeDef } from "@/domain/node-registry";
+import { useRegisteredServices } from "@/services/flows";
 import {
   usePlatformDataSources,
   type PlatformDataSource,
@@ -148,12 +149,16 @@ function NodeFields({
     | undefined;
   const flow = useEditorStore((s) => s.flow);
   const selectedId = useEditorStore((s) => s.selectedNodeIds[0]);
+  const [serviceKeyword, setServiceKeyword] = useState("");
+  const { data: registered = [], isFetching: servicesLoading } = useRegisteredServices(
+    nodeType === "http-call" && keys.includes("serviceId"), serviceKeyword,
+  );
   const {
     data: sources = [],
     isLoading,
     isError,
     refetch,
-  } = usePlatformDataSources(keys.includes("datasource"));
+  } = usePlatformDataSources(keys.includes("datasource") && !data?.serviceId);
   const def = requireNodeDef(nodeType);
   const variables = useMemo(
     () => variableOptions(flow, selectedId),
@@ -182,6 +187,8 @@ function NodeFields({
       )}
       {keys.map((key) => {
         if (key === "auth") return null;
+        if (nodeType === "http-call" && data?.serviceId
+            && ["datasource", "method", "url", "timeout", "retry", "follow", "parse", "extract"].includes(key)) return null;
         if (
           ["condition", "switch"].includes(nodeType) &&
           logicMode === "expression" &&
@@ -225,6 +232,18 @@ function NodeFields({
           name: path,
           className: block ? "fs-config__block-field" : undefined,
         };
+        if (key === "serviceId") {
+          const choices = registered.map((row) => ({ value: row.id, label: `${row.serviceName} · ${row.method}` }));
+          if (typeof data?.serviceId === "string" && data.serviceId && !choices.some((choice) => choice.value === data.serviceId)) {
+            choices.unshift({ value: data.serviceId, label: data.serviceId });
+          }
+          return (
+            <Form.Item {...itemProps}>
+              <Select showSearch allowClear filterOption={false} onSearch={setServiceKeyword}
+                loading={servicesLoading} placeholder="搜索并选择登记的接口" options={choices} />
+            </Form.Item>
+          );
+        }
         if (key === "request")
           return (
             <Form.Item {...itemProps}>

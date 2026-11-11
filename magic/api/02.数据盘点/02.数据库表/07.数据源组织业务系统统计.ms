@@ -201,7 +201,7 @@ if (text(body?.mode) == 'facets') {
             if (mode == 'proxy') {
                 typeKey = 'mode:proxy'
             } else if (['upload', 'report'].contains(mode)
-                    || (typeKey == 'api'
+                    || (typeKey == 'api' && !['capture', 'pull'].contains(mode)
                     && text(row.showConnect != null ? row.showConnect : row.showconnect) == '0')) {
                 typeKey = 'mode:upload'
             } else if (['receive', 'push'].contains(mode)) {

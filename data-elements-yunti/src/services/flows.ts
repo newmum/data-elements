@@ -78,14 +78,14 @@ export function useCompile() {
 
 export function useDebug() {
   return useMutation({
-    mutationFn: (flow: Flow) => {
+    mutationFn: ({ flow, input }: { flow: Flow; input: Record<string, unknown> }) => {
       const result = compile(flow);
       if (!result.ok) {
         throw new Error(result.problems.map((item) => item.message).join('\n') || '流程编译失败');
       }
       return request<DebugResult>('POST', `/flows/${flow.flowId}/debug`, {
         flow,
-        script: result.script,
+        input,
       });
     },
   });
@@ -94,21 +94,30 @@ export function useDebug() {
 export function usePublish() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: { id: string; remark: string; targetNodeId?: string }) => {
-      const detail = await request<FlowDetail>('GET', `/flows/${vars.id}`);
-      const result = compile(detail.flow);
-      if (!result.ok) {
-        throw new Error(result.problems.map((item) => item.message).join('\n') || '流程编译失败');
-      }
+    mutationFn: (vars: { id: string; lockVersion: number; remark: string; targetNodeId?: string }) => {
       return request<PublishResult>('POST', `/flows/${vars.id}/publish`, {
         remark: vars.remark,
         targetNodeId: vars.targetNodeId,
-        script: result.script,
+        lockVersion: vars.lockVersion,
       });
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: flowKeys.all });
       qc.invalidateQueries({ queryKey: flowKeys.versions(vars.id) });
+      qc.invalidateQueries({ queryKey: flowKeys.detail(vars.id) });
+    },
+  });
+}
+
+export function useRegisteredServices(enabled: boolean, keyword: string) {
+  return useQuery({
+    queryKey: ['registered-services', keyword],
+    enabled,
+    queryFn: async () => {
+      const data = await request<{ list: Array<{ id: string; serviceName: string; method: string; uri: string; upstreamAddress?: string }> }>(
+        'POST', '/gateway/api/list', { pageNum: 1, pageSize: 30, keyword },
+      );
+      return data.list.filter((row) => row.upstreamAddress || row.uri);
     },
   });
 }

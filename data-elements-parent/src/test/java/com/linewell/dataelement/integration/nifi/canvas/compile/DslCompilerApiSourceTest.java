@@ -50,7 +50,8 @@ class DslCompilerApiSourceTest {
                                 "url", "https://example.test/api/list",
                                 "method", "POST",
                                 "connectTimeout", "10 sec",
-                                "readTimeout", "30 sec"))), List.of()),
+                                "readTimeout", "30 sec",
+                                "responseExtractPath", "data.list"))), List.of()),
                 null, null, null, null, null, null, null);
 
         new DslCompiler(nifi, registry, mock(FieldMappingService.class), mock(HiveModule.class)).compile(pipeline);
@@ -63,8 +64,12 @@ class DslCompilerApiSourceTest {
         assertThat(properties.getValue())
                 .containsEntry("HTTP URL", "https://example.test/api/list")
                 .containsEntry("Socket Read Timeout", "30 sec")
-                .containsEntry("Response Generation Required", "true")
+                .containsEntry("Response Generation Required", "false")
                 .doesNotContainKeys("Remote URL", "Read Timeout", "Always Output Response");
+        verify(nifi).createProcessor(eq("pg"), eq("org.apache.nifi.processors.standard.EvaluateJsonPath"),
+                eq("接口来源/提取响应记录"), anyDouble(), anyDouble(),
+                eq(Map.of("Destination", "flowfile-content", "Return Type", "json", "records", "$.data.list")),
+                nullable(String.class), nullable(String.class));
     }
 
     @Test

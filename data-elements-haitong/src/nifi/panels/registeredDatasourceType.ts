@@ -9,7 +9,7 @@ const aliases: Record<string, string> = {
 const sourceKeys = new Set([
   'mysql', 'vertica', 'oracle', 'oceanbase', 'gaussdb', 'gbase8a', 'sqlserver', 'hive', 'hetu', 'doris', 'starrocks',
   'clickhouse', 'iotdb', 'hdfs', 'hbase', 'dameng', 'postgresql', 'db2', 'mariadb', 'gbase8s', 'oscar',
-  'highgo', 'kingbase', 'minio', 'ftp', 'sftp', 'api', 'kafka', 'elasticsearch', 'tdsql-mysql', 'tdsql-pg', 'hailiang',
+  'highgo', 'kingbase', 'minio', 'ftp', 'sftp', 'api', 'kafka', 'elasticsearch', 'mongodb', 'tdsql-mysql', 'tdsql-pg', 'hailiang',
 ]);
 
 function typeKey(raw?: string) {

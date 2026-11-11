@@ -12,9 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.sql.DataSource;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.ssssssss.magicapi.core.annotation.MagicModule;
@@ -32,7 +30,6 @@ public class ApiPullConfigurationMagicModule {
     private static final Set<String> TRIGGER_TYPES = Set.of("MANUAL", "CRON", "EVENT");
     private static final ObjectMapper JSON = new ObjectMapper();
     private final TenantDataSourceRegistry tenants;
-    private final Set<String> ruleSchemaReadyTenants = ConcurrentHashMap.newKeySet();
 
     public ApiPullConfigurationMagicModule(TenantDataSourceRegistry tenants) {
         this.tenants = tenants;
@@ -42,12 +39,41 @@ public class ApiPullConfigurationMagicModule {
     public List<Map<String, Object>> definitions(String datasourceId) {
         String tenantId = tenantId();
         requireId(datasourceId, "数据源标识不能为空");
-        ensureSchema(tenantId);
-        assertApiPullDatasource(tenantId, datasourceId);
-        Map<String, Object> source = jdbc(tenantId).queryForMap(
-                "select pool_cfg from db_datasource_t where tid=? and tenant_id=? and is_del=0",
-                datasourceId, tenantId);
-        return apiPullItems(text(source.get("pool_cfg"), ""));
+        return apiPullItems(text(requireApiPullDatasource(tenantId, datasourceId).get("pool_cfg"), ""));
+    }
+
+    @Comment("校验 API 抓取登记定义及凭据边界")
+    public boolean validateDefinitions(List<?> definitions) {
+        if (definitions == null || definitions.isEmpty() || definitions.size() > 100) {
+            throw new IllegalArgumentException("请登记 1 至 100 条 API");
+        }
+        Set<String> names = new java.util.HashSet<>();
+        for (Object entry : definitions) {
+            if (!(entry instanceof Map<?, ?> item)) throw new IllegalArgumentException("API 定义格式无效");
+            String name = text(item.get("tableName"), "");
+            if (!name.matches("[A-Za-z][A-Za-z0-9_]{0,95}") || !names.add(name.toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("API 数据资源英文名无效或重复");
+            }
+            if (text(item.get("serviceName"), "").isBlank() || text(item.get("tableComment"), "").isBlank()) {
+                throw new IllegalArgumentException("请填写 API 服务名称和数据表中文名");
+            }
+            URI base = URI.create(text(item.get("baseUrl"), ""));
+            String path = text(item.get("endpointPath"), "");
+            if (!Set.of("http", "https").contains(text(base.getScheme(), "").toLowerCase(Locale.ROOT))
+                    || base.getHost() == null || base.getUserInfo() != null || !path.startsWith("/") || path.startsWith("//")) {
+                throw new IllegalArgumentException("请填写有效的 HTTP(S) API 地址和相对路径");
+            }
+            for (String field : List.of("authPassword", "authToken", "apiKeyValue", "oauthClientSecret")) {
+                if (!text(item.get(field), "").isBlank()) throw new IllegalArgumentException("API 登记请使用凭据引用");
+            }
+            rejectSensitiveHeaders(text(item.get("commonHeadersJson"), ""));
+            rejectSensitiveHeaders(text(item.get("requestHeadersJson"), ""));
+            String auth = text(item.get("authType"), "NONE").toUpperCase(Locale.ROOT);
+            if (!"NONE".equals(auth) && text(item.get("credentialRef"), "").isBlank()) {
+                throw new IllegalArgumentException("启用 API 认证时请填写凭据引用");
+            }
+        }
+        return true;
     }
 
     @Comment("把逻辑表英文名和服务名称规范化为可保存的 API 服务编码")
@@ -57,9 +83,9 @@ public class ApiPullConfigurationMagicModule {
         return serviceCode(tableName, serviceName);
     }
 
-    @Comment("确保当前租户的 API 拉取服务表和规则表存在；不创建或启动任何 NiFi 任务")
+    @Comment("验证当前租户上下文；API 拉取表由租户数据库基线维护")
     public boolean prepareRuleSchema() {
-        ensureSchema(tenantId());
+        tenantId();
         return true;
     }
 
@@ -67,7 +93,6 @@ public class ApiPullConfigurationMagicModule {
     public boolean validateDatasource(String datasourceId) {
         String tenantId = tenantId();
         requireId(datasourceId, "数据源标识不能为空");
-        ensureSchema(tenantId);
         assertApiPullDatasource(tenantId, datasourceId);
         return true;
     }
@@ -76,7 +101,6 @@ public class ApiPullConfigurationMagicModule {
     public Map<String, Object> saveService(Map<String, Object> body) {
         String tenantId = tenantId();
         String datasourceId = required(body, "datasourceId", "请选择数据源");
-        ensureSchema(tenantId);
         assertApiPullDatasource(tenantId, datasourceId);
         String serviceName = required(body, "serviceName", "请填写接口服务名称");
         String serviceCode = required(body, "serviceCode", "请填写接口服务编码").toLowerCase(Locale.ROOT);
@@ -137,7 +161,6 @@ public class ApiPullConfigurationMagicModule {
         String datasourceId = required(body, "datasourceId", "请选择数据源");
         String tableId = required(body, "sourceTableId", "请选择逻辑数据表");
         String serviceId = required(body, "serviceId", "请选择接口服务");
-        ensureSchema(tenantId);
         assertApiPullDatasource(tenantId, datasourceId);
         assertTable(tenantId, datasourceId, tableId);
         assertService(tenantId, datasourceId, serviceId);
@@ -189,10 +212,7 @@ public class ApiPullConfigurationMagicModule {
         String tenantId = tenantId();
         requireId(datasourceId, "数据源标识不能为空");
         requireId(tableName, "逻辑表名称不能为空");
-        ensureSchema(tenantId);
-        assertApiPullDatasource(tenantId, datasourceId);
-        Map<String, Object> source = jdbc(tenantId).queryForMap(
-                "select pool_cfg from db_datasource_t where tid=? and tenant_id=? and is_del=0", datasourceId, tenantId);
+        Map<String, Object> source = requireApiPullDatasource(tenantId, datasourceId);
         Map<String, Object> item = apiPullItems(text(source.get("pool_cfg"), "")).stream()
                 .filter(candidate -> tableName.equalsIgnoreCase(text(candidate.get("tableName"), "")))
                 .findFirst().orElseThrow(() -> new IllegalArgumentException("第一步未找到与逻辑表匹配的 API 定义：" + tableName));
@@ -202,25 +222,54 @@ public class ApiPullConfigurationMagicModule {
         config.put("url", endpointPath.startsWith("http://") || endpointPath.startsWith("https://")
                 ? endpointPath : baseUrl + (endpointPath.startsWith("/") ? endpointPath : "/" + endpointPath));
         config.put("method", text(item.get("endpointMethod"), "GET").toUpperCase(Locale.ROOT));
-        config.put("contentType", "application/json");
+        config.put("apiProtocol", text(item.get("apiProtocol"), "REST"));
+        config.put("captureScope", text(item.get("captureScope"), "full"));
+        config.put("paginationMode", text(item.get("paginationMode"), "none"));
+        config.put("contentType", text(item.get("apiProtocol"), "REST").equalsIgnoreCase("SOAP")
+                ? "text/xml" : "application/json");
         config.put("requestBody", text(item.get("requestTemplateJson"), ""));
-        config.put("commonHeadersJson", text(item.get("commonHeadersJson"), ""));
+        String headers = text(item.get("commonHeadersJson"), "");
+        rejectSensitiveHeaders(headers);
+        config.put("commonHeadersJson", headers);
+        config.put("responseExtractPath", text(item.get("responseExtractPath"), ""));
         config.put("responseConfigJson", text(item.get("responseConfigJson"), ""));
         config.put("paginationConfigJson", text(item.get("paginationConfigJson"), ""));
         config.put("incrementalConfigJson", text(item.get("incrementalConfigJson"), ""));
         config.put("runtimeConfigJson", text(item.get("runtimeConfigJson"), ""));
         config.put("authType", text(item.get("authType"), "NONE").toUpperCase(Locale.ROOT));
         config.put("credentialRef", text(item.get("credentialRef"), ""));
-        String trigger = text(item.get("triggerMode"), "MANUAL").toUpperCase(Locale.ROOT);
-        config.put("triggerMode", trigger);
-        if ("CRON".equals(trigger)) {
+        applySchedule(config, item);
+        return config;
+    }
+
+    public static void applySchedule(Map<String, Object> config, Map<String, Object> item) {
+        Object saved = item.get("captureSchedule");
+        Map<?, ?> schedule = saved instanceof Map<?, ?> map ? map : Map.of();
+        String mode = text(schedule.get("mode"), text(item.get("scheduleMode"), "")).toLowerCase(Locale.ROOT);
+        String cron = text(schedule.get("cronExpression"), text(item.get("cronExpression"), ""));
+        if (!cron.isBlank()) {
             config.put("batchSchedulePolicy", "CUSTOM");
+            config.put("scheduleMode", "cron");
             config.put("schedulingStrategy", "CRON_DRIVEN");
-            config.put("schedulingPeriod", required(item, "cronExpression", "定时 API 缺少 Cron 表达式"));
+            config.put("schedulingPeriod", cron);
+        } else if ("interval".equals(mode)) {
+            String minutes = text(schedule.get("intervalMinutes"), text(item.get("scheduleIntervalMinutes"), ""));
+            int interval = Integer.parseInt(minutes);
+            if (interval < 1 || interval > 10080) throw new IllegalArgumentException("API 抓取间隔必须为 1 至 10080 分钟");
+            config.put("batchSchedulePolicy", "CUSTOM");
+            config.put("scheduleMode", "interval");
+            config.put("schedulingStrategy", "TIMER_DRIVEN");
+            config.put("schedulingPeriod", interval + " min");
+        } else if ("once".equals(mode)) {
+            config.put("batchSchedulePolicy", "CUSTOM");
+            config.put("scheduleMode", "once");
+            config.put("schedulingStrategy", "TIMER_DRIVEN");
+            config.put("schedulingPeriod", "0 sec");
+        } else if ("time".equals(mode) || "CRON".equalsIgnoreCase(text(item.get("triggerMode"), ""))) {
+            throw new IllegalArgumentException("定时 API 缺少 Cron 表达式，请重新保存抓取配置");
         } else {
             config.putAll(com.linewell.dataelement.integration.nifi.canvas.pipeline.BatchSchedulePolicy.markDefault(config));
         }
-        return config;
     }
 
     /**
@@ -247,7 +296,6 @@ public class ApiPullConfigurationMagicModule {
                 || pool.contains("\"accessmode\":\"pull\""))) {
             return Map.of("applicable", false, "message", "当前来源不是 API 数据拉取，未绑定表规则");
         }
-        ensureSchema(tenantId);
         int changed = jdbc.update("""
                 update data_pull_rule_t
                    set nifi_task_id=?,updated_by=?,updated_time=?
@@ -261,118 +309,6 @@ public class ApiPullConfigurationMagicModule {
 
     private String tenantId(){ return TenantContext.requireTenantId(); }
     private JdbcTemplate jdbc(String tenantId){ DataSource ds=tenants.dataSourceForTenant(tenantId); return new JdbcTemplate(ds); }
-    private void ensureSchema(String tenantId) {
-        JdbcTemplate jdbc = jdbc(tenantId);
-        jdbc.execute("""
-                create table if not exists data_pull_service_t (
-                  tid varchar(32) not null, tenant_id varchar(32) not null, datasource_id varchar(32) not null,
-                  service_name varchar(128) not null, service_code varchar(96) not null, base_url varchar(1000) not null,
-                  path_prefix varchar(500) null, protocol varchar(16) not null default 'HTTPS', service_type varchar(32) not null default 'REST',
-                  media_type varchar(128) not null default 'application/json', network_mode varchar(32) not null default 'DIRECT',
-                  outbound_allowlist varchar(1000) null, connect_timeout_ms int not null default 5000, read_timeout_ms int not null default 30000,
-                  max_response_bytes bigint not null default 10485760, tls_mode varchar(32) not null default 'VERIFY_IDENTITY', client_cert_ref varchar(255) null,
-                  common_headers_json longtext null, auth_type varchar(48) not null default 'NONE', credential_ref varchar(255) null,
-                  auth_config_json longtext null, status tinyint not null default 1, created_by varchar(32) null, created_time datetime(6) not null,
-                  updated_by varchar(32) null, updated_time datetime(6) not null, is_del tinyint not null default 0,
-                  primary key(tid), unique key uk_pull_service_tenant_code(tenant_id,datasource_id,service_code,is_del),
-                  key idx_pull_service_source(tenant_id,datasource_id,status,is_del)) engine=InnoDB default charset=utf8mb4
-                """);
-        jdbc.execute("""
-                create table if not exists data_pull_rule_t (
-                  tid varchar(32) not null, tenant_id varchar(32) not null, datasource_id varchar(32) not null,
-                  source_table_id varchar(32) not null, service_id varchar(32) not null, rule_name varchar(128) not null,
-                  endpoint_method varchar(12) not null default 'GET', endpoint_path varchar(1000) not null,
-                  request_template_json longtext null, response_config_json longtext null, pagination_config_json longtext null,
-                  incremental_config_json longtext null, orchestration_config_json longtext null, mapping_config_json longtext null,
-                  quality_config_json longtext null, delete_config_json longtext null, runtime_config_json longtext null,
-                  trigger_mode varchar(16) not null default 'MANUAL', cron_expression varchar(128) null, nifi_task_id varchar(64) null,
-                  enabled tinyint not null default 0, created_by varchar(32) null, created_time datetime(6) not null, updated_by varchar(32) null,
-                  updated_time datetime(6) not null, is_del tinyint not null default 0, primary key(tid),
-                  unique key uk_pull_rule_table(tenant_id,source_table_id,is_del), key idx_pull_rule_due(tenant_id,enabled,trigger_mode,is_del),
-                  key idx_pull_rule_source(tenant_id,datasource_id,service_id,is_del)) engine=InnoDB default charset=utf8mb4
-                """);
-        // 已部署环境可能先由早期版本创建过 data_pull_rule_t。CREATE TABLE IF NOT EXISTS
-        // 不会补齐新增字段，后续保存标注时就会在 INSERT 阶段出现“SQL 语法错误/字段不存在”。
-        // 逐列补齐使旧表可以平滑升级；新增列均给出对历史记录安全的默认值或允许为空。
-        if (!ruleSchemaReadyTenants.contains(tenantId)) {
-            ensureRuleSchemaCompatibility(jdbc);
-            ruleSchemaReadyTenants.add(tenantId);
-        }
-        jdbc.execute("""
-                create table if not exists data_pull_checkpoint_t (
-                  tid varchar(32) not null, tenant_id varchar(32) not null, pull_rule_id varchar(32) not null,
-                  checkpoint_key varchar(128) not null default 'default', cursor_value longtext null, watermark_value varchar(255) null,
-                  watermark_tiebreaker varchar(255) null, page_number bigint null, last_success_batch_id varchar(64) null,
-                  last_full_success_at datetime(6) null, updated_time datetime(6) not null, primary key(tid),
-                  unique key uk_pull_checkpoint_rule_key(tenant_id,pull_rule_id,checkpoint_key), key idx_pull_checkpoint_rule(tenant_id,pull_rule_id)) engine=InnoDB default charset=utf8mb4
-                """);
-        jdbc.execute("""
-                create table if not exists data_pull_run_t (
-                  tid varchar(32) not null, tenant_id varchar(32) not null, pull_rule_id varchar(32) not null,
-                  nifi_task_id varchar(64) null, trigger_source varchar(16) not null, status varchar(24) not null,
-                  request_count bigint not null default 0, received_count bigint not null default 0, parsed_count bigint not null default 0,
-                  written_count bigint not null default 0, duplicate_count bigint not null default 0, failed_count bigint not null default 0,
-                  checkpoint_before_json longtext null, checkpoint_after_json longtext null, error_code varchar(96) null,
-                  error_message varchar(2000) null, started_at datetime(6) not null, finished_at datetime(6) null,
-                  created_by varchar(32) null, created_time datetime(6) not null, primary key(tid),
-                  key idx_pull_run_rule_time(tenant_id,pull_rule_id,started_at), key idx_pull_run_status(tenant_id,status,started_at)) engine=InnoDB default charset=utf8mb4
-                """);
-        jdbc.execute("""
-                create table if not exists data_pull_failure_t (
-                  tid varchar(32) not null, tenant_id varchar(32) not null, pull_run_id varchar(32) not null,
-                  pull_rule_id varchar(32) not null, source_record_key varchar(512) null, stage varchar(24) not null,
-                  retryable tinyint not null default 0, retry_count int not null default 0, payload_digest varchar(64) null,
-                  error_code varchar(96) null, error_message varchar(2000) null, next_retry_at datetime(6) null, resolved_at datetime(6) null,
-                  created_time datetime(6) not null, updated_time datetime(6) not null, primary key(tid),
-                  key idx_pull_failure_retry(tenant_id,retryable,next_retry_at), key idx_pull_failure_run(tenant_id,pull_run_id,pull_rule_id)) engine=InnoDB default charset=utf8mb4
-                """);
-    }
-
-    private void ensureRuleSchemaCompatibility(JdbcTemplate jdbc) {
-        ensureColumn(jdbc, "data_pull_rule_t", "service_id", "varchar(32) not null default ''");
-        ensureColumn(jdbc, "data_pull_rule_t", "rule_name", "varchar(128) not null default ''");
-        ensureColumn(jdbc, "data_pull_rule_t", "endpoint_method", "varchar(12) not null default 'GET'");
-        ensureColumn(jdbc, "data_pull_rule_t", "endpoint_path", "varchar(1000) not null default ''");
-        ensureColumn(jdbc, "data_pull_rule_t", "request_template_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "response_config_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "pagination_config_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "incremental_config_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "orchestration_config_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "mapping_config_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "quality_config_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "delete_config_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "runtime_config_json", "longtext null");
-        ensureColumn(jdbc, "data_pull_rule_t", "trigger_mode", "varchar(16) not null default 'MANUAL'");
-        ensureColumn(jdbc, "data_pull_rule_t", "cron_expression", "varchar(128) null");
-        ensureColumn(jdbc, "data_pull_rule_t", "nifi_task_id", "varchar(64) null");
-        ensureColumn(jdbc, "data_pull_rule_t", "enabled", "tinyint not null default 0");
-        ensureColumn(jdbc, "data_pull_rule_t", "created_by", "varchar(32) null");
-        ensureColumn(jdbc, "data_pull_rule_t", "created_time", "datetime(6) null");
-        ensureColumn(jdbc, "data_pull_rule_t", "updated_by", "varchar(32) null");
-        ensureColumn(jdbc, "data_pull_rule_t", "updated_time", "datetime(6) null");
-        ensureColumn(jdbc, "data_pull_rule_t", "is_del", "tinyint not null default 0");
-    }
-
-    private void ensureColumn(JdbcTemplate jdbc, String tableName, String columnName, String definition) {
-        if (hasColumn(jdbc, tableName, columnName)) return;
-        try {
-            jdbc.execute("alter table `" + tableName + "` add column `" + columnName + "` " + definition);
-        } catch (DataAccessException concurrentChange) {
-            // 两个用户首次进入时可能并发执行升级。若另一事务已补齐字段，应当继续；
-            // 任何其他 DDL 失败仍要原样抛出，避免把真实结构问题掩盖成同步成功。
-            if (!hasColumn(jdbc, tableName, columnName)) throw concurrentChange;
-        }
-    }
-
-    private boolean hasColumn(JdbcTemplate jdbc, String tableName, String columnName) {
-        Integer count = jdbc.queryForObject("""
-                select count(1)
-                  from information_schema.columns
-                 where table_schema = database() and table_name = ? and column_name = ?
-                """, Integer.class, tableName, columnName);
-        return count != null && count > 0;
-    }
-
     private List<Map<String, Object>> apiPullItems(String poolCfg) {
         if (poolCfg == null || poolCfg.isBlank()) return List.of();
         try {
@@ -403,7 +339,11 @@ public class ApiPullConfigurationMagicModule {
      * Keep this check server-side as a second boundary: a forged request must not attach API rules to
      * any of the existing access modes even if the low-code page is bypassed.
      */
-    private void assertApiPullDatasource(String tenant,String id){
+    private void assertApiPullDatasource(String tenant, String id) {
+        requireApiPullDatasource(tenant, id);
+    }
+
+    private Map<String, Object> requireApiPullDatasource(String tenant,String id){
         List<Map<String, Object>> rows = jdbc(tenant).queryForList(
                 "select db_type, pool_cfg from db_datasource_t where tid=? and tenant_id=? and is_del=0", id, tenant);
         if (rows.isEmpty()) throw new IllegalArgumentException("数据源不存在或不属于当前租户");
@@ -415,6 +355,7 @@ public class ApiPullConfigurationMagicModule {
         if (!apiCapture) {
             throw new IllegalArgumentException("API 拉取规则仅适用于接入方式为“数据拉取”的 API 数据源");
         }
+        return rows.getFirst();
     }
     private void assertTable(String tenant,String source,String table){ if(jdbc(tenant).queryForObject("select count(1) from db_table_t where tid=? and datasource_id=? and tenant_id=? and is_del=0",Integer.class,table,source,tenant)==0) throw new IllegalArgumentException("逻辑数据表不存在或不属于当前数据源"); }
     private void assertService(String tenant,String source,String service){ if(jdbc(tenant).queryForObject("select count(1) from data_pull_service_t where tid=? and datasource_id=? and tenant_id=? and is_del=0",Integer.class,service,source,tenant)==0) throw new IllegalArgumentException("接口服务不存在或不属于当前数据源"); }

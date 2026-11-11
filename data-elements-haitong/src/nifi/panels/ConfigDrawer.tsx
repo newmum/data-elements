@@ -935,6 +935,11 @@ export default function ConfigDrawer() {
       tenant: isOceanBaseSource ? item.tenant : undefined,
       clusterId: isOceanBaseSource ? item.clusterId : undefined,
     };
+    if (normalizedDbType === 'MONGODB') {
+      const mongoConfig = item as typeof item & { authSource?: string; ssl?: boolean };
+      basePatch.authSource = mongoConfig.authSource || 'admin';
+      basePatch.ssl = mongoConfig.ssl === true;
+    }
     if (isHuaweiMrsHive) {
       Object.assign(basePatch, usesServerManagedHiveProfile ? {
         dbType: 'HIVE',
@@ -1026,7 +1031,8 @@ export default function ConfigDrawer() {
       defaultSchema: item.schema || item.defaultSchema, schema: item.schema || item.defaultSchema,
     });
     if (node.category === 'sink') {
-      const sinkKey = isHuaweiMrsHive ? 'sink.hive' : 'sink.jdbc';
+      const sinkKey = normalizedDbType === 'MONGODB' ? 'sink.mongodb'
+        : isHuaweiMrsHive ? 'sink.hive' : 'sink.jdbc';
       if (node.manifestKey !== sinkKey) {
         const sinkManifest = manifests.find((candidate) => candidate.key === sinkKey);
         if (sinkManifest) switchNodeManifest(node.id, sinkManifest);

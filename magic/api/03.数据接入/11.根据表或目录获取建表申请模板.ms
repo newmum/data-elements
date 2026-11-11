@@ -615,6 +615,9 @@ for (col in (columns == null ? [] : columns)) {
     var sourceScale = first(col, ['scale'])
     var typeCode = knownTypeCode(sourceType)
     if (blank(typeCode)) { typeCode = knownTypeCode(columnType) }
+    if (sourceDialectCode == 'mongodb' && !blank(sourceType || columnType)) {
+        typeCode = portableDdl.logicalType(columnType || sourceType, sourceDialectCode)
+    }
     if (blank(columnName) || blank(typeCode)) {
         var missing = blank(columnName) || (displayOnlyType(sourceType) && displayOnlyType(columnType))
         incompleteSnapshot = incompleteSnapshot || missing

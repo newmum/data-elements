@@ -32,7 +32,7 @@ var result = {flowId: '', created: false, dryRun: body?.dryRun == true}
 db.transaction(() => {
     // 服务行锁串行化首次创建；参数中的租户、部门或流程ID均不作为授权依据。
     var services = db.select("""
-        SELECT tid, flow_id AS "flowId", service_name AS "serviceName", method
+        SELECT tid, flow_id AS "flowId", service_name AS "serviceName", method, uri, service_create_type
           FROM api_info_t
          WHERE tid=#{apiId} AND tenant_id=#{tenantId} AND is_del=0
         """ + scopeSql + ' FOR UPDATE')
@@ -61,12 +61,19 @@ db.transaction(() => {
         flowId: flowId, name: serviceName, description: '', version: 1, group: '默认分组',
         nodes: [
             {id: triggerId, type: 'trigger', name: 'API 触发器', position: {x: 80, y: 200},
-             data: {method: method, path: '/services/' + apiId, request: {query: [], path: [], header: [], body: null}, auth: {required: false, roles: []}}},
+             data: {method: method, path: '/services/' + apiId, request: {query: [], path: [], header: [], body: null}, auth: {required: true, roles: []}}},
             {id: responseId, type: 'response', name: '响应', position: {x: 520, y: 200},
              data: {mode: 'wrap', wrap: true, source: '', statusCode: 200}}
         ],
         edges: [{id: 'edge-' + flowId, source: triggerId, target: responseId, sourcePort: 'out', targetPort: 'in'}],
         settings: {timeoutMs: 10000, transactional: false, errorStrategy: 'fail-fast'}
+    }
+    if ((service.service_create_type || service.serviceCreateType) != 'flow' && service.uri != null && service.uri != '') {
+        var callId = 'http-' + flowId
+        flow.nodes.add({id:callId,type:'http-call',name:'调用已登记接口',position:{x:300,y:200},
+            data:{serviceId:apiId,outputVar:'httpResult',headers:[],query:[],body:''}})
+        flow.edges = [{id:'edge-call-'+flowId,source:triggerId,target:callId,sourcePort:'out',targetPort:'in'},
+            {id:'edge-response-'+flowId,source:callId,target:responseId,sourcePort:'out',targetPort:'in'}]
     }
     var now = new Date()
     db.table('fs_flow').primary('id').insert({id: flowId, name: serviceName, flow_group: '默认分组',

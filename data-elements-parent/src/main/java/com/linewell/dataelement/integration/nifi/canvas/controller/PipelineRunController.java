@@ -541,7 +541,9 @@ public class PipelineRunController {
     private java.util.Set<String> oneShotSourceIds(Pipeline p, NifiNodeMapping mapping) {
         if (mapping == null || mapping.primaryProcessorIds() == null || p.dsl() == null) return java.util.Set.of();
         return p.dsl().nodes().stream().filter(node -> "source".equals(node.category())
-                && compiler.supportsSyncSettings(node.manifestKey()) && "FULL".equals(SyncPolicy.mode(node.config())))
+                && (("source.api".equals(node.manifestKey()) && node.config() != null
+                    && "once".equals(node.config().get("scheduleMode")))
+                    || (compiler.supportsSyncSettings(node.manifestKey()) && "FULL".equals(SyncPolicy.mode(node.config())))))
                 .map(node -> mapping.primaryProcessorIds().get(node.id())).filter(Objects::nonNull)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }

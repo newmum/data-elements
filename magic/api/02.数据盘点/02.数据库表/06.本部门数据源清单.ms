@@ -388,7 +388,7 @@ if (['cards', 'cardMetrics', 'choices'].contains(requestMode)) {
             var mode = text(group.accessMode).trim().toLowerCase()
             if (mode == 'proxy') {
                 key = 'mode:proxy'
-            } else if (['upload', 'report'].contains(mode) || (key == 'api' && text(group.showConnect) == '0')) {
+            } else if (['upload', 'report'].contains(mode) || (key == 'api' && !['capture', 'pull'].contains(mode) && text(group.showConnect) == '0')) {
                 key = 'mode:upload'
             } else if (['receive', 'push'].contains(mode)) {
                 key = 'mode:receive'

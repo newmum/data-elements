@@ -362,6 +362,11 @@ public class DslCompiler {
                 if ("TRUNCATE_RELOAD".equals(strategy)) cfg.put("writerType", NATIVE_DATABASE_RECORD_MODE);
             }
             materializeServerManagedHuaweiMrsProfile(n.manifestKey(), cfg);
+            if ("source.mongodb".equals(m.key()) || "sink.mongodb".equals(m.key())) {
+                cfg.put("mongoUri", com.linewell.dataelement.metautil.mongo.MongoDatasource.endpoint(
+                        configText(cfg, "host"), configText(cfg, "port"), configText(cfg, "authSource"),
+                        Boolean.parseBoolean(configText(cfg, "ssl"))));
+            }
             if ("sink.hive".equals(m.key())) {
                 // HiveRecordPut receives database and table separately and renders
                 // them as validated Hive identifiers. A qualified table name here
@@ -1176,6 +1181,14 @@ public class DslCompiler {
      */
     private void buildApiSource(String pgId, Pipeline.Node node, NodeCompilation nc,
                                 NodeLayout nodeLayout, Map<String, Object> cfg) {
+        String protocol = firstNonBlankStatic(configText(cfg, "apiProtocol"), "REST");
+        String auth = firstNonBlankStatic(configText(cfg, "authType"), "NONE");
+        String pagination = firstNonBlankStatic(configText(cfg, "paginationMode"), "none");
+        if (!"REST".equalsIgnoreCase(protocol) || !"NONE".equalsIgnoreCase(auth)
+                || !"none".equalsIgnoreCase(pagination) || "incremental".equalsIgnoreCase(configText(cfg, "captureScope"))) {
+            throw new NodeConfigException(node.id(), node.label(), "apiProtocol",
+                    "当前自动接入支持直接访问的 HTTP/REST 全量 JSON 接口。SOAP、凭据引用、翻页和增量配置可登记，执行端尚未适配", null);
+        }
         String url = configText(cfg, "url");
         if (url.isBlank()) {
             throw new NodeConfigException(node.id(), node.label(), "url", "API 来源缺少接口地址", null);
@@ -1196,6 +1209,7 @@ public class DslCompiler {
         NifiEntity trigger = nifi.createProcessor(pgId, "org.apache.nifi.processors.standard.GenerateFlowFile",
                 node.label() + "/调度触发", x, y, triggerProps, period, strategy);
         nc.processorIds.put("trigger", trigger.id());
+        nifi.executeOnPrimaryNode(trigger.id());
 
         Map<String, String> httpProps = new LinkedHashMap<>();
         httpProps.put("HTTP Method", firstNonBlankStatic(configText(cfg, "method"), "GET").toUpperCase(Locale.ROOT));
@@ -1204,11 +1218,8 @@ public class DslCompiler {
         // newer NiFi versions, so it looks populated but leaves the processor
         // INVALID and makes the subsequent run-status request fail with 409.
         httpProps.put("HTTP URL", apiUrlReachableFromNifi(url));
-        // NiFi 2.x uses this formal property to emit a response FlowFile.
-        // "Always Output Response" was an older label; under NiFi 2.x it is
-        // interpreted as a dynamic HTTP header (with spaces) and every request
-        // then fails before it reaches the configured API.
-        httpProps.put("Response Generation Required", "true");
+        // Only successful HTTP responses may reach the record writer.
+        httpProps.put("Response Generation Required", "false");
         String contentType = firstNonBlankStatic(configText(cfg, "contentType"), "application/json");
         if (!contentType.isBlank()) httpProps.put("Content-Type", contentType);
         String connectTimeout = configText(cfg, "connectTimeout");
@@ -1220,7 +1231,32 @@ public class DslCompiler {
                 node.label() + "/调用接口", x + PROCESSOR_COLUMN_GAP, y, httpProps, null, null);
         nc.processorIds.put("invoke", invoke.id());
         connectInternal(pgId, nc, trigger.id(), invoke.id(), "success");
-        nc.outlets.put("default", new Outlet(invoke.id(), "Response"));
+        String recordPath = apiRecordPath(cfg);
+        if ("$".equals(recordPath)) {
+            nc.outlets.put("default", new Outlet(invoke.id(), "Response"));
+            return;
+        }
+        NifiEntity extract = nifi.createProcessor(pgId, EVALUATE_JSON_PATH_TYPE,
+                node.label() + "/提取响应记录", x + 2 * PROCESSOR_COLUMN_GAP, y,
+                Map.of("Destination", "flowfile-content", "Return Type", "json", "records", recordPath), null, null);
+        nc.processorIds.put("extract", extract.id());
+        connectInternal(pgId, nc, invoke.id(), extract.id(), "Response");
+        nc.outlets.put("default", new Outlet(extract.id(), "matched"));
+    }
+
+    private String apiRecordPath(Map<String, Object> config) {
+        String path = configText(config, "responseExtractPath");
+        String stored = configText(config, "responseConfigJson");
+        if (path.isBlank() && !stored.isBlank()) {
+            try {
+                JsonNode response = MAPPER.readTree(stored);
+                path = response.path("sourcePath").asText("");
+            } catch (Exception e) {
+                throw new IllegalArgumentException("API 响应提取配置不是有效的 JSON", e);
+            }
+        }
+        if (path.isBlank() || "$".equals(path)) return "$";
+        return path.startsWith("$") ? path : "$." + path;
     }
 
     /**

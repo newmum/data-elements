@@ -191,6 +191,10 @@ public class MetadataExplorerService {
         return getExplorer(config).generateCreateTableDdl(config, tableName, columns, tableComment);
     }
 
+    public List<TableInfo> getTableInventory(DataSourceConfig config) {
+        return getExplorer(config).getTableInventory(config);
+    }
+
     /**
      * 执行建表 DDL
      */

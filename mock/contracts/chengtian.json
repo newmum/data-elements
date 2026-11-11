@@ -157,7 +157,7 @@
         "kind": "magic",
         "id": "datapd_database_tree_statistics_01",
         "file": "magic/api/02.数据盘点/02.数据库表/07.数据源组织业务系统统计.ms",
-        "reviewedSha256": "e69c2c4617926cb6b7806ca0d84ffd2d256d51f320c861a30b900bd207ddab97"
+        "reviewedSha256": "edeedfc6f7d52db7f89eb3ee9f5b140c64f95380ec2012d174b1fa1d027c509b"
       },
       "request": {
         "type": "object"
@@ -165,7 +165,7 @@
       "response": {
         "type": "any"
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+      "review": "按接入方式统计数据源，离线 API 抓取归入 API 分类。"
     },
     {
       "operation": "POST /dst/database/page",
@@ -219,7 +219,7 @@
         "kind": "magic",
         "id": "datapd_dept_datasources_01",
         "file": "magic/api/02.数据盘点/02.数据库表/06.本部门数据源清单.ms",
-        "reviewedSha256": "6f6d3fd501910d52805b77afe5a7ea909608baac0b2938945a86e1b746883fe3"
+        "reviewedSha256": "7164de67b42dc3a052cd5141f2741b220cfa7cb1a2ed69cb1a85bfe286a950b7"
       },
       "request": {
         "type": "object"
@@ -257,7 +257,7 @@
           }
         }
       },
-      "review": "核对业务系统筛选修复：真实接口按登录会话解析平台角色，appId 仍只筛选业务系统。现有模拟已分离会话与筛选，参数、响应、分页和数据范围契约保持一致。"
+      "review": "分页分类筛选与统计保持一致，API 抓取不受连接状态影响。"
     },
     {
       "operation": "POST /dst/database/detail",
@@ -289,7 +289,7 @@
         "kind": "magic",
         "id": "datapd_save_update_datasource_01",
         "file": "magic/api/02.数据盘点/02.数据库表/04.保存数据源.ms",
-        "reviewedSha256": "92ed726133e28ef5f542731350206cdb679f3160d9b4fec17313bd9bffbbf135"
+        "reviewedSha256": "d63c6841fe6a4f7ecebbae2b6c733b9d19b2b74f326ea84b683e4fe140448395"
       },
       "request": {
         "type": "object"
@@ -300,7 +300,7 @@
           "tid"
         ]
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+      "review": "离线 API 抓取保留 API 定义及接入方式，响应继续返回数据源标识。"
     },
     {
       "operation": "POST /dst/database/delete",

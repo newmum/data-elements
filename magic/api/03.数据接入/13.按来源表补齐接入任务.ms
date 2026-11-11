@@ -969,6 +969,9 @@ if (body?.validateSourceOnly == true) {
         : normalizeSourceKey(preflightFile.dbType, preflightFile.config)
     var needsFileLocator = ['source.ftp', 'source.sftp'].contains(preflightManifest)
         && !['receive', 'upload', 'push'].contains(preflightMode)
+    if (preflightManifest == 'source.api') {
+        apiPullConfig.resolvePipelineSource(sourceDbId, text(first(sourceTable, ['tableName','table_name'])))
+    }
     if (needsFileLocator) { directFileLocator(preflightCfg, sourceTable) }
     return {valid:true, sourcePreflight:true, sourceTableId:sourceTableId,
         sourceManifestKey:preflightManifest, fileLocatorRequired:needsFileLocator,
@@ -1501,6 +1504,25 @@ var sourceNodeConfig = {
     softDeleteEnabled: false,
     deleteReconcileStrategy: 'NONE'
 }
+// MySQL DATETIME 默认返回 LocalDateTime，而时间分片处理器需要 JDBC Timestamp。
+// 仅对使用 DATETIME 水位列的 MySQL 新任务补齐驱动参数，保留显式配置。
+if (sourceManifestKey == 'source.mysql' && !blank(sourceNodeConfig.incrementalColumn)) {
+    var mysqlJdbcUrl = text(sourceJdbcUrl)
+    var normalizedUrl = mysqlJdbcUrl.toLowerCase()
+    if (normalizedUrl.startsWith('jdbc:mysql:') && !normalizedUrl.matches('.*[?&]treatmysqldatetimeastimestamp=.*')) {
+        for (column in sourceColumnsForNifi) {
+            var columnType = text(column.dataType).trim().toLowerCase()
+            if (text(column.columnName).equalsIgnoreCase(sourceNodeConfig.incrementalColumn)
+                    && (columnType == 'datetime' || columnType.startsWith('datetime('))) {
+                var separator = mysqlJdbcUrl.endsWith('?') || mysqlJdbcUrl.endsWith('&') ? '' : (mysqlJdbcUrl.contains('?') ? '&' : '?')
+                var compatibleUrl = mysqlJdbcUrl + separator + 'treatMysqlDatetimeAsTimestamp=true'
+                sourceNodeConfig.jdbcUrl = compatibleUrl
+                sourceNodeConfig.jdbcURL = compatibleUrl
+                break
+            }
+        }
+    }
+}
 // Preserve the connector's registered options instead of silently taking manifest defaults.
 // Server-managed Hive keeps only a tenant-owned reference; client secrets stay on the server.
 if (pushFileSource == null && isServerManagedHuaweiMrsHive(sourceDbType, sourceCfg)) {
@@ -1583,7 +1605,7 @@ if (pushFileSource != null) {
 // 明确创建任务时读取并写入 NiFi 画布；不在第二步新增任何规则编辑入口。
 if (pushFileSource == null && sourceManifestKey == 'source.api') {
     var apiRuntimeConfig = apiPullConfig.resolvePipelineSource(sourceDbId, text(sourceTableName))
-    for (apiKey in apiRuntimeConfig) { sourceNodeConfig[apiKey] = apiRuntimeConfig[apiKey] }
+    sourceNodeConfig.putAll(apiRuntimeConfig)
     sourceNodeConfig.sourceDbId = sourceDbId
     sourceNodeConfig.sourceDbName = sourceDb == null ? '' : sourceDb.dbName
     sourceNodeConfig.sourceTableId = sourceTableId
@@ -1636,6 +1658,8 @@ var allMappings = []
 var allTargetSummaries = []
 var originalSourceNodeConfig = sourceNodeConfig
 var originalSourceManifestKey = sourceManifestKey
+var originalSourceDbId = sourceDbId
+var apiPipelineId = null
 var pushChainTimestamp = pushFileSource == null ? '' : registeredTimestampColumn(rootSourceTable, rootSourceColumns)
 for (targetTable in targetsToCreate) {
 sourceTable = hopSourceByTarget[text(targetTable.tid)]
@@ -1702,6 +1726,10 @@ if (!firstHop) {
     }
 }
 
+if (sourceManifestKey == 'source.mongodb') {
+    sourceNodeConfig.syncMode = 'FULL'
+    sourceNodeConfig.remove('incrementalColumn')
+}
 var targetTableId = text(targetTable.tid)
 var targetDbId = text(first(targetTable, ['datasourceId', 'datasource_id']))
 var targetDb = targetDatasourceById[targetDbId]
@@ -1831,7 +1859,8 @@ for (targetIndex, targetCandidate in [targetTable]) {
     var candidateTargetPrimaryKeys = candidateTargetKeys.join(',')
     var candidateSinkId = 'sink-' + candidateTargetId
     var candidateIsHuaweiMrsHive = isServerManagedHuaweiMrsHive(candidateTargetDbType, candidateTargetCfg)
-    var candidateSinkManifestKey = candidateIsHuaweiMrsHive ? 'sink.hive' : 'sink.jdbc'
+    var candidateIsMongo = normalizeSinkType(candidateTargetDbType, candidateTargetCfg) == 'MONGODB'
+    var candidateSinkManifestKey = candidateIsHuaweiMrsHive ? 'sink.hive' : (candidateIsMongo ? 'sink.mongodb' : 'sink.jdbc')
     var candidateSinkConfig = {}
     if (candidateIsHuaweiMrsHive) {
         var candidateHiveDatabase = first(candidateTargetCfg, ['database', 'dbName', 'dbMetaDbName', 'serviceName'])
@@ -1861,6 +1890,24 @@ for (targetIndex, targetCandidate in [targetTable]) {
             hiveWriteMode: 'LINEWELL_HDFS',
             statementType: 'INSERT',
             updateKeys: ''
+        }
+    } else if (candidateIsMongo) {
+        candidateSinkConfig = {
+            dbType: 'MONGODB',
+            host: first(candidateTargetCfg, ['host', 'dbMetaIp']),
+            port: first(candidateTargetCfg, ['port', 'dbMetaPort']),
+            database: first(candidateTargetCfg, ['database', 'dbMetaDbName']),
+            authSource: candidateTargetCfg.authSource,
+            ssl: candidateTargetCfg.ssl == true,
+            username: first(candidateTargetCfg, ['username', 'dbMetaUser']),
+            password: first(candidateTargetCfg, ['password', 'dbMetaPassword']),
+            targetDbId: candidateTargetDbId,
+            targetDbName: candidateTargetDb.dbName,
+            targetTableId: candidateTargetId,
+            targetTableName: candidateTargetTableName,
+            table: candidateTargetTableName,
+            targetColumns: columnList(candidateTargetColumns),
+            updateKeys: candidateTargetPrimaryKeys
         }
     } else {
         candidateSinkConfig = {
@@ -1940,6 +1987,9 @@ pipelineRows.add({
     is_del: 0
 })
 
+if (firstHop && originalSourceManifestKey == 'source.api' && apiPipelineId == null) {
+    apiPipelineId = pipelineId
+}
 taskRows.add({
     tid: taskId,
     tenant_id: tenantId,
@@ -2131,6 +2181,11 @@ if (!dryRun) {
     }
     db.table('nifi_pipeline_t').batchInsert(pipelineRows)
     db.table('data_access_agg_task_t').batchInsert(taskRows)
+    if (apiPipelineId != null) {
+        db.table('data_pull_rule_t').where().eq('tenant_id',tenantId).eq('datasource_id',originalSourceDbId)
+            .eq('source_table_id',rootSourceTableId).eq('is_del',0)
+            .update({nifi_task_id:apiPipelineId,updated_time:now})
+    }
     if (allMappings.size() > 0) { db.table('data_access_field_mapping').batchInsert(allMappings) }
 }
 var results = []

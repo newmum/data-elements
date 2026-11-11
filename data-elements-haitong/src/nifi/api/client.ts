@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { InternalAxiosRequestConfig, AxiosRequestConfig } from 'axios';
 import { message as antdMessage } from 'antd';
 import { unwrapSuccessfulEnvelope } from './response';
-import { getBridgeToken, getSessionRevision, waitForToken } from './bridgeSession';
+import { getBridgeToken, getSessionRevision, setBridgeToken, waitForToken } from './bridgeSession';
 import { isPlatformAuthenticationFailure } from '../../api/platformApi';
 import { redirectToPlatformLogin } from '../../services/platformSession';
 import { globalRequestFailureMessage } from '../utils/requestFailure';
@@ -20,10 +20,20 @@ function rejectStaleSession(config?: SessionRequestConfig) {
 }
 
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_APP_BASE_API || '/nifi/api',
+  baseURL: import.meta.env.MODE === 'flow-lite' ? '/nifi/api' : import.meta.env.VITE_APP_BASE_API || '/nifi/api',
   timeout: Number(import.meta.env.VITE_APP_API_TIMEOUT_MS || 45000),
   headers: { 'Content-Type': 'application/json' },
 });
+
+function expireSession() {
+  if (import.meta.env.MODE === 'flow-lite') {
+    sessionStorage.removeItem('haitong-flow-lite:session');
+    setBridgeToken(null);
+    return new Error('登录已失效，请重新登录');
+  }
+  redirectToPlatformLogin();
+  return new Error('数据中台登录已失效，正在前往登录页');
+}
 
 apiClient.interceptors.request.use(async (config) => {
   const requestRevision = getSessionRevision();
@@ -47,8 +57,7 @@ apiClient.interceptors.response.use(
   (response) => {
     rejectStaleSession(response.config as SessionRequestConfig);
     if (isPlatformAuthenticationFailure(response.data, response.status)) {
-      redirectToPlatformLogin();
-      return Promise.reject(new Error('数据中台登录已失效，正在前往登录页'));
+      return Promise.reject(expireSession());
     }
     // Automatically unwrap { code, data, message } wrapper so callers get the inner data directly
     response.data = unwrapSuccessfulEnvelope(response.data);
@@ -61,8 +70,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(staleError);
     }
     if (isPlatformAuthenticationFailure(error?.response?.data, error?.response?.status)) {
-      redirectToPlatformLogin();
-      return Promise.reject(new Error('数据中台登录已失效，正在前往登录页'));
+      return Promise.reject(expireSession());
     }
     // Only show global toast for unexpected errors
     // React Query handles retry logic; we just provide user feedback here

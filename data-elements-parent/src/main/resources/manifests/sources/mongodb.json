@@ -1,0 +1,100 @@
+{
+  "key": "source.mongodb",
+  "category": "source",
+  "label": "MongoDB 数据源",
+  "icon": "mongodb",
+  "description": "按调度全量读取已选集合的文档",
+  "fields": [
+    {
+      "key": "host",
+      "label": "主机",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "port",
+      "label": "端口",
+      "type": "number",
+      "default": 27017
+    },
+    {
+      "key": "database",
+      "label": "数据库",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "username",
+      "label": "用户名",
+      "type": "text"
+    },
+    {
+      "key": "password",
+      "label": "密码",
+      "type": "password"
+    },
+    {
+      "key": "authSource",
+      "label": "认证数据库",
+      "type": "text",
+      "default": "admin"
+    },
+    {
+      "key": "ssl",
+      "label": "TLS",
+      "type": "switch",
+      "default": false
+    },
+    {
+      "key": "table",
+      "label": "集合",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "schedulingPeriod",
+      "label": "调度周期",
+      "type": "duration",
+      "default": "60 sec",
+      "group": "schedule"
+    }
+  ],
+  "compile": {
+    "controllerServices": [
+      {
+        "localId": "mongo",
+        "type": "org.apache.nifi.mongodb.MongoDBControllerService",
+        "properties": {
+          "Mongo URI": "${config.mongoUri}",
+          "Database User": "${config.username}",
+          "Password": "${config.password}"
+        }
+      }
+    ],
+    "processors": [
+      {
+        "localId": "read",
+        "type": "org.apache.nifi.processors.mongodb.GetMongo",
+        "schedulingPeriod": "${config.schedulingPeriod}",
+        "schedulingStrategy": "TIMER_DRIVEN",
+        "properties": {
+          "Client Service": "${cs.mongo}",
+          "Mongo Database Name": "${config.database}",
+          "Mongo Collection Name": "${config.table}",
+          "Query": "{}",
+          "JSON Type": "Standard",
+          "Date Format": "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+          "Batch Size": "1000",
+          "Results Per FlowFile": "1000"
+        }
+      }
+    ],
+    "outlets": [
+      {
+        "name": "default",
+        "processorRef": "read",
+        "relationship": "success"
+      }
+    ]
+  }
+}

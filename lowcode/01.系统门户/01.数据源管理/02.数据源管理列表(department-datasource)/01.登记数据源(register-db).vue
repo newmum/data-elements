@@ -290,7 +290,7 @@
 
         <section v-else-if="sourceType && accessMode !== 'proxy'" class="link-config-bordered">
           <div
-            v-if="accessMode === 'capture'"
+            v-if="showCaptureSourceTypeSwitch && accessMode === 'capture'"
             class="capture-source-type-section"
           >
             <span class="capture-source-type-label">选择抓取类型</span>
@@ -447,6 +447,7 @@
                 </button>
               </div>
               <el-button
+                v-if="accessMode !== 'capture'"
                 class="switch-source-type-button"
                 text
                 type="primary"
@@ -458,7 +459,7 @@
               </el-button>
             </div>
             <div
-              v-if="accessMode === 'explore' && connectionEnabled === '0'"
+              v-if="(accessMode === 'explore' && connectionEnabled === '0') || isOfflineApiCapture"
               class="connection-onboarding-actions"
             >
               <el-button
@@ -485,6 +486,7 @@
                 导入已填写模板
               </el-button>
               <el-button
+                v-if="!isOfflineApiCapture"
                 type="primary"
                 :loading="metadataImportState.loading"
                 @click="openDdlImportDialog"
@@ -667,7 +669,7 @@
                       connectorForm.authMode !== 'KERBEROS'
                     "
                     :required="
-                      sourceType !== 'hive' && sourceType !== 'elasticsearch'
+                      !['hive', 'elasticsearch', 'mongodb'].includes(sourceType)
                     "
                   >
                     <template #label>
@@ -694,7 +696,7 @@
                     "
                     label="密码"
                     :required="
-                      sourceType !== 'hive' && sourceType !== 'elasticsearch'
+                      !['hive', 'elasticsearch', 'mongodb'].includes(sourceType)
                     "
                   >
                     <el-input
@@ -703,6 +705,12 @@
                       autocomplete="new-password"
                       placeholder="请输入连接密码"
                     />
+                  </el-form-item>
+                  <el-form-item v-if="sourceType === 'mongodb'" label="认证数据库">
+                    <el-input v-model="connectorForm.authSource" placeholder="admin" />
+                  </el-form-item>
+                  <el-form-item v-if="sourceType === 'mongodb'" label="TLS">
+                    <el-switch v-model="connectorForm.ssl" />
                   </el-form-item>
                   <el-form-item v-if="showSchemaField">
                     <template #label>
@@ -935,7 +943,7 @@
                   </template>
 
                   <el-form-item
-                    v-if="!isHuaweiMrsHiveProfile"
+                    v-if="!isHuaweiMrsHiveProfile && sourceType !== 'mongodb'"
                     class="full-row"
                     required
                   >
@@ -1444,6 +1452,7 @@
                             <el-button
                               link
                               type="primary"
+                              v-if="connectionEnabled === '1'"
                               :loading="apiPullTestingItemId === item.clientId"
                               @click.stop="testApiPullItem(item, index)"
                               title="验证接口连通性并按响应提取字段识别待登记数据"
@@ -2325,7 +2334,7 @@
             </div>
           </template>
 
-          <div v-else class="connection-guide" :class="{ 'is-report-guide': accessMode === 'upload' }">
+          <div v-if="connectionEnabled !== '1'" class="connection-guide" :class="{ 'is-report-guide': accessMode === 'upload' }">
             <div v-if="accessMode === 'upload'" class="report-registration-panel">
               <AccessOnboarding title="通过三步完成数据上报" badge="CSV / Excel / TXT / JSON" :steps="reportGuideSteps" hint="点击下方「下一步」，保存数据源并进入上报工作台" />
               <div v-if="reportHistory.error" class="report-history-error" role="alert"><span>上传记录读取失败，请重试</span><el-button link type="primary" @click="reportHistoryTableRef?.refresh?.()">重新读取</el-button></div>
@@ -2342,6 +2351,12 @@
               </div>
             </div>
             <template v-else-if="connectionEnabled === '0'">
+              <AccessOnboarding
+                v-if="isOfflineApiCapture"
+                title="通过三步完成 API 抓取离线登记"
+                :steps="apiCaptureGuideSteps"
+                badge="Excel 模板"
+              />
               <div
                 v-if="
                   (accessMode === 'upload' ||
@@ -2356,12 +2371,10 @@
                     <span class="guide-kicker"
                       >{{ offlineTemplateFlowLabel }}模板导入结果</span
                     >
-                    <strong
-                      >已导入 {{ metadataImportState.tableCount }} 张数据表、{{
-                        metadataImportState.fieldCount
-                      }}
-                      个字段</strong
-                    >
+                    <strong>
+                      {{ isOfflineApiCapture ? `已识别 ${apiPullItems.length} 个 API、` : "已导入 " }}
+                      {{ metadataImportState.tableCount }} 张数据表、{{ metadataImportState.fieldCount }} 个字段
+                    </strong>
                     <p>
                       {{
                         metadataImportState.fileName
@@ -2371,6 +2384,7 @@
                     </p>
                   </div>
                   <div
+                    v-if="!isOfflineApiCapture"
                     class="guide-actions data-upload-guide-actions data-upload-result-actions"
                   >
                     <el-button
@@ -2440,41 +2454,8 @@
                   </el-table-column>
                 </DataTable>
               </div>
-              <div v-else-if="accessMode === 'capture'" class="guide-actions offline-template-actions">
-                    <el-button
-                      type="primary"
-                      plain
-                      :loading="templateDownloadState.loading"
-                      :disabled="templateDownloadState.loading"
-                      @click="downloadCurrentMetadataTemplate"
-                    >
-                      <template #icon
-                        ><Icon icon="el-icon-Download"
-                      /></template>
-                      {{
-                        templateDownloadState.loading
-                          ? "正在生成模板"
-                          : `下载${offlineTemplateFlowLabel}模板`
-                      }}
-                    </el-button>
-                    <el-button
-                      type="primary"
-                      :loading="metadataImportState.loading"
-                      @click="triggerMetadataImport"
-                    >
-                      <template #icon><Icon icon="el-icon-Upload" /></template>
-                      上传{{ offlineTemplateFlowLabel }}模板
-                    </el-button>
-                    <input
-                      ref="metadataImportInput"
-                      class="metadata-import-input"
-                      type="file"
-                      accept=".xlsx"
-                      @change="handleMetadataTemplateImport"
-                    />
-                  </div>
               <AccessOnboarding
-                v-else-if="accessMode === 'explore'"
+                v-if="accessMode === 'explore'"
                 title="通过三步完成离线元数据登记"
                 :steps="offlineGuideSteps"
                 badge="DDL / Excel 模板"
@@ -2910,6 +2891,7 @@ const relationalSourceTypes = [
   "postgresql",
   "kingbase8",
   "elasticsearch",
+  "mongodb",
 ];
 const resourceCatalogSourceTypes = ["api", "ftp", "kafka", "minio"];
 const sourceTypeLabels = {
@@ -2926,6 +2908,7 @@ const sourceTypeLabels = {
   kafka: "Kafka",
   minio: "MinIO",
   elasticsearch: "Elasticsearch",
+  mongodb: "MongoDB",
   gbase8a: "GBase 8a",
   sqlserver: "SQL Server",
   vertica: "Vertica",
@@ -2976,6 +2959,7 @@ const sourceTypeDescriptions = {
   api: "接口数据源",
   kafka: "消息流数据源",
   elasticsearch: "搜索与分析引擎",
+  mongodb: "文档型数据库",
 };
 const sourceTypeCardOptions = computed(() =>
   Object.entries(sourceTypeLabels)
@@ -2986,6 +2970,7 @@ const sourceTypeCardOptions = computed(() =>
       description: sourceTypeDescriptions[value] || "数据源",
     })),
 );
+const showCaptureSourceTypeSwitch = false;
 const captureSourceTypeCardOptions = [
   {
     value: "api",
@@ -3012,6 +2997,7 @@ const defaultPorts = {
   postgresql: "5432",
   kingbase8: "54321",
   elasticsearch: "9200",
+  mongodb: "27017",
 };
 const templateTableHeaders = [
   "序号",
@@ -3095,6 +3081,29 @@ const integrationTemplateFieldHeaders = [
   "统一格式",
   "是否为空",
 ];
+const apiCaptureSheetName = "接口配置";
+const apiCaptureTemplateHeaders = [
+  "数据表名 *",
+  "API 请求地址 *",
+  "响应提取字段 *",
+  "请求方式",
+  "抓取方式",
+  "间隔分钟",
+  "执行时间",
+  "星期",
+  "JSON 请求体",
+];
+const apiCaptureTemplateSchedules = {
+  一次性抓取: { scheduleMode: "once" },
+  按间隔抓取: { scheduleMode: "interval" },
+  每日定时: { scheduleMode: "time", scheduleTimePeriod: "daily" },
+  工作日定时: { scheduleMode: "time", scheduleTimePeriod: "workday" },
+  每周定时: { scheduleMode: "time", scheduleTimePeriod: "weekly" },
+};
+const apiCaptureTemplateWeekdays = {
+  星期一: "MON", 星期二: "TUE", 星期三: "WED", 星期四: "THU",
+  星期五: "FRI", 星期六: "SAT", 星期日: "SUN",
+};
 const requiredResourceCatalogHeaders = [
   "资源目录标识",
   "资源目录名称",
@@ -3692,8 +3701,10 @@ const apiPullOpenItems = ref([]);
 const isApiPullRegistration = computed(
   () =>
     accessMode.value === "capture" &&
-    sourceType.value === "api" &&
-    connectionEnabled.value === "1",
+    sourceType.value === "api",
+);
+const isOfflineApiCapture = computed(
+  () => isApiPullRegistration.value && connectionEnabled.value === "0",
 );
 const apiPullTestingItemId = ref("");
 const apiPullReadingWsdlItemId = ref("");
@@ -3984,7 +3995,7 @@ const addApiPullItem = () => {
   };
 // 抓取登记直接提供可填写的首条配置；已有接口清单继续使用原记录。
 watch(
-  [isApiPullRegistration, () => apiPullItems.value.length],
+  [() => isApiPullRegistration.value && connectionEnabled.value === "1", () => apiPullItems.value.length],
   ([enabled, count]) => {
     if (enabled && count === 0) addApiPullItem();
   },
@@ -4353,7 +4364,8 @@ const usesResourceCatalogTemplate = computed(() =>
 );
 // 数据抓取既支持联机探查，也支持网络不通时的离线模板登记；只有数据上报固定为模板方式。
 const isForcedConnectionMode = computed(() =>
-  ["upload", "capture", "proxy"].includes(accessMode.value),
+  ["upload", "proxy"].includes(accessMode.value) ||
+  (accessMode.value === "capture" && sourceType.value !== "api"),
 );
 const offlineTemplateFlowLabel = computed(() =>
   accessMode.value === "capture"
@@ -6162,6 +6174,11 @@ const offlineGuideSteps = computed(() => [
   { title: "导入元数据", description: accessMode.value === "explore" ? "导入 DDL 或已填写模板，识别数据表与字段。" : "上传已填写模板，识别数据表与字段。", icon: "el-icon-Upload" },
   { title: "核对并继续登记", description: "检查导入结果，继续标注、配置和内容审查。", icon: "el-icon-DocumentChecked" },
 ]);
+const apiCaptureGuideSteps = [
+  { title: "下载登记模板", description: "在 Excel 中填写接口地址、抓取规则、数据表和字段。", icon: "el-icon-Document" },
+  { title: "导入已填写模板", description: "上传 Excel，核对识别出的接口、数据表和字段数量。", icon: "el-icon-Upload" },
+  { title: "核对并继续登记", description: "点击「下一步」，核对表字段并完成登记。", icon: "el-icon-DocumentChecked" },
+];
 watch([reportHistorySourceId,accessMode],()=>{reportHistoryVersion++;reportHistory.total=0;reportHistory.error='';},{flush:'sync'});
 onBeforeUnmount(()=>{reportHistoryVersion++;});
 async function fetchReportFileHistory({pageNo=1,pageSize=20,sortField,sortDir}={}) {
@@ -6279,16 +6296,15 @@ const save = async () => {
     if (!savedDbId) {
       throw new Error("数据源已保存，但接口未返回数据源 ID。");
     }
-    // API 抓取的多接口定义由本次显式“保存”同步为后端服务配置草稿；
-    // 不创建任务、不启动调度。表级规则会在第二步完成通用表标注后再自动补齐。
-    if (accessMode.value === "capture" && sourceType.value === "api") {
-      await $common.post("/ods/api-pull/sync", { datasourceId: savedDbId });
-    }
     const savedFileRegistrations = isFilePush.value ? await saveFileRegistrationRows(savedDbId) : null;
     const importedMetadata = activeMetadataImport();
     if (!["upload", "proxy"].includes(accessMode.value) && !isFilePush.value && shouldPersistImportedMetadataSnapshot(importedMetadata)) {
       await persistImportedMetadataSnapshot(savedDbId, importedMetadata);
       markMetadataImportPersisted(importedMetadata);
+    }
+    // 使用已保存的 API 定义和最新的离线表结构同步规则草稿。
+    if (isApiPullRegistration.value) {
+      await $common.post("/ods/api-pull/sync", { datasourceId: savedDbId });
     }
     const metadataRefresh = accessMode.value === "proxy" ? {metadata:{},warning:false} : await refreshSavedDatasourceMetadata(savedDbId, formData);
     // 新增成功后始终保留首项“新建数据源”草稿，并把已保存的数据源放入可编辑列表。
@@ -6661,6 +6677,7 @@ async function downloadIntegrationMetadataTemplate() {
   const isDataUpload = accessMode.value === "upload";
   const isProxyAccess = accessMode.value === "proxy";
   const isDataCapture = accessMode.value === "capture";
+  const includeApiConfig = isApiPullRegistration.value;
   addTemplateSheet(
     workbook,
     "填写说明",
@@ -6678,7 +6695,9 @@ async function downloadIntegrationMetadataTemplate() {
         "完整流程",
         accessMode.value === "receive"
           ? "1. 选择推送数据类型；2. 填写并上传数据登记模板；3. 完成登记；4. 第五步按结构化数据或分片上传规范调用接口。"
-          : "1. 下载登记模板；2. 填写数据资源、数据表与字段定义；3. 上传登记模板并完成登记；4. 下载上报模板；5. 填写实际业务数据并上传。",
+          : isDataCapture
+            ? "1. 填写「接口配置」「数据表信息」「数据字段」，三张表使用相同的数据表英文名。2. 上传模板并核对识别结果。3. 点击「下一步」，核对表字段并完成登记。"
+            : "1. 下载登记模板；2. 填写数据资源、数据表与字段定义；3. 上传登记模板并完成登记；4. 下载上报模板；5. 填写实际业务数据并上传。",
       ],
       [
         "填写顺序",
@@ -6698,8 +6717,22 @@ async function downloadIntegrationMetadataTemplate() {
       ],
       ["是否为空", "非必填，默认“是”。如该字段必须有值，请改为“否”。"],
       ["模板说明", "本文件为待填写模板；请填写数据表与字段定义后上传登记。"],
+      ...(includeApiConfig ? [
+        ["接口地址", "填写完整 HTTP(S) 地址，例如 https://api.example.com/v1/orders。请勿填写密码、令牌等凭据。"],
+        ["响应提取字段", "填写记录所在路径，例如 data.list。接口直接返回记录或数组时，填写 $。"],
+        ["请求方式", "留空时使用 GET。POST 等请求如需提交 JSON，可填写「JSON 请求体」。"],
+        ["抓取方式", "留空时只执行一次。按间隔抓取填写 1 至 10080 的分钟数。定时抓取按 HH:mm 填写执行时间，每周定时还需选择星期。"],
+      ] : []),
     ],
   );
+  if (includeApiConfig) {
+    const apiSheet = addTemplateSheet(workbook, apiCaptureSheetName, apiCaptureTemplateHeaders, []);
+    markRequiredColumns(apiSheet, apiCaptureTemplateHeaders.slice(0, 3).map(normalizeTemplateHeader));
+    apiSheet.getColumn(7).numFmt = "@";
+    applyListValidation(apiSheet, "请求方式", `"${apiMethods.join(",")}"`);
+    applyListValidation(apiSheet, "抓取方式", `"${Object.keys(apiCaptureTemplateSchedules).join(",")}"`);
+    applyListValidation(apiSheet, "星期", `"${Object.keys(apiCaptureTemplateWeekdays).join(",")}"`);
+  }
   const tableRows = [];
   const fieldRows = [];
   const tableSheet = addTemplateSheet(
@@ -8227,10 +8260,11 @@ function normalizeImportedMetadata(tableObjects, fieldObjects, fileName) {
       "字段注释",
       "字段描述",
     ]);
-    fieldMap[tableName] = fieldMap[tableName] || [];
-    fieldMap[tableName].push({
-      serialNo: fieldMap[tableName].length + 1,
-      tableName,
+    const registeredTableName = tableMap.get(key).tableName;
+    fieldMap[registeredTableName] = fieldMap[registeredTableName] || [];
+    fieldMap[registeredTableName].push({
+      serialNo: fieldMap[registeredTableName].length + 1,
+      tableName: registeredTableName,
       columnName,
       columnComment,
       columnType: getCellText(row, ["字段类型"]),
@@ -8293,15 +8327,100 @@ function normalizeImportedMetadata(tableObjects, fieldObjects, fileName) {
     },
   };
 }
+function importApiCaptureDefinitions(workbook, tables) {
+  const sheet = workbook.getWorksheet(apiCaptureSheetName);
+  const tableKey = (name) => String(name || "").trim().toLowerCase();
+  const tablesByName = new Map(tables.map((table) => [tableKey(table.tableName), table]));
+  if (!sheet) {
+    const existing = new Map(apiPullItems.value.map((item) => [tableKey(item.tableName), item]));
+    const matched = tables.map((table) => existing.get(tableKey(table.tableName)));
+    if (matched.some((item) => !item || !apiPullRequestAddress(item) || !configuredApiResponseExtractPath(item))) {
+      throw new Error("模板缺少「接口配置」工作表，请下载新版模板并填写接口信息。");
+    }
+    return matched;
+  }
+  validateTemplateHeaders(sheet, apiCaptureSheetName, apiCaptureTemplateHeaders.slice(0, 3).map(normalizeTemplateHeader));
+  const rows = worksheetToObjects(sheet);
+  if (!rows.length || rows.length > 100) {
+    throw new Error("「接口配置」须填写 1 至 100 个 API。");
+  }
+  const seen = new Set();
+  const items = rows.map((row) => {
+    const fail = (message) => { throw new Error(`「接口配置」第 ${row.__rowNumber} 行：${message}`); };
+    const key = tableKey(row["数据表名"]);
+    const table = tablesByName.get(key);
+    if (!table || !/^[A-Za-z][A-Za-z0-9_]{0,95}$/.test(table.tableName)) {
+      fail("请填写「数据表信息」中对应的数据表英文名。");
+    }
+    if (seen.has(key)) fail("数据表已配置 API，每张表只能对应一个接口。");
+    seen.add(key);
+    const requestUrl = row["API 请求地址"];
+    let url;
+    try { url = new URL(requestUrl); } catch { fail("请填写完整的 HTTP(S) 地址。"); }
+    if (!["http:", "https:"].includes(url.protocol) || !/^https?:\/\//i.test(requestUrl) || url.username || url.password || url.hash) {
+      fail("请填写完整的 HTTP(S) 地址，地址中不能含用户名、密码或片段。");
+    }
+    const responseExtractPath = normalizeApiResponseExtractPath(row["响应提取字段"]);
+    if (!responseExtractPath) fail("请填写响应提取字段，读取整个响应时填写 $。");
+    const method = String(row["请求方式"] || "GET").toUpperCase();
+    if (!apiMethods.includes(method)) fail("请选择有效的请求方式。");
+    const body = row["JSON 请求体"] || "";
+    if (body) {
+      if (method === "GET") fail("GET 请求无需填写请求体。");
+      let parsed;
+      try { parsed = JSON.parse(body); } catch { fail("请求体须为有效的 JSON 对象或数组。"); }
+      if (!parsed || typeof parsed !== "object") fail("请求体须为有效的 JSON 对象或数组。");
+    }
+    const scheduleName = row["抓取方式"] || "一次性抓取";
+    if (!Object.hasOwn(apiCaptureTemplateSchedules, scheduleName)) fail("请选择有效的抓取方式。");
+    const schedule = { ...apiCaptureTemplateSchedules[scheduleName] };
+    if (schedule.scheduleMode === "interval") {
+      const minutes = Number(row["间隔分钟"]);
+      if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) {
+        fail("间隔分钟须填写 1 至 10080 的整数。");
+      }
+      schedule.scheduleIntervalMinutes = minutes;
+    }
+    if (schedule.scheduleMode === "time") {
+      const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(row["执行时间"] || "");
+      if (!match) fail("执行时间须按 HH:mm 填写，例如 09:30。");
+      schedule.scheduleTimeOfDay = match[1].padStart(2, "0") + ":" + match[2];
+      if (schedule.scheduleTimePeriod === "weekly") {
+        const weekday = row["星期"];
+        if (!Object.hasOwn(apiCaptureTemplateWeekdays, weekday)) fail("每周定时须选择星期。");
+        schedule.scheduleWeekday = apiCaptureTemplateWeekdays[weekday];
+      }
+    }
+    return createApiPullItem({
+      ...schedule,
+      tableName: table.tableName,
+      tableComment: table.tableComment,
+      serviceName: table.tableComment,
+      requestUrl,
+      endpointMethod: method,
+      responseExtractPath,
+      requestBodyType: body ? "json" : "none",
+      requestTemplateJson: body,
+    });
+  });
+  const missing = tables.filter((table) => !seen.has(tableKey(table.tableName)));
+  if (missing.length) {
+    throw new Error(`「接口配置」缺少对应的数据表：${missing.map((table) => table.tableName).join("、")}`);
+  }
+  return items;
+}
 async function handleMetadataTemplateImport(event) {
   const file = event?.target?.files?.[0];
   if (!file) return;
+  const offlineCapture = isOfflineApiCapture.value;
+  const importTarget = currentDb.value;
   metadataImportState.loading = true;
   try {
     const WorkbookClass = ExcelJS.Workbook || ExcelJS.default?.Workbook;
     if (!WorkbookClass) throw new Error("Excel 模板组件未正确加载");
     const workbook = new WorkbookClass();
     await workbook.xlsx.load(await file.arrayBuffer());
+    if (offlineCapture && (!isOfflineApiCapture.value || currentDb.value !== importTarget)) return;
     if (isFilePush.value) {
       const sheet=workbook.getWorksheet("文件登记");
       validateTemplateHeaders(sheet,"文件登记",fileRegistrationRequiredHeaders.filter(name=>name!=="文件英文名"));
@@ -8380,6 +8499,10 @@ async function handleMetadataTemplateImport(event) {
     const imported = isResourceCatalogTemplate
       ? normalizeImportedResourceMetadata(tableObjects, fieldObjects, file.name)
       : normalizeImportedMetadata(tableObjects, fieldObjects, file.name);
+    if (offlineCapture) {
+      apiPullItems.value = importApiCaptureDefinitions(workbook, imported.tables);
+      apiPullOpenItems.value = apiPullItems.value.map((item) => item.clientId);
+    }
     rememberMetadataImportForCurrentMode(imported);
     metadataImportState.fileName = file.name;
     metadataImportState.tableCount = imported.metadataImport.tableCount;
@@ -8410,13 +8533,13 @@ async function handleMetadataTemplateImport(event) {
         ...imported.metadataImport,
         accessMode: accessMode.value,
       });
-      if (savedDbId) {
+      if (savedDbId && !offlineCapture) {
         await persistImportedMetadataSnapshot(savedDbId, imported);
         markMetadataImportPersisted(imported);
       }
       $message.success(
-        accessMode.value === "capture"
-          ? `已上传数据抓取模板，共 ${metadataImportState.tableCount} 项资源、${metadataImportState.fieldCount} 个字段，等待审核`
+        offlineCapture
+          ? `已识别 ${apiPullItems.value.length} 个 API、${metadataImportState.tableCount} 张表、${metadataImportState.fieldCount} 个字段。点击「下一步」继续登记。`
           : `已上传 ${metadataImportState.tableCount} 项资源、${metadataImportState.fieldCount} 个字段，等待审核`,
       );
     } else if (savedDbId) {
@@ -8445,6 +8568,7 @@ function createConnectorDefaults() {
     username: "",
     password: "",
     jdbcURL: "",
+    authSource: "admin",
     schema: "",
     dbVersion: "",
     jdbcType: "serviceName",
@@ -8684,7 +8808,7 @@ function selectAccessMode(value) {
     return;
   }
   if (value === "capture") {
-    // 数据抓取固定提供连接信息，默认进入 API 抓取；可通过上方卡片切换到 FTP。
+    // 新建抓取只开放 API，默认提供连接信息。历史 FTP 配置仍按原类型回填。
     formRef.value?.setValue({ dbType: "api" });
     changeSourceType("api", true);
     connectionEnabled.value = "1";
@@ -8784,7 +8908,7 @@ function loadConnectorData(data) {
   }
 }
 function resolveConnectionEnabled(data) {
-  if (accessMode.value === "capture") {
+  if (accessMode.value === "capture" && sourceType.value !== "api") {
     connectionEnabled.value = "1";
     return;
   }
@@ -8803,6 +8927,9 @@ function buildConnectorSaveData() {
   connectorFieldNames.forEach((field) => {
     result[field] = "";
   });
+  if (isApiPullRegistration.value) {
+    return { ...result, captureSchedule: null, apiPullItems: apiPullItemsForSave() };
+  }
   if (connectionEnabled.value !== "1") return result;
   if (isHuaweiMrsHiveProfile.value) {
     return {
@@ -8911,7 +9038,9 @@ function buildConnectorSaveData() {
   };
   let activeFields = fieldsByType[sourceType.value] || [];
   if (isRelationalSource.value) {
-    activeFields = [...relationalFields];
+    activeFields = sourceType.value === "mongodb"
+      ? ["host", "port", "database", "username", "password", "authSource", "ssl"]
+      : [...relationalFields];
     if (sourceType.value === "hive") {
       activeFields.push(
         "gaussdbVariant",
@@ -8949,11 +9078,7 @@ function buildConnectorSaveData() {
     result[field] = connectorForm[field];
   });
   if (accessMode.value === "capture") {
-    if (sourceType.value === "api") {
-      result.captureSchedule = null;
-      result.apiPullItems = apiPullItemsForSave();
-    } else
-      result.captureSchedule = {
+    result.captureSchedule = {
         mode: captureSchedule.mode,
         intervalMinutes: Number(captureSchedule.intervalMinutes) || 60,
         timePeriod: captureSchedule.timePeriod,
@@ -9010,9 +9135,9 @@ function validateConnector() {
         "暂不提供连接信息时，请导入已填写登记模板或数据库导出的 DDL 文件",
       );
     }
-    return;
+    if (!isApiPullRegistration.value) return;
   }
-  if (connectionEnabled.value !== "1") return;
+  if (connectionEnabled.value !== "1" && !isApiPullRegistration.value) return;
   if (isHuaweiMrsHiveProfile.value) {
     if (!String(connectorForm.database || "").trim())
       throw new Error("请填写 Hive 数据库名");
@@ -9028,6 +9153,11 @@ function validateConnector() {
       throw new Error(
         `请完整填写 ${sourceTypeLabels[sourceType.value]} 主机、端口和数据库信息`,
       );
+    }
+    if (sourceType.value === "mongodb") {
+      if (Boolean(connectorForm.username) !== Boolean(connectorForm.password))
+        throw new Error("MongoDB 用户名和密码须同时填写");
+      return;
     }
     if (
       !["hive", "elasticsearch"].includes(sourceType.value) &&
@@ -9213,6 +9343,22 @@ function validateConnector() {
         )
           throw new Error(prefix + "请填写游标参数");
       });
+      if (connectionEnabled.value === "0") {
+        const metadata = activeMetadataImport();
+        const importedTables = metadata?.tables?.length ? metadata.tables : metadataImportRows.value;
+        const importedNames = new Set(importedTables.map((table) =>
+          String(table.tableName || table.tableNameEn || table.name || "").trim().toLowerCase(),
+        ));
+        const missing = [...tableNames].filter((name) => !importedNames.has(name));
+        const unmatched = [...importedNames].filter((name) => !tableNames.has(name));
+        if (missing.length || unmatched.length) {
+          const details = [
+            missing.length ? "模板缺少 " + missing.join("、") : "",
+            unmatched.length ? "未登记对应 API " + unmatched.join("、") : "",
+          ].filter(Boolean);
+          throw new Error("API 与模板的数据表英文名须一致。" + details.join("，"));
+        }
+      }
     }
   }
   if (sourceType.value === "kafka") {
@@ -11233,7 +11379,6 @@ defineExpose({
   background: transparent;
 }
 
-.offline-template-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 
 
 /* Keep access-method names readable before decorative order numbers and icons. */

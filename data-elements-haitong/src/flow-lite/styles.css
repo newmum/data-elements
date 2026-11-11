@@ -1,0 +1,20 @@
+html, body, #root, #root > .ant-app { height: 100%; margin: 0; }
+.lite-workspace { height: 100%; display: flex; flex-direction: column; background: var(--app-bg, #f4f7fc); }
+.lite-header { flex: none; display: flex; align-items: center; justify-content: space-between; min-height: 58px; padding: 0 26px; background: var(--surface, #fff); border-bottom: 1px solid var(--border, #e0e7f1); }
+.lite-brand { font-size: 17px; font-weight: 700; color: var(--text, #1e3358); }
+.lite-brand .anticon { color: #2457d6; margin-right: 6px; }
+.lite-list { padding: 28px clamp(16px, 5vw, 72px); overflow: auto; }
+.lite-list-heading, .lite-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.lite-list h1 { margin: 0 0 16px; font-size: 24px; }
+.lite-list .ant-table-wrapper { margin-top: 14px; }
+.lite-editor { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+.lite-toolbar { padding: 10px 20px; background: var(--surface, #fff); }
+.lite-toolbar .ant-input { width: clamp(130px, 25vw, 290px); }
+.lite-graph.nifi-workspace { position: relative; flex: 1; min-height: 0; height: auto; overflow: hidden; background: var(--canvas-bg, #eef3fa); }
+.lite-loading { position: absolute; left: 50%; top: 40%; }
+.lite-login { min-height: 100%; display: grid; place-items: center; padding: 20px; background: radial-gradient(ellipse at 30% 20%, #dde9ff, #f3f7fe 72%); }
+.lite-login-card { width: min(100%, 410px); border: 1px solid #dce5f1; border-radius: 18px; padding: 32px; background: var(--surface, #fff); box-shadow: 0 16px 50px #19356214; }
+.lite-login-card h1 { margin: 16px 0 4px; font-size: 25px; }
+.lite-login-card p { margin: 0 0 22px; color: #546786; }
+.lite-login-card .ant-alert { margin-bottom: 12px; }
+.lite-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px; background: #eaf0ff; color: #2457d6; font-size: 24px; }

@@ -149,7 +149,7 @@ var dataSourceOf = (asset) => {
     var databaseName = firstValue(asset, ['database', 'dbName', 'dbMetaDbName'])
     var username = firstValue(asset, ['username', 'dbUser', 'dbMetaUser', 'user'])
     var password = firstValue(asset, ['password', 'dbPassword', 'dbMetaPassword'])
-    if (databaseType != DatabaseType.ELASTICSEARCH && (blank(databaseName) || (!hiveZooKeeperDiscovery && (blank(host) || blank(username))))) {
+    if (databaseType != DatabaseType.ELASTICSEARCH && (blank(databaseName) || (!hiveZooKeeperDiscovery && (blank(host) || (databaseType != DatabaseType.MONGODB && blank(username)))))) {
         // 参数或业务状态不满足要求时立即终止请求。
         exit 400, '数据源连接参数不完整'
     }

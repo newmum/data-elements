@@ -607,6 +607,12 @@ export default function Canvas() {
       cx = c.x + c.width / 2 - NODE_WIDTH / 2;
       cy = c.y + c.height / 2 - NODE_HEIGHT / 2;
     }
+    if (import.meta.env.MODE === 'flow-lite') {
+      const existing = Object.values(nodes);
+      while (existing.some(node => Math.abs(node.x - cx) < NODE_WIDTH + 24 && Math.abs(node.y - cy) < NODE_HEIGHT)) {
+        cx += NODE_WIDTH + 60;
+      }
+    }
     const activeDisplay = Object.values(compositeRef.current.nodes).find(item => !item.readonly);
     const n = addNodeFromManifest(m, cx - (activeDisplay?.offsetX ?? 0), cy - (activeDisplay?.offsetY ?? 0));
     setAddAnyOpen(false);

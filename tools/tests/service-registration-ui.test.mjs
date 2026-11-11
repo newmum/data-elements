@@ -133,7 +133,8 @@ test("simplified registration derives a new publish path and retains hidden lega
   const f = contentFixture(async () => ({ orgId: "org", orgName: "部门" }));
   await f.api.setFormData({});
   f.setFields({ address: "https://example.test/service" });
-  assert.equal((await f.api.getPayload()).publishConfig.publishAddress, "https://example.test/service");
+  assert.equal((await f.api.getPayload()).providerConfig.address, "https://example.test/service");
+  assert.equal((await f.api.getPayload()).publishConfig.publishAddress, "");
   await f.api.setFormData({ id: "existing", publishConfig: { publishAddress: "/published" },
     extendInfo: { dataDomain: "domain", dataCategory: "category", dataLevel: "level",
       shareType: "shared", dataUpdateFreq: "daily", apiDescription: "legacy" } });

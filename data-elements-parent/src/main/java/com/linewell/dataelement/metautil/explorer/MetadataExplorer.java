@@ -75,6 +75,11 @@ public interface MetadataExplorer {
      */
     List<TableInfo> getTables(DataSourceConfig config);
 
+    /** Discovery can omit per-object statistics and field sampling. */
+    default List<TableInfo> getTableInventory(DataSourceConfig config) {
+        return getTables(config);
+    }
+
     /** Lightweight table identity scan without per-table counts, sizes or column reads. */
     default List<TableInfo> getTableDirectory(DataSourceConfig config) {
         throw new UnsupportedOperationException("当前数据源不提供JDBC表目录");

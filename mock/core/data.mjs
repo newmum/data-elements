@@ -99,6 +99,17 @@ export function paginate(
   };
 }
 
+export function sourceTypeKey(row) {
+  const mode = String(row.accessMode || "").toLowerCase();
+  if (mode === "proxy") return "mode:proxy";
+  if (["receive", "push"].includes(mode)) return "mode:receive";
+  if (["upload", "report"].includes(mode) ||
+      (row.dbType === "api" && String(row.showConnect) === "0" && !["capture", "pull"].includes(mode))) {
+    return "mode:upload";
+  }
+  return row.dbType;
+}
+
 export function filterSources(rows, params = {}) {
   // 数据探查沿用 conditions 契约；卡片页使用平铺参数，两者只缩小授权结果。
   params = { ...params };
@@ -154,6 +165,8 @@ export function filterSources(rows, params = {}) {
     result = result.filter(
       (row) => row.dbType === String(params.dbType || params.datasourceType),
     );
+  if (params.typeKey)
+    result = result.filter((row) => sourceTypeKey(row) === params.typeKey);
   if (params.orgIds?.length)
     result = result.filter((row) => params.orgIds.includes(row.orgId));
   if (params.orgId) result = result.filter((row) => row.orgId === params.orgId);

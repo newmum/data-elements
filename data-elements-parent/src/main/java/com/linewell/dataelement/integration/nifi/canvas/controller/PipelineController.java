@@ -1265,6 +1265,7 @@ public class PipelineController {
             sourceConfig.put("table", firstNonBlank(tableAsset, "tableName", "table", "name", "tableCode", "tableNameCn"));
             sourceConfig.put("registeredDatasourceId", firstNonBlank(sourceDs, "tid", "id", "datasourceId", "dataSourceId", "dbId"));
             sourceConfig.put("sourceTableId", firstNonBlank(tableAsset, "tid", "id", "tableId"));
+            sourceConfig.put("responseExtractPath", firstNonBlank(api, "responseExtractPath", "response_extract_path"));
             sourceConfig.put("responseConfigJson", firstNonBlank(api, "responseConfigJson", "response_config_json"));
             sourceConfig.put("paginationConfigJson", firstNonBlank(api, "paginationConfigJson", "pagination_config_json"));
             sourceConfig.put("incrementalConfigJson", firstNonBlank(api, "incrementalConfigJson", "incremental_config_json"));
@@ -1573,10 +1574,9 @@ public class PipelineController {
             config.put("scheduleMode", "time");
             return;
         }
-        // “仅执行一次” is represented as one execution for each explicit task
-        // start.  A very long timer prevents the scheduler from polling again.
+        // The bound source trigger is executed through NiFi RUN_ONCE.
         config.put("schedulingStrategy", "TIMER_DRIVEN");
-        config.put("schedulingPeriod", "365 days");
+        config.put("schedulingPeriod", "0 sec");
         config.put("scheduleMode", "once");
     }
 

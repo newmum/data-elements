@@ -15,6 +15,7 @@ import {
 import {
   App as AntdApp,
   Button,
+  Input,
   Modal,
   Select,
   Space,
@@ -53,6 +54,8 @@ export default function FlowEditorPage() {
   const [publishOpen, setPublishOpen] = useState(false);
   const loadedFlow = useRef("");
   const [runError, setRunError] = useState("");
+  const [runInputOpen, setRunInputOpen] = useState(false);
+  const [runInput, setRunInput] = useState("{}");
   const reportError = (action: string, error: unknown) => {
     const detail =
       error instanceof Error ? error.message : "请检查网络连接后重试";
@@ -63,7 +66,8 @@ export default function FlowEditorPage() {
     return text;
   };
   const defaultRuntimeNodeId =
-    runtimeNodes.find((node) => node.defaultNode)?.id ?? runtimeNodes[0]?.id;
+    runtimeNodes.find((node) => node.enabled && node.localNode && node.defaultNode)?.id ??
+    runtimeNodes.find((node) => node.enabled && node.localNode)?.id ?? "local_magic_api";
   const [targetNodeId, setTargetNodeId] = useState<string | undefined>();
   const flow = useEditorStore((s) => s.flow);
   const dirty = useEditorStore((s) => s.dirty);
@@ -114,13 +118,24 @@ export default function FlowEditorPage() {
 
   const runFlow = async () => {
     if (!flow || debug.isPending) return;
+    let input: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(runInput);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+      input = parsed as Record<string, unknown>;
+    } catch {
+      void message.error("调试输入须为 JSON 对象");
+      return;
+    }
+    setRunInputOpen(false);
+    setRunInput("{}");
     setRunError("");
     useUiStore.getState().setBottomOpen(true);
     useUiStore.getState().setBottomActiveKey("result");
     useEditorStore.getState().setRunning(true);
     useEditorStore.getState().clearRunStatus();
     try {
-      const result = await debug.mutateAsync(flow);
+      const result = await debug.mutateAsync({ flow, input });
       useEditorStore.getState().setRunTrace(result.trace);
       for (const entry of result.trace) {
         useEditorStore
@@ -154,6 +169,7 @@ export default function FlowEditorPage() {
     try {
       const result = await publish.mutateAsync({
         id: flow.flowId,
+        lockVersion,
         remark: "frontend publish",
         targetNodeId: selectedTargetNodeId ?? defaultRuntimeNodeId,
       });
@@ -164,16 +180,15 @@ export default function FlowEditorPage() {
     }
   };
 
-  const runtimeNodeOptions = useMemo(
-    () =>
-      runtimeNodes
-        .filter((node) => node.enabled)
+  const runtimeNodeOptions = useMemo(() => {
+    const options = runtimeNodes
+        .filter((node) => node.enabled && node.localNode)
         .map((node) => ({
           value: node.id,
           label: `${node.defaultNode ? "默认 · " : ""}${node.businessDomain} / ${node.serviceType} / ${node.name}`,
-        })),
-    [runtimeNodes],
-  );
+        }));
+    return options.length ? options : [{ value: "local_magic_api", label: "本机 Magic API" }];
+  }, [runtimeNodes]);
 
   const closeEditor = () => {
     if (dirty) {
@@ -257,7 +272,7 @@ export default function FlowEditorPage() {
           <Button
             icon={<PlayCircleOutlined />}
             loading={debug.isPending}
-            onClick={runFlow}
+            onClick={() => { setRunInput("{}"); setRunInputOpen(true); }}
           >
             运行
           </Button>
@@ -337,6 +352,11 @@ export default function FlowEditorPage() {
           <DownOutlined rotate={bottomOpen ? 0 : 180} />
         </button>
       </footer>
+      <Modal title="调试流程" open={runInputOpen} okText="运行" cancelText="取消"
+        onOk={() => void runFlow()} onCancel={() => { setRunInputOpen(false); setRunInput("{}"); }}>
+        <Input.TextArea aria-label="流程调试输入（JSON）" value={runInput} rows={8}
+          autoComplete="off" spellCheck={false} onChange={(event) => setRunInput(event.target.value)} />
+      </Modal>
       <Modal
         title="选择发布节点"
         open={publishOpen}
@@ -351,7 +371,7 @@ export default function FlowEditorPage() {
         onOk={() => publishFlow(targetNodeId)}
       >
         <Typography.Paragraph type="secondary">
-          按业务域和服务类型选择目标运行节点，用于分摊负载和隔离服务。
+          选择承载此 HTTP 服务的本机 Magic 运行节点。
         </Typography.Paragraph>
         <Select
           style={{ width: "100%" }}

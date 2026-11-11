@@ -6,7 +6,10 @@ import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.linewell.dataelement.dataassets.runtime.DataSourceConnectionPropertyResolver;
+import com.linewell.dataelement.metautil.explorer.impl.MongoDbMetadataExplorer;
 import com.linewell.dataelement.metautil.model.dto.ColumnInfo;
+import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
+import com.linewell.dataelement.metautil.model.enums.DatabaseType;
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver;
 import com.linewell.dataelement.metautil.jdbc.JdbcMetadataScope;
 import com.linewell.dataelement.metautil.structured.StructuredSourceProbeService;
@@ -104,6 +107,9 @@ public class ConnectionTestController {
             if (usesServerManagedHuaweiMrs(manifestKey, config)) {
                 return invokeHuaweiMrsGateway(config, "health", null, null, null);
             }
+            if (isMongo(manifestKey)) {
+                return ResponseEntity.ok(Map.of("success", new MongoDbMetadataExplorer().testConnection(mongoConfig(config))));
+            }
             if ("source.elasticsearch".equals(manifestKey)) {
                 return testElasticsearch(config);
             }
@@ -184,6 +190,11 @@ public class ConnectionTestController {
                             "error", "缺少表名: table"));
                 }
                 return invokeHuaweiMrsGateway(config, "columns", table, null, null);
+            }
+            if (isMongo(manifestKey) && table != null && !table.isBlank()) {
+                var columns = new MongoDbMetadataExplorer().getColumns(mongoConfig(config), table);
+                return ResponseEntity.ok(Map.of("success", !columns.isEmpty(), "table", table, "columns", columns,
+                        "error", columns.isEmpty() ? "集合为空或未探查到字段" : ""));
             }
             // File/API/Kafka sources expose resource-directory datasets instead of JDBC metadata.
             if (table != null && !table.isBlank() && isStructuredSource(manifestKey)) {
@@ -283,6 +294,14 @@ public class ConnectionTestController {
             config = resolveRegisteredHiveConfig(manifestKey, config);
             if (usesServerManagedHuaweiMrs(manifestKey, config)) {
                 return invokeHuaweiMrsGateway(config, "tables", null, keyword, limit);
+            }
+            if (isMongo(manifestKey)) {
+                var search = keyword == null ? "" : keyword.toLowerCase(Locale.ROOT);
+                var matches = new MongoDbMetadataExplorer().getTableInventory(mongoConfig(config)).stream()
+                        .filter(table -> table.getTableName().toLowerCase(Locale.ROOT).contains(search))
+                        .toList();
+                return ResponseEntity.ok(Map.of("success", true, "tables", matches.subList(0, Math.min(limit, matches.size())),
+                        "total", matches.size()));
             }
             if (isStructuredSource(manifestKey)) {
                 var page = structuredSourceProbeService.getTablesPage(
@@ -1417,6 +1436,25 @@ public class ConnectionTestController {
         }
         String separator = url.contains("?") ? "&" : "?";
         return url + separator + key + "=" + value;
+    }
+
+    private static boolean isMongo(String manifestKey) {
+        return "source.mongodb".equals(manifestKey) || "sink.mongodb".equals(manifestKey);
+    }
+
+    private static DataSourceConfig mongoConfig(Map<String, Object> options) {
+        var config = new DataSourceConfig();
+        config.setDatabaseType(DatabaseType.MONGODB);
+        config.setHost(str(options.get("host")));
+        String port = str(options.get("port"));
+        if (port != null && !port.isBlank()) config.setPort(Integer.valueOf(port));
+        String database = str(options.get("database"));
+        if (database == null || database.isBlank()) throw new IllegalArgumentException("请填写 MongoDB 数据库名");
+        config.setDatabase(database);
+        config.setUsername(str(options.get("username")));
+        config.setPassword(str(options.get("password")));
+        config.setConnectorProperties(options);
+        return config;
     }
 
     private static String str(Object o) {

@@ -59,12 +59,12 @@ class RegisteredDatasourceTypeTest {
                 count++;
             }
         }
-        assertEquals(32, count);
+        assertEquals(33, count);
     }
 
     @Test
     void everyRegisteredTypeEitherHasARealManifestOrAnExplicitUnsupportedError() {
-        Set<DatabaseType> unsupported = Set.of(DatabaseType.MONGODB, DatabaseType.MAXCOMPUTE);
+        Set<DatabaseType> unsupported = Set.of(DatabaseType.MAXCOMPUTE);
         for (DatabaseType type : DatabaseType.values()) {
             if (unsupported.contains(type)) {
                 assertThrows(IllegalArgumentException.class, () -> RegisteredDatasourceType.sourceManifest(type.getCode(), Map.of()));
@@ -78,9 +78,10 @@ class RegisteredDatasourceTypeTest {
 
     @Test
     void nonJdbcConnectorsNeverReceiveFabricatedMysqlUrls() {
-        for (String raw : Set.of("ftp", "sftp", "api", "minio", "kafka", "hdfs", "hbase", "es")) {
+        for (String raw : Set.of("ftp", "sftp", "api", "minio", "kafka", "hdfs", "hbase", "es", "mongodb")) {
             assertNull(RegisteredDatasourceType.jdbcUrl(raw, Map.of("url", "https://api.test"), Map.of()));
         }
+        assertEquals("MONGODB", RegisteredDatasourceType.sinkType("mongodb", Map.of()));
         assertEquals("source.sftp", RegisteredDatasourceType.sourceManifest("ftp", Map.of("ftpProtocol", "sftp")));
     }
 

@@ -970,6 +970,7 @@ const supportedDatasourceTypes = [
   "api",
   "kafka",
   "elasticsearch",
+  "mongodb",
 ];
 
 const normalizeDatasourceType = (value) => {
@@ -1010,7 +1011,9 @@ const normalizeAccessMode = (value) => {
 };
 
 const isDataReportSource = (item) => {
-  if (normalizeAccessMode(item?.accessMode) === "upload") return true;
+  const mode = normalizeAccessMode(item?.accessMode);
+  if (mode === "upload") return true;
+  if (mode === "capture") return false;
   // 历史数据源创建时尚未持久化 accessMode。上报方式不会保存接口连接，
   // 因而以“无连接的 API”作为仅对历史记录生效的兼容判定。
   const noConnection = ["0", "false", "no", "off"].includes(String(item?.showConnect ?? "").trim().toLowerCase());
@@ -1072,6 +1075,7 @@ const sourceTypeName = (item) => {
     api: "API",
     kafka: "Kafka",
     elasticsearch: "Elasticsearch 搜索引擎",
+    mongodb: "MongoDB",
     other: "其他类型数据源",
   };
   return names[type] || item.dbType || "其他类型数据源";

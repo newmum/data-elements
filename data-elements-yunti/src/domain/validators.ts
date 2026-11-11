@@ -82,6 +82,7 @@ function checkRequired(node: FlowNode): Problem[] {
   if (!specs) return [];
   const problems: Problem[] = [];
   for (const { field, label } of specs) {
+    if (node.type === 'http-call' && field === 'url' && node.data.serviceId) continue;
     if (isEmpty((node.data as Record<string, unknown>)[field])) {
       problems.push(
         problem({

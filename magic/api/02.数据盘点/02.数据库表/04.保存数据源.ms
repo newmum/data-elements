@@ -24,6 +24,7 @@
 ================================
 import '@post:/dst/maintenance/refresh' as refreshAssetIndex
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
+import apiPullConfig
 import tenantRuntime
 import dataScope
 import metadataAsset
@@ -435,6 +436,11 @@ if (blank(dbType) && old != null) {
     dbType = inferDbType(first(old, ['dbType', 'db_type']), first(old, ['jdbcUrl', 'jdbc_url']))
 }
 if (accessMode == 'proxy') { dbType=null }
+var isApiCapture = accessMode == 'capture' && !blank(dbType) && text(dbType).toLowerCase() == 'api'
+if (isApiCapture && props instanceof Map && props.containsKey('apiPullItems')) {
+    try { apiPullConfig.validateDefinitions(props.apiPullItems) }
+    catch (e) { exit 400, 'API 抓取登记定义无效，请核对地址、表名及凭据引用' }
+}
 // 华为 MRS Hive 的元数据仅由服务端 hwhive 模块访问。登记时只持久化模式标记，
 // 供登记后续步骤和 NiFi 重新加载当前租户的数据源，不信任浏览器提交的 JDBC/Kerberos 参数。
 var hiveConnectionMode = first(props, ['hiveConnectionMode', 'hive_connection_mode'])
@@ -567,6 +573,12 @@ if (showConnect == 0) {
     var registrationConfig = {}
     if (!blank(accessMode)) {
         registrationConfig.accessMode = accessMode
+    }
+    // API 抓取离线登记仍保存请求定义，以便网络恢复后生成对应任务。
+    if (isApiCapture) {
+        var apiItems = props instanceof Map && props.containsKey('apiPullItems')
+            ? props.apiPullItems : oldConnectionConfig.apiPullItems
+        if (apiItems != null) { registrationConfig.apiPullItems = apiItems }
     }
     if (accessMode == 'upload' && oldConnectionConfig.reportRegistration != null) {
         registrationConfig.reportRegistration = oldConnectionConfig.reportRegistration

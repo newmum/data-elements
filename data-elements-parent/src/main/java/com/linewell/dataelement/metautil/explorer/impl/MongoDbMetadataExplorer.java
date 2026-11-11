@@ -9,7 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import com.linewell.dataelement.metautil.explorer.AbstractMetadataExplorer;
+import com.linewell.dataelement.metautil.mongo.MongoDatasource;
 import com.linewell.dataelement.metautil.explorer.MetadataExplorer;
 import com.linewell.dataelement.metautil.model.dto.*;
 import com.mongodb.client.FindIterable;
@@ -32,36 +32,40 @@ public class MongoDbMetadataExplorer implements MetadataExplorer {
      * 创建 MongoDB 客户端
      */
     private MongoClient createClient(DataSourceConfig config) {
-        String connectionString;
-        if (config.getUsername() != null && !config.getUsername().isEmpty()) {
-            connectionString = String.format(
-                "mongodb://%s:%s@%s:%d/%s?authSource=admin",
-                config.getUsername(),
-                config.getPassword(),
-                config.getHost(),
-                config.getPortOrDefault(),
-                config.getDatabase() != null ? config.getDatabase() : "admin"
-            );
-        } else {
-            connectionString = String.format(
-                "mongodb://%s:%d",
-                config.getHost(),
-                config.getPortOrDefault()
-            );
-        }
-        
-        return MongoClients.create(connectionString);
+        return MongoClients.create(MongoDatasource.settings(config));
     }
 
     @Override
     public boolean testConnection(DataSourceConfig config) {
         try (MongoClient client = createClient(config)) {
-            // 尝试列出数据库来测试连接
-            client.listDatabaseNames().first();
+            client.getDatabase(config.getDatabase()).listCollectionNames().first();
             return true;
         } catch (Exception e) {
             log.error("MongoDB连接测试失败: {}", e.getMessage(), e);
             throw new DataSourceConnectionException("MongoDB 连接测试失败", e);
+        }
+    }
+
+    @Override
+    public String generateCreateTableDdl(DataSourceConfig config, String collection, List<ColumnInfo> columns,
+                                         String comment) {
+        return MongoDatasource.createCommand(collection, columns.stream()
+                .filter(column -> Boolean.TRUE.equals(column.getPrimaryKey()))
+                .map(ColumnInfo::getColumnName).toList());
+    }
+
+    @Override
+    public void createTable(DataSourceConfig config, String ddl) {
+        var command = MongoDatasource.parseCreateCommand(ddl);
+        try (MongoClient client = createClient(config)) {
+            MongoDatabase database = client.getDatabase(config.getDatabase());
+            database.createCollection(command.collection());
+            if (!command.uniqueKeys().isEmpty()) {
+                var keys = new Document();
+                command.uniqueKeys().forEach(key -> keys.append(key, 1));
+                database.getCollection(command.collection()).createIndex(keys, new com.mongodb.client.model.IndexOptions()
+                        .unique(true));
+            }
         }
     }
 
@@ -192,6 +196,21 @@ public class MongoDbMetadataExplorer implements MetadataExplorer {
     }
 
     @Override
+    public List<TableInfo> getTableInventory(DataSourceConfig config) {
+        var tables = new ArrayList<TableInfo>();
+        try (MongoClient client = createClient(config)) {
+            for (String name : client.getDatabase(config.getDatabase()).listCollectionNames().batchSize(250)) {
+                if (name.startsWith("system.")) continue;
+                var table = new TableInfo();
+                table.setTableName(name);
+                table.setTableType("COLLECTION");
+                tables.add(table);
+            }
+        }
+        return tables;
+    }
+
+    @Override
     public List<TableInfo> getTables(DataSourceConfig config) {
         List<TableInfo> tables = new ArrayList<>();
         
@@ -206,7 +225,7 @@ public class MongoDbMetadataExplorer implements MetadataExplorer {
                 // 获取集合统计信息
                 try {
                     Document stats = database.runCommand(new Document("collStats", collectionName));
-                    table.setRowCount(stats.getLong("count"));
+                    table.setRowCount(readLong(stats, "count"));
                     
                     // MongoDB 返回的大小可能是 Integer 或 Long
                     Object sizeObj = stats.get("size");
@@ -280,12 +299,8 @@ public class MongoDbMetadataExplorer implements MetadataExplorer {
             
             // 通过采样文档推断字段结构
             Map<String, String> fieldTypes = new LinkedHashMap<>();
-            int sampleCount = 0;
-            int maxSample = 100;
-            
-            for (Document doc : collection.find().limit(maxSample)) {
-                analyzeDocument(doc, "", fieldTypes);
-                sampleCount++;
+            for (Document doc : collection.find().limit(100)) {
+                analyzeDocument(doc, fieldTypes);
             }
             
             int position = 1;
@@ -295,8 +310,10 @@ public class MongoDbMetadataExplorer implements MetadataExplorer {
                 column.setDataType(entry.getValue());
                 column.setColumnType(entry.getValue());
                 column.setOrdinalPosition(position++);
-                column.setNullable(true); // MongoDB 字段都是可选的
-                column.setPrimaryKey("_id".equals(entry.getKey()));
+                boolean identifier = "_id".equals(entry.getKey());
+                column.setNullable(!identifier);
+                column.setPrimaryKey(identifier);
+                if ("objectId".equals(entry.getValue())) column.setLength(24L);
                 
                 columns.add(column);
             }
@@ -312,28 +329,15 @@ public class MongoDbMetadataExplorer implements MetadataExplorer {
     /**
      * 分析文档结构，推断字段类型
      */
-    private void analyzeDocument(Document doc, String prefix, Map<String, String> fieldTypes) {
-        for (String key : doc.keySet()) {
-            String fieldName = prefix.isEmpty() ? key : prefix + "." + key;
-            Object value = doc.get(key);
-            
-            String type = getMongoType(value);
-            
-            // 如果字段已存在且类型不同，标记为 mixed
-            if (fieldTypes.containsKey(fieldName)) {
-                String existingType = fieldTypes.get(fieldName);
-                if (!existingType.equals(type) && !existingType.equals("mixed")) {
-                    fieldTypes.put(fieldName, "mixed");
-                }
-            } else {
-                fieldTypes.put(fieldName, type);
+    private void analyzeDocument(Document doc, Map<String, String> fieldTypes) {
+        doc.forEach((key, value) -> fieldTypes.merge(key, getMongoType(value), (previous, next) -> {
+            if ("null".equals(previous)) return next;
+            if ("null".equals(next) || previous.equals(next)) return previous;
+            if (Set.of("int32", "int64").contains(previous) && Set.of("int32", "int64").contains(next)) {
+                return "int64";
             }
-            
-            // 递归处理嵌套文档
-            if (value instanceof Document) {
-                analyzeDocument((Document) value, fieldName, fieldTypes);
-            }
-        }
+            return "mixed";
+        }));
     }
 
     /**
@@ -528,6 +532,7 @@ public class MongoDbMetadataExplorer implements MetadataExplorer {
             Object value = doc.get(key);
             
             if (value instanceof Document) {
+                result.put(fieldName, value);
                 result.putAll(flattenDocument((Document) value, fieldName));
             } else if (value instanceof org.bson.types.ObjectId) {
                 result.put(fieldName, value.toString());

@@ -2994,3 +2994,10 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 - 官网资源及产品商标归各自权利人所有，本系统仅用于标识实际连接的数据源；保留厂商／项目原色和品牌造型。
 - 新增数据源时同时补充本地图标及来源，在浅色、深色和支持的最低浏览器版本检查清晰度。不要在运行时引用在线 CDN。
 
+## NiFi 流程轻量安装包
+
+仅精简数据库、保留完整前后端的部署方式：从后端工程用 `-Ddata-elements.without-nacos=true` 打包完整应用，海通前端按正常生产入口构建，再由 `python tools/package-haitong-deployment.py` 组装三个 ZIP。数据库脚本只用于独立空库，包含控制库 `baseline`、单一租户库 `baseline_haitong` 和现有平台登录种子。部署时从外置 `config/application.yml` 读取配置，菜单由 `www/haitong/deployment.js` 的 `enabledRoutes` 控制。具体配置和初始化步骤见[独立部署说明](../tools/haitong-deployment/deployment.md)，样例流程见[操作手册](../tools/haitong-deployment/operations.md)。
+
+轻量版通过 `flow-lite` Vite 构建入口复用海通 NiFi 画布，独立 Java 服务位于 `data-elements-haitong/standalone-backend/`，控制库初始化在 `db/haitong-flow-lite/init.sql`。仅提供流程列表和画布，使用独立管理员会话和加密 H2 文件。外部 Apache NiFi 执行 JDBC、MongoDB 和 JAVA 加工节点。
+
+先在 `data-elements-haitong` 执行 `pnpm exec vite build --mode flow-lite --config vite.flow-lite.config.ts`，再从仓库根目录执行 `mvn -f data-elements-haitong/standalone-backend/pom.xml package` 与 `python tools/package-haitong-flow-lite.py`。输出位于 `logs/haitong-flow-lite/release`，包内有部署手册、操作手册、独立控制库脚本及可复现的质检示例。

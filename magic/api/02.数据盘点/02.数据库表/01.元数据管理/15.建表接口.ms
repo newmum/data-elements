@@ -202,7 +202,7 @@ var dataSourceOf = (asset) => {
     var databaseName = firstValue(asset, ['database', 'dbName', 'dbMetaDbName'])
     var username = firstValue(asset, ['username', 'dbUser', 'dbMetaUser', 'user'])
     var password = firstValue(asset, ['password', 'dbPassword', 'dbMetaPassword'])
-    if (blank(databaseName) || (!hiveZooKeeperDiscovery && (blank(host) || blank(username)))) {
+    if (blank(databaseName) || (!hiveZooKeeperDiscovery && (blank(host) || (databaseType != DatabaseType.MONGODB && blank(username))))) {
         // 参数或业务状态不满足要求时立即终止请求。
         exit 400, '数据源连接参数不完整'
     }
@@ -538,7 +538,7 @@ if (body.canvas == true) {
             if (blank(registered.dbType)) { exit 400, '目标数据源未配置数据库类型' }
             try { databaseType = DatabaseType.fromCode(textOf(registered.dbType).toLowerCase()) }
             catch (error) { exit 400, '目标数据源数据库类型不受支持' }
-            if (!databaseType.isRelational()) { exit 400, '目标数据源类型不支持物理建表' }
+            if (!databaseType.isRelational() && databaseType != DatabaseType.MONGODB) { exit 400, '目标数据源类型不支持物理建表' }
         }
         managedHive = databaseType == DatabaseType.HIVE && registered.hiveConnectionMode != 'open-source'
             && (registered.metadataAccessMode == 'server-managed-mrs' || registered.hiveConnectionMode == 'huawei-mrs'

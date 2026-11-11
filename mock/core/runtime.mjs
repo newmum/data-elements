@@ -14,6 +14,7 @@ import {
   requireSources,
   paginate,
   filterSources,
+  sourceTypeKey,
 } from "./data.mjs";
 
 const clone = (value) => structuredClone(value);
@@ -203,7 +204,8 @@ export class ChengtianMockRuntime {
     for (const row of rows) {
       orgCounts[row.orgId] = (orgCounts[row.orgId] || 0) + 1;
       dbTypes[row.dbType] = (dbTypes[row.dbType] || 0) + 1;
-      typeCounts[row.dbType] = (typeCounts[row.dbType] || 0) + 1;
+      const typeKey = sourceTypeKey(row);
+      typeCounts[typeKey] = (typeCounts[typeKey] || 0) + 1;
       assetStatuses[row.assetStatus] =
         (assetStatuses[row.assetStatus] || 0) + 1;
       const apps = (orgApps[row.orgId] ||= []);
@@ -293,6 +295,7 @@ export class ChengtianMockRuntime {
         host: row.host,
         port: row.port,
         accessMode: row.accessMode,
+        apiPullItems: clone(row.apiPullItems || []),
       },
       found: true,
     };
@@ -327,12 +330,28 @@ export class ChengtianMockRuntime {
       "dbType",
       "storageDomain",
       "showConnect",
+      "accessMode",
     ];
     const changes = Object.fromEntries(
       fields
         .filter((key) => props[key] !== undefined)
         .map((key) => [key, props[key]]),
     );
+    const captureMode = changes.accessMode ?? existing?.accessMode;
+    const sourceType = changes.dbType ?? existing?.dbType;
+    if (
+      captureMode === "capture" &&
+      sourceType === "api" &&
+      props.apiPullItems !== undefined
+    ) {
+      assert(Array.isArray(props.apiPullItems), 400, "API 抓取登记定义无效");
+      changes.apiPullItems = props.apiPullItems.map((item) => {
+        const { tableName, tableComment, serviceName, apiProtocol, baseUrl,
+          endpointPath, endpointMethod, responseExtractPath, captureSchedule } = item;
+        return { tableName, tableComment, serviceName, apiProtocol, baseUrl,
+          endpointPath, endpointMethod, responseExtractPath, captureSchedule: clone(captureSchedule) };
+      });
+    }
     assert(existing || changes.dbName, 400, "请输入数据源名称");
     const row = existing || {
       tid: `${database.code}-source-${crypto.randomUUID()}`,

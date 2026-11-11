@@ -1,5 +1,6 @@
 import { getBridgeToken,getSessionRevision,setBridgeToken } from '../nifi/api/bridgeSession';
 import {sourcePlatformBaseUrl,sourcePlatformHomeUrl,sourcePlatformLoginUrl} from './platformLocation';
+import { deploymentLanding, standaloneDeployment } from '../app/deployment';
 
 /** A trusted platform credential changed: stop this request and rebuild the standalone workspace. */
 export function reconcilePlatformSessionToken(token:string,expectedRevision=getSessionRevision()):boolean {
@@ -21,6 +22,7 @@ export function getPortalBaseUrl(): URL {
 
 /** Let the platform root resolve the first menu available to the current user. */
 export function getPlatformHomeUrl(): string {
+  if (standaloneDeployment && deploymentLanding) return new URL(`#${deploymentLanding}`, window.location.href).href;
   return sourcePlatformHomeUrl(getPortalBaseUrl().href);
 }
 
@@ -120,6 +122,19 @@ export function logoutPlatformSession(): Promise<void> {
   if (loggingOut) return loggingOut;
   loggingOut = (async () => {
     const portal = getPortalBaseUrl();
+    if (standaloneDeployment && portal.origin === window.location.origin) {
+      const response = await fetch('/prod-api/portal/logout', { method: 'POST', headers: { token: sameOriginToken() } });
+      const result = await response.json();
+      if (!response.ok || ![0, 200].includes(Number(result.code))) throw new Error(result.message || '退出登录失败，请重试');
+      for (const storage of [localStorage, sessionStorage]) {
+        storage.removeItem('token');
+        storage.removeItem('remember_me');
+      }
+      sessionStorage.removeItem(LOGIN_REDIRECT_KEY);
+      setBridgeToken(null);
+      window.location.replace(getPlatformLoginUrl());
+      return;
+    }
     const frame = await platformBridge(portal);
     await new Promise<void>((resolve, reject) => {
       const nonce = crypto.randomUUID();

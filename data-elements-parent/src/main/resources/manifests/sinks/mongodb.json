@@ -1,0 +1,90 @@
+{
+  "key": "sink.mongodb",
+  "category": "sink",
+  "label": "MongoDB 目标集合",
+  "icon": "mongodb",
+  "description": "将记录写入集合，配置业务键时按键更新或插入",
+  "fields": [
+    {
+      "key": "host",
+      "label": "主机",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "port",
+      "label": "端口",
+      "type": "number",
+      "default": 27017
+    },
+    {
+      "key": "database",
+      "label": "数据库",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "username",
+      "label": "用户名",
+      "type": "text"
+    },
+    {
+      "key": "password",
+      "label": "密码",
+      "type": "password"
+    },
+    {
+      "key": "authSource",
+      "label": "认证数据库",
+      "type": "text",
+      "default": "admin"
+    },
+    {
+      "key": "ssl",
+      "label": "TLS",
+      "type": "switch",
+      "default": false
+    },
+    {
+      "key": "table",
+      "label": "集合",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "updateKeys",
+      "label": "更新键字段",
+      "type": "text",
+      "placeholder": "多个字段用英文逗号分隔"
+    }
+  ],
+  "compile": {
+    "controllerServices": [
+      {
+        "localId": "mongo",
+        "type": "org.apache.nifi.mongodb.MongoDBControllerService",
+        "properties": {
+          "Mongo URI": "${config.mongoUri}",
+          "Database User": "${config.username}",
+          "Password": "${config.password}"
+        }
+      }
+    ],
+    "processors": [
+      {
+        "localId": "put",
+        "type": "org.apache.nifi.processors.mongodb.PutMongoRecord",
+        "properties": {
+          "Client Service": "${cs.mongo}",
+          "Mongo Database Name": "${config.database}",
+          "Mongo Collection Name": "${config.table}",
+          "Record Reader": "${cs.jsonReader}",
+          "Update Key Fields": "${config.updateKeys}",
+          "Batch Size": "500"
+        }
+      }
+    ],
+    "inlet": "put",
+    "outlets": []
+  }
+}

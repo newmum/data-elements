@@ -418,6 +418,14 @@ if (body?.batchGenerate == true) {
             batchColumns.add(columnInfo)
         }
         try {
+            if (targetType == DatabaseType.MONGODB) {
+                var command = metadataExplorerService.generateCreateTableDdl(batchConfig,
+                    requestedTableName, batchColumns, submittedProps.tableNameCn)
+                generated.add({dbId: submittedDbId, requestedTableName: requestedTableName,
+                    tableName: requestedTableName, ddl: command, warnings: [], tableItems: submittedItems,
+                    partitionPlan:{enabled:false}, partitionSupported:false})
+                continue
+            }
             var converted = portableDdl.prepare(batchColumns, batchConfig)
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 requestedTableName, converted.columns, submittedProps.tableNameCn)
@@ -524,6 +532,9 @@ var renderDdl = (request, dsConfig, columns) => {
     var propList = request.propList
     var targetTableName = textOf(propList.tableName).trim()
     if (dsConfig.getEffectiveDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
+    if (dsConfig.getEffectiveDatabaseType() == DatabaseType.MONGODB) {
+        return metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, columns, propList.tableNameCn)
+    }
     var converted = portableDdl.prepare(columns, dsConfig)
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
     var partitionPlan = normalizeDdlPartition(request?.partitionPlan, converted.columns, dsConfig.getEffectiveDatabaseType())

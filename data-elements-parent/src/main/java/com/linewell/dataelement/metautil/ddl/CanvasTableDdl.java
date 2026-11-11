@@ -9,6 +9,7 @@ import com.alibaba.druid.sql.ast.statement.SQLCommentStatement;
 import com.alibaba.druid.sql.ast.statement.SQLCreateTableStatement;
 import com.linewell.dataelement.metautil.model.dto.DataSourceConfig;
 import com.linewell.dataelement.metautil.model.enums.DatabaseType;
+import com.linewell.dataelement.metautil.mongo.MongoDatasource;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,14 @@ public class CanvasTableDdl {
         if (ddl == null || ddl.isBlank()) throw new IllegalArgumentException("请填写建表语句");
         if (tableName == null || tableName.isBlank()) throw new IllegalArgumentException("请填写目标表名");
         String name = tableName.trim();
+        if (config.getEffectiveDatabaseType() == DatabaseType.MONGODB) {
+            var command = MongoDatasource.parseCreateCommand(ddl);
+            if (!name.equals(command.collection())) {
+                throw new IllegalArgumentException("创建集合指令与选择的目标集合不一致");
+            }
+            return Map.of("ddl", ddl, "tableName", name, "lookupName", name, "schemaName", scope(config),
+                    "quoted", true, "syntaxChecked", true);
+        }
         if (config.getEffectiveDatabaseType() == DatabaseType.HIVE) name = name.toLowerCase(Locale.ROOT);
         return Map.of("ddl",ddl,"tableName",name,"lookupName",unquote(name),
                 "schemaName",scope(config),"quoted",isQuoted(name),"syntaxChecked",false);
@@ -106,6 +115,7 @@ public class CanvasTableDdl {
 
     public boolean alreadyExists(Throwable failure) {
         for (Throwable e = failure; e != null; e = e.getCause()) {
+            if (e instanceof com.mongodb.MongoCommandException mongo && mongo.getErrorCode() == 48) return true;
             if (e instanceof SQLException sql && (sql.getErrorCode() == 955 || sql.getErrorCode() == 1050
                     || sql.getErrorCode() == 2714 || "42P07".equals(sql.getSQLState()) || "X0Y32".equals(sql.getSQLState()))) return true;
             String message = e.getMessage() == null ? "" : e.getMessage().toLowerCase(Locale.ROOT);

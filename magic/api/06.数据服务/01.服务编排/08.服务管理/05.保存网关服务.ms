@@ -57,10 +57,19 @@ if (!(provider instanceof Map) || !(publish instanceof Map) || !(ext instanceof 
 if (params.size()>500 || ext.size()>64 || JSONUtil.toJsonStr(body).length()>1048576) { exit 413,'服务登记最多500个参数、64项扩展配置及1MiB内容' }
 var method=text(body.method || body.httpMethod || provider.httpMethod || publish.publishMethod || 'GET').toUpperCase()
 if (!['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS'].contains(method)) { exit 400,'请选择有效的HTTP请求方式' }
+var createType = text(old?.serviceCreateType || old?.service_create_type || body.serviceCreateType || 'api')
+var linkedFlow = text(old?.flowId || old?.flow_id)
 var uri=text(body.uri || body.address || provider.address).trim()
-var publishAddress=text(body.publishAddress || publish.publishAddress || uri).trim()
-if (blank(uri) || uri.length()>1000 || publishAddress.length()>1000) { exit 400,'请填写1000个字符以内的服务地址和发布地址' }
-if (!uri.matches('^(?i)https?://[^\\s]+$') && !uri.startsWith('/')) { exit 400,'服务地址须为HTTP(S)地址或已有服务相对路径' }
+var publishAddress = linkedFlow != '' || createType != 'apiBuild'
+    ? text(old?.publishAddress || old?.publish_address)
+    : text(body.publishAddress || publish.publishAddress || uri).trim()
+var publishAddressFull = linkedFlow != '' || createType != 'apiBuild'
+    ? text(old?.publishAddressFull || old?.publish_address_full)
+    : publishAddress
+if (createType == 'flow') { uri = ''; provider = {} }
+if ((createType != 'flow' && blank(uri)) || uri.length()>1000 || publishAddress.length()>1000) { exit 400,'请填写1000个字符以内的上游地址' }
+if (uri != '' && !uri.matches('^(?i)https?://[^\\s]+$') && !uri.startsWith('/')) { exit 400,'服务地址须为HTTP(S)地址或已有服务相对路径' }
+if (creating && createType != 'apiBuild') { publish = {} }
 var orgId=creating?userOrgId:text(old.orgId || old.org_id)
 // 数据源关联独立于服务资源标识；既有服务不能经普通编辑静默转移数据源。
 var oldDatasourceId=text(old?.datasourceId || old?.datasource_id).trim()
@@ -94,18 +103,25 @@ for (prop in oldProps) { propsByName[text(prop.propName || prop.prop_name)]=prop
 var row={tid:apiId,datasource_id:blank(datasourceId)?null:datasourceId,resource_id:body.resourceId || old?.resourceId || old?.resource_id || apiId,
     service_name:name,service_code:body.serviceCode || body.code || old?.serviceCode || old?.service_code || apiId,
     service_type:body.serviceType || body.type || old?.serviceType || old?.service_type || '数据服务',
-    service_desc:body.serviceDesc || body.description || ext.apiDescription || '',uri:uri,method:method,
+    service_desc:body.serviceDesc || body.description || ext.apiDescription || '',uri:uri.length()<=255?uri:null,method:method,
     service_sql:body.serviceSql || body.sql || old?.serviceSql || old?.service_sql || '',
     is_use:body.isUse==null?(old?.isUse==null?(old?.is_use==null?1:old.is_use):old.isUse):body.isUse,
-    group_id:groupId,version:body.version || old?.version || '1.0',status:body.status || old?.status || 'draft',
+    group_id:groupId,version:body.version || old?.version || '1.0',
+    status:createType=='apiBuild' && linkedFlow=='' ? (body.status || old?.status || 'draft') : (old?.status || 'draft'),
     protocol:body.protocol || provider.protocol || 'HTTP',address:provider.address || uri,
-    publish_address:publishAddress,publish_address_full:publishAddress,provider_config:json(provider),publish_config:json(publish),
+    publish_address:publishAddress,publish_address_full:publishAddressFull,provider_config:json(provider),publish_config:json(publish),
     labels:body.labels || '',return_type:ext.returnType || body.returnType || '',share_type:ext.shareType || body.shareType || '',
     data_domain:ext.dataDomain || '',data_category:ext.dataCategory || '',data_level:ext.dataLevel || '',
     catalog_id:ext.catalogId || body.catalogId || '',org_id:orgId,source_business_name:ext.sourceBusinessName || '',
     source_business_item:ext.sourceBusinessItem || '',request_example:ext.requestExample || '',response_example:ext.responseExample || '',
-    service_create_type:body.serviceCreateType || old?.serviceCreateType || old?.service_create_type || 'api',
-    flow_id:body.flowId || old?.flowId || old?.flow_id || '',tenant_id:tenantId,updated_time:now,updated_by:userId}
+    service_create_type:createType,tenant_id:tenantId,updated_time:now,updated_by:userId}
+// 登记编辑与编排发布各自写自己的字段，避免旧表单覆盖并发产生的流程或发布地址。
+if (!creating && (createType != 'apiBuild' || linkedFlow != '')) {
+    row.remove('status')
+    row.remove('publish_address')
+    row.remove('publish_address_full')
+    row.remove('publish_config')
+}
 db.transaction(()=>{
     if (creating) { row.created_time=now;row.created_by=userId;row.is_del=0;db.table('api_info_t').primary('tid').insert(row) }
     else { db.table('api_info_t').where().eq('tenant_id',tenantId).eq('tid',apiId).eq('is_del',0).update(row) }

@@ -473,6 +473,12 @@ class DataAggTaskEnsureBatchMagicTest {
         var source = cn.hutool.json.JSONUtil.parseObj(fixture.jdbc.queryForObject(
                 "select p.dsl_json from nifi_pipeline_t p join data_access_agg_task_t t on t.pipeline_id=p.id where t.target_table_id='target-0'", String.class)).getJSONArray("nodes").getJSONObject(0);
         assertEquals("source." + manifest, source.getStr("manifestKey"));
+        if (raw.equals("api")) {
+            var config = source.getJSONObject("config");
+            assertEquals("https://api.test/person", config.getStr("url"));
+            assertEquals("$.data", config.getStr("responseExtractPath"));
+            assertEquals("1 min", config.getStr("schedulingPeriod"));
+        }
         if (raw.equals("kingbase8")) {
             assertEquals("KINGBASE", source.getJSONObject("config").getStr("dbType"));
             assertEquals("PG", source.getJSONObject("config").getStr("compatibleMode"));
@@ -1001,6 +1007,7 @@ class DataAggTaskEnsureBatchMagicTest {
                         pool_cfg clob,is_del int,asset_status int default 2)
                     """);
             jdbc.execute("create table sym_dict_t(tid varchar(64),tenant_id varchar(32),parent_id varchar(64),dict_code varchar(64),is_del int,sort_no int)");
+            jdbc.execute("create table data_pull_rule_t(tenant_id varchar(32), datasource_id varchar(64), source_table_id varchar(64), nifi_task_id varchar(64), updated_time timestamp, is_del int)");
             jdbc.execute("create table dwm_center_layer_source_t(tenant_id varchar(32),target_id varchar(64),target_type varchar(32),datasource_id varchar(64),is_del int)");
             jdbc.execute("""
                     create table db_table_column_t(tid varchar(64),tenant_id varchar(32),table_id varchar(64),
@@ -1115,7 +1122,8 @@ class DataAggTaskEnsureBatchMagicTest {
 
     public static final class ApiPullStub {
         public Map<String, Object> resolvePipelineSource(String datasourceId, String tableName) {
-            return Map.of("url", "https://api.test/person", "method", "GET");
+            return Map.of("url", "https://api.test/person", "method", "GET",
+                    "responseExtractPath", "$.data", "schedulingPeriod", "1 min");
         }
     }
 

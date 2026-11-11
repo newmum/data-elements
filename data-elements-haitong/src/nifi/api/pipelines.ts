@@ -457,7 +457,7 @@ export function useFlowStatus(id: string | null, intervalMs = 3000) {
   const sessionRevision = useSessionRevision();
   const qc = useQueryClient();
   useEffect(() => {
-    if (!tokenReady || !id) return;
+    if (import.meta.env.MODE === 'flow-lite' || !tokenReady || !id) return;
     let metricsAt = 0;
     return subscribeRuntimeStatus(event => {
       const current = qc.getQueryData<FlowStatusPayload>(['pipeline-status', id, sessionRevision]);
@@ -475,7 +475,7 @@ export function useFlowStatus(id: string | null, intervalMs = 3000) {
     enabled: tokenReady && !!id,
     queryKey: ['pipeline-status', id, sessionRevision],
     queryFn: async ({ signal }) => (await api.get<FlowStatusPayload>(`/pipelines/${id}/status`, { ...BACKGROUND_REQUEST_OPTIONS, signal })).data,
-    refetchInterval: false,
+    refetchInterval: import.meta.env.MODE === 'flow-lite' ? intervalMs : false,
   });
 }
 

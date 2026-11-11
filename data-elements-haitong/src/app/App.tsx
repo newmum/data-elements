@@ -13,6 +13,7 @@ import { useSessionRevision } from '../nifi/api/bridgeSession';
 import { entryRouteDestination } from './entryRoute';
 import { preloadCanvas } from './preloadCanvas';
 import ReportLoading from '../report/components/ReportLoading';
+import { deploymentAllows, deploymentLanding, standaloneDeployment } from './deployment';
 const LowcodeLogs=lazy(()=>import('../components/LowcodeLogs'));
 const Overview=lazy(()=>import('../pages/overview/OverviewPage'));
 const Tasks=lazy(()=>import('../pages/development/TaskListPage'));
@@ -37,6 +38,10 @@ function EntryRoute(){
 export default function App(){
  const location=useLocation();
  const sessionRevision=useSessionRevision();
+ if(standaloneDeployment&&!deploymentAllows(location.pathname)){
+  if(deploymentLanding)return <Navigate to={deploymentLanding} replace/>;
+  return <Result status="403" title="此入口未启用" subTitle="请联系部署管理员检查菜单配置。"/>;
+ }
  if(location.pathname==='/report')return <Suspense fallback={<ReportLoading phase={-1}/>}><Report key={`report-session-${sessionRevision}`}/></Suspense>;
  const livePaths=new Set(['/','/integration/overview','/overview','/development/tasks','/development/nifi-flows','/development/registry','/development/batch','/development/multi-table','/development/canvas','/ops/ingress','/ops/distribution','/ops/clusters','/ops/cross-network','/reconcile/instant','/reconcile/inventory','/reconcile/statements']);
  const localCanvas=location.pathname==='/development/canvas'&&new URLSearchParams(location.search).has('task');

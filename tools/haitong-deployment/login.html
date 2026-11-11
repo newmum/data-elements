@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录海通数据集成中心</title>
+  <link rel="icon" href="/haitong/brand/haitong-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/login.css">
+  <script defer src="/haitong/deployment.js"></script>
+  <script defer src="/sm3.js"></script>
+  <script defer src="/login.js"></script>
+</head>
+<body>
+  <main>
+    <img src="/haitong/brand/haitong-mark.svg" alt="" width="48" height="48">
+    <h1>海通数据集成中心</h1>
+    <form id="login">
+      <label>账号<input name="account" autocomplete="username" maxlength="50" required></label>
+      <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+      <p id="error" role="alert" hidden></p>
+      <button type="submit">登录</button>
+    </form>
+  </main>
+</body>
+</html>

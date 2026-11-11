@@ -65,6 +65,7 @@
       <div class="list-toolbar source-toolbar">
         <div class="list-toolbar__primary">
           <el-button type="primary" icon="plus" @click="openRegister">登记数据服务</el-button>
+          <el-button plain @click="openFlowDraft()">构建服务</el-button>
         </div>
         <div class="list-filters toolbar-filters">
           <el-select class="filter-select filter-select--status" v-model="filters.status" clearable placeholder="服务状态" @change="queryFirstPage">
@@ -112,9 +113,18 @@
           </template>
         </el-table-column>
         <el-table-column label="请求方式" width="100" align="left" header-align="left">
-          <template #default="{ row }">{{ upper(row.method) || "—" }}</template>
+          <template #default="{ row }">{{ upper(row.platformMethod || (row.serviceCreateType === "flow" ? "" : row.method)) || "—" }}</template>
         </el-table-column>
-        <el-table-column prop="publishAddressFull" label="服务地址" min-width="240" align="left" header-align="left" show-overflow-tooltip />
+        <el-table-column label="服务地址" min-width="255" align="left" header-align="left">
+          <template #default="{ row }">
+            <div v-if="row.upstreamAddress" class="service-address" :title="row.upstreamAddress">上游 {{ row.upstreamAddress }}</div>
+            <div v-if="row.platformAddress" class="service-publish-address">
+              <span class="service-address" :title="row.platformAddress">发布 {{ row.platformAddress }}</span>
+              <el-button link type="primary" @click.stop="copyPublishAddress(row.platformAddress)">复制</el-button>
+            </div>
+            <span v-if="!row.upstreamAddress && !row.platformAddress">待发布</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100" align="center" header-align="center">
           <template #default="{ row }"><el-tag size="small" :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag></template>
         </el-table-column>
@@ -126,6 +136,20 @@
 
     <api-register-modal v-model="registerModalVisible" :api-detail="apiDetail" @close="onModalClose" />
     <api-build-modal v-model="buildModalVisible" :api-detail="apiDetail" @close="onModalClose" />
+    <el-dialog v-model="flowDraftVisible" :title="flowDraft.id ? '编辑编排服务' : '构建服务'" width="min(480px, 96vw)" append-to-body>
+      <el-form label-position="top" @submit.prevent="saveFlowDraft">
+        <el-form-item label="服务名称" required>
+          <el-input v-model.trim="flowDraft.name" maxlength="255" />
+        </el-form-item>
+        <el-form-item label="服务编码">
+          <el-input v-model.trim="flowDraft.code" maxlength="255" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="flowDraftVisible = false">取消</el-button>
+        <el-button type="primary" :loading="flowDraftSaving" @click="saveFlowDraft">保存并编排</el-button>
+      </template>
+    </el-dialog>
     <teleport to="body">
       <div v-if="orchestrationVisible" class="orchestration-designer">
       <div class="orchestration-frame-wrap">
@@ -208,6 +232,8 @@ const tableRef = ref();
 const groupLoading = ref(false);
 const registerModalVisible = ref(false);
 const buildModalVisible = ref(false);
+const flowDraftVisible = ref(false), flowDraftSaving = ref(false);
+const flowDraft = reactive({ id: "", name: "", code: "", groupId: "" });
 const groupDialogVisible = ref(false);
 const orchestrationVisible = ref(false);
 const orchestrationLoading = ref(false);
@@ -266,6 +292,12 @@ const normalizeServiceRow = (row) => {
   normalized.publishAddress = row.publishAddress || row.publishaddress || row.publish_address || normalized.publishAddressFull;
   normalized.updatedTime = row.updatedTime || row.updatedtime || row.updated_time || "";
   normalized.flowId = row.flowId || row.flowid || row.flow_id || "";
+  const provider = parseMaybeJson(row.providerConfig) || {};
+  const publish = parseMaybeJson(row.publishConfig) || {};
+  normalized.upstreamAddress = normalized.serviceCreateType === "flow" ? "" : (row.upstreamAddress || provider.address || row.uri || "");
+  const isManaged = publish.generatedBy === "flowserve" || normalized.serviceCreateType === "apiBuild";
+  normalized.platformAddress = normalized.status === "published" && isManaged ? normalized.publishAddressFull : "";
+  normalized.platformMethod = normalized.platformAddress ? publish.publishMethod : "";
   return normalized;
 };
 const statusText = (status) => {
@@ -329,6 +361,39 @@ const openRegister = () => {
   apiDetail.value = {groupId: currentGroup.value?.id || "api_service_group_default"};
   registerModalVisible.value = true;
 };
+const openFlowDraft = (row) => {
+  Object.assign(flowDraft, { id: row?.id || "", name: row?.serviceName || "", code: row?.serviceCode || "",
+    groupId: row?.groupId || currentGroup.value?.id || "api_service_group_default" });
+  flowDraftVisible.value = true;
+};
+const saveFlowDraft = async () => {
+  if (!flowDraft.name || flowDraftSaving.value) {
+    if (!flowDraft.name) ElMessage.warning("请填写服务名称");
+    return;
+  }
+  flowDraftSaving.value = true;
+  try {
+    const saved = extractPayload(await $common.post("/dws/flowserve/gateway/save", {
+      id: flowDraft.id, name: flowDraft.name, serviceCode: flowDraft.code,
+      serviceCreateType: "flow", groupId: flowDraft.groupId, providerConfig: {}, publishConfig: {},
+    }));
+    if (!saved.id) throw new Error("服务保存失败");
+    flowDraftVisible.value = false;
+    void loadGroups();
+    void tableRef.value?.refresh?.();
+    await openOrchestration({ id: saved.id, serviceName: flowDraft.name });
+  } catch (error) {
+    if (!error?.handled) ElMessage.error(error?.message || "服务保存失败，请重试");
+  } finally {
+    flowDraftSaving.value = false;
+  }
+};
+const copyPublishAddress = async (address) => {
+  try {
+    await navigator.clipboard.writeText(address);
+    ElMessage.success("已复制发布地址");
+  } catch { ElMessage.warning("无法复制，请手动选取发布地址"); }
+};
 const loadApiDetail = async (row) => {
   const apiId = row?.id || row?.tid;
   if (!apiId) return { ...(row || {}) };
@@ -373,6 +438,7 @@ const deleteGroup = async (row) => {
   queryFirstPage();
 };
 const handleDetailClick = async (row) => {
+  if (row.serviceCreateType === "flow") { await openOrchestration(row); return; }
   const id = row?.id || row?.tid;
   if (!id) {
     ElMessage.warning("暂未找到服务标识，无法查看详情");
@@ -394,6 +460,7 @@ const handleDetailClick = async (row) => {
   }
 };
 const handleEdit = async (row) => {
+  if (row.serviceCreateType === "flow") { openFlowDraft(row); return; }
   try {
     const detail = await loadApiDetail(row);
     apiDetail.value = { ...detail };
@@ -670,6 +737,8 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+.service-address { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.service-publish-address { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .data-serve-page {
   display: flex;
   flex-direction: column;

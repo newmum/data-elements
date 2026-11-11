@@ -94,6 +94,8 @@ export const datasourceNodeDefs: NodeDef[] = [
     icon: 'GlobalOutlined',
     ports: IN_OUT,
     defaultData: {
+      serviceId: '',
+      credentialRef: '',
       datasource: '',
       method: 'GET',
       url: 'https://api.example.com/path',

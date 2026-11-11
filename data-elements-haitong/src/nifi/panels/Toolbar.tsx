@@ -35,6 +35,7 @@ import {
   ArrowLeftOutlined,
 } from '@ant-design/icons';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { standaloneNifiUiUrl } from '../../app/deployment';
 import { notifyClose, requestIntegratedCanvasClose, getTid } from '@/api/iframeBridge';
 import {
   useSavePipeline,
@@ -566,7 +567,7 @@ export default function Toolbar() {
       // this browser navigation against VITE_APP_API_URL: that variable is a
       // build-time Vite dev-server target and may point at localhost or a
       // development service after the bundle reaches production.
-      const nifiUiUrl = resolveNifiNativeUiUrl(
+      const nifiUiUrl = standaloneNifiUiUrl(target.processGroupId) ?? resolveNifiNativeUiUrl(
         target.url,
         String(apiClient.defaults.baseURL ?? ''),
         window.location.origin,

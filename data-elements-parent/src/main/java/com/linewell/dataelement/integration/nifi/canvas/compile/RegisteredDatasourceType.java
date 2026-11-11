@@ -40,7 +40,7 @@ public final class RegisteredDatasourceType {
             case FTP -> "sftp".equals(value)
                     || "sftp".equalsIgnoreCase(first(config, "ftpProtocol", "ftp_protocol", "protocol"))
                     ? "source.sftp" : "source.ftp";
-            case MAXCOMPUTE, MONGODB -> throw new IllegalArgumentException(
+            case MAXCOMPUTE -> throw new IllegalArgumentException(
                     "当前画布尚未提供该数据源的来源组件: " + type.getDisplayName());
             default -> "source." + type.getCode();
         };
@@ -53,6 +53,7 @@ public final class RegisteredDatasourceType {
 
     public static String sinkType(String raw, Map<String, Object> config) {
         DatabaseType type = databaseType(raw, config);
+        if (type == DatabaseType.MONGODB) return type.name();
         if (!type.isRelational() || type == DatabaseType.MAXCOMPUTE) {
             throw new IllegalArgumentException("物化建表不支持该目标数据源类型: " + type.getDisplayName());
         }

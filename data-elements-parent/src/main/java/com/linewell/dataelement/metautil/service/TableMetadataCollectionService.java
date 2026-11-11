@@ -641,6 +641,9 @@ public class TableMetadataCollectionService {
      */
     private List<TableInfo> collectPhysicalTables(String tenantId, String datasourceId, DataSourceConfig config)
             throws Exception {
+        if (config.getDatabaseType() == DatabaseType.MONGODB) {
+            return explorer.getTableInventory(config);
+        }
         if (!isServerManagedHuaweiMrs(tenantId, datasourceId)) {
             if (usesOwnerQualifiedSnapshot(config.getDatabaseType())) {
                 return collectVisibleOwnerTables(config);
@@ -868,7 +871,7 @@ public class TableMetadataCollectionService {
         // its HTTP explorer. Both reuse the durable step-2 collection workflow.
         // Object files and configured Kafka topics also have real inferred schemas.
         if (type == null || (!type.isRelational() && !Set.of(DatabaseType.FTP, DatabaseType.ELASTICSEARCH,
-                DatabaseType.MINIO, DatabaseType.KAFKA).contains(type))) {
+                DatabaseType.MINIO, DatabaseType.KAFKA, DatabaseType.MONGODB).contains(type))) {
             throw new IllegalArgumentException("当前数据源不支持数据表采集");
         }
         DataSourceConfig config = new DataSourceConfig();

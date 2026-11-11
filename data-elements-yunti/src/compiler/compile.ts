@@ -20,6 +20,15 @@ export function compile(flow: Flow): CompileResult {
     return { ok: false, script: '', problems };
   }
 
+  if (flow.nodes.some((node) => node.type === 'http-call' && node.data.serviceId)) {
+    return {
+      ok: true,
+      script: "import '@/common/serviceFlowManage' as manage\n"
+        + `return manage({action:'invoke',flowId:${JSON.stringify(flow.flowId)},body:body || parameter || {}})\n`,
+      problems,
+    };
+  }
+
   const ctx = new CompileContext(flow);
 
   // Header

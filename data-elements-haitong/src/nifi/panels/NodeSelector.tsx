@@ -113,7 +113,8 @@ function SelectorContent({ onSelect, defaultCategory = 'source' }: NodeSelectorC
           size="small"
           activeKey={tab}
           onChange={(k) => setTab(k as ComponentCategory)}
-          items={tabs.map((t) => ({ key: t.key, label: t.label }))}
+          items={tabs.filter(t => import.meta.env.MODE !== 'flow-lite' || t.key !== 'branch')
+            .map(t => ({ key: t.key, label: t.label }))}
         />
       </div>
       <div className="node-selector__grid">

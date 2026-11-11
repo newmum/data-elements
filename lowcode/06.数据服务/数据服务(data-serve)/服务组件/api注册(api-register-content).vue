@@ -33,7 +33,53 @@
       :options="formOptions"
       @change="onFormChange"
     />
+    <div v-if="definitionLoaded && !hasDebugHeading" class="api-debug-fallback">
+      <el-button type="primary" plain @click="openDebug">调试 API</el-button>
     </div>
+    </div>
+    <el-drawer v-model="debugVisible" title="调试 API" append-to-body :size="'min(640px, 100vw)'" @closed="resetDebug">
+      <el-form label-position="top" class="api-debug-form" @submit.prevent="sendDebug">
+        <el-form-item label="上游请求">
+          <el-input v-model="debugRequest.address" :disabled="debugLoading" aria-label="上游地址">
+            <template #prepend>{{ debugRequest.method }}</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="Query 参数（JSON 对象）">
+          <el-input v-model="debugRequest.query" type="textarea" :rows="3" :disabled="debugLoading" />
+        </el-form-item>
+        <el-form-item label="请求头（JSON 对象）">
+          <el-input v-model="debugRequest.headers" type="textarea" :rows="3" :disabled="debugLoading" />
+        </el-form-item>
+        <el-form-item label="临时认证">
+          <div class="api-debug-auth">
+            <el-input v-model="debugRequest.authHeader" placeholder="请求头名，如 token" :disabled="debugLoading" />
+            <el-input v-model="debugRequest.authValue" type="password" show-password placeholder="仅用于本次调试" :disabled="debugLoading" />
+          </div>
+        </el-form-item>
+        <el-form-item v-if="!['GET', 'HEAD'].includes(debugRequest.method)" label="请求体">
+          <el-input v-model="debugRequest.payload" type="textarea" :rows="5" :disabled="debugLoading" />
+        </el-form-item>
+        <el-alert v-if="debugError" :title="debugError" type="error" :closable="false" show-icon />
+        <section v-if="debugResult" class="api-debug-result" aria-live="polite">
+          <div class="api-debug-status">
+            <el-tag :type="debugResult.ok ? 'success' : 'danger'">{{ debugStatus }}</el-tag>
+            <span v-if="debugResult.status">HTTP {{ debugResult.status }}</span>
+            <span v-if="debugResult.businessCode != null">业务码 {{ debugResult.businessCode }}</span>
+            <span>{{ debugResult.durationMs ?? 0 }} ms</span>
+          </div>
+          <details v-if="debugResult.headers">
+            <summary>响应头</summary>
+            <pre>{{ JSON.stringify(debugResult.headers, null, 2) }}</pre>
+          </details>
+          <pre v-if="debugResult.body != null" aria-label="响应正文">{{ debugResponseText }}</pre>
+          <el-button v-if="debugResponseText && currentMode === 'edit'" link type="primary" @click="useDebugExample">设为响应示例</el-button>
+        </section>
+      </el-form>
+      <template #footer>
+        <el-button @click="debugVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="debugLoading" @click="sendDebug">发送请求</el-button>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -106,6 +152,28 @@ const saveLoading = ref(false),
 const formRules = ref<FormRule[]>([]);
 const activeExample = ref<ExampleScope>("request");
 const definitionLoaded = ref(false);
+const hasDebugHeading = ref(false);
+const debugVisible = ref(false), debugLoading = ref(false), debugError = ref("");
+const debugResult = ref<RecordValue>();
+const debugRequest = ref({ address: "", method: "GET", query: "{}", headers: "{}", payload: "", authHeader: "", authValue: "" });
+let debugAttempt = 0;
+const debugResponseText = computed(() => {
+  const body = debugResult.value?.body;
+  return body == null ? "" : typeof body === "string" ? body : JSON.stringify(body, null, 2);
+});
+const debugStatus = computed(() => {
+  const result = debugResult.value;
+  if (!result) return "";
+  if (result.kind === "timeout") return "请求超时";
+  if (result.kind === "network") return "连接失败";
+  if (result.ok) return "调用成功";
+  const status = Number(result.status);
+  if ([401, 403].includes(status) || [401, 403, 100120].includes(Number(result.businessCode))) return "上游认证或授权失败";
+  if (status >= 500) return "上游服务异常";
+  if (status >= 400) return "上游拒绝请求";
+  if (status >= 300) return "上游返回重定向";
+  return "上游业务返回失败";
+});
 const formOptions = computed(() => ({
   form: {
     disabled: currentMode.value === "view" || !!initializationError.value,
@@ -142,6 +210,7 @@ const loadDefinition = () =>
       collectDefaults(definition.rules);
       const rules = cloneDeep(definition.rules);
       bindExampleActions(rules);
+      hasDebugHeading.value = bindDebugAction(rules);
       formRules.value = rules;
       definitionLoaded.value = true;
     })
@@ -220,6 +289,114 @@ const exampleValue = (row: ServiceParameter): unknown => {
   if (type === "date") return "2026-01-01";
   if (type === "datetime") return "2026-01-01 00:00:00";
   return "";
+};
+const resetDebug = () => {
+  debugAttempt++;
+  debugLoading.value = false;
+  debugError.value = "";
+  debugResult.value = undefined;
+  debugRequest.value = { address: "", method: "GET", query: "{}", headers: "{}", payload: "", authHeader: "", authValue: "" };
+};
+const bindDebugAction = (rules: unknown[]): boolean => {
+  for (const value of rules) {
+    const rule = record(value);
+    if (rule.type === "UTitle" && record(rule.props).name === "接口信息") {
+      rule.children = [...(Array.isArray(rule.children) ? rule.children : []), {
+        type: "el-button", slot: "right", native: true, children: ["调试 API"],
+        props: { type: "primary", plain: true, size: "small", disabled: false },
+        on: { click: () => { void openDebug(); } },
+      }];
+      return true;
+    }
+    if (Array.isArray(rule.children) && bindDebugAction(rule.children)) return true;
+  }
+  return false;
+};
+const openDebug = async () => {
+  if (!definitionLoaded.value || initializing.value || debugVisible.value) return;
+  const version = initializationVersion;
+  const form = await formValues();
+  if (version !== initializationVersion) return;
+  resetDebug();
+  const request = debugRequest.value;
+  request.address = text(form.address).trim();
+  request.method = text(form.httpMethod || "GET").toUpperCase();
+  const query: RecordValue = {}, headers: RecordValue = {}, body: RecordValue = {};
+  for (const row of normalizeParams(form.publishParams)) {
+    const name = row.paramName.trim();
+    if (row.paramScope !== "request" || !name || /authorization|token|password|passwd|secret|api.?key|credential|cookie/i.test(name)) continue;
+    if (!row.showcaseValue.trim() && !row.defaultValue.trim()) continue;
+    const value = exampleValue(row);
+    const position = row.paramPosition.toLowerCase();
+    if (position === "path") request.address = request.address.replaceAll("{" + name + "}", encodeURIComponent(text(value)));
+    else if (position === "header") headers[name] = text(value);
+    else if (position === "body") body[name] = value;
+    else query[name] = value;
+  }
+  request.query = JSON.stringify(query, null, 2);
+  request.headers = JSON.stringify(headers, null, 2);
+  request.payload = Object.keys(body).length ? JSON.stringify(body, null, 2) : "";
+  debugVisible.value = true;
+};
+const debugObject = (value: string, label: string): RecordValue => {
+  try {
+    const parsed = JSON.parse(value.trim() || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+  } catch { /* 统一显示当前编辑区的格式错误。 */ }
+  throw new Error(label + "必须是 JSON 对象");
+};
+const sendDebug = async () => {
+  if (debugLoading.value) return;
+  const attempt = ++debugAttempt;
+  const input = { ...debugRequest.value };
+  debugLoading.value = true;
+  debugError.value = "";
+  debugResult.value = undefined;
+  try {
+    if (!input.address.trim() || /\{[^{}]+\}/.test(input.address)) throw new Error("请填写服务地址并补齐路径参数");
+    const query = debugObject(input.query, "Query 参数");
+    const headers = debugObject(input.headers, "请求头");
+    if (input.authHeader.trim() || input.authValue) {
+      if (!input.authHeader.trim() || !input.authValue) throw new Error("请同时填写认证请求头和值");
+    }
+    const payload = ["GET", "HEAD"].includes(input.method) || !input.payload.trim() ? undefined : input.payload;
+    if (payload && !Object.keys(headers).some((name) => name.toLowerCase() === "content-type")) {
+      try { JSON.parse(payload); } catch { throw new Error("请填写合法 JSON 请求体，或指定对应的 Content-Type"); }
+    }
+    if (!["GET", "HEAD", "OPTIONS"].includes(input.method)) {
+      try {
+        await ElMessageBox.confirm("此请求可能修改上游数据，确定发送？", "确认发送 " + input.method + " 请求", { type: "warning" });
+      } catch { return; }
+    }
+    if (attempt !== debugAttempt || !debugVisible.value) return;
+    const result = await $common.post("/dws/flowserve/gateway/api/debug", {
+      apiId: text(snapshot.form.id), datasourceId: props.data.datasourceId,
+      address: input.address.trim(), method: input.method, query, headers, payload,
+      credentialHeader: input.authHeader.trim(), credential: input.authValue,
+    });
+    if (attempt === debugAttempt && debugVisible.value) debugResult.value = payloadOf(result);
+  } catch (error) {
+    if (attempt === debugAttempt && debugVisible.value) debugError.value = messageOf(error, "API 调试失败，请检查配置后重试");
+  } finally {
+    if (attempt === debugAttempt) {
+      debugLoading.value = false;
+      debugRequest.value.authValue = "";
+    }
+  }
+};
+const useDebugExample = async () => {
+  if (!canEditExamples() || !debugResponseText.value) return;
+  const attempt = debugAttempt;
+  const value = debugResponseText.value;
+  const form = await formValues();
+  if (text(form.responseExample).trim()) {
+    try { await ElMessageBox.confirm("使用本次脱敏响应替换当前响应示例？", "替换响应示例"); }
+    catch { return; }
+  }
+  if (attempt !== debugAttempt || !debugVisible.value) return;
+  formRef.value?.setValue({ responseExample: value });
+  exampleInitialized.response = true;
+  emit("change");
 };
 const createExample = (rows: ServiceParameter[], scope: ExampleScope): string =>
   JSON.stringify(Object.fromEntries(rows.filter((row) => row.paramScope === scope && row.paramName.trim())
@@ -305,8 +482,8 @@ const buildPayload = (form: RecordValue, rows: ServiceParameter[]): RecordValue 
   publishConfig: {
     ...record(props.data.publishConfig),
     publishProtocol: form.protocol,
-    // 新登记沿用服务地址；已有服务保留其历史发布路径。
-    publishAddress: text(form.publishAddress || form.address).trim(),
+    // 平台发布地址由服务发布记录写入，编辑登记信息时保留已有值。
+    publishAddress: text(form.publishAddress).trim(),
     publishMethod: form.httpMethod,
   },
   publishParams: rows.map((row, index) => ({
@@ -474,6 +651,8 @@ const handleCancel = async () => {
 watch(
   () => props.data,
   (data) => {
+    debugVisible.value = false;
+    resetDebug();
     void setFormData(data);
   },
   { immediate: true, deep: true }
@@ -493,10 +672,24 @@ defineExpose({
     return buildPayload(form, normalizeParams(form.publishParams));
   },
 });
-onBeforeUnmount(() => { initializationVersion++; });
+onBeforeUnmount(() => { initializationVersion++; debugAttempt++; });
 </script>
 
 <style scoped>
+.api-debug-fallback { display: flex; justify-content: flex-end; margin-top: 8px; }
+.api-debug-auth { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.api-debug-auth > * { flex: 1 1 180px; }
+.api-debug-result { margin-top: 16px; }
+.api-debug-status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.api-debug-result pre {
+  padding: 12px;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+}
 .api-register-content {
   width: 100%;
   max-width: 1160px;

@@ -12,6 +12,8 @@ export const fieldMeta: Record<string, FieldMeta> = {
   request: { label: "请求参数", help: "定义查询、路径、请求头和请求体参数。" },
   auth: { label: "访问声明" },
   datasource: { label: "数据源", help: "选择主平台已登记、类型匹配的数据源。" },
+  serviceId: { label: "已登记服务", help: "使用所选服务的上游地址和请求方式。" },
+  credentialRef: { label: "凭据引用", help: "选填部署配置中绑定到该服务的凭据标识。" },
   sql: {
     label: "SQL 脚本",
     language: "sql",
@@ -35,7 +37,7 @@ export const fieldMeta: Record<string, FieldMeta> = {
   },
   statusCode: { label: "HTTP 状态码" },
   body: { label: "请求体", language: "json" },
-  headers: { label: "请求头" },
+  headers: { label: "请求头", help: "可填 {{登录节点变量.body.data.token}} 或 Bearer {{认证节点变量.body.access_token}}。" },
   query: { label: "查询参数" },
   code: { label: "处理脚本", language: "javascript" },
   script: { label: "处理脚本", language: "javascript" },
