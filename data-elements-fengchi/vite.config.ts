@@ -7,7 +7,7 @@ const localServer = { host: 'localhost', port: 3020, strictPort: true };
 export default defineConfig({
   plugins: [react()],
   base: '/',
-  server: localServer,
+  server: { ...localServer, proxy: { '/api/ai': { target: 'http://127.0.0.1:3021' } } },
   preview: localServer,
   build: {
     rollupOptions: {

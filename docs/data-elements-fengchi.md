@@ -95,3 +95,22 @@ SQL 表名识别只查询当前本地 `commerce_db` 的字段目录，不建立�
 连接类型使用本地打包的 Devicon v2.17.0（MIT）和 Simple Icons 15.14.0（CC0 仓库许可）数据库图形，运行时不从外部拉取图标。完整来源、变更和校验值见 [`sources.json`](../data-elements-fengchi/src/assets/database/sources.json)，说明与署名见 [`third-party-notices.txt`](../data-elements-fengchi/public/third-party-notices.txt)，许可证原文保留在 [`src/assets/database/`](../data-elements-fengchi/src/assets/database/)。
 
 数据库名称和商标属于各自权利人，使用仅用于类型识别，不暗示授权、赞助或关联。开源仓库许可不等于商标许可；Snowflake 官方品牌页此前不可访问，不能据此声称获得无限制商业使用授权。扩大公开再分发范围前应核对适用品牌政策。
+
+## 智能问数（本机试用）
+
+工具栏「历史」右侧的「智能问数」提供中文生成 SQL、解释 SQL、检查潜在错误三个入口。默认自动关联当前表及已加载结构，切换表时同步；没有明确表时提示用户选择。只处理发送前展示并经用户确认的表结构，以及面板中展示的需求和 SQL；不自动读取表格行数据。共享 Mock 模式沿用现有授权后的表结构，不另建 schema 数据源。每次发送前须确认内容可能包含 SQL 字面值，清除敏感信息；回复按纯文本展示，复制后由人审核，不自动插入或执行。
+
+这是默认关闭的本机技术适配服务，不是公开生产服务。Vite 在 `http://localhost:3020` 将 `/api/ai` 转到仅监听 `127.0.0.1:3021` 的 Node 服务。仅接受这个 Origin 与本机 Host；没有远程用户认证，禁止将该适配端口暴露外网。生产集成应由正式后端提供会话鉴权、权限校验、持久配额与审计。静态构建及 `vite preview` 不包含此适配器。
+
+在工程目录分别启动 `npm run ai:server` 和 `npm run dev`。Node.js 需支持内置 `fetch`（建议 Node 22 LTS 或更新受支持版本）。服务端由安全环境配置以下值，不使用 `VITE_` 前缀，不放进前端文件、Git、截图或日志：
+
+- `FENGCHI_AI_ENABLED=true`：显式开启。
+- `OPENAI_API_KEY`：用户自己的 OpenAI API 密钥，仅服务端读取。
+- `OPENAI_MODEL`：用户账户可用且明确选定的模型；不自动选价更高的模型。
+- `FENGCHI_AI_MAX_REQUESTS`：本次服务进程的调用上限，整数 1 至 1000。
+
+缺少任何配置即拒绝请求，不消耗额度。确认模型、可用额度、到期时间与预算后再启用；该请求数上限不是金额硬上限，服务重启会重置。每次上游尝试都计数，包括失败和取消，无自动重试。每次最多 2000 输出 token，60 秒超时，最多 20 张表 / 300 个字段、4000 字需求与 12000 字 SQL。用户取消会中止等待，但已开始的调用仍可能计费。输入按白名单组装，禁止附带表格行数据字段。
+
+上游固定为 OpenAI 官方 Responses API，`store:false`，不配置工具，不执行数据库操作，不支持用户自定义目标 URL或重定向。`store:false` 不意味着服务商零保留；应遵守账户的数据处理政策。说明文档：https://developers.openai.com/api/reference/resources/responses/methods/create
+
+验证：`npm run test:ai` 使用假上游覆盖默认关闭、来源校验、结构白名单、请求限制、返回文本与失败脱敏，不产生任何真实 API 消费。前端契约测试随 `npm test` 执行。实际账户连通性和浏览器交互须在安全配置及用户授权后另验，不能用 Mock 测试冒充真实接口验证。

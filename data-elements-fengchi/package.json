@@ -9,12 +9,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:ai",
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "check": "npm test && npm run build",
     "dev:mock": "vite --mode mock",
-    "build:mock": "tsc -b && vite build --mode mock --outDir ../logs/mock/fengchi/dist"
+    "build:mock": "tsc -b && vite build --mode mock --outDir ../logs/mock/fengchi/dist",
+    "ai:server": "node server/ai-service.mjs",
+    "test:ai": "node --test server/ai-service.check.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "5.6.1",
@@ -36,5 +38,5 @@
     "vite": "6.4.1",
     "vitest": "3.2.4"
   },
-  "description": "风驰数据计算平台 · 独立数据库工作台前端"
+  "description": "\u98ce\u9a70\u6570\u636e\u8ba1\u7b97\u5e73\u53f0 \u00b7 \u72ec\u7acb\u6570\u636e\u5e93\u5de5\u4f5c\u53f0\u524d\u7aef"
 }
