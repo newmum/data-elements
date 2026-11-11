@@ -16,6 +16,23 @@ public final class HiveSinkPublicationPolicy {
         if(!"sink".equals(node.category())||node.config()==null)return false;
         return "HIVE".equalsIgnoreCase(Objects.toString(node.config().get("dbType"),""));
     }
+
+    public static boolean isHdfsWriteMode(String configuredMode) {
+        String mode = Objects.toString(configuredMode, "").trim().toUpperCase(Locale.ROOT);
+        return Set.of("", "LINEWELL_HDFS", "LINEWELL", "HDFS_BATCH", "BATCH").contains(mode);
+    }
+
+    public static boolean supportsHdfsMerge(Pipeline.Node node) {
+        if (node == null || !"sink.hive".equals(node.manifestKey()) || node.config() == null) return false;
+        Map<String, Object> config = node.config();
+        return isHdfsWriteMode(Objects.toString(config.get("hiveWriteMode"), ""))
+                && !(config.get("partitionPlan") instanceof Map<?, ?> plan
+                        && Boolean.parseBoolean(Objects.toString(plan.get("enabled"), "false")));
+    }
+
+    public static boolean usesHdfsMerge(Pipeline.Node node) {
+        return supportsHdfsMerge(node) && !Boolean.FALSE.equals(node.config().get("hiveHdfsMerge"));
+    }
     /** Context is stored on the sink so ordinary DSL save/load cannot discard it. */
     public static boolean bypassesGovernance(Pipeline.Node node) {
         if(!isHiveSink(node)||node.config()==null||!(node.config().get("accessChain") instanceof Map<?,?> chain))return false;

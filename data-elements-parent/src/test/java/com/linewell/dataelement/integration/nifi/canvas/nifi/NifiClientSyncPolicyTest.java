@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.integration.nifi.canvas.config.NifiNodeRuntimeResolver;
 import com.linewell.dataelement.model.nifi.NifiEntity;
+import com.linewell.dataelement.model.nifi.RevisionDto;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -81,6 +83,29 @@ class NifiClientSyncPolicyTest {
         assertThat(component.path("backPressureObjectThreshold").asInt()).isEqualTo(1);
         assertThat(component.path("loadBalanceStrategy").asText()).isEqualTo("DO_NOT_LOAD_BALANCE");
         assertThat(component.at("/destination/groupId").asText()).isEqualTo("batch");
+    }
+
+    @Test void hiveMergeQueuesDoNotExpireAndWriterRetriesUseTheCreationRevision() {
+        doReturn(mock(NifiEntity.class)).when(client).post(eq("/process-groups/pg/connections"), any(), eq(NifiEntity.class));
+        client.createBufferedConnection("pg", "source", "merge", "PROCESSOR", List.of("success"));
+        ArgumentCaptor<Object> body = ArgumentCaptor.forClass(Object.class);
+        verify(client).post(eq("/process-groups/pg/connections"), body.capture(), eq(NifiEntity.class));
+        JsonNode queue = ((JsonNode) body.getValue()).path("component");
+        assertThat(queue.path("flowFileExpiration").asText()).isEqualTo("0 sec");
+        assertThat(queue.path("backPressureObjectThreshold").asInt()).isEqualTo(10_000);
+        assertThat(queue.path("backPressureDataSizeThreshold").asText()).isEqualTo("1 GB");
+        assertThat(queue.path("loadBalanceStrategy").asText()).isEqualTo("DO_NOT_LOAD_BALANCE");
+
+        var writer = new NifiEntity(new RevisionDto(7L, "test", null), Map.of("id", "put",
+                "relationships", List.of(Map.of("name", "success"), Map.of("name", "failure"))), null, null);
+        doReturn(mapper.createObjectNode()).when(client).put(eq("/processors/put"), any(), eq(JsonNode.class));
+        assertThat(client.configureWriteFailureRetries(writer)).containsExactly("failure");
+        verify(client).put(eq("/processors/put"), body.capture(), eq(JsonNode.class));
+        JsonNode retry = (JsonNode) body.getValue();
+        assertThat(retry.at("/revision/version").asInt()).isEqualTo(7);
+        assertThat(retry.at("/component/config/retryCount").asInt()).isEqualTo(3);
+        assertThat(retry.at("/component/config/retriedRelationships/0").asText()).isEqualTo("failure");
+        verify(client, never()).get(anyString(), any());
     }
 
     private JsonNode idleStatus() {

@@ -64,6 +64,16 @@ if (body?.importSourceDdl == true || body?.convertSourceDdl == true) {
 }
 
 var textOf = (value) => value == null ? null : value + ''
+
+// 日历分区的 Hive 兜底是显式分区值。保持 RANGE 上界和提交计划一致，来源继承模式沿用原值。
+var normalizeDdlPartition = (request, columns, targetType) => {
+    var plan = tablePartitions.normalize(request, columns, targetType)
+    var strategy = (textOf(request?.strategy) || '').trim().toUpperCase()
+    if (targetType == DatabaseType.HIVE && plan.enabled == true && (strategy == 'YEAR' || strategy == 'MONTH')) {
+        plan.partitions.get(plan.partitions.size() - 1).put('bucket', 'default')
+    }
+    return plan
+}
 var blank = (value) => value == null || textOf(value).trim() == ''
 var ddlFailureTip = (failure, includeReason) => {
     var reason = failure == null ? '' : textOf(failure.getMessage())
@@ -411,7 +421,7 @@ if (body?.batchGenerate == true) {
             var converted = portableDdl.prepare(batchColumns, batchConfig)
             var ddl = metadataExplorerService.generateCreateTableDdl(batchConfig,
                 requestedTableName, converted.columns, submittedProps.tableNameCn)
-            var partitionPlan = tablePartitions.normalize(submittedTarget.partitionPlan, converted.columns, targetType)
+            var partitionPlan = normalizeDdlPartition(submittedTarget.partitionPlan, converted.columns, targetType)
             var constraintPreview = tablePartitions.enrichConstraints(ddl, submittedTarget.sourceConstraints, batchConfig, partitionPlan)
             ddl = constraintPreview.ddl
             var previewWarnings = []
@@ -516,7 +526,7 @@ var renderDdl = (request, dsConfig, columns) => {
     if (dsConfig.getEffectiveDatabaseType() == DatabaseType.HIVE) { targetTableName = targetTableName.toLowerCase() }
     var converted = portableDdl.prepare(columns, dsConfig)
     var ddl = metadataExplorerService.generateCreateTableDdl(dsConfig, targetTableName, converted.columns, propList.tableNameCn)
-    var partitionPlan = tablePartitions.normalize(request?.partitionPlan, converted.columns, dsConfig.getEffectiveDatabaseType())
+    var partitionPlan = normalizeDdlPartition(request?.partitionPlan, converted.columns, dsConfig.getEffectiveDatabaseType())
     ddl = tablePartitions.enrichConstraints(ddl, request?.sourceConstraints, dsConfig, partitionPlan).ddl
     return tablePartitions.apply(ddl, partitionPlan, dsConfig)
 }

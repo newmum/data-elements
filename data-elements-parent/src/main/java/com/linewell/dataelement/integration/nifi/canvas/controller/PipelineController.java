@@ -267,7 +267,8 @@ public class PipelineController {
                 // chained task the catalog identifies the root business source,
                 // while this pipeline's source is the previous materialized hop.
                 // Registration-rule binding remains an explicit deploy/start action.
-                .map(com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy::forCanvas)
+                .map(stored -> com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy
+                        .forCanvas(stored).withStoredDesignVersion(stored))
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -442,7 +443,7 @@ public class PipelineController {
     @SerializedNifiMutation
     @Transactional
     public Pipeline create(@RequestBody Pipeline body, @RequestParam(required = false) String catalogTid) {
-        body = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(validateIncrementalFields(body));
+        body = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(body);
         Pipeline existing = findCatalogPipeline(catalogTid);
         if (existing != null) return saveDesign(existing, body);
         // Force-create: clear any incoming id so save() generates one.
@@ -463,7 +464,7 @@ public class PipelineController {
                                            @RequestParam(required=false) String expectedDesignHash) {
         Pipeline current = repo.findById(id).orElse(null);
         if (current == null) return ResponseEntity.notFound().build();
-        final Pipeline prepared = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(validateIncrementalFields(body));
+        final Pipeline prepared = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(body);
         return ResponseEntity.ok(repo.update(id, cur -> {
             // Native/runtime observations change updatedAt without changing the editable design.
             // New clients compare the design they loaded; legacy timestamp callers retain their check.

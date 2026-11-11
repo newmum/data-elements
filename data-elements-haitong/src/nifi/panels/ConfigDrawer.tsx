@@ -1,10 +1,13 @@
 import { normalizeSourceManifestKey, sinkDbType, buildJdbcUrl, connectionProductPatch, connectionFieldVisible } from "./registeredDatasourceType";
 ﻿import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Collapse, Button, Space, Spin, App as AntdApp, Tooltip } from 'antd';
+import { AutoComplete, Divider, Drawer, Form, Input, InputNumber, Select, Switch, Button, Space, Spin, App as AntdApp } from 'antd';
+import ConfigFieldLabel from './ConfigFieldLabel';
+import ConfigSections from './ConfigSections';
 import { syncModes, syncSettings, syncSettingsPatch, syncSettingsError } from '../utils/syncSettings';
 import { incrementalFieldVisible } from '../utils/incrementalFields';
 import { DAILY_IMMEDIATE, DAILY_STAGGERED, automaticSchedule, dailyScheduleDefaults, staggeredScheduleDefaults, isBatchSource, scheduleFieldVisible } from '../utils/batchSchedule';
 import { governanceNodeLabel } from '../utils/fieldGovernancePresentation';
+import { hiveHdfsMergeUnavailable, isHiveSink } from '../utils/hiveSinkPolicy';
 import {
   DatabaseOutlined,
   FunctionOutlined,
@@ -365,6 +368,7 @@ const GROUP_LABELS: Record<string, string> = {
   incremental: '增量配置',
   schedule: '调度策略',
   advanced: '高级选项',
+  write: '写入配置',
   default: '基础配置',
   sync: '同步方式',
 };
@@ -655,8 +659,13 @@ export default function ConfigDrawer() {
 
   const enhancedFields = useMemo(() => {
     const fields = (manifest?.fields ?? []).flatMap(expandIncrementalField);
+    if (manifest?.key === 'sink.jdbc' && isHiveSink(node ?? undefined)) {
+      const mergeField = manifests?.find(item => item.key === 'sink.hive')?.fields?.find(field => field.key === 'hiveHdfsMerge');
+      if (mergeField) fields.push(mergeField);
+    }
     if (manifest?.category === 'source' && isBatchSource(manifest.key) && fields.some(f => f.key === 'schedulingPeriod')) {
       fields.unshift({ key: 'batchSchedulePolicy', label: '执行方式', type: 'select', group: 'schedule',
+        help: '立即执行：启动后立即执行，之后每隔 1 天调度。自动错峰：首次保存时分配执行时间，之后编辑、重启和重新部署沿用同一时刻。',
         options: [{ label: '每天一次（立即执行）', value: DAILY_IMMEDIATE }, { label: '每天一次（自动错峰）', value: DAILY_STAGGERED }, { label: '自定义调度', value: 'CUSTOM' }] });
     }
     if (manifest?.category !== 'source' || !manifest.compile?.processors?.some(p => p.type.endsWith('.GenerateTableFetch') || p.type.endsWith('.GenerateDateTableFetch'))) return fields;
@@ -667,7 +676,7 @@ export default function ConfigDrawer() {
       { key: 'fullOrderColumn', label: '全量分页排序字段', type: 'text', group: 'sync', help: '建议填写主键或稳定唯一字段；未指定且没有主键时，使用单条流式查询，避免无序分页漏数。', placeholder: '如 id，复合排序可用逗号分隔' },
       ...fields,
     ] as FieldSchema[];
-  }, [manifest]);
+  }, [manifest, manifests, node?.category, node?.config.dbType]);
 
   useEffect(() => {
     if (!node || !open || enhancedFields.length === 0) return;
@@ -680,7 +689,7 @@ export default function ConfigDrawer() {
     }
     enhancedFields.forEach((field) => {
       if (!scheduleFieldVisible(field.key, node.config)) return;
-      if (field.default === undefined || node.config[field.key] !== undefined
+      if (field.key === 'hiveHdfsMerge' || field.default === undefined || node.config[field.key] !== undefined
         || field.key === 'fileFilterRegex' && patch.fileFilterRegex === '') return;
       // schedulingPeriod 在 Timer/Cron 下共用同一 config key，展开成两个字段。
       // 仅对当前可见的那个套用默认值，避免 Cron 的默认把 Timer 的「一天」覆盖掉。
@@ -1208,6 +1217,11 @@ export default function ConfigDrawer() {
 
   const renderSmartField = (field: FieldSchema) => {
     if (!node || !manifest) return null;
+    if (field.key === 'hiveHdfsMerge') {
+      return <Switch aria-label={field.label} checked={node.config.hiveHdfsMerge !== false}
+        disabled={isFieldReadOnly(field) || Boolean(hiveHdfsMergeUnavailable(node))}
+        onChange={(enabled) => updateConfig(node.id, { hiveHdfsMerge: enabled })} />;
+    }
     if (['source.ftp', 'source.sftp'].includes(manifest.key)
       && node.config.fileConsumptionPolicy === 'DELETE_AFTER_DATABASE_COMMIT'
       && field.key === 'fileFilterRegex') {
@@ -1396,10 +1410,8 @@ export default function ConfigDrawer() {
         <Select style={{ width: '100%' }} value={node.config.batchSchedulePolicy === DAILY_IMMEDIATE ? DAILY_IMMEDIATE : automaticSchedule(node.config) ? DAILY_STAGGERED : 'CUSTOM'} options={field.options} disabled={disabled}
           onChange={v => updateConfig(node.id, v === DAILY_IMMEDIATE ? dailyScheduleDefaults(node.config) : v === DAILY_STAGGERED ? staggeredScheduleDefaults(node.config)
             : { batchSchedulePolicy: 'CUSTOM', schedulingPeriod: node.config.schedulingPeriod || '0 0 0 * * ?' })} />
-        {node.config.batchSchedulePolicy === DAILY_IMMEDIATE && <div role="status" className="ant-form-item-extra">启动后立即执行，之后每隔 1 天调度。</div>}
         {automaticSchedule(node.config) && <div role="status">
-          <div>{node.config.batchScheduleTime ? `每天 ${String(node.config.batchScheduleTime)}（北京时间）` : '首次保存时自动分配执行时间'}</div>
-          <div className="ant-form-item-extra">分配后固定保存，编辑、重启和重新部署沿用同一时刻。</div>
+          {node.config.batchScheduleTime ? `每天 ${String(node.config.batchScheduleTime)}（北京时间）` : '执行时间待分配'}
         </div>}
       </Space>;
     }
@@ -1645,7 +1657,7 @@ export default function ConfigDrawer() {
               (manifest.key === 'transform.sql' && field.key === 'sql')
               || (isUnifiedFieldMapping && field.key === 'mappings')
                 ? null
-                : field.label
+                : <ConfigFieldLabel label={field.label} help={field.help} />
             }
             required={
               (manifest.key === 'transform.sql' && field.key === 'sql')
@@ -1653,7 +1665,7 @@ export default function ConfigDrawer() {
                 ? false
                 : field.required
             }
-            help={['transform.field-mapping', 'transform.field-enrichment'].includes(manifest.key) && field.key === 'mappings' ? undefined : field.help}
+            help={field.key === 'hiveHdfsMerge' ? hiveHdfsMergeUnavailable(node) : undefined}
             style={{ marginBottom: 14 }}
             data-field-key={field.key}
           >
@@ -1723,7 +1735,7 @@ export default function ConfigDrawer() {
       open={open}
       getContainer={getNifiOverlayContainer}
       onClose={() => openDrawer(null)}
-      width={isScriptDrawer ? 'min(660px, calc(100vw - 24px))' : isFieldMappingDrawer ? 'min(980px, calc(100vw - 32px))' : isCustomSqlDrawer || isFilterDrawer || isBranchDrawer ? 'min(1180px, calc(100vw - 32px))' : 460}
+      width={isScriptDrawer ? 'min(660px, calc(100vw - 24px))' : isFieldMappingDrawer ? 'min(980px, calc(100vw - 32px))' : isCustomSqlDrawer || isFilterDrawer || isBranchDrawer ? 'min(1180px, calc(100vw - 32px))' : 'min(460px, 100vw)'}
       placement="right"
       mask={false}
       closable={false}
@@ -1799,19 +1811,14 @@ export default function ConfigDrawer() {
                 保存
               </Button>
             )}
-            <Button type="text" icon={<CloseOutlined />} onClick={() => openDrawer(null)} />
+            <Button type="text" aria-label="关闭节点配置" icon={<CloseOutlined />} onClick={() => openDrawer(null)} />
           </div>
 
           <div className="coze-drawer-body">
-            {manifest.description && !isFieldMappingDrawer && !isScriptDrawer && (
-              <div style={{ color: 'var(--text-tertiary)', fontSize: 12, marginBottom: 12 }}>
-                {manifest.description}
-              </div>
-            )}
             {/* 按配置分组展示字段。 */}
             {isScriptDrawer ? <ScriptProcessEditor key={node.id} manifestKey={manifest.key} config={node.config} onChange={patch => updateConfig(node.id, patch)} /> : grouped.length === 1 ? renderFields(grouped[0].fields) : (
-              <Collapse
-                defaultActiveKey={grouped.map((g) => g.key)}
+              <ConfigSections
+                key={`${node.id}:${manifest.key}`}
                 ghost
                 size="small"
                 items={grouped.map((g) => ({

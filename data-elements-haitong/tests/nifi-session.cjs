@@ -104,12 +104,14 @@ test('explicit routes outrank parent INIT, and changing token drops the old pare
       './bridgeSession': session,
     });
     bridge.initIframeBridge();
-    const send = (type, payload) => listeners.get('message')({ origin: 'http://localhost:3000', source: parentMock, data: { type, ...payload } });
+    const send = (type, payload, origin = 'http://localhost:3000') => listeners.get('message')({ origin, source: parentMock, data: { type, ...payload } });
     listeners.get('message')({ origin: 'http://untrusted.example', source: parentMock, data: { type: 'SET_TOKEN', token: 'rogue' } });
     listeners.get('message')({ origin: 'http://localhost:3000', source: windowMock, data: { type: 'SET_TOKEN', token: 'rogue' } });
+    send('SET_TOKEN', { token: 'rogue' }, 'http://127.0.0.1:3001');
     assert.equal(session.getBridgeToken(), null);
 
-    send('INIT', { payload: { token: 'tenant-a', jobId: 'parent-a' } });
+    send('INIT', { payload: { token: 'tenant-a', jobId: 'parent-a' } }, 'http://127.0.0.1:3000');
+    assert.equal(session.getBridgeToken(), 'tenant-a');
     assert.equal(bridge.getPipelineId(), 'parent-a');
     assert.equal(session.getCanvasSelectionRevision(), 1);
     bridge.setCanvasSelection({});

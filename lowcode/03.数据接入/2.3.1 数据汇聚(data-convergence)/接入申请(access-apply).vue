@@ -158,22 +158,20 @@
               <el-option label="按月分区" value="MONTH" />
               <el-option label="区域分区" value="REGION" />
               <el-option label="枚举分区" value="LIST" />
-              <el-option v-if="activePartitionChoice === 'TIME'" label="时间分区（来源实际边界）" value="TIME" />
               <el-option v-if="activePartitionChoice === 'RANGE'" label="数值范围分区" value="RANGE" />
             </el-select>
             <template v-if="activePartition.strategy === 'YEAR'">
-              <el-date-picker v-model="activePartition.startYear" type="year" value-format="YYYY" placeholder="起始年份" @change="updatePartitionDdl" />
-              <el-input-number v-model="activePartition.years" :min="1" :max="240" controls-position="right" @change="updatePartitionDdl" />
-              <span>年；包含历史与未来兜底分区</span>
+              <el-date-picker v-model="activePartition.startYear" type="year" value-format="YYYY" placeholder="起始年份" :disabled="!editable" @change="updatePartitionDdl" />
+              <span>至</span>
+              <el-date-picker v-model="activePartition.endYear" type="year" value-format="YYYY" placeholder="结束年份" :disabled="!editable" @change="updatePartitionDdl" />
             </template>
             <template v-if="activePartition.strategy === 'MONTH'">
-              <el-date-picker v-model="activePartition.startMonth" type="month" value-format="YYYY-MM" placeholder="起始月份" @change="updatePartitionDdl" />
-              <el-input-number v-model="activePartition.months" :min="1" :max="240" controls-position="right" @change="updatePartitionDdl" />
-              <span>个月；包含历史与未来兜底分区</span>
+              <el-date-picker v-model="activePartition.startMonth" type="month" value-format="YYYY-MM" placeholder="起始月份" :disabled="!editable" @change="updatePartitionDdl" />
+              <span>至</span>
+              <el-date-picker v-model="activePartition.endMonth" type="month" value-format="YYYY-MM" placeholder="结束月份" :disabled="!editable" @change="updatePartitionDdl" />
             </template>
+            <span v-if="['YEAR', 'MONTH'].includes(activePartition.strategy)">含结束周期，另保留历史与未来兜底分区</span>
             <span v-if="activePartition.sourceBoundaries">已保留来源 {{ activePartition.partitions?.length || 0 }} 个实际边界</span>
-            <el-button v-if="activePartition.sourceBoundaries && ['YEAR', 'MONTH'].includes(activePartitionChoice)"
-              :disabled="!editable" @click="repartitionSource">重新划分</el-button>
             <el-input v-if="['YEAR', 'MONTH'].includes(activePartition.strategy) || activePartition.kind === 'TIME'"
               v-model="activePartition.timezone" placeholder="分区时区，默认Asia/Shanghai" @change="updatePartitionDdl" />
             <el-input v-if="activePartition.strategy === 'LIST'" v-model="activeListPartitionText"
@@ -364,12 +362,20 @@ let partitionProbeIdentity = "";
 const activePartitionSupported = computed(() => partitionSupport.value[activeDdlKey.value] === true);
 const activePartition = computed(() => partitionPlans.value[activeDdlKey.value] || {});
 const defaultRegionCodes = ['350100', '350200', '350300', '350400', '350500', '350600', '350700', '350800', '350900', '351000'];
-const calendarPartitionDefaults = (strategy: string, now = new Date()) => {
+const calendarPartitionDefaults = (strategy: string, now = new Date(), sourceStart = '') => {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
-  return strategy === 'YEAR'
-    ? { startYear: String(year), years: Math.max(2035, year + 4) - year + 1 }
-    : { startMonth: `${year}-${String(month).padStart(2, '0')}`, months: (Math.max(2035, year + 1) - year) * 12 + 13 - month };
+  const match = /^([0-9]{4})-(0[1-9]|1[0-2])-/.exec(sourceStart);
+  const suggestedYear = match ? Number(match[1]) : year;
+  const endYear = Math.max(2035, year + (strategy === 'YEAR' ? 4 : 1));
+  if (strategy === 'YEAR') {
+    const startYear = suggestedYear > 0 && suggestedYear <= endYear && endYear - suggestedYear < 240 ? suggestedYear : year;
+    return { startYear: String(startYear).padStart(4, '0'), endYear: String(endYear) };
+  }
+  const suggestedMonth = match ? Number(match[2]) : month;
+  const useSuggestion = suggestedYear > 0 && suggestedYear <= endYear && (endYear - suggestedYear) * 12 + 13 - suggestedMonth <= 240;
+  return { startMonth: useSuggestion ? `${String(suggestedYear).padStart(4, '0')}-${String(suggestedMonth).padStart(2, '0')}`
+    : `${year}-${String(month).padStart(2, '0')}`, endMonth: `${endYear}-12` };
 };
 const activeListPartitionText = computed({
   get: () => activePartition.value.enumText ?? (activePartition.value.partitions || []).flatMap((row: any) => row.values || []).join(','),
@@ -377,7 +383,7 @@ const activeListPartitionText = computed({
 });
 const activePartitionChoice = computed({
   get: () => activePartition.value.strategy === 'RANGE'
-    ? activePartition.value.displayStrategy || (activePartition.value.kind === 'TIME' ? 'TIME' : 'RANGE')
+    ? 'RANGE'
     : activePartition.value.strategy === 'LIST' && activePartition.value.displayStrategy === 'REGION'
       ? 'REGION' : activePartition.value.strategy || 'MONTH',
   set: (value: string) => {
@@ -391,13 +397,12 @@ const activePartitionChoice = computed({
     delete plan.displayStrategy;
     if (value === 'REGION') Object.assign(plan, { displayStrategy: 'REGION', enumText: plan.regionText ?? defaultRegionCodes.join(',') });
     if (value === 'LIST') plan.enumText = plan.enumerationText ?? '';
-    if (['YEAR', 'MONTH'].includes(value)) Object.assign(plan, calendarPartitionDefaults(value));
+    if (['YEAR', 'MONTH'].includes(value)) {
+      const previousStart = plan.startMonth ? `${plan.startMonth}-01` : plan.startYear ? `${plan.startYear}-01-01` : '';
+      if (!plan[value === 'YEAR' ? 'startYear' : 'startMonth']) Object.assign(plan, calendarPartitionDefaults(value, new Date(), previousStart));
+    }
   },
 });
-const repartitionSource = async () => {
-  activePartitionChoice.value = activePartitionChoice.value;
-  await updatePartitionDdl();
-};
 const invalidateDdl = () => {
   ddlGenerationVersion += 1;
   ddlGenerating.value = false;
@@ -428,6 +433,27 @@ const partitionPayload = (key: string) => {
   if (!field) partitionInputError(key, "请先选择用于分区的字段。");
   if (["MONTH", "YEAR"].includes(plan.strategy) && !/date|time/.test(fieldType)) {
     partitionInputError(key, `“${fieldLabel}”不是日期或时间字段。按年或按月分区请选择日期或时间字段；按区域编码分区请选择“区域分区”。`);
+  }
+  if (["MONTH", "YEAR"].includes(plan.strategy)) {
+    const yearly = plan.strategy === 'YEAR';
+    const start = yearly ? plan.startYear : plan.startMonth;
+    const end = yearly ? plan.endYear : plan.endMonth;
+    const period = yearly ? /^[0-9]{4}$/ : /^[0-9]{4}-(0[1-9]|1[0-2])$/;
+    const unit = yearly ? '年份' : '月份';
+    if (!period.test(String(start || '')) || !period.test(String(end || ''))) {
+      partitionInputError(key, `请选择有效的起始${unit}和结束${unit}。`);
+    }
+    const [startYear, startMonth = 1] = String(start).split('-').map(Number);
+    const [endYear, endMonth = 1] = String(end).split('-').map(Number);
+    const count = yearly ? endYear - startYear + 1 : (endYear - startYear) * 12 + endMonth - startMonth + 1;
+    if (startYear < 1 || endYear === 9999 && (yearly || endMonth === 12)) {
+      partitionInputError(key, "分区时间必须可以生成有效的下一周期上界。");
+    }
+    if (count < 1) partitionInputError(key, `结束${unit}不能早于起始${unit}。`);
+    if (count > 240) partitionInputError(key, `一次最多创建 240 ${yearly ? '年' : '个月'}的时间分区。`);
+    return yearly
+      ? { enabled: true, field: plan.field, strategy: 'YEAR', startYear: start, years: count, timezone: plan.timezone }
+      : { enabled: true, field: plan.field, strategy: 'MONTH', startMonth: start, months: count, timezone: plan.timezone };
   }
   if (plan.strategy === "LIST" && plan.enumText !== undefined) {
     const valueLabel = plan.displayStrategy === 'REGION' ? '区域编码' : '枚举值';
@@ -471,11 +497,17 @@ const probePartitions = async (targets: any[]) => {
     ? String(result.source.ddlReadMessage || '') : '';
   partitionProbeMessage.value = String(result.source?.message || "未识别到来源分区，可手动配置");
   sourcePartitionDetected.value = result.source?.status === "detected";
+  const sourcePlan = result.source?.plan;
+  const calendarStrategy = sourcePlan?.displayStrategy === 'MONTH' ? 'MONTH' : 'YEAR';
+  const temporalSource = sourcePlan?.kind === 'TIME' && sourcePlan?.strategy === 'RANGE';
+  const calendarPlan = temporalSource ? { field: sourcePlan.field, strategy: calendarStrategy, timezone: sourcePlan.timezone,
+    ...calendarPartitionDefaults(calendarStrategy, new Date(), String(sourcePlan.partitions?.[0]?.upper || '')) } : null;
+  if (calendarPlan) partitionProbeMessage.value = '已识别来源时间分区。目标按自然年或自然月生成，请确认起止时间。';
   for (const target of targets) {
     if (partitionPlans.value[target.key]) continue;
     const existing = Object.values(partitionPlans.value).find((plan: any) => plan.enabled);
     partitionPlans.value[target.key] = partitionSupport.value[target.key] && result.source?.status === "detected"
-      ? { ...JSON.parse(JSON.stringify(result.source.plan)), enabled: partitionEnabled.value }
+      ? { ...JSON.parse(JSON.stringify(calendarPlan || sourcePlan)), enabled: partitionEnabled.value }
       : { ...JSON.parse(JSON.stringify(existing || {})), enabled: partitionEnabled.value && partitionSupport.value[target.key] === true };
   }
   partitionProbeIdentity = identity;

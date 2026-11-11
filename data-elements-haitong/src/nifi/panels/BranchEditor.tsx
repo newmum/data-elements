@@ -2,6 +2,7 @@ import { Button, Input, Space, Typography } from 'antd';
 import { BranchesOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import type { CanvasNode } from '@/types/dsl';
 import { ConditionBuilder, upstreamColumnOptions, type BusinessCondition } from './ConditionBuilder';
+import ConfigFieldLabel from './ConfigFieldLabel';
 
 export interface BranchRoute { id: string; name: string; conditions: BusinessCondition[] }
 
@@ -18,8 +19,8 @@ export default function BranchEditor({ routes, onChange, sourceNodes = [], defau
   return (
     <div className="branch-editor">
       <div className="branch-editor__heading">
-        <Typography.Title level={5}><BranchesOutlined /> 设置数据分流规则</Typography.Title>
-        <Typography.Text type="secondary">每个分支独立判断；一条数据满足多个分支时会同时进入多个出口。画布连线会依次使用尚未连接的分支。</Typography.Text>
+        <Typography.Title level={5}><BranchesOutlined /> <ConfigFieldLabel label="设置数据分流规则"
+          help="每个分支独立判断；一条数据满足多个分支时会同时进入多个出口。画布连线会依次使用尚未连接的分支。" /></Typography.Title>
       </div>
       {routes.map((route, index) => (
         <section className="branch-editor__route" key={route.id}>
@@ -32,9 +33,8 @@ export default function BranchEditor({ routes, onChange, sourceNodes = [], defau
       ))}
       <Button icon={<PlusOutlined />} onClick={() => onChange([...routes, newRoute(routes.length)])}>添加分支</Button>
       <section className="branch-editor__default">
-        <Typography.Text strong>其他数据出口</Typography.Text>
+        <Typography.Text strong><ConfigFieldLabel label="其他数据出口" help="不满足任何分支条件的数据会从这里输出。" /></Typography.Text>
         <Input value={defaultRouteName} onChange={(event) => onDefaultRouteNameChange(event.target.value)} placeholder="例如：其他、异常、待复核" />
-        <Typography.Text type="secondary">不满足任何分支条件的数据会从这里输出。</Typography.Text>
       </section>
     </div>
   );

@@ -156,6 +156,33 @@ class BatchCreateTableDdlMagicTest {
         }
     }
 
+    @Test void calendarPartitionPreviewUsesHiveDefaultAndTheNextOracleBoundary() throws Exception {
+        Fixture fixture = new Fixture(2);
+        fixture.jdbc.update("update db_datasource_t set db_type='hive',pool_cfg='{\"usePlatformHiveConfig\":true}' where tid='db-0'");
+        fixture.jdbc.update("update db_datasource_t set db_type='oceanbaseoracle' where tid='db-1'");
+        fixture.ddlGenerator.expectedColumns = 1;
+        for (int index = 0; index < fixture.targets.size(); index++) {
+            var target = new LinkedHashMap<>(fixture.targets.get(index));
+            target.put("tableItems", List.of(Map.of("columnName", "WFSJ", "dataType", "timestamp")));
+            target.put("partitionPlan", Map.of("enabled", true, "field", "WFSJ", "strategy", "YEAR", "startYear", "2004", "years", 29));
+            fixture.targets.set(index, target);
+        }
+
+        var result = assertInstanceOf(Map.class, fixture.run());
+        var rows = (List<?>) result.get("results");
+        var hive = (Map<?, ?>) rows.getFirst();
+        String hiveDdl = hive.get("ddl").toString();
+        assertTrue(hiveDdl.contains("`ods_partition`='2004'"));
+        assertTrue(hiveDdl.endsWith("PARTITION (`ods_partition`='default');\n"));
+        var hivePartitions = (List<?>) ((Map<?, ?>) hive.get("partitionPlan")).get("partitions");
+        assertEquals("default", ((Map<?, ?>) hivePartitions.getLast()).get("bucket"));
+        String oracleDdl = ((Map<?, ?>) rows.getLast()).get("ddl").toString();
+        assertTrue(oracleDdl.contains("p_2004") && oracleDdl.contains("2005-01-01 00:00:00"));
+        assertTrue(oracleDdl.contains("2033-01-01 00:00:00") && oracleDdl.contains("VALUES LESS THAN (MAXVALUE)"));
+        assertEquals(1, fixture.counter.reads);
+        assertEquals(0, fixture.counter.writes);
+    }
+
     @Test void partitionProbeReadsOneSourceAndOneAuthorizedDatasourceBatchAndRejectsEveryHiddenId() throws Exception {
         Fixture f=new Fixture(20);
         f.jdbc.execute("create table db_table_t(tid varchar(64), tenant_id varchar(32), datasource_id varchar(64), table_name varchar(100), is_del int)");

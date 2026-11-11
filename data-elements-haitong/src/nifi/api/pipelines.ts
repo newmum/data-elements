@@ -13,7 +13,7 @@ import { acceptDeploymentResult } from '../utils/deploymentCache';
 import type { TaskChain } from '../types/taskChain';
 import { useCanvasStore } from '../stores/canvasStore';
 import { sameDesignDsl, preservesIncrementalFields } from '../utils/pipelineVersion';
-import { incrementalConfigurationError } from '../utils/incrementalFields';
+import { withHiveHdfsMergeDefaults } from '../utils/hiveSinkPolicy';
 import { useTaskChainStore } from '../stores/taskChainStore';
 import { useErrorPanelStore } from '../stores/errorPanelStore';
 import { flowActionFailure, type FlowAction } from '../utils/flowActionFailure';
@@ -96,6 +96,7 @@ export interface FlowStatusPayload {
   nifiStatus?: any;
   nifiStatusError?: string;
   nodeMapping?: {
+    candidate?: { processGroupId: string; designHash: string };
     primaryProcessorIds?: Record<string, string>;
     processorIdToCanvasNode?: Record<string, string>;
     edgeProcessorEndpoints?: Record<string, {
@@ -153,6 +154,7 @@ export interface Pipeline {
   createdAt?: number | null;
   updatedAt?: number | null;
   dsl: CanvasDsl;
+  nodeMapping?: FlowStatusPayload['nodeMapping'];
   nifiProcessGroupId?: string | null;
   status?: PipelineStatus;
   lastDeployedHash?: string | null;
@@ -222,13 +224,11 @@ export function useSavePipeline() {
       requireEditableTask(p.id);
       return performFlowAction(p.id ?? useCanvasStore.getState().currentPipelineId, 'save', async () => {
         const revision = getSessionRevision();
-        const dsl = p.dsl;
-        const error = incrementalConfigurationError(dsl);
-        if (error) throw new Error(error);
+        const dsl = withHiveHdfsMergeDefaults(p.dsl);
         if (p.id) {
           const stored = qc.getQueryData<Pipeline>(['pipeline', p.id, revision]);
           if (stored && stored.name === p.name && sameDesignDsl(stored.dsl, dsl)) return stored;
-          const saved = (await api.post<Pipeline>(`/pipelines/${p.id}`, p, {
+          const saved = (await api.post<Pipeline>(`/pipelines/${p.id}`, { ...p, dsl }, {
             params: stored?.designHash ? { expectedDesignHash: stored.designHash }
               : stored?.updatedAt ? { expectedUpdatedAt: stored.updatedAt } : undefined,
           })).data;
@@ -236,7 +236,7 @@ export function useSavePipeline() {
           if (!preservesIncrementalFields(dsl, saved.dsl)) throw new Error('保存响应改变了主增量字段，画布配置已保留，请核对后端版本后重试');
           return saved;
         }
-        const saved = (await api.post<Pipeline>('/pipelines', p, {
+        const saved = (await api.post<Pipeline>('/pipelines', { ...p, dsl }, {
           params: p.copy ? undefined : { catalogTid: getTid() || undefined },
         })).data;
         if (revision !== getSessionRevision()) throw new Error('登录会话已切换，请重新打开画布');
@@ -271,10 +271,12 @@ export function useDeletePipeline() {
 export function useDeployPipeline() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, catalogTid }: { id: string; catalogTid?: string | null }) => {
+    mutationFn: async ({ id, catalogTid, preserveExisting = true }: {
+      id: string; catalogTid?: string | null; preserveExisting?: boolean;
+    }) => {
       requireEditableTask(id);
       return performFlowAction(id, 'deploy', async () => {
-        const result = (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid })).data;
+        const result = (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid, preserveExisting })).data;
         if (!result || result.pipeline?.id !== id) {
           throw Object.assign(new Error('部署接口未返回有效的流程结果，请刷新状态确认执行结果'), { payload: result });
         }
@@ -290,6 +292,44 @@ export function useDeployPipeline() {
       qc.invalidateQueries({ queryKey: ['pipeline-status', id] });
     },
   });
+}
+
+export function useActivateCandidate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, processGroupId }: { id: string; processGroupId: string }) => {
+      requireEditableTask(id);
+      return performFlowAction(id, 'deploy', async () =>
+        (await api.post<DeploymentResult>(`/pipelines/${id}/activate-candidate`, { processGroupId })).data);
+    },
+    onSuccess: async (data, { id }) => {
+      const revision = getSessionRevision();
+      await acceptDeploymentResult(qc, data, id, revision, () => revision === getSessionRevision());
+    },
+  });
+}
+
+export interface AttributeChange {
+  nodeId: string;
+  nodeLabel?: string;
+  field: string;
+  label?: string;
+  processorId: string | null;
+  currentValue: string | null;
+  designValue: string | null;
+  status: string;
+  message?: string;
+}
+
+export async function previewRuntimeAttributes(id: string) {
+  requireEditableTask(id);
+  return (await api.get<{ processGroupId: string; changes: AttributeChange[] }>(`/pipelines/${id}/attribute-sync`)).data;
+}
+
+export async function applyRuntimeAttributes(id: string, processGroupId: string,
+  selections: Array<Pick<AttributeChange, 'nodeId' | 'field' | 'processorId' | 'currentValue' | 'designValue'> & { keepNative: boolean }>) {
+  requireEditableTask(id);
+  return (await api.post<AttributeChange[]>(`/pipelines/${id}/attribute-sync`, { processGroupId, selections })).data;
 }
 
 export interface ConnectionTestResult {

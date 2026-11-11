@@ -1,6 +1,7 @@
-import { Button, Empty, Input, Select, Tag, Tooltip, Typography } from 'antd';
+import { Button, Empty, Input, Select, Space, Tag, Tooltip } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import type { CanvasNode } from '@/types/dsl';
+import { ConfigHelp } from './ConfigFieldLabel';
 
 export type ConditionOperator = 'EQ' | 'NE' | 'GT' | 'GE' | 'LT' | 'LE' | 'CONTAINS' | 'STARTS_WITH' | 'IN' | 'IS_NULL' | 'NOT_NULL';
 export interface BusinessCondition { id: string; field: string; operator: ConditionOperator; value?: string; connector?: 'AND' | 'OR' }
@@ -79,8 +80,10 @@ export function ConditionBuilder({ value, onChange, columns, emptyText = '请先
           </div>
         );
       })}
-      <Button icon={<PlusOutlined />} onClick={() => onChange([...value, newCondition()])}>添加条件</Button>
-      {value.length > 0 && <Typography.Text type="secondary">按顺序判断条件，“并且”表示都要满足，“或者”表示满足任意一个。</Typography.Text>}
+      <Space size={4}>
+        <Button icon={<PlusOutlined />} onClick={() => onChange([...value, newCondition()])}>添加条件</Button>
+        {value.length > 1 && <ConfigHelp label="条件关系" help="按顺序判断条件，“并且”表示都要满足，“或者”表示满足任意一个。" />}
+      </Space>
     </div>
   );
 }

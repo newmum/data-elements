@@ -219,7 +219,7 @@
         "kind": "magic",
         "id": "datapd_dept_datasources_01",
         "file": "magic/api/02.数据盘点/02.数据库表/06.本部门数据源清单.ms",
-        "reviewedSha256": "0cc358a379ec40d827c074f9d8eb6fdd83a9419c1f308991024215854d75b839"
+        "reviewedSha256": "6f6d3fd501910d52805b77afe5a7ea909608baac0b2938945a86e1b746883fe3"
       },
       "request": {
         "type": "object"
@@ -257,7 +257,7 @@
           }
         }
       },
-      "review": "首阶段按现行澄天调用方与真实实现核对；仅覆盖数据源闭环。内部重构且契约不变时，可保留模拟实现，完成回归后更新本项审阅摘要和说明。"
+      "review": "核对业务系统筛选修复：真实接口按登录会话解析平台角色，appId 仍只筛选业务系统。现有模拟已分离会话与筛选，参数、响应、分页和数据范围契约保持一致。"
     },
     {
       "operation": "POST /dst/database/detail",

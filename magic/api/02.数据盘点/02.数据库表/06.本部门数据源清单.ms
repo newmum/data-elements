@@ -55,7 +55,15 @@ if (blank(tenantId)) {
     exit 401, '无法识别当前租户'
 }
 
-var userInfo = me()
+// 内部接口共用请求体。这里的 appId 是业务系统筛选，角色查询应使用登录会话的应用。
+var filtersBody = body
+var userInfo = null
+try {
+    body = {}
+    userInfo = me()
+} finally {
+    body = filtersBody
+}
 var orgId = userInfo?.orgId
 var scopeResource = 'MENU:2081000000000000002'
 // 每次请求只解析一次服务端角色范围；在分页、统计及批量明细读取之前应用。

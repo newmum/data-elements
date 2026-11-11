@@ -39,6 +39,14 @@ public class PipelineGroupOrganizer {
     }
 
     public Layout prepare(Pipeline pipeline) {
+        return prepare(pipeline, false);
+    }
+
+    public Layout prepareCandidate(Pipeline pipeline) {
+        return prepare(pipeline, true);
+    }
+
+    private Layout prepare(Pipeline pipeline, boolean candidate) {
         String tenant = TenantContext.requireTenantId();
         Map<String, Object> task = first(jdbc.queryForList("""
                 select tid, task_name, source_db_id, process_group_id from data_access_agg_task_t
@@ -81,13 +89,13 @@ public class PipelineGroupOrganizer {
                 .flatMap(java.util.Optional::stream).findFirst();
         if (featureGroup.isPresent()) {
             var group = featureGroup.get();
-            flowParent = ensure(top, group.name(), marker("application", group.identity()));
+            flowParent = ensure(top, group.name(), marker("application", group.identity()), !candidate);
             controllerServiceScope = flowParent;
         } else {
-            String department = ensure(top, label(org, "name", "未归属部门"), marker("department", key(org, "id")));
+            String department = ensure(top, label(org, "name", "未归属部门"), marker("department", key(org, "id")), !candidate);
             flowParent = department;
             if (!sameGroupLabel(applicationName, taskName)) {
-                flowParent = ensure(department, applicationName, marker("application", key(app, "tid")));
+                flowParent = ensure(department, applicationName, marker("application", key(app, "tid")), !candidate);
                 // Services owned by an application are visible to every task PG
                 // beneath it. A compact single-name task flow has no application
                 // parent by design, so it remains fully self-contained.
@@ -95,6 +103,13 @@ public class PipelineGroupOrganizer {
             }
         }
         String flowMarker = marker("pipeline", pipeline.id());
+        if (candidate) {
+            boolean alreadyBound = pipeline.nifiProcessGroupId() != null && !pipeline.nifiProcessGroupId().isBlank();
+            String name = alreadyBound ? pipeline.name() + " · 候选" : pipeline.name();
+            String comments = alreadyBound ? flowMarker + ":candidate" : flowMarker;
+            return new Layout(top, flowParent, controllerServiceScope, name, comments,
+                    nextPosition(nifi.listProcessGroups(flowParent)), List.of());
+        }
         Set<String> previousIds = new LinkedHashSet<>();
         if (pipeline.nifiProcessGroupId() != null && !pipeline.nifiProcessGroupId().isBlank()) {
             previousIds.add(pipeline.nifiProcessGroupId());
@@ -188,14 +203,14 @@ public class PipelineGroupOrganizer {
         }
     }
 
-    private String ensure(String parent, String name, String comments) {
+    private String ensure(String parent, String name, String comments, boolean renameExisting) {
         List<JsonNode> siblings = nifi.listProcessGroups(parent);
         List<JsonNode> matches = siblings.stream()
                 .filter(g -> comments.equals(g.path("component").path("comments").asText())).toList();
         if (matches.size() > 1) throw new IllegalStateException("存在重复的管理分组，请先整理：" + name);
         if (!matches.isEmpty()) {
             JsonNode group = matches.getFirst();
-            rename(group, name, comments);
+            if (renameExisting) rename(group, name, comments);
             return group.path("id").asText();
         }
         Position position = nextPosition(siblings);

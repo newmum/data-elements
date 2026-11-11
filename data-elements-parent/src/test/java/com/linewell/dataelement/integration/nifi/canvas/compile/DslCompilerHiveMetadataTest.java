@@ -99,7 +99,7 @@ class DslCompilerHiveMetadataTest {
         when(nifi.findProcessorType("PutHwHDFS")).thenReturn(java.util.Optional.of("com.linewell.microservice.processor.hadoop.PutHwHDFS"));
         when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.withCsv(publicCsvWriterService()));
         Map<String, Object> config = Map.of("database", database, "table", "EVENT_LOG", "username", "service_user",
-                "hiveProfile", "", "clientConfigDir", "/untrusted/client", "keytabPath", "/untrusted/keytab");
+                "hiveProfile", "", "clientConfigDir", "/untrusted/client", "keytabPath", "/untrusted/keytab", "hiveHdfsMerge", false);
         Pipeline pipeline = new Pipeline("test", "Hive sink", null, null, null,
                 new Pipeline.Dsl(1, List.of(new Pipeline.Node("sink", "sink.hive", "Hive", "sink", 0, 0, config)), List.of()),
                 null, null, null, null, null, null, null);
@@ -219,7 +219,7 @@ class DslCompilerHiveMetadataTest {
 
         Pipeline pipeline = new Pipeline("test", "Hive sink", null, null, null,
                 new Pipeline.Dsl(1, List.of(new Pipeline.Node("sink", "sink.hive", "Hive", "sink", 0, 0,
-                        Map.of("database", "analytics", "table", "EVENT_LOG", "hdfsDirectory", "/warehouse/custom/event_log"))),
+                        Map.of("database", "analytics", "table", "EVENT_LOG", "hdfsDirectory", "/warehouse/custom/event_log", "hiveHdfsMerge", false))),
                         List.of()), null, null, null, null, null, null, null);
 
         new DslCompiler(nifi, registry, mock(FieldMappingService.class), hive).compile(pipeline);
@@ -253,7 +253,7 @@ class DslCompilerHiveMetadataTest {
         when(nifi.findProcessorType("PutHDFS")).thenReturn(java.util.Optional.of("org.apache.nifi.processors.hadoop.PutHDFS"));
         Pipeline pipeline = new Pipeline("native", "Native HDFS", null, null, null,
                 new Pipeline.Dsl(1, List.of(new Pipeline.Node("sink", "sink.hive", "Hive", "sink", 0, 0,
-                        Map.of("database", "analytics", "table", "EVENT_LOG", "hiveWriteMode", "HDFS_BATCH"))),
+                        Map.of("database", "analytics", "table", "EVENT_LOG", "hiveWriteMode", "HDFS_BATCH", "hiveHdfsMerge", false))),
                         List.of()), null, null, null, null, null, null, null);
 
         new DslCompiler(nifi, registry, mock(FieldMappingService.class), hive).compile(pipeline);
@@ -324,9 +324,9 @@ class DslCompilerHiveMetadataTest {
         Pipeline pipeline = new Pipeline("two-targets", "Hive targets", null, null, null,
                 new Pipeline.Dsl(1, List.of(
                         new Pipeline.Node("sink-a", "sink.hive", "Hive A", "sink", 0, 0,
-                                Map.of("database", "analytics", "table", "A")),
+                                Map.of("database", "analytics", "table", "A", "hiveHdfsMerge", false)),
                         new Pipeline.Node("sink-b", "sink.hive", "Hive B", "sink", 0, 300,
-                                Map.of("database", "analytics", "table", "B"))), List.of()),
+                                Map.of("database", "analytics", "table", "B", "hiveHdfsMerge", false))), List.of()),
                 null, null, null, null, null, null, null);
 
         new DslCompiler(nifi, registry, mock(FieldMappingService.class), hive).compile(pipeline);

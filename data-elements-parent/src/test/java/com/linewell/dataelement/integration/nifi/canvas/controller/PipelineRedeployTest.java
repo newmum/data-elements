@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.linewell.dataelement.integration.nifi.canvas.compile.DslCompiler;
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
 import com.linewell.dataelement.integration.nifi.canvas.errors.ErrorService;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.*;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
@@ -289,11 +292,12 @@ class PipelineRedeployTest {
         stored.set(new Pipeline(p.id(), p.name(), p.description(), p.createdAt(), p.updatedAt(), p.dsl(),
                 p.nifiProcessGroupId(), p.status(), p.lastDeployedHash(), p.lastDeployedAt(), p.lastStoppedAt(),
                 new NifiNodeMapping(Map.of("source", "full-fetch"), Map.of("full-fetch", "source"), Map.of()), null));
+        when(nifi.startWithOneShotSourcesIfPresent("old-group", java.util.Set.of("full-fetch"))).thenReturn(true);
         assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(200);
-        verify(nifi).startWithOneShotSources("old-group", java.util.Set.of("full-fetch"));
+        verify(nifi).startWithOneShotSourcesIfPresent("old-group", java.util.Set.of("full-fetch"));
         verify(nifi, never()).setProcessGroupState(anyString(), eq("RUNNING"));
         clearInvocations(nifi);
-        doThrow(new IllegalStateException("上一轮仍有排队数据")).when(nifi).startWithOneShotSources(anyString(), anySet());
+        doThrow(new IllegalStateException("上一轮仍有排队数据")).when(nifi).startWithOneShotSourcesIfPresent(anyString(), anySet());
         assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(409);
         assertThat(stored.get().status()).isEqualTo(PipelineStatus.RUNNING);
         verify(nifi, never()).cleanupProcessGroup(anyString());
@@ -309,12 +313,55 @@ class PipelineRedeployTest {
     }
 
     @Test
-    void normalStartRejectsAChangedSavedVersionInsteadOfRedeployingIt() {
+    void normalStartUsesTheBoundGroupWithADifferentSavedDesign() {
         stored.set(pipeline("old-group", "stale-hash", PipelineStatus.STOPPED));
 
-        assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(409);
+        assertThat(controller.start("p1").getStatusCode().value()).isEqualTo(200);
 
-        verifyNoInteractions(compiler, nifi);
+        verifyNoInteractions(compiler);
+        verify(nifi).setProcessGroupState("old-group", "RUNNING");
+        verify(nifi, never()).resumeStoppedProcessors(anyString());
+        assertThat(stored.get().lastDeployedHash()).isEqualTo("stale-hash");
+    }
+
+    @Test
+    void candidateCanDeployWithoutReadingOldProcessorStateOrChangingTheActiveGroup() {
+        compileNewGroup();
+        when(groups.prepareCandidate(any())).thenReturn(new PipelineGroupOrganizer.Layout("top", "task", "application",
+                "流程 · 候选", "owned:candidate", new PipelineGroupOrganizer.Position(520, 0), List.of()));
+        var p = stored.get();
+        stored.set(new Pipeline(p.id(), p.name(), p.description(), p.createdAt(), p.updatedAt(), p.dsl(),
+                p.nifiProcessGroupId(), PipelineStatus.RUNNING, p.lastDeployedHash(), p.lastDeployedAt(), null,
+                new NifiNodeMapping(Map.of("old-source", "deleted-processor"), Map.of("deleted-processor", "old-source"), Map.of()), 0L));
+        var processors = JsonNodeFactory.instance.objectNode();
+        processors.putArray("processors");
+        when(nifi.get("/process-groups/new-group/processors?includeDescendantGroups=true", JsonNode.class)).thenReturn(processors);
+
+        var result = controller.deploy("p1", new PipelineRunController.DeployRequest(null, true));
+
+        assertThat(result.getStatusCode().value()).isEqualTo(200);
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo("old-group");
+        assertThat(stored.get().status()).isEqualTo(PipelineStatus.RUNNING);
+        assertThat(stored.get().nodeMapping().candidate().processGroupId()).isEqualTo("new-group");
+        verify(groups).prepareCandidate(any());
+        verify(groups, never()).prepare(any());
+        verify(nifi, never()).get(contains("/state"), eq(JsonNode.class));
+        verify(nifi, never()).getProcessGroupStatus("old-group");
+        verify(nifi, never()).cleanupProcessGroup(anyString());
+        verify(nifi, never()).setProcessGroupState(anyString(), anyString());
+        verify(tasks, never()).updateProcessGroup(anyString(), anyString());
+
+        when(nifi.getProcessGroupStatus("old-group")).thenThrow(new NifiException("missing", 404, null));
+        var status = JsonNodeFactory.instance.objectNode();
+        status.putObject("processGroupStatus").putObject("aggregateSnapshot").put("activeThreadCount", 0);
+        when(nifi.getProcessGroupStatus("new-group")).thenReturn(status);
+        when(nifi.getProcessGroup("new-group")).thenReturn(JsonNodeFactory.instance.objectNode().put("runningCount", 0));
+
+        assertThat(controller.activateCandidate("p1", new PipelineRunController.CandidateRequest("new-group")))
+                .containsEntry("mode", "candidate-activated");
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
+        assertThat(stored.get().nodeMapping().candidate()).isNull();
+        verify(tasks).updateProcessGroup("p1", "new-group");
     }
 
     @Test

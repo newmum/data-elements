@@ -263,9 +263,13 @@ class DslCompilerHiveTemporalWriterTest {
 
     @ParameterizedTest @ValueSource(ints={20,100})
     void hiveTargetsShareCodecsAndOneBatchServiceRead(int count) {
+        when(nifi.createBufferedConnection(anyString(), anyString(), anyString(), anyString(), anyList()))
+                .thenReturn(entity("buffered"));
+        when(nifi.configureWriteFailureRetries(any())).thenReturn(List.of("failure", "retry"));
         List<Pipeline.Node> nodes=new ArrayList<>();List<Pipeline.Edge> edges=new ArrayList<>();
         for(int i=0;i<count;i++) {
-            nodes.add(source("s"+i,"mysql",Map.of()));nodes.add(hiveSink("h"+i));
+            nodes.add(source("s"+i,"mysql",Map.of()));
+            nodes.add(new Pipeline.Node("h"+i,"sink.hive","h"+i,"sink",600,0,Map.of("table","EVENT_LOG","database","default")));
             edges.add(new Pipeline.Edge("e"+i,"s"+i,"h"+i,"default"));
         }
         compiler.compile(hiveTargetFlow(nodes,edges));
@@ -273,7 +277,48 @@ class DslCompilerHiveTemporalWriterTest {
         assertThat(services.stream().filter(s->HiveTemporalJsonPolicy.READER_NAME.equals(s.name()))).isEmpty();
         verify(nifi,times(1)).listControllerServices("root");
         verify(nifi,times(1)).findProcessorType("PutHwHDFS");
-        assertThat(processors).noneMatch(p->p.type().endsWith(".MergeRecord"));
+        assertThat(processors.stream().filter(p->p.type().endsWith(".MergeRecord"))).hasSize(count);
+    }
+
+    @Test void defaultHiveMergeRunsAfterGovernanceAndKeepsFailuresOffTheDataPath() {
+        var sink = new Pipeline.Node("sink", "sink.hive", "sink", "sink", 600, 0,
+                Map.of("table", "EVENT_LOG", "database", "default"));
+        when(nifi.createBufferedConnection(anyString(), anyString(), anyString(), anyString(), anyList()))
+                .thenReturn(entity("buffered"));
+        when(nifi.configureWriteFailureRetries(any())).thenReturn(List.of("failure", "retry"));
+
+        var result = compiler.compile(hiveTargetFlow(List.of(source("source", "mysql", Map.of()), mapping(), sink),
+                List.of(new Pipeline.Edge("sm", "source", "mapping", "default"),
+                        new Pipeline.Edge("mh", "mapping", "sink", "default"))));
+        var merge = namedProcessor("sink/merge-records");
+        var convert = namedProcessor("sink/convert");
+        var put = namedProcessor("sink/put");
+        assertThat(result.nodes().get("sink").inletProcessorId).isEqualTo(merge.id());
+        assertThat(merge.properties()).containsEntry("Record Writer", "global-hive-json-writer")
+                .containsEntry("Minimum Bin Size", "128 MB").containsEntry("Maximum Bin Size", "256 MB")
+                .containsEntry("Max Bin Age", "5 min").doesNotContainKey("Correlation Attribute Name");
+        verify(nifi).createProcessor(eq("pg"), eq(merge.type()), eq(merge.name()), anyDouble(), anyDouble(),
+                anyMap(), eq("5 sec"), eq("TIMER_DRIVEN"));
+        verify(nifi).createBufferedConnection("pg", namedProcessor("字段映射").id(), merge.id(), "PROCESSOR", List.of("success"));
+        verify(nifi).createBufferedConnection("pg", merge.id(), convert.id(), "PROCESSOR", List.of("merged"));
+        verify(nifi).createBufferedConnection(eq("pg"), eq(merge.id()), anyString(), eq("FUNNEL"), eq(List.of("failure")));
+        verify(nifi).createBufferedConnection(eq("pg"), eq(convert.id()), anyString(), eq("FUNNEL"), eq(List.of("failure")));
+        verify(nifi).createBufferedConnection(eq("pg"), eq(put.id()), anyString(), eq("FUNNEL"), eq(List.of("failure", "retry")));
+        assertThat(convert.properties()).containsEntry("Record Writer", "csv-service-id")
+                .containsEntry("Include Zero Record FlowFiles", "false");
+        verify(nifi, times(1)).listControllerServices("root");
+    }
+
+    @Test void configuredPartitionsBypassAutomaticHiveMergeEvenWithTheSettingEnabled() {
+        var sink = new Pipeline.Node("sink", "sink.hive", "sink", "sink", 600, 0,
+                Map.of("table", "EVENT_LOG", "database", "default", "hiveHdfsMerge", true,
+                        "partitionPlan", Map.of("enabled", true)));
+        compiler.compile(hiveTargetFlow(List.of(source("source", "mysql", Map.of()), sink),
+                List.of(new Pipeline.Edge("sh", "source", "sink", "default"))));
+        assertThat(processors).noneMatch(p -> p.type().endsWith(".MergeRecord"));
+        verify(nifi).createConnection("pg", namedProcessor("source/execute").id(), "PROCESSOR",
+                namedProcessor("sink/convert").id(), "PROCESSOR", List.of("success"));
+        verify(nifi, never()).configureWriteFailureRetries(any());
     }
 
     @Test void unrelatedMysqlSourceAlsoUsesThePublicWriter() {
@@ -323,7 +368,7 @@ class DslCompilerHiveTemporalWriterTest {
         assertThat(convert.properties()).containsEntry("Record Reader","global-json-reader").containsEntry("Record Writer","csv-service-id");
         verify(nifi,times(1)).listControllerServices("root");
     }
-    private static Pipeline.Node hiveSink(String id){return new Pipeline.Node(id,"sink.hive",id,"sink",600,0,Map.of("table","EVENT_LOG","database","default"));}
+    private static Pipeline.Node hiveSink(String id){return new Pipeline.Node(id,"sink.hive",id,"sink",600,0,Map.of("table","EVENT_LOG","database","default","hiveHdfsMerge",false));}
     private static Pipeline hiveTargetFlow(List<Pipeline.Node> nodes,List<Pipeline.Edge> edges){return new Pipeline("target-hive","Hive target",null,null,null,new Pipeline.Dsl(1,nodes,edges),null,null,null,null,null,null,null);}
 
     @ParameterizedTest @ValueSource(strings = {"jdbc:hive2://host/default", " JDBC:HIVE://host/default "})

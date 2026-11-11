@@ -8,6 +8,7 @@ import com.linewell.dataelement.integration.nifi.canvas.errors.FlowFailureDetail
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineRuntimeStatusResolver;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineTaskLifecycleSynchronizer;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer;
+import com.linewell.dataelement.integration.nifi.canvas.lifecycle.NifiAttributeSync;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.SerializedNifiMutation;
 import com.linewell.dataelement.integration.nifi.canvas.lifecycle.TargetTableCleanupService;
 import com.linewell.dataelement.integration.nifi.canvas.mapping.AccessTaskFieldMappingBinder;
@@ -15,6 +16,7 @@ import com.linewell.dataelement.feature.metadatagovernance.application.LineageAn
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiException;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.DslHasher;
+import com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineRepository;
@@ -47,7 +49,7 @@ import java.util.function.Consumer;
  *
  * <p>接口语义如下：
  * <ul>
- *   <li>{@code POST /start}：只启动当前已部署且配置未变的流程；部署是显式操作。</li>
+ *   <li>{@code POST /start}：启动当前关联的 NiFi 流程组。</li>
  *   <li>{@code POST /stop}：停止 NiFi 处理器，但保留 NiFi 中的 Process Group（状态置为 STOPPED）。</li>
  *   <li>{@code GET /status}：返回聚合状态（本地生命周期状态 + NiFi 运行态 + 错误信息等）。</li>
  *   <li>{@code POST /deploy}：仅部署，不启动处理器。</li>
@@ -81,6 +83,7 @@ public class PipelineRunController {
     private final PipelineRepository repo;
     private final DslCompiler compiler;
     private final NifiClient nifi;
+    private final NifiAttributeSync attributeSync;
     private final ErrorService errors;
     private final PipelineTaskLifecycleSynchronizer taskLifecycle;
     private final PipelineRuntimeStatusResolver statusResolver;
@@ -89,6 +92,8 @@ public class PipelineRunController {
     private final AccessTaskFieldMappingBinder accessTaskFieldMappingBinder;
     @Autowired(required = false)
     private LineageAnalysisService lineageAnalysis;
+    @Autowired
+    private org.springframework.transaction.support.TransactionTemplate transactions;
 
     public PipelineRunController(PipelineRepository repo, DslCompiler compiler, NifiClient nifi, ErrorService errors,
                                  PipelineTaskLifecycleSynchronizer taskLifecycle,
@@ -106,6 +111,7 @@ public class PipelineRunController {
         this.repo = repo;
         this.compiler = compiler;
         this.nifi = nifi;
+        this.attributeSync = new NifiAttributeSync(nifi);
         this.errors = errors;
         this.taskLifecycle = taskLifecycle;
         this.statusResolver = statusResolver;
@@ -121,9 +127,8 @@ public class PipelineRunController {
         if (pipeline == null) return ResponseEntity.notFound().build();
         // Viewing the existing native group does not execute the saved design.
         // A newer draft/compiler or failed replacement must not hide a running group.
-        // Revision checks remain mandatory for start/deploy, not this read-only link.
         if (pipeline.nifiProcessGroupId() == null || pipeline.nifiProcessGroupId().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "当前任务尚未部署到 NiFi，请先保存并部署"));
+            return ResponseEntity.badRequest().body(Map.of("error", "当前任务尚未部署到 NiFi，请先部署流程"));
         }
         return ResponseEntity.ok(Map.of(
                 "url", "/nifi-ui/#/process-groups/" + pipeline.nifiProcessGroupId(),
@@ -135,10 +140,7 @@ public class PipelineRunController {
     /**
      * 启动已部署的流程。
      *
-     * <p>保存/部署与启动是两个刻意分离的操作。普通启动绝不保存 DSL，也不
-     * 重建 NiFi Process Group；若当前版本尚未部署，调用方必须先明确执行
-     * {@code /deploy}。这避免用户点击“启动”时意外删除并重建一个已有队列的
-     * 原生流程。{@code force=true} 仅保留给显式运维重建场景。</p>
+     * <p>普通启动使用当前关联的原生流程组。force=true 用于显式运维重建。</p>
      */
     @PostMapping("/start")
     @SerializedNifiMutation
@@ -148,41 +150,22 @@ public class PipelineRunController {
                                    @PathVariable String id,
                                    @RequestParam(value = "force", required = false, defaultValue = "false") boolean force,
                                    @RequestParam(value = "confirmCleanup", required = false, defaultValue = "false") boolean confirmCleanup) {
-        Pipeline p = bindAccessTaskMappings(repo.findById(id).orElse(null));
+        Pipeline p = repo.findById(id).orElse(null);
         if (p == null) return ResponseEntity.notFound().build();
-        try {
-            if (SyncPolicy.needsCleanupConfirmation(p) && !confirmCleanup) {
-                return ResponseEntity.status(409).body(Map.of("error", "cleanup-confirmation-required",
-                        "message", "请在启动弹框中确认目标表及清空范围，再启动流程。"));
-            }
-        } catch (IllegalStateException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        if (!force && isBlank(p.nifiProcessGroupId())) {
+            return deploymentRequired(p, deploymentHash(p), "请先部署流程，再启动 NiFi");
         }
-
-        String currentHash = deploymentHash(p);
-        boolean hasDeployed = p.nifiProcessGroupId() != null && p.lastDeployedHash() != null;
-        boolean unchanged = hasDeployed && Objects.equals(currentHash, p.lastDeployedHash());
-
-        if (!force) {
-            if (!hasDeployed) {
-                return deploymentRequired(p, currentHash,
-                        "流程尚未部署。请先执行“保存并部署”，再启动流程。");
-            }
-            if (!unchanged) {
-                return deploymentRequired(p, currentHash,
-                        "当前已保存版本与已部署版本不一致。请先执行“保存并部署”，再启动流程。");
-            }
-            // 清空目标数据需要重新创建源端水位和原生流程，不能在普通启动时静默发生。
-            if (TargetTableCleanupService.requested(p)) {
-                return deploymentRequired(p, currentHash,
-                        "流程配置了启动前清空目标数据。请先明确执行“保存并部署”，再启动流程。");
-            }
-            if (oneShotSourceIds(p, p.nodeMapping()).isEmpty() && isNifiAlreadyRunning(p)) {
-                return reconcileAlreadyRunning(p);
-            }
-            return fastStart(p);
+        if (force) p = bindAccessTaskMappings(p);
+        Boolean deployedCleanup = p.nodeMapping() == null ? null : p.nodeMapping().cleanupConfirmationRequired();
+        boolean requiresCleanup = force ? SyncPolicy.needsCleanupConfirmation(p)
+                : deployedCleanup != null ? deployedCleanup
+                : Objects.equals(p.lastDeployedHash(), deploymentHash(p)) && SyncPolicy.needsCleanupConfirmation(p);
+        if (requiresCleanup && !confirmCleanup) {
+            return ResponseEntity.status(409).body(Map.of("error", "cleanup-confirmation-required",
+                    "message", "请核对已部署版本的目标表及清空范围，再确认启动。"));
         }
-        return fullDeploy(p, currentHash, true, null, force);
+        if (!force) return fastStart(p, true);
+        return fullDeploy(p, deploymentHash(p), true, null, true);
     }
 
     private ResponseEntity<?> deploymentRequired(Pipeline pipeline, String currentHash, String message) {
@@ -213,7 +196,136 @@ public class PipelineRunController {
                                     @RequestBody(required = false) DeployRequest request) {
         Pipeline p = repo.findById(id).orElse(null);
         if (p == null) return ResponseEntity.notFound().build();
+        if (request != null && request.preserveExisting()) return deployCandidate(p, request.catalogTid());
         return fullDeploy(p, deploymentHash(p), false, request, false);
+    }
+
+    @GetMapping("/attribute-sync")
+    public NifiAttributeSync.Preview previewAttributes(@PathVariable String id) {
+        return attributeSync.preview(requirePipeline(id));
+    }
+
+    @PostMapping("/attribute-sync")
+    @SerializedNifiMutation
+    public List<NifiAttributeSync.Change> syncAttributes(@PathVariable String id, @RequestBody NifiAttributeSync.Request request) {
+        Pipeline pipeline = requirePipeline(id);
+        var result = attributeSync.apply(pipeline, request);
+        if (result.results().stream().anyMatch(row -> "SYNCED".equals(row.status()) || "KEPT_NATIVE".equals(row.status()))) {
+            repo.update(id, current -> withMapping(current, current.nodeMapping().withAttributes(
+                    result.baselines())));
+        }
+        return result.results();
+    }
+
+    @PostMapping("/activate-candidate")
+    @SerializedNifiMutation
+    @org.springframework.transaction.annotation.Transactional
+    public Map<String, Object> activateCandidate(@PathVariable String id, @RequestBody CandidateRequest request) {
+        Pipeline p = requirePipeline(id);
+        var candidate = p.nodeMapping() == null ? null : p.nodeMapping().candidate();
+        if (candidate == null || !candidate.processGroupId().equals(request.processGroupId())) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "候选流程已变化，请刷新");
+        }
+        requireStoppedGroup(p.nifiProcessGroupId(), true);
+        requireStoppedGroup(candidate.processGroupId(), false);
+        return bindCandidate(p, candidate, "candidate-activated");
+    }
+
+    private Pipeline requirePipeline(String id) {
+        return repo.findById(id).orElseThrow(() ->
+                new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "流程不存在"));
+    }
+
+    private void requireStoppedGroup(String id, boolean allowMissing) {
+        if (isBlank(id)) return;
+        JsonNode aggregate;
+        try {
+            aggregate = nifi.getProcessGroupStatus(id).path("processGroupStatus").path("aggregateSnapshot");
+            JsonNode group = nifi.getProcessGroup(id);
+            int running = group.path("runningCount").asInt(group.path("component").path("runningCount").asInt(-1));
+            if (aggregate.path("activeThreadCount").asInt(-1) == 0 && running == 0) return;
+        } catch (NifiException e) {
+            if (allowMissing && e.status() == 404) return;
+            throw e;
+        }
+        throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                "请先停止对应 NiFi 流程组并等待运行任务结束，再切换关联");
+    }
+
+    private ResponseEntity<?> deployCandidate(Pipeline saved, String catalogTid) {
+        String[] createdGroup = {null};
+        try (var runtime = nifi.bindRuntimeNode()) {
+            PipelineController.validateIncrementalFields(saved);
+            var existing = saved.nodeMapping() == null ? null : saved.nodeMapping().candidate();
+            if (existing != null && saved.designHash().equals(existing.designHash())) {
+                try {
+                    nifi.getProcessGroup(existing.processGroupId());
+                    return ResponseEntity.ok(candidateResult(saved, existing, "candidate-created"));
+                } catch (NifiException e) {
+                    if (e.status() != 404) throw e;
+                }
+            }
+            taskLifecycle.ensureCatalogAccessTask(catalogTid, saved);
+            Pipeline design = accessTaskFieldMappingBinder == null ? saved : accessTaskFieldMappingBinder.bind(saved);
+            var layout = groups.prepareCandidate(design);
+            var compiled = compiler.compile(design, group -> createdGroup[0] = group, layout);
+            if (compiled == null || isBlank(compiled.processGroupId())) {
+                throw new IllegalStateException("未生成可用的 NiFi 流程组");
+            }
+            createdGroup[0] = compiled.processGroupId();
+            NifiNodeMapping mapping = buildMapping(design, compiled);
+            Map<String, Map<String, NifiNodeMapping.AttributeBaseline>> baselines = null;
+            try {
+                baselines = attributeSync.capture(saved.dsl(), compiled.processGroupId(), mapping);
+            } catch (RuntimeException e) {
+                log.warn("NiFi 属性基准暂不可读取，pipeline={}, group={}", saved.id(), compiled.processGroupId());
+            }
+            var candidate = new NifiNodeMapping.Candidate(compiled.processGroupId(), deploymentHash(design),
+                    saved.designHash(), mapping.withAttributes(baselines)
+                            .withRuntimePolicy(oneShotSourceIds(design, mapping), SyncPolicy.needsCleanupConfirmation(design)),
+                    compiled.planVersionIds());
+            java.util.function.Supplier<Map<String, Object>> persist = () -> {
+                if (isBlank(saved.nifiProcessGroupId())) return bindCandidate(saved, candidate, "first-deploy");
+                Pipeline updated = repo.update(saved.id(), current -> withMapping(current,
+                        (current.nodeMapping() == null ? new NifiNodeMapping(null, null, null) : current.nodeMapping())
+                                .withCandidate(candidate)));
+                return candidateResult(updated, candidate, "candidate-created");
+            };
+            Map<String, Object> response = transactions == null ? persist.get() : transactions.execute(status -> persist.get());
+            createdGroup[0] = null;
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            if (!isBlank(createdGroup[0])) {
+                try { nifi.cleanupProcessGroup(createdGroup[0]); }
+                catch (RuntimeException cleanup) { log.warn("部署候选组清理待处理，group={}", createdGroup[0]); }
+            }
+            return deploymentFailure(saved.id(), e instanceof NifiException nifiError && nifiError.status() > 0
+                            ? nifiError.status() : 422, "CANDIDATE_DEPLOYMENT_FAILED", "生成 NiFi 流程失败", e,
+                    "请检查本次生成所需的组件和配置。", Map.of("previousGraphRetained", true));
+        }
+    }
+
+    private Map<String, Object> bindCandidate(Pipeline saved, NifiNodeMapping.Candidate candidate, String mode) {
+        Pipeline updated = repo.update(saved.id(), current -> new Pipeline(current.id(), current.name(),
+                current.description(), current.createdAt(), current.updatedAt(), current.dsl(), candidate.processGroupId(),
+                PipelineStatus.STOPPED, candidate.deploymentHash(), System.currentTimeMillis(), current.lastStoppedAt(),
+                candidate.mapping(), 0L));
+        if (mappingVersions != null && candidate.planVersionIds() != null) {
+            mappingVersions.activate(saved, candidate.planVersionIds(), candidate.processGroupId());
+        }
+        taskLifecycle.updateProcessGroup(saved.id(), candidate.processGroupId());
+        taskLifecycle.statusOnly(saved.id(), 0);
+        return candidateResult(updated, candidate, mode);
+    }
+
+    private static Map<String, Object> candidateResult(Pipeline pipeline, NifiNodeMapping.Candidate candidate, String mode) {
+        return Map.of("pipeline", pipeline, "processGroupId", candidate.processGroupId(), "mode", mode, "started", false);
+    }
+
+    private static Pipeline withMapping(Pipeline current, NifiNodeMapping mapping) {
+        return new Pipeline(current.id(), current.name(), current.description(), current.createdAt(), current.updatedAt(),
+                current.dsl(), current.nifiProcessGroupId(), current.status(), current.lastDeployedHash(),
+                current.lastDeployedAt(), current.lastStoppedAt(), mapping, current.lastBulletinId());
     }
 
     @PostMapping("/stop")
@@ -227,68 +339,30 @@ public class PipelineRunController {
         if (p.nifiProcessGroupId() == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Pipeline has not been deployed yet"));
         }
-        repo.updateStatus(id, PipelineStatus.STOPPING);
         try {
             nifi.setProcessGroupState(p.nifiProcessGroupId(), "STOPPED");
-            nifi.waitForAllProcessorsStopped(p.nifiProcessGroupId(), 30_000L);
-            return markPipelineStopped(p, null);
         } catch (NifiException e) {
-            String activeSummary = safeActiveThreadSummary(p.nifiProcessGroupId());
-            try {
-                nifi.terminateActiveProcessorThreads(p.nifiProcessGroupId());
-                nifi.waitForAllProcessorsStopped(p.nifiProcessGroupId(), 10_000L);
-                String warning = activeSummary.isBlank()
-                        ? "Stop timed out waiting for active processor threads; active threads were terminated."
-                        : "Stop timed out waiting for active processor threads; active threads were terminated: " + activeSummary;
-                return markPipelineStopped(p, warning);
-            } catch (NifiException retryError) {
-                if (safeAllProcessorsStoppedByState(p.nifiProcessGroupId())) {
-                    String warning = activeSummary.isBlank()
-                            ? "All processors are stopped by state, but NiFi still reports lingering active threads."
-                            : "All processors are stopped by state, but NiFi still reports lingering active threads: " + activeSummary;
-                    return markPipelineStopped(p, warning);
-                }
-                taskLifecycle.statusOnly(p.id(), 2);
-                String message = e.getMessage();
-                if (!Objects.equals(retryError.getMessage(), message)) {
-                    message = message + "; after terminating active threads: " + retryError.getMessage();
-                }
-                errors.add(id, runtimeErr(FlowError.ErrorPhase.DEPLOYMENT, "Stop pipeline failed", message));
-                return errorResponse(retryError);
-            }
+            errors.add(id, runtimeErr(FlowError.ErrorPhase.RUNTIME, "停止流程组失败", FlowFailureDetails.describe(e)));
+            return errorResponse(e);
+        }
+        repo.updateStatus(id, PipelineStatus.STOPPING);
+        try {
+            nifi.waitForAllProcessorsStopped(p.nifiProcessGroupId(), 30_000L);
+            return markPipelineStopped(p);
+        } catch (NifiException e) {
+            return ResponseEntity.accepted().body(Map.of("processGroupId", p.nifiProcessGroupId(),
+                    "state", "STOPPING", "warning", "NiFi 已接受停止请求，正在等待运行中的任务结束"));
         }
     }
 
-    private ResponseEntity<?> markPipelineStopped(Pipeline p, String warning) {
+    private ResponseEntity<?> markPipelineStopped(Pipeline p) {
         repo.update(p.id(), cur -> new Pipeline(cur.id(), cur.name(), cur.description(),
                 cur.createdAt(), cur.updatedAt(), cur.dsl(),
                 cur.nifiProcessGroupId(), PipelineStatus.STOPPED,
                 cur.lastDeployedHash(), cur.lastDeployedAt(), System.currentTimeMillis(),
                 cur.nodeMapping(), cur.lastBulletinId()));
         taskLifecycle.stopped(p.id());
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("processGroupId", p.nifiProcessGroupId());
-        body.put("state", "STOPPED");
-        if (!isBlank(warning)) {
-            body.put("warning", warning);
-        }
-        return ResponseEntity.ok(body);
-    }
-
-    private String safeActiveThreadSummary(String processGroupId) {
-        try {
-            return nifi.activeThreadSummary(processGroupId);
-        } catch (Exception ignored) {
-            return "";
-        }
-    }
-
-    private boolean safeAllProcessorsStoppedByState(String processGroupId) {
-        try {
-            return nifi.allProcessorsStoppedByState(processGroupId);
-        } catch (Exception ignored) {
-            return false;
-        }
+        return ResponseEntity.ok(Map.of("processGroupId", p.nifiProcessGroupId(), "state", "STOPPED"));
     }
 
     @GetMapping("/status/page")
@@ -398,15 +472,26 @@ public class PipelineRunController {
     // 内部实现
     // ---------------------------------------------------------------------
 
-    /**
-     * 快速启动：复用现有 Process Group，仅把状态切换到 RUNNING。
-     * 适用于 lastDeployedHash 与当前 DSL hash 一致的场景。
-     */
-    private ResponseEntity<?> fastStart(Pipeline p) {
+    /** Start the existing native group using its deployed execution policy. */
+    private ResponseEntity<?> fastStart(Pipeline p, boolean boundOnly) {
         repo.updateStatus(p.id(), PipelineStatus.DEPLOYING);
         try {
-            if (TargetTableCleanupService.requested(p)) targetCleanup.clear(p);
-            startNativeFlow(p, p.nifiProcessGroupId(), p.nodeMapping());
+            boolean ranOnce;
+            if (boundOnly) {
+                Set<String> oneShot = p.nodeMapping() == null ? Set.of() : p.nodeMapping().oneShotSources();
+                if (oneShot == null) {
+                    oneShot = Objects.equals(p.lastDeployedHash(), deploymentHash(p))
+                            ? oneShotSourceIds(p, p.nodeMapping()) : Set.of();
+                }
+                ranOnce = !oneShot.isEmpty() && nifi.startWithOneShotSourcesIfPresent(p.nifiProcessGroupId(), oneShot);
+                if (!ranOnce) {
+                    if (isNifiAlreadyRunning(p)) return reconcileAlreadyRunning(p);
+                    nifi.setProcessGroupState(p.nifiProcessGroupId(), "RUNNING");
+                }
+            } else {
+                if (TargetTableCleanupService.requested(p)) targetCleanup.clear(p);
+                ranOnce = startNativeFlow(p, p.nifiProcessGroupId(), p.nodeMapping());
+            }
             Pipeline updated = repo.update(p.id(), cur -> new Pipeline(cur.id(), cur.name(), cur.description(),
                     cur.createdAt(), cur.updatedAt(), cur.dsl(),
                     cur.nifiProcessGroupId(), PipelineStatus.RUNNING,
@@ -417,14 +502,15 @@ public class PipelineRunController {
                     "pipeline", updated,
                     "processGroupId", p.nifiProcessGroupId(),
                     "started", true,
-                    "mode", "fast-restart"));
+                    "mode", "fast-restart",
+                    "oneShot", ranOnce));
         } catch (NifiException e) {
             repo.updateStatus(p.id(), PipelineStatus.DEPLOY_FAILED);
             taskLifecycle.statusOnly(p.id(), 2);
             errors.add(p.id(), runtimeErr(FlowError.ErrorPhase.DEPLOYMENT, "快速启动失败", FlowFailureDetails.describe(e)));
             return errorResponse(e);
         } catch (IllegalStateException e) {
-            if (!oneShotSourceIds(p, p.nodeMapping()).isEmpty() && !TargetTableCleanupService.requested(p)) {
+            if (boundOnly || !oneShotSourceIds(p, p.nodeMapping()).isEmpty() && !TargetTableCleanupService.requested(p)) {
                 repo.updateStatus(p.id(), p.status());
                 return ResponseEntity.status(409).body(Map.of("error", "full-source-not-ready", "message", e.getMessage()));
             }
@@ -460,14 +546,15 @@ public class PipelineRunController {
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
-    private void startNativeFlow(Pipeline p, String groupId, NifiNodeMapping mapping) {
-        java.util.Set<String> oneShot = oneShotSourceIds(p, mapping);
-        // Only database sources whose compiled head is GenerateTableFetch have four-mode semantics.
-        if (!oneShot.isEmpty()) nifi.startWithOneShotSources(groupId, oneShot);
-        else {
-            nifi.setProcessGroupState(groupId, "RUNNING");
-            nifi.resumeStoppedProcessors(groupId);
+    private boolean startNativeFlow(Pipeline p, String groupId, NifiNodeMapping mapping) {
+        Set<String> oneShot = oneShotSourceIds(p, mapping);
+        if (!oneShot.isEmpty()) {
+            nifi.startWithOneShotSources(groupId, oneShot);
+            return true;
         }
+        nifi.setProcessGroupState(groupId, "RUNNING");
+        nifi.resumeStoppedProcessors(groupId);
+        return false;
     }
 
     private ResponseEntity<?> reconcileAlreadyRunning(Pipeline pipeline) {
@@ -541,7 +628,7 @@ public class PipelineRunController {
             if (!forceRebuild
                     && !(start && TargetTableCleanupService.requested(p))
                     && Objects.equals(currentHash, p.lastDeployedHash()) && groups.isCurrent(layout, p.nifiProcessGroupId())) {
-                if (start) return fastStart(p);
+                if (start) return fastStart(p, false);
                 Pipeline restored = repo.updateStatus(p.id(), p.status());
                 taskLifecycle.updateProcessGroup(p.id(), p.nifiProcessGroupId());
                 return ResponseEntity.ok(Map.of("pipeline", restored, "processGroupId", p.nifiProcessGroupId(),
@@ -576,7 +663,8 @@ public class PipelineRunController {
                             "请根据详情核对字段映射配置、扩展版本及依赖服务；旧流程已保留。", Map.of());
                 }
             }
-            if (DslHasher.usesJavaMapping(p.dsl()) || hasHivePartitionPlan(p)) {
+            if (DslHasher.usesJavaMapping(p.dsl()) || hasHivePartitionPlan(p)
+                    || p.dsl().nodes().stream().anyMatch(HiveSinkPublicationPolicy::supportsHdfsMerge)) {
                 return stagedMappingDeploy(p, currentHash, start, layout);
             }
             List<String> previousParents = groups.parentIds(layout.previousIds());
@@ -695,6 +783,7 @@ public class PipelineRunController {
     private ResponseEntity<?> stagedMappingDeploy(Pipeline pipeline, String hash, boolean start,
                                                  PipelineGroupOrganizer.Layout layout) {
         boolean manualHiveTemplate = hasHivePartitionPlan(pipeline);
+        boolean hiveMergeChange = pipeline.dsl().nodes().stream().anyMatch(HiveSinkPublicationPolicy::supportsHdfsMerge);
         final String[] staged = {null};
         boolean committed = false;
         boolean previousStopped = false;
@@ -724,6 +813,7 @@ public class PipelineRunController {
             }
             DslCompiler.CompileResult result = compiler.compile(pipeline, group -> staged[0] = group, layout);
             if (result == null || isBlank(result.processGroupId())) throw new IllegalStateException("候选流程编译失败");
+            if (hiveMergeChange && !manualHiveTemplate) nifi.requireValidGeneratedProcessGroup(result.processGroupId());
             // Hive partition targets deliberately publish the ordinary template for native editing.
             // Keep candidate/queue/watermark protection, without automatic partition validation.
             NifiNodeMapping mapping = buildMapping(pipeline, result);
@@ -757,7 +847,9 @@ public class PipelineRunController {
                 taskLifecycle.started(pipeline.id());
             } else taskLifecycle.statusOnly(pipeline.id(), 0);
             if (lineageAnalysis != null) { try { lineageAnalysis.captureDeployment(updated); } catch (RuntimeException ex) { log.warn("流程已部署，血缘索引归档待恢复，pipeline={}",pipeline.id()); } }
-            Map<String,Object> response = new LinkedHashMap<>();response.put("pipeline",updated);response.put("processGroupId",result.processGroupId());response.put("started",start);response.put("mode",manualHiveTemplate ? "staged-hive-template-deploy" : "staged-unified-deploy");
+            Map<String,Object> response = new LinkedHashMap<>();response.put("pipeline",updated);response.put("processGroupId",result.processGroupId());response.put("started",start);
+            response.put("mode", manualHiveTemplate ? "staged-hive-template-deploy"
+                    : hiveMergeChange ? "staged-hive-merge-deploy" : "staged-unified-deploy");
             if (!retained.isEmpty()) response.put("retainedStoppedGroups",retained);
             return ResponseEntity.ok(response);
         } catch (RuntimeException ex) {
@@ -770,8 +862,10 @@ public class PipelineRunController {
                         pipeline.nifiProcessGroupId(),pipeline.status(),pipeline.lastDeployedHash(),pipeline.lastDeployedAt(),pipeline.lastStoppedAt(),pipeline.nodeMapping(),pipeline.lastBulletinId()));
                 if (previousStopped) repo.updateStatus(pipeline.id(),PipelineStatus.STOPPED);
             } else repo.updateStatus(pipeline.id(),PipelineStatus.STOPPED);
-            return deploymentFailure(pipeline.id(), 409, manualHiveTemplate ? "hive-template-deployment-failed" : "mapping-deployment-failed",
-                    manualHiveTemplate ? "Hive基础候选流程部署失败" : "统一映射候选流程部署失败", ex,
+            return deploymentFailure(pipeline.id(), 409, manualHiveTemplate ? "hive-template-deployment-failed"
+                            : hiveMergeChange ? "hive-merge-deployment-failed" : "mapping-deployment-failed",
+                    manualHiveTemplate ? "Hive基础候选流程部署失败"
+                            : hiveMergeChange ? "Hive小文件合并候选流程部署失败" : "统一映射候选流程部署失败", ex,
                     committed ? "请检查新流程状态及错误详情。" : "旧流程及其状态已保留，请根据详情修复后重新部署。",
                     Map.of("previousGraphRetained", !committed));
         }
@@ -850,6 +944,9 @@ public class PipelineRunController {
         return value == null || value.isBlank();
     }
 
-    public record DeployRequest(String catalogTid) {
+    public record DeployRequest(String catalogTid, boolean preserveExisting) {
+        public DeployRequest(String catalogTid) { this(catalogTid, false); }
     }
+
+    public record CandidateRequest(String processGroupId) {}
 }

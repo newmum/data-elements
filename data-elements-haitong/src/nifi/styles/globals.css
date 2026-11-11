@@ -1799,6 +1799,38 @@
   overflow-y: auto;
   flex: 1;
 }
+.nifi-config-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.nifi-config-help {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: help;
+}
+.nifi-config-help:hover,
+.nifi-config-help:focus-visible {
+  color: var(--primary-color);
+}
+.nifi-config-help:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+.nifi-config-help__text {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 .coze-drawer-footer {
   display: flex;
   justify-content: flex-end;
@@ -1869,10 +1901,6 @@
 
 .custom-sql-config-drawer .nifi-editor-field {
   margin-bottom: 0 !important;
-}
-
-.custom-sql-config-drawer .nifi-editor-field .ant-form-item-explain {
-  display: none;
 }
 
 .custom-sql-config-drawer .ant-form,
@@ -1999,9 +2027,8 @@
   flex: 1;
 }
 
-.custom-sql-editor__foot {
-  margin-top: 8px;
-  font-size: 12px;
+.custom-sql-editor__label {
+  margin-bottom: 6px;
 }
 
 .materialize-table-form .ant-form-item {

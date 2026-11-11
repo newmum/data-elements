@@ -154,7 +154,8 @@ public class PipelineRepository {
         Pipeline stamped = new Pipeline(
                 next.id(), next.name(), next.description(), next.createdAt(),
                 Math.max(System.currentTimeMillis(),cur.updatedAt()==null?0:cur.updatedAt()+1),
-                BatchSchedulePolicy.normalize(next.dsl(),cur.dsl(),TenantContext.requireTenantId(),id),
+                java.util.Objects.equals(next.dsl(), cur.dsl()) ? cur.dsl()
+                        : BatchSchedulePolicy.normalize(next.dsl(), cur.dsl(), TenantContext.requireTenantId(), id),
                 next.nifiProcessGroupId(), next.status(),
                 next.lastDeployedHash(), next.lastDeployedAt(), next.lastStoppedAt(),
                 next.nodeMapping(), next.lastBulletinId());

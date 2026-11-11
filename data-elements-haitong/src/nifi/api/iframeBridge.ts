@@ -256,11 +256,15 @@ function handleMessage(event: MessageEvent) {
  */
 function parseAllowedOrigins(): string[] {
   const origins = new Set<string>([window.location.origin]);
-  const platformUrl = sourcePlatformBaseUrl(window.location.href,import.meta.env.VITE_SOURCE_PLATFORM_HOME_URL,import.meta.env.DEV).href;
+  const platformHome = import.meta.env.VITE_SOURCE_PLATFORM_HOME_URL;
+  const platformUrl = sourcePlatformBaseUrl(window.location.href, platformHome, import.meta.env.DEV);
   const meta = document.querySelector('meta[name="iframe-allowed-origins"]');
-  const configured = [platformUrl,
+  const configured = [platformUrl.href,
     ...(meta?.getAttribute('content') ?? '').split(','),
     ...(import.meta.env.VITE_NIFI_EMBED_ORIGINS ?? '').split(',')];
+  if (import.meta.env.DEV && !platformHome?.trim()) {
+    configured.push('http://127.0.0.1:3000');
+  }
   for (const entry of configured) {
     if (!entry.trim()) continue;
     try {

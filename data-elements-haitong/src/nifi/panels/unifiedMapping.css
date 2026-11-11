@@ -21,7 +21,6 @@
 .fm-rule-main { display:flex; flex-direction:column; gap:24px; }
 .fm-rule-choice { display:flex; flex-direction:column; gap:10px; }
 .fm-rule-choice .ant-select { width:100%; }
-.fm-rule-description { font-size:13px; line-height:1.65; }
 .fm-recommend-modal .ht-table-wrap { overflow:hidden; }
 .fm-rule-fields { border-top:1px solid var(--fm-border-default,#e8ebf0); padding-top:20px; }
 .fm-rule-conversion:empty { display:none; }
@@ -143,10 +142,9 @@
 .fm-rule-catalog-check { font-size:12px; }
 .fm-rule-catalog-item:focus-visible { outline:2px solid var(--fm-border-hover); outline-offset:-2px; }
 .fm-rule-detail { min-width:0; overflow:auto; padding:16px 20px 20px; scrollbar-width:thin; overscroll-behavior:contain; }
-.fm-rule-detail-heading { display:flex; gap:12px; align-items:flex-start; margin-bottom:16px; }
-.fm-rule-detail-heading h3 { margin:0 0 3px; color:var(--text-primary); font-size:15px; font-weight:600; line-height:22px; }
+.fm-rule-detail-heading { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+.fm-rule-detail-heading h3 { margin:0; color:var(--text-primary); font-size:15px; font-weight:600; line-height:22px; }
 .fm-rule-detail-icon { display:flex; align-items:center; justify-content:center; flex:none; width:32px; height:32px; border:1px solid var(--node-border); border-radius:6px; color:var(--fm-border-hover); font-size:17px; }
-.fm-rule-workbench .fm-rule-description { font-size:12px; line-height:20px; }
 .fm-rule-workbench .fm-rule-main { gap:16px; }
 .fm-rule-workbench .fm-rule-fields { border:0; padding:0; }
 .fm-rule-workbench .fm-rule-section-title { margin-bottom:10px; font-size:13px; line-height:20px; }

@@ -3,6 +3,7 @@ import { AutoComplete, Button, Checkbox, Input, Modal, Space, Typography } from 
 import type { UnifiedMappingDraft } from '../api/fieldMapping';
 import { Choice } from './UnifiedRuleForms';
 import { getNifiOverlayContainer } from './overlayContainer';
+import ConfigFieldLabel from './ConfigFieldLabel';
 
 export default function MappingFlowSettings({ draft, onApply, onClose }: {
   draft: UnifiedMappingDraft; onApply: (draft: UnifiedMappingDraft) => void; onClose: () => void;
@@ -16,8 +17,8 @@ export default function MappingFlowSettings({ draft, onApply, onClose }: {
       onClose();
     }}>应用设置</Button></Space>}>
     <div className="unified-rule-section">
-      <Typography.Text type="secondary">适用于当前节点的全部治理规则。单个字段的空值和转换失败处理，在该字段的治理规则中设置。</Typography.Text>
-      <section className="unified-rule-section"><div className="fm-rule-section-title">异常处理</div><div className="unified-form-grid">
+      <section className="unified-rule-section"><div className="fm-rule-section-title"><ConfigFieldLabel label="异常处理"
+        help="适用于当前节点的全部治理规则。单个字段的空值和转换失败处理，在该字段的治理规则中设置。" /></div><div className="unified-form-grid">
         <Choice label="记录处理失败时" value={policies.recordErrorMode ?? 'FAIL_FLOWFILE'} choices={{ FAIL_FLOWFILE: '整批失败，保留原输入', ROUTE_INVALID: '成功记录继续，隔离错误记录' }} onChange={value => patch('recordErrorMode', value)} />
         <Choice label="源字段不存在时" value={policies.onMissingSource ?? 'NULL'} choices={{ NULL: '以 NULL 进入规则', FAIL: '记录报错' }} onChange={value => patch('onMissingSource', value)} />
       </div></section>

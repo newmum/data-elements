@@ -276,7 +276,8 @@ public class DslCompiler {
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
         GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi,pipeline);
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
-        String pgName = pipeline.name() == null ? pipeline.id() : pipeline.name();
+        String pgName = layout != null && layout.name() != null ? layout.name()
+                : pipeline.name() == null ? pipeline.id() : pipeline.name();
         var position = layout == null
                 ? com.linewell.dataelement.integration.nifi.canvas.lifecycle.PipelineGroupOrganizer.nextPosition(nifi.listProcessGroups(parentId))
                 : layout.position();
@@ -716,8 +717,11 @@ public class DslCompiler {
                 if (out == null) {
                     throw new IllegalStateException("Source component has no outlet: edge " + e.id());
                 }
-                NifiEntity connection = nifi.createConnection(pgId, out.processorId, "PROCESSOR",
-                        dst.inletProcessorId, "PROCESSOR", List.of(out.relationship));
+                NifiEntity connection = dst.processorIds.containsKey("hive-merge")
+                        ? nifi.createBufferedConnection(pgId, out.processorId, dst.inletProcessorId,
+                                "PROCESSOR", List.of(out.relationship))
+                        : nifi.createConnection(pgId, out.processorId, "PROCESSOR",
+                                dst.inletProcessorId, "PROCESSOR", List.of(out.relationship));
                 edgeConnectionIds.put(e.id(), connection.id());
                 src.usedOutgoing.computeIfAbsent(out.processorId, k -> new LinkedHashSet<>()).add(out.relationship);
             }
@@ -1604,7 +1608,7 @@ public class DslCompiler {
         String profile = firstNonBlank(stringConfig(cfg, "hiveProfile"), stringConfig(cfg, "hive_profile"));
         if (profile == null) profile = "";
         boolean hdfsSink = "sink.hive".equals(manifestKey)
-                && isHiveHdfsWriteMode(stringConfig(cfg, "hiveWriteMode"));
+                && HiveSinkPublicationPolicy.isHdfsWriteMode(stringConfig(cfg, "hiveWriteMode"));
         if (hdfsSink && profile.isBlank()) profile = "default";
         String mode = firstNonBlank(stringConfig(cfg, "metadataAccessMode"), stringConfig(cfg, "metadata_access_mode"));
         String connectionMode = firstNonBlank(stringConfig(cfg, "hiveConnectionMode"), stringConfig(cfg, "hive_connection_mode"));
@@ -3456,13 +3460,7 @@ public class DslCompiler {
         if (manifest == null || !"sink.hive".equals(manifest.key()) || !"put".equals(localId)) {
             return false;
         }
-        return isHiveHdfsWriteMode(stringConfig(cfg, "hiveWriteMode"));
-    }
-
-    private static boolean isHiveHdfsWriteMode(String configuredMode) {
-        String mode = configuredMode == null ? "" : configuredMode.trim().toUpperCase(Locale.ROOT);
-        return mode.isBlank() || HIVE_LINEWELL_HDFS_MODE.equals(mode) || "LINEWELL".equals(mode)
-                || HIVE_BATCH_LAKE_MODE.equals(mode) || "BATCH".equals(mode);
+        return HiveSinkPublicationPolicy.isHdfsWriteMode(stringConfig(cfg, "hiveWriteMode"));
     }
 
     private String hiveHdfsWriterMode(Map<String, Object> cfg) {
@@ -3485,6 +3483,12 @@ public class DslCompiler {
         Map<String, Object> writerConfig = new LinkedHashMap<>(cfg);
         double x = nodeOriginX(layout);
         double y = nodeOriginY(layout);
+        NifiEntity merge = null;
+        if (HiveSinkPublicationPolicy.usesHdfsMerge(node)) {
+            merge = createHiveHdfsRecordMerge(pgId, node, sharedCs, x, y);
+            nc.processorIds.put("hive-merge", merge.id());
+            x += PROCESSOR_COLUMN_GAP;
+        }
 
         NifiEntity convert = nifi.createProcessor(pgId, CONVERT_RECORD_TYPE, node.label() + "/convert",
                 x, y, Map.of(
@@ -3499,11 +3503,34 @@ public class DslCompiler {
         nc.processorIds.put("convert", convert.id());
         nc.processorIds.put("filename", filename.id());
         nc.processorIds.put("put", put.id());
-        nc.inletProcessorId = convert.id();
+        nc.inletProcessorId = merge == null ? convert.id() : merge.id();
         nifi.createConnection(pgId, convert.id(), "PROCESSOR", filename.id(), "PROCESSOR", List.of("success"));
         nifi.createConnection(pgId, filename.id(), "PROCESSOR", put.id(), "PROCESSOR", List.of("success"));
         nc.usedOutgoing.computeIfAbsent(convert.id(), ignored -> new LinkedHashSet<>()).add("success");
         nc.usedOutgoing.computeIfAbsent(filename.id(), ignored -> new LinkedHashSet<>()).add("success");
+        if (merge != null) {
+            nifi.createBufferedConnection(pgId, merge.id(), convert.id(), "PROCESSOR", List.of("merged"));
+            NifiEntity failed = nifi.createRetentionFunnel(pgId, x + 2 * PROCESSOR_COLUMN_GAP, y - PROCESSOR_ROW_GAP);
+            nifi.createBufferedConnection(pgId, merge.id(), failed.id(), "FUNNEL", List.of("failure"));
+            nifi.createBufferedConnection(pgId, convert.id(), failed.id(), "FUNNEL", List.of("failure"));
+            nifi.createBufferedConnection(pgId, put.id(), failed.id(), "FUNNEL", nifi.configureWriteFailureRetries(put));
+        }
+    }
+
+    private NifiEntity createHiveHdfsRecordMerge(String pgId, Pipeline.Node node,
+                                                Map<String, String> sharedCs, double x, double y) {
+        return nifi.createProcessor(pgId, MERGE_RECORD_TYPE, node.label() + "/merge-records",
+                x, y, Map.of(
+                        "Record Reader", sharedCs.get("hiveJsonReader"),
+                        "Record Writer", requireHiveQueryRecordWriter(sharedCs),
+                        "Merge Strategy", "Bin-Packing Algorithm",
+                        "Attribute Strategy", "Keep Only Common Attributes",
+                        "Minimum Number of Records", "1",
+                        "Maximum Number of Records", "100000",
+                        "Minimum Bin Size", "128 MB",
+                        "Maximum Bin Size", "256 MB",
+                        "Max Bin Age", "5 min",
+                        "Maximum Number of Bins", "10"), "5 sec", "TIMER_DRIVEN");
     }
 
     /**

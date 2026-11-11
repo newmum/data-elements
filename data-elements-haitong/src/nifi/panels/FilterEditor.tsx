@@ -3,6 +3,7 @@ import { Alert, Input, Segmented, Typography } from 'antd';
 import { CheckCircleOutlined, FilterOutlined } from '@ant-design/icons';
 import type { CanvasNode } from '@/types/dsl';
 import { ConditionBuilder, compileConditions, upstreamColumnOptions, type BusinessCondition } from './ConditionBuilder';
+import ConfigFieldLabel from './ConfigFieldLabel';
 
 interface FilterEditorProps {
   value: string;
@@ -30,8 +31,8 @@ export default function FilterEditor({ value, onChange, rules, onRulesChange, so
     <div className="filter-editor filter-editor--business">
       <div className="filter-editor__heading">
         <div>
-          <Typography.Title level={5}><FilterOutlined /> 设置保留哪些数据</Typography.Title>
-          <Typography.Text type="secondary">逐行选择字段和判断方式，系统会自动生成过滤规则。</Typography.Text>
+          <Typography.Title level={5}><FilterOutlined /> <ConfigFieldLabel label="设置保留哪些数据"
+            help="逐行选择字段和判断方式，系统会自动生成过滤规则。" /></Typography.Title>
         </div>
         <Segmented
           value={keepMode}

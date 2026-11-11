@@ -24,6 +24,7 @@ import org.springframework.web.client.RestClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -791,15 +792,31 @@ public class NifiClient {
 
     /** Start downstream in bulk and run full-table sources once, independently of the browser lifetime. */
     public void startWithOneShotSources(String pgId, java.util.Set<String> sourceIds) {
+        startWithOneShotSources(pgId, sourceIds, false);
+    }
+
+    public boolean startWithOneShotSourcesIfPresent(String pgId, java.util.Set<String> sourceIds) {
+        return startWithOneShotSources(pgId, sourceIds, true);
+    }
+
+    private boolean startWithOneShotSources(String pgId, java.util.Set<String> sourceIds, boolean allowNativeFallback) {
         if (sourceIds.isEmpty() || sourceIds.size() > 20) {
             throw new IllegalStateException("单次全量启动必须包含 1 至 20 个数据库来源");
         }
-        JsonNode snapshot = getProcessGroupStatus(pgId).path("processGroupStatus").path("aggregateSnapshot");
-        if (snapshot.path("queuedCount").asLong(-1) != 0 || snapshot.path("activeThreadCount").asInt(-1) != 0) {
-            throw new IllegalStateException("上一轮全量仍有排队数据或活跃线程，请处理完成后再启动新一轮");
-        }
+        if (!allowNativeFallback) requirePreviousRoundComplete(pgId);
         JsonNode processors = get("/flow/process-groups/" + pgId, JsonNode.class)
                 .path("processGroupFlow").path("flow").path("processors");
+        if (allowNativeFallback) {
+            if (!processors.isArray()) throw new IllegalStateException("NiFi 未返回来源处理器清单");
+            var actual = new java.util.LinkedHashSet<String>();
+            for (JsonNode processor : processors) {
+                String id = processor.path("id").asText();
+                if (sourceIds.contains(id)) actual.add(id);
+            }
+            if (actual.isEmpty()) return false;
+            sourceIds = actual;
+            requirePreviousRoundComplete(pgId);
+        }
         ObjectNode sources = mapper.createObjectNode();
         ObjectNode downstream = mapper.createObjectNode();
         for (JsonNode processor : processors) {
@@ -825,6 +842,14 @@ public class NifiClient {
             body.set("revision", entry.getValue());
             put(runtimeNode, "/processors/" + entry.getKey() + "/run-status", body, NifiEntity.class);
         });
+        return true;
+    }
+
+    private void requirePreviousRoundComplete(String pgId) {
+        JsonNode snapshot = getProcessGroupStatus(pgId).path("processGroupStatus").path("aggregateSnapshot");
+        if (snapshot.path("queuedCount").asLong(-1) != 0 || snapshot.path("activeThreadCount").asInt(-1) != 0) {
+            throw new IllegalStateException("上一轮全量仍有排队数据或活跃线程，请处理完成后再启动新一轮");
+        }
     }
 
     private void scheduleComponents(String pgId, String state, ObjectNode components) {
@@ -891,6 +916,16 @@ public class NifiClient {
     public NifiEntity createConnection(String pgId, String sourceId, String sourceType,
                                        String destId, String destType,
                                        java.util.List<String> selectedRelationships) {
+        return createConnection(pgId, sourceId, sourceType, destId, destType, selectedRelationships, false);
+    }
+
+    public NifiEntity createBufferedConnection(String pgId, String sourceId, String destId, String destType,
+                                               List<String> selectedRelationships) {
+        return createConnection(pgId, sourceId, "PROCESSOR", destId, destType, selectedRelationships, true);
+    }
+
+    private NifiEntity createConnection(String pgId, String sourceId, String sourceType, String destId, String destType,
+                                        List<String> selectedRelationships, boolean buffered) {
         ObjectNode component = mapper.createObjectNode();
 
         ObjectNode source = mapper.createObjectNode();
@@ -910,11 +945,33 @@ public class NifiClient {
             selectedRelationships.forEach(relsNode::add);
         }
         component.set("selectedRelationships", relsNode);
+        if (buffered) {
+            component.put("flowFileExpiration", "0 sec")
+                    .put("backPressureObjectThreshold", 10_000)
+                    .put("backPressureDataSizeThreshold", "1 GB")
+                    .put("loadBalanceStrategy", "DO_NOT_LOAD_BALANCE");
+        }
 
         ObjectNode envelope = mapper.createObjectNode();
         envelope.set("revision", mapper.valueToTree(RevisionDto.initial(clientId)));
         envelope.set("component", component);
         return post("/process-groups/" + pgId + "/connections", envelope, NifiEntity.class);
+    }
+
+    /** Configure retries on the writer's own input queue using the creation revision. */
+    public List<String> configureWriteFailureRetries(NifiEntity processor) {
+        JsonNode snapshot = mapper.valueToTree(processor);
+        List<String> failures = new java.util.ArrayList<>();
+        snapshot.path("component").path("relationships").forEach(relationship -> {
+            String name = relationship.path("name").asText();
+            if ("failure".equals(name) || "retry".equals(name)) failures.add(name);
+        });
+        if (failures.isEmpty()) throw new IllegalStateException("Hive HDFS 写入组件没有可保留的 failure/retry 关系");
+        ObjectNode update = mapper.createObjectNode().put("id", processor.id());
+        ObjectNode config = update.putObject("config").put("retryCount", 3);
+        failures.forEach(config.putArray("retriedRelationships")::add);
+        putLayoutSnapshot("/processors/" + processor.id(), snapshot, update);
+        return List.copyOf(failures);
     }
 
     /** Finalize a stopped generated graph; failures remain queued instead of auto-terminating. */
@@ -1002,7 +1059,7 @@ public class NifiClient {
         long deadline = System.currentTimeMillis() + 10_000L;
         while (true) {
             JsonNode processors = get("/process-groups/" + pgId + "/processors?includeDescendantGroups=true", JsonNode.class).path("processors");
-            if (!processors.isArray() || processors.isEmpty()) throw new IllegalStateException("Hive分区流程未生成完整处理器链路");
+            if (!processors.isArray() || processors.isEmpty()) throw new IllegalStateException("候选流程未生成完整处理器链路");
             java.util.List<String> invalid = new java.util.ArrayList<>();
             boolean validating = false;
             for (JsonNode entity : processors) {
@@ -1014,11 +1071,11 @@ public class NifiClient {
                 component.path("validationErrors").forEach(error -> details.add(error.asText()));
                 invalid.add(component.path("name").asText() + "：" + (details.isEmpty() ? "原生组件尚未通过校验（" + status + "）" : String.join("；", details)));
             }
-            if (!invalid.isEmpty()) throw new IllegalStateException("Hive分区候选流程校验失败，未替换旧流程：" + String.join("；", invalid));
+            if (!invalid.isEmpty()) throw new IllegalStateException("候选流程校验失败，未替换旧流程：" + String.join("；", invalid));
             if (!validating) return;
-            if (System.currentTimeMillis() >= deadline) throw new IllegalStateException("Hive分区候选流程仍在校验中，未替换旧流程，请稍后重试");
+            if (System.currentTimeMillis() >= deadline) throw new IllegalStateException("候选流程仍在校验中，未替换旧流程，请稍后重试");
             try { Thread.sleep(200); }
-            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException("Hive分区流程校验被中断", interrupted); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new IllegalStateException("候选流程校验被中断", interrupted); }
         }
     }
 

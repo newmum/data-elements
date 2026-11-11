@@ -146,4 +146,23 @@ class UnifiedMappingDeploymentTest {
         verify(nifi, never()).cleanupProcessGroup("candidate");
     }
 
+    @Test void invalidHiveMergeCandidateLeavesOldGraphRunning() {
+        var original = fixture();
+        var sink = new Pipeline.Node("h", "sink.hive", "普通Hive目标", "sink", 320, 0, Map.of("hiveHdfsMerge", true));
+        var pipeline = new Pipeline(original.id(), original.name(), original.description(), original.createdAt(), original.updatedAt(),
+                new Pipeline.Dsl(1, List.of(original.dsl().nodes().getFirst(), sink), List.of(new Pipeline.Edge("edge", "s", "h", null))),
+                "old", PipelineStatus.RUNNING, original.lastDeployedHash(), original.lastDeployedAt(),
+                null, new NifiNodeMapping(Map.of(), Map.of(), Map.of()), 0L);
+        when(repo.findById("p")).thenReturn(Optional.of(pipeline));
+        when(compiler.compile(any(), any(), any())).thenAnswer(call -> {
+            call.<java.util.function.Consumer<String>>getArgument(1).accept("candidate");
+            return new DslCompiler.CompileResult("candidate", Map.of(), Map.of(), Map.of());
+        });
+        doThrow(new IllegalStateException("MergeRecord 配置校验失败")).when(nifi).requireValidGeneratedProcessGroup("candidate");
+        assertEquals(409, controller.deploy("p", null).getStatusCode().value());
+        verify(nifi).cleanupProcessGroup("candidate");
+        verify(nifi, never()).setProcessGroupState(eq("old"), anyString());
+        verify(nifi, never()).cleanupProcessGroup("old");
+    }
+
 }

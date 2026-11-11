@@ -7,6 +7,7 @@ import { BranchBodyEditor, Choice, ConversionStepsEditor, ExpressionEditor, Fall
 import { isEditableRule, logicalFieldType, RULE_TYPES, setRuleSteps, stepSummary, TYPE_LABELS, validateRuleForm, type Predicate, type RuleBody } from './unifiedRuleModel';
 import { concreteRuleMode, ruleChoice, selectConcreteRule } from './mappingRulePresentation';
 import MappingRuleCatalog, { MappingRuleIcon } from './MappingRuleCatalog';
+import ConfigFieldLabel from './ConfigFieldLabel';
 
 interface Props {
   initial: UnifiedMappingRule;
@@ -28,7 +29,7 @@ export default function MappingRuleDialog(props:Props) {
   const {modal}=App.useApp();
   const [rule,setRule]=useState(()=>structuredClone(props.initial));
   const [errors,setErrors]=useState<string[]>([]);
-  const [expanded,setExpanded]=useState<string[]>([]);
+  const [expanded,setExpanded]=useState<string[]>(['steps','advanced']);
   const detailRef=useRef<HTMLDivElement>(null);
   const formErrors=useRef(new Map<string,string>());
   const report=useCallback((id:string,error:string)=>{if(error)formErrors.current.set(id,error);else formErrors.current.delete(id);},[]);
@@ -70,7 +71,7 @@ export default function MappingRuleDialog(props:Props) {
     <div className="fm-rule-workspace">
       <MappingRuleCatalog mode={mode} onChange={changeMode}/>
       <div className="fm-rule-detail" ref={detailRef}>
-        <header className="fm-rule-detail-heading"><div className="fm-rule-detail-icon"><MappingRuleIcon mode={mode}/></div><div><h3>{ruleChoice(mode).label}</h3><Typography.Text type="secondary" className="fm-rule-description">{ruleChoice(mode).description}</Typography.Text></div></header>
+        <header className="fm-rule-detail-heading"><div className="fm-rule-detail-icon"><MappingRuleIcon mode={mode}/></div><h3>{ruleChoice(mode).label}</h3></header>
       <div className="fm-rule-main">
         <section className="fm-rule-fields">
         <div className="fm-rule-section-title">字段对应</div>
@@ -91,14 +92,13 @@ export default function MappingRuleDialog(props:Props) {
       <section className="fm-rule-policy-section"><div className="fm-rule-section-title">空值与失败处理</div><div className="fm-rule-policy-grid">
           {!conditional&&<NullHandlingEditor body={rule as RuleBody} onChange={body=>setRule({...rule,input:body.input,steps:body.steps})}/>}
           <FallbackEditor value={rule.onError??'ERROR'} defaultValue={rule.defaultValue} onChange={(onError,defaultValue)=>setRule({...rule,onError,defaultValue})}/>
-          {!conditional&&step&&<details className="fm-rule-step-error"><summary>当前转换步骤的失败策略</summary><FallbackEditor step value={step.onError??'ERROR'} defaultValue={step.defaultValue} onChange={(onError,defaultValue)=>patchStep({...step,onError,defaultValue})}/></details>}
+          {!conditional&&step&&<details className="fm-rule-step-error" open><summary>当前转换步骤的失败策略</summary><FallbackEditor step value={step.onError??'ERROR'} defaultValue={step.defaultValue} onChange={(onError,defaultValue)=>patchStep({...step,onError,defaultValue})}/></details>}
       </div></section>
-      <section className="fm-rule-output-section"><div className="fm-rule-section-title">输出类型与校验</div><div className="unified-form-grid">
+      <section className="fm-rule-output-section"><div className="fm-rule-section-title"><ConfigFieldLabel label="输出类型与校验" help="范围、格式及允许值可通过“输出校验”转换或附加转换步骤配置。" /></div><div className="unified-form-grid">
           <Choice label="输出类型" value={rule.target.logicalType??'ANY'} choices={Object.fromEntries(RULE_TYPES.map(t=>[t,TYPE_LABELS[t]]))} onChange={logicalType=>setRule({...rule,target:{...rule.target,logicalType}})}/>
-          <div className="unified-form-field"><Typography.Text>最大字符数</Typography.Text><InputNumber aria-label="目标最大字符数" min={0} max={262144} value={rule.target.length??0} onChange={length=>setRule({...rule,target:{...rule.target,length:length??0}})}/><Typography.Text type="secondary">0 表示不限</Typography.Text></div>
+          <div className="unified-form-field"><Typography.Text><ConfigFieldLabel label="最大字符数" help="0 表示不限。" /></Typography.Text><InputNumber aria-label="目标最大字符数" min={0} max={262144} value={rule.target.length??0} onChange={length=>setRule({...rule,target:{...rule.target,length:length??0}})}/></div>
           <Checkbox checked={rule.target.nullable!==false} onChange={e=>setRule({...rule,target:{...rule.target,nullable:e.target.checked}})}>允许 NULL</Checkbox>
-          {rule.target.logicalType==='DECIMAL'&&<div className="unified-form-field"><Typography.Text>精度 / 小数位</Typography.Text><Space><InputNumber aria-label="目标精度" min={0} max={1000} value={rule.target.precision??0} onChange={precision=>setRule({...rule,target:{...rule.target,precision:precision??0,...(!precision?{scale:0}:{})}})}/><InputNumber aria-label="目标小数位" min={-1000} max={1000} disabled={!rule.target.precision} value={!rule.target.precision?0:rule.target.scale??0} onChange={scale=>setRule({...rule,target:{...rule.target,scale:scale??0}})}/></Space><Typography.Text type="secondary">精度为 0 时保留原始小数位；已登记目标仍按物理列容量校验</Typography.Text></div>}
-          <Typography.Text type="secondary">范围、格式及允许值可通过“输出校验”转换或附加转换步骤配置。</Typography.Text>
+          {rule.target.logicalType==='DECIMAL'&&<div className="unified-form-field"><Typography.Text><ConfigFieldLabel label="精度 / 小数位" help="精度为 0 时保留原始小数位；已登记目标仍按物理列容量校验。" /></Typography.Text><Space><InputNumber aria-label="目标精度" min={0} max={1000} value={rule.target.precision??0} onChange={precision=>setRule({...rule,target:{...rule.target,precision:precision??0,...(!precision?{scale:0}:{})}})}/><InputNumber aria-label="目标小数位" min={-1000} max={1000} disabled={!rule.target.precision} value={!rule.target.precision?0:rule.target.scale??0} onChange={scale=>setRule({...rule,target:{...rule.target,scale:scale??0}})}/></Space></div>}
         </div></section>
       <Collapse className="fm-rule-options" activeKey={expanded} onChange={keys=>setExpanded(Array.isArray(keys)?keys:[keys])} items={[
         {key:'steps',label:'附加转换步骤'+(visibleSteps.length>1?' · '+visibleSteps.length+' 个步骤':''),children:conditional?<Typography.Text type="secondary">请在各条件分支内配置转换步骤。</Typography.Text>:<ConversionStepsEditor {...common} steps={rule.steps} onChange={steps=>setRule(current=>setRuleSteps(current,steps,props.targets.some(field=>field.name===current.target.name)))}/>},

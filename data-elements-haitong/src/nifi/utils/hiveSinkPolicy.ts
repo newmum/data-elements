@@ -2,7 +2,29 @@ import type { CanvasDsl, CanvasEdge, CanvasNode } from '../types/dsl';
 
 export function isHiveSink(node: CanvasNode | undefined): boolean {
   return !!node && (node.manifestKey === 'sink.hive'
-    || (node.category === 'sink' && String(node.config?.dbType ?? '').toUpperCase() === 'HIVE'));
+    || (node.category === 'sink' && String(node.config?.dbType ?? '').trim().toUpperCase() === 'HIVE'));
+}
+
+export function hiveHdfsMergeUnavailable(node: CanvasNode): string | undefined {
+  if (node.manifestKey !== 'sink.hive') return '当前使用通用 JDBC 写入组件。使用 Hive 的 PutHwHDFS 或 PutHDFS 写入时才会生成合并节点。';
+  if (String((node.config.partitionPlan as { enabled?: unknown } | undefined)?.enabled).toLowerCase() === 'true') {
+    return '已启用分区计划，请在 NiFi 原生流程中按分区配置合并。平台部署时不会自动插入合并节点。';
+  }
+  const mode = String(node.config.hiveWriteMode ?? '').trim().toUpperCase();
+  if (!['', 'LINEWELL_HDFS', 'LINEWELL', 'HDFS_BATCH', 'BATCH'].includes(mode)) {
+    return '当前写入组件不使用 HDFS 文件合并。选择 PutHwHDFS 或 PutHDFS 后生效。';
+  }
+}
+
+/** Apply the default on save so the user can deploy it without editing old nodes. */
+export function withHiveHdfsMergeDefaults(dsl: CanvasDsl): CanvasDsl {
+  let changed = false;
+  const nodes = dsl.nodes.map(node => {
+    if (node.manifestKey !== 'sink.hive' || typeof node.config.hiveHdfsMerge === 'boolean' || hiveHdfsMergeUnavailable(node)) return node;
+    changed = true;
+    return { ...node, config: { ...node.config, hiveHdfsMerge: true } };
+  });
+  return changed ? { ...dsl, nodes } : dsl;
 }
 /** A first/direct Hive target always keeps governance; missing legacy context never bypasses it. */
 export function bypassesHiveGovernance(node: CanvasNode | undefined): boolean {

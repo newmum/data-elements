@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hiveSinkCanvas } from '../utils/hiveSinkPolicy.ts';
+import { hiveHdfsMergeUnavailable, hiveSinkCanvas, withHiveHdfsMergeDefaults } from '../utils/hiveSinkPolicy.ts';
 import { normalizeCanvasDsl } from '../types/dsl.ts';
 import { buildCompositeCanvas } from '../utils/compositeCanvas.ts';
 
@@ -15,6 +15,21 @@ const hive = (id='h') => rawTarget(node(id, 'sink.hive', 'sink'));
 const jdbc = () => node('j', 'sink.jdbc', 'sink');
 const edge = (source, target) => ({ id: source + target, source, target, outlet: 'default' });
 const graph = (nodes, edges) => ({ version: 1, nodes, edges });
+
+test('saving a legacy Hive design applies the merge default only to eligible HDFS targets', () => {
+  const off = { ...hive('off'), config: { hiveHdfsMerge: false } };
+  const partitioned = { ...hive('partitioned'), config: { partitionPlan: { enabled: true } } };
+  const recordPut = { ...hive('standard'), config: { hiveWriteMode: 'HIVE_RECORD_PUT' } };
+  const legacyJdbc = { ...jdbc(), config: { dbType: 'HIVE' } };
+  const saved = graph([hive(), off, partitioned, recordPut, legacyJdbc], []);
+  const prepared = withHiveHdfsMergeDefaults(saved);
+  assert.deepEqual(prepared.nodes.map(target => target.config.hiveHdfsMerge), [true, false, undefined, undefined, undefined]);
+  assert.equal(saved.nodes[0].config.hiveHdfsMerge, undefined);
+  assert.equal(hiveHdfsMergeUnavailable(prepared.nodes[0]), undefined);
+  assert.match(hiveHdfsMergeUnavailable(partitioned), /分区/);
+  assert.match(hiveHdfsMergeUnavailable(recordPut), /写入组件/);
+  assert.match(hiveHdfsMergeUnavailable(legacyJdbc), /通用 JDBC/);
+});
 
 test('Downstream Hive target omits consecutive mapping nodes on load and repeated normalization is stable', () => {
   const dsl = graph([source(), mapping('a'), mapping('b'), hive()], [edge('s','a'),edge('a','b'),edge('b','h')]);

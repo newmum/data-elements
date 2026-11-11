@@ -77,6 +77,18 @@ class PipelineControllerReadOnlyDetailTest {
     }
 
     @Test
+    void projectedDetailKeepsTheStoredRevisionForTheNextSave() {
+        var source = new Pipeline.Node("s", "source.mysql", "source", "source", 0, 0, Map.of());
+        var stored = new Pipeline("p", "stored", null, 10L, 20L,
+                new Pipeline.Dsl(1, List.of(source), List.of()), null, null, null, null, null, null, null);
+        var projected = new Pipeline("p", "stored", null, 10L, 20L,
+                new Pipeline.Dsl(1, List.of(), List.of()), null, null, null, null, null, null, null);
+
+        assertThat(projected.designHash()).isNotEqualTo(stored.designHash());
+        assertThat(projected.withStoredDesignVersion(stored).designHash()).isEqualTo(stored.designHash());
+    }
+
+    @Test
     void missingDetailReturnsNotFoundWithoutRepairOrExternalReads() {
         var repository = mock(PipelineRepository.class);
         when(repository.findById("missing")).thenReturn(Optional.empty());

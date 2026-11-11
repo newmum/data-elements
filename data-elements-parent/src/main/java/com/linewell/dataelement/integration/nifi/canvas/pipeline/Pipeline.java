@@ -27,22 +27,37 @@ public record Pipeline(
         // Lifecycle status (defaults to DRAFT for newly created records).
         PipelineStatus status,
         // SHA-256 of the canonicalized DSL at the time of the last successful deploy.
-        // Used by /start to decide between fast-restart and full redeploy.
+        // Used to compare a saved design with the last deployed version.
         String lastDeployedHash,
         Long lastDeployedAt,
         Long lastStoppedAt,
         // Mapping between canvas nodes and NiFi components for lineage / bulletin lookup.
         NifiNodeMapping nodeMapping,
         // Last bulletin id processed (so polling only fetches new bulletins).
-        Long lastBulletinId
+        Long lastBulletinId,
+        @com.fasterxml.jackson.annotation.JsonIgnore String storedDesignHash
 ) {
     public Pipeline {
         if (status == null) status = PipelineStatus.DRAFT;
     }
 
+    public Pipeline(String id, String name, String description, Long createdAt, Long updatedAt, Dsl dsl,
+                    String nifiProcessGroupId, PipelineStatus status, String lastDeployedHash, Long lastDeployedAt,
+                    Long lastStoppedAt, NifiNodeMapping nodeMapping, Long lastBulletinId) {
+        this(id, name, description, createdAt, updatedAt, dsl, nifiProcessGroupId, status, lastDeployedHash,
+                lastDeployedAt, lastStoppedAt, nodeMapping, lastBulletinId, null);
+    }
+
     @com.fasterxml.jackson.annotation.JsonProperty("designHash")
     public String designHash() {
-        return DslHasher.designHash(this);
+        return storedDesignHash == null ? DslHasher.designHash(this) : storedDesignHash;
+    }
+
+    /** Keep the stored design version when a read decorates or projects the graph. */
+    public Pipeline withStoredDesignVersion(Pipeline stored) {
+        if (this == stored) return this;
+        return new Pipeline(id, name, description, createdAt, updatedAt, dsl, nifiProcessGroupId, status,
+                lastDeployedHash, lastDeployedAt, lastStoppedAt, nodeMapping, lastBulletinId, stored.designHash());
     }
 
     public record Dsl(int version, List<Node> nodes, List<Edge> edges) {

@@ -1,0 +1,100 @@
+/* The HTML entry and the Vue loading state use this stylesheet before and after mount. */
+.workspace-loading {
+  --workspace-loading-accent: var(--el-color-primary, #1890ff);
+  --workspace-loading-tint: var(--el-color-primary-light-9, #edf4ff);
+
+  box-sizing: border-box;
+  display: grid;
+  flex: 1;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 16px;
+  color: var(--el-text-color-primary, #17233b);
+  background: var(--el-bg-color-page, #f0f2f5);
+  font-family: "Source Han Sans CN", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+.workspace-loading__panel {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  width: min(100%, 296px);
+  padding: 18px;
+  border: 1px solid var(--el-border-color-lighter, #e4eaf3);
+  border-radius: 12px;
+  background: var(--el-bg-color, #fff);
+  box-shadow: 0 6px 20px rgb(26 54 105 / 6%);
+}
+
+.workspace-loading__mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  background: var(--workspace-loading-tint);
+}
+
+.workspace-loading__panel--error {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+}
+
+.workspace-loading__mark::before {
+  width: 20px;
+  height: 21px;
+  content: "";
+  background: var(--workspace-loading-accent);
+  border-radius: 50% / 23%;
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 72%);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 6px,
+    rgb(255 255 255 / 72%) 6px 7px
+  );
+}
+
+.workspace-loading__label {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.workspace-loading__track {
+  position: relative;
+  grid-column: 1 / -1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--workspace-loading-tint);
+}
+
+.workspace-loading__track::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 36%;
+  border-radius: inherit;
+  background: var(--workspace-loading-accent);
+  content: "";
+  animation: workspace-loading-progress 1.55s ease-in-out infinite;
+}
+
+@keyframes workspace-loading-progress {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(280%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-loading__track::before {
+    animation: none;
+  }
+}

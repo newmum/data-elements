@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { compiler } from '../../../scripts/compiler.mjs';
+import { withHiveHdfsMergeDefaults } from '../utils/hiveSinkPolicy.ts';
 
 function harness(chain) {
   const ts = compiler(), mutations = [], requests = [];
@@ -25,6 +26,7 @@ function harness(chain) {
     if (id === './bridgeSession') return { getSessionRevision: () => 1 };
     if (id === '../stores/errorPanelStore') return { useErrorPanelStore: { getState: () => ({ clearFailures() {}, record() {} }) } };
     if (id === '../utils/incrementalFields') return { incrementalConfigurationError: () => undefined };
+    if (id === '../utils/hiveSinkPolicy') return { withHiveHdfsMergeDefaults };
     if (id === '../utils/pipelineVersion') return { preservesIncrementalFields: (submitted, returned) => submitted === returned };
     return {};
   } });

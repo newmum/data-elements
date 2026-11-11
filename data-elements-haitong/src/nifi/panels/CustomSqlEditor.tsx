@@ -11,6 +11,7 @@ import { getApiErrorMessage } from '@/api/response';
 import { generateSelectSql, quoteSqlIdentifier, type SqlColumn } from './customSqlGeneration';
 import { insertSqlField, replaceSqlStatement } from './sqlEditorTransactions';
 import { getNifiOverlayContainer } from './overlayContainer';
+import ConfigFieldLabel from './ConfigFieldLabel';
 
 const { Text } = Typography;
 
@@ -389,6 +390,8 @@ const CustomSqlEditor = forwardRef<CustomSqlEditorHandle, CustomSqlEditorProps>(
       </div>
 
       <Divider style={{ margin: '10px 0' }} />
+      <Text strong className="custom-sql-editor__label"><ConfigFieldLabel label="SQL 语句"
+        help="SQL 包含 FLOWFILE 时在记录内执行，否则在来源库执行。多条 SQL 中，前置语句作为准备动作，最后一条 SELECT/WITH 作为输出结果。" /></Text>
       <CodeMirror
         ref={editorRef}
         className="custom-sql-editor__code"
@@ -408,11 +411,6 @@ const CustomSqlEditor = forwardRef<CustomSqlEditorHandle, CustomSqlEditorProps>(
         <Select aria-label="生成语句的来源表" style={{ width: '100%', margin: '12px 0' }} value={selectedSource}
           onChange={setSelectedSource} options={sourceTables.map((item) => ({ value: item.key, label: `${item.node.label} · ${item.table}` }))} />
       </Modal>
-      <div className="custom-sql-editor__foot">
-        <Text type="secondary">
-          系统会自动判断执行方式：SQL 中包含 FLOWFILE 时按记录内加工执行，否则在来源库执行。多条 SQL 时，前置语句作为准备动作，最后一条 SELECT/WITH 作为输出结果。
-        </Text>
-      </div>
     </div>
   );
 });

@@ -105,6 +105,7 @@ class DatasourceCardsPagingMagicTest {
         assertThat(ids(fixture.cards(Map.of("orgIds", List.of("dept-b"))))).isEmpty();
         var proxy = fixture.cards(Map.of("appId", "app-a", "typeKey", "mode:proxy"));
         assertThat(ids(proxy)).containsExactly("proxy");
+        assertThat(proxy).containsEntry("orgId", "dept-a").containsEntry("orgName", "本部门");
         assertThat(number(rows(proxy).getFirst(), "serviceCount")).isEqualTo(1);
         assertThat(fixture.scope.serviceDecisions).isEqualTo(1);
         fixture.scope.policy = "OWNER";
@@ -282,8 +283,15 @@ class DatasourceCardsPagingMagicTest {
             source.jdbc.execute("CREATE TABLE api_info_t(tid VARCHAR,tenant_id VARCHAR,datasource_id VARCHAR,org_id VARCHAR,created_by VARCHAR,is_del INT)");
             String canonical = CanonicalMagicSources.byId(SCRIPT)
                     .replaceAll("(?m)^import (?!cn\\.hutool\\.|java\\.util\\.)[^\\r\\n]*\\r?\\n", "");
-            script = MagicScript.create("var me=()=>{orgId:'dept-a',orgName:'本部门'}; "
-                    + "var configData=()=>{es_dataassets:'assets'};\n" + canonical, null);
+            script = MagicScript.create("""
+                    var me = () => {
+                        if (body?.appId != null) {
+                            throw new IllegalStateException('业务系统筛选不能用于当前会话的角色查询')
+                        }
+                        return {orgId:'dept-a', orgName:'本部门'}
+                    }
+                    var configData = () => {es_dataassets:'assets'}
+                    """ + canonical, null);
         }
 
         Map<String, Object> cards(Map<String, Object> options) {

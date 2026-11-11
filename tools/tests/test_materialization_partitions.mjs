@@ -97,8 +97,31 @@ for (const status of ['unknown','unsupported','not_partitioned']) {
 console.log('Detected-only partition hint and inconclusive-probe fallback verified.');
 for(const date of ['2026-01-01T12:00:00','2026-10-22T12:00:00','2035-12-01T12:00:00','2037-02-01T12:00:00']) {
   const now=new Date(date),year=actual.calendarPartitionDefaults('YEAR',now),month=actual.calendarPartitionDefaults('MONTH',now);
-  assert.ok(Number(year.startYear)+year.years>=2036,'Include the entire year 2035');
-  const [y,m]=month.startMonth.split('-').map(Number);
-  assert.ok(y*12+m-1+month.months>=2036*12,'Include December 2035, not merely its start');
+  assert.ok(Number(year.endYear)>=2035,'Include the entire year 2035');
+  assert.ok(month.endMonth>='2035-12','Include December 2035, not merely its start');
 }
 console.log('Year/month defaults include all of 2035 and still provide future ranges after 2035.');
+
+columns[0] = { columnName: 'WFSJ', columnType: 'TIMESTAMP' };
+const inherited = { enabled:true, sourceBoundaries:true, strategy:'RANGE', kind:'TIME', field:'WFSJ',
+  partitions:[{name:'p1',upper:'2020-01-11 12:00:00'},{name:'p2',upper:'2021-01-01 12:00:00'}] };
+plans.value={};
+probeResult={source:{status:'detected',plan:inherited},targetSupport:{target:true}};
+await actual.probePartitions([{key:'target',dbId:'temporal-source'}]);
+context.activeDdlKey.value='target';
+assert.equal(actual.activePartitionChoice.value,'YEAR');
+assert.equal(plans.value.target.startYear,'2020');
+assert.equal(plans.value.target.partitions,undefined,'An irregular source cannot define the target boundaries');
+assert.equal(plans.value.target.enabled,false);
+await actual.togglePartition(true);
+actual.activePartitionChoice.value='YEAR';
+Object.assign(plans.value.target,{startYear:'2004',endYear:'2032'});
+assert.equal(actual.partitionPayload('target').years,29);
+plans.value.target.endYear='2003';
+assert.throws(()=>actual.partitionPayload('target'),/结束年份不能早于起始年份/);
+actual.activePartitionChoice.value='MONTH';
+Object.assign(plans.value.target,{startMonth:'2025-12',endMonth:'2026-02'});
+assert.equal(actual.partitionPayload('target').months,3);
+plans.value.target.endMonth='2046-01';
+assert.throws(()=>actual.partitionPayload('target'),/240 个月/);
+assert.equal(inherited.partitions[0].upper,'2020-01-11 12:00:00');

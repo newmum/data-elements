@@ -5,9 +5,7 @@
     <p class="runtime-page-state__message">{{ loadError }}</p>
     <el-button type="primary" plain @click="loadPage(true)">重试</el-button>
   </section>
-  <section v-else class="runtime-page-state" aria-busy="true">
-    <loading-state title="正在加载页面" compact />
-  </section>
+  <WorkspaceLoading v-else />
 </template>
 
 <script setup lang="ts">
@@ -15,6 +13,7 @@ import { getCurrentInstance, onBeforeUnmount, ref, shallowRef, watch, type Compo
 import { ensureRuntimeSfc } from "@/plugins/compiler/runtime-sfc";
 import { useSettingStore } from "@/store";
 import { AuthStorage } from "@/utils/auth";
+import WorkspaceLoading from "@/layouts/components/WorkspaceLoading.vue";
 
 const props = defineProps({
   name: {

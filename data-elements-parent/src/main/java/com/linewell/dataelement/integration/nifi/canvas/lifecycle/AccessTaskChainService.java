@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.linewell.dataelement.feature.identity.application.DataScopeAuthorizationService;
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient;
-import com.linewell.dataelement.integration.nifi.canvas.pipeline.DslHasher;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.NifiNodeMapping;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.Pipeline;
 import com.linewell.dataelement.integration.nifi.canvas.pipeline.PipelineResourceReferences;
@@ -105,7 +104,8 @@ public class AccessTaskChainService {
         item.put("sourceDbName", text(sources.get(text(task, "source_db_id")), "db_name"));
         item.put("targetDbName", text(sources.get(text(task, "target_db_id")), "db_name"));
         item.put("sourceTableName", text(task, "source_table_name")); item.put("targetTableName", text(task, "target_table_name"));
-        item.put("pipelineId", id); item.put("pipeline", com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(pipeline));
+        item.put("pipelineId", id); item.put("pipeline", com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy
+                .forCanvas(pipeline).withStoredDesignVersion(pipeline));
         if (standalone && nativeReady(pipeline)) {
             item.put("processGroupId", pipeline.nifiProcessGroupId());
             item.put("nativeUrl", "/nifi-ui/#/process-groups/" + pipeline.nifiProcessGroupId());
@@ -263,11 +263,13 @@ public class AccessTaskChainService {
         Set<String> downstreamTasks = new LinkedHashSet<>();
         links.forEach(link -> downstreamTasks.add(link.get("toTaskId")));
         for (Map<String,Object> item : items) {
-            Pipeline design = (Pipeline)item.get("pipeline");
+            Pipeline stored = (Pipeline)item.get("pipeline");
+            Pipeline design = stored;
             if (downstreamTasks.contains(String.valueOf(item.get("taskId"))))
                 design = com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.downstreamTask(
                         design,String.valueOf(item.get("sourceTableId")),String.valueOf(item.get("targetTableId")));
-            item.put("pipeline",com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy.forCanvas(design));
+            item.put("pipeline",com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy
+                    .forCanvas(design).withStoredDesignVersion(stored));
         }
         result.put("rootSourceTableId", root); result.put("selectedPipelineId", text(selected, "pipeline_id"));
         result.put("selectedTaskId", text(selected, "task_id")); result.put("items", items); result.put("links", links);
@@ -406,8 +408,7 @@ public class AccessTaskChainService {
 
     private static boolean nativeReady(Pipeline pipeline) {
         return pipeline.nifiProcessGroupId() != null && !pipeline.nifiProcessGroupId().isBlank()
-                && pipeline.lastDeployedHash() != null && pipeline.lastDeployedHash().equals(DslHasher.deploymentHash(pipeline.dsl(), DslHasher.CURRENT_COMPILER_REVISION))
-                && pipeline.status() != PipelineStatus.DEPLOYING && pipeline.status() != PipelineStatus.DEPLOY_FAILED;
+                && pipeline.lastDeployedHash() != null;
     }
 
     private static String ancestors(List<Object> args, String tenant) {

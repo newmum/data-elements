@@ -20,7 +20,7 @@ const names = [
   'isCurrentInit', 'trackLoad', 'sourceAccessModeLabel', 'init', 'buildDdlTargets', 'currentDdlInput', 'regenerateDdl', 'handleSave',
   'materializationTimeType', 'targetTableItems', 'syncOdsSystemTimeTypes',
   'isHiveTarget',
-  'partitionPlans', 'ddlPartitionPlans', 'partitionSupport', 'partitionProbeMessage', 'sourceDefinitionMessage', 'sourcePartitionDetected',
+  'partitionPlans', 'ddlPartitionPlans', 'partitionSupport', 'partitionProbeMessage', 'sourceDefinitionMessage', 'sourcePartitionDetected', 'calendarPartitionDefaults',
   'sourceConstraints', 'partitionError', 'partitionProbeIdentity', 'ddlGenerationVersion', 'invalidateDdl', 'partitionInputError', 'partitionPayload', 'probePartitions',
   'partitionEnabled', 'ddlGeneratedSqlByTarget', 'ddlInputFingerprintsByTarget', 'ddlPartitionInputsByTarget', 'ddlTargetFingerprint',
   'normalizeCode', 'orderTargetDatasourceIds', 'getOptionValue', 'buildDatasourceOptions', 'getDefaultDatasourcePaths',
@@ -480,7 +480,7 @@ const draftInput=await drafts.actual.currentDdlInput();
 await drafts.actual.regenerateDdl(draftInput);
 drafts.context.ddlSqlByTarget.value['db-0']+='; -- first target manual draft';
 drafts.context.ddlWasEdited.value=true;
-drafts.actual.partitionPlans.value['db-1']={enabled:true,field:'ODS_RKSJ',strategy:'YEAR',startYear:'2026',years:10};
+drafts.actual.partitionPlans.value['db-1']={enabled:true,field:'ODS_RKSJ',strategy:'YEAR',startYear:'2026',endYear:'2035'};
 let nextInput=await drafts.actual.currentDdlInput();
 const beforeDraftChange=drafts.calls.length;
 await drafts.actual.regenerateDdl(nextInput,['db-1']);
@@ -493,7 +493,7 @@ assert.equal(drafts.calls.length,beforeTabSwitch,'Unchanged target inputs must n
 assert.ok(drafts.context.ddlSqlByTarget.value['db-0'].endsWith('first target manual draft'));
 const previousSql=plain(drafts.context.ddlSqlByTarget.value);
 drafts.context.ddlSqlByTarget.value['db-1']+=' -- second manual draft';
-drafts.actual.partitionPlans.value['db-1'].years=11;
+drafts.actual.partitionPlans.value['db-1'].endYear='2036';
 nextInput=await drafts.actual.currentDdlInput();
 drafts.context.ElMessageBox.confirm=async()=>{throw 'cancel';};
 await assert.rejects(drafts.actual.regenerateDdl(nextInput,['db-1']),error=>error==='cancel');
