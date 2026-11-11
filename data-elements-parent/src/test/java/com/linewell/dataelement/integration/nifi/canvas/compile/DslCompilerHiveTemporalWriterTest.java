@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -120,7 +121,9 @@ class DslCompilerHiveTemporalWriterTest {
         assertThat(processor.type()).isEqualTo("com.linewell.dataelement.nifi.HaitongTransformRecord");
         assertEmbeddedMappingMetadata(processor);
         verify(nifi,never()).waitForControllerServiceEnabled(eq("true"),anyLong());
-        assertThat(namedProcessor("source/execute").properties()).containsEntry("Use Avro Logical Types","true");
+        assertThat(namedProcessor("source/execute").properties())
+                .containsEntry("Record Writer", "global-hive-json-writer")
+                .containsEntry("Use Avro Logical Types", "true");
         assertNoTaskJsonServices();
     }
     @Test void oraclePublicationProjectsDateAsTimestampBeforeJdbcReadsIt() {
@@ -181,21 +184,22 @@ class DslCompilerHiveTemporalWriterTest {
         assertNoTaskJsonServices();
     }
 
-    @Test void mysqlUsesSameGlobalWriterAndReader() {
+    @Test void mysqlUsesThePublicTimeFormatWriter() {
         compiler.compile(flow(List.of(source("m", "mysql", Map.of("dbType", "MYSQL")))));
-        assertThat(namedProcessor("m/execute").properties()).containsEntry("Record Writer", "global-json-writer");
+        assertThat(namedProcessor("m/execute").properties()).containsEntry("Record Writer", "global-hive-json-writer");
         assertNoTaskJsonServices();
     }
 
-    @Test void mixedSourcesSelectTheWriterOfTheirDatabase() {
+    @Test void mixedSqlSourcesUseTheSameTimeFormatWriter() {
         compiler.compile(flow(List.of(source("h", "hive", Map.of()), source("m", "mysql", Map.of("dbType", "MYSQL")))));
         assertThat(namedProcessor("h/execute").properties()).containsEntry("Record Writer", "global-hive-json-writer");
-        assertThat(namedProcessor("m/execute").properties()).containsEntry("Record Writer", "global-json-writer");
+        assertThat(namedProcessor("m/execute").properties()).containsEntry("Record Writer", "global-hive-json-writer");
         assertNoTaskJsonServices();
     }
 
-    @Test void queryExecutedDirectlyInHiveUsesTheSameTemporalWriter() {
-        Pipeline.Node source = source("h", "hive", Map.of());
+    @ParameterizedTest @ValueSource(strings = {"hive", "mysql"})
+    void queryExecutedInSourceDatabaseUsesTheSameTemporalWriter(String database) {
+        Pipeline.Node source = source("h", database, Map.of());
         Pipeline.Node query = new Pipeline.Node("q", "transform.sql", "query", "transform", 300, 0,
                 Map.of("executionMode", "SOURCE_DB", "sql", "SELECT event_time FROM EVENT_LOG"));
         Pipeline base = flow(List.of(source, query));
@@ -206,10 +210,21 @@ class DslCompilerHiveTemporalWriterTest {
         assertThat(namedProcessor("query/query").properties()).containsEntry("Record Writer", "global-hive-json-writer");
     }
 
+    @Test void missingTimeFormatWriterStopsSqlCompilationBeforeAnyProcessGroupIsCreated() {
+        when(nifi.listControllerServices("root")).thenReturn(HiveServiceFixtures.codecs().stream()
+                .filter(service -> !HiveTemporalJsonPolicy.WRITER_NAME.equals(service.path("component").path("name").asText()))
+                .toList());
+        assertThatThrownBy(() -> compiler.compile(flow(List.of(source("s", "mysql", Map.of())))))
+                .hasMessageContaining(HiveTemporalJsonPolicy.WRITER_NAME);
+        assertThat(processors).isEmpty();
+        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble());
+        verify(nifi, never()).createProcessGroup(anyString(), anyString(), anyDouble(), anyDouble(), anyString());
+    }
+
     @ParameterizedTest @ValueSource(ints = {20, 100})
     void sourcesShareOneTemporalWriterWithoutServiceLookupPerNode(int count) {
         List<Pipeline.Node> nodes = new ArrayList<>();
-        for (int i = 0; i < count; i++) nodes.add(source("h" + i, "hive", Map.of()));
+        for (int i = 0; i < count; i++) nodes.add(source("s" + i, i % 2 == 0 ? "mysql" : "hive", Map.of()));
         compiler.compile(flow(nodes));
         assertThat(processors.stream().filter(processor -> processor.type().endsWith(".ExecuteSQLRecord")))
                 .hasSize(count).allMatch(processor -> "global-hive-json-writer".equals(processor.properties().get("Record Writer")));
@@ -324,7 +339,7 @@ class DslCompilerHiveTemporalWriterTest {
     @Test void unrelatedMysqlSourceAlsoUsesThePublicWriter() {
         compiler.compile(hiveTargetFlow(List.of(source("s","mysql",Map.of()),source("unrelated","mysql",Map.of()),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));
         assertThat(namedProcessor("s/execute").properties()).containsEntry("Record Writer","global-hive-json-writer");
-        assertThat(namedProcessor("unrelated/execute").properties()).containsEntry("Record Writer","global-json-writer");
+        assertThat(namedProcessor("unrelated/execute").properties()).containsEntry("Record Writer","global-hive-json-writer");
     }
     @Test void hiveTargetCurrentMaximumIncrementalSourceUsesSameWriter() {
         compiler.compile(hiveTargetFlow(List.of(source("s","oracle",Map.of("dbType","ORACLE","syncMode","INCREMENTAL","initialStrategy","START_AT_CURRENT_MAX","incrementalColumn","EVENT_TIME","sourceColumns",List.of(Map.of("columnName","EVENT_TIME","dataType","DATE")))),hiveSink("h")),List.of(new Pipeline.Edge("e","s","h","default"))));

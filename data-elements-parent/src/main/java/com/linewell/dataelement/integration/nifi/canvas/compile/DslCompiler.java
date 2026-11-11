@@ -120,6 +120,24 @@ public class DslCompiler {
         GlobalJsonRecordServices.resolve(nifi,pipeline);
     }
 
+    /** Verify the public Writer before a legacy full deployment can replace an existing flow. */
+    public void preflightSqlRecordWriter(Pipeline pipeline) {
+        if (usesSqlSourceRecordWriter(pipeline)) GlobalJsonRecordServices.resolve(nifi, pipeline, true);
+    }
+
+    private boolean usesSqlSourceRecordWriter(Pipeline pipeline) {
+        return pipeline.dsl().nodes().stream().anyMatch(node -> {
+            ComponentManifest manifest = registry.get(node.manifestKey());
+            if (manifest == null || manifest.compile() == null) return false;
+            Map<String, Object> config = manifestConfig(manifest, node.config());
+            if (isExternalTransformSqlNode(manifest, config)) return true;
+            if (!"source".equals(manifest.category()) || manifest.compile().processors() == null) return false;
+            if (currentMaximumSource(config) && manifest.compile().processors().stream()
+                    .anyMatch(spec -> DateTableFetchPolicy.isTableFetch(spec.type()))) return false;
+            return manifest.compile().processors().stream().anyMatch(spec -> EXECUTE_SQL_RECORD_TYPE.equals(spec.type()));
+        });
+    }
+
     /** Validate all source configurations in memory, then query installed extensions once per publication. */
     public void preflightSources(Pipeline pipeline) {
         if (validateDateFetchConfigurations(pipeline)) nifi.requireDateFetchExtension();
@@ -274,7 +292,7 @@ public class DslCompiler {
         preflightScriptProcesses(pipeline);
         Map<String,JsonNode> javaSpecs=javaMappingSpecifications(pipeline);
         Map<String,UnifiedMappingService.Compiled> preparedJavaPlans=javaSpecs.isEmpty()?Map.of():unifiedMappingService.compileBatch(javaSpecs);
-        GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi,pipeline);
+        GlobalJsonRecordServices globalJson = GlobalJsonRecordServices.resolve(nifi, pipeline, usesSqlSourceRecordWriter(pipeline));
         String parentId = layout == null ? nifi.getRootProcessGroupId() : layout.parentId();
         String pgName = layout != null && layout.name() != null ? layout.name()
                 : pipeline.name() == null ? pipeline.id() : pipeline.name();
@@ -304,12 +322,11 @@ public class DslCompiler {
 
         // Reuse the selected node's public JSON codecs without changing their properties or state.
         Map<String, String> sharedGlobalCs = new HashMap<>();
-        boolean typedJdbcRecords=usesJavaMapping(pipeline);
         Set<String> hiveInputNodes=HiveSinkPublicationPolicy.upstreamNodeIds(pipeline);
         sharedGlobalCs.put("jsonReader", globalJson.readerId());
         sharedGlobalCs.put("jsonWriter", globalJson.writerId());
         if(globalJson.writerIds().containsKey(HiveTemporalJsonPolicy.WRITER_NAME))
-            sharedGlobalCs.put("hiveJsonWriter", globalJson.writerIds().get(HiveTemporalJsonPolicy.WRITER_NAME));
+            sharedGlobalCs.put("timeJsonWriter", globalJson.writerIds().get(HiveTemporalJsonPolicy.WRITER_NAME));
         sharedGlobalCs.put("hiveJsonReader", globalJson.readerId());
 
         // 节点编译上下文：记录每个节点在 NiFi 中创建出来的 CS/Processor 实体 ID。
@@ -337,13 +354,7 @@ public class DslCompiler {
             compiled.put(n.id(), nc);
             manifestByNode.put(n.id(), m);
 
-            Map<String, Object> cfg = new LinkedHashMap<>();
-            if (m.fields() != null) {
-                for (var f : m.fields()) {
-                    if (f.defaultValue() != null) cfg.put(f.key(), f.defaultValue());
-                }
-            }
-            if (n.config() != null) cfg.putAll(n.config());
+            Map<String, Object> cfg = manifestConfig(m, n.config());
             if (periodicSource != null && "sink.jdbc".equals(m.key())) {
                 String strategy = SyncPolicy.fullStrategy(periodicSource.config());
                 cfg.put("statementType", "TRUNCATE_RELOAD".equals(strategy) ? "INSERT"
@@ -633,7 +644,7 @@ public class DslCompiler {
                     applyIncrementalSourceOptions(m, pSpec.localId(), cfg, resolved);
                     applySourceFetchDatabaseType(m, pSpec.type(), cfg, resolved);
                     if (DateTableFetchPolicy.isTableFetch(pSpec.type())) DateTableFetchPolicy.apply(cfg, resolved);
-                    applySourceRecordQueryOptions(m, pSpec.type(), cfg, resolved, sharedCs,typedJdbcRecords);
+                    applySourceRecordQueryOptions(m, pSpec.type(), cfg, resolved, sharedCs);
                     // Processors in one DSL component stay on the same row;
                     // NodeLayout has already separated topological columns and
                     // branch lanes so these cards cannot overlap another node.
@@ -761,6 +772,17 @@ public class DslCompiler {
         if (periodicSource != null) nifi.finalizeGeneratedProcessGroup(rootPgId);
 
         return new CompileResult(rootPgId, sharedGlobalCs, compiled, edgeConnectionIds,planVersionIds);
+    }
+
+    private static Map<String, Object> manifestConfig(ComponentManifest manifest, Map<String, Object> saved) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        if (manifest.fields() != null) {
+            for (var field : manifest.fields()) {
+                if (field.defaultValue() != null) config.put(field.key(), field.defaultValue());
+            }
+        }
+        if (saved != null) config.putAll(saved);
+        return config;
     }
 
     public boolean supportsSyncSettings(String manifestKey) {
@@ -2599,8 +2621,8 @@ public class DslCompiler {
                         "Database Connection Pooling Service", nc.csIds.get("sql-dbcp"),
                         "SQL Query", lastResultQuery(stringConfig(cfg, "_runtimeSourceSql").isBlank()
                                 ? String.valueOf(cfg.get("sql")) : stringConfig(cfg, "_runtimeSourceSql")),
-                        "Record Writer", sourceQueryRecordWriter(sharedCs, sourceCfg),
-                        "Use Avro Logical Types", Boolean.toString(HiveTemporalJsonPolicy.isHive(null,sourceCfg)||usesJavaMapping(pipeline)||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput"))),
+                        "Record Writer", requireTimeJsonWriter(sharedCs),
+                        "Use Avro Logical Types", "true",
                         "Output Empty FlowFile", "false"
                 ), schedulingPeriod, schedulingStrategy);
         nc.processorIds.put("query", proc.id());
@@ -3522,7 +3544,7 @@ public class DslCompiler {
         return nifi.createProcessor(pgId, MERGE_RECORD_TYPE, node.label() + "/merge-records",
                 x, y, Map.of(
                         "Record Reader", sharedCs.get("hiveJsonReader"),
-                        "Record Writer", requireHiveQueryRecordWriter(sharedCs),
+                        "Record Writer", requireTimeJsonWriter(sharedCs),
                         "Merge Strategy", "Bin-Packing Algorithm",
                         "Attribute Strategy", "Keep Only Common Attributes",
                         "Minimum Number of Records", "1",
@@ -3954,15 +3976,12 @@ public class DslCompiler {
      */
     private void applySourceRecordQueryOptions(ComponentManifest manifest, String processorType,
                                               Map<String, Object> cfg, Map<String, String> resolved,
-                                              Map<String, String> sharedCs,boolean typedJdbcRecords) {
-        if (!"source".equals(manifest.category())) return;
-        if (!"org.apache.nifi.processors.standard.ExecuteSQLRecord".equals(processorType)) return;
+                                              Map<String, String> sharedCs) {
+        if (!"source".equals(manifest.category()) || !EXECUTE_SQL_RECORD_TYPE.equals(processorType)) return;
         resolved.put("Output Empty FlowFile", "false");
         configureSourceRecordWindow(cfg, resolved);
-        if(HiveTemporalJsonPolicy.isHive(manifest.key(),cfg)||typedJdbcRecords||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput")))resolved.put("Use Avro Logical Types","true");
-        if (HiveTemporalJsonPolicy.isHive(manifest.key(), cfg)||Boolean.TRUE.equals(cfg.get("_runtimeHiveTargetInput"))) {
-            resolved.put("Record Writer", requireHiveQueryRecordWriter(sharedCs));
-        }
+        resolved.put("Use Avro Logical Types", "true");
+        resolved.put("Record Writer", requireTimeJsonWriter(sharedCs));
     }
 
     /** Record windows and JDBC fetch hints are independent of the date partition size. */
@@ -3988,13 +4007,13 @@ public class DslCompiler {
 
     private String sourceQueryRecordWriter(Map<String, String> sharedCs, Map<String, Object> sourceCfg) {
         if (!HiveTemporalJsonPolicy.isHive(null, sourceCfg)&&!Boolean.TRUE.equals(sourceCfg.get("_runtimeHiveTargetInput"))) return sharedCs.get("jsonWriter");
-        return requireHiveQueryRecordWriter(sharedCs);
+        return requireTimeJsonWriter(sharedCs);
     }
 
-    private String requireHiveQueryRecordWriter(Map<String, String> sharedCs) {
-        String writer = sharedCs.get("hiveJsonWriter");
+    private String requireTimeJsonWriter(Map<String, String> sharedCs) {
+        String writer = sharedCs.get("timeJsonWriter");
         if (writer == null || writer.isBlank()) {
-            throw new IllegalStateException("Hive 读写链路缺少日期时间 JSON Record Writer，请重新发布流程");
+            throw new IllegalStateException("NiFi 根作用域缺少已启用的 " + HiveTemporalJsonPolicy.WRITER_NAME);
         }
         return writer;
     }

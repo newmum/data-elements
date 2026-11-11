@@ -1942,9 +1942,9 @@ Java 路径均位于 `data-elements-parent/src/main/java/com/linewell/dataelemen
 
 #### 23.4 Hive Writer 发布绑定
 
-Hive 来源新发布时，来源 `ExecuteSQLRecord.Record Writer` 和自定义 `HaitongTransformRecord.record-writer` 统一绑定到名为 `PUBLIC-WRITER-JSON-TIME_FORMAT` 的 `JsonRecordSetWriter`。流程共享该服务，普通数据库保留普通 Writer。“仅升级运行字段节点”也为 Hive 绑定该 Writer，并等待服务启用；来源、目标组件 ID 与增量水位保持原状。
+新生成的数据库采集 `ExecuteSQLRecord.Record Writer`（含普通库写入链路与 Hive）统一绑定到 NiFi 根作用域已启用的 `PUBLIC-WRITER-JSON-TIME_FORMAT`，并启用 `Use Avro Logical Types`。日期与时间格式沿用公共服务配置。下游 `HaitongTransformRecord` 继续按目标链路选择 Writer。已有流程的 Writer 按当前 NiFi 配置运行。
 
-| 属性 | 值 |
+| 属性 | 时间精度验收参考配置 |
 | --- | --- |
 | Date Format | `yyyy-MM-dd` |
 | Time Format | `HH:mm:ss` |
@@ -2016,7 +2016,7 @@ JDBC读取端在Hive和JAVA_RECORD流程中显式开启 `Use Avro Logical Types=
 
 NiFi的TIMESTAMP中间编码表示时间点：当前验收中本地14:27:49在JSON线上表现为UTC06:27:49，配套Reader和Asia/Shanghai计划时区回读为14:27:49，最终数据库也保存14:27:49。不可将中间文本再按另一套无时区语义解析。DATE保持日历日期，NULL保持NULL。Writer格式中带9位小数不等于所有JDBC驱动和目标列都保留纳秒；当前实际写入验收确认到秒，更高精度须按驱动和物理列另行核验。
 
-Hive的来源ExecuteSQLRecord和自定义字段组件继续绑定 `PUBLIC-WRITER-JSON-TIME_FORMAT`；普通来源也采用匹配的时间编解码参数。字段节点升级保留来源组件和水位；旧来源已输出截断值时，Writer不能恢复丢失的信息，需要受控调整原读取链路。
+普通库及 Hive 的数据库采集 ExecuteSQLRecord 默认绑定 `PUBLIC-WRITER-JSON-TIME_FORMAT`。自定义字段组件继续按目标链路选择 Writer。字段节点升级保留来源组件和水位；旧来源已输出截断值时，Writer不能恢复丢失的信息，需要受控调整原读取链路。
 
 
 <a id="field-mapping--244-发布兼容与构建"></a>

@@ -613,7 +613,8 @@ public class PipelineRunController {
         try {
             taskLifecycle.ensureCatalogAccessTask(request == null ? null : request.catalogTid(), p);
             p = bindAccessTaskMappings(p);
-            if(p.dsl().nodes().stream().anyMatch(com.linewell.dataelement.integration.nifi.canvas.pipeline.HiveSinkPublicationPolicy::isHiveSink)) {
+            boolean hiveTarget = p.dsl().nodes().stream().anyMatch(HiveSinkPublicationPolicy::isHiveSink);
+            if (hiveTarget) {
                 try { compiler.preflightGlobalRecordServices(p); }
                 catch (RuntimeException ex) {
                     repo.updateStatus(p.id(),p.status());
@@ -635,6 +636,12 @@ public class PipelineRunController {
                         "started", p.status() == PipelineStatus.RUNNING, "mode", "reuse"));
             }
             try (var runtime = nifi.bindRuntimeNode()) {
+            try { if (!hiveTarget) compiler.preflightSqlRecordWriter(p); }
+            catch (RuntimeException ex) {
+                repo.updateStatus(p.id(), p.status());
+                return deploymentFailure(p.id(), 422, "NIFI_SQL_RECORD_WRITER_UNAVAILABLE", "SQL 采集 Writer 核验失败", ex,
+                        "请核对当前 NiFi 根作用域已启用 PUBLIC-WRITER-JSON-TIME_FORMAT。", Map.of("previousGraphRetained", true));
+            }
             try { compiler.preflightSchedules(p); }
             catch (RuntimeException ex) {
                 repo.updateStatus(p.id(), p.status());

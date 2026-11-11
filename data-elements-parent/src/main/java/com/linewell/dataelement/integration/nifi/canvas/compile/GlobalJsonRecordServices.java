@@ -16,12 +16,17 @@ record GlobalJsonRecordServices(String rootId, List<JsonNode> services, Map<Stri
         return resolve(nifi, Set.of(HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME), Set.of());
     }
     static GlobalJsonRecordServices resolve(NifiClient nifi, Pipeline pipeline) {
+        return resolve(nifi, pipeline, false);
+    }
+
+    static GlobalJsonRecordServices resolve(NifiClient nifi, Pipeline pipeline, boolean needsSqlTimeWriter) {
         Pipeline published=HiveSinkPublicationPolicy.forPublication(pipeline);
         Set<String> hive=HiveTemporalJsonPolicy.hiveWriterNodes(published);
         Set<String> required=new LinkedHashSet<>();
         if(published!=null&&published.dsl()!=null&&published.dsl().nodes()!=null)
             published.dsl().nodes().forEach(node->required.add(hive.contains(node.id())?HiveTemporalJsonPolicy.WRITER_NAME:HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME));
         if(required.isEmpty())required.add(HiveTemporalJsonPolicy.DEFAULT_WRITER_NAME);
+        if (needsSqlTimeWriter) required.add(HiveTemporalJsonPolicy.WRITER_NAME);
         return resolve(nifi,required,hive);
     }
     private static GlobalJsonRecordServices resolve(NifiClient nifi,Set<String> required,Set<String> hiveNodes) {

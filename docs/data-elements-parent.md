@@ -261,17 +261,17 @@ VITE_APP_API_URL=http://localhost:8088
 | 用途 | 全局服务名称 | 类型 |
 | --- | --- | --- |
 | JSON 读取 | `PUBLIC-READER-JSON` | `org.apache.nifi.json.JsonTreeReader` |
-| 非 Hive 库 JSON 写出 | `PUBLIC-WRITER-JSON` | `org.apache.nifi.json.JsonRecordSetWriter` |
-| Hive 读写链路 JSON 写出 | `PUBLIC-WRITER-JSON-TIME_FORMAT` | `org.apache.nifi.json.JsonRecordSetWriter` |
+| 普通 JSON 转换及写出 | `PUBLIC-WRITER-JSON` | `org.apache.nifi.json.JsonRecordSetWriter` |
+| 数据库采集 ExecuteSQLRecord 与 Hive 时间格式链路 | `PUBLIC-WRITER-JSON-TIME_FORMAT` | `org.apache.nifi.json.JsonRecordSetWriter` |
 
 
 <a id="nifi-json-services--发布约束"></a>
 
 ### 发布约束
 
-- 完整发布、字段映射单节点升级、字段映射级联、JDBC 来源与目标、JSON 转换和 SQL Record 链路采用同一引用规则。Hive 来源读取、无其他库写入目标的 Hive 转换链、Hive 目标的上游原始采集链使用时间格式 Writer；其他数据库分支使用普通 JSON Writer。映射写入 Oracle 等其他目标时，即使来源是 Hive，映射及目标合并等处理也使用普通 Writer。
-- 混合画布按发布后的实际连接关系分类，不能因为画布存在 Hive 就把其他库分支切换为时间格式 Writer。写入 Hive 的原始分支绕过映射后，共享映射仍供 Oracle 等目标消费时，该映射使用普通 Writer。
-- 仅校验当前流程实际需要的 Writer；非 Hive 流程不依赖时间格式 Writer，也不能在普通 Writer 缺失时以时间格式 Writer 替代。
+- 新生成的数据库采集 `ExecuteSQLRecord` 和直接在来源库执行的 SQL 查询绑定 `PUBLIC-WRITER-JSON-TIME_FORMAT` 的真实 Controller Service ID，并启用 Avro 逻辑类型。日期、时间和时间戳输出按 NiFi 中该公共服务的实际配置执行。字段映射、字典查询和其他 JSON 转换组件沿用既有链路规则。
+- 混合画布的下游映射和转换按发布后的实际连接关系分类。写入 Hive 的原始分支绕过映射后，共享映射仍供 Oracle 等目标消费时，该映射使用普通 Writer。
+- 仅校验当前流程所需的 Writer。文件等无数据库采集且无 Hive 时间格式链路的流程继续使用普通 Writer。需要时间格式 Writer 时，编译检查该公共服务是否存在、唯一且可用。
 - 编译器读取实际 Flow 根组及其直接 Controller Services，不把配置的租户／应用子组视为全局根，不按同名任务级服务替代。
 - 同一编译过程只做一次全局服务列表读取，在内存中分配给全部节点；20／100 个来源或映射节点不增加全局服务读取次数。
 - 全局名称必须唯一、类型正确、处于 `ENABLED` 且无校验错误。缺失、重名、未启用或类型错误时，在清理旧流程、停止升级对象或创建新流程前给出明确错误。
@@ -726,7 +726,7 @@ curl -fsS http://127.0.0.1:8088/actuator/health
 
 #### Hive 来源的日期时间 JSON Writer
 
-发布 Hive 来源时，后端为当前流程组创建一份名为 `PUBLIC-WRITER-JSON-TIME_FORMAT` 的 `JsonRecordSetWriter`，将 Hive `ExecuteSQLRecord` 的 `Record Writer` 绑定到其真实 NiFi ID。直接在 Hive 来源执行的 SOURCE_DB SQL 节点也使用此 Writer。判断依据为 `source.hive`、来源配置 `dbType=HIVE` 或 Hive JDBC URL；仅目标为 Hive 不改变普通数据库来源的 Writer。
+发布 Hive 或其他数据库采集来源时，`ExecuteSQLRecord.Record Writer` 引用 NiFi 根作用域已有的 `PUBLIC-WRITER-JSON-TIME_FORMAT` 服务。直接在来源库执行的 SOURCE_DB SQL 节点也引用此 Writer。已有流程继续使用其部署时的绑定。
 
 默认格式为 Date `yyyy-MM-dd`、Time `HH:mm:ss`、Timestamp `yyyy-MM-dd HH:mm:ss.SSSSSSSSS`，并写出完整 `avro.schema`。Hive 流程的 JSON Reader 和统一映射类型化 Reader 配置相同的解析格式，避免日期字符串与类型化 Schema 不匹配。名称相同的祖先共享服务不会被修改；此 Writer 的配置和生命周期属于本次发布的流程组，每个流程只创建一次。普通数据库 `ExecuteSQLRecord` 保持原有 JsonWriter 绑定。
 
