@@ -1,8 +1,6 @@
-/* The HTML entry and the Vue loading state use this stylesheet before and after mount. */
+/* Both the HTML entry and the mounted workspace use the original startup design. */
 .workspace-loading {
-  --workspace-loading-accent: var(--el-color-primary, #1890ff);
-  --workspace-loading-tint: var(--el-color-primary-light-9, #edf4ff);
-
+  position: relative;
   box-sizing: border-box;
   display: grid;
   flex: 1;
@@ -10,86 +8,131 @@
   width: 100%;
   height: 100%;
   min-width: 0;
-  padding: 16px;
-  color: var(--el-text-color-primary, #17233b);
-  background: var(--el-bg-color-page, #f0f2f5);
-  font-family: "Source Han Sans CN", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  padding: 24px;
+  overflow: hidden;
+  color: #172033;
+  background:
+    radial-gradient(circle at 22% 20%, rgb(59 130 246 / 20%), transparent 30%),
+    radial-gradient(circle at 78% 22%, rgb(79 70 229 / 14%), transparent 28%),
+    linear-gradient(135deg, #f8fbff 0%, #eef4ff 46%, #f7faff 100%);
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+.workspace-loading::before {
+  position: absolute;
+  inset: 10%;
+  background-image:
+    linear-gradient(rgb(36 99 235 / 8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(36 99 235 / 8%) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+  content: "";
+  pointer-events: none;
 }
 
 .workspace-loading__panel {
+  position: relative;
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 14px;
+  gap: 18px;
+  width: min(460px, 100%);
+  min-width: 0;
+  padding: 28px;
+  border: 1px solid rgb(47 84 235 / 12%);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 0 24px 70px rgb(31 76 148 / 16%);
+  backdrop-filter: blur(18px);
+}
+
+.workspace-loading__brand {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  width: min(100%, 296px);
-  padding: 18px;
-  border: 1px solid var(--el-border-color-lighter, #e4eaf3);
-  border-radius: 12px;
-  background: var(--el-bg-color, #fff);
-  box-shadow: 0 6px 20px rgb(26 54 105 / 6%);
+  gap: 18px;
 }
 
 .workspace-loading__mark {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 9px;
-  background: var(--workspace-loading-tint);
+  display: block;
+  width: 62px;
+  height: 62px;
+  max-width: 100%;
+  object-fit: contain;
 }
 
-.workspace-loading__panel--error {
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: start;
-}
-
-.workspace-loading__mark::before {
-  width: 20px;
-  height: 21px;
-  content: "";
-  background: var(--workspace-loading-accent);
-  border-radius: 50% / 23%;
-  box-shadow: inset 0 2px 0 rgb(255 255 255 / 72%);
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0 6px,
-    rgb(255 255 255 / 72%) 6px 7px
-  );
+.workspace-loading__copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
 .workspace-loading__label {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.workspace-loading__copy small {
+  color: #607089;
+  font-size: 13px;
   line-height: 1.5;
+}
+
+.workspace-loading__panel--error {
+  justify-items: start;
 }
 
 .workspace-loading__track {
   position: relative;
-  grid-column: 1 / -1;
-  height: 3px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--workspace-loading-tint);
+  background: #d9e7fb;
 }
 
 .workspace-loading__track::before {
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 36%;
+  inset: 0;
   border-radius: inherit;
-  background: var(--workspace-loading-accent);
+  background: linear-gradient(90deg, #d9e7fb 0%, #2563eb 42%, #4f46e5 58%, #d9e7fb 100%);
+  background-size: 220% 100%;
   content: "";
-  animation: workspace-loading-progress 1.55s ease-in-out infinite;
+  animation: workspace-loading-progress 1.4s ease-in-out infinite;
 }
 
 @keyframes workspace-loading-progress {
   from {
-    transform: translateX(-100%);
+    background-position: 120% 0;
   }
 
   to {
-    transform: translateX(280%);
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace-loading {
+    padding: 16px;
+  }
+
+  .workspace-loading__panel {
+    padding: 20px;
+  }
+
+  .workspace-loading__brand {
+    gap: 14px;
+  }
+
+  .workspace-loading__mark {
+    width: 52px;
+    height: 52px;
+  }
+
+  .workspace-loading__label {
+    font-size: 18px;
   }
 }
 

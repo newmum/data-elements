@@ -81,11 +81,40 @@
     <div id="app">
       <div class="workspace-loading">
         <div class="workspace-loading__panel" role="status">
-          <span class="workspace-loading__mark" aria-hidden="true"></span>
-          <span class="workspace-loading__label">正在加载页面</span>
+          <div class="workspace-loading__brand">
+            <img
+              id="boot-logo"
+              class="workspace-loading__mark"
+              src="/src/assets/images/workplace/iconDatabase.svg"
+              alt=""
+            />
+            <div class="workspace-loading__copy">
+              <strong id="boot-title" class="workspace-loading__label">数据要素操作平台</strong>
+              <small>正在初始化应用资源</small>
+            </div>
+          </div>
           <span class="workspace-loading__track" aria-hidden="true"></span>
         </div>
       </div>
+      <script>
+        (function () {
+          document.getElementById("boot-title").textContent = window.__SYSTEM_NAME__;
+          try {
+            var logo = localStorage.getItem("logo");
+            if (!logo) return;
+            var image = document.getElementById("boot-logo");
+            var fallback = image.getAttribute("src");
+            image.addEventListener(
+              "error",
+              function () {
+                image.src = fallback;
+              },
+              { once: true }
+            );
+            image.src = logo;
+          } catch (_) {}
+        })();
+      </script>
     </div>
   </body>
   <script>
