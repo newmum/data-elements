@@ -565,7 +565,7 @@
         "kind": "magic",
         "id": "bc30a3edb1f04bceaeee373ed5952d4a",
         "file": "magic/api/02.数据盘点/02.数据库表/01.元数据管理/13.数据表预览.ms",
-        "reviewedSha256": "ebce615ccd4446148429f8e98ba4e64220eb13531a57ef775ac56d58f16286d2"
+        "reviewedSha256": "3853effd1255af9bd0cfb38f95955093e227272114bf28c9932d029d51325731"
       },
       "request": {
         "type": "object"
@@ -573,7 +573,7 @@
       "response": {
         "type": "any"
       },
-      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览；只读桥复用这些既有契约，不另造业务 API。"
+      "review": "元数据平台与风驰共用已授权表 ID、字段快照和分页预览。真实 MongoDB 预览的免认证连接可省略用户名和密码。当前 Mock 覆盖 MySQL、PostgreSQL、Oracle、金仓和达梦场景，按既有请求、响应、分页和权限契约验证。"
     },
     {
       "operation": "POST /dst/database/metadata/table/sample-data",

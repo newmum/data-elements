@@ -79,6 +79,43 @@ public class StructuredTableReadMagicModule {
         return call("TRIM", List.of(term), term.kind);
     }
 
+    @Comment("用分隔符拼接文本表达式，跳过数据库 NULL，保留非 NULL 空值和长文本")
+    public Expression concatWs(String separator, List<Expression> terms) {
+        if (separator == null || terms.isEmpty()) {
+            throw new IllegalArgumentException("结构化文本拼接参数无效");
+        }
+        List<Expression> values = List.copyOf(terms);
+        Kind resultKind = values.stream().anyMatch(term -> term.kind == Kind.LOB) ? Kind.LOB : Kind.TEXT;
+        var arguments = new ArrayList<Object>();
+        arguments.add(separator);
+        arguments.addAll(values);
+        Expression nativeConcat = call("CONCAT_WS", arguments, resultKind);
+        return new Expression(context -> context.oracle
+                ? concatOracleText(context, separator, values, resultKind)
+                : nativeConcat.sql(context), resultKind);
+    }
+
+    private static String concatOracleText(Render context, String separator, List<Expression> terms, Kind kind) {
+        // Use CLOB concatenation from the first operand so wide inputs do not pass through a VARCHAR buffer.
+        var parts = new ArrayList<String>();
+        if (kind == Kind.LOB) {
+            parts.add("EMPTY_CLOB()");
+        }
+        for (int index = 0; index < terms.size(); index++) {
+            Expression term = terms.get(index);
+            if (index > 0) {
+                String current = term.sql(context);
+                String previous = terms.subList(0, index).stream()
+                        .map(value -> value.sql(context) + " IS NOT NULL")
+                        .collect(Collectors.joining(" OR ", "(", ")"));
+                parts.add("CASE WHEN " + current + " IS NOT NULL AND " + previous
+                        + " THEN " + context.parameter(separator) + " END");
+            }
+            parts.add(term.sql(context));
+        }
+        return parts.stream().collect(Collectors.joining(" || ", "(", ")"));
+    }
+
     public Expression replace(Expression term, String search, String replacement) {
         if (search == null || search.isEmpty() || replacement == null) {
             throw new IllegalArgumentException("结构化文本替换参数无效");

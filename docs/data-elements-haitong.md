@@ -2996,7 +2996,9 @@ Magic 接口和低代码只从根 `magic/`、`lowcode/` 的当前可维护源逐
 
 ## NiFi 流程轻量安装包
 
-仅精简数据库、保留完整前后端的部署方式：从后端工程用 `-Ddata-elements.without-nacos=true` 打包完整应用，海通前端按正常生产入口构建，再由 `python tools/package-haitong-deployment.py` 组装三个 ZIP。数据库脚本只用于独立空库，包含控制库 `baseline`、单一租户库 `baseline_haitong` 和现有平台登录种子。部署时从外置 `config/application.yml` 读取配置，菜单由 `www/haitong/deployment.js` 的 `enabledRoutes` 控制。具体配置和初始化步骤见[独立部署说明](../tools/haitong-deployment/deployment.md)，样例流程见[操作手册](../tools/haitong-deployment/operations.md)。
+海通独立部署保留完整前后端，仅精简数据库。从仓库根目录执行 `mvn -f data-elements-parent/pom.xml install` 构建标准后端，在 `data-elements-haitong` 执行 `pnpm run build`。回到仓库根目录执行 `python tools/package-haitong-deployment.py --bundle --nacos --jar data-elements-parent/target/data-element.jar --frontend data-elements-haitong/dist` 生成依赖 Nacos 的部署 ZIP。启动配置 `config/application.yml` 导入 Nacos 的海通 Data ID，配置模板位于 `nacos/haitong-data-element.yml`。若构建无 Nacos 版，Maven 参数使用 `"-Ddata-elements.without-nacos=true"`（PowerShell 中保留引号），打包工具省略 `--nacos`。
+
+数据库脚本用于独立空库，包含控制库 `baseline`、单一租户库 `baseline_haitong` 和现有平台登录种子。菜单由 `www/haitong/deployment.js` 的 `enabledRoutes` 控制。具体配置和初始化步骤见[独立部署说明](../tools/haitong-deployment/deployment.md)，样例流程见[操作手册](../tools/haitong-deployment/operations.md)。
 
 轻量版通过 `flow-lite` Vite 构建入口复用海通 NiFi 画布，独立 Java 服务位于 `data-elements-haitong/standalone-backend/`，控制库初始化在 `db/haitong-flow-lite/init.sql`。仅提供流程列表和画布，使用独立管理员会话和加密 H2 文件。外部 Apache NiFi 执行 JDBC、MongoDB 和 JAVA 加工节点。
 

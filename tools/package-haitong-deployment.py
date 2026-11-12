@@ -142,6 +142,7 @@ def pack(output, name, files):
         if archive.testzip() is not None:
             raise ValueError(f"Archive verification failed: {target}")
     print(target)
+    return target
 
 
 def main():
@@ -149,12 +150,15 @@ def main():
     parser.add_argument("--output", type=Path, default=BUILD / "release")
     parser.add_argument("--jar", type=Path, default=BUILD / "backend/data-element.jar")
     parser.add_argument("--frontend", type=Path, default=BUILD / "frontend")
-    parser.add_argument("--database-only", action="store_true")
+    parser.add_argument("--nacos", action="store_true", help="Use the standard backend and import configuration from Nacos")
+    layout = parser.add_mutually_exclusive_group()
+    layout.add_argument("--database-only", action="store_true")
+    layout.add_argument("--bundle", action="store_true", help="Package the complete deployment in a single ZIP")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     database = database_files()
-    pack(args.output, "haitong-database-lite.zip", database)
     if args.database_only:
+        pack(args.output, "haitong-database-lite.zip", database)
         return
     examples_build = BUILD / "example-build"
     examples_build.mkdir(parents=True, exist_ok=True)
@@ -162,7 +166,12 @@ def main():
         names = jar.namelist()
         if "BOOT-INF/classes/com/linewell/dataelement/DataElementApplication.class" not in names:
             raise ValueError("Expected full data-element application")
-        if any(name.startswith("BOOT-INF/lib/") and "nacos" in name.lower() for name in names):
+        libraries = [name for name in names if name.startswith("BOOT-INF/lib/")]
+        if args.nacos:
+            for dependency in ("spring-cloud-starter-alibaba-nacos-config", "nacos-client"):
+                if not any(name.startswith(f"BOOT-INF/lib/{dependency}-") for name in libraries):
+                    raise ValueError(f"The backend is missing the required Nacos dependency: {dependency}")
+        elif any("nacos" in name.lower() for name in libraries):
             raise ValueError("The full backend still includes Nacos")
         jackson = []
         for name in names:
@@ -175,9 +184,10 @@ def main():
         mariadb.write_bytes(jar.read(driver))
     quality = examples_build / "quality-check.jar"
     build_quality_example(sorted(jackson), quality, examples_build)
+    runtime_config = TEMPLATES / "application.yml"
     backend = {
         "backend/data-element.jar": args.jar,
-        "config/application.yml": TEMPLATES / "application.yml",
+        "config/application.yml": TEMPLATES / "nacos-bootstrap.yml" if args.nacos else runtime_config,
         "start-backend.ps1": TEMPLATES / "start-backend.ps1",
         "start-backend.sh": TEMPLATES / "start-backend.sh",
         "部署说明.md": TEMPLATES / "deployment.md",
@@ -187,7 +197,8 @@ def main():
         "examples/example-mariadb.sql": EXAMPLES / "mariadb.sql",
         f"examples/drivers/{mariadb.name}": mariadb,
     }
-    pack(args.output, "haitong-backend-no-nacos.zip", backend)
+    if args.nacos:
+        backend["nacos/haitong-data-element.yml"] = runtime_config
     index = args.frontend / "index.html"
     if "/haitong/assets/" not in index.read_text(encoding="utf-8"):
         raise ValueError("Expected the full Haitong production build")
@@ -205,9 +216,17 @@ def main():
         "logs/.gitkeep": b"",
         "temp/.gitkeep": b"",
     })
-    pack(args.output, "haitong-frontend-full.zip", frontend)
+    configuration = "nacos" if args.nacos else "no-nacos"
+    if args.bundle:
+        packages = [pack(args.output, f"haitong-deployment-{configuration}.zip", database | backend | frontend)]
+    else:
+        packages = [
+            pack(args.output, "haitong-database-lite.zip", database),
+            pack(args.output, f"haitong-backend-{configuration}.zip", backend),
+            pack(args.output, "haitong-frontend-full.zip", frontend),
+        ]
     checksums = []
-    for path in sorted(args.output.glob("haitong-*.zip")):
+    for path in sorted(packages):
         with path.open("rb") as package:
             checksums.append(f"{hashlib.file_digest(package, 'sha256').hexdigest()}  {path.name}\n")
     (args.output / "SHA256SUMS.txt").write_text("".join(checksums), encoding="utf-8")

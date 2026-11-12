@@ -17,36 +17,28 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "查询标准代码表所有数据（不分页）；使用请求参数 dictName、dictCode、dataCategoryId、categoryPath；涉及 da_metadata_code_t 等业务表。",
+  "description": "读取当前登录租户的有效标准代码集，供值域与字段登记选择。可按名称、编码、分类 ID 或分类路径筛选，按创建时间降序返回完整数组。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：01.标准代码列表
-// 路由：POST /dwm/standard/code/list
-// 业务说明：查询标准代码表所有数据（不分页）；使用请求参数 dictName、dictCode、dataCategoryId、categoryPath；涉及 da_metadata_code_t 等业务表。
-// 核心业务逻辑：按接口约定编排当前请求并返回业务处理结果。
-import log
-import jsons
+import tenantRuntime
 
-/**
- * 查询标准代码表列表
- * POST /api/gov/standard/code/list
- * 
- * 查询标准代码表所有数据（不分页）
- * 支持按字典名称、字典编码、数据分类ID、发布状态等条件过滤
- */
+// POST /dwm/standard/code/list 提供当前租户的标准代码集候选，供值域和字段登记使用。
+// dictName、dictCode 支持模糊匹配，dataCategoryId 精确匹配，categoryPath 匹配路径前缀。
+// 返回按创建时间降序排列的完整数组，无匹配时返回空数组。
 
-// 获取查询条件
+var tenantId = tenantRuntime.id()
 var dictName = body?.dictName
 var dictCode = body?.dictCode
 var dataCategoryId = body?.dataCategoryId
 var categoryPath = body?.categoryPath
 
-// 构建查询条件
+// __HEADER__ 标识承载整组字典值的代码集记录，租户和删除条件在查询时同时应用。
 var query = db.table('da_metadata_code_t')
     .where()
-    .eq('is_del',0)
+    .eq('tenant_id', tenantId)
+    .eq('is_del', 0)
     .eq('code_value', '__HEADER__')
 
 if (dictName != null && dictName != '') {
@@ -65,13 +57,6 @@ if (categoryPath != null && categoryPath != '') {
     query = query.like('data_category_path', categoryPath + '%')
 }
 
-
-// ========== 查询列表 ==========
-var list = query
+return query
     .orderBy('created_time', 'desc')
     .select()
-
-log.info('查询标准代码表列表成功, 共查询到 {} 条记录', list.length)
-
-// ========== 返回结果 ==========
-return list

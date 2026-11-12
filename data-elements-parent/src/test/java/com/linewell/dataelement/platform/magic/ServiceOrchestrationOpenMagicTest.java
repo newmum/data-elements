@@ -21,10 +21,17 @@ class ServiceOrchestrationOpenMagicTest {
         final ScopeRuntime scope=new ScopeRuntime();
         final TaskCategoryWarehouseScopeMagicTest.Counter counter=new TaskCategoryWarehouseScopeMagicTest.Counter();
         Fixture(int count) {
-            data.jdbc.execute("create table api_info_t(tid varchar(64) primary key,tenant_id varchar(64),is_del int,org_id varchar(64),created_by varchar(64),flow_id varchar(64),service_name varchar(255),method varchar(10))");
+            data.jdbc.execute("""
+                    create table api_info_t(
+                        tid varchar(64) primary key, tenant_id varchar(64), is_del int, org_id varchar(64),
+                        created_by varchar(64), flow_id varchar(64), service_name varchar(255), method varchar(32),
+                        uri varchar(255), service_create_type varchar(32)
+                    )
+                    """);
             data.jdbc.execute("create table fs_flow(id varchar(64) primary key,tenant_id varchar(64),name varchar(255),flow_group varchar(255),status varchar(32),current_version int,dsl clob,updated_by varchar(64),updated_at timestamp,lock_version int,deleted int)");
-            for(int i=0;i<count;i++)data.jdbc.update("insert into api_info_t values(?,'tenant-a',0,'org-a','user-a','','服务编排','GET')","api-"+i);
-            data.jdbc.update("insert into api_info_t values('foreign','tenant-b',0,'org-a','user-a','','跨租户服务','GET'),('department','tenant-a',0,'org-b','user-b','','其他部门','GET'),('deleted','tenant-a',1,'org-a','user-a','','删除服务','GET')");
+            String insertService = "insert into api_info_t (tid,tenant_id,is_del,org_id,created_by,flow_id,service_name,method) values ";
+            for(int i=0;i<count;i++)data.jdbc.update(insertService+"(?,'tenant-a',0,'org-a','user-a','','服务编排','GET')","api-"+i);
+            data.jdbc.update(insertService+"('foreign','tenant-b',0,'org-a','user-a','','跨租户服务','GET'),('department','tenant-a',0,'org-b','user-b','','其他部门','GET'),('deleted','tenant-a',1,'org-a','user-a','','删除服务','GET')");
             data.db.setSqlInterceptors(List.of(counter));
         }
         Object open(String id,boolean dryRun)throws Exception {

@@ -1,6 +1,6 @@
 # 海通数据集成中心独立部署
 
-将三个 ZIP 解压到同一目录。后端是完整的 `data-element.jar`，按无 Nacos 的方式构建。前端是完整海通站点。数据库 ZIP 提供独立部署时的控制库、海通租户库及必要初始化数据。
+将部署 ZIP 解压到一个目录。如果收到的是分别交付的前端、后端和数据库三个 ZIP，将它们解压到同一目录。包内有完整的 Java 后端和海通站点。`db/` 提供独立部署时的控制库、海通租户库及必要初始化数据。
 
 ## 数据库和初始账号
 
@@ -18,15 +18,21 @@
    python db/init-account.py --user DBA_USER --nifi-url https://nifi.example.com:8443 --nifi-username NIFI_USER
    ```
 
-## 外置配置和启动
+## 配置和启动
 
-部署机准备 Java 21、Redis、Nginx 和可访问的 MySQL。NiFi 在实际部署或运行流程时使用。编辑 `config/application.yml`，可直接填写本机配置值，也可保留 `${变量名:默认值}` 引用并在进程环境传入变量。
+部署机准备 Java 21、Redis、Nginx 和可访问的 MySQL。NiFi 在实际部署或运行流程时使用。
+
+如果包内有 `nacos/haitong-data-element.yml`，把其中的内容发布到服务器现有 Nacos。新建的 Data ID 默认为 `haitong-data-element.yml`，Group 默认为 `DEFAULT_GROUP`，配置格式选择 YAML。使用自定义命名空间时，在 `config/application.yml` 或进程环境的 `NACOS_NAMESPACE` 中填写命名空间 ID。设置 `NACOS_SERVER_ADDR` 为应用服务器可访问的 Nacos 地址（例如 `127.0.0.1:8848`），启用鉴权时设置 `NACOS_USER` 和 `NACOS_PASSWORD`。使用其他 Data ID 或 Group 时同步设置 `HAITONG_NACOS_DATA_ID`、`HAITONG_NACOS_GROUP`。后端启动必须能读取该 Data ID。
+
+跨机器连接 Nacos 时，应用服务器还需能访问 Nacos 的客户端 gRPC 端口，通常是主端口加 1000。主端口使用 8848 时，客户端 gRPC 端口为 9848。
+
+数据库、Redis、Magic API 和租户配置在 Nacos 的 YAML 中维护。也可以保留 YAML 中的变量引用，在后端进程环境提供实际连接值。无 Nacos 的部署包在 `config/application.yml` 中直接维护这些配置。
 
 - `HAITONG_CONTROL_JDBC_URL` 和 `HAITONG_TENANT_JDBC_URL` 分别指向控制库和海通租户库。
 - `HAITONG_DB_USER`、`HAITONG_DB_PASSWORD` 提供数据库应用账号。若采用不同账号，可通过 `HAITONG_TENANT_DB_USER`、`HAITONG_TENANT_DB_PASSWORD` 单独覆盖租户库凭据。
 - `HAITONG_REDIS_HOST`、`HAITONG_REDIS_PORT`、`HAITONG_REDIS_PASSWORD` 和 `HAITONG_REDIS_DATABASE` 配置登录会话和缓存。
 
-Windows 运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-backend.ps1`，Linux 运行 `bash ./start-backend.sh`。脚本以 `--spring.config.location=file:./config/application.yml` 启动。配置或环境变量更改后重启后端即可。
+Windows 运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-backend.ps1`，Linux 运行 `bash ./start-backend.sh`。脚本以 `--spring.config.location=file:./config/application.yml` 启动。连接参数或环境变量更改后重启后端。
 
 编辑 `config/nginx.conf` 中的监听端口及后端地址。如用已有 Nginx，把其中的 `server` 段合并到现有站点，并把 `root` 指到部署目录的 `www`。独立启动时，从解压目录运行 `nginx -p "$PWD/" -c config/nginx.conf`。浏览器打开站点根地址，默认端口为 8090。登录页调用原平台账号接口，登录后进入完整海通前端。上线时由 Nginx 配置 HTTPS。
 

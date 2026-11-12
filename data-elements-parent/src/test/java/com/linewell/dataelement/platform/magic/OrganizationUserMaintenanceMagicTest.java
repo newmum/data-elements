@@ -88,6 +88,45 @@ class OrganizationUserMaintenanceMagicTest {
     static Map<?,?> result(Object value){return assertInstanceOf(Map.class,value);}
     static void exit(int expected,Object value){assertEquals(expected,((Number)assertInstanceOf(ExitValue.class,value).getValues()[0]).intValue());}
 
+    @Test void qualityOrganizationOptionsKeepLegacyFieldsAndScopeInOneRead() throws Exception {
+        String resourceId = "a1000000000000000000000000000017";
+        for (int size : List.of(20, 100)) {
+            var fixture = new Fixture();
+            fixture.jdbc.update("delete from rm_org_t");
+            fixture.jdbc.update("""
+                    insert into rm_org_t(id, tenant_id, serial_number, name, deleted)
+                    values ('ROOT', 'tenant-a', '000', 'Root', 0),
+                           ('removed', 'tenant-a', '000', 'Removed', 1),
+                           ('foreign', 'tenant-b', '000', 'Foreign', null)
+                    """);
+            var expected = new ArrayList<Map<String, Object>>();
+            for (int index = 0; index < size; index++) {
+                var option = new LinkedHashMap<String, Object>();
+                option.put("tid", "organization-" + index);
+                option.put("name", index % 2 == 0 ? "A" : "Z");
+                option.put("parentId", index % 2 == 0 ? null : "parent");
+                expected.add(option);
+            }
+            for (int index = size - 1; index >= 0; index--) {
+                var option = expected.get(index);
+                fixture.jdbc.update("""
+                        insert into rm_org_t(id, tenant_id, serial_number, name, parent_id, deleted)
+                        values (?, 'tenant-a', ?, ?, ?, ?)
+                        """, option.get("tid"), String.format("%03d", index / 2), option.get("name"),
+                        option.get("parentId"), index % 2 == 0 ? null : 0);
+            }
+
+            assertEquals(expected, fixture.run(resourceId, Map.of("tenantId", "tenant-b")));
+            assertEquals(1, fixture.reads);
+            System.out.println("Quality organization options " + size + ": SQL reads=1");
+
+            fixture.jdbc.update("update rm_org_t set deleted = 1 where tenant_id = 'tenant-a'");
+            fixture.reads = 0;
+            assertEquals(List.of(), fixture.run(resourceId, Map.of()));
+            assertEquals(1, fixture.reads);
+        }
+    }
+
     @Test void orgCreationEditMoveAndStatusPreserveTreeAndUseConstantReads() throws Exception {
         for(int count:List.of(20,100)) {
             var f=new Fixture();

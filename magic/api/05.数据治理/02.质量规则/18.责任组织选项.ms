@@ -17,15 +17,35 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "读取当前租户未删除的组织机构，按顺序返回质量整改责任组织选择项。",
+  "description": "按当前登录租户读取质量整改责任组织选项，无需请求参数。排除 ROOT 和已删除记录，兼容删除标志为空的历史记录，按组织序列编号和名称升序返回组织 ID、名称及父组织 ID。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：18.责任组织选项
-// 路由：POST /dwm/quality/options/organizations
-// 业务说明：读取当前租户未删除的组织机构，按顺序返回质量整改责任组织选择项。
 import tenantRuntime
-// Responsibility selector; never accept a browser-provided tenant.
-var tenantId=tenantRuntime.id()
-return db.select('SELECT id AS tid,name,parent_id FROM rm_org_t WHERE tenant_id=#{tenantId} AND (deleted IS NULL OR deleted=0) AND id<>\'ROOT\' ORDER BY serial_number, name')
+
+// POST /dwm/quality/options/organizations 为质量整改提供责任组织选项。
+// 无需请求参数，返回当前租户组织的 tid、name 和 parentId，无可选组织时返回空数组。
+
+// 只使用登录租户，兼容删除标志为空的历史组织并排除根占位节点。
+var tenantId = tenantRuntime.id()
+var organizations = db.table('rm_org_t')
+    .columns('id', 'name', 'parent_id')
+    .where()
+    .eq('tenant_id', tenantId)
+    .and(active => active.isNull('deleted').or().eq('deleted', 0))
+    .ne('id', 'ROOT')
+    .orderBy('serial_number', 'asc')
+    .orderBy('name', 'asc')
+    .select()
+
+// 保持工单选择器沿用的组织 ID 字段名。
+var options = []
+for (organization in organizations) {
+    options.add({
+        tid: organization.id,
+        name: organization.name,
+        parentId: organization.parentId
+    })
+}
+return options

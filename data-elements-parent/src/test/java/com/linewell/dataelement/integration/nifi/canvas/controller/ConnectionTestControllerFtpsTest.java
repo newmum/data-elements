@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.ssssssss.magicapi.core.service.MagicAPIService;
 
 class ConnectionTestControllerFtpsTest {
+    private static final int PEER_READ_TIMEOUT_MILLIS = 20_000;
+    private static final int COMMAND_TIMEOUT_SECONDS = 25;
     private final ConnectionTestController controller = new ConnectionTestController(
             mock(StructuredSourceProbeService.class), mock(MagicAPIService.class),
             mock(DataSourceConnectionPropertyResolver.class));
@@ -27,7 +29,7 @@ class ConnectionTestControllerFtpsTest {
              var executor = Executors.newSingleThreadExecutor()) {
             var command = executor.submit(() -> {
                 try (var socket = server.accept()) {
-                    socket.setSoTimeout(5000);
+                    socket.setSoTimeout(PEER_READ_TIMEOUT_MILLIS);
                     socket.getOutputStream().write("220 validation FTP ready\r\n".getBytes(StandardCharsets.UTF_8));
                     socket.getOutputStream().flush();
                     var first = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8)).readLine();
@@ -39,7 +41,7 @@ class ConnectionTestControllerFtpsTest {
             var response = controller.test(Map.of("manifestKey", "source.ftp", "config", Map.of(
                     "ftpProtocol", "ftps", "host", server.getInetAddress().getHostAddress(), "port", server.getLocalPort(),
                     "username", "validation", "password", "validation", "ftpsImplicit", "false")));
-            assertThat(command.get(8, TimeUnit.SECONDS)).isEqualTo("AUTH TLS");
+            assertThat(command.get(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)).isEqualTo("AUTH TLS");
             assertThat(((Map<?, ?>) response.getBody()).get("success")).isEqualTo(false);
         }
     }
@@ -50,14 +52,15 @@ class ConnectionTestControllerFtpsTest {
              var executor = Executors.newSingleThreadExecutor()) {
             var firstByte = executor.submit(() -> {
                 try (var socket = server.accept()) {
-                    socket.setSoTimeout(5000);
+                    // The first TLS handshake can initialize JSSE providers after TCP connect.
+                    socket.setSoTimeout(PEER_READ_TIMEOUT_MILLIS);
                     return socket.getInputStream().read();
                 }
             });
             var response = controller.test(Map.of("manifestKey", "source.ftp", "config", Map.of(
                     "ftpProtocol", "ftps", "host", server.getInetAddress().getHostAddress(), "port", server.getLocalPort(),
                     "username", "validation", "password", "validation", "ftpsImplicit", "true")));
-            assertThat(firstByte.get(8, TimeUnit.SECONDS)).isEqualTo(0x16);
+            assertThat(firstByte.get(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)).isEqualTo(0x16);
             assertThat(((Map<?, ?>) response.getBody()).get("success")).isEqualTo(false);
         }
     }

@@ -114,6 +114,37 @@ class StructuredTableReadMagicModuleTest {
     }
 
     @Test
+    void concatenatedSearchKeepsNullEmptyAndLongTextSemantics() {
+        var fixture = new Fixture();
+        JdbcTemplate jdbc = new JdbcTemplate(fixture.source());
+        jdbc.execute("CREATE TABLE inventory (tid VARCHAR, tenant_id VARCHAR, title VARCHAR, comment_text CLOB, suffix VARCHAR)");
+        String longComment = "x".repeat(6200) + "%_tail";
+        jdbc.update("INSERT INTO inventory VALUES ('long', ?, NULL, ?, 'next')", TENANT, longComment);
+        jdbc.update("INSERT INTO inventory VALUES ('empty', ?, '', NULL, 'next')", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('no-literal', ?, 'x', 'abctail', 'next')", TENANT);
+        jdbc.update("INSERT INTO inventory VALUES ('foreign', ?, NULL, ?, 'next')", OTHER_TENANT, longComment);
+
+        TenantContext.run(TENANT, () -> {
+            var module = fixture.module();
+            var id = module.column("r", "tid", "TEXT");
+            var joined = module.concatWs(" ", List.of(module.column("r", "title", "TEXT"),
+                    module.column("r", "comment_text", "LOB"), module.column("r", "suffix", "TEXT")));
+            var query = module.from("inventory", "r", TENANT);
+            query.where(module.contains(joined, "%_TAIL NEXT"));
+            assertEquals(List.of(Map.of("id", "long", "text", longComment + " next")),
+                    query.grouped(Map.of("id", id, "text", joined), List.of()));
+
+            var empty = module.from("inventory", "r", TENANT);
+            empty.where(module.equal(id, "empty"));
+            assertEquals(List.of(Map.of("text", " next")), empty.grouped(Map.of("text", joined), List.of()));
+
+            var separator = module.concatWs("'%_", List.of(module.column("r", "title", "TEXT"),
+                    module.column("r", "suffix", "TEXT")));
+            assertEquals(List.of(Map.of("text", "'%_next")), empty.grouped(Map.of("text", separator), List.of()));
+        });
+    }
+
+    @Test
     void rejectsTenantRebindingAndUnboundedOrUntrustedStructure() {
         var fixture = new Fixture();
         StructuredTableReadMagicModule module = fixture.module();

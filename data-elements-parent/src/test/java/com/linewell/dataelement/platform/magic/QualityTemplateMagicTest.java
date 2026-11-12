@@ -1,6 +1,7 @@
 package com.linewell.dataelement.platform.magic;
 
 import com.linewell.dataelement.utils.StructuredValues;
+import com.linewell.dataelement.platform.tenant.domain.TenantContext;
 
 import static org.assertj.core.api.Assertions.*;
 import java.nio.file.*;
@@ -31,6 +32,7 @@ class QualityTemplateMagicTest {
         final DatasourceCompletionMagicTest.Fixture f=new DatasourceCompletionMagicTest.Fixture(100);
         final Scope scope=new Scope();final Task task=new Task();
         final TaskCategoryWarehouseScopeMagicTest.Counter counter=new TaskCategoryWarehouseScopeMagicTest.Counter();
+        final StructuredTableReadMagicModule tableRead=TaskRuntimeMagicFixture.structuredReads(f.jdbc, sql -> counter.reads++);
         Fixture(){
             f.db.setResultProvider(new org.ssssssss.magicapi.core.interceptor.DefaultResultProvider("quality-template-test"));
             var dialects=new org.ssssssss.magicapi.modules.db.dialect.DialectAdapter();
@@ -48,8 +50,9 @@ class QualityTemplateMagicTest {
             Map<String,Object> bindings=new LinkedHashMap<>();bindings.put("body",body);bindings.put("db",f.db);bindings.put("tenantRuntime",scope);bindings.put("dataScope",scope);
             bindings.put("qualitySql",new QualitySqlTemplate());bindings.put("jsons",new JsonModule());bindings.put("IdUtil",new Ids());bindings.put("StpUtil",new Actor());bindings.put("tableSort",new TableSortMagicModule());bindings.put("dataQuality",task);
             bindings.put("log",new Log());
+            bindings.put("tableRead",tableRead);
             counter.reads=0;
-            return MagicScript.create(script,null).execute(new MagicScriptContext(bindings));
+            return TenantContext.call(scope.id(), () -> MagicScript.create(script,null).execute(new MagicScriptContext(bindings)));
         }
         String save() throws Exception {return String.valueOf(((Map<?,?>)run("23.保存SQL模板",new LinkedHashMap<>(Map.of("ruleName","参数模板","ruleCode","DQ_SQL","dimension","ACCURACY","sqlTemplate","${column}<#{min}","values",Map.of("min",0))))).get("tid"));}
     }
@@ -78,6 +81,41 @@ class QualityTemplateMagicTest {
         }
         f.f.jdbc.update("update data_gov_quality_rule set tenant_id='foreign' where tid=?",id);
         assertThat(f.run("04.保存任务",Map.of("taskName","拒绝","datasourceId","db","rules",List.of(Map.of("ruleType","SQL_TEMPLATE","parameters",Map.of("templateId",id)))))).isInstanceOf(ExitValue.class);
+    }
+
+    @Test void templatePageRetainsTheWireContractAndFiltersBeforeStableSorting() throws Exception {
+        var f = new Fixture();
+        f.f.jdbc.execute("""
+                insert into data_gov_quality_rule
+                    (tid,tenant_id,is_del,scope_of_application,rule_name,rule_code,check_dimension,
+                     rule_description,check_logic,updated_time) values
+                ('a','ga',0,'QUALITY_SQL_TEMPLATE_V1','普通名称','find-1','ACCURACY','备注','{}',timestamp '2026-11-01 10:00:00'),
+                ('b','ga',0,'QUALITY_SQL_TEMPLATE_V1','find 名称','code-2','ACCURACY','备注','{}',timestamp '2026-11-01 10:00:00'),
+                ('c','ga',0,'QUALITY_SQL_TEMPLATE_V1','find 未更新','code-3','ACCURACY',null,'{}',null),
+                ('deleted','ga',1,'QUALITY_SQL_TEMPLATE_V1','find','code-4','ACCURACY',null,'{}',null),
+                ('other','foreign',0,'QUALITY_SQL_TEMPLATE_V1','find','code-5','ACCURACY',null,'{}',null),
+                ('legacy','ga',0,'LEGACY','find','code-6','ACCURACY',null,'{}',null),
+                ('dimension','ga',0,'QUALITY_SQL_TEMPLATE_V1','find','code-7','VALIDITY',null,'{}',null),
+                ('unmatched','ga',0,'QUALITY_SQL_TEMPLATE_V1','不匹配','code-8','ACCURACY',null,'{}',null)
+                """);
+        var filters = new LinkedHashMap<String, Object>(Map.of("keyword", "find", "dimension", "ACCURACY",
+                "sortField", "updated_time", "sortDir", "asc", "tenantId", "foreign"));
+        var page = StructuredValues.objectMap(f.run("22.SQL模板分页", filters));
+        assertThat(page).containsOnlyKeys("total", "list").containsEntry("total", 3L);
+        var rows = StructuredValues.objectRows(page.get("list"));
+        assertThat(rows).extracting(row -> row.get("tid")).containsExactly("a", "b", "c");
+        assertThat(rows.getFirst()).containsOnlyKeys("tid", "ruleName", "ruleCode", "checkDimension",
+                "ruleDescription", "checkLogic", "updatedTime").containsEntry("checkLogic", "{}");
+        assertThat(f.counter.reads).isEqualTo(2);
+
+        filters.put("page", 2);
+        assertThat(StructuredValues.objectMap(f.run("22.SQL模板分页", filters)))
+                .containsEntry("total", 3L).containsEntry("list", List.of());
+        assertThat(f.counter.reads).isOne();
+        filters.put("keyword", "absent");
+        assertThat(StructuredValues.objectMap(f.run("22.SQL模板分页", filters)))
+                .containsEntry("total", 0L).containsEntry("list", null);
+        assertThat(f.counter.reads).isOne();
     }
     @Test void legacyEditorsCannotBypassTemplateOrTenantBoundaries() throws Exception {
         var f=new Fixture();String id=f.save();
