@@ -22,7 +22,7 @@ describe('standalone Data Elements frontend', () => {
   it('pins dev and preview to the same unused frontend port without fallback', () => {
     const resolved = config as UserConfig;
     const expected = { host: 'localhost', port: 3020, strictPort: true };
-    expect(resolved.server).toEqual(expected);
+    expect(resolved.server).toEqual({...expected, proxy: {'/api/ai': {target: 'http://127.0.0.1:3021'}}});
     expect(resolved.preview).toEqual(expected);
     expect([3000, 3002, 3005, 3010, 3030, 4173]).not.toContain(expected.port);
     expect(resolved.base).toBe('/');
