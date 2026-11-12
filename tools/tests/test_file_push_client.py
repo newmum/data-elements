@@ -52,7 +52,7 @@ class FilePushClientTest(unittest.TestCase):
         if chunked:
             args.append('--chunked')
         try:
-            result = subprocess.run(args, capture_output=True, text=True, timeout=15,
+            result = subprocess.run(args, capture_output=True, encoding='utf-8', timeout=15,
                                     env={**os.environ, 'HAITONG_API_KEY': 'validation-test-client-key'})
         finally:
             server.shutdown()

@@ -31,6 +31,7 @@ import org.ssssssss.script.annotation.Comment;
 public class StructuredTableReadMagicModule {
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,63}");
     private static final int MAX_IN_VALUES = 1000;
+    private static final int DAMENG_SEARCH_CHUNK_SIZE = 8000;
     private static final DialectAdapter DIALECTS = new DialectAdapter();
     private final JdbcTemplate jdbc;
 
@@ -64,7 +65,16 @@ public class StructuredTableReadMagicModule {
     }
 
     public Expression coalesce(List<?> values) {
-        return call("COALESCE", values, kind(values));
+        Kind resultKind = kind(values);
+        Expression portable = call("COALESCE", values, resultKind);
+        if (resultKind != Kind.LOB) {
+            return portable;
+        }
+        // Dameng otherwise coerces a mixed CLOB/VARCHAR result to VARCHAR before sorting.
+        var clobValues = values.stream().map(operand -> operand instanceof Expression term && term.kind == Kind.LOB
+                ? term : new Expression(context -> "TO_CLOB(" + value(context, operand) + ")", Kind.LOB)).toList();
+        Expression clob = call("COALESCE", clobValues, Kind.LOB);
+        return new Expression(context -> (context.dameng ? clob : portable).sql(context), resultKind);
     }
 
     public Expression greatest(List<?> values) {
@@ -92,7 +102,7 @@ public class StructuredTableReadMagicModule {
         Expression nativeConcat = call("CONCAT_WS", arguments, resultKind);
         return new Expression(context -> context.oracle
                 ? concatOracleText(context, separator, values, resultKind)
-                : nativeConcat.sql(context), resultKind);
+                : nativeConcat.sql(context), resultKind, resultKind == Kind.LOB);
     }
 
     private static String concatOracleText(Render context, String separator, List<Expression> terms, Kind kind) {
@@ -225,10 +235,27 @@ public class StructuredTableReadMagicModule {
 
     public Condition contains(Expression term, String value) {
         return new Condition(context -> {
+            if (context.dameng && term.joinedClob && (value == null || value.length() <= DAMENG_SEARCH_CHUNK_SIZE)) {
+                return containsDamengJoinedClob(context, term, value);
+            }
             String column = searchableText(context, term);
             String function = context.postgres ? "STRPOS" : "INSTR";
             return function + "(LOWER(" + column + "), LOWER(" + context.parameter(value) + ")) > 0";
         });
+    }
+
+    private static String containsDamengJoinedClob(Render context, Expression term, String value) {
+        // Keep the joined CLOB in the same query level as CONNECT BY. ROWNUM bounds its derived row.
+        String source = "(SELECT " + term.sql(context) + " AS search_text FROM DUAL WHERE ROWNUM <= 1) joined_text";
+        String text = "joined_text.search_text";
+        // Overlap the chunks so a keyword split at the boundary can still be found.
+        int overlap = value == null || value.isEmpty() ? 0 : value.length() - 1;
+        int stride = DAMENG_SEARCH_CHUNK_SIZE - overlap;
+        String chunk = "DBMS_LOB.SUBSTR(" + text + ", " + DAMENG_SEARCH_CHUNK_SIZE
+                + ", (LEVEL - 1) * " + context.parameter(stride) + " + 1)";
+        String chunkMatch = "INSTR(LOWER(" + chunk + "), LOWER(" + context.parameter(value) + ")) > 0";
+        String chunkCount = "CEIL(LENGTH(" + text + ") / (" + context.parameter(stride) + " * 1.0))";
+        return "EXISTS (SELECT 1 FROM " + source + " WHERE " + chunkMatch + " CONNECT BY LEVEL <= " + chunkCount + ")";
     }
 
     public Condition like(Expression term, String pattern) {
@@ -301,10 +328,16 @@ public class StructuredTableReadMagicModule {
     public static final class Expression {
         private final Function<Render, String> renderer;
         private final Kind kind;
+        private final boolean joinedClob;
 
         private Expression(Function<Render, String> renderer, Kind kind) {
+            this(renderer, kind, false);
+        }
+
+        private Expression(Function<Render, String> renderer, Kind kind, boolean joinedClob) {
             this.renderer = renderer;
             this.kind = kind;
+            this.joinedClob = joinedClob;
         }
 
         private String sql(Render context) {
@@ -713,6 +746,7 @@ public class StructuredTableReadMagicModule {
         private final boolean postgres;
         private final boolean kingbase;
         private final boolean oracle;
+        private final boolean dameng;
         private final boolean mysql;
         private final CommonTables commonTables;
         private final List<Object> parameters;
@@ -723,7 +757,8 @@ public class StructuredTableReadMagicModule {
             String url = metadata.getURL().toLowerCase(Locale.ROOT);
             kingbase = url.startsWith("jdbc:kingbase8:");
             postgres = url.startsWith("jdbc:postgresql:") || kingbase;
-            oracle = url.startsWith("jdbc:dm:") || url.startsWith("jdbc:oracle:");
+            dameng = url.startsWith("jdbc:dm:");
+            oracle = dameng || url.startsWith("jdbc:oracle:");
             mysql = url.startsWith("jdbc:mysql:") || url.startsWith("jdbc:mariadb:") || url.startsWith("jdbc:h2:");
             quote = oracle ? "\"" : metadata.getIdentifierQuoteString().trim();
             commonTables = new CommonTables();
@@ -736,6 +771,7 @@ public class StructuredTableReadMagicModule {
             postgres = source.postgres;
             kingbase = source.kingbase;
             oracle = source.oracle;
+            dameng = source.dameng;
             mysql = source.mysql;
             commonTables = source.commonTables;
             this.parameters = parameters;

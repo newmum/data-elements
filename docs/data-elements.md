@@ -705,7 +705,7 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
   - `/idaas`: unified identity management and its explicitly configured tenant-receiver interfaces; platform and tenant-local accounts remain separate.
   - `/sym` and `/portal`: the existing tenant system-management and portal routes. Preserve their deployed paths when improving Magic editor names or documentation.
 - A Magic group metadata `path` must contain one URL segment only. Compose deeper URLs through nested groups; never put `dst/database` or another multi-segment value in one group.
-- Number sibling API groups, APIs, functions, and tasks with two digits: `01.`, `02.`, `03.`. Do not use unnumbered names, `1.1`, `未定义名称`, `test`, or copied names in active resources.
+- 同级 API 分组、接口、函数和任务从 `01.` 开始连续编号。移动或退役资源后，整理所涉分组的同级编号。现用资源使用准确的业务名称，物理名称与编辑器显示名称一致，避免占位名、测试名或复制名。
 - Physical `file_path` numbering is for readable ordering. Runtime imports and routes come from group/API metadata `path`; do not rewrite imports merely because a display/file name gained a numeric prefix.
 - Direct database moves must preserve the complete resource tree:
   - Every group has one `group.json`.
@@ -723,13 +723,13 @@ Use the released `my-db` page at `/register/register-sjkb/list` as the default v
 
 #### Magic 脚本可读性与注释规范
 
-- Keep public interface URLs and function import paths in their existing English form. Give each active interface and function a clear Chinese display name. Within each sibling group, use consecutive two-digit display numbers starting at `01`; renumber the remaining siblings after moving or retiring a resource. Keep the physical file name in sync with its display name while preserving the Magic metadata `id`, route `path`, method, and group identity.
-- The Magic editor `description` is a business explanation, not a repeat of the name or an English route. State what the interface reads or changes, key input and validation rules, authentication and tenant/application scope, important persistence or downstream effects, and the returned result or meaningful error. Describe unfinished compatibility endpoints truthfully as unfinished. Give shared functions equally specific descriptions and readable parameter descriptions.
+- 接口、函数和任务使用明确的中文显示名称。编号、物理路径和运行标识遵循 [Magic API 目录组织](#lowcode-magic--magic-api-organization)。调整名称或排序时保留接口方法、路由、函数导入路径、元数据 ID 和分组身份。
+- Magic 编辑器的 `description` 说明实际业务、主要输入与校验、认证和租户或应用范围、写入或下游影响、返回结果及有意义的错误。共享函数也写明用途和参数。兼容入口尚未实现的能力应如实标注。
 - 所有 `import` 集中放在脚本最前面。最后一个 `import` 之后，第一段写中文资源说明，再开始可执行代码。接口写明请求方法、完整路由、用途、主要参数和返回结果。函数或任务写明实际导入路径或执行入口、输入及用途。有权限、事务、外部调用或写入时，说明边界和副作用。没有导入的脚本从该说明开始。
 - 在关键代码上方就近写中文行注释，解释为何采用该做法。租户与角色范围、分页前后顺序、去重优先级、批量读取、状态流转、事务、异常和外部副作用都应按实际逻辑说明。普通赋值、方法名已经能表达的操作无需复述。业务变化后同步改资源说明和行注释。
 - 使用同一脚本内一致的缩进、空格和大括号风格，按导入、说明、参数与权限、数据访问和结果组装组织。分支与循环的主体分行缩进，长对象和链式调用按含义换行。复杂条件先用业务名称拆解，再组合；只为确实复用的逻辑或必要技术边界提取函数。保持 MagicScript 语法和原有接口契约，整理后执行实际脚本回归。
 - For legacy Magic SQL awaiting migration, preserve parameter bindings, identifier and alias case, and query semantics during unrelated edits. Follow [Magic API 优先与数据库访问抽象](#magic-first-data-access) when redesigning that data access.
-- Before bulk editing, inventory active `api_file_t` rows and back up the exact affected rows. Match resources by the Magic metadata `id` when unique; if legacy rows share an ID or have no row `tid`, distinguish them by their exact `file_path` and content, and report editor-invisible orphan resources separately. Check for duplicate paths and preserve the JSON/`================================`/script format plus directory and `group.json` records. After publication, refresh or cold-load the Magic registry, inspect representative scripts in the editor, and test real read and write routes for each affected business area. A database-only comparison or unrefreshed test does not prove the new script runs.
+- 批量整理前按 [本地资源版本管理](#resource-versioning) 核对所选资源，备份对应的活动记录。元数据 `id` 重复或旧记录缺少表行 `tid` 时，使用准确的 `file_path` 和内容区分，并报告编辑器不可见的孤立资源。发布后回读运行脚本，逐业务域验证实际入口。
 
 
 <a id="lowcode-magic--magic-api-metadata-management"></a>

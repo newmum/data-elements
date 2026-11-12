@@ -72,4 +72,4 @@ npm run test:compact
 
 历史验收中的 `preview/index.html` 是独立 HTML 辅助，未纳入当前纯净基线。不得用其旧截图证明 React 通过。若依赖或浏览器测试失败，记录实际原因，不写虚假的全部通过。
 
-修改公共文字规则时同步更新 `../docs/data-elements-idaas.md#design-system`、相关测试及随包辅助预览的独立桥接样式；不能让交付里两套预览互相矛盾。
+修改公共文字规则时同步更新 `../docs/data-elements-idaas.md#design-system`、React 样式和相关测试。

@@ -271,12 +271,12 @@ export function useDeletePipeline() {
 export function useDeployPipeline() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, catalogTid, preserveExisting = true }: {
-      id: string; catalogTid?: string | null; preserveExisting?: boolean;
+    mutationFn: async ({ id, catalogTid, preserveExisting = true, forceRebuild = false }: {
+      id: string; catalogTid?: string | null; preserveExisting?: boolean; forceRebuild?: boolean;
     }) => {
       requireEditableTask(id);
       return performFlowAction(id, 'deploy', async () => {
-        const result = (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid, preserveExisting })).data;
+        const result = (await api.post<DeploymentResult>(`/pipelines/${id}/deploy`, { catalogTid, preserveExisting, forceRebuild })).data;
         if (!result || result.pipeline?.id !== id) {
           throw Object.assign(new Error('部署接口未返回有效的流程结果，请刷新状态确认执行结果'), { payload: result });
         }

@@ -25,7 +25,9 @@ class ElasticsearchMetadataExplorerTest {
     private DataSourceConfig config;
     private JsonNode search;
     private int major = 7;
-    private int errorStatus;
+    private int catStatus;
+    private int aliasStatus;
+    private boolean malformedAliasResponse;
     private boolean conflictingLegacyTypes;
     private final ElasticsearchMetadataExplorer explorer = new ElasticsearchMetadataExplorer();
 
@@ -34,9 +36,22 @@ class ElasticsearchMetadataExplorerTest {
         server.createContext("/", exchange -> {
             String path = exchange.getRequestURI().getPath(); paths.add(path);
             auth.add(exchange.getRequestHeaders().getFirst("Authorization"));
-            if (errorStatus != 0 && path.startsWith("/_cat/indices")) {
-                byte[] bytes = "{\"error\":{\"type\":\"security_exception\",\"reason\":\"action [indices:monitor/stats] is unauthorized\"},\"status\":403}".getBytes(StandardCharsets.UTF_8);
-                exchange.sendResponseHeaders(errorStatus, bytes.length);exchange.getResponseBody().write(bytes);exchange.close();return;
+            boolean aliasRequest = path.endsWith("/_alias");
+            if (aliasRequest && (!"GET".equals(exchange.getRequestMethod())
+                    || !"expand_wildcards=open".equals(exchange.getRequestURI().getRawQuery()))) {
+                exchange.sendResponseHeaders(400, -1);
+                exchange.close();
+                return;
+            }
+            int status = path.startsWith("/_cat/indices") ? catStatus : aliasRequest ? aliasStatus : 0;
+            if (status != 0) {
+                String action = aliasRequest ? "indices:admin/aliases/get" : "indices:monitor/stats";
+                byte[] bytes = json.writeValueAsBytes(Map.of("error", Map.of("type", "security_exception",
+                        "reason", "action [" + action + "] is unauthorized"), "status", status));
+                exchange.sendResponseHeaders(status, bytes.length);
+                exchange.getResponseBody().write(bytes);
+                exchange.close();
+                return;
             }
             Object response;
             if (path.startsWith("/_cat/indices")) {
@@ -44,6 +59,15 @@ class ElasticsearchMetadataExplorerTest {
                 indices.add(Map.of("index", ".internal", "docs.count", "1"));
                 for (int i=0;i<650;i++) indices.add(Map.of("index",String.format("visible-%03d",i),"docs.count","20","store.size","1024"));
                 response = indices;
+            } else if (aliasRequest) {
+                var indices = new LinkedHashMap<String, Object>();
+                for (int i = 649; i >= 0; i--) {
+                    indices.put(String.format("visible-%03d", i), Map.of("aliases", Map.of()));
+                }
+                indices.put(".internal", Map.of("aliases", Map.of()));
+                indices.put("foreign-index", Map.of("aliases", Map.of()));
+                indices.put("visible-secret", Map.of("aliases", Map.of()));
+                response = malformedAliasResponse ? Map.of("error", Map.of("type", "proxy_error")) : indices;
             } else if (path.endsWith("/_mapping")) {
                 var mappings = new LinkedHashMap<String,Object>();
                 for (String index : path.substring(1,path.length()-9).split(",")) {
@@ -77,7 +101,10 @@ class ElasticsearchMetadataExplorerTest {
     void legacyAndModernClustersSupportConnectionCollectionMappingsAndPreview(int version) {
         major = version;
         assertThat(explorer.testConnection(config)).isTrue();
-        assertThat(explorer.getTables(config)).hasSize(650);
+        var tables = explorer.getTables(config);
+        assertThat(tables).hasSize(650);
+        assertThat(tables.getFirst().getRowCount()).isEqualTo(20L);
+        assertThat(tables.getFirst().getDataSizeBytes()).isEqualTo(1024L);
         assertThat(explorer.getColumns(config,"visible-001")).hasSize(6);
         var request = new PageQueryRequest();request.setDataSource(config);request.setTableName("visible-001");
         request.setPageSize(20);request.setColumns(List.of("name", "users.name"));
@@ -99,10 +126,53 @@ class ElasticsearchMetadataExplorerTest {
         assertThat(paths).isEmpty();
     }
 
-    @Test void forbiddenCollectionRemainsAnErrorRatherThanAnEmptySuccessfulCollection() {
-        errorStatus=403;
-        assertThatThrownBy(()->explorer.getTables(config)).hasMessageContaining("HTTP 403");
-        assertThat(paths).hasSize(1);
+    @ParameterizedTest @ValueSource(ints={6,8})
+    void missingCatStatsPrivilegeFallsBackToScopedIndexMetadata(int version) {
+        major = version;
+        catStatus = 403;
+        config.setDatabase("visible-*,-visible-secret");
+        config.setUsername("restricted-reader");
+        config.setPassword("test-only");
+        var tables = explorer.getTables(config);
+        assertThat(tables).hasSize(650);
+        assertThat(tables.getFirst().getTableName()).isEqualTo("visible-000");
+        assertThat(tables).allSatisfy(table -> {
+            assertThat(table.getTableName()).matches("visible-\\d{3}");
+            assertThat(table.getRowCount()).isNull();
+            assertThat(table.getDataSizeBytes()).isNull();
+        });
+        assertThat(paths).containsExactly("/_cat/indices/visible-*,-visible-secret", "/visible-*,-visible-secret/_alias");
+        String expected = "Basic " + Base64.getEncoder()
+                .encodeToString("restricted-reader:test-only".getBytes(StandardCharsets.UTF_8));
+        assertThat(auth).containsExactly(expected, expected);
+    }
+
+    @ParameterizedTest @ValueSource(ints={20,100})
+    void fallbackStillReadsOnlyTheCurrentPageOfMappingsInOneBatch(int size) {
+        catStatus = 403;
+        config.setDatabase("visible-*,-visible-secret");
+        var page = explorer.getTablesPage(config, 2, size, null);
+        assertThat(page.getTotal()).isEqualTo(650);
+        assertThat(page.getRows()).hasSize(size).allSatisfy(row -> assertThat(row.getColumnCount()).isEqualTo(6));
+        assertThat(paths).hasSize(3);
+        assertThat(paths.getLast()).contains(String.format("visible-%03d",size)).doesNotContain("visible-000");
+        assertThat(paths.getLast().split(",")).hasSize(size);
+    }
+
+    @Test void forbiddenMetadataRemainsAnErrorRatherThanAnEmptySuccessfulCollection() {
+        catStatus = 403;
+        aliasStatus = 403;
+        assertThatThrownBy(()->explorer.getTables(config)).hasMessageContaining("HTTP 403").hasMessageContaining("view_index_metadata");
+        assertThat(paths).containsExactly("/_cat/indices/visible-*", "/visible-*/_alias");
+    }
+
+    @Test void authenticationFailureIsNotRetriedAndInvalidMetadataFails() {
+        catStatus = 401;
+        assertThatThrownBy(() -> explorer.getTables(config)).hasMessageContaining("HTTP 401");
+        assertThat(paths).containsExactly("/_cat/indices/visible-*");
+        catStatus = 403;
+        malformedAliasResponse = true;
+        assertThatThrownBy(() -> explorer.getTables(config)).hasMessageContaining("返回格式异常");
     }
 
     @Test void ambiguousLegacyMappingsAreRejectedInsteadOfSilentlyLosingFields() {

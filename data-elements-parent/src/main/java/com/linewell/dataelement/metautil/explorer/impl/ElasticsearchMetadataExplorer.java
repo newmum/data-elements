@@ -32,6 +32,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -148,7 +149,7 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             int status = response.statusCode();
             if (status < 200 || status >= 300) {
-                throw new IllegalStateException("Elasticsearch读取失败，HTTP " + status);
+                throw new EsReadException(status);
             }
             String body = response.body();
             if (body == null || body.isBlank()) {
@@ -160,6 +161,15 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("读取 Elasticsearch 响应被中断", e);
+        }
+    }
+
+    private static final class EsReadException extends IllegalStateException {
+        private final int status;
+
+        private EsReadException(int status) {
+            super("Elasticsearch读取失败，HTTP " + status);
+            this.status = status;
         }
     }
 
@@ -259,35 +269,79 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
         }
         path += "?format=json&bytes=b&s=index&h=index,docs.count,store.size,pri.store.size";
 
-        JsonNode array = json(config, path);
-        List<TableInfo> all = new ArrayList<>();
         String kw = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
+        List<TableInfo> all = new ArrayList<>();
+        JsonNode array;
+        try {
+            array = json(config, path);
+        } catch (EsReadException failure) {
+            if (failure.status != 403) throw failure;
+            return discoverTablesWithoutStats(config, pattern, kw);
+        }
         if (array.isArray()) {
             for (JsonNode node : array) {
                 String index = text(node, "index");
-                if (index == null || index.isBlank() || index.startsWith(".")) {
+                if (!visibleIndex(pattern, kw, index)) {
                     continue;
                 }
-                if (!kw.isBlank() && !index.toLowerCase(Locale.ROOT).contains(kw)) {
-                    continue;
-                }
-                TableInfo table = new TableInfo();
-                table.setTableName(index);
-                table.setTableComment(index);
-                table.setTableType("INDEX");
-                table.setEngine("Elasticsearch");
+                TableInfo table = indexTable(index);
                 table.setRowCount(longValue(text(node, "docs.count")));
                 Long size = sizeBytes(firstText(node, "store.size", "pri.store.size", "dataset.size"));
                 table.setDataSizeBytes(size);
                 table.setDataSizeFormatted(formatBytes(size));
                 table.setTotalSizeBytes(size);
                 table.setTotalSizeFormatted(formatBytes(size));
-                all.add(table);
-                if (all.size() > 10000) throw new IllegalArgumentException("可见索引超过10000个，请缩小索引范围");
+                addDiscoveredIndex(all, table);
             }
         }
 
         return all;
+    }
+
+    private List<TableInfo> discoverTablesWithoutStats(DataSourceConfig config, String pattern, String keyword) {
+        // ES 6/7/8 return concrete index names as keys, including indices without aliases.
+        String scope = pattern.isBlank() ? "*" : pattern;
+        JsonNode response;
+        try {
+            response = json(config, "/" + encodePath(scope) + "/_alias?expand_wildcards=open");
+        } catch (EsReadException failure) {
+            if (failure.status != 403) throw failure;
+            throw new IllegalStateException("Elasticsearch索引统计和索引元数据均被拒绝，HTTP 403。"
+                    + "请检查登记索引范围的 view_index_metadata 权限和代理对索引元数据接口的访问规则。", failure);
+        }
+        if (!response.isObject()) {
+            throw new IllegalStateException("Elasticsearch索引元数据返回格式异常");
+        }
+        List<TableInfo> tables = new ArrayList<>();
+        response.fields().forEachRemaining(entry -> {
+            if (!entry.getValue().path("aliases").isObject()) {
+                throw new IllegalStateException("Elasticsearch索引元数据返回格式异常");
+            }
+            if (visibleIndex(pattern, keyword, entry.getKey())) {
+                addDiscoveredIndex(tables, indexTable(entry.getKey()));
+            }
+        });
+        tables.sort(Comparator.comparing(TableInfo::getTableName));
+        return tables;
+    }
+
+    private boolean visibleIndex(String scope, String keyword, String index) {
+        return isOrdinaryIndex(index) && matchesIndexScope(scope, index)
+                && (keyword.isBlank() || index.toLowerCase(Locale.ROOT).contains(keyword));
+    }
+
+    private TableInfo indexTable(String index) {
+        TableInfo table = new TableInfo();
+        table.setTableName(index);
+        table.setTableComment(index);
+        table.setTableType("INDEX");
+        table.setEngine("Elasticsearch");
+        return table;
+    }
+
+    private void addDiscoveredIndex(List<TableInfo> tables, TableInfo table) {
+        if (tables.size() == 10000) throw new IllegalArgumentException("可见索引超过10000个，请缩小索引范围");
+        tables.add(table);
     }
 
     @Override
@@ -656,23 +710,32 @@ public class ElasticsearchMetadataExplorer implements MetadataExplorer, DataQuer
     }
 
     private void checkIndexScope(DataSourceConfig config, String name) {
-        if (name == null || name.isBlank() || name.startsWith(".") || name.matches(".*[,*/?#].*")) {
+        if (!isOrdinaryIndex(name)) {
             throw new IllegalArgumentException("请选择一个普通索引");
         }
-        String scope = indexPattern(config);
-        if (scope.isBlank()) return;
+        if (!matchesIndexScope(indexPattern(config), name)) {
+            throw new IllegalArgumentException("索引不在当前连接范围内");
+        }
+    }
+
+    private boolean isOrdinaryIndex(String name) {
+        return name != null && !name.isBlank() && !name.startsWith(".") && !name.matches(".*[,*/?#].*");
+    }
+
+    private boolean matchesIndexScope(String scope, String name) {
+        if (scope.isBlank()) return true;
         boolean allowed = false;
         for (String item : scope.split(",")) {
             String pattern = item.trim();
             boolean excluded = pattern.startsWith("-");
             if (excluded) pattern = pattern.substring(1);
             String regex = Pattern.quote(pattern).replace("*", "\\E.*\\Q").replace("?", "\\E.\\Q");
-            if (name.matches(regex)) {
-                if (excluded) throw new IllegalArgumentException("索引不在当前连接范围内");
+            if ("_all".equals(pattern) || name.matches(regex)) {
+                if (excluded) return false;
                 allowed = true;
             }
         }
-        if (!allowed) throw new IllegalArgumentException("索引不在当前连接范围内");
+        return allowed;
     }
 
     @Override

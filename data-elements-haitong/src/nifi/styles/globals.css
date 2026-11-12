@@ -2667,6 +2667,9 @@
 @keyframes canvas-action-rotate { to { transform: rotate(360deg); } }
 .coze-toolbar .coze-toolbar__action { width: 88px; min-width: 88px; padding-inline: 8px; }
 .canvas-start-actions { display: inline-flex; align-items: stretch; }
+.canvas-save-actions { display: inline-flex; align-items: stretch; }
+.canvas-save-actions:has(.canvas-save-menu) .canvas-save-action { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.canvas-save-actions .canvas-save-menu { border-top-left-radius: 0; border-bottom-left-radius: 0; width: 32px; min-width: 32px; padding-inline: 4px; }
 .canvas-start-actions__main { border-top-right-radius: 0; border-bottom-right-radius: 0; min-width: 88px; }
 .canvas-start-actions__more { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-color: rgba(255,255,255,.3); width: 32px; padding-inline: 6px; }
 .canvas-sync-modal .ant-modal-content { padding: 24px 28px; }

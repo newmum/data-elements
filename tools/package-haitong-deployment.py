@@ -5,9 +5,10 @@ import hashlib
 import json
 from pathlib import Path
 import re
-from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
+from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 from haitong_quality_example import EXAMPLES, build_quality_example
+from haitong_dm_deployment import dameng_database_files, linux_runtime_files
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = Path(__file__).resolve().with_name("haitong-deployment")
@@ -73,7 +74,7 @@ def ddl(canonical, database, requested):
     return header + "\n\n".join(statements) + "\nSET FOREIGN_KEY_CHECKS=1;\n", sorted(selected)
 
 
-def magic_sql():
+def magic_rows():
     root = ROOT / "magic"
     index = json.loads((root / ".manifest.json").read_text(encoding="utf-8"))
     records = {entry["path"]: entry for entry in index["resources"]}
@@ -95,20 +96,14 @@ def magic_sql():
         content = "this is directory" if is_dir else (root / path).read_text(encoding="utf-8")
         row_ids = entry.get("rowIds", [])
         row_id = next((value for value in row_ids if value), None)
-        rows.append(f"({literal(row_id)},{literal(entry['databasePath'])},{literal(content)},0)")
-    return "INSERT INTO api_file_t (tid,file_path,file_content,is_del) VALUES\n" + ",\n".join(rows) + ";\n", sorted(paths)
+        rows.append((row_id, entry['databasePath'], content))
+    return rows, sorted(paths)
 
 
-def database_files():
-    control, control_tables = ddl("baseline", "baseline", CONTROL_TABLES)
-    tenant, tenant_tables = ddl("baseline_ga", "baseline_haitong", TENANT_TABLES)
-    resources, magic_paths = magic_sql()
-    control += (
-        "\nINSERT INTO sym_tenant_t (tid,code,name,init_flag,json_config,sort_no,created_time,is_del,status,isolation_mode)"
-        f" VALUES ('{TENANT}','HAITONG','海通数据集成中心',1,'{{\"accountSource\":\"LOCAL\"}}',1,NOW(6),0,1,'DATABASE');\n"
-        + resources
-    )
-    tenant += f"""
+def seed_sql():
+    control = ("\nINSERT INTO sym_tenant_t (tid,code,name,init_flag,json_config,sort_no,created_time,is_del,status,isolation_mode)"
+               f" VALUES ('{TENANT}','HAITONG','海通数据集成中心',1,'{{\"accountSource\":\"LOCAL\"}}',1,NOW(6),0,1,'DATABASE');\n")
+    tenant = f"""
 INSERT INTO sym_application_t (tid,tenant_id,app_name,client_id,is_use,is_del,created_time)
 VALUES ('{APP}','{TENANT}','海通数据集成中心','haitong',1,0,NOW(6));
 INSERT INTO rm_org_t (id,tenant_id,name,parent_id,serial_number,org_path,nature,status,deleted,sort_num)
@@ -120,6 +115,17 @@ VALUES ('{MENU}','{TENANT}','NiFi 流程','ROOT','/development/nifi-flows','nifi
 INSERT INTO rm_role_menu_rela_t (id,tenant_id,role_id,app_resource_id)
 VALUES ('8fb3fdba44d54a729098000000000006','{TENANT}','{ROLE}','{MENU}');
 """
+    return control, tenant
+
+
+def database_files():
+    control, control_tables = ddl("baseline", "baseline", CONTROL_TABLES)
+    tenant, tenant_tables = ddl("baseline_ga", "baseline_haitong", TENANT_TABLES)
+    rows, magic_paths = magic_rows()
+    control_seed, tenant_seed = seed_sql()
+    resources = [f"({literal(row_id)},{literal(path)},{literal(content)},0)" for row_id, path, content in rows]
+    control += control_seed + "INSERT INTO api_file_t (tid,file_path,file_content,is_del) VALUES\n" + ",\n".join(resources) + ";\n"
+    tenant += tenant_seed
     manifest = {"controlDatabase": "baseline", "tenantDatabase": "baseline_haitong",
                 "controlTables": control_tables, "tenantTables": tenant_tables, "magicResources": magic_paths}
     return {
@@ -135,7 +141,13 @@ def pack(output, name, files):
     with ZipFile(target, "w", ZIP_DEFLATED) as archive:
         for relative, source in sorted(files.items()):
             if isinstance(source, Path):
-                archive.write(source, relative, compress_type=ZIP_STORED if source.suffix == ".jar" else ZIP_DEFLATED)
+                if source.suffix == ".sh":
+                    script = ZipInfo(relative)
+                    script.create_system = 3
+                    script.external_attr = 0o100755 << 16
+                    archive.writestr(script, source.read_text(encoding="utf-8").encode("utf-8"), compress_type=ZIP_DEFLATED)
+                else:
+                    archive.write(source, relative, compress_type=ZIP_STORED if source.suffix in (".jar", ".gz") else ZIP_DEFLATED)
             else:
                 archive.writestr(relative, source)
     with ZipFile(target) as archive:
@@ -151,12 +163,16 @@ def main():
     parser.add_argument("--jar", type=Path, default=BUILD / "backend/data-element.jar")
     parser.add_argument("--frontend", type=Path, default=BUILD / "frontend")
     parser.add_argument("--nacos", action="store_true", help="Use the standard backend and import configuration from Nacos")
+    parser.add_argument("--dm8-runtime-dir", type=Path, help="Bundle DM8 SQL and verified Linux x64/ARM64 runtimes")
     layout = parser.add_mutually_exclusive_group()
     layout.add_argument("--database-only", action="store_true")
     layout.add_argument("--bundle", action="store_true", help="Package the complete deployment in a single ZIP")
     args = parser.parse_args()
+    if args.dm8_runtime_dir and (not args.bundle or args.nacos):
+        parser.error("--dm8-runtime-dir requires --bundle with Nacos disabled")
     args.output.mkdir(parents=True, exist_ok=True)
-    database = database_files()
+    database = (dameng_database_files(ROOT, CONTROL_TABLES, TENANT_TABLES, TENANT, magic_rows(), seed_sql())
+                if args.dm8_runtime_dir else database_files())
     if args.database_only:
         pack(args.output, "haitong-database-lite.zip", database)
         return
@@ -182,6 +198,13 @@ def main():
         driver = next(name for name in names if re.fullmatch(r"BOOT-INF/lib/mariadb-java-client-\d[^/]*\.jar", name))
         mariadb = examples_build / Path(driver).name
         mariadb.write_bytes(jar.read(driver))
+        if args.dm8_runtime_dir:
+            dm_driver = next(name for name in names if re.fullmatch(r"BOOT-INF/lib/DmJdbcDriver18-\d[^/]*\.jar", name, re.I))
+            dm_library = examples_build / Path(dm_driver).name
+            dm_library.write_bytes(jar.read(dm_driver))
+            sm3 = next(name for name in names if re.fullmatch(r"BOOT-INF/lib/bcprov-jdk(?:18on|15on|15to18)-\d[^/]*\.jar", name))
+            sm3_library = examples_build / Path(sm3).name
+            sm3_library.write_bytes(jar.read(sm3))
     quality = examples_build / "quality-check.jar"
     build_quality_example(sorted(jackson), quality, examples_build)
     runtime_config = TEMPLATES / "application.yml"
@@ -217,6 +240,14 @@ def main():
         "temp/.gitkeep": b"",
     })
     configuration = "nacos" if args.nacos else "no-nacos"
+    if args.dm8_runtime_dir:
+        configuration = "dm8-no-nacos-kylin-v10"
+        backend.update(linux_runtime_files(TEMPLATES, args.dm8_runtime_dir))
+        backend[f"tools/lib/{dm_library.name}"] = dm_library
+        backend[f"tools/lib/{sm3_library.name}"] = sm3_library
+        for name in ("start-backend.ps1", "start-backend.sh"):
+            del backend[name]
+        del frontend["config/nginx.conf"]
     if args.bundle:
         packages = [pack(args.output, f"haitong-deployment-{configuration}.zip", database | backend | frontend)]
     else:

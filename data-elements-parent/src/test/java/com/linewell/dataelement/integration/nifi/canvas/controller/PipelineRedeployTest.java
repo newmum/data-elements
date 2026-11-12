@@ -380,6 +380,22 @@ class PipelineRedeployTest {
         assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
     }
 
+    @Test
+    void explicitRedeployRebuildsEvenWhenDesignIsUnchanged() {
+        Pipeline p = stored.get();
+        stored.set(pipeline("old-group", deployedHash(p.dsl()), PipelineStatus.STOPPED));
+        when(groups.isCurrent(any(), eq("old-group"))).thenReturn(true);
+        compileNewGroup();
+
+        assertThat(controller.deploy("p1", new PipelineRunController.DeployRequest(null, false, true))
+                .getStatusCode().value()).isEqualTo(200);
+
+        verify(nifi).requireEmptyQueuesForRedeploy("old-group");
+        verify(nifi).cleanupProcessGroup("old-group");
+        verify(compiler).compile(any(), any(), any());
+        assertThat(stored.get().nifiProcessGroupId()).isEqualTo("new-group");
+    }
+
     private void setFullLoad(String mode, boolean delete) {
         var source = new Pipeline.Node("source", "source.jdbc", "来源", "source", 0, 0,
                 Map.of("syncMode", mode, "deleteTargetData", delete));

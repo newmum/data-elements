@@ -374,13 +374,13 @@ server {
 
 `init.sql` 在实验目标创建后由根工具 `tools/export-db.py` 的 `mysql_export / SHOW CREATE` 完整导出；文件包含完整表、字段、主键、索引及注释，不包含业务记录、连接口令或账号授权。不得对已有运行库执行初始化文件。
 
-维护入口为 `tools/copy-police-resources.py`。复制源快照和回退材料包含受限连接配置，仅存放在仓库外私有目录；运行计划、计数及验收报告位于忽略的 `logs/police-copy/`。
+复制源快照和回退材料包含受限连接配置，仅存放在仓库外私有目录。运行计划、计数及验收报告位于忽略的 `logs/police-copy/`。
 
 <a id="police-resource-import--工具与验证"></a>
 
 ### 工具与验证
 
-维护工具为根目录 `tools/copy-police-resources.py`，默认只读计划；通用连接能力由 `tools/chengtian-maintenance.py` 提供。准备迁入前必须已有独立目标连接，工具不再从合成数据源复制配置。分阶段入口为 `plan`、`menu`、`prepare`、`apply`、`index` 和 `verify`；`reprepare` 仅从仓库外已准备快照重新生成候选内容，写入前仍须重新比较来源配置。
+`tools/copy-police-resources.py` 默认只读计划，通过 `tools/chengtian-maintenance.py` 连接旧 MySQL `chengtian`。这套工具适用于公安绑定 `baseline_ga`、澄天绑定旧 MySQL `chengtian` 的迁入实验，当前澄天金仓 `baseline_ct.public` 不适用。准备迁入前必须已有独立目标连接，工具不再从合成数据源复制配置。分阶段入口为 `plan`、`menu`、`prepare`、`apply`、`index` 和 `verify`。`reprepare` 从仓库外已准备快照重新生成候选内容，写入前重新比较来源配置。
 
 已迁入批次的来源兼容使用`repair-chain`只读规划，再以`repair-chain --apply`执行所选批次；`--pipeline-id`可重复指定当前核对的画布，所选ID必须属于受限复制快照。只处理至多100个明确画布，批量读取当前任务/登记关联并一次校验全部数据源的当前角色范围。仅当画布仍与原复制快照一致、保持SAVED且没有部署痕迹时补齐来源绑定；人工修改、已部署、跨租户、失效或无权引用均拒绝覆盖。执行前保存仓库外受限备份，按原DSL、版本时间及当前任务/登记关联进行原子并发比较，任一冲突整批回退。此操作不重建表、不写来源数据、不操作NiFi，也不在打开画布时隐式修复。
 
@@ -566,11 +566,11 @@ ES 资产投影从当前澄天主表及白名单属性重新生成，按每批 2
 
 Elasticsearch数据源使用已登记的HTTP/HTTPS Endpoint和认证配置；`es`、`elastic`统一识别为`elasticsearch`。索引范围保存在连接配置的`database`（可空或通配表达式），不得用数据源中文显示名代替。一个普通索引对应一张登记表，mapping的对象路径展开为字段；隐藏/系统索引不进入采集。第二步沿用现有后台采集、分页快照和按需字段采集流程，完整索引清单不按500条截断，超过10000个时须缩小范围。
 
-后台采集先请求 `GET /_cat/indices/<已登记索引范围>`，字段探查批量请求该范围内的 `/_mapping`，预览请求 `/_search`。连接测试只请求根路径，成功不等于具备后续权限。采集任务状态接口返回成功而任务内部为 `FAILED / Elasticsearch读取失败，HTTP 403`，表示上游 ES 或代理拒绝读取，不能当成零张表成功。按实际 ES 版本审阅账号/API Key 的集群 `monitor`、目标索引 `monitor`、`view_index_metadata` 及预览所需 `read` 权限；同时核对登记认证方式和反向代理路径限制。不要给未登记索引扩大授权；排查时查看 ES 原始响应中的 `error.type` 与拒绝的 action，不能仅凭 HTTP 403 确定具体缺失权限。权限依据见 [CAT indices 官方接口](https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-cat-indices) 与 [安全权限定义](https://www.elastic.co/docs/reference/elasticsearch/security-privileges)。
+后台采集先请求 `GET /_cat/indices/<已登记索引范围>`，读取索引和统计。若返回 HTTP 403，使用同一连接认证和索引范围调用一次 `GET /<索引范围>/_alias?expand_wildcards=open`，根据响应的索引名登记，统计数据保留为空。ES 6 的该接口也返回没有别名的索引。若元数据同样被拒绝，采集返回失败并提示核对 `view_index_metadata` 和代理路径，HTTP 401 直接报告。连接测试只请求根路径，后续授权由各接口单独校验。字段探查通过 `/_mapping` 批量读取，索引元数据和字段可授权 `view_index_metadata`，需要预览文档时再对相同索引授予 `read`。只有索引统计需要 CAT 对应的监控权限。依据见 [ES 6.8 CAT 实现](https://github.com/elastic/elasticsearch/blob/v6.8.23/server/src/main/java/org/elasticsearch/rest/action/cat/RestIndicesAction.java)、[ES 6.8 别名查询实现](https://github.com/elastic/elasticsearch/blob/v6.8.23/server/src/main/java/org/elasticsearch/action/admin/indices/alias/get/TransportGetAliasesAction.java)及 [ES 6.8 索引权限](https://github.com/elastic/elasticsearch/blob/v6.8.23/x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/security/authz/privilege/IndexPrivilege.java)。
 
-ES 6 的 `mappings.<type>.properties` 与 ES 7/8 的 `mappings.properties` 统一为登记字段；旧版多类型字段定义冲突时明确拒绝，不静默丢字段。分页及样例预览兼容旧版整数 `hits.total` 和新版 `{value,relation}`；识别到旧版带类型 mapping 时不发送新版命中数追踪选项。协议回归覆盖两个版本的连接、完整索引采集、20/100 项字段读取与预览；每页索引目录加批量 mapping 固定两次 HTTP，越界索引在请求前拒绝。此验证不代表已对现场 ES 6/8 集群的认证、证书、代理及 NiFi 流程完成实测。
+ES 6 的 `mappings.<type>.properties` 与 ES 7/8 的 `mappings.properties` 统一为登记字段；旧版多类型字段定义冲突时明确拒绝，不静默丢字段。分页及样例预览兼容旧版整数 `hits.total` 和新版 `{value,relation}`；识别到旧版带类型 mapping 时不发送新版命中数追踪选项。协议回归覆盖两个版本的连接、完整索引采集、监控权限不足时的回退、20/100 项字段读取与预览。现场 ES 账号的授权及网关配置需用实际索引验证。
 
-ES技术适配器负责HTTP、mapping和DSL转换，不执行SQL或平台业务表读写。索引分页只批量读取当前页mapping；20/100个普通短名称索引均为一次索引清单请求和一次批量mapping请求。单批至多100个且路径长度有界，长名称按路径预算分批；字段批量入口最多500个索引，任一索引超出登记范围时在远端请求前拒绝。租户和角色范围仍由原Magic入口及登记主表校验，ES连接凭据只保存到服务端连接配置，不进入检索投影。
+ES技术适配器负责HTTP、mapping和DSL转换，不执行SQL或平台业务表读写。索引分页只批量读取当前页mapping。20/100个普通短名称索引均为一次索引清单请求和一次批量mapping请求，CAT 403 时各增加一次索引元数据请求。单批至多100个且路径长度有界，长名称按路径预算分批。字段批量入口最多500个索引，任一索引超出登记范围时在远端请求前拒绝，元数据回退结果也按登记范围过滤。租户和角色范围仍由原Magic入口及登记主表校验，ES连接凭据只保存到服务端连接配置，不进入检索投影。
 
 普通数据预览复用原接口，以原生`_search`进行过滤、排序和from/size分页，20/100条均为一次mapping和一次search，不逐文档补查；`track_total_hits=true`返回精确总数，超过默认10000条窗口时需缩小筛选范围。text字段的精确筛选与排序使用已有keyword子字段，缺少时返回明确提示；索引、mapping或分片查询失败不伪报成功。ES不使用JDBC/SQL，不提供本接口的字典类别分组。现有索引只读验证不创建测试索引或业务文档。
 

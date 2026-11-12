@@ -197,7 +197,7 @@ public class PipelineRunController {
         Pipeline p = repo.findById(id).orElse(null);
         if (p == null) return ResponseEntity.notFound().build();
         if (request != null && request.preserveExisting()) return deployCandidate(p, request.catalogTid());
-        return fullDeploy(p, deploymentHash(p), false, request, false);
+        return fullDeploy(p, deploymentHash(p), false, request, request != null && request.forceRebuild());
     }
 
     @GetMapping("/attribute-sync")
@@ -717,7 +717,7 @@ public class PipelineRunController {
             // Note: CS were enabled + waited inside compiler.compile() so that
             // processors are created against already-ENABLED services. We only
             // start the PG here.
-            NifiNodeMapping mapping = buildMapping(p, res);
+            NifiNodeMapping mapping = withAttributeBaselines(p, res.processGroupId(), buildMapping(p, res));
             if (start) {
                 if (TargetTableCleanupService.requested(p)) targetCleanup.clear(p);
                 startNativeFlow(p, res.processGroupId(), mapping);
@@ -825,7 +825,7 @@ public class PipelineRunController {
             if (hiveMergeChange && !manualHiveTemplate) nifi.requireValidGeneratedProcessGroup(result.processGroupId());
             // Hive partition targets deliberately publish the ordinary template for native editing.
             // Keep candidate/queue/watermark protection, without automatic partition validation.
-            NifiNodeMapping mapping = buildMapping(pipeline, result);
+            NifiNodeMapping mapping = withAttributeBaselines(pipeline, result.processGroupId(), buildMapping(pipeline, result));
             for (String group : layout.previousIds()) {
                 nifi.setProcessGroupState(group, "STOPPED");
                 nifi.waitForAllProcessorsStopped(group, 30_000L);
@@ -885,6 +885,16 @@ public class PipelineRunController {
         repo.update(id, cur -> new Pipeline(cur.id(), cur.name(), cur.description(),
                 cur.createdAt(), cur.updatedAt(), cur.dsl(), groupId, PipelineStatus.DEPLOYING,
                 null, null, cur.lastStoppedAt(), null, null));
+    }
+
+    /** 捕获新部署组件的初始属性值；无法读取时保留部署结果并要求后续人工核对。 */
+    private NifiNodeMapping withAttributeBaselines(Pipeline pipeline, String groupId, NifiNodeMapping mapping) {
+        try {
+            return mapping.withAttributes(attributeSync.capture(pipeline.dsl(), groupId, mapping));
+        } catch (RuntimeException error) {
+            log.warn("NiFi 属性基准暂不可读取，pipeline={}, group={}", pipeline.id(), groupId);
+            return mapping;
+        }
     }
 
     /** Map canvas nodes to NiFi components for status and error lookup. */
@@ -953,8 +963,9 @@ public class PipelineRunController {
         return value == null || value.isBlank();
     }
 
-    public record DeployRequest(String catalogTid, boolean preserveExisting) {
-        public DeployRequest(String catalogTid) { this(catalogTid, false); }
+    public record DeployRequest(String catalogTid, boolean preserveExisting, boolean forceRebuild) {
+        public DeployRequest(String catalogTid) { this(catalogTid, false, false); }
+        public DeployRequest(String catalogTid, boolean preserveExisting) { this(catalogTid, preserveExisting, false); }
     }
 
     public record CandidateRequest(String processGroupId) {}

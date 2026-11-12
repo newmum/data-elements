@@ -49,6 +49,8 @@ import {
   usePipeline,
   type PipelineStatus,
   getNifiUiLink,
+  previewRuntimeAttributes,
+  applyRuntimeAttributes,
 } from '@/api/pipelines';
 import { apiClient } from '@/api/client';
 import { resolveNifiNativeUiUrl } from '@/api/nifiNativeUrl';
@@ -64,6 +66,7 @@ import NifiAttributeSyncDialog from './NifiAttributeSyncDialog';
 import { useComponentManifests } from '@/api/manifests';
 import { syncSettings, syncSettingsPatch, syncSettingsError, needsCleanupConfirmation, syncModeLabel, sameSavedContent, type SyncSettings } from '../utils/syncSettings';
 import { sameDesignDsl } from '../utils/pipelineVersion';
+import { planSaveSync, saveSyncMode } from '../utils/saveSyncPlan';
 import type { CanvasDsl } from '@/types/dsl';
 import { useTaskChainStore } from '../stores/taskChainStore';
 import { buildFlowRuntimeMetrics } from '../runtime/runtimeMetrics';
@@ -276,11 +279,12 @@ export default function Toolbar() {
   }, [optimisticStatus, liveStatus]);
 
   const deploySavedPipeline = async (id: string, name: string, submitted: CanvasDsl,
-    catalogTid: string | null = taskChain?.items.find(item => item.pipeline.id === id)?.sourceTableId || getTid()) => {
-    const result = await deploy.mutateAsync({ id, catalogTid, preserveExisting: !isChengtianIntegration });
+    catalogTid: string | null = taskChain?.items.find(item => item.pipeline.id === id)?.sourceTableId || getTid(),
+    forceRebuild = false) => {
+    const result = await deploy.mutateAsync({ id, catalogTid, preserveExisting: !isChengtianIntegration && !forceRebuild, forceRebuild });
     if (!isCurrentSession()) return;
     if (result.mode === 'candidate-created') {
-      message.success('候选流程已部署为停止态，可从「部署与同步」切换。');
+      message.success('候选流程已部署为停止态，可从保存旁的菜单切换。');
       return;
     }
     if (useCanvasStore.getState().currentPipelineId === id && result.pipeline?.id === id) {
@@ -293,11 +297,48 @@ export default function Toolbar() {
   const reportSaveOrDeployFailure = (error: any, deploymentAttempted: boolean, action: string, failedPipelineId = currentPipelineId) => {
     if (!isCurrentSession() || useCanvasStore.getState().currentPipelineId !== failedPipelineId) return;
     const diagnostic = flowActionFailure(error, deploymentAttempted ? 'deploy' : 'save');
-    message.error(`${deploymentAttempted ? '画布已保存，部署未完成' : `${action}失败`}：${diagnostic.message}`);
+    message.error(`${deploymentAttempted ? '画布已保存，同步或部署未完成' : `${action}失败`}：${diagnostic.message}`);
     openErrorPanel();
   };
 
-  // ---- Save the design independently of the deployed graph ----
+  // 首次保存部署流程。已有流程仅同步已支持且未发生原生侧冲突的属性。
+  const syncSavedPipeline = async (saved: NonNullable<typeof currentPipelineQuery.data>, previousDsl?: CanvasDsl,
+    catalogTid?: string | null) => {
+    const mode = saveSyncMode(saved.nifiProcessGroupId, saved.nodeMapping, saved.lastDeployedHash);
+    if (mode === 'deploy') {
+      await deploySavedPipeline(saved.id, saved.name, saved.dsl, catalogTid);
+      return;
+    }
+    if (mode === 'missing-mapping') {
+      message.warning('设计已保存。NiFi 历史流程组或组件关联不完整，请核对原生流程后从保存旁菜单选择重新部署。');
+      return;
+    }
+    const preview = await previewRuntimeAttributes(saved.id);
+    if (!isCurrentSession()) return;
+    const { automatic: changed, unresolved, needsRedeploy } = planSaveSync(previousDsl, saved.dsl, preview.changes);
+    for (let offset = 0; offset < changed.length; offset += 100) {
+      const selections = changed.slice(offset, offset + 100).map(row => ({
+        nodeId: row.nodeId, field: row.field, processorId: row.processorId,
+        currentValue: row.currentValue, designValue: row.designValue, keepNative: false,
+      }));
+      const results = await applyRuntimeAttributes(saved.id, preview.processGroupId, selections);
+      if (!isCurrentSession()) return;
+      if (results.some(row => row.status !== 'SYNCED')) {
+        message.warning('设计已保存，部分 NiFi 属性未同步，请重新核对。');
+        setAttributeSyncOpen(true);
+        return;
+      }
+    }
+    if (unresolved.length) {
+      message.warning('设计已保存，部分 NiFi 属性需要核对后才能同步。');
+      setAttributeSyncOpen(true);
+    } else if (needsRedeploy) {
+      message.warning('设计已保存并同步可更新的属性。节点、连接或其他配置变化需要重新部署流程。');
+    } else {
+      message.success('流程已保存，支持的 NiFi 属性已同步');
+    }
+  };
+
   const doSaveInPlace = async () => {
     if (!isCurrentSession()) return;
     if (actionLock.current || readOnlySnapshot || save.isPending || deploy.isPending || isTransitioning) return;
@@ -310,14 +351,14 @@ export default function Toolbar() {
         // Let the busy state paint before serialization, especially on older workstations.
         await new Promise<void>(resolve => window.requestAnimationFrame(() => window.setTimeout(resolve, 0)));
         if (!isCurrentSession()) return;
+        const previousDsl = currentPipelineQuery.data?.dsl;
         const dsl = toDsl();
         const saved = await save.mutateAsync({ id: currentPipelineId, name: currentPipelineName, dsl });
         if (!isCurrentSession()) return;
         if (useCanvasStore.getState().currentPipelineId === currentPipelineId) setCurrentPipeline(saved.id, saved.name);
-        if (isChengtianIntegration) {
-          deploymentAttempted = true;
-          await deploySavedPipeline(saved.id, saved.name, saved.dsl);
-        } else message.success('流程设计已保存');
+        deploymentAttempted = true;
+        if (isChengtianIntegration) await deploySavedPipeline(saved.id, saved.name, saved.dsl);
+        else await syncSavedPipeline(saved, previousDsl);
       } catch (e: any) {
         reportSaveOrDeployFailure(e, deploymentAttempted, '保存');
       } finally {
@@ -374,14 +415,18 @@ export default function Toolbar() {
   };
 
   const deployDesign = async () => {
-    if (!isCurrentSession() || actionLock.current || readOnlySnapshot || !requireSavedDesign() || !savedPipeline) return;
+    if (!isCurrentSession() || actionLock.current || readOnlySnapshot || !currentPipelineId || !currentPipelineName) return;
     actionLock.current = true;
     setOperationBusy(true);
     setActiveAction('deploy');
+    let savedSuccessfully = false;
     try {
-      await deploySavedPipeline(savedPipeline.id, savedPipeline.name, savedPipeline.dsl);
+      const saved = await save.mutateAsync({ id: currentPipelineId, name: currentPipelineName, dsl: toDsl() });
+      savedSuccessfully = true;
+      if (!isCurrentSession()) return;
+      await deploySavedPipeline(saved.id, saved.name, saved.dsl, undefined, true);
     } catch (error) {
-      reportSaveOrDeployFailure(error, true, '部署', savedPipeline.id);
+      reportSaveOrDeployFailure(error, savedSuccessfully, '保存', currentPipelineId);
     } finally {
       actionLock.current = false;
       setOperationBusy(false);
@@ -852,7 +897,8 @@ export default function Toolbar() {
         <Tooltip title={isChengtianIntegration ? '外部运行端尚未配置到当前租户，画布只保存和发布设计版本' : nativeDetails.tooltip}>
           <span><Button className="coze-toolbar__action" icon={nativeChecking ? <BusyIndicator /> : <LinkOutlined />} disabled={isChengtianIntegration || nativeChecking || !canOpenNative} onClick={handleOpenNifi}>详情</Button></span>
         </Tooltip>
-        <Tooltip title={`${hasTaskChain ? `当前操作任务：${currentPipelineName}；` : ''}${isChengtianIntegration ? '保存并发布设计版本 (Ctrl+S)' : '保存设计 (Ctrl+S)'}`}>
+        <div className="canvas-save-actions">
+        <Tooltip title={`${hasTaskChain ? `当前操作任务：${currentPipelineName}；` : ''}${isChengtianIntegration ? '保存并发布设计版本 (Ctrl+S)' : '保存并同步到 NiFi (Ctrl+S)'}`}>
           <Button
             className="coze-toolbar__action canvas-save-action"
             aria-busy={activeAction === 'save' || save.isPending || deploy.isPending}
@@ -866,15 +912,16 @@ export default function Toolbar() {
 
         {!isChengtianIntegration && <Dropdown trigger={['click']} getPopupContainer={getNifiOverlayContainer}
           menu={{ items: [
-            { key: 'deploy', label: savedPipeline?.nifiProcessGroupId ? '部署新候选流程' : '部署到 NiFi', onClick: () => void deployDesign() },
-            { key: 'sync', label: '同步属性到 NiFi', disabled: !savedPipeline?.nifiProcessGroupId,
-              onClick: () => { if (requireSavedDesign()) setAttributeSyncOpen(true); } },
+            { key: 'deploy', label: '重新部署流程', disabled: isRunning, onClick: () => {
+              modal.confirm({ title: '重新部署流程', content: '将保存当前画布并重建 NiFi 流程。请先确认旧流程及队列已处理完毕。', okText: '重新部署', cancelText: '取消', onOk: deployDesign });
+            } },
             ...(candidate ? [{ key: 'activate', label: '切换到候选流程', disabled: isRunning, onClick: activatePreparedCandidate }] : []),
           ] }}>
-          <Button className="coze-toolbar__action" disabled={readOnlySnapshot || !!activeAction || save.isPending || isTransitioning}>
-            {activeAction === 'deploy' ? '部署中' : '部署与同步'} <DownOutlined />
+          <Button className="coze-toolbar__action canvas-save-menu" aria-label="保存操作" disabled={readOnlySnapshot || !!activeAction || save.isPending || isTransitioning}>
+            <DownOutlined />
           </Button>
         </Dropdown>}
+        </div>
 
         {isRunning ? (
           <Button
@@ -973,10 +1020,9 @@ export default function Toolbar() {
               }));
             }
             setOpenSaveAs(false);
-            if (isChengtianIntegration) {
-              deploymentAttempted = true;
-              await deploySavedPipeline(saved.id, saved.name, submitted, isCopy ? null : getTid());
-            } else message.success('流程设计已保存');
+            deploymentAttempted = true;
+            if (isChengtianIntegration) await deploySavedPipeline(saved.id, saved.name, submitted, isCopy ? null : getTid());
+            else await syncSavedPipeline(saved, undefined, isCopy ? null : getTid());
           } catch (e: any) {
             message.destroy('start-flow');
             reportSaveOrDeployFailure(e, deploymentAttempted, '保存', savedPipelineId);
