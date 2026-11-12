@@ -608,8 +608,9 @@ const cleanupMonitorHistory = async () => {
       ElMessage.info("当前没有需要清理的监控历史快照");
       return;
     }
+    const batchSize = Math.min(count, Number(preview.batchSize || count));
     await ElMessageBox.confirm(
-      `将清理 ${preview.cutoff} 之前的 ${count} 条监控历史快照。此操作不可撤销，确认清理吗？`,
+      `${preview.cutoff} 之前有 ${count} 条监控历史快照。本次最多永久删除 ${batchSize} 条，确认清理吗？`,
       "确认清理监控历史",
       { type: "warning", confirmButtonText: "确认清理", cancelButtonText: "取消" }
     );
@@ -619,7 +620,10 @@ const cleanupMonitorHistory = async () => {
       confirm: true,
     });
     const result = resultResponse?.data || resultResponse || {};
-    ElMessage.success(`已清理 ${Number(result.deleted || 0)} 条监控历史快照`);
+    const deleted = Number(result.deleted || 0);
+    ElMessage.success(result.hasMore
+      ? `已删除 ${deleted} 条监控历史快照，仍有到期记录，可继续清理。`
+      : `已删除 ${deleted} 条监控历史快照。`);
   } catch (error) {
     if (error === "cancel" || error === "close" || error?.action === "cancel") return;
     ElMessage.error(operationErrorMessage(error, "清理监控历史失败"));
@@ -790,39 +794,29 @@ const deleteCurrentFlow = async () => {
   const row = deleteDrawerRow.value;
   if (!row || deletingTargets.value) return;
   const sourceTableId = String(row.sourceTableId || '').trim();
-  let deleteBySource = false;
-  let taskCount = 1;
+  deletingTargets.value = true;
   try {
-    if (row.recordSource !== 'pipeline' && sourceTableId) {
-      const previewResponse = await $common.post('/ods/dataAggReset', {
-        sourceTableId, deleteTargetTable: false, dryRun: true,
-      }, { _hiddenErrorMsg: true });
-      const preview = previewResponse?.data || previewResponse || {};
-      if (String(preview.sourceTableId || '') !== sourceTableId) {
-        throw new Error('无法确认来源表与待删除任务的关联，请刷新后重试');
-      }
-      taskCount = Number(preview.taskCount || 0);
-      deleteBySource = taskCount > 0;
-    }
+    const taskId = row.recordSource === 'pipeline' ? '' : requireOperationId(row.tid, '缺少任务编号，无法删除');
     await ElMessageBox.confirm(
-      `${deleteBySource && taskCount > 1 ? `该来源表关联 ${taskCount} 个接入任务，将一并删除。` : '将删除当前接入任务和关联流程。'}已创建的目标表及其数据会保留，可在“建表情况”中单独删除。确认继续吗？`,
+      '将删除当前接入任务和关联流程。已创建的目标表及其数据会保留，可在“建表情况”中单独删除。确认继续吗？',
       '删除任务', { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' },
     );
-    deletingTargets.value = true;
+    let response;
     if (row.recordSource === 'pipeline') {
       const pipelineId = requireOperationId(row.pipelineId, '缺少流程编号，无法删除');
-      await $request.post(`/nifi/api/pipelines/delete/${pipelineId}`, {},
+      response = await $request.post(`/nifi/api/pipelines/delete/${pipelineId}`, {},
         { responsePolicy: 'raw', errorPolicy: 'silent', timeout: 120 * 1000 });
-    } else if (deleteBySource) {
-      await $common.post('/ods/dataAggReset', { sourceTableId, deleteTargetTable: false },
+    } else if (sourceTableId) {
+      response = await $common.post('/ods/dataAggReset', { sourceTableId, taskId, deleteTargetTable: false },
         { _hiddenErrorMsg: true }, 120 * 1000);
     } else {
-      await $common.post('/ods/task/deleteById', { tid: row.tid },
+      response = await $common.post('/ods/task/deleteById', { tid: taskId },
         { _hiddenErrorMsg: true }, 120 * 1000);
-      outcomes.push(response?.data || response || {});
     }
     deleteDrawerVisible.value = false;
-    ElMessage.success('已删除任务和关联流程，目标表及数据已保留');
+    const outcome = response?.data || response || {};
+    const pending = Number(outcome.processGroupCleanupPendingCount || 0) > 0;
+    ElMessage[pending ? 'warning' : 'success'](outcome.message || '已删除任务和关联流程，目标表及数据已保留');
     await refreshTable();
   } catch (error) {
     if (error !== 'cancel' && error !== 'close' && error?.action !== 'cancel') {
@@ -930,6 +924,7 @@ const deleteAllTargets = async () => {
     for (const target of targets) {
       const response = await $common.post('/ods/dataAggReset', deleteTargetPayload(target),
         { _hiddenErrorMsg: true }, 120 * 1000);
+      outcomes.push(response?.data || response || {});
     }
     deleteDrawerVisible.value = false;
     const summary = targetCleanupSummary(outcomes);

@@ -17,25 +17,26 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n    \"code\": 500,\n    \"msg\": \"任务不存在\",\n    \"success\": false,\n    \"data\": null\n}",
-  "description": "当前租户内按任务 ID 取消接入；允许没有来源表的独立任务；使用请求参数 tid、dryRun；涉及 data_access_agg_task_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t、da_prop_t 等业务表；执行数据库写入并返回处理结果。",
+  "description": "当前租户内按任务 ID 取消接入；允许没有来源表的独立任务；使用请求参数 tid、dryRun；涉及 data_access_agg_task_t、data_access_field_mapping、nifi_pipeline_t、da_prop_t 等业务表；执行数据库写入并返回处理结果。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
+import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifiClient
+import log
+import tenantRuntime
+
 // 接口：03.根据id删除任务
 // 路由：POST /ods/task/deleteById
-// 业务说明：当前租户内按任务 ID 取消接入；允许没有来源表的独立任务；使用请求参数 tid、dryRun；涉及 data_access_agg_task_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t、da_prop_t 等业务表；执行数据库写入并返回处理结果。
+// 业务说明：当前租户内按任务 ID 取消接入；允许没有来源表的独立任务；使用请求参数 tid、dryRun；涉及 data_access_agg_task_t、data_access_field_mapping、nifi_pipeline_t、da_prop_t 等业务表；执行数据库写入并返回处理结果。
 /*
  * 删除数据接入任务
  *
  * 当前租户内按任务 ID 取消接入；允许没有来源表的独立任务。
- * 先逻辑删除任务、字段映射、监控快照和流水线持久化记录，再清理 NiFi
+ * 先逻辑删除任务、字段映射和流水线持久化记录，再清理 NiFi
  * 进程组。只清空指向该任务的目录 accessTaskId，不删除目标物理表。
  * dryRun=true 只校验任务归属并返回计划，不写入或清理运行态。
  */
-import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifiClient
-import log
-import tenantRuntime
 
 var text = value => value == null ? '' : (value + '').trim()
 var tid = text(body?.tid)
@@ -58,13 +59,12 @@ if (body?.dryRun == true) {
     }
 }
 
+// 任务和流程的生命周期与监控历史保留期限独立。
 var now = new Date()
 db.table('data_access_agg_task_t').where().eq('tid', tid).eq('tenant_id', tenantId).eq('is_del', 0)
     .update({is_del: 1, task_status: 0, updated_time: now})
 db.table('data_access_field_mapping').where().eq('task_id', tid).eq('is_del', 0)
     .update({is_del: 1, updated_time: now})
-db.table('data_access_task_monitor_snap_t').where().eq('task_id', tid).eq('is_del', 0)
-    .update({is_del: 1})
 if (task.pipelineId != null && task.pipelineId != '') {
     db.table('nifi_pipeline_t').where().eq('id', task.pipelineId).eq('tenant_id', tenantId).eq('is_del', 0)
         .update({is_del: 1, updated_at: System.currentTimeMillis()})

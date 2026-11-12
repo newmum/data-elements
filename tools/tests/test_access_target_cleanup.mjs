@@ -22,7 +22,7 @@ for (const [index, file] of paths.entries()) {
   const script = source.match(/<script\b[^>]*>([\s\S]*?)<\/script>/)?.[1];
   const names = [...(index < 2 ? ['props','isDistribution','taskPage','taskName'] : []),
     ...helpers, ...(index === 3 ? ['handleDeleteExistingTarget']
-    : index === 2 ? ['deleteTargetPayload', 'deleteSingleTarget', 'deleteAllTargets'] : ['handleTaskRecovery'])];
+    : index === 2 ? ['requireOperationId', 'deleteCurrentFlow', 'deleteTargetPayload', 'deleteSingleTarget', 'deleteAllTargets'] : ['handleTaskRecovery'])];
   const ast = babel.Babel.transform(script, { ast: true, code: false, configFile: false, babelrc: false,
     parserOpts: { sourceType: 'module', plugins: ['typescript'] } }).ast;
   const selected = names.map(name => {
@@ -43,7 +43,7 @@ for (const [index, file] of paths.entries()) {
       completedMaterializations: new Map([[target.targetDbId, { table: target }]]),
       materializationResults: ref([{ dbId: target.targetDbId, status: 'succeeded' }]),
       scheduleVisible: ref(true), targetDrawerVisible: ref(true), accessTaskId: ref('task-1'),
-      deleteDrawerRow: ref({ sourceTableId: 'source-1' }), deleteDrawerVisible: ref(true),
+      deleteDrawerRow: ref({ sourceTableId: 'source-1', tid: 'task-1' }), deleteDrawerVisible: ref(true),
       deleteDrawerTargets: ref([target]), deletingTargets: ref(false), canDeleteTarget: () => true,
       operationErrorMessage: error => error.message, tableRef: ref({ refresh: async () => {} }), refreshTable: async () => {},
       $message: messages, ElMessage: messages,
@@ -76,6 +76,15 @@ for (const [index, file] of paths.entries()) {
   await cleanup(pending);
   assert.equal(pending.notices.filter(item => item.key === 'error').length, 0, file);
   assert.ok(pending.notices.some(item => item.key === 'warning' && /待重试/.test(item.message)), file);
+  if (index < 3) {
+    const flow = fixture({ processGroupCleanupPendingCount: 1, message: '部分流程清理待重试' });
+    if (index === 2) await flow.actual.deleteCurrentFlow();
+    else await flow.actual.handleTaskRecovery({ tid: 'task-1', sourceTableId: 'source-1', targetTableId: 'stale-target' }, {}, 'flow');
+    assert.equal(flow.calls.length, 1, 'Deleting the selected flow uses a single request');
+    assert.deepEqual(JSON.parse(JSON.stringify(flow.calls[0].body)),
+      { sourceTableId: 'source-1', taskId: 'task-1', deleteTargetTable: false });
+    assert.ok(flow.notices.some(item => item.key === 'warning' && /待重试/.test(item.message)), file);
+  }
   if (index === 3) {
     assert.equal(hive.context.completedMaterializations.has(target.targetDbId), false);
     assert.equal(hive.context.materializationResults.value.length, 0);

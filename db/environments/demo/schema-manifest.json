@@ -33,14 +33,14 @@
       "objects": {
         "tables": 177,
         "views": 0,
-        "indexes": 627,
+        "indexes": 628,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "719328698c7675ef23b9372b91a714305e7c43c58a6367ec055e904a48b564a8",
+      "sha256": "0b2c07cacb423c74217aede123a0b85cb339e37ec6a0eabed114e3a08c4367e2",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -55,14 +55,14 @@
       "objects": {
         "tables": 177,
         "views": 0,
-        "indexes": 627,
+        "indexes": 628,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "374e5f9514261370884f18745da66d0f62e0bac850549395754ee806cb0f1757",
+      "sha256": "4c1ae6f4d23a100696b5f065e47928e25a2cbc42ebe6c7615eeea6b3abf7e1fa",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -77,14 +77,14 @@
       "objects": {
         "tables": 177,
         "views": 0,
-        "indexes": 627,
+        "indexes": 628,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "541965773e354f9eac98ab8224631b99bd9cfa83d2e11fa49e2dadaa12e89c3e",
+      "sha256": "09f3db5586faccb454a94bb347a7120118b338911dafdeaacecb6881f8954c7d",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",
@@ -99,14 +99,14 @@
       "objects": {
         "tables": 177,
         "views": 0,
-        "indexes": 627,
+        "indexes": 628,
         "foreignKeys": 2,
         "triggers": 0,
         "procedures": 0,
         "functions": 0,
         "events": 0
       },
-      "sha256": "8f45a59ccf0fd77fd01891c7b8e3894fe64c3b9a80dc798ee125ed9f5d8e8539",
+      "sha256": "d949377dbf897cbcdd9ad7c413d54d225ca8d1cbab30da0a0c676ad4c5a6c10d",
       "exportNotes": {
         "definitions": "SHOW CREATE",
         "routineDefiners": "omitted",

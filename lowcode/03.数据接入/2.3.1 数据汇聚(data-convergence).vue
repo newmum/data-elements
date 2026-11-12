@@ -1165,6 +1165,11 @@ const handleTaskRecovery = async (task, row, command, target = null) => {
     return;
   }
   const deleteTargetTable = command === "target";
+  const taskId = String(task?.tid || "").trim();
+  if (!deleteTargetTable && !taskId) {
+    $message.warning("缺少任务编号，请刷新后再删除流程");
+    return;
+  }
   const actionText = deleteTargetTable ? (isHiveTarget(target) ? `移除 Hive ${taskPage.verb}登记和流程` : "删除目标表并移除流程") : "删除任务";
   try {
     await ElMessageBox.confirm(
@@ -1176,10 +1181,11 @@ const handleTaskRecovery = async (task, row, command, target = null) => {
     );
     const response = await $common.post("/ods/dataAggReset", {
       sourceTableId,
-      ...(!deleteTargetTable && task?.tid ? { taskId: task.tid } : {}),
-      targetTableId: target?.targetTableId || task?.targetTableId || task?.target_table_id || row?.targetTableId || "",
-      targetDbId: target?.targetDbId || "",
-      targetTableName: target?.targetTableName || target?.tableName || "",
+      ...(deleteTargetTable ? {
+        targetTableId: target?.targetTableId || task?.targetTableId || task?.target_table_id || row?.targetTableId || "",
+        targetDbId: target?.targetDbId || "",
+        targetTableName: target?.targetTableName || target?.tableName || "",
+      } : { taskId }),
       deleteTargetTable,
     });
     scheduleVisible.value = false;

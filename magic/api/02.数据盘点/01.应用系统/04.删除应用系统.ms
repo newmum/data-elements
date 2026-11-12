@@ -22,11 +22,12 @@
   "responseBodyDefinition": null
 }
 ================================
+import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
+
 // 接口：04.删除应用系统
 // 路由：POST /dst/application/delete
 // 业务说明：按应用系统标识查找关联数据源、表、字段、目录及接入任务；dryRun 仅预估清理范围，正式执行时清理关联平台元数据和索引，不删除业务物理表。
 // 删除应用系统：处理 POST /delete 的核心写入或状态变更逻辑。
-import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 
 var text = value => value == null ? '' : (value + '').trim()
 var addUnique = (rows, value) => {
@@ -99,7 +100,6 @@ if (dryRun) {
 var nowTime = new Date()
 if (taskIds.size() > 0) {
     db.table('data_access_field_mapping').where().in('task_id', taskIds).eq('is_del', 0).update({ is_del: 1, updated_time: nowTime })
-    db.table('data_access_task_monitor_snap_t').where().in('task_id', taskIds).eq('is_del', 0).update({ is_del: 1 })
     db.table('data_access_agg_task_t').where().in('tid', taskIds).eq('is_del', 0).update({ is_del: 1, task_status: 0, updated_time: nowTime })
 }
 if (pipelineIds.size() > 0) {

@@ -17,37 +17,25 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "手工预览或清理当前租户超过保留天数的任务监控历史快照。执行清理必须显式传入 confirm=true；不会删除接入任务与最新监控状态；使用请求参数 retentionDays、dryRun、confirm；涉及 data_access_task_monitor_snap_t 等业务表。",
+  "description": "当前租户全量数据范围用户可预览或分批物理删除到期监控快照，包含历史软删记录。执行必须同时传入 dryRun=false 和 confirm=true，每次最多 1000 条。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：07.手工清理任务监控历史
-// 路由：POST /ods/task/monitorSnapCleanup
-// 业务说明：手工预览或清理当前租户超过保留天数的任务监控历史快照。执行清理必须显式传入 confirm=true；不会删除接入任务与最新监控状态；使用请求参数 retentionDays、dryRun、confirm；涉及 data_access_task_monitor_snap_t 等业务表。
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import '@/common/purge-task-monitor-snapshots' as purgeSnapshots
+import dataScope
 
-// 读取请求中的业务标识与筛选条件，供下面的校验和查询使用。
-var retentionDays = body?.retentionDays::int(30)
-if (retentionDays < 1 || retentionDays > 1000) {
-    throw new IllegalArgumentException('保留天数必须在 1–1000 天之间')
+// 接口：POST /ods/task/monitorSnapCleanup。retentionDays 确定快照的到期边界。
+// 预览返回到期数量，确认后返回本批物理删除数及是否还有剩余。
+// 清理横跨租户内全部任务，部门和个人数据范围不得预览或执行全库清理。
+var scope = dataScope.dataSource()
+if (scope?.scope != 'ALL' || scope?.userId == null) {
+    exit 403, '需要当前租户的全部数据范围才能清理监控历史'
 }
-var cutoff = LocalDateTime.now().minusDays(retentionDays)
-    .format(DateTimeFormatter.ofPattern('yyyy-MM-dd HH:mm:ss'))
-// 以下从 data_access_task_monitor_snap_t 业务表读取或维护当前操作涉及的记录。
-var count = db.table('data_access_task_monitor_snap_t').where()
-    .eq('is_del', 0).lt('monitor_time', cutoff).count()
 
-if (body?.dryRun != false) {
-    return {retentionDays: retentionDays, cutoff: cutoff, count: count, deleted: 0}
+var dryRun = body?.dryRun != false
+if (!dryRun && body?.confirm != true) {
+    exit 400, '请先预览并确认清理范围'
 }
-if (body?.confirm != true) {
-    throw new IllegalArgumentException('请先预览并确认清理范围')
-}
-var deleted = 0
-if (count > 0) {
-    deleted = db.table('data_access_task_monitor_snap_t').where()
-        .eq('is_del', 0).lt('monitor_time', cutoff).delete()
-}
-return {retentionDays: retentionDays, cutoff: cutoff, count: count, deleted: deleted}
+var retentionDays = body?.retentionDays == null ? 30 : body.retentionDays::int(0)
+return purgeSnapshots(retentionDays, dryRun)

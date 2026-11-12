@@ -22,15 +22,16 @@
   "responseBodyDefinition": null
 }
 ================================
-// 接口：18.删除已登记表资产
-// 路由：POST /dst/database/metadata/tables/deleteAsset
-// 业务说明：删除已失效表资产（POST /dst/database/metadata/tables/deleteAsset）。支持 tableId 或 tableIds 一次批量级联清理；兼容历史租户缺少的非核心目录关联表；不删除物理表，dryRun=true 仅统计；涉及 db_table_t、da_prop_t、data_access_agg_task_t、db_table_column_t、da_asset_catalog_item_t、da_app_catalog_rela 等业务表。
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import jsons
 import cn.hutool.json.JSONUtil
 import java.util.Map
 import tenantRuntime
 import metadataAsset
+
+// 接口：18.删除已登记表资产
+// 路由：POST /dst/database/metadata/tables/deleteAsset
+// 业务说明：删除已失效表资产（POST /dst/database/metadata/tables/deleteAsset）。支持 tableId 或 tableIds 一次批量级联清理；兼容历史租户缺少的非核心目录关联表；不删除物理表，dryRun=true 仅统计；涉及 db_table_t、da_prop_t、data_access_agg_task_t、db_table_column_t、da_asset_catalog_item_t、da_app_catalog_rela 等业务表。
 
 /*
  * 元数据管理 18：级联删除已登记但物理库已不存在的数据表资产。
@@ -291,8 +292,6 @@ if (catalogIds.size() > 0) {
 if (taskIds.size() > 0) {
     db.table('data_access_field_mapping').where().in('task_id', taskIds).eq('is_del', 0)
         .update({ is_del: 1, updated_time: nowTime })
-    db.table('data_access_task_monitor_snap_t').where().in('task_id', taskIds).eq('is_del', 0)
-        .update({ is_del: 1 })
     db.table('data_access_agg_task_t').where().in('tid', taskIds).eq('is_del', 0)
         .update({ is_del: 1, updated_time: nowTime, task_status: 0 })
 }

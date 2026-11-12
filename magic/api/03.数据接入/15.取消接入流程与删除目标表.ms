@@ -19,22 +19,12 @@
   "headers" : [ ],
   "paths" : [ ],
   "responseBody" : null,
-  "description" : "取消或重建数据接入；仅清理当前租户所选来源表关联的目标和流程。未关联但没有任务、目录及衍生表引用的同名目标，预检返回 targetUnlinked；实际删除须指定预检确认的目标表 ID 并提交 confirmUnlinkedTarget=true，且不清理当前来源表任务。Hive（含 MRS 与普通 Hive）仅清理接入流程和目标登记，不连接或删除物理表；非 Hive 执行删表，连接或删除异常时保留画布、任务及目标登记供重试，确认物理清理后用事务批量更新关联记录。NiFi 清理失败保留流程记录。dryRun=true 只读预检；batchDryRun=true 时需同时提交 dryRun=true、deleteTargetTable=true 与最多 20 个 targets，服务端批量预取并逐 ID 校验当前租户内对象归属，只读预检不写业务数据；checkPhysicalExistence=true 用于物化重名检查，否则 Hive 跳过物理探查。单目标删除仍须再次授权。涉及 db_table_t、data_access_agg_task_t、db_datasource_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t 等业务表。",
+  "description" : "取消或重建数据接入；仅清理当前租户所选来源表关联的目标和流程。未关联但没有任务、目录及衍生表引用的同名目标，预检返回 targetUnlinked；实际删除须指定预检确认的目标表 ID 并提交 confirmUnlinkedTarget=true，且不清理当前来源表任务。Hive（含 MRS 与普通 Hive）仅清理接入流程和目标登记，不连接或删除物理表；非 Hive 执行删表，连接或删除异常时保留画布、任务及目标登记供重试，确认物理清理后用事务批量更新关联记录。NiFi 清理失败保留流程记录。dryRun=true 只读预检；batchDryRun=true 时需同时提交 dryRun=true、deleteTargetTable=true 与最多 20 个 targets，服务端批量预取并逐 ID 校验当前租户内对象归属，只读预检不写业务数据；checkPhysicalExistence=true 用于物化重名检查，否则 Hive 跳过物理探查。单目标删除仍须再次授权。涉及 db_table_t、data_access_agg_task_t、db_datasource_t、data_access_field_mapping、nifi_pipeline_t 等业务表。",
   "requestBodyDefinition" : null,
   "responseBodyDefinition" : null
 }
 ================================
-// 接口：15.取消接入流程与删除目标表
-// 路由：POST /ods/dataAggReset
-// 业务说明：取消或重建数据接入。batchDryRun=true 只读预检最多 20 个 targets，批量读取并逐 ID 核验当前租户内对象归属；未关联且无人引用的登记目标须用明确 ID 和 confirmUnlinkedTarget 二次确认，且不清理来源任务。单目标删除重新授权。Hive 清理保留物理表；物化重名预检显式提交 checkPhysicalExistence=true。非 Hive 连接/删除异常和 NiFi 清理异常返回待重试状态并保留相关记录。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
-/*
- * Rebuild recovery for a source table.
- * The operation is deliberately source-scoped so one table cannot remove another
- * table's target metadata or deployed pipeline.
- * Hive cleanup retains the physical table without opening a Hive connection.
- * Materialization explicitly requests read-only physical-name checks.
- */
 import jsons
 import cn.hutool.json.JSONUtil as poolJsons
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
@@ -48,6 +38,17 @@ import log
 import tenantRuntime
 import portableDdl
 import com.linewell.dataelement.metautil.jdbc.JdbcDriverPropertyResolver
+
+// 接口：15.取消接入流程与删除目标表
+// 路由：POST /ods/dataAggReset
+// 业务说明：取消或重建数据接入。batchDryRun=true 只读预检最多 20 个 targets，批量读取并逐 ID 核验当前租户内对象归属；未关联且无人引用的登记目标须用明确 ID 和 confirmUnlinkedTarget 二次确认，且不清理来源任务。单目标删除重新授权。Hive 清理保留物理表；物化重名预检显式提交 checkPhysicalExistence=true。非 Hive 连接/删除异常和 NiFi 清理异常返回待重试状态并保留相关记录。
+/*
+ * Rebuild recovery for a source table.
+ * The operation is deliberately source-scoped so one table cannot remove another
+ * table's target metadata or deployed pipeline.
+ * Hive cleanup retains the physical table without opening a Hive connection.
+ * Materialization explicitly requests read-only physical-name checks.
+ */
 
 var text = (value) => value == null ? '' : value + ''
 var blank = (value) => value == null || text(value).trim() == ''
@@ -156,7 +157,7 @@ var validatedTargetOrigins = (sourceRow, resolvedTargets, taskByTargetId) => {
         if (linkedTask == null
             || text(first(linkedTask, ['sourceTableId', 'source_table_id'])) != sourceId
             || text(first(linkedTask, ['targetTableId', 'target_table_id'])) != targetId) {
-            exit 409, '目标表元数据已关联其他来源表，已拒绝删除'
+            exit 409, '目标表登记的来源与当前任务不一致，已保留目标表。只需清理流程时，请选择“删除此任务流程”'
         }
         mismatches.add({table: target, targetId: targetId, declaredSource: declaredSource})
         if (declaredSource == targetId) {
@@ -203,7 +204,7 @@ var validatedTargetOrigins = (sourceRow, resolvedTargets, taskByTargetId) => {
             modes[candidate.targetId] = 'registered_target_self_marker'
             continue
         }
-        exit 409, '目标表元数据已关联其他来源表，已拒绝删除'
+        exit 409, '目标表登记的来源与当前任务不一致，已保留目标表。只需清理流程时，请选择“删除此任务流程”'
     }
     return modes
 }
@@ -487,19 +488,20 @@ var sourceTable = db.table('db_table_t').where()
     .eq('tid', sourceTableId).eq('tenant_id', tenantId).eq('is_del', 0).selectOne()
 if (sourceTable == null) { exit 404, '来源表不存在' }
 
-var tasks = db.table('data_access_agg_task_t').where()
-    .eq('tenant_id', tenantId).eq('source_table_id', sourceTableId).eq('is_del', 0).select()
+var requestedTaskId = text(body?.taskId).trim()
+var taskQuery = db.table('data_access_agg_task_t').where()
+    .eq('tenant_id', tenantId).eq('source_table_id', sourceTableId).eq('is_del', 0)
+if (!blank(requestedTaskId)) {
+    taskQuery.eq('tid', requestedTaskId)
+}
+var tasks = taskQuery.select()
 var targetTable = null
 var targetChosenByTask = false
 var targetTableId = text(body?.targetTableId || body?.target_table_id).trim()
 var requestedTargetTableId = targetTableId
-var requestedTaskId = text(body?.taskId).trim()
 // 独立任务只取消用户指定的任务/目标；历史单任务多目标画布按其真实sink关联匹配。
 if (!blank(requestedTaskId)) {
-    var selectedTasks = []
-    for (task in tasks) { if (text(task.tid) == requestedTaskId) { selectedTasks.add(task) } }
-    if (selectedTasks.size() != 1) { exit 403, '所选任务不存在、不属于当前租户或来源表' }
-    tasks = selectedTasks
+    if (tasks.size() != 1) { exit 403, '所选任务不存在、不属于当前租户或来源表' }
 } else if (!blank(requestedTargetTableId)) {
     var pipelineIds = []
     for (task in tasks) {
@@ -661,7 +663,9 @@ if (deleteTargetTable) {
     // source row itself and belongs to the active tenant. Prefetch all task
     // target rows once; a loop over tasks must not issue one SELECT per ID.
     var cancelCandidateIds = []
-    if (!blank(targetTableId) && targetTableId != sourceTableId) { cancelCandidateIds.add(targetTableId) }
+    if (blank(requestedTaskId) && !blank(targetTableId) && targetTableId != sourceTableId) {
+        cancelCandidateIds.add(targetTableId)
+    }
     for (task in (tasks == null ? [] : tasks)) {
         var candidateId = text(first(task, ['targetTableId', 'target_table_id']))
         if (!blank(candidateId) && candidateId != sourceTableId && !cancelCandidateIds.contains(candidateId)) {
@@ -685,11 +689,13 @@ if (deleteTargetTable) {
     }
 }
 
-// A dry run does not grant permission for the later destructive single-target
-// call. Recheck the source and selected target datasource for that request.
+// 取消任务只依赖有效来源及当前租户的任务。目标数据源校验仅用于删目标表。
+// 实际删表仍重新校验来源和目标数据源，不能沿用预检结果作为授权。
 var singleDatasourceIds = []
 if (!blank(sourceDatasourceId)) { singleDatasourceIds.add(sourceDatasourceId) }
-if (!blank(targetDbId) && !singleDatasourceIds.contains(targetDbId)) { singleDatasourceIds.add(targetDbId) }
+if (deleteTargetTable && !blank(targetDbId) && !singleDatasourceIds.contains(targetDbId)) {
+    singleDatasourceIds.add(targetDbId)
+}
 if (singleDatasourceIds.size() == 0) { exit 409, '来源表缺少所属数据源' }
 var singleDatasourceRows = db.table('db_datasource_t').where()
     .eq('tenant_id', tenantId).eq('is_del', 0).in('tid', singleDatasourceIds).select()
@@ -910,13 +916,13 @@ for (task in (targetUnlinked ? [] : (tasks == null ? [] : tasks))) {
     if (!blank(pipelineId) && !completedPipelineIds.contains(pipelineId)) { completedPipelineIds.add(pipelineId) }
 }
 var pipelineCount = completedPipelineIds.size()
+// 只结算任务与目标登记，监控历史由独立保留策略清理。
 db.transaction(() => {
 if (pendingTaskIds.size() > 0) {
     db.table('data_access_agg_task_t').where().in('tid', pendingTaskIds).eq('is_del', 0).update({task_status:0, updated_time:now})
 }
 if (completedTaskIds.size() > 0) {
     db.table('data_access_field_mapping').where().in('task_id', completedTaskIds).eq('is_del', 0).update({is_del:1, updated_time:now})
-    db.table('data_access_task_monitor_snap_t').where().in('task_id', completedTaskIds).eq('is_del', 0).update({is_del:1})
     db.table('data_access_agg_task_t').where().in('tid', completedTaskIds).eq('is_del', 0).update({is_del:1, task_status:0, updated_time:now})
 }
 if (completedPipelineIds.size() > 0) {

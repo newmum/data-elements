@@ -17,14 +17,19 @@
   "headers": [],
   "paths": [],
   "responseBody": "{\n  \"deleted\": false,\n  \"dryRun\": true\n}",
-  "description": "删除以租户业务库为事实来源：先软删除数据源及其当前租户内的关联记录，；使用请求参数 tid、dryRun；涉及 db_datasource_t、db_table_t、da_catalog_t、db_table_column_t、data_access_agg_task_t、data_access_field_mapping 等业务表。",
+  "description": "删除以租户业务库为事实来源：先软删除数据源及其当前租户内的关联记录并清理检索索引；使用请求参数 tid、dryRun；涉及 db_datasource_t、db_table_t、da_catalog_t、db_table_column_t、data_access_agg_task_t、data_access_field_mapping 等业务表。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
+import tenantRuntime
+import dataScope
+import tenantEs
+import '@/common/configData' as configData
+
 // 接口：05.删除数据源
 // 路由：POST /dst/database/delete
-// 业务说明：删除以租户业务库为事实来源：先软删除数据源及其当前租户内的关联记录，；使用请求参数 tid、dryRun；涉及 db_datasource_t、db_table_t、da_catalog_t、db_table_column_t、data_access_agg_task_t、data_access_field_mapping 等业务表。
+// 业务说明：删除以租户业务库为事实来源：先软删除数据源及其当前租户内的关联记录并清理检索索引；使用请求参数 tid、dryRun；涉及 db_datasource_t、db_table_t、da_catalog_t、db_table_column_t、data_access_agg_task_t、data_access_field_mapping 等业务表。
 /*
  * 删除数据源。
  *
@@ -32,10 +37,6 @@
  * 再清理当前租户 Elasticsearch 投影。重复删除仍会执行投影清理，避免
  * “数据库已经删除、列表中的 ES 卡片仍然存在”而无法自愈。
  */
-import tenantRuntime
-import dataScope
-import tenantEs
-import '@/common/configData' as configData
 
 var text = value => value == null ? '' : (value + '').trim()
 var addUnique = (rows, value) => {
@@ -183,11 +184,6 @@ if (taskIds.size() > 0) {
         .eq('tenant_id', tenantId)
         .eq('is_del', 0)
         .update({ is_del: 1, updated_time: nowTime })
-    db.table('data_access_task_monitor_snap_t').where()
-        .in('task_id', taskIds)
-        .eq('tenant_id', tenantId)
-        .eq('is_del', 0)
-        .update({ is_del: 1 })
     db.table('data_access_agg_task_t').where()
         .in('tid', taskIds)
         .eq('tenant_id', tenantId)

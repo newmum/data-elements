@@ -175,7 +175,7 @@
         "datapd_application_delete_01"
       ],
       "kind": null,
-      "baseSha256": "ae0a5e2db549ac0350608f3b9b4b59748360227a273208705910785944934553",
+      "baseSha256": "63a667549bbfda600c6135fa4f0a6e9bc5ba0f3814fcd809404e0127e4835d67",
       "metadataId": "datapd_application_delete_01"
     },
     {
@@ -353,7 +353,7 @@
         "metadata_tables_delete_asset_01"
       ],
       "kind": null,
-      "baseSha256": "4db9000322618b060e1d084cd2d556b120ca638caa56a4c27fcbc830969d2ab0",
+      "baseSha256": "78df1f8baaf338760ea88d5ebd4d91cefc5af17a5074b2c8c98d6b86b1424053",
       "metadataId": "metadata_tables_delete_asset_01"
     },
     {
@@ -572,7 +572,7 @@
         "datapd_database_delete_01"
       ],
       "kind": null,
-      "baseSha256": "a629cae0dafc630c9e51942e3cb32dfd64e6d34081948f8e4bfc2314c21d5ced",
+      "baseSha256": "4f40b628caf8250225c5fa53722504ac699f99a59c2b3da408c6790c6a3c4b75",
       "metadataId": "datapd_database_delete_01"
     },
     {
@@ -1005,7 +1005,7 @@
         "0fae2484c3674bae8d7a3cc61cf67225"
       ],
       "kind": null,
-      "baseSha256": "162828a4ae2029070546c100be74aea4f3ee939f20a7a0c5e2b25ff0530c6689",
+      "baseSha256": "3ea0908e4265b2a16f7ab67a83d520821e324da017317615f30bf1814703231e",
       "metadataId": "0fae2484c3674bae8d7a3cc61cf67225"
     },
     {
@@ -1035,7 +1035,7 @@
         "8f8b59890a174e36ad43a290e748290a"
       ],
       "kind": null,
-      "baseSha256": "5107cef3e0e70304ed3251ede0d7ef09fa3af97705fbf3619a201dcc7bec73cb",
+      "baseSha256": "dbfd704941765492bd35182b7129f78cdf91fee9845ccd481b667a21552a0a1d",
       "metadataId": "8f8b59890a174e36ad43a290e748290a"
     },
     {
@@ -1608,7 +1608,7 @@
         null
       ],
       "kind": null,
-      "baseSha256": "2486b53cc8643359891ff6f8fa0ea7be2fee6b66aa5d0fbfe7529f032d03dad4",
+      "baseSha256": "aa5dc3ab32a423201605b3b1f098d396ec322c3842385cf91351061207ea1047",
       "metadataId": "ods_data_agg_reset_01"
     },
     {
@@ -1618,7 +1618,7 @@
         "93adfae2a5074269981dc2a45d7358d5"
       ],
       "kind": null,
-      "baseSha256": "f5d79315dd5bd05260fd061c23f1422a11d20d0692e1acf7891bea277359bd00",
+      "baseSha256": "ddf40d2fc8ef0b9c02fe77fdd3e21685e4dcc9c62ade71a5d2870f31ad4a97df",
       "metadataId": "93adfae2a5074269981dc2a45d7358d5"
     },
     {
@@ -6248,6 +6248,16 @@
       "baseSha256": "7190e33c0fff28bd7a3f7336d87d4b0d734d0685644dad40415bba2f12a78390"
     },
     {
+      "path": "function/01.通用函数/33.清理到期任务监控快照.ms",
+      "databasePath": "/magic-api/function/01.通用函数/33.清理到期任务监控快照.ms",
+      "rowIds": [
+        "ff3df3ce982b4069a256bbae20473682"
+      ],
+      "kind": "function",
+      "metadataId": "377fbf22fd334ef1b29464ba6a42fe31",
+      "baseSha256": "5a6db028cc77c1ab66dd21511617d7412e48ecfe02b4b85531ce045b37327c88"
+    },
+    {
       "path": "function/01.通用函数/group.json",
       "databasePath": "/magic-api/function/01.通用函数/group.json",
       "rowIds": [
@@ -7017,6 +7027,16 @@
       "kind": "task",
       "baseSha256": "1a54c8558222d117186f209b842659d7a733072f6d6b94717ce34eb8c4f60f44",
       "metadataId": "a0934f8c5154518b8ce4c698ff7ee319"
+    },
+    {
+      "path": "task/05.系统定时任务/09.清理到期任务监控快照.ms",
+      "databasePath": "/magic-api/task/05.系统定时任务/09.清理到期任务监控快照.ms",
+      "rowIds": [
+        "4cd193aef8164559a98958b4adc43fc6"
+      ],
+      "kind": "task",
+      "metadataId": "3ed89c080ce8418790474305211073dc",
+      "baseSha256": "c56ed5a78f72fdc8407bfa7917057b59578b568e0668fa8c235689d418c51ac2"
     },
     {
       "path": "task/05.系统定时任务/group.json",

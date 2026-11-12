@@ -11176,6 +11176,8 @@ CREATE UNIQUE INDEX ix_29d4deb2fc86506ba00bac31 ON public.data_access_task_monit
 
 CREATE INDEX ix_94a7ddb0cbf142c308c9b2f6 ON public.data_access_task_monitor_snap_t USING btree (tenant_id, is_del);
 
+CREATE INDEX idx_task_monitor_snap_retention ON public.data_access_task_monitor_snap_t USING btree (tenant_id, monitor_time, tid);
+
 CREATE INDEX ix_150aaddd0067aedc1763dc20 ON public.data_api_authorization_t USING btree (tenant_id, apply_form_id, is_del);
 
 CREATE INDEX ix_43b512d6ca010c5ea30ebfc2 ON public.data_api_authorization_t USING btree (tenant_id, catalog_id, api_id, is_del);

@@ -203,12 +203,21 @@ class HuaweiHiveTargetDeletionMagicTest {
 
     @Test
     void lifecycleCleanupRollsBackAsOneTransactionWhenALaterMetadataWriteFails() {
-        jdbc.execute("DROP TABLE data_access_task_monitor_snap_t");
+        jdbc.execute("DROP TABLE db_table_column_t");
         assertThrows(RuntimeException.class,() -> run(request()));
         assertEquals(0,deleted("data_access_field_mapping","mapping-1"));
         assertEquals(0,deleted("data_access_agg_task_t","task-1"));
         assertEquals(0,deleted("db_table_t","target-1"));
-        assertEquals(0,deleted("db_table_column_t","target-column"));
+    }
+
+    @Test
+    void cleanupDoesNotRequireTheMonitorSnapshotTable() throws Exception {
+        jdbc.execute("DROP TABLE data_access_task_monitor_snap_t");
+        Map<?, ?> result = assertInstanceOf(Map.class, run(request()));
+        assertEquals(true, result.get("targetTableDeleted"));
+        assertEquals(1, deleted("data_access_field_mapping", "mapping-1"));
+        assertEquals(1, deleted("data_access_agg_task_t", "task-1"));
+        assertEquals(1, deleted("db_table_t", "target-1"));
     }
 
     @Test
@@ -567,6 +576,41 @@ class HuaweiHiveTargetDeletionMagicTest {
         assertEquals(0,jdbc.queryForObject("select is_del from data_access_agg_task_t where tid='task-1'",Integer.class));
         assertEquals(1,jdbc.queryForObject("select is_del from data_access_agg_task_t where tid='task-2'",Integer.class));
         assertInstanceOf(ExitValue.class,run(Map.of("sourceTableId","source-1","taskId","foreign-task","dryRun",true)));
+    }
+
+    @Test
+    void conflictingTargetBlocksTableDeletionButDoesNotBlockCancellingTheSelectedTask() throws Exception {
+        jdbc.update("update db_table_t set source_table_id='other-source' where tid='target-1'");
+        jdbc.update("update db_datasource_t set is_del=1 where tid='target-db'");
+        jdbc.update("update data_access_agg_task_t set process_group_id='selected-pg' where tid='task-1'");
+        jdbc.update("""
+                insert into data_access_agg_task_t(tid,tenant_id,source_table_id,target_table_id,target_db_id,process_group_id,is_del)
+                values('task-2','police','source-1','target-1','target-db','other-pg',0),
+                      ('foreign-task','other-tenant','source-1','target-1','target-db','foreign-pg',0)
+                """);
+        var refused = assertInstanceOf(ExitValue.class, run(request()));
+        assertEquals(409, refused.getValues()[0]);
+        assertTrue(String.valueOf(refused.getValues()[1]).contains("删除此任务流程"));
+        assertLifecycleIntact();
+        verifyNoInteractions(nifi);
+
+        var foreign = assertInstanceOf(ExitValue.class, run(Map.of(
+                "sourceTableId", "source-1", "taskId", "foreign-task", "deleteTargetTable", false)));
+        assertEquals(403, foreign.getValues()[0]);
+        assertLifecycleIntact();
+
+        var result = assertInstanceOf(Map.class, run(Map.of(
+                "sourceTableId", "source-1", "taskId", "task-1", "deleteTargetTable", false)));
+        assertEquals(1, result.get("taskCount"));
+        assertEquals(false, result.get("targetTableDeleted"));
+        assertEquals(1, deleted("data_access_agg_task_t", "task-1"));
+        assertEquals(0, deleted("data_access_agg_task_t", "task-2"));
+        assertEquals(0, deleted("data_access_agg_task_t", "foreign-task"));
+        assertEquals(0, deleted("db_table_t", "target-1"));
+        assertEquals(0, deleted("db_table_column_t", "target-column"));
+        verify(nifi).cleanupProcessGroup("selected-pg");
+        verifyNoMoreInteractions(nifi);
+        verifyNoInteractions(hive, explorer);
     }
 
     @Test

@@ -17,22 +17,12 @@
   "headers": [],
   "paths": [],
   "responseBody": null,
-  "description": "Magic 负责定位并逻辑删除接入任务、字段映射、监控快照、流水线、目标表；使用请求参数 dryRun、tid；涉及 db_datasource_t、db_table_t、data_access_agg_task_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t 等业务表。",
+  "description": "Magic 负责定位并逻辑删除接入任务、字段映射、流水线、目标表；使用请求参数 dryRun、tid；涉及 db_datasource_t、db_table_t、data_access_agg_task_t、data_access_field_mapping、nifi_pipeline_t 等业务表。",
   "requestBodyDefinition": null,
   "responseBodyDefinition": null
 }
 ================================
-// 接口：17.清理重建接入数据
-// 路由：POST /ods/cleanup-rebuild
-// 业务说明：Magic 负责定位并逻辑删除接入任务、字段映射、监控快照、流水线、目标表；使用请求参数 dryRun、tid；涉及 db_datasource_t、db_table_t、data_access_agg_task_t、data_access_field_mapping、data_access_task_monitor_snap_t、nifi_pipeline_t 等业务表。
 import '@/common/datasourceConnectionConfig' as datasourceConnectionConfig
-/*
- * 清理并重建数据接入目标
- *
- * Magic 负责定位并逻辑删除接入任务、字段映射、监控快照、流水线、目标表
- * 及字段，并清空目录目标关系。NiFiClient 和 MetadataExplorerService 仅负责
- * 运行时进程组清理与远端物理删表。body.dryRun=true 时只返回影响范围。
- */
 import cn.hutool.json.JSONUtil as jsons
 import com.linewell.dataelement.elasticsearch.EsCommonService as esCommonService
 import com.linewell.dataelement.integration.nifi.canvas.nifi.NifiClient as nifiClient
@@ -41,6 +31,17 @@ import com.linewell.dataelement.metautil.model.enums.DatabaseType
 import com.linewell.dataelement.metautil.service.MetadataExplorerService as metadataExplorerService
 import java.util.Map
 import log
+
+// 接口：17.清理重建接入数据
+// 路由：POST /ods/cleanup-rebuild
+// 业务说明：Magic 负责定位并逻辑删除接入任务、字段映射、流水线、目标表；使用请求参数 dryRun、tid；涉及 db_datasource_t、db_table_t、data_access_agg_task_t、data_access_field_mapping、nifi_pipeline_t 等业务表。
+/*
+ * 清理并重建数据接入目标
+ *
+ * Magic 负责定位并逻辑删除接入任务、字段映射、流水线、目标表
+ * 及字段，并清空目录目标关系。NiFiClient 和 MetadataExplorerService 仅负责
+ * 运行时进程组清理与远端物理删表。body.dryRun=true 时只返回影响范围。
+ */
 
 var blank = value => value == null || (value + '').trim() == ''
 var valueOf = (row, keys) => {
@@ -143,6 +144,7 @@ if (body?.dryRun == true) {
     return result
 }
 
+// 任务和流程的生命周期与监控历史保留期限独立。
 var now = new Date()
 for (task in tasks) {
     // 从 MySQL 业务表读取当前有效数据。
@@ -152,8 +154,6 @@ for (task in tasks) {
     db.table('data_access_field_mapping').where().eq('task_id', task.tid).eq('is_del', 0)
         .update({is_del: 1, updated_time: now})
     // 从 MySQL 业务表读取当前有效数据。
-    db.table('data_access_task_monitor_snap_t').where().eq('task_id', task.tid).eq('is_del', 0)
-        .update({is_del: 1})
     if (!blank(task.pipelineId)) {
         // 从 MySQL 业务表读取当前有效数据。
         db.table('nifi_pipeline_t').where().eq('id', task.pipelineId).eq('is_del', 0)

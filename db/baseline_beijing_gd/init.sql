@@ -4467,6 +4467,8 @@ CREATE OR REPLACE  INDEX "ix_data_access_field_mapping_1fcxbde" ON "baseline_bei
 
 CREATE OR REPLACE  INDEX "ix_data_access_task_monitor_snap_t_1fcxbde" ON "baseline_beijing_gd"."data_access_task_monitor_snap_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
+CREATE INDEX "idx_task_monitor_snap_retention" ON "baseline_beijing_gd"."data_access_task_monitor_snap_t" ("tenant_id","monitor_time","tid");
+
 CREATE OR REPLACE  INDEX "ix_data_apply_form_t_1fcxbde" ON "baseline_beijing_gd"."data_apply_form_t"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;
 
 CREATE OR REPLACE  INDEX "ix_data_gov_quality_rule_1fcxbde" ON "baseline_beijing_gd"."data_gov_quality_rule"("tenant_id" ASC,"is_del" ASC) STORAGE(ON "MAIN", CLUSTERBTR) ;

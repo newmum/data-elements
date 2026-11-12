@@ -1025,7 +1025,8 @@ CREATE TABLE `data_access_task_monitor_snap_t` (
   `tenant_id` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT '2084109831682699264' COMMENT '租户标识',
   PRIMARY KEY (`tid`) USING BTREE,
   UNIQUE KEY `INDEX33565282` (`tid`) USING BTREE,
-  KEY `idx_data_access_task_monitor_snap_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE
+  KEY `idx_data_access_task_monitor_snap_tenant_is_del` (`tenant_id`,`is_del`) USING BTREE,
+  KEY `idx_task_monitor_snap_retention` (`tenant_id`,`monitor_time`,`tid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据接入-数据接入监控快照';
 
 -- TABLE data_api_authorization_t
